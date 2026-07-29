@@ -61,7 +61,12 @@ async def get_task_for_principal(
     session: AsyncSession, task_id: str, principal: Principal
 ) -> TaskRow | None:
     row = await session.get(TaskRow, task_id)
-    if row is None or row.school_id != principal.school_id:
+    if row is None:
+        return None
+    if row.school_id != principal.school_id:
+        return None
+    # Personal workspace: same school is not enough — owner membership must match.
+    if row.membership_id != principal.membership_id:
         return None
     return row
 
@@ -73,7 +78,11 @@ async def get_run_for_principal(
     if run is None:
         return None
     task = await session.get(TaskRow, run.task_id)
-    if task is None or task.school_id != principal.school_id:
+    if task is None:
+        return None
+    if task.school_id != principal.school_id:
+        return None
+    if task.membership_id != principal.membership_id:
         return None
     return run
 
@@ -81,7 +90,10 @@ async def get_run_for_principal(
 async def list_tasks(session: AsyncSession, principal: Principal) -> list[TaskRow]:
     result = await session.execute(
         select(TaskRow)
-        .where(TaskRow.school_id == principal.school_id)
+        .where(
+            TaskRow.school_id == principal.school_id,
+            TaskRow.membership_id == principal.membership_id,
+        )
         .order_by(TaskRow.created_at.desc())
         .limit(50)
     )

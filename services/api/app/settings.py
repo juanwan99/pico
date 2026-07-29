@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     pico_dangerous_tools_enabled: bool = False
     pico_env: str = "development"
 
+    # OpenAI-compat proxy key for NextChat etc. (dev only unless set).
+    # Never fall back to KIMI_API_KEY or JWT secret as Bearer.
+    pico_openai_proxy_key: str = ""
+
     # Phase 3 edu adapter
     # fake = synthetic FakeEdu; live = HTTP to edu
     pico_edu_mode: str = "fake"  # fake | live
