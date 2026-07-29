@@ -95,6 +95,7 @@ class TokenResponse(BaseModel):
     claims_shape: dict
 
 
+
 @app.get("/health")
 async def health() -> dict:
     return {"ok": True, "service": "pico-api", "phase": "3-integrate"}
@@ -596,3 +597,24 @@ async def phase3_meta(settings: Settings = Depends(get_settings)) -> dict:
         "handoff_enabled": settings.pico_edu_handoff_enabled,
         "hook_token_configured": bool(settings.pico_hook_service_token),
     }
+
+# ----- SPA (single-port product on :8080) -----
+_DIST = Path(__file__).resolve().parents[3] / "apps" / "web" / "dist"
+if _DIST.is_dir() and (_DIST / "index.html").is_file():
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    _assets = _DIST / "assets"
+    if _assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_assets)), name="assets")
+
+    @app.get("/")
+    async def spa_index():
+        return FileResponse(_DIST / "index.html")
+
+    @app.get("/favicon.ico")
+    async def favicon():
+        # no favicon asset yet — avoid noisy 404 JSON in preview
+        from fastapi import Response
+        return Response(status_code=204)
+
