@@ -77,9 +77,10 @@ export const ALL_LANG_OPTIONS: Record<Lang, string> = {
 };
 
 const LANG_KEY = "lang";
-const DEFAULT_LANG = "en";
+const DEFAULT_LANG = "cn";
 
-const fallbackLang = en;
+// Pico: 默认简体中文；其他语言在中文之上 merge，缺省回落到中文
+const fallbackLang = cn as LocaleType;
 const targetLang = ALL_LANGS[getLang()] as LocaleType;
 
 // if target lang missing some fields, it will use fallback lang string
