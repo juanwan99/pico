@@ -31,3 +31,11 @@ hello:
 
 demo:
 	. .venv/bin/activate && python scripts/demo_e2e.py
+
+product:
+	bash scripts/run-product.sh
+
+agent-smoke:
+	. .venv/bin/activate && curl -s http://127.0.0.1:8000/v1/chat/completions \
+	  -H 'Authorization: Bearer pico-dev' -H 'Content-Type: application/json' \
+	  -d '{"model":"pico-agent","messages":[{"role":"user","content":"列出我学校的班级"}],"stream":false}'

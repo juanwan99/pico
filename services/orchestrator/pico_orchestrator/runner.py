@@ -53,8 +53,13 @@ async def run_agent_loop(
     is_cancelled: Callable[[], Awaitable[bool]],
     caps: RunCaps | None = None,
     force_tools: list[str] | None = None,
+    history: list[dict[str, Any]] | None = None,
 ) -> RunResult:
-    """Execute multi-step tool loop; emit ordered events via callback."""
+    """Execute multi-step tool loop; emit ordered events via callback.
+
+    Underlying agent = pinned Kimi model HTTPS API + allowlist tool gateway
+    (not a custom agent OS). Optional `history` is prior OpenAI-style messages.
+    """
     caps = caps or RunCaps()
     cfg = resolve_provider()
     if cfg is None:
@@ -82,19 +87,25 @@ async def run_agent_loop(
     )
 
     system = (
-        "You are Pico, an AI workspace agent for schools. "
-        "You have NO shell, host filesystem, web, or MCP. "
-        "Only the provided tools exist. "
-        f"The verified school_id is {principal.school_id}; never invent another school. "
-        "When listing school data, call fake_edu_list_classes. "
-        "When the user asks to propose a write/change, call pico_propose_change. "
-        "Answer in the user's language. Be concise."
+        "你是 Pico，学校场景的 AI 工作台智能体（底层：Kimi 模型 API + 白名单工具环）。"
+        "你没有 Shell、本机文件系统、联网浏览、MCP。"
+        "只能使用已提供的工具。"
+        f"已校验 school_id={principal.school_id}，禁止编造其它学校。"
+        "查询班级等学校只读数据时调用 fake_edu_list_classes。"
+        "用户要求变更/写入业务时调用 pico_propose_change（仅提案，不静默写库）。"
+        "用用户的语言回答，简洁。"
     )
 
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": prompt},
-    ]
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+    # prior turns (user/assistant only; drop system from client)
+    for h in history or []:
+        role = h.get("role")
+        content = h.get("content")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": str(content)})
+    # current user prompt (if not already last)
+    if not messages or messages[-1].get("role") != "user" or messages[-1].get("content") != prompt:
+        messages.append({"role": "user", "content": prompt})
 
     # Optional scripted first tool for deterministic demos / tests
     if force_tools:
@@ -245,7 +256,18 @@ async def run_agent_loop(
 
     text = "".join(final_text_parts).strip()
     if not text and artifact_md:
-        text = "已完成工具调用，见产物区。"
+        text = "已完成工具调用。"
+    # Surface tool trail for chat UIs that only show assistant text
+    tool_notes: list[str] = []
+    if artifact_md:
+        tool_notes.append("【工具产物 · 班级列表】\n" + artifact_md)
+    if change_proposal:
+        tool_notes.append(
+            "【变更提案 · 待人工确认】\n"
+            + json.dumps(change_proposal, ensure_ascii=False, indent=2)
+        )
+    if tool_notes:
+        text = (text + "\n\n" if text else "") + "\n\n".join(tool_notes)
 
     await emit(
         "run.status",
