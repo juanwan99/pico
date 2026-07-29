@@ -23,3 +23,8 @@ Edu-cloud will:
 - Receive proposed changes; commit only after edu-side Review when mutating school facts.
 
 Details freeze in a short OpenAPI once MVP streams.
+
+
+---
+
+See also: [整体技术架构方案（含定价）](./OVERALL-ARCHITECTURE.md)
