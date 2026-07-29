@@ -1,4 +1,4 @@
-.PHONY: dev api web test lint freeze-check security-check hello install demo
+.PHONY: dev api web test lint freeze-check security-check hello install demo proto
 
 install:
 	python3.12 -m venv .venv || true
@@ -10,6 +10,9 @@ api:
 
 web:
 	cd apps/web && npm run dev -- --host 0.0.0.0 --port 5173
+
+proto:
+	bash scripts/proto.sh
 
 test:
 	. .venv/bin/activate && pytest -q

@@ -48,23 +48,24 @@ tests/security/           Shell/File/Web/MCP-off proofs
 - Node 20+ (22 recommended)
 - Optional: `KIMI_API_KEY` for S1 real-model streaming
 
-## Quick start
+## Quick start — 今日独立原型
 
 ```bash
-cp .env.example .env
-# edit .env — set KIMI_API_KEY when available
-
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt
-
-# Terminal A — API
-make api
-# Terminal B — Web
-cd apps/web && npm install && npm run dev
+cp .env.example .env   # set KIMI_API_KEY
+make proto             # API :8000 + Web :5173
+# open http://127.0.0.1:5173
+make demo              # headless S4→S7 proof
 ```
 
-Open the Vite URL (default `http://127.0.0.1:5173`).
+Demo script: [`docs/DEMO.md`](docs/DEMO.md)
+
+### Manual two-terminal
+
+```bash
+make install
+make api    # terminal A
+make web    # terminal B
+```
 
 ### Useful commands
 
