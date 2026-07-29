@@ -240,31 +240,8 @@ async def chat_completions(
         }
 
     async def event_stream() -> AsyncIterator[bytes]:
-        # initial role
-        yield _sse_chunk(
-            {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": model,
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"role": "assistant"},
-                        "finish_reason": None,
-                    }
-                ],
-            }
-        ).encode()
-        try:
-            text = await _run_and_collect(prompt, principal, settings, history=history)
-        except Exception as e:  # noqa: BLE001
-            text = f"Error: {e}"
-        # stream in small chunks for UX
-        step = 24
-        for i in range(0, len(text), step):
-            piece = text[i : i + step]
-            yield _sse_chunk(
+        def chunk(delta: dict, *, finish: str | None = None) -> bytes:
+            return _sse_chunk(
                 {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -273,23 +250,154 @@ async def chat_completions(
                     "choices": [
                         {
                             "index": 0,
-                            "delta": {"content": piece},
-                            "finish_reason": None,
+                            "delta": delta,
+                            "finish_reason": finish,
                         }
                     ],
                 }
             ).encode()
-        yield _sse_chunk(
-            {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": model,
-                "choices": [
-                    {"index": 0, "delta": {}, "finish_reason": "stop"}
-                ],
-            }
-        ).encode()
+
+        yield chunk({"role": "assistant"})
+
+        # Direct model (moonshot/deepseek/*) → real token stream (GPT-like handfeel)
+        use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+        if use_direct or model in {"moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"}:
+            from pico_orchestrator.provider import stream_chat
+
+            system = (
+                "你是 Pico，面向学校场景的 AI 助手。"
+                "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
+                "不要编造不存在的学校数据。"
+            )
+            try:
+                async for piece in stream_chat(
+                    prompt,
+                    max_tokens=body.max_tokens or 2048,
+                    history=history,
+                    system=system,
+                ):
+                    if piece:
+                        yield chunk({"content": piece})
+            except Exception as e:  # noqa: BLE001
+                yield chunk({"content": f"【错误】{e}"})
+            yield chunk({}, finish="stop")
+            yield b"data: [DONE]\n\n"
+            return
+
+        # pico-agent: progressive deltas from agent loop (not wait-then-fake-chunk)
+        import asyncio
+
+        from pico_orchestrator.runner import RunCaps, run_agent_loop
+
+        from app.db import init_db
+
+        await init_db()
+        factory = session_factory()
+        task_id = new_id()
+        run_id = new_id()
+        async with factory() as session:
+            session.add(
+                TaskRow(
+                    id=task_id,
+                    school_id=principal.school_id,
+                    membership_id=principal.membership_id,
+                    title=prompt[:80],
+                )
+            )
+            session.add(
+                RunRow(
+                    id=run_id,
+                    task_id=task_id,
+                    status="running",
+                    prompt=prompt,
+                    model=model,
+                )
+            )
+            await session.commit()
+
+        q: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+
+        async def emit(event_type: str, payload: dict[str, Any]) -> None:
+            async with factory() as session:
+                await append_event(session, run_id, event_type, payload)
+            if event_type == "message.delta":
+                text = str(payload.get("text") or "")
+                if text:
+                    await q.put(("delta", text))
+            elif event_type == "agent.step" and payload.get("phase") == "model":
+                # light status for first step only — avoid spam
+                if payload.get("step") == 1:
+                    await q.put(("status", "正在思考…\n"))
+            elif event_type == "tool.call":
+                name = payload.get("name") or payload.get("tool") or "tool"
+                await q.put(("status", f"\n〔调用工具 {name}〕\n"))
+            elif event_type == "tool.result":
+                await q.put(("status", "〔工具完成〕\n"))
+
+        async def is_cancelled() -> bool:
+            return False
+
+        async def run() -> None:
+            try:
+                caps = RunCaps(
+                    max_seconds=settings.pico_run_max_seconds,
+                    max_tokens=settings.pico_run_max_tokens,
+                    max_retries=settings.pico_run_max_retries,
+                )
+                result = await run_agent_loop(
+                    prompt=prompt,
+                    principal=principal,
+                    emit=emit,
+                    is_cancelled=is_cancelled,
+                    caps=caps,
+                    history=history,
+                )
+                async with factory() as session:
+                    run_row = await session.get(RunRow, run_id)
+                    if run_row:
+                        run_row.status = result.status
+                        run_row.error = result.error
+                        await session.commit()
+                await q.put(("done", result))
+            except Exception as e:  # noqa: BLE001
+                await q.put(("error", e))
+
+        task = asyncio.create_task(run())
+        saw_text = False
+        try:
+            while True:
+                kind, payload = await q.get()
+                if kind == "delta":
+                    saw_text = True
+                    yield chunk({"content": str(payload)})
+                elif kind == "status":
+                    # only show status if no answer yet (tool path UX)
+                    if not saw_text:
+                        yield chunk({"content": str(payload)})
+                elif kind == "error":
+                    yield chunk({"content": f"【错误】{payload}"})
+                    break
+                elif kind == "done":
+                    result = payload
+                    if not saw_text:
+                        text = getattr(result, "final_text", None) or getattr(result, "error", None) or ""
+                        # small pieces if only final blob
+                        step = 32
+                        for i in range(0, len(text), step):
+                            yield chunk({"content": text[i : i + step]})
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as wait_err:  # noqa: BLE001
+                # runner already reported; avoid breaking the SSE trailer
+                _ = wait_err
+
+        yield chunk({}, finish="stop")
         yield b"data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

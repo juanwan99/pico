@@ -37,8 +37,14 @@ def resolve_provider() -> ProviderConfig | None:
     return None
 
 
-async def stream_chat(prompt: str, *, max_tokens: int = 256) -> AsyncIterator[str]:
-    """Stream assistant text deltas from the real model API.
+async def stream_chat(
+    prompt: str,
+    *,
+    max_tokens: int = 1024,
+    history: list[dict] | None = None,
+    system: str | None = None,
+) -> AsyncIterator[str]:
+    """Stream assistant text deltas from the real model API (token-level).
 
     Raises RuntimeError if no API key is configured (S1 BLOCKED).
     """
@@ -49,9 +55,18 @@ async def stream_chat(prompt: str, *, max_tokens: int = 256) -> AsyncIterator[st
             "(mock is not a substitute)"
         )
     client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+    messages: list[dict] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    for h in history or []:
+        role = h.get("role")
+        content = h.get("content")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": str(content)})
+    messages.append({"role": "user", "content": prompt})
     stream = await client.chat.completions.create(
         model=cfg.model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         stream=True,
         max_tokens=max_tokens,
     )
