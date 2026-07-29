@@ -1,10 +1,51 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import {
+  NButton,
+  NCard,
+  NConfigProvider,
+  NDivider,
+  NEmpty,
+  NIcon,
+  NInput,
+  NLayout,
+  NLayoutContent,
+  NLayoutHeader,
+  NLayoutSider,
+  NList,
+  NListItem,
+  NModal,
+  NScrollbar,
+  NSpace,
+  NSpin,
+  NTag,
+  NText,
+  NThing,
+  darkTheme,
+  type GlobalThemeOverrides,
+} from "naive-ui";
+import {
+  AddOutline,
+  ChatbubbleOutline,
+  CloseOutline,
+  CodeSlashOutline,
+  CopyOutline,
+  DocumentTextOutline,
+  RefreshOutline,
+  SendOutline,
+  SettingsOutline,
+  StopOutline,
+} from "@vicons/ionicons5";
+import MarkdownIt from "markdown-it";
 
-type TimelineItem = {
-  kind: "system" | "user" | "assistant" | "tool" | "deny" | "status";
+type Role = "user" | "assistant" | "system" | "tool" | "deny" | "step";
+type Msg = {
+  id: string;
+  role: Role;
   text: string;
   seq?: number;
+  toolName?: string;
+  ok?: boolean;
 };
 
 type TaskItem = { id: string; title: string; created_at?: string };
@@ -13,67 +54,91 @@ type ChangeItem = {
   title: string;
   summary: string;
   status: string;
-  confirmed_by?: string | null;
-  audit?: unknown[];
 };
 
-const DEMO_PROMPTS = [
-  "列出我学校的班级，并一句话总结。",
-  "用工具查班级后，说明一共几个班。",
-  "请 echo 一句：pico-proto-ok",
+const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
+
+const themeOverrides: GlobalThemeOverrides = {
+  common: {
+    primaryColor: "#d97757",
+    primaryColorHover: "#e08a6d",
+    primaryColorPressed: "#c56a4c",
+    bodyColor: "#0b0c0f",
+    cardColor: "#14161a",
+    modalColor: "#14161a",
+    popoverColor: "#14161a",
+    borderColor: "#2a2e37",
+    textColorBase: "#e8eaed",
+    textColor1: "#e8eaed",
+    textColor2: "#a8b0bd",
+    textColor3: "#7a8494",
+  },
+  Layout: { color: "#0b0c0f", siderColor: "#101218", headerColor: "#0b0c0f" },
+  Card: { color: "#14161a", borderColor: "#2a2e37" },
+  Input: {
+    color: "#16181d",
+    colorFocus: "#16181d",
+    border: "1px solid #2a2e37",
+    borderHover: "1px solid #3d4450",
+    borderFocus: "1px solid #d97757",
+  },
+  Button: { textColorPrimary: "#0b0c0f" },
+};
+
+const SUGGESTIONS = [
+  { label: "列出我学校的班级", prompt: "列出我学校的班级，并一句话总结。" },
+  { label: "工具冒烟 echo", prompt: "请调用 echo 工具输出：pico-proto-ok" },
+  { label: "跨校拒绝演示", prompt: "__CROSS_SCHOOL__" },
+  { label: "创建待确认提案", prompt: "__PROPOSE__" },
 ];
 
 const token = ref(localStorage.getItem("pico_token") || "");
 const schoolId = ref(localStorage.getItem("pico_school") || "school-a");
 const membershipId = ref(localStorage.getItem("pico_member") || "member-1");
-const prompt = ref(DEMO_PROMPTS[0]);
-const messages = ref<TimelineItem[]>([
-  {
-    kind: "system",
-    text: "Pico 独立原型 · Claude 式三区 AI 空间。密钥仅服务端 · Kimi Agent 多步工具 · 唯一 AI 账本。",
-  },
-]);
-const safety = ref("…");
-const freeze = ref("…");
-const artifact = ref("");
-const busy = ref(false);
-const apiOnline = ref(false);
+const prompt = ref("");
+const messages = ref<Msg[]>([]);
 const tasks = ref<TaskItem[]>([]);
 const changes = ref<ChangeItem[]>([]);
 const activeTaskId = ref<string | null>(null);
 const activeRunId = ref<string | null>(null);
-const runStatus = ref<string>("—");
-const errorBanner = ref("");
-const timelineEl = ref<HTMLElement | null>(null);
+const runStatus = ref("idle");
+const busy = ref(false);
+const safetyOk = ref(false);
+const freezeLabel = ref("…");
+const artifactOpen = ref(true);
+const artifactTitle = ref("Artifact");
+const artifactBody = ref("");
+const siderCollapsed = ref(false);
+const settingsOpen = ref(false);
+const errorText = ref("");
+const abortPoll = ref(false);
 
-const principalLabel = computed(() =>
-  token.value ? `${schoolId.value} / ${membershipId.value}` : "未签发",
-);
-
-const pendingChanges = computed(() =>
+const pendingApprovals = computed(() =>
   changes.value.filter((c) => c.status === "proposed"),
 );
+const canStop = computed(
+  () => busy.value && (runStatus.value === "running" || runStatus.value === "queued"),
+);
+const isEmpty = computed(() => messages.value.length === 0);
 
-const statusTone = computed(() => {
-  const s = runStatus.value;
-  if (s === "succeeded") return "ok";
-  if (s === "failed" || s === "cancelled") return "bad";
-  if (s === "running" || s === "queued") return "run";
-  return "";
-});
+function uid() {
+  return Math.random().toString(36).slice(2, 10);
+}
 
-function authHeaders(json = true): Headers {
-  const h = new Headers();
+function renderMd(text: string) {
+  return md.render(text || "");
+}
+
+function authHeaders(): Headers {
+  const h = new Headers({ "Content-Type": "application/json" });
   if (token.value) h.set("Authorization", `Bearer ${token.value}`);
-  if (json) h.set("Content-Type", "application/json");
   return h;
 }
 
 async function api(path: string, init: RequestInit = {}) {
-  const headers = authHeaders(!(init.body instanceof FormData));
+  const headers = authHeaders();
   if (init.headers) {
-    const extra = new Headers(init.headers);
-    extra.forEach((v, k) => headers.set(k, v));
+    new Headers(init.headers).forEach((v, k) => headers.set(k, v));
   }
   const res = await fetch(path, { ...init, headers });
   const data = await res.json().catch(() => ({}));
@@ -88,70 +153,43 @@ async function api(path: string, init: RequestInit = {}) {
   return data;
 }
 
-async function scrollTimeline() {
+async function scrollBottom() {
   await nextTick();
-  const el = timelineEl.value;
+  // NScrollbar exposes scrollTo via ref in some versions — fallback DOM
+  const el = document.querySelector(".chat-scroll .n-scrollbar-container");
   if (el) el.scrollTop = el.scrollHeight;
 }
 
-watch(messages, () => {
-  void scrollTimeline();
-}, { deep: true });
+watch(messages, () => void scrollBottom(), { deep: true });
 
 async function refreshMeta() {
-  errorBanner.value = "";
-  try {
-    await api("/health");
-    apiOnline.value = true;
-  } catch {
-    apiOnline.value = false;
-    safety.value = "API offline";
-    freeze.value = "—";
-    errorBanner.value = "API 未连通。请先 make api（:8000），再刷新。";
-    return;
-  }
   try {
     const s = await api("/v1/meta/agent-safety");
-    safety.value = s.proof?.dangerous_off ? "危险工具 OFF" : "SAFETY FAIL";
+    safetyOk.value = !!s.proof?.dangerous_off;
   } catch {
-    safety.value = "safety n/a";
+    safetyOk.value = false;
   }
   try {
     const f = await api("/v1/meta/freeze");
     const pins = f.agent_pins || {};
-    freeze.value = `Kimi sdk ${pins["kimi-agent-sdk"]} · cli ${pins["kimi-cli"]}`;
+    freezeLabel.value = `Kimi ${pins["kimi-agent-sdk"] || "?"} · ${pins["kimi-cli"] || "?"}`;
   } catch {
-    freeze.value = "freeze n/a";
+    freezeLabel.value = "model offline?";
   }
 }
 
 async function mintToken() {
-  busy.value = true;
-  errorBanner.value = "";
-  try {
-    const data = await api("/v1/dev/token", {
-      method: "POST",
-      body: JSON.stringify({
-        school_id: schoolId.value,
-        membership_id: membershipId.value,
-      }),
-    });
-    token.value = data.access_token;
-    localStorage.setItem("pico_token", token.value);
-    localStorage.setItem("pico_school", schoolId.value);
-    localStorage.setItem("pico_member", membershipId.value);
-    messages.value.push({
-      kind: "system",
-      text: `S4 测试凭证已签发 · ${schoolId.value} / ${membershipId.value}`,
-    });
-    await refreshTasks();
-    await refreshChanges();
-  } catch (e) {
-    errorBanner.value = `签发失败: ${String(e)}`;
-    messages.value.push({ kind: "system", text: errorBanner.value });
-  } finally {
-    busy.value = false;
-  }
+  const data = await api("/v1/dev/token", {
+    method: "POST",
+    body: JSON.stringify({
+      school_id: schoolId.value,
+      membership_id: membershipId.value,
+    }),
+  });
+  token.value = data.access_token;
+  localStorage.setItem("pico_token", token.value);
+  localStorage.setItem("pico_school", schoolId.value);
+  localStorage.setItem("pico_member", membershipId.value);
 }
 
 async function ensureToken() {
@@ -170,7 +208,11 @@ async function refreshChanges() {
   changes.value = data.changes || [];
 }
 
-function pushEventToTimeline(ev: {
+function pushMsg(partial: Omit<Msg, "id"> & { id?: string }) {
+  messages.value.push({ id: partial.id || uid(), ...partial });
+}
+
+function applyEvent(ev: {
   seq: number;
   type: string;
   payload: Record<string, unknown>;
@@ -179,110 +221,115 @@ function pushEventToTimeline(ev: {
   if (ev.type === "message.delta" || ev.type === "message.final") {
     const text = String(p.text || "");
     if (!text) return;
-    // merge consecutive assistant deltas
     const last = messages.value[messages.value.length - 1];
-    if (last?.kind === "assistant" && ev.type === "message.delta") {
+    if (last?.role === "assistant" && ev.type === "message.delta") {
       last.text = text;
       last.seq = ev.seq;
     } else {
-      messages.value.push({ kind: "assistant", text, seq: ev.seq });
+      pushMsg({ role: "assistant", text, seq: ev.seq });
     }
   } else if (ev.type === "tool.call") {
-    messages.value.push({
-      kind: "tool",
-      text: `调用 ${p.tool}\n${JSON.stringify(p.arguments || {}, null, 2)}`,
+    pushMsg({
+      role: "tool",
+      text: JSON.stringify(p.arguments || {}, null, 2),
+      toolName: String(p.tool || "tool"),
       seq: ev.seq,
     });
   } else if (ev.type === "tool.result") {
-    messages.value.push({
-      kind: "tool",
+    pushMsg({
+      role: "tool",
       text: p.ok
-        ? `结果 ${p.tool} ✓\n${JSON.stringify(p.result, null, 2)}`
-        : `失败 ${p.tool} · ${p.code}: ${p.message}`,
+        ? JSON.stringify(p.result, null, 2)
+        : `${p.code}: ${p.message}`,
+      toolName: String(p.tool || "tool"),
+      ok: !!p.ok,
       seq: ev.seq,
     });
   } else if (ev.type === "auth.deny") {
-    messages.value.push({
-      kind: "deny",
-      text: `跨校拒绝 · ${p.code}\n${p.message}`,
+    pushMsg({
+      role: "deny",
+      text: `${p.code}: ${p.message}`,
+      seq: ev.seq,
+    });
+  } else if (ev.type === "agent.step") {
+    pushMsg({
+      role: "step",
+      text: `Step ${p.step}${p.phase ? ` · ${p.phase}` : ""}${p.message ? ` — ${p.message}` : ""}`,
       seq: ev.seq,
     });
   } else if (ev.type === "run.status") {
     runStatus.value = String(p.status || "");
-    messages.value.push({
-      kind: "status",
-      text: `状态 → ${p.status}${p.reason ? ` · ${p.reason}` : ""}`,
-      seq: ev.seq,
-    });
   } else if (ev.type === "artifact.created") {
-    messages.value.push({
-      kind: "system",
-      text: `产物就绪：${p.title}`,
-      seq: ev.seq,
-    });
-  } else if (ev.type === "change.proposed") {
-    messages.value.push({
-      kind: "system",
-      text: `待确认提案：${p.title}`,
-      seq: ev.seq,
-    });
-  } else if (ev.type === "agent.step") {
-    messages.value.push({
-      kind: "status",
-      text: `步骤 ${p.step}${p.phase ? ` · ${p.phase}` : ""}${p.message ? ` · ${p.message}` : ""}`,
-      seq: ev.seq,
-    });
+    artifactTitle.value = String(p.title || "Artifact");
+    artifactOpen.value = true;
   }
 }
 
-async function finishArtifacts() {
-  if (activeTaskId.value) {
-    const t = await api(`/v1/tasks/${activeTaskId.value}`);
-    const arts = t.artifacts || [];
-    if (arts.length) {
-      artifact.value = arts
-        .map((a: { title: string; inline: string }) => `# ${a.title}\n\n${a.inline}`)
-        .join("\n\n---\n\n");
-    }
+async function loadArtifacts(taskId: string) {
+  const t = await api(`/v1/tasks/${taskId}`);
+  const arts = t.artifacts || [];
+  if (arts.length) {
+    artifactTitle.value = arts[0].title || "Artifact";
+    artifactBody.value = arts
+      .map((a: { title: string; inline: string }) => `# ${a.title}\n\n${a.inline}`)
+      .join("\n\n---\n\n");
+    artifactOpen.value = true;
   }
-  await refreshChanges();
 }
 
 async function pollRun(runId: string) {
   const seen = new Set<number>();
-  let done = false;
-  while (!done) {
+  abortPoll.value = false;
+  while (!abortPoll.value) {
     const data = await api(`/v1/runs/${runId}/events`);
     for (const ev of data.events || []) {
       if (seen.has(ev.seq)) continue;
       seen.add(ev.seq);
-      pushEventToTimeline(ev);
+      applyEvent(ev);
     }
     const runData = await api(`/v1/runs/${runId}`);
-    const st = runData.run?.status;
-    runStatus.value = st;
-    if (st === "succeeded" || st === "failed" || st === "cancelled") {
-      done = true;
-      break;
-    }
-    await new Promise((r) => setTimeout(r, 320));
+    runStatus.value = runData.run?.status || runStatus.value;
+    if (["succeeded", "failed", "cancelled"].includes(runStatus.value)) break;
+    await new Promise((r) => setTimeout(r, 300));
   }
-  await finishArtifacts();
+  if (activeTaskId.value) await loadArtifacts(activeTaskId.value);
+  await refreshChanges();
 }
 
-async function startTask() {
+async function newChat() {
+  messages.value = [];
+  activeTaskId.value = null;
+  activeRunId.value = null;
+  runStatus.value = "idle";
+  artifactBody.value = "";
+  prompt.value = "";
+  errorText.value = "";
+}
+
+async function sendPrompt(raw?: string) {
+  const text = (raw ?? prompt.value).trim();
+  if (!text || busy.value) return;
+
+  if (text === "__CROSS_SCHOOL__") {
+    prompt.value = "";
+    await runCrossSchool();
+    return;
+  }
+  if (text === "__PROPOSE__") {
+    prompt.value = "";
+    await proposeChange();
+    return;
+  }
+
   await ensureToken();
-  if (!token.value) return;
   busy.value = true;
-  errorBanner.value = "";
-  messages.value.push({ kind: "user", text: prompt.value });
+  errorText.value = "";
+  prompt.value = "";
+  pushMsg({ role: "user", text });
   try {
     const data = await api("/v1/tasks", {
       method: "POST",
-      body: JSON.stringify({
-        title: prompt.value.slice(0, 48),
-        prompt: prompt.value,
-      }),
+      body: JSON.stringify({ title: text.slice(0, 48), prompt: text }),
     });
     activeTaskId.value = data.task.id;
     activeRunId.value = data.run.id;
@@ -290,27 +337,29 @@ async function startTask() {
     await refreshTasks();
     await pollRun(data.run.id);
   } catch (e) {
-    errorBanner.value = `任务失败: ${String(e)}`;
-    messages.value.push({ kind: "system", text: errorBanner.value });
+    errorText.value = String(e);
+    pushMsg({ role: "system", text: `错误：${String(e)}` });
   } finally {
     busy.value = false;
   }
 }
 
-async function cancelActive() {
+async function stopRun() {
+  abortPoll.value = true;
   if (!activeRunId.value) return;
   try {
     await api(`/v1/runs/${activeRunId.value}/cancel`, {
       method: "POST",
       body: "{}",
     });
-    messages.value.push({ kind: "system", text: "已请求取消 Run" });
+    runStatus.value = "cancelled";
+    pushMsg({ role: "system", text: "已停止生成" });
   } catch (e) {
-    messages.value.push({ kind: "system", text: `取消失败: ${String(e)}` });
+    errorText.value = String(e);
   }
 }
 
-async function crossSchoolDemo() {
+async function runCrossSchool() {
   await ensureToken();
   busy.value = true;
   try {
@@ -320,16 +369,11 @@ async function crossSchoolDemo() {
     });
     activeTaskId.value = data.task_id;
     activeRunId.value = data.run_id;
-    messages.value.push({
-      kind: "system",
-      text: `S6 跨校演示 · denied=${data.denied}`,
-    });
-    for (const ev of data.events || []) {
-      pushEventToTimeline(ev);
-    }
+    pushMsg({ role: "system", text: "跨校访问演示（网关 fail-closed）" });
+    for (const ev of data.events || []) applyEvent(ev);
     await refreshTasks();
   } catch (e) {
-    messages.value.push({ kind: "system", text: `跨校演示失败: ${String(e)}` });
+    pushMsg({ role: "system", text: String(e) });
   } finally {
     busy.value = false;
   }
@@ -342,20 +386,20 @@ async function proposeChange() {
     const data = await api("/v1/changes", {
       method: "POST",
       body: JSON.stringify({
-        title: "调整一年级分班（提案）",
-        summary: "独立原型：确认只写审计，不写学校业务库。",
+        title: "调整一年级分班",
+        summary: "Codex/Claude 式待确认：人工批准后才可进入回写。",
         payload: { action: "reassign_class", class_id: "cls-a1" },
         task_id: activeTaskId.value,
         run_id: activeRunId.value,
       }),
     });
-    messages.value.push({
-      kind: "system",
-      text: `S7 提案已创建 · ${data.change.id.slice(0, 8)}…`,
+    pushMsg({
+      role: "system",
+      text: `待确认提案已创建 · ${data.change.id.slice(0, 8)}…`,
     });
     await refreshChanges();
   } catch (e) {
-    messages.value.push({ kind: "system", text: `提案失败: ${String(e)}` });
+    pushMsg({ role: "system", text: String(e) });
   } finally {
     busy.value = false;
   }
@@ -368,52 +412,52 @@ async function confirmChange(id: string) {
       method: "POST",
       body: "{}",
     });
-    messages.value.push({
-      kind: "system",
-      text: `已人工确认 · 审计已记 · 确认≠写学校库`,
+    pushMsg({
+      role: "system",
+      text: "已批准变更 · 审计已记 · 未静默写业务库",
     });
-    const block = `\n\n## 审计快照\n\n\`\`\`json\n${JSON.stringify(data.change, null, 2)}\n\`\`\``;
-    artifact.value = (artifact.value || "# 产物") + block;
+    artifactBody.value =
+      (artifactBody.value || "") +
+      `\n\n## Approval audit\n\n\`\`\`json\n${JSON.stringify(data.change, null, 2)}\n\`\`\``;
+    artifactOpen.value = true;
     await refreshChanges();
   } catch (e) {
-    messages.value.push({ kind: "system", text: `确认失败: ${String(e)}` });
+    errorText.value = String(e);
   } finally {
     busy.value = false;
   }
 }
 
-async function selectTask(id: string) {
-  activeTaskId.value = id;
-  const t = await api(`/v1/tasks/${id}`);
-  const arts = t.artifacts || [];
-  artifact.value = arts.length
-    ? arts
-        .map((a: { title: string; inline: string }) => `# ${a.title}\n\n${a.inline}`)
-        .join("\n\n")
-    : "此任务暂无产物。";
-}
-
-function useDemoPrompt(p: string) {
-  prompt.value = p;
-}
-
-function clearTimeline() {
-  messages.value = [
-    {
-      kind: "system",
-      text: "时间线已清空。可继续创建任务。",
-    },
-  ];
-  runStatus.value = "—";
-}
-
-async function runQuickDemo() {
+async function openTask(id: string) {
   await ensureToken();
-  prompt.value = DEMO_PROMPTS[0];
-  await startTask();
-  if (runStatus.value === "succeeded") {
-    await crossSchoolDemo();
-    await proposeChange();
+  activeTaskId.value = id;
+  messages.value = [];
+  const t = await api(`/v1/tasks/${id}`);
+  pushMsg({ role: "system", text: `会话：${t.task?.title || id}` });
+  // load latest run events
+  const runs = await api(`/v1/tasks/${id}/runs`);
+  const run = (runs.runs || [])[0];
+  if (run) {
+    activeRunId.value = run.id;
+    runStatus.value = run.status;
+    const evs = await api(`/v1/runs/${run.id}/events`);
+    for (const ev of evs.events || []) applyEvent(ev);
+  }
+  await loadArtifacts(id);
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    /* ignore */
+  }
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    e.preventDefault();
+    void sendPrompt();
   }
 }
 
@@ -425,164 +469,340 @@ onMounted(async () => {
     localStorage.setItem("pico_token", qTok);
     window.history.replaceState({}, "", window.location.pathname);
   }
-  await refreshMeta();
-  if (token.value) {
-    try {
-      await refreshTasks();
-      await refreshChanges();
-    } catch {
-      token.value = "";
-      localStorage.removeItem("pico_token");
-    }
+  try {
+    await refreshMeta();
+    await ensureToken();
+    await refreshTasks();
+    await refreshChanges();
+  } catch (e) {
+    errorText.value = String(e);
   }
 });
 </script>
 
 <template>
-  <div class="shell">
-    <aside class="rail">
-      <div class="rail-brand">
-        <div class="logo">P</div>
-        <div>
-          <div class="logo-title">Pico</div>
-          <div class="muted tiny">独立 AI 底座原型</div>
-        </div>
-      </div>
+  <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides">
+    <n-layout has-sider style="height: 100vh">
+      <!-- ===== Left: conversations (Claude/Codex style) ===== -->
+      <n-layout-sider
+        bordered
+        collapse-mode="width"
+        :collapsed-width="64"
+        :width="280"
+        :collapsed="siderCollapsed"
+        show-trigger
+        @collapse="siderCollapsed = true"
+        @expand="siderCollapsed = false"
+        :native-scrollbar="false"
+        style="border-right: 1px solid #2a2e37"
+      >
+        <div style="padding: 12px; display: flex; flex-direction: column; height: 100%; gap: 10px">
+          <n-button type="primary" block strong :disabled="busy" @click="newChat">
+            <template #icon>
+              <n-icon :component="AddOutline" />
+            </template>
+            {{ siderCollapsed ? "" : "新对话" }}
+          </n-button>
 
-      <div class="section">
-        <div class="section-head">
-          <h2>任务</h2>
-          <button class="ghost tiny-btn" :disabled="busy" @click="refreshTasks">刷新</button>
+          <div v-if="!siderCollapsed" style="flex: 1; min-height: 0; display: flex; flex-direction: column">
+            <n-text depth="3" style="font-size: 12px; margin: 4px 0">会话</n-text>
+            <n-scrollbar style="flex: 1">
+              <n-list hoverable clickable style="background: transparent">
+                <n-list-item
+                  v-for="t in tasks"
+                  :key="t.id"
+                  @click="openTask(t.id)"
+                  :style="{
+                    background: t.id === activeTaskId ? '#1a1d24' : 'transparent',
+                    borderRadius: '8px',
+                    marginBottom: '4px',
+                    cursor: 'pointer',
+                  }"
+                >
+                  <n-thing>
+                    <template #avatar>
+                      <n-icon :component="ChatbubbleOutline" depth="3" />
+                    </template>
+                    <template #header>
+                      <span style="font-size: 13px; line-height: 1.3">{{ t.title }}</span>
+                    </template>
+                  </n-thing>
+                </n-list-item>
+                <n-empty v-if="!tasks.length" description="尚无会话" size="small" style="margin-top: 24px" />
+              </n-list>
+            </n-scrollbar>
+
+            <n-divider style="margin: 10px 0" />
+            <n-text depth="3" style="font-size: 12px">待确认 · Approvals</n-text>
+            <n-scrollbar style="max-height: 160px; margin-top: 6px">
+              <div v-for="c in pendingApprovals" :key="c.id" style="margin-bottom: 8px">
+                <n-card size="small" :bordered="true">
+                  <div style="font-size: 12px; margin-bottom: 6px">{{ c.title }}</div>
+                  <n-button size="tiny" type="primary" :disabled="busy" @click="confirmChange(c.id)">
+                    批准
+                  </n-button>
+                </n-card>
+              </div>
+              <n-text v-if="!pendingApprovals.length" depth="3" style="font-size: 12px">无待办</n-text>
+            </n-scrollbar>
+
+            <n-divider style="margin: 10px 0" />
+            <n-space vertical :size="6">
+              <n-tag size="small" :type="safetyOk ? 'success' : 'error'" round>
+                {{ safetyOk ? "Tools sandbox OFF" : "Safety ?" }}
+              </n-tag>
+              <n-text depth="3" style="font-size: 11px">{{ freezeLabel }}</n-text>
+              <n-button size="tiny" quaternary @click="settingsOpen = true">
+                <template #icon><n-icon :component="SettingsOutline" /></template>
+                身份 / 设置
+              </n-button>
+            </n-space>
+          </div>
         </div>
-        <ul class="list">
-          <li
-            v-for="t in tasks"
-            :key="t.id"
-            :class="{ active: t.id === activeTaskId }"
-            @click="selectTask(t.id)"
+      </n-layout-sider>
+
+      <!-- ===== Center: chat ===== -->
+      <n-layout>
+        <n-layout-header
+          bordered
+          style="height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px"
+        >
+          <n-space align="center">
+            <n-text strong style="font-size: 15px">Pico</n-text>
+            <n-tag size="small" round :bordered="false" type="warning">Claude / Codex 式工作台</n-tag>
+            <n-tag size="small" round :type="runStatus === 'running' ? 'info' : 'default'">
+              {{ runStatus }}
+            </n-tag>
+          </n-space>
+          <n-space>
+            <n-button size="small" quaternary @click="artifactOpen = !artifactOpen">
+              <template #icon><n-icon :component="DocumentTextOutline" /></template>
+              Artifacts
+            </n-button>
+            <n-button size="small" quaternary :disabled="busy" @click="refreshMeta">
+              <template #icon><n-icon :component="RefreshOutline" /></template>
+            </n-button>
+          </n-space>
+        </n-layout-header>
+
+        <n-layout has-sider position="absolute" style="top: 52px; bottom: 0">
+          <n-layout-content content-style="display:flex;flex-direction:column;height:100%">
+            <div v-if="errorText" style="padding: 8px 16px; background: #3a1f1f; color: #ffb4b4; font-size: 13px">
+              {{ errorText }}
+            </div>
+
+            <!-- messages -->
+            <n-scrollbar class="chat-scroll" style="flex: 1; padding: 0 0 12px">
+              <div style="max-width: 820px; margin: 0 auto; padding: 20px 20px 40px">
+                <!-- empty / home -->
+                <div v-if="isEmpty" style="text-align: center; padding: 64px 12px 32px">
+                  <n-text style="font-size: 28px; font-weight: 600">今天要交办什么？</n-text>
+                  <p style="color: #7a8494; margin: 12px 0 28px; font-size: 14px">
+                    对话 · 多步工具 · Artifacts · 人工批准 — 对齐 Claude / Codex 核心路径
+                  </p>
+                  <n-space justify="center" wrap>
+                    <n-button
+                      v-for="s in SUGGESTIONS"
+                      :key="s.label"
+                      secondary
+                      round
+                      :disabled="busy"
+                      @click="sendPrompt(s.prompt)"
+                    >
+                      {{ s.label }}
+                    </n-button>
+                  </n-space>
+                </div>
+
+                <div v-for="m in messages" :key="m.id" style="margin-bottom: 18px">
+                  <!-- user -->
+                  <div v-if="m.role === 'user'" style="display: flex; justify-content: flex-end">
+                    <div
+                      style="
+                        max-width: 85%;
+                        background: #2a231f;
+                        border: 1px solid #4a3a32;
+                        border-radius: 16px 16px 4px 16px;
+                        padding: 10px 14px;
+                        font-size: 14.5px;
+                        white-space: pre-wrap;
+                      "
+                    >
+                      {{ m.text }}
+                    </div>
+                  </div>
+
+                  <!-- assistant -->
+                  <div v-else-if="m.role === 'assistant'" style="display: flex; gap: 10px">
+                    <div
+                      style="
+                        width: 28px;
+                        height: 28px;
+                        border-radius: 8px;
+                        background: linear-gradient(135deg, #d97757, #c45c3e);
+                        flex-shrink: 0;
+                      "
+                    />
+                    <div style="flex: 1; min-width: 0">
+                      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
+                        <n-text strong style="font-size: 13px">Pico</n-text>
+                        <n-button text size="tiny" @click="copyText(m.text)">
+                          <template #icon><n-icon :component="CopyOutline" :size="14" /></template>
+                        </n-button>
+                      </div>
+                      <div class="msg-md" v-html="renderMd(m.text)" />
+                    </div>
+                  </div>
+
+                  <!-- tool use card (Codex/Claude tool blocks) -->
+                  <div v-else-if="m.role === 'tool'" style="margin-left: 38px">
+                    <n-card size="small" embedded style="background: #12141a; border: 1px solid #2a2e37">
+                      <template #header>
+                        <n-space align="center" :size="8">
+                          <n-icon :component="CodeSlashOutline" />
+                          <n-text strong style="font-size: 12px">Tool · {{ m.toolName }}</n-text>
+                          <n-tag
+                            v-if="m.ok !== undefined"
+                            size="tiny"
+                            :type="m.ok ? 'success' : 'error'"
+                            round
+                          >
+                            {{ m.ok ? "ok" : "fail" }}
+                          </n-tag>
+                        </n-space>
+                      </template>
+                      <pre style="margin: 0; font-size: 12px; white-space: pre-wrap; color: #a8b0bd">{{ m.text }}</pre>
+                    </n-card>
+                  </div>
+
+                  <!-- deny -->
+                  <div v-else-if="m.role === 'deny'" style="margin-left: 38px">
+                    <n-card size="small" style="border-color: #5a3030; background: #1f1414">
+                      <n-text type="error" style="font-size: 13px">拒绝 · {{ m.text }}</n-text>
+                    </n-card>
+                  </div>
+
+                  <!-- step / system -->
+                  <div v-else style="margin-left: 38px">
+                    <n-text depth="3" style="font-size: 12px">{{ m.text }}</n-text>
+                  </div>
+                </div>
+
+                <div v-if="busy" style="margin-left: 38px; display: flex; align-items: center; gap: 8px">
+                  <n-spin size="small" />
+                  <n-text depth="3" style="font-size: 13px">Agent 运行中…</n-text>
+                </div>
+              </div>
+            </n-scrollbar>
+
+            <!-- composer -->
+            <div style="border-top: 1px solid #2a2e37; padding: 12px 16px 16px; background: #0b0c0f">
+              <div style="max-width: 820px; margin: 0 auto">
+                <div
+                  style="
+                    border: 1px solid #2a2e37;
+                    border-radius: 16px;
+                    background: #14161a;
+                    padding: 10px 12px;
+                  "
+                >
+                  <n-input
+                    v-model:value="prompt"
+                    type="textarea"
+                    :autosize="{ minRows: 1, maxRows: 8 }"
+                    placeholder="给 Pico 下指令…（⌘/Ctrl+Enter 发送）"
+                    :bordered="false"
+                    @keydown="onKeydown"
+                  />
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px">
+                    <n-space :size="6">
+                      <n-tag size="tiny" round :bordered="false">多步工具</n-tag>
+                      <n-tag size="tiny" round :bordered="false">Artifacts</n-tag>
+                      <n-tag size="tiny" round :bordered="false">人工批准</n-tag>
+                    </n-space>
+                    <n-space>
+                      <n-button
+                        v-if="canStop"
+                        type="warning"
+                        secondary
+                        round
+                        @click="stopRun"
+                      >
+                        <template #icon><n-icon :component="StopOutline" /></template>
+                        停止
+                      </n-button>
+                      <n-button
+                        type="primary"
+                        round
+                        strong
+                        :disabled="busy || !prompt.trim()"
+                        :loading="busy"
+                        @click="sendPrompt()"
+                      >
+                        <template #icon><n-icon :component="SendOutline" /></template>
+                        发送
+                      </n-button>
+                    </n-space>
+                  </div>
+                </div>
+                <n-text depth="3" style="display: block; text-align: center; font-size: 11px; margin-top: 8px">
+                  Pico 独立原型 · 密钥仅服务端 · 确认≠写学校库
+                </n-text>
+              </div>
+            </div>
+          </n-layout-content>
+
+          <!-- ===== Right: Artifacts (Claude style) ===== -->
+          <n-layout-sider
+            v-if="artifactOpen"
+            bordered
+            :width="400"
+            :native-scrollbar="false"
+            style="border-left: 1px solid #2a2e37"
           >
-            <span class="task-title">{{ t.title }}</span>
-          </li>
-          <li v-if="!tasks.length" class="muted empty">签发后创建任务会出现在这里</li>
-        </ul>
-      </div>
+            <div style="display: flex; flex-direction: column; height: 100%">
+              <div
+                style="
+                  height: 48px;
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: 0 12px;
+                  border-bottom: 1px solid #2a2e37;
+                "
+              >
+                <n-space align="center" :size="8">
+                  <n-icon :component="DocumentTextOutline" />
+                  <n-text strong style="font-size: 13px">{{ artifactTitle }}</n-text>
+                </n-space>
+                <n-button text @click="artifactOpen = false">
+                  <template #icon><n-icon :component="CloseOutline" /></template>
+                </n-button>
+              </div>
+              <n-scrollbar style="flex: 1; padding: 16px">
+                <div v-if="artifactBody" class="msg-md" v-html="renderMd(artifactBody)" />
+                <n-empty v-else description="工具产物会显示在这里（表、文档、审计）" style="margin-top: 48px" />
+              </n-scrollbar>
+            </div>
+          </n-layout-sider>
+        </n-layout>
+      </n-layout>
+    </n-layout>
 
-      <div class="section">
-        <h2>身份 (S4)</h2>
-        <label class="field-label">school_id</label>
-        <input v-model="schoolId" placeholder="school-a" />
-        <label class="field-label">membership_id</label>
-        <input v-model="membershipId" placeholder="member-1" />
-        <button class="block" :disabled="busy" @click="mintToken">签发测试凭证</button>
-        <p class="muted tiny">claim 形状预留对接；原型用测试签发器</p>
-      </div>
-
-      <div class="section">
-        <div class="section-head">
-          <h2>待确认 (S7)</h2>
-          <span v-if="pendingChanges.length" class="badge">{{ pendingChanges.length }}</span>
-        </div>
-        <ul class="list">
-          <li v-for="c in changes" :key="c.id" class="change-item">
-            <div class="task-title">{{ c.title }}</div>
-            <div class="muted tiny">{{ c.status }}</div>
-            <button
-              v-if="c.status === 'proposed'"
-              class="primary block sm"
-              :disabled="busy"
-              @click="confirmChange(c.id)"
-            >
-              人工确认
-            </button>
-          </li>
-          <li v-if="!changes.length" class="muted empty">无提案</li>
-        </ul>
-        <button class="block" :disabled="busy" @click="proposeChange">新建提案</button>
-      </div>
-    </aside>
-
-    <section class="main">
-      <header class="main-header">
-        <div>
-          <div class="brand">AI 空间 <span>Claude 式三区 · 今日原型</span></div>
-          <div class="muted tiny">唯一 AI 账本 · FakeEdu · 无 edu 联调</div>
-        </div>
-        <div class="row wrap">
-          <span class="pill" :class="apiOnline ? 'ok' : 'bad'">{{
-            apiOnline ? "API 在线" : "API 离线"
-          }}</span>
-          <span class="pill" :class="safety.includes('OFF') ? 'ok' : 'bad'">{{
-            safety
-          }}</span>
-          <span class="pill">{{ freeze }}</span>
-          <span class="pill" :class="statusTone">run · {{ runStatus }}</span>
-          <span class="pill">{{ principalLabel }}</span>
-        </div>
-      </header>
-
-      <div v-if="errorBanner" class="banner error">{{ errorBanner }}</div>
-
-      <div class="demo-bar">
-        <span class="muted tiny">演示提示词</span>
-        <button
-          v-for="p in DEMO_PROMPTS"
-          :key="p"
-          class="chip"
-          type="button"
-          @click="useDemoPrompt(p)"
-        >
-          {{ p.slice(0, 18) }}…
-        </button>
-        <button class="chip accent" type="button" :disabled="busy" @click="runQuickDemo">
-          一键演示路径
-        </button>
-        <button class="chip" type="button" @click="clearTimeline">清空时间线</button>
-      </div>
-
-      <div ref="timelineEl" class="timeline">
-        <div
-          v-for="(m, i) in messages"
-          :key="i"
-          class="bubble"
-          :class="m.kind"
-        >
-          <div class="bubble-label">{{ m.kind }}</div>
-          <pre class="bubble-body">{{ m.text }}</pre>
-        </div>
-      </div>
-
-      <div class="composer">
-        <textarea
-          v-model="prompt"
-          rows="3"
-          placeholder="描述要交办的事… 例如：列出我学校的班级"
-          @keydown.meta.enter.prevent="startTask"
-          @keydown.ctrl.enter.prevent="startTask"
-        />
-        <div class="row wrap">
-          <button class="primary" :disabled="busy" @click="startTask">
-            {{ busy ? "运行中…" : "创建任务并运行" }}
-          </button>
-          <button :disabled="busy || !activeRunId" @click="cancelActive">取消 Run</button>
-          <button :disabled="busy" @click="crossSchoolDemo">跨校拒绝 (S6)</button>
-          <button :disabled="busy" @click="refreshMeta">刷新状态</button>
-        </div>
-        <p class="muted tiny">
-          ⌘/Ctrl+Enter 发送 · Shell/File/Web/MCP 关闭 · 确认≠写学校库
-        </p>
-      </div>
-    </section>
-
-    <aside class="artifacts">
-      <div class="section-head">
-        <h2>产物</h2>
-        <span class="muted tiny">Artifact</span>
-      </div>
-      <div v-if="!artifact" class="empty-art">
-        <p>工具成功后，班级表 / 报告会出现在这里。</p>
-        <p class="muted tiny">建议先跑「列出我学校的班级」。</p>
-      </div>
-      <pre v-else class="art-body">{{ artifact }}</pre>
-    </aside>
-  </div>
+    <!-- settings modal -->
+    <n-modal v-model:show="settingsOpen" preset="card" title="身份与设置" style="width: 420px">
+      <n-space vertical>
+        <n-text depth="3" style="font-size: 12px">school_id</n-text>
+        <n-input v-model:value="schoolId" />
+        <n-text depth="3" style="font-size: 12px">membership_id</n-text>
+        <n-input v-model:value="membershipId" />
+        <n-button type="primary" block :disabled="busy" @click="mintToken().then(() => (settingsOpen = false))">
+          重新签发测试凭证
+        </n-button>
+        <n-text depth="3" style="font-size: 12px">
+          原型使用测试签发器；claim 形状预留对接。不连 edu。
+        </n-text>
+      </n-space>
+    </n-modal>
+  </n-config-provider>
 </template>
