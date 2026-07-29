@@ -1,7 +1,22 @@
 <!doctype html>
-<html lang="en-US">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
+    <script>
+      /* Pico: product default locale = 简体中文 */
+      (function () {
+        try {
+          var raw = localStorage.getItem('lang');
+          var lang = raw;
+          try { lang = raw ? JSON.parse(raw) : null; } catch (e) { lang = raw; }
+          if (!lang || lang === 'en' || lang === 'en-US' || lang === 'en-GB') {
+            localStorage.setItem('lang', JSON.stringify('zh-Hans'));
+            document.cookie = 'lang=zh-Hans;path=/;max-age=31536000;SameSite=Lax';
+          }
+        } catch (e) {}
+      })();
+    </script>
+
     <script>
       /* Pico: early SW teardown so stale LibreChat workbox cannot blank the shell */
       (function () {

@@ -2,6 +2,9 @@ import { atom } from 'recoil';
 import Cookies from 'js-cookie';
 import { atomWithLocalStorage } from './utils';
 
+/** Pico product default: Simplified Chinese (not browser English). */
+export const PICO_DEFAULT_LOCALE = 'zh-Hans';
+
 const readStoredLang = () => {
   if (typeof localStorage === 'undefined') {
     return undefined;
@@ -20,11 +23,20 @@ const readStoredLang = () => {
   }
 };
 
+/**
+ * Prefer explicit user choice; otherwise Pico ships in 简体中文.
+ * Sandbox / Playwright often leave lang=en — treat bare English as unset for product.
+ */
 const defaultLang = () => {
-  const userLang =
-    (typeof navigator !== 'undefined' ? navigator.language || navigator.languages?.[0] : null) ??
-    'en';
-  return Cookies.get('lang') || readStoredLang() || userLang;
+  const stored = Cookies.get('lang') || readStoredLang();
+  if (!stored) {
+    return PICO_DEFAULT_LOCALE;
+  }
+  const normalized = String(stored).replace(/_/g, '-').toLowerCase();
+  if (normalized === 'en' || normalized === 'en-us' || normalized === 'en-gb') {
+    return PICO_DEFAULT_LOCALE;
+  }
+  return stored;
 };
 
 const lang = atomWithLocalStorage('lang', defaultLang());

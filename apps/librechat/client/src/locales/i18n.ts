@@ -2,8 +2,12 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 import translationEn from './en/translation.json';
+import translationZhHans from './zh-Hans/translation.json';
 
 export const defaultNS = 'translation';
+
+/** Pico product default locale */
+export const PICO_DEFAULT_LOCALE = 'zh-Hans' as const;
 
 export const supportedLocales = [
   'ar',
@@ -54,10 +58,11 @@ export type TranslationResource = Record<string, string>;
 
 export const resources = {
   en: { translation: translationEn },
+  'zh-Hans': { translation: translationZhHans },
 } as const;
 
 const localeLoaders: Record<
-  Exclude<SupportedLocale, 'en'>,
+  Exclude<SupportedLocale, 'en' | 'zh-Hans'>,
   () => Promise<{ default: TranslationResource }>
 > = {
   ar: () => import('./ar/translation.json'),
@@ -98,7 +103,6 @@ const localeLoaders: Record<
   ug: () => import('./ug/translation.json'),
   uk: () => import('./uk/translation.json'),
   vi: () => import('./vi/translation.json'),
-  'zh-Hans': () => import('./zh-Hans/translation.json'),
   'zh-Hant': () => import('./zh-Hant/translation.json'),
 };
 
@@ -150,10 +154,10 @@ const localeAliases: Record<string, SupportedLocale> = {
   'zh-mo': 'zh-Hant',
 };
 
-const loadedLocales = new Set<SupportedLocale>(['en']);
+const loadedLocales = new Set<SupportedLocale>(['en', 'zh-Hans']);
 const loadingLocales: Partial<Record<SupportedLocale, Promise<SupportedLocale>>> = {};
 let languageRequestId = 0;
-let latestRequestedLocale: SupportedLocale = 'en';
+let latestRequestedLocale: SupportedLocale = PICO_DEFAULT_LOCALE;
 
 function readCookie(name: string) {
   if (typeof document === 'undefined') {
@@ -188,16 +192,16 @@ function readStoredLanguage() {
 
 function getNavigatorLanguage() {
   if (typeof navigator === 'undefined') {
-    return 'en';
+    return PICO_DEFAULT_LOCALE;
   }
 
-  return navigator.language || navigator.languages?.[0] || 'en';
+  return navigator.language || navigator.languages?.[0] || PICO_DEFAULT_LOCALE;
 }
 
 export function normalizeLocale(locale?: string | null): SupportedLocale {
   const requested = locale === 'auto' ? getNavigatorLanguage() : locale;
   if (!requested) {
-    return 'en';
+    return PICO_DEFAULT_LOCALE;
   }
 
   const normalized = requested.replace(/_/g, '-').toLowerCase();
@@ -212,19 +216,28 @@ export function normalizeLocale(locale?: string | null): SupportedLocale {
   }
 
   const base = normalized.split('-')[0];
-  return localeByLowercase[base] ?? localeAliases[base] ?? 'en';
+  return localeByLowercase[base] ?? localeAliases[base] ?? PICO_DEFAULT_LOCALE;
 }
 
 export function detectInitialLanguage() {
   const cookieLang = readCookie('lang');
   const storedLang = readStoredLanguage();
-  return normalizeLocale(cookieLang || storedLang || getNavigatorLanguage());
+  const picked = cookieLang || storedLang;
+  if (!picked) {
+    return PICO_DEFAULT_LOCALE;
+  }
+  const normalized = normalizeLocale(picked);
+  // Product default: bare English leftover from sandbox → 简体中文
+  if (normalized === 'en') {
+    return PICO_DEFAULT_LOCALE;
+  }
+  return normalized;
 }
 
 export async function ensureLocale(locale?: string | null): Promise<SupportedLocale> {
   const normalized = normalizeLocale(locale);
 
-  if (normalized === 'en') {
+  if (normalized === 'en' || normalized === 'zh-Hans') {
     return normalized;
   }
 
@@ -238,7 +251,10 @@ export async function ensureLocale(locale?: string | null): Promise<SupportedLoc
   }
 
   if (!loadingLocales[normalized]) {
-    const loader = localeLoaders[normalized];
+    const loader = localeLoaders[normalized as Exclude<SupportedLocale, 'en' | 'zh-Hans'>];
+    if (!loader) {
+      return PICO_DEFAULT_LOCALE;
+    }
     loadingLocales[normalized] = loader()
       .then((module) => {
         i18n.addResourceBundle(normalized, defaultNS, module.default, true, true);
@@ -247,18 +263,18 @@ export async function ensureLocale(locale?: string | null): Promise<SupportedLoc
       })
       .catch((error): SupportedLocale => {
         console.error(`[i18n] Failed to load locale "${normalized}"`, error);
-        return 'en';
+        return PICO_DEFAULT_LOCALE;
       })
       .finally(() => {
         delete loadingLocales[normalized];
       });
   }
 
-  return loadingLocales[normalized] ?? Promise.resolve('en');
+  return loadingLocales[normalized] ?? Promise.resolve(PICO_DEFAULT_LOCALE);
 }
 
 export function __setLocaleLoaderForTests(
-  locale: Exclude<SupportedLocale, 'en'>,
+  locale: Exclude<SupportedLocale, 'en' | 'zh-Hans'>,
   loader: () => Promise<{ default: TranslationResource }>,
 ) {
   const previousLoader = localeLoaders[locale];
@@ -268,7 +284,7 @@ export function __setLocaleLoaderForTests(
   };
 }
 
-export function __resetLocaleForTests(locale: Exclude<SupportedLocale, 'en'>) {
+export function __resetLocaleForTests(locale: Exclude<SupportedLocale, 'en' | 'zh-Hans'>) {
   delete loadingLocales[locale];
   loadedLocales.delete(locale);
   if (i18n.hasResourceBundle(locale, defaultNS)) {
@@ -281,17 +297,18 @@ export function syncDocumentLanguage(locale: SupportedLocale) {
     return;
   }
 
-  document.documentElement.lang = locale;
+  document.documentElement.lang = locale === 'zh-Hans' ? 'zh-CN' : locale;
   document.documentElement.dir = i18n.dir(locale);
 }
 
 export const i18nInitPromise = i18n.use(initReactI18next).init({
-  lng: 'en',
+  lng: PICO_DEFAULT_LOCALE,
   fallbackLng: {
-    'zh-TW': ['zh-Hant', 'en'],
-    'zh-HK': ['zh-Hant', 'en'],
+    'zh-TW': ['zh-Hant', 'zh-Hans', 'en'],
+    'zh-HK': ['zh-Hant', 'zh-Hans', 'en'],
+    'zh-Hans': ['en'],
     zh: ['zh-Hans', 'en'],
-    default: ['en'],
+    default: ['zh-Hans', 'en'],
   },
   fallbackNS: defaultNS,
   ns: [defaultNS],
@@ -331,6 +348,17 @@ export async function changeLanguageSafely(locale?: string | null) {
 export async function initializeI18n() {
   const initialLanguage = detectInitialLanguage();
   await changeLanguageSafely(initialLanguage);
+  // Persist product default so next visit stays Chinese
+  if (typeof localStorage !== 'undefined' && initialLanguage === PICO_DEFAULT_LOCALE) {
+    try {
+      const raw = localStorage.getItem('lang');
+      if (!raw || raw === '"en"' || raw === 'en') {
+        localStorage.setItem('lang', JSON.stringify(PICO_DEFAULT_LOCALE));
+      }
+    } catch {
+      /* ignore */
+    }
+  }
   return initialLanguage;
 }
 
