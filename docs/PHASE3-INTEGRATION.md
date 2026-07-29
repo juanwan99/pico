@@ -1,6 +1,7 @@
 # Phase 3 — Integrate Pico ↔ edu-cloud
 
 ```
+PICO_SCOPE: agents work **only** in this repo; edu-cloud is out of band
 STATUS: PICO MERGED · EDU PR OPEN (juanwan99/edu-cloud#443)
 PLAN: MVP-3DAY v1.2 §10
 CONTRACTS: Phase 2 FROZEN v1.0 (unchanged field names)
