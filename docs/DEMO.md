@@ -1,67 +1,40 @@
-# Pico Phase 1 Demo Script
+# Pico 独立原型 — 今日演示
 
 ```
-PLAN: docs/MVP-3DAY.md v1.2 FIXED
+SCOPE: juanwan99/pico only
+PRODUCT: Claude 式 AI 空间 + Kimi Agent + 模型 API + 唯一账本
+NOT: 网盘 · 教务 SaaS · edu 联调
 ```
 
-## Prerequisites
+## 30 秒启动
 
 ```bash
-cp .env.example .env
-# set KIMI_API_KEY in .env
-
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
-make api
-# other terminal
-cd apps/web && npm install && npm run dev
+# 仓库根目录
+cp -n .env.example .env   # 填入 KIMI_API_KEY
+make proto                # API :8000 + Web :5173
 ```
 
-## Script (S1–S7)
+打开 **http://127.0.0.1:5173**
 
-1. **测试签发 School A**  
-   UI 左侧：`school-a` / `member-1` → 签发 token。  
-   或 `POST /v1/dev/token`.
+## 现场路径（S1–S7）
 
-2. **真流式 + Agent 多步**  
-   输入：`列出我学校的班级，并简要说明。` → **创建任务并运行**。  
-   主区应出现：`agent.step`、`tool.call` / `message.delta`、终态 `succeeded`。
+| 步 | 操作 | 看见什么 |
+|----|------|----------|
+| 1 | 左侧 **签发测试凭证**（school-a） | S4 身份 |
+| 2 | **一键演示路径** 或「创建任务并运行」 | 多步 tool.call/result + 回复 |
+| 3 | 右侧 **产物** | 班级表 markdown |
+| 4 | **跨校拒绝 (S6)** | 时间线 `auth.deny` |
+| 5 | **新建提案** → **人工确认** | S7 审计；不写学校库 |
+| 6 | 顶栏 pill | 危险工具 OFF · Agent pin |
 
-3. **FakeEdu 工具 Event**  
-   时间线含 `fake_edu_list_classes` 的 `tool.call` / `tool.result`。
-
-4. **产物**  
-   右侧产物区出现班级表 markdown。
-
-5. **跨校拒绝 + Event**  
-   点 **跨校拒绝演示**。  
-   时间线含 `auth.deny`（token=school-a，请求 school-b）。
-
-6. **待确认**  
-   **新建提案** → 左侧待确认列表 → **确认**。  
-   审计行出现；**无学校业务库写入**。
-
-7. **取消 Run**  
-   发起长任务后立即 **取消 Run** → 终态 `cancelled` 或尽快结束。
-
-## curl 速查
+## 无 UI 的证据
 
 ```bash
-TOK=$(curl -s -X POST localhost:8000/v1/dev/token \
-  -H 'Content-Type: application/json' \
-  -d '{"school_id":"school-a","membership_id":"m1"}' | jq -r .access_token)
-
-curl -s -X POST localhost:8000/v1/tasks \
-  -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
-  -d '{"prompt":"列出我学校的班级"}' | jq .
-
-# poll events
-RUN=<run_id>
-curl -s localhost:8000/v1/runs/$RUN/events -H "Authorization: Bearer $TOK" | jq .
+make demo    # scripts/demo_e2e.py → DEMO_OK
+make test
+make hello   # 真模型或诚实 BLOCKED
 ```
 
-## Non-goals shown
+## 一句话对外
 
-- 未连接 edu-cloud  
-- 未启用 Shell/File/Web/MCP  
-- 确认 ≠ 写教务库  
+> Pico 是独立 AI 底座原型：服务端 Kimi 多步工具环、真实模型 API、三区 UI、租户 fail-closed 账本；今天不连 edu。
