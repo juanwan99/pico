@@ -32,6 +32,17 @@ const nextConfig = {
   },
   experimental: {
     forceSwcTransforms: true,
+    // Preview proxy: browser Origin is localhost:8080 but X-Forwarded-Host is the public sandbox host.
+    serverActions: {
+      allowedOrigins: [
+        "localhost:8080",
+        "127.0.0.1:8080",
+        "localhost:3000",
+        "hds-uil2qzt0xk5b-6014-m0sh8.grok-code-wild.hades-www.grok-sandbox.com",
+        "*.grok-sandbox.com",
+        "*.hades-www.grok-sandbox.com",
+      ],
+    },
   },
 };
 
