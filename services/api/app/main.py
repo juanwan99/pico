@@ -31,8 +31,8 @@ except ImportError:
 from app import run_service
 from app.auth import Principal, issue_test_token, require_principal, require_service_token
 from app.db import EventRow, RunRow, get_session, init_db
-from app.settings import Settings, get_settings
 from app.openai_compat import router as openai_compat_router
+from app.settings import Settings, get_settings
 
 
 def _sync_settings_to_environ() -> None:
