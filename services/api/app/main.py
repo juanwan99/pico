@@ -438,8 +438,8 @@ async def stream_run(
                             "data": json.dumps(_event_dict(e), ensure_ascii=False),
                         }
                 status = r.status if r else "failed"
-            if status in terminal and last_seq > 0:
-                # final drain already done
+            if status in terminal:
+                # End even when zero events (failed before emit) — avoid infinite poll.
                 yield {
                     "event": "stream.end",
                     "data": json.dumps({"status": status}),

@@ -47,36 +47,38 @@ def _content_text(content: str | list[Any] | None) -> str:
     return "\n".join(parts)
 
 
+def _dev_proxy_keys(settings: Settings) -> set[str]:
+    """Explicit dev/proxy keys only — never KIMI_API_KEY or JWT secret."""
+    keys = {"pico-dev", "sk-pico-dev"}
+    extra = (settings.pico_openai_proxy_key or "").strip()
+    if extra:
+        keys.add(extra)
+    return keys
+
+
 def _principal_from_auth(
     authorization: str | None,
     settings: Settings,
 ) -> Principal:
-    """Accept Bearer pico-jwt OR shared proxy key → auto test principal."""
+    """Accept Pico JWT, or (non-production) explicit OpenAI-compat proxy keys.
+
+    Rejects arbitrary sk-*, and does not treat model keys / JWT secrets as Bearer.
+    """
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="missing bearer")
     token = authorization.split(" ", 1)[1].strip()
-    # Shared key for NextChat OPENAI_API_KEY (not a JWT)
-    proxy_key = (settings.kimi_api_key or settings.pico_jwt_secret or "").strip()
-    if token == proxy_key or token in {
-        "pico-dev",
-        "sk-pico-dev",
-        settings.pico_jwt_secret,
-    }:
-        # mint ephemeral principal claims for ledger
-        return Principal(
-            school_id="school-a",
-            membership_id="nextchat-user",
-            scopes=["ai:run", "ai:read", "ai:confirm"],
-            iss=settings.pico_jwt_iss,
-            aud=settings.pico_jwt_aud,
-            exp=int(time.time()) + 3600,
-            raw={},
-        )
+    if not token:
+        raise HTTPException(status_code=401, detail="empty bearer")
+
+    env = (settings.pico_env or "development").lower()
+    production = env in {"production", "prod"}
+
+    # Prefer real JWT always
     try:
         return decode_token(token, settings)
-    except HTTPException:
-        # last resort: treat as opaque and use default principal if looks like sk-
-        if token.startswith("sk-"):
+    except HTTPException as jwt_err:
+        # Dev proxy keys for NextChat OPENAI_API_KEY — disabled in production
+        if not production and token in _dev_proxy_keys(settings):
             return Principal(
                 school_id="school-a",
                 membership_id="nextchat-user",
@@ -84,8 +86,13 @@ def _principal_from_auth(
                 iss=settings.pico_jwt_iss,
                 aud=settings.pico_jwt_aud,
                 exp=int(time.time()) + 3600,
-                raw={},
+                raw={"proxy": True},
             )
+        if production and token in _dev_proxy_keys(settings):
+            raise HTTPException(
+                status_code=401,
+                detail="proxy keys disabled in production; use Pico JWT",
+            ) from jwt_err
         raise
 
 

@@ -305,8 +305,13 @@ function applyEvent(ev: {
     if (p.status === "failed") {
       const um = String(p.user_message || friendlyError(p.reason) || "运行失败");
       errorText.value = um;
-      const last = messages.value[messages.value.length - 1];
-      if (!(last?.role === "assistant" && last.text.includes(um))) {
+      // Avoid double error rows when message.final already carries the same text.
+      const already = messages.value.some(
+        (m) =>
+          (m.role === "assistant" || m.role === "system") &&
+          (m.text === um || m.text.includes(um) || um.includes(m.text)),
+      );
+      if (!already) {
         pushMsg({ role: "assistant", text: um, seq: ev.seq });
       }
     }
@@ -494,16 +499,24 @@ async function openTask(id: string) {
   await ensureToken();
   activeTaskId.value = id;
   messages.value = [];
+  errorText.value = "";
   const t = await api(`/v1/tasks/${id}`);
-  pushMsg({ role: "system", text: `会话：${t.task?.title || id}` });
-  // load latest run events
+  // load latest run — restore user prompt as first bubble (not only system+events)
   const runs = await api(`/v1/tasks/${id}/runs`);
   const run = (runs.runs || [])[0];
   if (run) {
     activeRunId.value = run.id;
     runStatus.value = run.status;
+    const userText = String(run.prompt || t.task?.title || "").trim();
+    if (userText) {
+      pushMsg({ role: "user", text: userText });
+    } else {
+      pushMsg({ role: "system", text: `会话：${t.task?.title || id}` });
+    }
     const evs = await api(`/v1/runs/${run.id}/events`);
     for (const ev of evs.events || []) applyEvent(ev);
+  } else {
+    pushMsg({ role: "system", text: `会话：${t.task?.title || id}` });
   }
   await loadArtifacts(id);
 }
