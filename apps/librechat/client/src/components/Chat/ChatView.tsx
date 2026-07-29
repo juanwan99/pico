@@ -184,15 +184,12 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     )}
                   >
                     {isProjectLandingPage && project && <ProjectLandingChip project={project} />}
-                    <div
-                      className={
-                        isLandingPage
-                          ? 'pointer-events-none fixed left-[-9999px] top-0 h-0 w-0 overflow-hidden opacity-0'
-                          : 'mx-auto w-full max-w-3xl px-2'
-                      }
-                    >
-                      <ChatForm index={index} placeholder={chatFormPlaceholder} />
-                    </div>
+                    {/* Single submit path: Landing uses useSubmitMessage; ChatForm only when chatting */}
+                    {!isLandingPage ? (
+                      <div className="mx-auto w-full max-w-3xl px-2">
+                        <ChatForm index={index} placeholder={chatFormPlaceholder} />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 {showResultPanel ? (

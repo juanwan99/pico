@@ -205,6 +205,45 @@ async def _ledger_task_run(
     return task_id, run_id
 
 
+def _extract_file_artifacts(text: str) -> list[tuple[str, str]]:
+    """Parse fenced file blocks into (filename, body)."""
+    import re
+
+    out: list[tuple[str, str]] = []
+    if not text:
+        return out
+    for m in re.finditer(
+        r"```(?:file:)?([A-Za-z0-9._\-]+\.[A-Za-z0-9]{1,12})\s*\n([\s\S]*?)```",
+        text,
+    ):
+        name = m.group(1).strip()
+        body = m.group(2).rstrip()
+        if name:
+            out.append((name[:200], body[:50000]))
+    return out
+
+
+def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
+    """Synthesize file when user explicitly asks to create name.ext with content."""
+    import re
+
+    if not user_prompt:
+        return []
+    um = re.search(
+        r"(?:创建|生成|写|保存).{0,40}?([A-Za-z0-9._\-]+\.(?:txt|md|csv|json))",
+        user_prompt,
+        re.I,
+    )
+    if not um:
+        return []
+    name = um.group(1)
+    cm = re.search(r"内容\s*[为是:=：]\s*([^\n，,。；;]{1,200})", user_prompt)
+    body = "hi"
+    if cm:
+        body = cm.group(1).strip().strip("\"'「」")
+    return [(name, body or "hi")]
+
+
 async def _finalize_run(
     run_id: str,
     *,
@@ -212,10 +251,12 @@ async def _finalize_run(
     error: str | None = None,
     final_text: str | None = None,
     task_id: str | None = None,
+    user_prompt: str | None = None,
 ) -> None:
     from app.db import ArtifactRow
 
     factory = session_factory()
+    created_titles: list[str] = []
     async with factory() as session:
         run = await session.get(RunRow, run_id)
         if not run:
@@ -225,6 +266,21 @@ async def _finalize_run(
             run.error = error
         tid = task_id or run.task_id
         if final_text and tid and status == "succeeded":
+            files = _extract_file_artifacts(final_text)
+            if not files:
+                files = _file_from_user_prompt(user_prompt)
+            for name, body in files:
+                session.add(
+                    ArtifactRow(
+                        id=new_id(),
+                        task_id=tid,
+                        run_id=run_id,
+                        kind="file",
+                        title=name,
+                        inline=body,
+                    )
+                )
+                created_titles.append(name)
             session.add(
                 ArtifactRow(
                     id=new_id(),
@@ -235,15 +291,17 @@ async def _finalize_run(
                     inline=final_text[:8000],
                 )
             )
+            created_titles.append("回复摘要")
         await session.commit()
-    if final_text and status == "succeeded":
+    if created_titles:
         async with factory() as session:
-            await append_event(
-                session,
-                run_id,
-                "artifact.created",
-                {"title": "回复摘要", "kind": "doc"},
-            )
+            for title in created_titles:
+                await append_event(
+                    session,
+                    run_id,
+                    "artifact.created",
+                    {"title": title, "kind": "file" if title != "回复摘要" else "doc"},
+                )
 
 
 async def _run_and_collect(
@@ -384,6 +442,7 @@ async def chat_completions(
                 "你是 Pico，面向学校场景的 AI 助手。"
                 "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
                 "不要编造不存在的学校数据。"
+                "若用户要求创建或生成文件（如 hello.txt），请在回复中用代码块输出完整内容，格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
             )
             parts: list[str] = []
             try:
@@ -397,13 +456,13 @@ async def chat_completions(
                     if piece:
                         parts.append(piece)
                 text = "".join(parts) or "(empty)"
-                await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id)
+                await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id, user_prompt=prompt)
             except Exception as e:  # noqa: BLE001
                 text = f"【错误】{user_message_for_error(str(e))}"
                 await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
         else:
             text = await _run_and_collect(prompt, principal, settings, history=history)
-            await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id)
+            await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id, user_prompt=prompt)
         return {
             "id": completion_id,
             "object": "chat.completion",
@@ -455,6 +514,7 @@ async def chat_completions(
                 "你是 Pico，面向学校场景的 AI 助手。"
                 "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
                 "不要编造不存在的学校数据。"
+                "若用户要求创建或生成文件（如 hello.txt），请在回复中用代码块输出完整内容，格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
             )
             parts: list[str] = []
             try:
@@ -473,6 +533,7 @@ async def chat_completions(
                     status="succeeded",
                     final_text="".join(parts),
                     task_id=task_id,
+                    user_prompt=prompt,
                 )
             except Exception as e:  # noqa: BLE001
                 yield chunk({"content": f"【错误】{user_message_for_error(str(e))}"})

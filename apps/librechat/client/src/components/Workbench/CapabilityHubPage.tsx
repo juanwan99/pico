@@ -146,7 +146,19 @@ export default function CapabilityHubPage() {
                   <button
                     type="button"
                     className="mt-3 text-[12.5px] font-medium text-[#1a1a1a] underline-offset-2 hover:underline"
-                    onClick={() => navigate('/c/new')}
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem('pico:pendingExpert', e.name);
+                        sessionStorage.setItem(
+                          'pico:pendingPrompt',
+                          `请以「${e.name}」专家身份协助：${e.desc}`,
+                        );
+                      } catch {
+                        /* ignore */
+                      }
+                      navigate('/c/new');
+                    }}
+
                   >
                     在任务中召唤
                   </button>

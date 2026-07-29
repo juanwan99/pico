@@ -2,7 +2,7 @@
  * Pico home — pixel layout aligned to WorkBuddy reference (clean-room).
  * Owns hero + scene chips + primary composer chrome on landing.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FileText,
   Landmark,
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useOptionalChatFormContext } from '~/Providers';
 import { useAuthContext } from '~/hooks';
+import useSubmitMessage from '~/hooks/Messages/useSubmitMessage';
 import WorkspaceSelector from '~/components/Chat/Input/WorkspaceSelector';
 import { cn } from '~/utils';
 
@@ -92,6 +93,7 @@ export default function Landing({
 }) {
   const { user } = useAuthContext();
   const form = useOptionalChatFormContext();
+  const { submitMessage } = useSubmitMessage();
   const [scene, setScene] = useState<SceneId>('office');
   const [text, setText] = useState('');
   const [permOpen, setPermOpen] = useState(false);
@@ -119,6 +121,34 @@ export default function Landing({
     },
     [syncForm],
   );
+
+  const sendTask = useCallback(() => {
+    const value = text.trim();
+    if (!value) {
+      return;
+    }
+    // Single submit path — no DOM bridge to hidden ChatForm
+    submitMessage({ text: value });
+    syncForm('');
+  }, [text, submitMessage, syncForm]);
+
+  // Expert / skill "summon" prefill from capability hub
+  useEffect(() => {
+    try {
+      const expert = sessionStorage.getItem('pico:pendingExpert');
+      if (expert) {
+        sessionStorage.removeItem('pico:pendingExpert');
+        fillPrompt(`请以「${expert}」的角色协助完成任务：`);
+      }
+      const pre = sessionStorage.getItem('pico:pendingPrompt');
+      if (pre) {
+        sessionStorage.removeItem('pico:pendingPrompt');
+        fillPrompt(pre);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [fillPrompt]);
 
   const name = user?.name?.split(/\s+/)[0] || '';
 
@@ -187,21 +217,8 @@ export default function Landing({
               onChange={(e) => syncForm(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
-                  // let ChatForm own submit; focus real submit path by dispatching
                   e.preventDefault();
-                  const real = document.querySelector<HTMLTextAreaElement>(
-                    'textarea[data-testid="text-input"]',
-                  );
-                  if (real) {
-                    const native = Object.getOwnPropertyDescriptor(
-                      window.HTMLTextAreaElement.prototype,
-                      'value',
-                    )?.set;
-                    native?.call(real, text);
-                    real.dispatchEvent(new Event('input', { bubbles: true }));
-                    // try click send
-                    document.querySelector<HTMLButtonElement>('[data-testid="send-button"]')?.click();
-                  }
+                  sendTask();
                 }
               }}
               placeholder={PLACEHOLDER}
@@ -267,23 +284,7 @@ export default function Landing({
                   )}
                   aria-label="发送"
                   disabled={!text.trim()}
-                  onClick={() => {
-                    const real = document.querySelector<HTMLTextAreaElement>(
-                      'textarea[data-testid="text-input"]',
-                    );
-                    if (real) {
-                      const native = Object.getOwnPropertyDescriptor(
-                        window.HTMLTextAreaElement.prototype,
-                        'value',
-                      )?.set;
-                      native?.call(real, text);
-                      real.dispatchEvent(new Event('input', { bubbles: true }));
-                      form?.setValue('text', text, { shouldDirty: true });
-                      document
-                        .querySelector<HTMLButtonElement>('[data-testid="send-button"]')
-                        ?.click();
-                    }
-                  }}
+                  onClick={() => sendTask()}
                 >
                   <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
                 </button>
