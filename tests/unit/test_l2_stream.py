@@ -61,6 +61,7 @@ def test_cancel_run_endpoint() -> None:
 def test_stream_session_factory_uses_maker() -> None:
     """Regression: stream_run must call session_factory() then factory()."""
     import inspect
+
     from app import main as main_mod
 
     src = inspect.getsource(main_mod.stream_run)
