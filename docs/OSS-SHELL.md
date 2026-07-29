@@ -1,4 +1,4 @@
-> **STATUS: LibreChat is now the product shell (workbench/nextchat removed).**
+> **STATUS: LibreChat is the product shell.** `apps/web` / `nextchat` / `workbench` removed. See also `CORRECTED-GOALS.md`.
 
 # Pico 产品壳：开源选型（WorkBuddy 品类）
 
@@ -22,8 +22,7 @@ WorkBuddy 类 **任务工作台**：
 | **OpenHands** | Web Agent + 终端/文件 | 高（偏工程 Agent） | 可接模型 | MIT | 通常要 Docker 沙盒 | 工程向备选 |
 | **LobeChat** | Web 好看 Chat | 中 | 好 | **社区证限制二次商用分发** | 重 monorepo | **不选（许可风险）** |
 | **Open WebUI** | Web + 知识库 | 低～中 | 好 | BSD 系 | 中 | 知识库轨，非任务台 |
-| **NextChat（现状遗留）** | Web Chat | 低 | 已接 | MIT 系 | 已有 | **仅过渡，非终局** |
-| **apps/workbench（自研）** | Web 任务首页 | IA 对齐截图 | 已接 | 自有 | 已上预览 | **临时脚手架，等 OSS 接入后降级** |
+| **NextChat / workbench** | — | — | — | — | **已删除** | 勿恢复为默认 |
 | WorkBuddy 本体 | 闭源桌面 | 目标参考 | 可配 API | 闭源 | 不可拆 | **禁止 fork 源码** |
 
 ## 拍板建议
@@ -36,7 +35,6 @@ WorkBuddy 类 **任务工作台**：
   4) Agent/MCP 面板保留，对接 Pico 工具环（后置）
 
 并行参考 = AionUi（桌面 Cowork 信息架构）
-临时壳   = apps/workbench（预览不断线，直到 LibreChat 绿）
 禁止     = LobeChat 商用分发风险；拆 WorkBuddy 安装包
 ```
 

@@ -42,6 +42,10 @@ Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
 ---
 
+## Corrected goals snapshot
+
+Owner-aligned goals + purged wrong memories: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
+
 ## Product rules
 
 - AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.
