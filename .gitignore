@@ -167,3 +167,6 @@ htmlcov/
 # Local agent / kimi state
 .kimi/
 .kimi-code/
+apps/nextchat/node_modules/
+apps/nextchat/.next/
+apps/nextchat/.env.local
