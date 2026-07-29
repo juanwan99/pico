@@ -39,11 +39,18 @@ export default function useSubmitMessage() {
       }
 
       const convoId = conversation?.conversationId;
-      const wsPrefix = workspaceContextPrefix(convoId);
+      const userId = user?.id ?? (user as { _id?: string } | undefined)?._id;
+      let wsPrefix = workspaceContextPrefix(convoId);
+      if (userId && wsPrefix && !wsPrefix.includes('【Pico-User:')) {
+        wsPrefix = `【Pico-User:${String(userId)}】 ${wsPrefix}`;
+      } else if (userId && !wsPrefix) {
+        wsPrefix = `【Pico-User:${String(userId)}】\n`;
+      }
       const textWithWs =
         wsPrefix &&
         data.text &&
         !data.text.includes('【Pico-Convo:') &&
+        !data.text.includes('【Pico-User:') &&
         !data.text.startsWith('【工作空间')
           ? `${wsPrefix}${data.text}`
           : data.text;
@@ -63,7 +70,7 @@ export default function useSubmitMessage() {
       }
       methods.reset();
     },
-    [ask, methods, addedConvo, setMessages, getMessages, getLatestMessage, conversation],
+    [ask, methods, addedConvo, setMessages, getMessages, getLatestMessage, conversation, user],
   );
 
   const submitPrompt = useCallback(

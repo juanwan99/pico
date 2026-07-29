@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.auth import Principal, decode_token
+from app.auth import Principal, decode_token, scope_proxy_principal
 from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
 
@@ -341,16 +341,23 @@ async def chat_completions(
     authorization: str | None = Header(default=None),
     x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
     x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+    x_pico_membership_id: str | None = Header(default=None, alias="X-Pico-Membership-Id"),
     settings: Settings = Depends(get_settings),
 ):
     import re
 
     principal = _principal_from_auth(authorization, settings)
+    # 【Pico-User:xxx】 from client message (LibreChat cannot always set headers on reverse proxy)
+    raw_for_user = _last_user_prompt(body.messages)
+    m_user = re.search(r"【Pico-User:([^】]+)】", raw_for_user)
+    membership_hint = x_pico_membership_id or (m_user.group(1).strip() if m_user else None)
+    principal = scope_proxy_principal(principal, membership_hint)
     raw_prompt = _last_user_prompt(body.messages)
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
     # strip ledger markers from model-visible prompt
     prompt = re.sub(r"【Pico-Convo:[^】]+】", "", raw_prompt)
+    prompt = re.sub(r"【Pico-User:[^】]+】", "", prompt)
     prompt = re.sub(r"【工作空间：[^】]+】", "", prompt)
     prompt = re.sub(r"【权限：[^】]+】", "", prompt)
     prompt = re.sub(r"【模型偏好：[^】]+】", "", prompt).strip() or raw_prompt

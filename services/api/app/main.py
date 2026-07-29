@@ -29,7 +29,7 @@ except ImportError:
     pass
 
 from app import run_service
-from app.auth import Principal, issue_test_token, require_principal, require_service_token
+from app.auth import Principal, issue_test_token, require_principal, require_scoped_principal, require_service_token
 from app.db import EventRow, RunRow, WorkspaceRow, get_session, init_db, new_id
 from app.openai_compat import router as openai_compat_router
 from app.settings import Settings, get_settings
@@ -251,7 +251,7 @@ async def dev_token(
 
 
 @app.get("/v1/me")
-async def me(principal: Principal = Depends(require_principal)) -> dict:
+async def me(principal: Principal = Depends(require_scoped_principal)) -> dict:
     return {
         "school_id": principal.school_id,
         "membership_id": principal.membership_id,
@@ -269,7 +269,7 @@ class HelloRequest(BaseModel):
 @app.post("/v1/dev/model-hello")
 async def model_hello(
     body: HelloRequest,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     from pico_orchestrator.provider import resolve_provider, stream_chat
@@ -305,7 +305,7 @@ async def model_hello(
 
 
 @app.get("/v1/tools")
-async def list_tools(principal: Principal = Depends(require_principal)) -> dict:
+async def list_tools(principal: Principal = Depends(require_scoped_principal)) -> dict:
     from pico_orchestrator.tools_builtin import build_default_gateway
 
     gw = build_default_gateway()
@@ -320,7 +320,7 @@ class ToolInvokeRequest(BaseModel):
 @app.post("/v1/tools/invoke")
 async def invoke_tool(
     body: ToolInvokeRequest,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
 ) -> dict:
     from pico_orchestrator.gateway import ToolError
     from pico_orchestrator.tools_builtin import build_default_gateway
@@ -349,7 +349,7 @@ class CreateWorkspaceRequest(BaseModel):
 
 @app.get("/v1/workspaces")
 async def list_workspaces(
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     from sqlalchemy import select
@@ -380,7 +380,7 @@ async def list_workspaces(
 @app.post("/v1/workspaces")
 async def create_workspace(
     body: CreateWorkspaceRequest,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     name = body.name.strip()
@@ -409,7 +409,7 @@ async def create_workspace(
 @app.delete("/v1/workspaces/{workspace_id}")
 async def delete_workspace(
     workspace_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     row = await session.get(WorkspaceRow, workspace_id)
@@ -469,7 +469,7 @@ def _event_dict(e: EventRow) -> dict:
 @app.post("/v1/tasks")
 async def create_task(
     body: CreateTaskRequest,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     if not body.prompt.strip():
@@ -484,7 +484,7 @@ async def create_task(
 @app.get("/v1/tasks")
 async def tasks(
     conversation_id: str | None = None,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     rows = await run_service.list_tasks(session, principal)
@@ -496,7 +496,7 @@ async def tasks(
 @app.get("/v1/tasks/{task_id}")
 async def get_task(
     task_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     task = await run_service.get_task_for_principal(session, task_id, principal)
@@ -522,7 +522,7 @@ async def get_task(
 @app.get("/v1/tasks/{task_id}/runs")
 async def list_task_runs(
     task_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     task = await run_service.get_task_for_principal(session, task_id, principal)
@@ -535,7 +535,7 @@ async def list_task_runs(
 @app.get("/v1/runs/{run_id}")
 async def get_run(
     run_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     run = await run_service.get_run_for_principal(session, run_id, principal)
@@ -547,7 +547,7 @@ async def get_run(
 @app.post("/v1/runs/{run_id}/cancel")
 async def cancel_run(
     run_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     from app.db import append_event
@@ -563,7 +563,7 @@ async def cancel_run(
 @app.get("/v1/runs/{run_id}/events")
 async def run_events(
     run_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     run = await run_service.get_run_for_principal(session, run_id, principal)
@@ -577,7 +577,7 @@ async def run_events(
 async def stream_run(
     run_id: str,
     request: Request,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ):
     run = await run_service.get_run_for_principal(session, run_id, principal)
@@ -630,7 +630,7 @@ class ChangeCreateRequest(BaseModel):
 @app.post("/v1/changes")
 async def create_change(
     body: ChangeCreateRequest,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     row = await run_service.create_change(
@@ -655,7 +655,7 @@ async def create_change(
 
 @app.get("/v1/changes")
 async def changes(
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     rows = await run_service.list_changes(session, principal)
@@ -678,7 +678,7 @@ async def changes(
 @app.post("/v1/changes/{change_id}/confirm")
 async def confirm_change(
     change_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     try:
@@ -705,7 +705,7 @@ async def confirm_change(
 
 @app.post("/v1/demo/cross-school-deny")
 async def demo_cross_school(
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     return await run_service.demo_cross_school_deny(session, principal)

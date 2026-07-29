@@ -153,16 +153,26 @@ export default function ResultPanel({
 
   const openArtifact = (a: ArtifactItem & { body?: string }) => {
     if (a.url) {
-      window.open(a.url, '_blank', 'noopener,noreferrer');
+      // only allow http(s) relative-safe opens
+      try {
+        const u = new URL(a.url, window.location.origin);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+          return;
+        }
+        window.open(u.toString(), '_blank', 'noopener,noreferrer');
+      } catch {
+        /* ignore */
+      }
       return;
     }
     if (a.body) {
       const w = window.open('', '_blank');
       if (w) {
-        w.document.write(`<pre style="white-space:pre-wrap;font:14px/1.5 system-ui;padding:16px">${a.body
-          .replace(/&/g, '&')
-          .replace(/</g, '<')}</pre>`);
-        w.document.title = a.name;
+        w.document.title = a.name || '产物';
+        const pre = w.document.createElement('pre');
+        pre.style.cssText = 'white-space:pre-wrap;font:14px/1.5 system-ui;padding:16px;margin:0';
+        pre.textContent = a.body; // textContent — no HTML injection
+        w.document.body.appendChild(pre);
       }
     }
   };

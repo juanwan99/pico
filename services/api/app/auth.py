@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.settings import Settings, get_settings
@@ -182,6 +182,31 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
     )
 
 
+def scope_proxy_principal(
+    principal: Principal,
+    membership_id: str | None,
+) -> Principal:
+    """When using dev proxy key, bind ledger rows to LibreChat user id."""
+    if not principal.raw.get("proxy"):
+        return principal
+    mid = (membership_id or "").strip()
+    if not mid:
+        return principal
+    # allow uuid / mongo id / slug only
+    import re
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", mid):
+        return principal
+    return Principal(
+        school_id=principal.school_id,
+        membership_id=mid,
+        scopes=principal.scopes,
+        iss=principal.iss,
+        aud=principal.aud,
+        exp=principal.exp,
+        raw={**principal.raw, "scoped_membership": mid},
+    )
+
+
 async def require_principal(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),
@@ -192,6 +217,20 @@ async def require_principal(
             detail={"code": "auth.missing", "message": "bearer token required"},
         )
     return decode_token(creds.credentials, settings)
+
+
+async def require_scoped_principal(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    settings: Settings = Depends(get_settings),
+    x_pico_membership_id: str | None = Header(default=None, alias="X-Pico-Membership-Id"),
+) -> Principal:
+    if creds is None or not creds.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "auth.missing", "message": "bearer token required"},
+        )
+    p = decode_token(creds.credentials, settings)
+    return scope_proxy_principal(p, x_pico_membership_id)
 
 
 def require_service_token(
