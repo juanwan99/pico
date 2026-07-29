@@ -227,3 +227,5 @@ pico/
 ## 整体架构与定价
 
 - 主文档：[`docs/OVERALL-ARCHITECTURE.md`](./OVERALL-ARCHITECTURE.md)（DRAFT，待业主确认升 FIXED）
+
+- 默认拍板快查：[`docs/ARCHITECTURE-DEFAULTS.md`](./ARCHITECTURE-DEFAULTS.md)
