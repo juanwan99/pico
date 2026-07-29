@@ -1,0 +1,77 @@
+{
+  "at": "2026-07-29T12:47:13.460Z",
+  "http": {
+    "3080": {
+      "name": "3080",
+      "url": "http://127.0.0.1:3080/login",
+      "status": 200,
+      "bodyLen": 11852,
+      "contentType": "text/html; charset=utf-8",
+      "location": "",
+      "hasPicoLoading": true,
+      "hasWelcome": false,
+      "hasPicoTitle": true,
+      "snippet": "<!doctype html> <html lang=\"*\"> <head> <meta charset=\"utf-8\" /> <base href=\"/\" /> <meta name=\"theme-color\" content=\"#171717\" /> <meta name=\"mobile-web-app-capable"
+    },
+    "6014": {
+      "name": "6014",
+      "url": "http://127.0.0.1:6014/login",
+      "status": 403,
+      "bodyLen": 0,
+      "contentType": "",
+      "location": "",
+      "hasPicoLoading": false,
+      "hasWelcome": false,
+      "hasPicoTitle": false,
+      "snippet": ""
+    },
+    "8080": {
+      "name": "8080",
+      "url": "http://127.0.0.1:8080/login",
+      "status": 200,
+      "bodyLen": 11852,
+      "contentType": "text/html; charset=utf-8",
+      "location": "",
+      "hasPicoLoading": true,
+      "hasWelcome": false,
+      "hasPicoTitle": true,
+      "snippet": "<!doctype html> <html lang=\"*\"> <head> <meta charset=\"utf-8\" /> <base href=\"/\" /> <meta name=\"theme-color\" content=\"#171717\" /> <meta name=\"mobile-web-app-capable"
+    },
+    "api": {
+      "name": "api",
+      "url": "http://127.0.0.1:18765/health",
+      "status": 200,
+      "bodyLen": 107,
+      "contentType": "application/json",
+      "location": "",
+      "hasPicoLoading": false,
+      "hasWelcome": false,
+      "hasPicoTitle": false,
+      "snippet": "{\"ok\":true,\"service\":\"pico-api\",\"phase\":\"3-integrate\",\"git_sha\":\"429f85f4682fb525a77dee72df51b43ff05b4fac\"}"
+    }
+  },
+  "browser": {
+    "6014": {
+      "url": "http://127.0.0.1:6014/login",
+      "navStatus": 403,
+      "bodyText": "",
+      "hasWelcome": false,
+      "hasPicoLoading": false,
+      "hasLoginForm": false,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+      ],
+      "shot": "/workspace/screenshots/preview-6014.png"
+    },
+    "8080": {
+      "url": "http://127.0.0.1:8080/login",
+      "navStatus": 200,
+      "bodyText": "Welcome back\nEmail address\nPassword\nContinue\n\nDon't have an account? Sign up",
+      "hasWelcome": true,
+      "hasPicoLoading": true,
+      "hasLoginForm": true,
+      "consoleErrors": [],
+      "shot": "/workspace/screenshots/preview-8080.png"
+    }
+  }
+}

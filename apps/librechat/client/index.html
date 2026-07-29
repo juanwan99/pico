@@ -2,6 +2,21 @@
 <html lang="en-US">
   <head>
     <meta charset="utf-8" />
+    <script>
+      /* Pico: early SW teardown so stale LibreChat workbox cannot blank the shell */
+      (function () {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }).catch(function () {});
+        if (window.caches && caches.keys) {
+          caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+          }).catch(function () {});
+        }
+      })();
+    </script>
+
     <base href="/" />
     <meta name="theme-color" content="#171717" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -9,9 +24,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta
       name="description"
-      content="LibreChat - An open source chat application with support for multiple AI models"
+      content="Pico — AI 工作台"
     />
-    <title>LibreChat</title>
+    <title>Pico</title>
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-180x180.png" />
@@ -197,7 +212,12 @@
   </head>
   <body>
     <div id="root">
-      <div id="loading-container"></div>
+      <div id="loading-container">
+        <div id="pico-boot" role="status" aria-live="polite" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:12px;font-family:system-ui,-apple-system,sans-serif;background:#0d0d0d;color:#f5f5f5;text-align:center;margin:0;padding:24px">
+          <h1 style="font-size:1.25rem;font-weight:600;margin:0">Pico 正在加载…</h1>
+          <p style="margin:0;opacity:.75;font-size:.95rem">AI 工作台 · 若超过 10 秒仍停在此页，预览层可能未命中产品端口</p>
+        </div>
+      </div>
     </div>
   </body>
 </html>
