@@ -10,11 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from app.auth import Principal, decode_token, issue_test_token
-from app.db import append_event, new_id, session_factory
-from app.db import RunRow, TaskRow
+from app.auth import Principal, decode_token
+from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
 
 router = APIRouter(tags=["openai-compat"])
@@ -126,8 +125,9 @@ async def _run_and_collect(
     *,
     history: list[dict[str, Any]] | None = None,
 ) -> str:
-    from app.db import init_db
     from pico_orchestrator.runner import RunCaps, run_agent_loop
+
+    from app.db import init_db
 
     await init_db()
     factory = session_factory()
