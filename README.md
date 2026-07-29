@@ -9,49 +9,87 @@ It is the **AI space**: experience + agent orchestration + model API access.
 
 | Layer | Responsibility |
 |-------|----------------|
-| Experience | Claude-style IA (chat + artifacts) + Kimi-like density; deep clone of mature AI UX, not a novel shell |
-| Agent orchestration | **Kimi open-source Agent runtime** (thin adapters only — do not invent an agent OS) |
-| Governance facts | Task / Run / Event (and later Change / Review / Commit) owned in DB; sessions are not business truth |
-| Models | **HTTP APIs only** (Kimi and/or DeepSeek); thin provider adapters; keys never in the browser |
-| Education SaaS | Lives in **[edu-cloud](https://github.com/juanwan99/edu-cloud)**; Pico exposes tools/APIs edu mounts |
-
-## Relationship to edu-cloud
-
-```
-edu-cloud (schools, exams, membership, deploy)
-     │  tools / auth context / review write-back
-     ▼
-pico (AI workspace + agent + model API)
-```
-
-- **edu-cloud** keeps multi-tenant school business and OneFlow release for the school product.
-- **pico** iterates AI UX + agent + providers at higher speed; integrates via versioned API/SDK and shared auth contracts.
-- Do **not** duplicate exam/grade/student domains inside Pico.
-
-## 3-day MVP bar (initial)
-
-1. One model API path live (Kimi **or** DeepSeek first).
-2. Kimi Agent really runs multi-step tools server-side.
-3. Task/Run/Event (or equivalent) persisted; school/membership injected server-side.
-4. Existing-style three-pane UI connected (task + stream + one artifact type).
-5. 1–2 read-only tools + cross-tenant deny.
-6. Minimal human confirm path for proposed writes (full exam write-back can stay in edu-cloud later).
-
-## Non-goals (v0)
-
-- Full 5GB file-product contract as the product center
-- Self-hosting model weights as default
-- Rebuilding edu business modules inside this repo
-- Skipping auth / tenant fail-closed
+| Experience | Claude-style IA (chat + artifacts) + Kimi-like density |
+| Agent orchestration | **Kimi open-source Agent runtime** (thin adapters only) |
+| Governance facts | Task / Run / Event owned in Pico DB (unique AI ledger) |
+| Models | **HTTP APIs only** (Kimi / DeepSeek); keys never in the browser |
+| Education SaaS | **[edu-cloud](https://github.com/juanwan99/edu-cloud)** — Phase 3 wire-up |
 
 ## Status
 
-**3-Day MVP plan: FIXED v1.2** — see [`docs/MVP-3DAY.md`](docs/MVP-3DAY.md).
+**3-Day MVP plan: FIXED v1.2** — [`docs/MVP-3DAY.md`](docs/MVP-3DAY.md)
 
-- Phase 1: Pico independent (this MVP)
-- Phase 2: Integration contracts
-- Phase 3: edu-cloud wire-up + retire edu AI
+| Phase | Goal |
+|-------|------|
+| **1 (this repo now)** | Independent Pico: Agent + model API + UI + ledger + CI |
+| **2** | Integration contracts |
+| **3** | edu-cloud wire-up + retire edu AI |
 
-## Handoff
+Handoff: [`docs/HANDOFF.md`](docs/HANDOFF.md)  
+D1 freeze: [`docs/D1-FREEZE.md`](docs/D1-FREEZE.md)  
+Demo: [`docs/DEMO.md`](docs/DEMO.md)
 
-New execution windows: start at [`docs/HANDOFF.md`](docs/HANDOFF.md).
+## Layout
+
+```text
+apps/web/                 Vue 3 + Vite three-zone shell
+services/api/             FastAPI control plane
+services/orchestrator/    Kimi Agent pin + allowlist gateway
+docs/contracts/           Phase 2 contract skeletons
+tests/security/           Shell/File/Web/MCP-off proofs
+```
+
+## Prerequisites
+
+- **Python 3.12+** (kimi-agent-sdk requires ≥3.12; plan floor was 3.11+)
+- Node 20+ (22 recommended)
+- Optional: `KIMI_API_KEY` for S1 real-model streaming
+
+## Quick start
+
+```bash
+cp .env.example .env
+# edit .env — set KIMI_API_KEY when available
+
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+
+# Terminal A — API
+make api
+# Terminal B — Web
+cd apps/web && npm install && npm run dev
+```
+
+Open the Vite URL (default `http://127.0.0.1:5173`).
+
+### Useful commands
+
+```bash
+make test            # unit + security
+make security-check  # agent tools OFF proof
+make freeze-check    # pinned SDK/runtime versions
+make hello           # real model hello or honest S1 BLOCKED
+```
+
+## Agent pin (D1)
+
+| Package | Version |
+|---------|---------|
+| `kimi-agent-sdk` | **0.0.5** |
+| `kimi-cli` | **1.12.0** |
+
+Dangerous host tools (Shell / File / Web / MCP) are **off** in  
+`services/orchestrator/agents/pico.yaml`. See CI job + `tests/security`.
+
+## Phase 1 success criteria
+
+S1–S8 are defined in [`docs/MVP-3DAY.md`](docs/MVP-3DAY.md).  
+Write windows have **`VERDICT_AUTHORITY: NONE`** — do not self-PASS.
+
+## Non-goals (Phase 1)
+
+- Daily edu-cloud integration / dual AI ledger
+- Netdisk product center
+- Custom agent OS
+- Unattended merge to `main`

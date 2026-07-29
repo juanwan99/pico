@@ -1,0 +1,486 @@
+"""Pico API — Phase 1 control plane (D1–D3)."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+from sse_starlette.sse import EventSourceResponse
+
+_ROOT = Path(__file__).resolve().parents[3]
+_ORCH = _ROOT / "services" / "orchestrator"
+for p in (str(_ORCH),):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+from app import run_service
+from app.auth import Principal, issue_test_token, require_principal
+from app.db import EventRow, RunRow, get_session, init_db
+from app.settings import Settings, get_settings
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await init_db()
+    yield
+
+
+app = FastAPI(
+    title="Pico API",
+    version="0.2.0",
+    description="Phase 1 MVP control plane",
+    lifespan=lifespan,
+)
+
+_settings = get_settings()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_settings.cors_origin_list or ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ----- meta / auth -----
+
+
+class TokenRequest(BaseModel):
+    school_id: str = Field(examples=["school-a"])
+    membership_id: str = Field(examples=["member-1"])
+    scopes: list[str] = Field(default_factory=lambda: ["ai:run", "ai:read"])
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    claims_shape: dict
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {"ok": True, "service": "pico-api", "phase": "1-d2d3"}
+
+
+@app.get("/v1/meta/freeze")
+async def freeze_meta(settings: Settings = Depends(get_settings)) -> dict:
+    from pico_orchestrator.pins import AGENT_PINS, installed_versions
+
+    return {
+        "plan": "MVP-3DAY v1.2 FIXED",
+        "agent_pins": AGENT_PINS,
+        "installed": installed_versions(),
+        "spend_caps": {
+            "max_seconds": settings.pico_run_max_seconds,
+            "max_tokens": settings.pico_run_max_tokens,
+            "max_retries": settings.pico_run_max_retries,
+        },
+        "dangerous_tools_enabled_setting": settings.pico_dangerous_tools_enabled,
+    }
+
+
+@app.get("/v1/meta/agent-safety")
+async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
+    from pico_orchestrator.safety import assert_dangerous_tools_off
+
+    agent_path = Path(settings.pico_agent_file)
+    if not agent_path.is_absolute():
+        agent_path = _ROOT / agent_path
+    if settings.pico_dangerous_tools_enabled:
+        raise HTTPException(status_code=500, detail="PICO_DANGEROUS_TOOLS_ENABLED must be false")
+    try:
+        proof = assert_dangerous_tools_off(agent_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"ok": True, "proof": proof}
+
+
+@app.post("/v1/dev/token", response_model=TokenResponse)
+async def dev_token(
+    body: TokenRequest, settings: Settings = Depends(get_settings)
+) -> TokenResponse:
+    if settings.pico_env == "production":
+        raise HTTPException(status_code=404, detail="not available in production")
+    token = issue_test_token(
+        school_id=body.school_id,
+        membership_id=body.membership_id,
+        scopes=body.scopes,
+        settings=settings,
+    )
+    return TokenResponse(
+        access_token=token,
+        expires_in=settings.pico_jwt_ttl_seconds,
+        claims_shape={
+            "iss": settings.pico_jwt_iss,
+            "aud": settings.pico_jwt_aud,
+            "school_id": body.school_id,
+            "membership_id": body.membership_id,
+            "scopes": body.scopes,
+            "exp": "unix",
+        },
+    )
+
+
+@app.get("/v1/me")
+async def me(principal: Principal = Depends(require_principal)) -> dict:
+    return {
+        "school_id": principal.school_id,
+        "membership_id": principal.membership_id,
+        "scopes": principal.scopes,
+        "iss": principal.iss,
+        "aud": principal.aud,
+        "exp": principal.exp,
+    }
+
+
+class HelloRequest(BaseModel):
+    prompt: str = Field(default="Say hello in one short sentence.")
+
+
+@app.post("/v1/dev/model-hello")
+async def model_hello(
+    body: HelloRequest,
+    principal: Principal = Depends(require_principal),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    from pico_orchestrator.provider import resolve_provider, stream_chat
+
+    cfg = resolve_provider()
+    if cfg is None:
+        return {
+            "status": "BLOCKED",
+            "standard": "S1",
+            "reason": "missing KIMI_API_KEY (and no DEEPSEEK_API_KEY fallback)",
+            "principal": {
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+            },
+        }
+    chunks: list[str] = []
+    max_tokens = min(256, settings.pico_run_max_tokens)
+    async for delta in stream_chat(body.prompt, max_tokens=max_tokens):
+        chunks.append(delta)
+    return {
+        "status": "ok",
+        "provider": cfg.name,
+        "model": cfg.model,
+        "text": "".join(chunks),
+        "principal": {
+            "school_id": principal.school_id,
+            "membership_id": principal.membership_id,
+        },
+    }
+
+
+# ----- tools -----
+
+
+@app.get("/v1/tools")
+async def list_tools(principal: Principal = Depends(require_principal)) -> dict:
+    from pico_orchestrator.tools_builtin import build_default_gateway
+
+    gw = build_default_gateway()
+    return {"tools": gw.list_tools(), "school_id": principal.school_id}
+
+
+class ToolInvokeRequest(BaseModel):
+    name: str
+    arguments: dict = Field(default_factory=dict)
+
+
+@app.post("/v1/tools/invoke")
+async def invoke_tool(
+    body: ToolInvokeRequest,
+    principal: Principal = Depends(require_principal),
+) -> dict:
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.tools_builtin import build_default_gateway
+
+    gw = build_default_gateway()
+    try:
+        result = await gw.invoke(principal, body.name, dict(body.arguments))
+    except ToolError as e:
+        code = 403 if e.code == "tenant.cross_school" else 400
+        raise HTTPException(
+            status_code=code, detail={"code": e.code, "message": e.message}
+        ) from e
+    return {"ok": True, "result": result}
+
+
+# ----- tasks / runs / events -----
+
+
+class CreateTaskRequest(BaseModel):
+    title: str = ""
+    prompt: str
+
+
+def _task_dict(t) -> dict:
+    return {
+        "id": t.id,
+        "school_id": t.school_id,
+        "membership_id": t.membership_id,
+        "title": t.title,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+
+def _run_dict(r) -> dict:
+    return {
+        "id": r.id,
+        "task_id": r.task_id,
+        "status": r.status,
+        "model": r.model,
+        "prompt": r.prompt,
+        "error": r.error,
+        "cancel_requested": bool(r.cancel_requested),
+        "started_at": r.started_at.isoformat() if r.started_at else None,
+        "ended_at": r.ended_at.isoformat() if r.ended_at else None,
+        "token_usage": json.loads(r.token_usage_json or "{}"),
+    }
+
+
+def _event_dict(e: EventRow) -> dict:
+    return {
+        "id": e.id,
+        "run_id": e.run_id,
+        "seq": e.seq,
+        "type": e.type,
+        "payload": e.payload,
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+    }
+
+
+@app.post("/v1/tasks")
+async def create_task(
+    body: CreateTaskRequest,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    if not body.prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt required")
+    task, run = await run_service.create_task(
+        session, principal, body.title, body.prompt.strip()
+    )
+    await run_service.start_run_background(run.id, principal)
+    return {"task": _task_dict(task), "run": _run_dict(run)}
+
+
+@app.get("/v1/tasks")
+async def tasks(
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    rows = await run_service.list_tasks(session, principal)
+    return {"tasks": [_task_dict(t) for t in rows]}
+
+
+@app.get("/v1/tasks/{task_id}")
+async def get_task(
+    task_id: str,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    task = await run_service.get_task_for_principal(session, task_id, principal)
+    if not task:
+        raise HTTPException(status_code=404, detail="task not found")
+    arts = await run_service.list_artifacts_for_task(session, task_id)
+    return {
+        "task": _task_dict(task),
+        "artifacts": [
+            {
+                "id": a.id,
+                "kind": a.kind,
+                "title": a.title,
+                "inline": a.inline,
+                "run_id": a.run_id,
+            }
+            for a in arts
+        ],
+    }
+
+
+@app.get("/v1/runs/{run_id}")
+async def get_run(
+    run_id: str,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    run = await run_service.get_run_for_principal(session, run_id, principal)
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
+    return {"run": _run_dict(run)}
+
+
+@app.post("/v1/runs/{run_id}/cancel")
+async def cancel_run(
+    run_id: str,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app.db import append_event
+
+    run = await run_service.get_run_for_principal(session, run_id, principal)
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
+    run = await run_service.request_cancel(session, run)
+    await append_event(session, run.id, "run.cancel_requested", {})
+    return {"run": _run_dict(run)}
+
+
+@app.get("/v1/runs/{run_id}/events")
+async def run_events(
+    run_id: str,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    run = await run_service.get_run_for_principal(session, run_id, principal)
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
+    events = await run_service.list_events(session, run_id)
+    return {"events": [_event_dict(e) for e in events]}
+
+
+@app.get("/v1/runs/{run_id}/stream")
+async def stream_run(
+    run_id: str,
+    request: Request,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    run = await run_service.get_run_for_principal(session, run_id, principal)
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    async def gen():
+        last_seq = 0
+        terminal = {"succeeded", "failed", "cancelled"}
+        while True:
+            if await request.is_disconnected():
+                break
+            from app.db import session_factory
+
+            async with session_factory() as s:
+                r = await s.get(RunRow, run_id)
+                events = await run_service.list_events(s, run_id)
+                for e in events:
+                    if e.seq > last_seq:
+                        last_seq = e.seq
+                        yield {
+                            "event": e.type,
+                            "data": json.dumps(_event_dict(e), ensure_ascii=False),
+                        }
+                status = r.status if r else "failed"
+            if status in terminal and last_seq > 0:
+                # final drain already done
+                yield {
+                    "event": "stream.end",
+                    "data": json.dumps({"status": status}),
+                }
+                break
+            await asyncio.sleep(0.25)
+
+    return EventSourceResponse(gen())
+
+
+# ----- changes (S7) -----
+
+
+class ChangeCreateRequest(BaseModel):
+    title: str
+    summary: str
+    payload: dict = Field(default_factory=dict)
+    task_id: str | None = None
+    run_id: str | None = None
+
+
+@app.post("/v1/changes")
+async def create_change(
+    body: ChangeCreateRequest,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    row = await run_service.create_change(
+        session,
+        principal,
+        title=body.title,
+        summary=body.summary,
+        payload=body.payload,
+        task_id=body.task_id,
+        run_id=body.run_id,
+    )
+    return {
+        "change": {
+            "id": row.id,
+            "title": row.title,
+            "summary": row.summary,
+            "status": row.status,
+            "payload": json.loads(row.payload_json or "{}"),
+        }
+    }
+
+
+@app.get("/v1/changes")
+async def changes(
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    rows = await run_service.list_changes(session, principal)
+    return {
+        "changes": [
+            {
+                "id": r.id,
+                "title": r.title,
+                "summary": r.summary,
+                "status": r.status,
+                "confirmed_by": r.confirmed_by,
+                "confirmed_at": r.confirmed_at.isoformat() if r.confirmed_at else None,
+                "audit": json.loads(r.audit_json or "[]"),
+            }
+            for r in rows
+        ]
+    }
+
+
+@app.post("/v1/changes/{change_id}/confirm")
+async def confirm_change(
+    change_id: str,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    try:
+        row = await run_service.confirm_change(session, principal, change_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="change not found") from None
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {
+        "change": {
+            "id": row.id,
+            "title": row.title,
+            "status": row.status,
+            "confirmed_by": row.confirmed_by,
+            "confirmed_at": row.confirmed_at.isoformat() if row.confirmed_at else None,
+            "audit": json.loads(row.audit_json or "[]"),
+            "note": "Audit only — no school business write in Phase 1",
+        }
+    }
+
+
+# ----- demos -----
+
+
+@app.post("/v1/demo/cross-school-deny")
+async def demo_cross_school(
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    return await run_service.demo_cross_school_deny(session, principal)

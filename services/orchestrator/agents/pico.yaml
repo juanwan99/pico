@@ -1,0 +1,26 @@
+# Pico production agent — dangerous host capabilities OFF.
+# `tools` replaces any inherited list. Do NOT add Shell/File/Web here.
+# Allowlisted Pico tools are injected by the Pico gateway (not kimi host tools).
+version: 1
+agent:
+  name: pico
+  system_prompt_path: ./system.md
+  system_prompt_args:
+    ROLE_ADDITIONAL: |
+      You are Pico, an AI workspace agent for school educators.
+      You have NO shell, host filesystem, web browsing, or MCP tools.
+      Only Pico allowlisted tools (injected by the control plane) may run.
+      Never claim you executed host commands or browsed the web.
+  tools: []
+  # Explicit excludes as defense-in-depth if a future base agent is extended.
+  exclude_tools:
+    - "kimi_cli.tools.shell:Shell"
+    - "kimi_cli.tools.file:ReadFile"
+    - "kimi_cli.tools.file:ReadMediaFile"
+    - "kimi_cli.tools.file:Glob"
+    - "kimi_cli.tools.file:Grep"
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.web:SearchWeb"
+    - "kimi_cli.tools.web:FetchURL"
+    - "kimi_cli.tools.multiagent:Task"

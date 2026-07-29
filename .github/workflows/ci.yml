@@ -1,0 +1,77 @@
+name: ci
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: python-lint-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-dev.txt
+
+      - name: Ruff
+        run: ruff check services tests scripts
+
+      - name: Agent pin check
+        run: python scripts/check_agent_pin.py
+
+      - name: Security proof (Shell/File/Web/MCP off)
+        run: |
+          python scripts/security_proof.py
+          pytest -q tests/security
+
+      - name: Unit tests
+        run: pytest -q tests/unit
+
+      - name: Model hello (optional — honest BLOCKED without secret)
+        env:
+          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
+        run: |
+          set +e
+          python scripts/model_hello.py
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then
+            echo "::notice::S1 BLOCKED — KIMI_API_KEY not configured (expected until secret is set)"
+            exit 0
+          fi
+          exit "$code"
+
+  web:
+    name: web-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install & build
+        run: |
+          npm install
+          npm run build
+        continue-on-error: false
