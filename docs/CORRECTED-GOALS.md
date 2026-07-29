@@ -104,13 +104,36 @@ Pico API + orchestrator + DB
 | API 仅 **127.0.0.1:18765**（内网） | API 绑公网 8080 抢预览 |
 | 预览代理会发现多端口；须 **pin 8080** | 以为「本机 curl 通 = 用户预览通」 |
 | 用户主要靠 **Grok Live Preview** | 让用户去外部浏览器开 sandbox 域名（常 404） |
-| 白屏 ≠ 产品逻辑一定挂；常为 **代理选错端口 / SPA 资源 / 服务挂死** | 只回「我这边 200」不修预览路径 |
+| 白屏 ≠ 产品逻辑一定挂；常为 **代理鉴权/空 body** | 只回「我这边 200」不修预览路径；或立刻换壳 |
+
+### 4.4 Live Preview 白屏 — 已证实根因（必记）
+
+**根因：Grok Preview 代理层（约 :6014），不是 LibreChat / Pico API 主流程没写出来。**
+
+| 对照 | 现象 | 含义 |
+|------|------|------|
+| 直连 **:8080** | 200 HTML；Playwright 见 **Welcome back** | 产品 UI **正常** |
+| 走 **:6014** 无 preview-auth | **403**（或 302→鉴权）+ **body 长度 0** | 面板拿到 **空页 = 纯白** |
+| pin target | 必须 **8080** | 避免代理粘到 API/Mongo 端口 |
+| proxy 版本 | 本环境约 **0.1.11**（无 `--version` flag） | 远早于 changelog 0.2.90/0.2.96 修复 |
+
+**下次禁止再犯：**
+
+1. **不要**因用户说白屏就立刻换壳 / 重写前端。  
+2. **不要**只 curl :8080 就对用户说「预览好了」。  
+3. **必须**对比：8080 vs 6014 的 status/body 长度 + Playwright 两边截图。  
+4. **不要**设 `PROXY=1`（弄崩 LibreChat undici）。  
+5. 首屏保留无 JS 可见「Pico 正在加载…」；若 10 秒内连这句都没有 → **面板没吃到 8080 HTML**。  
+6. 证据写 `docs/PREVIEW-WHITE-SCREEN.md`，诚实：本机绿 ≠ Live Preview 绿。
+
+**演示登录（LibreChat）：** `teacher@example.com` / `pico-demo-123`  
+详见 `docs/PREVIEW-WHITE-SCREEN.md`。
 
 ---
 
 ## 5. 技术冻结（仍有效）
 
-- Python **3.11+**
+- Python **3.11+**（kimi-agent-sdk 实际要求 **≥3.12**）
 - 前端壳：当前 **LibreChat (React)**；历史文档中的 Vue3 叙述以壳选型更新为准（不强制改回 Vue）
 - **钉死** Kimi Agent 版本（见 `agent_pins` / requirements）
 - Kimi API 优先
@@ -135,6 +158,10 @@ Pico API + orchestrator + DB
 | 12 | Shell/File/Web/MCP 默认全开 | **默认关** |
 | 13 | 写入窗可自 PASS / 无人合 main | **不自 PASS**；值守合并 |
 | 14 | 计划可随口改 | 须升 **v1.3+** 授权 |
+| 15 | **用户白屏 = 产品壳/API 挂了** | **先查 6014 鉴权/空 body vs 8080 HTML**；常是 Preview 层 |
+| 16 | **本机 8080 200 = Live Preview 好了** | 必须 Playwright 8080 **且** 理解 6014 门禁；用户侧看面板 |
+| 17 | **白屏就换 NextChat/自研壳** | 6014 不转发 8080 时 **任何前端都白** |
+| 18 | **设 PROXY=1 修代理** | **禁止**；崩 LibreChat undici |
 
 ---
 
@@ -146,7 +173,8 @@ Pico API + orchestrator + DB
 | Pico API | `127.0.0.1:18765`（OpenAI 兼容 `/v1/chat/completions` 等） |
 | 账本 / Agent | `services/api` + `services/orchestrator` |
 | 启动 | `scripts/run-product.sh` + pin 预览到 8080 |
-| 已知风险 | Grok preview-proxy 多候选端口；用户侧曾 **白屏/JSON**；in-container Playwright 可绿但 Live Preview 仍可能白 |
+| 演示账号 | `teacher@example.com` / `pico-demo-123` |
+| 已知风险 | Grok preview-proxy 鉴权空 body；版本约 0.1.11；in-container 可绿但 Live Preview 依赖平台会话 |
 
 ---
 
@@ -169,8 +197,8 @@ Pico API + orchestrator + DB
 3. 唯一 AI 账本在 Pico；禁止双跑。
 4. 壳 = apps/librechat（MIT 魔改）；禁 apps/web / 禁拆 WorkBuddy。
 5. 核 = Pico API + Kimi Agent 钉版本 + 模型 HTTPS API。
-6. 公网预览只应是 UI :8080；API 仅 loopback。
-7. 成功看用户 Live Preview 有可见 UI，不看单 curl。
+6. 公网预览只应是 UI :8080；API 仅 loopback；pin target 8080。
+7. 白屏先查 6014 空 body vs 8080 Welcome back；勿误判换壳。
 8. S1–S8 仍是 Phase1 标尺；商业定价未 FIXED。
 9. 流程：CANDIDATE+SHA → CI → 审 → 值守合；不自 PASS。
 10. 无授权不改 MVP v1.2 计划正文。
