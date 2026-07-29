@@ -693,12 +693,7 @@ export function Settings() {
     </ListItem>
   );
 
-  const saasStartComponent = (
-    <ListItem
-      className={styles["subtitle-button"]}
-      title={
-{/* Pico: upstream SaaS promo removed */}
-  );
+  const saasStartComponent = null; // Pico: upstream SaaS promo removed
 
   const useCustomConfigComponent = // Conditionally render the following ListItem based on clientConfig.isApp
     !clientConfig?.isApp && ( // only show if isApp is false
