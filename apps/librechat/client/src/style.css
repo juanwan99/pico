@@ -3028,73 +3028,70 @@ html {
   background-color: #f5f5f5;
 }
 
-/* ========== Pico Workbench (WorkBuddy-class IA, clean-room) ========== */
-html.light body,
-body.light,
-:root {
-  /* softer gray stage like modern task workbenches */
+/* ========== Pico Workbench pixel home (clean-room) ========== */
+html:not(.dark) body,
+html:not(.dark) #root {
+  background: #f5f5f5 !important;
 }
-
-.pico-wb-landing {
-  animation: pico-wb-fade 280ms ease-out;
-}
-
-@keyframes pico-wb-fade {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Main chat stage: light gray canvas */
-.pico-wb-shell,
-div[class*="bg-presentation"] {
-  /* no-op safety */
-}
-
-/* Composer: larger soft card */
-form .relative.flex.w-full.flex-grow.flex-col.overflow-hidden.rounded-t-3xl,
-form .relative.flex.w-full.flex-grow.flex-col.overflow-hidden.sm\:rounded-3xl {
-  border-radius: 1.25rem !important;
-  background: #ffffff !important;
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 8px 24px rgba(15, 23, 42, 0.06) !important;
-  border-color: rgba(15, 23, 42, 0.06) !important;
-}
-
-.dark form .relative.flex.w-full.flex-grow.flex-col.overflow-hidden.rounded-t-3xl,
-.dark form .relative.flex.w-full.flex-grow.flex-col.overflow-hidden.sm\:rounded-3xl {
-  background: var(--surface-chat) !important;
-}
-
-/* Hide LibreChat-y dense header noise slightly on landing */
-.pico-wb-rail {
-  min-width: 11.5rem;
-}
-
-.pico-wb-nav-item {
-  min-height: 2.5rem;
-}
-
-/* Chat background when light */
-html:not(.dark) #root,
-html:not(.dark) body {
-  background-color: #f4f5f7;
-}
-
 html:not(.dark) .bg-presentation {
-  background-color: #f4f5f7 !important;
+  background-color: #f5f5f5 !important;
 }
-
 html:not(.dark) .bg-surface-primary {
   background-color: #ffffff;
 }
+/* Main stage next to sidebar */
+.pico-wb-sidebar {
+  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  border-right: 1px solid rgba(0, 0, 0, 0.04);
+}
+.pico-wb-landing {
+  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+}
+.pico-wb-composer {
+  min-height: 120px;
+  background: #fff !important;
+}
+html:not(.dark) .pico-wb-composer textarea {
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+  color: #1a1a1a !important;
+}
+html:not(.dark) .pico-wb-composer textarea::placeholder {
+  color: #b0b0b0 !important;
+}
+/* Hide dense badge row noise on landing home */
+.pico-wb-landing + * .badge-row,
+.pico-wb-landing ~ * [data-testid="convo-options"] {
+  /* keep functional */
+}
 
-html:not(.dark) .bg-surface-chat {
-  background-color: #ffffff;
+.pico-wb-composer {
+  min-height: 132px !important;
+}
+.pico-wb-stage {
+  min-height: 0;
+}
+/* Keep home stack: title then form, never reverse */
+.pico-wb-stage > * {
+  flex-shrink: 0;
+}
+
+/* Force visible workbench composer (pixel home) */
+html:not(.dark) .pico-wb-composer {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px rgba(15, 23, 42, 0.08) !important;
+  min-height: 148px !important;
+  border-radius: 20px !important;
+}
+html:not(.dark) .pico-wb-composer textarea {
+  min-height: 72px !important;
+  font-size: 14px !important;
+  color: #1a1a1a !important;
+}
+html:not(.dark) .pico-wb-composer textarea::placeholder {
+  color: #9a9a9a !important;
+  opacity: 1 !important;
 }

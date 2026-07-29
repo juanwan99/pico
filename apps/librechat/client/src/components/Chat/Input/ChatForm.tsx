@@ -478,13 +478,8 @@ const ChatForm = memo(function ChatForm({
       })}
       className={cn(
         'mx-auto flex w-full flex-row gap-3 transition-[max-width] duration-300 sm:px-2',
-        maximizeChatSpace ? 'max-w-full' : 'md:max-w-3xl xl:max-w-4xl',
-        centerFormOnLanding &&
-          (conversationId == null || conversationId === Constants.NEW_CONVO) &&
-          !isSubmitting &&
-          conversation?.messages?.length === 0
-          ? 'transition-all duration-200 sm:mb-28'
-          : 'sm:mb-10',
+        maximizeChatSpace ? 'max-w-full' : 'max-w-[720px]',
+        'mb-2 sm:mb-4',
       )}
     >
       <div className="relative flex h-full flex-1 items-stretch md:flex-col">
@@ -531,11 +526,11 @@ const ChatForm = memo(function ChatForm({
             <div
               onClick={handleContainerClick}
               className={cn(
-                'relative flex w-full flex-grow flex-col overflow-hidden rounded-t-3xl border pb-4 text-text-primary transition-all duration-200 sm:rounded-3xl sm:pb-0',
-                isTextAreaFocused ? 'shadow-lg' : 'shadow-md',
+                'pico-wb-composer relative flex w-full flex-grow flex-col overflow-hidden rounded-[20px] border pb-3 text-text-primary transition-all duration-200 sm:pb-0',
+                isTextAreaFocused ? 'shadow-[0_8px_30px_rgba(0,0,0,0.08)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.04)]',
                 isTemporary
                   ? 'border-violet-800/60 bg-violet-950/10'
-                  : 'border-border-light bg-surface-chat',
+                  : 'border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-chat',
               )}
             >
               <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} />
@@ -562,8 +557,8 @@ const ChatForm = memo(function ChatForm({
                 setFiles={setFiles}
                 setFilesLoading={setFilesLoading}
               />
-              {endpoint && (
-                <div className={cn('flex', isRTL ? 'flex-row-reverse' : 'flex-row')}>
+              {(endpoint || true) && (
+                <div className={cn('flex min-h-[72px]', isRTL ? 'flex-row-reverse' : 'flex-row')}>
                   <div
                     className="relative flex-1"
                     style={
@@ -605,7 +600,7 @@ const ChatForm = memo(function ChatForm({
                       onBlur={handleTextareaBlur}
                       aria-label={localize('com_ui_message_input')}
                       onClick={handleFocusOrClick}
-                      style={{ height: 44, overflowY: 'auto' }}
+                      style={{ height: 72, minHeight: 72, overflowY: 'auto' }}
                       className={cn(
                         baseClasses,
                         removeFocusRings,
@@ -629,7 +624,6 @@ const ChatForm = memo(function ChatForm({
                 )}
               >
                 <div className={`${isRTL ? 'mr-2' : 'ml-2'} flex items-center gap-0.5`}>
-                  <WorkspaceSelector disabled={disableInputs} />
                   <AttachFileChat
                     conversation={conversation}
                     disableInputs={disableInputs}
@@ -681,6 +675,18 @@ const ChatForm = memo(function ChatForm({
                 </div>
               </div>
               {TextToSpeech && automaticPlayback && <StreamAudio index={index} />}
+            </div>
+            {/* WorkBuddy-class: workspace + permission UNDER the card */}
+            <div className="mt-2 flex flex-wrap items-center gap-1 px-1">
+              <WorkspaceSelector disabled={disableInputs} />
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[#6b6b6b] hover:bg-black/[0.04] hover:text-[#1a1a1a]"
+                aria-label="默认权限"
+              >
+                <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[9px] opacity-70">✓</span>
+                默认权限
+              </button>
             </div>
           </div>
         </div>

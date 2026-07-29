@@ -1,76 +1,60 @@
 /**
- * Single-column workbench sidebar (WorkBuddy-class IA).
- * One rail only: nav + active panel content. No dual-column strip.
+ * Pico workbench left rail — pixel-aligned to WorkBuddy home IA (clean-room).
+ * Single column only. No dual rail.
  */
 import { memo, useCallback, lazy, Suspense } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
-import { SquarePen, PanelLeftClose, PanelLeft } from 'lucide-react';
+import {
+  Plus,
+  Bot,
+  FolderKanban,
+  Blocks,
+  Zap,
+  MoreHorizontal,
+  History,
+  Search,
+  Gift,
+  ChevronDown,
+  CircleHelp,
+  Bell,
+  PanelLeft,
+} from 'lucide-react';
 import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { Skeleton, Button, TooltipAnchor } from '@librechat/client';
 import type { NavLink } from '~/common';
-import { useShortcutAriaKey, useShortcutHint } from '~/hooks/useKeyboardShortcuts';
-import { useActivePanel, resolveActivePanel, DEFAULT_PANEL } from '~/Providers';
-import { CLOSE_SIDEBAR_ID } from '~/components/Chat/Menus/OpenSidebar';
-import SidePanelNav from '~/components/SidePanel/Nav';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { clearMessagesCache, cn } from '~/utils';
 import store from '~/store';
 
 const AccountSettings = lazy(() => import('~/components/Nav/AccountSettings'));
 
-function NewTaskButton({ setActive }: { setActive: (id: string) => void }) {
-  const localize = useLocalize();
-  const queryClient = useQueryClient();
-  const { newConversation } = useNewConvo();
-  const conversationId = useRecoilValue(store.conversationIdByIndex(0));
-  const switchToHistory = useRecoilValue(store.newChatSwitchToHistory);
-  const tooltipDescription = useShortcutHint('newChat', localize('com_ui_new_chat'));
-  const ariaKey = useShortcutAriaKey('newChat');
+type NavItem = {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  path?: string;
+  action?: 'new-task' | 'more';
+  badge?: string;
+};
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLAnchorElement>) => {
-      if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        clearMessagesCache(queryClient, conversationId);
-        queryClient.invalidateQueries([QueryKeys.messages]);
-        newConversation();
-        if (switchToHistory) {
-          setActive(DEFAULT_PANEL);
-        }
-      }
-    },
-    [queryClient, conversationId, newConversation, switchToHistory, setActive],
-  );
-
-  return (
-    <TooltipAnchor
-      side="right"
-      description={tooltipDescription}
-      render={
-        <a
-          href="/c/new"
-          data-testid="new-chat-button"
-          aria-label={localize('com_ui_new_chat')}
-          aria-keyshortcuts={ariaKey}
-          className="flex h-10 w-full items-center gap-2.5 rounded-xl bg-neutral-900 px-3 text-sm font-medium text-white shadow-sm transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
-          onClick={handleClick}
-        >
-          <SquarePen className="h-4 w-4 shrink-0" />
-          <span className="truncate">{localize('com_ui_new_chat')}</span>
-        </a>
-      }
-    />
-  );
-}
+const NAV: NavItem[] = [
+  { id: 'new', label: '新建任务', icon: Plus, action: 'new-task' },
+  { id: 'agents', label: '助理', icon: Bot, path: '/agents' },
+  { id: 'projects', label: '项目', icon: FolderKanban, path: '/projects' },
+  { id: 'skills', label: '专家·技能·连接器', icon: Blocks, path: '/skills' },
+  { id: 'auto', label: '自动化', icon: Zap, path: '/c/new' },
+  { id: 'more', label: '更多', icon: MoreHorizontal, action: 'more', badge: '资料库·灵感' },
+];
 
 function Sidebar({
-  links,
+  links: _links,
   expanded,
   onCollapse,
   onExpand,
-  onResizeStart,
-  onResizeKeyboard,
+  onResizeStart: _onResizeStart,
+  onResizeKeyboard: _onResizeKeyboard,
 }: {
   links: NavLink[];
   expanded: boolean;
@@ -80,184 +64,183 @@ function Sidebar({
   onResizeKeyboard: (direction: 'shrink' | 'grow') => void;
 }) {
   const localize = useLocalize();
-  const { active, setActive } = useActivePanel();
-  const effectiveActive = resolveActivePanel(active, links);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const { newConversation } = useNewConvo();
+  const conversationId = useRecoilValue(store.conversationIdByIndex(0));
 
-  const toggleLabel = expanded ? 'com_nav_close_sidebar' : 'com_nav_open_sidebar';
-  const toggleSidebarHint = useShortcutHint('toggleSidebar', localize(toggleLabel));
-  const toggleSidebarAriaKey = useShortcutAriaKey('toggleSidebar');
+  const onNewTask = useCallback(() => {
+    clearMessagesCache(queryClient, conversationId);
+    queryClient.invalidateQueries([QueryKeys.messages]);
+    newConversation();
+    navigate('/c/new');
+  }, [queryClient, conversationId, newConversation, navigate]);
 
-  // Collapsed: icon-only strip (still single column)
+  const isNewTask =
+    location.pathname === '/c/new' ||
+    location.pathname === '/' ||
+    /^\/c\/[^/]+$/.test(location.pathname);
+
   if (!expanded) {
     return (
-      <div className="pico-wb-sidebar flex h-full w-full flex-col gap-1 bg-[#f3f4f6] px-1.5 py-2 dark:bg-surface-primary-alt">
-        <TooltipAnchor
-          side="right"
-          description={toggleSidebarHint}
-          render={
-            <Button
-              data-testid="open-sidebar-button"
-              size="icon"
-              variant="ghost"
-              aria-label={localize(toggleLabel)}
-              aria-expanded={false}
-              aria-keyshortcuts={toggleSidebarAriaKey}
-              className="h-9 w-9 rounded-lg"
-              onClick={onExpand}
-            >
-              <PanelLeft className="h-5 w-5 text-text-primary" />
-            </Button>
-          }
-        />
-        <TooltipAnchor
-          side="right"
-          description={localize('com_ui_new_chat')}
-          render={
-            <a
-              href="/c/new"
-              data-testid="new-chat-button"
-              aria-label={localize('com_ui_new_chat')}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-              onClick={(e) => {
-                if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
-                  e.preventDefault();
-                  onExpand();
-                  setActive(DEFAULT_PANEL);
-                }
-              }}
-            >
-              <SquarePen className="h-4 w-4" />
-            </a>
-          }
-        />
-        <div className="mx-1 border-b border-border-light" />
-        <div className="flex flex-1 flex-col gap-1 overflow-y-auto">
-          {links.map((link) => (
-            <TooltipAnchor
-              key={link.id}
-              side="right"
-              description={localize(link.title)}
-              render={
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label={localize(link.title)}
-                  aria-pressed={link.id === effectiveActive}
-                  data-testid={`nav-panel-${link.id}`}
-                  className={cn(
-                    'h-9 w-9 rounded-lg',
-                    link.id === effectiveActive
-                      ? 'bg-white text-text-primary shadow-sm dark:bg-surface-tertiary'
-                      : 'text-text-secondary',
-                  )}
-                  onClick={() => {
-                    setActive(link.id);
-                    onExpand();
-                  }}
-                >
-                  <link.icon className="h-4 w-4" />
-                </Button>
-              }
-            />
-          ))}
-        </div>
-        <Suspense fallback={<Skeleton className="h-9 w-9 rounded-lg" />}>
-          <AccountSettings collapsed />
-        </Suspense>
+      <div className="pico-wb-sidebar flex h-full w-full flex-col items-center gap-2 bg-[#f0f0f0] py-3 dark:bg-surface-primary-alt">
+        <Button size="icon" variant="ghost" className="h-9 w-9" onClick={onExpand} aria-label="展开">
+          <PanelLeft className="h-5 w-5" />
+        </Button>
+        <button
+          type="button"
+          onClick={onNewTask}
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1a1a1a] text-white"
+          aria-label="新建任务"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
       </div>
     );
   }
 
-  // Expanded: ONE column — header nav + content panel
   return (
-    <>
-      <div className="pico-wb-sidebar flex h-full w-full min-w-0 flex-col bg-[#f3f4f6] dark:bg-surface-primary-alt">
-        {/* Header: collapse + new task */}
-        <div className="flex flex-col gap-2 border-b border-border-light/80 px-3 pb-3 pt-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-semibold tracking-tight text-text-primary">Pico</span>
-            <TooltipAnchor
-              side="right"
-              description={toggleSidebarHint}
-              render={
-                <Button
-                  id={CLOSE_SIDEBAR_ID}
-                  data-testid="close-sidebar-button"
-                  size="icon"
-                  variant="ghost"
-                  aria-label={localize(toggleLabel)}
-                  aria-expanded={true}
-                  aria-keyshortcuts={toggleSidebarAriaKey}
-                  className="h-8 w-8 rounded-lg"
-                  onClick={onCollapse}
-                >
-                  <PanelLeftClose className="h-4 w-4 text-text-secondary" />
-                </Button>
-              }
-            />
-          </div>
-          <NewTaskButton setActive={setActive} />
+    <div className="pico-wb-sidebar flex h-full w-full min-w-0 flex-col bg-[#f0f0f0] text-[#1a1a1a] dark:bg-surface-primary-alt dark:text-text-primary">
+      {/* Brand row */}
+      <div className="flex items-start justify-between px-4 pb-1 pt-4">
+        <div className="min-w-0">
+          <div className="text-[15px] font-semibold leading-tight tracking-tight">Pico</div>
+          <div className="mt-0.5 text-[11px] leading-none text-[#8c8c8c]">v0.8.7</div>
         </div>
-
-        {/* Primary nav — horizontal scroll chips in same column */}
-        <div
-          className="flex gap-1 overflow-x-auto border-b border-border-light/80 px-2 py-2"
-          role="tablist"
-          aria-label={localize('com_nav_control_panel')}
-        >
-          {links.map((link) => {
-            const isActive = link.id === effectiveActive;
-            return (
+        <div className="flex items-center gap-0.5 text-[#6b6b6b]">
+          <TooltipAnchor
+            description="任务历史"
+            render={
               <button
-                key={link.id}
                 type="button"
-                role="tab"
-                aria-selected={isActive}
-                data-testid={`nav-panel-${link.id}`}
-                onClick={() => setActive(link.id)}
-                className={cn(
-                  'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
-                  isActive
-                    ? 'bg-white text-text-primary shadow-sm ring-1 ring-black/[0.05] dark:bg-surface-tertiary dark:ring-white/10'
-                    : 'text-text-secondary hover:bg-white/70 hover:text-text-primary dark:hover:bg-surface-hover',
-                )}
+                className="rounded-md p-1.5 hover:bg-black/[0.04]"
+                onClick={() => navigate('/search')}
+                aria-label="任务历史"
               >
-                <link.icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="max-w-[5.5rem] truncate">{localize(link.title)}</span>
+                <History className="h-4 w-4" />
               </button>
-            );
-          })}
-        </div>
-
-        {/* Active panel content — fills rest of single column */}
-        <nav className="min-h-0 flex-1 overflow-hidden bg-[#f3f4f6] dark:bg-surface-primary-alt">
-          <SidePanelNav links={links} />
-        </nav>
-
-        <div className="border-t border-border-light/80 px-2 py-2">
-          <Suspense fallback={<Skeleton className="h-9 w-full rounded-lg" />}>
-            <AccountSettings />
-          </Suspense>
+            }
+          />
+          <button
+            type="button"
+            className="rounded-md p-1.5 hover:bg-black/[0.04]"
+            onClick={() => navigate('/search')}
+            aria-label="搜索"
+          >
+            <Search className="h-4 w-4" />
+          </button>
+          <button type="button" className="rounded-md p-1.5 hover:bg-black/[0.04]" aria-label="活动">
+            <Gift className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
-      {/* Resize handle */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label={localize('com_ui_resize_sidebar')}
-        tabIndex={0}
-        className="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize transition-colors hover:bg-border-medium active:bg-border-heavy"
-        onMouseDown={onResizeStart}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowLeft') {
-            onResizeKeyboard('shrink');
-          } else if (e.key === 'ArrowRight') {
-            onResizeKeyboard('grow');
+      {/* Primary nav — vertical list, one column */}
+      <nav className="mt-3 flex flex-1 flex-col gap-0.5 px-2.5" aria-label="主导航">
+        {NAV.map((item) => {
+          const Icon = item.icon;
+          let active = false;
+          if (item.action === 'new-task') {
+            active = isNewTask && !location.pathname.startsWith('/agents') && !location.pathname.startsWith('/projects') && !location.pathname.startsWith('/skills');
+            // On any chat route treat as new-task home when path is /c/*
+            active = location.pathname.startsWith('/c') || location.pathname === '/';
+          } else if (item.path) {
+            active = location.pathname.startsWith(item.path);
+            if (item.id === 'auto') {
+              active = false;
+            }
           }
-        }}
-      />
-    </>
+          // If on agents, only agents active
+          if (location.pathname.startsWith('/agents')) {
+            active = item.id === 'agents';
+          } else if (location.pathname.startsWith('/projects')) {
+            active = item.id === 'projects';
+          } else if (location.pathname.startsWith('/skills')) {
+            active = item.id === 'skills';
+          } else if (location.pathname.startsWith('/c') || location.pathname === '/') {
+            active = item.id === 'new';
+          }
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              data-testid={item.action === 'new-task' ? 'new-chat-button' : `nav-${item.id}`}
+              onClick={() => {
+                if (item.action === 'new-task') {
+                  onNewTask();
+                  return;
+                }
+                if (item.action === 'more') {
+                  navigate('/prompts');
+                  return;
+                }
+                if (item.path) {
+                  navigate(item.path);
+                }
+              }}
+              className={cn(
+                'group flex h-10 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13.5px] transition-colors',
+                active
+                  ? 'bg-[#e6e6e6] font-medium text-[#1a1a1a]'
+                  : 'font-normal text-[#3d3d3d] hover:bg-[#e8e8e8]',
+              )}
+            >
+              <span
+                className={cn(
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full',
+                  item.id === 'new' && active
+                    ? 'bg-transparent text-[#1a1a1a]'
+                    : 'text-[#4a4a4a]',
+                )}
+              >
+                <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
+              </span>
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {item.badge ? (
+                <span className="shrink-0 text-[11px] text-[#9a9a9a]">{item.badge}</span>
+              ) : null}
+            </button>
+          );
+        })}
+
+        {/* 空间 */}
+        <div className="mt-4 px-1">
+          <button
+            type="button"
+            className="flex h-8 w-full items-center gap-1 rounded-md px-1.5 text-[12.5px] text-[#6b6b6b] hover:bg-[#e8e8e8]"
+          >
+            <span>空间 (1)</span>
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/projects')}
+            className="mt-0.5 flex h-8 w-full items-center gap-2 rounded-md px-1.5 text-[12.5px] text-[#3d3d3d] hover:bg-[#e8e8e8]"
+          >
+            <FolderKanban className="h-3.5 w-3.5 text-[#6b6b6b]" />
+            <span className="truncate">项目新手指引</span>
+            <span className="ml-auto text-[#b0b0b0]">›</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* User footer */}
+      <div className="mt-auto flex items-center gap-1 border-t border-black/[0.04] px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <Suspense fallback={<Skeleton className="h-8 w-8 rounded-full" />}>
+            <AccountSettings />
+          </Suspense>
+        </div>
+        <button type="button" className="rounded-md p-1.5 text-[#6b6b6b] hover:bg-black/[0.04]" aria-label="通知">
+          <Bell className="h-4 w-4" />
+        </button>
+        <button type="button" className="rounded-md p-1.5 text-[#6b6b6b] hover:bg-black/[0.04]" aria-label="帮助">
+          <CircleHelp className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
   );
 }
 

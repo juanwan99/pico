@@ -117,13 +117,14 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
         <AddedChatContext.Provider value={addedChatHelpers}>
           <Presentation>
             <div className="relative flex h-full w-full flex-col">
-              <Header />
+              {/* Workbench home: no top chrome bar (pixel home) */
+              !isLandingPage && <Header />}
               <>
                 <div
                   className={cn(
                     'flex flex-col',
                     isLandingPage
-                      ? 'flex-1 items-center justify-center gap-2 overflow-y-auto py-4'
+                      ? 'pico-wb-stage flex-1 items-center justify-center gap-3 overflow-y-auto bg-[#f5f5f5] py-6 dark:bg-presentation'
                       : 'h-full overflow-y-auto',
                   )}
                 >
@@ -131,7 +132,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   <div
                     className={cn(
                       'w-full',
-                      isLandingPage && 'relative z-10 max-w-3xl px-3 transition-all duration-200 xl:max-w-4xl',
+                      isLandingPage && 'relative z-10 w-full max-w-[720px] px-4 transition-all duration-200',
                     )}
                   >
                     {isProjectLandingPage && project && <ProjectLandingChip project={project} />}
@@ -141,7 +142,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     {!isLandingPage && <Footer />}
                   </div>
                 </div>
-                {isLandingPage && <Footer />}
+                {/* footer hidden on workbench home */}
               </>
             </div>
           </Presentation>
