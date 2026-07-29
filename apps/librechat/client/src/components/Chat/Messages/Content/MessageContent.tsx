@@ -95,6 +95,20 @@ const DisplayMessage = ({ text, isCreatedByUser, message, showCursor }: TDisplay
   const { isSubmitting = false, isLatestMessage = false } = useMessageContext();
   const enableUserMsgMarkdown = useRecoilValue(store.enableUserMsgMarkdown);
 
+  // Hide Pico ledger/workspace control markers from user-visible bubbles
+  const displayText = useMemo(() => {
+    if (!isCreatedByUser || !text) {
+      return text;
+    }
+    return text
+      .replace(/【Pico-User:[^】]*】\s*/g, '')
+      .replace(/【Pico-Convo:[^】]*】\s*/g, '')
+      .replace(/【工作空间：[^】]*】(?:（[^）]*）)?\s*/g, '')
+      .replace(/【权限：[^】]*】\s*/g, '')
+      .replace(/【模型偏好：[^】]*】\s*/g, '')
+      .trim();
+  }, [isCreatedByUser, text]);
+
   const showCursorState = useMemo(
     () => showCursor === true && isSubmitting,
     [showCursor, isSubmitting],
@@ -102,13 +116,13 @@ const DisplayMessage = ({ text, isCreatedByUser, message, showCursor }: TDisplay
 
   const content = useMemo(() => {
     if (!isCreatedByUser) {
-      return <Markdown content={text} isLatestMessage={isLatestMessage} />;
+      return <Markdown content={displayText} isLatestMessage={isLatestMessage} />;
     }
     if (enableUserMsgMarkdown) {
-      return <MarkdownLite content={text} />;
+      return <MarkdownLite content={displayText} />;
     }
-    return <>{text}</>;
-  }, [isCreatedByUser, enableUserMsgMarkdown, text, isLatestMessage]);
+    return <>{displayText}</>;
+  }, [isCreatedByUser, enableUserMsgMarkdown, displayText, isLatestMessage]);
 
   return (
     <Container message={message}>
@@ -116,7 +130,7 @@ const DisplayMessage = ({ text, isCreatedByUser, message, showCursor }: TDisplay
         className={cn(
           'markdown prose message-content dark:prose-invert light w-full break-words',
           isSubmitting && 'submitting',
-          showCursorState && text.length > 0 && 'result-streaming',
+          showCursorState && displayText.length > 0 && 'result-streaming',
           isCreatedByUser && !enableUserMsgMarkdown && 'whitespace-pre-wrap',
           isCreatedByUser ? 'dark:text-gray-20' : 'dark:text-gray-100',
         )}
