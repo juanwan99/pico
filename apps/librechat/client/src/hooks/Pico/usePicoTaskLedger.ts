@@ -19,11 +19,18 @@ export type PicoLedgerState = {
   refresh: () => void;
 };
 
-function statusLabel(run: PicoRun | null, isSubmitting: boolean): string | null {
+function statusLabel(
+  run: PicoRun | null,
+  isSubmitting: boolean,
+  artifacts: PicoArtifact[],
+): string | null {
   if (isSubmitting) {
     return '等待模型响应';
   }
   if (!run) {
+    if (artifacts.length) {
+      return '已完成';
+    }
     return null;
   }
   if (run.status === 'running' || run.status === 'queued' || run.status === 'preparing') {
@@ -31,8 +38,7 @@ function statusLabel(run: PicoRun | null, isSubmitting: boolean): string | null 
   }
   if (run.status === 'succeeded') {
     if (run.started_at && run.ended_at) {
-      const ms =
-        Date.parse(run.ended_at) - Date.parse(run.started_at);
+      const ms = Date.parse(run.ended_at) - Date.parse(run.started_at);
       if (!Number.isNaN(ms) && ms > 0) {
         return `已完成 ${Math.max(1, Math.round(ms / 1000))}s`;
       }
@@ -40,12 +46,28 @@ function statusLabel(run: PicoRun | null, isSubmitting: boolean): string | null 
     return '已完成';
   }
   if (run.status === 'failed') {
-    return '失败';
+    return run.error ? `失败：${run.error.slice(0, 40)}` : '失败';
   }
   if (run.status === 'cancelled') {
     return '已取消';
   }
   return run.status;
+}
+
+function readPendingId(): string | null {
+  try {
+    const p = sessionStorage.getItem('pico:pendingConvo');
+    if (p && p.startsWith('pending_')) {
+      return p;
+    }
+    const from = sessionStorage.getItem('pico:rebindFrom');
+    if (from && from.startsWith('pending_')) {
+      return from;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 export function usePicoTaskLedger(
@@ -60,65 +82,6 @@ export function usePicoTaskLedger(
   const [tick, setTick] = useState(0);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
-
-  useEffect(() => {
-    if (!conversationId || conversationId === 'new') {
-      setTask(null);
-      setRun(null);
-      setArtifacts([]);
-      return;
-    }
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { tasks } = await listPicoTasks(conversationId);
-        const latest = tasks[0] ?? null;
-        if (cancelled) {
-          return;
-        }
-        setTask(latest);
-        if (!latest) {
-          setRun(null);
-          setArtifacts([]);
-          return;
-        }
-        const [detail, runsRes] = await Promise.all([
-          getPicoTask(latest.id),
-          listPicoTaskRuns(latest.id),
-        ]);
-        if (cancelled) {
-          return;
-        }
-        setArtifacts(detail.artifacts || []);
-        const runs = runsRes.runs || [];
-        setRun(runs[0] ?? null);
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : String(e));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [conversationId, tick, isSubmitting]);
-
-  // poll while submitting
-  useEffect(() => {
-    if (!isSubmitting || !conversationId || conversationId === 'new') {
-      return;
-    }
-    const id = window.setInterval(() => setTick((n) => n + 1), 2500);
-    return () => window.clearInterval(id);
-  }, [isSubmitting, conversationId]);
-
 
   // Rebind pending_* → real conversation id once LibreChat assigns one
   useEffect(() => {
@@ -146,19 +109,104 @@ export function usePicoTaskLedger(
           }
         }
       } catch {
-        /* ignore — ledger still queryable via pending until retry */
+        /* retry on next tick */
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [conversationId]);
+  }, [conversationId, tick]);
+
+  useEffect(() => {
+    if (!conversationId || conversationId === 'new') {
+      setTask(null);
+      setRun(null);
+      setArtifacts([]);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Query real id first; if empty (first msg race), also try pending_*
+        let tasks = (await listPicoTasks(conversationId)).tasks || [];
+        if (!tasks.length) {
+          const pending = readPendingId();
+          if (pending && pending !== conversationId) {
+            tasks = (await listPicoTasks(pending)).tasks || [];
+          }
+        }
+        const latest = tasks[0] ?? null;
+        if (cancelled) {
+          return;
+        }
+        setTask(latest);
+        if (!latest) {
+          setRun(null);
+          setArtifacts([]);
+          return;
+        }
+        const [detail, runsRes] = await Promise.all([
+          getPicoTask(latest.id),
+          listPicoTaskRuns(latest.id),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        setArtifacts(detail.artifacts || []);
+        const runs = runsRes.runs || [];
+        setRun(runs[0] ?? null);
+      } catch (e) {
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : String(e);
+          // user-facing short Chinese for common fetch failures
+          if (msg.includes('401')) {
+            setError('登录已失效，请刷新页面后重新登录');
+          } else if (msg.includes('502') || msg.includes('unavailable')) {
+            setError('账本服务暂时不可用，请稍后重试');
+          } else {
+            setError(msg.slice(0, 120));
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, tick, isSubmitting]);
+
+  // poll while submitting + short tail after finish (artifacts may lag)
+  useEffect(() => {
+    if (!conversationId || conversationId === 'new') {
+      return;
+    }
+    if (isSubmitting) {
+      const id = window.setInterval(() => setTick((n) => n + 1), 2000);
+      return () => window.clearInterval(id);
+    }
+    // after submit ends, refresh a few times for artifact
+    let n = 0;
+    const id = window.setInterval(() => {
+      n += 1;
+      setTick((t) => t + 1);
+      if (n >= 4) {
+        window.clearInterval(id);
+      }
+    }, 1500);
+    return () => window.clearInterval(id);
+  }, [isSubmitting, conversationId]);
 
   return {
     task,
     run,
     artifacts,
-    statusLabel: statusLabel(run, isSubmitting),
+    statusLabel: statusLabel(run, isSubmitting, artifacts),
     loading,
     error,
     refresh,

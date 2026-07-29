@@ -40,6 +40,9 @@ if [ -f "$LC/package.json" ]; then
   if [ ! -d "$LC/client/dist" ]; then
     (cd "$LC" && npm run build:packages && npm run build:client)
   fi
+  if [ -x "$ROOT/scripts/ensure-librechat-dist.sh" ]; then
+    "$ROOT/scripts/ensure-librechat-dist.sh" || true
+  fi
   # Always re-apply self-destroy SW after dist exists (build regenerates workbox)
   if [ -x "$ROOT/scripts/librechat-postbuild-sw.sh" ]; then
     "$ROOT/scripts/librechat-postbuild-sw.sh" || true
@@ -64,6 +67,19 @@ MONGO_URI=mongodb://127.0.0.1:27017/LibreChat
 ENV
   fi
   if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:3080/; then
+    (
+      cd "$LC"
+      unset PROXY HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy || true
+      nohup npm run backend >>/tmp/librechat-api.log 2>&1 &
+    )
+    for _ in $(seq 1 60); do curl -sf -o /dev/null --max-time 1 http://127.0.0.1:3080/ && break; sleep 0.5; done
+  fi
+  # dist asset live check — stale server memory after rebuild causes white "Pico 正在加载"
+  ASSET=$(grep -oE 'assets/index\.[A-Za-z0-9_-]+\.js' "$LC/client/dist/index.html" 2>/dev/null | head -1 || true)
+  if [ -n "$ASSET" ] && ! curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:3080/$ASSET"; then
+    echo "[pico] live index asset 404 — restarting LibreChat backend to pick up dist"
+    pkill -f 'api/server/index.js' 2>/dev/null || true
+    sleep 1
     (
       cd "$LC"
       unset PROXY HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy || true

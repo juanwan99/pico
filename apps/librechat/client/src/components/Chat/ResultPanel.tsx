@@ -273,7 +273,16 @@ export default function ResultPanel({
             {artifacts.length === 0 ? (
               <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-[#9a9a9a]">
                 <FileText className="h-8 w-8 opacity-35" strokeWidth={1.25} />
-                <p className="text-[13px]">暂无内容</p>
+                <p className="text-[13px]">
+                  {runStatusLabel?.includes('等待')
+                    ? '任务进行中，产物生成后将显示在这里'
+                    : runStatusLabel?.startsWith('失败')
+                      ? '本次运行未产出文件（见上方状态）'
+                      : '暂无内容'}
+                </p>
+                <p className="max-w-[14rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
+                  模型回复摘要与工具产物会自动记入账本，并出现在本列表
+                </p>
               </div>
             ) : (
               <ul className="space-y-2">

@@ -4,10 +4,13 @@ set -eu
 cd /workspace
 
 if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8080/login; then
-  # Keep pin alive even when already healthy
-  curl -sf -o /dev/null --max-time 2 -X POST http://127.0.0.1:6015/__control/target \
-    -H 'Content-Type: application/json' -d '{"port":8080}' || true
-  exit 0
+  ASSET=$(grep -oE 'assets/index\.[A-Za-z0-9_-]+\.js' /workspace/apps/librechat/client/dist/index.html 2>/dev/null | head -1 || true)
+  if [ -n "$ASSET" ] && curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:8080/$ASSET"; then
+    curl -sf -o /dev/null --max-time 2 -X POST http://127.0.0.1:6015/__control/target \
+      -H 'Content-Type: application/json' -d '{"port":8080}' || true
+    exit 0
+  fi
+  # HTML up but main JS missing — fall through to restart product stack
 fi
 
 # Mongo portable

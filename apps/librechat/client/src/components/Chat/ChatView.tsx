@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';
 import { Spinner } from '@librechat/client';
@@ -105,6 +105,16 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '等待模型响应' : undefined);
   const showResultPanel = !isLandingPage && resultOpen && conversationId && conversationId !== Constants.NEW_CONVO;
 
+  // Ensure result panel opens when artifacts arrive or run finishes
+  useEffect(() => {
+    if (!conversationId || conversationId === Constants.NEW_CONVO) {
+      return;
+    }
+    if ((ledger.artifacts?.length ?? 0) > 0 || ledger.statusLabel?.startsWith('已完成')) {
+      setResultOpen(true);
+    }
+  }, [conversationId, ledger.artifacts, ledger.statusLabel]);
+
   if (isLoading && conversationId !== Constants.NEW_CONVO) {
     content = <LoadingSpinner />;
   } else if ((isLoading || isNavigating) && !isLandingPage) {
@@ -137,9 +147,16 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     completedLabel={
                       !isSubmitting && ledger.statusLabel && ledger.statusLabel.startsWith('已完成')
                         ? ledger.statusLabel
-                        : null
+                        : ledger.statusLabel?.startsWith('失败')
+                          ? ledger.statusLabel
+                          : null
                     }
                   />
+                  {ledger.error ? (
+                    <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900">
+                      账本：{ledger.error}
+                    </div>
+                  ) : null}
                 </>
               )}
               <div className={cn('flex min-h-0 flex-1', isLandingPage ? 'flex-col' : 'flex-row')}>

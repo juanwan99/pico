@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from app.auth import Principal, decode_token, scope_proxy_principal
 from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
+from pico_orchestrator.user_errors import user_message_for_error
 
 router = APIRouter(tags=["openai-compat"])
 
@@ -398,7 +399,7 @@ async def chat_completions(
                 text = "".join(parts) or "(empty)"
                 await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id)
             except Exception as e:  # noqa: BLE001
-                text = f"【错误】{e}"
+                text = f"【错误】{user_message_for_error(str(e))}"
                 await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
         else:
             text = await _run_and_collect(prompt, principal, settings, history=history)
@@ -474,7 +475,7 @@ async def chat_completions(
                     task_id=task_id,
                 )
             except Exception as e:  # noqa: BLE001
-                yield chunk({"content": f"【错误】{e}"})
+                yield chunk({"content": f"【错误】{user_message_for_error(str(e))}"})
                 await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
             yield chunk({}, finish="stop")
             yield b"data: [DONE]\n\n"
@@ -573,7 +574,7 @@ async def chat_completions(
                     if not saw_text:
                         yield chunk({"content": str(payload)})
                 elif kind == "error":
-                    yield chunk({"content": f"【错误】{payload}"})
+                    yield chunk({"content": f"【错误】{user_message_for_error(str(payload))}"})
                     break
                 elif kind == "done":
                     result = payload
