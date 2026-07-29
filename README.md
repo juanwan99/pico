@@ -51,3 +51,7 @@ pico (AI workspace + agent + model API)
 - Phase 1: Pico independent (this MVP)
 - Phase 2: Integration contracts
 - Phase 3: edu-cloud wire-up + retire edu AI
+
+## Handoff
+
+New execution windows: start at [`docs/HANDOFF.md`](docs/HANDOFF.md).
