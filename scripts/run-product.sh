@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-# Pico product: API :8000 + NextChat :3000 + preview gateway :8080
+# ONLY public: NextChat :8080. API loopback :8000 (preview must not attach to API).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 export PYTHONPATH="$ROOT/services/api:$ROOT/services/orchestrator${PYTHONPATH:+:$PYTHONPATH}"
-if [ -f "$ROOT/.env" ]; then set -a; # shellcheck disable=SC1091
-  source "$ROOT/.env"; set +a
-fi
+if [ -f "$ROOT/.env" ]; then set -a; source "$ROOT/.env"; set +a; fi
 mkdir -p "$ROOT/data"
 UV="$ROOT/.venv/bin/uvicorn"; [ -x "$UV" ] || UV=uvicorn
 
 if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8000/health; then
-  echo "[pico] starting API :8000"
+  echo "[pico] API 127.0.0.1:8000"
   nohup "$UV" app.main:app --app-dir "$ROOT/services/api" --host 127.0.0.1 --port 8000 \
     >>/tmp/pico-api.log 2>&1 &
   for _ in $(seq 1 40); do curl -sf -o /dev/null --max-time 1 http://127.0.0.1:8000/health && break; sleep 0.25; done
@@ -28,27 +26,20 @@ DISABLE_GPT4=1
 ENV
 fi
 
-if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:3000/; then
-  echo "[pico] starting NextChat :3000"
+# Kill any leftover gateway so it cannot steal :8080
+pkill -f preview-gateway.py 2>/dev/null || true
+
+if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8080/; then
+  echo "[pico] NextChat product UI 0.0.0.0:8080"
   cd "$ROOT/apps/nextchat"
   if [ ! -d node_modules ]; then yarn install || npm install; fi
-  nohup npx next dev -H 127.0.0.1 -p 3000 >>/tmp/nextchat.log 2>&1 &
-  for _ in $(seq 1 90); do curl -sf -o /dev/null --max-time 1 http://127.0.0.1:3000/ && break; sleep 0.5; done
-  cd "$ROOT"
+  nohup npx next dev -H 0.0.0.0 -p 8080 >>/tmp/nextchat.log 2>&1 &
+  for _ in $(seq 1 90); do
+    body=$(curl -sf --max-time 1 http://127.0.0.1:8080/ 2>/dev/null | head -c 40 || true)
+    echo "$body" | grep -qi html && break
+    sleep 0.5
+  done
 fi
 
-# Prefer repo gateway script
-GW="$ROOT/scripts/preview-gateway.py"
-if [ ! -f "$GW" ]; then GW=/tmp/pico-gateway8080.py; fi
-if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8080/; then
-  echo "[pico] starting preview gateway :8080"
-  nohup python3 "$GW" >>/tmp/pico-gateway.log 2>&1 &
-  sleep 0.5
-fi
-
-echo "[pico] Preview http://0.0.0.0:8080  (NextChat)  API :8000"
-echo "[pico] product_ui=nextchat — if you see JSON Not Found, hard-refresh; API root is not the UI"
-if [ -x "$ROOT/scripts/assert-product-identity.sh" ]; then
-  # optional soft check
-  bash "$ROOT/scripts/assert-product-identity.sh" || true
-fi
+echo "[pico] PUBLIC UI http://0.0.0.0:8080 (must be HTML/NextChat, never API JSON)"
+echo "[pico] API loopback only 127.0.0.1:8000"
