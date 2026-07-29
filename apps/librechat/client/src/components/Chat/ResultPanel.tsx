@@ -1,17 +1,24 @@
 /**
- * Task-scoped result panel (WorkBuddy-class IA, clean-room).
- * Top views: 概览 / 工作空间文件 / 浏览器
- * 产物 is nested under 概览 (not a 4th top-level tab).
+ * Task result panel — clean-room layout from WorkBuddy nonempty screenshots.
+ * Top: view dropdown 概览 | 工作空间文件 | 浏览器
+ * 概览: file cards (icon / name / size / 打开); 产物 nested concept = cards list
+ * 工作空间文件: search + checkbox rows
+ * 浏览器: nav chrome + URL + security footer
  */
 import { useMemo, useState } from 'react';
 import {
   ChevronDown,
-  ChevronRight,
   FileText,
   FolderOpen,
   Globe,
   Maximize2,
   PanelRightClose,
+  ArrowLeft,
+  ArrowRight,
+  RotateCw,
+  ExternalLink,
+  MoreHorizontal,
+  Search,
 } from 'lucide-react';
 import type { TMessage } from 'librechat-data-provider';
 import { cn } from '~/utils';
@@ -21,43 +28,85 @@ type TopView = 'overview' | 'files' | 'browser';
 type ArtifactItem = {
   id: string;
   name: string;
-  kind: string;
+  sizeLabel: string;
+  kind: 'txt' | 'file' | 'other';
+  url?: string;
 };
+
+function formatSize(n?: number): string {
+  if (n == null || Number.isNaN(n)) {
+    return '';
+  }
+  if (n < 1024) {
+    return `${n}B`;
+  }
+  if (n < 1024 * 1024) {
+    return `${(n / 1024).toFixed(1)}KB`;
+  }
+  return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+}
 
 function collectArtifacts(messages: TMessage[] | null | undefined): ArtifactItem[] {
   if (!messages?.length) {
     return [];
   }
   const out: ArtifactItem[] = [];
+  const seen = new Set<string>();
+
   for (const m of messages) {
     const files = m.files;
     if (Array.isArray(files)) {
       for (const f of files) {
-        const id = String((f as { file_id?: string }).file_id ?? (f as { _id?: string })._id ?? Math.random());
-        const name = String(
-          (f as { filename?: string }).filename ?? (f as { name?: string }).name ?? '附件',
+        const id = String(
+          (f as { file_id?: string }).file_id ??
+            (f as { _id?: string })._id ??
+            (f as { filepath?: string }).filepath ??
+            Math.random(),
         );
-        out.push({ id, name, kind: 'file' });
-      }
-    }
-    // content parts with type file/image occasionally
-    const content = (m as { content?: unknown[] }).content;
-    if (Array.isArray(content)) {
-      content.forEach((part, i) => {
-        if (part && typeof part === 'object' && 'type' in part) {
-          const t = String((part as { type: string }).type);
-          if (t.includes('file') || t.includes('image')) {
-            out.push({
-              id: `${m.messageId}-c${i}`,
-              name: t,
-              kind: t,
-            });
-          }
+        if (seen.has(id)) {
+          continue;
         }
-      });
+        seen.add(id);
+        const name = String(
+          (f as { filename?: string }).filename ??
+            (f as { name?: string }).name ??
+            '附件',
+        );
+        const bytes = (f as { bytes?: number; size?: number }).bytes ?? (f as { size?: number }).size;
+        const lower = name.toLowerCase();
+        out.push({
+          id,
+          name,
+          sizeLabel: formatSize(typeof bytes === 'number' ? bytes : undefined) || '—',
+          kind: lower.endsWith('.txt') || lower.endsWith('.md') ? 'txt' : 'file',
+          url: (f as { filepath?: string; preview?: string }).filepath,
+        });
+      }
     }
   }
   return out;
+}
+
+const VIEW_LABEL: Record<TopView, string> = {
+  overview: '概览',
+  files: '工作空间文件',
+  browser: '浏览器',
+};
+
+function FileGlyph({ kind }: { kind: ArtifactItem['kind'] }) {
+  return (
+    <span
+      className={cn(
+        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold',
+        kind === 'txt'
+          ? 'bg-[#e8f1ff] text-[#3b6fd9]'
+          : 'bg-[#f0f0f0] text-[#6b6b6b]',
+      )}
+      aria-hidden
+    >
+      {kind === 'txt' ? 'TXT' : <FileText className="h-4 w-4" />}
+    </span>
+  );
 }
 
 export default function ResultPanel({
@@ -72,14 +121,24 @@ export default function ResultPanel({
   onClose?: () => void;
 }) {
   const [view, setView] = useState<TopView>('overview');
-  const [artifactsOpen, setArtifactsOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [fileQuery, setFileQuery] = useState('');
+  const [browserUrl, setBrowserUrl] = useState('');
   const artifacts = useMemo(() => collectArtifacts(messages), [messages]);
 
-  const tabs: { id: TopView; label: string }[] = [
-    { id: 'overview', label: '概览' },
-    { id: 'files', label: '工作空间文件' },
-    { id: 'browser', label: '浏览器' },
-  ];
+  const filteredFiles = useMemo(() => {
+    const q = fileQuery.trim().toLowerCase();
+    if (!q) {
+      return artifacts;
+    }
+    return artifacts.filter((a) => a.name.toLowerCase().includes(q));
+  }, [artifacts, fileQuery]);
+
+  const openArtifact = (a: ArtifactItem) => {
+    if (a.url) {
+      window.open(a.url, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
     <aside
@@ -87,22 +146,56 @@ export default function ResultPanel({
       data-testid="result-panel"
       aria-label="结果区"
     >
+      {/* Header — dropdown view switcher (matches nonempty shots) */}
       <div className="flex h-11 items-center gap-1 border-b border-black/[0.06] px-2 dark:border-border-light">
-        {tabs.map((t) => (
+        <div className="relative">
           <button
-            key={t.id}
             type="button"
-            onClick={() => setView(t.id)}
-            className={cn(
-              'rounded-md px-2.5 py-1.5 text-[12.5px] font-medium transition-colors',
-              view === t.id
-                ? 'bg-[#edf1f4] text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
-                : 'text-[#6b6b6b] hover:bg-black/[0.03] hover:text-[#1a1a1a]',
-            )}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[13px] font-medium text-[#1a1a1a] hover:bg-black/[0.04] dark:text-text-primary"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-haspopup="listbox"
           >
-            {t.label}
+            {VIEW_LABEL[view]}
+            <ChevronDown className="h-3.5 w-3.5 text-[#8c8c8c]" />
           </button>
-        ))}
+          {menuOpen && (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-40 cursor-default"
+                aria-label="close"
+                onClick={() => setMenuOpen(false)}
+              />
+              <ul
+                className="absolute left-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-lg dark:border-border-light dark:bg-surface-secondary"
+                role="listbox"
+              >
+                {(Object.keys(VIEW_LABEL) as TopView[]).map((id) => (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={view === id}
+                      className={cn(
+                        'flex w-full px-3 py-2 text-left text-[13px]',
+                        view === id
+                          ? 'bg-[#edf1f4] font-medium'
+                          : 'hover:bg-black/[0.03]',
+                      )}
+                      onClick={() => {
+                        setView(id);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      {VIEW_LABEL[id]}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
         <div className="ml-auto flex items-center gap-0.5">
           <button
             type="button"
@@ -125,72 +218,143 @@ export default function ResultPanel({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      {/* Body */}
+      <div className="flex min-h-0 flex-1 flex-col">
         {view === 'overview' && (
-          <div className="space-y-3">
-            {taskTitle ? (
-              <div className="rounded-lg bg-[#fafafa] px-3 py-2 dark:bg-surface-tertiary">
-                <p className="text-[11px] text-[#8c8c8c]">当前任务</p>
-                <p className="mt-0.5 truncate text-[13px] font-medium">{taskTitle}</p>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {taskTitle || runStatusLabel ? (
+              <div className="mb-3 rounded-lg bg-[#fafafa] px-3 py-2 dark:bg-surface-tertiary">
+                {taskTitle ? (
+                  <p className="truncate text-[13px] font-medium">{taskTitle}</p>
+                ) : null}
                 {runStatusLabel ? (
-                  <p className="mt-1 text-[12px] text-[#6b6b6b]">{runStatusLabel}</p>
+                  <p className="mt-0.5 text-[12px] text-[#6b6b6b]">{runStatusLabel}</p>
                 ) : null}
               </div>
             ) : null}
 
-            <button
-              type="button"
-              className="flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[13px] font-medium text-[#1a1a1a] hover:bg-black/[0.03]"
-              onClick={() => setArtifactsOpen((v) => !v)}
-              aria-expanded={artifactsOpen}
-            >
-              {artifactsOpen ? (
-                <ChevronDown className="h-3.5 w-3.5 text-[#8c8c8c]" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 text-[#8c8c8c]" />
-              )}
-              产物
-              <span className="ml-auto text-[11px] font-normal text-[#9a9a9a]">
-                {artifacts.length || ''}
-              </span>
-            </button>
-
-            {artifactsOpen && (
-              <div className="rounded-lg border border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-secondary">
-                {artifacts.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-[#9a9a9a]">
-                    <FileText className="h-8 w-8 opacity-40" strokeWidth={1.25} />
-                    <p className="text-[13px]">暂无内容</p>
-                  </div>
-                ) : (
-                  <ul className="divide-y divide-black/[0.04]">
-                    {artifacts.map((a) => (
-                      <li key={a.id} className="flex items-center gap-2 px-3 py-2.5 text-[13px]">
-                        <FileText className="h-4 w-4 shrink-0 text-[#6b6b6b]" />
-                        <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+            {artifacts.length === 0 ? (
+              <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-[#9a9a9a]">
+                <FileText className="h-8 w-8 opacity-35" strokeWidth={1.25} />
+                <p className="text-[13px]">暂无内容</p>
               </div>
+            ) : (
+              <ul className="space-y-2">
+                {artifacts.map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex items-center gap-2.5 rounded-xl border border-black/[0.06] bg-white px-2.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-border-light dark:bg-surface-secondary"
+                  >
+                    <FileGlyph kind={a.kind} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-[#1a1a1a] dark:text-text-primary">
+                        {a.name}
+                      </p>
+                      {a.sizeLabel ? (
+                        <p className="text-[11px] text-[#9a9a9a]">{a.sizeLabel}</p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-lg bg-[#f3f3f3] px-2.5 py-1 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#e8e8e8] dark:bg-surface-tertiary dark:text-text-primary"
+                      onClick={() => openArtifact(a)}
+                    >
+                      打开
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         )}
 
         {view === 'files' && (
-          <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 text-[#9a9a9a]">
-            <FolderOpen className="h-8 w-8 opacity-40" strokeWidth={1.25} />
-            <p className="text-[13px]">空目录</p>
-            <p className="max-w-[14rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
-              浏览器版工作空间文件将绑定服务端托管目录（本地全盘后置）
-            </p>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="border-b border-black/[0.05] px-3 py-2">
+              <div className="flex items-center gap-2 rounded-lg bg-[#f5f5f5] px-2.5 py-1.5 dark:bg-surface-tertiary">
+                <Search className="h-3.5 w-3.5 shrink-0 text-[#9a9a9a]" />
+                <input
+                  value={fileQuery}
+                  onChange={(e) => setFileQuery(e.target.value)}
+                  placeholder="搜索文件"
+                  className="w-full bg-transparent text-[13px] outline-none placeholder:text-[#b0b0b0]"
+                />
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {filteredFiles.length === 0 ? (
+                <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-[#9a9a9a]">
+                  <FolderOpen className="h-8 w-8 opacity-35" strokeWidth={1.25} />
+                  <p className="text-[13px]">空目录</p>
+                </div>
+              ) : (
+                <ul>
+                  {filteredFiles.map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex items-center gap-2 border-b border-black/[0.04] px-3 py-2.5 hover:bg-[#fafafa] dark:hover:bg-surface-tertiary"
+                    >
+                      <input type="checkbox" className="rounded border-black/20" aria-label={a.name} />
+                      <FileGlyph kind={a.kind} />
+                      <span className="min-w-0 flex-1 truncate text-[13px]">{a.name}</span>
+                      <span className="shrink-0 text-[12px] text-[#9a9a9a]">{a.sizeLabel}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         )}
 
         {view === 'browser' && (
-          <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 text-[#9a9a9a]">
-            <Globe className="h-8 w-8 opacity-40" strokeWidth={1.25} />
-            <p className="text-[13px]">暂无连接</p>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex items-center gap-1 border-b border-black/[0.05] px-2 py-1.5">
+              <button type="button" className="rounded p-1 text-[#8c8c8c]" aria-label="后退" disabled>
+                <ArrowLeft className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" className="rounded p-1 text-[#8c8c8c]" aria-label="前进" disabled>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" className="rounded p-1 text-[#8c8c8c]" aria-label="刷新">
+                <RotateCw className="h-3.5 w-3.5" />
+              </button>
+              <form
+                className="mx-1 flex min-w-0 flex-1 items-center rounded-full bg-[#f3f3f3] px-3 py-1 dark:bg-surface-tertiary"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                }}
+              >
+                <input
+                  value={browserUrl}
+                  onChange={(e) => setBrowserUrl(e.target.value)}
+                  placeholder="搜索或输入网址"
+                  className="w-full bg-transparent text-[12px] outline-none placeholder:text-[#b0b0b0]"
+                />
+              </form>
+              <button
+                type="button"
+                className="rounded p-1 text-[#8c8c8c]"
+                aria-label="在新窗口打开"
+                onClick={() => {
+                  if (browserUrl.trim()) {
+                    const u = browserUrl.startsWith('http') ? browserUrl : `https://${browserUrl}`;
+                    window.open(u, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" className="rounded p-1 text-[#8c8c8c]" aria-label="更多">
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-[#fafafa] text-[#9a9a9a] dark:bg-presentation">
+              <Globe className="mb-2 h-8 w-8 opacity-35" strokeWidth={1.25} />
+              <p className="text-[13px]">暂无连接</p>
+            </div>
+            <div className="border-t border-black/[0.05] px-3 py-2 text-center text-[11px] leading-snug text-[#9a9a9a]">
+              当前页面由 AI 操作，请注意信息安全；若有疑问，请立即结束任务
+            </div>
           </div>
         )}
       </div>
