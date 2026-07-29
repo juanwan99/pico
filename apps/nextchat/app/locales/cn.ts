@@ -8,13 +8,11 @@ const cn = {
   WIP: "该功能仍在开发中……",
   Error: {
     Unauthorized: isApp
-      ? `😆 对话遇到了一些问题，不用慌:
-       \\ 1️⃣ 想要零配置开箱即用，[点击这里立刻开启对话 🚀](${SAAS_CHAT_UTM_URL})
-       \\ 2️⃣ 如果你想消耗自己的 OpenAI 资源，点击[这里](/#/settings)修改设置 ⚙️`
-      : `😆 对话遇到了一些问题，不用慌:
-       \ 1️⃣ 想要零配置开箱即用，[点击这里立刻开启对话 🚀](${SAAS_CHAT_UTM_URL})
-       \ 2️⃣ 如果你正在使用私有部署版本，点击[这里](/#/auth)输入访问秘钥 🔑
-       \ 3️⃣ 如果你想消耗自己的 OpenAI 资源，点击[这里](/#/settings)修改设置 ⚙️
+      ? `对话暂时不可用。请检查服务端配置，或在设置中确认接口可用。`
+      : `对话暂时不可用。
+       1. 确认 Pico 后端与模型密钥已就绪
+       2. 在[设置](/#/settings)中检查接口地址
+       3. 若管理员开启了访问码，请在[鉴权页](/#/auth)输入
        `,
   },
   Auth: {
@@ -27,7 +25,7 @@ const cn = {
     Later: "稍后再说",
     SaasTips: "配置太麻烦，想要立即使用",
     TopTips:
-      "🥳 NextChat AI 首发优惠，立刻解锁 OpenAI o1, GPT-4o, Claude-3.5 等最新大模型",
+      "Pico 独立 AI 底座 · 对话走服务端编排与账本，密钥不落浏览器",
   },
   ChatItem: {
     ChatItemCount: (count: number) => `${count} 条对话`,
@@ -115,7 +113,7 @@ const cn = {
     Download: "下载文件",
     Share: "分享到 ShareGPT",
     MessageFromYou: "用户",
-    MessageFromChatGPT: "ChatGPT",
+    MessageFromChatGPT: "Pico",
     Format: {
       Title: "导出格式",
       SubTitle: "可以导出 Markdown 文本或者 PNG 图片",

@@ -9,10 +9,10 @@ import { GoogleTagManager, GoogleAnalytics } from "@next/third-parties/google";
 import { getServerSideConfig } from "./config/server";
 
 export const metadata: Metadata = {
-  title: "NextChat",
-  description: "Your personal ChatGPT Chat Bot.",
+  title: "Pico · AI 工作台",
+  description: "Pico 独立 AI 底座 — 对话 · 工具 · 账本",
   appleWebApp: {
-    title: "NextChat",
+    title: "Pico",
     statusBarStyle: "default",
   },
 };
@@ -35,8 +35,13 @@ export default function RootLayout({
   const serverConfig = getServerSideConfig();
 
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var k='lang';if(!localStorage.getItem(k))localStorage.setItem(k,'cn');}catch(e){}})();`,
+          }}
+        />
         <meta name="config" content={JSON.stringify(getClientConfig())} />
         <meta
           name="viewport"
