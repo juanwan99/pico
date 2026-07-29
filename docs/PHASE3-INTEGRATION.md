@@ -1,7 +1,8 @@
 # Phase 3 — Integrate Pico ↔ edu-cloud
 
 ```
-STATUS: PICO MERGED · EDU PR OPEN (juanwan99/edu-cloud#443)
+PICO_SCOPE: agents work **only** in this repo; edu-cloud is out of band
+STATUS: PICO-SIDE COMPLETE ON MAIN (edu team owns their side)
 PLAN: MVP-3DAY v1.2 §10
 CONTRACTS: Phase 2 FROZEN v1.0 (unchanged field names)
 ```
@@ -62,11 +63,3 @@ PICO_HOOK_SERVICE_TOKEN=<shared-for-callbacks>
 3. Re-enable test issuer only in non-prod
 
 
-## Current ship state
-
-| Repo | State |
-|------|-------|
-| pico main | Phase 3 integrate **merged** (PR #6) |
-| edu-cloud | PR #443 `pico_bridge` — merge when Tests green |
-
-Nothing is blocked on owner chat; remaining work is **CI green + merge #443 + env cutover**.
