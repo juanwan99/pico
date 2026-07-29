@@ -32,10 +32,16 @@ Phase 1 status: [`docs/PHASE1-STATUS.md`](docs/PHASE1-STATUS.md)
 Phase 2 contracts: [`docs/PHASE2-CONTRACTS.md`](docs/PHASE2-CONTRACTS.md) **FROZEN v1.0**  
 Phase 3 integrate: [`docs/PHASE3-INTEGRATION.md`](docs/PHASE3-INTEGRATION.md)
 
+## Product UI (binding)
+
+| Use | Do not use |
+|-----|------------|
+| **`apps/nextchat`** | ~~`apps/web`~~ **deleted** — hand-rolled 三栏 scaffold |
+
 ## Layout
 
 ```text
-apps/web/                 Vue 3 + Vite three-zone shell
+apps/nextchat/            **Product UI** (NextChat OSS · Claude/Codex-class)
 services/api/             FastAPI control plane
 services/orchestrator/    Kimi Agent pin + allowlist gateway
 docs/contracts/           Phase 2 contract skeletons
@@ -48,23 +54,25 @@ tests/security/           Shell/File/Web/MCP-off proofs
 - Node 20+ (22 recommended)
 - Optional: `KIMI_API_KEY` for S1 real-model streaming
 
-## Quick start — 今日独立原型
+## Quick start — 产品预览
 
 ```bash
 cp .env.example .env   # set KIMI_API_KEY
-make proto             # API :8000 + Web :5173
-# open http://127.0.0.1:5173
-make demo              # headless S4→S7 proof
+make product           # API :8000 + **NextChat** :8080
+# open http://127.0.0.1:8080  （完整 AI 产品壳，不是三栏脚手架）
+make demo              # headless API proof
 ```
 
-Demo script: [`docs/DEMO.md`](docs/DEMO.md)
+**禁止** 再引入 `apps/web` 自研三栏壳。产品 UI = `apps/nextchat` only.
+
+Demo: [`docs/DEMO.md`](docs/DEMO.md)
 
 ### Manual two-terminal
 
 ```bash
 make install
-make api    # terminal A
-make web    # terminal B
+make api    # terminal A → :8000
+make ui     # terminal B → NextChat :8080
 ```
 
 ### Useful commands
@@ -89,7 +97,7 @@ cp .env.example .env
 
 make install          # Python 3.12+
 make api              # 终端 A → http://127.0.0.1:8000
-make web              # 终端 B → http://127.0.0.1:5173  （代理 /v1 → :8000）
+make ui               # 终端 B → NextChat http://127.0.0.1:8080
 ```
 
 或：`make proto`（若 Makefile 提供一键）。
@@ -98,15 +106,15 @@ make web              # 终端 B → http://127.0.0.1:5173  （代理 /v1 → :8
 
 1. 打开 Web → 自动/设置页领取 dev JWT（`/v1/dev/token`）
 2. 发送「列出我学校的班级」
-3. UI 走 **SSE** `GET /v1/runs/{id}/stream`（Bearer）；失败时回退轮询 events
-4. **停止**：按钮 → `POST /v1/runs/{id}/cancel` + 中止 SSE
+3. NextChat 经 OpenAI 兼容 `POST /v1/chat/completions` 走 Pico Agent + 账本
+4. 流式/停止由 NextChat + 后端 cancel/流式语义承担
 
 ### 端口
 
 | 服务 | 地址 |
 |------|------|
 | API | `http://127.0.0.1:8000` |
-| Web（Vite） | `http://127.0.0.1:5173` |
+| Product UI（NextChat） | `http://127.0.0.1:8080` |
 | 健康检查 | `GET /health` |
 
 ### 失败对照
@@ -117,7 +125,7 @@ make web              # 终端 B → http://127.0.0.1:5173  （代理 /v1 → :8
 | 「模型服务未配置」 | 无 `KIMI_API_KEY` | 写入 `.env` 后重启 API |
 | 401 / 登录 | 无 JWT | 设置页重新 mint token |
 | 跨校拒绝 | 预期 fail-closed | 用建议「跨校拒绝演示」 |
-| 停止无反应 | 旧版轮询 | 需 L2 前端；硬刷新 |
+| 停止无反应 | 代理/模型卡住 | 刷新；查 API 日志；确认 :8080 是 NextChat |
 | NextChat 401 | 生产禁 proxy key | 用 Pico JWT；dev 仅 `pico-dev` / `PICO_OPENAI_PROXY_KEY` |
 
 ### 证据命令

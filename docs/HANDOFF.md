@@ -123,7 +123,7 @@ IA 母版：**Claude 式**（对话 + 右侧产物）；气质可参考 Kimi；�
 ```text
 pico/
   docs/                 # 计划与合同（已有）
-  apps/web/             # Vue3 三区 UI
+  apps/nextchat/        # Product UI (NextChat) — apps/web REMOVED
   services/api/         # FastAPI/同类：鉴权、Task/Run、stream
   services/orchestrator/# Kimi Agent 适配、allowlist 网关
   packages/contracts/   # 可选：共享类型

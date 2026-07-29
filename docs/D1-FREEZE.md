@@ -14,7 +14,7 @@ VERDICT_AUTHORITY: NONE  (write window — do not self-PASS S1–S8)
 | Item | Value | Evidence |
 |------|-------|----------|
 | API / orchestrator language | **Python ≥ 3.12** (plan says 3.11+; **kimi-agent-sdk requires ≥3.12**) | `pyproject.toml` `requires-python` |
-| Frontend | **Vue 3 + Vite** | `apps/web/package.json` |
+| Frontend | **NextChat (product shell)** | `apps/nextchat` — `apps/web` removed |
 | Agent SDK | **`kimi-agent-sdk==0.0.5`** | `requirements.txt` |
 | Agent runtime | **`kimi-cli==1.12.0`** (SDK pin range `>=1.12,<1.13`) | `requirements.txt` |
 | Agent config file | `services/orchestrator/agents/pico.yaml` | empty dangerous tools; allowlist only |

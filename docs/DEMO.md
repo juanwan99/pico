@@ -11,10 +11,10 @@ NOT: 网盘 · 教务 SaaS · edu 联调
 ```bash
 # 仓库根目录
 cp -n .env.example .env   # 填入 KIMI_API_KEY
-make proto                # API :8000 + Web :5173
+make product              # API :8000 + NextChat :8080
 ```
 
-打开 **http://127.0.0.1:5173**
+打开 **http://127.0.0.1:8080**（NextChat 产品壳）
 
 ## 现场路径（S1–S7）
 
