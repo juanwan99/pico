@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pico.local/schemas/event.schema.json",
+  "title": "PicoEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "run_id", "seq", "type", "payload"],
+  "properties": {
+    "id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "seq": { "type": "integer", "minimum": 1 },
+    "type": {
+      "type": "string",
+      "enum": [
+        "run.status",
+        "agent.step",
+        "message.delta",
+        "message.final",
+        "tool.call",
+        "tool.result",
+        "auth.deny",
+        "artifact.created",
+        "change.proposed",
+        "run.cancel_requested",
+        "run.error",
+        "stream.end"
+      ]
+    },
+    "payload": { "type": "object" },
+    "created_at": { "type": "string" }
+  }
+}

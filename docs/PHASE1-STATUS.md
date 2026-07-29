@@ -37,8 +37,7 @@ make demo              # scripts/demo_e2e.py against :8000
 - Shell/File/Web/MCP enabled
 - Self-hosted GPU default
 
-## Next (Phase 2/3 — not started unless dispatched)
+## Next
 
-- Freeze contracts with edu (already skeleton under `docs/contracts/`)
-- edu token issuer + real read tools
-- Atomic retire of edu AI
+- **Phase 2 contracts: FROZEN v1.0** — [`PHASE2-CONTRACTS.md`](PHASE2-CONTRACTS.md)
+- **Phase 3 Integrate** — only when dispatched (edu issuer + adapters + retire edu AI)

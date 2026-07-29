@@ -28,7 +28,8 @@ It is the **AI space**: experience + agent orchestration + model API access.
 Handoff: [`docs/HANDOFF.md`](docs/HANDOFF.md)  
 D1 freeze: [`docs/D1-FREEZE.md`](docs/D1-FREEZE.md)  
 Demo: [`docs/DEMO.md`](docs/DEMO.md)  
-Phase 1 status: [`docs/PHASE1-STATUS.md`](docs/PHASE1-STATUS.md)
+Phase 1 status: [`docs/PHASE1-STATUS.md`](docs/PHASE1-STATUS.md)  
+Phase 2 contracts: [`docs/PHASE2-CONTRACTS.md`](docs/PHASE2-CONTRACTS.md) **FROZEN v1.0**
 
 ## Layout
 
