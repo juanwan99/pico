@@ -1,5 +1,6 @@
 /**
- * Pico home — pixel-aligned WorkBuddy task home (clean-room layout).
+ * Pico home — pixel layout aligned to WorkBuddy reference (clean-room).
+ * Owns hero + scene chips + primary composer chrome on landing.
  */
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -10,10 +11,15 @@ import {
   Clapperboard,
   Presentation,
   Sparkles,
+  Plus,
+  Mic,
+  ArrowUp,
+  ChevronDown,
   type LucideIcon,
 } from 'lucide-react';
 import { useOptionalChatFormContext } from '~/Providers';
-import { useLocalize, useAuthContext } from '~/hooks';
+import { useAuthContext } from '~/hooks';
+import WorkspaceSelector from '~/components/Chat/Input/WorkspaceSelector';
 import { cn } from '~/utils';
 
 type SceneId = 'office' | 'code' | 'design';
@@ -77,59 +83,52 @@ const CHIPS: Chip[] = [
   },
 ];
 
-export default function Landing({ centerFormOnLanding: _centerFormOnLanding }: { centerFormOnLanding: boolean }) {
+const PLACEHOLDER = '今天帮你做些什么？ @ 引用对话文件，/ 调用技能与指令';
+
+export default function Landing({
+  centerFormOnLanding: _c,
+}: {
+  centerFormOnLanding: boolean;
+}) {
   const { user } = useAuthContext();
-  const localize = useLocalize();
   const form = useOptionalChatFormContext();
   const [scene, setScene] = useState<SceneId>('office');
+  const [text, setText] = useState('');
 
   const visibleChips = useMemo(() => CHIPS.filter((c) => c.scenes.includes(scene)), [scene]);
 
-  const fillPrompt = useCallback(
-    (prompt: string) => {
-      form?.setValue('text', prompt, { shouldDirty: true, shouldTouch: true });
-      requestAnimationFrame(() => {
-        const el = document.querySelector<HTMLTextAreaElement>(
-          'textarea[data-testid="text-input"]',
-        );
-        if (!el) {
-          return;
-        }
-        const native = Object.getOwnPropertyDescriptor(
-          window.HTMLTextAreaElement.prototype,
-          'value',
-        )?.set;
-        native?.call(el, prompt);
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.focus();
-        el.selectionStart = el.value.length;
-        el.selectionEnd = el.value.length;
-      });
+  const syncForm = useCallback(
+    (value: string) => {
+      setText(value);
+      form?.setValue('text', value, { shouldDirty: true, shouldTouch: true });
     },
     [form],
   );
 
-  const name = user?.name?.split(' ')[0] || user?.username || '';
+  const fillPrompt = useCallback(
+    (prompt: string) => {
+      syncForm(prompt);
+      requestAnimationFrame(() => {
+        document.getElementById('pico-wb-home-input')?.focus();
+      });
+    },
+    [syncForm],
+  );
+
+  const name = user?.name?.split(/\s+/)[0] || '';
 
   return (
-    <div className="pico-wb-landing pointer-events-auto flex w-full flex-shrink-0 flex-col items-center px-4 pt-8 sm:pt-14">
+    <div className="pico-wb-landing flex w-full flex-col items-center px-6 pb-4 pt-10 sm:pt-16">
       <div className="flex w-full max-w-[720px] flex-col items-center">
-        {/* Title — WorkBuddy-scale hero */}
-        <h1 className="text-center text-[32px] font-semibold leading-tight tracking-[-0.02em] text-[#1a1a1a] sm:text-[36px] dark:text-text-primary">
+        <h1 className="text-center text-[32px] font-semibold leading-none tracking-[-0.03em] text-[#1a1a1a] sm:text-[36px] dark:text-text-primary">
           Pico，我帮你
         </h1>
         {name ? (
-          <p className="mt-2 text-center text-[13px] text-[#8c8c8c]">
-            {name}，描述任务即可开始
-          </p>
+          <p className="mt-2.5 text-[13px] text-[#8c8c8c]">{name}，描述任务即可开始</p>
         ) : null}
 
         {/* Scene pills */}
-        <div
-          className="mt-6 flex flex-wrap items-center justify-center gap-2"
-          role="tablist"
-          aria-label="场景"
-        >
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-2" role="tablist">
           {SCENES.map((s) => {
             const active = scene === s.id;
             return (
@@ -140,21 +139,21 @@ export default function Landing({ centerFormOnLanding: _centerFormOnLanding }: {
                 aria-selected={active}
                 onClick={() => setScene(s.id)}
                 className={cn(
-                  'inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] transition-colors',
+                  'inline-flex h-[32px] items-center gap-1.5 rounded-full px-3.5 text-[13px]',
                   active
                     ? 'bg-[#1a1a1a] font-medium text-white'
-                    : 'bg-white font-normal text-[#4a4a4a] ring-1 ring-black/[0.06] hover:bg-[#fafafa]',
+                    : 'bg-white text-[#4a4a4a] shadow-[0_0_0_1px_rgba(0,0,0,0.06)] hover:bg-[#fafafa]',
                 )}
               >
-                {s.id === 'office' && <Sparkles className="h-3.5 w-3.5 opacity-80" />}
+                {s.id === 'office' ? <Sparkles className="h-3.5 w-3.5 opacity-90" /> : null}
                 {s.label}
               </button>
             );
           })}
         </div>
 
-        {/* Capability chips — single row wrap like reference */}
-        <div className="mt-5 flex w-full max-w-[680px] flex-wrap items-center justify-center gap-2">
+        {/* Capability chips */}
+        <div className="mt-5 flex w-full flex-wrap items-center justify-center gap-2">
           {visibleChips.map((chip) => {
             const Icon = chip.icon;
             return (
@@ -162,16 +161,122 @@ export default function Landing({ centerFormOnLanding: _centerFormOnLanding }: {
                 key={chip.id}
                 type="button"
                 onClick={() => fillPrompt(chip.prompt)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white px-3 text-[12.5px] text-[#3d3d3d] ring-1 ring-black/[0.06] transition hover:bg-[#fafafa] hover:ring-black/10"
+                className="inline-flex h-[32px] items-center gap-1.5 rounded-full bg-white px-3 text-[12.5px] text-[#3d3d3d] shadow-[0_0_0_1px_rgba(0,0,0,0.06)] hover:bg-[#fafafa]"
               >
-                <Icon className="h-3.5 w-3.5 shrink-0 text-[#6b6b6b]" strokeWidth={1.75} />
+                <Icon className="h-3.5 w-3.5 text-[#6b6b6b]" strokeWidth={1.75} />
                 {chip.label}
               </button>
             );
           })}
         </div>
 
-        <p className="mt-3 text-[11px] text-[#b0b0b0]">{localize('com_ui_task_chip_hint')}</p>
+        {/* PIXEL composer card — matches reference input block */}
+        <div className="mt-8 w-full">
+          <div
+            className="rounded-[20px] border border-black/[0.08] bg-white px-4 pb-3 pt-3.5 shadow-[0_8px_28px_rgba(15,23,42,0.07)]"
+            data-testid="pico-wb-home-composer"
+          >
+            <textarea
+              id="pico-wb-home-input"
+              value={text}
+              onChange={(e) => syncForm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  // let ChatForm own submit; focus real submit path by dispatching
+                  e.preventDefault();
+                  const real = document.querySelector<HTMLTextAreaElement>(
+                    'textarea[data-testid="text-input"]',
+                  );
+                  if (real) {
+                    const native = Object.getOwnPropertyDescriptor(
+                      window.HTMLTextAreaElement.prototype,
+                      'value',
+                    )?.set;
+                    native?.call(real, text);
+                    real.dispatchEvent(new Event('input', { bubbles: true }));
+                    // try click send
+                    document.querySelector<HTMLButtonElement>('[data-testid="send-button"]')?.click();
+                  }
+                }
+              }}
+              placeholder={PLACEHOLDER}
+              rows={3}
+              className="w-full resize-none border-0 bg-transparent text-[14px] leading-[1.55] text-[#1a1a1a] outline-none placeholder:text-[#a0a0a0]"
+            />
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] hover:bg-black/[0.04]"
+                aria-label="添加"
+                onClick={() =>
+                  document.querySelector<HTMLButtonElement>('[data-testid="attach-file"]')?.click()
+                }
+              >
+                <Plus className="h-5 w-5" strokeWidth={1.75} />
+              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center gap-1 rounded-full bg-[#f3f3f3] px-2.5 text-[12.5px] font-medium text-[#3d3d3d]"
+                >
+                  Auto
+                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                </button>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] hover:bg-black/[0.04]"
+                  aria-label="语音"
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
+                    text.trim()
+                      ? 'bg-[#1a1a1a] text-white'
+                      : 'bg-[#e8e8e8] text-[#9a9a9a]',
+                  )}
+                  aria-label="发送"
+                  disabled={!text.trim()}
+                  onClick={() => {
+                    const real = document.querySelector<HTMLTextAreaElement>(
+                      'textarea[data-testid="text-input"]',
+                    );
+                    if (real) {
+                      const native = Object.getOwnPropertyDescriptor(
+                        window.HTMLTextAreaElement.prototype,
+                        'value',
+                      )?.set;
+                      native?.call(real, text);
+                      real.dispatchEvent(new Event('input', { bubbles: true }));
+                      form?.setValue('text', text, { shouldDirty: true });
+                      document
+                        .querySelector<HTMLButtonElement>('[data-testid="send-button"]')
+                        ?.click();
+                    }
+                  }}
+                >
+                  <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Under-card: 选择工作空间 + 默认权限 */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-1">
+            <WorkspaceSelector />
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-[#6b6b6b] hover:bg-black/[0.04]"
+            >
+              <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[9px] opacity-70">
+                ✓
+              </span>
+              默认权限
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

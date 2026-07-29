@@ -136,9 +136,10 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     )}
                   >
                     {isProjectLandingPage && project && <ProjectLandingChip project={project} />}
-                    {/* Workbench: scene chips on Landing replace generic starters */
-                    false && isLandingPage && <ConversationStarters />}
-                    <ChatForm index={index} placeholder={chatFormPlaceholder} />
+                    {/* Pixel home: Landing owns visible composer; keep ChatForm mounted for submit plumbing */}
+                    <div className={isLandingPage ? 'pointer-events-none fixed left-[-9999px] top-0 h-0 w-0 overflow-hidden opacity-0' : 'w-full'}>
+                      <ChatForm index={index} placeholder={chatFormPlaceholder} />
+                    </div>
                     {!isLandingPage && <Footer />}
                   </div>
                 </div>
