@@ -33,3 +33,11 @@ DEFAULT: zh-Hans（简体中文）
 ## 历史说明
 
 旧文档指向 `apps/nextchat` 的 `cn` locale —— **已废**；以本页与 LibreChat `zh-Hans` 为准。
+
+
+## 覆盖面（2026-07-29 补齐）
+
+- 补全 `zh-Hans` 相对 `en` 的缺失 key（高频 UI + 项目/MCP/快捷键/设置等）
+- 硬编码英文 aria 改 i18n：添加文件选项 / 工具选项 / 调整侧栏 / 对话列表
+- 页脚与关于页品牌：LibreChat → **Pico**
+- 登录后主界面实测：`项目` / `对话` / `智能体市场` / 中文页脚，无 Welcome back / Projects 残留

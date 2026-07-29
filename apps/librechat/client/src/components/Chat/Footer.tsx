@@ -36,13 +36,11 @@ function Footer({ className, startupConfig }: FooterProps) {
     </a>
   );
 
+  // Pico product footer — do not surface LibreChat branding
   const mainContentParts = (
     typeof config?.customFooter === 'string'
       ? config.customFooter
-      : '[LibreChat ' +
-        Constants.VERSION +
-        '](https://librechat.ai) - ' +
-        localize('com_ui_latest_footer')
+      : `Pico ${Constants.VERSION} · ${localize('com_ui_latest_footer')}`
   ).split('|');
 
   useEffect(() => {

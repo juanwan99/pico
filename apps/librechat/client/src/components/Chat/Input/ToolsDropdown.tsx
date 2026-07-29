@@ -377,7 +377,7 @@ const ToolsDropdown = ({ disabled }: ToolsDropdownProps) => {
         <Ariakit.MenuButton
           disabled={isDisabled}
           id="tools-dropdown-button"
-          aria-label="Tools Options"
+          aria-label={localize('com_ui_tools_options')}
           className={cn(
             'flex size-9 items-center justify-center rounded-full p-1 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-opacity-50',
             isPopoverActive && 'bg-surface-hover',

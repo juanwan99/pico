@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useLocalize } from '~/hooks';
 import type { NavLink } from '~/common';
 import SidePanelNav from '~/components/SidePanel/Nav';
 import ExpandedPanel from './ExpandedPanel';
@@ -19,6 +20,7 @@ function Sidebar({
   onResizeStart: (e: React.MouseEvent) => void;
   onResizeKeyboard: (direction: 'shrink' | 'grow') => void;
 }) {
+  const localize = useLocalize();
   return (
     <>
       <div className="flex h-full w-full overflow-hidden">
@@ -42,7 +44,7 @@ function Sidebar({
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize sidebar"
+        aria-label={localize('com_ui_resize_sidebar')}
         tabIndex={expanded ? 0 : -1}
         className={cn(
           'absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize transition-colors hover:bg-border-medium active:bg-border-heavy',
