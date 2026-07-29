@@ -18,7 +18,7 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
     if "cancelled" in low or c == "cancelled":
         return "已停止生成。"
     if (
-        "no kimi_api_key" in low
+        "no kimi_api_key" in low or "尚未配置" in text or "kimi_api_key" in low
         or "no deepseek" in low
         or "blocked s1" in low
         or "api key" in low

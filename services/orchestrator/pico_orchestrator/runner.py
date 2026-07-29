@@ -64,7 +64,7 @@ async def run_agent_loop(
     caps = caps or RunCaps()
     cfg = resolve_provider()
     if cfg is None:
-        reason = "BLOCKED S1: no KIMI_API_KEY or DEEPSEEK_API_KEY"
+        reason = "尚未配置 Kimi 密钥：请设置 KIMI_API_KEY（或 DEEPSEEK_API_KEY）"
         await emit(
             "run.status",
             enrich_fail_payload({"status": "failed", "reason": reason, "code": "model.unconfigured"}),

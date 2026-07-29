@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     kimi_api_key: str = ""
     kimi_base_url: str = "https://api.moonshot.cn/v1"
-    kimi_model: str = "moonshot-v1-8k"
+    kimi_model: str = "kimi-k2.6"
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     deepseek_model: str = "deepseek-chat"
@@ -35,13 +35,18 @@ class Settings(BaseSettings):
     pico_api_host: str = "0.0.0.0"
     pico_api_port: int = 8000
     pico_database_url: str = "sqlite+aiosqlite:///./data/pico.db"
-    pico_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # Include LibreChat product origins (8080 public + 3080 direct)
+    pico_cors_origins: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:8080,http://127.0.0.1:8080,"
+        "http://localhost:3080,http://127.0.0.1:3080"
+    )
 
     pico_agent_file: str = "services/orchestrator/agents/pico.yaml"
     pico_dangerous_tools_enabled: bool = False
     pico_env: str = "development"
 
-    # OpenAI-compat proxy key for NextChat etc. (dev only unless set).
+    # OpenAI-compat proxy key for LibreChat etc. (dev only unless set).
     # Never fall back to KIMI_API_KEY or JWT secret as Bearer.
     pico_openai_proxy_key: str = ""
 

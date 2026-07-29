@@ -199,12 +199,18 @@ async def list_models(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     _principal_from_auth(authorization, settings)
-    model = settings.kimi_model or "moonshot-v1-8k"
+    from pico_orchestrator.provider import KNOWN_KIMI_MODELS, DEFAULT_KIMI_MODEL
+
+    default = settings.kimi_model or DEFAULT_KIMI_MODEL
+    ids = []
+    for mid in [default, *KNOWN_KIMI_MODELS, "pico-agent"]:
+        if mid not in ids:
+            ids.append(mid)
     return {
         "object": "list",
         "data": [
-            {"id": model, "object": "model", "owned_by": "pico"},
-            {"id": "pico-agent", "object": "model", "owned_by": "pico"},
+            {"id": mid, "object": "model", "owned_by": "pico-kimi" if mid != "pico-agent" else "pico"}
+            for mid in ids
         ],
     }
 
@@ -222,8 +228,33 @@ async def chat_completions(
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
 
+    # Direct Kimi (or DeepSeek) for non-agent models — real HTTPS API, not mock
+    use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
     if not body.stream:
-        text = await _run_and_collect(prompt, principal, settings, history=history)
+        if use_direct:
+            from pico_orchestrator.provider import stream_chat
+
+            system = (
+                "你是 Pico，面向学校场景的 AI 助手。"
+                "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
+                "不要编造不存在的学校数据。"
+            )
+            parts: list[str] = []
+            try:
+                async for piece in stream_chat(
+                    prompt,
+                    max_tokens=body.max_tokens or 2048,
+                    history=history,
+                    system=system,
+                    model=model,
+                ):
+                    if piece:
+                        parts.append(piece)
+                text = "".join(parts) or "(empty)"
+            except Exception as e:  # noqa: BLE001
+                text = f"【错误】{e}"
+        else:
+            text = await _run_and_collect(prompt, principal, settings, history=history)
         return {
             "id": completion_id,
             "object": "chat.completion",
@@ -261,7 +292,7 @@ async def chat_completions(
 
         # Direct model (moonshot/deepseek/*) → real token stream (GPT-like handfeel)
         use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
-        if use_direct or model in {"moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"}:
+        if use_direct:
             from pico_orchestrator.provider import stream_chat
 
             system = (
@@ -275,6 +306,7 @@ async def chat_completions(
                     max_tokens=body.max_tokens or 2048,
                     history=history,
                     system=system,
+                    model=model,
                 ):
                     if piece:
                         yield chunk({"content": piece})
