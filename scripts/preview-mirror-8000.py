@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+"""Public :8000 and used for sticky preview → LibreChat :3080."""
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import http.client
-UP_HOST, UP_PORT = "127.0.0.1", 8080
+UP_HOST, UP_PORT = "127.0.0.1", 3080
 class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     def log_message(self, *a): pass
@@ -30,4 +31,6 @@ class H(BaseHTTPRequestHandler):
         finally: conn.close()
     do_GET=do_POST=do_PUT=do_PATCH=do_DELETE=do_OPTIONS=do_HEAD=do_REQUEST
 if __name__ == "__main__":
-    ThreadingHTTPServer(("0.0.0.0", 8000), H).serve_forever()
+    import sys
+    port = int(sys.argv[1]) if len(sys.argv)>1 else 8000
+    ThreadingHTTPServer(("0.0.0.0", port), H).serve_forever()

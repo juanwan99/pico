@@ -1,3 +1,5 @@
+> **STATUS: LibreChat is now the product shell (workbench/nextchat removed).**
+
 # Pico 产品壳：开源选型（WorkBuddy 品类）
 
 > 原则：**找开源壳魔改，不从零画工作台；不拆闭源 WorkBuddy。**  

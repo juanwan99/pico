@@ -170,3 +170,14 @@ htmlcov/
 apps/nextchat/node_modules/
 apps/nextchat/.next/
 apps/nextchat/.env.local
+
+# LibreChat vendor runtime
+apps/librechat/node_modules/
+apps/librechat/**/node_modules/
+apps/librechat/client/dist/
+apps/librechat/api/logs/
+apps/librechat/logs/
+apps/librechat/.env
+apps/librechat/data-node/
+apps/librechat/meili_data*/
+apps/librechat/uploads/
