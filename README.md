@@ -85,6 +85,19 @@ make hello           # real model hello or honest S1 BLOCKED
 ```
 
 
+
+## Preview port rule (Grok live preview)
+
+The live preview **probes local ports** and will attach to **:8000** if anything answers there
+(typically FastAPI JSON). Product UI must be the **only** service on **:8080**.
+
+| Port | Bind | Role |
+|------|------|------|
+| **8080** | `0.0.0.0` | **NextChat product UI only** |
+| **18765** | `127.0.0.1` | Pico API (internal) |
+| **8000** | — | **MUST be free** |
+
+
 ## One-stop runbook（L2）
 
 ### 起服务

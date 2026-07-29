@@ -76,9 +76,9 @@ if (mode !== "export") {
   nextConfig.rewrites = async () => {
     const ret = [
       // Pico control plane (same-origin for preview)
-      { source: "/v1/:path*", destination: "http://127.0.0.1:8000/v1/:path*" },
-      { source: "/health", destination: "http://127.0.0.1:8000/health" },
-      { source: "/openapi.json", destination: "http://127.0.0.1:8000/openapi.json" },
+      { source: "/v1/:path*", destination: "http://127.0.0.1:18765/v1/:path*" },
+      { source: "/health", destination: "http://127.0.0.1:18765/health" },
+      { source: "/openapi.json", destination: "http://127.0.0.1:18765/openapi.json" },
       // adjust for previous version directly using "/api/proxy/" as proxy base route
       // {
       //   source: "/api/proxy/v1/:path*",
