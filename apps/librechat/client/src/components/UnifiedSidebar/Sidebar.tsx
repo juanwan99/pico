@@ -44,8 +44,8 @@ const NAV: NavItem[] = [
   { id: 'agents', label: '助理', icon: Bot, path: '/agents' },
   { id: 'projects', label: '项目', icon: FolderKanban, path: '/projects' },
   { id: 'skills', label: '专家·技能·连接器', icon: Blocks, path: '/skills' },
-  { id: 'auto', label: '自动化', icon: Zap, path: '/c/new' },
-  { id: 'more', label: '更多', icon: MoreHorizontal, action: 'more', badge: '资料库·灵感' },
+  { id: 'auto', label: '自动化', icon: Zap, path: '/automation' },
+  { id: 'more', label: '更多', icon: MoreHorizontal, path: '/more', badge: '资料库·灵感' },
 ];
 
 function Sidebar({
@@ -158,6 +158,10 @@ function Sidebar({
             active = item.id === 'projects';
           } else if (location.pathname.startsWith('/skills')) {
             active = item.id === 'skills';
+          } else if (location.pathname.startsWith('/automation')) {
+            active = item.id === 'auto';
+          } else if (location.pathname.startsWith('/more')) {
+            active = item.id === 'more';
           } else if (location.pathname.startsWith('/c') || location.pathname === '/') {
             active = item.id === 'new';
           }
@@ -173,7 +177,7 @@ function Sidebar({
                   return;
                 }
                 if (item.action === 'more') {
-                  navigate('/prompts');
+                  navigate('/more');
                   return;
                 }
                 if (item.path) {

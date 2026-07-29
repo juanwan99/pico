@@ -20,6 +20,8 @@ import dashboardRoutes from './Dashboard';
 import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
 import Search from './Search';
+import AutomationPage from '~/components/Workbench/AutomationPage';
+import MoreHubPage from '~/components/Workbench/MoreHubPage';
 import Root from './Root';
 
 const AuthLayout = () => (
@@ -185,6 +187,14 @@ export const router = createBrowserRouter(
                   <AgentMarketplace />
                 </MarketplaceProvider>
               ),
+            },
+            {
+              path: 'automation',
+              element: <AutomationPage />,
+            },
+            {
+              path: 'more',
+              element: <MoreHubPage />,
             },
           ],
         },

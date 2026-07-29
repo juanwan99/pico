@@ -94,6 +94,11 @@ export default function Landing({
   const form = useOptionalChatFormContext();
   const [scene, setScene] = useState<SceneId>('office');
   const [text, setText] = useState('');
+  const [permOpen, setPermOpen] = useState(false);
+  const [fullAccess, setFullAccess] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [model, setModel] = useState('Auto');
+
 
   const visibleChips = useMemo(() => CHIPS.filter((c) => c.scenes.includes(scene)), [scene]);
 
@@ -215,13 +220,36 @@ export default function Landing({
                 <Plus className="h-5 w-5" strokeWidth={1.75} />
               </button>
               <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center gap-1 rounded-full bg-[#f3f3f3] px-2.5 text-[12.5px] font-medium text-[#3d3d3d]"
-                >
-                  Auto
-                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1 rounded-full bg-[#f3f3f3] px-2.5 text-[12.5px] font-medium text-[#3d3d3d]"
+                    onClick={() => setModelOpen((v) => !v)}
+                  >
+                    {model}
+                    <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                  </button>
+                  {modelOpen && (
+                    <div className="absolute bottom-full right-0 z-50 mb-2 w-52 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-lg">
+                      {['Auto', 'kimi-k2.6', 'Kimi-K3'].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          className="flex w-full px-3 py-2 text-left text-[13px] hover:bg-[#f5f5f5]"
+                          onClick={() => {
+                            setModel(m);
+                            setModelOpen(false);
+                            try {
+                              localStorage.setItem('pico:modelMode', m);
+                            } catch {}
+                          }}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button
                   type="button"
                   className="flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] hover:bg-black/[0.04]"
@@ -266,15 +294,41 @@ export default function Landing({
           {/* Under-card: 选择工作空间 + 默认权限 */}
           <div className="mt-2.5 flex flex-wrap items-center gap-1">
             <WorkspaceSelector />
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-[#6b6b6b] hover:bg-black/[0.04]"
-            >
-              <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[9px] opacity-70">
-                ✓
-              </span>
-              默认权限
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-[#6b6b6b] hover:bg-black/[0.04]"
+                onClick={() => setPermOpen((v) => !v)}
+              >
+                <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[9px] opacity-70">
+                  ✓
+                </span>
+                {fullAccess ? '完全访问' : '默认权限'}
+              </button>
+              {permOpen && (
+                <div className="absolute bottom-full left-0 z-50 mb-2 w-72 rounded-xl border border-black/[0.08] bg-white p-3 shadow-lg">
+                  <p className="text-[12.5px] leading-relaxed text-[#4a4a4a]">
+                    当前为默认权限，所有操作都会在安全沙箱约束内进行，超出范围会请求你的允许。
+                  </p>
+                  <label className="mt-3 flex items-center justify-between gap-2 text-[13px]">
+                    <span>允许完全访问</span>
+                    <input
+                      type="checkbox"
+                      checked={fullAccess}
+                      onChange={(e) => {
+                        setFullAccess(e.target.checked);
+                        try {
+                          localStorage.setItem(
+                            'pico:permissionMode',
+                            e.target.checked ? 'full' : 'default',
+                          );
+                        } catch {}
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

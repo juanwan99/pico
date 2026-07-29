@@ -50,10 +50,21 @@ export function getSelectedWorkspace(): PicoWorkspace | null {
 /** Prefix for agent context when a non-default workspace is active */
 export function workspaceContextPrefix(): string {
   const ws = getSelectedWorkspace();
-  if (!ws) {
-    return '';
+  const bits: string[] = [];
+  if (ws) {
+    bits.push(`【工作空间：${ws.name}】${ws.note ? `（${ws.note}）` : ''}`);
   }
-  return `【工作空间：${ws.name}】${ws.note ? `（${ws.note}）` : ''}\n`;
+  try {
+    const perm = localStorage.getItem('pico:permissionMode') || 'default';
+    bits.push(perm === 'full' ? '【权限：完全访问】' : '【权限：默认沙箱】');
+    const model = localStorage.getItem('pico:modelMode');
+    if (model && model !== 'Auto') {
+      bits.push(`【模型偏好：${model}】`);
+    }
+  } catch {
+    /* ignore */
+  }
+  return bits.length ? bits.join(' ') + '\n' : '';
 }
 
 export default function WorkspaceSelector({
@@ -65,6 +76,7 @@ export default function WorkspaceSelector({
 }) {
   const localize = useLocalize();
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const [list, setList] = useState<PicoWorkspace[]>(() =>
     typeof window !== 'undefined' ? loadWorkspaces() : [],
   );
@@ -81,6 +93,11 @@ export default function WorkspaceSelector({
     () => list.find((w) => w.id === selectedId) ?? list[0],
     [list, selectedId],
   );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((w) => w.name.toLowerCase().includes(q));
+  }, [list, search]);
 
   const select = useCallback((id: string) => {
     setSelectedId(id);
@@ -89,7 +106,7 @@ export default function WorkspaceSelector({
   }, []);
 
   const addWorkspace = useCallback(() => {
-    const name = window.prompt(localize('com_ui_workspace_name_prompt') || '工作空间名称');
+    const name = window.prompt('为工作空间命名，本地将自动创建同名文件夹，命名后不可随意更改');
     if (!name?.trim()) {
       return;
     }
@@ -174,8 +191,19 @@ export default function WorkspaceSelector({
                 {localize('com_ui_workspace_hint')}
               </p>
             </div>
+            <div className="border-b border-border-light px-3 py-2">
+              <input
+                className="w-full rounded-lg border border-black/[0.08] bg-[#fafafa] px-2.5 py-1.5 text-xs outline-none"
+                placeholder="搜索工作空间"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
             <ul className="max-h-56 overflow-y-auto py-1">
-              {list.map((ws) => {
+              {filtered.length === 0 ? (
+                <li className="px-3 py-3 text-center text-xs text-text-secondary">未找到工作空间</li>
+              ) : null}
+              {filtered.map((ws) => {
                 const isSel = ws.id === selected?.id;
                 return (
                   <li key={ws.id}>
@@ -218,14 +246,23 @@ export default function WorkspaceSelector({
                 );
               })}
             </ul>
-            <div className="border-t border-border-light p-1.5">
+            <div className="border-t border-border-light p-1.5 space-y-0.5">
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary"
                 onClick={addWorkspace}
               >
                 <Plus className="h-3.5 w-3.5" />
-                {localize('com_ui_workspace_add')}
+                新建工作空间
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-xs font-medium text-text-secondary opacity-60"
+                title="浏览器版后置：本地全盘目录"
+                disabled
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                打开本地文件夹（桌面能力后置）
               </button>
             </div>
           </div>
