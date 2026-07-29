@@ -98,9 +98,65 @@ class TokenResponse(BaseModel):
 
 
 
+
+def _resolve_git_sha() -> str:
+    """Best-effort code identity for version self-proof."""
+    import os
+    import subprocess
+
+    env = (os.environ.get("PICO_GIT_SHA") or os.environ.get("GITHUB_SHA") or "").strip()
+    if env:
+        return env
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(_ROOT),
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2,
+        )
+        return out.strip()
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
 @app.get("/health")
 async def health() -> dict:
-    return {"ok": True, "service": "pico-api", "phase": "3-integrate"}
+    return {
+        "ok": True,
+        "service": "pico-api",
+        "phase": "3-integrate",
+        "git_sha": _resolve_git_sha(),
+    }
+
+
+@app.get("/v1/meta/version")
+async def meta_version(settings: Settings = Depends(get_settings)) -> dict:
+    """Runtime version self-proof — which code + which product shell."""
+    from pico_orchestrator.pins import AGENT_PINS, installed_versions
+    from pico_orchestrator.provider import resolve_provider
+
+    web_dir = _ROOT / "apps" / "web"
+    nextchat = _ROOT / "apps" / "nextchat" / "package.json"
+    product_ui = "nextchat" if nextchat.is_file() else "missing"
+    cfg = resolve_provider()
+    apps_web = web_dir.is_dir()
+    return {
+        "ok": True,
+        "service": "pico-api",
+        "git_sha": _resolve_git_sha(),
+        "api_version": app.version,
+        "product_ui": product_ui,
+        "apps_web_present": apps_web,
+        "product_ui_ok": product_ui == "nextchat" and not apps_web,
+        "agent_pins": AGENT_PINS,
+        "installed": installed_versions(),
+        "dangerous_tools_enabled": settings.pico_dangerous_tools_enabled,
+        "model_ready": cfg is not None,
+        "model_provider": cfg.name if cfg else None,
+        "model_name": cfg.model if cfg else None,
+        "plan": "MVP-3DAY v1.2 FIXED",
+    }
 
 
 @app.get("/v1/meta/freeze")

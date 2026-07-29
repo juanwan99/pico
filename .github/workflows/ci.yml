@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main, "feat/**", "fix/**"]
+    branches: [main, "feat/**", "fix/**", "grok/**", "docs/**"]
   pull_request:
     branches: [main]
 
@@ -56,22 +56,14 @@ jobs:
           fi
           exit "$code"
 
-  web:
-    name: web-build
+  product-ui:
+    name: product-ui-nextchat-only
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: apps/web
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: apps/web/package-lock.json
-      - name: Install & build
+      - name: Forbid apps/web; require NextChat shell
         run: |
-          npm install
-          npm run build
-        continue-on-error: false
+          bash scripts/assert-product-identity.sh
+          test -f apps/README.md
+          echo "OK: product UI = apps/nextchat only"

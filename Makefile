@@ -1,18 +1,19 @@
-.PHONY: dev api web test lint freeze-check security-check hello install demo proto
+.PHONY: dev api web ui test lint freeze-check security-check hello install demo proto product agent-smoke
 
 install:
 	python3.12 -m venv .venv || true
 	. .venv/bin/activate && pip install -U pip && pip install -r requirements-dev.txt
-	cd apps/web && npm install
+	@if [ -d apps/nextchat ]; then (cd apps/nextchat && yarn install || npm install); fi
 
 api:
 	. .venv/bin/activate && uvicorn app.main:app --app-dir services/api --host 0.0.0.0 --port 8000 --reload
 
-web:
-	cd apps/web && npm run dev -- --host 0.0.0.0 --port 5173
+# Product UI = NextChat (OpenAI-compat → Pico agent). apps/web removed.
+web ui:
+	cd apps/nextchat && npx next dev -H 0.0.0.0 -p 8080
 
-proto:
-	bash scripts/proto.sh
+proto product:
+	bash scripts/run-product.sh
 
 test:
 	. .venv/bin/activate && pytest -q
@@ -31,9 +32,6 @@ hello:
 
 demo:
 	. .venv/bin/activate && python scripts/demo_e2e.py
-
-product:
-	bash scripts/run-product.sh
 
 agent-smoke:
 	. .venv/bin/activate && curl -s http://127.0.0.1:8000/v1/chat/completions \

@@ -5,6 +5,7 @@ DOC: docs/WORKFLOW.md
 STATUS: BINDING v0.2
 SOURCE: edu-cloud AGENTS.md 内核吸收 + pico 边界改写
 COMPARE: docs/WORKFLOW-COMPARE-EDU.md
+VERSIONING: docs/VERSIONING.md
 REPO: juanwan99/pico ONLY
 ```
 
@@ -198,3 +199,8 @@ REPO: juanwan99/pico ONLY
 
 工作流变更须 **替换或删除** 旧句，禁止只追加冲突层。  
 仅当新的、有证据的安全边界时加长。
+
+
+---
+
+版本管理专章：[`VERSIONING.md`](./VERSIONING.md)（edu 内核吸收 + pico 发布边界）。
