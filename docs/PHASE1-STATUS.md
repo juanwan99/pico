@@ -40,4 +40,4 @@ make demo              # scripts/demo_e2e.py against :8000
 ## Next
 
 - **Phase 2 contracts: FROZEN v1.0** — [`PHASE2-CONTRACTS.md`](PHASE2-CONTRACTS.md)
-- **Phase 3 Integrate** — only when dispatched (edu issuer + adapters + retire edu AI)
+- **Phase 3 Integrate** — see [`PHASE3-INTEGRATION.md`](PHASE3-INTEGRATION.md)

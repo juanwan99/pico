@@ -346,6 +346,14 @@ async function selectTask(id: string) {
 }
 
 onMounted(async () => {
+  const q = new URLSearchParams(window.location.search);
+  const qTok = q.get("token");
+  if (qTok) {
+    token.value = qTok;
+    localStorage.setItem("pico_token", qTok);
+    // clean URL
+    window.history.replaceState({}, "", window.location.pathname);
+  }
   await refreshMeta();
   if (token.value) {
     try {

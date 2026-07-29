@@ -304,9 +304,60 @@ async def confirm_change(
         detail_json=json.dumps({"title": row.title}, ensure_ascii=False),
     )
     session.add(audit)
-    # Note: still NO school business write — Phase 3 handoff only
     await session.commit()
     await session.refresh(row)
+
+    # Phase 3 optional push to edu Review queue — edu owns business write
+    try:
+        from pico_orchestrator.edu_adapter import EduAdapterError, push_change_proposal
+
+        handoff_body = {
+            "pico_change_id": row.id,
+            "school_id": row.school_id,
+            "membership_id": row.membership_id,
+            "title": row.title,
+            "summary": row.summary,
+            "payload": json.loads(row.payload_json or "{}"),
+            "confirmed_at": row.confirmed_at.isoformat() if row.confirmed_at else None,
+            "confirmed_by": row.confirmed_by,
+        }
+        result = await push_change_proposal(handoff_body)
+        if result is not None:
+            history = json.loads(row.audit_json or "[]")
+            history.append(
+                {
+                    "action": "handoff_pushed",
+                    "edu_response": result,
+                    "at": _utcnow().isoformat(),
+                }
+            )
+            row.audit_json = json.dumps(history, ensure_ascii=False)
+            session.add(
+                AuditRow(
+                    id=new_id(),
+                    school_id=principal.school_id,
+                    membership_id=principal.membership_id,
+                    action="change.handoff_pushed",
+                    subject_type="change_proposal",
+                    subject_id=row.id,
+                    detail_json=json.dumps(result, ensure_ascii=False),
+                )
+            )
+            await session.commit()
+            await session.refresh(row)
+    except EduAdapterError as e:
+        history = json.loads(row.audit_json or "[]")
+        history.append(
+            {
+                "action": "handoff_failed",
+                "code": e.code,
+                "message": e.message,
+                "at": _utcnow().isoformat(),
+            }
+        )
+        row.audit_json = json.dumps(history, ensure_ascii=False)
+        await session.commit()
+        await session.refresh(row)
     return row
 
 
