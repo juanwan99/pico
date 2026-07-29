@@ -222,3 +222,8 @@ pico/
 
 **交接完成条件：** 新窗口确认已读本文 + `docs/MVP-3DAY.md` v1.2，并按总控 **GO / DISPATCH** 开工。  
 无 GO 时：只读熟悉仓库，不强制写码。
+
+
+## 整体架构与定价
+
+- 主文档：[`docs/OVERALL-ARCHITECTURE.md`](./OVERALL-ARCHITECTURE.md)（DRAFT，待业主确认升 FIXED）
