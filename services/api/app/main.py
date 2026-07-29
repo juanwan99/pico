@@ -151,8 +151,14 @@ async def meta_version(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.provider import resolve_provider
 
     web_dir = _ROOT / "apps" / "web"
+    workbench = _ROOT / "apps" / "workbench" / "package.json"
     nextchat = _ROOT / "apps" / "nextchat" / "package.json"
-    product_ui = "nextchat" if nextchat.is_file() else "missing"
+    if workbench.is_file():
+        product_ui = "workbench"
+    elif nextchat.is_file():
+        product_ui = "nextchat"
+    else:
+        product_ui = "missing"
     cfg = resolve_provider()
     apps_web = web_dir.is_dir()
     return {
@@ -162,7 +168,7 @@ async def meta_version(settings: Settings = Depends(get_settings)) -> dict:
         "api_version": app.version,
         "product_ui": product_ui,
         "apps_web_present": apps_web,
-        "product_ui_ok": product_ui == "nextchat" and not apps_web,
+        "product_ui_ok": product_ui in {"workbench", "nextchat"} and not apps_web,
         "agent_pins": AGENT_PINS,
         "installed": installed_versions(),
         "dangerous_tools_enabled": settings.pico_dangerous_tools_enabled,

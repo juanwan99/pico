@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "PingFang SC", "Noto Sans SC", "Segoe UI", system-ui, sans-serif;
+  --color-pico-ink: #1a1a1a;
+  --color-pico-muted: #6b7280;
+  --color-pico-line: #e8eaed;
+  --color-pico-soft: #f4f5f7;
+  --color-pico-panel: #f7f8fa;
+  --color-pico-accent: #10b981;
+  --color-pico-accent-soft: #ecfdf5;
+  --color-pico-chip: #f0f1f3;
+  --radius-card: 1.25rem;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: var(--font-sans);
+  color: var(--color-pico-ink);
+  background: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+button { font-family: inherit; }
+textarea { font-family: inherit; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }

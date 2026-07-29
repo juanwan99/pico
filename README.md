@@ -1,3 +1,10 @@
+
+## Product shell (current)
+
+**Default UI = `apps/workbench`** — task workbench IA (inspired by desktop agent workspaces like WorkBuddy: 新建任务 / 模式切换 / 能力 chip / 大输入卡).  
+Branding is **Pico only** (not a fork of any commercial client).  
+NextChat remains under `apps/nextchat` as legacy chat shell.
+
 # Pico
 
 **Standalone AI foundation** for the 微与积 / edu product line.
