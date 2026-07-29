@@ -25,8 +25,9 @@ It is the **AI space**: experience + agent orchestration + model API access.
 | **2** | Integration contracts |
 | **3** | edu-cloud wire-up + retire edu AI |
 
-Handoff for new windows: [`docs/HANDOFF.md`](docs/HANDOFF.md)  
-D1 freeze: [`docs/D1-FREEZE.md`](docs/D1-FREEZE.md)
+Handoff: [`docs/HANDOFF.md`](docs/HANDOFF.md)  
+D1 freeze: [`docs/D1-FREEZE.md`](docs/D1-FREEZE.md)  
+Demo: [`docs/DEMO.md`](docs/DEMO.md)
 
 ## Layout
 

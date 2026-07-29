@@ -62,3 +62,13 @@ Changing `kimi-agent-sdk` / `kimi-cli` versions requires:
 2. Re-run `tests/security` + `scripts/check_agent_pin.py`
 3. Re-prove tool boundary
 
+
+## D2/D3 runtime addendum
+
+Implemented on same freeze pins without changing Agent versions:
+
+- Task/Run/Event/Artifact/ChangeProposal ledger (SQLite)
+- Server multi-step tool loop via Kimi HTTPS tool-calling + allowlist gateway
+- Tool names use `_` (Kimi rejects `.` in function names)
+- UI streams Event timeline; S7 confirm + audit; cross-school `auth.deny` Event
+- See `docs/DEMO.md`

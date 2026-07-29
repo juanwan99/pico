@@ -58,3 +58,18 @@ OWNER: Pico only (unique AI ledger — no dual-run with edu AI)
 - Cancel / fail / success must close the Run with terminal status.
 - Cross-school denies are recorded as Events (`auth.deny` / `tenant.cross_school`).
 
+
+## Phase 1 realized API (D2)
+
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | `/v1/tasks` | create Task + Run; starts agent loop |
+| GET | `/v1/tasks` | list by school |
+| GET | `/v1/tasks/{id}` | + artifacts |
+| GET | `/v1/runs/{id}` | status |
+| POST | `/v1/runs/{id}/cancel` | cancel_requested |
+| GET | `/v1/runs/{id}/events` | ordered Event |
+| GET | `/v1/runs/{id}/stream` | SSE |
+| POST | `/v1/demo/cross-school-deny` | auth.deny Event demo |
+| POST | `/v1/changes` | propose |
+| POST | `/v1/changes/{id}/confirm` | human confirm + audit |

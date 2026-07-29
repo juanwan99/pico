@@ -219,3 +219,21 @@ h2 {
   font-size: 0.95rem;
   font-weight: 600;
 }
+
+.bubble.deny {
+  border-color: #8b3a42;
+  background: #2a1518;
+  color: #ffb4b4;
+}
+
+.bubble.status {
+  border-color: #3a4660;
+  background: #141820;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.list li {
+  cursor: pointer;
+}

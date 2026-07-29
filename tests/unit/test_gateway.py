@@ -23,16 +23,16 @@ class P:
 @pytest.mark.asyncio
 async def test_allowlist_and_cross_school() -> None:
     gw = build_default_gateway()
-    assert any(t["name"] == "fake_edu.list_classes" for t in gw.list_tools())
-    assert any(t["name"] == "pico.echo" for t in gw.list_tools())
+    assert any(t["name"] == "fake_edu_list_classes" for t in gw.list_tools())
+    assert any(t["name"] == "pico_echo" for t in gw.list_tools())
 
     a = P(school_id="school-a", membership_id="m1", scopes=["ai:run"])
-    out = await gw.invoke(a, "fake_edu.list_classes", {})
+    out = await gw.invoke(a, "fake_edu_list_classes", {})
     assert out["school_id"] == "school-a"
     assert len(out["classes"]) >= 1
 
     with pytest.raises(ToolError) as ei:
-        await gw.invoke(a, "fake_edu.list_classes", {"school_id": "school-b"})
+        await gw.invoke(a, "fake_edu_list_classes", {"school_id": "school-b"})
     assert ei.value.code == "tenant.cross_school"
 
     with pytest.raises(ToolError) as ei2:

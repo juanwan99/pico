@@ -37,3 +37,10 @@ GET  /v1/changes/{id}/audit
 # Phase 3: edu webhook / pull for pending commits
 ```
 
+
+## Phase 1 realized
+
+- `POST /v1/changes` creates `change_proposals` row status=`proposed`
+- `POST /v1/changes/{id}/confirm` sets `confirmed` + audit_log row
+- Explicit UI confirm required — no silent business write
+- Phase 3: replace audit-only confirm with edu Review/Commit handoff

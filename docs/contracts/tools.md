@@ -16,11 +16,11 @@ VERSION: 0.1
 
 | Name | Kind | Phase 1 adapter | Notes |
 |------|------|-----------------|-------|
-| `fake_edu.list_classes` | read | FakeEdu + synthetic data | future edu read shape |
-| `pico.echo` | local | Pico | smoke / allowlist demo |
+| `fake_edu_list_classes` | read | FakeEdu + synthetic data | future edu read shape |
+| `pico_echo` | local | Pico | smoke / allowlist demo |
 | *(more)* | — | — | ≥2 allowlist tools by S6 |
 
-### `fake_edu.list_classes` (draft)
+### `fake_edu_list_classes` (draft)
 
 **Input**
 
