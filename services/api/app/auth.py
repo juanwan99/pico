@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -50,6 +51,15 @@ def issue_test_token(
     return jwt.encode(payload, s.pico_jwt_secret, algorithm="HS256")
 
 
+def _dev_proxy_keys(settings: Settings) -> set[str]:
+    """Match openai_compat: explicit proxy keys only (never model API keys)."""
+    keys = {"pico-dev", "sk-pico-dev"}
+    extra = (getattr(settings, "pico_openai_proxy_key", None) or "").strip()
+    if extra:
+        keys.add(extra)
+    return keys
+
+
 def _decode_with_key(
     token: str, *, key: str, algorithms: list[str], audience: str, issuer: str | None
 ) -> dict[str, Any]:
@@ -70,6 +80,20 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
     aud = s.pico_jwt_aud
     last_err: Exception | None = None
     data: dict[str, Any] | None = None
+
+    # 0) Dev OpenAI-compat proxy keys (disabled in production) — same principal as chat
+    env = (s.pico_env or "development").lower()
+    production = env in {"production", "prod"}
+    if not production and token in _dev_proxy_keys(s):
+        return Principal(
+            school_id="school-a",
+            membership_id="nextchat-user",
+            scopes=["ai:run", "ai:read", "ai:confirm"],
+            iss=s.pico_jwt_iss,
+            aud=s.pico_jwt_aud,
+            exp=int(time.time()) + 3600,
+            raw={"proxy": True},
+        )
 
     # 1) Phase 1 test issuer
     if s.pico_accept_test_issuer and s.pico_jwt_secret:

@@ -30,6 +30,8 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     temperature: float | None = None
     max_tokens: int | None = None
+    user: str | None = None  # LibreChat may pass conversation id
+    metadata: dict[str, Any] | None = None
 
 
 def _content_text(content: str | list[Any] | None) -> str:
@@ -123,6 +125,124 @@ def _history_for_agent(messages: list[ChatMessage]) -> list[dict[str, Any]]:
         if text:
             out.append({"role": m.role, "content": text})
     return out
+
+
+
+def _conversation_id_from(
+    body: ChatCompletionRequest,
+    x_conversation_id: str | None,
+) -> str | None:
+    if x_conversation_id and x_conversation_id.strip():
+        return x_conversation_id.strip()[:128]
+    if body.user and body.user.strip() and body.user not in {"default", "user"}:
+        return body.user.strip()[:128]
+    if body.metadata:
+        for k in ("conversation_id", "conversationId", "convo_id"):
+            v = body.metadata.get(k)
+            if v:
+                return str(v)[:128]
+    # parse 【Pico-Convo:xxx】 from latest user message
+    import re
+    prompt = _last_user_prompt(body.messages)
+    m = re.search(r"【Pico-Convo:([^】]+)】", prompt)
+    if m:
+        return m.group(1).strip()[:128]
+    return None
+
+
+def _workspace_id_from(
+    body: ChatCompletionRequest,
+    x_workspace_id: str | None,
+) -> str | None:
+    if x_workspace_id and x_workspace_id.strip():
+        return x_workspace_id.strip()[:36]
+    if body.metadata:
+        v = body.metadata.get("workspace_id") or body.metadata.get("workspaceId")
+        if v:
+            return str(v)[:36]
+    return None
+
+
+async def _ledger_task_run(
+    *,
+    principal: Principal,
+    prompt: str,
+    model: str,
+    conversation_id: str | None,
+    workspace_id: str | None,
+    status: str = "running",
+) -> tuple[str, str]:
+    """Create Task+Run rows for any chat completion path."""
+    from app.db import init_db
+
+    await init_db()
+    factory = session_factory()
+    task_id = new_id()
+    run_id = new_id()
+    title = prompt[:80]
+    async with factory() as session:
+        session.add(
+            TaskRow(
+                id=task_id,
+                school_id=principal.school_id,
+                membership_id=principal.membership_id,
+                title=title,
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
+            )
+        )
+        session.add(
+            RunRow(
+                id=run_id,
+                task_id=task_id,
+                status=status,
+                prompt=prompt,
+                model=model or "",
+            )
+        )
+        await session.commit()
+    return task_id, run_id
+
+
+async def _finalize_run(
+    run_id: str,
+    *,
+    status: str,
+    error: str | None = None,
+    final_text: str | None = None,
+    task_id: str | None = None,
+) -> None:
+    from app.db import ArtifactRow
+
+    factory = session_factory()
+    async with factory() as session:
+        run = await session.get(RunRow, run_id)
+        if not run:
+            return
+        run.status = status
+        if error:
+            run.error = error
+        tid = task_id or run.task_id
+        if final_text and tid and status == "succeeded":
+            session.add(
+                ArtifactRow(
+                    id=new_id(),
+                    task_id=tid,
+                    run_id=run_id,
+                    kind="doc",
+                    title="回复摘要",
+                    inline=final_text[:8000],
+                )
+            )
+        await session.commit()
+    if final_text and status == "succeeded":
+        async with factory() as session:
+            await append_event(
+                session,
+                run_id,
+                "artifact.created",
+                {"title": "回复摘要", "kind": "doc"},
+            )
 
 
 async def _run_and_collect(
@@ -219,10 +339,21 @@ async def list_models(
 async def chat_completions(
     body: ChatCompletionRequest,
     authorization: str | None = Header(default=None),
+    x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
+    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
     settings: Settings = Depends(get_settings),
 ):
+    import re
+
     principal = _principal_from_auth(authorization, settings)
-    prompt = _last_user_prompt(body.messages)
+    raw_prompt = _last_user_prompt(body.messages)
+    conversation_id = _conversation_id_from(body, x_conversation_id)
+    workspace_id = _workspace_id_from(body, x_workspace_id)
+    # strip ledger markers from model-visible prompt
+    prompt = re.sub(r"【Pico-Convo:[^】]+】", "", raw_prompt)
+    prompt = re.sub(r"【工作空间：[^】]+】", "", prompt)
+    prompt = re.sub(r"【权限：[^】]+】", "", prompt)
+    prompt = re.sub(r"【模型偏好：[^】]+】", "", prompt).strip() or raw_prompt
     history = _history_for_agent(body.messages)
     model = body.model or settings.kimi_model or "pico-agent"
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
@@ -231,6 +362,13 @@ async def chat_completions(
     # Direct Kimi (or DeepSeek) for non-agent models — real HTTPS API, not mock
     use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
     if not body.stream:
+        task_id, run_id = await _ledger_task_run(
+            principal=principal,
+            prompt=prompt,
+            model=model,
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+        )
         if use_direct:
             from pico_orchestrator.provider import stream_chat
 
@@ -251,10 +389,13 @@ async def chat_completions(
                     if piece:
                         parts.append(piece)
                 text = "".join(parts) or "(empty)"
+                await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id)
             except Exception as e:  # noqa: BLE001
                 text = f"【错误】{e}"
+                await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
         else:
             text = await _run_and_collect(prompt, principal, settings, history=history)
+            await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id)
         return {
             "id": completion_id,
             "object": "chat.completion",
@@ -295,11 +436,19 @@ async def chat_completions(
         if use_direct:
             from pico_orchestrator.provider import stream_chat
 
+            task_id, run_id = await _ledger_task_run(
+                principal=principal,
+                prompt=prompt,
+                model=model,
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
+            )
             system = (
                 "你是 Pico，面向学校场景的 AI 助手。"
                 "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
                 "不要编造不存在的学校数据。"
             )
+            parts: list[str] = []
             try:
                 async for piece in stream_chat(
                     prompt,
@@ -309,9 +458,17 @@ async def chat_completions(
                     model=model,
                 ):
                     if piece:
+                        parts.append(piece)
                         yield chunk({"content": piece})
+                await _finalize_run(
+                    run_id,
+                    status="succeeded",
+                    final_text="".join(parts),
+                    task_id=task_id,
+                )
             except Exception as e:  # noqa: BLE001
                 yield chunk({"content": f"【错误】{e}"})
+                await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
             yield chunk({}, finish="stop")
             yield b"data: [DONE]\n\n"
             return
@@ -334,6 +491,8 @@ async def chat_completions(
                     school_id=principal.school_id,
                     membership_id=principal.membership_id,
                     title=prompt[:80],
+                    conversation_id=conversation_id,
+                    workspace_id=workspace_id,
                 )
             )
             session.add(

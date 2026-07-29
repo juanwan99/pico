@@ -1,13 +1,12 @@
 /**
- * Browser-side "workspace" picker — WorkBuddy-class task boundary.
- * Clean-room: local named spaces (not desktop folder ACL).
- * Selected workspace is injected into the next user message as context.
+ * Workspace picker — syncs with Pico /v1/workspaces when proxy available.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FolderOpen, Check, Plus, ChevronDown, Trash2 } from 'lucide-react';
 import { Button, TooltipAnchor } from '@librechat/client';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
+import { createPicoWorkspace, listPicoWorkspaces } from '~/data-provider/pico/api';
 
 const STORAGE_KEY = 'pico:workspaces';
 const SELECTED_KEY = 'pico:workspaceId';
@@ -47,10 +46,13 @@ export function getSelectedWorkspace(): PicoWorkspace | null {
   return list.find((w) => w.id === id) ?? list[0] ?? null;
 }
 
-/** Prefix for agent context when a non-default workspace is active */
-export function workspaceContextPrefix(): string {
+/** Prefix for agent context — includes Pico-Convo for ledger mapping */
+export function workspaceContextPrefix(conversationId?: string | null): string {
   const ws = getSelectedWorkspace();
   const bits: string[] = [];
+  if (conversationId && conversationId !== 'new') {
+    bits.push(`【Pico-Convo:${conversationId}】`);
+  }
   if (ws) {
     bits.push(`【工作空间：${ws.name}】${ws.note ? `（${ws.note}）` : ''}`);
   }
@@ -64,7 +66,7 @@ export function workspaceContextPrefix(): string {
   } catch {
     /* ignore */
   }
-  return bits.length ? bits.join(' ') + '\n' : '';
+  return bits.length ? `${bits.join(' ')}\n` : '';
 }
 
 export default function WorkspaceSelector({
@@ -80,13 +82,34 @@ export default function WorkspaceSelector({
   const [list, setList] = useState<PicoWorkspace[]>(() =>
     typeof window !== 'undefined' ? loadWorkspaces() : [],
   );
-  const [selectedId, setSelectedId] = useState<string>(() =>
-    typeof window !== 'undefined' ? localStorage.getItem(SELECTED_KEY) || 'default' : 'default',
+  const [selectedId, setSelectedId] = useState(
+    () => (typeof window !== 'undefined' && localStorage.getItem(SELECTED_KEY)) || 'default',
   );
 
   useEffect(() => {
-    setList(loadWorkspaces());
-    setSelectedId(localStorage.getItem(SELECTED_KEY) || 'default');
+    let alive = true;
+    (async () => {
+      try {
+        const { workspaces } = await listPicoWorkspaces();
+        if (!alive || !workspaces?.length) {
+          return;
+        }
+        setList((prev) => {
+          const map = new Map(prev.map((w) => [w.id, w]));
+          for (const w of workspaces) {
+            map.set(w.id, { id: w.id, name: w.name, note: w.note || '托管工作空间' });
+          }
+          const next = Array.from(map.values());
+          saveWorkspaces(next);
+          return next;
+        });
+      } catch {
+        /* proxy may be down */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const selected = useMemo(
@@ -95,7 +118,9 @@ export default function WorkspaceSelector({
   );
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return list;
+    if (!q) {
+      return list;
+    }
     return list.filter((w) => w.name.toLowerCase().includes(q));
   }, [list, search]);
 
@@ -106,21 +131,30 @@ export default function WorkspaceSelector({
   }, []);
 
   const addWorkspace = useCallback(() => {
-    const name = window.prompt('为工作空间命名，本地将自动创建同名文件夹，命名后不可随意更改');
+    const name = window.prompt('为工作空间命名（托管边界；浏览器不创建本机文件夹）');
     if (!name?.trim()) {
       return;
     }
-    const ws: PicoWorkspace = {
-      id: `ws_${Date.now()}`,
-      name: name.trim(),
-    };
-    setList((prev) => {
-      const next = [...prev, ws];
-      saveWorkspaces(next);
-      return next;
-    });
-    select(ws.id);
-  }, [localize, select]);
+    void (async () => {
+      let ws: PicoWorkspace = {
+        id: `ws_${Date.now()}`,
+        name: name.trim(),
+        note: '托管工作空间',
+      };
+      try {
+        const { workspace } = await createPicoWorkspace(name.trim());
+        ws = { id: workspace.id, name: workspace.name, note: workspace.note || '托管工作空间' };
+      } catch {
+        /* local fallback */
+      }
+      setList((prev) => {
+        const next = [...prev, ws];
+        saveWorkspaces(next);
+        return next;
+      });
+      select(ws.id);
+    })();
+  }, [select]);
 
   const removeWorkspace = useCallback(
     (id: string, e: React.MouseEvent) => {
@@ -140,36 +174,29 @@ export default function WorkspaceSelector({
     [selectedId, select],
   );
 
-  const label = selected?.name || localize('com_ui_select_workspace');
-
   return (
     <div className="relative">
       <TooltipAnchor
-        description={localize('com_ui_workspace_hint')}
-        side="top"
+        description={localize('com_ui_workspace') || '工作空间'}
         render={
           <Button
             type="button"
-            size={compact ? 'icon' : 'sm'}
             variant="ghost"
+            size="sm"
             disabled={disabled}
-            aria-label={localize('com_ui_select_workspace')}
-            aria-expanded={open}
-            data-testid="workspace-selector"
             className={cn(
-              'h-8 gap-1.5 rounded-lg text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary',
-              !compact && 'px-2',
-              open && 'bg-surface-hover text-text-primary',
+              'h-8 gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-[#6b6b6b] hover:bg-black/[0.04]',
+              compact && 'px-1.5',
             )}
             onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
           >
-            <FolderOpen className="h-4 w-4 shrink-0" aria-hidden />
-            {!compact && <span className="max-w-[7rem] truncate">{label}</span>}
-            {!compact && <ChevronDown className="h-3 w-3 opacity-60" aria-hidden />}
+            <FolderOpen className="h-3.5 w-3.5" />
+            {!compact && <span className="max-w-[7rem] truncate">{selected?.name || '选择工作空间'}</span>}
+            <ChevronDown className="h-3.5 w-3.5 opacity-60" />
           </Button>
         }
       />
-
       {open && (
         <>
           <button
@@ -178,19 +205,7 @@ export default function WorkspaceSelector({
             aria-label="close"
             onClick={() => setOpen(false)}
           />
-          <div
-            className="absolute bottom-full left-0 z-50 mb-2 w-64 overflow-hidden rounded-xl border border-border-light bg-white shadow-lg dark:bg-surface-secondary"
-            role="listbox"
-            aria-label={localize('com_ui_select_workspace')}
-          >
-            <div className="border-b border-border-light px-3 py-2">
-              <p className="text-xs font-medium text-text-primary">
-                {localize('com_ui_select_workspace')}
-              </p>
-              <p className="mt-0.5 text-[11px] leading-snug text-text-secondary">
-                {localize('com_ui_workspace_hint')}
-              </p>
-            </div>
+          <div className="absolute bottom-full left-0 z-50 mb-2 w-64 overflow-hidden rounded-xl border border-black/[0.08] bg-white shadow-lg dark:border-border-light dark:bg-surface-secondary">
             <div className="border-b border-border-light px-3 py-2">
               <input
                 className="w-full rounded-lg border border-black/[0.08] bg-[#fafafa] px-2.5 py-1.5 text-xs outline-none"
@@ -203,50 +218,35 @@ export default function WorkspaceSelector({
               {filtered.length === 0 ? (
                 <li className="px-3 py-3 text-center text-xs text-text-secondary">未找到工作空间</li>
               ) : null}
-              {filtered.map((ws) => {
-                const isSel = ws.id === selected?.id;
-                return (
-                  <li key={ws.id}>
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={isSel}
-                      className={cn(
-                        'flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-hover',
-                        isSel && 'bg-surface-hover',
-                      )}
-                      onClick={() => select(ws.id)}
-                    >
-                      <FolderOpen className="mt-0.5 h-4 w-4 shrink-0 text-text-secondary" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium text-text-primary">
-                          {ws.name}
-                        </span>
-                        {ws.note ? (
-                          <span className="mt-0.5 block truncate text-[11px] text-text-secondary">
-                            {ws.note}
-                          </span>
-                        ) : null}
+              {filtered.map((ws) => (
+                <li key={ws.id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[#f5f5f5]"
+                    onClick={() => select(ws.id)}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{ws.name}</span>
+                      {ws.note ? (
+                        <span className="block truncate text-[11px] text-[#9a9a9a]">{ws.note}</span>
+                      ) : null}
+                    </span>
+                    {selectedId === ws.id ? <Check className="h-3.5 w-3.5 shrink-0" /> : null}
+                    {ws.id !== 'default' ? (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="rounded p-1 text-[#b0b0b0] hover:bg-black/[0.05] hover:text-red-500"
+                        onClick={(e) => removeWorkspace(ws.id, e)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
                       </span>
-                      {isSel ? (
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                      ) : null}
-                      {ws.id !== 'default' ? (
-                        <button
-                          type="button"
-                          className="mt-0.5 rounded p-0.5 text-text-secondary hover:bg-red-50 hover:text-red-600"
-                          aria-label="删除"
-                          onClick={(e) => removeWorkspace(ws.id, e)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      ) : null}
-                    </button>
-                  </li>
-                );
-              })}
+                    ) : null}
+                  </button>
+                </li>
+              ))}
             </ul>
-            <div className="border-t border-border-light p-1.5 space-y-0.5">
+            <div className="space-y-0.5 border-t border-border-light p-1.5">
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary"

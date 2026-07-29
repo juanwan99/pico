@@ -13,7 +13,7 @@ export default function useSubmitMessage() {
   const { user } = useAuthContext();
   const methods = useChatFormContext();
   const { conversation: addedConvo } = useAddedChatContext();
-  const { ask, index, getMessages, setMessages } = useChatContext();
+  const { ask, index, getMessages, setMessages, conversation } = useChatContext();
   const getLatestMessage = useGetLatestMessage(index);
 
   const autoSendPrompts = useRecoilValue(store.autoSendPrompts);
@@ -38,9 +38,13 @@ export default function useSubmitMessage() {
         setMessages([...(rootMessages || []), latestMessage]);
       }
 
-      const wsPrefix = workspaceContextPrefix();
+      const convoId = conversation?.conversationId;
+      const wsPrefix = workspaceContextPrefix(convoId);
       const textWithWs =
-        wsPrefix && data.text && !data.text.startsWith('【工作空间')
+        wsPrefix &&
+        data.text &&
+        !data.text.includes('【Pico-Convo:') &&
+        !data.text.startsWith('【工作空间')
           ? `${wsPrefix}${data.text}`
           : data.text;
       const submitted = ask(
@@ -49,8 +53,6 @@ export default function useSubmitMessage() {
         },
         {
           addedConvo: addedConvo ?? undefined,
-          // Queued during-run messages carry their own consumed attachments,
-          // quote chips, and manual skill picks (undefined = drain composer).
           overrideFiles: data.overrideFiles,
           overrideQuotes: data.overrideQuotes,
           overrideManualSkills: data.overrideManualSkills,
@@ -61,7 +63,7 @@ export default function useSubmitMessage() {
       }
       methods.reset();
     },
-    [ask, methods, addedConvo, setMessages, getMessages, getLatestMessage],
+    [ask, methods, addedConvo, setMessages, getMessages, getLatestMessage, conversation],
   );
 
   const submitPrompt = useCallback(

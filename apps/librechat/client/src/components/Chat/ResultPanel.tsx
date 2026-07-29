@@ -21,6 +21,7 @@ import {
   Search,
 } from 'lucide-react';
 import type { TMessage } from 'librechat-data-provider';
+import type { PicoArtifact } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
 
 type TopView = 'overview' | 'files' | 'browser';
@@ -31,6 +32,7 @@ type ArtifactItem = {
   sizeLabel: string;
   kind: 'txt' | 'file' | 'other';
   url?: string;
+  body?: string;
 };
 
 function formatSize(n?: number): string {
@@ -114,17 +116,32 @@ export default function ResultPanel({
   taskTitle,
   runStatusLabel,
   onClose,
+  picoArtifacts,
 }: {
   messages?: TMessage[] | null;
   taskTitle?: string;
   runStatusLabel?: string;
   onClose?: () => void;
+  picoArtifacts?: PicoArtifact[] | null;
 }) {
   const [view, setView] = useState<TopView>('overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [fileQuery, setFileQuery] = useState('');
   const [browserUrl, setBrowserUrl] = useState('');
-  const artifacts = useMemo(() => collectArtifacts(messages), [messages]);
+  const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
+  const artifacts = useMemo(() => {
+    if (picoArtifacts?.length) {
+      return picoArtifacts.map((a) => ({
+        id: a.id,
+        name: a.title || a.kind || '产物',
+        sizeLabel: a.inline ? `${Math.min(a.inline.length, 9999)}B` : '—',
+        kind: (a.title || '').toLowerCase().endsWith('.txt') ? ('txt' as const) : ('file' as const),
+        url: undefined as string | undefined,
+        body: a.inline,
+      }));
+    }
+    return messageArts;
+  }, [picoArtifacts, messageArts]);
 
   const filteredFiles = useMemo(() => {
     const q = fileQuery.trim().toLowerCase();
@@ -134,9 +151,19 @@ export default function ResultPanel({
     return artifacts.filter((a) => a.name.toLowerCase().includes(q));
   }, [artifacts, fileQuery]);
 
-  const openArtifact = (a: ArtifactItem) => {
+  const openArtifact = (a: ArtifactItem & { body?: string }) => {
     if (a.url) {
       window.open(a.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (a.body) {
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(`<pre style="white-space:pre-wrap;font:14px/1.5 system-ui;padding:16px">${a.body
+          .replace(/&/g, '&')
+          .replace(/</g, '<')}</pre>`);
+        w.document.title = a.name;
+      }
     }
   };
 

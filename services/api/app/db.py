@@ -1,4 +1,4 @@
-"""Pico unique AI ledger — Task / Run / Event / Artifact / ChangeProposal."""
+"""Pico unique AI ledger — Task / Run / Event / Artifact / ChangeProposal / Workspace."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -28,6 +28,21 @@ class Base(DeclarativeBase):
     pass
 
 
+class WorkspaceRow(Base):
+    """Managed execution boundary (browser-safe; not local full-disk)."""
+
+    __tablename__ = "workspaces"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    school_id: Mapped[str] = mapped_column(String(128), index=True)
+    membership_id: Mapped[str] = mapped_column(String(128), index=True)
+    name: Mapped[str] = mapped_column(String(256), default="")
+    kind: Mapped[str] = mapped_column(String(32), default="managed")
+    note: Mapped[str] = mapped_column(String(512), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
 class TaskRow(Base):
     __tablename__ = "tasks"
 
@@ -35,6 +50,8 @@ class TaskRow(Base):
     school_id: Mapped[str] = mapped_column(String(128), index=True)
     membership_id: Mapped[str] = mapped_column(String(128), index=True)
     title: Mapped[str] = mapped_column(String(512), default="")
+    conversation_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -112,7 +129,7 @@ class ChangeProposalRow(Base):
     title: Mapped[str] = mapped_column(String(512), default="")
     summary: Mapped[str] = mapped_column(Text, default="")
     payload_json: Mapped[str] = mapped_column(Text, default="{}")
-    status: Mapped[str] = mapped_column(String(32), default="proposed")  # proposed|confirmed|rejected
+    status: Mapped[str] = mapped_column(String(32), default="proposed")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     confirmed_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -138,19 +155,29 @@ _Session: async_sessionmaker[AsyncSession] | None = None
 
 def _normalize_url(url: str) -> str:
     if url.startswith("sqlite:///"):
-        # ensure parent dir
         path = url.removeprefix("sqlite:///")
         if path.startswith("./") or not path.startswith("/"):
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
     if url.startswith("sqlite+aiosqlite:///"):
-        path = url.removeprefix("sqlite+aiosqlite:///")
         if ":///" in url:
             raw = url.split("sqlite+aiosqlite:///")[-1]
             if raw and not raw.startswith(":"):
                 Path(raw).parent.mkdir(parents=True, exist_ok=True)
         return url
     return url
+
+
+def _migrate_sqlite_sync(conn) -> None:
+    try:
+        rows = conn.execute(text("PRAGMA table_info(tasks)")).fetchall()
+    except Exception:
+        return
+    tcols = {r[1] for r in rows}
+    if "conversation_id" not in tcols:
+        conn.execute(text("ALTER TABLE tasks ADD COLUMN conversation_id VARCHAR(128)"))
+    if "workspace_id" not in tcols:
+        conn.execute(text("ALTER TABLE tasks ADD COLUMN workspace_id VARCHAR(36)"))
 
 
 async def init_db() -> None:
@@ -161,6 +188,8 @@ async def init_db() -> None:
     _Session = async_sessionmaker(_engine, expire_on_commit=False)
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if "sqlite" in url:
+            await conn.run_sync(_migrate_sqlite_sync)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

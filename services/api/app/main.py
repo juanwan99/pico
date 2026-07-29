@@ -30,7 +30,7 @@ except ImportError:
 
 from app import run_service
 from app.auth import Principal, issue_test_token, require_principal, require_service_token
-from app.db import EventRow, RunRow, get_session, init_db
+from app.db import EventRow, RunRow, WorkspaceRow, get_session, init_db, new_id
 from app.openai_compat import router as openai_compat_router
 from app.settings import Settings, get_settings
 
@@ -336,6 +336,90 @@ async def invoke_tool(
     return {"ok": True, "result": result}
 
 
+
+
+# ----- workspaces (managed boundary) -----
+
+
+class CreateWorkspaceRequest(BaseModel):
+    name: str
+    note: str = ""
+    kind: str = "managed"
+
+
+@app.get("/v1/workspaces")
+async def list_workspaces(
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from sqlalchemy import select
+
+    q = await session.execute(
+        select(WorkspaceRow)
+        .where(
+            WorkspaceRow.school_id == principal.school_id,
+            WorkspaceRow.membership_id == principal.membership_id,
+        )
+        .order_by(WorkspaceRow.created_at.desc())
+    )
+    rows = list(q.scalars().all())
+    return {
+        "workspaces": [
+            {
+                "id": w.id,
+                "name": w.name,
+                "kind": w.kind,
+                "note": w.note,
+                "created_at": w.created_at.isoformat() if w.created_at else None,
+            }
+            for w in rows
+        ]
+    }
+
+
+@app.post("/v1/workspaces")
+async def create_workspace(
+    body: CreateWorkspaceRequest,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    row = WorkspaceRow(
+        id=new_id(),
+        school_id=principal.school_id,
+        membership_id=principal.membership_id,
+        name=name[:256],
+        kind=body.kind if body.kind in {"managed", "cloud"} else "managed",
+        note=(body.note or "")[:512],
+    )
+    session.add(row)
+    await session.commit()
+    return {
+        "workspace": {
+            "id": row.id,
+            "name": row.name,
+            "kind": row.kind,
+            "note": row.note,
+        }
+    }
+
+
+@app.delete("/v1/workspaces/{workspace_id}")
+async def delete_workspace(
+    workspace_id: str,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    row = await session.get(WorkspaceRow, workspace_id)
+    if not row or row.school_id != principal.school_id or row.membership_id != principal.membership_id:
+        raise HTTPException(status_code=404, detail="workspace not found")
+    await session.delete(row)
+    await session.commit()
+    return {"ok": True}
+
+
 # ----- tasks / runs / events -----
 
 
@@ -350,6 +434,8 @@ def _task_dict(t) -> dict:
         "school_id": t.school_id,
         "membership_id": t.membership_id,
         "title": t.title,
+        "conversation_id": getattr(t, "conversation_id", None),
+        "workspace_id": getattr(t, "workspace_id", None),
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
 
@@ -397,10 +483,13 @@ async def create_task(
 
 @app.get("/v1/tasks")
 async def tasks(
+    conversation_id: str | None = None,
     principal: Principal = Depends(require_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     rows = await run_service.list_tasks(session, principal)
+    if conversation_id:
+        rows = [r for r in rows if getattr(r, "conversation_id", None) == conversation_id]
     return {"tasks": [_task_dict(t) for t in rows]}
 
 

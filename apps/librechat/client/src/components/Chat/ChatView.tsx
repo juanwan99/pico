@@ -28,6 +28,7 @@ import Header from './Header';
 import Footer from './Footer';
 import { cn } from '~/utils';
 import store from '~/store';
+import { usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
 
 function LoadingSpinner() {
   return (
@@ -100,7 +101,8 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const taskTitle = chatHelpers.conversation?.title && chatHelpers.conversation.title !== 'New Chat'
     ? chatHelpers.conversation.title
     : undefined;
-  const runStatusLabel = isSubmitting ? '等待模型响应' : undefined;
+  const ledger = usePicoTaskLedger(conversationId, isSubmitting);
+  const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '等待模型响应' : undefined);
   const showResultPanel = !isLandingPage && resultOpen && conversationId && conversationId !== Constants.NEW_CONVO;
 
   if (isLoading && conversationId !== Constants.NEW_CONVO) {
@@ -130,9 +132,13 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                 <>
                   <Header />
                   <TaskRunBar
-                    title={taskTitle}
+                    title={taskTitle || ledger.task?.title}
                     isSubmitting={isSubmitting}
-                    completedLabel={null}
+                    completedLabel={
+                      !isSubmitting && ledger.statusLabel && ledger.statusLabel.startsWith('已完成')
+                        ? ledger.statusLabel
+                        : null
+                    }
                   />
                 </>
               )}
@@ -175,8 +181,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                 {showResultPanel ? (
                   <ResultPanel
                     messages={flatMessages}
-                    taskTitle={taskTitle}
+                    taskTitle={taskTitle || ledger.task?.title}
                     runStatusLabel={runStatusLabel}
+                    picoArtifacts={ledger.artifacts}
                     onClose={() => setResultOpen(false)}
                   />
                 ) : null}
