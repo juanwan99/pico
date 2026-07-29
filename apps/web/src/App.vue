@@ -105,6 +105,8 @@ const runStatus = ref("idle");
 const busy = ref(false);
 const safetyOk = ref(false);
 const freezeLabel = ref("…");
+const modelReady = ref(true);
+const showSteps = ref(false);
 const artifactOpen = ref(true);
 const artifactTitle = ref("Artifact");
 const artifactBody = ref("");
@@ -135,12 +137,34 @@ function authHeaders(): Headers {
   return h;
 }
 
+function friendlyError(err: unknown): string {
+  if (err instanceof Error) {
+    const m = err.message || "";
+    if (/密钥|模型服务|超时|限流|跨校|登录|找不到|未能完成|出了点问题|处理超时|无法连接/.test(m)) {
+      return m;
+    }
+    if (/blocked s1|kimi_api_key|api key/i.test(m)) {
+      return "模型服务未配置或密钥无效。请管理员配置 API 密钥后重试。";
+    }
+    if (/failed to fetch|networkerror|load failed/i.test(m)) {
+      return "无法连接 Pico 服务，请确认 API 已启动。";
+    }
+    return m.replace(/^Error:\s*/i, "") || "请求失败，请重试。";
+  }
+  return String(err ?? "请求失败");
+}
+
 async function api(path: string, init: RequestInit = {}) {
   const headers = authHeaders();
   if (init.headers) {
     new Headers(init.headers).forEach((v, k) => headers.set(k, v));
   }
-  const res = await fetch(path, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(path, { ...init, headers });
+  } catch (e) {
+    throw new Error(friendlyError(e));
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const d = data?.detail;
@@ -148,7 +172,7 @@ async function api(path: string, init: RequestInit = {}) {
       typeof d === "string"
         ? d
         : d?.message || d?.code || res.statusText || "request failed";
-    throw new Error(msg);
+    throw new Error(friendlyError(new Error(String(msg))));
   }
   return data;
 }
@@ -172,9 +196,17 @@ async function refreshMeta() {
   try {
     const f = await api("/v1/meta/freeze");
     const pins = f.agent_pins || {};
-    freezeLabel.value = `Kimi ${pins["kimi-agent-sdk"] || "?"} · ${pins["kimi-cli"] || "?"}`;
+    modelReady.value = f.model_ready !== false;
+    if (f.model_ready === false) {
+      freezeLabel.value = "模型未配置密钥";
+    } else {
+      const prov = f.model_provider || "model";
+      const name = f.model_name || pins["kimi-agent-sdk"] || "?";
+      freezeLabel.value = `${prov} · ${name}`;
+    }
   } catch {
-    freezeLabel.value = "model offline?";
+    freezeLabel.value = "无法读取模型状态";
+    modelReady.value = false;
   }
 }
 
@@ -223,6 +255,10 @@ function applyEvent(ev: {
     if (!text) return;
     const last = messages.value[messages.value.length - 1];
     if (last?.role === "assistant" && ev.type === "message.delta") {
+      // Multi-step emits per-step chunks — append rather than clobber.
+      last.text = last.text ? `${last.text}${text}` : text;
+      last.seq = ev.seq;
+    } else if (last?.role === "assistant" && ev.type === "message.final") {
       last.text = text;
       last.seq = ev.seq;
     } else {
@@ -240,7 +276,7 @@ function applyEvent(ev: {
       role: "tool",
       text: p.ok
         ? JSON.stringify(p.result, null, 2)
-        : `${p.code}: ${p.message}`,
+        : String(p.message || p.code || "工具失败"),
       toolName: String(p.tool || "tool"),
       ok: !!p.ok,
       seq: ev.seq,
@@ -248,17 +284,32 @@ function applyEvent(ev: {
   } else if (ev.type === "auth.deny") {
     pushMsg({
       role: "deny",
-      text: `${p.code}: ${p.message}`,
+      text: String(p.message || p.code || "访问被拒绝"),
       seq: ev.seq,
     });
   } else if (ev.type === "agent.step") {
-    pushMsg({
-      role: "step",
-      text: `Step ${p.step}${p.phase ? ` · ${p.phase}` : ""}${p.message ? ` — ${p.message}` : ""}`,
-      seq: ev.seq,
-    });
+    if (showSteps.value) {
+      pushMsg({
+        role: "step",
+        text: `步骤 ${p.step}${p.phase ? ` · ${p.phase}` : ""}${p.message ? ` — ${p.message}` : ""}`,
+        seq: ev.seq,
+      });
+    }
+  } else if (ev.type === "run.error") {
+    const um = String(p.user_message || "");
+    if (um) {
+      errorText.value = um;
+    }
   } else if (ev.type === "run.status") {
     runStatus.value = String(p.status || "");
+    if (p.status === "failed") {
+      const um = String(p.user_message || friendlyError(p.reason) || "运行失败");
+      errorText.value = um;
+      const last = messages.value[messages.value.length - 1];
+      if (!(last?.role === "assistant" && last.text.includes(um))) {
+        pushMsg({ role: "assistant", text: um, seq: ev.seq });
+      }
+    }
   } else if (ev.type === "artifact.created") {
     artifactTitle.value = String(p.title || "Artifact");
     artifactOpen.value = true;
@@ -280,20 +331,30 @@ async function loadArtifacts(taskId: string) {
 async function pollRun(runId: string) {
   const seen = new Set<number>();
   abortPoll.value = false;
-  while (!abortPoll.value) {
-    const data = await api(`/v1/runs/${runId}/events`);
-    for (const ev of data.events || []) {
-      if (seen.has(ev.seq)) continue;
-      seen.add(ev.seq);
-      applyEvent(ev);
+  try {
+    while (!abortPoll.value) {
+      const data = await api(`/v1/runs/${runId}/events`);
+      for (const ev of data.events || []) {
+        if (seen.has(ev.seq)) continue;
+        seen.add(ev.seq);
+        applyEvent(ev);
+      }
+      const runData = await api(`/v1/runs/${runId}`);
+      runStatus.value = runData.run?.status || runStatus.value;
+      if (runData.run?.error && runStatus.value === "failed" && !errorText.value) {
+        errorText.value = friendlyError(runData.run.error);
+      }
+      if (["succeeded", "failed", "cancelled"].includes(runStatus.value)) break;
+      await new Promise((r) => setTimeout(r, 300));
     }
-    const runData = await api(`/v1/runs/${runId}`);
-    runStatus.value = runData.run?.status || runStatus.value;
-    if (["succeeded", "failed", "cancelled"].includes(runStatus.value)) break;
-    await new Promise((r) => setTimeout(r, 300));
+    if (activeTaskId.value) await loadArtifacts(activeTaskId.value);
+    await refreshChanges();
+  } catch (e) {
+    const msg = friendlyError(e);
+    errorText.value = msg;
+    pushMsg({ role: "assistant", text: msg });
+    runStatus.value = "failed";
   }
-  if (activeTaskId.value) await loadArtifacts(activeTaskId.value);
-  await refreshChanges();
 }
 
 async function newChat() {
@@ -337,8 +398,9 @@ async function sendPrompt(raw?: string) {
     await refreshTasks();
     await pollRun(data.run.id);
   } catch (e) {
-    errorText.value = String(e);
-    pushMsg({ role: "system", text: `错误：${String(e)}` });
+    const msg = friendlyError(e);
+    errorText.value = msg;
+    pushMsg({ role: "assistant", text: msg });
   } finally {
     busy.value = false;
   }
@@ -355,7 +417,7 @@ async function stopRun() {
     runStatus.value = "cancelled";
     pushMsg({ role: "system", text: "已停止生成" });
   } catch (e) {
-    errorText.value = String(e);
+    errorText.value = friendlyError(e);
   }
 }
 
@@ -373,7 +435,7 @@ async function runCrossSchool() {
     for (const ev of data.events || []) applyEvent(ev);
     await refreshTasks();
   } catch (e) {
-    pushMsg({ role: "system", text: String(e) });
+    pushMsg({ role: "assistant", text: friendlyError(e) });
   } finally {
     busy.value = false;
   }
@@ -399,7 +461,7 @@ async function proposeChange() {
     });
     await refreshChanges();
   } catch (e) {
-    pushMsg({ role: "system", text: String(e) });
+    pushMsg({ role: "assistant", text: friendlyError(e) });
   } finally {
     busy.value = false;
   }
@@ -422,7 +484,7 @@ async function confirmChange(id: string) {
     artifactOpen.value = true;
     await refreshChanges();
   } catch (e) {
-    errorText.value = String(e);
+    errorText.value = friendlyError(e);
   } finally {
     busy.value = false;
   }
@@ -475,7 +537,7 @@ onMounted(async () => {
     await refreshTasks();
     await refreshChanges();
   } catch (e) {
-    errorText.value = String(e);
+    errorText.value = friendlyError(e);
   }
 });
 </script>
@@ -552,6 +614,9 @@ onMounted(async () => {
                 {{ safetyOk ? "Tools sandbox OFF" : "Safety ?" }}
               </n-tag>
               <n-text depth="3" style="font-size: 11px">{{ freezeLabel }}</n-text>
+              <n-button size="tiny" quaternary @click="showSteps = !showSteps">
+                {{ showSteps ? "隐藏步骤" : "显示步骤" }}
+              </n-button>
               <n-button size="tiny" quaternary @click="settingsOpen = true">
                 <template #icon><n-icon :component="SettingsOutline" /></template>
                 身份 / 设置
@@ -587,8 +652,19 @@ onMounted(async () => {
 
         <n-layout has-sider position="absolute" style="top: 52px; bottom: 0">
           <n-layout-content content-style="display:flex;flex-direction:column;height:100%">
-            <div v-if="errorText" style="padding: 8px 16px; background: #3a1f1f; color: #ffb4b4; font-size: 13px">
-              {{ errorText }}
+            <div
+              v-if="!modelReady"
+              style="padding: 8px 16px; background: #3a321f; color: #ffd59a; font-size: 13px; display: flex; justify-content: space-between; gap: 12px"
+            >
+              <span>模型 API 密钥未配置：对话将无法调用大模型。请在服务端设置 KIMI_API_KEY 或 DEEPSEEK_API_KEY。</span>
+              <n-button size="tiny" quaternary @click="refreshMeta">刷新状态</n-button>
+            </div>
+            <div
+              v-if="errorText"
+              style="padding: 8px 16px; background: #3a1f1f; color: #ffb4b4; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 12px"
+            >
+              <span>{{ errorText }}</span>
+              <n-button size="tiny" quaternary style="color: #ffb4b4" @click="errorText = ''">关闭</n-button>
             </div>
 
             <!-- messages -->
@@ -598,7 +674,7 @@ onMounted(async () => {
                 <div v-if="isEmpty" style="text-align: center; padding: 64px 12px 32px">
                   <n-text style="font-size: 28px; font-weight: 600">今天要交办什么？</n-text>
                   <p style="color: #7a8494; margin: 12px 0 28px; font-size: 14px">
-                    对话 · 多步工具 · Artifacts · 人工批准 — 对齐 Claude / Codex 核心路径
+                    对话 · 工具调用 · 产物 · 人工确认。失败会用中文说明原因，而不是堆栈。
                   </p>
                   <n-space justify="center" wrap>
                     <n-button
