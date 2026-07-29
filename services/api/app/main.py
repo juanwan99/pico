@@ -120,6 +120,20 @@ def _resolve_git_sha() -> str:
         return "unknown"
 
 
+
+@app.get("/")
+async def root_info() -> dict:
+    """Avoid bare FastAPI Not Found when preview probes API root."""
+    return {
+        "ok": True,
+        "service": "pico-api",
+        "message": "Pico API. Product UI is on the preview host (NextChat via gateway :8080).",
+        "health": "/health",
+        "version": "/v1/meta/version",
+        "chat": "/v1/chat/completions",
+    }
+
+
 @app.get("/health")
 async def health() -> dict:
     return {
