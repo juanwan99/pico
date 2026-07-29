@@ -1,7 +1,7 @@
 # Phase 3 — Integrate Pico ↔ edu-cloud
 
 ```
-STATUS: IN PROGRESS (Pico ready; edu bridge module shipped in parallel PR)
+STATUS: PICO MERGED · EDU PR OPEN (juanwan99/edu-cloud#443)
 PLAN: MVP-3DAY v1.2 §10
 CONTRACTS: Phase 2 FROZEN v1.0 (unchanged field names)
 ```
@@ -60,3 +60,13 @@ PICO_HOOK_SERVICE_TOKEN=<shared-for-callbacks>
 1. `PICO_EDU_MODE=fake`
 2. `PICO_AI_PRIMARY=false` on edu
 3. Re-enable test issuer only in non-prod
+
+
+## Current ship state
+
+| Repo | State |
+|------|-------|
+| pico main | Phase 3 integrate **merged** (PR #6) |
+| edu-cloud | PR #443 `pico_bridge` — merge when Tests green |
+
+Nothing is blocked on owner chat; remaining work is **CI green + merge #443 + env cutover**.
