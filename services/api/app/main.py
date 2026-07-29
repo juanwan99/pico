@@ -427,7 +427,8 @@ async def stream_run(
                 break
             from app.db import session_factory
 
-            async with session_factory() as s:
+            factory = session_factory()
+            async with factory() as s:
                 r = await s.get(RunRow, run_id)
                 events = await run_service.list_events(s, run_id)
                 for e in events:
