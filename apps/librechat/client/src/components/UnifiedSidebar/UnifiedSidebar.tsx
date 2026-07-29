@@ -12,7 +12,7 @@ import { cn } from '~/utils';
 import store from '~/store';
 
 const COLLAPSED_WIDTH = 52;
-const EXPANDED_MIN = 248;
+const EXPANDED_MIN = 263;
 const TRANSITION_MS = 300;
 const EASING = 'cubic-bezier(0.2, 0, 0, 1)';
 
@@ -182,9 +182,9 @@ function UnifiedSidebar() {
         <aside
           className="relative flex h-full flex-shrink-0 overflow-hidden"
           style={{
-            width: expanded ? 248 : COLLAPSED_WIDTH,
-            minWidth: expanded ? 248 : COLLAPSED_WIDTH,
-            maxWidth: expanded ? 248 : COLLAPSED_WIDTH,
+            width: expanded ? 263 : COLLAPSED_WIDTH,
+            minWidth: expanded ? 263 : COLLAPSED_WIDTH,
+            maxWidth: expanded ? 263 : COLLAPSED_WIDTH,
             transition: isResizing
               ? 'none'
               : `width ${TRANSITION_MS}ms ${EASING}, min-width ${TRANSITION_MS}ms ${EASING}, max-width ${TRANSITION_MS}ms ${EASING}`,

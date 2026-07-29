@@ -3095,3 +3095,14 @@ html:not(.dark) .pico-wb-composer textarea::placeholder {
   color: #9a9a9a !important;
   opacity: 1 !important;
 }
+
+/* pico contrast: dark sidebar inactive labels */
+html.dark .pico-wb-sidebar {
+  color: #e8e8e8;
+}
+html.dark .pico-wb-sidebar .text-\[\#3d3d3d\],
+html.dark .pico-wb-sidebar .text-\[\#6b6b6b\],
+html.dark .pico-wb-sidebar .text-\[\#4a4a4a\],
+html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
+  color: #c8c8c8 !important;
+}

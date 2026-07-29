@@ -153,8 +153,8 @@ export default function Landing({
   const name = user?.name?.split(/\s+/)[0] || '';
 
   return (
-    <div className="pico-wb-landing flex w-full flex-col items-center px-6 pb-4 pt-10 sm:pt-16">
-      <div className="flex w-full max-w-[720px] flex-col items-center">
+    <div className="pico-wb-landing flex w-full flex-col items-center px-6 pb-4 pt-16 sm:pt-24">
+      <div className="flex w-full max-w-[797px] flex-col items-center">
         <h1 className="text-center text-[32px] font-semibold leading-none tracking-[-0.03em] text-[#1a1a1a] sm:text-[36px] dark:text-text-primary">
           Pico，我帮你
         </h1>

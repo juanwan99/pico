@@ -144,12 +144,12 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   <TaskRunBar
                     title={taskTitle || ledger.task?.title}
                     isSubmitting={isSubmitting}
+                    model={ledger.run?.model}
+                    statusLabel={ledger.statusLabel}
                     completedLabel={
-                      !isSubmitting && ledger.statusLabel && ledger.statusLabel.startsWith('已完成')
+                      !isSubmitting && ledger.statusLabel && (ledger.statusLabel.startsWith('已完成') || ledger.statusLabel.startsWith('失败'))
                         ? ledger.statusLabel
-                        : ledger.statusLabel?.startsWith('失败')
-                          ? ledger.statusLabel
-                          : null
+                        : null
                     }
                   />
                   {ledger.error ? (
@@ -179,7 +179,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   <div
                     className={cn(
                       'w-full shrink-0',
-                      isLandingPage && 'relative z-10 w-full max-w-[720px] px-4 transition-all duration-200',
+                      isLandingPage && 'relative z-10 w-full max-w-[797px] px-4 transition-all duration-200',
                       !isLandingPage && 'border-t border-black/[0.04] bg-white dark:border-border-light dark:bg-surface-primary',
                     )}
                   >

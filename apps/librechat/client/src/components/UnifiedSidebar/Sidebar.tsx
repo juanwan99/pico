@@ -177,10 +177,10 @@ function Sidebar({
                   }
                 }}
                 className={cn(
-                  'group flex h-10 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13.5px] transition-colors',
+                  'group flex h-[33px] w-full items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13px] transition-colors',
                   active
-                    ? 'bg-[#e6e6e6] font-medium text-[#1a1a1a]'
-                    : 'font-normal text-[#3d3d3d] hover:bg-[#e8e8e8]',
+                    ? 'bg-[#e6e6e6] font-medium text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
+                    : 'font-normal text-[#3d3d3d] hover:bg-[#e8e8e8] dark:text-text-secondary dark:hover:bg-surface-tertiary',
                 )}
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center text-[#4a4a4a]">

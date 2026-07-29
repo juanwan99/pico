@@ -16,9 +16,9 @@ const ITEMS = [
   {
     id: 'files',
     label: '我的文件',
-    desc: '任务成果与云端网盘（浏览器托管目录）',
+    desc: '任务成果请在会话右侧「结果区」查看（全局文件库后置）',
     icon: FolderOpen,
-    href: '/c/new',
+    href: '#',
     ready: false,
   },
   {
