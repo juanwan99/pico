@@ -2089,5 +2089,7 @@
   "com_ui_zoom_in": "Zoom in",
   "com_ui_zoom_level": "Zoom level",
   "com_ui_zoom_out": "Zoom out",
-  "com_user_message": "You"
+  "com_user_message": "You",
+  "com_ui_task_input_placeholder": "What can I help you with today? @ files, / skills",
+  "com_ui_task_chip_hint": "Tap a capability to draft a task, or type below"
 }

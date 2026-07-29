@@ -107,7 +107,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const chatFormPlaceholder =
     isProjectLandingPage && project
       ? localize('com_ui_new_chat_in_project', { name: project.name })
-      : undefined;
+      : isLandingPage
+        ? localize('com_ui_task_input_placeholder')
+        : undefined;
 
   return (
     <ChatFormProvider {...methods}>
@@ -121,7 +123,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   className={cn(
                     'flex flex-col',
                     isLandingPage
-                      ? 'flex-1 items-center justify-end sm:justify-center'
+                      ? 'flex-1 items-center justify-center gap-2 overflow-y-auto py-4'
                       : 'h-full overflow-y-auto',
                   )}
                 >
@@ -129,11 +131,12 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   <div
                     className={cn(
                       'w-full',
-                      isLandingPage && 'max-w-3xl transition-all duration-200 xl:max-w-4xl',
+                      isLandingPage && 'relative z-10 max-w-3xl px-3 transition-all duration-200 xl:max-w-4xl',
                     )}
                   >
                     {isProjectLandingPage && project && <ProjectLandingChip project={project} />}
-                    {isLandingPage && <ConversationStarters />}
+                    {/* Workbench: scene chips on Landing replace generic starters */
+                    false && isLandingPage && <ConversationStarters />}
                     <ChatForm index={index} placeholder={chatFormPlaceholder} />
                     {!isLandingPage && <Footer />}
                   </div>
