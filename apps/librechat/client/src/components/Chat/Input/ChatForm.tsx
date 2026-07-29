@@ -32,6 +32,7 @@ import { mainTextareaId, BadgeItem } from '~/common';
 import PendingSteerChips from './PendingSteerChips';
 import PendingQuoteChips from './PendingQuoteChips';
 import AttachFileChat from './Files/AttachFileChat';
+import WorkspaceSelector from './WorkspaceSelector';
 import useSteering from '~/hooks/Chat/useSteering';
 import FileFormChat from './Files/FileFormChat';
 import InFlightSteers from './InFlightSteers';
@@ -627,7 +628,8 @@ const ChatForm = memo(function ChatForm({
                   isRTL ? 'flex-row-reverse' : 'flex-row',
                 )}
               >
-                <div className={`${isRTL ? 'mr-2' : 'ml-2'}`}>
+                <div className={`${isRTL ? 'mr-2' : 'ml-2'} flex items-center gap-0.5`}>
+                  <WorkspaceSelector disabled={disableInputs} />
                   <AttachFileChat
                     conversation={conversation}
                     disableInputs={disableInputs}

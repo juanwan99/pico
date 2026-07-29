@@ -7,6 +7,7 @@ import { useGetLatestMessage } from '~/hooks/Messages/useLatestMessage';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { mainTextareaId } from '~/common';
 import store from '~/store';
+import { workspaceContextPrefix } from '~/components/Chat/Input/WorkspaceSelector';
 
 export default function useSubmitMessage() {
   const { user } = useAuthContext();
@@ -37,9 +38,14 @@ export default function useSubmitMessage() {
         setMessages([...(rootMessages || []), latestMessage]);
       }
 
+      const wsPrefix = workspaceContextPrefix();
+      const textWithWs =
+        wsPrefix && data.text && !data.text.startsWith('【工作空间')
+          ? `${wsPrefix}${data.text}`
+          : data.text;
       const submitted = ask(
         {
-          text: data.text,
+          text: textWithWs,
         },
         {
           addedConvo: addedConvo ?? undefined,

@@ -50,6 +50,7 @@ export default function useUnifiedSidebarLinks() {
     includeHidePanel: false,
   });
 
+  /** WorkBuddy-class single-rail nav: task-first, hide chat-tool clutter. */
   const links = useMemo(() => {
     const conversationLink: NavLink = {
       title: 'com_ui_chat_history',
@@ -59,7 +60,29 @@ export default function useUnifiedSidebarLinks() {
       Component: ConversationsSection,
     };
 
-    return [conversationLink, ...sideNavLinks];
+    const order = [
+      'conversations',
+      'agents',
+      'skills',
+      'mcp-builder',
+      'memories',
+      'prompts',
+    ];
+    const hidden = new Set([
+      'bookmarks',
+      'files',
+      'parameters',
+      'hide-panel',
+      'assistants',
+      'azureAssistants',
+    ]);
+
+    const merged = [conversationLink, ...sideNavLinks].filter((l) => !hidden.has(l.id));
+    const rank = (id: string) => {
+      const i = order.indexOf(id);
+      return i === -1 ? 100 : i;
+    };
+    return merged.sort((a, b) => rank(a.id) - rank(b.id));
   }, [sideNavLinks]);
 
   return links;

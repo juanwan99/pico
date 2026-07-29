@@ -2112,5 +2112,9 @@
   "com_ui_you_answered": "你的回答：",
   "com_ui_your_answer": "Type your answer…",
   "com_ui_task_input_placeholder": "今天帮你做些什么？ @ 引用文件，/ 调用技能与指令",
-  "com_ui_task_chip_hint": "点击能力卡片填入任务说明，也可直接在下方输入"
+  "com_ui_task_chip_hint": "点击能力卡片填入任务说明，也可直接在下方输入",
+  "com_ui_select_workspace": "选择工作空间",
+  "com_ui_workspace_hint": "限定本次任务的资料与产物范围（浏览器内）",
+  "com_ui_workspace_add": "新建工作空间",
+  "com_ui_workspace_name_prompt": "工作空间名称"
 }
