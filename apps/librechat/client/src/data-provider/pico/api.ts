@@ -1,6 +1,8 @@
 /**
  * Browser → LibreChat `/api/pico` → Pico ledger (Task/Run/Artifact/Workspace).
+ * Must send LibreChat JWT (same as other API clients).
  */
+import { getTokenHeader } from 'librechat-data-provider';
 
 export type PicoArtifact = {
   id: string;
@@ -37,12 +39,27 @@ export type PicoWorkspace = {
   created_at?: string | null;
 };
 
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  try {
+    const auth = getTokenHeader();
+    if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+      headers.Authorization = auth;
+    } else if (typeof auth === 'string' && auth.length > 0) {
+      headers.Authorization = auth.startsWith('Bearer') ? auth : `Bearer ${auth}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return headers;
+}
+
 async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api/pico${path}`, {
     credentials: 'include',
     ...init,
     headers: {
-      Accept: 'application/json',
+      ...authHeaders(),
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.headers || {}),
     },
@@ -81,7 +98,6 @@ export async function createPicoWorkspace(name: string, note = '') {
 export async function deletePicoWorkspace(id: string) {
   return picoFetch<{ ok: boolean }>(`/v1/workspaces/${id}`, { method: 'DELETE' });
 }
-
 
 export async function rebindConversation(fromId: string, toId: string) {
   return picoFetch<{ updated: number; from: string; to: string }>(`/v1/tasks/rebind-conversation`, {
