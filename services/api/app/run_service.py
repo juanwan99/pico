@@ -95,6 +95,15 @@ async def list_events(session: AsyncSession, run_id: str) -> list[EventRow]:
     return list(result.scalars().all())
 
 
+async def list_runs_for_task(session: AsyncSession, task_id: str) -> list[RunRow]:
+    result = await session.execute(
+        select(RunRow)
+        .where(RunRow.task_id == task_id)
+        .order_by(RunRow.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def request_cancel(session: AsyncSession, run: RunRow) -> RunRow:
     run.cancel_requested = 1
     # Immediate terminal cancel if still queued; running worker polls cancel_requested.
@@ -117,46 +126,59 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
     settings = get_settings()
     factory = session_factory()
 
-    async with factory() as session:
-        run = await session.get(RunRow, run_id)
-        if run is None:
-            return
-        if run.status == "cancelled":
-            await append_event(session, run_id, "run.status", {"status": "cancelled"})
-            return
-        run.status = "running"
-        run.started_at = _utcnow()
-        run.model = provider_label()
-        await session.commit()
-
-    async def emit(event_type: str, payload: dict[str, Any]) -> None:
-        async with factory() as session:
-            await append_event(session, run_id, event_type, payload)
-
-    async def is_cancelled() -> bool:
+    try:
         async with factory() as session:
             run = await session.get(RunRow, run_id)
-            return bool(run and run.cancel_requested)
+            if run is None:
+                return
+            if run.status == "cancelled":
+                await append_event(session, run_id, "run.status", {"status": "cancelled"})
+                return
+            run.status = "running"
+            run.started_at = _utcnow()
+            run.model = provider_label()
+            await session.commit()
 
-    caps = RunCaps(
-        max_seconds=settings.pico_run_max_seconds,
-        max_tokens=settings.pico_run_max_tokens,
-        max_retries=settings.pico_run_max_retries,
-    )
+        async def emit(event_type: str, payload: dict[str, Any]) -> None:
+            async with factory() as session:
+                await append_event(session, run_id, event_type, payload)
 
-    # Load prompt
-    async with factory() as session:
-        run = await session.get(RunRow, run_id)
-        assert run is not None
-        prompt = run.prompt
+        async def is_cancelled() -> bool:
+            async with factory() as session:
+                run = await session.get(RunRow, run_id)
+                return bool(run and run.cancel_requested)
 
-    result = await run_agent_loop(
-        prompt=prompt,
-        principal=principal,
-        emit=emit,
-        is_cancelled=is_cancelled,
-        caps=caps,
-    )
+        caps = RunCaps(
+            max_seconds=settings.pico_run_max_seconds,
+            max_tokens=settings.pico_run_max_tokens,
+            max_retries=settings.pico_run_max_retries,
+        )
+
+        async with factory() as session:
+            run = await session.get(RunRow, run_id)
+            assert run is not None
+            prompt = run.prompt
+
+        result = await run_agent_loop(
+            prompt=prompt,
+            principal=principal,
+            emit=emit,
+            is_cancelled=is_cancelled,
+            caps=caps,
+        )
+    except Exception as exc:  # noqa: BLE001 — persist failure on any crash
+        async with factory() as session:
+            run = await session.get(RunRow, run_id)
+            if run is None:
+                return
+            run.status = "failed"
+            run.ended_at = _utcnow()
+            run.error = str(exc)
+            await session.commit()
+            await append_event(
+                session, run_id, "run.status", {"status": "failed", "reason": str(exc)}
+            )
+        return
 
     async with factory() as session:
         run = await session.get(RunRow, run_id)

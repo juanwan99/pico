@@ -153,3 +153,15 @@ def test_task_run_with_real_model(client: TestClient):
     # Prefer tool path but model may answer without tools occasionally
     task = client.get(f"/v1/tasks/{task_id}", headers=h).json()
     assert task["task"]["id"] == task_id
+
+
+def test_list_task_runs_endpoint(client: TestClient):
+    tok = _token(client)
+    h = {"Authorization": f"Bearer {tok}"}
+    # no model needed for cross-school demo task
+    r = client.post("/v1/demo/cross-school-deny", headers=h)
+    assert r.status_code == 200
+    task_id = r.json()["task_id"]
+    runs = client.get(f"/v1/tasks/{task_id}/runs", headers=h)
+    assert runs.status_code == 200
+    assert len(runs.json()["runs"]) >= 1

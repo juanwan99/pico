@@ -1,4 +1,4 @@
-.PHONY: dev api web test lint freeze-check security-check hello install
+.PHONY: dev api web test lint freeze-check security-check hello install demo
 
 install:
 	python3.12 -m venv .venv || true
@@ -25,3 +25,6 @@ freeze-check:
 
 hello:
 	. .venv/bin/activate && python scripts/model_hello.py
+
+demo:
+	. .venv/bin/activate && python scripts/demo_e2e.py
