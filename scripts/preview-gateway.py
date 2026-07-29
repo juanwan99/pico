@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Public preview entry :8080 → NextChat UI; /v1 /health → Pico API (loopback)."""
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import urllib.request
 import urllib.error
@@ -38,13 +39,12 @@ class H(BaseHTTPRequestHandler):
         except urllib.error.HTTPError as e:
             data = e.read()
             self.send_response(e.code)
-            ct = e.headers.get("Content-Type", "text/plain")
-            self.send_header("Content-Type", ct)
+            self.send_header("Content-Type", e.headers.get("Content-Type", "text/plain"))
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
         except Exception as e:
-            msg = ('{"ok":false,"error":"%s"}' % str(e).replace('"','')).encode()
+            msg = ('{"ok":false,"error":"%s"}' % str(e).replace('"', "")).encode()
             self.send_response(502)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(msg)))
@@ -53,5 +53,5 @@ class H(BaseHTTPRequestHandler):
     do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = do_OPTIONS = do_REQUEST
 
 if __name__ == "__main__":
-    print("gateway 0.0.0.0:8080 ui=3000 api=8000", flush=True)
+    print("gateway 0.0.0.0:8080 -> ui:3000 api:8000", flush=True)
     ThreadingHTTPServer(("0.0.0.0", 8080), H).serve_forever()

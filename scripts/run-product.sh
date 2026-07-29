@@ -12,7 +12,7 @@ UV="$ROOT/.venv/bin/uvicorn"; [ -x "$UV" ] || UV=uvicorn
 
 if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8000/health; then
   echo "[pico] starting API :8000"
-  nohup "$UV" app.main:app --app-dir "$ROOT/services/api" --host 0.0.0.0 --port 8000 \
+  nohup "$UV" app.main:app --app-dir "$ROOT/services/api" --host 127.0.0.1 --port 8000 \
     >>/tmp/pico-api.log 2>&1 &
   for _ in $(seq 1 40); do curl -sf -o /dev/null --max-time 1 http://127.0.0.1:8000/health && break; sleep 0.25; done
 fi
@@ -32,7 +32,7 @@ if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:3000/; then
   echo "[pico] starting NextChat :3000"
   cd "$ROOT/apps/nextchat"
   if [ ! -d node_modules ]; then yarn install || npm install; fi
-  nohup npx next dev -H 0.0.0.0 -p 3000 >>/tmp/nextchat.log 2>&1 &
+  nohup npx next dev -H 127.0.0.1 -p 3000 >>/tmp/nextchat.log 2>&1 &
   for _ in $(seq 1 90); do curl -sf -o /dev/null --max-time 1 http://127.0.0.1:3000/ && break; sleep 0.5; done
   cd "$ROOT"
 fi
