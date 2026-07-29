@@ -48,3 +48,12 @@ if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8080/; then
 fi
 echo "[pico] Product UI (NextChat) http://0.0.0.0:8080 → API :8000"
 echo "[pico] NOT apps/web (removed). If you see orange 三栏 shell, wrong process is bound."
+
+# Identity printout (prevent silent shell drift)
+if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8000/v1/meta/version; then
+  echo "[pico] version: $(curl -sf --max-time 2 http://127.0.0.1:8000/v1/meta/version)"
+fi
+bash "$ROOT/scripts/assert-product-identity.sh" || {
+  echo "[pico] IDENTITY CHECK FAILED — fix shell before demo"
+  exit 1
+}

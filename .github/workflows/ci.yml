@@ -64,10 +64,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Forbid apps/web; require NextChat shell
         run: |
-          if [ -d apps/web ]; then
-            echo "::error::apps/web must not exist (hand-rolled shell removed)"
-            exit 1
-          fi
-          test -f apps/nextchat/package.json
+          bash scripts/assert-product-identity.sh
           test -f apps/README.md
           echo "OK: product UI = apps/nextchat only"

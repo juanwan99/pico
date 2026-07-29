@@ -149,3 +149,16 @@ CI：`apps/web` 目录存在 → **失败**（见 workflow）。
 ## 9. 一句话
 
 **版本管理 = 全 SHA 身份 + GitHub 唯一事实 + 钉依赖 + FIXED 文档纪律；发布轨按 pico 边界演进，不假装 edu OneFlow。**
+
+
+---
+
+## 10. 事故类：产品壳漂移（2026-07-29）
+
+| 现象 | 预览出现橙色「新对话」三栏，不是 NextChat |
+|------|------------------------------------------|
+| 根因 | 进程绑错：`apps/web` Vite 占 :8080；main 仍可能含双壳 |
+| 修复 | 删除 `apps/web`；只认 `apps/nextchat`；CI + `assert-product-identity` |
+| 防再发 | `/v1/meta/version` 含 `product_ui_ok`；启动脚本断言；预览前看 identity |
+
+**版本不出问题 = 代码 SHA + 产品壳身份 + pin 三者同时正确。**
