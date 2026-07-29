@@ -21,7 +21,7 @@ If work needs edu source changes → **stop and say so**; do not open edu.
 
 ## Execution workflow (binding) — **same mode as edu**
 
-**Full:** [`docs/WORKFLOW.md`](docs/WORKFLOW.md)  
+**Full:** [`docs/WORKFLOW.md`](docs/WORKFLOW.md) · **Versioning:** [`docs/VERSIONING.md`](docs/VERSIONING.md)  
 **Why/what absorbed:** [`docs/WORKFLOW-COMPARE-EDU.md`](docs/WORKFLOW-COMPARE-EDU.md)
 
 | Rule | |
@@ -36,6 +36,7 @@ If work needs edu source changes → **stop and say so**; do not open edu.
 | Facts | GitHub Issue/PR/SHA/CI only — no parallel status system |
 | Review | Exact SHA; writer cannot issue independent `PASS` |
 | Risk | Green CI+self; Yellow/Red **independent exact-SHA review** |
+| Version | Full 40-char SHA; no parallel VERSION-MAP; see VERSIONING.md |
 
 Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 

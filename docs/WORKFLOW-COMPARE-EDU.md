@@ -128,3 +128,8 @@ PICO_TARGET: docs/WORKFLOW.md + AGENTS.md
 2. **不要**把 edu Environment/OneFlow 原样贴进 pico。  
 3. 窗口命名建议统一：`Grok-Pico写入` / `Grok-Pico调查` / `Grok-Pico审查`（可选字母流）。  
 4. 黄/红 PR（含 #22 L1b）必须 **CANDIDATE → CI → 独立审查 → 值守合**。
+
+
+## 版本管理补记
+
+详见 [`VERSIONING.md`](./VERSIONING.md)：门禁/SHA **已吸收**；OneFlow/生产 digest **未照搬**；运行自证 **约定中**。

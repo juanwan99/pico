@@ -236,3 +236,5 @@ pico/
 绑定：[`docs/WORKFLOW.md`](./WORKFLOW.md)（从 edu 模式迁入的 pico 门禁；非 edu 仓操作）。
 
 - 与 edu 工作流对照：[`docs/WORKFLOW-COMPARE-EDU.md`](./WORKFLOW-COMPARE-EDU.md)
+
+- 版本管理（绑定）：[`docs/VERSIONING.md`](./VERSIONING.md)
