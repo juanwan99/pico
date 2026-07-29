@@ -122,6 +122,7 @@ async def start_run_background(run_id: str, principal: Principal) -> None:
 
 async def _execute_run(run_id: str, principal: Principal) -> None:
     from pico_orchestrator.runner import RunCaps, provider_label, run_agent_loop
+    from pico_orchestrator.user_errors import enrich_fail_payload, user_message_for_error
 
     settings = get_settings()
     factory = session_factory()
@@ -176,7 +177,20 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             run.error = str(exc)
             await session.commit()
             await append_event(
-                session, run_id, "run.status", {"status": "failed", "reason": str(exc)}
+                session,
+                run_id,
+                "run.status",
+                enrich_fail_payload({"status": "failed", "reason": str(exc)}),
+            )
+            await append_event(
+                session,
+                run_id,
+                "message.final",
+                {
+                    "text": user_message_for_error(str(exc)),
+                    "role": "assistant",
+                    "kind": "error",
+                },
             )
         return
 
@@ -188,6 +202,17 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         run.ended_at = _utcnow()
         run.error = result.error
         run.token_usage_json = json.dumps(result.token_usage or {})
+        if result.status == "failed" and not result.final_text:
+            await append_event(
+                session,
+                run_id,
+                "message.final",
+                {
+                    "text": user_message_for_error(result.error),
+                    "role": "assistant",
+                    "kind": "error",
+                },
+            )
         if result.final_text:
             # final assistant message event if not already
             await append_event(

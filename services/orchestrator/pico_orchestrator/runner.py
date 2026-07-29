@@ -19,6 +19,7 @@ from openai import AsyncOpenAI
 from pico_orchestrator.gateway import AllowlistGateway, Principal, ToolError
 from pico_orchestrator.provider import ProviderConfig, resolve_provider
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
+from pico_orchestrator.user_errors import enrich_fail_payload
 
 EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
@@ -63,14 +64,15 @@ async def run_agent_loop(
     caps = caps or RunCaps()
     cfg = resolve_provider()
     if cfg is None:
+        reason = "BLOCKED S1: no KIMI_API_KEY or DEEPSEEK_API_KEY"
         await emit(
             "run.status",
-            {"status": "failed", "reason": "BLOCKED S1: no model API key"},
+            enrich_fail_payload({"status": "failed", "reason": reason, "code": "model.unconfigured"}),
         )
         return RunResult(
             status="failed",
             final_text="",
-            error="BLOCKED S1: no KIMI_API_KEY or DEEPSEEK_API_KEY",
+            error=reason,
         )
 
     gw = build_default_gateway()
@@ -125,7 +127,16 @@ async def run_agent_loop(
             return RunResult(status="cancelled", final_text="".join(final_text_parts))
 
         if time.monotonic() - started > caps.max_seconds:
-            await emit("run.status", {"status": "failed", "reason": "timeout"})
+            await emit(
+                "run.status",
+                enrich_fail_payload(
+                    {
+                        "status": "failed",
+                        "reason": f"timeout after {caps.max_seconds}s",
+                        "code": "timeout",
+                    }
+                ),
+            )
             return RunResult(
                 status="failed",
                 final_text="".join(final_text_parts),
@@ -144,9 +155,15 @@ async def run_agent_loop(
             )
         except Exception as e:  # noqa: BLE001
             retries += 1
-            await emit("run.error", {"error": str(e), "retry": retries})
+            await emit(
+                "run.error",
+                enrich_fail_payload({"error": str(e), "retry": retries}),
+            )
             if retries > caps.max_retries:
-                await emit("run.status", {"status": "failed", "reason": str(e)})
+                await emit(
+                    "run.status",
+                    enrich_fail_payload({"status": "failed", "reason": str(e)}),
+                )
                 return RunResult(
                     status="failed",
                     final_text="".join(final_text_parts),
@@ -161,7 +178,14 @@ async def run_agent_loop(
             if total_tokens > caps.max_tokens:
                 await emit(
                     "run.status",
-                    {"status": "failed", "reason": "token_cap", "tokens": total_tokens},
+                    enrich_fail_payload(
+                        {
+                            "status": "failed",
+                            "reason": "token_cap",
+                            "code": "token_cap",
+                            "tokens": total_tokens,
+                        }
+                    ),
                 )
                 return RunResult(
                     status="failed",

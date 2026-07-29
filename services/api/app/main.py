@@ -106,7 +106,9 @@ async def health() -> dict:
 @app.get("/v1/meta/freeze")
 async def freeze_meta(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.pins import AGENT_PINS, installed_versions
+    from pico_orchestrator.provider import resolve_provider
 
+    cfg = resolve_provider()
     return {
         "plan": "MVP-3DAY v1.2 FIXED",
         "agent_pins": AGENT_PINS,
@@ -117,6 +119,9 @@ async def freeze_meta(settings: Settings = Depends(get_settings)) -> dict:
             "max_retries": settings.pico_run_max_retries,
         },
         "dangerous_tools_enabled_setting": settings.pico_dangerous_tools_enabled,
+        "model_ready": cfg is not None,
+        "model_provider": cfg.name if cfg else None,
+        "model_name": cfg.model if cfg else None,
     }
 
 
@@ -132,7 +137,14 @@ async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
     try:
         proof = assert_dangerous_tools_off(agent_path)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "安全配置校验失败，危险工具必须保持关闭。",
+                "code": "safety.check_failed",
+                "detail": str(e),
+            },
+        ) from e
     return {"ok": True, "proof": proof}
 
 
