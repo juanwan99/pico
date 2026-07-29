@@ -10,41 +10,41 @@ OWNER_ORDER: 你只管 pico — permanent; not optional; not overridden by "Phas
 
 | Allowed | Forbidden |
 |---------|-----------|
-| Read/write **this** repo (`pico`) | `gh repo clone` / edit / push / PR / watch CI on **edu-cloud** |
-| Docs, API, UI, orchestrator, tests **in pico** | Implementing edu issuer, edu modules, edu frontend |
-| Phase 2 contracts & Phase 3 **adapters/hooks living in pico** | "Coordinate" by coding the other system |
-| **Read-only** reference to edu docs for patterns | Dual-running or fixing edu AI for them |
+| Read/write **this** repo (`pico`) | Write/PR/CI/merge on **edu-cloud** |
+| Docs, API, UI, orchestrator, tests **in pico** | Implementing edu issuer/modules/frontend |
+| Phase 2/3 **Pico-side** adapters/hooks/docs | Dual AI ledger / dual-run with edu AI |
+| **Read-only** reference to edu AGENTS for workflow patterns | Copying edu ECS/OneFlow/prod ports as if pico owned them |
 
-If a user message says "integrate / Phase 3 / edu", interpret as: **finish Pico-side surface only**.  
-If work requires edu source changes → **stop and say so in chat**; do not open edu PRs.
-
-Violation of this file = wrong execution, not a gray area.
+If work needs edu source changes → **stop and say so**; do not open edu.
 
 ---
 
-## Execution workflow (binding)
+## Execution workflow (binding) — **same mode as edu**
 
-**Full procedure:** [`docs/WORKFLOW.md`](docs/WORKFLOW.md)
+**Full:** [`docs/WORKFLOW.md`](docs/WORKFLOW.md)  
+**Why/what absorbed:** [`docs/WORKFLOW-COMPARE-EDU.md`](docs/WORKFLOW-COMPARE-EDU.md)
 
-Summary:
+| Rule | |
+|------|---|
+| Isolation | One slice → one writer → one branch → one PR |
+| Window states | `OPEN` / `KEEP` / `CLEAR` / `WAIT` |
+| Roles | `Grok-Pico写入` / `调查` / `审查` |
+| After push | **`CANDIDATE` + full 40-char SHA + evidence map** |
+| Gates | CI ∥ independent review ∥ UI QA when UI |
+| Verdict | Writer `VERDICT_AUTHORITY: NONE` — **no self-PASS** |
+| Merge | **Watched** only; no unattended main merge |
+| Facts | GitHub Issue/PR/SHA/CI only — no parallel status system |
+| Review | Exact SHA; writer cannot issue independent `PASS` |
+| Risk | Green CI+self; Yellow/Red **independent exact-SHA review** |
 
-1. **One slice → one writer → one branch → one PR.**
-2. Writer `VERDICT_AUTHORITY: NONE` — no self-PASS of S1–S8 or "product done".
-3. After coherent push: comment **`CANDIDATE`** with **full 40-char SHA** + evidence map.
-4. **CI green + independent exact-SHA review** (`PASS`/`REVISE`/`BLOCKED`) before merge.
-5. **Watched merge** to `main` only — no unattended merge (MVP S8).
-6. Durable facts live on **GitHub Issue/PR/SHA/CI** only.
-7. Roles: 写入 / 调查 / 审查 (pattern from edu; **no A/B/C letter requirement** on pico unless owner names them).
-
-Green changes: CI + self-check.  
-Yellow/red (auth, tenancy, SSE, agent safety, secrets): **independent review required**.
+Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
 ---
 
 ## Product rules
 
-- Product: AI foundation only. No school SaaS rebuild.
-- Prefer Kimi Agent + model **APIs**; no custom agent framework.
-- Tenant fail-closed; Pico owns the **unique AI ledger**.
-- Pricing docs may be DRAFT; do **not** freeze commercial FIXED unless owner orders.
-- Small PRs; night long tests OK; no unattended default-branch merge unless owner authorized that PR.
+- AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.
+- Kimi Agent + model HTTPS APIs; no custom agent OS.
+- Tenant fail-closed; **Pico owns the unique AI ledger**.
+- Pricing docs may stay DRAFT; do not freeze commercial FIXED unless owner orders.
+- Prefer smallest correct fix; delete dual-run croft rather than stack adapters.
