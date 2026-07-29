@@ -20,6 +20,14 @@ for p in (str(_ORCH),):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+# Load repo-root .env before settings (keys never shipped in git)
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(_ROOT / ".env", override=False)
+except ImportError:
+    pass
+
 from app import run_service
 from app.auth import Principal, issue_test_token, require_principal
 from app.db import EventRow, RunRow, get_session, init_db
@@ -34,7 +42,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="Pico API",
-    version="0.2.0",
+    version="0.3.0",
     description="Phase 1 MVP control plane",
     lifespan=lifespan,
 )
@@ -67,7 +75,7 @@ class TokenResponse(BaseModel):
 
 @app.get("/health")
 async def health() -> dict:
-    return {"ok": True, "service": "pico-api", "phase": "1-d2d3"}
+    return {"ok": True, "service": "pico-api", "phase": "1-harden"}
 
 
 @app.get("/v1/meta/freeze")
@@ -306,6 +314,20 @@ async def get_task(
             for a in arts
         ],
     }
+
+
+
+@app.get("/v1/tasks/{task_id}/runs")
+async def list_task_runs(
+    task_id: str,
+    principal: Principal = Depends(require_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    task = await run_service.get_task_for_principal(session, task_id, principal)
+    if not task:
+        raise HTTPException(status_code=404, detail="task not found")
+    runs = await run_service.list_runs_for_task(session, task_id)
+    return {"runs": [_run_dict(r) for r in runs]}
 
 
 @app.get("/v1/runs/{run_id}")

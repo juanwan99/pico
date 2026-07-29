@@ -186,17 +186,39 @@ function pushEventToTimeline(ev: {
   }
 }
 
+async function finishArtifacts() {
+  if (activeTaskId.value) {
+    const t = await api(`/v1/tasks/${activeTaskId.value}`);
+    const arts = t.artifacts || [];
+    if (arts.length) {
+      artifact.value = arts
+        .map((a: { title: string; inline: string }) => `# ${a.title}\n\n${a.inline}`)
+        .join("\n\n---\n\n");
+    }
+  }
+  await refreshChanges();
+}
+
 async function pollRun(runId: string) {
-  let done = false;
-  let lastSeq = 0;
   const seen = new Set<number>();
+
+  // Prefer SSE; fall back to polling if EventSource fails (proxy/auth limits).
+  const useSse = typeof EventSource !== "undefined";
+  if (useSse && token.value) {
+    await new Promise<void>((resolve) => {
+      // EventSource cannot set Authorization header — use poll with bearer instead.
+      // Keep SSE path ready for cookie/auth future; Phase 1 uses poll under the hood.
+      resolve();
+    });
+  }
+
+  let done = false;
   while (!done) {
     const data = await api(`/v1/runs/${runId}/events`);
     const events = data.events || [];
     for (const ev of events) {
       if (seen.has(ev.seq)) continue;
       seen.add(ev.seq);
-      lastSeq = Math.max(lastSeq, ev.seq);
       pushEventToTimeline(ev);
     }
     const runData = await api(`/v1/runs/${runId}`);
@@ -206,16 +228,9 @@ async function pollRun(runId: string) {
       done = true;
       break;
     }
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 350));
   }
-  if (activeTaskId.value) {
-    const t = await api(`/v1/tasks/${activeTaskId.value}`);
-    const arts = t.artifacts || [];
-    if (arts.length) {
-      artifact.value = arts.map((a: { title: string; inline: string }) => `# ${a.title}\n\n${a.inline}`).join("\n\n---\n\n");
-    }
-  }
-  await refreshChanges();
+  await finishArtifacts();
 }
 
 async function startTask() {

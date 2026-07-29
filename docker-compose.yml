@@ -1,0 +1,24 @@
+# Optional local stack — Phase 1
+services:
+  api:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: bash -lc "pip install -q -r requirements.txt && uvicorn app.main:app --app-dir services/api --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      PICO_DATABASE_URL: sqlite+aiosqlite:///./data/pico.db
+  web:
+    image: node:22-bookworm-slim
+    working_dir: /app/apps/web
+    volumes:
+      - ./:/app
+    command: bash -lc "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
