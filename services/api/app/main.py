@@ -30,7 +30,7 @@ except ImportError:
 
 from app import run_service
 from app.auth import Principal, issue_test_token, require_principal, require_scoped_principal, require_service_token
-from app.db import EventRow, RunRow, WorkspaceRow, get_session, init_db, new_id
+from app.db import EventRow, RunRow, WorkspaceRow, AutomationRow, get_session, init_db, new_id
 from app.openai_compat import router as openai_compat_router
 from app.settings import Settings, get_settings
 
@@ -60,7 +60,13 @@ def _sync_settings_to_environ() -> None:
 async def lifespan(_app: FastAPI):
     _sync_settings_to_environ()
     await init_db()
-    yield
+    from app import automation_service
+
+    automation_service.start_scheduler()
+    try:
+        yield
+    finally:
+        await automation_service.stop_scheduler()
 
 
 app = FastAPI(
@@ -420,6 +426,110 @@ async def delete_workspace(
     return {"ok": True}
 
 
+
+
+# ----- automations (server scheduler) -----
+
+
+class CreateAutomationRequest(BaseModel):
+    name: str
+    prompt: str
+    schedule_kind: str = "periodic"  # periodic|interval|once
+    schedule: dict | None = None
+    workspace_id: str | None = None
+
+
+def _auto_dict(a) -> dict:
+    import json as _json
+    return {
+        "id": a.id,
+        "name": a.name,
+        "prompt": a.prompt,
+        "schedule_kind": a.schedule_kind,
+        "schedule": _json.loads(a.schedule_json or "{}"),
+        "workspace_id": a.workspace_id,
+        "enabled": bool(a.enabled),
+        "last_run_at": a.last_run_at.isoformat() if a.last_run_at else None,
+        "next_run_at": a.next_run_at.isoformat() if a.next_run_at else None,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    }
+
+
+@app.get("/v1/automations")
+async def list_automations(
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    rows = await automation_service.list_automations(session, principal)
+    return {"automations": [_auto_dict(a) for a in rows]}
+
+
+@app.post("/v1/automations")
+async def create_automation(
+    body: CreateAutomationRequest,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    if not body.prompt.strip() and not body.name.strip():
+        raise HTTPException(status_code=400, detail="name/prompt required")
+    row = await automation_service.create_automation(
+        session,
+        principal,
+        name=body.name.strip() or body.prompt.strip()[:40],
+        prompt=body.prompt.strip() or body.name.strip(),
+        schedule_kind=body.schedule_kind,
+        schedule=body.schedule or {},
+        workspace_id=body.workspace_id,
+    )
+    return {"automation": _auto_dict(row)}
+
+
+@app.post("/v1/automations/{auto_id}/enable")
+async def enable_automation(
+    auto_id: str,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    row = await automation_service.set_enabled(session, principal, auto_id, True)
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"automation": _auto_dict(row)}
+
+
+@app.post("/v1/automations/{auto_id}/disable")
+async def disable_automation(
+    auto_id: str,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    row = await automation_service.set_enabled(session, principal, auto_id, False)
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"automation": _auto_dict(row)}
+
+
+@app.delete("/v1/automations/{auto_id}")
+async def delete_automation(
+    auto_id: str,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    ok = await automation_service.delete_automation(session, principal, auto_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"ok": True}
+
+
 # ----- tasks / runs / events -----
 
 
@@ -517,6 +627,42 @@ async def get_task(
         ],
     }
 
+
+
+
+class RebindConversationRequest(BaseModel):
+    from_conversation_id: str
+    to_conversation_id: str
+
+
+@app.post("/v1/tasks/rebind-conversation")
+async def rebind_conversation(
+    body: RebindConversationRequest,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Map pending client convo id → real LibreChat conversation id."""
+    src = (body.from_conversation_id or "").strip()[:128]
+    dst = (body.to_conversation_id or "").strip()[:128]
+    if not src or not dst or src == dst:
+        raise HTTPException(status_code=400, detail="invalid conversation ids")
+    if dst in {"new", "search"} or src in {"new", "search"}:
+        raise HTTPException(status_code=400, detail="reserved conversation id")
+    from sqlalchemy import select
+    from app.db import TaskRow
+
+    q = await session.execute(
+        select(TaskRow).where(
+            TaskRow.school_id == principal.school_id,
+            TaskRow.membership_id == principal.membership_id,
+            TaskRow.conversation_id == src,
+        )
+    )
+    rows = list(q.scalars().all())
+    for row in rows:
+        row.conversation_id = dst
+    await session.commit()
+    return {"updated": len(rows), "from": src, "to": dst}
 
 
 @app.get("/v1/tasks/{task_id}/runs")

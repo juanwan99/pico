@@ -3,6 +3,7 @@ import {
   getPicoTask,
   listPicoTaskRuns,
   listPicoTasks,
+  rebindConversation,
   type PicoArtifact,
   type PicoRun,
   type PicoTask,
@@ -117,6 +118,41 @@ export function usePicoTaskLedger(
     const id = window.setInterval(() => setTick((n) => n + 1), 2500);
     return () => window.clearInterval(id);
   }, [isSubmitting, conversationId]);
+
+
+  // Rebind pending_* → real conversation id once LibreChat assigns one
+  useEffect(() => {
+    if (!conversationId || conversationId === 'new' || conversationId.startsWith('pending_')) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        let from = sessionStorage.getItem('pico:rebindFrom');
+        const to = sessionStorage.getItem('pico:rebindTo') || conversationId;
+        if (!from) {
+          const pending = sessionStorage.getItem('pico:pendingConvo');
+          if (pending && pending.startsWith('pending_') && pending !== conversationId) {
+            from = pending;
+          }
+        }
+        if (from && from.startsWith('pending_') && to && to !== from) {
+          await rebindConversation(from, to);
+          if (!cancelled) {
+            sessionStorage.removeItem('pico:rebindFrom');
+            sessionStorage.removeItem('pico:rebindTo');
+            sessionStorage.removeItem('pico:pendingConvo');
+            setTick((n) => n + 1);
+          }
+        }
+      } catch {
+        /* ignore — ledger still queryable via pending until retry */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId]);
 
   return {
     task,

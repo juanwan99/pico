@@ -25,3 +25,24 @@ SHELL: apps/librechat
 - 结果区接真实 Artifact 流
 - 工作空间服务端 ACL
 - 自动化服务端 scheduler
+
+## 续作（ledger）
+
+| 项 | 状态 |
+|----|------|
+| Task.conversation_id / workspace_id | ✅ |
+| Workspace API CRUD | ✅ |
+| chat/completions 一律入账 + 回复摘要产物 | ✅ |
+| LibreChat `/api/pico` 代理 | ✅ |
+| 前端 usePicoTaskLedger + 结果区接产物 | ✅ |
+| 发送注入 Pico-Convo | ✅ |
+| 自动化 scheduler | 未做（P2） |
+
+## 续作 2（绑定 + 调度）
+
+| 项 | 状态 |
+|----|------|
+| 首条消息 pending_* → rebind | ✅ |
+| POST /v1/tasks/rebind-conversation | ✅ |
+| /v1/automations + 20s 调度循环 | ✅ 已验证单次触发 |
+| 自动化页接服务端 | ✅ |

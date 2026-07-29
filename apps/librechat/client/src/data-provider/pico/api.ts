@@ -81,3 +81,47 @@ export async function createPicoWorkspace(name: string, note = '') {
 export async function deletePicoWorkspace(id: string) {
   return picoFetch<{ ok: boolean }>(`/v1/workspaces/${id}`, { method: 'DELETE' });
 }
+
+
+export async function rebindConversation(fromId: string, toId: string) {
+  return picoFetch<{ updated: number; from: string; to: string }>(`/v1/tasks/rebind-conversation`, {
+    method: 'POST',
+    body: JSON.stringify({ from_conversation_id: fromId, to_conversation_id: toId }),
+  });
+}
+
+export type PicoAutomation = {
+  id: string;
+  name: string;
+  prompt: string;
+  schedule_kind: string;
+  schedule: Record<string, unknown>;
+  enabled: boolean;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+};
+
+export async function listPicoAutomations() {
+  return picoFetch<{ automations: PicoAutomation[] }>(`/v1/automations`);
+}
+
+export async function createPicoAutomation(body: {
+  name: string;
+  prompt: string;
+  schedule_kind: string;
+  schedule: Record<string, unknown>;
+}) {
+  return picoFetch<{ automation: PicoAutomation }>(`/v1/automations`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function setPicoAutomationEnabled(id: string, enabled: boolean) {
+  const path = enabled ? `/v1/automations/${id}/enable` : `/v1/automations/${id}/disable`;
+  return picoFetch<{ automation: PicoAutomation }>(path, { method: 'POST' });
+}
+
+export async function deletePicoAutomation(id: string) {
+  return picoFetch<{ ok: boolean }>(`/v1/automations/${id}`, { method: 'DELETE' });
+}

@@ -136,6 +136,26 @@ class ChangeProposalRow(Base):
     audit_json: Mapped[str] = mapped_column(Text, default="[]")
 
 
+class AutomationRow(Base):
+    """Scheduled trigger config (browser product; server-side runner)."""
+
+    __tablename__ = "automations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    school_id: Mapped[str] = mapped_column(String(128), index=True)
+    membership_id: Mapped[str] = mapped_column(String(128), index=True)
+    name: Mapped[str] = mapped_column(String(256), default="")
+    prompt: Mapped[str] = mapped_column(Text, default="")
+    schedule_kind: Mapped[str] = mapped_column(String(32), default="periodic")  # periodic|interval|once
+    schedule_json: Mapped[str] = mapped_column(Text, default="{}")
+    workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    enabled: Mapped[int] = mapped_column(Integer, default=1)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
 class AuditRow(Base):
     __tablename__ = "audit_log"
 

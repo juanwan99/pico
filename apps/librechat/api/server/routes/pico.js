@@ -149,4 +149,35 @@ router.delete('/v1/workspaces/:id', (req, res) => {
   }
 });
 
+router.post('/v1/tasks/rebind-conversation', (req, res) =>
+  proxy(req, res, '/v1/tasks/rebind-conversation'),
+);
+
+router.get('/v1/automations', (req, res) => proxy(req, res, '/v1/automations'));
+router.post('/v1/automations', (req, res) => proxy(req, res, '/v1/automations'));
+router.post('/v1/automations/:id/enable', (req, res) => {
+  try {
+    assertId(req.params.id, 'id');
+    return proxy(req, res, `/v1/automations/${req.params.id}/enable`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+router.post('/v1/automations/:id/disable', (req, res) => {
+  try {
+    assertId(req.params.id, 'id');
+    return proxy(req, res, `/v1/automations/${req.params.id}/disable`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+router.delete('/v1/automations/:id', (req, res) => {
+  try {
+    assertId(req.params.id, 'id');
+    return proxy(req, res, `/v1/automations/${req.params.id}`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+
 module.exports = router;

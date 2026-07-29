@@ -1,81 +1,92 @@
 /**
- * Automation list + create form shell (clean-room from research).
- * Execution scheduler is server-side (P2); UI first.
+ * Automation list + create form — backed by Pico /v1/automations (server scheduler).
  */
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, ArrowLeft } from 'lucide-react';
+import { Plus, ArrowLeft, Loader2 } from 'lucide-react';
 import { cn } from '~/utils';
+import {
+  createPicoAutomation,
+  deletePicoAutomation,
+  listPicoAutomations,
+  setPicoAutomationEnabled,
+  type PicoAutomation,
+} from '~/data-provider/pico/api';
 
 type Mode = 'list' | 'create';
 type ScheduleKind = 'periodic' | 'interval' | 'once';
 
-const LS_KEY = 'pico:automations';
-
-type AutomationDraft = {
-  id: string;
-  name: string;
-  prompt: string;
-  scheduleKind: ScheduleKind;
-  scheduleLabel: string;
-  createdAt: string;
-};
-
-function loadList(): AutomationDraft[] {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw) as AutomationDraft[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveList(list: AutomationDraft[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify(list));
-}
-
 export default function AutomationPage() {
   const [mode, setMode] = useState<Mode>('list');
-  const [list, setList] = useState<AutomationDraft[]>(() =>
-    typeof window !== 'undefined' ? loadList() : [],
-  );
+  const [list, setList] = useState<PicoAutomation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
   const [scheduleKind, setScheduleKind] = useState<ScheduleKind>('periodic');
   const [time, setTime] = useState('09:00');
+  const [intervalMin, setIntervalMin] = useState(60);
+  const [saving, setSaving] = useState(false);
 
-  const scheduleLabel = useMemo(() => {
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { automations } = await listPicoAutomations();
+      setList(automations || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const schedulePayload = useMemo(() => {
     if (scheduleKind === 'periodic') {
-      return `每天 ${time}`;
+      return { time };
     }
     if (scheduleKind === 'interval') {
-      return '按间隔';
+      return { minutes: intervalMin };
+    }
+    return { at: new Date(Date.now() + 60_000).toISOString() };
+  }, [scheduleKind, time, intervalMin]);
+
+  const scheduleLabel = (a: PicoAutomation) => {
+    if (a.schedule_kind === 'periodic') {
+      return `每天 ${String((a.schedule as { time?: string })?.time || '09:00')}`;
+    }
+    if (a.schedule_kind === 'interval') {
+      return `每 ${(a.schedule as { minutes?: number })?.minutes || 60} 分钟`;
     }
     return '单次';
-  }, [scheduleKind, time]);
+  };
 
-  const onSave = () => {
-    if (!name.trim() || !prompt.trim()) {
+  const onSave = async () => {
+    if (!name.trim() || !prompt.trim() || saving) {
       return;
     }
-    const item: AutomationDraft = {
-      id: `auto_${Date.now()}`,
-      name: name.trim(),
-      prompt: prompt.trim(),
-      scheduleKind,
-      scheduleLabel,
-      createdAt: new Date().toISOString(),
-    };
-    const next = [item, ...list];
-    setList(next);
-    saveList(next);
-    setMode('list');
-    setName('');
-    setPrompt('');
+    setSaving(true);
+    try {
+      await createPicoAutomation({
+        name: name.trim(),
+        prompt: prompt.trim(),
+        schedule_kind: scheduleKind,
+        schedule: schedulePayload,
+      });
+      setMode('list');
+      setName('');
+      setPrompt('');
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (mode === 'create') {
@@ -104,17 +115,17 @@ export default function AutomationPage() {
             <button
               type="button"
               className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
-              disabled={!name.trim() || !prompt.trim()}
-              onClick={onSave}
+              disabled={!name.trim() || !prompt.trim() || saving}
+              onClick={() => void onSave()}
             >
-              保存
+              {saving ? '保存中…' : '保存'}
             </button>
           </div>
         </header>
 
         <div className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto px-6 py-6">
-          <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
-            浏览器版由服务端调度执行；请保持 Pico 服务可用。桌面端「退出客户端即停止」的限制不适用于本产品。
+          <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12.5px] text-emerald-900">
+            到点由 Pico 服务端创建 Task/Run 并执行，无需保持桌面客户端在线。
           </div>
 
           <label className="mb-4 block">
@@ -124,16 +135,6 @@ export default function AutomationPage() {
               onChange={(e) => setName(e.target.value)}
               className="w-full rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[14px] outline-none focus:border-black/20 dark:bg-surface-secondary"
               placeholder="例如：生成昨日 AI 重点资讯总结"
-            />
-          </label>
-
-          <label className="mb-4 block">
-            <span className="mb-1.5 block text-[13px] font-medium">工作空间（可选）</span>
-            <input
-              disabled
-              className="w-full rounded-xl border border-black/[0.06] bg-[#f5f5f5] px-3 py-2.5 text-[13px] text-[#9a9a9a]"
-              value="绑定服务端工作空间（P1）"
-              readOnly
             />
           </label>
 
@@ -149,9 +150,6 @@ export default function AutomationPage() {
           </label>
 
           <div className="mb-2 text-[13px] font-medium">执行频率</div>
-          <p className="mb-2 text-[12px] text-[#8c8c8c]">
-            建议避开上午高峰时段，高峰期容易排队；选择非高峰期更稳定
-          </p>
           <div className="mb-4 flex gap-2">
             {(
               [
@@ -187,28 +185,23 @@ export default function AutomationPage() {
               />
             </label>
           )}
-
-          <div className="mb-2 text-[13px] font-medium">连接器</div>
-          <p className="mb-3 text-[12px] text-[#8c8c8c]">
-            勾选即授权该连接器在任务中免确认使用（P1 接 MCP 实例）
-          </p>
-          <button
-            type="button"
-            className="rounded-xl border border-dashed border-black/[0.12] px-3 py-2 text-[13px] text-[#6b6b6b]"
-          >
-            选择连接器
-          </button>
-
-          <div className="mt-6 space-y-2 text-[12.5px] text-[#8c8c8c]">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" disabled className="rounded" />
-              推送到微信小程序（后置）
+          {scheduleKind === 'interval' && (
+            <label className="mb-4 flex items-center gap-3 text-[13px]">
+              <span>每隔</span>
+              <input
+                type="number"
+                min={1}
+                max={10080}
+                value={intervalMin}
+                onChange={(e) => setIntervalMin(Number(e.target.value) || 60)}
+                className="w-24 rounded-lg border border-black/[0.08] bg-white px-2 py-1.5"
+              />
+              <span>分钟</span>
             </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" disabled className="rounded" />
-              推送到企微通知 bot（后置）
-            </label>
-          </div>
+          )}
+          {scheduleKind === 'once' && (
+            <p className="mb-4 text-[12.5px] text-[#8c8c8c]">保存后约 1 分钟内触发一次，随后自动停用。</p>
+          )}
         </div>
       </div>
     );
@@ -229,13 +222,20 @@ export default function AutomationPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto p-6">
-        {list.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 pt-20 text-[#8c8c8c]">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            加载中…
+          </div>
+        ) : null}
+        {error ? (
+          <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">{error}</p>
+        ) : null}
+        {!loading && list.length === 0 ? (
           <div className="mx-auto flex max-w-md flex-col items-center gap-3 pt-20 text-center">
-            <p className="text-[15px] font-medium text-[#1a1a1a] dark:text-text-primary">
-              定时任务
-            </p>
+            <p className="text-[15px] font-medium text-[#1a1a1a] dark:text-text-primary">定时任务</p>
             <p className="text-[13px] leading-relaxed text-[#8c8c8c]">
-              配置名称、提示词与执行频率后，到点由服务端创建正常 Task/Run 并写入运行记录。
+              配置名称、提示词与执行频率后，到点由服务端创建 Task/Run 并写入运行记录。
             </p>
             <button
               type="button"
@@ -248,7 +248,8 @@ export default function AutomationPage() {
               返回新建任务
             </Link>
           </div>
-        ) : (
+        ) : null}
+        {list.length > 0 ? (
           <ul className="mx-auto max-w-2xl space-y-2">
             {list.map((item) => (
               <li
@@ -261,15 +262,38 @@ export default function AutomationPage() {
                       {item.name}
                     </p>
                     <p className="mt-1 line-clamp-2 text-[12.5px] text-[#6b6b6b]">{item.prompt}</p>
+                    {item.next_run_at ? (
+                      <p className="mt-1 text-[11px] text-[#9a9a9a]">
+                        下次：{new Date(item.next_run_at).toLocaleString()}
+                      </p>
+                    ) : null}
                   </div>
-                  <span className="shrink-0 rounded-full bg-[#edf1f4] px-2.5 py-1 text-[11px] text-[#3d3d3d]">
-                    {item.scheduleLabel}
-                  </span>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="rounded-full bg-[#edf1f4] px-2.5 py-1 text-[11px] text-[#3d3d3d]">
+                      {scheduleLabel(item)}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-[11px] text-[#6b6b6b] underline"
+                      onClick={() =>
+                        void setPicoAutomationEnabled(item.id, !item.enabled).then(refresh)
+                      }
+                    >
+                      {item.enabled ? '停用' : '启用'}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[11px] text-red-600/80"
+                      onClick={() => void deletePicoAutomation(item.id).then(refresh)}
+                    >
+                      删除
+                    </button>
+                  </div>
                 </div>
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
       </div>
     </div>
   );
