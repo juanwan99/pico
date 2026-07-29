@@ -10,22 +10,41 @@ OWNER_ORDER: 你只管 pico — permanent; not optional; not overridden by "Phas
 
 | Allowed | Forbidden |
 |---------|-----------|
-| Read/write **this** repo (`pico`) | `gh repo clone` / edit / push / PR / watch CI on **edu-cloud** |
-| Docs, API, UI, orchestrator, tests **in pico** | Implementing edu issuer, edu modules, edu frontend |
-| Phase 2 contracts & Phase 3 **adapters/hooks living in pico** | "Coordinate" by coding the other system |
-| Pointing at frozen contracts for edu team | Dual-running or fixing edu AI for them |
+| Read/write **this** repo (`pico`) | Write/PR/CI/merge on **edu-cloud** |
+| Docs, API, UI, orchestrator, tests **in pico** | Implementing edu issuer/modules/frontend |
+| Phase 2/3 **Pico-side** adapters/hooks/docs | Dual AI ledger / dual-run with edu AI |
+| **Read-only** reference to edu AGENTS for workflow patterns | Copying edu ECS/OneFlow/prod ports as if pico owned them |
 
-If a user message says "integrate / Phase 3 / edu", interpret as: **finish Pico-side surface only** (env, validation, Fake→HTTP adapter, hooks, docs).  
-If work seems to require edu source changes → **stop and say so in chat**; do not open edu.
+If work needs edu source changes → **stop and say so**; do not open edu.
 
-Violation of this file = wrong execution, not a gray area.
+---
+
+## Execution workflow (binding) — **same mode as edu**
+
+**Full:** [`docs/WORKFLOW.md`](docs/WORKFLOW.md)  
+**Why/what absorbed:** [`docs/WORKFLOW-COMPARE-EDU.md`](docs/WORKFLOW-COMPARE-EDU.md)
+
+| Rule | |
+|------|---|
+| Isolation | One slice → one writer → one branch → one PR |
+| Window states | `OPEN` / `KEEP` / `CLEAR` / `WAIT` |
+| Roles | `Grok-Pico写入` / `调查` / `审查` |
+| After push | **`CANDIDATE` + full 40-char SHA + evidence map** |
+| Gates | CI ∥ independent review ∥ UI QA when UI |
+| Verdict | Writer `VERDICT_AUTHORITY: NONE` — **no self-PASS** |
+| Merge | **Watched** only; no unattended main merge |
+| Facts | GitHub Issue/PR/SHA/CI only — no parallel status system |
+| Review | Exact SHA; writer cannot issue independent `PASS` |
+| Risk | Green CI+self; Yellow/Red **independent exact-SHA review** |
+
+Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
 ---
 
 ## Product rules
 
-- Product: AI foundation only. No school SaaS rebuild.
-- Prefer Kimi Agent + model **APIs**; no custom agent framework.
-- Tenant fail-closed; no dual-run legacy AI (Pico owns AI ledger).
-- Small PRs; CANDIDATE + CI + independent review before merge when required.
-- Night: long tests OK; no unattended merge to default branch unless owner authorized for that PR.
+- AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.
+- Kimi Agent + model HTTPS APIs; no custom agent OS.
+- Tenant fail-closed; **Pico owns the unique AI ledger**.
+- Pricing docs may stay DRAFT; do not freeze commercial FIXED unless owner orders.
+- Prefer smallest correct fix; delete dual-run croft rather than stack adapters.
