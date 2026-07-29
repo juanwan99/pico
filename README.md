@@ -46,4 +46,8 @@ pico (AI workspace + agent + model API)
 
 ## Status
 
-Repository bootstrap. Implementation slices land as Issues/PRs in this repo.
+**3-Day MVP plan: FIXED v1.2** — see [`docs/MVP-3DAY.md`](docs/MVP-3DAY.md).
+
+- Phase 1: Pico independent (this MVP)
+- Phase 2: Integration contracts
+- Phase 3: edu-cloud wire-up + retire edu AI
