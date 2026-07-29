@@ -113,13 +113,18 @@ const artifactBody = ref("");
 const siderCollapsed = ref(false);
 const settingsOpen = ref(false);
 const errorText = ref("");
-const abortPoll = ref(false);
+const abortPoll = ref(false); // legacy name: stop stream/poll
+let streamAbort: AbortController | null = null;
+const stopHint = ref("");
 
 const pendingApprovals = computed(() =>
   changes.value.filter((c) => c.status === "proposed"),
 );
 const canStop = computed(
-  () => busy.value && (runStatus.value === "running" || runStatus.value === "queued"),
+  () =>
+    (busy.value && runStatus.value !== "succeeded" && runStatus.value !== "failed") ||
+    runStatus.value === "running" ||
+    runStatus.value === "queued",
 );
 const isEmpty = computed(() => messages.value.length === 0);
 
@@ -333,33 +338,140 @@ async function loadArtifacts(taskId: string) {
   }
 }
 
-async function pollRun(runId: string) {
+function parseSseChunk(
+  buffer: string,
+): { events: { event: string; data: string }[]; rest: string } {
+  const parts = buffer.split("\n\n");
+  const rest = parts.pop() ?? "";
+  const events: { event: string; data: string }[] = [];
+  for (const block of parts) {
+    if (!block.trim()) continue;
+    let evName = "message";
+    const dataLines: string[] = [];
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event:")) evName = line.slice(6).trim();
+      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+      else if (line.startsWith("data: ")) dataLines.push(line.slice(6));
+    }
+    events.push({ event: evName, data: dataLines.join("\n") });
+  }
+  return { events, rest };
+}
+
+/** True SSE via fetch (Bearer auth; EventSource cannot set Authorization). */
+async function streamRun(runId: string) {
   const seen = new Set<number>();
   abortPoll.value = false;
+  stopHint.value = "";
+  streamAbort = new AbortController();
   try {
+    const res = await fetch(`/v1/runs/${runId}/stream`, {
+      method: "GET",
+      headers: {
+        Accept: "text/event-stream",
+        ...(token.value ? { Authorization: `Bearer ${token.value}` } : {}),
+      },
+      signal: streamAbort.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(body || `流式连接失败 (${res.status})`);
+    }
+    if (!res.body) {
+      // Fallback environments without stream body
+      await pollRunFallback(runId, seen);
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
     while (!abortPoll.value) {
-      const data = await api(`/v1/runs/${runId}/events`);
-      for (const ev of data.events || []) {
-        if (seen.has(ev.seq)) continue;
-        seen.add(ev.seq);
-        applyEvent(ev);
-      }
-      const runData = await api(`/v1/runs/${runId}`);
-      runStatus.value = runData.run?.status || runStatus.value;
-      if (runData.run?.error && runStatus.value === "failed" && !errorText.value) {
-        errorText.value = friendlyError(runData.run.error);
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parsed = parseSseChunk(buf);
+      buf = parsed.rest;
+      for (const raw of parsed.events) {
+        if (raw.event === "stream.end") {
+          try {
+            const d = JSON.parse(raw.data || "{}") as { status?: string };
+            if (d.status) runStatus.value = d.status;
+          } catch {
+            /* ignore */
+          }
+          continue;
+        }
+        try {
+          const ev = JSON.parse(raw.data || "{}") as {
+            seq: number;
+            type: string;
+            payload: Record<string, unknown>;
+          };
+          if (ev.seq != null) {
+            if (seen.has(ev.seq)) continue;
+            seen.add(ev.seq);
+          }
+          // Prefer payload type from ledger event
+          applyEvent({
+            seq: ev.seq,
+            type: ev.type || raw.event,
+            payload: ev.payload || {},
+          });
+        } catch {
+          /* ignore malformed */
+        }
       }
       if (["succeeded", "failed", "cancelled"].includes(runStatus.value)) break;
-      await new Promise((r) => setTimeout(r, 300));
+    }
+    // Drain any final status if stream closed without stream.end
+    if (!["succeeded", "failed", "cancelled"].includes(runStatus.value)) {
+      try {
+        const runData = await api(`/v1/runs/${runId}`);
+        runStatus.value = runData.run?.status || runStatus.value;
+      } catch {
+        /* ignore */
+      }
     }
     if (activeTaskId.value) await loadArtifacts(activeTaskId.value);
     await refreshChanges();
   } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      stopHint.value = "已停止";
+      runStatus.value = runStatus.value === "running" ? "cancelled" : runStatus.value;
+      return;
+    }
     const msg = friendlyError(e);
     errorText.value = msg;
-    pushMsg({ role: "assistant", text: msg });
-    runStatus.value = "failed";
+    // Fallback to poll if SSE path fails (proxy/version)
+    try {
+      await pollRunFallback(runId, seen);
+    } catch {
+      pushMsg({ role: "assistant", text: msg });
+      runStatus.value = "failed";
+    }
+  } finally {
+    streamAbort = null;
   }
+}
+
+async function pollRunFallback(runId: string, seen: Set<number>) {
+  while (!abortPoll.value) {
+    const data = await api(`/v1/runs/${runId}/events`);
+    for (const ev of data.events || []) {
+      if (seen.has(ev.seq)) continue;
+      seen.add(ev.seq);
+      applyEvent(ev);
+    }
+    const runData = await api(`/v1/runs/${runId}`);
+    runStatus.value = runData.run?.status || runStatus.value;
+    if (runData.run?.error && runStatus.value === "failed" && !errorText.value) {
+      errorText.value = friendlyError(runData.run.error);
+    }
+    if (["succeeded", "failed", "cancelled"].includes(runStatus.value)) break;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  if (activeTaskId.value) await loadArtifacts(activeTaskId.value);
+  await refreshChanges();
 }
 
 async function newChat() {
@@ -401,7 +513,7 @@ async function sendPrompt(raw?: string) {
     activeRunId.value = data.run.id;
     runStatus.value = data.run.status;
     await refreshTasks();
-    await pollRun(data.run.id);
+    await streamRun(data.run.id);
   } catch (e) {
     const msg = friendlyError(e);
     errorText.value = msg;
@@ -413,16 +525,36 @@ async function sendPrompt(raw?: string) {
 
 async function stopRun() {
   abortPoll.value = true;
-  if (!activeRunId.value) return;
+  stopHint.value = "正在停止…";
+  // Cut SSE immediately so UI unblocks
+  try {
+    streamAbort?.abort();
+  } catch {
+    /* ignore */
+  }
+  streamAbort = null;
+  if (!activeRunId.value) {
+    busy.value = false;
+    runStatus.value = "cancelled";
+    stopHint.value = "已停止";
+    return;
+  }
   try {
     await api(`/v1/runs/${activeRunId.value}/cancel`, {
       method: "POST",
       body: "{}",
     });
     runStatus.value = "cancelled";
-    pushMsg({ role: "system", text: "已停止生成" });
+    stopHint.value = "已停止";
+    const last = messages.value[messages.value.length - 1];
+    if (!(last?.role === "system" && last.text.includes("停止"))) {
+      pushMsg({ role: "system", text: "已停止生成" });
+    }
   } catch (e) {
     errorText.value = friendlyError(e);
+    stopHint.value = "";
+  } finally {
+    busy.value = false;
   }
 }
 
@@ -777,9 +909,9 @@ onMounted(async () => {
                   </div>
                 </div>
 
-                <div v-if="busy" style="margin-left: 38px; display: flex; align-items: center; gap: 8px">
-                  <n-spin size="small" />
-                  <n-text depth="3" style="font-size: 13px">Agent 运行中…</n-text>
+                <div v-if="busy || stopHint" style="margin-left: 38px; display: flex; align-items: center; gap: 8px">
+                  <n-spin v-if="busy && !stopHint" size="small" />
+                  <n-text depth="3" style="font-size: 13px">{{ stopHint || "Agent 运行中（SSE）…" }}</n-text>
                 </div>
               </div>
             </n-scrollbar>

@@ -76,6 +76,62 @@ make freeze-check    # pinned SDK/runtime versions
 make hello           # real model hello or honest S1 BLOCKED
 ```
 
+
+## One-stop runbook（L2）
+
+### 起服务
+
+```bash
+cp .env.example .env
+# 必填（S1 真模型）：KIMI_API_KEY=sk-...
+# 可选：PICO_ENV=development
+# 可选（NextChat 代理）：PICO_OPENAI_PROXY_KEY=  # 生产勿用；开发可用 pico-dev 作为 UI 侧 key 名约定
+
+make install          # Python 3.12+
+make api              # 终端 A → http://127.0.0.1:8000
+make web              # 终端 B → http://127.0.0.1:5173  （代理 /v1 → :8000）
+```
+
+或：`make proto`（若 Makefile 提供一键）。
+
+### 主路径
+
+1. 打开 Web → 自动/设置页领取 dev JWT（`/v1/dev/token`）
+2. 发送「列出我学校的班级」
+3. UI 走 **SSE** `GET /v1/runs/{id}/stream`（Bearer）；失败时回退轮询 events
+4. **停止**：按钮 → `POST /v1/runs/{id}/cancel` + 中止 SSE
+
+### 端口
+
+| 服务 | 地址 |
+|------|------|
+| API | `http://127.0.0.1:8000` |
+| Web（Vite） | `http://127.0.0.1:5173` |
+| 健康检查 | `GET /health` |
+
+### 失败对照
+
+| 现象 | 常见原因 | 处理 |
+|------|----------|------|
+| 「无法连接 Pico」 | API 未起 / 端口错 | `make api`；查 8000 |
+| 「模型服务未配置」 | 无 `KIMI_API_KEY` | 写入 `.env` 后重启 API |
+| 401 / 登录 | 无 JWT | 设置页重新 mint token |
+| 跨校拒绝 | 预期 fail-closed | 用建议「跨校拒绝演示」 |
+| 停止无反应 | 旧版轮询 | 需 L2 前端；硬刷新 |
+| NextChat 401 | 生产禁 proxy key | 用 Pico JWT；dev 仅 `pico-dev` / `PICO_OPENAI_PROXY_KEY` |
+
+### 证据命令
+
+```bash
+make test
+make security-check
+curl -s localhost:8000/health
+curl -s localhost:8000/v1/meta/agent-safety
+```
+
+工作流：见 [`docs/WORKFLOW.md`](docs/WORKFLOW.md)（CANDIDATE → CI → 审查 → 值守合）。
+
+
 ## Agent pin (D1)
 
 | Package | Version |
