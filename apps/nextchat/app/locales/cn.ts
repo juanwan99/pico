@@ -1,6 +1,5 @@
 import { getClientConfig } from "../config/client";
 import { SubmitKey } from "../store/config";
-import { SAAS_CHAT_UTM_URL } from "@/app/constant";
 
 const isApp = !!getClientConfig()?.isApp;
 
@@ -19,11 +18,11 @@ const cn = {
     Return: "返回",
     Title: "需要密码",
     Tips: "管理员开启了密码验证，请在下方填入访问码",
-    SubTips: "或者输入你的 OpenAI 或 Google AI 密钥",
+    SubTips: "或按管理员要求输入访问凭证",
     Input: "在此处填写访问码",
     Confirm: "确认",
     Later: "稍后再说",
-    SaasTips: "配置太麻烦，想要立即使用",
+    SaasTips: "需要帮助请联系管理员",
     TopTips:
       "Pico 独立 AI 底座 · 对话走服务端编排与账本，密钥不落浏览器",
   },
@@ -113,7 +112,7 @@ const cn = {
     Download: "下载文件",
     Share: "分享到 ShareGPT",
     MessageFromYou: "用户",
-    MessageFromChatGPT: "Pico",
+    MessageFromChatGPT: "Pico 助手",
     Format: {
       Title: "导出格式",
       SubTitle: "可以导出 Markdown 文本或者 PNG 图片",
@@ -190,7 +189,7 @@ const cn = {
     },
     InjectSystemPrompts: {
       Title: "注入系统级提示信息",
-      SubTitle: "强制给每次请求的消息列表开头添加一个模拟 ChatGPT 的系统提示",
+      SubTitle: "强制给每次请求的消息列表开头添加系统提示（高级）",
     },
     InputTemplate: {
       Title: "用户输入预处理",
@@ -310,11 +309,11 @@ const cn = {
 
     Access: {
       SaasStart: {
-        Title: "使用 NextChat AI",
-        Label: "（性价比最高的方案）",
+        Title: "Pico 智能体",
+        Label: "（本机/校内部署）",
         SubTitle:
-          "由 NextChat 官方维护, 零配置开箱即用，支持 OpenAI o1, GPT-4o, Claude-3.5 等最新大模型",
-        ChatNow: "立刻对话",
+          "对话经 Pico 服务端编排与唯一 AI 账本；模型密钥仅服务端；非第三方 SaaS 套餐",
+        ChatNow: "打开设置",
       },
       AccessCode: {
         Title: "访问密码",

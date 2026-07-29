@@ -2,7 +2,7 @@ import styles from "./auth.module.scss";
 import { IconButton } from "./button";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Path, SAAS_CHAT_URL } from "../constant";
+import { Path } from "../constant";
 import { useAccessStore } from "../store";
 import Locale from "../locales";
 import Delete from "../icons/close.svg";
@@ -29,7 +29,7 @@ export function AuthPage() {
   const goChat = () => navigate(Path.Chat);
   const goSaas = () => {
     trackAuthorizationPageButtonToCPaymentClick();
-    window.location.href = SAAS_CHAT_URL;
+    window.location.href = Path.Settings;
   };
 
   const resetAccessCode = () => {
@@ -170,7 +170,7 @@ function TopBanner() {
         <span>
           {Locale.Auth.TopTips}
           <a
-            href={SAAS_CHAT_URL}
+            href={Path.Settings}
             rel="stylesheet"
             onClick={() => {
               trackSettingsPageGuideToCPaymentClick();

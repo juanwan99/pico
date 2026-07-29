@@ -238,3 +238,5 @@ pico/
 - 与 edu 工作流对照：[`docs/WORKFLOW-COMPARE-EDU.md`](./WORKFLOW-COMPARE-EDU.md)
 
 - 版本管理（绑定）：[`docs/VERSIONING.md`](./VERSIONING.md)
+
+- 去品牌化：[`docs/DEBRAND.md`](./DEBRAND.md) · 合规 [`apps/nextchat/THIRD_PARTY_NOTICES.md`](../apps/nextchat/THIRD_PARTY_NOTICES.md)

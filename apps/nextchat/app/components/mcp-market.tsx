@@ -94,7 +94,7 @@ export function McpMarketPage() {
       if (!mcpEnabled) return;
       try {
         setLoadingPresets(true);
-        const response = await fetch("https://nextchat.club/mcp/list");
+        const response = new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } }); // Pico: no upstream MCP market
         if (!response.ok) {
           throw new Error("Failed to load preset servers");
         }

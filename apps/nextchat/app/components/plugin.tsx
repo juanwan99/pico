@@ -132,7 +132,7 @@ export function PluginPage() {
           <div className="window-actions">
             <div className="window-action-button">
               <a
-                href={PLUGINS_REPO_URL}
+                href="#" onClick={(e)=>e.preventDefault()}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -183,7 +183,7 @@ export function PluginPage() {
               >
                 {Locale.Plugin.Page.Find}
                 <a
-                  href={PLUGINS_REPO_URL}
+                  href="#" onClick={(e)=>e.preventDefault()}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ marginLeft: 16 }}
