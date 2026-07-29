@@ -96,13 +96,36 @@ def _last_user_prompt(messages: list[ChatMessage]) -> str:
             t = _content_text(m.content).strip()
             if t:
                 return t
-    # fallback: join all
     return "\n".join(
         f"{m.role}: {_content_text(m.content)}" for m in messages
     ).strip() or "hello"
 
 
-async def _run_and_collect(prompt: str, principal: Principal, settings: Settings) -> str:
+def _history_for_agent(messages: list[ChatMessage]) -> list[dict[str, Any]]:
+    """Prior turns only (exclude the latest user message — runner appends it)."""
+    if not messages:
+        return []
+    # drop trailing user message(s) that form current prompt
+    trimmed = list(messages)
+    while trimmed and trimmed[-1].role == "user":
+        trimmed.pop()
+    out: list[dict[str, Any]] = []
+    for m in trimmed[-20:]:  # cap context
+        if m.role not in ("user", "assistant"):
+            continue
+        text = _content_text(m.content).strip()
+        if text:
+            out.append({"role": m.role, "content": text})
+    return out
+
+
+async def _run_and_collect(
+    prompt: str,
+    principal: Principal,
+    settings: Settings,
+    *,
+    history: list[dict[str, Any]] | None = None,
+) -> str:
     from app.db import init_db
     from pico_orchestrator.runner import RunCaps, run_agent_loop
 
@@ -148,6 +171,7 @@ async def _run_and_collect(prompt: str, principal: Principal, settings: Settings
         emit=emit,
         is_cancelled=is_cancelled,
         caps=caps,
+        history=history,
     )
     async with factory() as session:
         run = await session.get(RunRow, run_id)
@@ -186,12 +210,13 @@ async def chat_completions(
 ):
     principal = _principal_from_auth(authorization, settings)
     prompt = _last_user_prompt(body.messages)
+    history = _history_for_agent(body.messages)
     model = body.model or settings.kimi_model or "pico-agent"
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
 
     if not body.stream:
-        text = await _run_and_collect(prompt, principal, settings)
+        text = await _run_and_collect(prompt, principal, settings, history=history)
         return {
             "id": completion_id,
             "object": "chat.completion",
@@ -225,7 +250,7 @@ async def chat_completions(
             }
         ).encode()
         try:
-            text = await _run_and_collect(prompt, principal, settings)
+            text = await _run_and_collect(prompt, principal, settings, history=history)
         except Exception as e:  # noqa: BLE001
             text = f"Error: {e}"
         # stream in small chunks for UX
