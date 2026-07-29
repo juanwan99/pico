@@ -1,10 +1,11 @@
-"""Phase 1 allowlist tools + OpenAI tool schemas for multi-step loop."""
+"""Phase 1–3 allowlist tools + OpenAI tool schemas for multi-step loop."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from pico_orchestrator.gateway import AllowlistGateway, Principal, ToolSpec
+from pico_orchestrator.edu_adapter import EduAdapterError, list_classes
+from pico_orchestrator.gateway import AllowlistGateway, Principal, ToolError, ToolSpec
 
 
 async def _echo(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -18,23 +19,16 @@ async def _echo(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
 async def _fake_edu_list_classes(
     principal: Principal, args: dict[str, Any]
 ) -> dict[str, Any]:
-    school_id = principal.school_id
-    catalog = {
-        "school-a": [
-            {"id": "cls-a1", "name": "一年级 1 班"},
-            {"id": "cls-a2", "name": "一年级 2 班"},
-        ],
-        "school-b": [
-            {"id": "cls-b1", "name": "二年级 1 班"},
-        ],
-    }
-    classes = catalog.get(school_id, [])
-    limit = int(args.get("limit") or 20)
-    return {"school_id": school_id, "classes": classes[:limit]}
+    """Name kept for contract stability; implementation swaps via PICO_EDU_MODE."""
+    try:
+        return await list_classes(
+            principal.school_id, limit=int(args.get("limit") or 20)
+        )
+    except EduAdapterError as e:
+        raise ToolError(e.code, e.message) from e
 
 
 async def _propose_change(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-    """Propose a business change — does NOT write school DB (S7)."""
     return {
         "proposal": {
             "title": args.get("title") or "未命名变更提案",
@@ -62,8 +56,8 @@ def build_default_gateway() -> AllowlistGateway:
         ToolSpec(
             name="fake_edu_list_classes",
             description=(
-                "List classes for the caller's school (FakeEdu Phase 1). "
-                "Optional school_id must match token or is rejected."
+                "List classes for the caller's school. "
+                "Phase 1 FakeEdu; Phase 3 live edu adapter (same name)."
             ),
             handler=_fake_edu_list_classes,
             school_scoped=True,

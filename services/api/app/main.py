@@ -29,20 +29,42 @@ except ImportError:
     pass
 
 from app import run_service
-from app.auth import Principal, issue_test_token, require_principal
+from app.auth import Principal, issue_test_token, require_principal, require_service_token
 from app.db import EventRow, RunRow, get_session, init_db
 from app.settings import Settings, get_settings
 
 
+def _sync_settings_to_environ() -> None:
+    """Bridge pydantic settings into os.environ for orchestrator adapters."""
+    import os
+
+    s = get_settings()
+    mapping = {
+        "KIMI_API_KEY": s.kimi_api_key,
+        "KIMI_BASE_URL": s.kimi_base_url,
+        "KIMI_MODEL": s.kimi_model,
+        "DEEPSEEK_API_KEY": s.deepseek_api_key,
+        "PICO_EDU_MODE": s.pico_edu_mode,
+        "PICO_EDU_BASE_URL": s.pico_edu_base_url,
+        "PICO_EDU_SERVICE_TOKEN": s.pico_edu_service_token,
+        "PICO_EDU_TIMEOUT_SECONDS": str(s.pico_edu_timeout_seconds),
+        "PICO_EDU_HANDOFF_ENABLED": "true" if s.pico_edu_handoff_enabled else "false",
+    }
+    for k, v in mapping.items():
+        if v and not os.environ.get(k):
+            os.environ[k] = str(v)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    _sync_settings_to_environ()
     await init_db()
     yield
 
 
 app = FastAPI(
     title="Pico API",
-    version="0.3.0",
+    version="0.4.0",
     description="Phase 1 MVP control plane",
     lifespan=lifespan,
 )
@@ -75,7 +97,7 @@ class TokenResponse(BaseModel):
 
 @app.get("/health")
 async def health() -> dict:
-    return {"ok": True, "service": "pico-api", "phase": "1-harden"}
+    return {"ok": True, "service": "pico-api", "phase": "3-integrate"}
 
 
 @app.get("/v1/meta/freeze")
@@ -506,3 +528,71 @@ async def demo_cross_school(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     return await run_service.demo_cross_school_deny(session, principal)
+
+
+# ----- Phase 3 edu hooks -----
+
+
+class EduChangeStatusIn(BaseModel):
+    pico_change_id: str
+    edu_review_id: str = ""
+    status: str  # committed | rejected
+    detail: dict = Field(default_factory=dict)
+
+
+@app.post("/v1/hooks/edu/change-status")
+async def edu_change_status(
+    body: EduChangeStatusIn,
+    session: AsyncSession = Depends(get_session),
+    _: bool = Depends(require_service_token),
+) -> dict:
+    """edu → Pico callback after Review/Commit (no school write in Pico)."""
+    from app.db import AuditRow, ChangeProposalRow, new_id
+
+    if body.status not in {"committed", "rejected"}:
+        raise HTTPException(status_code=400, detail="status must be committed|rejected")
+    row = await session.get(ChangeProposalRow, body.pico_change_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="change not found")
+    history = json.loads(row.audit_json or "[]")
+    history.append(
+        {
+            "action": f"edu_{body.status}",
+            "edu_review_id": body.edu_review_id,
+            "detail": body.detail,
+        }
+    )
+    row.audit_json = json.dumps(history, ensure_ascii=False)
+    if body.status == "rejected" and row.status == "confirmed":
+        row.status = "rejected"
+    session.add(
+        AuditRow(
+            id=new_id(),
+            school_id=row.school_id,
+            membership_id=row.membership_id,
+            action=f"change.edu_{body.status}",
+            subject_type="change_proposal",
+            subject_id=row.id,
+            detail_json=json.dumps(
+                {"edu_review_id": body.edu_review_id, "detail": body.detail},
+                ensure_ascii=False,
+            ),
+        )
+    )
+    await session.commit()
+    return {"ok": True, "pico_change_id": row.id, "status": row.status}
+
+
+@app.get("/v1/meta/phase3")
+async def phase3_meta(settings: Settings = Depends(get_settings)) -> dict:
+    return {
+        "edu_mode": settings.pico_edu_mode,
+        "edu_base_configured": bool(settings.pico_edu_base_url),
+        "edu_issuer_configured": bool(
+            settings.pico_edu_iss
+            and (settings.pico_edu_jwt_secret or settings.pico_edu_jwt_public_key_pem)
+        ),
+        "accept_test_issuer": settings.pico_accept_test_issuer,
+        "handoff_enabled": settings.pico_edu_handoff_enabled,
+        "hook_token_configured": bool(settings.pico_hook_service_token),
+    }
