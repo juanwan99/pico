@@ -23,6 +23,7 @@ import Presentation from './Presentation';
 import ChatForm from './Input/ChatForm';
 import Landing from './Landing';
 import ResultPanel from './ResultPanel';
+import TaskRunBar from './TaskRunBar';
 import Header from './Header';
 import Footer from './Footer';
 import { cn } from '~/utils';
@@ -125,7 +126,16 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
         <AddedChatContext.Provider value={addedChatHelpers}>
           <Presentation>
             <div className="relative flex h-full w-full flex-col">
-              {!isLandingPage && <Header />}
+              {!isLandingPage && (
+                <>
+                  <Header />
+                  <TaskRunBar
+                    title={taskTitle}
+                    isSubmitting={isSubmitting}
+                    completedLabel={null}
+                  />
+                </>
+              )}
               <div className={cn('flex min-h-0 flex-1', isLandingPage ? 'flex-col' : 'flex-row')}>
                 <div
                   className={cn(

@@ -22,6 +22,8 @@ import ChatRoute from './ChatRoute';
 import Search from './Search';
 import AutomationPage from '~/components/Workbench/AutomationPage';
 import MoreHubPage from '~/components/Workbench/MoreHubPage';
+import CapabilityHubPage from '~/components/Workbench/CapabilityHubPage';
+import AssistantPage from '~/components/Workbench/AssistantPage';
 import Root from './Root';
 
 const AuthLayout = () => (
@@ -187,6 +189,18 @@ export const router = createBrowserRouter(
                   <AgentMarketplace />
                 </MarketplaceProvider>
               ),
+            },
+            {
+              path: 'assistants',
+              element: <AssistantPage />,
+            },
+            {
+              path: 'capability',
+              element: <CapabilityHubPage />,
+            },
+            {
+              path: 'skills/manage',
+              lazy: loadSkillsView,
             },
             {
               path: 'automation',
