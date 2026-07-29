@@ -1,46 +1,119 @@
-# Contract: Change Handoff (skeleton)
+# Contract: Change Handoff
 
 ```
-STATUS: SKELETON (Phase 1: proposal + human confirm + audit only)
-VERSION: 0.1
+STATUS: FROZEN
+VERSION: 1.0
+OWNER_PROPOSAL: Pico
+OWNER_BUSINESS_COMMIT: edu-cloud (Phase 3)
+SCHEMA: packages/contracts/schemas/change-proposal.schema.json
 ```
 
-## Flow (future edu write-back)
+## 1. Goal
+
+Allow agents to **propose** school-data mutations without Pico becoming school SoT.
 
 ```text
-Pico Agent proposes Change
-    → human confirm in Pico UI (S7)
-    → audit row in Pico
-    → (Phase 3) handoff to edu Review / Commit
-    → edu owns business write
+Agent / user → ChangeProposal (Pico)
+    → Human confirm in Pico UI (mandatory)
+    → Pico audit row
+    → [Phase 3] handoff to edu Review / Commit
+    → edu writes school DB
+    → optional callback to Pico (status=committed|rejected)
 ```
 
-## Phase 1 minimum (S7)
+## 2. Phase 1 (realized — audit only)
 
-| Step | Pico behavior |
+| Step | API / behavior |
 |------|----------------|
-| Propose | Create `change_proposal` fact + Event |
-| Confirm | Explicit UI action; no silent business write |
-| Audit | Immutable audit line (who/when/what) |
+| Propose | `POST /v1/changes` or tool `pico_propose_change` |
+| List | `GET /v1/changes` |
+| Confirm | `POST /v1/changes/{id}/confirm` |
+| Effect | status `confirmed` + audit; **no school row written** |
 
-## Phase 3 boundary
+Statuses: `proposed` → `confirmed` | `rejected` (reject API optional Phase 1).
 
-- edu Review/Commit owns school DB mutations.
-- Pico never becomes school business source of truth.
-- No dual AI ledger: edu legacy AI retired atomically.
+## 3. Proposal payload conventions
 
-## Interface sketch (not implemented in D1)
+`payload` is an **opaque business intent** object for edu. Recommended keys:
+
+```json
+{
+  "domain": "classes" | "grades" | "exams" | "members" | "other",
+  "action": "create" | "update" | "delete" | "reassign" | "...",
+  "resource_type": "class",
+  "resource_id": "cls-a1",
+  "patch": { },
+  "idempotency_key": "uuid"
+}
+```
+
+Pico does not interpret `patch` beyond storage + display.
+
+## 4. Phase 3 handoff API (edu implements)
+
+### 4.1 Pico → edu (push) — preferred
 
 ```http
-POST /v1/changes/{id}/confirm   # human confirm
-GET  /v1/changes/{id}/audit
-# Phase 3: edu webhook / pull for pending commits
+POST {EDU_BASE}/internal/pico/change-proposals
+Authorization: Bearer <pico-service-credential>
+Content-Type: application/json
+
+{
+  "pico_change_id": "uuid",
+  "school_id": "string",
+  "membership_id": "string",
+  "title": "string",
+  "summary": "string",
+  "payload": { },
+  "confirmed_at": "ISO-8601",
+  "confirmed_by": "membership_id"
+}
 ```
 
+edu response:
 
-## Phase 1 realized
+```json
+{
+  "edu_review_id": "string",
+  "status": "accepted_for_review"
+}
+```
 
-- `POST /v1/changes` creates `change_proposals` row status=`proposed`
-- `POST /v1/changes/{id}/confirm` sets `confirmed` + audit_log row
-- Explicit UI confirm required — no silent business write
-- Phase 3: replace audit-only confirm with edu Review/Commit handoff
+### 4.2 edu → Pico (status callback)
+
+```http
+POST {PICO_BASE}/v1/hooks/edu/change-status
+Authorization: Bearer <edu-service-credential>
+
+{
+  "pico_change_id": "uuid",
+  "edu_review_id": "string",
+  "status": "committed" | "rejected",
+  "detail": { }
+}
+```
+
+Pico updates local proposal + audit; still **does not** write school data.
+
+### 4.3 Pull alternative
+
+edu may `GET {PICO_BASE}/v1/internal/changes?status=confirmed&school_id=` with service auth. Same payload fields.
+
+## 5. Hard rules
+
+1. No silent business write from agent tool results.
+2. Confirm is a **human** (or explicitly delegated school admin) action.
+3. Pico ledger remains source of AI proposal history.
+4. edu ledger remains source of committed school facts.
+5. Phase 3 cutover: retire edu AI runtime/workbench so proposals are not duplicated.
+
+## 6. Mapping to future Review / Commit terms
+
+| Pico term | edu term (Phase 3) |
+|-----------|---------------------|
+| ChangeProposal | Review candidate |
+| confirm | acknowledge for Review queue |
+| edu committed | Commit |
+| edu rejected | Review reject |
+
+Exact edu table names are edu-internal; this contract only freezes the **handoff envelope**.

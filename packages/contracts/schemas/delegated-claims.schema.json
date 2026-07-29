@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pico.local/schemas/delegated-claims.schema.json",
+  "title": "PicoDelegatedClaims",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["iss", "aud", "exp", "iat", "school_id", "membership_id", "scopes"],
+  "properties": {
+    "iss": { "type": "string", "minLength": 1 },
+    "aud": { "type": "string", "const": "pico-api" },
+    "exp": { "type": "integer", "minimum": 1 },
+    "iat": { "type": "integer", "minimum": 1 },
+    "school_id": { "type": "string", "minLength": 1 },
+    "membership_id": { "type": "string", "minLength": 1 },
+    "scopes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "sub": { "type": "string" },
+    "jti": { "type": "string" }
+  }
+}
