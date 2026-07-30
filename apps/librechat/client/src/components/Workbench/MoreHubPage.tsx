@@ -33,33 +33,33 @@ const ITEMS = [
   {
     id: 'mail',
     label: '我的邮箱',
-    desc: '智能体邮箱 · 需开通',
+    desc: '查看接入要求与授权边界',
     icon: Mail,
-    href: null as string | null,
+    href: '/capability/connectors/c3',
     ready: false,
   },
   {
     id: 'docs',
     label: '腾讯文档',
-    desc: '授权墙能力',
+    desc: '文档授权与连接配置',
     icon: FileText,
-    href: null,
+    href: '/capability/connectors/c5',
     ready: false,
   },
   {
     id: 'ima',
     label: 'ima知识库',
-    desc: '知识库连接',
+    desc: '知识库索引与检索范围',
     icon: Library,
-    href: null,
+    href: '/capability/connectors/c4?provider=ima',
     ready: false,
   },
   {
     id: 'lexiang',
     label: '乐享知识库',
-    desc: '知识库连接',
+    desc: '知识库索引与检索范围',
     icon: BookOpen,
-    href: null,
+    href: '/capability/connectors/c4?provider=lexiang',
     ready: false,
   },
 ] as const;
@@ -76,7 +76,6 @@ export default function MoreHubPage() {
             <button
               key={item.id}
               type="button"
-              disabled={!item.ready}
               onClick={() => {
                 if (item.href) {
                   navigate(item.href);
@@ -84,8 +83,8 @@ export default function MoreHubPage() {
               }}
               className={
                 item.ready
-                  ? 'flex h-full flex-col rounded-2xl border border-black/[0.06] bg-white p-4 text-left shadow-sm transition hover:border-black/12'
-                  : 'flex h-full flex-col rounded-2xl border border-black/[0.06] bg-white p-4 text-left opacity-75'
+                  ? 'flex h-full flex-col rounded-lg border border-black/[0.06] bg-white p-4 text-left shadow-sm transition hover:border-black/12'
+                  : 'flex h-full flex-col rounded-lg border border-black/[0.06] bg-white p-4 text-left opacity-80 transition hover:border-black/12 hover:opacity-100'
               }
             >
               <div className="mb-3 flex items-start justify-between">
@@ -96,7 +95,7 @@ export default function MoreHubPage() {
                   <ChevronRight className="h-4 w-4 text-[#b0b0b0]" />
                 ) : (
                   <span className="rounded-full bg-[#edf1f4] px-2 py-0.5 text-[11px] text-[#6b6b6b]">
-                    后置
+                    待接入
                   </span>
                 )}
               </div>

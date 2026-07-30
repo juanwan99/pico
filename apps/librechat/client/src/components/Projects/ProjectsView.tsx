@@ -103,16 +103,28 @@ export default function ProjectsView() {
 
   return (
     <main className="flex h-full min-h-0 flex-col overflow-auto bg-[#fafafa] text-text-primary dark:bg-presentation" data-testid="projects-view">
-      <div className="container mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-8 md:px-6 lg:pt-12">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-black/[0.06] bg-white px-4 dark:border-border-light dark:bg-surface-primary">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {isSmallScreen ? <OpenSidebar /> : null}
+          <h1 className="text-[15px] font-semibold text-[#1a1a1a] dark:text-text-primary">
+            {localize('com_ui_projects')}
+          </h1>
+        </div>
+        <Button type="button" variant="submit" size="sm" onClick={() => setIsCreating(true)}>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {localize('com_ui_new_project')}
+        </Button>
+      </div>
+
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 px-4 py-5 md:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            {isSmallScreen ? <OpenSidebar /> : null}
-            <h1 className="text-[20px] font-semibold tracking-tight text-[#1a1a1a] md:text-[22px] dark:text-text-primary">
-              {localize('com_ui_projects')}
-            </h1>
+            <span className="rounded-full bg-surface-active-alt px-3 py-1.5 text-[12.5px] font-medium text-text-primary">
+              {localize('com_ui_your_projects')}
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden text-sm text-text-secondary sm:inline">
+            <span className="hidden text-[12px] text-text-secondary sm:inline">
               {localize('com_ui_sort_by')}
             </span>
             <DropdownPopup
@@ -127,7 +139,7 @@ export default function ProjectsView() {
                 <Ariakit.MenuButton
                   aria-label={localize('com_ui_sort_projects_by')}
                   className={cn(
-                    'inline-flex h-10 items-center justify-between gap-2 whitespace-nowrap rounded-lg border border-border-medium bg-surface-secondary px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary disabled:pointer-events-none disabled:opacity-50 sm:w-44',
+                    'inline-flex h-8 items-center justify-between gap-2 whitespace-nowrap rounded-lg border border-border-medium bg-surface-secondary px-2.5 text-[12.5px] font-medium text-text-primary transition-colors hover:bg-surface-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary disabled:pointer-events-none disabled:opacity-50 sm:w-40',
                     isSortMenuOpen && 'bg-surface-hover text-text-primary',
                   )}
                 >
@@ -142,14 +154,10 @@ export default function ProjectsView() {
               }
               items={sortMenuItems}
             />
-            <Button type="button" variant="submit" size="sm" onClick={() => setIsCreating(true)}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              {localize('com_ui_new_project')}
-            </Button>
           </div>
         </div>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-3">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">{localize('com_ui_search_projects')}</span>
             <Search
@@ -163,11 +171,6 @@ export default function ProjectsView() {
               className="border-border-medium bg-surface-secondary pl-9 text-text-primary placeholder:text-text-secondary focus-visible:ring-2 focus-visible:ring-ring-primary"
             />
           </label>
-          <div className="flex items-center">
-            <span className="rounded-full bg-surface-active-alt px-4 py-2 text-sm font-medium text-text-primary">
-              {localize('com_ui_your_projects')}
-            </span>
-          </div>
         </div>
 
         <ProjectCreateDialog
@@ -181,7 +184,7 @@ export default function ProjectsView() {
             <Spinner className="text-text-primary" />
           </div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+          <div className="grid gap-3 md:grid-cols-2">
             {projects.map((project) => {
               const activity = formatActivity(project);
               return (
@@ -189,7 +192,7 @@ export default function ProjectsView() {
                   key={project._id}
                   type="button"
                   className={cn(
-                    'group/project flex min-h-[8.5rem] flex-col rounded-xl border border-border-medium bg-surface-secondary p-4 text-left transition-colors',
+                    'group/project flex min-h-[7rem] flex-col rounded-lg border border-border-medium bg-surface-secondary p-4 text-left transition-colors',
                     'hover:border-border-heavy hover:bg-surface-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
                   )}
                   onClick={() => navigate(`/projects/${project._id}`)}
@@ -223,7 +226,16 @@ export default function ProjectsView() {
 
         {!isLoading && projects.length === 0 && (
           <div className="rounded-lg border border-border-medium bg-transparent py-16 text-center text-sm text-text-secondary">
-            {localize('com_ui_no_projects')}
+            <p className="text-[13px] font-medium text-[#6b6b6b]">
+              {localize('com_ui_no_projects')}
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsCreating(true)}
+              className="mt-3 rounded-lg bg-[#1a1a1a] px-3 py-2 text-[12.5px] font-medium text-white"
+            >
+              {localize('com_ui_new_project')}
+            </button>
           </div>
         )}
 

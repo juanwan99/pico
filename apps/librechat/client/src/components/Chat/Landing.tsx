@@ -108,6 +108,7 @@ export default function Landing({
     }
   });
   const [expertBadge, setExpertBadge] = useState<string | null>(null);
+  const [connectorBadge, setConnectorBadge] = useState<string | null>(null);
 
 
   const visibleChips = useMemo(() => CHIPS.filter((c) => c.scenes.includes(scene)), [scene]);
@@ -153,6 +154,11 @@ export default function Landing({
         setExpertBadge(expert);
         fillPrompt(`请以「${expert}」的角色协助完成任务：`);
       }
+      const connector = sessionStorage.getItem('pico:pendingConnector');
+      if (connector) {
+        sessionStorage.removeItem('pico:pendingConnector');
+        setConnectorBadge(connector);
+      }
       const pre = sessionStorage.getItem('pico:pendingPrompt');
       if (pre) {
         sessionStorage.removeItem('pico:pendingPrompt');
@@ -172,15 +178,15 @@ export default function Landing({
   return (
     <div className="pico-wb-landing flex w-full flex-col items-center px-6 pb-6 pt-14 sm:pt-20">
       <div className="flex w-full max-w-[797px] flex-col items-center">
-        <h1 className="text-center text-[30px] font-semibold leading-none tracking-[-0.02em] text-[#1a1a1a] sm:text-[34px] dark:text-text-primary">
+        <h1 className="text-center text-[30px] font-semibold leading-none tracking-normal text-[#1a1a1a] sm:text-[34px] dark:text-text-primary">
           Pico，我帮你
         </h1>
         {name ? (
           <p className="mt-2.5 text-[13px] text-[#8c8c8c]">{name}，描述任务即可开始</p>
         ) : null}
-        {expertBadge ? (
+        {expertBadge || connectorBadge ? (
           <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#edf1f4] px-3 py-1 text-[12px] font-medium text-[#3d3d3d]">
-            专家 · {expertBadge}
+            {expertBadge ? `专家 · ${expertBadge}` : `连接器 · ${connectorBadge}`}
             <span className="text-[#8c8c8c]">· 模型 {model}</span>
           </div>
         ) : null}

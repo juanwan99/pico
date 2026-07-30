@@ -13,12 +13,13 @@ import {
   FolderOpen,
   Globe,
   Maximize2,
+  Minimize2,
   PanelRightClose,
   ArrowLeft,
   ArrowRight,
   RotateCw,
   ExternalLink,
-  MoreHorizontal,
+  Download,
   Search,
 } from 'lucide-react';
 import type { TMessage } from 'librechat-data-provider';
@@ -131,6 +132,9 @@ export default function ResultPanel({
   const [browserUrl, setBrowserUrl] = useState('');
   const [browserLoaded, setBrowserLoaded] = useState('');
   const [browserKey, setBrowserKey] = useState(0);
+  const [browserHistory, setBrowserHistory] = useState<string[]>([]);
+  const [browserIndex, setBrowserIndex] = useState(-1);
+  const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
@@ -157,6 +161,8 @@ export default function ResultPanel({
       const u = (fromArts.inline || fromArts.title || '').trim();
       setBrowserUrl(u);
       setBrowserLoaded(u);
+      setBrowserHistory([u]);
+      setBrowserIndex(0);
     }
   }, [picoArtifacts]);
 
@@ -194,9 +200,61 @@ export default function ResultPanel({
     }
   };
 
+  const downloadArtifact = (artifact: ArtifactItem & { body?: string }) => {
+    if (artifact.url) {
+      openArtifact(artifact);
+      return;
+    }
+    if (!artifact.body) {
+      return;
+    }
+    const blob = new Blob([artifact.body], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = artifact.name || 'artifact.txt';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const loadBrowserUrl = (raw: string) => {
+    const value = raw.trim();
+    if (!value) {
+      return;
+    }
+    const next = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const parsed = new URL(next);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return;
+      }
+    } catch {
+      return;
+    }
+    const history = [...browserHistory.slice(0, browserIndex + 1), next];
+    setBrowserUrl(next);
+    setBrowserLoaded(next);
+    setBrowserHistory(history);
+    setBrowserIndex(history.length - 1);
+  };
+
+  const moveBrowserHistory = (delta: number) => {
+    const nextIndex = browserIndex + delta;
+    const next = browserHistory[nextIndex];
+    if (!next || nextIndex < 0 || nextIndex >= browserHistory.length) {
+      return;
+    }
+    setBrowserIndex(nextIndex);
+    setBrowserUrl(next);
+    setBrowserLoaded(next);
+  };
+
   return (
     <aside
-      className="pico-result-panel flex h-full w-[340px] shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary"
+      className={cn(
+        'pico-result-panel flex h-full w-[340px] shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary',
+        expanded && 'pico-result-panel--expanded fixed inset-0 z-[200]',
+      )}
       data-testid="result-panel"
       aria-label="结果区"
     >
@@ -254,10 +312,15 @@ export default function ResultPanel({
           <button
             type="button"
             className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-black/[0.04]"
-            aria-label="进入全屏"
-            title="进入全屏"
+            aria-label={expanded ? '退出全屏' : '进入全屏'}
+            title={expanded ? '退出全屏' : '进入全屏'}
+            onClick={() => setExpanded((value) => !value)}
           >
-            <Maximize2 className="h-3.5 w-3.5" />
+            {expanded ? (
+              <Minimize2 className="h-3.5 w-3.5" />
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5" />
+            )}
           </button>
           {onClose ? (
             <button
@@ -289,7 +352,7 @@ export default function ResultPanel({
 
             {artifacts.length === 0 ? (
               <div className="flex min-h-[240px] flex-col px-1 pt-2">
-                <p className="mb-2 text-[12px] font-medium tracking-wide text-[#8c8c8c]">产物</p>
+                <p className="mb-2 text-[12px] font-medium tracking-normal text-[#8c8c8c]">产物</p>
                 <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa] px-4 py-10 text-[#9a9a9a]">
                   <FileText className="h-9 w-9 opacity-30" strokeWidth={1.25} />
                   <p className="text-[13px] font-medium text-[#6b6b6b]">
@@ -320,13 +383,26 @@ export default function ResultPanel({
                         <p className="text-[11px] text-[#9a9a9a]">{a.sizeLabel}</p>
                       ) : null}
                     </div>
-                    <button
-                      type="button"
-                      className="shrink-0 rounded-lg bg-[#f3f3f3] px-2.5 py-1 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#e8e8e8] dark:bg-surface-tertiary dark:text-text-primary"
-                      onClick={() => openArtifact(a)}
-                    >
-                      打开
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {a.body ? (
+                        <button
+                          type="button"
+                          className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-[#f3f3f3]"
+                          onClick={() => downloadArtifact(a)}
+                          aria-label={`下载${a.name}`}
+                          title="下载"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="rounded-lg bg-[#f3f3f3] px-2.5 py-1 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#e8e8e8] dark:bg-surface-tertiary dark:text-text-primary"
+                        onClick={() => openArtifact(a)}
+                      >
+                        打开
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -364,6 +440,13 @@ export default function ResultPanel({
                       <FileGlyph kind={a.kind} />
                       <span className="min-w-0 flex-1 truncate text-[13px]">{a.name}</span>
                       <span className="shrink-0 text-[12px] text-[#9a9a9a]">{a.sizeLabel}</span>
+                      <button
+                        type="button"
+                        className="rounded-md px-2 py-1 text-[11.5px] font-medium text-[#3d3d3d] hover:bg-[#f0f0f0]"
+                        onClick={() => openArtifact(a)}
+                      >
+                        打开
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -375,10 +458,22 @@ export default function ResultPanel({
         {view === 'browser' && (
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-center gap-1 border-b border-black/[0.05] px-2 py-1.5">
-              <button type="button" className="rounded p-1 text-[#8c8c8c]" aria-label="后退" disabled>
+              <button
+                type="button"
+                className="rounded p-1 text-[#8c8c8c] disabled:opacity-35"
+                aria-label="后退"
+                disabled={browserIndex <= 0}
+                onClick={() => moveBrowserHistory(-1)}
+              >
                 <ArrowLeft className="h-3.5 w-3.5" />
               </button>
-              <button type="button" className="rounded p-1 text-[#8c8c8c]" aria-label="前进" disabled>
+              <button
+                type="button"
+                className="rounded p-1 text-[#8c8c8c] disabled:opacity-35"
+                aria-label="前进"
+                disabled={browserIndex < 0 || browserIndex >= browserHistory.length - 1}
+                onClick={() => moveBrowserHistory(1)}
+              >
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
               <button
@@ -397,8 +492,7 @@ export default function ResultPanel({
                   if (!raw) {
                     return;
                   }
-                  const u = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-                  setBrowserLoaded(u);
+                  loadBrowserUrl(raw);
                 }}
               >
                 <input
@@ -421,9 +515,6 @@ export default function ResultPanel({
                 }}
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-              </button>
-              <button type="button" className="rounded p-1 text-[#8c8c8c]" aria-label="更多">
-                <MoreHorizontal className="h-3.5 w-3.5" />
               </button>
             </div>
             {browserLoaded ? (
@@ -448,8 +539,7 @@ export default function ResultPanel({
                       type="button"
                       className="rounded-full bg-white px-2.5 py-1 text-[11px] ring-1 ring-black/[0.06]"
                       onClick={() => {
-                        setBrowserUrl(host);
-                        setBrowserLoaded(`https://${host}`);
+                        loadBrowserUrl(host);
                       }}
                     >
                       {host}

@@ -73,7 +73,7 @@ export default function AssistantPage() {
         </button>
       }
     >
-      <div className="mx-auto grid w-full max-w-4xl gap-4 p-6 lg:grid-cols-[1fr_1.1fr]">
+      <div className="mx-auto grid w-full max-w-4xl gap-3 p-5 lg:grid-cols-[1fr_1.1fr]">
         <div className="space-y-2">
           {ASSISTANTS.map((a) => (
             <button
@@ -82,11 +82,11 @@ export default function AssistantPage() {
               onClick={() => setOpenId(a.id)}
               className={
                 openId === a.id
-                  ? 'flex w-full items-center gap-3 rounded-2xl border border-[#1a1a1a] bg-white p-3.5 text-left shadow-sm'
-                  : 'flex w-full items-center gap-3 rounded-2xl border border-black/[0.06] bg-white p-3.5 text-left hover:border-black/12'
+                  ? 'flex w-full items-center gap-3 rounded-lg border border-[#1a1a1a] bg-white p-3.5 text-left shadow-sm'
+                  : 'flex w-full items-center gap-3 rounded-lg border border-black/[0.06] bg-white p-3.5 text-left hover:border-black/12'
               }
             >
-              <div className="flex size-10 items-center justify-center rounded-2xl bg-[#1a1a1a] text-white">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-[#1a1a1a] text-white">
                 <Bot className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
@@ -99,15 +99,15 @@ export default function AssistantPage() {
 
           <button
             type="button"
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-black/[0.12] py-4 text-[13px] text-[#6b6b6b]"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-black/[0.12] py-4 text-[13px] text-[#6b6b6b]"
             onClick={() => navigate('/agents')}
           >
             <Plus className="h-4 w-4" />
             添加助理（市场）
           </button>
 
-          <div className="rounded-2xl border border-black/[0.06] bg-white p-4">
-            <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#9a9a9a]">
+          <div className="rounded-lg border border-black/[0.06] bg-white p-4">
+            <p className="mb-2 text-[12px] font-medium uppercase tracking-normal text-[#9a9a9a]">
               已连接
             </p>
             <div className="flex items-center gap-3 rounded-xl bg-[#fafafa] px-3 py-3">
@@ -123,11 +123,11 @@ export default function AssistantPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-black/[0.06] bg-white p-5">
+        <div className="rounded-lg border border-black/[0.06] bg-white p-5">
           {open ? (
             <>
               <div className="flex items-start gap-3">
-                <div className="flex size-12 items-center justify-center rounded-2xl bg-[#1a1a1a] text-white">
+                <div className="flex size-12 items-center justify-center rounded-lg bg-[#1a1a1a] text-white">
                   <Bot className="h-6 w-6" />
                 </div>
                 <div>
@@ -147,7 +147,7 @@ export default function AssistantPage() {
               <button
                 type="button"
                 onClick={() => start(open)}
-                className="mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#1a1a1a] py-2.5 text-[13px] font-medium text-white"
+                className="mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#1a1a1a] py-2.5 text-[13px] font-medium text-white"
               >
                 <MessageSquare className="h-4 w-4" />
                 用此助理新建任务

@@ -57,6 +57,7 @@ const DEMO_CONNECTORS = [
   { id: 'c2', name: '自定义连接器', desc: 'OpenAPI / Webhook 后置', status: 'add' as const },
   { id: 'c3', name: '邮箱', desc: '智能体邮箱 · 后置', status: 'add' as const },
   { id: 'c4', name: '知识库', desc: '文档索引连接 · 后置', status: 'add' as const },
+  { id: 'c5', name: '腾讯文档', desc: '文档授权连接 · 后置', status: 'add' as const },
 ];
 
 const DEMO_SKILLS = [
@@ -69,11 +70,14 @@ export default function CapabilityHubPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tabParam = params.get('tab') as HubTab | null;
+  const projectId = params.get('projectId');
+  const returnTo = params.get('return');
   const [tab, setTab] = useState<HubTab>(
     tabParam && TABS.some((t) => t.id === tabParam) ? tabParam : 'experts',
   );
   const [q, setQ] = useState('');
   const [expertId, setExpertId] = useState<string | null>(null);
+  const [skillId, setSkillId] = useState<string | null>(null);
 
   useEffect(() => {
     if (tabParam && TABS.some((t) => t.id === tabParam)) {
@@ -85,7 +89,14 @@ export default function CapabilityHubPage() {
     setTab(id);
     setQ('');
     setExpertId(null);
-    setParams(id === 'experts' ? {} : { tab: id });
+    setSkillId(null);
+    const next = new URLSearchParams(params);
+    if (id === 'experts') {
+      next.delete('tab');
+    } else {
+      next.set('tab', id);
+    }
+    setParams(next);
   };
 
   const experts = useMemo(() => {
@@ -115,8 +126,27 @@ export default function CapabilityHubPage() {
   }, [q]);
 
   const selectedExpert = DEMO_EXPERTS.find((e) => e.id === expertId);
+  const selectedSkill = DEMO_SKILLS.find((skill) => skill.id === skillId);
+
+  const bindProjectCapability = (kind: 'expert' | 'skill', value: string) => {
+    if (!projectId || !returnTo) {
+      return false;
+    }
+    try {
+      const key = `pico:projectBindings:${projectId}`;
+      const current = JSON.parse(localStorage.getItem(key) || '{}') as Record<string, string>;
+      localStorage.setItem(key, JSON.stringify({ ...current, [kind]: value }));
+    } catch {
+      /* return navigation still works */
+    }
+    navigate(returnTo);
+    return true;
+  };
 
   const summonExpert = (name: string, desc: string) => {
+    if (bindProjectCapability('expert', name)) {
+      return;
+    }
     try {
       sessionStorage.setItem('pico:pendingExpert', name);
       sessionStorage.setItem('pico:pendingPrompt', `请以「${name}」专家身份协助：${desc}`);
@@ -128,10 +158,37 @@ export default function CapabilityHubPage() {
     navigate('/c/new');
   };
 
+  const startSkill = (skill: (typeof DEMO_SKILLS)[number]) => {
+    if (bindProjectCapability('skill', skill.name)) {
+      return;
+    }
+    try {
+      sessionStorage.setItem('pico:pendingPrompt', skill.prompt);
+      setActiveExpert(null);
+      setPicoModelMode(preferredModelForSkill(skill.id));
+    } catch {
+      /* ignore */
+    }
+    navigate('/c/new');
+  };
+
+  const connectorHref = (connectorId: string) => {
+    const next = new URLSearchParams();
+    if (projectId) {
+      next.set('projectId', projectId);
+    }
+    if (returnTo) {
+      next.set('return', returnTo);
+    }
+    const suffix = next.toString();
+    return `/capability/connectors/${connectorId}${suffix ? `?${suffix}` : ''}`;
+  };
+
   return (
     <WorkbenchShell
       title="专家·技能·连接器"
       subtitle="能力中心"
+      backTo={returnTo || '/c/new'}
       actions={
         tab === 'skills' ? (
           <button
@@ -187,7 +244,7 @@ export default function CapabilityHubPage() {
                 key={e.id}
                 type="button"
                 onClick={() => setExpertId(e.id)}
-                className="rounded-2xl border border-black/[0.06] bg-white p-4 text-left shadow-sm transition hover:border-black/12"
+                className="rounded-lg border border-black/[0.06] bg-white p-4 text-left shadow-sm transition hover:border-black/12"
               >
                 <div className="mb-2 flex size-9 items-center justify-center rounded-xl bg-[#edf1f4]">
                   <UserRound className="h-4 w-4" />
@@ -212,7 +269,7 @@ export default function CapabilityHubPage() {
             >
               ← 返回专家列表
             </button>
-            <div className="rounded-2xl border border-black/[0.06] bg-white p-5">
+            <div className="rounded-lg border border-black/[0.06] bg-white p-5">
               <p className="text-[17px] font-semibold">{selectedExpert.name}</p>
               <p className="mt-1 text-[13px] text-[#6b6b6b]">{selectedExpert.desc}</p>
               <p className="mt-4 text-[12px] font-medium text-[#8c8c8c]">工作方法</p>
@@ -226,16 +283,16 @@ export default function CapabilityHubPage() {
               </div>
               <button
                 type="button"
-                className="mt-5 w-full rounded-xl bg-[#1a1a1a] py-2.5 text-[13px] font-medium text-white"
+                className="mt-5 w-full rounded-lg bg-[#1a1a1a] py-2.5 text-[13px] font-medium text-white"
                 onClick={() => summonExpert(selectedExpert.name, selectedExpert.desc)}
               >
-                在任务中召唤
+                {projectId ? '绑定到项目' : '在任务中召唤'}
               </button>
             </div>
           </div>
         )}
 
-        {tab === 'skills' && (
+        {tab === 'skills' && !selectedSkill && (
           <div className="mx-auto max-w-2xl space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-[12px] text-[#8c8c8c]">推荐技能 · 点击即开任务</p>
@@ -251,17 +308,8 @@ export default function CapabilityHubPage() {
               <button
                 key={s.id}
                 type="button"
-                onClick={() => {
-                  try {
-                    sessionStorage.setItem('pico:pendingPrompt', s.prompt);
-                    setActiveExpert(null);
-                    setPicoModelMode(preferredModelForSkill(s.id));
-                  } catch {
-                    /* ignore */
-                  }
-                  navigate('/c/new');
-                }}
-                className="flex w-full items-start gap-3 rounded-2xl border border-black/[0.06] bg-white p-4 text-left hover:border-black/12"
+                onClick={() => setSkillId(s.id)}
+                className="flex w-full items-start gap-3 rounded-lg border border-black/[0.06] bg-white p-4 text-left hover:border-black/12"
               >
                 <div className="flex size-10 items-center justify-center rounded-xl bg-[#edf1f4]">
                   <Sparkles className="h-5 w-5" />
@@ -276,11 +324,48 @@ export default function CapabilityHubPage() {
             <button
               type="button"
               onClick={() => navigate('/skills/new')}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-black/[0.12] py-4 text-[13px] text-[#6b6b6b]"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-black/[0.12] py-4 text-[13px] text-[#6b6b6b]"
             >
               <Plus className="h-4 w-4" />
               添加自定义技能
             </button>
+          </div>
+        )}
+
+        {tab === 'skills' && selectedSkill && (
+          <div className="mx-auto max-w-lg space-y-3">
+            <button
+              type="button"
+              className="text-[12.5px] text-[#6b6b6b] hover:underline"
+              onClick={() => setSkillId(null)}
+            >
+              ← 返回技能列表
+            </button>
+            <div className="rounded-lg border border-black/[0.06] bg-white p-5">
+              <div className="mb-4 flex items-start gap-3">
+                <div className="flex size-10 items-center justify-center rounded-lg bg-[#edf1f4]">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[17px] font-semibold">{selectedSkill.name}</p>
+                  <p className="mt-1 text-[13px] text-[#6b6b6b]">{selectedSkill.desc}</p>
+                </div>
+              </div>
+              <p className="text-[12px] font-medium text-[#8c8c8c]">任务模板</p>
+              <p className="mt-1 rounded-lg bg-[#f5f5f5] p-3 text-[13px] leading-relaxed text-[#3d3d3d]">
+                {selectedSkill.prompt}
+              </p>
+              <p className="mt-3 text-[11.5px] text-[#8c8c8c]">
+                推荐模型：{preferredModelForSkill(selectedSkill.id)}
+              </p>
+              <button
+                type="button"
+                className="mt-5 w-full rounded-lg bg-[#1a1a1a] py-2.5 text-[13px] font-medium text-white"
+                onClick={() => startSkill(selectedSkill)}
+              >
+                {projectId ? '绑定到项目' : '用此技能新建任务'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -290,8 +375,8 @@ export default function CapabilityHubPage() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => navigate(`/capability/connectors/${c.id}`)}
-                className="flex items-start gap-3 rounded-2xl border border-black/[0.06] bg-white p-4 text-left hover:border-black/12"
+                onClick={() => navigate(connectorHref(c.id))}
+                className="flex items-start gap-3 rounded-lg border border-black/[0.06] bg-white p-4 text-left hover:border-black/12"
               >
                 <div className="flex size-10 items-center justify-center rounded-xl bg-[#edf1f4]">
                   <Plug className="h-5 w-5" />

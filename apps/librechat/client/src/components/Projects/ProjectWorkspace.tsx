@@ -20,6 +20,11 @@ import { QueryKeys } from 'librechat-data-provider';
 import type { ConversationListResponse, TConversation } from 'librechat-data-provider';
 import { Spinner } from '@librechat/client';
 import { useConversationsInfiniteQuery, useProjectQuery } from '~/data-provider';
+import {
+  getPicoTask,
+  listPicoTasks,
+  type PicoArtifact,
+} from '~/data-provider/pico/api';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { cn, clearMessagesCache } from '~/utils';
 import ProjectChatList from './ProjectChatList';
@@ -27,6 +32,15 @@ import store from '~/store';
 
 type TabId = 'dynamic' | 'plan' | 'tasks' | 'assets';
 type PlanCol = 'todo' | 'doing' | 'paused';
+type ProjectBindings = {
+  connector?: string;
+  expert?: string;
+  skill?: string;
+};
+type ProjectArtifact = PicoArtifact & {
+  taskTitle: string;
+  createdAt?: string | null;
+};
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'dynamic', label: '动态' },
@@ -95,6 +109,9 @@ export default function ProjectWorkspace() {
   const [notes, setNotes] = useState<{ id: string; text: string; at: number }[]>([]);
   const [assetFolder, setAssetFolder] = useState<string | null>(null);
   const [taskQuery, setTaskQuery] = useState('');
+  const [bindings, setBindings] = useState<ProjectBindings>({});
+  const [projectArtifacts, setProjectArtifacts] = useState<ProjectArtifact[]>([]);
+  const [assetPreview, setAssetPreview] = useState<ProjectArtifact | null>(null);
 
   useEffect(() => {
     if (!activeProjectId) {
@@ -110,6 +127,8 @@ export default function ProjectWorkspace() {
       if (n) {
         setNotes(JSON.parse(n));
       }
+      const b = localStorage.getItem(`pico:projectBindings:${activeProjectId}`);
+      setBindings(b ? JSON.parse(b) : {});
     } catch {
       /* ignore */
     }
@@ -234,6 +253,74 @@ export default function ProjectWorkspace() {
     }
   }, [activeProjectId, instruction]);
 
+  const openProjectCapability = useCallback(
+    (tabId: 'experts' | 'skills' | 'connectors') => {
+      if (!activeProjectId) {
+        return;
+      }
+      const params = new URLSearchParams({
+        tab: tabId,
+        projectId: activeProjectId,
+        return: `/projects/${activeProjectId}`,
+      });
+      navigate(`/capability?${params.toString()}`);
+    },
+    [activeProjectId, navigate],
+  );
+
+  useEffect(() => {
+    const conversationIds = new Set(
+      conversations
+        .map((item) => item.conversationId)
+        .filter((value): value is string => Boolean(value)),
+    );
+    if (conversationIds.size === 0) {
+      setProjectArtifacts([]);
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      try {
+        const { tasks } = await listPicoTasks();
+        const projectTasks = (tasks || []).filter(
+          (task) => task.conversation_id && conversationIds.has(task.conversation_id),
+        );
+        const details = await Promise.all(
+          projectTasks.map(async (task) => {
+            try {
+              return { task, detail: await getPicoTask(task.id) };
+            } catch {
+              return { task, detail: null };
+            }
+          }),
+        );
+        if (!alive) {
+          return;
+        }
+        setProjectArtifacts(
+          details.flatMap(({ task, detail }) =>
+            (detail?.artifacts || [])
+              .filter(
+                (artifact) => !(artifact.kind === 'doc' && artifact.title === '回复摘要'),
+              )
+              .map((artifact) => ({
+                ...artifact,
+                taskTitle: task.title || '未命名任务',
+                createdAt: task.created_at,
+              })),
+          ),
+        );
+      } catch {
+        if (alive) {
+          setProjectArtifacts([]);
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [conversations]);
+
   const publishNote = useCallback(() => {
     const text = note.trim();
     if (!text || !activeProjectId) {
@@ -278,11 +365,11 @@ export default function ProjectWorkspace() {
             全部项目
           </button>
           <div className="mb-3 flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf1f4]">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#edf1f4]">
               <Folder className="h-5 w-5 text-[#3d3d3d]" />
             </span>
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-[16px] font-semibold tracking-tight">{project.name}</h1>
+              <h1 className="truncate text-[16px] font-semibold tracking-normal">{project.name}</h1>
               {project.description ? (
                 <p className="mt-0.5 line-clamp-2 text-[12.5px] text-[#6b6b6b]">
                   {project.description}
@@ -347,7 +434,7 @@ export default function ProjectWorkspace() {
                 </button>
               </div>
               {conversations.slice(0, 3).length > 0 ? (
-                <div className="rounded-2xl border border-black/[0.06] bg-white p-3 dark:border-border-light dark:bg-surface-secondary">
+                <div className="rounded-lg border border-black/[0.06] bg-white p-3 dark:border-border-light dark:bg-surface-secondary">
                   <p className="mb-2 text-[12px] font-medium text-[#8c8c8c]">最近任务</p>
                   <ul className="space-y-1">
                     {conversations.slice(0, 5).map((c) => (
@@ -370,7 +457,7 @@ export default function ProjectWorkspace() {
                   </ul>
                 </div>
               ) : null}
-              <div className="rounded-2xl border border-black/[0.06] bg-white p-4 dark:border-border-light dark:bg-surface-secondary">
+              <div className="rounded-lg border border-black/[0.06] bg-white p-4 dark:border-border-light dark:bg-surface-secondary">
                 <textarea
                   className="w-full resize-none bg-transparent text-[13px] outline-none placeholder:text-[#b0b0b0]"
                   rows={3}
@@ -393,7 +480,7 @@ export default function ProjectWorkspace() {
               {notes.map((n) => (
                 <div
                   key={n.id}
-                  className="rounded-2xl border border-black/[0.06] bg-white px-4 py-3 dark:border-border-light dark:bg-surface-secondary"
+                  className="rounded-lg border border-black/[0.06] bg-white px-4 py-3 dark:border-border-light dark:bg-surface-secondary"
                 >
                   <p className="text-[12px] text-[#9a9a9a]">你 · {timeLabel(n.at)}</p>
                   <p className="mt-1 whitespace-pre-wrap text-[13.5px]">{n.text}</p>
@@ -401,7 +488,7 @@ export default function ProjectWorkspace() {
               ))}
 
               {conversations.length === 0 && notes.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-10 text-center text-[13px] text-[#9a9a9a]">
+                <div className="rounded-lg border border-dashed border-black/[0.08] px-4 py-10 text-center text-[13px] text-[#9a9a9a]">
                   暂无成员动态。发起任务或发布留言后会出现在此。
                 </div>
               ) : (
@@ -410,7 +497,7 @@ export default function ProjectWorkspace() {
                     key={c.conversationId}
                     type="button"
                     onClick={() => openChat(c)}
-                    className="flex w-full items-start gap-3 rounded-2xl border border-black/[0.06] bg-white px-4 py-3 text-left hover:bg-[#fafafa] dark:border-border-light dark:bg-surface-secondary"
+                    className="flex w-full items-start gap-3 rounded-lg border border-black/[0.06] bg-white px-4 py-3 text-left hover:bg-[#fafafa] dark:border-border-light dark:bg-surface-secondary"
                   >
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#5a9a6a]" />
                     <div className="min-w-0 flex-1">
@@ -432,7 +519,7 @@ export default function ProjectWorkspace() {
                 return (
                   <div
                     key={col.id}
-                    className="flex min-h-[280px] flex-col rounded-2xl border border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-secondary"
+                    className="flex min-h-[280px] flex-col rounded-lg border border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-secondary"
                   >
                     <div className="flex items-center justify-between border-b border-black/[0.05] px-3 py-2.5">
                       <span className="text-[13px] font-medium">
@@ -551,10 +638,10 @@ export default function ProjectWorkspace() {
                   从任务收集产物
                 </button>
                 <span className="ml-auto text-[12px] text-[#8c8c8c]">
-                  展示项目任务产出 · 文件体积后置
+                  来自项目任务账本 · {projectArtifacts.length} 个产物
                 </span>
               </div>
-              <div className="rounded-2xl border border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-secondary">
+              <div className="rounded-lg border border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-secondary">
                 <div className="grid grid-cols-[1fr_80px_100px_80px] gap-2 border-b border-black/[0.05] px-4 py-2 text-[11px] text-[#9a9a9a]">
                   <span>名称</span>
                   <span>类型</span>
@@ -568,31 +655,49 @@ export default function ProjectWorkspace() {
                     <span className="text-[12px] text-[#9a9a9a]">文件夹</span>
                   </div>
                 ) : null}
-                {conversations.length === 0 ? (
+                {projectArtifacts.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-[#9a9a9a]">
                     <Folder className="h-8 w-8 opacity-40" />
                     <p className="text-[13px]">空目录</p>
-                    <p className="text-[12px]">项目任务完成后会在此汇总标题索引</p>
+                    <p className="text-[12px]">项目任务产生文件后会在此汇总</p>
                   </div>
                 ) : (
                   <ul>
-                    {conversations.map((c) => (
-                      <li key={c.conversationId}>
+                    {projectArtifacts.map((artifact) => (
+                      <li key={`${artifact.run_id || 'artifact'}:${artifact.id}`}>
                         <button
                           type="button"
-                          onClick={() => openChat(c)}
+                          disabled={!artifact.inline}
+                          onClick={() => setAssetPreview(artifact)}
                           className="grid w-full grid-cols-[1fr_80px_100px_80px] gap-2 border-b border-black/[0.04] px-4 py-2.5 text-left text-[13px] hover:bg-[#fafafa]"
                         >
-                          <span className="truncate font-medium">{titleOf(c)}.md</span>
-                          <span className="text-[#9a9a9a]">文档</span>
-                          <span className="text-[#9a9a9a]">{timeLabel(c.updatedAt as string)}</span>
-                          <span className="text-[#9a9a9a]">任务</span>
+                          <span className="truncate font-medium">{artifact.title}</span>
+                          <span className="text-[#9a9a9a]">{artifact.kind}</span>
+                          <span className="text-[#9a9a9a]">{timeLabel(artifact.createdAt)}</span>
+                          <span className="truncate text-[#9a9a9a]">{artifact.taskTitle}</span>
                         </button>
                       </li>
                     ))}
                   </ul>
                 )}
               </div>
+              {assetPreview ? (
+                <div className="mt-3 rounded-lg border border-black/[0.06] bg-white">
+                  <div className="flex items-center justify-between border-b border-black/[0.05] px-3 py-2">
+                    <p className="truncate text-[12.5px] font-medium">{assetPreview.title}</p>
+                    <button
+                      type="button"
+                      onClick={() => setAssetPreview(null)}
+                      className="rounded-md px-2 py-1 text-[11.5px] text-[#6b6b6b] hover:bg-[#f5f5f5]"
+                    >
+                      关闭
+                    </button>
+                  </div>
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11.5px] leading-relaxed text-[#3d3d3d]">
+                    {assetPreview.inline || '（无正文）'}
+                  </pre>
+                </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -621,11 +726,11 @@ export default function ProjectWorkspace() {
                     if (item.id === 'automation') {
                       navigate('/automation');
                     } else if (item.id === 'expert') {
-                      navigate('/capability?tab=experts');
+                      openProjectCapability('experts');
                     } else if (item.id === 'skill') {
-                      navigate('/capability?tab=skills');
+                      openProjectCapability('skills');
                     } else if (item.id === 'connector') {
-                      navigate('/capability?tab=connectors');
+                      openProjectCapability('connectors');
                     }
                   }}
                 >
@@ -633,6 +738,12 @@ export default function ProjectWorkspace() {
                 </button>
               </div>
               <p className="text-[11.5px] leading-relaxed text-[#8c8c8c]">{item.hint}</p>
+              {item.id !== 'instruction' && item.id !== 'automation' && bindings[item.id] ? (
+                <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-white px-2 py-1.5 text-[12px] ring-1 ring-black/[0.05]">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="min-w-0 flex-1 truncate">{bindings[item.id]}</span>
+                </div>
+              ) : null}
               {item.id === 'instruction' ? (
                 <div className="mt-2 space-y-2">
                   <textarea

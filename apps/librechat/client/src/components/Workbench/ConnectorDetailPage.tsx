@@ -1,9 +1,9 @@
 /**
- * 连接器详情 — 点击连接器后进入（业务占位 + 明确后置边界）.
+ * 连接器详情 — 配置草稿、权限边界与任务/项目绑定。
  */
-import { useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Plug, Shield } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Check, Plug, Save, Shield } from 'lucide-react';
 import WorkbenchShell from './WorkbenchShell';
 
 const CATALOG: Record<
@@ -35,31 +35,106 @@ const CATALOG: Record<
     name: '知识库',
     desc: '文档索引连接',
     status: 'add',
-    scope: '后置',
-    note: '可后续接向量检索；当前用任务附件与结果区代替。',
+    scope: '只读检索 · 授权后启用',
+    note: '可保存索引范围草稿；实际授权与向量索引需要服务端连接器。',
+  },
+  c5: {
+    name: '腾讯文档',
+    desc: '文档授权连接',
+    status: 'add',
+    scope: '指定目录只读 · 写入需逐次确认',
+    note: '浏览器版保留配置与权限说明；OAuth 授权需要服务端回调。',
   },
 };
 
 export default function ConnectorDetailPage() {
   const { connectorId } = useParams();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const provider = params.get('provider');
+  const projectId = params.get('projectId');
+  const returnTo = params.get('return');
   const item = useMemo(
-    () => CATALOG[connectorId || ''] || {
-      name: '未知连接器',
-      desc: '',
-      status: 'add' as const,
-      scope: '—',
-      note: '未在目录中。',
+    () => {
+      const base = CATALOG[connectorId || ''] || {
+        name: '未知连接器',
+        desc: '',
+        status: 'add' as const,
+        scope: '—',
+        note: '未在目录中。',
+      };
+      if (connectorId === 'c4' && provider) {
+        return {
+          ...base,
+          name: provider === 'lexiang' ? '乐享知识库' : 'ima知识库',
+        };
+      }
+      return base;
     },
-    [connectorId],
+    [connectorId, provider],
   );
+  const storageKey = `pico:connectorDraft:${connectorId || 'unknown'}:${provider || 'default'}`;
+  const [label, setLabel] = useState('');
+  const [endpoint, setEndpoint] = useState('');
+  const [scope, setScope] = useState(item.scope);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setScope(item.scope);
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) {
+        return;
+      }
+      const draft = JSON.parse(raw) as { label?: string; endpoint?: string; scope?: string };
+      setLabel(draft.label || '');
+      setEndpoint(draft.endpoint || '');
+      setScope(draft.scope || item.scope);
+    } catch {
+      /* ignore invalid local draft */
+    }
+  }, [item.scope, storageKey]);
+
+  const saveDraft = () => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ label, endpoint, scope }));
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1600);
+    } catch {
+      setSaved(false);
+    }
+  };
+
+  const useConnector = () => {
+    if (projectId && returnTo) {
+      try {
+        const key = `pico:projectBindings:${projectId}`;
+        const current = JSON.parse(localStorage.getItem(key) || '{}') as Record<string, string>;
+        localStorage.setItem(key, JSON.stringify({ ...current, connector: item.name }));
+      } catch {
+        /* navigation still works */
+      }
+      navigate(returnTo);
+      return;
+    }
+    try {
+      sessionStorage.setItem('pico:pendingConnector', item.name);
+      sessionStorage.setItem(
+        'pico:pendingPrompt',
+        `请在允许的权限范围内使用「${item.name}」连接器协助完成任务：`,
+      );
+    } catch {
+      /* ignore */
+    }
+    navigate('/c/new');
+  };
 
   return (
     <WorkbenchShell title={item.name} subtitle="连接器" backTo="/capability?tab=connectors">
-      <div className="mx-auto max-w-xl space-y-4 p-6">
-        <div className="rounded-2xl border border-black/[0.06] bg-white p-5">
+      <div className="mx-auto w-full max-w-2xl space-y-3 p-5">
+        <div className="rounded-lg border border-black/[0.06] bg-white p-4">
           <div className="flex items-start gap-3">
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-[#edf1f4]">
+            <div className="flex size-11 items-center justify-center rounded-lg bg-[#edf1f4]">
               <Plug className="h-6 w-6" />
             </div>
             <div>
@@ -72,34 +147,80 @@ export default function ConnectorDetailPage() {
                     : 'mt-2 inline-flex rounded-full bg-[#edf1f4] px-2 py-0.5 text-[11px] text-[#6b6b6b]'
                 }
               >
-                {item.status === 'ready' ? '可用（受限）' : '后置 · 不可配置'}
+                {item.status === 'ready' ? '可用（受限）' : '待服务端授权'}
               </span>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-black/[0.06] bg-white p-5">
+        <div className="rounded-lg border border-black/[0.06] bg-white p-4">
           <div className="mb-2 flex items-center gap-2 text-[13px] font-medium">
             <Shield className="h-4 w-4" />
             权限与范围
           </div>
-          <p className="text-[13px] text-[#3d3d3d]">{item.scope}</p>
+          <p className="text-[13px] text-[#3d3d3d]">{scope}</p>
           <p className="mt-2 text-[12.5px] leading-relaxed text-[#8c8c8c]">{item.note}</p>
+        </div>
+
+        <div className="rounded-lg border border-black/[0.06] bg-white p-4">
+          <div className="mb-3">
+            <p className="text-[13px] font-medium">连接配置</p>
+            <p className="mt-0.5 text-[11.5px] text-[#8c8c8c]">
+              这里只保存浏览器草稿，不保存密钥，也不会伪造服务端已连接状态。
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-[12px] text-[#6b6b6b]">配置名称</span>
+              <input
+                value={label}
+                onChange={(event) => setLabel(event.target.value)}
+                placeholder={`例如：${item.name}默认配置`}
+                className="h-9 w-full rounded-lg border border-black/[0.08] px-3 text-[13px] outline-none focus:border-black/20"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[12px] text-[#6b6b6b]">服务地址或资源标识</span>
+              <input
+                value={endpoint}
+                onChange={(event) => setEndpoint(event.target.value)}
+                placeholder={connectorId === 'c3' ? '邮箱账号标识' : 'https:// 或资源 ID'}
+                className="h-9 w-full rounded-lg border border-black/[0.08] px-3 text-[13px] outline-none focus:border-black/20"
+              />
+            </label>
+          </div>
+          <label className="mt-3 block">
+            <span className="mb-1 block text-[12px] text-[#6b6b6b]">授权范围</span>
+            <textarea
+              value={scope}
+              onChange={(event) => setScope(event.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-lg border border-black/[0.08] px-3 py-2 text-[13px] outline-none focus:border-black/20"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={saveDraft}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-black/[0.08] px-3 py-2 text-[12.5px] font-medium"
+          >
+            {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+            {saved ? '草稿已保存' : '保存配置草稿'}
+          </button>
         </div>
 
         <div className="flex gap-2">
           <button
             type="button"
             disabled={item.status !== 'ready'}
-            onClick={() => navigate('/c/new')}
-            className="rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-40"
+            onClick={useConnector}
+            className="rounded-lg bg-[#1a1a1a] px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-40"
           >
-            在任务中使用
+            {projectId ? '绑定到项目' : '在任务中使用'}
           </button>
           <button
             type="button"
-            onClick={() => navigate('/capability')}
-            className="rounded-xl border border-black/[0.08] px-4 py-2.5 text-[13px]"
+            onClick={() => navigate('/capability?tab=connectors')}
+            className="rounded-lg border border-black/[0.08] px-4 py-2.5 text-[13px]"
           >
             返回能力中心
           </button>

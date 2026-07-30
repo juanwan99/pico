@@ -3125,8 +3125,12 @@ html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
   font-family: var(--pico-wb-font);
   width: var(--pico-wb-result-w) !important;
 }
+.pico-result-panel.pico-result-panel--expanded {
+  display: flex !important;
+  width: 100vw !important;
+}
 @media (max-width: 1024px) {
-  .pico-result-panel {
+  .pico-result-panel:not(.pico-result-panel--expanded) {
     display: none !important;
   }
 }
@@ -3150,5 +3154,5 @@ html:not(.dark) .pico-result-panel {
   font-family: var(--pico-wb-font);
 }
 .pico-wb-secondary header h1 {
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
