@@ -45,6 +45,14 @@ class AllowlistGateway:
             {"name": t.name, "description": t.description} for t in self.tools.values()
         ]
 
+    def restricted_to(self, names: list[str] | tuple[str, ...] | None) -> AllowlistGateway:
+        if names is None:
+            return self
+        allowed = set(names)
+        return AllowlistGateway(
+            tools={name: spec for name, spec in self.tools.items() if name in allowed}
+        )
+
     async def invoke(
         self,
         principal: Principal,

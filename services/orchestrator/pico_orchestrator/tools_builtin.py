@@ -77,8 +77,14 @@ def build_default_gateway() -> AllowlistGateway:
     return gw
 
 
-def openai_tool_schemas(gw: AllowlistGateway | None = None) -> list[dict[str, Any]]:
+def openai_tool_schemas(
+    gw: AllowlistGateway | None = None,
+    *,
+    allowed_tools: list[str] | tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
     gw = gw or build_default_gateway()
+    if allowed_tools is not None:
+        gw = gw.restricted_to(allowed_tools)
     schemas: list[dict[str, Any]] = []
     for name, spec in gw.tools.items():
         if name == "pico_echo":

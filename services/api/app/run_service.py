@@ -29,12 +29,60 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _json_dict(raw: str | None) -> dict[str, Any]:
+    try:
+        data = json.loads(raw or "{}")
+        return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _merge_token_usage(
+    existing: str | None,
+    usage: dict[str, Any] | None,
+    skill_snapshot: dict[str, Any] | None,
+) -> str:
+    merged = _json_dict(existing)
+    merged.update(usage or {})
+    if skill_snapshot:
+        merged["skill_snapshot"] = skill_snapshot
+    return json.dumps(merged, ensure_ascii=False)
+
+
+def _run_skill_snapshot(run: RunRow | None) -> dict[str, Any] | None:
+    if run is None:
+        return None
+    snapshot = _json_dict(run.token_usage_json).get("skill_snapshot")
+    return snapshot if isinstance(snapshot, dict) else None
+
+
+def _skill_s7_payload(
+    *,
+    prompt: str,
+    final_text: str | None,
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "title": "S7 变更提案（skill.write_s7）",
+        "summary": (final_text or "skill.write_s7 requested a controlled change proposal.")[:1000],
+        "payload": {
+            "skill_snapshot": snapshot,
+            "prompt": prompt[:2000],
+            "final_text": (final_text or "")[:4000],
+        },
+    }
+
+
 async def create_task(
     session: AsyncSession,
     principal: Principal,
     title: str,
     prompt: str,
+    skill_id: str | None = None,
 ) -> tuple[TaskRow, RunRow]:
+    from pico_orchestrator.skill_policy import snapshot_for_skill
+
+    skill_snapshot = snapshot_for_skill(skill_id)
     task = TaskRow(
         id=new_id(),
         school_id=principal.school_id,
@@ -49,6 +97,7 @@ async def create_task(
         status="queued",
         prompt=prompt,
         model="",
+        token_usage_json=_merge_token_usage(None, None, skill_snapshot),
     )
     session.add(run)
     await session.commit()
@@ -171,6 +220,14 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             run = await session.get(RunRow, run_id)
             assert run is not None
             prompt = run.prompt
+            skill_snapshot = _run_skill_snapshot(run)
+
+        if skill_snapshot:
+            await emit("skill.snapshot", skill_snapshot)
+            from pico_orchestrator.skill_policy import instruction_for_snapshot
+
+            caps.allowed_tools = list(skill_snapshot.get("tools") or [])
+            caps.skill_instruction = instruction_for_snapshot(skill_snapshot)
 
         result = await run_agent_loop(
             prompt=prompt,
@@ -213,7 +270,12 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         run.status = result.status
         run.ended_at = _utcnow()
         run.error = result.error
-        run.token_usage_json = json.dumps(result.token_usage or {})
+        skill_snapshot = _run_skill_snapshot(run)
+        run.token_usage_json = _merge_token_usage(
+            run.token_usage_json,
+            result.token_usage,
+            skill_snapshot,
+        )
         if result.status == "failed" and not result.final_text:
             await append_event(
                 session,
@@ -249,8 +311,17 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                 "artifact.created",
                 {"title": art.title, "kind": art.kind, "artifact_id": art.id},
             )
-        if result.change_proposal:
-            prop = result.change_proposal.get("proposal") or result.change_proposal
+        change_proposal = result.change_proposal
+        if not change_proposal and skill_snapshot and skill_snapshot.get("requires_s7"):
+            change_proposal = {
+                "proposal": _skill_s7_payload(
+                    prompt=run.prompt,
+                    final_text=result.final_text,
+                    snapshot=skill_snapshot,
+                )
+            }
+        if change_proposal:
+            prop = change_proposal.get("proposal") or change_proposal
             ch = ChangeProposalRow(
                 id=new_id(),
                 school_id=principal.school_id,
