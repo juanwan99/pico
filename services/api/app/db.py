@@ -191,7 +191,7 @@ def _normalize_url(url: str) -> str:
 def _migrate_sqlite_sync(conn) -> None:
     try:
         rows = conn.execute(text("PRAGMA table_info(tasks)")).fetchall()
-    except Exception:
+    except Exception:  # noqa: BLE001
         return
     tcols = {r[1] for r in rows}
     if "conversation_id" not in tcols:

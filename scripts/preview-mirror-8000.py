@@ -25,7 +25,7 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             if self.command != "HEAD": self.wfile.write(data)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             msg = f"<!doctype html><meta charset=utf-8><h1>Pico</h1><pre>{e}</pre>".encode()
             self.send_response(502); self.send_header("Content-Type","text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(msg))); self.end_headers(); self.wfile.write(msg)

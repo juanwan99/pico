@@ -104,7 +104,7 @@ async def stream_chat(
             stream=True,
             max_tokens=max_tokens,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         # Surface readable Chinese for common failures
         msg = str(e)
         low = msg.lower()
