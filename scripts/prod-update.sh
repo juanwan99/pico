@@ -12,6 +12,17 @@ git fetch origin
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 echo "[pico] SHA=$(git rev-parse HEAD)"
+# stamp git identity for API /health (container has no .git)
+SHA=$(git rev-parse HEAD)
+if [ -f .env ]; then
+  if grep -q '^PICO_GIT_SHA=' .env; then
+    sed -i "s|^PICO_GIT_SHA=.*|PICO_GIT_SHA=${SHA}|" .env
+  else
+    echo "PICO_GIT_SHA=${SHA}" >>.env
+  fi
+fi
+export PICO_GIT_SHA="$SHA"
+
 git log -1 --oneline
 
 # never print secrets

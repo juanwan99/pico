@@ -44,6 +44,7 @@ services:
       PICO_ENV: development
       PICO_ACCEPT_TEST_ISSUER: "true"
       PICO_OPENAI_PROXY_KEY: pico-dev
+      PICO_GIT_SHA: ${PICO_GIT_SHA:-unknown}
     volumes:
       - pico_data:/app/data
       - ./.env:/app/.env:ro

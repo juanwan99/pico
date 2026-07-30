@@ -257,3 +257,10 @@ cd /opt/pico && bash scripts/vps-fix-login.sh
 
 **注意：** 验收后 origin tip 可能继续前进（CI/selftest/prod-update 等）；生产可再 `prod-update.sh` 对齐最新 tip，不必重装。
 
+## 11. 产物路径（2026-07-30 本地复验）
+
+- Chat 创建 `hello.txt` → Task 账本 `artifacts` 含 `kind=file` title=`hello.txt` inline=`hi`
+- 单元测试：`tests/unit/test_file_artifacts.py`
+- selftest 步骤 7 覆盖
+- 生产 health `git_sha: unknown`：部署时 `prod-update.sh` 写入 `PICO_GIT_SHA`；compose 注入 env
+

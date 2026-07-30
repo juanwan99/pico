@@ -138,7 +138,7 @@ async def root_info() -> dict:
     return {
         "ok": True,
         "service": "pico-api",
-        "message": "Pico API. Product UI is on the preview host (NextChat via gateway :8080).",
+        "message": "Pico API. Product UI is on the preview host (LibreChat via product UI :8080).",
         "health": "/health",
         "version": "/v1/meta/version",
         "chat": "/v1/chat/completions",
