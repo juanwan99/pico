@@ -24,6 +24,8 @@ import AutomationPage from '~/components/Workbench/AutomationPage';
 import MoreHubPage from '~/components/Workbench/MoreHubPage';
 import CapabilityHubPage from '~/components/Workbench/CapabilityHubPage';
 import AssistantPage from '~/components/Workbench/AssistantPage';
+import FilesHubPage from '~/components/Workbench/FilesHubPage';
+import ConnectorDetailPage from '~/components/Workbench/ConnectorDetailPage';
 import Root from './Root';
 
 const AuthLayout = () => (
@@ -199,6 +201,10 @@ export const router = createBrowserRouter(
               element: <CapabilityHubPage />,
             },
             {
+              path: 'capability/connectors/:connectorId',
+              element: <ConnectorDetailPage />,
+            },
+            {
               path: 'skills/manage',
               lazy: loadSkillsView,
             },
@@ -209,6 +215,10 @@ export const router = createBrowserRouter(
             {
               path: 'more',
               element: <MoreHubPage />,
+            },
+            {
+              path: 'more/files',
+              element: <FilesHubPage />,
             },
           ],
         },
