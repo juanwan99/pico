@@ -25,7 +25,7 @@ fi
 # Unset proxy vars that break LibreChat undici
 unset PROXY HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy || true
 
-babash /workspace/scripts/run-product.sh >>/tmp/app-startup.log 2>&1 || true
+bash /workspace/scripts/run-product.sh >>/tmp/app-startup.log 2>&1 || true
 
 # Pin Live Preview to product UI
 curl -sf -o /dev/null --max-time 2 -X POST http://127.0.0.1:6015/__control/target \
