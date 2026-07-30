@@ -12,13 +12,13 @@ verdict and does not claim owner acceptance or exact 100% pixel parity.
 
 ## Production Baseline
 
-- UI implementation SHA tested: `83e4011f9631dae13d829b8174b8c090b36ec1fa`
+- UI implementation SHA tested: `d2b8b0aaf63c16f8d015100090313c80efeb6a22`
 - Production URL: `https://pico.aivia.asia`
 - Desktop viewport: `1440x900`
 - Mobile viewport: `390x844`
 - Shell: `apps/librechat`
 - Theme tested: light
-- LibreChat rebuilt: yes, image `sha256:94131a92da3d014d7207ee096f06e8d3ace0e82761a735d3a3a7d3048c5dfd1a`
+- LibreChat rebuilt: yes, image `sha256:41a6893bf435ef7b19d1c0ed799bd04c25e6864a9d313c33264951650b459e5a`
 
 ## Shell Measurements
 
@@ -41,6 +41,17 @@ window chrome.
 At the corrected browser viewport, the active-task geometry totals
 `264 + 860 + 316 = 1440px`. The native WorkBuddy task view totals approximately
 `264 + 871 + 317 = 1452px`.
+
+Production DOM measurements after the native-app correction:
+
+| State | Measured production value | Evidence |
+| --- | ---: | --- |
+| New task sidebar | 264x900px | `pixel-home-native-d94d000.png` |
+| New task composer and attached footer | 797x180px | `pixel-home-native-d94d000.png` |
+| New task result panel | Absent | DOM assertion |
+| Active task composer form | 797x126px | `pixel-task-artifact-native-d2b8b0a.png` |
+| Active task result panel | 316px | `pixel-task-artifact-native-d2b8b0a.png` |
+| Desktop horizontal overflow | 0px | `scrollWidth == clientWidth == 1440` |
 
 ## Native WorkBuddy Screen Audit
 
@@ -95,14 +106,14 @@ fresh-task state.
 | Level | Route or state | Browser check | Evidence | Remaining pixel decision |
 | --- | --- | --- | --- | --- |
 | Primary | Login and authenticated entry | Login succeeds; authenticated shell opens | Authenticated desktop session | Owner visual review of login page |
-| Primary | `/c/new` home | Sidebar plus full main stage, scene tabs, chips, attached composer/workspace control | `pixel-home-opt.png` | Refresh after corrected deployment |
-| Primary | Active task | Task run bar, model/status, center conversation | `pixel-task-artifact-opt.png` | Owner reference overlay |
-| Primary | Result files | Summary and generated file expose open/download actions | `pixel-task-artifact-opt.png` | Owner reference overlay |
+| Primary | `/c/new` home | Sidebar plus full main stage, scene tabs, chips, attached composer/workspace control | `pixel-home-native-d94d000.png` | Owner reference overlay |
+| Primary | Active task | Task run bar, model/status, center conversation | `pixel-task-new-artifact-native-d2b8b0a.png` | Owner reference overlay |
+| Primary | Result files | Summary and generated file expose open/download actions | `pixel-task-new-artifact-native-d2b8b0a.png` | Owner reference overlay |
 | Secondary | `/assistants` | List/detail workbench opens | `pixel-assistants-opt.png` | Owner reference overlay |
 | Secondary | `/projects` | Project list and deletion flow work | `pixel-project-workspace-final.png` | Owner reference overlay |
-| Secondary | `/capability` | Expert, skill, connector tabs and details open | Three capability screenshots | Owner reference overlay |
+| Secondary | `/capability` | Expert, skill, connector tabs and details open | `pixel-capability-native-d2b8b0a.png` plus detail screenshots | Owner reference overlay |
 | Secondary | `/automation` | List and create form open; temporary test item removed | Two automation screenshots | Owner reference overlay |
-| Secondary | More popover and `/more/files` | Anchored module menu and table-style file library open | `pixel-files-final.png` | Refresh after corrected deployment |
+| Secondary | More popover and `/more/files` | Anchored module menu and table-style file library open | `pixel-more-popover-native-d94d000.png` / `pixel-files-final.png` | Owner reference overlay |
 | Secondary | `/workspaces` | Workspace create/select/delete flow works | `pixel-workspaces-final.png` | Owner reference overlay |
 | Tertiary | Expert detail | Model preference is visible and selectable | `pixel-capability-expert-final.png` | Owner reference overlay |
 | Tertiary | Skill detail | File skill recommends `pico-agent` | `pixel-capability-skill-final.png` | Owner reference overlay |
@@ -128,6 +139,8 @@ The following eight routes were checked independently at both `1280x900` and
 | 390x844 | 8/8 | `scrollWidth == clientWidth` on every route | 0 errors, 0 warnings |
 
 Mobile evidence: `pixel-mobile-390-opt.png` and `pixel-mobile-result-opt.png`.
+The corrected new-task shell was rechecked at 390x844 with no horizontal
+overflow in `pixel-mobile-390-native-d2b8b0a.png`.
 
 ## P0 Regression Evidence
 
@@ -147,6 +160,9 @@ automation, project, and workspace records created for validation were removed.
 The density pass did not change API code. Post-rebuild production validation:
 
 - A new chat with `只回：演示OK` returned `演示OK` and reached completed state.
+- The native-app correction was rechecked with another new production chat:
+  `只回：演示OK` returned `演示OK`; the same conversation then generated
+  `native-proof.txt` (2 bytes), which appeared in the result rail.
 - A new `pico-agent` task generated `opt-proof.txt`; the result panel displayed
   the reply summary and the 8-byte file with open/download controls.
 - At 390px, the collapsed result control opened the artifact panel full-screen,
@@ -181,6 +197,12 @@ Production screenshots saved under `output/playwright/`:
 - `pixel-workspaces-final.png`
 - `mobile-home-agent.png`
 - `mobile-secondary-agent.png`
+- `pixel-home-native-d94d000.png`
+- `pixel-more-popover-native-d94d000.png`
+- `pixel-task-artifact-native-d2b8b0a.png`
+- `pixel-task-new-artifact-native-d2b8b0a.png`
+- `pixel-capability-native-d2b8b0a.png`
+- `pixel-mobile-390-native-d2b8b0a.png`
 
 ## Owner Reference Gaps
 
