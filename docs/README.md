@@ -19,7 +19,8 @@ ONEFLOW: docs/ONEFLOW.md
 | 0 | GitHub PR/Issue/Actions | **Task state & evidence** |
 | 1 | [AGENTS.md](../AGENTS.md) | Machine + human HARD scope |
 | 2 | [ONEFLOW.md](./ONEFLOW.md) | Delivery OS + closed loops |
-| 2b | [RACI-GROK-CODEX.md](./RACI-GROK-CODEX.md) | 总控 vs Codex · 日间/夜间派工 |
+| 2b | [RACI-GROK-CODEX.md](./RACI-GROK-CODEX.md) | 总管/写入/审查映射 · 并行 · 夜间6h · GitHub交接 |
+| 2c | [templates/](./templates/) | 日间任务 / 审查 / CANDIDATE-DEPLOYED |
 | 3 | [MVP-3DAY.md](./MVP-3DAY.md) | Product law v1.2 FIXED |
 | 4 | [CORRECTED-GOALS.md](./CORRECTED-GOALS.md) | Product memory (not netdisk/SaaS) |
 | 5 | [PARALLEL-SPRINT-PLAN.md](./PARALLEL-SPRINT-PLAN.md) | **Current** execution plan (BINDING-v2) |
