@@ -205,3 +205,9 @@ Pico API + orchestrator + DB
 9. 流程：CANDIDATE+SHA → CI → 审 → 值守合；不自 PASS。
 10. 无授权不改 MVP v1.2 计划正文。
 ```
+
+---
+
+## 执行导航
+
+总体规划（阶段/底座/冻结）：[`docs/MASTER-PLAN.md`](./MASTER-PLAN.md)
