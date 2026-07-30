@@ -215,8 +215,14 @@ export default function FilesHubPage() {
   const downloadFile = async (row: Row) => {
     let blob: Blob;
     try {
+      setWarning(null);
       blob = await getPicoArtifactContent(row.id, true);
-    } catch {
+    } catch (downloadError) {
+      setWarning(
+        downloadError instanceof Error
+          ? `下载失败：${downloadError.message}`
+          : `下载失败：${String(downloadError)}`,
+      );
       return;
     }
     const url = URL.createObjectURL(blob);

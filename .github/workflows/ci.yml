@@ -34,6 +34,9 @@ jobs:
       - name: Agent pin check
         run: python scripts/check_agent_pin.py
 
+      - name: N3 skill snapshot smoke
+        run: python scripts/n3_skill_snapshot_smoke.py
+
       - name: Security proof (Shell/File/Web/MCP off)
         run: |
           python scripts/security_proof.py

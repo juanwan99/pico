@@ -8,6 +8,7 @@ import {
   Landmark,
   LineChart,
   Search,
+  ScrollText,
   Clapperboard,
   Presentation,
   Sparkles,
@@ -105,6 +106,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
   });
   const [expertBadge, setExpertBadge] = useState<string | null>(null);
   const [connectorBadge, setConnectorBadge] = useState<string | null>(null);
+  const [skillBadge, setSkillBadge] = useState<string | null>(null);
 
   const visibleChips = useMemo(() => CHIPS.filter((c) => c.scenes.includes(scene)), [scene]);
 
@@ -154,6 +156,11 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
         sessionStorage.removeItem('pico:pendingConnector');
         setConnectorBadge(connector);
       }
+      const skill = sessionStorage.getItem('pico:pendingSkillLabel');
+      if (skill) {
+        sessionStorage.removeItem('pico:pendingSkillLabel');
+        setSkillBadge(skill);
+      }
       const pre = sessionStorage.getItem('pico:pendingPrompt');
       if (pre) {
         sessionStorage.removeItem('pico:pendingPrompt');
@@ -179,9 +186,18 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
         {name ? (
           <p className="mt-2.5 text-[13px] text-[#8c8c8c]">{name}，描述任务即可开始</p>
         ) : null}
-        {expertBadge || connectorBadge ? (
+        {expertBadge || connectorBadge || skillBadge ? (
           <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#edf1f4] px-3 py-1 text-[12px] font-medium text-[#3d3d3d]">
-            {expertBadge ? `专家 · ${expertBadge}` : `连接器 · ${connectorBadge}`}
+            {skillBadge ? (
+              <>
+                <ScrollText className="h-3.5 w-3.5" />
+                技能 · {skillBadge}
+              </>
+            ) : expertBadge ? (
+              `专家 · ${expertBadge}`
+            ) : (
+              `连接器 · ${connectorBadge}`
+            )}
             <span className="text-[#8c8c8c]">· 模型 {model}</span>
           </div>
         ) : null}

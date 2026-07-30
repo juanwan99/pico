@@ -61,9 +61,30 @@ const DEMO_CONNECTORS = [
 ];
 
 const DEMO_SKILLS = [
-  { id: 's1', name: '会议纪要', desc: '把录音/要点整理成纪要', prompt: '请把我提供的会议要点整理成纪要，含决议与待办。' },
-  { id: 's2', name: '周报生成', desc: '结构化本周工作与下周计划', prompt: '请根据我列的事项生成周报：本周完成、风险、下周计划。' },
-  { id: 's3', name: '文件产物', desc: '生成可下载 txt/md', prompt: '创建 hello.txt，内容为 hi。请用 file 代码块输出。' },
+  {
+    id: 'skill-chat',
+    name: 'skill.chat',
+    desc: '少工具或无工具的普通问答',
+    prompt: '请直接回答我的问题，不要臆造学校数据。',
+    tools: '无工具',
+    risk: 'low',
+  },
+  {
+    id: 'skill-read',
+    name: 'skill.read',
+    desc: '只读工具子集，适合查询演示班级数据',
+    prompt: '请读取可用的班级信息并用一句话概括。',
+    tools: 'fake_edu_list_classes',
+    risk: 'read',
+  },
+  {
+    id: 'skill-write-s7',
+    name: 'skill.write_s7',
+    desc: '业务变更提案进入现有 S7 人工确认',
+    prompt: '请提出一个把一班名称改为星辰一班的变更申请。',
+    tools: 'pico_propose_change',
+    risk: 'write_s7',
+  },
 ];
 
 export default function CapabilityHubPage() {
@@ -163,7 +184,8 @@ export default function CapabilityHubPage() {
       return;
     }
     try {
-      sessionStorage.setItem('pico:pendingPrompt', skill.prompt);
+      sessionStorage.setItem('pico:pendingSkillLabel', skill.name);
+      sessionStorage.setItem('pico:pendingPrompt', `【Pico-Skill:${skill.id}】\n${skill.prompt}`);
       setActiveExpert(null);
       setPicoModelMode(preferredModelForSkill(skill.id));
     } catch {
@@ -295,7 +317,7 @@ export default function CapabilityHubPage() {
         {tab === 'skills' && !selectedSkill && (
           <div className="mx-auto max-w-2xl space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-[12px] text-[#8c8c8c]">推荐技能 · 点击即开任务</p>
+              <p className="text-[12px] text-[#8c8c8c]">LibreChat Skills · 点击即开 Pico 快照任务</p>
               <button
                 type="button"
                 onClick={() => navigate('/skills/manage')}
@@ -317,6 +339,9 @@ export default function CapabilityHubPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] font-medium">{s.name}</p>
                   <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">{s.desc}</p>
+                  <p className="mt-1 truncate text-[11px] text-[#8c8c8c]">
+                    tools: {s.tools} · risk: {s.risk}
+                  </p>
                 </div>
                 <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[#b0b0b0]" />
               </button>
@@ -357,6 +382,9 @@ export default function CapabilityHubPage() {
               </p>
               <p className="mt-3 text-[11.5px] text-[#8c8c8c]">
                 推荐模型：{preferredModelForSkill(selectedSkill.id)}
+              </p>
+              <p className="mt-1 text-[11.5px] text-[#8c8c8c]">
+                发送时写入 Pico Run 快照：{selectedSkill.id} · tools: {selectedSkill.tools}
               </p>
               <button
                 type="button"

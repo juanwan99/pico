@@ -88,8 +88,9 @@ const BINDINGS: {
   detail: string;
 }[] = [
   { id: 'none', kind: 'none', label: '不绑定', detail: '直接执行提示词' },
-  { id: 'skill-meeting', kind: 'skill', label: '技能 · 会议纪要', detail: '保存技能偏好' },
-  { id: 'skill-weekly', kind: 'skill', label: '技能 · 周报生成', detail: '保存技能偏好' },
+  { id: 'skill-chat', kind: 'skill', label: '技能 · skill.chat', detail: '保存 N2 技能偏好' },
+  { id: 'skill-read', kind: 'skill', label: '技能 · skill.read', detail: '保存 N2 技能偏好' },
+  { id: 'skill-write-s7', kind: 'skill', label: '技能 · skill.write_s7', detail: '保存 N2 技能偏好' },
   { id: 'expert-docs', kind: 'expert', label: '专家 · 文档助理', detail: '保存专家偏好' },
   { id: 'expert-research', kind: 'expert', label: '专家 · 研究分析', detail: '保存专家偏好' },
 ];
@@ -632,7 +633,7 @@ export default function AutomationPage() {
                     ))}
                   </select>
                   <span className="mt-1 block text-[11px] text-[#8c8c8c]">
-                    {selectedBinding.detail}；服务端暂未自动注入对应技能或专家。
+                    {selectedBinding.detail}；自动化只保存偏好，不显示虚假的即时运行按钮。
                   </span>
                 </label>
               </section>
@@ -669,7 +670,7 @@ export default function AutomationPage() {
               </div>
               <div className="border-t border-amber-100 bg-amber-50 px-4 py-3 text-[11px] leading-4 text-amber-900">
                 调度频率与启用状态由服务端真实执行。工作空间、权限、技能/专家保存在
-                schedule.pico_ui，当前仅作兼容元数据，不代表服务端已应用这些绑定。
+                schedule.pico_ui，当前仅作兼容元数据；若需立即验证技能快照，请从能力中心发起一次任务。
               </div>
             </aside>
           </div>

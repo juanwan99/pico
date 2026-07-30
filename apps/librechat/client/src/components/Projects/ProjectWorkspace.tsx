@@ -15,6 +15,7 @@ import {
   MessageSquare,
   CheckCircle2,
   Trash2,
+  AlertCircle,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { QueryKeys } from 'librechat-data-provider';
@@ -450,8 +451,26 @@ export default function ProjectWorkspace() {
 
   if (!project) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-text-secondary">
-        {localize('com_ui_project_not_found')}
+      <div className="flex h-full items-center justify-center bg-[#fafafa] px-4 text-sm text-text-secondary">
+        <div
+          role="alert"
+          className="w-full max-w-sm rounded-lg border border-black/[0.06] bg-white p-5 text-center shadow-sm"
+        >
+          <AlertCircle className="mx-auto mb-2 h-7 w-7 text-[#8c8c8c]" />
+          <p className="text-[14px] font-semibold text-[#1a1a1a]">
+            {localize('com_ui_project_not_found')}
+          </p>
+          <p className="mt-1 text-[12.5px] leading-5 text-[#8c8c8c]">
+            该项目可能已删除，或当前账号没有访问权限。
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/projects')}
+            className="mt-4 rounded-lg bg-[#1a1a1a] px-3 py-2 text-[12.5px] font-medium text-white"
+          >
+            返回项目列表
+          </button>
+        </div>
       </div>
     );
   }
@@ -807,7 +826,7 @@ export default function ProjectWorkspace() {
                 </p>
               ) : null}
               <div className="rounded-lg border border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-secondary">
-                <div className="grid grid-cols-[1fr_80px_100px_80px] gap-2 border-b border-black/[0.05] px-4 py-2 text-[11px] text-[#9a9a9a]">
+                <div className="hidden grid-cols-[1fr_80px_100px_80px] gap-2 border-b border-black/[0.05] px-4 py-2 text-[11px] text-[#9a9a9a] sm:grid">
                   <span>名称</span>
                   <span>类型</span>
                   <span>更新时间</span>
@@ -845,12 +864,15 @@ export default function ProjectWorkspace() {
                           type="button"
                           disabled={!artifact.inline}
                           onClick={() => setAssetPreview(artifact)}
-                          className="grid w-full grid-cols-[1fr_80px_100px_80px] gap-2 border-b border-black/[0.04] px-4 py-2.5 text-left text-[13px] hover:bg-[#fafafa]"
+                          className="grid w-full grid-cols-1 gap-1 border-b border-black/[0.04] px-4 py-2.5 text-left text-[13px] hover:bg-[#fafafa] sm:grid-cols-[1fr_80px_100px_80px] sm:gap-2"
                         >
                           <span className="truncate font-medium">{artifact.title}</span>
-                          <span className="text-[#9a9a9a]">{artifact.kind}</span>
-                          <span className="text-[#9a9a9a]">{timeLabel(artifact.createdAt)}</span>
-                          <span className="truncate text-[#9a9a9a]">{artifact.taskTitle}</span>
+                          <span className="text-[11.5px] text-[#9a9a9a] sm:hidden">
+                            {artifact.kind} · {timeLabel(artifact.createdAt)} · {artifact.taskTitle}
+                          </span>
+                          <span className="hidden text-[#9a9a9a] sm:block">{artifact.kind}</span>
+                          <span className="hidden text-[#9a9a9a] sm:block">{timeLabel(artifact.createdAt)}</span>
+                          <span className="hidden truncate text-[#9a9a9a] sm:block">{artifact.taskTitle}</span>
                         </button>
                       </li>
                     ))}
