@@ -846,6 +846,29 @@ async def confirm_change(
     }
 
 
+@app.post("/v1/changes/{change_id}/reject")
+async def reject_change(
+    change_id: str,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    try:
+        row = await run_service.reject_change(session, principal, change_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="change not found") from None
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {
+        "change": {
+            "id": row.id,
+            "title": row.title,
+            "status": row.status,
+            "audit": json.loads(row.audit_json or "[]"),
+            "note": "Rejected — no school business write",
+        }
+    }
+
+
 # ----- demos -----
 
 

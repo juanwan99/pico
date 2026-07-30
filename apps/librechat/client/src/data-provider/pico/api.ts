@@ -141,3 +141,45 @@ export async function setPicoAutomationEnabled(id: string, enabled: boolean) {
 export async function deletePicoAutomation(id: string) {
   return picoFetch<{ ok: boolean }>(`/v1/automations/${id}`, { method: 'DELETE' });
 }
+
+
+export type PicoChange = {
+  id: string;
+  title: string;
+  summary: string;
+  status: string;
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
+  audit?: unknown[];
+};
+
+export async function listPicoChanges() {
+  return picoFetch<{ changes: PicoChange[] }>(`/v1/changes`);
+}
+
+export async function createPicoChange(body: {
+  title: string;
+  summary: string;
+  payload?: Record<string, unknown>;
+  task_id?: string;
+  run_id?: string;
+}) {
+  return picoFetch<{ change: PicoChange }>(`/v1/changes`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: body.title,
+      summary: body.summary,
+      payload: body.payload || {},
+      task_id: body.task_id,
+      run_id: body.run_id,
+    }),
+  });
+}
+
+export async function confirmPicoChange(id: string) {
+  return picoFetch<{ change: PicoChange }>(`/v1/changes/${id}/confirm`, { method: 'POST' });
+}
+
+export async function rejectPicoChange(id: string) {
+  return picoFetch<{ change: PicoChange }>(`/v1/changes/${id}/reject`, { method: 'POST' });
+}

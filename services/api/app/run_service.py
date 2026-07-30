@@ -317,6 +317,8 @@ async def confirm_change(
     row = await session.get(ChangeProposalRow, change_id)
     if row is None or row.school_id != principal.school_id:
         raise KeyError("not found")
+    if row.membership_id and row.membership_id != principal.membership_id:
+        raise KeyError("not found")
     if row.status != "proposed":
         raise ValueError(f"cannot confirm status={row.status}")
     row.status = "confirmed"
@@ -398,10 +400,50 @@ async def confirm_change(
     return row
 
 
+async def reject_change(
+    session: AsyncSession,
+    principal: Principal,
+    change_id: str,
+) -> ChangeProposalRow:
+    row = await session.get(ChangeProposalRow, change_id)
+    if row is None or row.school_id != principal.school_id:
+        raise KeyError("not found")
+    if row.membership_id and row.membership_id != principal.membership_id:
+        raise KeyError("not found")
+    if row.status != "proposed":
+        raise ValueError(f"cannot reject status={row.status}")
+    row.status = "rejected"
+    history = json.loads(row.audit_json or "[]")
+    history.append(
+        {
+            "action": "rejected",
+            "by": principal.membership_id,
+            "at": _utcnow().isoformat(),
+        }
+    )
+    row.audit_json = json.dumps(history, ensure_ascii=False)
+    audit = AuditRow(
+        id=new_id(),
+        school_id=principal.school_id,
+        membership_id=principal.membership_id,
+        action="change.rejected",
+        subject_type="change_proposal",
+        subject_id=row.id,
+        detail_json=json.dumps({"title": row.title}, ensure_ascii=False),
+    )
+    session.add(audit)
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
 async def list_changes(session: AsyncSession, principal: Principal) -> list[ChangeProposalRow]:
     result = await session.execute(
         select(ChangeProposalRow)
-        .where(ChangeProposalRow.school_id == principal.school_id)
+        .where(
+            ChangeProposalRow.school_id == principal.school_id,
+            ChangeProposalRow.membership_id == principal.membership_id,
+        )
         .order_by(ChangeProposalRow.created_at.desc())
         .limit(50)
     )

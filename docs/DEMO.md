@@ -58,6 +58,7 @@ curl -sf http://127.0.0.1:18765/health
 | 3 | 发「创建 hello.txt，内容为 hi」 | 结果区出现 **hello.txt** |
 | 4 | （可选）模型选 **pico-agent** 再发简单任务 | 工具环/Agent 路径（若环境允许） |
 | 5 | 侧栏打开项目 / 自动化 | 可导航；自动化需登录态 JWT |
+| 6 | 任务页「新建演示提案」→ 确认/拒绝 | S7：状态 confirmed/rejected；无业务写库 |
 
 ### API 快速证据
 
@@ -84,7 +85,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/api/pico/v1/task
 | S2 Agent 多步 | **显式选 pico-agent**；非默认 |
 | S3 账本 | 是 |
 | S5 UI | 是（LibreChat 任务台） |
-| S7 人确认 | **产品 UI 未闭环**（工具有提案能力，W2 待做） |
+| S7 人确认 | **最小闭环**：任务页横幅「新建演示提案」→ 确认/拒绝；仅审计不写学校库 |
 | S8 合 main | 分支 CANDIDATE 流程，**不自 PASS** |
 
 ---

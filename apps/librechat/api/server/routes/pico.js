@@ -180,4 +180,25 @@ router.delete('/v1/automations/:id', (req, res) => {
   }
 });
 
+
+router.get('/v1/changes', (req, res) => proxy(req, res, '/v1/changes'));
+router.post('/v1/changes', (req, res) => proxy(req, res, '/v1/changes'));
+router.post('/v1/changes/:id/confirm', (req, res) => {
+  try {
+    assertId(req.params.id, 'id');
+    return proxy(req, res, `/v1/changes/${req.params.id}/confirm`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+router.post('/v1/changes/:id/reject', (req, res) => {
+  try {
+    assertId(req.params.id, 'id');
+    return proxy(req, res, `/v1/changes/${req.params.id}/reject`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+
 module.exports = router;
+

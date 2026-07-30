@@ -24,6 +24,7 @@ import ChatForm from './Input/ChatForm';
 import Landing from './Landing';
 import ResultPanel from './ResultPanel';
 import TaskRunBar from './TaskRunBar';
+import ChangeConfirmBanner from './ChangeConfirmBanner';
 import Header from './Header';
 import Footer from './Footer';
 import { cn } from '~/utils';
@@ -157,6 +158,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                       账本：{ledger.error}
                     </div>
                   ) : null}
+                  <ChangeConfirmBanner taskId={ledger.task?.id} />
                 </>
               )}
               <div className={cn('flex min-h-0 flex-1', isLandingPage ? 'flex-col' : 'flex-row')}>
