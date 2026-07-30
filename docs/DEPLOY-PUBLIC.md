@@ -152,3 +152,7 @@ bash scripts/vps-apply-kimi-key.sh
 脚本会写入 `/opt/pico/.env`（不打印 key）、重启 `docker-compose.host.yml`、跑本地 S1 冒烟。
 
 聊天里贴过的 key 视为已泄露，稳定后建议在 Moonshot 控制台**轮换**。
+
+## 调查结果真源
+
+Codex 生产部署调查整理见 **[docs/CODEX-VPS-INVESTIGATION.md](./CODEX-VPS-INVESTIGATION.md)**（后续任务先读）。
