@@ -30,6 +30,8 @@ class RunCaps:
     max_tokens: int = 8000
     max_retries: int = 2
     max_steps: int = 8
+    allowed_tools: list[str] | None = None
+    skill_instruction: str = ""
 
 
 @dataclass
@@ -75,7 +77,7 @@ async def run_agent_loop(
             error=reason,
         )
 
-    gw = build_default_gateway()
+    gw = build_default_gateway().restricted_to(caps.allowed_tools)
     tools = openai_tool_schemas(gw)
     client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
 
@@ -97,6 +99,8 @@ async def run_agent_loop(
         "回答：先给结论，再补必要步骤；中文优先；结构清晰；不要空话套话。"
         "普通问答直接回答，不必强行调工具。"
     )
+    if caps.skill_instruction:
+        system = f"{system}\n{caps.skill_instruction}"
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
     # prior turns (user/assistant only; drop system from client)
@@ -146,13 +150,14 @@ async def run_agent_loop(
         await emit("agent.step", {"step": step, "phase": "model"})
 
         try:
-            resp = await client.chat.completions.create(
-                model=cfg.model,
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                max_tokens=min(1024, caps.max_tokens),
-            )
+            request: dict[str, Any] = {
+                "model": cfg.model,
+                "messages": messages,
+                "max_tokens": min(1024, caps.max_tokens),
+            }
+            if tools:
+                request.update(tools=tools, tool_choice="auto")
+            resp = await client.chat.completions.create(**request)
         except Exception as e:  # noqa: BLE001
             retries += 1
             await emit(

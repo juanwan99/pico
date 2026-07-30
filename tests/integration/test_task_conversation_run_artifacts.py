@@ -247,6 +247,64 @@ def test_non_stream_agent_reuses_one_run_and_preserves_failure(client, monkeypat
     assert run_rows[0]["error"] == "provider unavailable"
 
 
+def test_skill_write_s7_records_snapshot_and_existing_change_path(client, monkeypatch) -> None:
+    _stub_agent(
+        monkeypatch,
+        RunResult(status="succeeded", final_text="建议把一班名称改为星辰一班。"),
+    )
+    owner = _headers(client, "member-skill-write-s7")
+    conversation_id = "conversation-skill-write-s7"
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers=owner,
+        json={
+            "model": "test-direct-model",
+            "stream": False,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        "【Pico-Convo:conversation-skill-write-s7】\n"
+                        "【Pico-Skill:skill.write_s7】\n"
+                        "提出一个班级改名申请"
+                    ),
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    tasks = client.get(
+        "/v1/tasks",
+        headers=owner,
+        params={"conversation_id": conversation_id},
+    )
+    task_id = tasks.json()["tasks"][0]["id"]
+    runs = client.get(f"/v1/tasks/{task_id}/runs", headers=owner)
+    run = runs.json()["runs"][0]
+    snapshot = run["token_usage"]["skill_snapshot"]
+    assert snapshot["id"] == "skill-write-s7"
+    assert snapshot["tools"] == ["pico_propose_change"]
+    assert snapshot["requires_s7"] is True
+
+    changes = client.get(
+        "/v1/changes",
+        headers=owner,
+        params={"task_id": task_id, "status": "proposed"},
+    )
+    assert changes.status_code == 200, changes.text
+    rows = changes.json()["changes"]
+    assert len(rows) == 1
+    assert rows[0]["run_id"] == run["id"]
+    assert rows[0]["payload"]["skill_snapshot"]["id"] == "skill-write-s7"
+
+    events = client.get(f"/v1/runs/{run['id']}/events", headers=owner)
+    event_types = [event["type"] for event in events.json()["events"]]
+    assert "skill.snapshot" in event_types
+    assert "change.proposed" in event_types
+
+
 @pytest.mark.asyncio
 async def test_direct_stream_aclose_finalizes_run_as_cancelled(tmp_path, monkeypatch) -> None:
     db = tmp_path / "stream-aclose.db"

@@ -103,6 +103,7 @@ const DisplayMessage = ({ text, isCreatedByUser, message, showCursor }: TDisplay
     return text
       .replace(/【Pico-User:[^】]*】\s*/g, '')
       .replace(/【Pico-Convo:[^】]*】\s*/g, '')
+      .replace(/【Pico-Skill:[^】]*】\s*/g, '')
       .replace(/【工作空间：[^】]*】(?:（[^）]*）)?\s*/g, '')
       .replace(/【权限：[^】]*】\s*/g, '')
       .replace(/【模型偏好：[^】]*】\s*/g, '')

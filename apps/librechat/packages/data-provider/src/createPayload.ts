@@ -11,6 +11,25 @@ function getUserTimezone(): string | undefined {
   }
 }
 
+function picoSkillMarker(manualSkills?: string[]): string {
+  const first = manualSkills?.find((skill) => typeof skill === 'string' && skill.trim());
+  if (!first) {
+    return '';
+  }
+  const normalized = first.trim().toLowerCase().replace(/_/g, '-');
+  const aliases: Record<string, string> = {
+    'skill.chat': 'skill-chat',
+    'skill-chat': 'skill-chat',
+    'skill.read': 'skill-read',
+    'skill-read': 'skill-read',
+    'skill.write-s7': 'skill-write-s7',
+    'skill.write_s7': 'skill-write-s7',
+    'skill-write-s7': 'skill-write-s7',
+  };
+  const id = aliases[first.trim().toLowerCase()] ?? aliases[normalized];
+  return id ? `【Pico-Skill:${id}】\n` : '';
+}
+
 export default function createPayload(submission: t.TSubmission) {
   const {
     isEdited,
@@ -55,6 +74,10 @@ export default function createPayload(submission: t.TSubmission) {
     timezone: getUserTimezone(),
     clientRequestId,
   };
+  const marker = picoSkillMarker(manualSkills);
+  if (marker && typeof payload.text === 'string' && !payload.text.includes('【Pico-Skill:')) {
+    payload.text = `${marker}${payload.text}`;
+  }
 
   return { server, payload };
 }

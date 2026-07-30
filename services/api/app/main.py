@@ -551,6 +551,7 @@ async def delete_automation(
 class CreateTaskRequest(BaseModel):
     title: str = ""
     prompt: str
+    skill_id: str | None = None
 
 
 def _task_dict(t) -> dict:
@@ -600,7 +601,7 @@ async def create_task(
     if not body.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt required")
     task, run = await run_service.create_task(
-        session, principal, body.title, body.prompt.strip()
+        session, principal, body.title, body.prompt.strip(), body.skill_id
     )
     await run_service.start_run_background(run.id, principal)
     return {"task": _task_dict(task), "run": _run_dict(run)}

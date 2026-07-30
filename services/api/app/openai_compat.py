@@ -195,6 +195,7 @@ async def _ledger_task_run(
     model: str,
     conversation_id: str | None,
     workspace_id: str | None,
+    skill_snapshot: dict[str, Any] | None = None,
     status: str = "running",
 ) -> tuple[str, str]:
     """Create Task+Run rows for any chat completion path."""
@@ -223,6 +224,10 @@ async def _ledger_task_run(
                 status=status,
                 prompt=prompt,
                 model=model or "",
+                token_usage_json=json.dumps(
+                    {"skill_snapshot": skill_snapshot} if skill_snapshot else {},
+                    ensure_ascii=False,
+                ),
             )
         )
         await session.commit()
@@ -279,7 +284,8 @@ async def _finalize_run(
 ) -> None:
     from sqlalchemy import select, update
 
-    from app.db import ArtifactRow, _utcnow
+    from app.db import ArtifactRow, ChangeProposalRow, EventRow, _utcnow
+    from app.run_service import _json_dict, _skill_s7_payload
 
     terminal = ("succeeded", "failed", "cancelled")
     if status not in terminal:
@@ -310,6 +316,23 @@ async def _finalize_run(
         if task_id is not None and task_id != run.task_id:
             await session.rollback()
             raise ValueError("run/task mismatch during finalize")
+
+        usage = _json_dict(run.token_usage_json)
+        skill_snapshot = usage.get("skill_snapshot")
+        if isinstance(skill_snapshot, dict) and status == "succeeded":
+            existing_skill_event = await session.execute(
+                select(EventRow.id)
+                .where(EventRow.run_id == run_id, EventRow.type == "skill.snapshot")
+                .limit(1)
+            )
+            if existing_skill_event.scalar_one_or_none() is None:
+                await append_event(
+                    session,
+                    run_id,
+                    "skill.snapshot",
+                    skill_snapshot,
+                    commit=False,
+                )
 
         if final_text and status == "succeeded":
             existing = await session.execute(
@@ -369,6 +392,43 @@ async def _finalize_run(
                     },
                     commit=False,
                 )
+        if (
+            isinstance(skill_snapshot, dict)
+            and skill_snapshot.get("requires_s7")
+            and status == "succeeded"
+        ):
+            existing_change = await session.execute(
+                select(ChangeProposalRow.id).where(ChangeProposalRow.run_id == run_id).limit(1)
+            )
+            if existing_change.scalar_one_or_none() is None:
+                task_row = await session.get(TaskRow, run.task_id)
+                if task_row is None:
+                    await session.rollback()
+                    return
+                prop = _skill_s7_payload(
+                    prompt=run.prompt,
+                    final_text=final_text,
+                    snapshot=skill_snapshot,
+                )
+                change = ChangeProposalRow(
+                    id=new_id(),
+                    school_id=task_row.school_id,
+                    membership_id=task_row.membership_id,
+                    task_id=run.task_id,
+                    run_id=run.id,
+                    title=prop["title"],
+                    summary=prop["summary"],
+                    payload_json=json.dumps(prop["payload"], ensure_ascii=False),
+                    status="proposed",
+                )
+                session.add(change)
+                await append_event(
+                    session,
+                    run_id,
+                    "change.proposed",
+                    {"change_id": change.id, "title": change.title},
+                    commit=False,
+                )
         await session.commit()
 
 
@@ -379,8 +439,10 @@ async def _run_and_collect(
     *,
     run_id: str,
     history: list[dict[str, Any]] | None = None,
+    skill_snapshot: dict[str, Any] | None = None,
 ) -> Any:
     from pico_orchestrator.runner import RunCaps, run_agent_loop
+    from pico_orchestrator.skill_policy import instruction_for_snapshot
 
     factory = session_factory()
 
@@ -395,7 +457,11 @@ async def _run_and_collect(
         max_seconds=settings.pico_run_max_seconds,
         max_tokens=settings.pico_run_max_tokens,
         max_retries=settings.pico_run_max_retries,
+        allowed_tools=list(skill_snapshot.get("tools") or []) if skill_snapshot else None,
+        skill_instruction=instruction_for_snapshot(skill_snapshot),
     )
+    if skill_snapshot:
+        await emit("skill.snapshot", skill_snapshot)
     result = await run_agent_loop(
         prompt=prompt,
         principal=principal,  # structural Principal protocol
@@ -456,7 +522,20 @@ async def chat_completions(
         raise HTTPException(status_code=403, detail="proxy membership mismatch")
     principal = scope_proxy_principal(principal, x_pico_membership_id)
     enforce_scope(principal, "ai:run")
-    raw_prompt = _last_user_prompt(body.messages)
+    raw_prompt_with_skill = _last_user_prompt(body.messages)
+    from pico_orchestrator.skill_policy import (
+        instruction_for_snapshot,
+        snapshot_for_skill,
+        snapshot_from_prompt,
+    )
+
+    raw_prompt, skill_snapshot = snapshot_from_prompt(raw_prompt_with_skill)
+    if body.metadata and not skill_snapshot:
+        skill_snapshot = snapshot_for_skill(
+            body.metadata.get("pico_skill_id")
+            or body.metadata.get("skill_id")
+            or body.metadata.get("skillId")
+        )
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
     # strip ledger markers from model-visible prompt; project instruction → system
@@ -470,6 +549,8 @@ async def chat_completions(
     prompt = re.sub(r"【项目指令：[^】]+】", "", prompt).strip() or raw_prompt
     history = _history_for_agent(body.messages)
     model = _model_preference_from_prompt(raw_prompt) or body.model or settings.kimi_model or "pico-agent"
+    if skill_snapshot and skill_snapshot.get("tools"):
+        model = "pico-agent"
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
 
@@ -482,6 +563,7 @@ async def chat_completions(
             model=model,
             conversation_id=conversation_id,
             workspace_id=workspace_id,
+            skill_snapshot=skill_snapshot,
         )
         if use_direct:
             from pico_orchestrator.provider import stream_chat
@@ -494,6 +576,8 @@ async def chat_completions(
             )
             if project_instruction:
                 system = system + "\n【项目约束】" + project_instruction
+            if skill_snapshot:
+                system = system + "\n" + instruction_for_snapshot(skill_snapshot)
             parts: list[str] = []
             try:
                 async for piece in stream_chat(
@@ -517,6 +601,7 @@ async def chat_completions(
                 settings,
                 run_id=run_id,
                 history=history,
+                skill_snapshot=skill_snapshot,
             )
             text = result.final_text or result.error or "(empty)"
             await _finalize_run(
@@ -573,6 +658,7 @@ async def chat_completions(
                 model=model,
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
+                skill_snapshot=skill_snapshot,
             )
             system = (
                 "你是 Pico，面向学校场景的 AI 助手。"
@@ -582,6 +668,8 @@ async def chat_completions(
             )
             if project_instruction:
                 system = system + "\n【项目约束】" + project_instruction
+            if skill_snapshot:
+                system = system + "\n" + instruction_for_snapshot(skill_snapshot)
             parts: list[str] = []
             finalized = False
             try:
@@ -659,6 +747,10 @@ async def chat_completions(
                     status="running",
                     prompt=prompt,
                     model=model,
+                    token_usage_json=json.dumps(
+                        {"skill_snapshot": skill_snapshot} if skill_snapshot else {},
+                        ensure_ascii=False,
+                    ),
                 )
             )
             await session.commit()
@@ -691,7 +783,11 @@ async def chat_completions(
                     max_seconds=settings.pico_run_max_seconds,
                     max_tokens=settings.pico_run_max_tokens,
                     max_retries=settings.pico_run_max_retries,
+                    allowed_tools=list(skill_snapshot.get("tools") or []) if skill_snapshot else None,
+                    skill_instruction=instruction_for_snapshot(skill_snapshot),
                 )
+                if skill_snapshot:
+                    await emit("skill.snapshot", skill_snapshot)
                 result = await run_agent_loop(
                     prompt=prompt,
                     principal=principal,
