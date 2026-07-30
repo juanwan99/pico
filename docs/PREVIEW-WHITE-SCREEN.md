@@ -100,3 +100,16 @@ It looks like you are trying to access MongoDB over HTTP on the native driver po
 | 对照 | `curl 127.0.0.1:8080` 应见「Pico 正在加载…」；`curl 127.0.0.1:27017` 才是上述 Mongo 句 |
 
 **禁止：** 因这句去改 Mongo 配置或换壳。
+
+
+## Symptom: Port hds-…-6014-… is not found (cf-ray)
+
+**Meaning:** Grok Live Preview **edge/tunnel** cannot resolve the sandbox **preview-proxy** service name (`*-6014-*`). This is **platform routing**, not LibreChat HTML missing.
+
+| Fix on product side | Limit |
+|---------------------|------|
+| Keep product healthy on **0.0.0.0:8080** | Required but not always sufficient |
+| POST pin `{"port":8080}` to control **:6015** | Prevents sticky Mongo/API |
+| Restart product stack / wait for proxy revive | Edge may still 404 until platform remaps |
+
+**Do not** treat as “Mongo broken” or “swap shell”. User message may include `cf-ray=…-LAX` — Cloudflare edge.
