@@ -96,7 +96,8 @@ Pico 已具备可演示工作台；后续以 **AI 底座契约与账本主链** 
 | 登录 + 真聊（Kimi） | 有 |
 | 产物进结果区 | 有（含流式 finalize 修复） |
 | 工作台 IA / 二级入口 | 有（clean-room；像素未 100% 叠图） |
-| Task/Run/Artifact/S7 API | 大体有；绑定与 UI 同对象需持续压实 |
+| Task/Run/Artifact/S7 API | M2 已收口；流式终态、幂等、下载、隔离与同 change id 路径有测并经生产抽检 |
+| M3 对接桩 | 已就绪；默认 fake、handoff 关闭，live 缺配置 fail-closed |
 | Phase2 合同文档 | FROZEN v1.0 |
 | 热更新 / 生产 SHA stamp | 有 |
 | edu 真联调 | **无**（edu tip 亦未见 pico 桥代码） |
@@ -122,7 +123,7 @@ Pico 已具备可演示工作台；后续以 **AI 底座契约与账本主链** 
 | **M4** | 候选发布 | CI + 审查 + 值守合 main | S8；不自 PASS |
 | **M5** | 真联调 edu | 授权后双仓 | token/工具/Change/退役；**另窗** |
 
-**默认当前执行焦点：M0 → M1 → M2。**  
+**当前快照：M2（含 S7）与 M3 对接桩已完成 3 日冲刺收口；不代表产品终局 PASS。**
 M5 **禁止**在本规划下自动开工（需业主点名 + 可能升计划）。
 
 ---

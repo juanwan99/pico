@@ -14,13 +14,13 @@ HORIZON: 3 calendar days · 每晚 Codex ≈6h 长任务
 ## 0. 「做完」定义（3 天验收，不掺水）
 
 ```text
-□ M2 续 T1–T3（流式中断 / finalize 幂等 / Artifact 下载）在 main
-□ 生产 health.git_sha == main tip + ## DEPLOYED
-□ M2 收口：S7 最小真闭环（提案→确认/拒绝→审计，UI 同 change id）
-□ 隔离/自测含：中断终态、下载跨人拒绝、S7 confirm/reject
+☑ M2 续 T1–T3（流式中断 / finalize 幂等 / Artifact 下载）在 main
+☑ 生产 health.git_sha == main tip + ## DEPLOYED
+☑ M2 收口：S7 最小真闭环（提案→确认/拒绝→审计，UI 同 change id）
+☑ 隔离/自测含：中断终态、下载跨人拒绝、S7 confirm/reject
 ☑ M3 桩：JWT 同形开关、PICO_EDU_MODE fake|live 边界、change-handoff 形状（fake 默认；真联调后置）
-□ OneFlow：CANDIDATE → CI 绿 → 合 main → 部署回写
-□ 不写 edu · 不像素战役 · 不自 PASS 产品终局
+☑ OneFlow：CANDIDATE → CI 绿 → 合 main → 部署回写
+☑ 不写 edu · 不像素战役 · 不自 PASS 产品终局
 ```
 
 **明确不在 3 天内：** edu 真联调（M5）、GHCR 阶段 B、像素 100%。
@@ -85,15 +85,15 @@ HORIZON: 3 calendar days · 每晚 Codex ≈6h 长任务
 
 | # | 项 | Y/N |
 |---|-----|-----|
-| 1 | main tip == 生产 health.git_sha | |
-| 2 | 登录 / 真聊 / 产物 / 下载打开 | |
-| 3 | 流式中断 Run 终态有测 | |
-| 4 | finalize 幂等有测 | |
-| 5 | Artifact content 跨人 404 | |
-| 6 | S7 确认+拒绝 UI+API | |
-| 7 | M3 桩配置+测（fake 可） | |
-| 8 | 端口 loopback；443 200 | |
-| 9 | 未写 edu；未伪 PASS | |
+| 1 | main tip == 生产 health.git_sha | Y |
+| 2 | 登录 / 真聊 / 产物 / 下载打开 | Y |
+| 3 | 流式中断 Run 终态有测 | Y |
+| 4 | finalize 幂等有测 | Y |
+| 5 | Artifact content 跨人 404 | Y |
+| 6 | S7 确认+拒绝 UI+API | Y |
+| 7 | M3 桩配置+测（fake 可） | Y |
+| 8 | 端口 loopback；443 200 | Y |
+| 9 | 未写 edu；未伪 PASS | Y |
 
 ---
 
@@ -128,3 +128,4 @@ HORIZON: 3 calendar days · 每晚 Codex ≈6h 长任务
 | 日期 | main SHA | prod SHA | 出门 | 注 |
 |------|----------|----------|------|-----|
 | 2026-07-30 | （计划落盘） | b736c6a 一带（M2 续，可能尚未=main） | 计划已 BINDING | 执行从 D1 Git 闭环开始 |
+| 2026-07-30 | 3b1bef8506ecefefa25bf948e2d4af4eb6527675 | 3b1bef8506ecefefa25bf948e2d4af4eb6527675 | Y | D3 全量回归与生产十项验收完成；底座阶段收口，M5 后置 |
