@@ -231,3 +231,29 @@ cd /opt/pico && bash scripts/vps-fix-login.sh
 **生产演示主路径闭环（诚实）：** HTTPS 入口 + 登录 + Kimi 真聊。  
 仍 **非** S2–S8 全量 PASS / 非 WorkBuddy 对等 / 未合 main。
 
+## 10. 生产热更新验收（Codex · 2026-07-30 业主报告）
+
+| 项 | 结果 |
+|----|------|
+| 部署 SHA（当时） | `12c31c907dada11f0dbac991008ea28673cf7f9e` |
+| 分支 | `grok/pico-preview-librechat-p0` |
+| compose | mongo / pico-api / librechat **Up** |
+| health | ok |
+| UI login API | 200 · token PRESENT |
+| S1 | 200 · reply **演示OK** |
+| 浏览器登录 | **Y** |
+| 浏览器真聊 | **Y** ·「演示OK」 |
+| 公网 | 443 open；8080/18765/27017 closed |
+| 监听 | 127.0.0.1:{8080,18765,27017}；0.0.0.0:{80,443} Nginx |
+| PROXY=1 | 未用 |
+| 合 main / 自 PASS | **否** |
+
+**额外（服务器本地）：** 强制 pico-api `127.0.0.1:18765`；关闭 Meili 噪音。仓内 `docker-compose.host.yml` 已对齐 127.0.0.1 + SEARCH=false / Meili 空 host。
+
+**热更新命令已验证：** `git pull --ff-only` + `docker compose -f docker-compose.host.yml up -d`  
+后续可用：`bash scripts/prod-update.sh`
+
+**提醒：** 聊天出现过的 Kimi key 建议 Moonshot 轮换。
+
+**注意：** 验收后 origin tip 可能继续前进（CI/selftest/prod-update 等）；生产可再 `prod-update.sh` 对齐最新 tip，不必重装。
+

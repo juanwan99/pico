@@ -74,6 +74,9 @@ services:
       ALLOW_EMAIL_LOGIN: "true"
       ALLOW_UNVERIFIED_EMAIL_LOGIN: "true"
       SEARCH: "false"
+      # avoid Meili fetch noise when search disabled
+      MEILI_HOST: ""
+      MEILI_NO_ANALYTICS: "true"
       DOMAIN_CLIENT: https://pico.aivia.asia
       DOMAIN_SERVER: https://pico.aivia.asia
       CONFIG_PATH: /app/librechat.yaml
