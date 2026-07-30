@@ -264,3 +264,17 @@ cd /opt/pico && bash scripts/vps-fix-login.sh
 - selftest 步骤 7 覆盖
 - 生产 health `git_sha: unknown`：部署时 `prod-update.sh` 写入 `PICO_GIT_SHA`；compose 注入 env
 
+## 12. 二次「热更新报告」仍停在 12c31c9（2026-07-30）
+
+Codex 再次回报 origin/local 均为 `12c31c9`，但 GitHub tip 已是 **`e22b602`**（及之后）。
+含义：**生产未真正 fetch/reset 到最新 tip**（常见原因：本地改了 `docker-compose.host.yml` 导致 pull 未进、或只 up 未 pull、或旧报告复贴）。
+
+纠正：
+```bash
+cd /opt/pico
+git fetch origin
+git reset --hard origin/grok/pico-preview-librechat-p0
+# 或：EXPECT_SHA_PREFIX=e22b602 bash scripts/prod-update.sh
+curl -sS http://127.0.0.1:18765/health   # 期望 git_sha 前缀 = tip，非 unknown/旧
+```
+
