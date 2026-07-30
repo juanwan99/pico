@@ -13,8 +13,8 @@ if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8080/login; then
   # HTML up but main JS missing — fall through to restart product stack
 fi
 
-# Mongo portable
-if ! python3 -c "import socket;s=socket.create_connection(('127.0.0.1',27017),1);s.close()" 2>/dev/null; then
+# Mongo portable — wire protocol on 27117 only (not 27017)
+if ! python3 -c "import socket;s=socket.create_connection(('127.0.0.1',27117),1);s.close()" 2>/dev/null; then
   if [ -x /tmp/mongodb/bin/mongod ]; then
     mkdir -p /tmp/mongo-data /tmp/mongo-log
     /tmp/mongodb/bin/mongod --dbpath /tmp/mongo-data --bind_ip 127.0.0.1 --port 27117 \

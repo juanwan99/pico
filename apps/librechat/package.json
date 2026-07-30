@@ -205,5 +205,11 @@
       "admin/",
       "packages/"
     ]
+  },
+  "dependencies": {
+    "@opentelemetry/sdk-node": "^0.221.0",
+    "@react-spring/web": "^10.1.2",
+    "react-window": "^1.8.11",
+    "winston-daily-rotate-file": "^5.0.0"
   }
 }
