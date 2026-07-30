@@ -221,7 +221,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     {isProjectLandingPage && project && <ProjectLandingChip project={project} />}
                     {/* Single submit path: Landing uses useSubmitMessage; ChatForm only when chatting */}
                     {!isLandingPage ? (
-                      <div className="mx-auto w-full max-w-[797px] px-2">
+                      <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">
                         <ChatForm index={index} placeholder={chatFormPlaceholder} />
                       </div>
                     ) : null}
