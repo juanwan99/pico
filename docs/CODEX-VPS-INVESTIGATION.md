@@ -113,6 +113,23 @@ Compose：`docker-compose.host.yml`。镜像：`pico-librechat:v13` / `pico-api:
 
 ## 4. 后续任务队列
 
+
+### P0.4 登录失败（2026-07-30）
+
+现象：UI「登录失败，请检查邮箱和密码后再试」。
+
+常见原因（生产空库 / 新 Mongo）：
+1. **演示用户从未注册**（文档账号 ≠ 自动入库）
+2. 注册后 `emailVerified=false` 且未开 `ALLOW_UNVERIFIED_EMAIL_LOGIN`
+3. 密码不一致
+
+修复（服务器）：
+```bash
+cd /opt/pico && git pull --ff-only origin grok/pico-preview-librechat-p0
+bash scripts/vps-seed-demo-user.sh
+```
+期望输出：`DEMO_LOGIN=OK`。然后再打开 https://pico.aivia.asia/login。
+
 ### P0 — 真聊闭环
 
 | ID | 任务 | 状态 |

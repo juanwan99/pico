@@ -8,6 +8,7 @@
 #
 #   cd /opt/pico
 #   docker compose -f docker-compose.host.yml up -d
+#   bash scripts/vps-seed-demo-user.sh   # demo login
 #
 services:
   mongo:
@@ -41,7 +42,6 @@ services:
       PICO_API_HOST: "127.0.0.1"
       PICO_API_PORT: "18765"
       PICO_CORS_ORIGINS: "https://pico.aivia.asia,http://127.0.0.1:8080,http://localhost:8080"
-      # demo: allow LibreChat proxy key pico-dev (see openai_compat.py)
       PICO_ENV: development
       PICO_ACCEPT_TEST_ISSUER: "true"
       PICO_OPENAI_PROXY_KEY: pico-dev
@@ -72,6 +72,8 @@ services:
       OPENAI_MODELS: moonshot-v1-8k,kimi-k2.6,pico-agent
       APP_TITLE: Pico
       ALLOW_REGISTRATION: "true"
+      ALLOW_EMAIL_LOGIN: "true"
+      ALLOW_UNVERIFIED_EMAIL_LOGIN: "true"
       SEARCH: "false"
       DOMAIN_CLIENT: https://pico.aivia.asia
       DOMAIN_SERVER: https://pico.aivia.asia
