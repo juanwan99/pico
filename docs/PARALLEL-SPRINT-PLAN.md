@@ -378,3 +378,5 @@ H5–H6    只修 P0；文档完成度三列更新；DEPLOYED；验收包
 | 2026-07-30 | v1 DRAFT | PR#37 |
 | 2026-07-30 | v2 REVISE-applied | 仍 DO NOT EXECUTE |
 | 2026-07-30 | BINDING-v2 | 业主授权；开 N1 |
+| 2026-07-30 | N1 完成 | PR #41 · main 54595fe · 主路径 6/6 |
+| 2026-07-30 | N2 卡发布 | docs/NIGHT-CARD-N2-SKILL-THIN.md |
