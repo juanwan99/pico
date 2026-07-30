@@ -31,6 +31,10 @@ ONEFLOW: docs/ONEFLOW.md
 | 11 | [DEMO.md](./DEMO.md) · [DEPLOY-PUBLIC.md](./DEPLOY-PUBLIC.md) | Demo & public deploy notes |
 | 12 | [PIXEL-DIFF.md](./PIXEL-DIFF.md) · matrices when present | UX evidence (not task status) |
 
+## Repeatable smokes
+
+- N3 Skill snapshot: `python scripts/n3_skill_snapshot_smoke.py` for CI policy/frontmatter; add `--api http://127.0.0.1:18765` against a running Pico API for live Run snapshot + S7 proof.
+
 ## Completed / historical (active tree)
 
 | Path | Note |

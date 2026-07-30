@@ -61,11 +61,13 @@ export function preferredModelForExpert(name: string): PicoModelMode {
 }
 
 export function preferredModelForSkill(skillId: string): PicoModelMode {
-  if (skillId === 's3') {
+  if (skillId === 'skill-read' || skillId === 'skill-write-s7') {
     return 'pico-agent';
   }
-  // multi-step heavy skills can opt into agent later
-  return 'kimi-k2.6';
+  if (skillId === 'skill-chat') {
+    return 'kimi-k2.6';
+  }
+  return 'pico-agent';
 }
 
 export function expertSystemLine(): string {
