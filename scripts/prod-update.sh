@@ -78,5 +78,14 @@ if [ -n "${EXPECT_SHA_PREFIX:-}" ]; then
   esac
 fi
 
+# security: API must not listen on all interfaces
+if command -v ss >/dev/null 2>&1; then
+  if ss -lntp 2>/dev/null | grep -E '0\.0\.0\.0:18765|\*:18765' >/dev/null; then
+    echo "[pico] FATAL: pico-api listening on 0.0.0.0:18765 — fix compose command host=127.0.0.1" >&2
+    exit 4
+  fi
+  echo "[pico] listen check: 18765 not on 0.0.0.0 (ok)"
+fi
+
 echo "[pico] done — open https://pico.aivia.asia/login"
 echo "[pico] optional: bash scripts/vps-fix-login.sh"

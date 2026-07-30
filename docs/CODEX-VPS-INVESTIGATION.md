@@ -278,3 +278,19 @@ git reset --hard origin/grok/pico-preview-librechat-p0
 curl -sS http://127.0.0.1:18765/health   # 期望 git_sha 前缀 = tip，非 unknown/旧
 ```
 
+## 13. 硬对齐 2409746 验收（Codex · 2026-07-30）
+
+| 项 | 结果 |
+|----|------|
+| before | `12c31c9…` |
+| after = origin | **`2409746…`** |
+| health git_sha | **与 SHA 一致**（非 unknown） |
+| login / S1 / 浏览器真聊 | 200 / 200 / Y |
+| 公网 | 仅 443；8080/18765/27017 closed |
+| 未合 main / 未自 PASS | 是 |
+
+**事故：** hard align 后曾一度 API 在 **0.0.0.0:18765**（旧镜像 CMD 或未钉 command）。已人工改回 127.0.0.1。  
+**仓内修复：** compose 显式 `command: uvicorn --host 127.0.0.1`；`prod-update` 若检测到 `0.0.0.0:18765` 则 **exit 4**。
+
+服务器可有本地 compose 微调，但 **loopback 绑定必须进 Git**，避免每次 reset 丢安全。
+

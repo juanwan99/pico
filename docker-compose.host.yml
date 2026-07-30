@@ -34,6 +34,18 @@ services:
       dockerfile: Dockerfile.pico-api
     restart: unless-stopped
     network_mode: host
+    # CRITICAL: host network + public IP risk — always bind loopback only
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--app-dir",
+        "services/api",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "18765",
+      ]
     env_file:
       - .env
     environment:
