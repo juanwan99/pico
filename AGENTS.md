@@ -46,6 +46,8 @@ Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
 Owner-aligned goals + purged wrong memories: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 
+Live engineering calibration (branch tip, S1–S8, stale-doc index): [`docs/CALIBRATION-NOW.md`](docs/CALIBRATION-NOW.md).
+
 ## Product rules
 
 - AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.

@@ -1,5 +1,7 @@
 # 隐患排查报告（2026-07-30）
 
+> 工程全景校准见 [`docs/CALIBRATION-NOW.md`](./CALIBRATION-NOW.md)。下列 R3/R4 已按后续实现修正。
+
 ## 已修复（本轮）
 
 | ID | 等级 | 问题 | 处理 |
@@ -17,8 +19,8 @@
 |----|------|------|------|
 | R1 | P1 | 对话补全走 `OPENAI_API_KEY=pico-dev`，若无 `Pico-User` 标记仍落默认 membership | 发送路径已注入 `Pico-User`；旧任务仍属旧 principal |
 | R2 | P2 | 生产若误设 `PICO_ENV=development` 会接受 proxy key | 部署检查清单；prod 拒 `sk-pico-dev` |
-| R3 | P2 | 首条消息 conversationId 可能仍为 `new`，账本绑定偏弱 | 第二条起稳定；后续可在 title 生成后回写 |
-| R4 | P2 | 自动化无服务端 scheduler | 明确 P2，勿宣传「到点必跑」 |
+| R3 | P2 | 首条消息曾无稳定 conversationId | **已有 pending_* + rebind**（2026-07-30）；仍可能竞态，需回归 |
+| R4 | P2 | ~~自动化无服务端 scheduler~~ | **已有 tick 调度**；可靠性/字段/历史仍薄，勿宣传生产级 SLA |
 | R5 | P2 | Workspace 文件视图仍为空壳 | UI 空态已标明 |
 | R6 | 信息 | KIMI key 在 `.env`（gitignored） | 勿提交；轮换泄露 key |
 

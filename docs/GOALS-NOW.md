@@ -1,5 +1,7 @@
 # Pico 当前目标（执行窗口径 · 2026-07-30）
 
+> **现状校准：** 以 [`docs/CALIBRATION-NOW.md`](./CALIBRATION-NOW.md) 为准；本页若与之冲突，以校准页为准。
+
 ```
 REPO: juanwan99/pico ONLY
 SHELL: apps/librechat (MIT)
@@ -31,7 +33,7 @@ RESEARCH: workbuddy-research + followup（clean-room，禁止拆闭源）
 |--------|------|
 | **P0** | 侧栏路由正确；Composer 控件可用；任务中 **结果区骨架**；状态文案对齐调研 |
 | **P1** | Task/Run 与会话投影；项目四 Tab；能力中心三分页真接 |
-| **P2** | 自动化服务端调度；腾讯系授权墙内能力后置 |
+| **P2** | 自动化字段补齐/历史；腾讯系授权墙内能力后置（**调度骨架已有**） |
 
 ## 浏览器边界（写死）
 

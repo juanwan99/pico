@@ -1,3 +1,4 @@
+<!-- STALE: nextchat paths obsolete; shell = apps/librechat. See CALIBRATION-NOW.md -->
 # Product UI = NextChat (OSS) + Pico backend
 
 ```

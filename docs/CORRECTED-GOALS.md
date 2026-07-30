@@ -167,6 +167,8 @@ Pico API + orchestrator + DB
 
 ## 7. 当前工程事实（校正时点）
 
+> 更新快照：[`docs/CALIBRATION-NOW.md`](./CALIBRATION-NOW.md)（分支 tip / S1–S8 对照 / 过时记忆表）。
+
 | 项 | 值 |
 |----|-----|
 | 产品 UI | `apps/librechat` → 公网预览 **:8080** |

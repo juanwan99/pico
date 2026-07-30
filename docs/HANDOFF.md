@@ -1,5 +1,9 @@
 # Pico 交接文档 — 给新执行窗口
 
+> **STALE-WARNING（2026-07-30）：** 本文 §3「仅文档脚手架」、§5「Vue 3」、§6 `apps/nextchat` **已过时**。  
+> 当前壳 = `apps/librechat`；工程现状与错误记忆表 → [`docs/CORRECTED-GOALS.md`](./CORRECTED-GOALS.md) + [`docs/CALIBRATION-NOW.md`](./CALIBRATION-NOW.md)。  
+> HARD 仓界 / 不自 PASS / v1.2 FIXED **仍有效**。
+
 ```
 DOC: docs/HANDOFF.md
 ROLE_OF_READER: 固定执行窗口（写入 / 调查 / 审查 按派发）
