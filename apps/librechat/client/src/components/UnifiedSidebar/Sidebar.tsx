@@ -1,7 +1,7 @@
 /**
  * Pico workbench left rail — single column WorkBuddy-class IA.
  */
-import { memo, useCallback, lazy, Suspense } from 'react';
+import { memo, useCallback, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import {
@@ -19,6 +19,11 @@ import {
   Bell,
   PanelLeft,
   FolderOpen,
+  Mail,
+  FileText,
+  Library,
+  Lightbulb,
+  BookOpen,
 } from 'lucide-react';
 import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
@@ -60,6 +65,33 @@ const NAV: NavItem[] = [
   },
 ];
 
+const MORE_ITEMS = [
+  { label: '我的文件', icon: FolderOpen, path: '/more/files' },
+  { label: '我的邮箱', icon: Mail, path: '/capability/connectors/c3' },
+  {
+    label: '腾讯文档',
+    icon: FileText,
+    path: '/capability/connectors/c5',
+    divider: true,
+  },
+  {
+    label: 'ima知识库',
+    icon: Library,
+    path: '/capability/connectors/c4?provider=ima',
+  },
+  {
+    label: '乐享知识库',
+    icon: BookOpen,
+    path: '/capability/connectors/c4?provider=lexiang',
+  },
+  {
+    label: '灵感',
+    icon: Lightbulb,
+    path: '/capability?tab=skills',
+    divider: true,
+  },
+] as const;
+
 function isNavItemActive(pathname: string, item: NavItem) {
   if (pathname.startsWith('/agents') || pathname.startsWith('/assistants')) {
     return item.id === 'agents';
@@ -100,6 +132,11 @@ function Sidebar({
   const queryClient = useQueryClient();
   const { newConversation } = useNewConvo();
   const conversationId = useRecoilValue(store.conversationIdByIndex(0));
+  const [moreMenu, setMoreMenu] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
+  const moreRegionRef = useRef<HTMLDivElement>(null);
 
   const onNewTask = useCallback(() => {
     clearMessagesCache(queryClient, conversationId);
@@ -107,6 +144,19 @@ function Sidebar({
     newConversation();
     navigate('/c/new');
   }, [queryClient, conversationId, newConversation, navigate]);
+
+  useEffect(() => {
+    if (!moreMenu) {
+      return;
+    }
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!moreRegionRef.current?.contains(event.target as Node)) {
+        setMoreMenu(null);
+      }
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePress);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePress);
+  }, [moreMenu]);
 
   if (!expanded) {
     return (
@@ -258,31 +308,75 @@ function Sidebar({
             const active = isNavItemActive(location.pathname, item);
 
             return (
-              <button
+              <div
                 key={item.id}
-                type="button"
-                data-testid={`nav-${item.id}`}
-                onClick={() => {
-                  if (item.path) {
-                    navigate(item.path);
-                  }
-                }}
-                className={cn(
-                  'group flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13.5px] transition-colors',
-                  active
-                    ? 'bg-[#e4e4e4] font-medium text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
-                    : 'font-normal text-[#3d3d3d] hover:bg-[#e8e8e8] dark:text-text-secondary dark:hover:bg-surface-tertiary',
-                )}
-                aria-current={active ? 'page' : undefined}
+                ref={item.action === 'more' ? moreRegionRef : undefined}
+                className="relative"
               >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center text-[#4a4a4a]">
-                  <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
-                </span>
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {item.badge ? (
-                  <span className="shrink-0 text-[11px] text-[#9a9a9a]">{item.badge}</span>
+                <button
+                  type="button"
+                  data-testid={`nav-${item.id}`}
+                  onClick={(event) => {
+                    if (item.action === 'more') {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setMoreMenu((current) =>
+                        current ? null : { left: rect.right - 10, top: rect.top - 2 },
+                      );
+                      return;
+                    }
+                    if (item.path) {
+                      navigate(item.path);
+                    }
+                  }}
+                  className={cn(
+                    'group flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13.5px] transition-colors',
+                    active
+                      ? 'bg-[#e4e4e4] font-medium text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
+                      : 'font-normal text-[#3d3d3d] hover:bg-[#e8e8e8] dark:text-text-secondary dark:hover:bg-surface-tertiary',
+                  )}
+                  aria-current={active ? 'page' : undefined}
+                  aria-expanded={item.action === 'more' ? Boolean(moreMenu) : undefined}
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center text-[#4a4a4a]">
+                    <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {item.badge ? (
+                    <span className="shrink-0 text-[11px] text-[#9a9a9a]">{item.badge}</span>
+                  ) : null}
+                </button>
+                {item.action === 'more' && moreMenu ? (
+                  <div
+                    className="fixed z-[160] w-40 rounded-lg border border-black/[0.08] bg-white p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.12)]"
+                    style={{ left: moreMenu.left, top: moreMenu.top }}
+                    role="menu"
+                    aria-label="更多 · 资料库·灵感"
+                  >
+                    {MORE_ITEMS.map((menuItem) => {
+                      const MenuIcon = menuItem.icon;
+                      return (
+                        <div key={menuItem.label}>
+                          {'divider' in menuItem && menuItem.divider ? (
+                            <div className="my-1 h-px bg-black/[0.06]" />
+                          ) : null}
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-[#3d3d3d] hover:bg-[#f2f2f2]"
+                            onClick={() => {
+                              setMoreMenu(null);
+                              navigate(menuItem.path);
+                            }}
+                          >
+                            <MenuIcon className="h-4 w-4 text-[#5d5d5d]" strokeWidth={1.75} />
+                            <span>{menuItem.label}</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 ) : null}
-              </button>
+              </div>
             );
           })}
         </nav>

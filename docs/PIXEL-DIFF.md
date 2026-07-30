@@ -1,9 +1,11 @@
 # Pico Workbench Pixel Diff
 
 Clean-room evidence for `grok/pico-preview-librechat-p0`. The implementation keeps
-Pico branding and LibreChat authentication. It uses owner direction and public
-WorkBuddy screenshots only for information architecture and layout rhythm; it does
-not copy closed-source code, branded assets, illustrations, or product copy.
+Pico branding and LibreChat authentication. It uses owner direction, public
+WorkBuddy screenshots, and direct visual inspection of the owner's installed
+WorkBuddy 5.3.5 application for information architecture and layout rhythm. It
+does not inspect or copy closed-source code, branded assets, illustrations, or
+product copy.
 
 This document records implementation and browser evidence. It is not a release
 verdict and does not claim owner acceptance or exact 100% pixel parity.
@@ -20,20 +22,45 @@ verdict and does not claim owner acceptance or exact 100% pixel parity.
 
 ## Shell Measurements
 
-| Element | Reference target | Production measurement | Result |
-| --- | --- | --- | --- |
-| Expanded sidebar | 280px | 280px | Aligned |
-| Main task stage | Remaining center column | 820px at 1440px viewport | Aligned |
-| Result panel | 340px | 340px | Aligned |
-| Workbench canvas | `#f5f5f5` | `rgb(245, 245, 245)` | Aligned |
-| Home title | Compact workbench heading | 203x34px at x=589, y=104 | Aligned to current clean-room baseline |
-| Mobile result rail | Degrade without crowding | Collapsed behind a 36px control; opens as a full-screen panel | Aligned |
-| Horizontal overflow | None | 0px at 1440 and 390 | Aligned |
+Direct WorkBuddy measurements were taken from a maximized `1452x877` native
+window on 2026-07-30. Pico production evidence uses a `1440x900` browser
+viewport, so proportional column values are compared separately from vertical
+window chrome.
 
-The sidebar, center stage, and result panel total `280 + 820 + 340 = 1440px`
-at the desktop validation viewport. Exact element-by-element `+/-2px` comparison
-still requires owner-provided full-window reference captures at matching viewport
-sizes.
+| Element | WorkBuddy 5.3.5 reference | Previous production | Corrected implementation target |
+| --- | --- | --- | --- |
+| Expanded sidebar | 264px | 280px | 264px |
+| Active-task center column | about 871px | 820px | 860px at 1440px |
+| Active-task result panel | about 317px | 340px | 316px |
+| New-task result panel | Hidden | Visible at 340px | Hidden |
+| New-task composer | about 799x180px including workspace footer | 720px card plus detached controls | 797px attached card/footer |
+| Active-task composer | about 798x126px | 768x148px minimum | 797x126px |
+| Home title top | about y=190px including native menu chrome | y=104px | Desktop stack moved down 76px |
+| Workbench canvas | Near-white main / `#f0f0f0` rail | `#f5f5f5` / `#f0f0f0` | Retained |
+
+At the corrected browser viewport, the active-task geometry totals
+`264 + 860 + 316 = 1440px`. The native WorkBuddy task view totals approximately
+`264 + 871 + 317 = 1452px`.
+
+## Native WorkBuddy Screen Audit
+
+The following installed-app states were inspected directly without sending a
+message, authorizing a connector, or modifying WorkBuddy data:
+
+| Screen | Observed structure used for Pico |
+| --- | --- |
+| New task | Sidebar plus full-width main stage; centered title/scenes; 799px composer with attached workspace footer; no result rail |
+| Existing task with `hello.txt` | 264px sidebar, dense conversation center, 317px browser/artifact rail, 798x126px bottom composer |
+| Assistant | Minimal local-assistant chat shell with bottom composer; no marketing cards |
+| Project list | Wide title/banner band, one project row, then two-row template grid |
+| Expert center | Top expert/skill/connector pills, visual scene carousel, category strip, three-column expert cards |
+| Skill center | Same top shell, four-column featured skills, category strip, dense four-column skill cards |
+| Automation | Two-option top tab, centered empty state, three-column template grid |
+| More | Anchored popover menu rather than a standalone landing page |
+| My files | Title/subtitle, two tabs, compact toolbar, and table-style file list |
+
+These observations replace the earlier assumption that a fresh task should
+always show three columns and that the sidebar/result widths were 280/340px.
 
 ## Density Optimization Pass
 
@@ -57,19 +84,25 @@ The three home gaps totalled 76px before and 60px after, a 16px reduction
 without reducing chip or primary action sizes. The TaskRunBar and result header
 remain 44px because they were already aligned.
 
+The direct native-app audit showed that this historical tightening pass moved the
+home stack in the wrong direction relative to WorkBuddy. The corrected pass keeps
+the smaller internal gaps but moves the whole desktop stack down, widens the
+composer, attaches its workspace footer, and removes the result rail from the
+fresh-task state.
+
 ## Screen Matrix
 
 | Level | Route or state | Browser check | Evidence | Remaining pixel decision |
 | --- | --- | --- | --- | --- |
 | Primary | Login and authenticated entry | Login succeeds; authenticated shell opens | Authenticated desktop session | Owner visual review of login page |
-| Primary | `/c/new` home | Three columns, scene tabs, chips, composer, workspace control | `pixel-home-opt.png` | Owner reference overlay |
+| Primary | `/c/new` home | Sidebar plus full main stage, scene tabs, chips, attached composer/workspace control | `pixel-home-opt.png` | Refresh after corrected deployment |
 | Primary | Active task | Task run bar, model/status, center conversation | `pixel-task-artifact-opt.png` | Owner reference overlay |
 | Primary | Result files | Summary and generated file expose open/download actions | `pixel-task-artifact-opt.png` | Owner reference overlay |
 | Secondary | `/assistants` | List/detail workbench opens | `pixel-assistants-opt.png` | Owner reference overlay |
 | Secondary | `/projects` | Project list and deletion flow work | `pixel-project-workspace-final.png` | Owner reference overlay |
 | Secondary | `/capability` | Expert, skill, connector tabs and details open | Three capability screenshots | Owner reference overlay |
 | Secondary | `/automation` | List and create form open; temporary test item removed | Two automation screenshots | Owner reference overlay |
-| Secondary | `/more` and `/more/files` | Module hub and file library open | `pixel-files-final.png` | Owner reference overlay |
+| Secondary | More popover and `/more/files` | Anchored module menu and table-style file library open | `pixel-files-final.png` | Refresh after corrected deployment |
 | Secondary | `/workspaces` | Workspace create/select/delete flow works | `pixel-workspaces-final.png` | Owner reference overlay |
 | Tertiary | Expert detail | Model preference is visible and selectable | `pixel-capability-expert-final.png` | Owner reference overlay |
 | Tertiary | Skill detail | File skill recommends `pico-agent` | `pixel-capability-skill-final.png` | Owner reference overlay |
@@ -151,16 +184,17 @@ Production screenshots saved under `output/playwright/`:
 
 ## Owner Reference Gaps
 
-These screens lack owner-provided, full-window WorkBuddy captures at matching
-viewport sizes, so exact `+/-2px` comparison and a 100% pixel claim remain blocked:
+The installed WorkBuddy application now supplies direct desktop reference for the
+new-task, active-task, assistant, project-list, expert, skill, automation, more,
+and file-library states. Exact `+/-2px` comparison and a 100% pixel claim remain
+blocked for surfaces that do not have like-for-like native/web states or have not
+yet been captured at matching dimensions:
 
 - Login
-- Assistants list/detail
-- Projects list and project workspace
-- Expert, skill, and connector tabs/details
-- Automation list/create
-- More, file library, and workspaces
-- Active task and generated-file result states
+- Mobile 390 layout
+- Project workspace detail
+- Connector detail and authorization states
+- Workspace management
 
 The current evidence supports functional reachability, workbench visual character,
 column geometry, responsive stability, and production smoke behavior. Final visual
