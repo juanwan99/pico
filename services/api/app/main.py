@@ -661,7 +661,14 @@ async def get_artifact_content(
     filename = (artifact.title or f"{artifact.id}.txt").replace("\r", "").replace("\n", "")
     fallback = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._") or "artifact.txt"
     disposition = "attachment" if download else "inline"
-    guessed_media_type = mimetypes.guess_type(filename)[0] or "text/plain"
+    extension_media_types = {
+        ".csv": "text/csv",
+        ".json": "application/json",
+        ".md": "text/markdown",
+        ".txt": "text/plain",
+    }
+    ext = Path(filename).suffix.lower()
+    guessed_media_type = extension_media_types.get(ext) or mimetypes.guess_type(filename)[0] or "text/plain"
     safe_inline_media_types = {
         "application/json",
         "image/bmp",
