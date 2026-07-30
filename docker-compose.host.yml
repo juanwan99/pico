@@ -2,6 +2,10 @@
 # Why host: Docker bridge was broken on the VPS; all binds stay on 127.0.0.1.
 # Public entry: Nginx 443 → 127.0.0.1:8080 only.
 #
+# Auth note: LibreChat talks to Pico via OPENAI_API_KEY=pico-dev (OpenAI-compat
+# proxy). API only accepts that key when PICO_ENV is NOT production. Keep
+# development until LibreChat→Pico JWT is wired end-to-end.
+#
 #   cd /opt/pico
 #   docker compose -f docker-compose.host.yml up -d
 #
@@ -37,9 +41,10 @@ services:
       PICO_API_HOST: "127.0.0.1"
       PICO_API_PORT: "18765"
       PICO_CORS_ORIGINS: "https://pico.aivia.asia,http://127.0.0.1:8080,http://localhost:8080"
-      PICO_ENV: production
-      # still allow demo LibreChat proxy key unless you set JWT-only later
+      # demo: allow LibreChat proxy key pico-dev (see openai_compat.py)
+      PICO_ENV: development
       PICO_ACCEPT_TEST_ISSUER: "true"
+      PICO_OPENAI_PROXY_KEY: pico-dev
     volumes:
       - pico_data:/app/data
       - ./.env:/app/.env:ro

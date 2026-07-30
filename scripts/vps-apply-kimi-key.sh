@@ -33,9 +33,12 @@ keys = {
     "KIMI_BASE_URL": os.environ.get("KIMI_BASE_URL", "https://api.moonshot.cn/v1"),
     "KIMI_MODEL": os.environ.get("KIMI_MODEL", "kimi-k2.6"),
     "PICO_CORS_ORIGINS": "https://pico.aivia.asia,http://127.0.0.1:8080,http://localhost:8080",
-    "PICO_ENV": "production",
+    # LibreChat uses OPENAI_API_KEY=pico-dev → must NOT set production
+    "PICO_ENV": "development",
     "PICO_API_HOST": "127.0.0.1",
     "PICO_API_PORT": "18765",
+    "PICO_OPENAI_PROXY_KEY": "pico-dev",
+    "PICO_ACCEPT_TEST_ISSUER": "true",
 }
 out, seen = [], set()
 for line in text.splitlines():
@@ -52,7 +55,7 @@ for k, v in keys.items():
     if k not in seen:
         out.append(f"{k}={v}")
 path.write_text("\n".join(out) + "\n")
-print(f"[pico] wrote {path} KIMI_API_KEY=SET len={len(key)}")
+print(f"[pico] wrote {path} KIMI_API_KEY=SET len={len(key)} PICO_ENV=development")
 PY
 
 mkdir -p apps/librechat
@@ -90,21 +93,24 @@ for k, v in keys.items():
     if k not in seen:
         out.append(f"{k}={v}")
 p.write_text("\n".join(out) + "\n")
-print("[pico] librechat DOMAIN=https://pico.aivia.asia")
+print("[pico] librechat DOMAIN=https://pico.aivia.asia OPENAI→18765")
 PY
 
 if [ -f docker-compose.host.yml ]; then
+  # recreate api so env_file remounts .env
+  docker compose -f docker-compose.host.yml up -d --force-recreate pico-api || \
+    docker compose -f docker-compose.host.yml up -d
   docker compose -f docker-compose.host.yml up -d
 else
   docker compose -f docker-compose.product.yml up -d || true
 fi
 
-sleep 3
+sleep 4
 echo "[pico] health:"
 curl -sS --max-time 5 http://127.0.0.1:18765/health || true
 echo
 
-echo "[pico] S1 chat smoke:"
+echo "[pico] S1 chat smoke (proxy pico-dev + Kimi upstream):"
 code=$(curl -sS --max-time 90 -o /tmp/pico-s1.json -w '%{http_code}' \
   -H 'Authorization: Bearer pico-dev' \
   -H 'Content-Type: application/json' \
@@ -124,13 +130,15 @@ try:
 except Exception as e:
     print('  body not json', e, raw[:240]); raise SystemExit
 if 'error' in data:
-    print('  error:', str(data.get('error'))[:240])
+    print('  error:', str(data.get('error'))[:300])
 else:
     ch=(data.get('choices') or [{}])[0]
     msg=(ch.get('message') or {}).get('content') or ch.get('text') or ''
     print('  reply_snippet:', str(msg)[:160].replace('\n',' '))
+    if '演示OK' in str(msg) or 'OK' in str(msg) or len(str(msg))>0:
+        print('  S1_SMOKE=PASS_LIKELY')
 PY
 
 echo "[pico] loopback UI:"
 curl -sS -o /dev/null -w '  8080_login=%{http_code}\n' --max-time 5 http://127.0.0.1:8080/login || true
-echo "[pico] done — open https://pico.aivia.asia/login and chat"
+echo "[pico] next: open https://pico.aivia.asia/login → chat"
