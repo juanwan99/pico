@@ -9,6 +9,7 @@ PLAN_LAW: docs/MVP-3DAY.md v1.2 FIXED（无业主授权不升 v1.3）
 BRANCH: grok/pico-preview-librechat-p0 → main（CANDIDATE · 不自 PASS · 值守合）
 RELATED:
   - docs/ONEFLOW.md（执行操作系统）
+  - docs/SPRINT-3DAY-PUSH.md（3 日加速收口）
   - docs/CORRECTED-GOALS.md
   - docs/MVP-3DAY.md
   - docs/PHASE2-CONTRACTS.md / docs/PHASE3-INTEGRATION.md
@@ -297,6 +298,10 @@ CANDIDATE + 40字 SHA → CI 全绿 → 独立审查 → 值守合 main
 ---
 
 ## 11. 当前建议「下一刀」
+
+**若处于 3 日冲刺：** 以 [`docs/SPRINT-3DAY-PUSH.md`](./SPRINT-3DAY-PUSH.md) 为准，覆盖本节默认下一刀。
+
+## 11b. 默认下一刀（非冲刺时）
 
 1. **采纳本 MASTER 为执行导航**（本文入库）。  
 2. 执行 **M1 清残留**（小 PR/连续 commit）。  

@@ -23,6 +23,7 @@ If work needs edu source changes → **stop and say so**; do not open edu.
 ## Execution workflow (binding) — **OneFlow adapted from edu**
 
 **OneFlow (end-to-end OS + closed loops):** [`docs/ONEFLOW.md`](docs/ONEFLOW.md)  
+**3-day push (when active):** [`docs/SPRINT-3DAY-PUSH.md`](docs/SPRINT-3DAY-PUSH.md)  
 **Windows / risk / review detail:** [`docs/WORKFLOW.md`](docs/WORKFLOW.md) · **Versioning:** [`docs/VERSIONING.md`](docs/VERSIONING.md)  
 **Why/what absorbed:** [`docs/WORKFLOW-COMPARE-EDU.md`](docs/WORKFLOW-COMPARE-EDU.md)  
 **Helper (not authority):** `bash scripts/oneflow-status.sh`
