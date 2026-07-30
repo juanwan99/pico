@@ -211,3 +211,8 @@ Pico API + orchestrator + DB
 ## 执行导航
 
 总体规划（阶段/底座/冻结）：[`docs/MASTER-PLAN.md`](./MASTER-PLAN.md)
+
+
+## 执行操作系统
+
+Pico 适配版 OneFlow（闭环）：[`docs/ONEFLOW.md`](./ONEFLOW.md)

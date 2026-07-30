@@ -2,7 +2,7 @@
 
 ```
 DOC: docs/WORKFLOW.md
-STATUS: BINDING v0.2
+STATUS: BINDING v0.3
 SOURCE: edu-cloud AGENTS.md 内核吸收 + pico 边界改写
 COMPARE: docs/WORKFLOW-COMPARE-EDU.md
 VERSIONING: docs/VERSIONING.md
@@ -10,7 +10,8 @@ REPO: juanwan99/pico ONLY
 ```
 
 > **工作模式与 edu 相同**（切片隔离、CANDIDATE、独立审查、GitHub 唯一事实）。  
-> **运行时合同不同**（无 ECS/OneFlow/edu 生产端口）— 见对照文，勿整份复制 edu AGENTS。
+> **端到端操作系统：** 已启用 Pico 适配版 OneFlow — [`docs/ONEFLOW.md`](./ONEFLOW.md)（闭环清单 + 角色 + 发布阶段 A/B）。  
+> **运行时实体不同**（无 ECS / 1908x / mcu.asia）— 见对照文与 ONEFLOW 适配表；勿整份复制 edu 端口。
 
 禁止再造：自动调度器、mailbox、lease、平行状态库、与 GitHub 重复的「进度协议」。
 
@@ -62,17 +63,21 @@ REPO: juanwan99/pico ONLY
 
 ---
 
-## 3. 主路径
+## 3. 主路径（OneFlow 闭环）
+
+权威端到端说明：[`ONEFLOW.md`](./ONEFLOW.md) §3。摘要：
 
 ```text
-总控/业主：目标 + Issue/PR 号唤醒
+总管：目标（= 授权同范围 merge + 阶段 A 发布意图）
   → 写入 OPEN：预检 → 实现 → 窄测 → push
-  → PR 评论 CANDIDATE（全 SHA + 验收映射 + BLOCKED）
-  → 并行：CI ∥ 独立审查 ∥（若 UI）UI QA
-  → Ready（如需）
-  → 有人值守 merge main
-  → CLEAR 写入
+  → PR：CANDIDATE（全 SHA + 验收映射 + BLOCKED）
+  → 并行：CI ∥ 独立审查(黄/红) ∥ UI/生产抽检(若用户可见)
+  → CI 必须绿 → 总管 MERGED main
+  → 阶段 A 部署 → health.git_sha 对齐 → ## DEPLOYED 回写
+  → CLEAR 写入；用户只收总管结果
 ```
+
+**闭环门禁：** CI 红禁止合；未 DEPLOYED（或未声明延迟）= 发布未闭环。
 
 ### CANDIDATE 模板
 
@@ -103,12 +108,14 @@ REPO: juanwan99/pico ONLY
 - 覆盖改动旅程 + console/network；高风险补否定/空态。  
 - 非每个 PR 全站回归。
 
-### 合并
+### 合并（总管 · OneFlow）
 
-- **禁止** 无人值守合 main（MVP S8）。  
-- 黄/红：CI 绿 + 独立审查 PASS 后值守合。  
-- 绿：CI 绿 + 自检；薄审查可选。  
-- 对齐 main：先 sync 再 CI，再审当前 SHA（禁「先审后 sync」）。
+- **禁止** CI 红合 main；**禁止** 无人值守乱合。  
+- **总管**（网页 Codex 或业主指定）在门禁满足后 merge；写入不自合黄/红。  
+- 黄/红：CI 绿 + 独立审查 PASS（同完整 SHA）。  
+- 绿：CI 绿 + 自检；总管可合。  
+- 对齐 main：先 sync 再 CI，再审当前 SHA（禁「先审后 sync」）。  
+- 合后必须走发布闭环（ONEFLOW §9）或显式声明未部署。
 
 ---
 
@@ -159,7 +166,7 @@ REPO: juanwan99/pico ONLY
 | API | `127.0.0.1:8000` 或同机 compose |
 | 开发数据 | 本地 SQLite / 最小 seed；**不用** 生产数据 |
 | CI | GitHub Actions = 常规门禁证据 |
-| 发布 | 当前 **无** OneFlow；合 main ≠ 自动生产，除非另建轨 |
+| 发布 | **OneFlow 阶段 A**：合 main 后显式 prod-update + `## DEPLOYED`；阶段 B（GHCR/Actions）后置 |
 
 写入禁止：把生产密钥写进仓、打开危险工具默认、在文档外另立 AI 账本。
 
@@ -204,3 +211,11 @@ REPO: juanwan99/pico ONLY
 ---
 
 版本管理专章：[`VERSIONING.md`](./VERSIONING.md)（edu 内核吸收 + pico 发布边界）。
+
+
+---
+
+## 9. OneFlow
+
+端到端操作系统与闭环清单：[`docs/ONEFLOW.md`](./ONEFLOW.md)  
+状态辅助：`bash scripts/oneflow-status.sh`
