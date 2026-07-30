@@ -47,7 +47,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.command != "HEAD":
                 self.wfile.write(data)
             conn.close()
-        except Exception as e:
+        except OSError as e:
             msg = (
                 "<!doctype html><meta charset=utf-8><title>Pico</title>"
                 "<p>预览误打到数据库端口，正在尝试回跳产品页失败。</p>"

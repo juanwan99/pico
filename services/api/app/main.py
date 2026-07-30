@@ -223,7 +223,7 @@ async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
         raise HTTPException(status_code=500, detail="PICO_DANGEROUS_TOOLS_ENABLED must be false")
     try:
         proof = assert_dangerous_tools_off(agent_path)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise HTTPException(
             status_code=500,
             detail={

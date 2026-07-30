@@ -41,7 +41,7 @@ def _parse_next_run(kind: str, schedule: dict[str, Any], from_dt: datetime | Non
     try:
         h, m = hhmm.split(":")
         hour, minute = int(h), int(m)
-    except Exception:
+    except (ValueError, TypeError):
         hour, minute = 9, 0
     candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if candidate <= now:

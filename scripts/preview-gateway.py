@@ -44,7 +44,7 @@ class H(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
         except Exception as e:  # noqa: BLE001
-            msg = ('{"ok":false,"error":"%s"}' % str(e).replace('"', "")).encode()
+            msg = ('{"ok":false,"error":"' + str(e).replace('"', '') + '"}').encode()
             self.send_response(502)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(msg)))
