@@ -182,6 +182,9 @@ AUTHORITY: VERDICT_AUTHORITY NONE — 本页不自 PASS
 
 ## 9. 建议主线（校准后 · 仍不升 v1.3）
 
+> **执行蓝图：** [`docs/ORCHESTRATION-PLAN.md`](./ORCHESTRATION-PLAN.md) · 回归清单 [`docs/REGRESSION-MAINPATH.md`](./REGRESSION-MAINPATH.md)
+
+
 按 **门禁收益** 而非「再堆 WorkBuddy 像素」：
 
 1. **预览诚实**：6014 空 body 机制写清；用户 Live Preview 不谎称已通。  

@@ -48,6 +48,8 @@ Owner-aligned goals + purged wrong memories: [`docs/CORRECTED-GOALS.md`](docs/CO
 
 Live engineering calibration (branch tip, S1–S8, stale-doc index): [`docs/CALIBRATION-NOW.md`](docs/CALIBRATION-NOW.md).
 
+Execution blueprint (W0–W4): [`docs/ORCHESTRATION-PLAN.md`](docs/ORCHESTRATION-PLAN.md).
+
 ## Product rules
 
 - AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.

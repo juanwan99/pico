@@ -1,6 +1,8 @@
 # Pico 当前目标（执行窗口径 · 2026-07-30）
 
-> **现状校准：** 以 [`docs/CALIBRATION-NOW.md`](./CALIBRATION-NOW.md) 为准；本页若与之冲突，以校准页为准。
+> **现状校准：** [`docs/CALIBRATION-NOW.md`](./CALIBRATION-NOW.md)  
+> **统筹执行：** [`docs/ORCHESTRATION-PLAN.md`](./ORCHESTRATION-PLAN.md) · [`docs/REGRESSION-MAINPATH.md`](./REGRESSION-MAINPATH.md)  
+> 冲突时以校准/统筹为准。
 
 ```
 REPO: juanwan99/pico ONLY
