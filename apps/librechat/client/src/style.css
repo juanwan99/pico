@@ -3125,6 +3125,11 @@ html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
   font-family: var(--pico-wb-font);
   width: var(--pico-wb-result-w) !important;
 }
+@media (max-width: 1024px) {
+  .pico-result-panel {
+    display: none !important;
+  }
+}
 html:not(.dark) .pico-wb-sidebar {
   background: var(--pico-wb-rail) !important;
 }

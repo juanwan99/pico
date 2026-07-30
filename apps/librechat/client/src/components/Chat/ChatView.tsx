@@ -104,7 +104,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     : undefined;
   const ledger = usePicoTaskLedger(conversationId, isSubmitting);
   const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '等待模型响应' : undefined);
-  const showResultPanel = !isLandingPage && resultOpen && conversationId && conversationId !== Constants.NEW_CONVO;
+  const showResultPanel = resultOpen && conversationId !== Constants.SEARCH;
 
   // WorkBuddy chrome: task pages always show right rail by default
   useEffect(() => {
@@ -169,7 +169,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   <ChangeConfirmBanner taskId={ledger.task?.id} />
                 </>
               )}
-              <div className={cn('flex min-h-0 flex-1', isLandingPage ? 'flex-col' : 'flex-row')}>
+              <div className="flex min-h-0 flex-1 flex-row">
                 <div
                   className={cn(
                     'flex min-w-0 flex-1 flex-col',
@@ -211,7 +211,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     onClose={() => setResultOpen(false)}
                   />
                 ) : null}
-                {!isLandingPage && !resultOpen ? (
+                {!resultOpen ? (
                   <button
                     type="button"
                     className="absolute right-3 top-14 z-20 rounded-lg border border-black/[0.08] bg-white px-2.5 py-1.5 text-[12px] shadow-sm dark:bg-surface-secondary"

@@ -130,6 +130,7 @@ export default function ResultPanel({
   const [fileQuery, setFileQuery] = useState('');
   const [browserUrl, setBrowserUrl] = useState('');
   const [browserLoaded, setBrowserLoaded] = useState('');
+  const [browserKey, setBrowserKey] = useState(0);
   const navigate = useNavigate();
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
@@ -159,7 +160,7 @@ export default function ResultPanel({
     }
   }, [picoArtifacts]);
 
-    const filteredFiles = useMemo(() => {
+  const filteredFiles = useMemo(() => {
     const q = fileQuery.trim().toLowerCase();
     if (!q) {
       return artifacts;

@@ -182,9 +182,9 @@ function UnifiedSidebar() {
         <aside
           className="relative flex h-full flex-shrink-0 overflow-hidden"
           style={{
-            width: expanded ? 263 : COLLAPSED_WIDTH,
-            minWidth: expanded ? 263 : COLLAPSED_WIDTH,
-            maxWidth: expanded ? 263 : COLLAPSED_WIDTH,
+            width: expanded ? sidebarWidth : COLLAPSED_WIDTH,
+            minWidth: expanded ? sidebarWidth : COLLAPSED_WIDTH,
+            maxWidth: expanded ? sidebarWidth : COLLAPSED_WIDTH,
             transition: isResizing
               ? 'none'
               : `width ${TRANSITION_MS}ms ${EASING}, min-width ${TRANSITION_MS}ms ${EASING}, max-width ${TRANSITION_MS}ms ${EASING}`,
