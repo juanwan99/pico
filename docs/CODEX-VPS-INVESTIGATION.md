@@ -187,7 +187,7 @@ docker compose -f /opt/pico/docker-compose.host.yml logs --tail=80 pico-api
 - [x] API health ok（2026-07-30）
 - [x] S1 本机 200 + 演示OK（2026-07-30）
 - [x] 浏览器 https 登录（2026-07-30 业主）
-- [ ] 任务台同句「演示OK」UI 回复
+- [x] 任务台 UI 真聊能回复（2026-07-30 业主）
 - [ ] 公网仅 443 暴露（历史已查，可抽查）
 - [ ] 证书续期方案
 - [ ] 未把密钥写入 Git
@@ -223,4 +223,11 @@ cd /opt/pico && bash scripts/vps-fix-login.sh
 演示号 `teacher@example.com` / `pico-demo-123`（seed/fix-login 路径）。
 
 下一默认：浏览器任务台发「只回：演示OK」闭合 UI 真聊（S1 本机此前已 200）。
+
+### P0.4 UI 真聊（2026-07-30 业主确认）
+
+浏览器任务台 **能回复**（与 S1 本机 200 /「演示OK」一致）。
+
+**生产演示主路径闭环（诚实）：** HTTPS 入口 + 登录 + Kimi 真聊。  
+仍 **非** S2–S8 全量 PASS / 非 WorkBuddy 对等 / 未合 main。
 

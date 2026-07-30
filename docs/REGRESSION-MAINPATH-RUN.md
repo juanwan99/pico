@@ -77,3 +77,9 @@ entry: https://pico.aivia.asia/login
 
 - Environment: Aliyun light server host-network stack (see CODEX-VPS-INVESTIGATION.md)
 - Not a self-PASS of S2–S8 / CI / merge main
+
+## Production UI (2026-07-30 · owner)
+
+- login OK on https://pico.aivia.asia
+- task UI chat **replies** (Kimi path)
+- not full S2–S8 / merge PASS
