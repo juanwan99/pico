@@ -16,8 +16,21 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from app.main import app  # noqa: E402
 from app.auth import issue_test_token  # noqa: E402
-from app.db import RunRow, TaskRow, init_db, session_factory  # noqa: E402
-from app.openai_compat import ChatCompletionRequest, ChatMessage, chat_completions  # noqa: E402
+from app.db import (  # noqa: E402
+    ArtifactRow,
+    EventRow,
+    RunRow,
+    TaskRow,
+    init_db,
+    new_id,
+    session_factory,
+)
+from app.openai_compat import (  # noqa: E402
+    ChatCompletionRequest,
+    ChatMessage,
+    _finalize_run,
+    chat_completions,
+)
 from app.settings import Settings, get_settings  # noqa: E402
 from pico_orchestrator.runner import RunResult  # noqa: E402
 
@@ -299,6 +312,105 @@ async def test_direct_stream_aclose_finalizes_run_as_cancelled(tmp_path, monkeyp
         ).scalar_one()
         assert run.status == "cancelled"
         assert run.error == "stream disconnected"
+
+
+@pytest.mark.asyncio
+async def test_finalize_is_idempotent_and_terminal_status_is_sticky(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    db = tmp_path / "finalize-idempotent.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+
+    from app import db as dbmod
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+
+    task_id = new_id()
+    run_id = new_id()
+    factory = session_factory()
+    async with factory() as session:
+        session.add(
+            TaskRow(
+                id=task_id,
+                school_id="school-a",
+                membership_id="member-finalize-idempotent",
+                title="idempotent",
+            )
+        )
+        session.add(
+            RunRow(
+                id=run_id,
+                task_id=task_id,
+                status="running",
+                prompt="创建 stable.txt",
+                model="test-direct-model",
+            )
+        )
+        await session.commit()
+
+    final_text = "done\n```file:stable.txt\nstable body\n```"
+    await _finalize_run(
+        run_id,
+        status="succeeded",
+        final_text=final_text,
+        task_id=task_id,
+    )
+    await _finalize_run(
+        run_id,
+        status="succeeded",
+        final_text=final_text,
+        task_id=task_id,
+    )
+    await _finalize_run(
+        run_id,
+        status="failed",
+        error="late failure",
+        task_id=task_id,
+    )
+
+    async with factory() as session:
+        from sqlalchemy import select
+
+        run = await session.get(RunRow, run_id)
+        assert run is not None
+        assert run.status == "succeeded"
+        assert run.error is None
+        assert run.ended_at is not None
+
+        artifacts = list(
+            (
+                await session.execute(
+                    select(ArtifactRow).where(ArtifactRow.run_id == run_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert {(row.kind, row.title) for row in artifacts} == {
+            ("file", "stable.txt"),
+            ("doc", "回复摘要"),
+        }
+
+        artifact_events = list(
+            (
+                await session.execute(
+                    select(EventRow).where(
+                        EventRow.run_id == run_id,
+                        EventRow.type == "artifact.created",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(artifact_events) == 2
+        assert {event.payload["artifact_id"] for event in artifact_events} == {
+            artifact.id for artifact in artifacts
+        }
 
 
 @pytest.mark.parametrize("stream", [False, True], ids=["non-stream", "stream"])

@@ -277,55 +277,99 @@ async def _finalize_run(
     task_id: str | None = None,
     user_prompt: str | None = None,
 ) -> None:
-    from app.db import ArtifactRow
+    from sqlalchemy import select, update
+
+    from app.db import ArtifactRow, _utcnow
+
+    terminal = ("succeeded", "failed", "cancelled")
+    if status not in terminal:
+        raise ValueError(f"invalid terminal run status: {status}")
 
     factory = session_factory()
-    created_titles: list[str] = []
     async with factory() as session:
+        claimed = await session.execute(
+            update(RunRow)
+            .where(
+                RunRow.id == run_id,
+                RunRow.status.not_in(terminal),
+            )
+            .values(
+                status=status,
+                error=error,
+                ended_at=_utcnow(),
+            )
+        )
+        if claimed.rowcount != 1:
+            await session.rollback()
+            return
+
         run = await session.get(RunRow, run_id)
         if not run:
+            await session.rollback()
             return
-        run.status = status
-        if error:
-            run.error = error
-        tid = task_id or run.task_id
-        if final_text and tid and status == "succeeded":
+        if task_id is not None and task_id != run.task_id:
+            await session.rollback()
+            raise ValueError("run/task mismatch during finalize")
+
+        if final_text and status == "succeeded":
+            existing = await session.execute(
+                select(ArtifactRow.kind, ArtifactRow.title).where(
+                    ArtifactRow.run_id == run_id
+                )
+            )
+            existing_keys = {(kind, title) for kind, title in existing.all()}
             files = _extract_file_artifacts(final_text)
             if not files:
                 files = _file_from_user_prompt(user_prompt)
             for name, body in files:
-                session.add(
-                    ArtifactRow(
-                        id=new_id(),
-                        task_id=tid,
-                        run_id=run_id,
-                        kind="file",
-                        title=name,
-                        inline=body,
-                    )
-                )
-                created_titles.append(name)
-            session.add(
-                ArtifactRow(
+                key = ("file", name)
+                if key in existing_keys:
+                    continue
+                artifact = ArtifactRow(
                     id=new_id(),
-                    task_id=tid,
+                    task_id=run.task_id,
+                    run_id=run_id,
+                    kind="file",
+                    title=name,
+                    inline=body,
+                )
+                session.add(artifact)
+                existing_keys.add(key)
+                await append_event(
+                    session,
+                    run_id,
+                    "artifact.created",
+                    {
+                        "artifact_id": artifact.id,
+                        "title": name,
+                        "kind": "file",
+                    },
+                    commit=False,
+                )
+
+            summary_key = ("doc", "回复摘要")
+            if summary_key not in existing_keys:
+                artifact = ArtifactRow(
+                    id=new_id(),
+                    task_id=run.task_id,
                     run_id=run_id,
                     kind="doc",
                     title="回复摘要",
                     inline=final_text[:8000],
                 )
-            )
-            created_titles.append("回复摘要")
-        await session.commit()
-    if created_titles:
-        async with factory() as session:
-            for title in created_titles:
+                session.add(artifact)
                 await append_event(
                     session,
                     run_id,
                     "artifact.created",
-                    {"title": title, "kind": "file" if title != "回复摘要" else "doc"},
+                    {
+                        "artifact_id": artifact.id,
+                        "title": "回复摘要",
+                        "kind": "doc",
+                    },
+                    commit=False,
                 )
+        await session.commit()
 
 
 async def _run_and_collect(
