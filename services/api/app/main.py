@@ -831,52 +831,73 @@ class ChangeCreateRequest(BaseModel):
     run_id: str | None = None
 
 
+def _change_dict(row) -> dict:
+    return {
+        "id": row.id,
+        "task_id": row.task_id,
+        "run_id": row.run_id,
+        "title": row.title,
+        "summary": row.summary,
+        "payload": json.loads(row.payload_json or "{}"),
+        "status": row.status,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "confirmed_by": row.confirmed_by,
+        "confirmed_at": row.confirmed_at.isoformat() if row.confirmed_at else None,
+        "audit": json.loads(row.audit_json or "[]"),
+    }
+
+
 @app.post("/v1/changes")
 async def create_change(
     body: ChangeCreateRequest,
     principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    row = await run_service.create_change(
-        session,
-        principal,
-        title=body.title,
-        summary=body.summary,
-        payload=body.payload,
-        task_id=body.task_id,
-        run_id=body.run_id,
-    )
-    return {
-        "change": {
-            "id": row.id,
-            "title": row.title,
-            "summary": row.summary,
-            "status": row.status,
-            "payload": json.loads(row.payload_json or "{}"),
-        }
-    }
+    try:
+        row = await run_service.create_change(
+            session,
+            principal,
+            title=body.title,
+            summary=body.summary,
+            payload=body.payload,
+            task_id=body.task_id,
+            run_id=body.run_id,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="task or run not found") from None
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"change": _change_dict(row)}
 
 
 @app.get("/v1/changes")
 async def changes(
+    task_id: str | None = None,
+    status: str | None = None,
     principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    rows = await run_service.list_changes(session, principal)
-    return {
-        "changes": [
-            {
-                "id": r.id,
-                "title": r.title,
-                "summary": r.summary,
-                "status": r.status,
-                "confirmed_by": r.confirmed_by,
-                "confirmed_at": r.confirmed_at.isoformat() if r.confirmed_at else None,
-                "audit": json.loads(r.audit_json or "[]"),
-            }
-            for r in rows
-        ]
-    }
+    if status and status not in {"proposed", "confirmed", "rejected"}:
+        raise HTTPException(status_code=400, detail="invalid change status")
+    rows = await run_service.list_changes(
+        session,
+        principal,
+        task_id=task_id,
+        status=status,
+    )
+    return {"changes": [_change_dict(row) for row in rows]}
+
+
+@app.get("/v1/changes/{change_id}")
+async def get_change(
+    change_id: str,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    row = await run_service.get_change_for_principal(session, principal, change_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="change not found")
+    return {"change": _change_dict(row)}
 
 
 @app.post("/v1/changes/{change_id}/confirm")
@@ -891,17 +912,9 @@ async def confirm_change(
         raise HTTPException(status_code=404, detail="change not found") from None
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    return {
-        "change": {
-            "id": row.id,
-            "title": row.title,
-            "status": row.status,
-            "confirmed_by": row.confirmed_by,
-            "confirmed_at": row.confirmed_at.isoformat() if row.confirmed_at else None,
-            "audit": json.loads(row.audit_json or "[]"),
-            "note": "Audit only — no school business write in Phase 1",
-        }
-    }
+    change = _change_dict(row)
+    change["note"] = "Audit only — no school business write in Phase 1"
+    return {"change": change}
 
 
 @app.post("/v1/changes/{change_id}/reject")
@@ -916,15 +929,9 @@ async def reject_change(
         raise HTTPException(status_code=404, detail="change not found") from None
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    return {
-        "change": {
-            "id": row.id,
-            "title": row.title,
-            "status": row.status,
-            "audit": json.loads(row.audit_json or "[]"),
-            "note": "Rejected — no school business write",
-        }
-    }
+    change = _change_dict(row)
+    change["note"] = "Rejected — no school business write"
+    return {"change": change}
 
 
 # ----- demos -----

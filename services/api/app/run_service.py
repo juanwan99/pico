@@ -7,7 +7,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
@@ -282,6 +282,16 @@ async def create_change(
     task_id: str | None = None,
     run_id: str | None = None,
 ) -> ChangeProposalRow:
+    if task_id and await get_task_for_principal(session, task_id, principal) is None:
+        raise KeyError("task not found")
+    if run_id:
+        run = await get_run_for_principal(session, run_id, principal)
+        if run is None:
+            raise KeyError("run not found")
+        if task_id and run.task_id != task_id:
+            raise ValueError("run does not belong to task")
+        task_id = task_id or run.task_id
+
     row = ChangeProposalRow(
         id=new_id(),
         school_id=principal.school_id,
@@ -309,42 +319,96 @@ async def create_change(
     return row
 
 
+async def get_change_for_principal(
+    session: AsyncSession,
+    principal: Principal,
+    change_id: str,
+) -> ChangeProposalRow | None:
+    row = await session.get(ChangeProposalRow, change_id)
+    if row is None:
+        return None
+    if row.school_id != principal.school_id:
+        return None
+    if row.membership_id != principal.membership_id:
+        return None
+    return row
+
+
+async def _transition_change(
+    session: AsyncSession,
+    principal: Principal,
+    change_id: str,
+    *,
+    target_status: str,
+) -> ChangeProposalRow:
+    transitioned_at = _utcnow()
+    values: dict[str, Any] = {"status": target_status}
+    if target_status == "confirmed":
+        values.update(
+            confirmed_at=transitioned_at,
+            confirmed_by=principal.membership_id,
+        )
+    result = await session.execute(
+        update(ChangeProposalRow)
+        .where(
+            ChangeProposalRow.id == change_id,
+            ChangeProposalRow.school_id == principal.school_id,
+            ChangeProposalRow.membership_id == principal.membership_id,
+            ChangeProposalRow.status == "proposed",
+        )
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        await session.rollback()
+        existing = await get_change_for_principal(session, principal, change_id)
+        if existing is None:
+            raise KeyError("not found")
+        raise ValueError(
+            f"cannot transition to {target_status} from status={existing.status}"
+        )
+
+    row = await session.get(ChangeProposalRow, change_id)
+    if row is None:
+        await session.rollback()
+        raise KeyError("not found")
+    action = "confirmed" if target_status == "confirmed" else "rejected"
+    history = json.loads(row.audit_json or "[]")
+    history.append(
+        {
+            "action": action,
+            "by": principal.membership_id,
+            "at": transitioned_at.isoformat(),
+        }
+    )
+    row.audit_json = json.dumps(history, ensure_ascii=False)
+    session.add(
+        AuditRow(
+            id=new_id(),
+            school_id=principal.school_id,
+            membership_id=principal.membership_id,
+            action=f"change.{action}",
+            subject_type="change_proposal",
+            subject_id=row.id,
+            detail_json=json.dumps({"title": row.title}, ensure_ascii=False),
+        )
+    )
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
 async def confirm_change(
     session: AsyncSession,
     principal: Principal,
     change_id: str,
 ) -> ChangeProposalRow:
-    row = await session.get(ChangeProposalRow, change_id)
-    if row is None or row.school_id != principal.school_id:
-        raise KeyError("not found")
-    if row.membership_id and row.membership_id != principal.membership_id:
-        raise KeyError("not found")
-    if row.status != "proposed":
-        raise ValueError(f"cannot confirm status={row.status}")
-    row.status = "confirmed"
-    row.confirmed_at = _utcnow()
-    row.confirmed_by = principal.membership_id
-    history = json.loads(row.audit_json or "[]")
-    history.append(
-        {
-            "action": "confirmed",
-            "by": principal.membership_id,
-            "at": row.confirmed_at.isoformat(),
-        }
+    row = await _transition_change(
+        session,
+        principal,
+        change_id,
+        target_status="confirmed",
     )
-    row.audit_json = json.dumps(history, ensure_ascii=False)
-    audit = AuditRow(
-        id=new_id(),
-        school_id=principal.school_id,
-        membership_id=principal.membership_id,
-        action="change.confirmed",
-        subject_type="change_proposal",
-        subject_id=row.id,
-        detail_json=json.dumps({"title": row.title}, ensure_ascii=False),
-    )
-    session.add(audit)
-    await session.commit()
-    await session.refresh(row)
 
     # Phase 3 optional push to edu Review queue — edu owns business write
     try:
@@ -405,47 +469,31 @@ async def reject_change(
     principal: Principal,
     change_id: str,
 ) -> ChangeProposalRow:
-    row = await session.get(ChangeProposalRow, change_id)
-    if row is None or row.school_id != principal.school_id:
-        raise KeyError("not found")
-    if row.membership_id and row.membership_id != principal.membership_id:
-        raise KeyError("not found")
-    if row.status != "proposed":
-        raise ValueError(f"cannot reject status={row.status}")
-    row.status = "rejected"
-    history = json.loads(row.audit_json or "[]")
-    history.append(
-        {
-            "action": "rejected",
-            "by": principal.membership_id,
-            "at": _utcnow().isoformat(),
-        }
+    return await _transition_change(
+        session,
+        principal,
+        change_id,
+        target_status="rejected",
     )
-    row.audit_json = json.dumps(history, ensure_ascii=False)
-    audit = AuditRow(
-        id=new_id(),
-        school_id=principal.school_id,
-        membership_id=principal.membership_id,
-        action="change.rejected",
-        subject_type="change_proposal",
-        subject_id=row.id,
-        detail_json=json.dumps({"title": row.title}, ensure_ascii=False),
-    )
-    session.add(audit)
-    await session.commit()
-    await session.refresh(row)
-    return row
 
 
-async def list_changes(session: AsyncSession, principal: Principal) -> list[ChangeProposalRow]:
+async def list_changes(
+    session: AsyncSession,
+    principal: Principal,
+    *,
+    task_id: str | None = None,
+    status: str | None = None,
+) -> list[ChangeProposalRow]:
+    query = select(ChangeProposalRow).where(
+        ChangeProposalRow.school_id == principal.school_id,
+        ChangeProposalRow.membership_id == principal.membership_id,
+    )
+    if task_id:
+        query = query.where(ChangeProposalRow.task_id == task_id)
+    if status:
+        query = query.where(ChangeProposalRow.status == status)
     result = await session.execute(
-        select(ChangeProposalRow)
-        .where(
-            ChangeProposalRow.school_id == principal.school_id,
-            ChangeProposalRow.membership_id == principal.membership_id,
-        )
-        .order_by(ChangeProposalRow.created_at.desc())
-        .limit(50)
+        query.order_by(ChangeProposalRow.created_at.desc()).limit(50)
     )
     return list(result.scalars().all())
 

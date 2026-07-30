@@ -158,16 +158,35 @@ export async function deletePicoAutomation(id: string) {
 
 export type PicoChange = {
   id: string;
+  task_id?: string | null;
+  run_id?: string | null;
   title: string;
   summary: string;
-  status: string;
+  payload?: Record<string, unknown>;
+  status: 'proposed' | 'confirmed' | 'rejected';
+  created_at?: string | null;
   confirmed_by?: string | null;
   confirmed_at?: string | null;
   audit?: unknown[];
 };
 
-export async function listPicoChanges() {
-  return picoFetch<{ changes: PicoChange[] }>(`/v1/changes`);
+export async function listPicoChanges(options?: {
+  taskId?: string;
+  status?: PicoChange['status'];
+}) {
+  const params = new URLSearchParams();
+  if (options?.taskId) {
+    params.set('task_id', options.taskId);
+  }
+  if (options?.status) {
+    params.set('status', options.status);
+  }
+  const query = params.toString();
+  return picoFetch<{ changes: PicoChange[] }>(`/v1/changes${query ? `?${query}` : ''}`);
+}
+
+export async function getPicoChange(id: string) {
+  return picoFetch<{ change: PicoChange }>(`/v1/changes/${id}`);
 }
 
 export async function createPicoChange(body: {
