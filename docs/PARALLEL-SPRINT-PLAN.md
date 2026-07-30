@@ -2,385 +2,377 @@
 
 ```
 DOC: docs/PARALLEL-SPRINT-PLAN.md
-STATUS: DRAFT → 待业主拍板 + Codex 审查后升 BINDING
+STATUS: DRAFT-v2 · REVISE-applied · 待业主确认后升 BINDING
+          ⚠️ DO NOT EXECUTE as BINDING until STATUS line says BINDING
 DATE: 2026-07-30
 REPO: juanwan99/pico ONLY
 LAW: docs/MVP-3DAY.md v1.2 FIXED（无授权不升 v1.3）
 OS: docs/ONEFLOW.md
-BASE: main tip 于落盘时以 origin/main 为准（冲刺后约 2fecb66+）
+HARD_SCOPE: AGENTS.md — 永久禁止写 edu-cloud（M5 亦不例外）
 PRIOR: docs/SPRINT-3DAY-PUSH.md（底座冲刺已收口）
-SYNTHESIS: 吸收 Codex「A 体验 / B edu」+ 总管「Skill L1+L2 薄层」+ 最大并行 + 夜间 6h
+REVIEW: Codex REVISE on PR #37 — 本版吸收全部 P0/P1
+RELATED_ADR: docs/ADR-SKILL-CATALOG.md（必先读 · 唯一 Skill 目录）
 ```
 
 ## 0. 目标与非目标
 
-### 目标（本计划窗口 · 约 7～10 个自然日）
+### 目标（约 7～10 自然日 · BINDING 后才执行）
 
-1. **工作台主路径**体验可演示、无假按钮/闪黑/主路径断线（有界 WorkBuddy 对标，非 100% 像素终局）。
-2. **Skill L1+L2 薄层**：受控预设目录 + 任务/会话绑定 + Run 记 `skill_id` + 高风险→S7。
-3. **M5 筹备闭环**：联调方案 + 接口清单 + staging 检查表；**真连须业主另授**。
-4. **证据矩阵**可并行产出；发布候选可随时拉起。
+1. **主路径**体验可演示：无假按钮/闪黑/主路径断线（有界对标，**非**全面像素终局）。
+2. **Skill 薄层**：在 **ADR 选定的唯一目录** 上，三类纵向闭环（chat / read / write→S7）+ Run 受控快照。
+3. **M5 筹备**：方案 + 接口清单；**真连仅 = Pico 调 staging edu HTTP**，**永不写 edu 仓**。
+4. **证据**：矩阵覆盖率与实现率分列；发布候选可收口。
 
 ### 非目标
 
-- 用户任意代码 Skill / 技能市场  
-- 未授权 edu 真 HTTP / 改 edu-cloud  
-- 自动化引擎大扩建、新壳、升 v1.3  
-- 宣称 ±2px 全站完成（缺参考图必须标「缺参考」）
+- 写 **edu-cloud** 任何文件/PR/CI（**永久**；M5 授权不打开此门）
+- 用户任意代码 Skill / 第二套并行 Skill 产品目录
+- 未授权对 edu 的 live 调用
+- 宣称全站 ±2px 或「全面对标完成」
+- 升 v1.3、新壳、自动化引擎大扩建
 
 ### 共用底座（禁止再造）
 
 ```text
-principal (school_id + membership_id + scopes)
-  → Task / Run / Event / Artifact / Change
-  → 唯一 AI 账本在 Pico；业务最终态在 edu（联调后）
+principal → Task / Run / Event / Artifact / Change
 ```
 
-**三合流点（唯一允许的硬汇合）：** `principal` · `Task` · `Change(S7)`  
-其余轨尽量不互相锁文件。
+**三合流点：** `principal` · `Task` · `Change(S7)`。
+
+### 完成度三列（禁止混谈）
+
+| 指标 | 本冲刺目标 |
+|------|------------|
+| **全站路由与状态矩阵覆盖率** | **100%**（每屏有行；可 NO_REF） |
+| **主路径实现率** | **100%**（§3.2 六步） |
+| **其余页面实现** | **backlog / NO_REF**，不计入「冲刺完成」 |
+
+完成定义使用 **□** 直到 BINDING 执行收口时再勾；草稿阶段不用 ☑ 假装已完成。
 
 ---
 
-## 1. 并行轨道（最大化并行）
+## 1. 并行轨道
+
+| 轨 | 内容 | 写？ | 与谁并行 |
+|----|------|------|----------|
+| **W** | 主路径 + 矩阵脚手架 | 是 | S/E 文档/Q（路径隔离下） |
+| **S** | Skill 薄层（ADR 后） | 是 | W（lease 外）；E 文档 |
+| **E** | M5 文档；（授权后）Pico 侧 live 客户端 | 文档始终；代码仅 pico | 文档期全并行 |
+| **Q** | 截图 artifact + 只读报告 + PR 评论 | **不写** MATRIX/PIXEL-DIFF 正文 | **始终** |
+
+### 1.1 路径隔离 + 文件 lease
+
+#### 默认分区
+
+| 轨 | 默认可写 | 禁止 |
+|----|----------|------|
+| W | `apps/librechat/client/src/components/Workbench/**`（除 CapabilityHub 见 lease）、`Chat/**` 中非 Skill 绑定条、空态/路由、闪黑相关全局样式中的 **W 标注片段** | `services/orchestrator/**` Skill 注入核；Skill schema |
+| S | `docs/skills/**` 或 ADR 指定目录、`docs/ADR-SKILL-CATALOG.md`、`services/api/**` skill 相关、`services/orchestrator/**` 注入、`packages/contracts/**` skill schema、`data-provider/pico/**` 中 skill API 客户端 | 大面积视觉重构、无关 Workbench 页 |
+| E | `docs/M5-*.md`、`docs/PHASE3*`；（授权后）`edu_adapter.py`、settings 中 edu live **仅 pico 仓** | **任何 edu-cloud 路径**；未授权改默认 fake |
+| Q | `screenshots/**`、`output/**`、PR/Issue 评论、只读 `docs/*-REPORT.md` | `docs/WORKBUDDY-*MATRIX.md`、`docs/PIXEL-DIFF.md` **正文**（只出附件，由合流人回填） |
+
+#### 共享文件 lease（同时只允许一个写入窗）
+
+| 文件 | 默认归属 | 合流单写窗 |
+|------|----------|------------|
+| `CapabilityHubPage.tsx`（及同目录技能 UI） | **S**（N2+） | N3 若 W 需改布局 → **仅 N3 合流负责人** |
+| `ChatView.tsx` | **W**；S 仅 PR 级最小挂载点 | N3 合流 |
+| `ChangeConfirmBanner.tsx` | **W** 修显示；S 仅 `requires_s7` 接线补丁 | 冲突则 N3 单写 |
+| `data-provider/pico/api.ts` | **S** 加 skill 方法；W 不加无关 API | 串行 commit |
+| `style.css` / 全局 tokens | **W** 主路径；S 禁止大改 | N3 |
+| `docs/WORKBUDDY-SCREEN-MATRIX.md` 等 | **W** 建表与回填 | Q **禁止**直接改；Q 交截图路径列表 |
+| `docs/PIXEL-DIFF.md` | **W** 或 N5 合流人 | Q 只附件 |
+| `run_service.py` / `openai_compat.py` / `auth.py` | 谁改谁独占整窗；另一轨 WAIT | 总管指定 |
+
+**规则：** 开写前在 PR 描述列 `LEASES: file=track`；发现双写立即停并 rebase。
+
+### 1.2 单 Codex 时的并行含义
 
 ```text
-        ┌───────────── Track W：工作台主路径 / 矩阵 ─────────────┐
-        │                                                      │
-Owner ──┼───────────── Track S：Skill 薄层 ─────────────────────┼──► 合流演示
-        │                                                      │
-        └───────────── Track E：M5 方案 /（授权后）先读 ─────────┘
-                              │
-                    Track Q：验收证据（只读+回归）常开
+日间：轨 A 短刀或 E 文档或 Q 只读
+夜间 6h：轨 B 深挖（一夜一主轨）
+总管：审查 / 合 main / 发次日卡
 ```
 
-| 轨 | 代号 | 写代码？ | 主产物 | 默认并行 |
-|----|------|----------|--------|----------|
-| **W** | Workbench 主路径 | 是（LibreChat 偏多） | 矩阵 + 主路径修复 | 与 S/E **文件不重叠则并行** |
-| **S** | Skill L1+L2 | 是（api+少量 UI） | schema/预设/绑定/skill_id | 与 W 分区并行 |
-| **E** | edu 筹备→联调 | 先文档；授权后 api | 方案+清单；（后）只读工具 | 文档期与 W/S **全并行**；真连单独闸 |
-| **Q** | QA / 证据 | 否或极小 fix | 截图矩阵、冒烟、SELFTEST | **始终并行**（不抢写路径） |
-
-### 1.1 路径隔离规则（保证真并行）
-
-| 轨 | 优先写入路径 | 禁止踩 |
-|----|--------------|--------|
-| W | `apps/librechat/client/**`（壳、路由、空态、主路径） | `services/orchestrator/**` Skill 核、大改 api 合同 |
-| S | `packages/contracts/**` 或 `docs/skills/**`、`services/api/**` skill 路由、`services/orchestrator/**` 注入 | 大面积视觉重构 |
-| E | `docs/M5-*.md`、`docs/PHASE3*`；（授权后）`edu_adapter.py` live 配置测 | 未授权改 live 默认开 |
-| Q | `docs/*MATRIX*`、`docs/PIXEL-DIFF.md`、`screenshots/**`、PR 评论 | 业务逻辑大改 |
-
-**冲突文件（必须串行）：** `run_service.py` 核心 finalize、`auth.py` 大改、`ChangeConfirmBanner` 行为、全局 `openai_compat` 流式主路径。  
-→ 由总管指定 **唯一写入窗**；另一轨 `WAIT`。
-
-### 1.2 角色（单 Codex 时的「逻辑并行」）
-
-实际常只有 **一个 Codex 执行器**。并行 =：
-
-1. **夜间 6h** 深挖一轨主交付；  
-2. **日间** 另一轨短刀或 Q 证据；  
-3. **总管** 审查 + 合 main + 出次日/夜卡；  
-4. **业主** 授权 M5、看公网、缺图时补参考。
-
-若未来多执行器：W 与 S 分人；E 文档可第三人；Q 独立。
+生产部署 **仅 N1 / N3 / N5** 夜末（或显式日间），降低重复 rebuild。
 
 ---
 
-## 2. 日历总览（可并行）
+## 2. 日历（修正节奏）
 
-| 日 | 日间（≤3h 有效） | 夜间 6h 长任务 | 可并行 Q |
-|----|------------------|----------------|----------|
-| **N0** | 计划审查（本文件）· 业主拍板 | — | — |
-| **N1** | W：矩阵脚手架 + 闪黑/假按钮速扫 | **W-6h：主路径 P0 收口** | 截图桌面 1280 |
-| **N2** | S：schema 草案 PR；E：M5 方案大纲 | **S-6h：Skill L1+L2 可演示** | 移动 390 主路径 |
-| **N3** | W/S 合流接线；修 CI | **W-6h：二三级入口诚实 + 空态** | 矩阵填缺口 |
-| **N4** | E：接口清单终稿；业主看是否授 M5 | **若已授权：E-6h 只读联调**；**否则 S-6h 加固/用户组装草稿** | 全冒烟 |
-| **N5** | 发布候选彩排 | **Q+Fix-6h：三门禁 + 只修 P0** | 证据包 |
-| **N6** 缓冲 | 扫尾 / 你验收 | 可选补跑 | — |
-
-**尽量并行：** N1 夜 W 时，日间可写 E 文档；N2 夜 S 时，日间 W 只读测矩阵。  
-**不可并行：** 未授权时禁止 E 真连；同文件双写。
+| 日 | 日间 | 夜间 6h | 部署？ |
+|----|------|---------|--------|
+| **N0** | **修计划升 BINDING · Skill ADR · lease 表确认** | — | 否 |
+| **N1** | 矩阵脚手架；Q 只读基线截图 | **W 主路径 P0** | **是** |
+| **N2** | E 文档并行；S 测补 | **S 三类 Skill 纵向闭环** | 否（除非 API-only 急修） |
+| **N3** | **共享文件单写合流** | **W 二三级诚实 + 矩阵回填** | **是** |
+| **N4** | E 清单终稿；业主是否授 M5 | **授权→E 只读（仅 pico）**；**否则 S 扩预设** | 否 |
+| **N5** | 彩排 | **三门禁 + P0 only** | **是** |
+| **N6** | 缓冲 / 业主验收 | 可选 | 否 |
 
 ---
 
-## 3. Track W — 工作台主路径（有界对标）
+## 3. Track W — 主路径
 
-### 3.1 先矩阵（1 日量级 · 可与修 bug 重叠）
+### 3.1 矩阵（覆盖率 100%）
 
-交付：
+- `docs/WORKBUDDY-SCREEN-MATRIX.md`
+- `docs/WORKBUDDY-INTERACTION-MATRIX.md`
+- `docs/PIXEL-DIFF.md`（主路径优先；由 W/合流回填）
 
-- `docs/WORKBUDDY-SCREEN-MATRIX.md`  
-- `docs/WORKBUDDY-INTERACTION-MATRIX.md`  
-- 更新 `docs/PIXEL-DIFF.md`（主路径优先）
+尺寸：主路径强制 1280 + 390；1440 尽力。
 
-每行：`入口 | 路由 | 参考图有/缺 | Pico 截图 | 像素差 | 交互差 | 状态(空/载/跑/S7/成/败/无权限) | 完成度`
+### 3.2 主路径 P0（实现率 100%）
 
-尺寸：1440 / 1280 / 390（主路径必须；其余尽力）。
+1. 首页发起任务  
+2. 执行中状态  
+3. 右栏产物/预览  
+4. S7 横幅  
+5. 文件打开/下载/历史  
+6. 项目内任务与资产  
 
-### 3.2 主路径 P0（优先于「全面三级」）
-
-```text
-1 首页发起任务
-2 执行中状态
-3 右栏产物 / 预览
-4 S7 待确认横幅
-5 文件打开、下载、历史
-6 项目内发起任务并见资产沉淀
-```
-
-验收：
-
-- 一/二/三级 **主路径相关** 无 404、白屏、假按钮  
-- 刷新不闪黑、不丢当前任务（已知问题优先）  
-- 桌面无横滚；移动核心按钮可用  
-- 空态/错误/执行态可截图  
-- **不** 要求全站 ±2px  
-
-### 3.3 二期（N3 夜 · 不挡 Skill）
-
-列表/详情/创建/配置诚实空态；缺参考标 `NO_REF`。
+验收：无 404/白屏/假按钮；刷新不闪黑不丢任务；桌面无横滚；移动核心可用；**不**要求全站像素完成。
 
 ---
 
-## 4. Track S — Skill 薄层（L1+L2）
+## 4. Track S — Skill（唯一目录 · 见 ADR）
 
-### 4.1 合同（最小）
+**硬前置：** `docs/ADR-SKILL-CATALOG.md` 合并结论前，**禁止**新建平行 `/v1/skills` 产品面。
 
-```text
-Skill = id + title + description + system_prompt_fragment
-      + allowed_tools[]（⊆ 全局白名单）
-      + model_pref? + risk(read|write) + requires_s7?
-```
+### 4.1 原则（ADR 摘要位）
 
-- 预设包：仓内 YAML/JSON + schema 校验  
-- API：`GET /v1/skills`（启用列表）；任务/会话绑定 skill  
-- Run 元数据：`skill_id`（+ 名称快照）  
-- `risk=write` 或 `requires_s7` → 变更类必须走现有 Change/S7  
-- **禁止** 扩大工具面超过全局白名单  
+- LibreChat 已有 Skills UI/API → **产品目录只保留一套**（复用或明确隐藏一侧）。  
+- Pico 账本保存 **受控 Skill 快照**（id/名/工具子集/风险），不双写两套运行时。  
+- 全局工具白名单仍是上界；Skill 只能求交收窄。
 
-### 4.2 预设起步（6～10 个）
+### 4.2 N2 范围（防过载）— 仅 3 个纵向闭环
 
-例：纯聊、写教案提纲、出练习、会议纪要、班级一览(fake 只读)、备注变更提案(S7)、总结产物、翻译润色…  
+| id（例） | 类型 | 证明 |
+|----------|------|------|
+| `skill.chat` | chat | 无工具/极少工具 · 可聊 |
+| `skill.read` | read | 只读工具子集 · 有引用或产物 |
+| `skill.write_s7` | write→S7 | 提案 · 横幅 · 确认/拒绝 |
+
+其余预设 → **N4b** 扩充，不进 N2。
 
 ### 4.3 验收
 
-- 能力中心或任务台可选 Skill  
-- 切换后工具/提示有可测差异  
-- 账本可查 skill_id  
-- 高风险走 S7  
-- 无任意代码 Skill  
+- 三技能可切换；Run 含受控快照  
+- write 走 S7  
+- 无第二产品目录；无扩大白名单  
 
 ---
 
-## 5. Track E — M5 筹备与（授权后）先读后写
+## 5. Track E — M5
 
-### 5.1 未授权（默认）
+### 5.1 红线（P0）
 
-只交付文档：
+```text
+M5 授权开放的是：
+  Pico 进程 → staging/production edu 的 HTTP/JWT 调用
 
-- `docs/M5-INTEGRATION-RUNBOOK.md`（staging、密钥、开关、回滚）  
-- `docs/M5-API-CHECKLIST.md`（JWT claims、只读工具、Change handoff、错误码）  
-- 生产保持 `PICO_EDU_MODE=fake`、handoff off  
+M5 授权 绝不 开放：
+  对 juanwan99/edu-cloud 的 clone 写 / PR / CI / merge
+```
 
-### 5.2 授权后第一刀（只读）
+一切 edu 侧改动由 **edu 工作流 / 其他角色** 完成；Pico 代理人只改 **本仓**。
 
-- edu JWT 验签（关或收紧 test issuer 的 runbook）  
-- school/membership/角色映射  
-- 过期/跨校拒绝测  
-- **两个只读工具** 真数  
-- edu 不可用 → **明确降级**，禁止静默假数据  
+### 5.2 未授权
 
-### 5.3 授权后第二刀（S7 写）
+仅 `docs/M5-INTEGRATION-RUNBOOK.md`、`docs/M5-API-CHECKLIST.md`；生产 `fake` + handoff off。
 
-- 仅 Change Proposal → 确认 → edu 原子提交  
-- change_id 一致；幂等/超时/冲突  
-- Pico 账本 + edu 业务态分离  
-- **禁止** 绕过 S7 写成绩/班级等  
+### 5.3 授权后（仅 Pico 仓）
 
-### 5.4 嵌工作台（非新壳）
-
-助理 / 项目 / 能力中心 / 任务区 / 右栏 / S7 / 历史 — 只接线，不造 edu 独立站。
+- 只读两工具真数 + 降级不静默假数据  
+- 再 S7 handoff；change_id 一致  
+- 嵌现有工作台，不造 edu 站  
 
 ---
 
-## 6. Track Q — 验收与证据（常开并行）
+## 6. Track Q
 
-| 门禁 | 内容 |
+| 做 | 不做 |
+|----|------|
+| 截图到 `screenshots/` 或 `output/` | 直接改 MATRIX/PIXEL-DIFF 正文 |
+| PR 评论证据表（路径列表） | 业务大改 |
+| SELFTEST / 只读冒烟 | 与 W 抢矩阵编辑 |
+
+矩阵回填：**W 或 N3/N5 合流人**根据 Q 附件一次写入。
+
+---
+
+## 7. 夜间 6h 卡（可复制 · 均含时间盒）
+
+### 7.0 通用 HARD
+
+```text
+- 仅 juanwan99/pico；禁止写 edu-cloud（即使「M5 授权」）
+- OneFlow；CI 红不合；禁 PROXY=1；禁暴露 18765/27017/8080；禁打印 key
+- 不自 PASS 终局；不升 v1.3
+- 一夜一主轨写代码；开写前列 LEASES
+- 结束：报告模板 + push；部署仅当夜卡允许
+```
+
+### 7.1 夜卡 N1 · W 主路径 P0
+
+```text
+# N1 · 6h · W 主路径 P0 · 允许部署
+
+H0–H0.5  fetch main；枝 grok/pico-w-mainpath；列 LEASES
+H0.5–H1  主路径 6 步点通表（断点列表）
+H1–H4    修闪黑/假按钮/404/右栏/S7/下载/项目任务回归
+H4–H5    矩阵主路径行 + 截图路径（正文 W 写；可引用 Q 附件）
+H5–H5.5  相关测/构建；PR；CI
+H5.5–H6  合 main；生产对齐；冒烟 6 步；## DEPLOYED；报告
+
+强制测：agent-selftest 或等价；浏览器 6 步
+停止：主路径全 Y 或 6h 满且 CANDIDATE 清晰接手
+禁止：全面像素、Skill 大改、edu、扩自动化
+
+报告：SHA / 6 步 Y/N / 矩阵路径 / 截图 / LEASES / blockers
+```
+
+### 7.2 夜卡 N2 · S 三类 Skill 闭环
+
+```text
+# N2 · 6h · S 三类 Skill · 默认不部署（api 急修除外）
+
+前置：ADR-SKILL-CATALOG 已合或同 PR 首段合并结论
+
+H0–H0.5  main；枝 grok/pico-skill-thin；LEASES（api.ts / hub 归 S）
+H0.5–H1.5  唯一目录接线（复用 LC 或 ADR 选定）；schema/快照字段
+H1.5–H3.5  仅 skill.chat / skill.read / skill.write_s7 纵向
+H3.5–H4.5  Run 快照 + 测（切换/隔离/S7）
+H4.5–H5.5  UI 最小可选；浏览器三技能
+H5.5–H6    PR；CI；合；报告（生产部署可留 N3）
+
+强制测：pytest skill 相关 + S7 回归
+停止：三技能闭环 Y；其余预设不进本卡
+禁止：6+ 预设堆量、第二目录、扩大白名单、edu
+
+报告：ADR 结论引用 / 三技能证据 / skill 快照 / SHA
+```
+
+### 7.3 夜卡 N3 · 合流 + 二三级诚实
+
+```text
+# N3 · 6h · 共享文件单写合流 + 二三级 · 允许部署
+
+H0–H1    指定唯一合流人；merge main；锁定 lease 共享文件
+H1–H3    合流 Skill 挂载 + W 布局；解决冲突
+H3–H5    二三级入口：无 404/白屏/假按钮；空态；矩阵回填（含 Q 附件）
+H5–H6    PR；CI；合；生产；冒烟主路径+三技能；DEPLOYED；报告
+
+强制测：selftest + 主路径手点 + 三技能
+停止：共享文件无双头；矩阵覆盖率朝 100%
+禁止：新功能、edu、像素终局宣称
+```
+
+### 7.4 夜卡 N4a · M5 只读（仅业主书面授权 · 只改 pico）
+
+```text
+# N4a · 6h · Pico→staging edu 只读 · 禁止写 edu-cloud
+
+前置：业主授权全文；staging URL/密钥在服务器 env 非聊天粘贴
+
+H0–H1    开关与 runbook；确认 fake 非默认误开生产
+H1–H4    JWT 验签路径；2 只读工具；跨校/过期；降级测
+H4–H5    文档清单勾选；pytest
+H5–H6    PR；CI；staging 验证报告；生产是否启用另令
+
+禁止：写 edu-cloud；业务写；绕过 S7；生产默认真连未令
+```
+
+### 7.5 夜卡 N4b · Skill 扩充（无 M5 授权时默认）
+
+```text
+# N4b · 6h · 预设扩充到 8–10 + 失败态
+
+H0–H1    main；仅 S lease
+H1–H4    按 ADR 目录加预设；测
+H4–H5    可选：组装草稿（提示词+工具子集，无代码）
+H5–H6    PR；CI；合；报告
+
+禁止：第二目录、edu、大视觉
+```
+
+### 7.6 夜卡 N5 · 三门禁
+
+```text
+# N5 · 6h · 发布候选 · 允许部署 · 禁止新功能
+
+H0–H1    拉齐 main=预期 tip
+H1–H3    功能门禁全表 + SELFTEST
+H3–H4    视觉：主路径截图齐；矩阵覆盖率检查
+H4–H5    生产门禁：端口、fake/live、SHA
+H5–H6    只修 P0；文档完成度三列更新；DEPLOYED；验收包
+
+停止：完成定义 □→执行后勾选；无新需求
+```
+
+---
+
+## 8. N0 出门条件（升 BINDING 前）
+
+```text
+□ PARALLEL-SPRINT-PLAN 本 v2 被业主接受
+□ docs/ADR-SKILL-CATALOG.md 合并（唯一目录结论）
+□ 文件 lease 表无异议
+□ AGENTS 导航标注 DRAFT 或已改 BINDING
+□ STATUS 行改为 BINDING 的专用 commit
+```
+
+---
+
+## 9. 完成定义（执行收口时再勾）
+
+```text
+□ 矩阵覆盖率 100%（允许 NO_REF 单元格）
+□ 主路径实现率 100%
+□ 三类 Skill 纵向闭环 + 无第二目录
+□ M5 方案+清单在 main；未授权则无 live
+□ 若授权：只读真工具在 pico 侧完成且未写 edu 仓
+□ main=prod · SELFTEST · 端口安全
+□ 未宣称全面像素完成 · 未写 edu-cloud
+```
+
+---
+
+## 10. 风险
+
+| 风险 | 缓解 |
 |------|------|
-| 视觉 | 主路径矩阵截图 1280+390；缺参考不装完成 |
-| 功能 | 登录、真聊、产物、下载、S7、Skill 切换、隔离 |
-| 生产 | CI、main=prod、端口、fake/live、SELFTEST |
-
-每夜长任务结束：`## CANDIDATE` + 可选 `## DEPLOYED`。
-
----
-
-## 7. 夜间 6 小时长任务卡（给 Codex）
-
-> 用法：业主说「跑 Nx 夜」→ 复制对应小节全文 → Codex 连续执行约 6h → 交报告。  
-> 日间任务由总管另发短卡；**夜卡默认一条主轨，禁止一夜开三轨写爆。**
-
-### 7.1 通用 HARD（所有夜卡）
-
-```text
-- 仅 juanwan99/pico · 不写 edu-cloud（除非夜卡写明且业主已授 M5）
-- OneFlow：CANDIDATE → CI 绿 → 合 main（有权）→ 生产对齐 → DEPLOYED
-- 禁 PROXY=1 · 禁公网 18765/27017/8080 · 禁打印 key
-- 不自 PASS 产品终局 · 不升 v1.3
-- 生产 /opt/pico · https://pico.aivia.asia · 演示账号沿用
-- 6h 结束必须：报告模板 + push；尽量 main=prod
-- 冲突路径：先 git pull --rebase/merge main；保留他轨已合入工作
-```
-
-### 7.2 夜卡 N1 · Track W 主路径 P0（6h）
-
-```text
-# 夜卡 N1 · 6h · Workbench 主路径 P0
-
-使命：主路径 6 步可演示 + 闪黑/假按钮/404 清零（主路径范围）+ 矩阵初版。
-
-H0–H1  对齐 main；建枝 grok/pico-w-mainpath；扫一级入口点通表
-H1–H4  修：刷新闪黑、假按钮、主路径断线、右栏/S7/下载回归
-H4–H5  写/补 WORKBUDDY-SCREEN-MATRIX 主路径行 + 截图目录
-H5–H6  测相关 UI 无构建红；PR；CI；合；生产；冒烟；报告
-
-禁止：全面像素、自动化引擎、Skill 大改、edu 真连。
-
-报告：main SHA / 主路径 1–6 Y/N / 矩阵路径 / 截图 / blockers
-```
-
-### 7.3 夜卡 N2 · Track S Skill L1+L2（6h）
-
-```text
-# 夜卡 N2 · 6h · Skill 薄层可演示
-
-使命：schema + ≥6 预设 + list/bind API + Run.skill_id + UI 可选 + 高风险 S7。
-
-H0–H1  对齐 main；枝 grok/pico-skill-l1；合同/schema 入库
-H1–H3  API + orchestrator 注入 allowed_tools 求交；测
-H3–H5  能力中心或任务台接线；浏览器切换 Skill 可察
-H5–H6  PR；CI；合；rebuild api（+前端若改）；冒烟含 Skill；报告
-
-禁止：任意代码 Skill、扩大白名单、edu 真连、大视觉改版。
-
-报告：skill 列表 / skill_id 账本证据 / S7 链 / SHA
-```
-
-### 7.4 夜卡 N3 · Track W 二三级诚实（6h）
-
-```text
-# 夜卡 N3 · 6h · 二三级入口诚实 + 空态
-
-使命：矩阵覆盖二三级；无 404/白屏/纯假按钮；空态/错误态可截图；缺参考标 NO_REF。
-
-禁止：宣称像素完成、新模块概念、edu。
-
-可与已合 Skill 共存；冲突 UI 文件先 merge main。
-```
-
-### 7.5 夜卡 N4a · Track E 只读联调（6h · 仅业主授权后）
-
-```text
-# 夜卡 N4a · 6h · M5 只读 · 需书面授权
-
-前置：业主确认 staging 与密钥；生产/staging 开关明确。
-使命：JWT 真验签路径 + 2 只读工具真数 + 降级明确 + 测；禁止写业务。
-
-未授权：禁止执行本卡；改跑 N4b。
-```
-
-### 7.6 夜卡 N4b · Track S 加固（6h · 默认无 M5 授权时）
-
-```text
-# 夜卡 N4b · 6h · Skill 加固
-
-使命：预设补到 8–10；隔离测；失败态；可选「组装草稿」仅私有提示词+工具子集（无代码）。
-禁止：市场、任意脚本、edu 真连。
-```
-
-### 7.7 夜卡 N5 · 三门禁收口（6h）
-
-```text
-# 夜卡 N5 · 6h · 发布候选
-
-使命：视觉/功能/生产三门禁全跑；只修 P0；更新矩阵完成度；验收包；main=prod。
-禁止：新功能。
-```
+| 双 Skill 目录 | ADR 强制唯一 |
+| W/S 文件战 | lease + N3 单写 |
+| Q 改矩阵 | Q 只附件 |
+| N2 过载 | 仅 3 skill |
+| M5 误写 edu | HARD 永久 pico-only |
+| DRAFT 误执行 | 文首 DO NOT EXECUTE |
 
 ---
 
-## 8. 日间短任务原则（与夜卡配合）
+## 11. 请 Codex 再审时（v2）
 
-| 日间适合 | 夜间适合 |
-|----------|----------|
-| 合 PR、CI 红修、文档大纲、审查响应 | 主路径大修、Skill 整层、联调第一刀 |
-| Q 截图补洞、矩阵填表 | 长浏览器回归 |
-| 业主演示走查 | 重建镜像 + 全冒烟 |
-
-**并行公式：** `日间(轨X 短) ∥ 夜(轨Y 6h) ∥ Q`，且 **X≠Y 或 X 只读**。
+1. P0 红线与 ADR 是否消除 BLOCKED？  
+2. lease 是否可执行？  
+3. N2 三分技能是否 6h 可行？  
+4. 可否建议升 BINDING？  
 
 ---
 
-## 9. 合流与验收包
+## 12. 审查记录
 
-### 9.1 中间合流演示（N3 末建议）
-
-- 选 Skill → 跑任务 → 产物 →（若 write）S7 → 矩阵有截图  
-
-### 9.2 计划完成定义（未授 M5）
-
-```text
-☑ 主路径 6 步全 Y
-☑ 矩阵主路径行齐全（缺参考已标记）
-☑ Skill ≥6 预设可切换且 skill_id 入账
-☑ M5 方案+清单在 main
-☑ main=prod · SELFTEST_OK · 端口安全
-☑ 未假称像素 100% · 未未授权真连 edu
-```
-
-### 9.3 授 M5 后追加
-
-```text
-☑ 2 只读真工具 + 降级测
-☑ S7 handoff 真提交（staging）+ change_id 一致
-```
-
----
-
-## 10. 风险与减速带
-
-| 风险 | 减速 |
-|------|------|
-| 单 Codex 假并行 | 一夜一主轨硬约束 |
-| 像素范围膨胀 | P0 主路径优先；NO_REF |
-| M5 等 edu | E 文档与 W/S 并行；真连闸 |
-| 文件冲突 | §1.1 隔离表 |
-| 破坏底座 | 回归必跑 S7/下载/聊天 |
-
----
-
-## 11. 请 Codex 审查时关注的问题（业主转发）
-
-1. 路径隔离是否够真并行？何处必串行？  
-2. 夜卡粒度是否 6h 可完成？建议拆/并？  
-3. Skill 与 W 轨 UI 文件冲突如何约定？  
-4. M5 授权门是否足够硬？  
-5. 是否应升格 BINDING 或改日历？  
-
-审查意见请回写本文件 §12 或 PR 评论。
-
----
-
-## 12. 审查记录（空）
-
-| 日期 | 审查方 | 结论 | 变更 |
-|------|--------|------|------|
-| | Codex | PENDING | |
-| | 业主 | PENDING | |
+| 日期 | 方 | 结论 | 变更 |
+|------|-----|------|------|
+| 2026-07-30 | Codex | REVISE（PR#37） | → 本 v2 |
+| | Codex | 待再审 v2 | |
+| | 业主 | 待确认 | |
 
 ---
 
 ## 13. 进度日志
 
-| 日期 | 事件 | SHA | 注 |
-|------|------|-----|-----|
-| 2026-07-30 | 计划草稿落盘 | （本 PR） | 待审查 |
+| 日期 | 事件 | 注 |
+|------|------|-----|
+| 2026-07-30 | v1 DRAFT | PR#37 |
+| 2026-07-30 | v2 REVISE-applied | 本提交 · 仍 DO NOT EXECUTE |

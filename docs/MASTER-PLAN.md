@@ -10,7 +10,7 @@ BRANCH: grok/pico-preview-librechat-p0 → main（CANDIDATE · 不自 PASS · �
 RELATED:
   - docs/ONEFLOW.md（执行操作系统）
   - docs/SPRINT-3DAY-PUSH.md（3 日加速收口）
-  - docs/PARALLEL-SPRINT-PLAN.md（并行：体验/Skill/M5 筹备 + 夜 6h）
+  - docs/PARALLEL-SPRINT-PLAN.md（**DRAFT-v2 · 勿当 BINDING 执行**；Skill ADR 见 ADR-SKILL-CATALOG）
   - docs/CORRECTED-GOALS.md
   - docs/MVP-3DAY.md
   - docs/PHASE2-CONTRACTS.md / docs/PHASE3-INTEGRATION.md
