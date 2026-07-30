@@ -101,7 +101,7 @@ function FileGlyph({ kind }: { kind: ArtifactItem['kind'] }) {
   return (
     <span
       className={cn(
-        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold',
+        'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold',
         kind === 'txt'
           ? 'bg-[#e8f1ff] text-[#3b6fd9]'
           : 'bg-[#f0f0f0] text-[#6b6b6b]',
@@ -338,7 +338,7 @@ export default function ResultPanel({
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col">
         {view === 'overview' && (
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
             {taskTitle || runStatusLabel ? (
               <div className="mb-3 rounded-lg bg-[#fafafa] px-3 py-2 dark:bg-surface-tertiary">
                 {taskTitle ? (
@@ -372,7 +372,7 @@ export default function ResultPanel({
                 {artifacts.map((a) => (
                   <li
                     key={a.id}
-                    className="flex items-center gap-2.5 rounded-xl border border-black/[0.06] bg-white px-2.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-border-light dark:bg-surface-secondary"
+                    className="flex items-center gap-2 rounded-lg border border-black/[0.06] bg-white px-2.5 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-border-light dark:bg-surface-secondary"
                   >
                     <FileGlyph kind={a.kind} />
                     <div className="min-w-0 flex-1">
@@ -387,7 +387,7 @@ export default function ResultPanel({
                       {a.body ? (
                         <button
                           type="button"
-                          className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-[#f3f3f3]"
+                          className="flex h-9 w-9 items-center justify-center rounded-md text-[#8c8c8c] hover:bg-[#f3f3f3]"
                           onClick={() => downloadArtifact(a)}
                           aria-label={`下载${a.name}`}
                           title="下载"
@@ -397,7 +397,7 @@ export default function ResultPanel({
                       ) : null}
                       <button
                         type="button"
-                        className="rounded-lg bg-[#f3f3f3] px-2.5 py-1 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#e8e8e8] dark:bg-surface-tertiary dark:text-text-primary"
+                        className="h-9 rounded-lg bg-[#f3f3f3] px-3 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#e8e8e8] dark:bg-surface-tertiary dark:text-text-primary"
                         onClick={() => openArtifact(a)}
                       >
                         打开

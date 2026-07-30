@@ -192,7 +192,7 @@ export default function Landing({
         ) : null}
 
         {/* Scene pills */}
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-2" role="tablist">
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2" role="tablist">
           {SCENES.map((s) => {
             const active = scene === s.id;
             return (
@@ -217,7 +217,7 @@ export default function Landing({
         </div>
 
         {/* Capability chips */}
-        <div className="mt-5 flex w-full flex-wrap items-center justify-center gap-2">
+        <div className="mt-4 flex w-full flex-wrap items-center justify-center gap-2">
           {visibleChips.map((chip) => {
             const Icon = chip.icon;
             return (
@@ -235,7 +235,7 @@ export default function Landing({
         </div>
 
         {/* PIXEL composer card — matches reference input block */}
-        <div className="mt-7 w-full max-w-[720px]">
+        <div className="mt-5 w-full max-w-[720px]">
           <div
             className="rounded-[20px] border border-black/[0.08] bg-white px-4 pb-3 pt-3.5 shadow-[0_8px_28px_rgba(15,23,42,0.07)]"
             data-testid="pico-wb-home-composer"
