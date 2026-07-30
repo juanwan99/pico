@@ -1,14 +1,13 @@
 # Production layout used on Aliyun light server (host network).
-# Why host: Docker bridge was broken on the VPS; all binds stay on 127.0.0.1.
 # Public entry: Nginx 443 → 127.0.0.1:8080 only.
 #
-# Auth note: LibreChat talks to Pico via OPENAI_API_KEY=pico-dev (OpenAI-compat
-# proxy). API only accepts that key when PICO_ENV is NOT production. Keep
-# development until LibreChat→Pico JWT is wired end-to-end.
+# Demo login (after recreate with this file):
+#   teacher@example.com / pico-demo-123
+#   PICO_SEED_DEMO_USER seeds on boot (source mounts; no full rebuild required)
 #
-#   cd /opt/pico
-#   docker compose -f docker-compose.host.yml up -d
-#   bash scripts/vps-seed-demo-user.sh   # demo login
+#   cd /opt/pico && git pull
+#   docker compose -f docker-compose.host.yml up -d --force-recreate librechat
+#   # or: bash scripts/vps-seed-demo-user.sh
 #
 services:
   mongo:
@@ -78,8 +77,19 @@ services:
       DOMAIN_CLIENT: https://pico.aivia.asia
       DOMAIN_SERVER: https://pico.aivia.asia
       CONFIG_PATH: /app/librechat.yaml
+      # Auto-create demo user on boot (see picoSeedDemoUser.js)
+      PICO_SEED_DEMO_USER: "true"
+      PICO_DEMO_EMAIL: teacher@example.com
+      PICO_DEMO_PASSWORD: pico-demo-123
+      PICO_DEMO_NAME: Pico Teacher
+      PICO_DEMO_USERNAME: teacher
+      # set true once if password was changed wrongly:
+      # PICO_SEED_DEMO_RESET_PASSWORD: "true"
     volumes:
       - ./librechat.yaml:/app/librechat.yaml:ro
+      # inject seed without rebuilding image
+      - ./apps/librechat/api/server/index.js:/app/api/server/index.js:ro
+      - ./apps/librechat/api/server/services/picoSeedDemoUser.js:/app/api/server/services/picoSeedDemoUser.js:ro
       - librechat_images:/app/client/public/images
       - librechat_uploads:/app/uploads
       - librechat_logs:/app/logs

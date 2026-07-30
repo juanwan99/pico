@@ -200,3 +200,19 @@ docker compose -f /opt/pico/docker-compose.host.yml logs --tail=80 pico-api
 |------|------|
 | 2026-07-30 | 首版：Codex 部署调查汇总 |
 | 2026-07-30 | **S1 业主证据：health ok + 200 + 演示OK**；P0.2/0.3 勾完；下一默认 P0.4 UI |
+
+### 登录修复（2026-07-30 续）
+
+生产空 Mongo / 未验证邮箱 → UI「登录失败」。
+
+**服务器一键（推荐）：**
+```bash
+cd /opt/pico && bash scripts/vps-fix-login.sh
+```
+期望 `DEMO_LOGIN=OK`。然后浏览器：
+`teacher@example.com` / `pico-demo-123`
+
+机制：
+- `PICO_SEED_DEMO_USER` 启动播种（compose 挂载 seed 源码，免全量 rebuild）
+- 脚本兜底：register API + mongosh emailVerified + create-user
+

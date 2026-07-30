@@ -33,6 +33,7 @@ const {
   updateInterfacePermissions,
 } = require('@librechat/api');
 const { connectDb, indexSync } = require('~/db');
+const { seedPicoDemoUser } = require('~/server/services/picoSeedDemoUser');
 const {
   updateAccessPermissions,
   sweepOrphanedPreviews,
@@ -129,6 +130,7 @@ const startServer = async () => {
   }
 
   await runAsSystem(seedDatabase);
+  await runAsSystem(seedPicoDemoUser);
   /* Recover stuck `status: 'pending'` records from a crash mid-render.
    * `runAsSystem` is required — `File` is tenant-isolated and strict
    * mode rejects unscoped queries. Lazy sweep in the preview endpoint
