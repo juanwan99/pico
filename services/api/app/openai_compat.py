@@ -642,12 +642,14 @@ async def chat_completions(
                     caps=caps,
                     history=history,
                 )
-                async with factory() as session:
-                    run_row = await session.get(RunRow, run_id)
-                    if run_row:
-                        run_row.status = result.status
-                        run_row.error = result.error
-                        await session.commit()
+                await _finalize_run(
+                    run_id,
+                    status=result.status,
+                    error=result.error,
+                    final_text=result.final_text,
+                    task_id=task_id,
+                    user_prompt=prompt,
+                )
                 await q.put(("done", result))
             except Exception as e:  # noqa: BLE001
                 await q.put(("error", e))
