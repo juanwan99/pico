@@ -22,6 +22,7 @@ import { useAuthContext } from '~/hooks';
 import useSubmitMessage from '~/hooks/Messages/useSubmitMessage';
 import WorkspaceSelector from '~/components/Chat/Input/WorkspaceSelector';
 import { cn } from '~/utils';
+import { consumePendingModel, getPicoModelMode, setPicoModelMode } from '~/utils/picoModelPref';
 
 type SceneId = 'office' | 'code' | 'design';
 
@@ -99,7 +100,14 @@ export default function Landing({
   const [permOpen, setPermOpen] = useState(false);
   const [fullAccess, setFullAccess] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
-  const [model, setModel] = useState('Auto');
+  const [model, setModel] = useState(() => {
+    try {
+      return getPicoModelMode() || 'Auto';
+    } catch {
+      return 'Auto';
+    }
+  });
+  const [expertBadge, setExpertBadge] = useState<string | null>(null);
 
 
   const visibleChips = useMemo(() => CHIPS.filter((c) => c.scenes.includes(scene)), [scene]);
@@ -135,15 +143,24 @@ export default function Landing({
   // Expert / skill "summon" prefill from capability hub
   useEffect(() => {
     try {
+      const pendingModel = consumePendingModel();
+      if (pendingModel) {
+        setModel(pendingModel);
+      }
       const expert = sessionStorage.getItem('pico:pendingExpert');
       if (expert) {
         sessionStorage.removeItem('pico:pendingExpert');
+        setExpertBadge(expert);
         fillPrompt(`请以「${expert}」的角色协助完成任务：`);
       }
       const pre = sessionStorage.getItem('pico:pendingPrompt');
       if (pre) {
         sessionStorage.removeItem('pico:pendingPrompt');
         fillPrompt(pre);
+      }
+      const active = sessionStorage.getItem('pico:activeExpert');
+      if (active) {
+        setExpertBadge(active);
       }
     } catch {
       /* ignore */
@@ -160,6 +177,12 @@ export default function Landing({
         </h1>
         {name ? (
           <p className="mt-2.5 text-[13px] text-[#8c8c8c]">{name}，描述任务即可开始</p>
+        ) : null}
+        {expertBadge ? (
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#edf1f4] px-3 py-1 text-[12px] font-medium text-[#3d3d3d]">
+            专家 · {expertBadge}
+            <span className="text-[#8c8c8c]">· 模型 {model}</span>
+          </div>
         ) : null}
 
         {/* Scene pills */}
@@ -256,9 +279,7 @@ export default function Landing({
                           onClick={() => {
                             setModel(m);
                             setModelOpen(false);
-                            try {
-                              localStorage.setItem('pico:modelMode', m);
-                            } catch {}
+                            setPicoModelMode(m);
                           }}
                         >
                           {m}

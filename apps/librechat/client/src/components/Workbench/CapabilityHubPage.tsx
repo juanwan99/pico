@@ -6,6 +6,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Plug, Sparkles, UserRound, ChevronRight } from 'lucide-react';
 import { cn } from '~/utils';
 import WorkbenchShell from './WorkbenchShell';
+import {
+  preferredModelForExpert,
+  preferredModelForSkill,
+  setActiveExpert,
+  setPicoModelMode,
+} from '~/utils/picoModelPref';
 
 type HubTab = 'experts' | 'skills' | 'connectors';
 
@@ -114,6 +120,8 @@ export default function CapabilityHubPage() {
     try {
       sessionStorage.setItem('pico:pendingExpert', name);
       sessionStorage.setItem('pico:pendingPrompt', `请以「${name}」专家身份协助：${desc}`);
+      setActiveExpert(name);
+      setPicoModelMode(preferredModelForExpert(name));
     } catch {
       /* ignore */
     }
@@ -246,6 +254,8 @@ export default function CapabilityHubPage() {
                 onClick={() => {
                   try {
                     sessionStorage.setItem('pico:pendingPrompt', s.prompt);
+                    setActiveExpert(null);
+                    setPicoModelMode(preferredModelForSkill(s.id));
                   } catch {
                     /* ignore */
                   }

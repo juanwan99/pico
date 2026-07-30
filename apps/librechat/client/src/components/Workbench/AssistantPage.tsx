@@ -5,6 +5,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot, Smartphone, Plus, MessageSquare, ChevronRight, Sparkles } from 'lucide-react';
 import WorkbenchShell from './WorkbenchShell';
+import {
+  preferredModelForExpert,
+  setActiveExpert,
+  setPicoModelMode,
+} from '~/utils/picoModelPref';
 
 const ASSISTANTS = [
   {
@@ -42,6 +47,11 @@ export default function AssistantPage() {
       if (a.expert) {
         sessionStorage.setItem('pico:pendingExpert', a.expert);
         sessionStorage.setItem('pico:pendingPrompt', `请以「${a.expert}」的角色协助完成任务：`);
+        setActiveExpert(a.expert);
+        setPicoModelMode(preferredModelForExpert(a.expert));
+      } else {
+        setActiveExpert(null);
+        setPicoModelMode(a.model?.includes('pico-agent') ? 'pico-agent' : 'kimi-k2.6');
       }
     } catch {
       /* ignore */

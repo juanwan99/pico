@@ -3139,3 +3139,11 @@ html:not(.dark) [data-testid="task-run-bar"] + * {
 html:not(.dark) .pico-result-panel {
   box-shadow: -1px 0 0 var(--pico-wb-line);
 }
+
+/* Secondary workbench pages */
+.pico-wb-secondary {
+  font-family: var(--pico-wb-font);
+}
+.pico-wb-secondary header h1 {
+  letter-spacing: -0.01em;
+}

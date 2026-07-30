@@ -268,7 +268,7 @@ export default function ProjectWorkspace() {
   return (
     <main className="flex h-full min-h-0 bg-[#fafafa] text-[#1a1a1a] dark:bg-presentation dark:text-text-primary">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="border-b border-black/[0.06] bg-white px-4 pb-0 pt-3 dark:border-border-light dark:bg-surface-primary">
+        <div className="border-b border-black/[0.06] bg-white px-4 pb-0 pt-2 dark:border-border-light dark:bg-surface-primary">
           <button
             type="button"
             onClick={() => navigate('/projects')}
@@ -282,7 +282,7 @@ export default function ProjectWorkspace() {
               <Folder className="h-5 w-5 text-[#3d3d3d]" />
             </span>
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-[18px] font-semibold tracking-tight">{project.name}</h1>
+              <h1 className="truncate text-[16px] font-semibold tracking-tight">{project.name}</h1>
               {project.description ? (
                 <p className="mt-0.5 line-clamp-2 text-[12.5px] text-[#6b6b6b]">
                   {project.description}
@@ -325,7 +325,7 @@ export default function ProjectWorkspace() {
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {tab === 'dynamic' && (
             <div className="mx-auto max-w-2xl space-y-3">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   className="rounded-full bg-[#1a1a1a] px-3 py-1 text-[12px] text-white"
@@ -338,7 +338,38 @@ export default function ProjectWorkspace() {
                 >
                   成员动态
                 </button>
+                <button
+                  type="button"
+                  onClick={startProjectChat}
+                  className="ml-auto rounded-full bg-white px-3 py-1 text-[12px] font-medium text-[#1a1a1a] ring-1 ring-black/[0.08]"
+                >
+                  任务台入口 · 新任务
+                </button>
               </div>
+              {conversations.slice(0, 3).length > 0 ? (
+                <div className="rounded-2xl border border-black/[0.06] bg-white p-3 dark:border-border-light dark:bg-surface-secondary">
+                  <p className="mb-2 text-[12px] font-medium text-[#8c8c8c]">最近任务</p>
+                  <ul className="space-y-1">
+                    {conversations.slice(0, 5).map((c) => (
+                      <li key={c.conversationId}>
+                        <button
+                          type="button"
+                          onClick={() => openChat(c)}
+                          className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-[#f5f5f5]"
+                        >
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#1a1a1a]" />
+                          <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                            {titleOf(c)}
+                          </span>
+                          <span className="text-[11px] text-[#9a9a9a]">
+                            {timeLabel(c.updatedAt as string)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <div className="rounded-2xl border border-black/[0.06] bg-white p-4 dark:border-border-light dark:bg-surface-secondary">
                 <textarea
                   className="w-full resize-none bg-transparent text-[13px] outline-none placeholder:text-[#b0b0b0]"
@@ -568,10 +599,10 @@ export default function ProjectWorkspace() {
       </div>
 
       <aside
-        className="hidden w-[300px] shrink-0 flex-col border-l border-black/[0.06] bg-white lg:flex dark:border-border-light dark:bg-surface-primary"
+        className="pico-result-panel hidden w-[340px] shrink-0 flex-col border-l border-black/[0.06] bg-white lg:flex dark:border-border-light dark:bg-surface-primary"
         aria-label="项目配置"
       >
-        <div className="border-b border-black/[0.06] px-4 py-3 text-[13px] font-semibold">
+        <div className="flex h-11 items-center border-b border-black/[0.06] bg-[#fafafa] px-4 text-[13px] font-semibold">
           项目配置
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
@@ -589,8 +620,12 @@ export default function ProjectWorkspace() {
                   onClick={() => {
                     if (item.id === 'automation') {
                       navigate('/automation');
-                    } else if (item.id === 'skill' || item.id === 'expert' || item.id === 'connector') {
-                      navigate('/capability');
+                    } else if (item.id === 'expert') {
+                      navigate('/capability?tab=experts');
+                    } else if (item.id === 'skill') {
+                      navigate('/capability?tab=skills');
+                    } else if (item.id === 'connector') {
+                      navigate('/capability?tab=connectors');
                     }
                   }}
                 >

@@ -27,10 +27,10 @@ export default function WorkbenchShell({
 
   return (
     <div
-      className={cn('flex h-full min-h-0 flex-col bg-[#fafafa] dark:bg-presentation', className)}
+      className={cn('pico-wb-secondary flex h-full min-h-0 flex-col bg-[#fafafa] dark:bg-presentation', className)}
       data-testid="workbench-shell"
     >
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white px-3 dark:border-border-light dark:bg-surface-primary">
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white px-3 dark:border-border-light dark:bg-surface-primary">
         <button
           type="button"
           onClick={() => navigate(backTo)}

@@ -33,3 +33,15 @@ STATUS: LIVING
 - 项目工作区与结果区文件树更贴
 - 自动化九字段更满（若 v1.2 允许）
 - 有业主截图则按图校二级页间距
+
+
+## 专家/技能 → 模型联动
+
+| 来源 | 写入 | 消费 |
+|------|------|------|
+| 专家召唤 | `pico:modelMode` + `pico:activeExpert` | Landing 徽章 + 提交前缀【专家角色】 |
+| 技能点击 | `preferredModelForSkill` → modelMode | 同左 |
+| 助理 | 默认/专家映射 | 同左 |
+| 代码类专家 | 偏好 `pico-agent` | 多步工具环 |
+
+实现：`client/src/utils/picoModelPref.ts`

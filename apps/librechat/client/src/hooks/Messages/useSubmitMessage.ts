@@ -8,6 +8,7 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import { mainTextareaId } from '~/common';
 import store from '~/store';
 import { workspaceContextPrefix } from '~/components/Chat/Input/WorkspaceSelector';
+import { expertSystemLine } from '~/utils/picoModelPref';
 
 function projectInstructionPrefix(conversation: { chatProjectId?: string | null } | null | undefined): string {
   try {
@@ -96,7 +97,8 @@ export default function useSubmitMessage() {
       } else if (userId && !wsPrefix) {
         wsPrefix = `【Pico-User:${String(userId)}】\n`;
       }
-      const metaPrefix = `${wsPrefix || ''}${projPrefix || ''}`;
+      const expertPrefix = expertSystemLine();
+      const metaPrefix = `${wsPrefix || ''}${projPrefix || ''}${expertPrefix || ''}`;
       const textWithWs =
         metaPrefix &&
         data.text &&
