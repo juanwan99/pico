@@ -91,6 +91,47 @@ NODE
   fi
 fi
 
+
+# S2 pico-agent explicit multi-step path (smoke, not full tool matrix)
+python3 - <<'PYS2' && pass "S2 pico-agent reply" || fail "S2 pico-agent"
+import json, urllib.request, urllib.error, os, sys
+API=os.environ.get("PICO_API","http://127.0.0.1:18765")
+H={"Authorization":"Bearer pico-dev","Content-Type":"application/json","X-Pico-Membership-Id":"selftest-s2"}
+body={"model":"pico-agent","stream":False,"messages":[{"role":"user","content":"【Pico-User:s2】用一句话说明你是谁，不要调工具"}]}
+req=urllib.request.Request(API+"/v1/chat/completions", data=json.dumps(body).encode(), method="POST", headers=H)
+try:
+    with urllib.request.urlopen(req, timeout=120) as r:
+        d=json.loads(r.read().decode())
+except urllib.error.HTTPError as e:
+    print(e.code, e.read()[:200]); sys.exit(1)
+msg=((d.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+assert len(msg.strip())>0, d
+print("s2", msg[:120].replace("\n"," "))
+PYS2
+
+# S7 membership isolation
+python3 - <<'PYISO' && pass "S7 membership isolation" || fail "S7 isolation"
+import json, urllib.request, urllib.error, os, sys
+API=os.environ.get("PICO_API","http://127.0.0.1:18765")
+
+def req(mid, method, path, body=None):
+    data=None if body is None else json.dumps(body).encode()
+    h={"Authorization":"Bearer pico-dev","Content-Type":"application/json","X-Pico-Membership-Id":mid}
+    r=urllib.request.Request(API+path, data=data, method=method, headers=h)
+    with urllib.request.urlopen(r, timeout=30) as resp:
+        return json.loads(resp.read().decode() or "{}")
+
+a=req("iso-a","POST","/v1/changes",{"title":"iso-a","summary":"only a","payload":{}})
+cid=a["change"]["id"]
+list_b=req("iso-b","GET","/v1/changes")
+ids=[c.get("id") for c in (list_b.get("changes") or [])]
+assert cid not in ids, ("leak", ids)
+list_a=req("iso-a","GET","/v1/changes")
+ids_a=[c.get("id") for c in (list_a.get("changes") or [])]
+assert cid in ids_a, ids_a
+print("iso ok", cid)
+PYISO
+
 python3 - <<'PYS7' && pass "S7 create/confirm/reject" || fail "S7 API"
 import json, urllib.request, urllib.error, os, sys
 API = os.environ.get("PICO_API", "http://127.0.0.1:18765")

@@ -29,3 +29,14 @@ DOC: docs/AGENT-SELFTEST.md
 bash scripts/agent-selftest.sh
 # 期望 SELFTEST_OK
 ```
+
+## 责任边界（HARD）
+
+| 角色 | 负责 |
+|------|------|
+| **Agent（本窗）** | 写代码、本地起栈、selftest、单测、ruff、push 分支 |
+| **业主** | 仅公网最终一眼；或 VPS 执行 **一行** 热更新 |
+| **Codex（有 SSH 时）** | 生产 `prod-update` / 浏览器公网验收 |
+
+**禁止**把「请你打开页面测一下」当作默认验收。Agent 本地 `SELFTEST_OK` 是开发门禁。
+
