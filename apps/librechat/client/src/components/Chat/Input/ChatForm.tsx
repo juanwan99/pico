@@ -478,7 +478,7 @@ const ChatForm = memo(function ChatForm({
       })}
       className={cn(
         'mx-auto flex w-full flex-row gap-3 transition-[max-width] duration-300 sm:px-2',
-        maximizeChatSpace ? 'max-w-full' : 'max-w-[720px]',
+        maximizeChatSpace ? 'max-w-full' : 'max-w-[797px]',
         'mb-2 sm:mb-4',
       )}
     >

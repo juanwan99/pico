@@ -61,6 +61,7 @@ const NAV: NavItem[] = [
     label: '更多',
     icon: MoreHorizontal,
     path: '/more',
+    action: 'more',
     badge: '资料库·灵感',
   },
 ];

@@ -203,7 +203,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                 >
                   <div
                     className={cn(
-                      'flex min-h-0 flex-1 flex-col',
+                      'flex min-h-0 w-full flex-1 flex-col',
                       !isLandingPage && 'overflow-y-auto',
                     )}
                   >
