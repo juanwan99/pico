@@ -21,6 +21,8 @@ STATUS: LIVING
 | 我的文件 | `/more/files` | 账本产物列表 | list tasks + artifacts |
 | 灵感 | `/capability?tab=skills` | 技能 tab | 同上 |
 | 任务列表项 | `/c/:id` | 中栏对话+右结果区 | 账本 rebind/产物 |
+| 空间 | `/workspaces` | 创建/列表/删除 | Pico `/v1/workspaces` |
+| 结果区底部 | `/more/files` | 全局产物 | 与右栏同源 |
 
 ## 后置（点开有壳、能力未做满）
 

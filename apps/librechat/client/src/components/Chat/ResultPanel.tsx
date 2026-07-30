@@ -6,6 +6,7 @@
  * 浏览器: nav chrome + URL + security footer
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown,
   FileText,
@@ -129,6 +130,7 @@ export default function ResultPanel({
   const [fileQuery, setFileQuery] = useState('');
   const [browserUrl, setBrowserUrl] = useState('');
   const [browserLoaded, setBrowserLoaded] = useState('');
+  const navigate = useNavigate();
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
     if (picoArtifacts?.length) {
@@ -460,6 +462,15 @@ export default function ResultPanel({
             </div>
           </div>
         )}
+      </div>
+      <div className="shrink-0 border-t border-black/[0.06] px-3 py-2 dark:border-border-light">
+        <button
+          type="button"
+          onClick={() => navigate('/more/files')}
+          className="w-full rounded-lg bg-[#f5f5f5] py-1.5 text-center text-[12px] font-medium text-[#3d3d3d] hover:bg-[#ebebeb] dark:bg-surface-tertiary dark:text-text-primary"
+        >
+          打开我的文件
+        </button>
       </div>
     </aside>
   );

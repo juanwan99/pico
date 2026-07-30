@@ -205,18 +205,19 @@ function Sidebar({
         <div className="mt-1 shrink-0 px-3.5 pb-2">
           <button
             type="button"
+            onClick={() => navigate('/workspaces')}
             className="flex h-8 w-full items-center gap-1 rounded-md px-1.5 text-[12.5px] text-[#6b6b6b] hover:bg-[#e8e8e8]"
           >
-            <span>空间 (1)</span>
+            <span>空间</span>
             <ChevronDown className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
-            onClick={() => navigate('/projects')}
+            onClick={() => navigate('/workspaces')}
             className="mt-0.5 flex h-8 w-full items-center gap-2 rounded-md px-1.5 text-[12.5px] text-[#3d3d3d] hover:bg-[#e8e8e8]"
           >
             <FolderKanban className="h-3.5 w-3.5 text-[#6b6b6b]" />
-            <span className="truncate">默认工作空间</span>
+            <span className="truncate">管理工作空间</span>
             <span className="ml-auto text-[#b0b0b0]">›</span>
           </button>
         </div>

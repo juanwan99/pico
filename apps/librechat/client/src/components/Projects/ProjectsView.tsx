@@ -102,12 +102,12 @@ export default function ProjectsView() {
   };
 
   return (
-    <main className="flex h-full min-h-0 flex-col overflow-auto bg-surface-primary text-text-primary">
+    <main className="flex h-full min-h-0 flex-col overflow-auto bg-[#fafafa] text-text-primary dark:bg-presentation" data-testid="projects-view">
       <div className="container mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-8 md:px-6 lg:pt-12">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             {isSmallScreen ? <OpenSidebar /> : null}
-            <h1 className="text-2xl font-bold tracking-tight text-text-primary md:text-3xl">
+            <h1 className="text-[20px] font-semibold tracking-tight text-[#1a1a1a] md:text-[22px] dark:text-text-primary">
               {localize('com_ui_projects')}
             </h1>
           </div>

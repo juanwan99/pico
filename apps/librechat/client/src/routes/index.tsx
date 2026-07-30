@@ -26,6 +26,7 @@ import CapabilityHubPage from '~/components/Workbench/CapabilityHubPage';
 import AssistantPage from '~/components/Workbench/AssistantPage';
 import FilesHubPage from '~/components/Workbench/FilesHubPage';
 import ConnectorDetailPage from '~/components/Workbench/ConnectorDetailPage';
+import WorkspaceHubPage from '~/components/Workbench/WorkspaceHubPage';
 import Root from './Root';
 
 const AuthLayout = () => (
@@ -219,6 +220,10 @@ export const router = createBrowserRouter(
             {
               path: 'more/files',
               element: <FilesHubPage />,
+            },
+            {
+              path: 'workspaces',
+              element: <WorkspaceHubPage />,
             },
           ],
         },
