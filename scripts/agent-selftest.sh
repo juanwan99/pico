@@ -200,8 +200,8 @@ print("artifacts", titles)
 PYART
 
 
-# N2 skill snapshots via POST /v1/tasks?skill_id= (no model wait; snapshot at create)
-python3 - <<'PYSKILL' && pass "skill snapshots chat/read/write_s7" || fail "skill snapshots"
+# Controlled skill snapshots via POST /v1/tasks?skill_id= (no model wait; snapshot at create)
+python3 - <<'PYSKILL' && pass "skill snapshots all controlled ids" || fail "skill snapshots"
 import json, urllib.request, urllib.error, os, sys
 API = os.environ.get("PICO_API", "http://127.0.0.1:18765")
 
@@ -229,6 +229,11 @@ cases = [
     ("st-skill-chat", "skill-chat", []),
     ("st-skill-read", "skill-read", ["fake_edu_list_classes"]),
     ("st-skill-w", "skill-write-s7", ["pico_propose_change"]),
+    ("st-skill-summarize", "skill-summarize", []),
+    ("st-skill-lesson", "skill-lesson-outline", []),
+    ("st-skill-quiz", "skill-quiz-draft", []),
+    ("st-skill-translate", "skill-translate", []),
+    ("st-skill-notes", "skill-meeting-notes", []),
 ]
 for mid, sid, tools in cases:
     st, d = create_task(mid, sid)
