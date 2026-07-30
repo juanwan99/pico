@@ -1,6 +1,5 @@
 ---
 name: skill-write-s7
-displayTitle: skill.write_s7
 description: Use this skill for change proposals that require the existing S7 confirmation path.
 allowed-tools:
   - pico_propose_change

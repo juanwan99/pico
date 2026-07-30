@@ -1,6 +1,5 @@
 ---
 name: skill-chat
-displayTitle: skill.chat
 description: Use this skill for normal Pico chat with few or no tools.
 allowed-tools: []
 disable-model-invocation: true
