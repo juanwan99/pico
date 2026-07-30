@@ -13,6 +13,8 @@ PRIOR: docs/SPRINT-3DAY-PUSH.md（底座冲刺已收口）
 REVIEW: Codex REVISE on PR #37 — 本版吸收全部 P0/P1
 RELATED_ADR: docs/ADR-SKILL-CATALOG.md（必先读 · 唯一 Skill 目录）
 DOC_INDEX: docs/README.md（真源索引 · 禁交接 MD）
+NIGHT_POLICY: docs/NIGHT-CARD-POLICY.md（加厚 · 最短工时）
+N3_CARD: docs/NIGHT-CARD-N3-THICK.md
 ```
 
 ## 0. 目标与非目标
@@ -380,3 +382,5 @@ H5–H6    只修 P0；文档完成度三列更新；DEPLOYED；验收包
 | 2026-07-30 | BINDING-v2 | 业主授权；开 N1 |
 | 2026-07-30 | N1 完成 | PR #41 · main 54595fe · 主路径 6/6 |
 | 2026-07-30 | N2 卡发布 | docs/NIGHT-CARD-N2-SKILL-THIN.md |
+| 2026-07-30 | N2 完成 | PR #43/#44 · 972c426 |
+| 2026-07-30 | 夜卡加厚策略 | NIGHT-CARD-POLICY + N3-THICK |
