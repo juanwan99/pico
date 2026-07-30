@@ -191,11 +191,17 @@ def scope_proxy_principal(
         return principal
     mid = (membership_id or "").strip()
     if not mid:
-        return principal
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="proxy membership header required",
+        )
     # allow uuid / mongo id / slug only
     import re
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", mid):
-        return principal
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid proxy membership header",
+        )
     return Principal(
         school_id=principal.school_id,
         membership_id=mid,

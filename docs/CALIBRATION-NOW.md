@@ -176,7 +176,6 @@ AUTHORITY: VERDICT_AUTHORITY NONE — 本页不自 PASS
 | `docs/GOALS-NOW.md` | 执行窗口径（部分 P2 句可能旧） |
 | `docs/HAZARD-AUDIT.md` | 安全；**R3/R4 部分过时** |
 | `docs/HANDOFF.md` | 历史交接；**§3 脚手架 / §5 Vue / §6 nextchat 过时** |
-| `docs/PRODUCT-UI.md` | **部分过时**（nextchat） |
 
 ---
 

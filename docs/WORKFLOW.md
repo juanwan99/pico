@@ -155,7 +155,7 @@ REPO: juanwan99/pico ONLY
 
 | 用途 | 约定 |
 |------|------|
-| 产品预览 UI | `0.0.0.0:8080`（如 NextChat / web） |
+| 产品预览 UI | `0.0.0.0:8080`（LibreChat 沙箱预览） |
 | API | `127.0.0.1:8000` 或同机 compose |
 | 开发数据 | 本地 SQLite / 最小 seed；**不用** 生产数据 |
 | CI | GitHub Actions = 常规门禁证据 |

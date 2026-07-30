@@ -149,4 +149,4 @@ It looks like you are trying to access MongoDB over HTTP on the native driver po
 
 ## 用户看得见：走公网部署
 
-见 [`docs/DEPLOY-PUBLIC.md`](./DEPLOY-PUBLIC.md) 与 `scripts/publish-tunnel.sh`（Cloudflare quick tunnel）。
+见 [`docs/DEPLOY-PUBLIC.md`](./DEPLOY-PUBLIC.md)。正式观看入口只使用生产 HTTPS 域名。

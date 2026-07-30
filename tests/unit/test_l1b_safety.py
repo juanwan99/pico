@@ -13,9 +13,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from app.main import app
-from app.openai_compat import _dev_proxy_keys, _principal_from_auth
-from app.settings import Settings
+from app.main import app  # noqa: E402
+from app.auth import scope_proxy_principal  # noqa: E402
+from app.openai_compat import _dev_proxy_keys, _principal_from_auth  # noqa: E402
+from app.settings import Settings  # noqa: E402
 
 
 def test_dev_proxy_keys_never_include_model_or_jwt_secret() -> None:
@@ -59,6 +60,26 @@ def test_openai_compat_accepts_pico_dev_in_development() -> None:
     p = _principal_from_auth("Bearer pico-dev", s)
     assert p.school_id == "school-a"
     assert p.membership_id == "nextchat-user"
+
+
+def test_proxy_principal_requires_valid_membership_header() -> None:
+    s = Settings(
+        pico_jwt_secret="change-me-dev-only-not-for-prod-32b!",
+        pico_env="development",
+        pico_accept_test_issuer=True,
+    )
+    proxy = _principal_from_auth("Bearer pico-dev", s)
+
+    with pytest.raises(HTTPException) as missing:
+        scope_proxy_principal(proxy, None)
+    assert missing.value.status_code == 401
+
+    with pytest.raises(HTTPException) as invalid:
+        scope_proxy_principal(proxy, "member:other")
+    assert invalid.value.status_code == 400
+
+    scoped = scope_proxy_principal(proxy, "member-a")
+    assert scoped.membership_id == "member-a"
 
 
 def test_openai_compat_rejects_proxy_in_production() -> None:

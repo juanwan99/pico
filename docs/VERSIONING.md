@@ -31,7 +31,7 @@ RELATED: docs/WORKFLOW.md · AGENTS.md · docs/MVP-3DAY.md
 运行版本   = 进程实际加载的代码身份（应可查询）
 依赖钉死   = kimi-agent-sdk / kimi-cli 等 pin（冻结表 + CI 检查）
 计划版本   = 文档 STATUS: FIXED vx.y（改计划必须升版）
-产品壳     = apps/nextchat（禁止 apps/web 回归）
+产品壳     = apps/librechat（禁止旧壳回归）
 AI 账本    = Pico DB 内 Task/Run/Event（非 edu 业务真源）
 ```
 
@@ -127,8 +127,8 @@ GET /v1/meta/version
 
 | 允许 | 禁止 |
 |------|------|
-| `apps/nextchat` 为产品 UI | 恢复 `apps/web` 三栏壳当默认 |
-| NextChat 版本随上游 + 我方补丁 | 双壳并行「都算正式产品」 |
+| `apps/librechat` 为产品 UI | 恢复任一已删除旧壳当默认 |
+| LibreChat 版本随上游 + 我方补丁 | 双壳并行「都算正式产品」 |
 
 CI：`apps/web` 目录存在 → **失败**（见 workflow）。
 
@@ -155,10 +155,10 @@ CI：`apps/web` 目录存在 → **失败**（见 workflow）。
 
 ## 10. 事故类：产品壳漂移（2026-07-29）
 
-| 现象 | 预览出现橙色「新对话」三栏，不是 NextChat |
+| 现象 | 预览出现已删除旧壳，不是 LibreChat |
 |------|------------------------------------------|
 | 根因 | 进程绑错：`apps/web` Vite 占 :8080；main 仍可能含双壳 |
-| 修复 | 删除 `apps/web`；只认 `apps/nextchat`；CI + `assert-product-identity` |
+| 修复 | 删除旧壳；只认 `apps/librechat`；CI + `assert-product-identity` |
 | 防再发 | `/v1/meta/version` 含 `product_ui_ok`；启动脚本断言；预览前看 identity |
 
 **版本不出问题 = 代码 SHA + 产品壳身份 + pin 三者同时正确。**

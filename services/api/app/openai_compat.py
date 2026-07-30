@@ -332,35 +332,12 @@ async def _run_and_collect(
     principal: Principal,
     settings: Settings,
     *,
+    run_id: str,
     history: list[dict[str, Any]] | None = None,
-) -> str:
+) -> Any:
     from pico_orchestrator.runner import RunCaps, run_agent_loop
 
-    from app.db import init_db
-
-    await init_db()
     factory = session_factory()
-    task_id = new_id()
-    run_id = new_id()
-    async with factory() as session:
-        session.add(
-            TaskRow(
-                id=task_id,
-                school_id=principal.school_id,
-                membership_id=principal.membership_id,
-                title=prompt[:80],
-            )
-        )
-        session.add(
-            RunRow(
-                id=run_id,
-                task_id=task_id,
-                status="running",
-                prompt=prompt,
-                model="",
-            )
-        )
-        await session.commit()
 
     async def emit(event_type: str, payload: dict[str, Any]) -> None:
         async with factory() as session:
@@ -382,13 +359,7 @@ async def _run_and_collect(
         caps=caps,
         history=history,
     )
-    async with factory() as session:
-        run = await session.get(RunRow, run_id)
-        if run:
-            run.status = result.status
-            run.error = result.error
-            await session.commit()
-    return result.final_text or result.error or "(empty)"
+    return result
 
 
 def _sse_chunk(data: dict[str, Any]) -> str:
@@ -429,11 +400,16 @@ async def chat_completions(
     import re
 
     principal = _principal_from_auth(authorization, settings)
-    # 【Pico-User:xxx】 from client message (LibreChat cannot always set headers on reverse proxy)
     raw_for_user = _last_user_prompt(body.messages)
     m_user = re.search(r"【Pico-User:([^】]+)】", raw_for_user)
-    membership_hint = x_pico_membership_id or (m_user.group(1).strip() if m_user else None)
-    principal = scope_proxy_principal(principal, membership_hint)
+    marker_membership = m_user.group(1).strip() if m_user else None
+    if (
+        principal.raw.get("proxy")
+        and marker_membership
+        and marker_membership != (x_pico_membership_id or "").strip()
+    ):
+        raise HTTPException(status_code=403, detail="proxy membership mismatch")
+    principal = scope_proxy_principal(principal, x_pico_membership_id)
     raw_prompt = _last_user_prompt(body.messages)
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
@@ -489,8 +465,22 @@ async def chat_completions(
                 text = f"【错误】{user_message_for_error(str(e))}"
                 await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
         else:
-            text = await _run_and_collect(prompt, principal, settings, history=history)
-            await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id, user_prompt=prompt)
+            result = await _run_and_collect(
+                prompt,
+                principal,
+                settings,
+                run_id=run_id,
+                history=history,
+            )
+            text = result.final_text or result.error or "(empty)"
+            await _finalize_run(
+                run_id,
+                status=result.status,
+                error=result.error,
+                final_text=result.final_text,
+                task_id=task_id,
+                user_prompt=prompt,
+            )
         return {
             "id": completion_id,
             "object": "chat.completion",

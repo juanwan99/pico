@@ -91,16 +91,7 @@ DOMAIN_SERVER=https://pico.aivia.asia
 
 ---
 
-## 路径 A — Grok 沙箱临时公网（仅演示 · 非正式）
-
-```bash
-bash scripts/publish-tunnel.sh   # → https://….trycloudflare.com
-```
-
-- 沙箱休眠 URL 即废；**不要**把 `pico.aivia.asia` CNAME 到 trycloudflare  
-- 正式入口以 **VPS + 域名** 为准
-
-## 路径 A′ — Cloudflare 具名隧道（备选）
+## 路径 A — Cloudflare 具名隧道（备选）
 
 仅当不用本 VPS 反代时；需 Tunnel Token + CNAME 到 `*.cfargotunnel.com`。本页优先 **路径 B（本机 139.196…）**。
 
@@ -134,7 +125,6 @@ docker compose -f docker-compose.product.yml up -d --build
 | 入口 | 用途 |
 |------|------|
 | **https://pico.aivia.asia** | **业主正式观看** |
-| trycloudflare 临时链 | 仅沙箱演示 |
 | Grok Live Preview 6014 | 辅助；挂了不挡交付 |
 | 127.0.0.1:8080 | 仅本机/沙箱 agent |
 

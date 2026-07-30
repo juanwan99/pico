@@ -40,7 +40,7 @@ DATE: 2026-07-29
 ```text
                     ┌──────────────────────────────┐
                     │  教师浏览器（工作台 UI）        │
-                    │  NextChat 等产品壳             │
+                    │  LibreChat 产品壳              │
                     └─────────────┬────────────────┘
                                   │ HTTPS
                     ┌─────────────▼────────────────┐
@@ -76,7 +76,7 @@ DATE: 2026-07-29
 
 | 层 | 职责 | 当前实现要点 |
 |----|------|----------------|
-| **L1 体验层** | 会话、Markdown、工具展示、设置 | `apps/nextchat`（中文默认） |
+| **L1 体验层** | 会话、Markdown、工具展示、设置 | `apps/librechat`（中文默认） |
 | **L2 API 控制面** | 鉴权、任务、流式/兼容协议、变更确认 | `services/api` FastAPI |
 | **L3 编排层** | 多步 tool-calling、事件发射、超时/token 帽 | `pico_orchestrator.run_agent_loop` |
 | **L4 工具网关** | 白名单、校隔离、跨校 fail-closed | `AllowlistGateway` |
@@ -354,7 +354,7 @@ SchoolPlan
 |------|------|
 | 控制面 | Python 3.11+ / FastAPI |
 | 编排 | 服务端多步 tool loop + pin Kimi 相关版本 |
-| UI | NextChat（Vue/Next 产品壳）+ 中文 |
+| UI | LibreChat（MIT 产品壳）+ 中文 |
 | 协议 | REST + SSE；OpenAI 兼容聊天 |
 | DB | SQLite（开发）→ Postgres（生产建议） |
 | 部署 | Docker/单二进制镜像；Standard/Dedicated 同镜像 |
@@ -365,7 +365,7 @@ SchoolPlan
 
 | 阶段 | 技术 | 定价相关 |
 |------|------|----------|
-| **P1 已做** | 独立 Pico、账本、工具环、NextChat、兼容 API | 不阻塞；内部可记 usage |
+| **P1 已做** | 独立 Pico、账本、工具环、LibreChat、兼容 API | 不阻塞；内部可记 usage |
 | **P1.5** | 校级钱包表、bucket、预检扣减、管理员用量视图 | 基础包+点可试运营 |
 | **P2** | edu 合同字段、context_refs | 合同与科目对齐 |
 | **P3** | 真只读/确认回写 | 阅卷链路联调 |

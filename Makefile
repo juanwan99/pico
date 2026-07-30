@@ -3,14 +3,13 @@
 install:
 	python3.12 -m venv .venv || true
 	. .venv/bin/activate && pip install -U pip && pip install -r requirements-dev.txt
-	@if [ -d apps/nextchat ]; then (cd apps/nextchat && yarn install || npm install); fi
 
 api:
-	. .venv/bin/activate && uvicorn app.main:app --app-dir services/api --host 0.0.0.0 --port 8000 --reload
+	. .venv/bin/activate && uvicorn app.main:app --app-dir services/api --host 127.0.0.1 --port 18765 --reload
 
-# Product UI = NextChat (OpenAI-compat → Pico agent). apps/web removed.
-web ui:
-	cd apps/nextchat && npx next dev -H 0.0.0.0 -p 8080
+# Product UI = LibreChat (OpenAI-compatible Pico API).
+dev web ui:
+	bash scripts/run-product.sh
 
 proto product:
 	bash scripts/run-product.sh
@@ -34,6 +33,7 @@ demo:
 	. .venv/bin/activate && python scripts/demo_e2e.py
 
 agent-smoke:
-	. .venv/bin/activate && curl -s http://127.0.0.1:8000/v1/chat/completions \
+	. .venv/bin/activate && curl -s http://127.0.0.1:18765/v1/chat/completions \
 	  -H 'Authorization: Bearer pico-dev' -H 'Content-Type: application/json' \
-	  -d '{"model":"pico-agent","messages":[{"role":"user","content":"列出我学校的班级"}],"stream":false}'
+	  -H 'X-Pico-Membership-Id: make-smoke' \
+	  -d '{"model":"pico-agent","messages":[{"role":"user","content":"【Pico-User:make-smoke】列出我学校的班级"}],"stream":false}'

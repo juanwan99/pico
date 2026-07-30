@@ -12,3 +12,8 @@ interface:
   bookmarks: true
   multiConvo: true
   agents: true
+endpoints:
+  openAI:
+    headers:
+      X-Pico-Membership-Id: "{{LIBRECHAT_USER_ID}}"
+      X-Conversation-Id: "{{LIBRECHAT_BODY_CONVERSATIONID}}"
