@@ -20,12 +20,34 @@ PLAN: MVP-3DAY v1.2 FIXED（无授权不升 v1.3）
 
 | 面 | 结论 |
 |----|------|
-| **业主看产品** | **https://pico.aivia.asia/login**（必须 HTTPS） |
+| **业主入口** | **https://pico.aivia.asia/login**（必须 HTTPS） |
 | **部署** | Codex 已在阿里云轻量（宝塔）跑通 v1.3 形态栈 |
-| **代码 tip（仓）** | `c47c3be`（含 host compose / Kimi apply 脚本回灌） |
-| **服务器曾报 SHA** | `/opt/pico` 曾钉在 `07e2e79…`；应用 key / pull 后应以服务器 `git rev-parse` 为准 |
-| **S1 真钥** | 须在服务器 `/opt/pico/.env` 的 `KIMI_API_KEY`；**永不进 Git**；聊天里出现过 key 则视为泄露，应轮换 |
-| **Grok 沙箱** | 常被重置；**不能** SSH `139.196.147.40:22`；**不能**用沙箱 HTTPS 成败否定国内 ECS 验收 |
+| **S1 本机冒烟（2026-07-30 业主回报）** | `health.ok` · **HTTP 200** · reply **「演示OK」** · `S1_SMOKE=PASS_LIKELY` |
+| **解读** | **Kimi 上游 + Pico API 代理链在 VPS 本机已通**（非自 PASS 全产品） |
+| **代码 tip（仓）** | 以 `git log` 为准（本页修订时 tip 在 144bd8b 一带） |
+| **服务器 SHA** | 以 `/opt/pico` `git rev-parse` 为准 |
+| **Grok 沙箱** | 常被重置；**不能** SSH `139.196.147.40:22`；**不能**用沙箱 HTTPS 成败否定国内验收 |
+
+---
+
+## 0.1 最新生产证据（业主粘贴 · 2026-07-30）
+
+```text
+health: {"ok":true,"service":"pico-api","phase":"3-integrate","git_sha":"unknown"}
+S1 http=200
+reply_snippet: 演示OK
+S1_SMOKE=PASS_LIKELY
+```
+
+| 推论 | 说明 |
+|------|------|
+| Pico API 进程健康 | `ok:true` |
+| `KIMI_API_KEY` 已生效 | 无「missing KIMI」类错误且模型回了「演示OK」 |
+| LibreChat→API 代理钥路径可用 | 冒烟用 `Bearer pico-dev`（`PICO_ENV` 须非 production） |
+| `git_sha: unknown` | 镜像/运行环境未注入 BUILD_COMMIT；**不阻塞** S1 |
+| 仍非全量 PASS | 未代替浏览器任务台 / S2–S8 / CI / 合 main |
+
+**下一步默认：** 浏览器 UI 登录 + 发同一句；不要重装栈。
 
 ---
 
@@ -37,303 +59,127 @@ PLAN: MVP-3DAY v1.2 FIXED（无授权不升 v1.3）
 |----|-----|----------|
 | 根域 | `aivia.asia` | 业主阿里云控制台 |
 | 产品主机名 | **`pico.aivia.asia`** | 业主拍板 / 部署目标 |
-| A 记录 | `pico` → **`139.196.147.40`** | Codex + Grok DoH（1.1.1.1） |
-| NS | 阿里云 hichina（`dns1/dns2.hichina.com`） | 业主域名面板 |
-| ACME | 曾用 **DNS-01**：`_acme-challenge.pico` TXT | Codex（签发 LE 时临时） |
-| 证书 | Let’s Encrypt · 域名 `pico.aivia.asia` · **到期约 2026-10-28** | Codex |
-| 续期 | **手工 DNS-01，未做自动续期** | Codex 明确缺口 |
+| A 记录 | `pico` → **`139.196.147.40`** | Codex + Grok DoH |
+| 证书 | Let’s Encrypt · 约 **2026-10-28** | Codex |
+| 续期 | **手工 DNS-01，未自动续期** | Codex 缺口 |
 
 ### 1.2 服务器
 
 | 项 | 值 |
 |----|-----|
-| 产品 | 阿里云 **轻量应用服务器** |
-| 地域 | 华东2（上海） |
-| 面板 | 宝塔 Linux |
+| 产品 | 阿里云轻量 · 华东2 · 宝塔 |
 | 公网 IP | **139.196.147.40** |
-| 内网 IP | 172.24.28.181 |
-| 规格 | 2 核 / 2 GiB / 40 GiB 系统盘 |
-| 到期 | 约 2027-02-08（业主面板） |
+| 规格 | 2C / 2G / 40G |
 | 路径 | **`/opt/pico`** |
 
-### 1.3 仓库与分支
+### 1.3 仓库
 
 | 项 | 值 |
 |----|-----|
-| 仓 | https://github.com/juanwan99/pico （private） |
-| 分支 | `grok/pico-preview-librechat-p0` → main |
-| PR | https://github.com/juanwan99/pico/pull/30 （CANDIDATE · 不自 PASS · 不无人合） |
-| 产品壳 | **`apps/librechat`**（禁 web/nextchat/workbench 回潮） |
-| 产品定义 | AI 工作台底座：对话 + Agent + 产物 + **唯一 AI 账本** + 模型 HTTPS API |
+| 仓 | juanwan99/pico |
+| 分支 | `grok/pico-preview-librechat-p0` |
+| PR | #30 CANDIDATE |
+| 壳 | `apps/librechat` |
 
 ---
 
-## 2. Codex 已完成事项（按系统）
-
-### 2.1 运行拓扑（生产 · host network）
+## 2. 运行拓扑（生产 · host network）
 
 ```text
-浏览器
-  → https://pico.aivia.asia:443
-      Nginx (/etc/nginx/conf.d/pico.aivia.asia.conf)
-        → proxy_pass http://127.0.0.1:8080
-            LibreChat (container, host net)
-              ├─ Mongo  127.0.0.1:27017  (会话呈现，非 AI 业务真源)
-              └─ OPENAI_REVERSE_PROXY → http://127.0.0.1:18765/v1
-                    Pico API (Kimi / pico-agent / 账本 SQLite)
+浏览器 → https://pico.aivia.asia:443
+  Nginx → 127.0.0.1:8080 LibreChat
+            ├─ Mongo 127.0.0.1:27017
+            └─ OPENAI_REVERSE_PROXY → 127.0.0.1:18765 Pico API → Kimi HTTPS
 ```
 
-| 进程/端口 | 绑定 | 公网 |
-|-----------|------|------|
-| Nginx 80/443 | 0.0.0.0 | **是**（唯一入口） |
-| LibreChat | **127.0.0.1:8080** | 否 |
-| Pico API | **127.0.0.1:18765** | 否 |
-| MongoDB | **127.0.0.1:27017** | 否 |
+| 端口 | 绑定 | 公网 |
+|------|------|------|
+| 80/443 | 0.0.0.0 Nginx | 是 |
+| 8080 / 18765 / 27017 | 127.0.0.1 | 否 |
 
-**为何 host network：** 该机 Docker **bridge 网络异常**；Codex 改用  
-`/opt/pico/docker-compose.host.yml`（仓内已回灌同名文件）。
-
-### 2.2 镜像与构建（服务器本地）
-
-| 镜像 | 说明 |
-|------|------|
-| `pico-librechat:v13` | 本地构建；CN 适配 Dockerfile |
-| `pico-api:v13` | 本地构建 |
-
-| 文件（服务器 / 仓） | 作用 |
-|---------------------|------|
-| `apps/librechat/Dockerfile.pico-fast` | Alpine→阿里云镜像；避免 ghcr.io uv；`npm ci --legacy-peer-deps` |
-| `Dockerfile.pico-api` | Python 3.12-slim + 阿里云 PyPI |
-| `docker-compose.host.yml` | host 网络 + 127.0.0.1 绑定 |
-| `librechat.yaml` | 最小自定义配置 `version: 1.3.13`；挂载 `:/app/librechat.yaml:ro` |
-
-构建动机：2G 机 + 国内网络；默认上游 Dockerfile 易 OOM / 拉不动 ghcr。
-
-### 2.3 LibreChat 环境（生产要点）
-
-| 变量 | 值（概念） |
-|------|------------|
-| `MONGO_URI` | `mongodb://127.0.0.1:27017/LibreChat` |
-| `OPENAI_REVERSE_PROXY` | `http://127.0.0.1:18765/v1` |
-| `OPENAI_API_KEY` | `pico-dev`（**调 Pico 的代理钥**，不是 Kimi sk） |
-| `DOMAIN_CLIENT` / `DOMAIN_SERVER` | `https://pico.aivia.asia` |
-| `HOST`/`PORT` | 127.0.0.1 / 8080 |
-
-日志曾确认：Custom config loaded · Connected to MongoDB · listening `http://127.0.0.1:8080` · readiness passing。
-
-### 2.4 Nginx / TLS
-
-| 项 | 内容 |
-|----|------|
-| 配置 | `/etc/nginx/conf.d/pico.aivia.asia.conf` |
-| HTTP | `/.well-known/acme-challenge/` 保留；其余 **301 → HTTPS** |
-| HTTPS | `ssl_certificate` / `privkey` under `/etc/letsencrypt/live/pico.aivia.asia/` |
-| 反代 | `proxy_pass http://127.0.0.1:8080` |
-| 校验 | `nginx -t` 通过并 reload |
-
-### 2.5 Codex 验收（采信）
-
-| 检查 | 结果 |
-|------|------|
-| 服务器本机 `https://pico.aivia.asia/login` | **HTTP/2 200** |
-| 另一台 ECS 外网同 URL | **HTTP/2 200** |
-| 页面 | `lang=zh-CN` · 简体默认 · zh-Hans 痕迹 |
-| 公网 8080/18765/27017 | **不可达**（正确） |
-| 监听 | 127.0.0.1:{8080,18765,27017} + 0.0.0.0:{80,443} |
-
-### 2.6 容器名（Codex 报）
-
-- `pico-mongo-1`
-- `pico-pico-api-1`
-- `pico-librechat-1`  
-
-（均 Up；以服务器 `docker compose -f docker-compose.host.yml ps` 为准。）
+Compose：`docker-compose.host.yml`。镜像：`pico-librechat:v13` / `pico-api:v13`。
 
 ---
 
-## 3. Grok 窗交叉验证（有限）
+## 3. 关键陷阱（摘要）
 
-| 探测（Grok 沙箱出口） | 结果 | 解读 |
-|----------------------|------|------|
-| DNS A `pico.aivia.asia` | `139.196.147.40` | 与部署一致 |
-| TCP 80/443 | OPEN | Nginx 在听 |
-| TCP 8080/18765/27017 | 超时/滤 | 符合「不裸奔」 |
-| TCP 22 | **不通** | **Grok 无法代登 VPS** |
-| `http://pico.aivia.asia` | 常 **403 Server: Beaver** | 阿里云拦截/备案相关；**应用 HTTPS** |
-| `https://…` 自 Grok | 可能 TLS RST | **路径/区域问题；不以之否定 Codex 国内 200** |
-
-**原则：** 生产是否健康，优先 **服务器本机 curl** 与 **中国境内浏览器/ECS**，不要用 Grok 沙箱 TLS 失败驱动重建。
+- `pico-dev` ≠ Kimi sk；Kimi 只在 `/opt/pico/.env`
+- **`PICO_ENV=production` → proxy 401**；演示保持 `development`
+- HTTP 常 Beaver 403 → 只用 HTTPS
+- 勿因 Grok TLS RST 重建
+- 不自 PASS / 不无人合 main / 不写 edu / 不换壳 / 禁 `PROXY=1`
 
 ---
 
-## 4. 关键认知（必须保留）
+## 4. 后续任务队列
 
-### 4.1 产品 vs 预览
-
-| 正确 | 错误 |
-|------|------|
-| 业主入口 = **https://pico.aivia.asia** | 业主应能开沙箱 8080 |
-| Live Preview 6014 白/拒绝连接 = 平台隧道 | 白屏就换壳 / 重写前端 |
-| Mongo over HTTP 英文句 = 误打 Mongo 口 | 当库坏了乱改 |
-| `OPENAI_API_KEY=pico-dev` = LibreChat→Pico 代理 | 把它当成 Kimi sk |
-| `KIMI_API_KEY` 只在服务器 `.env` | 写进 Git / 聊天常驻 |
-
-### 4.2 鉴权陷阱（代码行为）
-
-`services/api/app/openai_compat.py`：
-
-- `PICO_ENV=production` 时 **拒绝** `pico-dev` 等 proxy key → LibreChat 聊天 **401**。
-- 演示 VPS 须保持 **`PICO_ENV=development`**（或未来改 JWT 贯通后再 production）。
-- 仓内 `docker-compose.host.yml` / `scripts/vps-apply-kimi-key.sh` 已按此钉死。
-
-### 4.3 双存储边界
-
-| 存储 | 内容 | 是否 AI 业务真源 |
-|------|------|------------------|
-| Pico SQLite（API data） | Task/Run/Event/Artifact… | **是（唯一）** |
-| LibreChat Mongo | 会话气泡、用户、UI | 会话呈现 only |
-
-### 4.4 硬边界（永久）
-
-- 只写 `juanwan99/pico`；禁止 edu-cloud。
-- 不自 PASS；CANDIDATE → CI → 审 → **值守**合 main。
-- 禁止 `PROXY=1`（LibreChat undici）。
-- 禁止公网暴露 8080 / 18765 / 27017。
-- 密钥不进聊天记录与截图（已泄露则轮换）。
-
-### 4.5 沙箱 vs 生产端口叙事
-
-| 环境 | Mongo | 产品 UI | API |
-|------|--------|---------|-----|
-| Grok 沙箱（历史） | 真库 **27117**；27017 HTTP 盾 | mirror **8080** | 127.0.0.1:**18765** |
-| 阿里云 VPS（Codex） | host **27017** 仅本机 | 本机 **8080** ← Nginx | 本机 **18765** |
-
-两套都对；**不要**把沙箱 27117 方案硬套到已 host 部署的 VPS，除非重做网络。
-
----
-
-## 5. 仓库内相关文件地图
-
-| 路径 | 用途 |
-|------|------|
-| `docs/DEPLOY-PUBLIC.md` | 公网部署操作指南 + 域名/DNS |
-| `docs/CODEX-VPS-INVESTIGATION.md` | **本页** · 调查结果真源 |
-| `docs/PREVIEW-WHITE-SCREEN.md` | Live Preview 白屏（6014）· 与生产域名无关 |
-| `docs/CORRECTED-GOALS.md` | 产品目标校正 |
-| `docs/DEMO.md` | 演示路径；含生产 URL 提示 |
-| `docs/CALIBRATION-NOW.md` | 主线校准 |
-| `docker-compose.host.yml` | **生产 compose（host）** |
-| `docker-compose.product.yml` | 备选 bridge/bootstrap 向 |
-| `Dockerfile.pico-api` | API 镜像 |
-| `apps/librechat/Dockerfile.pico-fast` | LibreChat CN 构建 |
-| `librechat.yaml` | 最小 LC 配置 |
-| `scripts/vps-bootstrap-aivia.sh` | 轻量机首装（swap/docker/compose） |
-| `scripts/vps-apply-kimi-key.sh` | **写 Kimi key + 重启 + S1 冒烟（不 echo key）** |
-| `scripts/publish-tunnel.sh` | 沙箱临时 trycloudflare（非正式） |
-| `startup.sh` / `scripts/run-product.sh` | **Grok 沙箱** revive，不是 VPS 主路径 |
-
----
-
-## 6. 未完成 / 后续任务队列（按优先级）
-
-### P0 — 业主可用真聊（S1）
-
-| ID | 任务 | 状态 | 做法 |
-|----|------|------|------|
-| P0.1 | 浏览器打开 https://pico.aivia.asia/login | Codex：200；业主确认登录 | 演示号 `teacher@example.com` / `pico-demo-123`（可先注册） |
-| P0.2 | `/opt/pico/.env` 存在非空 `KIMI_API_KEY` | **待服务器确认**（Grok 不能 SSH） | 宝塔执行 `vps-apply-kimi-key.sh` |
-| P0.3 | 本机 S1 冒烟 `18765/v1/chat/completions` | 随 P0.2 | 脚本内置；期望非 error JSON |
-| P0.4 | UI 发「只回：演示OK」有模型回复 | 待 P0.2–3 | 默认模型直连 Kimi，非必须 pico-agent |
-
-### P1 — 运维硬化
+### P0 — 真聊闭环
 
 | ID | 任务 | 状态 |
 |----|------|------|
-| P1.1 | LE **自动续期**（DNS-01 hook / 阿里云 API） | 未做；证书 ~2026-10-28 |
-| P1.2 | 服务器 `git pull` 与仓 tip 对齐；避免只活在磁盘的补丁漂移 | 部分回灌已在 `c47c3be` |
-| P1.3 | 备份：`pico_data` / mongo volume / `.env`（无密钥进 Git） | 未标准化 |
-| P1.4 | 监控：磁盘 40G、2G 内存、容器 restart | 未做 |
-| P1.5 | HTTP Beaver/ICP 文案：对外只宣传 HTTPS | 已知 |
+| P0.1 | HTTPS 登录页 200 | Codex 已证；业主 UI 再点一次 |
+| P0.2 | `KIMI_API_KEY` 生效 | **已证（S1 200 + 演示OK）** |
+| P0.3 | 本机 S1 冒烟 | **PASS_LIKELY（业主 2026-07-30）** |
+| P0.4 | **浏览器**登录任务台并发「只回：演示OK」 | **待业主/下一窗** |
+| P0.5 | （可选）产物 hello.txt / 结果区 | 跟 DEMO 主路径 |
 
-### P2 — 产品与 Phase1 诚实项
+### P1 — 运维
 
-| ID | 任务 | 备注 |
+| ID | 任务 | 状态 |
 |----|------|------|
-| P2.1 | S2 `pico-agent` 显式多步演示 | 默认 chat ≠ 多步 |
-| P2.2 | S3 账本产物 hello.txt 路径在生产复验 | 见 REGRESSION / DEMO |
-| P2.3 | S7 确认横幅生产点验 | W2-S7-NOTES |
-| P2.4 | LibreChat→Pico **JWT** 后可 `PICO_ENV=production` | 现靠 pico-dev |
-| P2.5 | PR #30 CI 修红 + 值守合 main | S8；不自 PASS |
-| P2.6 | 密钥轮换（若曾在聊天出现） | 安全 |
+| P1.1 | LE 自动续期 | 未做 |
+| P1.2 | 服务器 git 与 tip 对齐；注入 git_sha | `git_sha: unknown` 可修 |
+| P1.3 | 备份 data/mongo/.env 策略 | 未做 |
+| P1.4 | 密钥轮换（若曾进聊天） | 建议做 |
 
-### P3 — 明确不做（本阶段）
+### P2 — 产品诚实项
 
-- 写 edu-cloud / 以联调 edu 为门禁  
-- 拆 WorkBuddy / 换壳  
-- 依赖 Grok Live Preview 作为交付  
-- 把 trycloudflare 当正式域名  
-- 商业定价写死（未 FIXED）
+| ID | 任务 |
+|----|------|
+| P2.1 | S2 pico-agent 显式多步 |
+| P2.2 | S3 账本产物生产复验 |
+| P2.3 | S7 确认横幅 |
+| P2.4 | JWT 后 production |
+| P2.5 | PR #30 CI + 值守合 |
+
+### P3 — 不做
+
+edu 门禁、换壳、依赖 Grok Preview、trycloudflare 当正式域名。
 
 ---
 
-## 7. 标准操作速查（给下一窗）
-
-### 7.1 只改 key / 重启 API（服务器）
+## 5. 标准操作速查
 
 ```bash
-cd /opt/pico
-git pull --ff-only origin grok/pico-preview-librechat-p0   # 如需脚本
-export KIMI_API_KEY='…'   # 勿回传聊天
-bash scripts/vps-apply-kimi-key.sh
-```
-
-### 7.2 看健康（服务器）
-
-```bash
-docker compose -f /opt/pico/docker-compose.host.yml ps
+# 健康
 curl -sS http://127.0.0.1:18765/health
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/login
 curl -sS -o /dev/null -w '%{http_code}\n' https://pico.aivia.asia/login
+
+# 日志
+docker compose -f /opt/pico/docker-compose.host.yml logs --tail=80 pico-api
 ```
 
-### 7.3 看日志（服务器）
-
-```bash
-docker compose -f /opt/pico/docker-compose.host.yml logs --tail=100 pico-api
-docker compose -f /opt/pico/docker-compose.host.yml logs --tail=100 librechat
-tail -n 50 /var/log/nginx/error.log
-```
-
-### 7.4 禁止默认动作
-
-```text
-✗  rm -rf /opt/pico && 重新 bootstrap
-✗  因 Grok curl HTTPS 失败而 rebuild 镜像
-✗  PROXY=1
-✗  发布 8080/18765/27017 到 0.0.0.0
-✗  自 PASS / 无人合 main
-```
+**禁止：** 因 S1 已通仍 `rm -rf /opt/pico` 重装。
 
 ---
 
-## 8. 验收清单（复制用）
+## 6. 验收清单
 
-- [ ] `dig pico.aivia.asia` → 139.196.147.40  
-- [ ] `https://pico.aivia.asia/login` → 200 · 欢迎回来  
-- [ ] 登录演示账号 → 任务台  
-- [ ] `KIMI_API_KEY` SET（仅服务器；不贴值）  
-- [ ] 聊天「演示OK」有回复  
-- [ ] 公网 nmap/探活：8080/18765/27017 关  
-- [ ] 证书到期日已知；续期方案有主  
-- [ ] 未把密钥写入 Git  
+- [x] DNS → 139.196.147.40（历史）
+- [x] API health ok（2026-07-30）
+- [x] S1 本机 200 + 演示OK（2026-07-30）
+- [ ] 浏览器 https 登录 + 任务台同句回复
+- [ ] 公网仅 443 暴露（历史已查，可抽查）
+- [ ] 证书续期方案
+- [ ] 未把密钥写入 Git
+- [ ] **未**自 PASS / 未合 main
 
 ---
 
-## 9. 修订记录
+## 7. 修订记录
 
 | 日期 | 内容 |
 |------|------|
-| 2026-07-30 | 首版：汇总 Codex VPS 部署调查 + Grok 交叉验证 + 后续队列 |
-
-**下一窗默认入口：** 读本页 §6 P0 → 在 **VPS** 执行 §7.1 → 勾 §8。  
-**不要**从空 Grok 沙箱重新发明生产拓扑。
+| 2026-07-30 | 首版：Codex 部署调查汇总 |
+| 2026-07-30 | **S1 业主证据：health ok + 200 + 演示OK**；P0.2/0.3 勾完；下一默认 P0.4 UI |

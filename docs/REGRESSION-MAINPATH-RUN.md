@@ -65,3 +65,15 @@ STATUS: W1 本机回归 **候选通过**（非 Phase1 PASS / 非 Live Preview PA
 
 - `screenshots/w1-login.png` / `w1-home.png` / `w1-chat.png`
 - API 用例见执行日志（membership `w1-reg`）
+
+## Production VPS S1 (2026-07-30 · owner paste · not full PASS)
+
+```
+health: ok pico-api phase=3-integrate
+S1 http=200 reply: 演示OK
+S1_SMOKE=PASS_LIKELY
+entry: https://pico.aivia.asia/login
+```
+
+- Environment: Aliyun light server host-network stack (see CODEX-VPS-INVESTIGATION.md)
+- Not a self-PASS of S2–S8 / CI / merge main
