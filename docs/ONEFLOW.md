@@ -57,9 +57,9 @@ RELATED: docs/WORKFLOW.md · docs/VERSIONING.md · AGENTS.md
 | 角色 | 谁扮演 | 职责 | 禁止 |
 |------|--------|------|------|
 | **用户** | 业主 | 产品目标；仅红例外（见 §6） | 当信使转发执行结果；日常技术门禁 |
-| **总管** | 网页 Codex（推荐）或业主点名会话 | 读 Issue/PR/SHA/CI；拆解；派发；跨切片决策；**门禁后 merge**；一句话结果 | 替写入自签审查 PASS；无依据合红 CI |
-| **写入** | Grok-Pico写入 / Codex 工程窗 | 实现、窄测、PR、同范围 CI 修、CANDIDATE、部署回写 | 自 PASS；双写一分支；写 edu |
-| **审查** | 未参与该 SHA 写入的只读窗 | exact SHA → PASS/REVISE/BLOCKED | 写业务代码；审移动 tip |
+| **总管** | **默认 Grok 总控**（或业主点名会话） | 读 Issue/PR/SHA/CI；拆解；派发；跨切片决策；**门禁后 merge**；一句话结果 | 替写入自签审查 PASS；无依据合红 CI |
+| **写入** | **默认云端 Codex 执行窗**（历史名：Grok-Pico写入） | 实现、窄测、PR、同范围 CI 修、CANDIDATE；**合并后**部署回写 | 自 PASS；自合黄/红；双写一分支；写 edu |
+| **审查** | **未参与该 SHA 写入**的只读窗（常用 Grok 总控只读） | exact SHA → PASS/REVISE/BLOCKED | 写业务代码；审移动 tip；写入自审 |
 | **运维执行** | 常与写入同一窗（阶段 A） | 热更新、冒烟、端口自检 | 无 SHA 的「感觉上线了」 |
 
 ---
@@ -80,7 +80,7 @@ RELATED: docs/WORKFLOW.md · docs/VERSIONING.md · AGENTS.md
     · 黄/红：独立审查 PASS（绑同一完整 SHA）
     · 用户可见：UI/生产抽检 PASS（绑 SHA）
     ↓
-[6 MERGE] 总管合 main（CI 红禁止合；写入不自合自己的黄/红）
+[6 MERGE] **总管**合 main（CI 红禁止合；写入不自合自己的黄/红；见 RACI §1.2–1.3）
     ↓
 [7 发布] 阶段 A：对齐 main tip → prod-update / rebuild 所需镜像
          回写：生产 health.git_sha == main（或声明延迟）
@@ -231,7 +231,7 @@ PR/Issue 评论模板：
 
 ## 11. 文档与真源（防交接污染）
 
-总控（Grok）与执行（Codex，常云端）**只通过 GitHub 交接**：见 `docs/RACI-GROK-CODEX.md` §1.1。
+总管/写入/审查与云端 Codex 映射、GitHub 交接、合并前审查：见 `docs/RACI-GROK-CODEX.md`（角色映射以 RACI §0 为准；风险门禁以本文为准）。
 
 
 1. **任务进度与证据只写在 GitHub**（PR 描述/评论、`CANDIDATE`、`DEPLOYED`、Actions）。  
