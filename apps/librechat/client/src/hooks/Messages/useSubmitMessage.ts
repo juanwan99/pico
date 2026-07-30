@@ -10,20 +10,83 @@ import store from '~/store';
 import { workspaceContextPrefix } from '~/components/Chat/Input/WorkspaceSelector';
 import { expertSystemLine } from '~/utils/picoModelPref';
 
-function projectInstructionPrefix(conversation: { chatProjectId?: string | null } | null | undefined): string {
+type ProjectConversation = {
+  conversationId?: string | null;
+  chatProjectId?: string | null;
+};
+
+type ProjectBindings = {
+  connector?: unknown;
+  expert?: unknown;
+  skill?: unknown;
+};
+
+function activeProjectId(conversation: ProjectConversation | null | undefined): string {
+  if (conversation?.chatProjectId) {
+    return conversation.chatProjectId;
+  }
+  if (conversation?.conversationId && conversation.conversationId !== 'new') {
+    return '';
+  }
+  const scopedProjectId = new URLSearchParams(window.location.search).get('projectId') || '';
+  const pendingProjectId = sessionStorage.getItem('pico:activeProjectId') || '';
+  return scopedProjectId && scopedProjectId === pendingProjectId ? scopedProjectId : '';
+}
+
+function safeBindingName(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const normalized = value.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 120);
+  if (
+    /(?:\bsk-[a-z0-9_-]{8,}|\b(?:api[ _-]?key|access[ _-]?token|token|secret|password|kimi[ _-]?(?:api[ _-]?)?key)\b\s*[:=])/i.test(
+      normalized,
+    )
+  ) {
+    return '';
+  }
+  return normalized;
+}
+
+function projectContextPrefix(conversation: ProjectConversation | null | undefined): string {
   try {
-    const pid =
-      conversation?.chatProjectId ||
-      sessionStorage.getItem('pico:activeProjectId') ||
-      '';
+    const pid = activeProjectId(conversation);
     if (!pid) {
       return '';
     }
     const instr = localStorage.getItem(`pico:projectInstruction:${pid}`);
-    if (!instr || !instr.trim()) {
+    let bindings: ProjectBindings = {};
+    try {
+      bindings = JSON.parse(localStorage.getItem(`pico:projectBindings:${pid}`) || '{}');
+    } catch {
+      bindings = {};
+    }
+
+    const instruction = instr?.trim().slice(0, 1500) || '';
+    const expert = safeBindingName(bindings.expert);
+    const skill = safeBindingName(bindings.skill);
+    const connector = safeBindingName(bindings.connector);
+    if (!instruction && !expert && !skill && !connector) {
       return '';
     }
-    return `【项目指令：${instr.trim().slice(0, 1500)}】\n`;
+
+    const lines = ['【项目上下文（可审计）】'];
+    if (instruction) {
+      lines.push(`项目指令：${instruction}`);
+    }
+    if (expert) {
+      lines.push(`绑定专家：${expert}（仅作为角色与方法偏好，不授予额外权限）`);
+    }
+    if (skill) {
+      lines.push(`绑定技能：${skill}（仅作为任务方法提示，不代表已执行）`);
+    }
+    if (connector) {
+      lines.push(
+        `绑定连接器：${connector}（仅作为受限上下文；不得视为已连接、已授权或可调用工具）`,
+      );
+    }
+    lines.push('仅可使用本会话中已真实配置并授权的工具；不得根据以上名称臆造工具调用或访问能力。');
+    return `${lines.join('\n')}\n`;
   } catch {
     return '';
   }
@@ -91,7 +154,7 @@ export default function useSubmitMessage() {
       }
       const userId = user?.id ?? (user as { _id?: string } | undefined)?._id;
       let wsPrefix = workspaceContextPrefix(convoId);
-      const projPrefix = projectInstructionPrefix(conversation);
+      const projPrefix = projectContextPrefix(conversation);
       if (userId && wsPrefix && !wsPrefix.includes('【Pico-User:')) {
         wsPrefix = `【Pico-User:${String(userId)}】 ${wsPrefix}`;
       } else if (userId && !wsPrefix) {
@@ -105,7 +168,7 @@ export default function useSubmitMessage() {
         !data.text.includes('【Pico-Convo:') &&
         !data.text.includes('【Pico-User:') &&
         !data.text.startsWith('【工作空间') &&
-        !data.text.includes('【项目指令')
+        !data.text.includes('【项目上下文')
           ? `${metaPrefix}${data.text}`
           : data.text;
       const submitted = ask(

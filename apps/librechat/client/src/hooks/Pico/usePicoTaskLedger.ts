@@ -100,8 +100,8 @@ export function usePicoTaskLedger(
           }
         }
         if (from && from.startsWith('pending_') && to && to !== from) {
-          await rebindConversation(from, to);
-          if (!cancelled) {
+          const result = await rebindConversation(from, to);
+          if (!cancelled && result.updated > 0) {
             sessionStorage.removeItem('pico:rebindFrom');
             sessionStorage.removeItem('pico:rebindTo');
             sessionStorage.removeItem('pico:pendingConvo');

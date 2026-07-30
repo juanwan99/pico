@@ -62,7 +62,7 @@ export function preferredModelForExpert(name: string): PicoModelMode {
 
 export function preferredModelForSkill(skillId: string): PicoModelMode {
   if (skillId === 's3') {
-    return 'kimi-k2.6';
+    return 'pico-agent';
   }
   // multi-step heavy skills can opt into agent later
   return 'kimi-k2.6';

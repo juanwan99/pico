@@ -2,7 +2,7 @@
  * Project workspace — 动态 / 计划 / 任务 / 资产 + 右侧配置轨
  * Clean-room IA; wires project chats into dynamic feed + plan board.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -14,17 +14,14 @@ import {
   FolderPlus,
   MessageSquare,
   CheckCircle2,
+  Trash2,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { QueryKeys } from 'librechat-data-provider';
 import type { ConversationListResponse, TConversation } from 'librechat-data-provider';
 import { Spinner } from '@librechat/client';
 import { useConversationsInfiniteQuery, useProjectQuery } from '~/data-provider';
-import {
-  getPicoTask,
-  listPicoTasks,
-  type PicoArtifact,
-} from '~/data-provider/pico/api';
+import { getPicoTask, listPicoTasks, type PicoArtifact } from '~/data-provider/pico/api';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { cn, clearMessagesCache } from '~/utils';
 import ProjectChatList from './ProjectChatList';
@@ -32,6 +29,7 @@ import store from '~/store';
 
 type TabId = 'dynamic' | 'plan' | 'tasks' | 'assets';
 type PlanCol = 'todo' | 'doing' | 'paused';
+type DynamicFilter = 'related' | 'members';
 type ProjectBindings = {
   connector?: string;
   expert?: string;
@@ -104,14 +102,20 @@ export default function ProjectWorkspace() {
   const activeProjectId = project?._id;
 
   const [planMap, setPlanMap] = useState<Record<string, PlanCol>>({});
+  const [dynamicFilter, setDynamicFilter] = useState<DynamicFilter>('related');
   const [instruction, setInstruction] = useState('');
+  const instructionRef = useRef<HTMLTextAreaElement>(null);
   const [note, setNote] = useState('');
   const [notes, setNotes] = useState<{ id: string; text: string; at: number }[]>([]);
-  const [assetFolder, setAssetFolder] = useState<string | null>(null);
+  const [assetFolders, setAssetFolders] = useState<string[]>([]);
+  const [isAddingFolder, setIsAddingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
   const [taskQuery, setTaskQuery] = useState('');
   const [bindings, setBindings] = useState<ProjectBindings>({});
   const [projectArtifacts, setProjectArtifacts] = useState<ProjectArtifact[]>([]);
   const [assetPreview, setAssetPreview] = useState<ProjectArtifact | null>(null);
+  const [isCollectingArtifacts, setIsCollectingArtifacts] = useState(false);
+  const [assetNotice, setAssetNotice] = useState('');
 
   useEffect(() => {
     if (!activeProjectId) {
@@ -129,6 +133,8 @@ export default function ProjectWorkspace() {
       }
       const b = localStorage.getItem(`pico:projectBindings:${activeProjectId}`);
       setBindings(b ? JSON.parse(b) : {});
+      const folders = localStorage.getItem(`pico:projectAssetFolders:${activeProjectId}`);
+      setAssetFolders(folders ? JSON.parse(folders) : []);
     } catch {
       /* ignore */
     }
@@ -224,15 +230,26 @@ export default function ProjectWorkspace() {
 
   const addToPlan = useCallback(
     (col: PlanCol) => {
-      // create new project chat then mark column when user returns
+      if (!activeProjectId) {
+        return;
+      }
       try {
-        sessionStorage.setItem(`pico:planColAfterCreate:${activeProjectId}`, col);
+        sessionStorage.setItem(
+          `pico:planColAfterCreate:${activeProjectId}`,
+          JSON.stringify({
+            col,
+            existingIds: conversations
+              .map((item) => item.conversationId)
+              .filter((value): value is string => Boolean(value)),
+            createdAt: Date.now(),
+          }),
+        );
       } catch {
         /* ignore */
       }
       startProjectChat();
     },
-    [activeProjectId, startProjectChat],
+    [activeProjectId, conversations, startProjectChat],
   );
 
   const movePlan = useCallback(
@@ -241,6 +258,48 @@ export default function ProjectWorkspace() {
     },
     [planMap, persistPlan],
   );
+
+  useEffect(() => {
+    if (!activeProjectId || conversations.length === 0) {
+      return;
+    }
+    const storageKey = `pico:planColAfterCreate:${activeProjectId}`;
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (!raw) {
+        return;
+      }
+      let pending: { col: PlanCol; existingIds: string[]; createdAt: number };
+      try {
+        const parsed = JSON.parse(raw);
+        pending = {
+          col: parsed.col,
+          existingIds: Array.isArray(parsed.existingIds) ? parsed.existingIds : [],
+          createdAt: Number(parsed.createdAt) || 0,
+        };
+      } catch {
+        pending = { col: raw as PlanCol, existingIds: [], createdAt: 0 };
+      }
+      if (!PLAN_COLUMNS.some((item) => item.id === pending.col)) {
+        sessionStorage.removeItem(storageKey);
+        return;
+      }
+      const existing = new Set(pending.existingIds);
+      const created = conversations.find(
+        (item) => item.conversationId && !existing.has(item.conversationId),
+      );
+      if (!created?.conversationId) {
+        if (pending.createdAt && Date.now() - pending.createdAt > 24 * 60 * 60 * 1000) {
+          sessionStorage.removeItem(storageKey);
+        }
+        return;
+      }
+      persistPlan({ ...planMap, [created.conversationId]: pending.col });
+      sessionStorage.removeItem(storageKey);
+    } catch {
+      /* ignore */
+    }
+  }, [activeProjectId, conversations, persistPlan, planMap]);
 
   const saveInstruction = useCallback(() => {
     if (!activeProjectId) {
@@ -268,18 +327,22 @@ export default function ProjectWorkspace() {
     [activeProjectId, navigate],
   );
 
-  useEffect(() => {
-    const conversationIds = new Set(
-      conversations
-        .map((item) => item.conversationId)
-        .filter((value): value is string => Boolean(value)),
-    );
-    if (conversationIds.size === 0) {
-      setProjectArtifacts([]);
-      return;
-    }
-    let alive = true;
-    void (async () => {
+  const collectProjectArtifacts = useCallback(
+    async (showNotice = false) => {
+      const conversationIds = new Set(
+        conversations
+          .map((item) => item.conversationId)
+          .filter((value): value is string => Boolean(value)),
+      );
+      if (conversationIds.size === 0) {
+        setProjectArtifacts([]);
+        if (showNotice) {
+          setAssetNotice('当前项目还没有可收集的任务产物');
+        }
+        return;
+      }
+      setIsCollectingArtifacts(true);
+      setAssetNotice('');
       try {
         const { tasks } = await listPicoTasks();
         const projectTasks = (tasks || []).filter(
@@ -294,32 +357,73 @@ export default function ProjectWorkspace() {
             }
           }),
         );
-        if (!alive) {
-          return;
+        const artifacts = details.flatMap(({ task, detail }) =>
+          (detail?.artifacts || [])
+            .filter((artifact) => !(artifact.kind === 'doc' && artifact.title === '回复摘要'))
+            .map((artifact) => ({
+              ...artifact,
+              taskTitle: task.title || '未命名任务',
+              createdAt: task.created_at,
+            })),
+        );
+        setProjectArtifacts(artifacts);
+        if (showNotice) {
+          setAssetNotice(
+            artifacts.length > 0
+              ? `已从 ${projectTasks.length} 个项目任务刷新 ${artifacts.length} 个产物`
+              : `已检查 ${projectTasks.length} 个项目任务，暂无文件产物`,
+          );
         }
-        setProjectArtifacts(
-          details.flatMap(({ task, detail }) =>
-            (detail?.artifacts || [])
-              .filter(
-                (artifact) => !(artifact.kind === 'doc' && artifact.title === '回复摘要'),
-              )
-              .map((artifact) => ({
-                ...artifact,
-                taskTitle: task.title || '未命名任务',
-                createdAt: task.created_at,
-              })),
-          ),
+      } catch {
+        setProjectArtifacts([]);
+        if (showNotice) {
+          setAssetNotice('产物账本刷新失败，请稍后重试');
+        }
+      } finally {
+        setIsCollectingArtifacts(false);
+      }
+    },
+    [conversations],
+  );
+
+  useEffect(() => {
+    void collectProjectArtifacts(false);
+  }, [collectProjectArtifacts]);
+
+  const persistAssetFolders = useCallback(
+    (folders: string[]) => {
+      setAssetFolders(folders);
+      if (!activeProjectId) {
+        return;
+      }
+      try {
+        localStorage.setItem(
+          `pico:projectAssetFolders:${activeProjectId}`,
+          JSON.stringify(folders),
         );
       } catch {
-        if (alive) {
-          setProjectArtifacts([]);
-        }
+        /* ignore */
       }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [conversations]);
+    },
+    [activeProjectId],
+  );
+
+  const createAssetFolder = useCallback(() => {
+    const name = newFolderName.trim();
+    if (!name || assetFolders.includes(name)) {
+      return;
+    }
+    persistAssetFolders([...assetFolders, name]);
+    setNewFolderName('');
+    setIsAddingFolder(false);
+  }, [assetFolders, newFolderName, persistAssetFolders]);
+
+  const deleteAssetFolder = useCallback(
+    (name: string) => {
+      persistAssetFolders(assetFolders.filter((folder) => folder !== name));
+    },
+    [assetFolders, persistAssetFolders],
+  );
 
   const publishNote = useCallback(() => {
     const text = note.trim();
@@ -415,13 +519,27 @@ export default function ProjectWorkspace() {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  className="rounded-full bg-[#1a1a1a] px-3 py-1 text-[12px] text-white"
+                  aria-pressed={dynamicFilter === 'related'}
+                  onClick={() => setDynamicFilter('related')}
+                  className={cn(
+                    'rounded-full px-3 py-1 text-[12px]',
+                    dynamicFilter === 'related'
+                      ? 'bg-[#1a1a1a] text-white'
+                      : 'bg-white text-[#6b6b6b] ring-1 ring-black/[0.06]',
+                  )}
                 >
                   与我相关
                 </button>
                 <button
                   type="button"
-                  className="rounded-full bg-white px-3 py-1 text-[12px] text-[#6b6b6b] ring-1 ring-black/[0.06]"
+                  aria-pressed={dynamicFilter === 'members'}
+                  onClick={() => setDynamicFilter('members')}
+                  className={cn(
+                    'rounded-full px-3 py-1 text-[12px]',
+                    dynamicFilter === 'members'
+                      ? 'bg-[#1a1a1a] text-white'
+                      : 'bg-white text-[#6b6b6b] ring-1 ring-black/[0.06]',
+                  )}
                 >
                   成员动态
                 </button>
@@ -433,7 +551,7 @@ export default function ProjectWorkspace() {
                   任务台入口 · 新任务
                 </button>
               </div>
-              {conversations.slice(0, 3).length > 0 ? (
+              {dynamicFilter === 'related' && conversations.slice(0, 3).length > 0 ? (
                 <div className="rounded-lg border border-black/[0.06] bg-white p-3 dark:border-border-light dark:bg-surface-secondary">
                   <p className="mb-2 text-[12px] font-medium text-[#8c8c8c]">最近任务</p>
                   <ul className="space-y-1">
@@ -457,39 +575,45 @@ export default function ProjectWorkspace() {
                   </ul>
                 </div>
               ) : null}
-              <div className="rounded-lg border border-black/[0.06] bg-white p-4 dark:border-border-light dark:bg-surface-secondary">
-                <textarea
-                  className="w-full resize-none bg-transparent text-[13px] outline-none placeholder:text-[#b0b0b0]"
-                  rows={3}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="发布留言"
-                />
-                <div className="mt-2 flex justify-end">
-                  <button
-                    type="button"
-                    disabled={!note.trim()}
-                    onClick={publishNote}
-                    className="rounded-lg bg-[#1a1a1a] px-3 py-1 text-[12px] text-white disabled:opacity-40"
-                  >
-                    发布
-                  </button>
+              {dynamicFilter === 'related' ? (
+                <div className="rounded-lg border border-black/[0.06] bg-white p-4 dark:border-border-light dark:bg-surface-secondary">
+                  <textarea
+                    className="w-full resize-none bg-transparent text-[13px] outline-none placeholder:text-[#b0b0b0]"
+                    rows={3}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="发布与项目相关的留言"
+                  />
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      disabled={!note.trim()}
+                      onClick={publishNote}
+                      className="rounded-lg bg-[#1a1a1a] px-3 py-1 text-[12px] text-white disabled:opacity-40"
+                    >
+                      发布
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
-              {notes.map((n) => (
-                <div
-                  key={n.id}
-                  className="rounded-lg border border-black/[0.06] bg-white px-4 py-3 dark:border-border-light dark:bg-surface-secondary"
-                >
-                  <p className="text-[12px] text-[#9a9a9a]">你 · {timeLabel(n.at)}</p>
-                  <p className="mt-1 whitespace-pre-wrap text-[13.5px]">{n.text}</p>
-                </div>
-              ))}
+              {dynamicFilter === 'related'
+                ? notes.map((n) => (
+                    <div
+                      key={n.id}
+                      className="rounded-lg border border-black/[0.06] bg-white px-4 py-3 dark:border-border-light dark:bg-surface-secondary"
+                    >
+                      <p className="text-[12px] text-[#9a9a9a]">你 · {timeLabel(n.at)}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-[13.5px]">{n.text}</p>
+                    </div>
+                  ))
+                : null}
 
-              {conversations.length === 0 && notes.length === 0 ? (
+              {conversations.length === 0 && (dynamicFilter === 'members' || notes.length === 0) ? (
                 <div className="rounded-lg border border-dashed border-black/[0.08] px-4 py-10 text-center text-[13px] text-[#9a9a9a]">
-                  暂无成员动态。发起任务或发布留言后会出现在此。
+                  {dynamicFilter === 'members'
+                    ? '暂无成员任务动态。项目任务更新后会出现在此。'
+                    : '暂无与你相关的动态。发起任务或发布留言后会出现在此。'}
                 </div>
               ) : (
                 conversations.slice(0, 20).map((c) => (
@@ -523,8 +647,7 @@ export default function ProjectWorkspace() {
                   >
                     <div className="flex items-center justify-between border-b border-black/[0.05] px-3 py-2.5">
                       <span className="text-[13px] font-medium">
-                        {col.label}{' '}
-                        <span className="text-[#9a9a9a]">{cards.length}</span>
+                        {col.label} <span className="text-[#9a9a9a]">{cards.length}</span>
                       </span>
                       <button
                         type="button"
@@ -538,7 +661,7 @@ export default function ProjectWorkspace() {
                     <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2">
                       {cards.length === 0 ? (
                         <div className="flex flex-1 items-center justify-center p-3 text-[12px] text-[#b0b0b0]">
-                          点击 + 新建任务到此列
+                          点击 + 新建任务；首次保存后自动归入此列
                         </div>
                       ) : (
                         cards.map((c) => {
@@ -588,9 +711,7 @@ export default function ProjectWorkspace() {
 
           {tab === 'tasks' && (
             <div className="mx-auto max-w-3xl">
-              <p className="mb-3 text-[12.5px] text-[#8c8c8c]">
-                你的任务是私密的，除非你共享它们
-              </p>
+              <p className="mb-3 text-[12.5px] text-[#8c8c8c]">你的任务是私密的，除非你共享它们</p>
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-[#edf1f4] px-2.5 py-1 text-[12px]">全部任务</span>
                 <span className="rounded-full bg-white px-2.5 py-1 text-[12px] ring-1 ring-black/[0.06]">
@@ -623,24 +744,68 @@ export default function ProjectWorkspace() {
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setAssetFolder(assetFolder ? null : '项目资料')}
+                  onClick={() => setIsAddingFolder((value) => !value)}
                   className="inline-flex items-center gap-1 rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-[12.5px] text-white"
                 >
                   <FolderPlus className="h-3.5 w-3.5" />
-                  {assetFolder ? '收起文件夹' : '新建文件夹'}
+                  新建文件夹
                 </button>
                 <button
                   type="button"
-                  onClick={startProjectChat}
+                  disabled={isCollectingArtifacts}
+                  onClick={() => void collectProjectArtifacts(true)}
                   className="inline-flex items-center gap-1 rounded-lg border border-black/[0.08] bg-white px-3 py-1.5 text-[12.5px]"
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  从任务收集产物
+                  {isCollectingArtifacts ? '正在刷新…' : '从任务收集产物'}
                 </button>
                 <span className="ml-auto text-[12px] text-[#8c8c8c]">
                   来自项目任务账本 · {projectArtifacts.length} 个产物
                 </span>
               </div>
+              {isAddingFolder ? (
+                <div className="mb-3 flex items-center gap-2 rounded-lg border border-black/[0.06] bg-white p-2">
+                  <input
+                    autoFocus
+                    value={newFolderName}
+                    onChange={(event) => setNewFolderName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        createAssetFolder();
+                      }
+                      if (event.key === 'Escape') {
+                        setIsAddingFolder(false);
+                        setNewFolderName('');
+                      }
+                    }}
+                    placeholder="文件夹名称"
+                    className="min-w-0 flex-1 rounded-md border border-black/[0.08] px-2 py-1.5 text-[12.5px] outline-none focus:border-black/30"
+                  />
+                  <button
+                    type="button"
+                    disabled={!newFolderName.trim() || assetFolders.includes(newFolderName.trim())}
+                    onClick={createAssetFolder}
+                    className="rounded-md bg-[#1a1a1a] px-2.5 py-1.5 text-[11.5px] text-white disabled:opacity-40"
+                  >
+                    创建
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingFolder(false);
+                      setNewFolderName('');
+                    }}
+                    className="rounded-md px-2.5 py-1.5 text-[11.5px] text-[#6b6b6b] hover:bg-[#f5f5f5]"
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : null}
+              {assetNotice ? (
+                <p className="mb-3 rounded-lg bg-[#f0f0f0] px-3 py-2 text-[12px] text-[#5f5f5f]">
+                  {assetNotice}
+                </p>
+              ) : null}
               <div className="rounded-lg border border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-secondary">
                 <div className="grid grid-cols-[1fr_80px_100px_80px] gap-2 border-b border-black/[0.05] px-4 py-2 text-[11px] text-[#9a9a9a]">
                   <span>名称</span>
@@ -648,14 +813,25 @@ export default function ProjectWorkspace() {
                   <span>更新时间</span>
                   <span>来源</span>
                 </div>
-                {assetFolder ? (
-                  <div className="flex items-center gap-2 border-b border-black/[0.04] px-4 py-2.5 text-[13px]">
+                {assetFolders.map((folder) => (
+                  <div
+                    key={folder}
+                    className="flex items-center gap-2 border-b border-black/[0.04] px-4 py-2.5 text-[13px]"
+                  >
                     <Folder className="h-4 w-4 text-[#6b6b6b]" />
-                    <span className="font-medium">{assetFolder}</span>
+                    <span className="min-w-0 flex-1 truncate font-medium">{folder}</span>
                     <span className="text-[12px] text-[#9a9a9a]">文件夹</span>
+                    <button
+                      type="button"
+                      onClick={() => deleteAssetFolder(folder)}
+                      className="rounded-md p-1 text-[#9a9a9a] hover:bg-[#f0f0f0] hover:text-[#1a1a1a]"
+                      aria-label={`删除文件夹 ${folder}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                ) : null}
-                {projectArtifacts.length === 0 ? (
+                ))}
+                {projectArtifacts.length === 0 && assetFolders.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-[#9a9a9a]">
                     <Folder className="h-8 w-8 opacity-40" />
                     <p className="text-[13px]">空目录</p>
@@ -723,7 +899,10 @@ export default function ProjectWorkspace() {
                   className="rounded-md p-0.5 text-[#8c8c8c] hover:bg-black/[0.04]"
                   aria-label={`添加${item.label}`}
                   onClick={() => {
-                    if (item.id === 'automation') {
+                    if (item.id === 'instruction') {
+                      instructionRef.current?.focus();
+                      instructionRef.current?.scrollIntoView({ block: 'nearest' });
+                    } else if (item.id === 'automation') {
                       navigate('/automation');
                     } else if (item.id === 'expert') {
                       openProjectCapability('experts');
@@ -747,6 +926,7 @@ export default function ProjectWorkspace() {
               {item.id === 'instruction' ? (
                 <div className="mt-2 space-y-2">
                   <textarea
+                    ref={instructionRef}
                     value={instruction}
                     onChange={(e) => setInstruction(e.target.value)}
                     rows={3}

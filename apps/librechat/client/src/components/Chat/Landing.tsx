@@ -277,7 +277,7 @@ export default function Landing({
                   </button>
                   {modelOpen && (
                     <div className="absolute bottom-full right-0 z-50 mb-2 w-52 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-lg">
-                      {['Auto', 'kimi-k2.6', 'Kimi-K3'].map((m) => (
+                      {['Auto', 'kimi-k2.6', 'Kimi-K3', 'pico-agent'].map((m) => (
                         <button
                           key={m}
                           type="button"

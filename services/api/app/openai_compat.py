@@ -50,6 +50,29 @@ def _content_text(content: str | list[Any] | None) -> str:
     return "\n".join(parts)
 
 
+def _model_preference_from_prompt(prompt: str) -> str | None:
+    """Resolve the workbench model preference from a strict allowlist."""
+    import re
+
+    match = re.search(r"【模型偏好：([^】]+)】", prompt or "")
+    if not match:
+        return None
+    requested = match.group(1).strip()
+    aliases = {
+        "pico": "pico-agent",
+        "pico agent": "pico-agent",
+        "kimi-k3": "kimi-k3",
+    }
+    normalized = aliases.get(requested.lower(), requested)
+    if normalized.lower() == "auto":
+        return None
+
+    from pico_orchestrator.provider import KNOWN_KIMI_MODELS
+
+    allowed = {"pico-agent", *KNOWN_KIMI_MODELS}
+    return normalized if normalized in allowed else None
+
+
 def _dev_proxy_keys(settings: Settings) -> set[str]:
     """Explicit dev/proxy keys only — never KIMI_API_KEY or JWT secret."""
     keys = {"pico-dev", "sk-pico-dev"}
@@ -135,8 +158,6 @@ def _conversation_id_from(
 ) -> str | None:
     if x_conversation_id and x_conversation_id.strip():
         return x_conversation_id.strip()[:128]
-    if body.user and body.user.strip() and body.user not in {"default", "user"}:
-        return body.user.strip()[:128]
     if body.metadata:
         for k in ("conversation_id", "conversationId", "convo_id"):
             v = body.metadata.get(k)
@@ -148,6 +169,8 @@ def _conversation_id_from(
     m = re.search(r"【Pico-Convo:([^】]+)】", prompt)
     if m:
         return m.group(1).strip()[:128]
+    if body.user and body.user.strip() and body.user not in {"default", "user"}:
+        return body.user.strip()[:128]
     return None
 
 
@@ -424,7 +447,7 @@ async def chat_completions(
     prompt = re.sub(r"【模型偏好：[^】]+】", "", prompt)
     prompt = re.sub(r"【项目指令：[^】]+】", "", prompt).strip() or raw_prompt
     history = _history_for_agent(body.messages)
-    model = body.model or settings.kimi_model or "pico-agent"
+    model = _model_preference_from_prompt(raw_prompt) or body.model or settings.kimi_model or "pico-agent"
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
 

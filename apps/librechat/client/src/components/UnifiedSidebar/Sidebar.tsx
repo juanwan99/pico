@@ -18,6 +18,7 @@ import {
   CircleHelp,
   Bell,
   PanelLeft,
+  FolderOpen,
 } from 'lucide-react';
 import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
@@ -43,10 +44,40 @@ const NAV: NavItem[] = [
   { id: 'new', label: '新建任务', icon: Plus, action: 'new-task' },
   { id: 'agents', label: '助理', icon: Bot, path: '/assistants' },
   { id: 'projects', label: '项目', icon: FolderKanban, path: '/projects' },
-  { id: 'skills', label: '专家·技能·连接器', icon: Blocks, path: '/capability' },
+  {
+    id: 'skills',
+    label: '专家·技能·连接器',
+    icon: Blocks,
+    path: '/capability',
+  },
   { id: 'auto', label: '自动化', icon: Zap, path: '/automation' },
-  { id: 'more', label: '更多', icon: MoreHorizontal, path: '/more', badge: '资料库·灵感' },
+  {
+    id: 'more',
+    label: '更多',
+    icon: MoreHorizontal,
+    path: '/more',
+    badge: '资料库·灵感',
+  },
 ];
+
+function isNavItemActive(pathname: string, item: NavItem) {
+  if (pathname.startsWith('/agents') || pathname.startsWith('/assistants')) {
+    return item.id === 'agents';
+  }
+  if (pathname.startsWith('/projects')) {
+    return item.id === 'projects';
+  }
+  if (pathname.startsWith('/skills') || pathname.startsWith('/capability')) {
+    return item.id === 'skills';
+  }
+  if (pathname.startsWith('/automation')) {
+    return item.id === 'auto';
+  }
+  if (pathname.startsWith('/more')) {
+    return item.id === 'more';
+  }
+  return Boolean(item.path && pathname.startsWith(item.path));
+}
 
 function Sidebar({
   links: _links,
@@ -79,18 +110,79 @@ function Sidebar({
 
   if (!expanded) {
     return (
-      <div className="pico-wb-sidebar flex h-full w-full flex-col items-center gap-2 bg-[#f0f0f0] py-3 dark:bg-surface-primary-alt">
-        <Button size="icon" variant="ghost" className="h-9 w-9" onClick={onExpand} aria-label="展开">
-          <PanelLeft className="h-5 w-5" />
-        </Button>
+      <div className="pico-wb-sidebar flex h-full w-full flex-col items-center bg-[#f0f0f0] py-3 dark:bg-surface-primary-alt">
+        <TooltipAnchor
+          description="展开侧栏"
+          render={
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 rounded-lg"
+              onClick={onExpand}
+              aria-label="展开侧栏"
+            >
+              <PanelLeft className="h-5 w-5" />
+            </Button>
+          }
+        />
         <button
           type="button"
           onClick={onNewTask}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1a1a1a] text-white"
+          className="mt-2 flex h-9 w-9 items-center justify-center rounded-lg bg-[#1a1a1a] text-white transition-colors hover:bg-black"
           aria-label="新建任务"
         >
           <Plus className="h-4 w-4" />
         </button>
+        <nav className="mt-2 flex flex-col items-center gap-1" aria-label="主导航">
+          {NAV.filter((item) => item.action !== 'new-task').map((item) => {
+            const Icon = item.icon;
+            const active = isNavItemActive(location.pathname, item);
+
+            return (
+              <TooltipAnchor
+                key={item.id}
+                description={item.label}
+                render={
+                  <button
+                    type="button"
+                    data-testid={`nav-${item.id}`}
+                    onClick={() => item.path && navigate(item.path)}
+                    className={cn(
+                      'flex h-9 w-9 items-center justify-center rounded-lg transition-colors',
+                      active
+                        ? 'bg-[#dedede] text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
+                        : 'text-[#555] hover:bg-[#e4e4e4] dark:text-text-secondary dark:hover:bg-surface-tertiary',
+                    )}
+                    aria-label={item.label}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                  </button>
+                }
+              />
+            );
+          })}
+        </nav>
+        <div className="my-2 h-px w-6 bg-black/[0.06] dark:bg-white/10" />
+        <TooltipAnchor
+          description="空间"
+          render={
+            <button
+              type="button"
+              onClick={() => navigate('/workspaces')}
+              className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-lg transition-colors',
+                location.pathname.startsWith('/workspaces')
+                  ? 'bg-[#dedede] text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
+                  : 'text-[#555] hover:bg-[#e4e4e4] dark:text-text-secondary dark:hover:bg-surface-tertiary',
+              )}
+              aria-label="空间"
+              aria-current={location.pathname.startsWith('/workspaces') ? 'page' : undefined}
+            >
+              <FolderOpen className="h-[18px] w-[18px]" strokeWidth={1.75} />
+            </button>
+          }
+        />
       </div>
     );
   }
@@ -124,9 +216,19 @@ function Sidebar({
           >
             <Search className="h-4 w-4" />
           </button>
-          <button type="button" className="rounded-md p-1.5 hover:bg-black/[0.04]" aria-label="活动">
-            <Gift className="h-4 w-4" />
-          </button>
+          <TooltipAnchor
+            description="活动与更多"
+            render={
+              <button
+                type="button"
+                className="rounded-md p-1.5 hover:bg-black/[0.04]"
+                onClick={() => navigate('/more')}
+                aria-label="活动与更多"
+              >
+                <Gift className="h-4 w-4" />
+              </button>
+            }
+          />
           <button
             type="button"
             className="rounded-md p-1.5 hover:bg-black/[0.04]"
@@ -153,23 +255,7 @@ function Sidebar({
         <nav className="mt-1 flex shrink-0 flex-col gap-0.5 px-2.5" aria-label="主导航">
           {NAV.filter((item) => item.action !== 'new-task').map((item) => {
             const Icon = item.icon;
-            let active = false;
-            if (location.pathname.startsWith('/agents') || location.pathname.startsWith('/assistants')) {
-              active = item.id === 'agents';
-            } else if (location.pathname.startsWith('/projects')) {
-              active = item.id === 'projects';
-            } else if (
-              location.pathname.startsWith('/skills') ||
-              location.pathname.startsWith('/capability')
-            ) {
-              active = item.id === 'skills';
-            } else if (location.pathname.startsWith('/automation')) {
-              active = item.id === 'auto';
-            } else if (location.pathname.startsWith('/more')) {
-              active = item.id === 'more';
-            } else if (item.path) {
-              active = location.pathname.startsWith(item.path);
-            }
+            const active = isNavItemActive(location.pathname, item);
 
             return (
               <button
@@ -182,11 +268,12 @@ function Sidebar({
                   }
                 }}
                 className={cn(
-                  'group flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13.5px] transition-colors',
+                  'group flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13.5px] transition-colors',
                   active
                     ? 'bg-[#e4e4e4] font-medium text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
                     : 'font-normal text-[#3d3d3d] hover:bg-[#e8e8e8] dark:text-text-secondary dark:hover:bg-surface-tertiary',
                 )}
+                aria-current={active ? 'page' : undefined}
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center text-[#4a4a4a]">
                   <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
@@ -229,10 +316,18 @@ function Sidebar({
             <AccountSettings />
           </Suspense>
         </div>
-        <button type="button" className="rounded-md p-1.5 text-[#6b6b6b] hover:bg-black/[0.04]" aria-label="通知">
+        <button
+          type="button"
+          className="rounded-md p-1.5 text-[#6b6b6b] hover:bg-black/[0.04]"
+          aria-label="通知"
+        >
           <Bell className="h-4 w-4" />
         </button>
-        <button type="button" className="rounded-md p-1.5 text-[#6b6b6b] hover:bg-black/[0.04]" aria-label="帮助">
+        <button
+          type="button"
+          className="rounded-md p-1.5 text-[#6b6b6b] hover:bg-black/[0.04]"
+          aria-label="帮助"
+        >
           <CircleHelp className="h-4 w-4" />
         </button>
       </div>
