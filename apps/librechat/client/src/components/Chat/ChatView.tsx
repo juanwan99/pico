@@ -97,7 +97,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     (conversationId === Constants.NEW_CONVO || !conversationId);
   const isNavigating = (!messagesTree || messagesTree.length === 0) && conversationId != null;
   const isProjectLandingPage = isLandingPage && project != null;
-  const [resultOpen, setResultOpen] = useState(true);
+  const [resultOpen, setResultOpen] = useState(true); // WorkBuddy: right rail default ON
   const flatMessages = useMemo(() => chatHelpers.getMessages?.() ?? null, [chatHelpers, messagesTree, isSubmitting]);
   const taskTitle = chatHelpers.conversation?.title && chatHelpers.conversation.title !== 'New Chat'
     ? chatHelpers.conversation.title
@@ -105,6 +105,14 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const ledger = usePicoTaskLedger(conversationId, isSubmitting);
   const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '等待模型响应' : undefined);
   const showResultPanel = !isLandingPage && resultOpen && conversationId && conversationId !== Constants.NEW_CONVO;
+
+  // WorkBuddy chrome: task pages always show right rail by default
+  useEffect(() => {
+    if (!conversationId || conversationId === Constants.NEW_CONVO) {
+      return;
+    }
+    setResultOpen(true);
+  }, [conversationId]);
 
   // Ensure result panel opens when artifacts arrive or run finishes
   useEffect(() => {

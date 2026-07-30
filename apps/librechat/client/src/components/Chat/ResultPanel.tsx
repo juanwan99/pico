@@ -128,6 +128,7 @@ export default function ResultPanel({
   const [menuOpen, setMenuOpen] = useState(false);
   const [fileQuery, setFileQuery] = useState('');
   const [browserUrl, setBrowserUrl] = useState('');
+  const [browserLoaded, setBrowserLoaded] = useState('');
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
     if (picoArtifacts?.length) {
@@ -192,7 +193,7 @@ export default function ResultPanel({
 
   return (
     <aside
-      className="pico-result-panel flex h-full w-[322px] shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary"
+      className="pico-result-panel flex h-full w-[min(360px,38vw)] min-w-[300px] max-w-[400px] shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary"
       data-testid="result-panel"
       aria-label="结果区"
     >
@@ -284,18 +285,21 @@ export default function ResultPanel({
             ) : null}
 
             {artifacts.length === 0 ? (
-              <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-[#9a9a9a]">
-                <FileText className="h-8 w-8 opacity-35" strokeWidth={1.25} />
-                <p className="text-[13px]">
-                  {runStatusLabel?.includes('等待')
-                    ? '任务进行中，产物生成后将显示在这里'
-                    : runStatusLabel?.startsWith('失败')
-                      ? '本次运行未产出文件（见上方状态）'
-                      : '暂无内容'}
-                </p>
-                <p className="max-w-[14rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
-                  模型回复摘要与工具产物会自动记入账本，并出现在本列表
-                </p>
+              <div className="flex min-h-[240px] flex-col px-1 pt-2">
+                <p className="mb-2 text-[12px] font-medium tracking-wide text-[#8c8c8c]">产物</p>
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa] px-4 py-10 text-[#9a9a9a]">
+                  <FileText className="h-9 w-9 opacity-30" strokeWidth={1.25} />
+                  <p className="text-[13px] font-medium text-[#6b6b6b]">
+                    {runStatusLabel?.includes('等待')
+                      ? '执行中…产物将出现在此'
+                      : runStatusLabel?.startsWith('失败')
+                        ? '本次未产出文件'
+                        : '暂无产物'}
+                  </p>
+                  <p className="max-w-[15rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
+                    概览 / 工作空间文件 / 浏览器 — 与任务台右栏一致
+                  </p>
+                </div>
               </div>
             ) : (
               <ul className="space-y-2">
