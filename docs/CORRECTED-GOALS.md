@@ -124,10 +124,10 @@ Pico API + orchestrator + DB
 3. **必须**对比：8080 vs 6014 的 status/body 长度 + Playwright 两边截图。  
 4. **不要**设 `PROXY=1`（弄崩 LibreChat undici）。  
 5. 首屏保留无 JS 可见「Pico 正在加载…」；若 10 秒内连这句都没有 → **面板没吃到 8080 HTML**。  
-6. 证据写 `docs/PREVIEW-WHITE-SCREEN.md`，诚实：本机绿 ≠ Live Preview 绿。
+6. 证据写 `docs/archive/PREVIEW-WHITE-SCREEN.md`，诚实：本机绿 ≠ Live Preview 绿。
 
 **演示登录（LibreChat）：** `teacher@example.com` / `pico-demo-123`  
-详见 `docs/PREVIEW-WHITE-SCREEN.md`。
+详见 `docs/archive/PREVIEW-WHITE-SCREEN.md`。
 
 ---
 
@@ -167,7 +167,7 @@ Pico API + orchestrator + DB
 
 ## 7. 当前工程事实（校正时点）
 
-> 更新快照：[`docs/CALIBRATION-NOW.md`](./CALIBRATION-NOW.md)（分支 tip / S1–S8 对照 / 过时记忆表）。
+> 更新快照：[`docs/README.md`](./README.md)（分支 tip / S1–S8 对照 / 过时记忆表）。
 
 | 项 | 值 |
 |----|-----|

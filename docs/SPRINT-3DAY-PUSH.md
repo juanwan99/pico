@@ -2,7 +2,8 @@
 
 ```
 DOC: docs/SPRINT-3DAY-PUSH.md
-STATUS: BINDING 执行计划（导航）
+STATUS: COMPLETED · 底座冲刺已收口 · 非当前执行计划
+CURRENT_PLAN: docs/PARALLEL-SPRINT-PLAN.md
 DATE: 2026-07-30
 REPO: juanwan99/pico ONLY
 LAW: docs/MVP-3DAY.md v1.2 FIXED（不升 v1.3）
@@ -101,7 +102,7 @@ HORIZON: 3 calendar days · 每晚 Codex ≈6h 长任务
 
 见对话归档；权威副本：
 
-**文件内嵌任务卡 → `docs/SPRINT-3DAY-PUSH-CODEX-D1.md`**
+**文件内嵌任务卡 → `docs/archive/SPRINT-3DAY-PUSH-CODEX-D1.md`**
 
 （若该文件存在则以其为准；总管可按日更新 D2/D3 卡。）
 

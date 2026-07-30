@@ -12,6 +12,7 @@ HARD_SCOPE: AGENTS.md — 永久禁止写 edu-cloud（M5 亦不例外）
 PRIOR: docs/SPRINT-3DAY-PUSH.md（底座冲刺已收口）
 REVIEW: Codex REVISE on PR #37 — 本版吸收全部 P0/P1
 RELATED_ADR: docs/ADR-SKILL-CATALOG.md（必先读 · 唯一 Skill 目录）
+DOC_INDEX: docs/README.md（真源索引 · 禁交接 MD）
 ```
 
 ## 0. 目标与非目标

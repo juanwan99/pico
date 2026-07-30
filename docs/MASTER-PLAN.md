@@ -10,12 +10,13 @@ BRANCH: grok/pico-preview-librechat-p0 → main（CANDIDATE · 不自 PASS · �
 RELATED:
   - docs/ONEFLOW.md（执行操作系统）
   - docs/SPRINT-3DAY-PUSH.md（3 日加速收口）
+  - docs/README.md（文档真源索引）
   - docs/PARALLEL-SPRINT-PLAN.md（**BINDING-v2**；Skill ADR 见 ADR-SKILL-CATALOG；N1 起执行）
   - docs/CORRECTED-GOALS.md
   - docs/MVP-3DAY.md
   - docs/PHASE2-CONTRACTS.md / docs/PHASE3-INTEGRATION.md
   - docs/OVERALL-ARCHITECTURE.md
-  - docs/PIXEL-FIRST.md / docs/PIXEL-DIFF.md
+  - docs/archive/PIXEL-FIRST.md / docs/PIXEL-DIFF.md
 SOURCE_READ (edu, read-only):
   - edu-cloud docs/SYSTEM-REQUIREMENT.md §0（AI 底座设计锚点）
   - 业主口径：edu 原通用 AI 代码几乎全部废除；Pico 接棒 AI 底座
@@ -150,7 +151,7 @@ M5 **禁止**在本规划下自动开工（需业主点名 + 可能升计划）�
 | 死代码 | 无路由组件、无引用脚本、过期 HANDOFF 冲突段 |
 
 **纪律：** 先 `rg` 断引用 → 删 → `scripts/agent-selftest` / unit。  
-**产出：** `docs/DEAD-CODE-SWEEP.md`。
+**产出：** `docs/archive/DEAD-CODE-SWEEP.md`。
 
 ### M2 — 底座主链（工程核心）
 
