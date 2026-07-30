@@ -384,3 +384,5 @@ H5–H6    只修 P0；文档完成度三列更新；DEPLOYED；验收包
 | 2026-07-30 | N2 卡发布 | docs/NIGHT-CARD-N2-SKILL-THIN.md |
 | 2026-07-30 | N2 完成 | PR #43/#44 · 972c426 |
 | 2026-07-30 | 夜卡加厚策略 | NIGHT-CARD-POLICY + N3-THICK |
+| 2026-07-30 | N3 #46 合 main | 条件通过；欠截图+DEPLOYED |
+| 2026-07-30 | N4-THICK 卡发布 | 先还债再加厚 |

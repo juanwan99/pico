@@ -27,7 +27,7 @@ ONEFLOW: docs/ONEFLOW.md
 | 8 | [M5-INTEGRATION-RUNBOOK.md](./M5-INTEGRATION-RUNBOOK.md) · [M5-API-CHECKLIST.md](./M5-API-CHECKLIST.md) | M5 筹备（未授权不真连） |
 | 8b | [PHASE2-CONTRACTS.md](./PHASE2-CONTRACTS.md) · [PHASE3-INTEGRATION.md](./PHASE3-INTEGRATION.md) · [contracts/](./contracts/) | Integration contracts |
 | 9 | [MASTER-PLAN.md](./MASTER-PLAN.md) | Phase map M0–M5 (nav only) |
-| 10 | Night cards: [N1](./NIGHT-CARD-N1-W-MAINPATH.md) · [N2](./NIGHT-CARD-N2-SKILL-THIN.md) · [N3-THICK](./NIGHT-CARD-N3-THICK.md) · [policy](./NIGHT-CARD-POLICY.md) | Executable card; **evidence still on PR** |
+| 10 | Night cards: [N1](./NIGHT-CARD-N1-W-MAINPATH.md) · [N2](./NIGHT-CARD-N2-SKILL-THIN.md) · [N3-THICK](./NIGHT-CARD-N3-THICK.md) · [N4-THICK](./NIGHT-CARD-N4-THICK.md) · [policy](./NIGHT-CARD-POLICY.md) | Executable card; **evidence still on PR** |
 | 11 | [DEMO.md](./DEMO.md) · [DEPLOY-PUBLIC.md](./DEPLOY-PUBLIC.md) | Demo & public deploy notes |
 | 12 | [PIXEL-DIFF.md](./PIXEL-DIFF.md) · matrices when present | UX evidence (not task status) |
 
