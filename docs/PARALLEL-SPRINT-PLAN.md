@@ -2,8 +2,8 @@
 
 ```
 DOC: docs/PARALLEL-SPRINT-PLAN.md
-STATUS: DRAFT-v2 · REVISE-applied · 待业主确认后升 BINDING
-          ⚠️ DO NOT EXECUTE as BINDING until STATUS line says BINDING
+STATUS: BINDING-v2 · 业主 2026-07-30 确认跳过二审并授权开跑
+          执行从 N1 夜卡开始；ADR-SKILL 仍为 N2 硬前置（N1 不依赖）
 DATE: 2026-07-30
 REPO: juanwan99/pico ONLY
 LAW: docs/MVP-3DAY.md v1.2 FIXED（无授权不升 v1.3）
@@ -366,7 +366,7 @@ H5–H6    只修 P0；文档完成度三列更新；DEPLOYED；验收包
 |------|-----|------|------|
 | 2026-07-30 | Codex | REVISE（PR#37） | → 本 v2 |
 | | Codex | 待再审 v2 | |
-| | 业主 | 待确认 | |
+| 2026-07-30 | 业主 | 跳过二审 · 授权 BINDING · 备 N1 夜 | |
 
 ---
 
@@ -375,4 +375,5 @@ H5–H6    只修 P0；文档完成度三列更新；DEPLOYED；验收包
 | 日期 | 事件 | 注 |
 |------|------|-----|
 | 2026-07-30 | v1 DRAFT | PR#37 |
-| 2026-07-30 | v2 REVISE-applied | 本提交 · 仍 DO NOT EXECUTE |
+| 2026-07-30 | v2 REVISE-applied | 仍 DO NOT EXECUTE |
+| 2026-07-30 | BINDING-v2 | 业主授权；开 N1 |
