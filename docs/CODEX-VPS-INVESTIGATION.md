@@ -186,7 +186,8 @@ docker compose -f /opt/pico/docker-compose.host.yml logs --tail=80 pico-api
 - [x] DNS → 139.196.147.40（历史）
 - [x] API health ok（2026-07-30）
 - [x] S1 本机 200 + 演示OK（2026-07-30）
-- [ ] 浏览器 https 登录 + 任务台同句回复
+- [x] 浏览器 https 登录（2026-07-30 业主）
+- [ ] 任务台同句「演示OK」UI 回复
 - [ ] 公网仅 443 暴露（历史已查，可抽查）
 - [ ] 证书续期方案
 - [ ] 未把密钥写入 Git
@@ -215,4 +216,11 @@ cd /opt/pico && bash scripts/vps-fix-login.sh
 机制：
 - `PICO_SEED_DEMO_USER` 启动播种（compose 挂载 seed 源码，免全量 rebuild）
 - 脚本兜底：register API + mongosh emailVerified + create-user
+
+### P0.4 登录（2026-07-30 业主确认）
+
+**已可登录** https://pico.aivia.asia/login  
+演示号 `teacher@example.com` / `pico-demo-123`（seed/fix-login 路径）。
+
+下一默认：浏览器任务台发「只回：演示OK」闭合 UI 真聊（S1 本机此前已 200）。
 
