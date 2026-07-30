@@ -199,6 +199,49 @@ assert "hello.txt" in titles or any(a.get("kind") == "file" for a in arts), titl
 print("artifacts", titles)
 PYART
 
+
+# N2 skill snapshots via POST /v1/tasks?skill_id= (no model wait; snapshot at create)
+python3 - <<'PYSKILL' && pass "skill snapshots chat/read/write_s7" || fail "skill snapshots"
+import json, urllib.request, urllib.error, os, sys
+API = os.environ.get("PICO_API", "http://127.0.0.1:18765")
+
+def create_task(mid, skill_id):
+    body = {
+        "title": f"selftest-{skill_id}",
+        "prompt": f"selftest skill {skill_id}",
+        "skill_id": skill_id,
+    }
+    data = json.dumps(body).encode()
+    h = {
+        "Authorization": "Bearer pico-dev",
+        "Content-Type": "application/json",
+        "X-Pico-Membership-Id": mid,
+    }
+    r = urllib.request.Request(API + "/v1/tasks", data=data, method="POST", headers=h)
+    try:
+        with urllib.request.urlopen(r, timeout=30) as resp:
+            return resp.status, json.loads(resp.read().decode() or "{}")
+    except urllib.error.HTTPError as e:
+        print("http", e.code, e.read()[:300])
+        sys.exit(1)
+
+cases = [
+    ("st-skill-chat", "skill-chat", []),
+    ("st-skill-read", "skill-read", ["fake_edu_list_classes"]),
+    ("st-skill-w", "skill-write-s7", ["pico_propose_change"]),
+]
+for mid, sid, tools in cases:
+    st, d = create_task(mid, sid)
+    assert st == 200, (sid, d)
+    run = d.get("run") or {}
+    snap = (run.get("token_usage") or {}).get("skill_snapshot")
+    assert isinstance(snap, dict), (sid, run)
+    assert snap.get("id") == sid, (sid, snap)
+    assert snap.get("tools") == tools, (sid, snap.get("tools"), tools)
+    print("skill ok", sid, snap.get("tools"))
+print("skills ok")
+PYSKILL
+
 echo "=== summary fails=$FAIL ==="
 if [ "$FAIL" -eq 0 ]; then
   echo SELFTEST_OK
