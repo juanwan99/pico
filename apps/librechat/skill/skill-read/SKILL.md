@@ -1,6 +1,5 @@
 ---
 name: skill-read
-displayTitle: skill.read
 description: Use this skill when the answer needs read-only school data.
 allowed-tools:
   - fake_edu_list_classes
