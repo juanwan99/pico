@@ -38,6 +38,21 @@ def test_claims_schema_requires_tenant_fields():
     assert schema["properties"]["aud"].get("const") == "pico-api"
 
 
+def test_change_handoff_schema_matches_frozen_envelope():
+    schema = json.loads((SCHEMAS / "change-handoff.schema.json").read_text())
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "pico_change_id",
+        "school_id",
+        "membership_id",
+        "title",
+        "summary",
+        "payload",
+        "confirmed_at",
+        "confirmed_by",
+    }
+
+
 def test_tool_name_pattern_forbids_dots():
     schema = json.loads((SCHEMAS / "tool-invoke.schema.json").read_text())
     pattern = schema["properties"]["name"]["pattern"]

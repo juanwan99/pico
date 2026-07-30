@@ -2,7 +2,7 @@
 
 ```
 PICO_SCOPE: agents work **only** in this repo; edu-cloud is out of band
-STATUS: PICO-SIDE COMPLETE ON MAIN (edu team owns their side)
+STATUS: M3 PICO STUB READY; LIVE EDU INTEGRATION DEFERRED
 PLAN: MVP-3DAY v1.2 §10
 CONTRACTS: Phase 2 FROZEN v1.0 (unchanged field names)
 ```
@@ -31,13 +31,17 @@ PICO_ACCEPT_TEST_ISSUER=false         # production after edu issuer live
 PICO_HOOK_SERVICE_TOKEN=<shared-for-callbacks>
 ```
 
+M3 stub status: JWT issuer modes, `fake|live` validation, and the frozen Change
+handoff envelope are implemented and tested in Pico; no live edu request is part
+of this milestone.
+
 ## edu-cloud endpoints (pico_bridge)
 
 | Method | Path | Who | Purpose |
 |--------|------|-----|---------|
 | POST | `/api/v1/pico/token` | logged-in membership | mint Pico JWT |
 | GET | `/api/v1/pico/classes` | service token | list classes for school |
-| POST | `/api/v1/pico/change-proposals` | service token | accept confirmed proposal |
+| POST | `/internal/pico/change-proposals` | service token | accept confirmed proposal |
 | GET | `/api/v1/pico/ai-status` | any auth | whether edu AI is tombstoned |
 
 ## Cutover checklist (no dual-run)

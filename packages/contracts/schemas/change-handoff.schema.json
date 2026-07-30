@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pico.local/schemas/change-handoff.schema.json",
+  "title": "PicoChangeHandoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pico_change_id",
+    "school_id",
+    "membership_id",
+    "title",
+    "summary",
+    "payload",
+    "confirmed_at",
+    "confirmed_by"
+  ],
+  "properties": {
+    "pico_change_id": { "type": "string", "minLength": 1 },
+    "school_id": { "type": "string", "minLength": 1 },
+    "membership_id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string" },
+    "payload": { "type": "object" },
+    "confirmed_at": { "type": "string", "format": "date-time" },
+    "confirmed_by": { "type": "string", "minLength": 1 }
+  }
+}

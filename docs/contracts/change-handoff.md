@@ -5,7 +5,8 @@ STATUS: FROZEN
 VERSION: 1.0
 OWNER_PROPOSAL: Pico
 OWNER_BUSINESS_COMMIT: edu-cloud (Phase 3)
-SCHEMA: packages/contracts/schemas/change-proposal.schema.json
+PROPOSAL_SCHEMA: packages/contracts/schemas/change-proposal.schema.json
+HANDOFF_SCHEMA: packages/contracts/schemas/change-handoff.schema.json
 ```
 
 ## 1. Goal

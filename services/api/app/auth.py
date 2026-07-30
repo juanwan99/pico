@@ -63,7 +63,17 @@ def _dev_proxy_keys(settings: Settings) -> set[str]:
 def _decode_with_key(
     token: str, *, key: str, algorithms: list[str], audience: str, issuer: str | None
 ) -> dict[str, Any]:
-    opts: dict[str, Any] = {"require": ["exp", "iat", "iss", "aud"]}
+    opts: dict[str, Any] = {
+        "require": [
+            "exp",
+            "iat",
+            "iss",
+            "aud",
+            "school_id",
+            "membership_id",
+            "scopes",
+        ]
+    }
     kwargs: dict[str, Any] = {
         "algorithms": algorithms,
         "audience": audience,
@@ -73,6 +83,46 @@ def _decode_with_key(
     if issuer is not None:
         kwargs["issuer"] = issuer
     return jwt.decode(token, key, **kwargs)
+
+
+def _principal_from_claims(data: dict[str, Any]) -> Principal:
+    school_id = data.get("school_id")
+    membership_id = data.get("membership_id")
+    scopes = data.get("scopes")
+    if not isinstance(school_id, str) or not school_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "auth.invalid", "message": "school_id must be a non-empty string"},
+        )
+    if not isinstance(membership_id, str) or not membership_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "auth.invalid",
+                "message": "membership_id must be a non-empty string",
+            },
+        )
+    if (
+        not isinstance(scopes, list)
+        or not scopes
+        or any(not isinstance(scope, str) or not scope.strip() for scope in scopes)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "auth.invalid",
+                "message": "scopes must be a non-empty string array",
+            },
+        )
+    return Principal(
+        school_id=school_id,
+        membership_id=membership_id,
+        scopes=scopes,
+        iss=str(data.get("iss", "")),
+        aud=str(data.get("aud", "")),
+        exp=int(data.get("exp", 0)),
+        raw=data,
+    )
 
 
 def decode_token(token: str, settings: Settings | None = None) -> Principal:
@@ -150,36 +200,21 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
             last_err = e
 
     if data is None:
+        if isinstance(last_err, jwt.InvalidAudienceError):
+            code = "auth.aud_mismatch"
+        elif isinstance(last_err, jwt.InvalidIssuerError):
+            code = "auth.iss_unknown"
+        else:
+            code = "auth.invalid" if last_err else "auth.iss_unknown"
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
-                "code": "auth.invalid" if last_err else "auth.iss_unknown",
+                "code": code,
                 "message": str(last_err) if last_err else "no trusted issuer matched",
             },
         )
 
-    school_id = data.get("school_id")
-    membership_id = data.get("membership_id")
-    if not school_id or not membership_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "code": "auth.invalid",
-                "message": "school_id and membership_id required",
-            },
-        )
-    scopes = data.get("scopes") or []
-    if isinstance(scopes, str):
-        scopes = [scopes]
-    return Principal(
-        school_id=str(school_id),
-        membership_id=str(membership_id),
-        scopes=list(scopes),
-        iss=str(data.get("iss", "")),
-        aud=str(data.get("aud", "")),
-        exp=int(data.get("exp", 0)),
-        raw=data,
-    )
+    return _principal_from_claims(data)
 
 
 def scope_proxy_principal(

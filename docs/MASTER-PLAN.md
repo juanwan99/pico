@@ -184,6 +184,8 @@ pytest -q tests/unit
 | 文档 | PHASE3 checklist 与现网 env 一致 |
 | **禁止** | 改 edu 仓；把 edu 当日常 CI 依赖 |
 
+M3 桩已就绪：Pico 默认 fake，live 配置缺失时 fail-closed；真实 edu 联调后置。
+
 ### M4 — 候选发布（S8）
 
 ```text

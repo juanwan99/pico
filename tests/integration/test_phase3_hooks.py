@@ -32,6 +32,7 @@ def client(tmp_path, monkeypatch):
 def test_phase3_meta_and_hook(client: TestClient):
     meta = client.get("/v1/meta/phase3").json()
     assert "edu_mode" in meta
+    assert meta["auth_issuer_mode"] == "test_and_edu"
     assert meta["hook_token_configured"] is True
 
     # create + confirm change then hook

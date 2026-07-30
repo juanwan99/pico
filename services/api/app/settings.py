@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -53,7 +54,7 @@ class Settings(BaseSettings):
 
     # Phase 3 edu adapter
     # fake = synthetic FakeEdu; live = HTTP to edu
-    pico_edu_mode: str = "fake"  # fake | live
+    pico_edu_mode: Literal["fake", "live"] = "fake"
     pico_edu_base_url: str = ""  # e.g. http://127.0.0.1:8001
     pico_edu_service_token: str = ""  # Pico → edu service credential
     pico_edu_timeout_seconds: float = 10.0
@@ -67,6 +68,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.pico_cors_origins.split(",") if o.strip()]
+
+    @property
+    def auth_issuer_mode(self) -> str:
+        return "test_and_edu" if self.pico_accept_test_issuer else "edu_only"
 
 
 @lru_cache

@@ -1007,6 +1007,7 @@ async def phase3_meta(settings: Settings = Depends(get_settings)) -> dict:
             settings.pico_edu_iss
             and (settings.pico_edu_jwt_secret or settings.pico_edu_jwt_public_key_pem)
         ),
+        "auth_issuer_mode": settings.auth_issuer_mode,
         "accept_test_issuer": settings.pico_accept_test_issuer,
         "handoff_enabled": settings.pico_edu_handoff_enabled,
         "hook_token_configured": bool(settings.pico_hook_service_token),
