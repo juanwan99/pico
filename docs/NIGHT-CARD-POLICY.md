@@ -5,6 +5,8 @@ DOC: docs/NIGHT-CARD-POLICY.md
 STATUS: BINDING 操作策略
 DATE: 2026-07-30
 WHY: 原 6h 卡常 10–90min 收工；需提高吞吐，同时保留 HARD 红线
+RACI: docs/RACI-GROK-CODEX.md（总控=Grok 规划审查 · 执行=Codex）
+NIGHT_RULE: 夜间必须多任务/长任务打满约6h + 可控风险
 TRUTH: 进度与证据仍只在 GitHub PR（OneFlow）
 ```
 
