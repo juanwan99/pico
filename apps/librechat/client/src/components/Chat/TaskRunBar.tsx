@@ -24,7 +24,7 @@ function TaskRunBar({
 
   return (
     <div
-      className="flex items-center gap-2 border-b border-black/[0.05] bg-white/90 px-3 py-2 backdrop-blur-sm dark:border-border-light dark:bg-surface-primary/90"
+      className="flex h-11 items-center gap-2 border-b border-black/[0.06] bg-white px-4 py-0 dark:border-border-light dark:bg-surface-primary/90"
       data-testid="task-run-bar"
     >
       <div className="min-w-0 flex-1">

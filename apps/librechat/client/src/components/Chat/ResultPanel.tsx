@@ -193,12 +193,12 @@ export default function ResultPanel({
 
   return (
     <aside
-      className="pico-result-panel flex h-full w-[min(360px,38vw)] min-w-[300px] max-w-[400px] shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary"
+      className="pico-result-panel flex h-full w-[340px] shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary"
       data-testid="result-panel"
       aria-label="结果区"
     >
       {/* Header — dropdown view switcher (matches nonempty shots) */}
-      <div className="flex h-11 items-center gap-1 border-b border-black/[0.06] px-2 dark:border-border-light">
+      <div className="flex h-11 items-center gap-1 border-b border-black/[0.06] bg-[#fafafa] px-2 dark:border-border-light">
         <div className="relative">
           <button
             type="button"

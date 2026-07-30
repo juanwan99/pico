@@ -139,8 +139,19 @@ function Sidebar({
       </div>
 
       <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <nav className="flex shrink-0 flex-col gap-0.5 px-2.5" aria-label="主导航">
-          {NAV.map((item) => {
+        <div className="px-2.5 pb-1">
+          <button
+            type="button"
+            data-testid="new-chat-button"
+            onClick={onNewTask}
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[#1a1a1a] text-[13px] font-medium text-white shadow-sm transition hover:bg-black"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.25} />
+            新建任务
+          </button>
+        </div>
+        <nav className="mt-1 flex shrink-0 flex-col gap-0.5 px-2.5" aria-label="主导航">
+          {NAV.filter((item) => item.action !== 'new-task').map((item) => {
             const Icon = item.icon;
             let active = false;
             if (location.pathname.startsWith('/agents') || location.pathname.startsWith('/assistants')) {
@@ -156,8 +167,6 @@ function Sidebar({
               active = item.id === 'auto';
             } else if (location.pathname.startsWith('/more')) {
               active = item.id === 'more';
-            } else if (location.pathname.startsWith('/c') || location.pathname === '/') {
-              active = item.id === 'new';
             } else if (item.path) {
               active = location.pathname.startsWith(item.path);
             }
@@ -166,25 +175,21 @@ function Sidebar({
               <button
                 key={item.id}
                 type="button"
-                data-testid={item.action === 'new-task' ? 'new-chat-button' : `nav-${item.id}`}
+                data-testid={`nav-${item.id}`}
                 onClick={() => {
-                  if (item.action === 'new-task') {
-                    onNewTask();
-                    return;
-                  }
                   if (item.path) {
                     navigate(item.path);
                   }
                 }}
                 className={cn(
-                  'group flex h-[33px] w-full items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13px] transition-colors',
+                  'group flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13.5px] transition-colors',
                   active
-                    ? 'bg-[#e6e6e6] font-medium text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
+                    ? 'bg-[#e4e4e4] font-medium text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
                     : 'font-normal text-[#3d3d3d] hover:bg-[#e8e8e8] dark:text-text-secondary dark:hover:bg-surface-tertiary',
                 )}
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center text-[#4a4a4a]">
-                  <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
+                  <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
                 </span>
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
                 {item.badge ? (

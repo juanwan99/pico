@@ -3106,3 +3106,36 @@ html.dark .pico-wb-sidebar .text-\[\#4a4a4a\],
 html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
   color: #c8c8c8 !important;
 }
+
+
+/* ========== Pico WorkBuddy pixel tokens (clean-room · 2026-07-30) ========== */
+:root {
+  --pico-wb-bg: #f5f5f5;
+  --pico-wb-rail: #f0f0f0;
+  --pico-wb-surface: #ffffff;
+  --pico-wb-ink: #1a1a1a;
+  --pico-wb-muted: #8c8c8c;
+  --pico-wb-line: rgba(0, 0, 0, 0.06);
+  --pico-wb-rail-w: 280px;
+  --pico-wb-result-w: 340px;
+  --pico-wb-composer-r: 20px;
+  --pico-wb-font: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+}
+.pico-result-panel {
+  font-family: var(--pico-wb-font);
+  width: var(--pico-wb-result-w) !important;
+}
+html:not(.dark) .pico-wb-sidebar {
+  background: var(--pico-wb-rail) !important;
+}
+html:not(.dark) .pico-wb-stage {
+  background: var(--pico-wb-bg) !important;
+}
+/* Message stream: airy WorkBuddy center */
+html:not(.dark) .pico-wb-stage + * ,
+html:not(.dark) [data-testid="task-run-bar"] + * {
+  /* keep */
+}
+html:not(.dark) .pico-result-panel {
+  box-shadow: -1px 0 0 var(--pico-wb-line);
+}

@@ -153,9 +153,9 @@ export default function Landing({
   const name = user?.name?.split(/\s+/)[0] || '';
 
   return (
-    <div className="pico-wb-landing flex w-full flex-col items-center px-6 pb-4 pt-16 sm:pt-24">
+    <div className="pico-wb-landing flex w-full flex-col items-center px-6 pb-6 pt-14 sm:pt-20">
       <div className="flex w-full max-w-[797px] flex-col items-center">
-        <h1 className="text-center text-[32px] font-semibold leading-none tracking-[-0.03em] text-[#1a1a1a] sm:text-[36px] dark:text-text-primary">
+        <h1 className="text-center text-[30px] font-semibold leading-none tracking-[-0.02em] text-[#1a1a1a] sm:text-[34px] dark:text-text-primary">
           Pico，我帮你
         </h1>
         {name ? (
@@ -206,7 +206,7 @@ export default function Landing({
         </div>
 
         {/* PIXEL composer card — matches reference input block */}
-        <div className="mt-8 w-full">
+        <div className="mt-7 w-full max-w-[720px]">
           <div
             className="rounded-[20px] border border-black/[0.08] bg-white px-4 pb-3 pt-3.5 shadow-[0_8px_28px_rgba(15,23,42,0.07)]"
             data-testid="pico-wb-home-composer"

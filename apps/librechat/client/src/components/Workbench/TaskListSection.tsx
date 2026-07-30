@@ -81,12 +81,23 @@ function TaskListSection() {
                     : 'hover:bg-[#e8e8e8] dark:hover:bg-surface-hover',
                 )}
               >
-                <span className="line-clamp-2 text-[12.5px] font-medium leading-snug text-[#1a1a1a] dark:text-text-primary">
-                  {title}
-                </span>
-                <span className="text-[11px] text-[#9a9a9a]">
-                  {relativeTime(c.updatedAt as string | undefined)}
-                </span>
+                <div className="flex items-start gap-2">
+                  <span
+                    className={cn(
+                      'mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full',
+                      active ? 'bg-[#1a1a1a]' : 'bg-[#c8c8c8]',
+                    )}
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    <span className="line-clamp-2 text-[12.5px] font-medium leading-snug text-[#1a1a1a] dark:text-text-primary">
+                      {title}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-[#9a9a9a]">
+                      {relativeTime(c.updatedAt as string | undefined)}
+                    </span>
+                  </div>
+                </div>
               </button>
             </li>
           );
