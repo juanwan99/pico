@@ -6,8 +6,8 @@ REPO: juanwan99/pico
 BRANCH: grok/pico-preview-librechat-p0
 BASE: main
 PR: https://github.com/juanwan99/pico/pull/30
-FULL_SHA: 3160c8c7da1ac250d27a0954d9760a67b4da8bbd
-SHORT: 3160c8c
+FULL_SHA: 53a5454e232d54bfa2e7e665a952109faa9d00c3
+SHORT: 53a5454
 DATE: 2026-07-30
 PLAN: docs/MVP-3DAY.md v1.2 FIXED（本 PR 不升 v1.3）
 COMMITS_AHEAD_MAIN: ~42
