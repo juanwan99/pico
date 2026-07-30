@@ -36,6 +36,8 @@ from app import run_service
 from app.auth import (
     Principal,
     issue_test_token,
+    require_any_scope,
+    require_scope,
     require_scoped_principal,
     require_service_token,
 )
@@ -102,7 +104,9 @@ app.include_router(openai_compat_router)
 class TokenRequest(BaseModel):
     school_id: str = Field(examples=["school-a"])
     membership_id: str = Field(examples=["member-1"])
-    scopes: list[str] = Field(default_factory=lambda: ["ai:run", "ai:read"])
+    scopes: list[str] = Field(
+        default_factory=lambda: ["ai:run", "ai:read", "ai:confirm"]
+    )
 
 
 class TokenResponse(BaseModel):
@@ -284,7 +288,7 @@ class HelloRequest(BaseModel):
 @app.post("/v1/dev/model-hello")
 async def model_hello(
     body: HelloRequest,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     from pico_orchestrator.provider import resolve_provider, stream_chat
@@ -320,7 +324,9 @@ async def model_hello(
 
 
 @app.get("/v1/tools")
-async def list_tools(principal: Principal = Depends(require_scoped_principal)) -> dict:
+async def list_tools(
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> dict:
     from pico_orchestrator.tools_builtin import build_default_gateway
 
     gw = build_default_gateway()
@@ -335,7 +341,7 @@ class ToolInvokeRequest(BaseModel):
 @app.post("/v1/tools/invoke")
 async def invoke_tool(
     body: ToolInvokeRequest,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
 ) -> dict:
     from pico_orchestrator.gateway import ToolError
     from pico_orchestrator.tools_builtin import build_default_gateway
@@ -364,7 +370,7 @@ class CreateWorkspaceRequest(BaseModel):
 
 @app.get("/v1/workspaces")
 async def list_workspaces(
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     from sqlalchemy import select
@@ -395,7 +401,7 @@ async def list_workspaces(
 @app.post("/v1/workspaces")
 async def create_workspace(
     body: CreateWorkspaceRequest,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     name = body.name.strip()
@@ -424,7 +430,7 @@ async def create_workspace(
 @app.delete("/v1/workspaces/{workspace_id}")
 async def delete_workspace(
     workspace_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     row = await session.get(WorkspaceRow, workspace_id)
@@ -466,7 +472,7 @@ def _auto_dict(a) -> dict:
 
 @app.get("/v1/automations")
 async def list_automations(
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     from app import automation_service
@@ -478,7 +484,7 @@ async def list_automations(
 @app.post("/v1/automations")
 async def create_automation(
     body: CreateAutomationRequest,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     from app import automation_service
@@ -500,7 +506,7 @@ async def create_automation(
 @app.post("/v1/automations/{auto_id}/enable")
 async def enable_automation(
     auto_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     from app import automation_service
@@ -514,7 +520,7 @@ async def enable_automation(
 @app.post("/v1/automations/{auto_id}/disable")
 async def disable_automation(
     auto_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     from app import automation_service
@@ -528,7 +534,7 @@ async def disable_automation(
 @app.delete("/v1/automations/{auto_id}")
 async def delete_automation(
     auto_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     from app import automation_service
@@ -588,7 +594,7 @@ def _event_dict(e: EventRow) -> dict:
 @app.post("/v1/tasks")
 async def create_task(
     body: CreateTaskRequest,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     if not body.prompt.strip():
@@ -603,7 +609,7 @@ async def create_task(
 @app.get("/v1/tasks")
 async def tasks(
     conversation_id: str | None = None,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     rows = await run_service.list_tasks(session, principal)
@@ -615,7 +621,7 @@ async def tasks(
 @app.get("/v1/tasks/{task_id}")
 async def get_task(
     task_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     task = await run_service.get_task_for_principal(session, task_id, principal)
@@ -641,7 +647,7 @@ async def get_task(
 async def get_artifact_content(
     artifact_id: str,
     download: bool = False,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     artifact = await run_service.get_artifact_for_principal(
@@ -695,7 +701,7 @@ class RebindConversationRequest(BaseModel):
 @app.post("/v1/tasks/rebind-conversation")
 async def rebind_conversation(
     body: RebindConversationRequest,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Map pending client convo id → real LibreChat conversation id."""
@@ -726,7 +732,7 @@ async def rebind_conversation(
 @app.get("/v1/tasks/{task_id}/runs")
 async def list_task_runs(
     task_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     task = await run_service.get_task_for_principal(session, task_id, principal)
@@ -739,7 +745,7 @@ async def list_task_runs(
 @app.get("/v1/runs/{run_id}")
 async def get_run(
     run_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     run = await run_service.get_run_for_principal(session, run_id, principal)
@@ -751,7 +757,7 @@ async def get_run(
 @app.post("/v1/runs/{run_id}/cancel")
 async def cancel_run(
     run_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     from app.db import append_event
@@ -767,7 +773,7 @@ async def cancel_run(
 @app.get("/v1/runs/{run_id}/events")
 async def run_events(
     run_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     run = await run_service.get_run_for_principal(session, run_id, principal)
@@ -781,7 +787,7 @@ async def run_events(
 async def stream_run(
     run_id: str,
     request: Request,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ):
     run = await run_service.get_run_for_principal(session, run_id, principal)
@@ -850,7 +856,7 @@ def _change_dict(row) -> dict:
 @app.post("/v1/changes")
 async def create_change(
     body: ChangeCreateRequest,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     try:
@@ -874,7 +880,7 @@ async def create_change(
 async def changes(
     task_id: str | None = None,
     status: str | None = None,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     if status and status not in {"proposed", "confirmed", "rejected"}:
@@ -891,7 +897,7 @@ async def changes(
 @app.get("/v1/changes/{change_id}")
 async def get_change(
     change_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     row = await run_service.get_change_for_principal(session, principal, change_id)
@@ -903,7 +909,7 @@ async def get_change(
 @app.post("/v1/changes/{change_id}/confirm")
 async def confirm_change(
     change_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_any_scope("ai:confirm", "ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     try:
@@ -920,7 +926,7 @@ async def confirm_change(
 @app.post("/v1/changes/{change_id}/reject")
 async def reject_change(
     change_id: str,
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_any_scope("ai:confirm", "ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     try:
@@ -939,7 +945,7 @@ async def reject_change(
 
 @app.post("/v1/demo/cross-school-deny")
 async def demo_cross_school(
-    principal: Principal = Depends(require_scoped_principal),
+    principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     return await run_service.demo_cross_school_deny(session, principal)
@@ -1007,6 +1013,7 @@ async def phase3_meta(settings: Settings = Depends(get_settings)) -> dict:
             settings.pico_edu_iss
             and (settings.pico_edu_jwt_secret or settings.pico_edu_jwt_public_key_pem)
         ),
+        "auth_issuer_mode": settings.auth_issuer_mode,
         "accept_test_issuer": settings.pico_accept_test_issuer,
         "handoff_enabled": settings.pico_edu_handoff_enabled,
         "hook_token_configured": bool(settings.pico_hook_service_token),

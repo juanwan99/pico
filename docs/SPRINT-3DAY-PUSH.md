@@ -18,7 +18,7 @@ HORIZON: 3 calendar days · 每晚 Codex ≈6h 长任务
 □ 生产 health.git_sha == main tip + ## DEPLOYED
 □ M2 收口：S7 最小真闭环（提案→确认/拒绝→审计，UI 同 change id）
 □ 隔离/自测含：中断终态、下载跨人拒绝、S7 confirm/reject
-□ M3 桩：JWT 同形开关、PICO_EDU_MODE fake|live 边界、change-handoff 形状（可仍 fake）
+☑ M3 桩：JWT 同形开关、PICO_EDU_MODE fake|live 边界、change-handoff 形状（fake 默认；真联调后置）
 □ OneFlow：CANDIDATE → CI 绿 → 合 main → 部署回写
 □ 不写 edu · 不像素战役 · 不自 PASS 产品终局
 ```

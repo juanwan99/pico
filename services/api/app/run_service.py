@@ -412,18 +412,22 @@ async def confirm_change(
 
     # Phase 3 optional push to edu Review queue — edu owns business write
     try:
-        from pico_orchestrator.edu_adapter import EduAdapterError, push_change_proposal
+        from pico_orchestrator.edu_adapter import (
+            EduAdapterError,
+            build_change_handoff,
+            push_change_proposal,
+        )
 
-        handoff_body = {
-            "pico_change_id": row.id,
-            "school_id": row.school_id,
-            "membership_id": row.membership_id,
-            "title": row.title,
-            "summary": row.summary,
-            "payload": json.loads(row.payload_json or "{}"),
-            "confirmed_at": row.confirmed_at.isoformat() if row.confirmed_at else None,
-            "confirmed_by": row.confirmed_by,
-        }
+        handoff_body = build_change_handoff(
+            pico_change_id=row.id,
+            school_id=row.school_id,
+            membership_id=row.membership_id,
+            title=row.title,
+            summary=row.summary,
+            payload=json.loads(row.payload_json or "{}"),
+            confirmed_at=row.confirmed_at or _utcnow(),
+            confirmed_by=row.confirmed_by or "",
+        )
         result = await push_change_proposal(handoff_body)
         if result is not None:
             history = json.loads(row.audit_json or "[]")

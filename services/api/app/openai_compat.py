@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from pico_orchestrator.user_errors import user_message_for_error
 from pydantic import BaseModel
 
-from app.auth import Principal, decode_token, scope_proxy_principal
+from app.auth import Principal, decode_token, enforce_scope, scope_proxy_principal
 from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
 
@@ -416,7 +416,7 @@ async def list_models(
     authorization: str | None = Header(default=None),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    _principal_from_auth(authorization, settings)
+    enforce_scope(_principal_from_auth(authorization, settings), "ai:read")
     from pico_orchestrator.provider import DEFAULT_KIMI_MODEL, KNOWN_KIMI_MODELS
 
     default = settings.kimi_model or DEFAULT_KIMI_MODEL
@@ -455,6 +455,7 @@ async def chat_completions(
     ):
         raise HTTPException(status_code=403, detail="proxy membership mismatch")
     principal = scope_proxy_principal(principal, x_pico_membership_id)
+    enforce_scope(principal, "ai:run")
     raw_prompt = _last_user_prompt(body.messages)
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
