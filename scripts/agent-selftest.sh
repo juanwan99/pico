@@ -92,5 +92,28 @@ else
   echo "  SKIP  playwright"
 fi
 
+
+# 6 S7 change confirm/reject
+python3 - <<'PYS7' && pass "S7 create/confirm/reject" || fail "S7 API"
+import json, urllib.request, urllib.error, os, sys
+API=os.environ.get("PICO_API","http://127.0.0.1:18765")
+def req(method, path, body=None):
+    data=None if body is None else json.dumps(body).encode()
+    h={"Authorization":"Bearer pico-dev","Content-Type":"application/json","X-Pico-Membership-Id":"selftest-s7"}
+    r=urllib.request.Request(API+path, data=data, method=method, headers=h)
+    try:
+        with urllib.request.urlopen(r, timeout=30) as resp:
+            return resp.status, json.loads(resp.read().decode() or "{}")
+    except urllib.error.HTTPError as e:
+        print("http", e.code, e.read()[:200]); sys.exit(1)
+st,d=req("POST","/v1/changes",{"title":"selftest","summary":"s7","payload":{"t":1}})
+assert st==200 and d.get("change",{}).get("id"), d
+cid=d["change"]["id"]
+st,c=req("POST",f"/v1/changes/{cid}/confirm",{})
+assert st==200 and c.get("change",{}).get("status")=="confirmed", c
+print("ok", cid)
+PYS7
+
+
 echo "=== summary fails=$FAIL ==="
 [ "$FAIL" -eq 0 ] && echo SELFTEST_OK || { echo SELFTEST_FAIL; exit 1; }
