@@ -14,6 +14,7 @@ REVIEW: Codex REVISE on PR #37 — 本版吸收全部 P0/P1
 RELATED_ADR: docs/ADR-SKILL-CATALOG.md（必先读 · 唯一 Skill 目录）
 DOC_INDEX: docs/README.md（真源索引 · 禁交接 MD）
 NIGHT_POLICY: docs/NIGHT-CARD-POLICY.md（加厚 · 最短工时）
+DAY_PARALLEL: docs/RACI-GROK-CODEX.md §2.1（日间能并行则并行）
 N3_CARD: docs/NIGHT-CARD-N3-THICK.md
 ```
 
