@@ -14,6 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.settings import Settings, get_settings
 
 _bearer = HTTPBearer(auto_error=False)
+REGISTERED_SCOPES = frozenset({"ai:read", "ai:run", "ai:confirm", "ai:admin"})
 
 
 @dataclass(frozen=True)
@@ -112,6 +113,15 @@ def _principal_from_claims(data: dict[str, Any]) -> Principal:
             detail={
                 "code": "auth.invalid",
                 "message": "scopes must be a non-empty string array",
+            },
+        )
+    unknown_scopes = set(scopes) - REGISTERED_SCOPES
+    if unknown_scopes:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "auth.invalid",
+                "message": f"unknown scopes: {sorted(unknown_scopes)}",
             },
         )
     return Principal(
@@ -272,6 +282,29 @@ async def require_scoped_principal(
         )
     p = decode_token(creds.credentials, settings)
     return scope_proxy_principal(p, x_pico_membership_id)
+
+
+def enforce_scope(principal: Principal, required_scope: str) -> Principal:
+    if required_scope not in REGISTERED_SCOPES:
+        raise RuntimeError(f"unregistered required scope: {required_scope}")
+    if required_scope not in principal.scopes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "auth.forbidden",
+                "message": f"{required_scope} scope required",
+            },
+        )
+    return principal
+
+
+def require_scope(required_scope: str):
+    async def dependency(
+        principal: Principal = Depends(require_scoped_principal),
+    ) -> Principal:
+        return enforce_scope(principal, required_scope)
+
+    return dependency
 
 
 def require_service_token(

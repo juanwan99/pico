@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import jwt
 import pytest
 from fastapi import HTTPException
@@ -110,6 +111,10 @@ def test_edu_claims_require_non_empty_scope_array():
         decode_token(_edu_token(s, scopes=[]), s)
     assert empty.value.detail["code"] == "auth.invalid"
 
+    with pytest.raises(HTTPException) as unknown:
+        decode_token(_edu_token(s, scopes=["ai:unknown"]), s)
+    assert unknown.value.detail["code"] == "auth.invalid"
+
 
 def test_test_issuer_reports_contract_error_codes():
     import time
@@ -208,6 +213,42 @@ async def test_list_classes_live_http(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_list_classes_live_rejects_cross_school_response(monkeypatch):
+    from pico_orchestrator.edu_adapter import EduAdapterError, list_classes
+
+    monkeypatch.setenv("PICO_EDU_MODE", "live")
+    monkeypatch.setenv("PICO_EDU_BASE_URL", "http://edu.test")
+    monkeypatch.setenv("PICO_EDU_SERVICE_TOKEN", "svc")
+
+    mock_resp = AsyncMock()
+    mock_resp.status_code = 200
+    mock_resp.json = lambda: {
+        "school_id": "school-b",
+        "classes": [{"id": "b1", "name": "Other tenant"}],
+    }
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, *args, **kwargs):
+            return mock_resp
+
+    with (
+        patch(
+            "pico_orchestrator.edu_adapter.httpx.AsyncClient",
+            return_value=FakeClient(),
+        ),
+        pytest.raises(EduAdapterError) as exc,
+    ):
+        await list_classes("school-a")
+    assert exc.value.code == "tenant.cross_school"
+
+
+@pytest.mark.asyncio
 async def test_fake_handoff_validates_shape_without_network(monkeypatch):
     from pico_orchestrator.edu_adapter import push_change_proposal
 
@@ -280,3 +321,70 @@ async def test_live_handoff_posts_frozen_contract_envelope(monkeypatch):
         "edu_review_id": "review-1",
         "status": "accepted_for_review",
     }
+
+
+@pytest.mark.asyncio
+async def test_live_handoff_wraps_transport_failure(monkeypatch):
+    from pico_orchestrator.edu_adapter import EduAdapterError, push_change_proposal
+
+    monkeypatch.setenv("PICO_EDU_MODE", "live")
+    monkeypatch.setenv("PICO_EDU_HANDOFF_ENABLED", "true")
+    monkeypatch.setenv("PICO_EDU_BASE_URL", "http://edu.test")
+    monkeypatch.setenv("PICO_EDU_SERVICE_TOKEN", "svc")
+
+    class FailingClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, **kwargs):
+            raise httpx.ConnectError(
+                "offline",
+                request=httpx.Request("POST", url),
+            )
+
+    with (
+        patch(
+            "pico_orchestrator.edu_adapter.httpx.AsyncClient",
+            return_value=FailingClient(),
+        ),
+        pytest.raises(EduAdapterError) as exc,
+    ):
+        await push_change_proposal(_handoff())
+    assert exc.value.code == "tool.upstream_error"
+
+
+@pytest.mark.asyncio
+async def test_live_handoff_rejects_invalid_response(monkeypatch):
+    from pico_orchestrator.edu_adapter import EduAdapterError, push_change_proposal
+
+    monkeypatch.setenv("PICO_EDU_MODE", "live")
+    monkeypatch.setenv("PICO_EDU_HANDOFF_ENABLED", "true")
+    monkeypatch.setenv("PICO_EDU_BASE_URL", "http://edu.test")
+    monkeypatch.setenv("PICO_EDU_SERVICE_TOKEN", "svc")
+
+    mock_resp = AsyncMock()
+    mock_resp.status_code = 200
+    mock_resp.json = dict
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, *args, **kwargs):
+            return mock_resp
+
+    with (
+        patch(
+            "pico_orchestrator.edu_adapter.httpx.AsyncClient",
+            return_value=FakeClient(),
+        ),
+        pytest.raises(EduAdapterError) as exc,
+    ):
+        await push_change_proposal(_handoff())
+    assert exc.value.code == "edu.contract_error"

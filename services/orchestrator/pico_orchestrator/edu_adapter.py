@@ -50,6 +50,22 @@ def _live_config() -> tuple[str, str, float]:
     return base, token, timeout
 
 
+def _response_object(resp: httpx.Response, *, operation: str) -> dict[str, Any]:
+    try:
+        data = resp.json()
+    except (TypeError, ValueError) as exc:
+        raise EduAdapterError(
+            "edu.contract_error",
+            f"{operation} response must be a JSON object",
+        ) from exc
+    if not isinstance(data, dict):
+        raise EduAdapterError(
+            "edu.contract_error",
+            f"{operation} response must be a JSON object",
+        )
+    return data
+
+
 def build_change_handoff(
     *,
     pico_change_id: str,
@@ -130,16 +146,42 @@ async def list_classes_live(school_id: str, *, limit: int = 20) -> dict[str, Any
     base, token, timeout = _live_config()
     url = f"{base}/api/v1/pico/classes"
     headers = {"Authorization": f"Bearer {token}", "X-Pico-School-Id": school_id}
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.get(url, params={"school_id": school_id, "limit": limit}, headers=headers)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(
+                url,
+                params={"school_id": school_id, "limit": limit},
+                headers=headers,
+            )
+    except httpx.HTTPError as exc:
+        raise EduAdapterError(
+            "tool.upstream_error",
+            f"edu class request failed: {type(exc).__name__}",
+        ) from exc
     if resp.status_code == 403:
         raise EduAdapterError("tenant.cross_school", resp.text)
     if resp.status_code >= 400:
         raise EduAdapterError("tool.upstream_error", f"edu HTTP {resp.status_code}: {resp.text[:300]}")
-    data = resp.json()
+    data = _response_object(resp, operation="edu class")
+    response_school = data.get("school_id")
+    if not isinstance(response_school, str) or not response_school:
+        raise EduAdapterError(
+            "edu.contract_error",
+            "edu class response school_id required",
+        )
+    if response_school != school_id:
+        raise EduAdapterError(
+            "tenant.cross_school",
+            "edu class response school_id does not match requested tenant",
+        )
     classes = data.get("classes") or data.get("items") or []
+    if not isinstance(classes, list):
+        raise EduAdapterError(
+            "edu.contract_error",
+            "edu class response classes must be an array",
+        )
     return {
-        "school_id": data.get("school_id") or school_id,
+        "school_id": response_school,
         "classes": [
             {"id": str(c.get("id", "")), "name": str(c.get("name", ""))}
             for c in classes[:limit]
@@ -187,10 +229,31 @@ async def push_change_proposal(body: dict[str, Any]) -> dict[str, Any] | None:
     base, token, timeout = _live_config()
     url = f"{base}{CHANGE_HANDOFF_PATH}"
     headers = {"Authorization": f"Bearer {token}"}
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(url, json=envelope, headers=headers)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, json=envelope, headers=headers)
+    except httpx.HTTPError as exc:
+        raise EduAdapterError(
+            "tool.upstream_error",
+            f"handoff request failed: {type(exc).__name__}",
+        ) from exc
     if resp.status_code >= 400:
         raise EduAdapterError(
             "tool.upstream_error", f"handoff HTTP {resp.status_code}: {resp.text[:300]}"
         )
-    return resp.json()
+    data = _response_object(resp, operation="handoff")
+    review_id = data.get("edu_review_id")
+    if not isinstance(review_id, str) or not review_id:
+        raise EduAdapterError(
+            "edu.contract_error",
+            "handoff response edu_review_id required",
+        )
+    if data.get("status") != "accepted_for_review":
+        raise EduAdapterError(
+            "edu.contract_error",
+            "handoff response status must be accepted_for_review",
+        )
+    return {
+        "edu_review_id": review_id,
+        "status": "accepted_for_review",
+    }

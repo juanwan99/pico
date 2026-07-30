@@ -60,3 +60,76 @@ def test_phase3_meta_and_hook(client: TestClient):
     )
     assert r.status_code == 200, r.text
     assert r.json()["ok"] is True
+
+
+def _token(client: TestClient, scopes: list[str]) -> str:
+    response = client.post(
+        "/v1/dev/token",
+        json={
+            "school_id": "school-a",
+            "membership_id": "m-scope",
+            "scopes": scopes,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["access_token"]
+
+
+def test_route_scopes_are_enforced(client: TestClient):
+    read = {"Authorization": f"Bearer {_token(client, ['ai:read'])}"}
+    assert client.get("/v1/changes", headers=read).status_code == 200
+    denied_create = client.post(
+        "/v1/changes",
+        headers=read,
+        json={"title": "t", "summary": "s", "payload": {}},
+    )
+    assert denied_create.status_code == 403
+    assert denied_create.json()["detail"]["code"] == "auth.forbidden"
+
+    run = {"Authorization": f"Bearer {_token(client, ['ai:run'])}"}
+    created = client.post(
+        "/v1/changes",
+        headers=run,
+        json={"title": "t", "summary": "s", "payload": {}},
+    )
+    assert created.status_code == 200, created.text
+    change_id = created.json()["change"]["id"]
+    assert client.get("/v1/changes", headers=run).status_code == 403
+    assert client.get("/v1/models", headers=run).status_code == 403
+
+    confirm = {"Authorization": f"Bearer {_token(client, ['ai:confirm'])}"}
+    confirmed = client.post(
+        f"/v1/changes/{change_id}/confirm",
+        headers=confirm,
+        json={},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+
+def test_live_handoff_configuration_failure_is_audited(
+    client: TestClient,
+    monkeypatch,
+):
+    token = _token(client, ["ai:run", "ai:read", "ai:confirm"])
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post(
+        "/v1/changes",
+        headers=headers,
+        json={"title": "t", "summary": "s", "payload": {}},
+    )
+    change_id = created.json()["change"]["id"]
+
+    monkeypatch.setenv("PICO_EDU_MODE", "live")
+    monkeypatch.setenv("PICO_EDU_HANDOFF_ENABLED", "true")
+    monkeypatch.delenv("PICO_EDU_BASE_URL", raising=False)
+    monkeypatch.delenv("PICO_EDU_SERVICE_TOKEN", raising=False)
+    confirmed = client.post(
+        f"/v1/changes/{change_id}/confirm",
+        headers=headers,
+        json={},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    change = confirmed.json()["change"]
+    assert change["status"] == "confirmed"
+    assert change["audit"][-1]["action"] == "handoff_failed"
+    assert change["audit"][-1]["code"] == "edu.config_error"
