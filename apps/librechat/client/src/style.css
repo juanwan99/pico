@@ -3131,7 +3131,11 @@ html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
 }
 @media (max-width: 1024px) {
   .pico-result-panel:not(.pico-result-panel--expanded) {
-    display: none !important;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex !important;
+    width: 100vw !important;
   }
 }
 html:not(.dark) .pico-wb-sidebar {

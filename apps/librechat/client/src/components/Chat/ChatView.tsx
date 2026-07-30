@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';
 import { Spinner } from '@librechat/client';
+import { PanelRightOpen } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { Constants, buildTree } from 'librechat-data-provider';
 import type { TChatProject, TMessage } from 'librechat-data-provider';
@@ -97,7 +98,12 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     (conversationId === Constants.NEW_CONVO || !conversationId);
   const isNavigating = (!messagesTree || messagesTree.length === 0) && conversationId != null;
   const isProjectLandingPage = isLandingPage && project != null;
-  const [resultOpen, setResultOpen] = useState(true); // WorkBuddy: right rail default ON
+  const [compactResult, setCompactResult] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches,
+  );
+  const [resultOpen, setResultOpen] = useState(
+    () => typeof window === 'undefined' || !window.matchMedia('(max-width: 1024px)').matches,
+  );
   const flatMessages = useMemo(() => chatHelpers.getMessages?.() ?? null, [chatHelpers, messagesTree, isSubmitting]);
   const taskTitle = chatHelpers.conversation?.title && chatHelpers.conversation.title !== 'New Chat'
     ? chatHelpers.conversation.title
@@ -106,23 +112,33 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '等待模型响应' : undefined);
   const showResultPanel = resultOpen && conversationId !== Constants.SEARCH;
 
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1024px)');
+    const syncResultLayout = (event: MediaQueryListEvent) => {
+      setCompactResult(event.matches);
+      setResultOpen(!event.matches);
+    };
+    media.addEventListener('change', syncResultLayout);
+    return () => media.removeEventListener('change', syncResultLayout);
+  }, []);
+
   // WorkBuddy chrome: task pages always show right rail by default
   useEffect(() => {
-    if (!conversationId || conversationId === Constants.NEW_CONVO) {
+    if (compactResult || !conversationId || conversationId === Constants.NEW_CONVO) {
       return;
     }
     setResultOpen(true);
-  }, [conversationId]);
+  }, [compactResult, conversationId]);
 
   // Ensure result panel opens when artifacts arrive or run finishes
   useEffect(() => {
-    if (!conversationId || conversationId === Constants.NEW_CONVO) {
+    if (compactResult || !conversationId || conversationId === Constants.NEW_CONVO) {
       return;
     }
     if ((ledger.artifacts?.length ?? 0) > 0 || ledger.statusLabel?.startsWith('已完成')) {
       setResultOpen(true);
     }
-  }, [conversationId, ledger.artifacts, ledger.statusLabel]);
+  }, [compactResult, conversationId, ledger.artifacts, ledger.statusLabel]);
 
   if (isLoading && conversationId !== Constants.NEW_CONVO) {
     content = <LoadingSpinner />;
@@ -214,9 +230,11 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                 {!resultOpen ? (
                   <button
                     type="button"
-                    className="absolute right-3 top-14 z-20 rounded-lg border border-black/[0.08] bg-white px-2.5 py-1.5 text-[12px] shadow-sm dark:bg-surface-secondary"
+                    className="absolute right-3 top-14 z-20 inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-[12px] font-medium shadow-sm dark:bg-surface-secondary"
                     onClick={() => setResultOpen(true)}
+                    data-testid="result-panel-toggle"
                   >
+                    <PanelRightOpen className="h-3.5 w-3.5" />
                     结果区
                   </button>
                 ) : null}
