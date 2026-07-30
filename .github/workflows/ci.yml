@@ -57,13 +57,15 @@ jobs:
           exit "$code"
 
   product-ui:
-    name: product-ui-nextchat-only
+    name: product-ui-librechat-shell
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Forbid apps/web; require NextChat shell
+      - name: Require LibreChat shell; forbid web/workbench
         run: |
           bash scripts/assert-product-identity.sh
+          test -f apps/librechat/package.json
           test -f apps/README.md
-          echo "OK: product UI = apps/nextchat only"
+          grep -q 'librechat' apps/README.md
+          echo "OK: product UI = apps/librechat"

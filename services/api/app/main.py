@@ -29,8 +29,13 @@ except ImportError:
     pass
 
 from app import run_service
-from app.auth import Principal, issue_test_token, require_principal, require_service_token
-from app.db import EventRow, RunRow, get_session, init_db
+from app.auth import (
+    Principal,
+    issue_test_token,
+    require_scoped_principal,
+    require_service_token,
+)
+from app.db import EventRow, RunRow, WorkspaceRow, get_session, init_db, new_id
 from app.openai_compat import router as openai_compat_router
 from app.settings import Settings, get_settings
 
@@ -60,7 +65,13 @@ def _sync_settings_to_environ() -> None:
 async def lifespan(_app: FastAPI):
     _sync_settings_to_environ()
     await init_db()
-    yield
+    from app import automation_service
+
+    automation_service.start_scheduler()
+    try:
+        yield
+    finally:
+        await automation_service.stop_scheduler()
 
 
 app = FastAPI(
@@ -120,6 +131,20 @@ def _resolve_git_sha() -> str:
         return "unknown"
 
 
+
+@app.get("/")
+async def root_info() -> dict:
+    """Avoid bare FastAPI Not Found when preview probes API root."""
+    return {
+        "ok": True,
+        "service": "pico-api",
+        "message": "Pico API. Product UI is on the preview host (LibreChat via product UI :8080).",
+        "health": "/health",
+        "version": "/v1/meta/version",
+        "chat": "/v1/chat/completions",
+    }
+
+
 @app.get("/health")
 async def health() -> dict:
     return {
@@ -137,8 +162,14 @@ async def meta_version(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.provider import resolve_provider
 
     web_dir = _ROOT / "apps" / "web"
+    librechat = _ROOT / "apps" / "librechat" / "package.json"
     nextchat = _ROOT / "apps" / "nextchat" / "package.json"
-    product_ui = "nextchat" if nextchat.is_file() else "missing"
+    if librechat.is_file():
+        product_ui = "librechat"
+    elif nextchat.is_file():
+        product_ui = "nextchat"
+    else:
+        product_ui = "missing"
     cfg = resolve_provider()
     apps_web = web_dir.is_dir()
     return {
@@ -148,7 +179,7 @@ async def meta_version(settings: Settings = Depends(get_settings)) -> dict:
         "api_version": app.version,
         "product_ui": product_ui,
         "apps_web_present": apps_web,
-        "product_ui_ok": product_ui == "nextchat" and not apps_web,
+        "product_ui_ok": product_ui in {"librechat", "nextchat"} and not apps_web,
         "agent_pins": AGENT_PINS,
         "installed": installed_versions(),
         "dangerous_tools_enabled": settings.pico_dangerous_tools_enabled,
@@ -231,7 +262,7 @@ async def dev_token(
 
 
 @app.get("/v1/me")
-async def me(principal: Principal = Depends(require_principal)) -> dict:
+async def me(principal: Principal = Depends(require_scoped_principal)) -> dict:
     return {
         "school_id": principal.school_id,
         "membership_id": principal.membership_id,
@@ -249,7 +280,7 @@ class HelloRequest(BaseModel):
 @app.post("/v1/dev/model-hello")
 async def model_hello(
     body: HelloRequest,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     from pico_orchestrator.provider import resolve_provider, stream_chat
@@ -285,7 +316,7 @@ async def model_hello(
 
 
 @app.get("/v1/tools")
-async def list_tools(principal: Principal = Depends(require_principal)) -> dict:
+async def list_tools(principal: Principal = Depends(require_scoped_principal)) -> dict:
     from pico_orchestrator.tools_builtin import build_default_gateway
 
     gw = build_default_gateway()
@@ -300,7 +331,7 @@ class ToolInvokeRequest(BaseModel):
 @app.post("/v1/tools/invoke")
 async def invoke_tool(
     body: ToolInvokeRequest,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
 ) -> dict:
     from pico_orchestrator.gateway import ToolError
     from pico_orchestrator.tools_builtin import build_default_gateway
@@ -314,6 +345,194 @@ async def invoke_tool(
             status_code=code, detail={"code": e.code, "message": e.message}
         ) from e
     return {"ok": True, "result": result}
+
+
+
+
+# ----- workspaces (managed boundary) -----
+
+
+class CreateWorkspaceRequest(BaseModel):
+    name: str
+    note: str = ""
+    kind: str = "managed"
+
+
+@app.get("/v1/workspaces")
+async def list_workspaces(
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from sqlalchemy import select
+
+    q = await session.execute(
+        select(WorkspaceRow)
+        .where(
+            WorkspaceRow.school_id == principal.school_id,
+            WorkspaceRow.membership_id == principal.membership_id,
+        )
+        .order_by(WorkspaceRow.created_at.desc())
+    )
+    rows = list(q.scalars().all())
+    return {
+        "workspaces": [
+            {
+                "id": w.id,
+                "name": w.name,
+                "kind": w.kind,
+                "note": w.note,
+                "created_at": w.created_at.isoformat() if w.created_at else None,
+            }
+            for w in rows
+        ]
+    }
+
+
+@app.post("/v1/workspaces")
+async def create_workspace(
+    body: CreateWorkspaceRequest,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    row = WorkspaceRow(
+        id=new_id(),
+        school_id=principal.school_id,
+        membership_id=principal.membership_id,
+        name=name[:256],
+        kind=body.kind if body.kind in {"managed", "cloud"} else "managed",
+        note=(body.note or "")[:512],
+    )
+    session.add(row)
+    await session.commit()
+    return {
+        "workspace": {
+            "id": row.id,
+            "name": row.name,
+            "kind": row.kind,
+            "note": row.note,
+        }
+    }
+
+
+@app.delete("/v1/workspaces/{workspace_id}")
+async def delete_workspace(
+    workspace_id: str,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    row = await session.get(WorkspaceRow, workspace_id)
+    if not row or row.school_id != principal.school_id or row.membership_id != principal.membership_id:
+        raise HTTPException(status_code=404, detail="workspace not found")
+    await session.delete(row)
+    await session.commit()
+    return {"ok": True}
+
+
+
+
+# ----- automations (server scheduler) -----
+
+
+class CreateAutomationRequest(BaseModel):
+    name: str
+    prompt: str
+    schedule_kind: str = "periodic"  # periodic|interval|once
+    schedule: dict | None = None
+    workspace_id: str | None = None
+
+
+def _auto_dict(a) -> dict:
+    import json as _json
+    return {
+        "id": a.id,
+        "name": a.name,
+        "prompt": a.prompt,
+        "schedule_kind": a.schedule_kind,
+        "schedule": _json.loads(a.schedule_json or "{}"),
+        "workspace_id": a.workspace_id,
+        "enabled": bool(a.enabled),
+        "last_run_at": a.last_run_at.isoformat() if a.last_run_at else None,
+        "next_run_at": a.next_run_at.isoformat() if a.next_run_at else None,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    }
+
+
+@app.get("/v1/automations")
+async def list_automations(
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    rows = await automation_service.list_automations(session, principal)
+    return {"automations": [_auto_dict(a) for a in rows]}
+
+
+@app.post("/v1/automations")
+async def create_automation(
+    body: CreateAutomationRequest,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    if not body.prompt.strip() and not body.name.strip():
+        raise HTTPException(status_code=400, detail="name/prompt required")
+    row = await automation_service.create_automation(
+        session,
+        principal,
+        name=body.name.strip() or body.prompt.strip()[:40],
+        prompt=body.prompt.strip() or body.name.strip(),
+        schedule_kind=body.schedule_kind,
+        schedule=body.schedule or {},
+        workspace_id=body.workspace_id,
+    )
+    return {"automation": _auto_dict(row)}
+
+
+@app.post("/v1/automations/{auto_id}/enable")
+async def enable_automation(
+    auto_id: str,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    row = await automation_service.set_enabled(session, principal, auto_id, True)
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"automation": _auto_dict(row)}
+
+
+@app.post("/v1/automations/{auto_id}/disable")
+async def disable_automation(
+    auto_id: str,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    row = await automation_service.set_enabled(session, principal, auto_id, False)
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"automation": _auto_dict(row)}
+
+
+@app.delete("/v1/automations/{auto_id}")
+async def delete_automation(
+    auto_id: str,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    ok = await automation_service.delete_automation(session, principal, auto_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"ok": True}
 
 
 # ----- tasks / runs / events -----
@@ -330,6 +549,8 @@ def _task_dict(t) -> dict:
         "school_id": t.school_id,
         "membership_id": t.membership_id,
         "title": t.title,
+        "conversation_id": getattr(t, "conversation_id", None),
+        "workspace_id": getattr(t, "workspace_id", None),
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
 
@@ -363,7 +584,7 @@ def _event_dict(e: EventRow) -> dict:
 @app.post("/v1/tasks")
 async def create_task(
     body: CreateTaskRequest,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     if not body.prompt.strip():
@@ -377,17 +598,20 @@ async def create_task(
 
 @app.get("/v1/tasks")
 async def tasks(
-    principal: Principal = Depends(require_principal),
+    conversation_id: str | None = None,
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     rows = await run_service.list_tasks(session, principal)
+    if conversation_id:
+        rows = [r for r in rows if getattr(r, "conversation_id", None) == conversation_id]
     return {"tasks": [_task_dict(t) for t in rows]}
 
 
 @app.get("/v1/tasks/{task_id}")
 async def get_task(
     task_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     task = await run_service.get_task_for_principal(session, task_id, principal)
@@ -410,10 +634,47 @@ async def get_task(
 
 
 
+
+class RebindConversationRequest(BaseModel):
+    from_conversation_id: str
+    to_conversation_id: str
+
+
+@app.post("/v1/tasks/rebind-conversation")
+async def rebind_conversation(
+    body: RebindConversationRequest,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Map pending client convo id → real LibreChat conversation id."""
+    src = (body.from_conversation_id or "").strip()[:128]
+    dst = (body.to_conversation_id or "").strip()[:128]
+    if not src or not dst or src == dst:
+        raise HTTPException(status_code=400, detail="invalid conversation ids")
+    if dst in {"new", "search"} or src in {"new", "search"}:
+        raise HTTPException(status_code=400, detail="reserved conversation id")
+    from sqlalchemy import select
+
+    from app.db import TaskRow
+
+    q = await session.execute(
+        select(TaskRow).where(
+            TaskRow.school_id == principal.school_id,
+            TaskRow.membership_id == principal.membership_id,
+            TaskRow.conversation_id == src,
+        )
+    )
+    rows = list(q.scalars().all())
+    for row in rows:
+        row.conversation_id = dst
+    await session.commit()
+    return {"updated": len(rows), "from": src, "to": dst}
+
+
 @app.get("/v1/tasks/{task_id}/runs")
 async def list_task_runs(
     task_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     task = await run_service.get_task_for_principal(session, task_id, principal)
@@ -426,7 +687,7 @@ async def list_task_runs(
 @app.get("/v1/runs/{run_id}")
 async def get_run(
     run_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     run = await run_service.get_run_for_principal(session, run_id, principal)
@@ -438,7 +699,7 @@ async def get_run(
 @app.post("/v1/runs/{run_id}/cancel")
 async def cancel_run(
     run_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     from app.db import append_event
@@ -454,7 +715,7 @@ async def cancel_run(
 @app.get("/v1/runs/{run_id}/events")
 async def run_events(
     run_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     run = await run_service.get_run_for_principal(session, run_id, principal)
@@ -468,7 +729,7 @@ async def run_events(
 async def stream_run(
     run_id: str,
     request: Request,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ):
     run = await run_service.get_run_for_principal(session, run_id, principal)
@@ -521,7 +782,7 @@ class ChangeCreateRequest(BaseModel):
 @app.post("/v1/changes")
 async def create_change(
     body: ChangeCreateRequest,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     row = await run_service.create_change(
@@ -546,7 +807,7 @@ async def create_change(
 
 @app.get("/v1/changes")
 async def changes(
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     rows = await run_service.list_changes(session, principal)
@@ -569,7 +830,7 @@ async def changes(
 @app.post("/v1/changes/{change_id}/confirm")
 async def confirm_change(
     change_id: str,
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     try:
@@ -591,12 +852,35 @@ async def confirm_change(
     }
 
 
+@app.post("/v1/changes/{change_id}/reject")
+async def reject_change(
+    change_id: str,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    try:
+        row = await run_service.reject_change(session, principal, change_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="change not found") from None
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {
+        "change": {
+            "id": row.id,
+            "title": row.title,
+            "status": row.status,
+            "audit": json.loads(row.audit_json or "[]"),
+            "note": "Rejected — no school business write",
+        }
+    }
+
+
 # ----- demos -----
 
 
 @app.post("/v1/demo/cross-school-deny")
 async def demo_cross_school(
-    principal: Principal = Depends(require_principal),
+    principal: Principal = Depends(require_scoped_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     return await run_service.demo_cross_school_deny(session, principal)

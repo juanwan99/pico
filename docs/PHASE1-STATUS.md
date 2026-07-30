@@ -14,7 +14,7 @@ WRITE_WINDOW: VERDICT_AUTHORITY NONE (this doc is evidence, not self-PASS ceremo
 | S2 | Pinned Kimi stack multi-step tool loop server-side | `kimi-agent-sdk==0.0.5` + `kimi-cli==1.12.0`; `runner.py` allowlist loop | Host tools off via `pico.yaml` |
 | S3 | Task+Run+ordered Event ledger | SQLite tables + API | Unique AI ledger in Pico |
 | S4 | Short-lived claims shape | `/v1/dev/token` test issuer | Phase 3: edu signs |
-| S5 | Product UI live | `apps/nextchat` | NextChat full shell → Pico OpenAI-compat |
+| S5 | Product UI live | `apps/librechat` | LibreChat (MIT) → Pico OpenAI-compat; nextchat/workbench/web removed |
 | S6 | ≥2 allowlist tools + FakeEdu + cross-school Event | `fake_edu_list_classes`, `pico_echo`, `pico_propose_change`; `/v1/demo/cross-school-deny` | |
 | S7 | Propose → human confirm → audit | `/v1/changes` + confirm | No school DB write |
 | S8 | CANDIDATE → CI → review → watched merge | PR #3 merged to main after CI green | Owner merge |
@@ -25,7 +25,7 @@ WRITE_WINDOW: VERDICT_AUTHORITY NONE (this doc is evidence, not self-PASS ceremo
 cp .env.example .env   # set KIMI_API_KEY
 make install
 make api               # terminal A
-make ui                # terminal B NextChat :8080
+make ui                # or scripts/run-product.sh — LibreChat :8080
 # terminal C
 make demo              # scripts/demo_e2e.py against :8000
 ```
@@ -37,6 +37,10 @@ make demo              # scripts/demo_e2e.py against :8000
 - Shell/File/Web/MCP enabled
 - Self-hosted GPU default
 
+## Corrected goals
+
+See [`CORRECTED-GOALS.md`](CORRECTED-GOALS.md) for owner-aligned goals and purged wrong memories.
+
 ## Next
 
 - **Phase 2 contracts: FROZEN v1.0** — [`PHASE2-CONTRACTS.md`](PHASE2-CONTRACTS.md)
@@ -44,4 +48,4 @@ make demo              # scripts/demo_e2e.py against :8000
 
 ## Note on L2 (historical)
 
-L2 PR #24 polished **SSE/stop on the deleted `apps/web` shell**. API fix (`session_factory` in stream) remains valuable. Product surface is **NextChat**; do not reintroduce `apps/web`.
+L2 PR #24 polished **SSE/stop on the deleted `apps/web` shell**. API fix (`session_factory` in stream) remains valuable. Product surface is **LibreChat** (`apps/librechat`); do not reintroduce `apps/web` / nextchat / workbench as default.

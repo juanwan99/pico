@@ -1,0 +1,121 @@
+# Production layout used on Aliyun light server (host network).
+# Public entry: Nginx 443 → 127.0.0.1:8080 only.
+#
+# Demo login (after recreate with this file):
+#   teacher@example.com / pico-demo-123
+#   PICO_SEED_DEMO_USER seeds on boot (source mounts; no full rebuild required)
+#
+#   cd /opt/pico && git pull
+#   docker compose -f docker-compose.host.yml up -d --force-recreate librechat
+#   # or: bash scripts/vps-seed-demo-user.sh
+#
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    network_mode: host
+    command:
+      [
+        "mongod",
+        "--bind_ip",
+        "127.0.0.1",
+        "--port",
+        "27017",
+        "--wiredTigerCacheSizeGB",
+        "0.25",
+      ]
+    volumes:
+      - pico_mongo:/data/db
+
+  pico-api:
+    image: pico-api:v13
+    build:
+      context: .
+      dockerfile: Dockerfile.pico-api
+    restart: unless-stopped
+    network_mode: host
+    # CRITICAL: host network + public IP risk — always bind loopback only
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--app-dir",
+        "services/api",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "18765",
+      ]
+    env_file:
+      - .env
+    environment:
+      PICO_DATABASE_URL: sqlite+aiosqlite:///./data/pico.db
+      PICO_API_HOST: "127.0.0.1"
+      PICO_API_PORT: "18765"
+      PICO_CORS_ORIGINS: "https://pico.aivia.asia,http://127.0.0.1:8080,http://localhost:8080"
+      PICO_ENV: development
+      PICO_ACCEPT_TEST_ISSUER: "true"
+      PICO_OPENAI_PROXY_KEY: pico-dev
+      PICO_GIT_SHA: ${PICO_GIT_SHA:-unknown}
+    volumes:
+      - pico_data:/app/data
+      - ./.env:/app/.env:ro
+    depends_on:
+      - mongo
+
+  librechat:
+    image: pico-librechat:v13
+    build:
+      context: ./apps/librechat
+      dockerfile: Dockerfile.pico-fast
+      args:
+        NODE_MAX_OLD_SPACE_SIZE: "1536"
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - ./apps/librechat/.env
+    environment:
+      HOST: "127.0.0.1"
+      PORT: "8080"
+      MONGO_URI: mongodb://127.0.0.1:27017/LibreChat
+      OPENAI_REVERSE_PROXY: http://127.0.0.1:18765/v1
+      OPENAI_API_KEY: pico-dev
+      ENDPOINTS: openAI
+      OPENAI_MODELS: moonshot-v1-8k,kimi-k2.6,pico-agent
+      APP_TITLE: Pico
+      ALLOW_REGISTRATION: "true"
+      ALLOW_EMAIL_LOGIN: "true"
+      ALLOW_UNVERIFIED_EMAIL_LOGIN: "true"
+      SEARCH: "false"
+      # avoid Meili fetch noise when search disabled
+      MEILI_HOST: ""
+      MEILI_NO_ANALYTICS: "true"
+      DOMAIN_CLIENT: https://pico.aivia.asia
+      DOMAIN_SERVER: https://pico.aivia.asia
+      CONFIG_PATH: /app/librechat.yaml
+      # Auto-create demo user on boot (see picoSeedDemoUser.js)
+      PICO_SEED_DEMO_USER: "true"
+      PICO_DEMO_EMAIL: teacher@example.com
+      PICO_DEMO_PASSWORD: pico-demo-123
+      PICO_DEMO_NAME: Pico Teacher
+      PICO_DEMO_USERNAME: teacher
+      # set true once if password was changed wrongly:
+      # PICO_SEED_DEMO_RESET_PASSWORD: "true"
+    volumes:
+      - ./librechat.yaml:/app/librechat.yaml:ro
+      # inject seed without rebuilding image
+      - ./apps/librechat/api/server/index.js:/app/api/server/index.js:ro
+      - ./apps/librechat/api/server/services/picoSeedDemoUser.js:/app/api/server/services/picoSeedDemoUser.js:ro
+      - librechat_images:/app/client/public/images
+      - librechat_uploads:/app/uploads
+      - librechat_logs:/app/logs
+    depends_on:
+      - mongo
+      - pico-api
+
+volumes:
+  pico_mongo:
+  pico_data:
+  librechat_images:
+  librechat_uploads:
+  librechat_logs:

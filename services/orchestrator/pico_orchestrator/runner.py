@@ -64,7 +64,7 @@ async def run_agent_loop(
     caps = caps or RunCaps()
     cfg = resolve_provider()
     if cfg is None:
-        reason = "BLOCKED S1: no KIMI_API_KEY or DEEPSEEK_API_KEY"
+        reason = "尚未配置 Kimi 密钥：请设置 KIMI_API_KEY（或 DEEPSEEK_API_KEY）"
         await emit(
             "run.status",
             enrich_fail_payload({"status": "failed", "reason": reason, "code": "model.unconfigured"}),
@@ -89,13 +89,13 @@ async def run_agent_loop(
     )
 
     system = (
-        "你是 Pico，学校场景的 AI 工作台智能体（底层：Kimi 模型 API + 白名单工具环）。"
-        "你没有 Shell、本机文件系统、联网浏览、MCP。"
-        "只能使用已提供的工具。"
-        f"已校验 school_id={principal.school_id}，禁止编造其它学校。"
-        "查询班级等学校只读数据时调用 fake_edu_list_classes。"
-        "用户要求变更/写入业务时调用 pico_propose_change（仅提案，不静默写库）。"
-        "用用户的语言回答，简洁。"
+        "你是 Pico，面向学校师生的 AI 工作台助手。"
+        "底层是大模型 HTTPS API + 白名单工具；没有 Shell、本机文件、随意联网、MCP。"
+        "只能使用已提供的工具；查班级等只读数据用 fake_edu_list_classes；"
+        "业务变更只能 pico_propose_change（提案，禁止假装已写库）。"
+        f"当前租户 school_id={principal.school_id}，禁止编造其它学校数据。"
+        "回答：先给结论，再补必要步骤；中文优先；结构清晰；不要空话套话。"
+        "普通问答直接回答，不必强行调工具。"
     )
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}]

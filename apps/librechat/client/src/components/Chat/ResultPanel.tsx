@@ -1,0 +1,568 @@
+/**
+ * Task result panel — clean-room layout from WorkBuddy nonempty screenshots.
+ * Top: view dropdown 概览 | 工作空间文件 | 浏览器
+ * 概览: file cards (icon / name / size / 打开); 产物 nested concept = cards list
+ * 工作空间文件: search + checkbox rows
+ * 浏览器: nav chrome + URL + security footer
+ */
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  ChevronDown,
+  FileText,
+  FolderOpen,
+  Globe,
+  Maximize2,
+  Minimize2,
+  PanelRightClose,
+  ArrowLeft,
+  ArrowRight,
+  RotateCw,
+  ExternalLink,
+  Download,
+  Search,
+} from 'lucide-react';
+import type { TMessage } from 'librechat-data-provider';
+import type { PicoArtifact } from '~/data-provider/pico/api';
+import { cn } from '~/utils';
+
+type TopView = 'overview' | 'files' | 'browser';
+
+type ArtifactItem = {
+  id: string;
+  name: string;
+  sizeLabel: string;
+  kind: 'txt' | 'file' | 'other';
+  url?: string;
+  body?: string;
+};
+
+function formatSize(n?: number): string {
+  if (n == null || Number.isNaN(n)) {
+    return '';
+  }
+  if (n < 1024) {
+    return `${n}B`;
+  }
+  if (n < 1024 * 1024) {
+    return `${(n / 1024).toFixed(1)}KB`;
+  }
+  return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+function collectArtifacts(messages: TMessage[] | null | undefined): ArtifactItem[] {
+  if (!messages?.length) {
+    return [];
+  }
+  const out: ArtifactItem[] = [];
+  const seen = new Set<string>();
+
+  for (const m of messages) {
+    const files = m.files;
+    if (Array.isArray(files)) {
+      for (const f of files) {
+        const id = String(
+          (f as { file_id?: string }).file_id ??
+            (f as { _id?: string })._id ??
+            (f as { filepath?: string }).filepath ??
+            Math.random(),
+        );
+        if (seen.has(id)) {
+          continue;
+        }
+        seen.add(id);
+        const name = String(
+          (f as { filename?: string }).filename ??
+            (f as { name?: string }).name ??
+            '附件',
+        );
+        const bytes = (f as { bytes?: number; size?: number }).bytes ?? (f as { size?: number }).size;
+        const lower = name.toLowerCase();
+        out.push({
+          id,
+          name,
+          sizeLabel: formatSize(typeof bytes === 'number' ? bytes : undefined) || '—',
+          kind: lower.endsWith('.txt') || lower.endsWith('.md') ? 'txt' : 'file',
+          url: (f as { filepath?: string; preview?: string }).filepath,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+const VIEW_LABEL: Record<TopView, string> = {
+  overview: '概览',
+  files: '工作空间文件',
+  browser: '浏览器',
+};
+
+function FileGlyph({ kind }: { kind: ArtifactItem['kind'] }) {
+  return (
+    <span
+      className={cn(
+        'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold',
+        kind === 'txt'
+          ? 'bg-[#e8f1ff] text-[#3b6fd9]'
+          : 'bg-[#f0f0f0] text-[#6b6b6b]',
+      )}
+      aria-hidden
+    >
+      {kind === 'txt' ? 'TXT' : <FileText className="h-4 w-4" />}
+    </span>
+  );
+}
+
+export default function ResultPanel({
+  messages,
+  taskTitle,
+  runStatusLabel,
+  onClose,
+  picoArtifacts,
+}: {
+  messages?: TMessage[] | null;
+  taskTitle?: string;
+  runStatusLabel?: string;
+  onClose?: () => void;
+  picoArtifacts?: PicoArtifact[] | null;
+}) {
+  const [view, setView] = useState<TopView>('overview');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [fileQuery, setFileQuery] = useState('');
+  const [browserUrl, setBrowserUrl] = useState('');
+  const [browserLoaded, setBrowserLoaded] = useState('');
+  const [browserKey, setBrowserKey] = useState(0);
+  const [browserHistory, setBrowserHistory] = useState<string[]>([]);
+  const [browserIndex, setBrowserIndex] = useState(-1);
+  const [expanded, setExpanded] = useState(false);
+  const navigate = useNavigate();
+  const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
+  const artifacts = useMemo(() => {
+    if (picoArtifacts?.length) {
+      return picoArtifacts.map((a) => ({
+        id: a.id,
+        name: a.title || a.kind || '产物',
+        sizeLabel: a.inline ? `${Math.min(a.inline.length, 9999)}B` : '—',
+        kind: (a.title || '').toLowerCase().endsWith('.txt') ? ('txt' as const) : ('file' as const),
+        url: undefined as string | undefined,
+        body: a.inline,
+      }));
+    }
+    return messageArts;
+  }, [picoArtifacts, messageArts]);
+
+  // Prefer https links in artifact inline as browser targets
+  useEffect(() => {
+    const fromArts = (picoArtifacts || []).find((a) => {
+      const s = (a.inline || a.title || '').trim();
+      return /^https?:\/\//i.test(s);
+    });
+    if (fromArts) {
+      const u = (fromArts.inline || fromArts.title || '').trim();
+      setBrowserUrl(u);
+      setBrowserLoaded(u);
+      setBrowserHistory([u]);
+      setBrowserIndex(0);
+    }
+  }, [picoArtifacts]);
+
+  const filteredFiles = useMemo(() => {
+    const q = fileQuery.trim().toLowerCase();
+    if (!q) {
+      return artifacts;
+    }
+    return artifacts.filter((a) => a.name.toLowerCase().includes(q));
+  }, [artifacts, fileQuery]);
+
+  const openArtifact = (a: ArtifactItem & { body?: string }) => {
+    if (a.url) {
+      // only allow http(s) relative-safe opens
+      try {
+        const u = new URL(a.url, window.location.origin);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+          return;
+        }
+        window.open(u.toString(), '_blank', 'noopener,noreferrer');
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    if (a.body) {
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.title = a.name || '产物';
+        const pre = w.document.createElement('pre');
+        pre.style.cssText = 'white-space:pre-wrap;font:14px/1.5 system-ui;padding:16px;margin:0';
+        pre.textContent = a.body; // textContent — no HTML injection
+        w.document.body.appendChild(pre);
+      }
+    }
+  };
+
+  const downloadArtifact = (artifact: ArtifactItem & { body?: string }) => {
+    if (artifact.url) {
+      openArtifact(artifact);
+      return;
+    }
+    if (!artifact.body) {
+      return;
+    }
+    const blob = new Blob([artifact.body], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = artifact.name || 'artifact.txt';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const loadBrowserUrl = (raw: string) => {
+    const value = raw.trim();
+    if (!value) {
+      return;
+    }
+    const next = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const parsed = new URL(next);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return;
+      }
+    } catch {
+      return;
+    }
+    const history = [...browserHistory.slice(0, browserIndex + 1), next];
+    setBrowserUrl(next);
+    setBrowserLoaded(next);
+    setBrowserHistory(history);
+    setBrowserIndex(history.length - 1);
+  };
+
+  const moveBrowserHistory = (delta: number) => {
+    const nextIndex = browserIndex + delta;
+    const next = browserHistory[nextIndex];
+    if (!next || nextIndex < 0 || nextIndex >= browserHistory.length) {
+      return;
+    }
+    setBrowserIndex(nextIndex);
+    setBrowserUrl(next);
+    setBrowserLoaded(next);
+  };
+
+  return (
+    <aside
+      className={cn(
+        'pico-result-panel flex h-full w-[340px] shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary',
+        expanded && 'pico-result-panel--expanded fixed inset-0 z-[200]',
+      )}
+      data-testid="result-panel"
+      aria-label="结果区"
+    >
+      {/* Header — dropdown view switcher (matches nonempty shots) */}
+      <div className="flex h-11 items-center gap-1 border-b border-black/[0.06] bg-[#fafafa] px-2 dark:border-border-light">
+        <div className="relative">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[13px] font-medium text-[#1a1a1a] hover:bg-black/[0.04] dark:text-text-primary"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-haspopup="listbox"
+          >
+            {VIEW_LABEL[view]}
+            <ChevronDown className="h-3.5 w-3.5 text-[#8c8c8c]" />
+          </button>
+          {menuOpen && (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-40 cursor-default"
+                aria-label="close"
+                onClick={() => setMenuOpen(false)}
+              />
+              <ul
+                className="absolute left-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-lg dark:border-border-light dark:bg-surface-secondary"
+                role="listbox"
+              >
+                {(Object.keys(VIEW_LABEL) as TopView[]).map((id) => (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={view === id}
+                      className={cn(
+                        'flex w-full px-3 py-2 text-left text-[13px]',
+                        view === id
+                          ? 'bg-[#edf1f4] font-medium'
+                          : 'hover:bg-black/[0.03]',
+                      )}
+                      onClick={() => {
+                        setView(id);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      {VIEW_LABEL[id]}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+        <div className="ml-auto flex items-center gap-0.5">
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-black/[0.04]"
+            aria-label={expanded ? '退出全屏' : '进入全屏'}
+            title={expanded ? '退出全屏' : '进入全屏'}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? (
+              <Minimize2 className="h-3.5 w-3.5" />
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5" />
+            )}
+          </button>
+          {onClose ? (
+            <button
+              type="button"
+              className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-black/[0.04]"
+              aria-label="收起结果区"
+              onClick={onClose}
+            >
+              <PanelRightClose className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex min-h-0 flex-1 flex-col">
+        {view === 'overview' && (
+          <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
+            {taskTitle || runStatusLabel ? (
+              <div className="mb-3 rounded-lg bg-[#fafafa] px-3 py-2 dark:bg-surface-tertiary">
+                {taskTitle ? (
+                  <p className="truncate text-[13px] font-medium">{taskTitle}</p>
+                ) : null}
+                {runStatusLabel ? (
+                  <p className="mt-0.5 text-[12px] text-[#6b6b6b]">{runStatusLabel}</p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {artifacts.length === 0 ? (
+              <div className="flex min-h-[240px] flex-col px-1 pt-2">
+                <p className="mb-2 text-[12px] font-medium tracking-normal text-[#8c8c8c]">产物</p>
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa] px-4 py-10 text-[#9a9a9a]">
+                  <FileText className="h-9 w-9 opacity-30" strokeWidth={1.25} />
+                  <p className="text-[13px] font-medium text-[#6b6b6b]">
+                    {runStatusLabel?.includes('等待')
+                      ? '执行中…产物将出现在此'
+                      : runStatusLabel?.startsWith('失败')
+                        ? '本次未产出文件'
+                        : '暂无产物'}
+                  </p>
+                  <p className="max-w-[15rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
+                    概览 / 工作空间文件 / 浏览器 — 与任务台右栏一致
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {artifacts.map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex items-center gap-2 rounded-lg border border-black/[0.06] bg-white px-2.5 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-border-light dark:bg-surface-secondary"
+                  >
+                    <FileGlyph kind={a.kind} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-[#1a1a1a] dark:text-text-primary">
+                        {a.name}
+                      </p>
+                      {a.sizeLabel ? (
+                        <p className="text-[11px] text-[#9a9a9a]">{a.sizeLabel}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {a.body ? (
+                        <button
+                          type="button"
+                          className="flex h-9 w-9 items-center justify-center rounded-md text-[#8c8c8c] hover:bg-[#f3f3f3]"
+                          onClick={() => downloadArtifact(a)}
+                          aria-label={`下载${a.name}`}
+                          title="下载"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="h-9 rounded-lg bg-[#f3f3f3] px-3 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#e8e8e8] dark:bg-surface-tertiary dark:text-text-primary"
+                        onClick={() => openArtifact(a)}
+                      >
+                        打开
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {view === 'files' && (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="border-b border-black/[0.05] px-3 py-2">
+              <div className="flex items-center gap-2 rounded-lg bg-[#f5f5f5] px-2.5 py-1.5 dark:bg-surface-tertiary">
+                <Search className="h-3.5 w-3.5 shrink-0 text-[#9a9a9a]" />
+                <input
+                  value={fileQuery}
+                  onChange={(e) => setFileQuery(e.target.value)}
+                  placeholder="搜索文件"
+                  className="w-full bg-transparent text-[13px] outline-none placeholder:text-[#b0b0b0]"
+                />
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {filteredFiles.length === 0 ? (
+                <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-[#9a9a9a]">
+                  <FolderOpen className="h-8 w-8 opacity-35" strokeWidth={1.25} />
+                  <p className="text-[13px]">空目录</p>
+                </div>
+              ) : (
+                <ul>
+                  {filteredFiles.map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex items-center gap-2 border-b border-black/[0.04] px-3 py-2.5 hover:bg-[#fafafa] dark:hover:bg-surface-tertiary"
+                    >
+                      <input type="checkbox" className="rounded border-black/20" aria-label={a.name} />
+                      <FileGlyph kind={a.kind} />
+                      <span className="min-w-0 flex-1 truncate text-[13px]">{a.name}</span>
+                      <span className="shrink-0 text-[12px] text-[#9a9a9a]">{a.sizeLabel}</span>
+                      <button
+                        type="button"
+                        className="rounded-md px-2 py-1 text-[11.5px] font-medium text-[#3d3d3d] hover:bg-[#f0f0f0]"
+                        onClick={() => openArtifact(a)}
+                      >
+                        打开
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+
+        {view === 'browser' && (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex items-center gap-1 border-b border-black/[0.05] px-2 py-1.5">
+              <button
+                type="button"
+                className="rounded p-1 text-[#8c8c8c] disabled:opacity-35"
+                aria-label="后退"
+                disabled={browserIndex <= 0}
+                onClick={() => moveBrowserHistory(-1)}
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                className="rounded p-1 text-[#8c8c8c] disabled:opacity-35"
+                aria-label="前进"
+                disabled={browserIndex < 0 || browserIndex >= browserHistory.length - 1}
+                onClick={() => moveBrowserHistory(1)}
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                className="rounded p-1 text-[#8c8c8c]"
+                aria-label="刷新"
+                onClick={() => setBrowserKey((k) => k + 1)}
+              >
+                <RotateCw className="h-3.5 w-3.5" />
+              </button>
+              <form
+                className="mx-1 flex min-w-0 flex-1 items-center rounded-full bg-[#f3f3f3] px-3 py-1 dark:bg-surface-tertiary"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const raw = browserUrl.trim();
+                  if (!raw) {
+                    return;
+                  }
+                  loadBrowserUrl(raw);
+                }}
+              >
+                <input
+                  value={browserUrl}
+                  onChange={(e) => setBrowserUrl(e.target.value)}
+                  placeholder="输入网址后回车预览"
+                  className="w-full bg-transparent text-[12px] outline-none placeholder:text-[#b0b0b0]"
+                />
+              </form>
+              <button
+                type="button"
+                className="rounded p-1 text-[#8c8c8c]"
+                aria-label="在新窗口打开"
+                onClick={() => {
+                  const raw = (browserLoaded || browserUrl).trim();
+                  if (raw) {
+                    const u = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+                    window.open(u, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {browserLoaded ? (
+              <iframe
+                key={browserKey}
+                title="browser-preview"
+                src={browserLoaded}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                className="min-h-0 w-full flex-1 border-0 bg-white"
+              />
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 bg-[#fafafa] px-4 text-center text-[#9a9a9a] dark:bg-presentation">
+                <Globe className="h-8 w-8 opacity-35" strokeWidth={1.25} />
+                <p className="text-[13px]">输入网址并回车可内嵌预览</p>
+                <p className="max-w-[14rem] text-[11px] leading-relaxed">
+                  部分站点禁止嵌入；若空白请用右上角新窗口打开
+                </p>
+                <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+                  {['example.com', 'www.wikipedia.org'].map((host) => (
+                    <button
+                      key={host}
+                      type="button"
+                      className="rounded-full bg-white px-2.5 py-1 text-[11px] ring-1 ring-black/[0.06]"
+                      onClick={() => {
+                        loadBrowserUrl(host);
+                      }}
+                    >
+                      {host}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="border-t border-black/[0.05] px-3 py-2 text-center text-[11px] leading-snug text-[#9a9a9a]">
+              预览仅供参考，注意信息安全；敏感操作请在受信浏览器中完成
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="shrink-0 border-t border-black/[0.06] px-3 py-2 dark:border-border-light">
+        <button
+          type="button"
+          onClick={() => navigate('/more/files')}
+          className="w-full rounded-lg bg-[#f5f5f5] py-1.5 text-center text-[12px] font-medium text-[#3d3d3d] hover:bg-[#ebebeb] dark:bg-surface-tertiary dark:text-text-primary"
+        >
+          打开我的文件
+        </button>
+      </div>
+    </aside>
+  );
+}

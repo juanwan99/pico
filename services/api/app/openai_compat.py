@@ -10,9 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
+from pico_orchestrator.user_errors import user_message_for_error
 from pydantic import BaseModel
 
-from app.auth import Principal, decode_token
+from app.auth import Principal, decode_token, scope_proxy_principal
 from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
 
@@ -30,6 +31,8 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     temperature: float | None = None
     max_tokens: int | None = None
+    user: str | None = None  # LibreChat may pass conversation id
+    metadata: dict[str, Any] | None = None
 
 
 def _content_text(content: str | list[Any] | None) -> str:
@@ -45,6 +48,29 @@ def _content_text(content: str | list[Any] | None) -> str:
         elif isinstance(p, str):
             parts.append(p)
     return "\n".join(parts)
+
+
+def _model_preference_from_prompt(prompt: str) -> str | None:
+    """Resolve the workbench model preference from a strict allowlist."""
+    import re
+
+    match = re.search(r"【模型偏好：([^】]+)】", prompt or "")
+    if not match:
+        return None
+    requested = match.group(1).strip()
+    aliases = {
+        "pico": "pico-agent",
+        "pico agent": "pico-agent",
+        "kimi-k3": "kimi-k3",
+    }
+    normalized = aliases.get(requested.lower(), requested)
+    if normalized.lower() == "auto":
+        return None
+
+    from pico_orchestrator.provider import KNOWN_KIMI_MODELS
+
+    allowed = {"pico-agent", *KNOWN_KIMI_MODELS}
+    return normalized if normalized in allowed else None
 
 
 def _dev_proxy_keys(settings: Settings) -> set[str]:
@@ -125,40 +151,193 @@ def _history_for_agent(messages: list[ChatMessage]) -> list[dict[str, Any]]:
     return out
 
 
-async def _run_and_collect(
-    prompt: str,
-    principal: Principal,
-    settings: Settings,
-    *,
-    history: list[dict[str, Any]] | None = None,
-) -> str:
-    from pico_orchestrator.runner import RunCaps, run_agent_loop
 
+def _conversation_id_from(
+    body: ChatCompletionRequest,
+    x_conversation_id: str | None,
+) -> str | None:
+    if x_conversation_id and x_conversation_id.strip():
+        return x_conversation_id.strip()[:128]
+    if body.metadata:
+        for k in ("conversation_id", "conversationId", "convo_id"):
+            v = body.metadata.get(k)
+            if v:
+                return str(v)[:128]
+    # parse 【Pico-Convo:xxx】 from latest user message
+    import re
+    prompt = _last_user_prompt(body.messages)
+    m = re.search(r"【Pico-Convo:([^】]+)】", prompt)
+    if m:
+        return m.group(1).strip()[:128]
+    if body.user and body.user.strip() and body.user not in {"default", "user"}:
+        return body.user.strip()[:128]
+    return None
+
+
+def _workspace_id_from(
+    body: ChatCompletionRequest,
+    x_workspace_id: str | None,
+) -> str | None:
+    if x_workspace_id and x_workspace_id.strip():
+        return x_workspace_id.strip()[:36]
+    if body.metadata:
+        v = body.metadata.get("workspace_id") or body.metadata.get("workspaceId")
+        if v:
+            return str(v)[:36]
+    return None
+
+
+async def _ledger_task_run(
+    *,
+    principal: Principal,
+    prompt: str,
+    model: str,
+    conversation_id: str | None,
+    workspace_id: str | None,
+    status: str = "running",
+) -> tuple[str, str]:
+    """Create Task+Run rows for any chat completion path."""
     from app.db import init_db
 
     await init_db()
     factory = session_factory()
     task_id = new_id()
     run_id = new_id()
+    title = prompt[:80]
     async with factory() as session:
         session.add(
             TaskRow(
                 id=task_id,
                 school_id=principal.school_id,
                 membership_id=principal.membership_id,
-                title=prompt[:80],
+                title=title,
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
             )
         )
         session.add(
             RunRow(
                 id=run_id,
                 task_id=task_id,
-                status="running",
+                status=status,
                 prompt=prompt,
-                model="",
+                model=model or "",
             )
         )
         await session.commit()
+    return task_id, run_id
+
+
+def _extract_file_artifacts(text: str) -> list[tuple[str, str]]:
+    """Parse fenced file blocks into (filename, body)."""
+    import re
+
+    out: list[tuple[str, str]] = []
+    if not text:
+        return out
+    for m in re.finditer(
+        r"```(?:file:)?([A-Za-z0-9._\-]+\.[A-Za-z0-9]{1,12})\s*\n([\s\S]*?)```",
+        text,
+    ):
+        name = m.group(1).strip()
+        body = m.group(2).rstrip()
+        if name:
+            out.append((name[:200], body[:50000]))
+    return out
+
+
+def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
+    """Synthesize file when user explicitly asks to create name.ext with content."""
+    import re
+
+    if not user_prompt:
+        return []
+    um = re.search(
+        r"(?:创建|生成|写|保存).{0,40}?([A-Za-z0-9._\-]+\.(?:txt|md|csv|json))",
+        user_prompt,
+        re.IGNORECASE,
+    )
+    if not um:
+        return []
+    name = um.group(1)
+    cm = re.search(r"内容\s*[为是:=：]\s*([^\n，,。；;]{1,200})", user_prompt)
+    body = "hi"
+    if cm:
+        body = cm.group(1).strip().strip("\"'「」")
+    return [(name, body or "hi")]
+
+
+async def _finalize_run(
+    run_id: str,
+    *,
+    status: str,
+    error: str | None = None,
+    final_text: str | None = None,
+    task_id: str | None = None,
+    user_prompt: str | None = None,
+) -> None:
+    from app.db import ArtifactRow
+
+    factory = session_factory()
+    created_titles: list[str] = []
+    async with factory() as session:
+        run = await session.get(RunRow, run_id)
+        if not run:
+            return
+        run.status = status
+        if error:
+            run.error = error
+        tid = task_id or run.task_id
+        if final_text and tid and status == "succeeded":
+            files = _extract_file_artifacts(final_text)
+            if not files:
+                files = _file_from_user_prompt(user_prompt)
+            for name, body in files:
+                session.add(
+                    ArtifactRow(
+                        id=new_id(),
+                        task_id=tid,
+                        run_id=run_id,
+                        kind="file",
+                        title=name,
+                        inline=body,
+                    )
+                )
+                created_titles.append(name)
+            session.add(
+                ArtifactRow(
+                    id=new_id(),
+                    task_id=tid,
+                    run_id=run_id,
+                    kind="doc",
+                    title="回复摘要",
+                    inline=final_text[:8000],
+                )
+            )
+            created_titles.append("回复摘要")
+        await session.commit()
+    if created_titles:
+        async with factory() as session:
+            for title in created_titles:
+                await append_event(
+                    session,
+                    run_id,
+                    "artifact.created",
+                    {"title": title, "kind": "file" if title != "回复摘要" else "doc"},
+                )
+
+
+async def _run_and_collect(
+    prompt: str,
+    principal: Principal,
+    settings: Settings,
+    *,
+    run_id: str,
+    history: list[dict[str, Any]] | None = None,
+) -> Any:
+    from pico_orchestrator.runner import RunCaps, run_agent_loop
+
+    factory = session_factory()
 
     async def emit(event_type: str, payload: dict[str, Any]) -> None:
         async with factory() as session:
@@ -180,13 +359,7 @@ async def _run_and_collect(
         caps=caps,
         history=history,
     )
-    async with factory() as session:
-        run = await session.get(RunRow, run_id)
-        if run:
-            run.status = result.status
-            run.error = result.error
-            await session.commit()
-    return result.final_text or result.error or "(empty)"
+    return result
 
 
 def _sse_chunk(data: dict[str, Any]) -> str:
@@ -199,12 +372,18 @@ async def list_models(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     _principal_from_auth(authorization, settings)
-    model = settings.kimi_model or "moonshot-v1-8k"
+    from pico_orchestrator.provider import DEFAULT_KIMI_MODEL, KNOWN_KIMI_MODELS
+
+    default = settings.kimi_model or DEFAULT_KIMI_MODEL
+    ids = []
+    for mid in [default, *KNOWN_KIMI_MODELS, "pico-agent"]:
+        if mid not in ids:
+            ids.append(mid)
     return {
         "object": "list",
         "data": [
-            {"id": model, "object": "model", "owned_by": "pico"},
-            {"id": "pico-agent", "object": "model", "owned_by": "pico"},
+            {"id": mid, "object": "model", "owned_by": "pico-kimi" if mid != "pico-agent" else "pico"}
+            for mid in ids
         ],
     }
 
@@ -213,17 +392,95 @@ async def list_models(
 async def chat_completions(
     body: ChatCompletionRequest,
     authorization: str | None = Header(default=None),
+    x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
+    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+    x_pico_membership_id: str | None = Header(default=None, alias="X-Pico-Membership-Id"),
     settings: Settings = Depends(get_settings),
 ):
+    import re
+
     principal = _principal_from_auth(authorization, settings)
-    prompt = _last_user_prompt(body.messages)
+    raw_for_user = _last_user_prompt(body.messages)
+    m_user = re.search(r"【Pico-User:([^】]+)】", raw_for_user)
+    marker_membership = m_user.group(1).strip() if m_user else None
+    if (
+        principal.raw.get("proxy")
+        and marker_membership
+        and marker_membership != (x_pico_membership_id or "").strip()
+    ):
+        raise HTTPException(status_code=403, detail="proxy membership mismatch")
+    principal = scope_proxy_principal(principal, x_pico_membership_id)
+    raw_prompt = _last_user_prompt(body.messages)
+    conversation_id = _conversation_id_from(body, x_conversation_id)
+    workspace_id = _workspace_id_from(body, x_workspace_id)
+    # strip ledger markers from model-visible prompt; project instruction → system
+    m_proj = re.search(r"【项目指令：([^】]+)】", raw_prompt)
+    project_instruction = m_proj.group(1).strip() if m_proj else ""
+    prompt = re.sub(r"【Pico-Convo:[^】]+】", "", raw_prompt)
+    prompt = re.sub(r"【Pico-User:[^】]+】", "", prompt)
+    prompt = re.sub(r"【工作空间：[^】]+】", "", prompt)
+    prompt = re.sub(r"【权限：[^】]+】", "", prompt)
+    prompt = re.sub(r"【模型偏好：[^】]+】", "", prompt)
+    prompt = re.sub(r"【项目指令：[^】]+】", "", prompt).strip() or raw_prompt
     history = _history_for_agent(body.messages)
-    model = body.model or settings.kimi_model or "pico-agent"
+    model = _model_preference_from_prompt(raw_prompt) or body.model or settings.kimi_model or "pico-agent"
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
 
+    # Direct Kimi (or DeepSeek) for non-agent models — real HTTPS API, not mock
+    use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
     if not body.stream:
-        text = await _run_and_collect(prompt, principal, settings, history=history)
+        task_id, run_id = await _ledger_task_run(
+            principal=principal,
+            prompt=prompt,
+            model=model,
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+        )
+        if use_direct:
+            from pico_orchestrator.provider import stream_chat
+
+            system = (
+                "你是 Pico，面向学校场景的 AI 助手。"
+                "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
+                "不要编造不存在的学校数据。"
+                "若用户要求创建或生成文件（如 hello.txt），请在回复中用代码块输出完整内容，格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
+            )
+            if project_instruction:
+                system = system + "\n【项目约束】" + project_instruction
+            parts: list[str] = []
+            try:
+                async for piece in stream_chat(
+                    prompt,
+                    max_tokens=body.max_tokens or 2048,
+                    history=history,
+                    system=system,
+                    model=model,
+                ):
+                    if piece:
+                        parts.append(piece)
+                text = "".join(parts) or "(empty)"
+                await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id, user_prompt=prompt)
+            except Exception as e:  # noqa: BLE001
+                text = f"【错误】{user_message_for_error(str(e))}"
+                await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
+        else:
+            result = await _run_and_collect(
+                prompt,
+                principal,
+                settings,
+                run_id=run_id,
+                history=history,
+            )
+            text = result.final_text or result.error or "(empty)"
+            await _finalize_run(
+                run_id,
+                status=result.status,
+                error=result.error,
+                final_text=result.final_text,
+                task_id=task_id,
+                user_prompt=prompt,
+            )
         return {
             "id": completion_id,
             "object": "chat.completion",
@@ -240,31 +497,8 @@ async def chat_completions(
         }
 
     async def event_stream() -> AsyncIterator[bytes]:
-        # initial role
-        yield _sse_chunk(
-            {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": model,
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"role": "assistant"},
-                        "finish_reason": None,
-                    }
-                ],
-            }
-        ).encode()
-        try:
-            text = await _run_and_collect(prompt, principal, settings, history=history)
-        except Exception as e:  # noqa: BLE001
-            text = f"Error: {e}"
-        # stream in small chunks for UX
-        step = 24
-        for i in range(0, len(text), step):
-            piece = text[i : i + step]
-            yield _sse_chunk(
+        def chunk(delta: dict, *, finish: str | None = None) -> bytes:
+            return _sse_chunk(
                 {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -273,23 +507,179 @@ async def chat_completions(
                     "choices": [
                         {
                             "index": 0,
-                            "delta": {"content": piece},
-                            "finish_reason": None,
+                            "delta": delta,
+                            "finish_reason": finish,
                         }
                     ],
                 }
             ).encode()
-        yield _sse_chunk(
-            {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": model,
-                "choices": [
-                    {"index": 0, "delta": {}, "finish_reason": "stop"}
-                ],
-            }
-        ).encode()
+
+        yield chunk({"role": "assistant"})
+
+        # Direct model (moonshot/deepseek/*) → real token stream (GPT-like handfeel)
+        use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+        if use_direct:
+            from pico_orchestrator.provider import stream_chat
+
+            task_id, run_id = await _ledger_task_run(
+                principal=principal,
+                prompt=prompt,
+                model=model,
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
+            )
+            system = (
+                "你是 Pico，面向学校场景的 AI 助手。"
+                "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
+                "不要编造不存在的学校数据。"
+                "若用户要求创建或生成文件（如 hello.txt），请在回复中用代码块输出完整内容，格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
+            )
+            if project_instruction:
+                system = system + "\n【项目约束】" + project_instruction
+            parts: list[str] = []
+            try:
+                async for piece in stream_chat(
+                    prompt,
+                    max_tokens=body.max_tokens or 2048,
+                    history=history,
+                    system=system,
+                    model=model,
+                ):
+                    if piece:
+                        parts.append(piece)
+                        yield chunk({"content": piece})
+                await _finalize_run(
+                    run_id,
+                    status="succeeded",
+                    final_text="".join(parts),
+                    task_id=task_id,
+                    user_prompt=prompt,
+                )
+            except Exception as e:  # noqa: BLE001
+                yield chunk({"content": f"【错误】{user_message_for_error(str(e))}"})
+                await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
+            yield chunk({}, finish="stop")
+            yield b"data: [DONE]\n\n"
+            return
+
+        # pico-agent: progressive deltas from agent loop (not wait-then-fake-chunk)
+        import asyncio
+
+        from pico_orchestrator.runner import RunCaps, run_agent_loop
+
+        from app.db import init_db
+
+        await init_db()
+        factory = session_factory()
+        task_id = new_id()
+        run_id = new_id()
+        async with factory() as session:
+            session.add(
+                TaskRow(
+                    id=task_id,
+                    school_id=principal.school_id,
+                    membership_id=principal.membership_id,
+                    title=prompt[:80],
+                    conversation_id=conversation_id,
+                    workspace_id=workspace_id,
+                )
+            )
+            session.add(
+                RunRow(
+                    id=run_id,
+                    task_id=task_id,
+                    status="running",
+                    prompt=prompt,
+                    model=model,
+                )
+            )
+            await session.commit()
+
+        q: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+
+        async def emit(event_type: str, payload: dict[str, Any]) -> None:
+            async with factory() as session:
+                await append_event(session, run_id, event_type, payload)
+            if event_type == "message.delta":
+                text = str(payload.get("text") or "")
+                if text:
+                    await q.put(("delta", text))
+            elif event_type == "agent.step" and payload.get("phase") == "model":
+                # light status for first step only — avoid spam
+                if payload.get("step") == 1:
+                    await q.put(("status", "正在思考…\n"))
+            elif event_type == "tool.call":
+                name = payload.get("name") or payload.get("tool") or "tool"
+                await q.put(("status", f"\n〔调用工具 {name}〕\n"))
+            elif event_type == "tool.result":
+                await q.put(("status", "〔工具完成〕\n"))
+
+        async def is_cancelled() -> bool:
+            return False
+
+        async def run() -> None:
+            try:
+                caps = RunCaps(
+                    max_seconds=settings.pico_run_max_seconds,
+                    max_tokens=settings.pico_run_max_tokens,
+                    max_retries=settings.pico_run_max_retries,
+                )
+                result = await run_agent_loop(
+                    prompt=prompt,
+                    principal=principal,
+                    emit=emit,
+                    is_cancelled=is_cancelled,
+                    caps=caps,
+                    history=history,
+                )
+                await _finalize_run(
+                    run_id,
+                    status=result.status,
+                    error=result.error,
+                    final_text=result.final_text,
+                    task_id=task_id,
+                    user_prompt=prompt,
+                )
+                await q.put(("done", result))
+            except Exception as e:  # noqa: BLE001
+                await q.put(("error", e))
+
+        task = asyncio.create_task(run())
+        saw_text = False
+        try:
+            while True:
+                kind, payload = await q.get()
+                if kind == "delta":
+                    saw_text = True
+                    yield chunk({"content": str(payload)})
+                elif kind == "status":
+                    # only show status if no answer yet (tool path UX)
+                    if not saw_text:
+                        yield chunk({"content": str(payload)})
+                elif kind == "error":
+                    yield chunk({"content": f"【错误】{user_message_for_error(str(payload))}"})
+                    break
+                elif kind == "done":
+                    result = payload
+                    if not saw_text:
+                        text = getattr(result, "final_text", None) or getattr(result, "error", None) or ""
+                        # small pieces if only final blob
+                        step = 32
+                        for i in range(0, len(text), step):
+                            yield chunk({"content": text[i : i + step]})
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as wait_err:  # noqa: BLE001
+                # runner already reported; avoid breaking the SSE trailer
+                _ = wait_err
+
+        yield chunk({}, finish="stop")
         yield b"data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <script>
+      /* Pico: product default locale = 简体中文 */
+      (function () {
+        try {
+          var raw = localStorage.getItem('lang');
+          var lang = raw;
+          try { lang = raw ? JSON.parse(raw) : null; } catch (e) { lang = raw; }
+          if (!lang || lang === 'en' || lang === 'en-US' || lang === 'en-GB') {
+            localStorage.setItem('lang', JSON.stringify('zh-Hans'));
+            document.cookie = 'lang=zh-Hans;path=/;max-age=31536000;SameSite=Lax';
+          }
+        } catch (e) {}
+      })();
+    </script>
+
+    <script>
+      /* Pico: early SW teardown so stale LibreChat workbox cannot blank the shell */
+      (function () {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }).catch(function () {});
+        if (window.caches && caches.keys) {
+          caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+          }).catch(function () {});
+        }
+      })();
+    </script>
+
+    <base href="/" />
+    <meta name="theme-color" content="#f5f5f5" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta
+      name="description"
+      content="Pico — AI 工作台"
+    />
+    <title>Pico</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon-180x180.png" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #f5f5f5;
+        color: #1a1a1a;
+      }
+    </style>
+    <script>
+      /* pico default light — WorkBuddy baseline; user may still set dark */
+      (function () {
+        try {
+          if (!localStorage.getItem('color-theme')) {
+            localStorage.setItem('color-theme', 'light');
+          }
+        } catch (e) {}
+      })();
+      const theme = localStorage.getItem('color-theme') || 'light';
+      const loadingContainerStyle = document.createElement('style');
+      let backgroundColor;
+      let foregroundColor;
+
+      if (theme === 'dark') {
+        backgroundColor = '#0d0d0d';
+        foregroundColor = '#f5f5f5';
+        document.documentElement.classList.add('dark');
+      } else if (theme === 'light') {
+        backgroundColor = '#f5f5f5';
+        foregroundColor = '#1a1a1a';
+        document.documentElement.classList.remove('dark');
+      } else if (theme === 'system') {
+        const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        backgroundColor = prefersDarkScheme ? '#0d0d0d' : '#f5f5f5';
+        foregroundColor = prefersDarkScheme ? '#f5f5f5' : '#1a1a1a';
+        document.documentElement.classList.toggle('dark', prefersDarkScheme);
+      } else {
+        backgroundColor = '#f5f5f5';
+        foregroundColor = '#1a1a1a';
+        document.documentElement.classList.remove('dark');
+      }
+      document.querySelector('meta[name="theme-color"]').content = backgroundColor;
+
+      loadingContainerStyle.innerHTML = `
+        #loading-container {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          background-color: ${backgroundColor};
+          color: ${foregroundColor};
+        }
+      `;
+      document.head.appendChild(loadingContainerStyle);
+    </script>
+    <script>
+      (function () {
+        var KEY = 'lc-asset-recovery-at';
+        var RUM_QUEUE_KEY = 'lc-rum-queue';
+        var MAX_RUM_QUEUE = 20;
+        window.__lcRumRecoveryGuardInstalled = true;
+        window.__lcRumQueue = Array.isArray(window.__lcRumQueue) ? window.__lcRumQueue : [];
+        try {
+          var persistedQueue = JSON.parse(sessionStorage.getItem(RUM_QUEUE_KEY) || '[]');
+          if (Array.isArray(persistedQueue)) {
+            window.__lcRumQueue = persistedQueue.concat(window.__lcRumQueue).slice(-MAX_RUM_QUEUE);
+          }
+        } catch (e) {
+          /* Diagnostics should never affect application startup. */
+        }
+        window.__lcRumPush = function (type, attributes) {
+          try {
+            var safeAttributes = {};
+            Object.keys(attributes || {}).forEach(function (key) {
+              var value = attributes[key];
+              if (
+                typeof value !== 'string' &&
+                typeof value !== 'number' &&
+                typeof value !== 'boolean'
+              ) {
+                return;
+              }
+              safeAttributes[key] = value;
+            });
+            if (window.__lcRumQueue.length >= MAX_RUM_QUEUE) {
+              window.__lcRumQueue.shift();
+            }
+            window.__lcRumQueue.push({
+              type: type,
+              at: Math.round(performance.now()),
+              visibilityState: document.visibilityState,
+              attributes: safeAttributes,
+            });
+            sessionStorage.setItem(RUM_QUEUE_KEY, JSON.stringify(window.__lcRumQueue));
+          } catch (e) {
+            /* Diagnostics should never affect application startup. */
+          }
+        };
+        function shouldRecover() {
+          try {
+            var last = Number(sessionStorage.getItem(KEY)) || 0;
+            if (Date.now() - last < 60000) {
+              return false;
+            }
+            sessionStorage.setItem(KEY, String(Date.now()));
+            return true;
+          } catch (e) {
+            return false;
+          }
+        }
+        window.__lcRecoverStaleAssets = function () {
+          if (!shouldRecover()) {
+            return false;
+          }
+          window.__lcRumPush('stale-asset-recovery-start');
+          var reload = function () {
+            window.__lcRumPush('stale-asset-recovery-reload');
+            window.location.reload();
+          };
+          if (navigator.serviceWorker) {
+            var scopeBase = new URL('./', document.baseURI || window.location.href).href;
+            navigator.serviceWorker
+              .getRegistrations()
+              .then(function (registrations) {
+                return Promise.all(
+                  registrations
+                    .filter(function (registration) {
+                      return registration.scope.indexOf(scopeBase) === 0;
+                    })
+                    .map(function (registration) {
+                      return registration.unregister();
+                    }),
+                );
+              })
+              .then(reload, reload);
+          } else {
+            reload();
+          }
+          return true;
+        };
+        if (navigator.serviceWorker) {
+          navigator.serviceWorker.addEventListener('message', function (event) {
+            if (!event.data || event.data.type !== 'LC_SW_PING') {
+              return;
+            }
+            var source = event.source || navigator.serviceWorker.controller;
+            if (source) {
+              source.postMessage({ type: 'LC_SW_PONG' });
+            }
+          });
+        }
+        window.addEventListener(
+          'error',
+          function (event) {
+            var el = event.target;
+            if (!el || !el.tagName) {
+              return;
+            }
+            var failedScript = el.tagName === 'SCRIPT' && el.src;
+            var failedPreload =
+              el.tagName === 'LINK' && /preload/.test(el.rel || '') && /\.js$/.test(el.href || '');
+            if (failedScript || failedPreload) {
+              var isRumBootstrap = el.getAttribute('data-lc-rum-bootstrap') === 'true';
+              window.__lcRumPush('asset-load-error', {
+                tagName: el.tagName,
+                assetUrl: el.src || el.href,
+                optional: isRumBootstrap,
+              });
+              if (isRumBootstrap) {
+                return;
+              }
+              window.__lcRecoverStaleAssets();
+            }
+          },
+          true,
+        );
+        window.addEventListener('unhandledrejection', function (event) {
+          var message = event.reason && event.reason.message;
+          if (
+            typeof message === 'string' &&
+            (message.indexOf('dynamically imported module') !== -1 ||
+              message.indexOf('Importing a module script failed') !== -1)
+          ) {
+            window.__lcRumPush('dynamic-import-error');
+            window.__lcRecoverStaleAssets();
+          }
+        });
+      })();
+    </script>
+    <script
+      data-lc-rum-bootstrap="true"
+      type="module"
+      src="/src/lib/rum/bootstrap-entry.js"
+    ></script>
+    <script defer type="module" src="/src/main.jsx"></script>
+  </head>
+  <body>
+    <div id="root">
+      <div id="loading-container">
+        <div id="pico-boot" role="status" aria-live="polite" style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100vh;box-sizing:border-box;gap:12px;font-family:system-ui,-apple-system,sans-serif;background:transparent;color:inherit;text-align:center;margin:0;padding:24px">
+          <h1 style="font-size:1.25rem;font-weight:600;margin:0">Pico 正在加载…</h1>
+          <p style="margin:0;opacity:.75;font-size:.95rem">AI 工作台 · 若超过 10 秒仍停在此页，预览层可能未命中产品端口</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

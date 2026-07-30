@@ -1,0 +1,25 @@
+# Lean Pico API image for Aliyun (CN PyPI mirror).
+FROM python:3.12-slim
+
+WORKDIR /app
+ARG PICO_GIT_SHA=unknown
+ENV PICO_GIT_SHA=${PICO_GIT_SHA}
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=120
+
+# Aliyun PyPI for build reliability in CN
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --upgrade pip
+
+COPY requirements.txt /app/requirements.txt
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ -r /app/requirements.txt
+
+COPY services /app/services
+COPY packages /app/packages
+COPY pyproject.toml /app/pyproject.toml
+
+RUN mkdir -p /app/data
+
+EXPOSE 18765
+CMD ["uvicorn", "app.main:app", "--app-dir", "services/api", "--host", "127.0.0.1", "--port", "18765"]

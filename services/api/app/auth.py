@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.settings import Settings, get_settings
@@ -50,6 +51,15 @@ def issue_test_token(
     return jwt.encode(payload, s.pico_jwt_secret, algorithm="HS256")
 
 
+def _dev_proxy_keys(settings: Settings) -> set[str]:
+    """Match openai_compat: explicit proxy keys only (never model API keys)."""
+    keys = {"pico-dev", "sk-pico-dev"}
+    extra = (getattr(settings, "pico_openai_proxy_key", None) or "").strip()
+    if extra:
+        keys.add(extra)
+    return keys
+
+
 def _decode_with_key(
     token: str, *, key: str, algorithms: list[str], audience: str, issuer: str | None
 ) -> dict[str, Any]:
@@ -70,6 +80,20 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
     aud = s.pico_jwt_aud
     last_err: Exception | None = None
     data: dict[str, Any] | None = None
+
+    # 0) Dev OpenAI-compat proxy keys (disabled in production) — same principal as chat
+    env = (s.pico_env or "development").lower()
+    production = env in {"production", "prod"}
+    if not production and token in _dev_proxy_keys(s):
+        return Principal(
+            school_id="school-a",
+            membership_id="nextchat-user",
+            scopes=["ai:run", "ai:read", "ai:confirm"],
+            iss=s.pico_jwt_iss,
+            aud=s.pico_jwt_aud,
+            exp=int(time.time()) + 3600,
+            raw={"proxy": True},
+        )
 
     # 1) Phase 1 test issuer
     if s.pico_accept_test_issuer and s.pico_jwt_secret:
@@ -158,6 +182,37 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
     )
 
 
+def scope_proxy_principal(
+    principal: Principal,
+    membership_id: str | None,
+) -> Principal:
+    """When using dev proxy key, bind ledger rows to LibreChat user id."""
+    if not principal.raw.get("proxy"):
+        return principal
+    mid = (membership_id or "").strip()
+    if not mid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="proxy membership header required",
+        )
+    # allow uuid / mongo id / slug only
+    import re
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", mid):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid proxy membership header",
+        )
+    return Principal(
+        school_id=principal.school_id,
+        membership_id=mid,
+        scopes=principal.scopes,
+        iss=principal.iss,
+        aud=principal.aud,
+        exp=principal.exp,
+        raw={**principal.raw, "scoped_membership": mid},
+    )
+
+
 async def require_principal(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),
@@ -168,6 +223,20 @@ async def require_principal(
             detail={"code": "auth.missing", "message": "bearer token required"},
         )
     return decode_token(creds.credentials, settings)
+
+
+async def require_scoped_principal(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    settings: Settings = Depends(get_settings),
+    x_pico_membership_id: str | None = Header(default=None, alias="X-Pico-Membership-Id"),
+) -> Principal:
+    if creds is None or not creds.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "auth.missing", "message": "bearer token required"},
+        )
+    p = decode_token(creds.credentials, settings)
+    return scope_proxy_principal(p, x_pico_membership_id)
 
 
 def require_service_token(

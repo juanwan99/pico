@@ -19,7 +19,7 @@ def test_meta_version_reports_product_shell() -> None:
     body = r.json()
     assert body["ok"] is True
     assert "git_sha" in body
-    assert body["product_ui"] == "nextchat"
+    assert body["product_ui"] == "librechat"
     assert body["apps_web_present"] is False
     assert body["product_ui_ok"] is True
     assert "agent_pins" in body
