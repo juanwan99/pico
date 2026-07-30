@@ -24,6 +24,33 @@ Measured before this pass on `https://pico.aivia.asia/c/new`, viewport `1920x911
 | Composer textarea | x=788, y=323, width=608, height=65 |
 | Body background | `rgb(245, 245, 245)` |
 
+Measured after this pass on `https://pico.aivia.asia/c/new`, viewport `1440x900`, origin `94741a810fa78378c934527d4852e083977bab24`:
+
+| Element | Measured |
+| --- | --- |
+| Sidebar | x=0, width=280 |
+| Main stage | x=280, width=820 |
+| Result panel | x=1100, width=340 |
+| Home title | x=589, y=104, width=203, height=34 |
+| Body background | `rgb(245, 245, 245)` |
+| Mobile 390 | no horizontal overflow; result rail hidden |
+
+## Validation Screenshots
+
+Saved locally during production validation:
+
+- `pixel-home.png`
+- `pixel-task.png`
+- `pixel-task-done.png`
+- `pixel-result-files.png`
+- `pixel-assistants.png`
+- `pixel-capability.png`
+- `pixel-automation.png`
+- `pixel-more.png`
+- `pixel-project.png`
+- `pixel-workspaces.png`
+- `pixel-mobile-390.png`
+
 ## Screenshot Gaps
 
 Exact ±2px claims still need owner full-window WorkBuddy screenshots for these screens:
