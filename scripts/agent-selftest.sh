@@ -97,7 +97,7 @@ python3 - <<'PYS2' && pass "S2 pico-agent reply" || fail "S2 pico-agent"
 import json, urllib.request, urllib.error, os, sys
 API=os.environ.get("PICO_API","http://127.0.0.1:18765")
 H={"Authorization":"Bearer pico-dev","Content-Type":"application/json","X-Pico-Membership-Id":"selftest-s2"}
-body={"model":"pico-agent","stream":False,"messages":[{"role":"user","content":"【Pico-User:s2】用一句话说明你是谁，不要调工具"}]}
+body={"model":"pico-agent","stream":False,"messages":[{"role":"user","content":"【Pico-User:selftest-s2】用一句话说明你是谁，不要调工具"}]}
 req=urllib.request.Request(API+"/v1/chat/completions", data=json.dumps(body).encode(), method="POST", headers=H)
 try:
     with urllib.request.urlopen(req, timeout=120) as r:
