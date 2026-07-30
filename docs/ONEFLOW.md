@@ -231,6 +231,9 @@ PR/Issue 评论模板：
 
 ## 11. 文档与真源（防交接污染）
 
+总控（Grok）与执行（Codex，常云端）**只通过 GitHub 交接**：见 `docs/RACI-GROK-CODEX.md` §1.1。
+
+
 1. **任务进度与证据只写在 GitHub**（PR 描述/评论、`CANDIDATE`、`DEPLOYED`、Actions）。  
 2. **禁止**新增 `HANDOFF*.md`、浪潮窗记、或「唯一必读交接」长文当跨窗状态。  
 3. 计划/夜卡 MD 若入库：必须经 PR；**勾选 ≠ 完成**，完成 = MERGED（+ 需要时 DEPLOYED）。  
