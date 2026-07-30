@@ -36,6 +36,7 @@ from app import run_service
 from app.auth import (
     Principal,
     issue_test_token,
+    require_any_scope,
     require_scope,
     require_scoped_principal,
     require_service_token,
@@ -908,7 +909,7 @@ async def get_change(
 @app.post("/v1/changes/{change_id}/confirm")
 async def confirm_change(
     change_id: str,
-    principal: Principal = Depends(require_scope("ai:confirm")),
+    principal: Principal = Depends(require_any_scope("ai:confirm", "ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     try:
@@ -925,7 +926,7 @@ async def confirm_change(
 @app.post("/v1/changes/{change_id}/reject")
 async def reject_change(
     change_id: str,
-    principal: Principal = Depends(require_scope("ai:confirm")),
+    principal: Principal = Depends(require_any_scope("ai:confirm", "ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     try:

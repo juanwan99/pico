@@ -285,14 +285,24 @@ async def require_scoped_principal(
 
 
 def enforce_scope(principal: Principal, required_scope: str) -> Principal:
-    if required_scope not in REGISTERED_SCOPES:
-        raise RuntimeError(f"unregistered required scope: {required_scope}")
-    if required_scope not in principal.scopes:
+    return enforce_any_scope(principal, required_scope)
+
+
+def enforce_any_scope(
+    principal: Principal,
+    *required_scopes: str,
+) -> Principal:
+    if not required_scopes:
+        raise RuntimeError("at least one required scope must be configured")
+    unknown = set(required_scopes) - REGISTERED_SCOPES
+    if unknown:
+        raise RuntimeError(f"unregistered required scopes: {sorted(unknown)}")
+    if not set(required_scopes).intersection(principal.scopes):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "auth.forbidden",
-                "message": f"{required_scope} scope required",
+                "message": f"one of {list(required_scopes)} scopes required",
             },
         )
     return principal
@@ -303,6 +313,15 @@ def require_scope(required_scope: str):
         principal: Principal = Depends(require_scoped_principal),
     ) -> Principal:
         return enforce_scope(principal, required_scope)
+
+    return dependency
+
+
+def require_any_scope(*required_scopes: str):
+    async def dependency(
+        principal: Principal = Depends(require_scoped_principal),
+    ) -> Principal:
+        return enforce_any_scope(principal, *required_scopes)
 
     return dependency
 

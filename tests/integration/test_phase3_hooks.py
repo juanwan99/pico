@@ -93,13 +93,32 @@ def test_route_scopes_are_enforced(client: TestClient):
         json={"title": "t", "summary": "s", "payload": {}},
     )
     assert created.status_code == 200, created.text
-    change_id = created.json()["change"]["id"]
+    run_change_id = created.json()["change"]["id"]
+    second = client.post(
+        "/v1/changes",
+        headers=run,
+        json={"title": "t2", "summary": "s2", "payload": {}},
+    )
+    confirm_change_id = second.json()["change"]["id"]
     assert client.get("/v1/changes", headers=run).status_code == 403
     assert client.get("/v1/models", headers=run).status_code == 403
+    confirmed_by_run = client.post(
+        f"/v1/changes/{run_change_id}/confirm",
+        headers=run,
+        json={},
+    )
+    assert confirmed_by_run.status_code == 200, confirmed_by_run.text
+
+    denied_confirm = client.post(
+        f"/v1/changes/{confirm_change_id}/confirm",
+        headers=read,
+        json={},
+    )
+    assert denied_confirm.status_code == 403
 
     confirm = {"Authorization": f"Bearer {_token(client, ['ai:confirm'])}"}
     confirmed = client.post(
-        f"/v1/changes/{change_id}/confirm",
+        f"/v1/changes/{confirm_change_id}/confirm",
         headers=confirm,
         json={},
     )
