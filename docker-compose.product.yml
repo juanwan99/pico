@@ -1,12 +1,15 @@
-# Product stack for public VPS deploy (LibreChat + Mongo + Pico API).
-# Not for Grok Live Preview. Map DOMAIN_* to your HTTPS host.
+# Product stack for public VPS (LibreChat + Mongo + Pico API).
+# Target: Aliyun light server 2C2G — keep Mongo cache small; build with low heap.
+# Map DOMAIN_* to https://pico.aivia.asia (or your host). Do not publish API.
 services:
   mongo:
     image: mongo:7
     restart: unless-stopped
+    command: ["mongod", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
     volumes:
       - pico_mongo:/data/db
     # not published — only internal
+    mem_limit: 512m
 
   pico-api:
     image: python:3.12-slim
@@ -21,14 +24,20 @@ services:
     environment:
       PICO_DATABASE_URL: sqlite+aiosqlite:///./data/pico.db
     # not published
+    mem_limit: 512m
+    depends_on:
+      - mongo
 
   librechat:
     build:
       context: ./apps/librechat
       dockerfile: Dockerfile
+      args:
+        # 2G host: do not use default 6144
+        NODE_MAX_OLD_SPACE_SIZE: "1536"
     restart: unless-stopped
     ports:
-      - "8080:3080"
+      - "127.0.0.1:8080:3080"
     env_file:
       - ./apps/librechat/.env
     environment:
@@ -36,12 +45,18 @@ services:
       PORT: "3080"
       MONGO_URI: mongodb://mongo:27017/LibreChat
       OPENAI_REVERSE_PROXY: http://pico-api:18765/v1
-      # Set these to your public https origin:
-      # DOMAIN_CLIENT: https://pico.example.com
-      # DOMAIN_SERVER: https://pico.example.com
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-pico-dev}
+      ENDPOINTS: openAI
+      OPENAI_MODELS: moonshot-v1-8k,pico-agent
+      APP_TITLE: Pico
+      ALLOW_REGISTRATION: "true"
+      SEARCH: "false"
+      DOMAIN_CLIENT: ${DOMAIN_CLIENT:-https://pico.aivia.asia}
+      DOMAIN_SERVER: ${DOMAIN_SERVER:-https://pico.aivia.asia}
     depends_on:
       - mongo
       - pico-api
+    mem_limit: 1024m
 
 volumes:
   pico_mongo:
