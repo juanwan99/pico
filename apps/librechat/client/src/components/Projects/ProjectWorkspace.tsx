@@ -184,6 +184,11 @@ export default function ProjectWorkspace() {
     if (!activeProjectId) {
       return;
     }
+    try {
+      sessionStorage.setItem('pico:activeProjectId', String(activeProjectId));
+    } catch {
+      /* ignore */
+    }
     clearMessagesCache(queryClient, conversation?.conversationId);
     queryClient.invalidateQueries([QueryKeys.messages]);
     newConversation({ template: { chatProjectId: activeProjectId } });

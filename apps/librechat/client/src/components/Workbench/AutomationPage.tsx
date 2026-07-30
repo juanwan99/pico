@@ -16,6 +16,16 @@ import {
 type Mode = 'list' | 'create';
 type ScheduleKind = 'periodic' | 'interval' | 'once';
 
+function friendlyError(raw: string): string {
+  if (/401|No auth token|Unauthorized/i.test(raw)) {
+    return '登录已失效或未带上身份，请刷新页面后重新登录再试。';
+  }
+  if (/502|unavailable|Failed to fetch/i.test(raw)) {
+    return '账本服务暂时不可用，请稍后重试。';
+  }
+  return raw.slice(0, 200);
+}
+
 export default function AutomationPage() {
   const [mode, setMode] = useState<Mode>('list');
   const [list, setList] = useState<PicoAutomation[]>([]);
@@ -23,9 +33,15 @@ export default function AutomationPage() {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [model, setModel] = useState('kimi-k2.6');
   const [scheduleKind, setScheduleKind] = useState<ScheduleKind>('periodic');
   const [time, setTime] = useState('09:00');
   const [intervalMin, setIntervalMin] = useState(60);
+  const [onceLocal, setOnceLocal] = useState(() => {
+    const d = new Date(Date.now() + 5 * 60_000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
   const [saving, setSaving] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -35,7 +51,7 @@ export default function AutomationPage() {
       const { automations } = await listPicoAutomations();
       setList(automations || []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e instanceof Error ? e.message : String(e)));
       setList([]);
     } finally {
       setLoading(false);
@@ -48,22 +64,41 @@ export default function AutomationPage() {
 
   const schedulePayload = useMemo(() => {
     if (scheduleKind === 'periodic') {
-      return { time };
+      return { time, model };
     }
     if (scheduleKind === 'interval') {
-      return { minutes: intervalMin };
+      return { minutes: intervalMin, model };
     }
-    return { at: new Date(Date.now() + 60_000).toISOString() };
-  }, [scheduleKind, time, intervalMin]);
+    let at = new Date(Date.now() + 60_000).toISOString();
+    try {
+      const parsed = new Date(onceLocal);
+      if (!Number.isNaN(parsed.getTime())) {
+        at = parsed.toISOString();
+      }
+    } catch {
+      /* keep default */
+    }
+    return { at, model };
+  }, [scheduleKind, time, intervalMin, onceLocal, model]);
 
   const scheduleLabel = (a: PicoAutomation) => {
+    const m = (a.schedule as { model?: string })?.model;
+    const modelBit = m ? ` · ${m}` : '';
     if (a.schedule_kind === 'periodic') {
-      return `每天 ${String((a.schedule as { time?: string })?.time || '09:00')}`;
+      return `每天 ${String((a.schedule as { time?: string })?.time || '09:00')}${modelBit}`;
     }
     if (a.schedule_kind === 'interval') {
-      return `每 ${(a.schedule as { minutes?: number })?.minutes || 60} 分钟`;
+      return `每 ${(a.schedule as { minutes?: number })?.minutes || 60} 分钟${modelBit}`;
     }
-    return '单次';
+    const at = (a.schedule as { at?: string })?.at;
+    if (at) {
+      try {
+        return `单次 ${new Date(at).toLocaleString()}${modelBit}`;
+      } catch {
+        /* fallthrough */
+      }
+    }
+    return `单次${modelBit}`;
   };
 
   const onSave = async () => {
@@ -71,10 +106,15 @@ export default function AutomationPage() {
       return;
     }
     setSaving(true);
+    setError(null);
     try {
+      const bodyPrompt =
+        model && model !== 'Auto'
+          ? `【模型偏好：${model}】\n${prompt.trim()}`
+          : prompt.trim();
       await createPicoAutomation({
         name: name.trim(),
-        prompt: prompt.trim(),
+        prompt: bodyPrompt,
         schedule_kind: scheduleKind,
         schedule: schedulePayload,
       });
@@ -83,7 +123,7 @@ export default function AutomationPage() {
       setPrompt('');
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e instanceof Error ? e.message : String(e)));
     } finally {
       setSaving(false);
     }
@@ -127,6 +167,9 @@ export default function AutomationPage() {
           <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12.5px] text-emerald-900">
             到点由 Pico 服务端创建 Task/Run 并执行，无需保持桌面客户端在线。
           </div>
+          {error ? (
+            <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">{error}</p>
+          ) : null}
 
           <label className="mb-4 block">
             <span className="mb-1.5 block text-[13px] font-medium">名称</span>
@@ -147,6 +190,20 @@ export default function AutomationPage() {
               className="w-full resize-none rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[14px] outline-none focus:border-black/20 dark:bg-surface-secondary"
               placeholder="描述到点后要执行的任务"
             />
+          </label>
+
+          <label className="mb-4 block">
+            <span className="mb-1.5 block text-[13px] font-medium">模型</span>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="w-full rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[14px] outline-none dark:bg-surface-secondary"
+            >
+              <option value="kimi-k2.6">kimi-k2.6</option>
+              <option value="Kimi-K3">Kimi-K3</option>
+              <option value="moonshot-v1-8k">moonshot-v1-8k</option>
+              <option value="pico-agent">pico-agent</option>
+            </select>
           </label>
 
           <div className="mb-2 text-[13px] font-medium">执行频率</div>
@@ -200,8 +257,21 @@ export default function AutomationPage() {
             </label>
           )}
           {scheduleKind === 'once' && (
-            <p className="mb-4 text-[12.5px] text-[#8c8c8c]">保存后约 1 分钟内触发一次，随后自动停用。</p>
+            <label className="mb-4 block text-[13px]">
+              <span className="mb-1.5 block font-medium">触发时间</span>
+              <input
+                type="datetime-local"
+                value={onceLocal}
+                onChange={(e) => setOnceLocal(e.target.value)}
+                className="rounded-lg border border-black/[0.08] bg-white px-2 py-1.5"
+              />
+              <p className="mt-1 text-[12px] text-[#8c8c8c]">触发一次后自动停用。</p>
+            </label>
           )}
+
+          <p className="text-[12px] leading-relaxed text-[#9a9a9a]">
+            工作空间 / 权限 / 技能绑定将在后续版本接入；当前按账号默认工作空间与模型执行。
+          </p>
         </div>
       </div>
     );
@@ -235,7 +305,7 @@ export default function AutomationPage() {
           <div className="mx-auto flex max-w-md flex-col items-center gap-3 pt-20 text-center">
             <p className="text-[15px] font-medium text-[#1a1a1a] dark:text-text-primary">定时任务</p>
             <p className="text-[13px] leading-relaxed text-[#8c8c8c]">
-              配置名称、提示词与执行频率后，到点由服务端创建 Task/Run 并写入运行记录。
+              配置名称、提示词、模型与执行频率后，到点由服务端创建 Task/Run 并写入运行记录。
             </p>
             <button
               type="button"
@@ -262,8 +332,13 @@ export default function AutomationPage() {
                       {item.name}
                     </p>
                     <p className="mt-1 line-clamp-2 text-[12.5px] text-[#6b6b6b]">{item.prompt}</p>
-                    {item.next_run_at ? (
+                    {item.last_run_at ? (
                       <p className="mt-1 text-[11px] text-[#9a9a9a]">
+                        上次：{new Date(item.last_run_at).toLocaleString()}
+                      </p>
+                    ) : null}
+                    {item.next_run_at ? (
+                      <p className="mt-0.5 text-[11px] text-[#9a9a9a]">
                         下次：{new Date(item.next_run_at).toLocaleString()}
                       </p>
                     ) : null}
@@ -271,6 +346,9 @@ export default function AutomationPage() {
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <span className="rounded-full bg-[#edf1f4] px-2.5 py-1 text-[11px] text-[#3d3d3d]">
                       {scheduleLabel(item)}
+                    </span>
+                    <span className="text-[10px] text-[#9a9a9a]">
+                      {item.enabled ? '已启用' : '已停用'}
                     </span>
                     <button
                       type="button"

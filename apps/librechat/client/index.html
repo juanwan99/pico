@@ -58,19 +58,31 @@
       }
     </style>
     <script>
-      const theme = localStorage.getItem('color-theme');
+      /* pico default light — WorkBuddy baseline; user may still set dark */
+      (function () {
+        try {
+          if (!localStorage.getItem('color-theme')) {
+            localStorage.setItem('color-theme', 'light');
+          }
+        } catch (e) {}
+      })();
+      const theme = localStorage.getItem('color-theme') || 'light';
       const loadingContainerStyle = document.createElement('style');
       let backgroundColor;
 
       if (theme === 'dark') {
         backgroundColor = '#0d0d0d';
+        document.documentElement.classList.add('dark');
       } else if (theme === 'light') {
         backgroundColor = '#ffffff';
+        document.documentElement.classList.remove('dark');
       } else if (theme === 'system') {
         const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
         backgroundColor = prefersDarkScheme ? '#0d0d0d' : '#ffffff';
+        document.documentElement.classList.toggle('dark', prefersDarkScheme);
       } else {
         backgroundColor = '#ffffff';
+        document.documentElement.classList.remove('dark');
       }
 
       loadingContainerStyle.innerHTML = `

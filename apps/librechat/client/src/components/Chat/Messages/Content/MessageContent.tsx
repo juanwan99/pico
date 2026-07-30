@@ -106,6 +106,7 @@ const DisplayMessage = ({ text, isCreatedByUser, message, showCursor }: TDisplay
       .replace(/【工作空间：[^】]*】(?:（[^）]*）)?\s*/g, '')
       .replace(/【权限：[^】]*】\s*/g, '')
       .replace(/【模型偏好：[^】]*】\s*/g, '')
+      .replace(/【项目指令：[^】]*】\s*/g, '')
       .trim();
   }, [isCreatedByUser, text]);
 

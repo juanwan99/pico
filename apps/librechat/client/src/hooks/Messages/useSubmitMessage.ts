@@ -9,6 +9,26 @@ import { mainTextareaId } from '~/common';
 import store from '~/store';
 import { workspaceContextPrefix } from '~/components/Chat/Input/WorkspaceSelector';
 
+function projectInstructionPrefix(conversation: { chatProjectId?: string | null } | null | undefined): string {
+  try {
+    const pid =
+      conversation?.chatProjectId ||
+      sessionStorage.getItem('pico:activeProjectId') ||
+      '';
+    if (!pid) {
+      return '';
+    }
+    const instr = localStorage.getItem(`pico:projectInstruction:${pid}`);
+    if (!instr || !instr.trim()) {
+      return '';
+    }
+    return `【项目指令：${instr.trim().slice(0, 1500)}】\n`;
+  } catch {
+    return '';
+  }
+}
+
+
 export default function useSubmitMessage() {
   const { user } = useAuthContext();
   const methods = useChatFormContext();
@@ -70,18 +90,21 @@ export default function useSubmitMessage() {
       }
       const userId = user?.id ?? (user as { _id?: string } | undefined)?._id;
       let wsPrefix = workspaceContextPrefix(convoId);
+      const projPrefix = projectInstructionPrefix(conversation);
       if (userId && wsPrefix && !wsPrefix.includes('【Pico-User:')) {
         wsPrefix = `【Pico-User:${String(userId)}】 ${wsPrefix}`;
       } else if (userId && !wsPrefix) {
         wsPrefix = `【Pico-User:${String(userId)}】\n`;
       }
+      const metaPrefix = `${wsPrefix || ''}${projPrefix || ''}`;
       const textWithWs =
-        wsPrefix &&
+        metaPrefix &&
         data.text &&
         !data.text.includes('【Pico-Convo:') &&
         !data.text.includes('【Pico-User:') &&
-        !data.text.startsWith('【工作空间')
-          ? `${wsPrefix}${data.text}`
+        !data.text.startsWith('【工作空间') &&
+        !data.text.includes('【项目指令')
+          ? `${metaPrefix}${data.text}`
           : data.text;
       const submitted = ask(
         {

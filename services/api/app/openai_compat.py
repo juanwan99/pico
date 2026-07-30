@@ -414,12 +414,15 @@ async def chat_completions(
     raw_prompt = _last_user_prompt(body.messages)
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
-    # strip ledger markers from model-visible prompt
+    # strip ledger markers from model-visible prompt; project instruction → system
+    m_proj = re.search(r"【项目指令：([^】]+)】", raw_prompt)
+    project_instruction = m_proj.group(1).strip() if m_proj else ""
     prompt = re.sub(r"【Pico-Convo:[^】]+】", "", raw_prompt)
     prompt = re.sub(r"【Pico-User:[^】]+】", "", prompt)
     prompt = re.sub(r"【工作空间：[^】]+】", "", prompt)
     prompt = re.sub(r"【权限：[^】]+】", "", prompt)
-    prompt = re.sub(r"【模型偏好：[^】]+】", "", prompt).strip() or raw_prompt
+    prompt = re.sub(r"【模型偏好：[^】]+】", "", prompt)
+    prompt = re.sub(r"【项目指令：[^】]+】", "", prompt).strip() or raw_prompt
     history = _history_for_agent(body.messages)
     model = body.model or settings.kimi_model or "pico-agent"
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
@@ -444,6 +447,8 @@ async def chat_completions(
                 "不要编造不存在的学校数据。"
                 "若用户要求创建或生成文件（如 hello.txt），请在回复中用代码块输出完整内容，格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
             )
+            if project_instruction:
+                system = system + "\n【项目约束】" + project_instruction
             parts: list[str] = []
             try:
                 async for piece in stream_chat(
@@ -516,6 +521,8 @@ async def chat_completions(
                 "不要编造不存在的学校数据。"
                 "若用户要求创建或生成文件（如 hello.txt），请在回复中用代码块输出完整内容，格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
             )
+            if project_instruction:
+                system = system + "\n【项目约束】" + project_instruction
             parts: list[str] = []
             try:
                 async for piece in stream_chat(

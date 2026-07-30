@@ -5,7 +5,7 @@
  * 工作空间文件: search + checkbox rows
  * 浏览器: nav chrome + URL + security footer
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   FileText,
@@ -143,7 +143,20 @@ export default function ResultPanel({
     return messageArts;
   }, [picoArtifacts, messageArts]);
 
-  const filteredFiles = useMemo(() => {
+  // Prefer https links in artifact inline as browser targets
+  useEffect(() => {
+    const fromArts = (picoArtifacts || []).find((a) => {
+      const s = (a.inline || a.title || '').trim();
+      return /^https?:\/\//i.test(s);
+    });
+    if (fromArts) {
+      const u = (fromArts.inline || fromArts.title || '').trim();
+      setBrowserUrl(u);
+      setBrowserLoaded(u);
+    }
+  }, [picoArtifacts]);
+
+    const filteredFiles = useMemo(() => {
     const q = fileQuery.trim().toLowerCase();
     if (!q) {
       return artifacts;
@@ -361,19 +374,30 @@ export default function ResultPanel({
               <button type="button" className="rounded p-1 text-[#8c8c8c]" aria-label="前进" disabled>
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
-              <button type="button" className="rounded p-1 text-[#8c8c8c]" aria-label="刷新">
+              <button
+                type="button"
+                className="rounded p-1 text-[#8c8c8c]"
+                aria-label="刷新"
+                onClick={() => setBrowserKey((k) => k + 1)}
+              >
                 <RotateCw className="h-3.5 w-3.5" />
               </button>
               <form
                 className="mx-1 flex min-w-0 flex-1 items-center rounded-full bg-[#f3f3f3] px-3 py-1 dark:bg-surface-tertiary"
                 onSubmit={(e) => {
                   e.preventDefault();
+                  const raw = browserUrl.trim();
+                  if (!raw) {
+                    return;
+                  }
+                  const u = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+                  setBrowserLoaded(u);
                 }}
               >
                 <input
                   value={browserUrl}
                   onChange={(e) => setBrowserUrl(e.target.value)}
-                  placeholder="搜索或输入网址"
+                  placeholder="输入网址后回车预览"
                   className="w-full bg-transparent text-[12px] outline-none placeholder:text-[#b0b0b0]"
                 />
               </form>
@@ -382,8 +406,9 @@ export default function ResultPanel({
                 className="rounded p-1 text-[#8c8c8c]"
                 aria-label="在新窗口打开"
                 onClick={() => {
-                  if (browserUrl.trim()) {
-                    const u = browserUrl.startsWith('http') ? browserUrl : `https://${browserUrl}`;
+                  const raw = (browserLoaded || browserUrl).trim();
+                  if (raw) {
+                    const u = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
                     window.open(u, '_blank', 'noopener,noreferrer');
                   }
                 }}
@@ -394,12 +419,40 @@ export default function ResultPanel({
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-[#fafafa] text-[#9a9a9a] dark:bg-presentation">
-              <Globe className="mb-2 h-8 w-8 opacity-35" strokeWidth={1.25} />
-              <p className="text-[13px]">暂无连接</p>
-            </div>
+            {browserLoaded ? (
+              <iframe
+                key={browserKey}
+                title="browser-preview"
+                src={browserLoaded}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                className="min-h-0 w-full flex-1 border-0 bg-white"
+              />
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 bg-[#fafafa] px-4 text-center text-[#9a9a9a] dark:bg-presentation">
+                <Globe className="h-8 w-8 opacity-35" strokeWidth={1.25} />
+                <p className="text-[13px]">输入网址并回车可内嵌预览</p>
+                <p className="max-w-[14rem] text-[11px] leading-relaxed">
+                  部分站点禁止嵌入；若空白请用右上角新窗口打开
+                </p>
+                <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+                  {['example.com', 'www.wikipedia.org'].map((host) => (
+                    <button
+                      key={host}
+                      type="button"
+                      className="rounded-full bg-white px-2.5 py-1 text-[11px] ring-1 ring-black/[0.06]"
+                      onClick={() => {
+                        setBrowserUrl(host);
+                        setBrowserLoaded(`https://${host}`);
+                      }}
+                    >
+                      {host}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="border-t border-black/[0.05] px-3 py-2 text-center text-[11px] leading-snug text-[#9a9a9a]">
-              当前页面由 AI 操作，请注意信息安全；若有疑问，请立即结束任务
+              预览仅供参考，注意信息安全；敏感操作请在受信浏览器中完成
             </div>
           </div>
         )}
