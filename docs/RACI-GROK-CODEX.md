@@ -83,6 +83,8 @@ TRUTH: GitHub PR/SHA/CI/DEPLOYED（OneFlow）
 □ 若夜间：能否撑满 ~6h？是否多包/有风险包？
 □ LEASES 是否与并行窗冲突
 □ 完成定义是否可在 GitHub 验证
+□ 任务书是否已在 GitHub（main docs 或 Issue/PR），云端 Codex 仅靠 git 可取？
+□ 总控↔Codex 是否避免「只聊天不落库」交接？
 □ HARD / 非目标是否写清
 □ 审查门禁：谁合 main（总控或授权执行合）
 ```
