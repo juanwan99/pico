@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
+import re
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -631,6 +635,37 @@ async def get_task(
             for a in arts
         ],
     }
+
+
+@app.get("/v1/artifacts/{artifact_id}/content")
+async def get_artifact_content(
+    artifact_id: str,
+    download: bool = False,
+    principal: Principal = Depends(require_scoped_principal),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    artifact = await run_service.get_artifact_for_principal(
+        session,
+        artifact_id,
+        principal,
+    )
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="artifact not found")
+
+    filename = (artifact.title or f"{artifact.id}.txt").replace("\r", "").replace("\n", "")
+    fallback = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._") or "artifact.txt"
+    disposition = "attachment" if download else "inline"
+    media_type = mimetypes.guess_type(filename)[0] or "text/plain"
+    return Response(
+        content=(artifact.inline or "").encode("utf-8"),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": (
+                f'{disposition}; filename="{fallback}"; '
+                f"filename*=UTF-8''{quote(filename)}"
+            )
+        },
+    )
 
 
 

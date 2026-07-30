@@ -50,7 +50,8 @@ function assertId(param, name) {
   return param;
 }
 
-async function proxy(req, res, path) {
+async function proxy(req, res, path, options = {}) {
+  const { binary = false, allowDownload = false } = options;
   const qsIdx = req.originalUrl.indexOf('?');
   const qs = qsIdx >= 0 ? req.originalUrl.slice(qsIdx) : '';
   // only forward known safe query keys
@@ -63,6 +64,9 @@ async function proxy(req, res, path) {
       if (ID_RE.test(cid) || /^[A-Za-z0-9._:-]{1,128}$/.test(cid)) {
         out.set('conversation_id', cid);
       }
+    }
+    if (allowDownload && ['1', 'true'].includes(sp.get('download'))) {
+      out.set('download', 'true');
     }
     const s = out.toString();
     safeQs = s ? `?${s}` : '';
@@ -86,13 +90,17 @@ async function proxy(req, res, path) {
       headers['Content-Type'] = 'application/json';
     }
     const r = await fetch(target, init);
-    const text = await r.text();
+    const body = binary ? Buffer.from(await r.arrayBuffer()) : await r.text();
     res.status(r.status);
     const ct = r.headers.get('content-type');
     if (ct) {
       res.setHeader('Content-Type', ct);
     }
-    res.send(text);
+    const disposition = r.headers.get('content-disposition');
+    if (disposition) {
+      res.setHeader('Content-Disposition', disposition);
+    }
+    res.send(body);
   } catch (err) {
     logger.error('[pico proxy]', err);
     const code = err.status || 502;
@@ -134,6 +142,17 @@ router.get('/v1/runs/:runId', (req, res) => {
   try {
     assertId(req.params.runId, 'runId');
     return proxy(req, res, `/v1/runs/${req.params.runId}`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+router.get('/v1/artifacts/:artifactId/content', (req, res) => {
+  try {
+    assertId(req.params.artifactId, 'artifactId');
+    return proxy(req, res, `/v1/artifacts/${req.params.artifactId}/content`, {
+      binary: true,
+      allowDownload: true,
+    });
   } catch (e) {
     return res.status(400).json({ error: 'bad_request', message: e.message });
   }
@@ -201,4 +220,3 @@ router.post('/v1/changes/:id/reject', (req, res) => {
 });
 
 module.exports = router;
-

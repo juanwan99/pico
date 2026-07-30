@@ -71,6 +71,19 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function getPicoArtifactContent(id: string, download = false): Promise<Blob> {
+  const query = download ? '?download=true' : '';
+  const res = await fetch(`/api/pico/v1/artifacts/${encodeURIComponent(id)}/content${query}`, {
+    credentials: 'include',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`pico ${res.status}: ${text.slice(0, 200)}`);
+  }
+  return res.blob();
+}
+
 export async function listPicoTasks(conversationId?: string) {
   const q = conversationId ? `?conversation_id=${encodeURIComponent(conversationId)}` : '';
   return picoFetch<{ tasks: PicoTask[] }>(`/v1/tasks${q}`);

@@ -444,6 +444,23 @@ def test_finalize_paths_expose_identical_run_and_artifact_contract(
     assert file_artifact["inline"] == file_body
     assert file_artifact["run_id"]
 
+    content = client.get(
+        f"/v1/artifacts/{file_artifact['id']}/content",
+        headers=owner,
+    )
+    assert content.status_code == 200, content.text
+    assert content.text == file_body
+    assert content.headers["content-type"].startswith("text/csv")
+    assert content.headers["content-disposition"].startswith("inline;")
+
+    download = client.get(
+        f"/v1/artifacts/{file_artifact['id']}/content?download=true",
+        headers=owner,
+    )
+    assert download.status_code == 200, download.text
+    assert download.content == file_body.encode()
+    assert download.headers["content-disposition"].startswith("attachment;")
+
     runs = client.get(f"/v1/tasks/{task_id}/runs", headers=owner)
     assert runs.status_code == 200, runs.text
     run_rows = runs.json()["runs"]
@@ -465,3 +482,8 @@ def test_finalize_paths_expose_identical_run_and_artifact_contract(
     outsider = _headers(client, f"outsider-{stream}")
     hidden = client.get(f"/v1/tasks/{task_id}", headers=outsider)
     assert hidden.status_code == 404
+    hidden_content = client.get(
+        f"/v1/artifacts/{file_artifact['id']}/content",
+        headers=outsider,
+    )
+    assert hidden_content.status_code == 404
