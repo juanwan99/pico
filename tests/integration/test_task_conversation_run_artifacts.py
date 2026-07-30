@@ -487,3 +487,45 @@ def test_finalize_paths_expose_identical_run_and_artifact_contract(
         headers=outsider,
     )
     assert hidden_content.status_code == 404
+
+
+def test_active_artifact_is_plain_text_inline_and_attachment_on_download(
+    client,
+    monkeypatch,
+) -> None:
+    file_body = "<script>window.localStorage.clear()</script>"
+    _stub_provider(
+        monkeypatch,
+        f"已生成：\n```file:unsafe.html\n{file_body}\n```",
+    )
+    owner = _headers(client, "member-active-artifact")
+    task_id = _complete(
+        client,
+        owner,
+        conversation_id="conversation-active-artifact",
+        stream=False,
+    )
+
+    detail = client.get(f"/v1/tasks/{task_id}", headers=owner)
+    file_artifact = next(
+        item for item in detail.json()["artifacts"] if item["kind"] == "file"
+    )
+
+    content = client.get(
+        f"/v1/artifacts/{file_artifact['id']}/content",
+        headers=owner,
+    )
+    assert content.status_code == 200, content.text
+    assert content.text == file_body
+    assert content.headers["content-type"].startswith("text/plain")
+    assert content.headers["content-disposition"].startswith("inline;")
+    assert content.headers["x-content-type-options"] == "nosniff"
+
+    download = client.get(
+        f"/v1/artifacts/{file_artifact['id']}/content?download=true",
+        headers=owner,
+    )
+    assert download.status_code == 200, download.text
+    assert download.content == file_body.encode()
+    assert download.headers["content-type"].startswith("text/html")
+    assert download.headers["content-disposition"].startswith("attachment;")

@@ -655,7 +655,23 @@ async def get_artifact_content(
     filename = (artifact.title or f"{artifact.id}.txt").replace("\r", "").replace("\n", "")
     fallback = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._") or "artifact.txt"
     disposition = "attachment" if download else "inline"
-    media_type = mimetypes.guess_type(filename)[0] or "text/plain"
+    guessed_media_type = mimetypes.guess_type(filename)[0] or "text/plain"
+    safe_inline_media_types = {
+        "application/json",
+        "image/bmp",
+        "image/gif",
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "text/csv",
+        "text/markdown",
+        "text/plain",
+    }
+    media_type = (
+        guessed_media_type
+        if download or guessed_media_type in safe_inline_media_types
+        else "text/plain"
+    )
     return Response(
         content=(artifact.inline or "").encode("utf-8"),
         media_type=media_type,
@@ -663,7 +679,8 @@ async def get_artifact_content(
             "Content-Disposition": (
                 f'{disposition}; filename="{fallback}"; '
                 f"filename*=UTF-8''{quote(filename)}"
-            )
+            ),
+            "X-Content-Type-Options": "nosniff",
         },
     )
 
