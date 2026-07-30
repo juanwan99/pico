@@ -7,7 +7,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
@@ -334,42 +334,81 @@ async def get_change_for_principal(
     return row
 
 
+async def _transition_change(
+    session: AsyncSession,
+    principal: Principal,
+    change_id: str,
+    *,
+    target_status: str,
+) -> ChangeProposalRow:
+    transitioned_at = _utcnow()
+    values: dict[str, Any] = {"status": target_status}
+    if target_status == "confirmed":
+        values.update(
+            confirmed_at=transitioned_at,
+            confirmed_by=principal.membership_id,
+        )
+    result = await session.execute(
+        update(ChangeProposalRow)
+        .where(
+            ChangeProposalRow.id == change_id,
+            ChangeProposalRow.school_id == principal.school_id,
+            ChangeProposalRow.membership_id == principal.membership_id,
+            ChangeProposalRow.status == "proposed",
+        )
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        await session.rollback()
+        existing = await get_change_for_principal(session, principal, change_id)
+        if existing is None:
+            raise KeyError("not found")
+        raise ValueError(
+            f"cannot transition to {target_status} from status={existing.status}"
+        )
+
+    row = await session.get(ChangeProposalRow, change_id)
+    if row is None:
+        await session.rollback()
+        raise KeyError("not found")
+    action = "confirmed" if target_status == "confirmed" else "rejected"
+    history = json.loads(row.audit_json or "[]")
+    history.append(
+        {
+            "action": action,
+            "by": principal.membership_id,
+            "at": transitioned_at.isoformat(),
+        }
+    )
+    row.audit_json = json.dumps(history, ensure_ascii=False)
+    session.add(
+        AuditRow(
+            id=new_id(),
+            school_id=principal.school_id,
+            membership_id=principal.membership_id,
+            action=f"change.{action}",
+            subject_type="change_proposal",
+            subject_id=row.id,
+            detail_json=json.dumps({"title": row.title}, ensure_ascii=False),
+        )
+    )
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
 async def confirm_change(
     session: AsyncSession,
     principal: Principal,
     change_id: str,
 ) -> ChangeProposalRow:
-    row = await session.get(ChangeProposalRow, change_id)
-    if row is None or row.school_id != principal.school_id:
-        raise KeyError("not found")
-    if row.membership_id and row.membership_id != principal.membership_id:
-        raise KeyError("not found")
-    if row.status != "proposed":
-        raise ValueError(f"cannot confirm status={row.status}")
-    row.status = "confirmed"
-    row.confirmed_at = _utcnow()
-    row.confirmed_by = principal.membership_id
-    history = json.loads(row.audit_json or "[]")
-    history.append(
-        {
-            "action": "confirmed",
-            "by": principal.membership_id,
-            "at": row.confirmed_at.isoformat(),
-        }
+    row = await _transition_change(
+        session,
+        principal,
+        change_id,
+        target_status="confirmed",
     )
-    row.audit_json = json.dumps(history, ensure_ascii=False)
-    audit = AuditRow(
-        id=new_id(),
-        school_id=principal.school_id,
-        membership_id=principal.membership_id,
-        action="change.confirmed",
-        subject_type="change_proposal",
-        subject_id=row.id,
-        detail_json=json.dumps({"title": row.title}, ensure_ascii=False),
-    )
-    session.add(audit)
-    await session.commit()
-    await session.refresh(row)
 
     # Phase 3 optional push to edu Review queue — edu owns business write
     try:
@@ -430,36 +469,12 @@ async def reject_change(
     principal: Principal,
     change_id: str,
 ) -> ChangeProposalRow:
-    row = await session.get(ChangeProposalRow, change_id)
-    if row is None or row.school_id != principal.school_id:
-        raise KeyError("not found")
-    if row.membership_id and row.membership_id != principal.membership_id:
-        raise KeyError("not found")
-    if row.status != "proposed":
-        raise ValueError(f"cannot reject status={row.status}")
-    row.status = "rejected"
-    history = json.loads(row.audit_json or "[]")
-    history.append(
-        {
-            "action": "rejected",
-            "by": principal.membership_id,
-            "at": _utcnow().isoformat(),
-        }
+    return await _transition_change(
+        session,
+        principal,
+        change_id,
+        target_status="rejected",
     )
-    row.audit_json = json.dumps(history, ensure_ascii=False)
-    audit = AuditRow(
-        id=new_id(),
-        school_id=principal.school_id,
-        membership_id=principal.membership_id,
-        action="change.rejected",
-        subject_type="change_proposal",
-        subject_id=row.id,
-        detail_json=json.dumps({"title": row.title}, ensure_ascii=False),
-    )
-    session.add(audit)
-    await session.commit()
-    await session.refresh(row)
-    return row
 
 
 async def list_changes(

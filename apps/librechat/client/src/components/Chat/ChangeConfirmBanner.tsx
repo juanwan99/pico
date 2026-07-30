@@ -2,7 +2,7 @@
  * S7 minimal human confirm — list proposed changes; confirm / reject.
  * No school business write; audit only.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, X, FileWarning, Loader2, Plus } from 'lucide-react';
 import {
   confirmPicoChange,
@@ -23,8 +23,13 @@ export default function ChangeConfirmBanner({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const requestVersion = useRef(0);
+  const currentTaskId = useRef(taskId);
+  currentTaskId.current = taskId;
 
   const refresh = useCallback(async () => {
+    const requestedTaskId = taskId;
+    const version = ++requestVersion.current;
     if (!taskId) {
       setItems([]);
       setLoading(false);
@@ -34,26 +39,49 @@ export default function ChangeConfirmBanner({
     setError(null);
     try {
       const { changes } = await listPicoChanges({ taskId });
-      setItems(changes || []);
+      if (version !== requestVersion.current || currentTaskId.current !== requestedTaskId) {
+        return;
+      }
+      setItems((changes || []).filter((item) => item.task_id === requestedTaskId));
     } catch (e) {
+      if (version !== requestVersion.current || currentTaskId.current !== requestedTaskId) {
+        return;
+      }
       setError(e instanceof Error ? e.message : String(e));
       setItems([]);
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current && currentTaskId.current === requestedTaskId) {
+        setLoading(false);
+      }
     }
   }, [taskId]);
 
   useEffect(() => {
+    requestVersion.current += 1;
+    setItems([]);
+    setError(null);
+    setToast(null);
     void refresh();
     const id = window.setInterval(() => void refresh(), 8000);
-    return () => window.clearInterval(id);
+    return () => {
+      requestVersion.current += 1;
+      window.clearInterval(id);
+    };
   }, [refresh, taskId]);
 
   const onConfirm = async (id: string) => {
+    const item = items.find((candidate) => candidate.id === id);
+    if (!taskId || item?.task_id !== taskId || item.status !== 'proposed') {
+      setError('提案已切换或状态已更新，请刷新后重试');
+      return;
+    }
     setBusyId(id);
     setError(null);
     try {
       const { change } = await confirmPicoChange(id);
+      if (currentTaskId.current !== taskId) {
+        return;
+      }
       setToast(`已确认 ${change.id}（仅审计，不写学校业务库）`);
       await refresh();
     } catch (e) {
@@ -64,10 +92,18 @@ export default function ChangeConfirmBanner({
   };
 
   const onReject = async (id: string) => {
+    const item = items.find((candidate) => candidate.id === id);
+    if (!taskId || item?.task_id !== taskId || item.status !== 'proposed') {
+      setError('提案已切换或状态已更新，请刷新后重试');
+      return;
+    }
     setBusyId(id);
     setError(null);
     try {
       const { change } = await rejectPicoChange(id);
+      if (currentTaskId.current !== taskId) {
+        return;
+      }
       setToast(`已拒绝 ${change.id}`);
       await refresh();
     } catch (e) {
@@ -78,6 +114,10 @@ export default function ChangeConfirmBanner({
   };
 
   const onDemoPropose = async () => {
+    if (!taskId) {
+      setError('任务账本尚未就绪');
+      return;
+    }
     setBusyId('create');
     setError(null);
     try {
@@ -85,8 +125,11 @@ export default function ChangeConfirmBanner({
         title: '演示提案：更新班级备注',
         summary: 'S7 人确认路径演示。确认后只记审计，不会写入学校教务库。',
         payload: { demo: true, action: 'update_class_note', value: 'Pico 演示' },
-        task_id: taskId || undefined,
+        task_id: taskId,
       });
+      if (currentTaskId.current !== taskId) {
+        return;
+      }
       setToast(`已创建待确认提案 ${change.id}`);
       await refresh();
     } catch (e) {
@@ -168,7 +211,7 @@ export default function ChangeConfirmBanner({
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              {c.status === 'proposed' ? (
+              {c.status === 'proposed' && c.task_id === taskId ? (
                 <>
                   <button
                     type="button"

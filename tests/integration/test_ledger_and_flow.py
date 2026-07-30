@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import sys
 import time
@@ -19,6 +21,9 @@ os.environ["PICO_DATABASE_URL"] = "sqlite+aiosqlite:///./data/test-pico.db"
 os.environ["PICO_JWT_SECRET"] = "test-secret-at-least-32-bytes-long!!"
 os.environ["PICO_ENV"] = "development"
 
+from app import run_service
+from app.auth import Principal
+from app.db import AuditRow, ChangeProposalRow, init_db, session_factory
 from app.main import app
 
 
@@ -195,6 +200,76 @@ def test_change_task_filter_and_task_ownership(
         },
     )
     assert denied.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_change_terminal_transition_has_one_winner() -> None:
+    await init_db()
+
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read", "ai:confirm"],
+        iss="pico",
+        aud="pico-api",
+        exp=2_000_000_000,
+        raw={},
+    )
+    factory = session_factory()
+    async with factory() as session:
+        change = await run_service.create_change(
+            session,
+            principal,
+            title="single winner",
+            summary="confirm or reject",
+            payload={},
+        )
+        change_id = change.id
+
+    async def confirm():
+        async with factory() as session:
+            return await run_service.confirm_change(session, principal, change_id)
+
+    async def reject():
+        async with factory() as session:
+            return await run_service.reject_change(session, principal, change_id)
+
+    results = await asyncio.gather(confirm(), reject(), return_exceptions=True)
+    winners = [result for result in results if isinstance(result, ChangeProposalRow)]
+    losers = [result for result in results if isinstance(result, ValueError)]
+    assert len(winners) == 1
+    assert len(losers) == 1
+
+    async with factory() as session:
+        from sqlalchemy import select
+
+        stored = await session.get(ChangeProposalRow, change_id)
+        assert stored is not None
+        assert stored.status in {"confirmed", "rejected"}
+        history = [
+            item
+            for item in json.loads(stored.audit_json or "[]")
+            if item.get("action") in {"confirmed", "rejected"}
+        ]
+        assert len(history) == 1
+        assert history[0]["action"] == stored.status
+        assert bool(stored.confirmed_by) is (stored.status == "confirmed")
+        terminal_audits = list(
+            (
+                await session.execute(
+                    select(AuditRow).where(
+                        AuditRow.subject_id == change_id,
+                        AuditRow.action.in_(
+                            ("change.confirmed", "change.rejected")
+                        ),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(terminal_audits) == 1
+        assert terminal_audits[0].action == f"change.{stored.status}"
 
 
 def test_cancel_queued_run(client: TestClient, monkeypatch):
