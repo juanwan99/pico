@@ -87,11 +87,7 @@ const CHIPS: Chip[] = [
 
 const PLACEHOLDER = '今天帮你做些什么？ @ 引用对话文件，/ 调用技能与指令';
 
-export default function Landing({
-  centerFormOnLanding: _c,
-}: {
-  centerFormOnLanding: boolean;
-}) {
+export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLanding: boolean }) {
   const { user } = useAuthContext();
   const form = useOptionalChatFormContext();
   const { submitMessage } = useSubmitMessage();
@@ -109,7 +105,6 @@ export default function Landing({
   });
   const [expertBadge, setExpertBadge] = useState<string | null>(null);
   const [connectorBadge, setConnectorBadge] = useState<string | null>(null);
-
 
   const visibleChips = useMemo(() => CHIPS.filter((c) => c.scenes.includes(scene)), [scene]);
 
@@ -176,7 +171,7 @@ export default function Landing({
   const name = user?.name?.split(/\s+/)[0] || '';
 
   return (
-    <div className="pico-wb-landing flex w-full flex-col items-center px-6 pb-6 pt-14 sm:pt-20">
+    <div className="pico-wb-landing flex w-full flex-col items-center px-6 pb-6 pt-10 sm:pt-[156px]">
       <div className="flex w-full max-w-[797px] flex-col items-center">
         <h1 className="text-center text-[30px] font-semibold leading-none tracking-normal text-[#1a1a1a] sm:text-[34px] dark:text-text-primary">
           Pico，我帮你
@@ -235,127 +230,128 @@ export default function Landing({
         </div>
 
         {/* PIXEL composer card — matches reference input block */}
-        <div className="mt-5 w-full max-w-[720px]">
+        <div className="mt-5 w-full max-w-[797px]">
           <div
-            className="rounded-[20px] border border-black/[0.08] bg-white px-4 pb-3 pt-3.5 shadow-[0_8px_28px_rgba(15,23,42,0.07)]"
+            className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.05)]"
             data-testid="pico-wb-home-composer"
           >
-            <textarea
-              id="pico-wb-home-input"
-              value={text}
-              onChange={(e) => syncForm(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  sendTask();
-                }
-              }}
-              placeholder={PLACEHOLDER}
-              rows={3}
-              className="w-full resize-none border-0 bg-transparent text-[14px] leading-[1.55] text-[#1a1a1a] outline-none placeholder:text-[#a0a0a0]"
-            />
-            <div className="mt-1 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] hover:bg-black/[0.04]"
-                aria-label="添加"
-                onClick={() =>
-                  document.querySelector<HTMLButtonElement>('[data-testid="attach-file"]')?.click()
-                }
-              >
-                <Plus className="h-5 w-5" strokeWidth={1.75} />
-              </button>
-              <div className="flex items-center gap-1.5">
-                <div className="relative">
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center gap-1 rounded-full bg-[#f3f3f3] px-2.5 text-[12.5px] font-medium text-[#3d3d3d]"
-                    onClick={() => setModelOpen((v) => !v)}
-                  >
-                    {model}
-                    <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-                  </button>
-                  {modelOpen && (
-                    <div className="absolute bottom-full right-0 z-50 mb-2 w-52 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-lg">
-                      {['Auto', 'kimi-k2.6', 'Kimi-K3', 'pico-agent'].map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          className="flex w-full px-3 py-2 text-left text-[13px] hover:bg-[#f5f5f5]"
-                          onClick={() => {
-                            setModel(m);
-                            setModelOpen(false);
-                            setPicoModelMode(m);
-                          }}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+            <div className="min-h-[138px] px-4 pb-3 pt-3.5">
+              <textarea
+                id="pico-wb-home-input"
+                value={text}
+                onChange={(e) => syncForm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendTask();
+                  }
+                }}
+                placeholder={PLACEHOLDER}
+                rows={3}
+                className="w-full resize-none border-0 bg-transparent text-[14px] leading-[1.55] text-[#1a1a1a] outline-none placeholder:text-[#a0a0a0]"
+              />
+              <div className="mt-1 flex items-center justify-between gap-2">
                 <button
                   type="button"
                   className="flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] hover:bg-black/[0.04]"
-                  aria-label="语音"
+                  aria-label="添加"
+                  onClick={() =>
+                    document
+                      .querySelector<HTMLButtonElement>('[data-testid="attach-file"]')
+                      ?.click()
+                  }
                 >
-                  <Mic className="h-4 w-4" />
+                  <Plus className="h-5 w-5" strokeWidth={1.75} />
                 </button>
-                <button
-                  type="button"
-                  className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                    text.trim()
-                      ? 'bg-[#1a1a1a] text-white'
-                      : 'bg-[#e8e8e8] text-[#9a9a9a]',
-                  )}
-                  aria-label="发送"
-                  disabled={!text.trim()}
-                  onClick={() => sendTask()}
-                >
-                  <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center gap-1 rounded-full bg-[#f3f3f3] px-2.5 text-[12.5px] font-medium text-[#3d3d3d]"
+                      onClick={() => setModelOpen((v) => !v)}
+                    >
+                      {model}
+                      <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                    </button>
+                    {modelOpen && (
+                      <div className="absolute bottom-full right-0 z-50 mb-2 w-52 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-lg">
+                        {['Auto', 'kimi-k2.6', 'Kimi-K3', 'pico-agent'].map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            className="flex w-full px-3 py-2 text-left text-[13px] hover:bg-[#f5f5f5]"
+                            onClick={() => {
+                              setModel(m);
+                              setModelOpen(false);
+                              setPicoModelMode(m);
+                            }}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] hover:bg-black/[0.04]"
+                    aria-label="语音"
+                  >
+                    <Mic className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
+                      text.trim() ? 'bg-[#1a1a1a] text-white' : 'bg-[#e8e8e8] text-[#9a9a9a]',
+                    )}
+                    aria-label="发送"
+                    disabled={!text.trim()}
+                    onClick={() => sendTask()}
+                  >
+                    <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Under-card: 选择工作空间 + 默认权限 */}
-          <div className="mt-2.5 flex flex-wrap items-center gap-1">
-            <WorkspaceSelector />
-            <div className="relative">
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-[#6b6b6b] hover:bg-black/[0.04]"
-                onClick={() => setPermOpen((v) => !v)}
-              >
-                <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[9px] opacity-70">
-                  ✓
-                </span>
-                {fullAccess ? '完全访问' : '默认权限'}
-              </button>
-              {permOpen && (
-                <div className="absolute bottom-full left-0 z-50 mb-2 w-72 rounded-xl border border-black/[0.08] bg-white p-3 shadow-lg">
-                  <p className="text-[12.5px] leading-relaxed text-[#4a4a4a]">
-                    当前为默认权限，所有操作都会在安全沙箱约束内进行，超出范围会请求你的允许。
-                  </p>
-                  <label className="mt-3 flex items-center justify-between gap-2 text-[13px]">
-                    <span>允许完全访问</span>
-                    <input
-                      type="checkbox"
-                      checked={fullAccess}
-                      onChange={(e) => {
-                        setFullAccess(e.target.checked);
-                        try {
-                          localStorage.setItem(
-                            'pico:permissionMode',
-                            e.target.checked ? 'full' : 'default',
-                          );
-                        } catch {}
-                      }}
-                    />
-                  </label>
-                </div>
-              )}
+            <div className="flex min-h-10 flex-wrap items-center gap-1 border-t border-black/[0.06] px-3">
+              <WorkspaceSelector />
+              <div className="relative">
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-[#6b6b6b] hover:bg-black/[0.04]"
+                  onClick={() => setPermOpen((v) => !v)}
+                >
+                  <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[9px] opacity-70">
+                    ✓
+                  </span>
+                  {fullAccess ? '完全访问' : '默认权限'}
+                </button>
+                {permOpen && (
+                  <div className="absolute bottom-full left-0 z-50 mb-2 w-72 rounded-xl border border-black/[0.08] bg-white p-3 shadow-lg">
+                    <p className="text-[12.5px] leading-relaxed text-[#4a4a4a]">
+                      当前为默认权限，所有操作都会在安全沙箱约束内进行，超出范围会请求你的允许。
+                    </p>
+                    <label className="mt-3 flex items-center justify-between gap-2 text-[13px]">
+                      <span>允许完全访问</span>
+                      <input
+                        type="checkbox"
+                        checked={fullAccess}
+                        onChange={(e) => {
+                          setFullAccess(e.target.checked);
+                          try {
+                            localStorage.setItem(
+                              'pico:permissionMode',
+                              e.target.checked ? 'full' : 'default',
+                            );
+                          } catch {}
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

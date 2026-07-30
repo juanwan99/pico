@@ -104,13 +104,17 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const [resultOpen, setResultOpen] = useState(
     () => typeof window === 'undefined' || !window.matchMedia('(max-width: 1024px)').matches,
   );
-  const flatMessages = useMemo(() => chatHelpers.getMessages?.() ?? null, [chatHelpers, messagesTree, isSubmitting]);
-  const taskTitle = chatHelpers.conversation?.title && chatHelpers.conversation.title !== 'New Chat'
-    ? chatHelpers.conversation.title
-    : undefined;
+  const flatMessages = useMemo(
+    () => chatHelpers.getMessages?.() ?? null,
+    [chatHelpers, messagesTree, isSubmitting],
+  );
+  const taskTitle =
+    chatHelpers.conversation?.title && chatHelpers.conversation.title !== 'New Chat'
+      ? chatHelpers.conversation.title
+      : undefined;
   const ledger = usePicoTaskLedger(conversationId, isSubmitting);
   const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '等待模型响应' : undefined);
-  const showResultPanel = resultOpen && conversationId !== Constants.SEARCH;
+  const showResultPanel = resultOpen && !isLandingPage && conversationId !== Constants.SEARCH;
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1024px)');
@@ -172,7 +176,10 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     model={ledger.run?.model}
                     statusLabel={ledger.statusLabel}
                     completedLabel={
-                      !isSubmitting && ledger.statusLabel && (ledger.statusLabel.startsWith('已完成') || ledger.statusLabel.startsWith('失败'))
+                      !isSubmitting &&
+                      ledger.statusLabel &&
+                      (ledger.statusLabel.startsWith('已完成') ||
+                        ledger.statusLabel.startsWith('失败'))
                         ? ledger.statusLabel
                         : null
                     }
@@ -205,14 +212,16 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   <div
                     className={cn(
                       'w-full shrink-0',
-                      isLandingPage && 'relative z-10 w-full max-w-[797px] px-4 transition-all duration-200',
-                      !isLandingPage && 'border-t border-black/[0.04] bg-white dark:border-border-light dark:bg-surface-primary',
+                      isLandingPage &&
+                        'relative z-10 w-full max-w-[797px] px-4 transition-all duration-200',
+                      !isLandingPage &&
+                        'border-t border-black/[0.04] bg-white dark:border-border-light dark:bg-surface-primary',
                     )}
                   >
                     {isProjectLandingPage && project && <ProjectLandingChip project={project} />}
                     {/* Single submit path: Landing uses useSubmitMessage; ChatForm only when chatting */}
                     {!isLandingPage ? (
-                      <div className="mx-auto w-full max-w-3xl px-2">
+                      <div className="mx-auto w-full max-w-[797px] px-2">
                         <ChatForm index={index} placeholder={chatFormPlaceholder} />
                       </div>
                     ) : null}
@@ -227,7 +236,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     onClose={() => setResultOpen(false)}
                   />
                 ) : null}
-                {!resultOpen ? (
+                {!resultOpen && !isLandingPage ? (
                   <button
                     type="button"
                     className="absolute right-3 top-14 z-20 inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-[12px] font-medium shadow-sm dark:bg-surface-secondary"

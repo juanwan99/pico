@@ -91,8 +91,8 @@
 .t-icon-swap .t-icon {
   grid-area: 1 / 1;
   transition:
-    opacity   var(--icon-swap-dur) var(--icon-swap-ease),
-    filter    var(--icon-swap-dur) var(--icon-swap-ease),
+    opacity var(--icon-swap-dur) var(--icon-swap-ease),
+    filter var(--icon-swap-dur) var(--icon-swap-ease),
     transform var(--icon-swap-dur) var(--icon-swap-ease);
   will-change: opacity, filter, transform;
 }
@@ -3041,11 +3041,11 @@ html:not(.dark) .bg-surface-primary {
 }
 /* Main stage next to sidebar */
 .pico-wb-sidebar {
-  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
   border-right: 1px solid rgba(0, 0, 0, 0.04);
 }
 .pico-wb-landing {
-  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
 }
 .pico-wb-composer {
   min-height: 120px;
@@ -3061,7 +3061,7 @@ html:not(.dark) .pico-wb-composer textarea::placeholder {
 }
 /* Hide dense badge row noise on landing home */
 .pico-wb-landing + * .badge-row,
-.pico-wb-landing ~ * [data-testid="convo-options"] {
+.pico-wb-landing ~ * [data-testid='convo-options'] {
   /* keep functional */
 }
 
@@ -3080,14 +3080,12 @@ html:not(.dark) .pico-wb-composer textarea::placeholder {
 html:not(.dark) .pico-wb-composer {
   background: #ffffff !important;
   border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 12px 32px rgba(15, 23, 42, 0.08) !important;
-  min-height: 148px !important;
-  border-radius: 20px !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  min-height: 126px !important;
+  border-radius: 16px !important;
 }
 html:not(.dark) .pico-wb-composer textarea {
-  min-height: 72px !important;
+  min-height: 60px !important;
   font-size: 14px !important;
   color: #1a1a1a !important;
 }
@@ -3107,7 +3105,6 @@ html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
   color: #c8c8c8 !important;
 }
 
-
 /* ========== Pico WorkBuddy pixel tokens (clean-room · 2026-07-30) ========== */
 :root {
   --pico-wb-bg: #f5f5f5;
@@ -3116,10 +3113,10 @@ html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
   --pico-wb-ink: #1a1a1a;
   --pico-wb-muted: #8c8c8c;
   --pico-wb-line: rgba(0, 0, 0, 0.06);
-  --pico-wb-rail-w: 280px;
-  --pico-wb-result-w: 340px;
-  --pico-wb-composer-r: 20px;
-  --pico-wb-font: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  --pico-wb-rail-w: 264px;
+  --pico-wb-result-w: 316px;
+  --pico-wb-composer-r: 16px;
+  --pico-wb-font: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
 }
 .pico-result-panel {
   font-family: var(--pico-wb-font);
@@ -3145,8 +3142,8 @@ html:not(.dark) .pico-wb-stage {
   background: var(--pico-wb-bg) !important;
 }
 /* Message stream: airy WorkBuddy center */
-html:not(.dark) .pico-wb-stage + * ,
-html:not(.dark) [data-testid="task-run-bar"] + * {
+html:not(.dark) .pico-wb-stage + *,
+html:not(.dark) [data-testid='task-run-bar'] + * {
   /* keep */
 }
 html:not(.dark) .pico-result-panel {

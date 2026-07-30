@@ -12,13 +12,17 @@ import { cn } from '~/utils';
 import store from '~/store';
 
 const COLLAPSED_WIDTH = 52;
-const EXPANDED_MIN = 280; // WorkBuddy-class rail
+const EXPANDED_MIN = 264;
 const TRANSITION_MS = 300;
 const EASING = 'cubic-bezier(0.2, 0, 0, 1)';
 
 function getInitialWidth(): number {
   const saved = localStorage.getItem('side:width');
-  return saved ? Math.max(Number(saved), EXPANDED_MIN) : EXPANDED_MIN;
+  const parsed = Number(saved);
+  if (!Number.isFinite(parsed) || parsed <= 280) {
+    return EXPANDED_MIN;
+  }
+  return Math.max(parsed, EXPANDED_MIN);
 }
 
 /**
@@ -29,7 +33,9 @@ function getInitialWidth(): number {
  */
 function SidebarChatProvider({ children }: { children: ReactNode }) {
   const chatHelpers = useChatHelpers(0);
-  const sidebarFormMethods = useForm<ChatFormValues>({ defaultValues: { text: '' } });
+  const sidebarFormMethods = useForm<ChatFormValues>({
+    defaultValues: { text: '' },
+  });
   return (
     <ChatFormProvider {...sidebarFormMethods}>
       <ChatContext.Provider value={chatHelpers}>{children}</ChatContext.Provider>
@@ -43,7 +49,10 @@ function UnifiedSidebar() {
   const [expanded, setExpanded] = useRecoilState(store.sidebarExpanded);
   const [sidebarWidth, setSidebarWidth] = useState(getInitialWidth);
   const [isResizing, setIsResizing] = useState(false);
-  const resizeHandlers = useRef<{ move: (e: MouseEvent) => void; up: () => void } | null>(null);
+  const resizeHandlers = useRef<{
+    move: (e: MouseEvent) => void;
+    up: () => void;
+  } | null>(null);
 
   const links = useUnifiedSidebarLinks();
 
