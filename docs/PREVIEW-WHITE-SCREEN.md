@@ -145,3 +145,8 @@ It looks like you are trying to access MongoDB over HTTP on the native driver po
 - **:27017** runs `scripts/mongo-port-http-shield.py` → reverse-proxy HTTP to **:8080**
 - So if Live Preview still mis-pins 27017, user gets **product HTML**, not the Mongo English sentence
 - Still prefer pin control `{"port":8080}`; shield is safety net only
+
+
+## 用户看得见：走公网部署
+
+见 [`docs/DEPLOY-PUBLIC.md`](./DEPLOY-PUBLIC.md) 与 `scripts/publish-tunnel.sh`（Cloudflare quick tunnel）。
