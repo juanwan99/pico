@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from app.main import app  # noqa: E402
-from pico_orchestrator.runner import RunResult  # noqa: E402
+from app.main import app
+from pico_orchestrator.runner import RunResult
 
 
 @pytest.fixture()

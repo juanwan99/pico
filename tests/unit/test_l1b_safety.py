@@ -13,10 +13,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from app.main import app  # noqa: E402
-from app.auth import scope_proxy_principal  # noqa: E402
-from app.openai_compat import _dev_proxy_keys, _principal_from_auth  # noqa: E402
-from app.settings import Settings  # noqa: E402
+from app.auth import scope_proxy_principal
+from app.main import app
+from app.openai_compat import _dev_proxy_keys, _principal_from_auth
+from app.settings import Settings
 
 
 def test_dev_proxy_keys_never_include_model_or_jwt_secret() -> None:
