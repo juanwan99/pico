@@ -109,7 +109,7 @@ docker compose -f docker-compose.product.yml up -d --build
 
 ## 路径 C — 合 main 后机房形态
 
-见 `docs/DEPLOY-AND-PRICING.md`；商业定价未 FIXED。
+见 `docs/archive/DEPLOY-AND-PRICING.md`；商业定价未 FIXED。
 
 ---
 
@@ -145,4 +145,4 @@ bash scripts/vps-apply-kimi-key.sh
 
 ## 调查结果真源
 
-Codex 生产部署调查整理见 **[docs/CODEX-VPS-INVESTIGATION.md](./CODEX-VPS-INVESTIGATION.md)**（后续任务先读）。
+Codex 生产部署调查整理见 **[docs/archive/CODEX-VPS-INVESTIGATION.md](./archive/CODEX-VPS-INVESTIGATION.md)**（后续任务先读）。

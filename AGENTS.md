@@ -60,11 +60,15 @@ Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
 ## Corrected goals snapshot
 
-Owner-aligned goals + purged wrong memories: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
+Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 
-Live engineering calibration (branch tip, S1–S8, stale-doc index): [`docs/CALIBRATION-NOW.md`](docs/CALIBRATION-NOW.md).
+**Doc index (truth order):** [`docs/README.md`](docs/README.md) — prefer GitHub over prose.
 
-Execution blueprint (W0–W4): [`docs/ORCHESTRATION-PLAN.md`](docs/ORCHESTRATION-PLAN.md).
+**Current plan:** [`docs/PARALLEL-SPRINT-PLAN.md`](docs/PARALLEL-SPRINT-PLAN.md) (BINDING-v2).  
+**Skill ADR:** [`docs/ADR-SKILL-CATALOG.md`](docs/ADR-SKILL-CATALOG.md).  
+**Completed foundation sprint:** [`docs/SPRINT-3DAY-PUSH.md`](docs/SPRINT-3DAY-PUSH.md) (COMPLETED).
+
+Do **not** use `docs/archive/**` or new HANDOFF markdown as task truth.
 
 ## Product rules
 

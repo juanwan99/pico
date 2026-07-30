@@ -229,7 +229,16 @@ PR/Issue 评论模板：
 
 ---
 
-## 11. 明确不做（防假 OneFlow）
+## 11. 文档与真源（防交接污染）
+
+1. **任务进度与证据只写在 GitHub**（PR 描述/评论、`CANDIDATE`、`DEPLOYED`、Actions）。  
+2. **禁止**新增 `HANDOFF*.md`、浪潮窗记、或「唯一必读交接」长文当跨窗状态。  
+3. 计划/夜卡 MD 若入库：必须经 PR；**勾选 ≠ 完成**，完成 = MERGED（+ 需要时 DEPLOYED）。  
+4. 过时叙述进 `docs/archive/`；索引见 `docs/README.md`。  
+5. 辅助脚本与本地笔记 **不是** 权威。
+
+## 12. 明确不做（防假 OneFlow）
+
 
 - 在 pico 假装已有 edu 级 GHCR→UAT→prod 全自动（未建前写「目标」即可）  
 - 用聊天当唯一状态源  
@@ -239,7 +248,7 @@ PR/Issue 评论模板：
 
 ---
 
-## 12. 启用声明
+## 13. 启用声明
 
 自本文件 BINDING v1.0 起：
 

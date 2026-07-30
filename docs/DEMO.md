@@ -10,7 +10,7 @@ STATUS: 演示说明（非 PASS 证书）
 ```
 
 > 过时句（NextChat / make product :8000）已废。启动以 `scripts/run-product.sh` / `startup.sh` 为准。  
-> 全景：`docs/CALIBRATION-NOW.md` · 总控：`docs/ORCHESTRATION-PLAN.md`
+> 全景：`docs/archive/CALIBRATION-NOW.md` · 总控：`docs/archive/ORCHESTRATION-PLAN.md`
 
 ---
 
@@ -79,7 +79,7 @@ curl -sS -H 'Authorization: Bearer sk-pico-dev' -H 'X-Pico-Membership-Id: demo' 
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/api/pico/v1/tasks
 ```
 
-主路径勾选清单：`docs/REGRESSION-MAINPATH.md` · 最近实跑：`docs/REGRESSION-MAINPATH-RUN.md`
+主路径勾选清单：`docs/archive/REGRESSION-MAINPATH.md` · 最近实跑：`docs/REGRESSION-MAINPATH-RUN.md`
 
 ---
 

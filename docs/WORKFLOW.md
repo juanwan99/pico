@@ -4,7 +4,7 @@
 DOC: docs/WORKFLOW.md
 STATUS: BINDING v0.3
 SOURCE: edu-cloud AGENTS.md 内核吸收 + pico 边界改写
-COMPARE: docs/WORKFLOW-COMPARE-EDU.md
+COMPARE: docs/archive/WORKFLOW-COMPARE-EDU.md
 VERSIONING: docs/VERSIONING.md
 REPO: juanwan99/pico ONLY
 ```

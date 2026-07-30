@@ -4,7 +4,9 @@
 
 ## 目标（校正）
 
-详见 **[docs/CORRECTED-GOALS.md](docs/CORRECTED-GOALS.md)** · 计划 **[docs/MVP-3DAY.md](docs/MVP-3DAY.md) v1.2** · 规则 **[AGENTS.md](AGENTS.md)**
+详见 **[docs/README.md](docs/README.md)**（文档真源索引）· **[docs/CORRECTED-GOALS.md](docs/CORRECTED-GOALS.md)** · **[docs/MVP-3DAY.md](docs/MVP-3DAY.md) v1.2** · **[AGENTS.md](AGENTS.md)**
+
+任务进度与证据以 **GitHub PR/SHA/CI** 为准（[OneFlow](docs/ONEFLOW.md)）；勿用交接 MD。
 
 | | |
 |--|--|

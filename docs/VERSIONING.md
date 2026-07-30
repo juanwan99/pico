@@ -80,7 +80,7 @@ AI 账本    = Pico DB 内 Task/Run/Event（非 edu 业务真源）
 
 | 文档类型 | 规则 |
 |----------|------|
-| `STATUS: FIXED` | 改内容必须 **升 VERSION**（如 v1.2 → v1.3），并在 HANDOFF/PR 说明 |
+| `STATUS: FIXED` | 改内容必须 **升 VERSION**（如 v1.2 → v1.3），并在 PR 说明 |
 | `STATUS: DRAFT` | 可迭代；**不得**冒充 FIXED 约束工程 |
 | 商业定价 | **未 FIXED 前** 不锁死汇率/个人钱包自动付校务（业主 REVISE） |
 | 工作流本文 | 变更须替换旧句，禁止堆叠冲突层（edu 同款） |

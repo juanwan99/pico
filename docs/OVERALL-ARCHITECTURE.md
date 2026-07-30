@@ -7,8 +7,8 @@ SCALE: 起步 10 校 × ~100 教师 ≈ 1000 席位
 RELATED:
   - docs/SCOPE.md
   - docs/ARCHITECTURE.md（层简述）
-  - docs/DEPLOY-AND-PRICING.md（部署/收费讨论底稿）
-  - docs/UNDERLYING-AGENT.md
+  - docs/archive/DEPLOY-AND-PRICING.md（部署/收费讨论底稿）
+  - docs/archive/UNDERLYING-AGENT.md
   - docs/PHASE2-CONTRACTS.md / PHASE3-INTEGRATION.md
 DATE: 2026-07-29
 ```
