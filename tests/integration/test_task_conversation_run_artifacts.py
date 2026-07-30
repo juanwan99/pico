@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -13,8 +14,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from app.main import app
-from pico_orchestrator.runner import RunResult
+from app.main import app  # noqa: E402
+from app.auth import issue_test_token  # noqa: E402
+from app.db import RunRow, TaskRow, init_db, session_factory  # noqa: E402
+from app.openai_compat import ChatCompletionRequest, ChatMessage, chat_completions  # noqa: E402
+from app.settings import Settings, get_settings  # noqa: E402
+from pico_orchestrator.runner import RunResult  # noqa: E402
 
 
 @pytest.fixture()
@@ -227,6 +232,73 @@ def test_non_stream_agent_reuses_one_run_and_preserves_failure(client, monkeypat
     assert len(run_rows) == 1
     assert run_rows[0]["status"] == "failed"
     assert run_rows[0]["error"] == "provider unavailable"
+
+
+@pytest.mark.asyncio
+async def test_direct_stream_aclose_finalizes_run_as_cancelled(tmp_path, monkeypatch) -> None:
+    db = tmp_path / "stream-aclose.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+    monkeypatch.setenv("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
+    monkeypatch.setenv("PICO_ENV", "development")
+
+    from app import db as dbmod
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+    settings = Settings()
+
+    async def slow_stream(*_args, **_kwargs) -> AsyncIterator[str]:
+        yield "partial"
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr("pico_orchestrator.provider.stream_chat", slow_stream)
+    token = issue_test_token(
+        school_id="school-a",
+        membership_id="member-stream-close",
+        settings=settings,
+    )
+    response = await chat_completions(
+        ChatCompletionRequest(
+            model="test-direct-model",
+            stream=True,
+            messages=[
+                ChatMessage(
+                    role="user",
+                    content="【Pico-Convo:conversation-stream-close】hello",
+                )
+            ],
+        ),
+        authorization=f"Bearer {token}",
+        x_conversation_id=None,
+        x_workspace_id=None,
+        x_pico_membership_id=None,
+        settings=settings,
+    )
+
+    iterator = response.body_iterator
+    await anext(iterator)
+    partial = await anext(iterator)
+    assert b"partial" in partial
+    await iterator.aclose()
+
+    factory = session_factory()
+    async with factory() as session:
+        from sqlalchemy import select
+
+        task = (
+            await session.execute(
+                select(TaskRow).where(
+                    TaskRow.conversation_id == "conversation-stream-close"
+                )
+            )
+        ).scalar_one()
+        run = (
+            await session.execute(select(RunRow).where(RunRow.task_id == task.id))
+        ).scalar_one()
+        assert run.status == "cancelled"
+        assert run.error == "stream disconnected"
 
 
 @pytest.mark.parametrize("stream", [False, True], ids=["non-stream", "stream"])

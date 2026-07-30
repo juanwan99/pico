@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -537,6 +538,7 @@ async def chat_completions(
             if project_instruction:
                 system = system + "\n【项目约束】" + project_instruction
             parts: list[str] = []
+            finalized = False
             try:
                 async for piece in stream_chat(
                     prompt,
@@ -555,16 +557,37 @@ async def chat_completions(
                     task_id=task_id,
                     user_prompt=prompt,
                 )
+                finalized = True
+            except (asyncio.CancelledError, GeneratorExit):
+                await asyncio.shield(
+                    _finalize_run(
+                        run_id,
+                        status="cancelled",
+                        error="stream disconnected",
+                        task_id=task_id,
+                    )
+                )
+                finalized = True
+                raise
             except Exception as e:  # noqa: BLE001
                 yield chunk({"content": f"【错误】{user_message_for_error(str(e))}"})
                 await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
+                finalized = True
+            finally:
+                if not finalized:
+                    await asyncio.shield(
+                        _finalize_run(
+                            run_id,
+                            status="cancelled",
+                            error="stream disconnected",
+                            task_id=task_id,
+                        )
+                    )
             yield chunk({}, finish="stop")
             yield b"data: [DONE]\n\n"
             return
 
         # pico-agent: progressive deltas from agent loop (not wait-then-fake-chunk)
-        import asyncio
-
         from pico_orchestrator.runner import RunCaps, run_agent_loop
 
         from app.db import init_db
@@ -641,11 +664,28 @@ async def chat_completions(
                     user_prompt=prompt,
                 )
                 await q.put(("done", result))
+            except asyncio.CancelledError:
+                await asyncio.shield(
+                    _finalize_run(
+                        run_id,
+                        status="cancelled",
+                        error="stream disconnected",
+                        task_id=task_id,
+                    )
+                )
+                raise
             except Exception as e:  # noqa: BLE001
+                await _finalize_run(
+                    run_id,
+                    status="failed",
+                    error=str(e),
+                    task_id=task_id,
+                )
                 await q.put(("error", e))
 
         task = asyncio.create_task(run())
         saw_text = False
+        interrupted = False
         try:
             while True:
                 kind, payload = await q.get()
@@ -670,6 +710,7 @@ async def chat_completions(
                     break
         finally:
             if not task.done():
+                interrupted = True
                 task.cancel()
             try:
                 await task
@@ -678,6 +719,15 @@ async def chat_completions(
             except Exception as wait_err:  # noqa: BLE001
                 # runner already reported; avoid breaking the SSE trailer
                 _ = wait_err
+            if interrupted:
+                await asyncio.shield(
+                    _finalize_run(
+                        run_id,
+                        status="cancelled",
+                        error="stream disconnected",
+                        task_id=task_id,
+                    )
+                )
 
         yield chunk({}, finish="stop")
         yield b"data: [DONE]\n\n"
