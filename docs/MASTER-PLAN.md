@@ -8,6 +8,7 @@ REPO: juanwan99/pico ONLY
 PLAN_LAW: docs/MVP-3DAY.md v1.2 FIXED（无业主授权不升 v1.3）
 BRANCH: grok/pico-preview-librechat-p0 → main（CANDIDATE · 不自 PASS · 值守合）
 RELATED:
+  - docs/ONEFLOW.md（执行操作系统）
   - docs/CORRECTED-GOALS.md
   - docs/MVP-3DAY.md
   - docs/PHASE2-CONTRACTS.md / docs/PHASE3-INTEGRATION.md
@@ -207,6 +208,10 @@ CANDIDATE + 40字 SHA → CI 全绿 → 独立审查 → 值守合 main
 ---
 
 ## 5. 工作流与角色
+
+**操作系统：** 自 2026-07-30 起默认走 **Pico OneFlow** — [`docs/ONEFLOW.md`](./ONEFLOW.md)  
+（CANDIDATE→CI→审查→MERGED→DEPLOYED 闭环；禁止 CI 红合 main。）
+
 
 | 角色 | 职责 |
 |------|------|

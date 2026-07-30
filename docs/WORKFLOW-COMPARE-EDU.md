@@ -133,3 +133,15 @@ PICO_TARGET: docs/WORKFLOW.md + AGENTS.md
 ## 版本管理补记
 
 详见 [`VERSIONING.md`](./VERSIONING.md)：门禁/SHA **已吸收**；OneFlow/生产 digest **未照搬**；运行自证 **约定中**。
+
+
+---
+
+## 4. 2026-07-30 更新：OneFlow 已适配落地
+
+| 原结论 | 更新 |
+|--------|------|
+| pico 无 OneFlow | **有** — `docs/ONEFLOW.md` BINDING v1.0（适配版） |
+| 合 main ≠ 生产 | **仍成立**，但强制 **阶段 A 部署闭环**（health.git_sha + DEPLOYED 评论） |
+| 拒绝 edu 端口 | **仍拒绝** 1908x/mcu/ECS 照抄 |
+| 吸收内核 | 角色/CANDIDATE/CI/审查/用户只定目标 — **保留并写进 ONEFLOW** |

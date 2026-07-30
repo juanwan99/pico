@@ -4,7 +4,7 @@
 DOC: docs/VERSIONING.md
 STATUS: BINDING v1.0
 SOURCE: edu-cloud AGENTS + SYSTEM-REQUIREMENT 中「版本/交付」内核
-NOT_COPIED: OneFlow、UAT 19080、mcu.asia、生产 compose digest 轨（pico 暂无对等发布）
+ADAPTED: docs/ONEFLOW.md（Pico OneFlow）；未抄 edu 19080/mcu/ECS
 RELATED: docs/WORKFLOW.md · AGENTS.md · docs/MVP-3DAY.md
 ```
 
@@ -17,10 +17,11 @@ RELATED: docs/WORKFLOW.md · AGENTS.md · docs/MVP-3DAY.md
 | **Agent/依赖钉版本** | **是**（产品层） | D1 freeze + `check_agent_pin` |
 | **计划/合同文档 FIXED 升版** | **是** | MVP-3DAY v1.2 等；禁静默改计划 |
 | **运行体自证**（代码 SHA + 健康） | **部分** | `/health` 有；缺统一 `/v1/meta/version` 字段约定 → **本文补齐约定** |
-| **OneFlow / UAT·生产 digest 发布** | **否（刻意）** | pico 当前无对等发布轨；合 main ≠ 自动生产 |
+| **OneFlow 工作流 + 阶段 A 发布闭环** | **是（适配）** | `ONEFLOW.md`；合 main 后 prod-update + health 自证 |
+| **GHCR digest 全自动 UAT→prod（阶段 B）** | **否（后置）** | 未建前不得声称已有 |
 | **edu 业务库 revision / 迁移链** | **否** | 业务真源在 edu；Pico 只管 AI 账本 |
 
-**结论：** 与 edu **同一工作模式下的版本门禁已吸收**；**发布工程**按 pico 边界改写，不假装有 OneFlow。
+**结论：** 与 edu **同一 OneFlow 工作模式**已吸收为 `docs/ONEFLOW.md`；发布为 **阶段 A 闭环**（SHA+热更新），阶段 B digest 轨后置。
 
 ---
 
