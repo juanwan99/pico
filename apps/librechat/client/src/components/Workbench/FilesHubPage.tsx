@@ -16,7 +16,12 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { getPicoTask, listPicoTasks, type PicoArtifact } from '~/data-provider/pico/api';
+import {
+  getPicoArtifactContent,
+  getPicoTask,
+  listPicoTasks,
+  type PicoArtifact,
+} from '~/data-provider/pico/api';
 import WorkbenchShell from './WorkbenchShell';
 import { cn } from '~/utils';
 
@@ -207,11 +212,13 @@ export default function FilesHubPage() {
     [rows, selectedKey],
   );
 
-  const downloadFile = (row: Row) => {
-    if (typeof row.inline !== 'string') {
+  const downloadFile = async (row: Row) => {
+    let blob: Blob;
+    try {
+      blob = await getPicoArtifactContent(row.id, true);
+    } catch {
       return;
     }
-    const blob = new Blob([row.inline], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -393,7 +400,7 @@ export default function FilesHubPage() {
                     {typeof selected.inline === 'string' ? (
                       <button
                         type="button"
-                        onClick={() => downloadFile(selected)}
+                        onClick={() => void downloadFile(selected)}
                         className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-black/[0.08] px-2.5 text-[11.5px] text-[#444] hover:bg-black/[0.04]"
                       >
                         <Download className="h-3.5 w-3.5" />

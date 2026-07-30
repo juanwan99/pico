@@ -461,6 +461,23 @@ async def list_artifacts_for_task(
     return list(result.scalars().all())
 
 
+async def get_artifact_for_principal(
+    session: AsyncSession,
+    artifact_id: str,
+    principal: Principal,
+) -> ArtifactRow | None:
+    result = await session.execute(
+        select(ArtifactRow)
+        .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+        .where(
+            ArtifactRow.id == artifact_id,
+            TaskRow.school_id == principal.school_id,
+            TaskRow.membership_id == principal.membership_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def demo_cross_school_deny(
     session: AsyncSession, principal: Principal
 ) -> dict[str, Any]:

@@ -231,6 +231,8 @@ async def append_event(
     run_id: str,
     event_type: str,
     payload: dict[str, Any],
+    *,
+    commit: bool = True,
 ) -> EventRow:
     result = await session.execute(
         select(EventRow.seq).where(EventRow.run_id == run_id).order_by(EventRow.seq.desc()).limit(1)
@@ -245,6 +247,9 @@ async def append_event(
         payload_json=json.dumps(payload, ensure_ascii=False),
     )
     session.add(row)
-    await session.commit()
+    if commit:
+        await session.commit()
+    else:
+        await session.flush()
     await session.refresh(row)
     return row

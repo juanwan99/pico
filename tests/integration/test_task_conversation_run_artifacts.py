@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -13,7 +14,24 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+from app.auth import issue_test_token
+from app.db import (
+    ArtifactRow,
+    EventRow,
+    RunRow,
+    TaskRow,
+    init_db,
+    new_id,
+    session_factory,
+)
 from app.main import app
+from app.openai_compat import (
+    ChatCompletionRequest,
+    ChatMessage,
+    _finalize_run,
+    chat_completions,
+)
+from app.settings import Settings, get_settings
 from pico_orchestrator.runner import RunResult
 
 
@@ -229,6 +247,172 @@ def test_non_stream_agent_reuses_one_run_and_preserves_failure(client, monkeypat
     assert run_rows[0]["error"] == "provider unavailable"
 
 
+@pytest.mark.asyncio
+async def test_direct_stream_aclose_finalizes_run_as_cancelled(tmp_path, monkeypatch) -> None:
+    db = tmp_path / "stream-aclose.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+    monkeypatch.setenv("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
+    monkeypatch.setenv("PICO_ENV", "development")
+
+    from app import db as dbmod
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+    settings = Settings()
+
+    async def slow_stream(*_args, **_kwargs) -> AsyncIterator[str]:
+        yield "partial"
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr("pico_orchestrator.provider.stream_chat", slow_stream)
+    token = issue_test_token(
+        school_id="school-a",
+        membership_id="member-stream-close",
+        settings=settings,
+    )
+    response = await chat_completions(
+        ChatCompletionRequest(
+            model="test-direct-model",
+            stream=True,
+            messages=[
+                ChatMessage(
+                    role="user",
+                    content="【Pico-Convo:conversation-stream-close】hello",
+                )
+            ],
+        ),
+        authorization=f"Bearer {token}",
+        x_conversation_id=None,
+        x_workspace_id=None,
+        x_pico_membership_id=None,
+        settings=settings,
+    )
+
+    iterator = response.body_iterator
+    await anext(iterator)
+    partial = await anext(iterator)
+    assert b"partial" in partial
+    await iterator.aclose()
+
+    factory = session_factory()
+    async with factory() as session:
+        from sqlalchemy import select
+
+        task = (
+            await session.execute(
+                select(TaskRow).where(
+                    TaskRow.conversation_id == "conversation-stream-close"
+                )
+            )
+        ).scalar_one()
+        run = (
+            await session.execute(select(RunRow).where(RunRow.task_id == task.id))
+        ).scalar_one()
+        assert run.status == "cancelled"
+        assert run.error == "stream disconnected"
+
+
+@pytest.mark.asyncio
+async def test_finalize_is_idempotent_and_terminal_status_is_sticky(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    db = tmp_path / "finalize-idempotent.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+
+    from app import db as dbmod
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+
+    task_id = new_id()
+    run_id = new_id()
+    factory = session_factory()
+    async with factory() as session:
+        session.add(
+            TaskRow(
+                id=task_id,
+                school_id="school-a",
+                membership_id="member-finalize-idempotent",
+                title="idempotent",
+            )
+        )
+        session.add(
+            RunRow(
+                id=run_id,
+                task_id=task_id,
+                status="running",
+                prompt="创建 stable.txt",
+                model="test-direct-model",
+            )
+        )
+        await session.commit()
+
+    final_text = "done\n```file:stable.txt\nstable body\n```"
+    await _finalize_run(
+        run_id,
+        status="succeeded",
+        final_text=final_text,
+        task_id=task_id,
+    )
+    await _finalize_run(
+        run_id,
+        status="succeeded",
+        final_text=final_text,
+        task_id=task_id,
+    )
+    await _finalize_run(
+        run_id,
+        status="failed",
+        error="late failure",
+        task_id=task_id,
+    )
+
+    async with factory() as session:
+        from sqlalchemy import select
+
+        run = await session.get(RunRow, run_id)
+        assert run is not None
+        assert run.status == "succeeded"
+        assert run.error is None
+        assert run.ended_at is not None
+
+        artifacts = list(
+            (
+                await session.execute(
+                    select(ArtifactRow).where(ArtifactRow.run_id == run_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert {(row.kind, row.title) for row in artifacts} == {
+            ("file", "stable.txt"),
+            ("doc", "回复摘要"),
+        }
+
+        artifact_events = list(
+            (
+                await session.execute(
+                    select(EventRow).where(
+                        EventRow.run_id == run_id,
+                        EventRow.type == "artifact.created",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(artifact_events) == 2
+        assert {event.payload["artifact_id"] for event in artifact_events} == {
+            artifact.id for artifact in artifacts
+        }
+
+
 @pytest.mark.parametrize("stream", [False, True], ids=["non-stream", "stream"])
 def test_finalize_paths_expose_identical_run_and_artifact_contract(
     client,
@@ -260,6 +444,23 @@ def test_finalize_paths_expose_identical_run_and_artifact_contract(
     assert file_artifact["inline"] == file_body
     assert file_artifact["run_id"]
 
+    content = client.get(
+        f"/v1/artifacts/{file_artifact['id']}/content",
+        headers=owner,
+    )
+    assert content.status_code == 200, content.text
+    assert content.text == file_body
+    assert content.headers["content-type"].startswith("text/csv")
+    assert content.headers["content-disposition"].startswith("inline;")
+
+    download = client.get(
+        f"/v1/artifacts/{file_artifact['id']}/content?download=true",
+        headers=owner,
+    )
+    assert download.status_code == 200, download.text
+    assert download.content == file_body.encode()
+    assert download.headers["content-disposition"].startswith("attachment;")
+
     runs = client.get(f"/v1/tasks/{task_id}/runs", headers=owner)
     assert runs.status_code == 200, runs.text
     run_rows = runs.json()["runs"]
@@ -281,3 +482,50 @@ def test_finalize_paths_expose_identical_run_and_artifact_contract(
     outsider = _headers(client, f"outsider-{stream}")
     hidden = client.get(f"/v1/tasks/{task_id}", headers=outsider)
     assert hidden.status_code == 404
+    hidden_content = client.get(
+        f"/v1/artifacts/{file_artifact['id']}/content",
+        headers=outsider,
+    )
+    assert hidden_content.status_code == 404
+
+
+def test_active_artifact_is_plain_text_inline_and_attachment_on_download(
+    client,
+    monkeypatch,
+) -> None:
+    file_body = "<script>window.localStorage.clear()</script>"
+    _stub_provider(
+        monkeypatch,
+        f"已生成：\n```file:unsafe.html\n{file_body}\n```",
+    )
+    owner = _headers(client, "member-active-artifact")
+    task_id = _complete(
+        client,
+        owner,
+        conversation_id="conversation-active-artifact",
+        stream=False,
+    )
+
+    detail = client.get(f"/v1/tasks/{task_id}", headers=owner)
+    file_artifact = next(
+        item for item in detail.json()["artifacts"] if item["kind"] == "file"
+    )
+
+    content = client.get(
+        f"/v1/artifacts/{file_artifact['id']}/content",
+        headers=owner,
+    )
+    assert content.status_code == 200, content.text
+    assert content.text == file_body
+    assert content.headers["content-type"].startswith("text/plain")
+    assert content.headers["content-disposition"].startswith("inline;")
+    assert content.headers["x-content-type-options"] == "nosniff"
+
+    download = client.get(
+        f"/v1/artifacts/{file_artifact['id']}/content?download=true",
+        headers=owner,
+    )
+    assert download.status_code == 200, download.text
+    assert download.content == file_body.encode()
+    assert download.headers["content-type"].startswith("text/html")
+    assert download.headers["content-disposition"].startswith("attachment;")

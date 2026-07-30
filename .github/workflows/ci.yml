@@ -42,6 +42,9 @@ jobs:
       - name: Unit tests
         run: pytest -q tests/unit
 
+      - name: Integration tests
+        run: pytest -q tests/integration
+
       - name: Model hello (optional — honest BLOCKED without secret)
         env:
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}

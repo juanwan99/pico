@@ -23,7 +23,7 @@ import {
   Search,
 } from 'lucide-react';
 import type { TMessage } from 'librechat-data-provider';
-import type { PicoArtifact } from '~/data-provider/pico/api';
+import { getPicoArtifactContent, type PicoArtifact } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
 
 type TopView = 'overview' | 'files' | 'browser';
@@ -35,6 +35,7 @@ type ArtifactItem = {
   kind: 'txt' | 'file' | 'other';
   url?: string;
   body?: string;
+  picoArtifact?: boolean;
 };
 
 function formatSize(n?: number): string {
@@ -146,6 +147,7 @@ export default function ResultPanel({
         kind: (a.title || '').toLowerCase().endsWith('.txt') ? ('txt' as const) : ('file' as const),
         url: undefined as string | undefined,
         body: a.inline,
+        picoArtifact: true,
       }));
     }
     return messageArts;
@@ -174,7 +176,7 @@ export default function ResultPanel({
     return artifacts.filter((a) => a.name.toLowerCase().includes(q));
   }, [artifacts, fileQuery]);
 
-  const openArtifact = (a: ArtifactItem & { body?: string }) => {
+  const openArtifact = async (a: ArtifactItem & { body?: string }) => {
     if (a.url) {
       // only allow http(s) relative-safe opens
       try {
@@ -185,6 +187,23 @@ export default function ResultPanel({
         window.open(u.toString(), '_blank', 'noopener,noreferrer');
       } catch {
         /* ignore */
+      }
+      return;
+    }
+    if (a.picoArtifact) {
+      const preview = window.open('', '_blank');
+      if (preview) {
+        preview.opener = null;
+      }
+      try {
+        const blob = await getPicoArtifactContent(a.id);
+        const url = URL.createObjectURL(blob);
+        if (preview) {
+          preview.location.href = url;
+        }
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } catch {
+        preview?.close();
       }
       return;
     }
@@ -200,15 +219,24 @@ export default function ResultPanel({
     }
   };
 
-  const downloadArtifact = (artifact: ArtifactItem & { body?: string }) => {
+  const downloadArtifact = async (artifact: ArtifactItem & { body?: string }) => {
     if (artifact.url) {
-      openArtifact(artifact);
+      void openArtifact(artifact);
       return;
     }
-    if (!artifact.body) {
-      return;
+    let blob: Blob;
+    if (artifact.picoArtifact) {
+      try {
+        blob = await getPicoArtifactContent(artifact.id, true);
+      } catch {
+        return;
+      }
+    } else {
+      if (!artifact.body) {
+        return;
+      }
+      blob = new Blob([artifact.body], { type: 'text/plain;charset=utf-8' });
     }
-    const blob = new Blob([artifact.body], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -388,7 +416,7 @@ export default function ResultPanel({
                         <button
                           type="button"
                           className="flex h-9 w-9 items-center justify-center rounded-md text-[#8c8c8c] hover:bg-[#f3f3f3]"
-                          onClick={() => downloadArtifact(a)}
+                          onClick={() => void downloadArtifact(a)}
                           aria-label={`下载${a.name}`}
                           title="下载"
                         >
@@ -398,7 +426,7 @@ export default function ResultPanel({
                       <button
                         type="button"
                         className="h-9 rounded-lg bg-[#f3f3f3] px-3 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#e8e8e8] dark:bg-surface-tertiary dark:text-text-primary"
-                        onClick={() => openArtifact(a)}
+                        onClick={() => void openArtifact(a)}
                       >
                         打开
                       </button>
@@ -443,7 +471,7 @@ export default function ResultPanel({
                       <button
                         type="button"
                         className="rounded-md px-2 py-1 text-[11.5px] font-medium text-[#3d3d3d] hover:bg-[#f0f0f0]"
-                        onClick={() => openArtifact(a)}
+                        onClick={() => void openArtifact(a)}
                       >
                         打开
                       </button>
