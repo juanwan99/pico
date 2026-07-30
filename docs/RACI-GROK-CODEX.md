@@ -18,6 +18,29 @@ TRUTH: GitHub PR/SHA/CI/DEPLOYED（OneFlow）
 **规划时必须默认：总控不写生产热更；执行窗有服务器与浏览器。**  
 总控可并行：审查、文档法条、不与执行 lease 冲突的小 PR。
 
+
+## 1.1 总控 ↔ 执行 交接信道（硬：只走 GitHub）
+
+Codex 常在**云端**；总控在对话侧。**二者不共享沙箱/SSH 会话。**
+
+| 允许当交接 | 禁止当交接 |
+|------------|------------|
+| Issue / PR 描述与评论 | 仅靠聊天长文、未入库 MD |
+| `## CANDIDATE` / `## DEPLOYED` / 审查结论评论 | 浪潮 HANDOFF.md 当唯一状态 |
+| main tip SHA、Actions CI | 「我这边好了」无 PR |
+| 任务书 **合入 main 的 docs/** 或 **贴在 Issue/PR** | 只存在于某次对话草稿 |
+
+**标准环：**
+
+```text
+总控：任务书 → PR 合 main 或 Issue 正文（含验收/HARD/lease/并行轨）
+业主：新 Codex 窗只给「读 main 某路径 / 某 Issue」+ 执行
+Codex：实现 → PR → CANDIDATE → CI →（授权）合 main → DEPLOYED
+总控：只读 GitHub 审查 → 评论 REVISE/PASS → 下一任务书再入库
+```
+
+总控规划时必须假设：**下一执行窗只能 git fetch GitHub，看不到对话侧聊天全文。**
+
 ## 2. 日间任务（总控怎么派）
 
 - **短、可验收**：单窗 1 个主目标 + 明确完成定义。  
