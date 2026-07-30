@@ -14,15 +14,22 @@ fi
 unset PROXY || true
 UV="$ROOT/.venv/bin/uvicorn"; [ -x "$UV" ] || UV=uvicorn
 
-# Mongo (portable or existing)
-if ! python3 -c "import socket;s=socket.create_connection(('127.0.0.1',27017),1);s.close()" 2>/dev/null; then
+# Mongo (portable or existing) — wire protocol on 27117 only
+if ! python3 -c "import socket;s=socket.create_connection(('127.0.0.1',27117),1);s.close()" 2>/dev/null; then
   if [ -x /tmp/mongodb/bin/mongod ]; then
     mkdir -p /tmp/mongo-data /tmp/mongo-log
-    nohup /tmp/mongodb/bin/mongod --dbpath /tmp/mongo-data --bind_ip 127.0.0.1 --port 27017 \
+    nohup /tmp/mongodb/bin/mongod --dbpath /tmp/mongo-data --bind_ip 127.0.0.1 --port 27117 \
       >>/tmp/mongo-log/stdout.log 2>&1 &
     sleep 2
   else
-    echo "[pico] WARN: no MongoDB on :27017 (LibreChat will fail to start)"
+    echo "[pico] WARN: no MongoDB on :27117 (LibreChat will fail to start)"
+  fi
+fi
+
+# Preview mis-pin shield: HTTP on classic 27017 → product :8080 (not Mongo wire)
+if ! python3 -c "import socket;s=socket.create_connection(('127.0.0.1',27017),0.3);s.close()" 2>/dev/null; then
+  if [ -f "$ROOT/scripts/mongo-port-http-shield.py" ]; then
+    nohup python3 "$ROOT/scripts/mongo-port-http-shield.py" 27017 8080 >>/tmp/mongo-27017-shield.log 2>&1 &
   fi
 fi
 
@@ -63,7 +70,7 @@ DOMAIN_SERVER=http://127.0.0.1:3080
 APP_TITLE=Pico
 SEARCH=false
 ALLOW_REGISTRATION=true
-MONGO_URI=mongodb://127.0.0.1:27017/LibreChat
+MONGO_URI=mongodb://127.0.0.1:27117/LibreChat
 ENV
   fi
   if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:3080/; then

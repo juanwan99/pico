@@ -113,3 +113,11 @@ It looks like you are trying to access MongoDB over HTTP on the native driver po
 | Restart product stack / wait for proxy revive | Edge may still 404 until platform remaps |
 
 **Do not** treat as “Mongo broken” or “swap shell”. User message may include `cf-ray=…-LAX` — Cloudflare edge.
+
+
+## Mitigation (2026-07-30): 27017 HTTP shield
+
+- **Real Mongo** wire protocol: **127.0.0.1:27117** (`MONGO_URI=...27117/LibreChat`)
+- **:27017** runs `scripts/mongo-port-http-shield.py` → reverse-proxy HTTP to **:8080**
+- So if Live Preview still mis-pins 27017, user gets **product HTML**, not the Mongo English sentence
+- Still prefer pin control `{"port":8080}`; shield is safety net only
