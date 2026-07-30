@@ -20,6 +20,21 @@ verdict and does not claim owner acceptance or exact 100% pixel parity.
 - Theme tested: light
 - LibreChat rebuilt: yes, image `sha256:41a6893bf435ef7b19d1c0ed799bd04c25e6864a9d313c33264951650b459e5a`
 
+## N1 Main-Path Evidence Addendum
+
+Collected on 2026-07-30 for `docs/NIGHT-CARD-N1-W-MAINPATH.md`.
+This addendum covers the six N1 main-path steps only and does not claim full-site
+pixel completion.
+
+| Main-path step | Evidence | Result |
+| --- | --- | --- |
+| Home task start | `output/playwright/n1-mainpath/01-home-1280.png`, `output/playwright/n1-mainpath/09-home-390.png` | Y |
+| Active task state | `output/playwright/n1-mainpath/02-running-1280.png` | Y |
+| Result rail artifacts | `output/playwright/n1-mainpath/02-running-1280.png` | Y |
+| S7 banner | `output/playwright/n1-mainpath/03-s7-proposed-1280.png`, `output/playwright/n1-mainpath/04-s7-confirmed-1280.png` | Y |
+| Open / download / file history | `output/playwright/n1-mainpath/download-n1-mainpath.txt`, `output/playwright/n1-mainpath/02-running-1280.png` | Y |
+| Project-scoped task and asset | `output/playwright/n1-mainpath/05-projects-1280.png`, `output/playwright/n1-mainpath/06-project-created-1280.png`, `output/playwright/n1-mainpath/07-project-task-landing-1280.png`, `output/playwright/n1-mainpath/08-project-task-result-1280.png`, `output/playwright/n1-mainpath/10-project-task-390.png` | Y |
+
 ## Shell Measurements
 
 Direct WorkBuddy measurements were taken from a maximized `1452x877` native
