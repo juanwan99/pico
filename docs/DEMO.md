@@ -1,40 +1,94 @@
-# Pico 独立原型 — 今日演示
+# Pico 演示路径（当前壳 · 2026-07-30）
 
 ```
-SCOPE: juanwan99/pico only
-PRODUCT: Claude 式 AI 空间 + Kimi Agent + 模型 API + 唯一账本
-NOT: 网盘 · 教务 SaaS · edu 联调
+DOC: docs/DEMO.md
+SHELL: apps/librechat @ :8080
+API: 127.0.0.1:18765
+PLAN: MVP v1.2 FIXED
+NOT: 网盘 · 教务 SaaS · edu 联调 · 自 PASS
+STATUS: 演示说明（非 PASS 证书）
 ```
 
-## 30 秒启动
+> 过时句（NextChat / make product :8000）已废。启动以 `scripts/run-product.sh` / `startup.sh` 为准。  
+> 全景：`docs/CALIBRATION-NOW.md` · 总控：`docs/ORCHESTRATION-PLAN.md`
+
+---
+
+## 30 秒启动（沙箱 / 本机 agent）
 
 ```bash
-# 仓库根目录
-cp -n .env.example .env   # 填入 KIMI_API_KEY
-make product              # API :8000 + NextChat :8080
+# 仓库根；.env 含 KIMI_API_KEY
+bash scripts/run-product.sh
+# 产品 UI
+curl -sf http://127.0.0.1:8080/ | head -c 200
+# API
+curl -sf http://127.0.0.1:18765/health
 ```
 
-打开 **http://127.0.0.1:8080**（NextChat 产品壳）
+| 面 | 地址 |
+|----|------|
+| 产品 UI | **http://127.0.0.1:8080**（预览须 pin 8080） |
+| LibreChat | :3080 |
+| Pico API | **仅** 127.0.0.1:18765 |
+| 演示登录 | `teacher@example.com` / `pico-demo-123` |
 
-## 现场路径（S1–S7）
+**Live Preview：** 若经 :6014 且无鉴权，常见 403 空 body = 纯白；**不等于**产品挂。详见 `PREVIEW-WHITE-SCREEN.md`。
 
-| 步 | 操作 | 看见什么 |
-|----|------|----------|
-| 1 | 左侧 **签发测试凭证**（school-a） | S4 身份 |
-| 2 | **一键演示路径** 或「创建任务并运行」 | 多步 tool.call/result + 回复 |
-| 3 | 右侧 **产物** | 班级表 markdown |
-| 4 | **跨校拒绝 (S6)** | 时间线 `auth.deny` |
-| 5 | **新建提案** → **人工确认** | S7 审计；不写学校库 |
-| 6 | 顶栏 pill | 危险工具 OFF · Agent pin |
+---
 
-## 无 UI 的证据
+## 模型路径（S2 叙事 · 必读）
+
+| 模型选择 | 行为 | 对应 |
+|----------|------|------|
+| **kimi-k2.6 / Kimi-K3 / moonshot-***（默认聊天） | **直连 Kimi HTTPS**，流式对话；账本仍记 Task/Run | **S1 主路径** |
+| **pico-agent** | **钉版本 Kimi Agent 多步工具环**（allowlist：echo / FakeEdu 班级 / 提案） | **S2 编排路径** |
+
+- 编排 runtime 钉死：`kimi-agent-sdk==0.0.5`、`kimi-cli==1.12.0`（`pico_orchestrator.pins`）  
+- Shell / 主机 File / 开放 Web / MCP：**默认关**  
+- **不要**把「默认能聊」说成「默认多步 Agent」——二者模型入口不同  
+
+---
+
+## 现场路径（产品 UI · ~3 分钟）
+
+| 步 | 操作 | 期望 |
+|----|------|------|
+| 1 | 打开 8080 → 登录演示账号 | 中文登录 / 任务台首页 |
+| 2 | 首页发「只回：演示OK」 | 流式或完整回复；结果区可有摘要 |
+| 3 | 发「创建 hello.txt，内容为 hi」 | 结果区出现 **hello.txt** |
+| 4 | （可选）模型选 **pico-agent** 再发简单任务 | 工具环/Agent 路径（若环境允许） |
+| 5 | 侧栏打开项目 / 自动化 | 可导航；自动化需登录态 JWT |
+
+### API 快速证据
 
 ```bash
-make demo    # scripts/demo_e2e.py → DEMO_OK
-make test
-make hello   # 真模型或诚实 BLOCKED
+# S1
+curl -sS -H 'Authorization: Bearer sk-pico-dev' -H 'X-Pico-Membership-Id: demo' \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"kimi-k2.6","stream":false,"messages":[{"role":"user","content":"【Pico-User:demo】只回：演示OK"}]}' \
+  http://127.0.0.1:18765/v1/chat/completions
+
+# 未登录账本代理须 401
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/api/pico/v1/tasks
 ```
+
+主路径勾选清单：`docs/REGRESSION-MAINPATH.md` · 最近实跑：`docs/REGRESSION-MAINPATH-RUN.md`
+
+---
+
+## 门禁状态（诚实）
+
+| ID | 演示？ |
+|----|--------|
+| S1 真模型 | 是（默认 Kimi） |
+| S2 Agent 多步 | **显式选 pico-agent**；非默认 |
+| S3 账本 | 是 |
+| S5 UI | 是（LibreChat 任务台） |
+| S7 人确认 | **产品 UI 未闭环**（工具有提案能力，W2 待做） |
+| S8 合 main | 分支 CANDIDATE 流程，**不自 PASS** |
+
+---
 
 ## 一句话对外
 
-> Pico 是独立 AI 底座原型：服务端 Kimi 多步工具环、真实模型 API、三区 UI、租户 fail-closed 账本；今天不连 edu。
+> Pico 是独立 AI 工作台：LibreChat 壳 + 服务端账本 + Kimi 真模型；默认直连对话，编排走 `pico-agent`；今天不连 edu，不宣称 Live Preview 在无鉴权代理下必通。
