@@ -137,3 +137,18 @@ docker compose -f docker-compose.product.yml up -d --build
 | trycloudflare 临时链 | 仅沙箱演示 |
 | Grok Live Preview 6014 | 辅助；挂了不挡交付 |
 | 127.0.0.1:8080 | 仅本机/沙箱 agent |
+
+
+## Kimi 真钥（生产）
+
+密钥**永不进 Git**。在 **VPS** 上：
+
+```bash
+export KIMI_API_KEY='sk-...'   # 只在服务器环境变量里
+cd /opt/pico && git pull --ff-only origin grok/pico-preview-librechat-p0 || true
+bash scripts/vps-apply-kimi-key.sh
+```
+
+脚本会写入 `/opt/pico/.env`（不打印 key）、重启 `docker-compose.host.yml`、跑本地 S1 冒烟。
+
+聊天里贴过的 key 视为已泄露，稳定后建议在 Moonshot 控制台**轮换**。

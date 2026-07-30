@@ -14,6 +14,12 @@ STATUS: 演示说明（非 PASS 证书）
 
 ---
 
+## 生产入口（业主）
+
+- **https://pico.aivia.asia/login**（HTTPS only）
+- 演示：`teacher@example.com` / `pico-demo-123`
+- 模型 key 在服务器 `/opt/pico/.env` 的 `KIMI_API_KEY`（不进 Git）
+
 ## 30 秒启动（沙箱 / 本机 agent）
 
 ```bash

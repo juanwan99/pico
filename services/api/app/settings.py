@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     pico_cors_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:8080,http://127.0.0.1:8080,"
-        "http://localhost:3080,http://127.0.0.1:3080"
+        "http://localhost:3080,http://127.0.0.1:3080,"
+        "https://pico.aivia.asia"
     )
 
     pico_agent_file: str = "services/orchestrator/agents/pico.yaml"

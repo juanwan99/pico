@@ -1,0 +1,64 @@
+# CN-friendly LibreChat image build (Aliyun light server).
+# Based on upstream Dockerfile but:
+# - Alpine APK via Aliyun mirror
+# - no ghcr.io uv COPY
+# - npm ci --legacy-peer-deps
+# - lower default NODE heap for 2G hosts
+FROM node:24.16.0-alpine AS node
+
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+  && apk upgrade --no-cache \
+  && apk add --no-cache jemalloc python3 py3-pip
+
+ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
+
+ARG NODE_MAX_OLD_SPACE_SIZE=1536
+ARG NPM_CI_TIMEOUT_SECONDS=1800
+ARG NPM_CI_ATTEMPTS=3
+
+RUN mkdir -p /app && chown node:node /app
+WORKDIR /app
+USER node
+
+COPY --chown=node:node package.json package-lock.json ./
+COPY --chown=node:node api/package.json ./api/package.json
+COPY --chown=node:node client/package.json ./client/package.json
+COPY --chown=node:node packages/data-provider/package.json ./packages/data-provider/package.json
+COPY --chown=node:node packages/data-schemas/package.json ./packages/data-schemas/package.json
+COPY --chown=node:node packages/api/package.json ./packages/api/package.json
+COPY --chown=node:node packages/client/package.json ./packages/client/package.json
+
+RUN \
+  touch .env ; \
+  mkdir -p /app/client/public/images /app/logs /app/uploads /app/skill ; \
+  npm config set fetch-retry-maxtimeout 600000 ; \
+  npm config set fetch-retries 5 ; \
+  npm config set registry https://registry.npmmirror.com ; \
+  attempt=1 ; \
+  until timeout "$NPM_CI_TIMEOUT_SECONDS" npm ci --no-audit --legacy-peer-deps ; do \
+    status=$? ; \
+    if [ "$attempt" -ge "$NPM_CI_ATTEMPTS" ]; then exit "$status" ; fi ; \
+    echo "npm ci failed ($status); retry $((attempt + 1))/$NPM_CI_ATTEMPTS" ; \
+    attempt=$((attempt + 1)) ; \
+    npm cache clean --force || true ; \
+    sleep 8 ; \
+  done
+
+COPY --chown=node:node . .
+
+RUN \
+  NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}" npm run frontend ; \
+  npm prune --production ; \
+  npm cache clean --force
+
+ARG BUILD_COMMIT=
+ARG BUILD_BRANCH=
+ARG BUILD_DATE=
+ENV BUILD_COMMIT=${BUILD_COMMIT} \
+    BUILD_BRANCH=${BUILD_BRANCH} \
+    BUILD_DATE=${BUILD_DATE} \
+    HOST=127.0.0.1 \
+    PORT=8080
+
+EXPOSE 8080
+CMD ["npm", "run", "backend"]

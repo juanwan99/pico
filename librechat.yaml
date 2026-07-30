@@ -1,0 +1,14 @@
+# Minimal LibreChat custom config for Pico product shell (v0.8.x / config 1.3.x)
+version: 1.3.13
+cache: true
+interface:
+  customWelcome: "Pico AI 工作台"
+  endpointsMenu: true
+  modelSelect: true
+  parameters: true
+  sidePanel: true
+  presets: true
+  prompts: true
+  bookmarks: true
+  multiConvo: true
+  agents: true

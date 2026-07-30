@@ -1,0 +1,88 @@
+# Production layout used on Aliyun light server (host network).
+# Why host: Docker bridge was broken on the VPS; all binds stay on 127.0.0.1.
+# Public entry: Nginx 443 → 127.0.0.1:8080 only.
+#
+#   cd /opt/pico
+#   docker compose -f docker-compose.host.yml up -d
+#
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    network_mode: host
+    command:
+      [
+        "mongod",
+        "--bind_ip",
+        "127.0.0.1",
+        "--port",
+        "27017",
+        "--wiredTigerCacheSizeGB",
+        "0.25",
+      ]
+    volumes:
+      - pico_mongo:/data/db
+
+  pico-api:
+    image: pico-api:v13
+    build:
+      context: .
+      dockerfile: Dockerfile.pico-api
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      PICO_DATABASE_URL: sqlite+aiosqlite:///./data/pico.db
+      PICO_API_HOST: "127.0.0.1"
+      PICO_API_PORT: "18765"
+      PICO_CORS_ORIGINS: "https://pico.aivia.asia,http://127.0.0.1:8080,http://localhost:8080"
+      PICO_ENV: production
+      # still allow demo LibreChat proxy key unless you set JWT-only later
+      PICO_ACCEPT_TEST_ISSUER: "true"
+    volumes:
+      - pico_data:/app/data
+      - ./.env:/app/.env:ro
+    depends_on:
+      - mongo
+
+  librechat:
+    image: pico-librechat:v13
+    build:
+      context: ./apps/librechat
+      dockerfile: Dockerfile.pico-fast
+      args:
+        NODE_MAX_OLD_SPACE_SIZE: "1536"
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - ./apps/librechat/.env
+    environment:
+      HOST: "127.0.0.1"
+      PORT: "8080"
+      MONGO_URI: mongodb://127.0.0.1:27017/LibreChat
+      OPENAI_REVERSE_PROXY: http://127.0.0.1:18765/v1
+      OPENAI_API_KEY: pico-dev
+      ENDPOINTS: openAI
+      OPENAI_MODELS: moonshot-v1-8k,kimi-k2.6,pico-agent
+      APP_TITLE: Pico
+      ALLOW_REGISTRATION: "true"
+      SEARCH: "false"
+      DOMAIN_CLIENT: https://pico.aivia.asia
+      DOMAIN_SERVER: https://pico.aivia.asia
+      CONFIG_PATH: /app/librechat.yaml
+    volumes:
+      - ./librechat.yaml:/app/librechat.yaml:ro
+      - librechat_images:/app/client/public/images
+      - librechat_uploads:/app/uploads
+      - librechat_logs:/app/logs
+    depends_on:
+      - mongo
+      - pico-api
+
+volumes:
+  pico_mongo:
+  pico_data:
+  librechat_images:
+  librechat_uploads:
+  librechat_logs:
