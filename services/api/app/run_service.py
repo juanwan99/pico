@@ -282,6 +282,16 @@ async def create_change(
     task_id: str | None = None,
     run_id: str | None = None,
 ) -> ChangeProposalRow:
+    if task_id and await get_task_for_principal(session, task_id, principal) is None:
+        raise KeyError("task not found")
+    if run_id:
+        run = await get_run_for_principal(session, run_id, principal)
+        if run is None:
+            raise KeyError("run not found")
+        if task_id and run.task_id != task_id:
+            raise ValueError("run does not belong to task")
+        task_id = task_id or run.task_id
+
     row = ChangeProposalRow(
         id=new_id(),
         school_id=principal.school_id,
@@ -306,6 +316,21 @@ async def create_change(
     session.add(audit)
     await session.commit()
     await session.refresh(row)
+    return row
+
+
+async def get_change_for_principal(
+    session: AsyncSession,
+    principal: Principal,
+    change_id: str,
+) -> ChangeProposalRow | None:
+    row = await session.get(ChangeProposalRow, change_id)
+    if row is None:
+        return None
+    if row.school_id != principal.school_id:
+        return None
+    if row.membership_id != principal.membership_id:
+        return None
     return row
 
 
@@ -437,15 +462,23 @@ async def reject_change(
     return row
 
 
-async def list_changes(session: AsyncSession, principal: Principal) -> list[ChangeProposalRow]:
+async def list_changes(
+    session: AsyncSession,
+    principal: Principal,
+    *,
+    task_id: str | None = None,
+    status: str | None = None,
+) -> list[ChangeProposalRow]:
+    query = select(ChangeProposalRow).where(
+        ChangeProposalRow.school_id == principal.school_id,
+        ChangeProposalRow.membership_id == principal.membership_id,
+    )
+    if task_id:
+        query = query.where(ChangeProposalRow.task_id == task_id)
+    if status:
+        query = query.where(ChangeProposalRow.status == status)
     result = await session.execute(
-        select(ChangeProposalRow)
-        .where(
-            ChangeProposalRow.school_id == principal.school_id,
-            ChangeProposalRow.membership_id == principal.membership_id,
-        )
-        .order_by(ChangeProposalRow.created_at.desc())
-        .limit(50)
+        query.order_by(ChangeProposalRow.created_at.desc()).limit(50)
     )
     return list(result.scalars().all())
 

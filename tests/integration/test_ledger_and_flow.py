@@ -67,27 +67,134 @@ def test_cross_school_deny_events(client: TestClient):
     assert "tool.call" in types
 
 
-def test_change_propose_confirm_audit(client: TestClient):
-    tok = _token(client)
-    h = {"Authorization": f"Bearer {tok}"}
-    r = client.post(
+def test_change_confirm_reject_and_membership_isolation(client: TestClient):
+    owner = {"Authorization": f"Bearer {_token(client)}"}
+    outsider = {"Authorization": f"Bearer {_token(client, member='m2')}"}
+    other_school = {
+        "Authorization": f"Bearer {_token(client, school='school-b', member='m1')}"
+    }
+    proposed = client.post(
         "/v1/changes",
-        headers=h,
+        headers=owner,
         json={
             "title": "t1",
             "summary": "s1",
             "payload": {"x": 1},
         },
     )
-    assert r.status_code == 200
-    cid = r.json()["change"]["id"]
-    assert r.json()["change"]["status"] == "proposed"
-    c2 = client.post(f"/v1/changes/{cid}/confirm", headers=h, json={})
-    assert c2.status_code == 200
-    assert c2.json()["change"]["status"] == "confirmed"
-    assert c2.json()["change"]["confirmed_by"] == "m1"
-    lst = client.get("/v1/changes", headers=h).json()["changes"]
-    assert any(x["id"] == cid and x["status"] == "confirmed" for x in lst)
+    assert proposed.status_code == 200
+    confirmed_id = proposed.json()["change"]["id"]
+    assert proposed.json()["change"]["status"] == "proposed"
+
+    detail = client.get(f"/v1/changes/{confirmed_id}", headers=owner)
+    assert detail.status_code == 200
+    assert detail.json()["change"]["id"] == confirmed_id
+    pending = client.get(
+        "/v1/changes",
+        headers=owner,
+        params={"status": "proposed"},
+    ).json()["changes"]
+    assert [item["id"] for item in pending] == [confirmed_id]
+
+    for denied in (outsider, other_school):
+        assert client.get(f"/v1/changes/{confirmed_id}", headers=denied).status_code == 404
+        assert (
+            client.post(
+                f"/v1/changes/{confirmed_id}/confirm",
+                headers=denied,
+                json={},
+            ).status_code
+            == 404
+        )
+        assert (
+            client.post(
+                f"/v1/changes/{confirmed_id}/reject",
+                headers=denied,
+                json={},
+            ).status_code
+            == 404
+        )
+        assert client.get("/v1/changes", headers=denied).json()["changes"] == []
+
+    confirmed = client.post(
+        f"/v1/changes/{confirmed_id}/confirm",
+        headers=owner,
+        json={},
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["change"]["status"] == "confirmed"
+    assert confirmed.json()["change"]["confirmed_by"] == "m1"
+    assert confirmed.json()["change"]["audit"][-1]["action"] == "confirmed"
+
+    second = client.post(
+        "/v1/changes",
+        headers=owner,
+        json={"title": "t2", "summary": "s2", "payload": {"x": 2}},
+    )
+    rejected_id = second.json()["change"]["id"]
+    rejected = client.post(
+        f"/v1/changes/{rejected_id}/reject",
+        headers=owner,
+        json={},
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["change"]["status"] == "rejected"
+    assert rejected.json()["change"]["audit"][-1]["action"] == "rejected"
+
+
+def test_change_task_filter_and_task_ownership(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    async def no_background_start(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.run_service.start_run_background",
+        no_background_start,
+    )
+    owner = {"Authorization": f"Bearer {_token(client)}"}
+    outsider = {"Authorization": f"Bearer {_token(client, member='m2')}"}
+    task = client.post(
+        "/v1/tasks",
+        headers=owner,
+        json={"title": "S7 task", "prompt": "create a proposal"},
+    )
+    assert task.status_code == 200
+    task_id = task.json()["task"]["id"]
+
+    created = client.post(
+        "/v1/changes",
+        headers=owner,
+        json={
+            "title": "task-scoped",
+            "summary": "same task",
+            "payload": {},
+            "task_id": task_id,
+        },
+    )
+    assert created.status_code == 200
+    change = created.json()["change"]
+    assert change["task_id"] == task_id
+
+    scoped = client.get(
+        "/v1/changes",
+        headers=owner,
+        params={"task_id": task_id},
+    )
+    assert [item["id"] for item in scoped.json()["changes"]] == [change["id"]]
+
+    denied = client.post(
+        "/v1/changes",
+        headers=outsider,
+        json={
+            "title": "forged task",
+            "summary": "must fail",
+            "payload": {},
+            "task_id": task_id,
+        },
+    )
+    assert denied.status_code == 404
 
 
 def test_cancel_queued_run(client: TestClient, monkeypatch):
