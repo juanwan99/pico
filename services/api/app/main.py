@@ -29,8 +29,13 @@ except ImportError:
     pass
 
 from app import run_service
-from app.auth import Principal, issue_test_token, require_principal, require_scoped_principal, require_service_token
-from app.db import EventRow, RunRow, WorkspaceRow, AutomationRow, get_session, init_db, new_id
+from app.auth import (
+    Principal,
+    issue_test_token,
+    require_scoped_principal,
+    require_service_token,
+)
+from app.db import EventRow, RunRow, WorkspaceRow, get_session, init_db, new_id
 from app.openai_compat import router as openai_compat_router
 from app.settings import Settings, get_settings
 
@@ -649,6 +654,7 @@ async def rebind_conversation(
     if dst in {"new", "search"} or src in {"new", "search"}:
         raise HTTPException(status_code=400, detail="reserved conversation id")
     from sqlalchemy import select
+
     from app.db import TaskRow
 
     q = await session.execute(

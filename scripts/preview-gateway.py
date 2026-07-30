@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Public preview entry :8080 → NextChat UI; /v1 /health → Pico API (loopback)."""
-from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-import urllib.request
 import urllib.error
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 UI = "http://127.0.0.1:3000"
 API = "http://127.0.0.1:8000"

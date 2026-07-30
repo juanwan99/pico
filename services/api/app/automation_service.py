@@ -10,9 +10,9 @@ from typing import Any
 
 from sqlalchemy import select
 
-from app.auth import Principal
-from app.db import AutomationRow, session_factory, new_id, _utcnow
 from app import run_service
+from app.auth import Principal
+from app.db import AutomationRow, _utcnow, new_id, session_factory
 
 log = logging.getLogger("pico.automation")
 
@@ -157,7 +157,7 @@ async def _fire_due() -> int:
                 await session.commit()
                 fired += 1
                 log.info("automation fired id=%s run=%s", auto.id, run.id)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 log.exception("automation fire failed id=%s", auto.id)
                 # backoff 5 min
                 auto.next_run_at = now + timedelta(minutes=5)
@@ -170,11 +170,11 @@ async def _loop() -> None:
     while not _stop.is_set():
         try:
             await _fire_due()
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("scheduler tick failed")
         try:
             await asyncio.wait_for(_stop.wait(), timeout=20.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             continue
     log.info("automation scheduler stopped")
 

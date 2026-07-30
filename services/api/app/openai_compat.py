@@ -10,12 +10,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
+from pico_orchestrator.user_errors import user_message_for_error
 from pydantic import BaseModel
 
 from app.auth import Principal, decode_token, scope_proxy_principal
 from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
-from pico_orchestrator.user_errors import user_message_for_error
 
 router = APIRouter(tags=["openai-compat"])
 
@@ -232,7 +232,7 @@ def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
     um = re.search(
         r"(?:创建|生成|写|保存).{0,40}?([A-Za-z0-9._\-]+\.(?:txt|md|csv|json))",
         user_prompt,
-        re.I,
+        re.IGNORECASE,
     )
     if not um:
         return []
@@ -378,7 +378,7 @@ async def list_models(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     _principal_from_auth(authorization, settings)
-    from pico_orchestrator.provider import KNOWN_KIMI_MODELS, DEFAULT_KIMI_MODEL
+    from pico_orchestrator.provider import DEFAULT_KIMI_MODEL, KNOWN_KIMI_MODELS
 
     default = settings.kimi_model or DEFAULT_KIMI_MODEL
     ids = []
