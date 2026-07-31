@@ -70,11 +70,11 @@ function titleOf(c: TConversation) {
   return t;
 }
 
-function timeLabel(iso?: string | Date | null) {
+function timeLabel(iso?: string | number | Date | null) {
   if (!iso) {
     return '';
   }
-  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  const d = iso instanceof Date ? iso : new Date(iso);
   if (Number.isNaN(d.getTime())) {
     return '';
   }
@@ -328,6 +328,17 @@ export default function ProjectWorkspace() {
     [activeProjectId, navigate],
   );
 
+  const openProjectAutomation = useCallback(() => {
+    if (!activeProjectId) {
+      return;
+    }
+    const params = new URLSearchParams({
+      projectId: activeProjectId,
+      return: `/projects/${activeProjectId}`,
+    });
+    navigate(`/automation?${params.toString()}`);
+  }, [activeProjectId, navigate]);
+
   const collectProjectArtifacts = useCallback(
     async (showNotice = false) => {
       const conversationIds = new Set(
@@ -335,19 +346,14 @@ export default function ProjectWorkspace() {
           .map((item) => item.conversationId)
           .filter((value): value is string => Boolean(value)),
       );
-      if (conversationIds.size === 0) {
-        setProjectArtifacts([]);
-        if (showNotice) {
-          setAssetNotice('当前项目还没有可收集的任务产物');
-        }
-        return;
-      }
       setIsCollectingArtifacts(true);
       setAssetNotice('');
       try {
         const { tasks } = await listPicoTasks();
         const projectTasks = (tasks || []).filter(
-          (task) => task.conversation_id && conversationIds.has(task.conversation_id),
+          (task) =>
+            task.workspace_id === activeProjectId ||
+            (task.conversation_id && conversationIds.has(task.conversation_id)),
         );
         const details = await Promise.all(
           projectTasks.map(async (task) => {
@@ -384,7 +390,7 @@ export default function ProjectWorkspace() {
         setIsCollectingArtifacts(false);
       }
     },
-    [conversations],
+    [activeProjectId, conversations],
   );
 
   useEffect(() => {
@@ -871,8 +877,12 @@ export default function ProjectWorkspace() {
                             {artifact.kind} · {timeLabel(artifact.createdAt)} · {artifact.taskTitle}
                           </span>
                           <span className="hidden text-[#9a9a9a] sm:block">{artifact.kind}</span>
-                          <span className="hidden text-[#9a9a9a] sm:block">{timeLabel(artifact.createdAt)}</span>
-                          <span className="hidden truncate text-[#9a9a9a] sm:block">{artifact.taskTitle}</span>
+                          <span className="hidden text-[#9a9a9a] sm:block">
+                            {timeLabel(artifact.createdAt)}
+                          </span>
+                          <span className="hidden truncate text-[#9a9a9a] sm:block">
+                            {artifact.taskTitle}
+                          </span>
                         </button>
                       </li>
                     ))}
@@ -902,7 +912,7 @@ export default function ProjectWorkspace() {
       </div>
 
       <aside
-        className="pico-result-panel hidden w-[340px] shrink-0 flex-col border-l border-black/[0.06] bg-white lg:flex dark:border-border-light dark:bg-surface-primary"
+        className="pico-result-panel hidden w-[340px] shrink-0 flex-col border-l border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-primary lg:flex"
         aria-label="项目配置"
       >
         <div className="flex h-11 items-center border-b border-black/[0.06] bg-[#fafafa] px-4 text-[13px] font-semibold">
@@ -925,7 +935,7 @@ export default function ProjectWorkspace() {
                       instructionRef.current?.focus();
                       instructionRef.current?.scrollIntoView({ block: 'nearest' });
                     } else if (item.id === 'automation') {
-                      navigate('/automation');
+                      openProjectAutomation();
                     } else if (item.id === 'expert') {
                       openProjectCapability('experts');
                     } else if (item.id === 'skill') {
@@ -967,7 +977,7 @@ export default function ProjectWorkspace() {
               {item.id === 'automation' ? (
                 <button
                   type="button"
-                  onClick={() => navigate('/automation')}
+                  onClick={openProjectAutomation}
                   className="mt-2 flex w-full items-center gap-2 rounded-lg bg-white px-2 py-1.5 text-left text-[12px] ring-1 ring-black/[0.05]"
                 >
                   <MessageSquare className="h-3.5 w-3.5 text-[#6b6b6b]" />

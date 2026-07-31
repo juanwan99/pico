@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app import run_service
 from app.auth import Principal
-from app.db import AutomationRow, _utcnow, new_id, session_factory
+from app.db import AutomationRow, RunRow, TaskRow, _utcnow, new_id, session_factory
 
 log = logging.getLogger("pico.automation")
 
@@ -111,6 +111,36 @@ async def delete_automation(session, principal: Principal, auto_id: str) -> bool
     await session.delete(row)
     await session.commit()
     return True
+
+
+async def run_once(
+    session,
+    principal: Principal,
+    auto_id: str,
+) -> tuple[AutomationRow, TaskRow, RunRow] | None:
+    """Create and start one real run without changing the saved schedule."""
+    auto = await session.get(AutomationRow, auto_id)
+    if (
+        not auto
+        or auto.school_id != principal.school_id
+        or auto.membership_id != principal.membership_id
+    ):
+        return None
+
+    task, run = await run_service.create_task(
+        session,
+        principal,
+        f"[自动] {auto.name}"[:80],
+        auto.prompt.strip() or auto.name,
+    )
+    if auto.workspace_id and hasattr(task, "workspace_id"):
+        task.workspace_id = auto.workspace_id
+    auto.last_run_at = _utcnow()
+    await session.commit()
+    await session.refresh(auto)
+    await session.refresh(task)
+    await run_service.start_run_background(run.id, principal)
+    return auto, task, run
 
 
 async def _fire_due() -> int:
