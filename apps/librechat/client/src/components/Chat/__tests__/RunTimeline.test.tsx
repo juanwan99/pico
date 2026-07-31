@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import type { PicoRunEvent } from '~/data-provider/pico/api';
+import type { PicoRun, PicoRunEvent } from '~/data-provider/pico/api';
 import RunTimeline from '../RunTimeline';
 
 function event(
@@ -9,6 +9,10 @@ function event(
   payload: Record<string, unknown> = {},
 ): PicoRunEvent {
   return { id, run_id: 'run-1', seq, type, payload };
+}
+
+function run(status: string): PicoRun {
+  return { id: 'run-1', task_id: 'task-1', status };
 }
 
 describe('RunTimeline', () => {
@@ -44,5 +48,37 @@ describe('RunTimeline', () => {
 
     rerender(<RunTimeline events={[]} />);
     expect(screen.getByText('暂无步骤')).toBeInTheDocument();
+  });
+
+  it('shows failed run and tool summaries with error codes', () => {
+    render(
+      <RunTimeline
+        run={run('failed')}
+        events={[
+          event('tool-failed', 1, 'tool.result', {
+            tool: 'workspace_write_file',
+            ok: false,
+            code: 'tool.denied',
+          }),
+          event('run-failed', 2, 'run.status', {
+            status: 'failed',
+            code: 'timeout',
+            user_message: '处理超时，请重试。',
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('工具结果 · workspace_write_file')).toBeInTheDocument();
+    expect(screen.getByText('失败 · 错误码：tool.denied')).toBeInTheDocument();
+    expect(screen.getByText('运行失败')).toBeInTheDocument();
+    expect(screen.getByText('处理超时，请重试。 · 错误码：timeout')).toBeInTheDocument();
+  });
+
+  it('shows a cancelled run even when the event stream has no terminal event', () => {
+    render(<RunTimeline run={run('cancelled')} events={[]} />);
+
+    expect(screen.getByText('运行已取消')).toBeInTheDocument();
+    expect(screen.getByText('已停止生成')).toBeInTheDocument();
   });
 });

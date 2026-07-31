@@ -26,6 +26,7 @@ import type { TMessage } from 'librechat-data-provider';
 import {
   getPicoArtifactContent,
   type PicoArtifact,
+  type PicoRun,
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
@@ -124,6 +125,7 @@ export default function ResultPanel({
   onClose,
   picoArtifacts,
   runEvents,
+  run,
 }: {
   messages?: TMessage[] | null;
   taskTitle?: string;
@@ -131,6 +133,7 @@ export default function ResultPanel({
   onClose?: () => void;
   picoArtifacts?: PicoArtifact[] | null;
   runEvents?: PicoRunEvent[] | null;
+  run?: PicoRun | null;
 }) {
   const [view, setView] = useState<TopView>('overview');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -379,7 +382,7 @@ export default function ResultPanel({
               </div>
             ) : null}
 
-            <RunTimeline events={runEvents} />
+            <RunTimeline events={runEvents} run={run} />
 
             {artifacts.length === 0 ? (
               <div className="flex min-h-[240px] flex-col px-1 pt-2">
@@ -400,7 +403,9 @@ export default function ResultPanel({
                   <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa] px-4 py-10 text-[#9a9a9a]">
                     <FileText className="h-9 w-9 opacity-30" strokeWidth={1.25} />
                     <p className="text-[13px] font-medium text-[#6b6b6b]">
-                      {runStatusLabel?.startsWith('失败') ? '本次未产出文件' : '暂无产物'}
+                      {runStatusLabel?.startsWith('失败') || runStatusLabel?.startsWith('已取消')
+                        ? '本次未产出文件'
+                        : '暂无产物'}
                     </p>
                     <p className="max-w-[15rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
                       概览 / 工作空间文件 / 浏览器 — 与任务台右栏一致
