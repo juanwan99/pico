@@ -532,6 +532,83 @@ async def test_finalize_is_idempotent_and_terminal_status_is_sticky(
 
 
 @pytest.mark.asyncio
+async def test_finalize_cancel_request_wins_over_success_and_artifacts(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    db = tmp_path / "finalize-cancel-wins.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+
+    from app import db as dbmod
+    from sqlalchemy import select
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+
+    task_id = new_id()
+    run_id = new_id()
+    factory = session_factory()
+    async with factory() as session:
+        session.add(
+            TaskRow(
+                id=task_id,
+                school_id="school-a",
+                membership_id="member-finalize-cancel",
+                title="cancel wins",
+            )
+        )
+        session.add(
+            RunRow(
+                id=run_id,
+                task_id=task_id,
+                status="running",
+                prompt="创建 should-not-exist.txt",
+                model="test-direct-model",
+                cancel_requested=1,
+            )
+        )
+        await session.commit()
+
+    await _finalize_run(
+        run_id,
+        status="succeeded",
+        final_text="done\n```file:should-not-exist.txt\nbody\n```",
+        task_id=task_id,
+    )
+
+    async with factory() as session:
+        run = await session.get(RunRow, run_id)
+        assert run is not None
+        assert run.status == "cancelled"
+        assert run.error is None
+        artifacts = list(
+            (
+                await session.execute(
+                    select(ArtifactRow).where(ArtifactRow.run_id == run_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert artifacts == []
+        terminal_events = list(
+            (
+                await session.execute(
+                    select(EventRow).where(
+                        EventRow.run_id == run_id,
+                        EventRow.type == "run.status",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert terminal_events[-1].payload == {"status": "cancelled"}
+
+
+@pytest.mark.asyncio
 async def test_unknown_skill_finalize_creates_no_artifact_or_change(
     tmp_path,
     monkeypatch,
