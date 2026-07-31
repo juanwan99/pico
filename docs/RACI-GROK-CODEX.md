@@ -173,4 +173,6 @@ ONEFLOW 三角色 **不变**：`总管` · `写入` · `审查`。
 - `docs/ONEFLOW.md` — 门禁与风险等级权威  
 - `docs/NIGHT-CARD-POLICY.md` — 夜间加厚（已与 §3 对齐）  
 - `docs/PARALLEL-SPRINT-PLAN.md` — 产品并行轨  
-- `docs/README.md` — 索引  
+- `docs/README.md` — 索引
+
+- `docs/DEPLOY-TWO-HOST.md` — 写代码 ECS 跳板部署生产

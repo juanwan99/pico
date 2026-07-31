@@ -31,7 +31,7 @@ ONEFLOW: docs/ONEFLOW.md
 | 9 | [MASTER-PLAN.md](./MASTER-PLAN.md) | Phase map M0–M5 (nav only) |
 | 9b | [DAY-TASK-2026-07-30-SKILL-UX.md](./DAY-TASK-2026-07-30-SKILL-UX.md) | **当前日间派工**（Skill+UX 双轨） |
 | 10 | Night cards: [N1](./NIGHT-CARD-N1-W-MAINPATH.md) · [N2](./NIGHT-CARD-N2-SKILL-THIN.md) · [N3-THICK](./NIGHT-CARD-N3-THICK.md) · [N4-THICK](./NIGHT-CARD-N4-THICK.md) · [policy](./NIGHT-CARD-POLICY.md) | Executable card; **evidence still on PR** |
-| 11 | [DEMO.md](./DEMO.md) · [DEPLOY-PUBLIC.md](./DEPLOY-PUBLIC.md) | Demo & public deploy notes |
+| 11 | [DEMO.md](./DEMO.md) · [DEPLOY-TWO-HOST.md](./DEPLOY-TWO-HOST.md) · [DEPLOY-PUBLIC.md](./DEPLOY-TWO-HOST.md](./DEPLOY-TWO-HOST.md) · [DEPLOY-PUBLIC.md) | Demo & public deploy notes |
 | 12 | [PIXEL-DIFF.md](./PIXEL-DIFF.md) · matrices when present | UX evidence (not task status) |
 
 ## Repeatable smokes
