@@ -76,6 +76,9 @@ CONTEXT：默认不清理会话。仅当条目或总管写明 context_reset: tru
 
 ## 4. 当前队列
 
+> **MANUAL_DISPATCH 2026-07-31**：业主要求手动派发。E2 必须认领 EQ-013+014；E3 必须部署 tip `eaf9875`+；E1 待命或协助 E2 API。context_reset: false。
+
+
 ### EQ-001 · N4 Run 过程时间线
 
 ```yaml
@@ -338,7 +341,8 @@ deliver:
 
 ```yaml
 id: EQ-015
-status: OPEN
+status: DONE
+done_note: "#97 merged eaf9875; await E3 DEPLOYED"
 priority: P1
 context_reset: false
 assignee: E1
