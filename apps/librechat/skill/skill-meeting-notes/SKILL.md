@@ -1,7 +1,9 @@
 ---
 name: skill-meeting-notes
-description: Turn supplied meeting content into decisions, owners, and action items.
-allowed-tools: []
+description: Structure meeting content and optionally save the notes as an artifact.
+allowed-tools:
+  - structured_outline
+  - workspace_write_file
 disable-model-invocation: true
 user-invocable: true
 always-apply: false
@@ -9,4 +11,4 @@ always-apply: false
 
 # skill.meeting_notes
 
-Organize the meeting content into topics, decisions, owners, and action items. Mark an owner as unassigned when the source does not name one.
+Organize the meeting content into topics, decisions, owners, and action items, then optionally save the notes as a workspace artifact. Mark an owner as unassigned when the source does not name one.

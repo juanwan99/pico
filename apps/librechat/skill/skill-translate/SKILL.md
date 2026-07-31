@@ -1,7 +1,9 @@
 ---
 name: skill-translate
-description: Translate supplied content while preserving meaning, tone, and formatting.
-allowed-tools: []
+description: Translate supplied or saved content and optionally save the translation.
+allowed-tools:
+  - workspace_read_file
+  - workspace_write_file
 disable-model-invocation: true
 user-invocable: true
 always-apply: false
@@ -9,4 +11,4 @@ always-apply: false
 
 # skill.translate
 
-Translate faithfully and preserve formatting, proper nouns, and tone. Mark uncertain terminology instead of inventing a confident translation.
+Read a referenced workspace artifact when needed, translate faithfully while preserving formatting, proper nouns, and tone, and optionally save the translation as a workspace artifact. Mark uncertain terminology instead of inventing a confident translation.
