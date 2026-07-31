@@ -1,3 +1,4 @@
+**Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
 **24h plan:** [docs/STANDALONE-AI-24H.md](./STANDALONE-AI-24H.md)
 
 # Pico documentation index
