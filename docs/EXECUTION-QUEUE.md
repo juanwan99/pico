@@ -477,7 +477,8 @@ files_lease:
 
 ```yaml
 id: EQ-026
-status: OPEN
+status: DONE
+done_note: "2026-07-31 E3 confirmed production HEAD/health.git_sha fa1c1402a5d2b828f4fdb720a70681bf8e2a8b2a contains #108 lineage; public login 200; protected ports loopback-only; VQ-007 testable"
 priority: P0
 context_reset: false
 assignee: E3
