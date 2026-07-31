@@ -64,6 +64,7 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 
 **Doc index (truth order):** [`docs/README.md`](docs/README.md) — prefer GitHub over prose.
 
+**Validation queue (direct dispatch):** [`docs/VALIDATION-QUEUE.md`](docs/VALIDATION-QUEUE.md)  
 **FAST sprint:** [`docs/SPRINT-FAST.md`](docs/SPRINT-FAST.md)  
 **P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
 **Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
