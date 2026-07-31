@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   getPicoTask,
+  listPicoRunEvents,
   listPicoTaskRuns,
   listPicoTasks,
   rebindConversation,
   type PicoArtifact,
   type PicoRun,
+  type PicoRunEvent,
   type PicoTask,
 } from '~/data-provider/pico/api';
 
 export type PicoLedgerState = {
   task: PicoTask | null;
   run: PicoRun | null;
+  events: PicoRunEvent[];
   artifacts: PicoArtifact[];
   statusLabel: string | null;
   loading: boolean;
@@ -76,6 +79,7 @@ export function usePicoTaskLedger(
 ): PicoLedgerState {
   const [task, setTask] = useState<PicoTask | null>(null);
   const [run, setRun] = useState<PicoRun | null>(null);
+  const [events, setEvents] = useState<PicoRunEvent[]>([]);
   const [artifacts, setArtifacts] = useState<PicoArtifact[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +125,7 @@ export function usePicoTaskLedger(
     if (!conversationId || conversationId === 'new') {
       setTask(null);
       setRun(null);
+      setEvents([]);
       setArtifacts([]);
       return;
     }
@@ -144,6 +149,7 @@ export function usePicoTaskLedger(
         setTask(latest);
         if (!latest) {
           setRun(null);
+          setEvents([]);
           setArtifacts([]);
           return;
         }
@@ -156,7 +162,22 @@ export function usePicoTaskLedger(
         }
         setArtifacts(detail.artifacts || []);
         const runs = runsRes.runs || [];
-        setRun(runs[0] ?? null);
+        const latestRun = runs[0] ?? null;
+        setRun(latestRun);
+        if (!latestRun) {
+          setEvents([]);
+          return;
+        }
+        try {
+          const eventsRes = await listPicoRunEvents(latestRun.id);
+          if (!cancelled) {
+            setEvents(eventsRes.events || []);
+          }
+        } catch {
+          if (!cancelled) {
+            setEvents([]);
+          }
+        }
       } catch (e) {
         if (!cancelled) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -205,6 +226,7 @@ export function usePicoTaskLedger(
   return {
     task,
     run,
+    events,
     artifacts,
     statusLabel: statusLabel(run, isSubmitting, artifacts),
     loading,

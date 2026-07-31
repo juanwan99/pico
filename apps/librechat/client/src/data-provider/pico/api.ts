@@ -31,6 +31,15 @@ export type PicoRun = {
   token_usage?: Record<string, unknown>;
 };
 
+export type PicoRunEvent = {
+  id: string;
+  run_id: string;
+  seq: number;
+  type: string;
+  payload: Record<string, unknown>;
+  created_at?: string | null;
+};
+
 export type PicoWorkspace = {
   id: string;
   name: string;
@@ -95,6 +104,10 @@ export async function getPicoTask(taskId: string) {
 
 export async function listPicoTaskRuns(taskId: string) {
   return picoFetch<{ runs: PicoRun[] }>(`/v1/tasks/${taskId}/runs`);
+}
+
+export async function listPicoRunEvents(runId: string) {
+  return picoFetch<{ events: PicoRunEvent[] }>(`/v1/runs/${runId}/events`);
 }
 
 export async function listPicoWorkspaces() {

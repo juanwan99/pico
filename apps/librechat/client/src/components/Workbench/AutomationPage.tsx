@@ -23,11 +23,14 @@ import {
   createPicoAutomation,
   deletePicoAutomation,
   listPicoAutomations,
+  listPicoRunEvents,
   runPicoAutomation,
   setPicoAutomationEnabled,
   type PicoAutomation,
   type PicoRun,
+  type PicoRunEvent,
 } from '~/data-provider/pico/api';
+import RunTimeline from '../Chat/RunTimeline';
 
 type Mode = 'list' | 'create';
 type ScheduleKind = 'periodic' | 'interval' | 'once';
@@ -240,6 +243,7 @@ export default function AutomationPage() {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PicoAutomation | null>(null);
   const [runResults, setRunResults] = useState<Record<string, PicoRun>>({});
+  const [runEvents, setRunEvents] = useState<Record<string, PicoRunEvent[]>>({});
 
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -410,6 +414,52 @@ export default function AutomationPage() {
       setPendingId(null);
     }
   };
+
+  const activeRuns = useMemo(() => Object.entries(runResults), [runResults]);
+
+  useEffect(() => {
+    const runs = activeRuns;
+    if (!runs.length) {
+      return;
+    }
+    let cancelled = false;
+    let polls = 0;
+    const refreshEvents = async () => {
+      const results = await Promise.all(
+        runs.map(async ([automationId, run]) => {
+          try {
+            const response = await listPicoRunEvents(run.id);
+            return [automationId, response.events || []] as const;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (!cancelled) {
+        setRunEvents((current) => {
+          const next = { ...current };
+          for (const result of results) {
+            if (result) {
+              next[result[0]] = result[1];
+            }
+          }
+          return next;
+        });
+      }
+    };
+    void refreshEvents();
+    const interval = window.setInterval(() => {
+      polls += 1;
+      void refreshEvents();
+      if (polls >= 15) {
+        window.clearInterval(interval);
+      }
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeRuns]);
 
   const onDelete = async () => {
     if (!deleteTarget || pendingId) {
@@ -943,6 +993,11 @@ export default function AutomationPage() {
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
+                      {runResults[item.id] ? (
+                        <div className="md:col-span-4">
+                          <RunTimeline events={runEvents[item.id]} />
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}

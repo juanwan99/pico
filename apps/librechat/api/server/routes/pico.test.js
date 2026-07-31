@@ -10,7 +10,7 @@ jest.mock('~/server/middleware', () => ({
 
 const router = require('./pico');
 
-describe('Pico proxy automation routes', () => {
+describe('Pico proxy routes', () => {
   let app;
 
   beforeEach(() => {
@@ -50,6 +50,29 @@ describe('Pico proxy automation routes', () => {
 
     expect(response.status).toBe(400);
     expect(response.body).toEqual({ error: 'bad_request', message: 'invalid id' });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('forwards run event requests to Pico API', async () => {
+    const response = await request(app).get('/api/pico/v1/runs/run-1/events');
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/runs/run-1/events',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          Authorization: expect.stringMatching(/^Bearer /),
+          'X-Pico-Membership-Id': 'member-123',
+        }),
+      }),
+    );
+  });
+
+  it('rejects invalid run ids for event requests', async () => {
+    const response = await request(app).get('/api/pico/v1/runs/bad.id/events');
+
+    expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });

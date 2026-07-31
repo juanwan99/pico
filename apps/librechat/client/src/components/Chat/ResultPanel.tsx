@@ -23,9 +23,14 @@ import {
   Search,
 } from 'lucide-react';
 import type { TMessage } from 'librechat-data-provider';
-import { getPicoArtifactContent, type PicoArtifact } from '~/data-provider/pico/api';
+import {
+  getPicoArtifactContent,
+  type PicoArtifact,
+  type PicoRunEvent,
+} from '~/data-provider/pico/api';
 import { cn } from '~/utils';
 import RunLoadingIndicator from './RunLoadingIndicator';
+import RunTimeline from './RunTimeline';
 
 type TopView = 'overview' | 'files' | 'browser';
 
@@ -118,12 +123,14 @@ export default function ResultPanel({
   runStatusLabel,
   onClose,
   picoArtifacts,
+  runEvents,
 }: {
   messages?: TMessage[] | null;
   taskTitle?: string;
   runStatusLabel?: string;
   onClose?: () => void;
   picoArtifacts?: PicoArtifact[] | null;
+  runEvents?: PicoRunEvent[] | null;
 }) {
   const [view, setView] = useState<TopView>('overview');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -371,6 +378,8 @@ export default function ResultPanel({
                 ) : null}
               </div>
             ) : null}
+
+            <RunTimeline events={runEvents} />
 
             {artifacts.length === 0 ? (
               <div className="flex min-h-[240px] flex-col px-1 pt-2">
