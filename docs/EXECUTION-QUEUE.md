@@ -160,7 +160,7 @@ deliver:
 
 ```yaml
 id: EQ-005
-status: OPEN
+status: CANCELLED
 priority: P2
 context_reset: false
 assignee: E1
@@ -190,7 +190,8 @@ files_lease:
 
 ```yaml
 id: EQ-007
-status: OPEN
+status: DONE
+done_note: "N6 #89 merged; await DEPLOYED+VQ-004"
 priority: P0
 context_reset: false
 assignee: E2
@@ -212,7 +213,8 @@ deliver:
 
 ```yaml
 id: EQ-008
-status: OPEN
+status: DONE
+done_note: "N6b #87 merged 597acfb; check DEPLOYED"
 priority: P1
 context_reset: false
 assignee: E1
@@ -237,6 +239,51 @@ priority: P2
 context_reset: false
 assignee: E3
 title: Deploy #82/#tip if needed; queue DONE; surface BLOCKED to controller
+files_lease:
+  - docs/EXECUTION-QUEUE.md
+  - docs/VALIDATION-QUEUE.md
+```
+
+### EQ-010 · N7 生产 readiness 探针增强
+
+```yaml
+id: EQ-010
+status: OPEN
+priority: P1
+context_reset: false
+assignee: E1
+title: /health 暴露 edu_mode、rate_limit 配置摘要（无密钥）+ selftest 钩子文档
+files_lease:
+  - services/api/app/main.py
+  - scripts/agent-selftest.sh
+  - docs/**
+deliver:
+  - PR 黄 FAST；不打印 secrets
+```
+
+### EQ-011 · N7 UI 能力中心空态与加载
+
+```yaml
+id: EQ-011
+status: OPEN
+priority: P2
+context_reset: false
+assignee: E2
+title: 仅当 #89 部署后能力中心加载失败时修空态/重试；无则标 CANCELLED
+files_lease:
+  - apps/librechat/client/src/components/Workbench/**
+depends: EQ-007 DEPLOYED + VQ-004
+```
+
+### EQ-012 · 部署巡检
+
+```yaml
+id: EQ-012
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E3
+title: 部署 main tip（含 #87+#89）## DEPLOYED；队列卫生
 files_lease:
   - docs/EXECUTION-QUEUE.md
   - docs/VALIDATION-QUEUE.md
