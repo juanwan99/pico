@@ -300,7 +300,8 @@ files_lease:
 
 ```yaml
 id: EQ-013
-status: OPEN
+status: DONE
+done_note: "timeline PASS on VQ-005; cancel split to EQ-020"
 priority: P0
 context_reset: false
 assignee: E2
@@ -321,6 +322,7 @@ deliver:
 ```yaml
 id: EQ-014
 status: OPEN
+done_note: "VQ-005 FAIL cancel — superseded by EQ-020 hotfix"
 priority: P0
 context_reset: false
 assignee: E2
