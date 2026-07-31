@@ -139,7 +139,8 @@ deliver:
 
 ```yaml
 id: EQ-004
-status: OPEN
+status: DONE
+done_note: "PR #82 merged+DEPLOYED at main a79e40fe6ceb567203ecb6888db38cebc2102201; VQ-003 unlocked"
 priority: P0
 context_reset: false
 assignee: E2
