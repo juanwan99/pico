@@ -1,0 +1,59 @@
+name: controller-bot
+
+# 7x24 总管轻量轮询：不依赖 Grok 对话在线。
+on:
+  schedule:
+    # 每 15 分钟（GitHub 可能有漂移）
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      auto_merge:
+        description: "Merge yellow/FAST + CI green PRs"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      dry_run:
+        description: "Dry run (no merge/comment)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: read
+  statuses: read
+
+concurrency:
+  group: controller-bot
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    name: controller-poll
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run controller bot poll
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          # 默认开启黄档代合；可在 repo Variables 设 CONTROLLER_AUTO_MERGE=false 关闭
+          CONTROLLER_AUTO_MERGE: ${{ github.event_name == 'workflow_dispatch' && inputs.auto_merge || vars.CONTROLLER_AUTO_MERGE || 'true' }}
+          CONTROLLER_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+        run: |
+          python scripts/controller_bot.py poll

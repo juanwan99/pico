@@ -17,9 +17,8 @@ ROLE: ① 总管
 
 ## 节奏
 
-- **限制（诚实）：** 总管 **没有** 独立于对话的后台 cron。
-  只有在本对话/会话被唤醒时才能 poll GitHub 并推进。
-  「一点反应没有」= 往往当时对话在休眠，不是队列坏了。
+- **对话总管限制：** 聊天回合才醒。
+**7×24 已补：** [`docs/CONTROLLER-BOT.md`](./CONTROLLER-BOT.md) + `.github/workflows/controller-bot.yml`（Actions 每 15 分钟 poll）。
 - 对话仍在时：业主一问或间隙即轮询推进  
 - 目标：被唤醒后 **立即** poll → 合/派/收口  
 - 真源仍是 GitHub，不靠聊天记忆  
