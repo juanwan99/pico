@@ -379,7 +379,8 @@ deliver:
 
 ```yaml
 id: EQ-017
-status: OPEN
+status: DONE
+done_note: "E3 rebuilt and aligned production HEAD/health.git_sha to 28107fa2d882900dae1aa000e800f46c373b9f01; posted ## DEPLOYED on #100"
 priority: P0
 context_reset: false
 assignee: E3
