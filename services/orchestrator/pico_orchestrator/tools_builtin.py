@@ -353,13 +353,20 @@ def openai_tool_schemas(
             },
             "required": ["title", "content"],
         },
+        # Moonshot rejects object schemas that combine top-level "type"
+        # with "anyOf"/"oneOf". Both keys optional; handler enforces one-of.
         "workspace_read_file": {
             "type": "object",
             "properties": {
-                "artifact_id": {"type": "string"},
-                "title": {"type": "string"},
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Artifact id (provide this or title)",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Exact artifact title (provide this or artifact_id)",
+                },
             },
-            "anyOf": [{"required": ["artifact_id"]}, {"required": ["title"]}],
         },
         "workspace_list_files": {
             "type": "object",

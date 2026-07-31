@@ -143,3 +143,16 @@ def test_new_tools_have_strict_openai_schemas() -> None:
     assert expected <= schemas.keys()
     assert schemas["workspace_write_file"]["required"] == ["title", "content"]
     assert schemas["calculator"]["required"] == ["expression"]
+
+
+def test_tool_schemas_are_moonshot_safe() -> None:
+    """Kimi/Moonshot rejects parameters with type+anyOf/oneOf/allOf combo."""
+    for schema in openai_tool_schemas():
+        params = schema["function"]["parameters"]
+        assert isinstance(params, dict)
+        assert params.get("type") == "object"
+        for banned in ("anyOf", "oneOf", "allOf"):
+            assert banned not in params, (schema["function"]["name"], banned)
+        props = params.get("properties") or {}
+        assert isinstance(props, dict)
+
