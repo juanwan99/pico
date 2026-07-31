@@ -28,6 +28,8 @@ PAIRS: docs/RACI-GROK-CODEX.md · docs/ONEFLOW.md
 
 无测试反馈 → **不得**宣布切片完成或写假 DEPLOYED。
 
+**无 GitHub `## TEST REPORT` = 验证任务未交付**（禁止只停在本地窗口）。
+
 ## 3. 测试窗环境
 
 优先顺序：

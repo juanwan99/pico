@@ -15,6 +15,7 @@ PLAN: docs/P0-SECURITY-HARDENING.md
 PR → CANDIDATE → CI → 等总管审合 → 跳板部署 production env → 等验证窗。
 可先合代码再改服务器 .env（PICO_ENV=production 等），部署清单写进 PR。
 禁 edu-cloud / PROXY=1 / 打印 key。
+**完成以 GitHub 回写为准；无 PR/评论视为未交付；卡住必须 ## BLOCKED。**
 P1 项（PG/队列/outbox）不要塞进本 PR。
 ```
 
