@@ -47,7 +47,8 @@ HARD: 只 pico；禁 edu-cloud；禁 PROXY=1；禁打印 key；禁用 CI 代替�
 
 ```yaml
 id: VQ-001
-status: OPEN
+status: DONE
+done_note: "2026-07-31 TEST REPORT PASS on #72 (UI run-once + N3/P0 cross)"
 priority: P0
 target_pr: 72
 related: [64, 70, 71, 72]
@@ -64,6 +65,29 @@ report:
   - ## TEST REPORT on PR #72 (main)
   - optional cross note on #70 if not already PASS for same SHA
 on_done: set status DONE; pause heartbeat if no other OPEN
+```
+
+### VQ-002 · N4 Run 时间线（部署后）
+
+```yaml
+id: VQ-002
+status: OPEN
+priority: P1
+target_pr: null
+related_docs: [docs/DAY-TASK-N4-RUN-TIMELINE.md]
+title: N4 过程可见验收
+deploy_gate:
+  - A merged PR implementing N4 exists with ## DEPLOYED
+  - production health.git_sha equals that deploy SHA
+  - (locate PR by title/path: Run timeline / events UI / DAY-TASK-N4)
+test_plan:
+  - A: 公网 pico-agent 真聊触发至少 1 次工具；UI 可见步骤/工具名（截图或 DOM 描述）
+  - B: skill-reead 路径不出现非法工具写入；若 UI 显示 snapshot 则 tools 为空或 unknown
+  - C: 自动化「运行一次」仍 PASS（防回归）
+  - D: Bearer pico-dev → 401/403
+report:
+  - ## TEST REPORT on the N4 implementation PR
+on_done: set status DONE
 ```
 
 ### VQ-000 · 模板（勿删）
