@@ -9,7 +9,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, select, text
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+    select,
+    text,
+)
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -84,6 +95,7 @@ class RunRow(Base):
 
 class EventRow(Base):
     __tablename__ = "events"
+    __table_args__ = (UniqueConstraint("run_id", "seq", name="uq_events_run_id_seq"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), index=True)
@@ -199,12 +211,40 @@ def _migrate_sqlite_sync(conn) -> None:
     if "workspace_id" not in tcols:
         conn.execute(text("ALTER TABLE tasks ADD COLUMN workspace_id VARCHAR(36)"))
 
+    duplicate_runs = conn.execute(
+        text("SELECT run_id FROM events GROUP BY run_id, seq HAVING COUNT(*) > 1")
+    ).scalars()
+    for run_id in set(duplicate_runs):
+        event_ids = conn.execute(
+            text(
+                "SELECT id FROM events WHERE run_id = :run_id "
+                "ORDER BY seq, created_at, id"
+            ),
+            {"run_id": run_id},
+        ).scalars()
+        for seq, event_id in enumerate(event_ids, start=1):
+            conn.execute(
+                text("UPDATE events SET seq = :seq WHERE id = :event_id"),
+                {"seq": seq, "event_id": event_id},
+            )
+    conn.execute(
+        text("CREATE UNIQUE INDEX IF NOT EXISTS uq_events_run_id_seq ON events (run_id, seq)")
+    )
+
+
+def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
 
 async def init_db() -> None:
     global _engine, _Session
     settings = get_settings()
     url = _normalize_url(settings.pico_database_url)
     _engine = create_async_engine(url, echo=False)
+    if "sqlite" in url:
+        event.listen(_engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
     _Session = async_sessionmaker(_engine, expire_on_commit=False)
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -234,22 +274,30 @@ async def append_event(
     *,
     commit: bool = True,
 ) -> EventRow:
-    result = await session.execute(
-        select(EventRow.seq).where(EventRow.run_id == run_id).order_by(EventRow.seq.desc()).limit(1)
-    )
-    last = result.scalar_one_or_none()
-    seq = (last or 0) + 1
-    row = EventRow(
-        id=new_id(),
-        run_id=run_id,
-        seq=seq,
-        type=event_type,
-        payload_json=json.dumps(payload, ensure_ascii=False),
-    )
-    session.add(row)
-    if commit:
-        await session.commit()
-    else:
-        await session.flush()
-    await session.refresh(row)
-    return row
+    for attempt in range(2):
+        try:
+            async with session.begin_nested():
+                result = await session.execute(
+                    select(EventRow.seq)
+                    .where(EventRow.run_id == run_id)
+                    .order_by(EventRow.seq.desc())
+                    .limit(1)
+                )
+                last = result.scalar_one_or_none()
+                row = EventRow(
+                    id=new_id(),
+                    run_id=run_id,
+                    seq=(last or 0) + 1,
+                    type=event_type,
+                    payload_json=json.dumps(payload, ensure_ascii=False),
+                )
+                session.add(row)
+                await session.flush()
+            if commit:
+                await session.commit()
+            await session.refresh(row)
+            return row
+        except IntegrityError:
+            if attempt:
+                raise
+    raise RuntimeError("event sequence allocation exhausted")
