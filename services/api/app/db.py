@@ -20,7 +20,7 @@ from sqlalchemy import (
     select,
     text,
 )
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -276,7 +276,10 @@ async def append_event(
     *,
     commit: bool = True,
 ) -> EventRow:
-    for attempt in range(2):
+    import asyncio
+
+    last_err: Exception | None = None
+    for attempt in range(5):
         try:
             async with session.begin_nested():
                 result = await session.execute(
@@ -299,7 +302,18 @@ async def append_event(
                 await session.commit()
             await session.refresh(row)
             return row
-        except IntegrityError:
-            if attempt:
+        except IntegrityError as e:
+            last_err = e
+            if attempt >= 4:
                 raise
-    raise RuntimeError("event sequence allocation exhausted")
+        except OperationalError as e:
+            last_err = e
+            # SQLite "database is locked" under concurrent cancel/worker
+            if attempt >= 4:
+                raise
+            await asyncio.sleep(0.02 * (attempt + 1))
+            try:
+                await session.rollback()
+            except Exception:
+                pass
+    raise RuntimeError(f"event sequence allocation exhausted: {last_err!r}")
