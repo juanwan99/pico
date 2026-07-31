@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -105,18 +104,18 @@ def combined_text(pr: PRInfo) -> str:
 
 
 def is_red(text: str) -> bool:
-    if re.search(r"RISK\s*:\s*红", text, re.I):
+    if re.search(r"RISK\s*:\s*红", text, re.IGNORECASE):
         return True
-    if re.search(r"RISK\s*:\s*red", text, re.I):
+    if re.search(r"RISK\s*:\s*red", text, re.IGNORECASE):
         return True
     return False
 
 
 def is_yellow_fast(text: str) -> bool:
-    yellow = bool(re.search(r"RISK\s*:\s*黄", text, re.I) or re.search(r"RISK\s*:\s*yellow", text, re.I))
+    yellow = bool(re.search(r"RISK\s*:\s*黄", text, re.IGNORECASE) or re.search(r"RISK\s*:\s*yellow", text, re.IGNORECASE))
     fast = "SPRINT-FAST" in text or re.search(r"\bFAST\s*:", text) is not None
     # docs-only heuristic
-    docs = bool(re.search(r"^docs\b", text.split("\n")[0] if text else "", re.I))
+    docs = bool(re.search(r"^docs\b", text.split("\n")[0] if text else "", re.IGNORECASE))
     return (yellow and fast) or (docs and "docs:" in text.lower())
 
 
@@ -323,7 +322,7 @@ def poll() -> int:
         issue_n = find_or_create_log_issue()
         post_log(issue_n, report)
         print(f"logged to issue #{issue_n}")
-    except Exception as e:
+    except (RuntimeError, OSError, json.JSONDecodeError, urllib.error.URLError) as e:
         print(f"log issue failed: {e}", file=sys.stderr)
     return 0
 
