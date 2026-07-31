@@ -47,7 +47,7 @@ HARD: 只 pico；禁 edu-cloud；禁 PROXY=1；禁打印 key；禁用 CI 代替�
 
 ```yaml
 id: VQ-001
-status: OPEN
+status: DONE
 priority: P0
 target_pr: 72
 related: [64, 70, 71, 72]
