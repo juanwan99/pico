@@ -233,6 +233,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     taskTitle={taskTitle || ledger.task?.title}
                     runStatusLabel={runStatusLabel}
                     picoArtifacts={ledger.artifacts}
+                    runEvents={ledger.events}
                     onClose={() => setResultOpen(false)}
                   />
                 ) : null}

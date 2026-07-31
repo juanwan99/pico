@@ -4,6 +4,7 @@ import {
   createPicoAutomation,
   deletePicoAutomation,
   listPicoAutomations,
+  listPicoRunEvents,
   runPicoAutomation,
   setPicoAutomationEnabled,
   type PicoAutomation,
@@ -22,6 +23,7 @@ jest.mock('~/data-provider/pico/api', () => ({
   createPicoAutomation: jest.fn(),
   deletePicoAutomation: jest.fn(),
   listPicoAutomations: jest.fn(),
+  listPicoRunEvents: jest.fn(),
   runPicoAutomation: jest.fn(),
   setPicoAutomationEnabled: jest.fn(),
 }));
@@ -77,6 +79,7 @@ describe('AutomationPage', () => {
         status: 'queued',
       },
     });
+    jest.mocked(listPicoRunEvents).mockResolvedValue({ events: [] });
     jest.mocked(deletePicoAutomation).mockResolvedValue({ ok: true });
   });
 
@@ -174,6 +177,17 @@ describe('AutomationPage', () => {
   });
 
   it('creates a real run from the run-once action and shows its status', async () => {
+    jest.mocked(listPicoRunEvents).mockResolvedValue({
+      events: [
+        {
+          id: 'event-1',
+          run_id: 'run-1',
+          seq: 1,
+          type: 'tool.call',
+          payload: { tool: 'calculator' },
+        },
+      ],
+    });
     jest.mocked(listPicoAutomations).mockResolvedValue({ automations: [automation] });
     renderPage();
 
@@ -182,6 +196,7 @@ describe('AutomationPage', () => {
 
     await waitFor(() => expect(runPicoAutomation).toHaveBeenCalledWith('auto-1'));
     expect(await screen.findByRole('status')).toHaveTextContent('已创建运行 · queued');
+    expect(await screen.findByText('调用工具 · calculator')).toBeInTheDocument();
   });
 
   it('keeps run-once failures visible and recoverable', async () => {
