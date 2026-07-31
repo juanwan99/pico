@@ -66,6 +66,7 @@ const ITEMS = [
 
 export default function MoreHubPage() {
   const navigate = useNavigate();
+  const unavailableCount = ITEMS.filter((item) => !item.ready).length;
 
   return (
     <WorkbenchShell title="更多 · 资料库·灵感" subtitle="扩展入口">
@@ -83,8 +84,8 @@ export default function MoreHubPage() {
               }}
               className={
                 item.ready
-                  ? 'flex h-full flex-col rounded-lg border border-black/[0.06] bg-white p-4 text-left shadow-sm transition hover:border-black/12'
-                  : 'flex h-full flex-col rounded-lg border border-black/[0.06] bg-white p-4 text-left opacity-80 transition hover:border-black/12 hover:opacity-100'
+                  ? 'hover:border-black/12 flex h-full flex-col rounded-lg border border-black/[0.06] bg-white p-4 text-left shadow-sm transition'
+                  : 'hover:border-black/12 flex h-full flex-col rounded-lg border border-black/[0.06] bg-white p-4 text-left opacity-80 transition hover:opacity-100'
               }
             >
               <div className="mb-3 flex items-start justify-between">
@@ -104,6 +105,25 @@ export default function MoreHubPage() {
             </button>
           );
         })}
+        {unavailableCount > 0 ? (
+          <div className="flex flex-col items-start justify-between gap-3 rounded-lg border border-dashed border-black/[0.1] bg-white p-4 dark:border-white/10 dark:bg-surface-primary sm:col-span-2 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-[13px] font-medium text-[#3d3d3d] dark:text-text-primary">
+                {unavailableCount} 个入口仍待接入
+              </p>
+              <p className="mt-1 text-[11.5px] text-[#8c8c8c]">
+                先从已开放的技能与连接器开始，不会进入空白页面。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/capability')}
+              className="shrink-0 rounded-md bg-[#1a1a1a] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-black"
+            >
+              查看可用能力
+            </button>
+          </div>
+        ) : null}
       </div>
     </WorkbenchShell>
   );

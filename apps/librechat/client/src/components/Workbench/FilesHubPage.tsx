@@ -2,6 +2,7 @@
  * Global artifact ledger with truthful preview and download capabilities.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   Code2,
@@ -52,7 +53,10 @@ const EXTENSION_GROUPS: Record<Exclude<FileGroup, 'all'>, string[]> = {
 const PREVIEW_LIMIT = 100_000;
 
 function getExtension(title: string) {
-  const match = title.trim().toLowerCase().match(/\.([a-z0-9]+)$/);
+  const match = title
+    .trim()
+    .toLowerCase()
+    .match(/\.([a-z0-9]+)$/);
   return match?.[1] || '';
 }
 
@@ -129,6 +133,7 @@ function FileTypeIcon({ group }: { group: Exclude<FileGroup, 'all'> }) {
 }
 
 export default function FilesHubPage() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -292,7 +297,10 @@ export default function FilesHubPage() {
         </div>
 
         {error ? (
-          <div role="alert" className="m-3 flex gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11.5px] text-red-800">
+          <div
+            role="alert"
+            className="m-3 flex gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11.5px] text-red-800"
+          >
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               文件加载失败：{error}
@@ -301,7 +309,10 @@ export default function FilesHubPage() {
           </div>
         ) : null}
         {warning ? (
-          <div role="status" className="mx-3 mt-3 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900">
+          <div
+            role="status"
+            className="mx-3 mt-3 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900"
+          >
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             {warning}
           </div>
@@ -319,6 +330,13 @@ export default function FilesHubPage() {
             <p className="max-w-xs text-center text-[11.5px] leading-4">
               任务产生可记录的文件后，会同时出现在这里和任务结果区
             </p>
+            <button
+              type="button"
+              onClick={() => navigate('/c/new')}
+              className="mt-3 rounded-md bg-[#1a1a1a] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-black"
+            >
+              新建任务生成文件
+            </button>
           </div>
         ) : (
           <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(320px,42%)_minmax(0,1fr)]">
@@ -345,7 +363,10 @@ export default function FilesHubPage() {
                     const canOpen = typeof row.inline === 'string';
                     const isSelected = row.key === selectedKey;
                     return (
-                      <li key={row.key} className={isSelected ? 'bg-[#f4f4f4]' : 'hover:bg-[#fafafa]'}>
+                      <li
+                        key={row.key}
+                        className={isSelected ? 'bg-[#f4f4f4]' : 'hover:bg-[#fafafa]'}
+                      >
                         <button
                           type="button"
                           onClick={() => setSelectedKey(row.key)}
@@ -372,7 +393,10 @@ export default function FilesHubPage() {
                               打开
                             </span>
                           ) : (
-                            <span className="shrink-0 text-[10px] text-[#aaa]" title="账本未保存正文">
+                            <span
+                              className="shrink-0 text-[10px] text-[#aaa]"
+                              title="账本未保存正文"
+                            >
                               仅记录
                             </span>
                           )}
@@ -421,13 +445,12 @@ export default function FilesHubPage() {
                         正文预览
                       </div>
                       <pre className="max-h-[calc(100vh-190px)] overflow-auto whitespace-pre-wrap break-words rounded-md border border-black/[0.06] bg-white p-3 font-mono text-[11.5px] leading-[1.65] text-[#333]">
-                        {selected.inline
-                          ? selected.inline.slice(0, PREVIEW_LIMIT)
-                          : '（空文件）'}
+                        {selected.inline ? selected.inline.slice(0, PREVIEW_LIMIT) : '（空文件）'}
                       </pre>
                       {selected.inline.length > PREVIEW_LIMIT ? (
                         <p className="mt-2 text-[10.5px] text-[#999]">
-                          预览仅显示前 {PREVIEW_LIMIT.toLocaleString('zh-CN')} 个字符，下载保留完整正文。
+                          预览仅显示前 {PREVIEW_LIMIT.toLocaleString('zh-CN')}{' '}
+                          个字符，下载保留完整正文。
                         </p>
                       ) : null}
                     </div>
