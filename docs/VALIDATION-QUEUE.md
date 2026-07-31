@@ -163,27 +163,32 @@ report:
 on_done: set status DONE；总管将 EQ-013/014 标 DONE
 ```
 
-### VQ-007 · 停止根治复测
+### VQ-007 · 停止根治复测（当前唯一 P0 产品门禁）
 
 ```yaml
 id: VQ-007
 status: OPEN
 priority: P0
 context_reset: false
-target_pr: null
-title: Public stop must cancel after EQ-023
+target_pr: 108
+related: [99, 107, 108, 110, 111]
+title: Public stop must cancel after EQ-023 — ONLY remaining launch gate
 deploy_gate:
-  - EQ-023 fix PR ## DEPLOYED
-  - health == main tip
+  - PR #108 has ## DEPLOYED (live was fa1c140…; tip may be newer docs-only 387e3d6 — report exact health.git_sha)
+  - health.ok true; public /login 200
+  - DO NOT accept E2 BROWSER PROOF alone as PASS
 test_plan:
-  - 点 task-run-bar「停止」须变停止中或可见错误
-  - Network POST /api/pico/v1/runs/*/cancel → 200
-  - cancel_requested=1 或 run.cancel_requested
-  - 终态 cancelled
-  - 历史时间线仍 PASS
+  - A: 登录 https://pico.aivia.asia
+  - B: 长任务至 task-run-bar 显示「停止」
+  - C: 点击「停止」→ 停止中或可见错误
+  - D: 账本 cancel_requested=1 或 event run.cancel_requested（SSH 只读可）
+  - E: 终态 cancelled（token_cap failed = FAIL）
+  - F: 历史进入时间线仍 PASS
+  - G: pico-dev 401 抽检
 report:
-  - ## TEST REPORT on fix PR + note on #107/#99
-on_done: VQ-005/006/007 DONE
+  - ## TEST REPORT on https://github.com/juanwan99/pico/pull/108
+  - 交叉一句到 #99 / #107
+on_done: set VQ-005 VQ-006 VQ-007 DONE；通知总管收 N7 停止线
 ```
 
 ### VQ-000 · 模板（勿删）
