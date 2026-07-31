@@ -473,6 +473,43 @@ files_lease:
   - apps/librechat/api/server/routes/pico.js
 ```
 
+### EQ-026 · 保障 VQ-007 可测
+
+```yaml
+id: EQ-026
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E3
+title: 确认 production health 含 #108（fa1c140 或更新 tip）；缺则部署；在 #108 再确认 ## DEPLOYED 或 already aligned
+files_lease:
+  - docs/**
+```
+
+### EQ-027 · VQ-007 FAIL 待命
+
+```yaml
+id: EQ-027
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E2
+title: 仅当 #108 出现 VQ-007 TEST REPORT FAIL 时再修；无报告则 idle
+files_lease:
+  - apps/librechat/client/**
+```
+
+### EQ-028 · idle 卫生
+
+```yaml
+id: EQ-028
+status: OPEN
+priority: P2
+context_reset: false
+assignee: E1
+title: idle；除非 VQ-007 FAIL 且根因在 API/proxy
+```
+
 ### EQ-000 · 模板
 
 ```yaml
