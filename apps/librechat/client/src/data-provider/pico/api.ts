@@ -110,6 +110,10 @@ export async function listPicoRunEvents(runId: string) {
   return picoFetch<{ events: PicoRunEvent[] }>(`/v1/runs/${runId}/events`);
 }
 
+export async function cancelPicoRun(runId: string) {
+  return picoFetch<{ run: PicoRun }>(`/v1/runs/${runId}/cancel`, { method: 'POST' });
+}
+
 export async function listPicoWorkspaces() {
   return picoFetch<{ workspaces: PicoWorkspace[] }>(`/v1/workspaces`);
 }

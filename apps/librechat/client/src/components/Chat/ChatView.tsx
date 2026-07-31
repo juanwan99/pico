@@ -134,15 +134,18 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     setResultOpen(true);
   }, [compactResult, conversationId]);
 
-  // Ensure result panel opens when artifacts arrive or run finishes
+  // Ensure result panel opens when artifacts arrive or a run reaches a terminal state
   useEffect(() => {
     if (compactResult || !conversationId || conversationId === Constants.NEW_CONVO) {
       return;
     }
-    if ((ledger.artifacts?.length ?? 0) > 0 || ledger.statusLabel?.startsWith('已完成')) {
+    if (
+      (ledger.artifacts?.length ?? 0) > 0 ||
+      ['succeeded', 'failed', 'cancelled'].includes(ledger.run?.status || '')
+    ) {
       setResultOpen(true);
     }
-  }, [compactResult, conversationId, ledger.artifacts, ledger.statusLabel]);
+  }, [compactResult, conversationId, ledger.artifacts, ledger.run?.status]);
 
   if (isLoading && conversationId !== Constants.NEW_CONVO) {
     content = <LoadingSpinner />;
@@ -179,10 +182,16 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                       !isSubmitting &&
                       ledger.statusLabel &&
                       (ledger.statusLabel.startsWith('已完成') ||
-                        ledger.statusLabel.startsWith('失败'))
+                        ledger.statusLabel.startsWith('失败') ||
+                        ledger.statusLabel.startsWith('已取消'))
                         ? ledger.statusLabel
                         : null
                     }
+                    canCancel={['queued', 'running', 'preparing'].includes(
+                      ledger.run?.status || '',
+                    )}
+                    cancelling={ledger.cancelling}
+                    onCancel={() => void ledger.cancelRun()}
                   />
                   {ledger.error ? (
                     <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900">
@@ -234,6 +243,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     runStatusLabel={runStatusLabel}
                     picoArtifacts={ledger.artifacts}
                     runEvents={ledger.events}
+                    run={ledger.run}
                     onClose={() => setResultOpen(false)}
                   />
                 ) : null}

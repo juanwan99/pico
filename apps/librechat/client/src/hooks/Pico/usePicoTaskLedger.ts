@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  cancelPicoRun,
   getPicoTask,
   listPicoRunEvents,
   listPicoTaskRuns,
@@ -20,6 +21,8 @@ export type PicoLedgerState = {
   loading: boolean;
   error: string | null;
   refresh: () => void;
+  cancelling: boolean;
+  cancelRun: () => Promise<void>;
 };
 
 function statusLabel(
@@ -82,10 +85,27 @@ export function usePicoTaskLedger(
   const [events, setEvents] = useState<PicoRunEvent[]>([]);
   const [artifacts, setArtifacts] = useState<PicoArtifact[]>([]);
   const [loading, setLoading] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
+  const cancelRun = useCallback(async () => {
+    if (!run || !['queued', 'running', 'preparing'].includes(run.status)) {
+      return;
+    }
+    setCancelling(true);
+    setError(null);
+    try {
+      const result = await cancelPicoRun(run.id);
+      setRun(result.run);
+      setTick((n) => n + 1);
+    } catch {
+      setError('停止运行失败，请稍后重试');
+    } finally {
+      setCancelling(false);
+    }
+  }, [run]);
 
   // Rebind pending_* → real conversation id once LibreChat assigns one
   useEffect(() => {
@@ -232,5 +252,7 @@ export function usePicoTaskLedger(
     loading,
     error,
     refresh,
+    cancelling,
+    cancelRun,
   };
 }

@@ -1,5 +1,5 @@
-import { CheckCircle2, Circle, FileText, Wrench } from 'lucide-react';
-import type { PicoRunEvent } from '~/data-provider/pico/api';
+import { AlertCircle, CheckCircle2, Circle, FileText, Wrench } from 'lucide-react';
+import type { PicoRun, PicoRunEvent } from '~/data-provider/pico/api';
 
 const VISIBLE_EVENT_TYPES = new Set([
   'skill.snapshot',
@@ -7,6 +7,7 @@ const VISIBLE_EVENT_TYPES = new Set([
   'tool.call',
   'tool.result',
   'artifact.created',
+  'run.status',
 ]);
 
 function textValue(payload: Record<string, unknown>, ...keys: string[]): string | null {
@@ -48,10 +49,32 @@ export function describePicoRunEvent(event: PicoRunEvent): {
   }
   if (event.type === 'tool.result') {
     const ok = payload.ok !== false;
+    const code = textValue(payload, 'code', 'error_code');
     return {
       title: `工具结果 · ${textValue(payload, 'tool', 'name') || '未命名工具'}`,
-      detail: ok ? '成功' : '失败',
+      detail: ok ? '成功' : ['失败', code ? `错误码：${code}` : null].filter(Boolean).join(' · '),
     };
+  }
+  if (event.type === 'run.status') {
+    const status = textValue(payload, 'status');
+    const code = textValue(payload, 'code', 'error_code');
+    if (status === 'failed') {
+      return {
+        title: '运行失败',
+        detail: [
+          textValue(payload, 'user_message') || '本次运行未能完成，请稍后重试。',
+          code ? `错误码：${code}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      };
+    }
+    if (status === 'cancelled') {
+      return {
+        title: '运行已取消',
+        detail: code ? `已停止生成 · 错误码：${code}` : '已停止生成',
+      };
+    }
   }
   if (event.type === 'artifact.created') {
     return {
@@ -63,6 +86,9 @@ export function describePicoRunEvent(event: PicoRunEvent): {
 }
 
 function EventIcon({ type }: { type: string }) {
+  if (type === 'run.status') {
+    return <AlertCircle className="h-3.5 w-3.5" />;
+  }
   if (type === 'tool.call' || type === 'tool.result') {
     return <Wrench className="h-3.5 w-3.5" />;
   }
@@ -75,10 +101,39 @@ function EventIcon({ type }: { type: string }) {
   return <Circle className="h-3.5 w-3.5" />;
 }
 
-export default function RunTimeline({ events }: { events?: PicoRunEvent[] | null }) {
-  const visible = (events || [])
-    .filter((event) => VISIBLE_EVENT_TYPES.has(event.type))
+export default function RunTimeline({
+  events,
+  run,
+}: {
+  events?: PicoRunEvent[] | null;
+  run?: PicoRun | null;
+}) {
+  const allEvents = events || [];
+  const visible = allEvents
+    .filter((event) => {
+      if (!VISIBLE_EVENT_TYPES.has(event.type)) {
+        return false;
+      }
+      if (event.type !== 'run.status') {
+        return true;
+      }
+      return ['failed', 'cancelled'].includes(String(event.payload?.status || ''));
+    })
     .sort((a, b) => a.seq - b.seq);
+  const terminalStatus =
+    run?.status === 'failed' || run?.status === 'cancelled' ? run.status : null;
+  const hasTerminalEvent = visible.some(
+    (event) => event.type === 'run.status' && event.payload?.status === terminalStatus,
+  );
+  if (terminalStatus && run && !hasTerminalEvent) {
+    visible.push({
+      id: `${run.id}-terminal-status`,
+      run_id: run.id,
+      seq: Math.max(0, ...allEvents.map((event) => event.seq)) + 1,
+      type: 'run.status',
+      payload: { status: terminalStatus },
+    });
+  }
 
   return (
     <section className="mb-3" aria-label="执行步骤">
