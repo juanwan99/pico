@@ -444,6 +444,8 @@ async def _run_and_collect(
     from pico_orchestrator.runner import RunCaps, run_agent_loop
     from pico_orchestrator.skill_policy import instruction_for_snapshot
 
+    from app.artifact_store import LedgerArtifactStore
+
     factory = session_factory()
 
     async def emit(event_type: str, payload: dict[str, Any]) -> None:
@@ -469,6 +471,7 @@ async def _run_and_collect(
         is_cancelled=is_cancelled,
         caps=caps,
         history=history,
+        artifact_store=LedgerArtifactStore(factory, run_id=run_id),
     )
     return result
 
@@ -779,6 +782,8 @@ async def chat_completions(
 
         async def run() -> None:
             try:
+                from app.artifact_store import LedgerArtifactStore
+
                 caps = RunCaps(
                     max_seconds=settings.pico_run_max_seconds,
                     max_tokens=settings.pico_run_max_tokens,
@@ -795,6 +800,11 @@ async def chat_completions(
                     is_cancelled=is_cancelled,
                     caps=caps,
                     history=history,
+                    artifact_store=LedgerArtifactStore(
+                        factory,
+                        task_id=task_id,
+                        run_id=run_id,
+                    ),
                 )
                 await _finalize_run(
                     run_id,

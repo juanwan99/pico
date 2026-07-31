@@ -20,6 +20,34 @@ class Principal(Protocol):
     scopes: list[str]
 
 
+class ArtifactStore(Protocol):
+    """Membership-scoped Artifact ledger used by workspace tools."""
+
+    async def write(
+        self,
+        principal: Principal,
+        *,
+        title: str,
+        content: str,
+        kind: str,
+    ) -> dict[str, Any]: ...
+
+    async def read(
+        self,
+        principal: Principal,
+        *,
+        artifact_id: str | None,
+        title: str | None,
+    ) -> dict[str, Any] | None: ...
+
+    async def list(
+        self,
+        principal: Principal,
+        *,
+        limit: int,
+    ) -> list[dict[str, Any]]: ...
+
+
 ToolHandler = Callable[[Principal, dict[str, Any]], Awaitable[dict[str, Any]]]
 
 

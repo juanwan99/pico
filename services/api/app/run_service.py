@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.artifact_store import LedgerArtifactStore
 from app.auth import Principal
 from app.db import (
     ArtifactRow,
@@ -235,6 +236,11 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             emit=emit,
             is_cancelled=is_cancelled,
             caps=caps,
+            artifact_store=LedgerArtifactStore(
+                factory,
+                task_id=run.task_id,
+                run_id=run_id,
+            ),
         )
     except Exception as exc:  # noqa: BLE001 — persist failure on any crash
         async with factory() as session:
