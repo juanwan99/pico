@@ -424,6 +424,53 @@ files_lease:
 depends: VQ-005
 ```
 
+### EQ-023 · N7 停止根治（VQ-006 FAIL）
+
+```yaml
+id: EQ-023
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E2
+fallback: E1
+task_doc: docs/DAY-TASK-N7-CANCEL-ROOTFIX.md
+title: Root-fix public stop → POST cancel 200 + cancelled
+files_lease:
+  - apps/librechat/client/**
+  - apps/librechat/api/server/routes/pico.js
+  - tests/**
+deliver:
+  - PR with Network proof checklist
+  - ## DEPLOYED
+  - VQ-007
+```
+
+### EQ-024 · 部署根治 tip
+
+```yaml
+id: EQ-024
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E3
+title: Deploy EQ-023 tip; ## DEPLOYED on fix PR
+depends: EQ-023 merge
+```
+
+### EQ-025 · cancel API/proxy 协助
+
+```yaml
+id: EQ-025
+status: OPEN
+priority: P1
+context_reset: false
+assignee: E1
+title: 仅当 Network 显示请求已发但 4xx/5xx/无账本时修 API/proxy
+files_lease:
+  - services/api/**
+  - apps/librechat/api/server/routes/pico.js
+```
+
 ### EQ-000 · 模板
 
 ```yaml

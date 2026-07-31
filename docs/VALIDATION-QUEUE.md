@@ -163,6 +163,29 @@ report:
 on_done: set status DONE；总管将 EQ-013/014 标 DONE
 ```
 
+### VQ-007 · 停止根治复测
+
+```yaml
+id: VQ-007
+status: OPEN
+priority: P0
+context_reset: false
+target_pr: null
+title: Public stop must cancel after EQ-023
+deploy_gate:
+  - EQ-023 fix PR ## DEPLOYED
+  - health == main tip
+test_plan:
+  - 点 task-run-bar「停止」须变停止中或可见错误
+  - Network POST /api/pico/v1/runs/*/cancel → 200
+  - cancel_requested=1 或 run.cancel_requested
+  - 终态 cancelled
+  - 历史时间线仍 PASS
+report:
+  - ## TEST REPORT on fix PR + note on #107/#99
+on_done: VQ-005/006/007 DONE
+```
+
 ### VQ-000 · 模板（勿删）
 
 ```yaml
