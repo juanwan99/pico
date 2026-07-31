@@ -30,6 +30,8 @@ PAIRS: docs/RACI-GROK-CODEX.md · docs/ONEFLOW.md
 
 **无 GitHub `## TEST REPORT` = 验证任务未交付**（禁止只停在本地窗口）。
 
+**派工入口：** 总管只改 [`docs/VALIDATION-QUEUE.md`](./VALIDATION-QUEUE.md)；验证窗 heartbeat 只读该文件（见文内固定提示词），业主无需每次转贴。
+
 ## 3. 测试窗环境
 
 优先顺序：
