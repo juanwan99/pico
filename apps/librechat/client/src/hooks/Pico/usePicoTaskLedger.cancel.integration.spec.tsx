@@ -95,6 +95,7 @@ describe('Pico cancel button integration', () => {
     global.fetch = fetchMock as typeof fetch;
 
     render(<CancelHarness />);
+    expect(screen.getByTestId('task-run-bar')).toHaveClass('mt-[52px]', 'z-20');
     fireEvent.click(await screen.findByRole('button', { name: '停止' }));
 
     expect(screen.getByRole('button', { name: '停止中' })).toBeDisabled();
