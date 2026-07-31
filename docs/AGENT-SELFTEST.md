@@ -30,6 +30,9 @@ bash scripts/agent-selftest.sh
 # 期望 SELFTEST_OK
 ```
 
+启动自测会先检查 `/health` readiness 摘要：`edu_mode`、限流 RPM、并发上限及
+membership/IP 键作用域。摘要只暴露非敏感配置；自测仅报告校验结果，不回显配置或密钥。
+
 ## 责任边界（HARD）
 
 | 角色 | 负责 |
@@ -39,4 +42,3 @@ bash scripts/agent-selftest.sh
 | **Codex（有 SSH 时）** | 生产 `prod-update` / 浏览器公网验收 |
 
 **禁止**把「请你打开页面测一下」当作默认验收。Agent 本地 `SELFTEST_OK` 是开发门禁。
-

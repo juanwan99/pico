@@ -16,7 +16,15 @@ def test_health() -> None:
     client = TestClient(app)
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json()["ok"] is True
+    body = r.json()
+    assert body["ok"] is True
+    assert body["edu_mode"] in {"fake", "live"}
+    assert body["rate_limit"] == {
+        "chat_rpm": 30,
+        "chat_max_concurrent": 2,
+        "key_scope": "membership_or_ip",
+    }
+    assert not any("secret" in key or "token" in key for key in body)
 
 
 def test_dev_token_and_me() -> None:
