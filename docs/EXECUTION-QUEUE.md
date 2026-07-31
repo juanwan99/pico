@@ -511,6 +511,39 @@ assignee: E1
 title: idle；除非 VQ-007 FAIL 且根因在 API/proxy
 ```
 
+### EQ-029 · 部署 #114 cancel 认领（P0）
+
+```yaml
+id: EQ-029
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E3
+fallback: E1
+title: Deploy main tip 880b714 (#114) — honor cancel in agent streams
+note: |
+  E1 BLOCKED: cannot resolve Host pico-prod from its runtime.
+  E3 用既有 aliyun→生产 路径（DEPLOY-PROD-CHECKLIST / 既往成功路径），禁止假 DEPLOYED。
+deliver:
+  - production HEAD == health.git_sha == 880b71402a701f33366dadbd20149516b90cdc9a（或更新 main 若已前进）
+  - rebuild pico-api（必）+ librechat 若需要
+  - ## DEPLOYED on PR #114
+  - unlock VQ-007 retest
+files_lease:
+  - docs/EXECUTION-QUEUE.md
+```
+
+### EQ-030 · VQ-007 复测后待命
+
+```yaml
+id: EQ-030
+status: OPEN
+priority: P1
+context_reset: false
+assignee: E2
+title: idle unless VQ-007 FAIL is UI-side after #114 deploy
+```
+
 ### EQ-000 · 模板
 
 ```yaml
