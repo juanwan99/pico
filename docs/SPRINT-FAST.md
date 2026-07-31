@@ -1,3 +1,5 @@
+**Execution queue:** [docs/EXECUTION-QUEUE.md](docs/EXECUTION-QUEUE.md)
+
 # 快模式冲刺（BINDING · 7 日）
 
 ```

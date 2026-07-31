@@ -1,3 +1,4 @@
+**Execution queue (×3):** [`docs/EXECUTION-QUEUE.md`](docs/EXECUTION-QUEUE.md)  
 **Validation queue:** [`docs/VALIDATION-QUEUE.md`](./VALIDATION-QUEUE.md)  
 **FAST sprint:** [`docs/SPRINT-FAST.md`](docs/SPRINT-FAST.md)  
 **P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
