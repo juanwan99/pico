@@ -40,7 +40,11 @@ def test_skill_snapshot_intersects_global_allowlist():
     snap = snapshot_for_skill("skill.read")
     assert snap is not None
     assert snap["id"] == "skill-read"
-    assert snap["tools"] == ["fake_edu_list_classes"]
+    assert snap["tools"] == [
+        "workspace_read_file",
+        "workspace_list_files",
+        "fake_edu_list_classes",
+    ]
     assert snap["risk"] == "read"
     assert len(snap["prompt_hash"]) == 64
 
