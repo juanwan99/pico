@@ -186,6 +186,62 @@ files_lease:
   - docs/VALIDATION-QUEUE.md
 ```
 
+### EQ-007 · N6 能力中心技能工具只读
+
+```yaml
+id: EQ-007
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E2
+fallback: E1
+task_doc: docs/DAY-TASK-N6-SKILL-HUB-TOOLS.md
+title: Skill hub shows policy-bound tools (read-only)
+files_lease:
+  - apps/librechat/client/**
+  - apps/librechat/api/server/routes/pico.js
+  - services/api/**  # if adding GET /v1/skills
+  - services/orchestrator/pico_orchestrator/skill_policy.py  # export only if needed
+deliver:
+  - PR RISK:黄 FAST
+  - ## DEPLOYED
+  - unlocks VQ-004
+```
+
+### EQ-008 · N6b 限流 membership 键
+
+```yaml
+id: EQ-008
+status: OPEN
+priority: P1
+context_reset: false
+assignee: E1
+task_doc: docs/DAY-TASK-N6-RATELIMIT-MEMBERSHIP.md
+title: Rate limit key prefers membership_id
+files_lease:
+  - services/api/app/rate_limit.py
+  - services/api/app/openai_compat.py
+  - services/api/app/main.py
+  - tests/unit/**
+deliver:
+  - PR RISK:黄 FAST
+  - ## DEPLOYED
+```
+
+### EQ-009 · 巡检
+
+```yaml
+id: EQ-009
+status: OPEN
+priority: P2
+context_reset: false
+assignee: E3
+title: Deploy #82/#tip if needed; queue DONE; surface BLOCKED to controller
+files_lease:
+  - docs/EXECUTION-QUEUE.md
+  - docs/VALIDATION-QUEUE.md
+```
+
 ### EQ-000 · 模板
 
 ```yaml

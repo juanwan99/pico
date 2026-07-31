@@ -89,7 +89,7 @@ DEBT: （无则写 none）
 
 ### 当前执行焦点
 
-N1/N2/N3 已完成。下一步：**N4** → `docs/DAY-TASK-N4-RUN-TIMELINE.md`；验证看 `VALIDATION-QUEUE` VQ-002
+N1/N2/N3 已完成。下一步：**N6**（N5 已合）；见 EXECUTION-QUEUE EQ-007/008 → `docs/DAY-TASK-N4-RUN-TIMELINE.md`；验证看 `VALIDATION-QUEUE` VQ-002
 
 
 ### 【给：③ 验证窗 · 本地】
