@@ -515,7 +515,8 @@ title: idle；除非 VQ-007 FAIL 且根因在 API/proxy
 
 ```yaml
 id: EQ-029
-status: OPEN
+status: DONE
+done_note: "2026-07-31 E3 rebuilt pico-api and deployed main f8c36bdc339aa2e2124b10eaf881a9d16024e54c containing #114; production HEAD/health.git_sha exact-match; public login 200; protected ports loopback-only; ## DEPLOYED on #114"
 priority: P0
 context_reset: false
 assignee: E3
