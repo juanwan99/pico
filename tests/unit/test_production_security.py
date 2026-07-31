@@ -10,12 +10,13 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+from app.auth import issue_test_token
 from app.openai_compat import (
     _assert_model_allowed,
     _effective_max_tokens,
     _principal_from_auth,
 )
-from app.rate_limit import ChatAdmission
+from app.rate_limit import ChatAdmission, _rate_limit_key
 from app.settings import Settings
 
 
@@ -47,9 +48,7 @@ def _valid_production(**overrides: object) -> Settings:
         ({"pico_allowed_models": "pico-agent"}, "provider model"),
     ],
 )
-def test_production_configuration_fails_closed(
-    overrides: dict[str, object], message: str
-) -> None:
+def test_production_configuration_fails_closed(overrides: dict[str, object], message: str) -> None:
     with pytest.raises(ValueError, match=message):
         _valid_production(**overrides).validate_production()
 
@@ -98,11 +97,44 @@ def test_requested_tokens_are_clamped_to_global_cap() -> None:
 async def test_chat_admission_enforces_concurrency_and_rpm() -> None:
     admission = ChatAdmission()
     assert await admission.acquire("ip", rpm=2, max_concurrent=1) is None
-    assert (
-        await admission.acquire("ip", rpm=2, max_concurrent=1)
-        == "concurrency_limit"
-    )
+    assert await admission.acquire("ip", rpm=2, max_concurrent=1) == "concurrency_limit"
     await admission.release("ip")
     assert await admission.acquire("ip", rpm=2, max_concurrent=1) is None
     await admission.release("ip")
     assert await admission.acquire("ip", rpm=2, max_concurrent=1) == "rate_limit"
+
+
+async def test_chat_admission_isolated_by_membership_on_same_ip() -> None:
+    settings = Settings()
+    shared_scope = {
+        "client": ("203.0.113.10", 1234),
+        "headers": [],
+    }
+
+    def key_for(member: str) -> str:
+        token = issue_test_token(
+            school_id="school-a",
+            membership_id=member,
+            settings=settings,
+        )
+        scope = {
+            **shared_scope,
+            "headers": [(b"authorization", f"Bearer {token}".encode())],
+        }
+        return _rate_limit_key(scope, settings)
+
+    member_a = key_for("member-a")
+    member_b = key_for("member-b")
+    assert member_a != member_b
+
+    admission = ChatAdmission()
+    assert await admission.acquire(member_a, rpm=1, max_concurrent=1) is None
+    await admission.release(member_a)
+    assert await admission.acquire(member_a, rpm=1, max_concurrent=1) == "rate_limit"
+    assert await admission.acquire(member_b, rpm=1, max_concurrent=1) is None
+    await admission.release(member_b)
+
+
+def test_chat_rate_limit_falls_back_to_ip_without_principal() -> None:
+    scope = {"client": ("203.0.113.10", 1234), "headers": []}
+    assert _rate_limit_key(scope, Settings()) == "ip:203.0.113.10"

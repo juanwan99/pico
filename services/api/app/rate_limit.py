@@ -13,6 +13,9 @@ from collections import defaultdict, deque
 from collections.abc import MutableMapping
 from typing import Any
 
+from fastapi import HTTPException
+
+from app.auth import decode_token, scope_proxy_principal
 from app.settings import get_settings
 
 
@@ -45,7 +48,7 @@ class ChatAdmission:
 
 
 class ChatRateLimitMiddleware:
-    """Apply IP RPM and concurrency caps to the expensive chat endpoint."""
+    """Apply membership RPM and concurrency caps to the expensive chat endpoint."""
 
     def __init__(self, app: Any) -> None:
         self.app = app
@@ -57,8 +60,7 @@ class ChatRateLimitMiddleware:
             return
 
         settings = get_settings()
-        client = scope.get("client")
-        key = str(client[0]) if client else "unknown"
+        key = _rate_limit_key(scope, settings)
         reason = await self.admission.acquire(
             key,
             rpm=settings.pico_chat_rpm,
@@ -85,3 +87,25 @@ class ChatRateLimitMiddleware:
             await self.app(scope, receive, send)
         finally:
             await self.admission.release(key)
+
+
+def _rate_limit_key(scope: dict, settings: Any) -> str:
+    """Prefer an authenticated tenant membership, falling back to client IP."""
+    headers = {key.lower(): value for key, value in scope.get("headers", [])}
+    authorization = headers.get(b"authorization", b"").decode("latin-1")
+    membership_header = headers.get(b"x-pico-membership-id", b"").decode("latin-1")
+    if authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        if token:
+            try:
+                principal = decode_token(token, settings)
+                principal = scope_proxy_principal(principal, membership_header)
+                return f"membership:{principal.school_id}:{principal.membership_id}"
+            except HTTPException:
+                # Authentication remains the endpoint's responsibility. An
+                # unparseable principal still receives the conservative IP cap.
+                pass
+
+    client = scope.get("client")
+    client_ip = str(client[0]) if client else "unknown"
+    return f"ip:{client_ip}"
