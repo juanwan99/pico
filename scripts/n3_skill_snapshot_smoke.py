@@ -1,4 +1,4 @@
-"""N3 repeatable smoke for the three thin Pico skills.
+"""Repeatable smoke for every controlled Pico skill.
 
 Default mode is CI-friendly and validates the committed LibreChat deployment
 skill files plus Pico policy snapshots. Pass --api to exercise a running Pico
@@ -46,6 +46,41 @@ SKILLS = [
         "tools": ["pico_propose_change"],
         "risk": "write_s7",
         "prompt": "提出一个把一班名称改为星辰一班的变更申请",
+    },
+    {
+        "id": "skill-summarize",
+        "name": "skill.summarize",
+        "tools": [],
+        "risk": "low",
+        "prompt": "总结这段内容：课程目标明确，明天完成复核。",
+    },
+    {
+        "id": "skill-lesson-outline",
+        "name": "skill.lesson_outline",
+        "tools": [],
+        "risk": "low",
+        "prompt": "为一节光合作用课程起草大纲。",
+    },
+    {
+        "id": "skill-quiz-draft",
+        "name": "skill.quiz_draft",
+        "tools": [],
+        "risk": "low",
+        "prompt": "根据水的三态起草三道测验题。",
+    },
+    {
+        "id": "skill-translate",
+        "name": "skill.translate",
+        "tools": [],
+        "risk": "low",
+        "prompt": "把“欢迎来到课堂”翻译成英文。",
+    },
+    {
+        "id": "skill-meeting-notes",
+        "name": "skill.meeting_notes",
+        "tools": [],
+        "risk": "low",
+        "prompt": "整理会议：决定周五发布，李老师负责复核。",
     },
 ]
 

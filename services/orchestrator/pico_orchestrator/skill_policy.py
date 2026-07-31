@@ -54,6 +54,56 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         requires_s7=True,
     ),
+    "skill-summarize": SkillPolicy(
+        id="skill-summarize",
+        name="skill.summarize",
+        requested_tools=(),
+        risk="low",
+        instruction=(
+            "本轮使用 skill.summarize：提炼用户提供内容的要点、结论与待办；"
+            "不得补写原文中不存在的事实。"
+        ),
+    ),
+    "skill-lesson-outline": SkillPolicy(
+        id="skill-lesson-outline",
+        name="skill.lesson_outline",
+        requested_tools=(),
+        risk="low",
+        instruction=(
+            "本轮使用 skill.lesson_outline：按教学目标、重点难点、活动与检查点生成课程大纲；"
+            "缺少年级或课时信息时明确假设。"
+        ),
+    ),
+    "skill-quiz-draft": SkillPolicy(
+        id="skill-quiz-draft",
+        name="skill.quiz_draft",
+        requested_tools=(),
+        risk="low",
+        instruction=(
+            "本轮使用 skill.quiz_draft：根据用户给定材料起草题目、答案与简短解析；"
+            "题目仅为草稿，提醒用户发布前复核。"
+        ),
+    ),
+    "skill-translate": SkillPolicy(
+        id="skill-translate",
+        name="skill.translate",
+        requested_tools=(),
+        risk="low",
+        instruction=(
+            "本轮使用 skill.translate：忠实翻译用户提供内容，保留格式、专名与语气；"
+            "不确定术语应标注而非臆造。"
+        ),
+    ),
+    "skill-meeting-notes": SkillPolicy(
+        id="skill-meeting-notes",
+        name="skill.meeting_notes",
+        requested_tools=(),
+        risk="low",
+        instruction=(
+            "本轮使用 skill.meeting_notes：把用户提供的会议内容整理为议题、决定、"
+            "负责人和待办；没有明确负责人的事项标为待确认。"
+        ),
+    ),
 }
 
 _ALIASES = {
@@ -71,6 +121,24 @@ _ALIASES = {
     "skill.write-s7": "skill-write-s7",
     "skill-write-s7": "skill-write-s7",
     "pico-write-s7": "skill-write-s7",
+    "summarize": "skill-summarize",
+    "skill.summarize": "skill-summarize",
+    "skill-summarize": "skill-summarize",
+    "lesson-outline": "skill-lesson-outline",
+    "lesson_outline": "skill-lesson-outline",
+    "skill.lesson_outline": "skill-lesson-outline",
+    "skill-lesson-outline": "skill-lesson-outline",
+    "quiz-draft": "skill-quiz-draft",
+    "quiz_draft": "skill-quiz-draft",
+    "skill.quiz_draft": "skill-quiz-draft",
+    "skill-quiz-draft": "skill-quiz-draft",
+    "translate": "skill-translate",
+    "skill.translate": "skill-translate",
+    "skill-translate": "skill-translate",
+    "meeting-notes": "skill-meeting-notes",
+    "meeting_notes": "skill-meeting-notes",
+    "skill.meeting_notes": "skill-meeting-notes",
+    "skill-meeting-notes": "skill-meeting-notes",
 }
 
 

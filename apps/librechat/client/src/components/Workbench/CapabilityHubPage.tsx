@@ -85,6 +85,46 @@ const DEMO_SKILLS = [
     tools: 'pico_propose_change',
     risk: 'write_s7',
   },
+  {
+    id: 'skill-summarize',
+    name: 'skill.summarize',
+    desc: 'Pico 快路径预设：提炼要点、结论与待办',
+    prompt: '请总结以下内容，列出要点、结论与待办；不要补充原文没有的事实：',
+    tools: '无工具',
+    risk: 'low',
+  },
+  {
+    id: 'skill-lesson-outline',
+    name: 'skill.lesson_outline',
+    desc: 'Pico 快路径预设：生成目标明确的课程大纲',
+    prompt: '请按教学目标、重点难点、课堂活动和检查点起草课程大纲。',
+    tools: '无工具',
+    risk: 'low',
+  },
+  {
+    id: 'skill-quiz-draft',
+    name: 'skill.quiz_draft',
+    desc: 'Pico 快路径预设：基于材料生成测验草稿',
+    prompt: '请根据我提供的材料起草测验题、答案和简短解析，并标明这是待复核草稿。',
+    tools: '无工具',
+    risk: 'low',
+  },
+  {
+    id: 'skill-translate',
+    name: 'skill.translate',
+    desc: 'Pico 快路径预设：忠实翻译并保留格式语气',
+    prompt: '请忠实翻译以下内容，保留格式、专名和语气；不确定术语请标注：',
+    tools: '无工具',
+    risk: 'low',
+  },
+  {
+    id: 'skill-meeting-notes',
+    name: 'skill.meeting_notes',
+    desc: 'Pico 快路径预设：整理会议决定、负责人和待办',
+    prompt: '请把以下会议内容整理为议题、决定、负责人和待办；未明确负责人时标为待确认：',
+    tools: '无工具',
+    risk: 'low',
+  },
 ];
 
 export default function CapabilityHubPage() {
@@ -317,7 +357,9 @@ export default function CapabilityHubPage() {
         {tab === 'skills' && !selectedSkill && (
           <div className="mx-auto max-w-2xl space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-[12px] text-[#8c8c8c]">LibreChat Skills · 点击即开 Pico 快照任务</p>
+              <p className="text-[12px] text-[#8c8c8c]">
+                Pico 技能快路径 · 完整目录与自定义技能请前往 /skills
+              </p>
               <button
                 type="button"
                 onClick={() => navigate('/skills/manage')}
