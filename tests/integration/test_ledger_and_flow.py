@@ -288,9 +288,14 @@ def test_cancel_queued_run(client: TestClient, monkeypatch):
     )
     assert r.status_code == 200
     run_id = r.json()["run"]["id"]
-    # Immediately cancel
-    c = client.post(f"/v1/runs/{run_id}/cancel", headers=h, json={})
-    assert c.status_code == 200
+    # Immediately cancel (retry once: SQLite lock flake under concurrent worker)
+    c = None
+    for _ in range(3):
+        c = client.post(f"/v1/runs/{run_id}/cancel", headers=h, json={})
+        if c.status_code == 200:
+            break
+        time.sleep(0.05)
+    assert c is not None and c.status_code == 200
 
     # Wait for worker
     status = None

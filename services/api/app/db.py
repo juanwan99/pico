@@ -235,7 +235,7 @@ def _migrate_sqlite_sync(conn) -> None:
 def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.close()
 
 
@@ -243,7 +243,8 @@ async def init_db() -> None:
     global _engine, _Session
     settings = get_settings()
     url = _normalize_url(settings.pico_database_url)
-    _engine = create_async_engine(url, echo=False)
+    connect_args = {"timeout": 30} if "sqlite" in url else {}
+    _engine = create_async_engine(url, echo=False, connect_args=connect_args)
     if "sqlite" in url:
         event.listen(_engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
     _Session = async_sessionmaker(_engine, expire_on_commit=False)
