@@ -12,7 +12,8 @@ router.use(requireJwtAuth);
 const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
 function picoBase() {
-  const raw = process.env.OPENAI_REVERSE_PROXY || process.env.PICO_API_BASE || 'http://127.0.0.1:18765/v1';
+  const raw =
+    process.env.OPENAI_REVERSE_PROXY || process.env.PICO_API_BASE || 'http://127.0.0.1:18765/v1';
   const base = raw.replace(/\/v1\/?$/, '');
   // only loopback / private env host — block accidental open proxy
   try {
@@ -183,6 +184,14 @@ router.post('/v1/tasks/rebind-conversation', (req, res) =>
 
 router.get('/v1/automations', (req, res) => proxy(req, res, '/v1/automations'));
 router.post('/v1/automations', (req, res) => proxy(req, res, '/v1/automations'));
+router.post('/v1/automations/:id/run', (req, res) => {
+  try {
+    assertId(req.params.id, 'id');
+    return proxy(req, res, `/v1/automations/${req.params.id}/run`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
 router.post('/v1/automations/:id/enable', (req, res) => {
   try {
     assertId(req.params.id, 'id');
@@ -207,7 +216,6 @@ router.delete('/v1/automations/:id', (req, res) => {
     return res.status(400).json({ error: 'bad_request', message: e.message });
   }
 });
-
 
 router.get('/v1/changes', (req, res) => proxy(req, res, '/v1/changes'));
 router.post('/v1/changes', (req, res) => proxy(req, res, '/v1/changes'));
