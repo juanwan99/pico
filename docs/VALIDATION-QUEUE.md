@@ -73,7 +73,8 @@ on_done: set status DONE; pause heartbeat if no other OPEN
 
 ```yaml
 id: VQ-002
-status: OPEN
+status: DONE
+done_note: "2026-07-31 production TEST REPORT on #78: overall FAIL; N4 timeline/run-once/P0 PASS, skill.unknown artifact write FAIL"
 priority: P1
 target_pr: null
 related_docs: [docs/DAY-TASK-N4-RUN-TIMELINE.md]
