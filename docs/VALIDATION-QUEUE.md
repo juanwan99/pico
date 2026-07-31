@@ -144,7 +144,8 @@ on_done: set status DONE
 
 ```yaml
 id: VQ-005
-status: OPEN
+status: DONE
+done_note: "timeline PASS earlier; cancel closed via VQ-008 PASS on #117 @ 567ab9e"
 priority: P0
 context_reset: false
 target_pr: 99
@@ -167,7 +168,8 @@ on_done: set status DONE；总管将 EQ-013/014 标 DONE
 
 ```yaml
 id: VQ-007
-status: OPEN
+status: DONE
+done_note: "superseded by VQ-008 PASS #117 @ 567ab9e cancelled"
 priority: P0
 context_reset: false
 target_pr: 108
@@ -195,7 +197,8 @@ on_done: set VQ-005 VQ-006 VQ-007 DONE；通知总管收 N7 停止线
 
 ```yaml
 id: VQ-008
-status: OPEN
+status: DONE
+done_note: "PASS 2026-07-31 production 567ab9edfdd436a3507b4774e8180e673e0dd779 #117"
 priority: P0
 context_reset: false
 target_pr: 114

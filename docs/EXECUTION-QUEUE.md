@@ -300,7 +300,8 @@ files_lease:
 
 ```yaml
 id: EQ-013
-status: OPEN
+status: DONE
+done_note: "history timeline production PASS; closed with N7 stop line"
 priority: P0
 context_reset: false
 assignee: E2
@@ -320,7 +321,8 @@ deliver:
 
 ```yaml
 id: EQ-014
-status: OPEN
+status: DONE
+done_note: "cancel UI path closed; VQ-008 PASS cancelled"
 priority: P0
 context_reset: false
 assignee: E2
@@ -414,7 +416,8 @@ deliver:
 
 ```yaml
 id: EQ-019
-status: OPEN
+status: DONE
+done_note: "superseded by #104/#107/#108; VQ-008 PASS"
 priority: P0
 context_reset: false
 assignee: E2
@@ -491,7 +494,8 @@ files_lease:
 
 ```yaml
 id: EQ-027
-status: OPEN
+status: DONE
+done_note: "no UI FAIL after #117; VQ-008 PASS"
 priority: P0
 context_reset: false
 assignee: E2
@@ -538,7 +542,8 @@ files_lease:
 
 ```yaml
 id: EQ-030
-status: OPEN
+status: DONE
+done_note: "no UI FAIL; VQ-008 PASS"
 priority: P1
 context_reset: false
 assignee: E2
