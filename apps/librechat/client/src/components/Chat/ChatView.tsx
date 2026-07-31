@@ -113,6 +113,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
       ? chatHelpers.conversation.title
       : undefined;
   const ledger = usePicoTaskLedger(conversationId, isSubmitting);
+  const cancellableRunId = ['queued', 'running', 'preparing'].includes(ledger.run?.status || '')
+    ? ledger.run?.id
+    : undefined;
   const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '等待模型响应' : undefined);
   const showResultPanel = resultOpen && !isLandingPage && conversationId !== Constants.SEARCH;
 
@@ -187,11 +190,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                         ? ledger.statusLabel
                         : null
                     }
-                    canCancel={['queued', 'running', 'preparing'].includes(
-                      ledger.run?.status || '',
-                    )}
+                    canCancel={Boolean(cancellableRunId)}
                     cancelling={ledger.cancelling}
-                    onCancel={() => void ledger.cancelRun()}
+                    onCancel={() => void ledger.cancelRun(cancellableRunId)}
                   />
                   {ledger.error ? (
                     <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900">
