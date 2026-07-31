@@ -312,8 +312,5 @@ async def append_event(
             if attempt >= 4:
                 raise
             await asyncio.sleep(0.02 * (attempt + 1))
-            try:
-                await session.rollback()
-            except Exception:
-                pass
+            await session.rollback()
     raise RuntimeError(f"event sequence allocation exhausted: {last_err!r}")
