@@ -30,6 +30,16 @@ bash scripts/agent-selftest.sh
 # 期望 SELFTEST_OK
 ```
 
+脚本启动时先检查 `/health` 的 readiness 摘要：
+
+- `edu_mode` 只能是 `fake` 或 `live`；
+- `rate_limit.scope` 固定为 `membership_or_ip`；
+- `rate_limit.rpm` 与 `rate_limit.max_concurrent` 必须是正整数。
+
+这些字段只公开运行模式和限流数值，不包含 token、key、issuer secret
+或上游服务凭据。部署核验仍以 `health.git_sha` 与已合 main 的完整 SHA
+一致为准。
+
 ## 责任边界（HARD）
 
 | 角色 | 负责 |
@@ -39,4 +49,3 @@ bash scripts/agent-selftest.sh
 | **Codex（有 SSH 时）** | 生产 `prod-update` / 浏览器公网验收 |
 
 **禁止**把「请你打开页面测一下」当作默认验收。Agent 本地 `SELFTEST_OK` 是开发门禁。
-
