@@ -428,7 +428,8 @@ depends: VQ-005
 
 ```yaml
 id: EQ-023
-status: OPEN
+status: DONE
+done_note: "#108 merged fa1c140; Chromium browser proof PASS; E3 deployed exact main SHA (EQ-024)"
 priority: P0
 context_reset: false
 assignee: E2
