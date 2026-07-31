@@ -27,6 +27,7 @@ TRUTH: GitHub only · 无回写 = 未交付
 |----|------|----------|
 | **N1** | P0 安全 **生产落地** | main 含 #67；生产 `## DEPLOYED`；`## TEST REPORT` 对 [TEST-TASK-P0-SECURITY](./TEST-TASK-P0-SECURITY.md) **PASS** |
 | **N2** | 轨 C 自动化真跑 | [#64](https://github.com/juanwan99/pico/pull/64) 合 main → 部署 → 冒烟「运行一次」有 Run |
+| **N3** | 未知 Skill fail-closed | [DAY-TASK-N3](./DAY-TASK-N3-SKILL-FAILCLOSED.md) 合+部署+TEST PASS |
 
 ### 本周冻结（禁止插队）
 
@@ -83,16 +84,10 @@ DEBT: （无则写 none）
 
 ## 5. 今日起立即动作
 
-### 【给：② 执行窗 · Codex@ECS】
+### 当前执行焦点
 
-```text
-读 docs/SPRINT-FAST.md（BINDING）。
-1) 立刻部署 main（含 #67 P0）按 docs/DEPLOY-PROD-CHECKLIST.md
-   → PR #67 评论 ## DEPLOYED 或 ## BLOCKED（2h SLA）
-2) #64 轨 C：CI 绿则 RISK:黄 + FAST 代合 main（或总管已合则只部署）
-   → ## DEPLOYED + 自动化冒烟说明
-强制 GitHub 回写。禁 M5/edu-cloud/像素。DEBT 记 docs/DEBT-BACKLOG.md 仅当新增借债。
-```
+N1/N2 已完成。下一步：**N3** → `docs/DAY-TASK-N3-SKILL-FAILCLOSED.md`
+
 
 ### 【给：③ 验证窗 · 本地】
 
