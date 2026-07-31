@@ -140,26 +140,27 @@ report:
 on_done: set status DONE
 ```
 
-### VQ-005 · N7 历史时间线 + 取消
+### VQ-005 · N7 历史时间线 + 取消（上线门槛）
 
 ```yaml
 id: VQ-005
 status: OPEN
 priority: P0
 context_reset: false
-target_pr: null
-title: N7 history timeline + cancel run
+target_pr: 99
+related: [97, 98, 99, 100]
+title: N7 history timeline + cancel run — launch gate
 deploy_gate:
-  - EQ-013/014 implementation PRs ## DEPLOYED
-  - health matches main
+  - production health.git_sha equals main tip (or comment exact live SHA ≥ 2911909 / e15a238 lineage)
+  - #99 has ## DEPLOYED lineage
 test_plan:
-  - 历史进入旧任务可见步骤时间线
-  - 长任务可点停止 → cancelled 可见（或短任务模拟）
-  - 运行一次 / skill hub 不回归
-  - pico-dev 401
+  - A: 公网完成一次带工具的 pico-agent 任务；从历史/会话再进入，结果区 Run 时间线可见 skill/tool/步骤（非仅最新内存）
+  - B: 运行中点「停止」→ UI 与账本 cancelled（或明确不可停止的诚实失败）
+  - C: 自动化「运行一次」仍 PASS
+  - D: Bearer pico-dev → 401/403
 report:
-  - ## TEST REPORT on N7 PRs
-on_done: set status DONE
+  - ## TEST REPORT on PR #99（主）并可交叉 #97
+on_done: set status DONE；总管将 EQ-013/014 标 DONE
 ```
 
 ### VQ-000 · 模板（勿删）
