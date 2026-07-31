@@ -22,6 +22,22 @@ echo "API=$API UI=$UI API_ONLY=$API_ONLY"
 
 h=$(curl -sS --max-time 5 "$API/health" || true)
 echo "$h" | grep -q '"ok":true' && pass "api health" || fail "api health: $h"
+if HEALTH_JSON="$h" python3 - <<'PY'
+import json
+import os
+
+health = json.loads(os.environ["HEALTH_JSON"])
+rate_limit = health["rate_limit"]
+assert health["edu_mode"] in {"fake", "live"}
+assert isinstance(rate_limit["chat_rpm"], int) and rate_limit["chat_rpm"] > 0
+assert isinstance(rate_limit["chat_max_concurrent"], int) and rate_limit["chat_max_concurrent"] > 0
+assert rate_limit["key_scope"] == "membership_or_ip"
+PY
+then
+  pass "health readiness summary"
+else
+  fail "health readiness summary missing or invalid"
+fi
 
 code=$(curl -sS --max-time 90 -o /tmp/pico-st-s1.json -w '%{http_code}' \
   -H 'Authorization: Bearer pico-dev' \

@@ -157,12 +157,18 @@ async def root_info() -> dict:
 
 
 @app.get("/health")
-async def health() -> dict:
+async def health(settings: Settings = Depends(get_settings)) -> dict:
     return {
         "ok": True,
         "service": "pico-api",
         "phase": "3-integrate",
         "git_sha": _resolve_git_sha(),
+        "edu_mode": settings.pico_edu_mode,
+        "rate_limit": {
+            "chat_rpm": settings.pico_chat_rpm,
+            "chat_max_concurrent": settings.pico_chat_max_concurrent,
+            "key_scope": "membership_or_ip",
+        },
     }
 
 
