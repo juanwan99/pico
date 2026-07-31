@@ -67,3 +67,14 @@ def test_skill_schema_filter_only_exposes_intersection():
     }
     assert read_names == {"fake_edu_list_classes"}
     assert openai_tool_schemas(gw, allowed_tools=[]) == []
+
+
+def test_misspelled_skill_exposes_no_tool_schemas():
+    _, snapshot = snapshot_from_prompt("【Pico-Skill:skill-reead】\n读取文件")
+
+    assert snapshot is not None
+    assert snapshot["name"] == "skill.unknown"
+    assert openai_tool_schemas(
+        build_default_gateway(),
+        allowed_tools=snapshot["tools"],
+    ) == []
