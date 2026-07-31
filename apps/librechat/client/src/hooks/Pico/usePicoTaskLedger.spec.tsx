@@ -52,9 +52,7 @@ describe('usePicoTaskLedger', () => {
       ],
     });
 
-    const { result, unmount } = renderHook(() =>
-      usePicoTaskLedger('conversation-history', false),
-    );
+    const { result, unmount } = renderHook(() => usePicoTaskLedger('conversation-history', false));
 
     await waitFor(() => expect(result.current.run?.id).toBe('run-history'));
     expect(mockedListTasks).toHaveBeenCalledWith('conversation-history');
@@ -109,6 +107,21 @@ describe('usePicoTaskLedger', () => {
     expect(mockedCancelRun).toHaveBeenCalledWith('run-running');
     await waitFor(() => expect(result.current.run?.status).toBe('cancelled'));
     expect(result.current.statusLabel).toBe('已取消');
+    unmount();
+  });
+
+  it('cancels the run rendered by the button even if polling has replaced ledger state', async () => {
+    mockedListTasks.mockResolvedValue({ tasks: [] });
+    mockedCancelRun.mockResolvedValue({
+      run: { id: 'run-rendered', task_id: 'task-running', status: 'cancelled' },
+    });
+
+    const { result, unmount } = renderHook(() => usePicoTaskLedger('conversation-running', false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => result.current.cancelRun('run-rendered'));
+
+    expect(mockedCancelRun).toHaveBeenCalledWith('run-rendered');
     unmount();
   });
 });
