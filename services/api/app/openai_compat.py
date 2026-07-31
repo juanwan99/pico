@@ -376,7 +376,11 @@ async def _finalize_run(
                     commit=False,
                 )
 
-        if final_text and status == "succeeded":
+        unknown_skill = (
+            isinstance(skill_snapshot, dict)
+            and skill_snapshot.get("name") == "skill.unknown"
+        )
+        if final_text and status == "succeeded" and not unknown_skill:
             existing = await session.execute(
                 select(ArtifactRow.kind, ArtifactRow.title).where(
                     ArtifactRow.run_id == run_id
