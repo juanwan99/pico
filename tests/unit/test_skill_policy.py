@@ -2,8 +2,10 @@
 
 from pico_orchestrator.skill_policy import (
     declared_tools_for_skill,
+    instruction_for_snapshot,
     normalize_skill_id,
     snapshot_for_skill,
+    snapshot_from_prompt,
     strip_skill_markers,
 )
 from pico_orchestrator.tools_builtin import build_default_gateway
@@ -75,3 +77,34 @@ def test_strip_marker():
     raw = "hello 【Pico-Skill:skill-chat】 world"
     assert "Pico-Skill" not in strip_skill_markers(raw)
     assert "hello" in strip_skill_markers(raw)
+
+
+def test_unknown_skill_fails_closed_as_chat_only():
+    snapshot = snapshot_for_skill("skill-reead")
+
+    assert snapshot is not None
+    assert snapshot["id"] == "skill-unknown"
+    assert snapshot["name"] == "skill.unknown"
+    assert snapshot["tools"] == []
+    assert snapshot["policy"]["tool_rule"] == "deny-all"
+    assert snapshot["policy"]["reason"] == "skill.unknown"
+    assert "workspace_write_file" not in snapshot["tools"]
+    assert "skill.unknown" in instruction_for_snapshot(snapshot)
+
+
+def test_unknown_prompt_marker_is_stripped_and_snapshotted():
+    prompt, snapshot = snapshot_from_prompt(
+        "【Pico-Skill:skill-reead】\n不要让我拿到全工具"
+    )
+
+    assert prompt == "不要让我拿到全工具"
+    assert snapshot is not None
+    assert snapshot["name"] == "skill.unknown"
+    assert snapshot["tools"] == []
+
+
+def test_prompt_without_skill_marker_preserves_default_policy():
+    prompt, snapshot = snapshot_from_prompt("普通对话")
+
+    assert prompt == "普通对话"
+    assert snapshot is None

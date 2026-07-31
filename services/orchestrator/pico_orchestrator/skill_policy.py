@@ -10,6 +10,10 @@ from typing import Any
 from pico_orchestrator.tools_builtin import build_default_gateway
 
 SKILL_MARKER_RE = re.compile(r"【Pico-Skill:([^】]+)】")
+UNKNOWN_SKILL_INSTRUCTION = (
+    "本轮请求的 Skill 不在 Pico 受控目录中，已降级为 skill.unknown（chat-only）；"
+    "不得调用工具、臆造工具结果或声称已执行写入。"
+)
 
 
 @dataclass(frozen=True)
@@ -177,9 +181,25 @@ def skill_id_from_prompt(prompt: str) -> str | None:
 
 
 def snapshot_for_skill(skill_ref: str | None) -> dict[str, Any] | None:
+    if not isinstance(skill_ref, str) or not skill_ref.strip():
+        return None
     skill_id = normalize_skill_id(skill_ref)
     if not skill_id:
-        return None
+        return {
+            "id": "skill-unknown",
+            "name": "skill.unknown",
+            "tools": [],
+            "risk": "unknown",
+            "requires_s7": False,
+            "prompt_hash": hashlib.sha256(
+                UNKNOWN_SKILL_INSTRUCTION.encode("utf-8")
+            ).hexdigest(),
+            "policy": {
+                "source": "librechat-skills",
+                "tool_rule": "deny-all",
+                "reason": "skill.unknown",
+            },
+        }
     policy = _POLICIES.get(skill_id)
     if policy is None:
         return None
@@ -213,9 +233,13 @@ def declared_tools_for_skill(skill_ref: str | None) -> list[str] | None:
 def instruction_for_snapshot(snapshot: dict[str, Any] | None) -> str:
     if not snapshot:
         return ""
+    if snapshot.get("name") == "skill.unknown":
+        return UNKNOWN_SKILL_INSTRUCTION
     policy = _POLICIES.get(str(snapshot.get("id") or ""))
     return policy.instruction if policy else ""
 
 
 def snapshot_from_prompt(prompt: str) -> tuple[str, dict[str, Any] | None]:
-    return strip_skill_markers(prompt), snapshot_for_skill(skill_id_from_prompt(prompt))
+    match = SKILL_MARKER_RE.search(prompt or "")
+    skill_ref = match.group(1) if match else None
+    return strip_skill_markers(prompt), snapshot_for_skill(skill_ref)
