@@ -100,7 +100,8 @@ on_done: set status DONE
 
 ```yaml
 id: VQ-003
-status: OPEN
+status: DONE
+done_note: "2026-07-31 production TEST REPORT PASS on #82: failed calculator visible with error code; normal tool path PASS; pico-dev 401"
 priority: P0
 context_reset: false
 target_pr: 82
