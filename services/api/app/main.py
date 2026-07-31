@@ -346,7 +346,10 @@ async def invoke_tool(
     from pico_orchestrator.gateway import ToolError
     from pico_orchestrator.tools_builtin import build_default_gateway
 
-    gw = build_default_gateway()
+    from app.artifact_store import LedgerArtifactStore
+    from app.db import session_factory
+
+    gw = build_default_gateway(LedgerArtifactStore(session_factory()))
     try:
         result = await gw.invoke(principal, body.name, dict(body.arguments))
     except ToolError as e:

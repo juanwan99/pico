@@ -16,7 +16,12 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from pico_orchestrator.gateway import AllowlistGateway, Principal, ToolError
+from pico_orchestrator.gateway import (
+    AllowlistGateway,
+    ArtifactStore,
+    Principal,
+    ToolError,
+)
 from pico_orchestrator.provider import ProviderConfig, resolve_provider
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
 from pico_orchestrator.user_errors import enrich_fail_payload
@@ -57,6 +62,7 @@ async def run_agent_loop(
     caps: RunCaps | None = None,
     force_tools: list[str] | None = None,
     history: list[dict[str, Any]] | None = None,
+    artifact_store: ArtifactStore | None = None,
 ) -> RunResult:
     """Execute multi-step tool loop; emit ordered events via callback.
 
@@ -77,7 +83,7 @@ async def run_agent_loop(
             error=reason,
         )
 
-    gw = build_default_gateway().restricted_to(caps.allowed_tools)
+    gw = build_default_gateway(artifact_store).restricted_to(caps.allowed_tools)
     tools = openai_tool_schemas(gw)
     client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
 
@@ -93,7 +99,10 @@ async def run_agent_loop(
     system = (
         "你是 Pico，面向学校师生的 AI 工作台助手。"
         "底层是大模型 HTTPS API + 白名单工具；没有 Shell、本机文件、随意联网、MCP。"
-        "只能使用已提供的工具；查班级等只读数据用 fake_edu_list_classes；"
+        "只能使用已提供的工具；文件写入、读取、列举必须使用 workspace_* 工具，"
+        "它们只操作当前成员的 Artifact 账本，不是宿主机文件；"
+        "计算使用 calculator，整理层级使用 structured_outline；"
+        "查班级等只读数据用 fake_edu_list_classes；"
         "业务变更只能 pico_propose_change（提案，禁止假装已写库）。"
         f"当前租户 school_id={principal.school_id}，禁止编造其它学校数据。"
         "回答：先给结论，再补必要步骤；中文优先；结构清晰；不要空话套话。"
