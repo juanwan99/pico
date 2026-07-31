@@ -1,3 +1,4 @@
+**P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
 **Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
 **24h plan:** [docs/STANDALONE-AI-24H.md](./STANDALONE-AI-24H.md)
 
