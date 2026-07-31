@@ -336,6 +336,16 @@ async def list_tools(
     return {"tools": gw.list_tools(), "school_id": principal.school_id}
 
 
+@app.get("/v1/skills/catalog")
+async def list_skill_catalog(
+    _principal: Principal = Depends(require_scope("ai:read")),
+) -> dict:
+    """Expose controlled skill/tool bindings without editable policy fields."""
+    from pico_orchestrator.skill_policy import skill_catalog
+
+    return {"skills": skill_catalog()}
+
+
 class ToolInvokeRequest(BaseModel):
     name: str
     arguments: dict = Field(default_factory=dict)

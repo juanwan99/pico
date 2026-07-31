@@ -184,6 +184,7 @@ router.get('/v1/artifacts/:artifactId/content', (req, res) => {
   }
 });
 router.get('/v1/workspaces', (req, res) => proxy(req, res, '/v1/workspaces'));
+router.get('/v1/skills/catalog', (req, res) => proxy(req, res, '/v1/skills/catalog'));
 router.post('/v1/workspaces', (req, res) => proxy(req, res, '/v1/workspaces'));
 router.delete('/v1/workspaces/:id', (req, res) => {
   try {

@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Plug, Sparkles, UserRound, ChevronRight } from 'lucide-react';
+import { listPicoSkillCatalog, type PicoSkillPolicy } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
 import WorkbenchShell from './WorkbenchShell';
 import {
@@ -60,72 +61,60 @@ const DEMO_CONNECTORS = [
   { id: 'c5', name: '腾讯文档', desc: '文档授权连接 · 后置', status: 'add' as const },
 ];
 
-const DEMO_SKILLS = [
-  {
-    id: 'skill-chat',
-    name: 'skill.chat',
+type SkillCopy = {
+  desc: string;
+  prompt: string;
+};
+
+type HubSkill = PicoSkillPolicy & SkillCopy;
+
+const SKILL_COPY: Record<string, SkillCopy> = {
+  'skill-chat': {
     desc: '纯对话（chat-only），明确不启用工具',
     prompt: '请直接回答我的问题，不要臆造学校数据。',
-    tools: '无工具 · chat-only',
-    risk: 'low',
   },
-  {
-    id: 'skill-read',
-    name: 'skill.read',
+  'skill-read': {
     desc: '只读工作区产物；也可查询演示班级数据',
     prompt: '请列出并读取相关工作区产物，用一句话概括。',
-    tools: 'workspace_read_file · workspace_list_files · fake_edu_list_classes',
-    risk: 'read',
   },
-  {
-    id: 'skill-write-s7',
-    name: 'skill.write_s7',
+  'skill-write-s7': {
     desc: '业务变更提案进入现有 S7 人工确认',
     prompt: '请提出一个把一班名称改为星辰一班的变更申请。',
-    tools: 'pico_propose_change',
-    risk: 'write_s7',
   },
-  {
-    id: 'skill-summarize',
-    name: 'skill.summarize',
+  'skill-summarize': {
     desc: '读取材料、结构化总结并可保存工作区产物',
     prompt: '请总结以下内容，列出要点、结论与待办；不要补充原文没有的事实：',
-    tools: 'workspace_read_file · structured_outline · workspace_write_file',
-    risk: 'low',
   },
-  {
-    id: 'skill-lesson-outline',
-    name: 'skill.lesson_outline',
+  'skill-lesson-outline': {
     desc: '结构化生成课程大纲并可保存工作区产物',
     prompt: '请按教学目标、重点难点、课堂活动和检查点起草课程大纲。',
-    tools: 'structured_outline · workspace_write_file',
-    risk: 'low',
   },
-  {
-    id: 'skill-quiz-draft',
-    name: 'skill.quiz_draft',
+  'skill-quiz-draft': {
     desc: '读取材料、生成测验草稿并可保存工作区产物',
     prompt: '请根据我提供的材料起草测验题、答案和简短解析，并标明这是待复核草稿。',
-    tools: 'workspace_read_file · structured_outline · workspace_write_file',
-    risk: 'low',
   },
-  {
-    id: 'skill-translate',
-    name: 'skill.translate',
+  'skill-translate': {
     desc: '读取材料、忠实翻译并可保存工作区产物',
     prompt: '请忠实翻译以下内容，保留格式、专名和语气；不确定术语请标注：',
-    tools: 'workspace_read_file · workspace_write_file',
-    risk: 'low',
   },
-  {
-    id: 'skill-meeting-notes',
-    name: 'skill.meeting_notes',
+  'skill-meeting-notes': {
     desc: '结构化会议决定、负责人和待办并可保存',
     prompt: '请把以下会议内容整理为议题、决定、负责人和待办；未明确负责人时标为待确认：',
-    tools: 'structured_outline · workspace_write_file',
-    risk: 'low',
   },
-];
+};
+
+function riskLabel(skill: PicoSkillPolicy): string {
+  if (skill.requires_s7 || skill.risk === 'write_s7') {
+    return '写入提案 · 需确认';
+  }
+  if (skill.risk === 'read') {
+    return '只读';
+  }
+  if (skill.tools.length === 0) {
+    return '纯对话';
+  }
+  return '低风险';
+}
 
 export default function CapabilityHubPage() {
   const navigate = useNavigate();
@@ -139,12 +128,48 @@ export default function CapabilityHubPage() {
   const [q, setQ] = useState('');
   const [expertId, setExpertId] = useState<string | null>(null);
   const [skillId, setSkillId] = useState<string | null>(null);
+  const [skillPolicies, setSkillPolicies] = useState<PicoSkillPolicy[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [skillsError, setSkillsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (tabParam && TABS.some((t) => t.id === tabParam)) {
       setTab(tabParam);
     }
   }, [tabParam]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listPicoSkillCatalog()
+      .then(({ skills }) => {
+        if (cancelled) {
+          return;
+        }
+        setSkillPolicies(
+          (skills || [])
+            .filter((skill) => skill.id !== 'skill-unknown' && skill.name !== 'skill.unknown')
+            .map((skill) => ({
+              ...skill,
+              tools: Array.isArray(skill.tools) ? skill.tools : [],
+            })),
+        );
+        setSkillsError(null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSkillPolicies([]);
+          setSkillsError('技能策略暂时不可用，请稍后重试。');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSkillsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const setTabNav = (id: HubTab) => {
     setTab(id);
@@ -178,16 +203,26 @@ export default function CapabilityHubPage() {
     return DEMO_CONNECTORS.filter((c) => c.name.includes(s) || c.desc.includes(s));
   }, [q]);
 
+  const skillCatalog = useMemo<HubSkill[]>(
+    () =>
+      skillPolicies.map((policy) => ({
+        ...policy,
+        desc: SKILL_COPY[policy.id]?.desc || 'Pico 受控技能',
+        prompt: SKILL_COPY[policy.id]?.prompt || '请使用此技能协助完成当前任务。',
+      })),
+    [skillPolicies],
+  );
+
   const skills = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) {
-      return DEMO_SKILLS;
+      return skillCatalog;
     }
-    return DEMO_SKILLS.filter((x) => x.name.includes(s) || x.desc.includes(s));
-  }, [q]);
+    return skillCatalog.filter((x) => x.name.includes(s) || x.desc.includes(s));
+  }, [q, skillCatalog]);
 
   const selectedExpert = DEMO_EXPERTS.find((e) => e.id === expertId);
-  const selectedSkill = DEMO_SKILLS.find((skill) => skill.id === skillId);
+  const selectedSkill = skillCatalog.find((skill) => skill.id === skillId);
 
   const bindProjectCapability = (kind: 'expert' | 'skill', value: string) => {
     if (!projectId || !returnTo) {
@@ -219,7 +254,7 @@ export default function CapabilityHubPage() {
     navigate('/c/new');
   };
 
-  const startSkill = (skill: (typeof DEMO_SKILLS)[number]) => {
+  const startSkill = (skill: HubSkill) => {
     if (bindProjectCapability('skill', skill.name)) {
       return;
     }
@@ -335,7 +370,9 @@ export default function CapabilityHubPage() {
               <p className="text-[17px] font-semibold">{selectedExpert.name}</p>
               <p className="mt-1 text-[13px] text-[#6b6b6b]">{selectedExpert.desc}</p>
               <p className="mt-4 text-[12px] font-medium text-[#8c8c8c]">工作方法</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-[#3d3d3d]">{selectedExpert.method}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-[#3d3d3d]">
+                {selectedExpert.method}
+              </p>
               <div className="mt-3 flex flex-wrap gap-1">
                 {selectedExpert.tags.map((tag) => (
                   <span key={tag} className="rounded-full bg-[#f2f2f2] px-2 py-0.5 text-[11px]">
@@ -368,26 +405,43 @@ export default function CapabilityHubPage() {
                 管理全部技能 →
               </button>
             </div>
-            {skills.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setSkillId(s.id)}
-                className="flex w-full items-start gap-3 rounded-lg border border-black/[0.06] bg-white p-4 text-left hover:border-black/12"
+            {skillsLoading ? (
+              <p
+                role="status"
+                className="rounded-lg border border-black/[0.06] bg-white p-4 text-[13px] text-[#6b6b6b]"
               >
-                <div className="flex size-10 items-center justify-center rounded-xl bg-[#edf1f4]">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14px] font-medium">{s.name}</p>
-                  <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">{s.desc}</p>
-                  <p className="mt-1 truncate text-[11px] text-[#8c8c8c]">
-                    tools: {s.tools} · risk: {s.risk}
-                  </p>
-                </div>
-                <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[#b0b0b0]" />
-              </button>
-            ))}
+                正在读取技能策略…
+              </p>
+            ) : skillsError ? (
+              <p
+                role="alert"
+                className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-900"
+              >
+                {skillsError}
+              </p>
+            ) : (
+              skills.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSkillId(s.id)}
+                  className="flex w-full items-start gap-3 rounded-lg border border-black/[0.06] bg-white p-4 text-left hover:border-black/12"
+                >
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-[#edf1f4]">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-medium">{s.name}</p>
+                    <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">{s.desc}</p>
+                    <p className="mt-1 truncate text-[11px] text-[#8c8c8c]">
+                      工具：{s.tools.length ? s.tools.join(' · ') : '无工具'} · 风险：
+                      {riskLabel(s)}
+                    </p>
+                  </div>
+                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[#b0b0b0]" />
+                </button>
+              ))
+            )}
             <button
               type="button"
               onClick={() => navigate('/skills/new')}
@@ -422,11 +476,39 @@ export default function CapabilityHubPage() {
               <p className="mt-1 rounded-lg bg-[#f5f5f5] p-3 text-[13px] leading-relaxed text-[#3d3d3d]">
                 {selectedSkill.prompt}
               </p>
+              <div className="mt-4 rounded-lg border border-black/[0.06] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[12px] font-medium text-[#6b6b6b]">工具权限（只读）</p>
+                  <span className="rounded-full bg-[#edf1f4] px-2 py-0.5 text-[11px] text-[#3d3d3d]">
+                    {riskLabel(selectedSkill)}
+                  </span>
+                </div>
+                {selectedSkill.tools.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {selectedSkill.tools.map((tool) => (
+                      <span
+                        key={tool}
+                        className="rounded-md bg-[#f5f5f5] px-2 py-1 font-mono text-[11px] text-[#3d3d3d]"
+                      >
+                        {tool}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[12px] text-[#8c8c8c]">无工具 · 纯对话</p>
+                )}
+                {selectedSkill.requires_s7 ? (
+                  <p className="mt-2 text-[12px] font-medium text-amber-700">
+                    仅生成变更提案，必须经人工确认后执行。
+                  </p>
+                ) : null}
+              </div>
               <p className="mt-3 text-[11.5px] text-[#8c8c8c]">
                 推荐模型：{preferredModelForSkill(selectedSkill.id)}
               </p>
               <p className="mt-1 text-[11.5px] text-[#8c8c8c]">
-                发送时写入 Pico Run 快照：{selectedSkill.id} · tools: {selectedSkill.tools}
+                发送时写入 Pico Run 快照：{selectedSkill.id} · 工具：
+                {selectedSkill.tools.length ? selectedSkill.tools.join(' · ') : '无工具'}
               </p>
               <button
                 type="button"
