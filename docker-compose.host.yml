@@ -1,9 +1,8 @@
 # Production layout used on Aliyun light server (host network).
 # Public entry: Nginx 443 → 127.0.0.1:8080 only.
 #
-# Demo login (after recreate with this file):
-#   teacher@example.com / pico-demo-123
-#   PICO_SEED_DEMO_USER seeds on boot (source mounts; no full rebuild required)
+# Demo seeding is off by default. Enable only for an explicitly approved demo:
+#   PICO_DEMO_SEED=1 PICO_DEMO_EMAIL=... PICO_DEMO_PASSWORD=...
 #
 #   cd /opt/pico && git pull
 #   docker compose -f docker-compose.host.yml up -d --force-recreate librechat
@@ -53,9 +52,10 @@ services:
       PICO_API_HOST: "127.0.0.1"
       PICO_API_PORT: "18765"
       PICO_CORS_ORIGINS: "https://pico.aivia.asia,http://127.0.0.1:8080,http://localhost:8080"
-      PICO_ENV: development
-      PICO_ACCEPT_TEST_ISSUER: "true"
-      PICO_OPENAI_PROXY_KEY: pico-dev
+      PICO_ENV: production
+      PICO_ACCEPT_TEST_ISSUER: "false"
+      PICO_ALLOWED_MODELS: ${PICO_ALLOWED_MODELS:?set PICO_ALLOWED_MODELS}
+      PICO_OPENAI_PROXY_KEY: ${PICO_OPENAI_PROXY_KEY:?set a strong internal proxy key}
       PICO_GIT_SHA: ${PICO_GIT_SHA:-unknown}
     volumes:
       - pico_data:/app/data
@@ -79,13 +79,13 @@ services:
       PORT: "8080"
       MONGO_URI: mongodb://127.0.0.1:27017/LibreChat
       OPENAI_REVERSE_PROXY: http://127.0.0.1:18765/v1
-      OPENAI_API_KEY: pico-dev
+      OPENAI_API_KEY: ${PICO_OPENAI_PROXY_KEY:?set a strong internal proxy key}
       ENDPOINTS: openAI
       OPENAI_MODELS: moonshot-v1-8k,kimi-k2.6,pico-agent
       APP_TITLE: Pico
-      ALLOW_REGISTRATION: "true"
+      ALLOW_REGISTRATION: "false"
       ALLOW_EMAIL_LOGIN: "true"
-      ALLOW_UNVERIFIED_EMAIL_LOGIN: "true"
+      ALLOW_UNVERIFIED_EMAIL_LOGIN: "false"
       SEARCH: "false"
       # avoid Meili fetch noise when search disabled
       MEILI_HOST: ""
@@ -93,12 +93,17 @@ services:
       DOMAIN_CLIENT: https://pico.aivia.asia
       DOMAIN_SERVER: https://pico.aivia.asia
       CONFIG_PATH: /app/librechat.yaml
-      # Auto-create demo user on boot (see picoSeedDemoUser.js)
-      PICO_SEED_DEMO_USER: "true"
-      PICO_DEMO_EMAIL: teacher@example.com
-      PICO_DEMO_PASSWORD: pico-demo-123
+      # Fixed-password demo accounts require explicit PICO_DEMO_SEED=1.
+      PICO_DEMO_SEED: ${PICO_DEMO_SEED:-0}
+      PICO_SEED_DEMO_USER: ${PICO_DEMO_SEED:-0}
+      PICO_DEMO_EMAIL: ${PICO_DEMO_EMAIL:-}
+      PICO_DEMO_PASSWORD: ${PICO_DEMO_PASSWORD:-}
       PICO_DEMO_NAME: Pico Teacher
       PICO_DEMO_USERNAME: teacher
+      CREDS_KEY: ${LIBRECHAT_CREDS_KEY:?set LIBRECHAT_CREDS_KEY}
+      CREDS_IV: ${LIBRECHAT_CREDS_IV:?set LIBRECHAT_CREDS_IV}
+      JWT_SECRET: ${LIBRECHAT_JWT_SECRET:?set LIBRECHAT_JWT_SECRET}
+      JWT_REFRESH_SECRET: ${LIBRECHAT_JWT_REFRESH_SECRET:?set LIBRECHAT_JWT_REFRESH_SECRET}
       # set true once if password was changed wrongly:
       # PICO_SEED_DEMO_RESET_PASSWORD: "true"
     volumes:

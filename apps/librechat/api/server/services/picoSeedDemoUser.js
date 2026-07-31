@@ -1,6 +1,6 @@
 /**
  * Pico: optional demo user seed for VPS / empty Mongo.
- * Enable with PICO_SEED_DEMO_USER=true (compose.host sets this).
+ * Enable explicitly with PICO_DEMO_SEED=1.
  * Never logs the password.
  */
 const bcrypt = require('bcryptjs');
@@ -10,12 +10,18 @@ const { findUser, updateUser } = require('~/models');
 const { registerUser } = require('~/server/services/AuthService');
 
 async function seedPicoDemoUser() {
-  if (!isEnabled(process.env.PICO_SEED_DEMO_USER)) {
+  if (process.env.PICO_DEMO_SEED !== '1') {
     return;
   }
 
-  const email = (process.env.PICO_DEMO_EMAIL || 'teacher@example.com').trim().toLowerCase();
-  const password = process.env.PICO_DEMO_PASSWORD || 'pico-demo-123';
+  const email = (process.env.PICO_DEMO_EMAIL || '').trim().toLowerCase();
+  const password = process.env.PICO_DEMO_PASSWORD || '';
+  if (!email || password.length < 12) {
+    logger.error(
+      '[picoSeedDemoUser] PICO_DEMO_EMAIL and a 12+ character password are required',
+    );
+    return;
+  }
   const name = process.env.PICO_DEMO_NAME || 'Pico Teacher';
   const username = process.env.PICO_DEMO_USERNAME || 'teacher';
   const forcePassword = isEnabled(process.env.PICO_SEED_DEMO_RESET_PASSWORD);

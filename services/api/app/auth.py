@@ -61,6 +61,13 @@ def _dev_proxy_keys(settings: Settings) -> set[str]:
     return keys
 
 
+def _production_proxy_key(settings: Settings) -> str | None:
+    key = (settings.pico_openai_proxy_key or "").strip()
+    if len(key) < 32 or key in {"pico-dev", "sk-pico-dev"}:
+        return None
+    return key
+
+
 def _decode_with_key(
     token: str, *, key: str, algorithms: list[str], audience: str, issuer: str | None
 ) -> dict[str, Any]:
@@ -141,10 +148,13 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
     last_err: Exception | None = None
     data: dict[str, Any] | None = None
 
-    # 0) Dev OpenAI-compat proxy keys (disabled in production) — same principal as chat
+    # 0) OpenAI-compat proxy: dev defaults only outside production; production
+    # accepts only the explicit 32+ character internal credential.
     env = (s.pico_env or "development").lower()
     production = env in {"production", "prod"}
-    if not production and token in _dev_proxy_keys(s):
+    if (not production and token in _dev_proxy_keys(s)) or (
+        production and token == _production_proxy_key(s)
+    ):
         return Principal(
             school_id="school-a",
             membership_id="nextchat-user",
