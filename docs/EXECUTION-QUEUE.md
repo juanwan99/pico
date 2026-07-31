@@ -174,7 +174,8 @@ depends: EQ-004
 
 ```yaml
 id: EQ-006
-status: OPEN
+status: DONE
+done_note: "2026-07-31 E3 aligned production HEAD/health.git_sha to f9bd81097cfa2e1c53f9b06a157a343aeed73ca0 and posted ## DEPLOYED on #81"
 priority: P2
 context_reset: false
 assignee: E3
