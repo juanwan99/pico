@@ -224,3 +224,51 @@ async def test_cancel_during_provider_request_wins_over_token_cap(monkeypatch) -
     assert result.status == "cancelled"
     assert events[-1] == ("run.status", {"status": "cancelled"})
     assert not any(payload.get("code") == "token_cap" for _, payload in events)
+
+
+@pytest.mark.asyncio
+async def test_cancel_after_final_provider_response_wins_over_success(monkeypatch) -> None:
+    from pico_orchestrator import runner
+
+    class FinalCompletions:
+        async def create(self, **_request: Any) -> Any:
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content="late answer", tool_calls=[]),
+                    )
+                ],
+                usage=SimpleNamespace(total_tokens=10),
+            )
+
+    class FinalClient:
+        def __init__(self, **_kwargs: Any) -> None:
+            self.chat = SimpleNamespace(completions=FinalCompletions())
+
+    monkeypatch.setattr(runner, "AsyncOpenAI", FinalClient)
+    monkeypatch.setattr(
+        runner,
+        "resolve_provider",
+        lambda: ProviderConfig("test", "key", "https://example.invalid/v1", "test"),
+    )
+    events: list[tuple[str, dict[str, Any]]] = []
+    cancel_checks = 0
+
+    async def emit(event_type: str, payload: dict[str, Any]) -> None:
+        events.append((event_type, payload))
+
+    async def is_cancelled() -> bool:
+        nonlocal cancel_checks
+        cancel_checks += 1
+        return cancel_checks >= 3
+
+    result = await run_agent_loop(
+        prompt="finish while cancellation arrives",
+        principal=P("school-a", "member-a", ["ai:run"]),
+        emit=emit,
+        is_cancelled=is_cancelled,
+    )
+
+    assert result.status == "cancelled"
+    assert events[-1] == ("run.status", {"status": "cancelled"})
+    assert not any(payload.get("status") == "succeeded" for _, payload in events)

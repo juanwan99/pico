@@ -298,6 +298,13 @@ async def run_agent_loop(
                 }
             )
 
+    # Cancellation can arrive after the final provider response (or the last
+    # tool result) but before terminal success is emitted. Give the durable
+    # cancel request one final chance to win that race.
+    if await is_cancelled():
+        await emit("run.status", {"status": "cancelled"})
+        return RunResult(status="cancelled", final_text="".join(final_text_parts))
+
     text = "".join(final_text_parts).strip()
     if not text and artifact_md:
         text = "已完成工具调用。"

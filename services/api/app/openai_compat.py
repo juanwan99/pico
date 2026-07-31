@@ -324,7 +324,7 @@ async def _finalize_run(
     task_id: str | None = None,
     user_prompt: str | None = None,
 ) -> None:
-    from sqlalchemy import select, update
+    from sqlalchemy import case, select, update
 
     from app.db import ArtifactRow, ChangeProposalRow, EventRow, _utcnow
     from app.run_service import _json_dict, _skill_s7_payload
@@ -335,6 +335,7 @@ async def _finalize_run(
 
     factory = session_factory()
     async with factory() as session:
+        requested_status = status
         claimed = await session.execute(
             update(RunRow)
             .where(
@@ -342,8 +343,14 @@ async def _finalize_run(
                 RunRow.status.not_in(terminal),
             )
             .values(
-                status=status,
-                error=error,
+                status=case(
+                    (RunRow.cancel_requested != 0, "cancelled"),
+                    else_=status,
+                ),
+                error=case(
+                    (RunRow.cancel_requested != 0, None),
+                    else_=error,
+                ),
                 ended_at=_utcnow(),
             )
         )
@@ -358,6 +365,15 @@ async def _finalize_run(
         if task_id is not None and task_id != run.task_id:
             await session.rollback()
             raise ValueError("run/task mismatch during finalize")
+        status = run.status
+        if status == "cancelled" and requested_status != "cancelled":
+            await append_event(
+                session,
+                run_id,
+                "run.status",
+                {"status": "cancelled"},
+                commit=False,
+            )
 
         usage = _json_dict(run.token_usage_json)
         skill_snapshot = usage.get("skill_snapshot")
