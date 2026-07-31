@@ -186,6 +186,12 @@ async def run_agent_loop(
             await asyncio.sleep(0.5 * retries)
             continue
 
+        # A cancel can arrive while the provider request is in flight. Honor it
+        # before applying terminal caps or dispatching any returned tool calls.
+        if await is_cancelled():
+            await emit("run.status", {"status": "cancelled"})
+            return RunResult(status="cancelled", final_text="".join(final_text_parts))
+
         usage = getattr(resp, "usage", None)
         if usage:
             total_tokens += int(getattr(usage, "total_tokens", 0) or 0)
