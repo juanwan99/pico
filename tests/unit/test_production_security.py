@@ -10,12 +10,13 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+from app.auth import issue_test_token
 from app.openai_compat import (
     _assert_model_allowed,
     _effective_max_tokens,
     _principal_from_auth,
 )
-from app.rate_limit import ChatAdmission
+from app.rate_limit import ChatAdmission, ChatRateLimitMiddleware
 from app.settings import Settings
 
 
@@ -106,3 +107,44 @@ async def test_chat_admission_enforces_concurrency_and_rpm() -> None:
     assert await admission.acquire("ip", rpm=2, max_concurrent=1) is None
     await admission.release("ip")
     assert await admission.acquire("ip", rpm=2, max_concurrent=1) == "rate_limit"
+
+
+async def test_chat_rate_limit_separates_memberships_on_same_ip(monkeypatch) -> None:
+    settings = Settings(pico_chat_rpm=1, pico_chat_max_concurrent=1)
+    monkeypatch.setattr("app.rate_limit.get_settings", lambda: settings)
+    calls: list[str] = []
+
+    async def downstream(scope, receive, send) -> None:
+        calls.append(scope["path"])
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    middleware = ChatRateLimitMiddleware(downstream)
+
+    async def request(membership_id: str) -> int:
+        token = issue_test_token(
+            school_id="school-a",
+            membership_id=membership_id,
+            settings=settings,
+        )
+        sent: list[dict] = []
+        scope = {
+            "type": "http",
+            "path": "/v1/chat/completions",
+            "client": ("203.0.113.10", 1234),
+            "headers": [(b"authorization", f"Bearer {token}".encode())],
+        }
+
+        async def receive() -> dict:
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        await middleware(scope, receive, send)
+        return next(message["status"] for message in sent if "status" in message)
+
+    assert await request("member-a") == 200
+    assert await request("member-a") == 429
+    assert await request("member-b") == 200
+    assert calls == ["/v1/chat/completions", "/v1/chat/completions"]

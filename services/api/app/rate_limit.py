@@ -13,6 +13,8 @@ from collections import defaultdict, deque
 from collections.abc import MutableMapping
 from typing import Any
 
+from fastapi import HTTPException
+
 from app.settings import get_settings
 
 
@@ -45,7 +47,7 @@ class ChatAdmission:
 
 
 class ChatRateLimitMiddleware:
-    """Apply IP RPM and concurrency caps to the expensive chat endpoint."""
+    """Apply per-membership (or fallback IP) caps to the chat endpoint."""
 
     def __init__(self, app: Any) -> None:
         self.app = app
@@ -58,7 +60,8 @@ class ChatRateLimitMiddleware:
 
         settings = get_settings()
         client = scope.get("client")
-        key = str(client[0]) if client else "unknown"
+        ip_key = str(client[0]) if client else "unknown"
+        key = _membership_key(scope, settings) or f"ip:{ip_key}"
         reason = await self.admission.acquire(
             key,
             rpm=settings.pico_chat_rpm,
@@ -85,3 +88,26 @@ class ChatRateLimitMiddleware:
             await self.app(scope, receive, send)
         finally:
             await self.admission.release(key)
+
+
+def _membership_key(scope: dict, settings: Any) -> str | None:
+    """Return a tenant-scoped membership key when request auth is valid."""
+    headers = {
+        key.decode("latin-1").lower(): value.decode("latin-1")
+        for key, value in scope.get("headers", [])
+    }
+    try:
+        # Keep limiter identity aligned with the endpoint's JWT/proxy handling.
+        from app.auth import scope_proxy_principal
+        from app.openai_compat import _principal_from_auth
+
+        principal = _principal_from_auth(headers.get("authorization"), settings)
+        principal = scope_proxy_principal(
+            principal,
+            headers.get("x-pico-membership-id"),
+        )
+    except HTTPException:
+        # Authentication remains the endpoint's responsibility. Unresolved
+        # callers still receive conservative IP-based admission control.
+        return None
+    return f"membership:{principal.school_id}:{principal.membership_id}"
