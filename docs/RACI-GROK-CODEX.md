@@ -33,7 +33,8 @@ ONEFLOW 三角色 **不变**：`总管` · `写入` · `审查`。
 | **总管（Grok）** | 优先级、任务书入库、lease/并行轨、审查、**CI 绿后合 main**、宣布下一切 | 默认不写生产热更；不把实现细节甩给业主；不自 PASS 产品终局 |
 | **写入（Codex）** | 按任务书实现、测、开 PR、CANDIDATE、修 CI、**总管合入后**部署、DEPLOYED | 不写 edu-cloud；不自审 PASS；**默认不合自己的功能 PR**；不升 v1.3 无授权 |
 | **审查** | exact SHA → PASS/REVISE/BLOCKED | 写业务代码；审移动 tip |
-| **业主** | 拍板、M5 授权、开 Codex 窗、必要时代合 | 不负责实现细节 |
+| **测试** | **独立测试窗**（业主已开专用窗） | 真环境用例、## TEST REPORT、FAIL 复测 | 冒充写入大改；用 CI 代替行为验收 |
+| **业主** | 拍板、M5 授权、开 Codex/测试窗、必要时代合 | 不负责实现细节 |
 
 **规划默认：** 写入有服务器与浏览器；总管与写入 **不共享沙箱**。
 
@@ -61,7 +62,10 @@ ONEFLOW 三角色 **不变**：`总管` · `写入` · `审查`。
 [3] 写入（Codex）：分支实现 → 开 PR → ## CANDIDATE + 40字 SHA
        → 修到 CI 绿（红禁止进入合并）
 
-[4] 审查：只读 exact SHA → 评论 PASS | REVISE | BLOCKED
+[3b] 测试窗：按任务书用例真跑（可与 CI 并行准备；**合并后/部署后必出 ## TEST REPORT**）
+       FAIL → 回写入修复 → 复测（不得跳过）
+
+[4] 审查：只读 exact SHA + 必要时对照 TEST → 评论 PASS | REVISE | BLOCKED
        （REVISE → 回 [3]；BLOCKED → 总管改派）
 
 [5] 总管：确认 CI 绿 +（黄/红风险时）审查 PASS → **合并 PR 入 main**
@@ -137,6 +141,7 @@ ONEFLOW 三角色 **不变**：`总管` · `写入` · `审查`。
 □ 合 main 权责指向 §1.3（总管合）
 □ 环顺序为 实现→CANDIDATE→CI→审查→合并→部署
 □ HARD / 非目标写清
+□ 是否附带测试窗任务与 ## TEST REPORT 要求？
 ```
 
 ---
@@ -176,3 +181,5 @@ ONEFLOW 三角色 **不变**：`总管` · `写入` · `审查`。
 - `docs/README.md` — 索引
 
 - `docs/DEPLOY-TWO-HOST.md` — 写代码 ECS 跳板部署生产
+
+- `docs/TEST-WINDOW.md` — 独立测试窗与派工必带测试
