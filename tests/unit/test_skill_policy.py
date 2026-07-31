@@ -1,6 +1,7 @@
 """Skill thin policy unit tests."""
 
 from pico_orchestrator.skill_policy import (
+    declared_tools_for_skill,
     normalize_skill_id,
     snapshot_for_skill,
     strip_skill_markers,
@@ -17,24 +18,57 @@ def test_normalize_aliases():
 
 
 def test_snapshot_tools_subset_of_gateway():
-    expected = {
+    declared = {
         "skill-chat": ([], False),
-        "skill-read": (["fake_edu_list_classes"], False),
+        "skill-read": (
+            [
+                "workspace_read_file",
+                "workspace_list_files",
+                "fake_edu_list_classes",
+            ],
+            False,
+        ),
         "skill-write-s7": (["pico_propose_change"], True),
-        "skill-summarize": ([], False),
-        "skill-lesson-outline": ([], False),
-        "skill-quiz-draft": ([], False),
-        "skill-translate": ([], False),
-        "skill-meeting-notes": ([], False),
+        "skill-summarize": (
+            [
+                "workspace_read_file",
+                "structured_outline",
+                "workspace_write_file",
+            ],
+            False,
+        ),
+        "skill-lesson-outline": (
+            ["structured_outline", "workspace_write_file"],
+            False,
+        ),
+        "skill-quiz-draft": (
+            [
+                "workspace_read_file",
+                "structured_outline",
+                "workspace_write_file",
+            ],
+            False,
+        ),
+        "skill-translate": (
+            ["workspace_read_file", "workspace_write_file"],
+            False,
+        ),
+        "skill-meeting-notes": (
+            ["structured_outline", "workspace_write_file"],
+            False,
+        ),
     }
     global_tools = set(build_default_gateway().tools)
 
-    for skill_id, (tools, requires_s7) in expected.items():
+    for skill_id, (tools, requires_s7) in declared.items():
         snapshot = snapshot_for_skill(skill_id)
         assert snapshot is not None
-        assert snapshot["tools"] == tools
+        assert declared_tools_for_skill(skill_id) == tools
+        assert snapshot["tools"] == [tool for tool in tools if tool in global_tools]
         assert set(snapshot["tools"]) <= global_tools
         assert snapshot["requires_s7"] is requires_s7
+
+    assert sum(bool(tools) for tools, _ in declared.values()) >= 5
 
 
 def test_strip_marker():

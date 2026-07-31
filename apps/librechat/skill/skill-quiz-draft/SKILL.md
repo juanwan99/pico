@@ -1,7 +1,10 @@
 ---
 name: skill-quiz-draft
-description: Draft quiz questions, answers, and short explanations from supplied material.
-allowed-tools: []
+description: Draft a structured quiz from supplied or saved material and save the draft.
+allowed-tools:
+  - workspace_read_file
+  - structured_outline
+  - workspace_write_file
 disable-model-invocation: true
 user-invocable: true
 always-apply: false
@@ -9,4 +12,4 @@ always-apply: false
 
 # skill.quiz_draft
 
-Create draft questions with answers and concise explanations from the user's material. Remind the user to review the draft before publishing it.
+Read a referenced workspace artifact when needed, create draft questions with answers and concise explanations, and optionally save the draft as a workspace artifact. Remind the user to review it before publishing.

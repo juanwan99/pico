@@ -227,23 +227,60 @@ def create_task(mid, skill_id):
 
 cases = [
     ("st-skill-chat", "skill-chat", []),
-    ("st-skill-read", "skill-read", ["fake_edu_list_classes"]),
+    (
+        "st-skill-read",
+        "skill-read",
+        ["workspace_read_file", "workspace_list_files", "fake_edu_list_classes"],
+    ),
     ("st-skill-w", "skill-write-s7", ["pico_propose_change"]),
-    ("st-skill-summarize", "skill-summarize", []),
-    ("st-skill-lesson", "skill-lesson-outline", []),
-    ("st-skill-quiz", "skill-quiz-draft", []),
-    ("st-skill-translate", "skill-translate", []),
-    ("st-skill-notes", "skill-meeting-notes", []),
+    (
+        "st-skill-summarize",
+        "skill-summarize",
+        ["workspace_read_file", "structured_outline", "workspace_write_file"],
+    ),
+    (
+        "st-skill-lesson",
+        "skill-lesson-outline",
+        ["structured_outline", "workspace_write_file"],
+    ),
+    (
+        "st-skill-quiz",
+        "skill-quiz-draft",
+        ["workspace_read_file", "structured_outline", "workspace_write_file"],
+    ),
+    (
+        "st-skill-translate",
+        "skill-translate",
+        ["workspace_read_file", "workspace_write_file"],
+    ),
+    (
+        "st-skill-notes",
+        "skill-meeting-notes",
+        ["structured_outline", "workspace_write_file"],
+    ),
 ]
-for mid, sid, tools in cases:
+assert sum(bool(tools) for _, _, tools in cases) >= 5
+for mid, sid, declared_tools in cases:
     st, d = create_task(mid, sid)
     assert st == 200, (sid, d)
     run = d.get("run") or {}
     snap = (run.get("token_usage") or {}).get("skill_snapshot")
     assert isinstance(snap, dict), (sid, run)
     assert snap.get("id") == sid, (sid, snap)
-    assert snap.get("tools") == tools, (sid, snap.get("tools"), tools)
-    print("skill ok", sid, snap.get("tools"))
+    active_tools = snap.get("tools")
+    assert isinstance(active_tools, list), (sid, active_tools)
+    assert all(tool in declared_tools for tool in active_tools), (
+        sid,
+        active_tools,
+        declared_tools,
+    )
+    if sid == "skill-chat":
+        assert active_tools == [], (sid, active_tools)
+    if sid == "skill-read":
+        assert "fake_edu_list_classes" in active_tools, (sid, active_tools)
+    if sid == "skill-write-s7":
+        assert active_tools == ["pico_propose_change"], (sid, active_tools)
+    print("skill ok", sid, active_tools, "declared", declared_tools)
 print("skills ok")
 PYSKILL
 

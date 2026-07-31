@@ -29,18 +29,22 @@ _POLICIES: dict[str, SkillPolicy] = {
         requested_tools=(),
         risk="low",
         instruction=(
-            "本轮使用 skill.chat：少工具或无工具，普通问答直接回答；"
+            "本轮使用 skill.chat：这是纯对话（chat-only）技能，普通问答直接回答；"
             "不得臆造学校数据或声称已执行工具。"
         ),
     ),
     "skill-read": SkillPolicy(
         id="skill-read",
         name="skill.read",
-        requested_tools=("fake_edu_list_classes",),
+        requested_tools=(
+            "workspace_read_file",
+            "workspace_list_files",
+            "fake_edu_list_classes",
+        ),
         risk="read",
         instruction=(
-            "本轮使用 skill.read：只允许只读工具；需要学校班级数据时使用 "
-            "fake_edu_list_classes；禁止提出或执行写入。"
+            "本轮使用 skill.read：只允许只读工具；优先列出或读取当前工作区产物，"
+            "需要演示学校班级数据时才使用 fake_edu_list_classes；禁止提出或执行写入。"
         ),
     ),
     "skill-write-s7": SkillPolicy(
@@ -57,51 +61,60 @@ _POLICIES: dict[str, SkillPolicy] = {
     "skill-summarize": SkillPolicy(
         id="skill-summarize",
         name="skill.summarize",
-        requested_tools=(),
+        requested_tools=(
+            "workspace_read_file",
+            "structured_outline",
+            "workspace_write_file",
+        ),
         risk="low",
         instruction=(
             "本轮使用 skill.summarize：提炼用户提供内容的要点、结论与待办；"
+            "可读取工作区材料、生成结构化结果并把总结保存为工作区产物；"
             "不得补写原文中不存在的事实。"
         ),
     ),
     "skill-lesson-outline": SkillPolicy(
         id="skill-lesson-outline",
         name="skill.lesson_outline",
-        requested_tools=(),
+        requested_tools=("structured_outline", "workspace_write_file"),
         risk="low",
         instruction=(
             "本轮使用 skill.lesson_outline：按教学目标、重点难点、活动与检查点生成课程大纲；"
-            "缺少年级或课时信息时明确假设。"
+            "缺少年级或课时信息时明确假设，可把大纲保存为工作区产物。"
         ),
     ),
     "skill-quiz-draft": SkillPolicy(
         id="skill-quiz-draft",
         name="skill.quiz_draft",
-        requested_tools=(),
+        requested_tools=(
+            "workspace_read_file",
+            "structured_outline",
+            "workspace_write_file",
+        ),
         risk="low",
         instruction=(
             "本轮使用 skill.quiz_draft：根据用户给定材料起草题目、答案与简短解析；"
-            "题目仅为草稿，提醒用户发布前复核。"
+            "可读取工作区材料并保存草稿；题目仅为草稿，提醒用户发布前复核。"
         ),
     ),
     "skill-translate": SkillPolicy(
         id="skill-translate",
         name="skill.translate",
-        requested_tools=(),
+        requested_tools=("workspace_read_file", "workspace_write_file"),
         risk="low",
         instruction=(
             "本轮使用 skill.translate：忠实翻译用户提供内容，保留格式、专名与语气；"
-            "不确定术语应标注而非臆造。"
+            "可读取工作区材料并保存译文；不确定术语应标注而非臆造。"
         ),
     ),
     "skill-meeting-notes": SkillPolicy(
         id="skill-meeting-notes",
         name="skill.meeting_notes",
-        requested_tools=(),
+        requested_tools=("structured_outline", "workspace_write_file"),
         risk="low",
         instruction=(
             "本轮使用 skill.meeting_notes：把用户提供的会议内容整理为议题、决定、"
-            "负责人和待办；没有明确负责人的事项标为待确认。"
+            "负责人和待办，并可保存为工作区产物；没有明确负责人的事项标为待确认。"
         ),
     ),
 }
@@ -184,6 +197,17 @@ def snapshot_for_skill(skill_ref: str | None) -> dict[str, Any] | None:
             "tool_rule": "intersection-with-global-allowlist",
         },
     }
+
+
+def declared_tools_for_skill(skill_ref: str | None) -> list[str] | None:
+    """Return the catalog binding before the global allowlist intersection."""
+    skill_id = normalize_skill_id(skill_ref)
+    if not skill_id:
+        return None
+    policy = _POLICIES.get(skill_id)
+    if policy is None:
+        return None
+    return list(policy.requested_tools)
 
 
 def instruction_for_snapshot(snapshot: dict[str, Any] | None) -> str:
