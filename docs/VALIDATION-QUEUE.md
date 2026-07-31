@@ -92,6 +92,26 @@ report:
 on_done: set status DONE
 ```
 
+### VQ-003 · N5 失败态可见（等 EQ-004 部署）
+
+```yaml
+id: VQ-003
+status: OPEN
+priority: P1
+target_pr: null
+title: N5 failed tool/run visible
+deploy_gate:
+  - N5 implementation PR ## DEPLOYED
+  - health matches
+test_plan:
+  - 触发一次会失败的工具或取消路径（安全范围内）；UI 显示失败/取消
+  - 正常工具路径不回归
+  - pico-dev 401
+report:
+  - ## TEST REPORT on N5 PR
+on_done: set status DONE
+```
+
 ### VQ-000 · 模板（勿删）
 
 ```yaml
