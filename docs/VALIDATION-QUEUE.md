@@ -101,19 +101,40 @@ on_done: set status DONE
 ```yaml
 id: VQ-003
 status: OPEN
-priority: P1
+priority: P0
 context_reset: false
-target_pr: null
+target_pr: 82
 title: N5 failed tool/run visible
 deploy_gate:
-  - N5 implementation PR ## DEPLOYED
-  - health matches
+  - PR 82 has ## DEPLOYED
+  - health.git_sha equals production deploy of N5 (main contains #82; tip may be 8cabb496… or newer)
 test_plan:
   - 触发一次会失败的工具或取消路径（安全范围内）；UI 显示失败/取消
   - 正常工具路径不回归
   - pico-dev 401
 report:
   - ## TEST REPORT on N5 PR
+on_done: set status DONE
+```
+
+### VQ-004 · N6 能力中心工具展示
+
+```yaml
+id: VQ-004
+status: OPEN
+priority: P1
+context_reset: false
+target_pr: null
+title: Skill hub tools visible
+deploy_gate:
+  - EQ-007 implementation PR ## DEPLOYED
+test_plan:
+  - 能力中心 skill.summarize 显示工具列表
+  - skill.chat 为无工具/纯对话
+  - skill.write_s7 含 propose 与需确认语义
+  - 主路径抽检登录+真聊
+report:
+  - ## TEST REPORT on N6 PR
 on_done: set status DONE
 ```
 
