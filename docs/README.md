@@ -1,3 +1,5 @@
+**24h plan:** [docs/STANDALONE-AI-24H.md](./STANDALONE-AI-24H.md)
+
 # Pico documentation index
 
 ```
