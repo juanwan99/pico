@@ -395,7 +395,8 @@ deliver:
 
 ```yaml
 id: EQ-018
-status: OPEN
+status: DONE
+done_note: "#102 merged 28107fa; CI green and production health.git_sha exact-match DEPLOYED"
 priority: P1
 context_reset: false
 assignee: E1
