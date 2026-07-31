@@ -375,6 +375,53 @@ deliver:
   - comment ## DEPLOYED on latest feature PRs missing it
 ```
 
+### EQ-017 · 验证配合 · 生产 tip 对齐 VQ-005
+
+```yaml
+id: EQ-017
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E3
+title: 确认 production health == main tip（含 #99/#100）；缺则部署；为 VQ-005 扫障
+files_lease:
+  - docs/EXECUTION-QUEUE.md
+deliver:
+  - ## DEPLOYED or comment tip SHA already live on #99 or #100
+```
+
+### EQ-018 · N8 未知 skill 无旁路产物
+
+```yaml
+id: EQ-018
+status: OPEN
+priority: P1
+context_reset: false
+assignee: E1
+task_doc: docs/DAY-TASK-N8-UNKNOWN-SKILL-NO-ARTIFACT.md
+title: unknown skill cannot create artifacts via extractor
+files_lease:
+  - services/api/**
+  - services/orchestrator/**
+  - tests/**
+deliver:
+  - PR 黄 FAST + ## DEPLOYED
+```
+
+### EQ-019 · VQ-005 FAIL 时补实现
+
+```yaml
+id: EQ-019
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E2
+title: 仅当 VQ-005 FAIL 时补历史时间线/停止 UI；PASS 则标 CANCELLED
+files_lease:
+  - apps/librechat/client/**
+depends: VQ-005
+```
+
 ### EQ-000 · 模板
 
 ```yaml
