@@ -48,6 +48,14 @@ export type PicoWorkspace = {
   created_at?: string | null;
 };
 
+export type PicoSkillPolicy = {
+  id: string;
+  name: string;
+  tools: string[];
+  risk: string;
+  requires_s7: boolean;
+};
+
 function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   try {
@@ -116,6 +124,10 @@ export async function cancelPicoRun(runId: string) {
 
 export async function listPicoWorkspaces() {
   return picoFetch<{ workspaces: PicoWorkspace[] }>(`/v1/workspaces`);
+}
+
+export async function listPicoSkillCatalog() {
+  return picoFetch<{ skills: PicoSkillPolicy[] }>(`/v1/skills/catalog`);
 }
 
 export async function createPicoWorkspace(name: string, note = '') {

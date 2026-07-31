@@ -180,6 +180,11 @@ def skill_id_from_prompt(prompt: str) -> str | None:
     return normalize_skill_id(match.group(1))
 
 
+def _allowed_tools(policy: SkillPolicy) -> list[str]:
+    global_tools = set(build_default_gateway().tools.keys())
+    return [tool for tool in policy.requested_tools if tool in global_tools]
+
+
 def snapshot_for_skill(skill_ref: str | None) -> dict[str, Any] | None:
     if not isinstance(skill_ref, str) or not skill_ref.strip():
         return None
@@ -203,12 +208,10 @@ def snapshot_for_skill(skill_ref: str | None) -> dict[str, Any] | None:
     policy = _POLICIES.get(skill_id)
     if policy is None:
         return None
-    global_tools = set(build_default_gateway().tools.keys())
-    allowed_tools = [tool for tool in policy.requested_tools if tool in global_tools]
     return {
         "id": policy.id,
         "name": policy.name,
-        "tools": allowed_tools,
+        "tools": _allowed_tools(policy),
         "risk": policy.risk,
         "requires_s7": policy.requires_s7,
         "prompt_hash": hashlib.sha256(policy.instruction.encode("utf-8")).hexdigest(),
@@ -228,6 +231,20 @@ def declared_tools_for_skill(skill_ref: str | None) -> list[str] | None:
     if policy is None:
         return None
     return list(policy.requested_tools)
+
+
+def skill_catalog() -> list[dict[str, Any]]:
+    """Return the user-safe, read-only catalog after allowlist intersection."""
+    return [
+        {
+            "id": policy.id,
+            "name": policy.name,
+            "tools": _allowed_tools(policy),
+            "risk": policy.risk,
+            "requires_s7": policy.requires_s7,
+        }
+        for policy in _POLICIES.values()
+    ]
 
 
 def instruction_for_snapshot(snapshot: dict[str, Any] | None) -> str:
