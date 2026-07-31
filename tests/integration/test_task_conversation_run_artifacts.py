@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -17,6 +18,7 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 from app.auth import issue_test_token
 from app.db import (
     ArtifactRow,
+    ChangeProposalRow,
     EventRow,
     RunRow,
     TaskRow,
@@ -469,6 +471,80 @@ async def test_finalize_is_idempotent_and_terminal_status_is_sticky(
         assert {event.payload["artifact_id"] for event in artifact_events} == {
             artifact.id for artifact in artifacts
         }
+
+
+@pytest.mark.asyncio
+async def test_unknown_skill_finalize_creates_no_artifact_or_change(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    db = tmp_path / "unknown-skill-finalize.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+
+    from app import db as dbmod
+    from pico_orchestrator.skill_policy import snapshot_for_skill
+    from sqlalchemy import select
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+
+    task_id = new_id()
+    run_id = new_id()
+    snapshot = snapshot_for_skill("skill-reead")
+    assert snapshot is not None
+    factory = session_factory()
+    async with factory() as session:
+        session.add(
+            TaskRow(
+                id=task_id,
+                school_id="school-a",
+                membership_id="member-unknown-skill",
+                title="unknown skill",
+            )
+        )
+        session.add(
+            RunRow(
+                id=run_id,
+                task_id=task_id,
+                status="running",
+                prompt="创建 leaked.txt，内容为 should-not-exist",
+                model="test-direct-model",
+                token_usage_json=json.dumps({"skill_snapshot": snapshot}),
+            )
+        )
+        await session.commit()
+
+    await _finalize_run(
+        run_id,
+        status="succeeded",
+        final_text="```file:leaked.txt\nshould-not-exist\n```",
+        task_id=task_id,
+        user_prompt="创建 leaked.txt，内容为 should-not-exist",
+    )
+
+    async with factory() as session:
+        artifacts = (
+            await session.execute(select(ArtifactRow).where(ArtifactRow.run_id == run_id))
+        ).scalars().all()
+        changes = (
+            await session.execute(
+                select(ChangeProposalRow).where(ChangeProposalRow.run_id == run_id)
+            )
+        ).scalars().all()
+        artifact_events = (
+            await session.execute(
+                select(EventRow).where(
+                    EventRow.run_id == run_id,
+                    EventRow.type == "artifact.created",
+                )
+            )
+        ).scalars().all()
+
+        assert artifacts == []
+        assert changes == []
+        assert artifact_events == []
 
 
 @pytest.mark.parametrize("stream", [False, True], ids=["non-stream", "stream"])
