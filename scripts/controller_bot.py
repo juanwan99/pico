@@ -18,7 +18,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 REPO = os.environ.get("GITHUB_REPOSITORY", "juanwan99/pico")
@@ -30,7 +30,7 @@ LOG_ISSUE_TITLE = "[controller-bot] poll log"
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ")
 
 
 def _headers() -> dict[str, str]:
@@ -104,11 +104,10 @@ def combined_text(pr: PRInfo) -> str:
 
 
 def is_red(text: str) -> bool:
-    if re.search(r"RISK\s*:\s*红", text, re.IGNORECASE):
-        return True
-    if re.search(r"RISK\s*:\s*red", text, re.IGNORECASE):
-        return True
-    return False
+    return bool(
+        re.search(r"RISK\s*:\s*红", text, re.IGNORECASE)
+        or re.search(r"RISK\s*:\s*red", text, re.IGNORECASE)
+    )
 
 
 def is_yellow_fast(text: str) -> bool:
