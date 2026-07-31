@@ -138,6 +138,28 @@ report:
 on_done: set status DONE
 ```
 
+### VQ-005 · N7 历史时间线 + 取消
+
+```yaml
+id: VQ-005
+status: OPEN
+priority: P0
+context_reset: false
+target_pr: null
+title: N7 history timeline + cancel run
+deploy_gate:
+  - EQ-013/014 implementation PRs ## DEPLOYED
+  - health matches main
+test_plan:
+  - 历史进入旧任务可见步骤时间线
+  - 长任务可点停止 → cancelled 可见（或短任务模拟）
+  - 运行一次 / skill hub 不回归
+  - pico-dev 401
+report:
+  - ## TEST REPORT on N7 PRs
+on_done: set status DONE
+```
+
 ### VQ-000 · 模板（勿删）
 
 ```yaml

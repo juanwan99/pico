@@ -120,3 +120,8 @@ N1/N2/N3 已完成。下一步：**N6**（N5 已合）；见 EXECUTION-QUEUE EQ-
 
 - OneFlow / RACI 仍有效；**冲突时本文件在 END 前优先（仅门禁节奏）**  
 - TEST-WINDOW、强制回写、DEPLOY-TWO-HOST **不降级**  
+
+
+## N7 派工（2026-07-31）
+
+见 EXECUTION-QUEUE EQ-013～016；VALIDATION VQ-005。context_reset: false。

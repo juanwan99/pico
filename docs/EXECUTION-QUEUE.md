@@ -234,7 +234,8 @@ deliver:
 
 ```yaml
 id: EQ-009
-status: OPEN
+status: DONE
+done_note: "superseded by EQ-016 deploy tip"
 priority: P2
 context_reset: false
 assignee: E3
@@ -248,7 +249,8 @@ files_lease:
 
 ```yaml
 id: EQ-010
-status: OPEN
+status: DONE
+done_note: "N7 health #91 merged"
 priority: P1
 context_reset: false
 assignee: E1
@@ -265,7 +267,8 @@ deliver:
 
 ```yaml
 id: EQ-011
-status: OPEN
+status: CANCELLED
+done_note: "no hub failure reported; VQ-004 handles product"
 priority: P2
 context_reset: false
 assignee: E2
@@ -279,7 +282,8 @@ depends: EQ-007 DEPLOYED + VQ-004
 
 ```yaml
 id: EQ-012
-status: OPEN
+status: DONE
+done_note: "superseded by EQ-016"
 priority: P0
 context_reset: false
 assignee: E3
@@ -287,6 +291,83 @@ title: 部署 main tip（含 #87+#89）## DEPLOYED；队列卫生
 files_lease:
   - docs/EXECUTION-QUEUE.md
   - docs/VALIDATION-QUEUE.md
+```
+
+### EQ-013 · N7 历史 Run 时间线
+
+```yaml
+id: EQ-013
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E2
+fallback: E1
+task_doc: docs/DAY-TASK-N7-HISTORY-RUN-TIMELINE.md
+title: History task opens run timeline
+files_lease:
+  - apps/librechat/client/**
+  - apps/librechat/api/server/routes/pico.js
+deliver:
+  - PR RISK:黄 FAST + ## CANDIDATE
+  - ## DEPLOYED after merge
+  - unlocks VQ-005
+```
+
+### EQ-014 · N7 运行中停止
+
+```yaml
+id: EQ-014
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E2
+fallback: E1
+task_doc: docs/DAY-TASK-N7-CANCEL-RUN.md
+title: Cancel in-flight run from UI
+files_lease:
+  - apps/librechat/client/**
+  - apps/librechat/api/server/routes/pico.js
+note: 可与 EQ-013 同 PR 或连续两 PR；lease 同属 E2
+deliver:
+  - PR RISK:黄 FAST
+  - ## DEPLOYED
+  - unlocks VQ-005
+```
+
+### EQ-015 · N7b 事件 seq 唯一
+
+```yaml
+id: EQ-015
+status: OPEN
+priority: P1
+context_reset: false
+assignee: E1
+task_doc: docs/DAY-TASK-N7-EVENT-SEQ-UNIQUE.md
+title: Event (run_id, seq) unique + foreign_keys
+files_lease:
+  - services/api/**
+  - services/orchestrator/**
+  - tests/**
+deliver:
+  - PR RISK:黄 FAST
+  - ## DEPLOYED
+```
+
+### EQ-016 · 部署与队列卫生（必做）
+
+```yaml
+id: EQ-016
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E3
+title: 部署 main tip（含 #89/#91/#94 及后续 N7）→ ## DEPLOYED；DRAFT #86/#93 有 TEST 则转正合入；队列 DONE 回写
+files_lease:
+  - docs/EXECUTION-QUEUE.md
+  - docs/VALIDATION-QUEUE.md
+deliver:
+  - production health == main tip
+  - comment ## DEPLOYED on latest feature PRs missing it
 ```
 
 ### EQ-000 · 模板
