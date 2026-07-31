@@ -499,7 +499,9 @@ async def _run_and_collect(
             await append_event(session, run_id, event_type, payload)
 
     async def is_cancelled() -> bool:
-        return False
+        async with factory() as session:
+            run = await session.get(RunRow, run_id)
+            return bool(run and run.cancel_requested)
 
     caps = RunCaps(
         max_seconds=settings.pico_run_max_seconds,
@@ -826,7 +828,9 @@ async def chat_completions(
                 await q.put(("status", "〔工具完成〕\n"))
 
         async def is_cancelled() -> bool:
-            return False
+            async with factory() as session:
+                run = await session.get(RunRow, run_id)
+                return bool(run and run.cancel_requested)
 
         async def run() -> None:
             try:

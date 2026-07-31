@@ -375,6 +375,64 @@ async def test_direct_stream_aclose_finalizes_run_as_cancelled(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_agent_stream_polls_ledger_cancel_request(tmp_path, monkeypatch) -> None:
+    db = tmp_path / "agent-cancel-poll.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+    monkeypatch.setenv("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
+    monkeypatch.setenv("PICO_ENV", "development")
+
+    from app import db as dbmod
+    from sqlalchemy import select
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+    settings = Settings()
+
+    async def cancel_aware_runner(*, emit, is_cancelled, **_kwargs) -> RunResult:
+        factory = session_factory()
+        async with factory() as session:
+            run = (await session.execute(select(RunRow))).scalar_one()
+            run.cancel_requested = 1
+            await session.commit()
+        assert await is_cancelled() is True
+        await emit("run.status", {"status": "cancelled"})
+        return RunResult(status="cancelled", final_text="")
+
+    monkeypatch.setattr(
+        "pico_orchestrator.runner.run_agent_loop",
+        cancel_aware_runner,
+    )
+    token = issue_test_token(
+        school_id="school-a",
+        membership_id="member-agent-cancel",
+        settings=settings,
+    )
+    response = await chat_completions(
+        ChatCompletionRequest(
+            model="pico-agent",
+            stream=True,
+            messages=[ChatMessage(role="user", content="run until cancelled")],
+        ),
+        authorization=f"Bearer {token}",
+        x_conversation_id="conversation-agent-cancel",
+        x_workspace_id=None,
+        x_pico_membership_id=None,
+        settings=settings,
+    )
+
+    chunks = [chunk async for chunk in response.body_iterator]
+    assert any(b"data: [DONE]" in chunk for chunk in chunks)
+
+    factory = session_factory()
+    async with factory() as session:
+        run = (await session.execute(select(RunRow))).scalar_one()
+        assert run.cancel_requested == 1
+        assert run.status == "cancelled"
+
+
+@pytest.mark.asyncio
 async def test_finalize_is_idempotent_and_terminal_status_is_sticky(
     tmp_path,
     monkeypatch,
