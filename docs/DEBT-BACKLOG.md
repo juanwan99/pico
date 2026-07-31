@@ -17,6 +17,6 @@ STATUS: LIVING
 | D8 | Kimi CLI 依赖链 vs 自研循环叙事 | 体检 P1 | 后置 |
 | D9 | 像素 / WorkBuddy 全面对标 | 产品后置 | 后置 |
 | D10 | M5 edu 真联调 | 需授权 | 授权后 |
-| D11 | 未知 skill 曾 fail-open | 体检 | **N3 本周还** |
+| D11 | 未知 skill 工具已 deny-all，但回复 artifact extractor 仍可产生写入 | #70 生产 TEST REPORT @ `77e3181…` | **N3 回归修复** |
 
 新增借债：PR 写 `DEBT: Dn 简述` 并追加本表一行。

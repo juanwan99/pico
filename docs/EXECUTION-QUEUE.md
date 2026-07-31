@@ -116,7 +116,8 @@ note: 无阻塞则保持 OPEN 但不抢；E2 完成后本条 CANCELLED
 
 ```yaml
 id: EQ-003
-status: OPEN
+status: DONE
+done_note: "2026-07-31 E3 aligned production HEAD/health.git_sha to b405328b1e034209d4a449cabda1fd50a39a22e9 and posted ## DEPLOYED on #76"
 priority: P2
 assignee: E3
 title: 巡检 — 合 main 未部署的 PR 补 ## DEPLOYED；EXECUTION/VALIDATION 队列 DONE 回写
