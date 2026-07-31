@@ -2,15 +2,22 @@
 # Seed LibreChat demo user on Aliyun VPS. Run ON the server (宝塔命令助手).
 #   bash /opt/pico/scripts/vps-seed-demo-user.sh
 #
-# Demo: teacher@example.com / pico-demo-123
-# Does not print secrets beyond the known demo password (already public in DEMO.md).
+# Demo credentials must be supplied explicitly; the script never prints the password.
 set -euo pipefail
+if [ "${PICO_DEMO_SEED:-0}" != "1" ]; then
+  echo "[pico] BLOCKED: set PICO_DEMO_SEED=1 explicitly to create a demo account" >&2
+  exit 2
+fi
 ROOT="${PICO_ROOT:-/opt/pico}"
-EMAIL="${DEMO_EMAIL:-teacher@example.com}"
-PASS="${DEMO_PASSWORD:-pico-demo-123}"
+EMAIL="${PICO_DEMO_EMAIL:-${DEMO_EMAIL:-}}"
+PASS="${PICO_DEMO_PASSWORD:-${DEMO_PASSWORD:-}}"
 NAME="${DEMO_NAME:-Pico Teacher}"
 USER="${DEMO_USERNAME:-teacher}"
 LC_URL="${LIBRECHAT_URL:-http://127.0.0.1:8080}"
+if [ -z "$EMAIL" ] || [ "${#PASS}" -lt 12 ]; then
+  echo "[pico] BLOCKED: PICO_DEMO_EMAIL and a 12+ character PICO_DEMO_PASSWORD are required" >&2
+  exit 2
+fi
 
 cd "$ROOT"
 
@@ -35,8 +42,8 @@ p = Path("apps/librechat/.env")
 p.parent.mkdir(parents=True, exist_ok=True)
 text = p.read_text() if p.exists() else ""
 keys = {
-    "ALLOW_UNVERIFIED_EMAIL_LOGIN": "true",
-    "ALLOW_REGISTRATION": "true",
+    "ALLOW_UNVERIFIED_EMAIL_LOGIN": "false",
+    "ALLOW_REGISTRATION": "false",
     "ALLOW_EMAIL_LOGIN": "true",
     "DOMAIN_CLIENT": "https://pico.aivia.asia",
     "DOMAIN_SERVER": "https://pico.aivia.asia",
@@ -44,7 +51,6 @@ keys = {
     "PORT": "8080",
     "MONGO_URI": "mongodb://127.0.0.1:27017/LibreChat",
     "OPENAI_REVERSE_PROXY": "http://127.0.0.1:18765/v1",
-    "OPENAI_API_KEY": "pico-dev",
 }
 out, seen = [], set()
 for line in text.splitlines():

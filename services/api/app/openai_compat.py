@@ -83,13 +83,21 @@ def _dev_proxy_keys(settings: Settings) -> set[str]:
     return keys
 
 
+def _production_proxy_key(settings: Settings) -> str | None:
+    key = (settings.pico_openai_proxy_key or "").strip()
+    if len(key) < 32 or key in {"pico-dev", "sk-pico-dev"}:
+        return None
+    return key
+
+
 def _principal_from_auth(
     authorization: str | None,
     settings: Settings,
 ) -> Principal:
-    """Accept Pico JWT, or (non-production) explicit OpenAI-compat proxy keys.
+    """Accept Pico JWT or a scoped OpenAI-compat proxy credential.
 
-    Rejects arbitrary sk-*, and does not treat model keys / JWT secrets as Bearer.
+    Production accepts only a strong explicit internal proxy credential. Model
+    keys and JWT signing secrets are never treated as Bearer credentials.
     """
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="missing bearer")
@@ -104,8 +112,11 @@ def _principal_from_auth(
     try:
         return decode_token(token, settings)
     except HTTPException as jwt_err:
-        # Dev proxy keys for NextChat OPENAI_API_KEY — disabled in production
-        if not production and token in _dev_proxy_keys(settings):
+        # Dev defaults stay non-production; production accepts only the strong
+        # explicit internal proxy credential.
+        if (not production and token in _dev_proxy_keys(settings)) or (
+            production and token == _production_proxy_key(settings)
+        ):
             return Principal(
                 school_id="school-a",
                 membership_id="nextchat-user",
@@ -121,6 +132,37 @@ def _principal_from_auth(
                 detail="proxy keys disabled in production; use Pico JWT",
             ) from jwt_err
         raise
+
+
+def _normalized_model(model: str) -> str:
+    normalized = model.strip()
+    return normalized.split("/")[-1] if "/" in normalized else normalized
+
+
+def _assert_model_allowed(model: str, settings: Settings) -> None:
+    if not settings.is_production:
+        return
+    allowed = {_normalized_model(item) for item in settings.allowed_model_list}
+    if _normalized_model(model) not in allowed:
+        raise HTTPException(status_code=400, detail="model is not allowed")
+
+
+def _effective_max_tokens(requested: int | None, cap: int) -> int:
+    default = min(2048, cap)
+    return min(requested if requested and requested > 0 else default, cap)
+
+
+def _estimated_usage(prompt: str, completion: str) -> dict[str, int | bool]:
+    # Upstream streaming adapters do not expose provider usage yet. This is an
+    # explicit estimate rather than the previous misleading constant zero.
+    prompt_tokens = max(1, (len(prompt) + 3) // 4)
+    completion_tokens = max(1, (len(completion) + 3) // 4)
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+        "estimated": True,
+    }
 
 
 def _last_user_prompt(messages: list[ChatMessage]) -> str:
@@ -554,6 +596,8 @@ async def chat_completions(
     model = _model_preference_from_prompt(raw_prompt) or body.model or settings.kimi_model or "pico-agent"
     if skill_snapshot and skill_snapshot.get("tools"):
         model = "pico-agent"
+    _assert_model_allowed(model, settings)
+    effective_max_tokens = _effective_max_tokens(body.max_tokens, settings.pico_run_max_tokens)
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
 
@@ -585,7 +629,7 @@ async def chat_completions(
             try:
                 async for piece in stream_chat(
                     prompt,
-                    max_tokens=body.max_tokens or 2048,
+                    max_tokens=effective_max_tokens,
                     history=history,
                     system=system,
                     model=model,
@@ -627,7 +671,7 @@ async def chat_completions(
                     "finish_reason": "stop",
                 }
             ],
-            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            "usage": _estimated_usage(prompt, text),
         }
 
     async def event_stream() -> AsyncIterator[bytes]:
@@ -678,7 +722,7 @@ async def chat_completions(
             try:
                 async for piece in stream_chat(
                     prompt,
-                    max_tokens=body.max_tokens or 2048,
+                    max_tokens=effective_max_tokens,
                     history=history,
                     system=system,
                     model=model,

@@ -18,7 +18,8 @@ fi
 cd "$ROOT"
 
 if [ ! -f .env ]; then
-  if [ -f .env.example ]; then cp .env.example .env; else touch .env; fi
+  echo "[pico] .env missing; prepare it from .env.production.example first" >&2
+  exit 2
 fi
 
 python3 - <<'PY'
@@ -33,12 +34,10 @@ keys = {
     "KIMI_BASE_URL": os.environ.get("KIMI_BASE_URL", "https://api.moonshot.cn/v1"),
     "KIMI_MODEL": os.environ.get("KIMI_MODEL", "kimi-k2.6"),
     "PICO_CORS_ORIGINS": "https://pico.aivia.asia,http://127.0.0.1:8080,http://localhost:8080",
-    # LibreChat uses OPENAI_API_KEY=pico-dev → must NOT set production
-    "PICO_ENV": "development",
+    "PICO_ENV": "production",
     "PICO_API_HOST": "127.0.0.1",
     "PICO_API_PORT": "18765",
-    "PICO_OPENAI_PROXY_KEY": "pico-dev",
-    "PICO_ACCEPT_TEST_ISSUER": "true",
+    "PICO_ACCEPT_TEST_ISSUER": "false",
 }
 out, seen = [], set()
 for line in text.splitlines():
@@ -55,7 +54,7 @@ for k, v in keys.items():
     if k not in seen:
         out.append(f"{k}={v}")
 path.write_text("\n".join(out) + "\n")
-print(f"[pico] wrote {path} KIMI_API_KEY=SET len={len(key)} PICO_ENV=development")
+print(f"[pico] wrote {path} KIMI_API_KEY=SET len={len(key)} PICO_ENV=production")
 PY
 
 mkdir -p apps/librechat
@@ -73,11 +72,11 @@ keys = {
     "DOMAIN_SERVER": "https://pico.aivia.asia",
     "MONGO_URI": "mongodb://127.0.0.1:27017/LibreChat",
     "OPENAI_REVERSE_PROXY": "http://127.0.0.1:18765/v1",
-    "OPENAI_API_KEY": "pico-dev",
     "ENDPOINTS": "openAI",
     "OPENAI_MODELS": "moonshot-v1-8k,kimi-k2.6,pico-agent",
     "APP_TITLE": "Pico",
-    "ALLOW_REGISTRATION": "true",
+    "ALLOW_REGISTRATION": "false",
+    "ALLOW_UNVERIFIED_EMAIL_LOGIN": "false",
     "SEARCH": "false",
 }
 out, seen = [], set()
@@ -110,9 +109,21 @@ echo "[pico] health:"
 curl -sS --max-time 5 http://127.0.0.1:18765/health || true
 echo
 
-echo "[pico] S1 chat smoke (proxy pico-dev + Kimi upstream):"
+echo "[pico] S1 chat smoke (strong internal proxy + Kimi upstream):"
+if [ -z "${PICO_OPENAI_PROXY_KEY:-}" ]; then
+  PICO_OPENAI_PROXY_KEY="$(
+    python3 - <<'PY'
+from pathlib import Path
+for line in Path(".env").read_text().splitlines():
+    if line.startswith("PICO_OPENAI_PROXY_KEY="):
+        print(line.split("=", 1)[1].strip())
+        break
+PY
+  )"
+fi
+: "${PICO_OPENAI_PROXY_KEY:?configure the strong internal proxy key in .env}"
 code=$(curl -sS --max-time 90 -o /tmp/pico-s1.json -w '%{http_code}' \
-  -H 'Authorization: Bearer pico-dev' \
+  -H "Authorization: Bearer ${PICO_OPENAI_PROXY_KEY}" \
   -H 'Content-Type: application/json' \
   -H 'X-Pico-Membership-Id: demo' \
   -d '{"model":"kimi-k2.6","stream":false,"messages":[{"role":"user","content":"【Pico-User:demo】只回：演示OK"}]}' \

@@ -43,6 +43,7 @@ from app.auth import (
 )
 from app.db import EventRow, RunRow, WorkspaceRow, get_session, init_db, new_id
 from app.openai_compat import router as openai_compat_router
+from app.rate_limit import ChatRateLimitMiddleware
 from app.settings import Settings, get_settings
 
 
@@ -69,6 +70,7 @@ def _sync_settings_to_environ() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    get_settings().validate_production()
     _sync_settings_to_environ()
     await init_db()
     from app import automation_service
@@ -88,6 +90,7 @@ app = FastAPI(
 )
 
 _settings = get_settings()
+app.add_middleware(ChatRateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.cors_origin_list or ["*"],
@@ -1049,4 +1052,3 @@ if _DIST.is_dir() and (_DIST / "index.html").is_file():
         # no favicon asset yet — avoid noisy 404 JSON in preview
         from fastapi import Response
         return Response(status_code=204)
-

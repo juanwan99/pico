@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+logger = logging.getLogger(__name__)
 
+_INSECURE_JWT_SECRETS = {
+    "",
+    "pico-dev",
+    "change-me",
+    "change-me-dev-only-not-for-prod-32b!",
+}
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(".env", "../../.env"), extra="ignore")
 
@@ -32,6 +40,9 @@ class Settings(BaseSettings):
     pico_run_max_seconds: int = 120
     pico_run_max_tokens: int = 8000
     pico_run_max_retries: int = 2
+    pico_chat_rpm: int = 30
+    pico_chat_max_concurrent: int = 2
+    pico_allowed_models: str = ""
 
     pico_api_host: str = "0.0.0.0"
     pico_api_port: int = 8000
@@ -47,8 +58,10 @@ class Settings(BaseSettings):
     pico_agent_file: str = "services/orchestrator/agents/pico.yaml"
     pico_dangerous_tools_enabled: bool = False
     pico_env: str = "development"
+    pico_allow_test_issuer_break_glass: bool = False
 
-    # OpenAI-compat proxy key for LibreChat etc. (dev only unless set).
+    # OpenAI-compat proxy key for LibreChat. Production requires a strong,
+    # explicit internal credential; development also accepts known dev values.
     # Never fall back to KIMI_API_KEY or JWT secret as Bearer.
     pico_openai_proxy_key: str = ""
 
@@ -72,6 +85,65 @@ class Settings(BaseSettings):
     @property
     def auth_issuer_mode(self) -> str:
         return "test_and_edu" if self.pico_accept_test_issuer else "edu_only"
+
+    @property
+    def is_production(self) -> bool:
+        return self.pico_env.strip().lower() in {"production", "prod"}
+
+    @property
+    def allowed_model_list(self) -> list[str]:
+        return [model.strip() for model in self.pico_allowed_models.split(",") if model.strip()]
+
+    def validate_production(self) -> None:
+        """Fail closed before a production process starts serving traffic."""
+        if not self.is_production:
+            return
+
+        errors: list[str] = []
+        jwt_secret = self.pico_jwt_secret.strip()
+        if jwt_secret in _INSECURE_JWT_SECRETS or len(jwt_secret) < 32:
+            errors.append("PICO_JWT_SECRET must be a non-default secret of at least 32 characters")
+
+        proxy_key = self.pico_openai_proxy_key.strip()
+        if proxy_key in {"pico-dev", "sk-pico-dev"}:
+            errors.append("PICO_OPENAI_PROXY_KEY must not use a development default")
+        elif proxy_key and len(proxy_key) < 32:
+            errors.append("PICO_OPENAI_PROXY_KEY must be empty or at least 32 characters")
+
+        if self.pico_accept_test_issuer:
+            if not self.pico_allow_test_issuer_break_glass:
+                errors.append(
+                    "PICO_ACCEPT_TEST_ISSUER=true requires "
+                    "PICO_ALLOW_TEST_ISSUER_BREAK_GLASS=true"
+                )
+            else:
+                logger.critical(
+                    "SECURITY BREAK-GLASS: production test JWT issuer is enabled"
+                )
+
+        if not (self.kimi_api_key.strip() or self.deepseek_api_key.strip()):
+            errors.append("configure KIMI_API_KEY or DEEPSEEK_API_KEY")
+        if not self.allowed_model_list:
+            errors.append("PICO_ALLOWED_MODELS must contain at least one production model")
+        else:
+            provider_model = (
+                self.kimi_model if self.kimi_api_key.strip() else self.deepseek_model
+            ).strip()
+            if provider_model not in self.allowed_model_list:
+                errors.append(
+                    "the configured provider model must appear in PICO_ALLOWED_MODELS"
+                )
+        if self.pico_chat_rpm <= 0:
+            errors.append("PICO_CHAT_RPM must be greater than zero")
+        if self.pico_chat_max_concurrent <= 0:
+            errors.append("PICO_CHAT_MAX_CONCURRENT must be greater than zero")
+        if self.pico_run_max_tokens <= 0:
+            errors.append("PICO_RUN_MAX_TOKENS must be greater than zero")
+        if self.pico_dangerous_tools_enabled:
+            errors.append("PICO_DANGEROUS_TOOLS_ENABLED must remain false")
+
+        if errors:
+            raise ValueError("invalid production configuration: " + "; ".join(errors))
 
 
 @lru_cache

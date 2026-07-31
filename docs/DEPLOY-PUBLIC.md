@@ -71,7 +71,8 @@ cd /opt/pico && docker compose -f docker-compose.product.yml up -d
 3. **SSL** → Let’s Encrypt 申请 → **强制 HTTPS**
 4. 浏览器打开：**https://pico.aivia.asia**  
    - 应见「欢迎回来」  
-   - 注册/登录演示：`teacher@example.com` / `pico-demo-123`（允许注册时先注册一次）
+   - 生产默认关闭开放注册；账号由管理员创建。临时演示播种必须显式
+     `PICO_DEMO_SEED=1` 并使用 12 位以上随机密码，演示后立即关闭。
 
 LibreChat 环境（compose 已默认）：
 

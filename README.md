@@ -29,7 +29,8 @@
 ./scripts/run-product.sh
 ```
 
-演示账号（LibreChat）：`teacher@example.com` / `pico-demo-123`
+生产默认关闭开放注册和演示账号播种。仅在获批演示窗显式设置
+`PICO_DEMO_SEED=1`、邮箱及 12 位以上随机密码；不要使用仓库内固定密码。
 
 ## 禁止
 

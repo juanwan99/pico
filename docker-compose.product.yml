@@ -23,6 +23,10 @@ services:
       - .env
     environment:
       PICO_DATABASE_URL: sqlite+aiosqlite:///./data/pico.db
+      PICO_ENV: production
+      PICO_ACCEPT_TEST_ISSUER: "false"
+      PICO_ALLOWED_MODELS: ${PICO_ALLOWED_MODELS:?set PICO_ALLOWED_MODELS}
+      PICO_OPENAI_PROXY_KEY: ${PICO_OPENAI_PROXY_KEY:?set a strong internal proxy key}
     # not published
     mem_limit: 512m
     depends_on:
@@ -45,11 +49,20 @@ services:
       PORT: "3080"
       MONGO_URI: mongodb://mongo:27017/LibreChat
       OPENAI_REVERSE_PROXY: http://pico-api:18765/v1
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-pico-dev}
+      OPENAI_API_KEY: ${PICO_OPENAI_PROXY_KEY:?set a strong internal proxy key}
       ENDPOINTS: openAI
       OPENAI_MODELS: moonshot-v1-8k,pico-agent
       APP_TITLE: Pico
-      ALLOW_REGISTRATION: "true"
+      ALLOW_REGISTRATION: "false"
+      ALLOW_UNVERIFIED_EMAIL_LOGIN: "false"
+      PICO_DEMO_SEED: ${PICO_DEMO_SEED:-0}
+      PICO_SEED_DEMO_USER: ${PICO_DEMO_SEED:-0}
+      PICO_DEMO_EMAIL: ${PICO_DEMO_EMAIL:-}
+      PICO_DEMO_PASSWORD: ${PICO_DEMO_PASSWORD:-}
+      CREDS_KEY: ${LIBRECHAT_CREDS_KEY:?set LIBRECHAT_CREDS_KEY}
+      CREDS_IV: ${LIBRECHAT_CREDS_IV:?set LIBRECHAT_CREDS_IV}
+      JWT_SECRET: ${LIBRECHAT_JWT_SECRET:?set LIBRECHAT_JWT_SECRET}
+      JWT_REFRESH_SECRET: ${LIBRECHAT_JWT_REFRESH_SECRET:?set LIBRECHAT_JWT_REFRESH_SECRET}
       SEARCH: "false"
       DOMAIN_CLIENT: ${DOMAIN_CLIENT:-https://pico.aivia.asia}
       DOMAIN_SERVER: ${DOMAIN_SERVER:-https://pico.aivia.asia}

@@ -12,7 +12,7 @@ set -euo pipefail
 PUBLIC_IP="${PUBLIC_IP:-139.196.147.40}"
 DOMAIN="${DOMAIN:-pico.aivia.asia}"
 REPO_URL="${REPO_URL:-https://github.com/juanwan99/pico.git}"
-BRANCH="${BRANCH:-grok/pico-preview-librechat-p0}"
+BRANCH="${BRANCH:-main}"
 APP_DIR="${APP_DIR:-/opt/pico}"
 
 echo "[pico] domain=https://${DOMAIN}  expect-ip=${PUBLIC_IP}"
@@ -55,9 +55,13 @@ cd "$APP_DIR"
 
 # --- env ---
 if [ ! -f .env ]; then
-  cp .env.example .env
-  echo "[pico] wrote .env from example — edit KIMI_API_KEY if you have it"
+  echo "[pico] BLOCKED: create .env from .env.production.example and fill secrets" >&2
+  exit 2
 fi
+grep -Eq '^PICO_ENV=(production|prod)$' .env || {
+  echo "[pico] BLOCKED: PICO_ENV must be production" >&2
+  exit 2
+}
 # export for compose
 export DOMAIN_CLIENT="https://${DOMAIN}"
 export DOMAIN_SERVER="https://${DOMAIN}"
@@ -83,11 +87,11 @@ keys = {
   "DOMAIN_SERVER": "https://${DOMAIN}",
   "MONGO_URI": "mongodb://mongo:27017/LibreChat",
   "OPENAI_REVERSE_PROXY": "http://pico-api:18765/v1",
-  "OPENAI_API_KEY": "pico-dev",
   "ENDPOINTS": "openAI",
   "OPENAI_MODELS": "moonshot-v1-8k,pico-agent",
   "APP_TITLE": "Pico",
-  "ALLOW_REGISTRATION": "true",
+  "ALLOW_REGISTRATION": "false",
+  "ALLOW_UNVERIFIED_EMAIL_LOGIN": "false",
   "SEARCH": "false",
 }
 out = []
@@ -129,8 +133,7 @@ cat <<EOF
 3) SSL → Let's Encrypt 申请并强制 HTTPS
 4) DNS 已解析？  pico.aivia.asia  A  ${PUBLIC_IP}
 
-演示登录（需先在站点注册一次或自行 seed）：
-  teacher@example.com / pico-demo-123
+生产默认关闭注册和 demo seed；管理员账号请按部署清单创建。
 
 检查：
   docker compose -f ${APP_DIR}/docker-compose.product.yml logs -f --tail=100

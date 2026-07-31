@@ -87,7 +87,7 @@ def test_openai_compat_rejects_proxy_in_production() -> None:
         pico_jwt_secret="change-me-dev-only-not-for-prod-32b!",
         pico_env="production",
         pico_accept_test_issuer=False,
-        pico_openai_proxy_key="still-set",
+        pico_openai_proxy_key="",
     )
     with pytest.raises(HTTPException) as ei:
         _principal_from_auth("Bearer pico-dev", s)
