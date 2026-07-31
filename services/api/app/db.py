@@ -235,6 +235,7 @@ def _migrate_sqlite_sync(conn) -> None:
 def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
 
 
