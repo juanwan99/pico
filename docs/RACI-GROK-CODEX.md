@@ -3,6 +3,7 @@
 ```
 DOC: docs/RACI-GROK-CODEX.md
 STATUS: BINDING
+FAST: docs/SPRINT-FAST.md（7 日黄档代合 · 见该文 END）
 DATE: 2026-07-30
 TRUTH: GitHub PR/SHA/CI/DEPLOYED（OneFlow）
 PAIRS: docs/ONEFLOW.md（角色名以 ONEFLOW 为准；本文件是映射与派工细则）
@@ -93,6 +94,7 @@ ONEFLOW 三角色 **不变**：`总管` · `写入` · `审查`。
 | 红 | **总管** + 业主红例外（若需要） | CI 绿 + 审查 PASS + 红例外记录 |
 
 写入 **永不** 在无总管授权时合并 **自己的** 黄/红 PR。
+**例外：** `docs/SPRINT-FAST.md` 生效期内，**黄档**可由 ② 代合（须 CI 绿 + FAST 标记）；**红档仍禁止自合。**
 
 ---
 
