@@ -361,7 +361,8 @@ deliver:
 
 ```yaml
 id: EQ-016
-status: OPEN
+status: DONE
+done_note: "E3 deployed main 29119098492a06a8ecbfadd7864afc34674ec8e8; backfilled ## DEPLOYED on #94/#97/#98/#99; promoted and merged tested docs PRs #86/#93"
 priority: P0
 context_reset: false
 assignee: E3
