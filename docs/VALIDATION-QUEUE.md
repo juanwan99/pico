@@ -1,3 +1,5 @@
+**Execution queue:** [EXECUTION-QUEUE.md](./EXECUTION-QUEUE.md)
+
 # 验证窗任务队列（总管直派 · 无需业主转贴）
 
 ```

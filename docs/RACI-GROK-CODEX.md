@@ -1,3 +1,5 @@
+**Execution queue:** [docs/EXECUTION-QUEUE.md](docs/EXECUTION-QUEUE.md)
+
 # 总控（Grok）× 执行（Codex）工作流
 
 ```
