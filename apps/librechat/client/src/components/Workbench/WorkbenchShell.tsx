@@ -5,13 +5,14 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { cn } from '~/utils';
+import { getTaskReturnRoute } from './workbenchSession';
 
 export default function WorkbenchShell({
   title,
   subtitle,
   children,
   actions,
-  backTo = '/c/new',
+  backTo,
   className,
   bare = false,
 }: {
@@ -27,13 +28,16 @@ export default function WorkbenchShell({
 
   return (
     <div
-      className={cn('pico-wb-secondary flex h-full min-h-0 flex-col bg-[#fafafa] dark:bg-presentation', className)}
+      className={cn(
+        'pico-wb-secondary flex h-full min-h-0 flex-col bg-[#fafafa] dark:bg-presentation',
+        className,
+      )}
       data-testid="workbench-shell"
     >
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white px-3 dark:border-border-light dark:bg-surface-primary">
         <button
           type="button"
-          onClick={() => navigate(backTo)}
+          onClick={() => navigate(backTo ?? getTaskReturnRoute())}
           className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#3d3d3d] hover:bg-black/[0.04]"
           aria-label="返回"
         >
@@ -43,9 +47,7 @@ export default function WorkbenchShell({
           <h1 className="truncate text-[15px] font-semibold text-[#1a1a1a] dark:text-text-primary">
             {title}
           </h1>
-          {subtitle ? (
-            <p className="truncate text-[11px] text-[#8c8c8c]">{subtitle}</p>
-          ) : null}
+          {subtitle ? <p className="truncate text-[11px] text-[#8c8c8c]">{subtitle}</p> : null}
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
       </header>

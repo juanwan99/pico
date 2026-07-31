@@ -33,6 +33,7 @@ import { useLocalize, useNewConvo } from '~/hooks';
 import { clearMessagesCache, cn } from '~/utils';
 import store from '~/store';
 import TaskListSection from '~/components/Workbench/TaskListSection';
+import { rememberTaskRoute } from '~/components/Workbench/workbenchSession';
 
 const AccountSettings = lazy(() => import('~/components/Nav/AccountSettings'));
 
@@ -138,6 +139,10 @@ function Sidebar({
     top: number;
   } | null>(null);
   const moreRegionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    rememberTaskRoute(location.pathname, location.search);
+  }, [location.pathname, location.search]);
 
   const onNewTask = useCallback(() => {
     clearMessagesCache(queryClient, conversationId);

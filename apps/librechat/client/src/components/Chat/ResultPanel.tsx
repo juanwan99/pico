@@ -25,6 +25,7 @@ import {
 import type { TMessage } from 'librechat-data-provider';
 import { getPicoArtifactContent, type PicoArtifact } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
+import RunLoadingIndicator from './RunLoadingIndicator';
 
 type TopView = 'overview' | 'files' | 'browser';
 
@@ -73,11 +74,10 @@ function collectArtifacts(messages: TMessage[] | null | undefined): ArtifactItem
         }
         seen.add(id);
         const name = String(
-          (f as { filename?: string }).filename ??
-            (f as { name?: string }).name ??
-            '附件',
+          (f as { filename?: string }).filename ?? (f as { name?: string }).name ?? '附件',
         );
-        const bytes = (f as { bytes?: number; size?: number }).bytes ?? (f as { size?: number }).size;
+        const bytes =
+          (f as { bytes?: number; size?: number }).bytes ?? (f as { size?: number }).size;
         const lower = name.toLowerCase();
         out.push({
           id,
@@ -103,9 +103,7 @@ function FileGlyph({ kind }: { kind: ArtifactItem['kind'] }) {
     <span
       className={cn(
         'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold',
-        kind === 'txt'
-          ? 'bg-[#e8f1ff] text-[#3b6fd9]'
-          : 'bg-[#f0f0f0] text-[#6b6b6b]',
+        kind === 'txt' ? 'bg-[#e8f1ff] text-[#3b6fd9]' : 'bg-[#f0f0f0] text-[#6b6b6b]',
       )}
       aria-hidden
     >
@@ -319,9 +317,7 @@ export default function ResultPanel({
                       aria-selected={view === id}
                       className={cn(
                         'flex w-full px-3 py-2 text-left text-[13px]',
-                        view === id
-                          ? 'bg-[#edf1f4] font-medium'
-                          : 'hover:bg-black/[0.03]',
+                        view === id ? 'bg-[#edf1f4] font-medium' : 'hover:bg-black/[0.03]',
                       )}
                       onClick={() => {
                         setView(id);
@@ -369,9 +365,7 @@ export default function ResultPanel({
           <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
             {taskTitle || runStatusLabel ? (
               <div className="mb-3 rounded-lg bg-[#fafafa] px-3 py-2 dark:bg-surface-tertiary">
-                {taskTitle ? (
-                  <p className="truncate text-[13px] font-medium">{taskTitle}</p>
-                ) : null}
+                {taskTitle ? <p className="truncate text-[13px] font-medium">{taskTitle}</p> : null}
                 {runStatusLabel ? (
                   <p className="mt-0.5 text-[12px] text-[#6b6b6b]">{runStatusLabel}</p>
                 ) : null}
@@ -381,19 +375,29 @@ export default function ResultPanel({
             {artifacts.length === 0 ? (
               <div className="flex min-h-[240px] flex-col px-1 pt-2">
                 <p className="mb-2 text-[12px] font-medium tracking-normal text-[#8c8c8c]">产物</p>
-                <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa] px-4 py-10 text-[#9a9a9a]">
-                  <FileText className="h-9 w-9 opacity-30" strokeWidth={1.25} />
-                  <p className="text-[13px] font-medium text-[#6b6b6b]">
-                    {runStatusLabel?.includes('等待')
-                      ? '执行中…产物将出现在此'
-                      : runStatusLabel?.startsWith('失败')
-                        ? '本次未产出文件'
-                        : '暂无产物'}
-                  </p>
-                  <p className="max-w-[15rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
-                    概览 / 工作空间文件 / 浏览器 — 与任务台右栏一致
-                  </p>
-                </div>
+                {runStatusLabel?.includes('等待') ? (
+                  <div className="flex flex-1 flex-col justify-center gap-3 rounded-xl border border-black/[0.06] bg-[#fafafa] px-5 py-10 dark:border-border-light dark:bg-surface-tertiary">
+                    <RunLoadingIndicator
+                      label="执行中，正在准备产物"
+                      className="justify-center text-[13px] font-medium text-[#3d3d3d] dark:text-text-primary"
+                    />
+                    <div className="space-y-2" aria-hidden="true">
+                      <div className="h-2.5 w-4/5 animate-pulse rounded bg-black/[0.07] dark:bg-white/10" />
+                      <div className="h-2.5 w-full animate-pulse rounded bg-black/[0.05] dark:bg-white/[0.08]" />
+                      <div className="h-2.5 w-2/3 animate-pulse rounded bg-black/[0.05] dark:bg-white/[0.08]" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa] px-4 py-10 text-[#9a9a9a]">
+                    <FileText className="h-9 w-9 opacity-30" strokeWidth={1.25} />
+                    <p className="text-[13px] font-medium text-[#6b6b6b]">
+                      {runStatusLabel?.startsWith('失败') ? '本次未产出文件' : '暂无产物'}
+                    </p>
+                    <p className="max-w-[15rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
+                      概览 / 工作空间文件 / 浏览器 — 与任务台右栏一致
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <ul className="space-y-2">
@@ -464,7 +468,11 @@ export default function ResultPanel({
                       key={a.id}
                       className="flex items-center gap-2 border-b border-black/[0.04] px-3 py-2.5 hover:bg-[#fafafa] dark:hover:bg-surface-tertiary"
                     >
-                      <input type="checkbox" className="rounded border-black/20" aria-label={a.name} />
+                      <input
+                        type="checkbox"
+                        className="rounded border-black/20"
+                        aria-label={a.name}
+                      />
                       <FileGlyph kind={a.kind} />
                       <span className="min-w-0 flex-1 truncate text-[13px]">{a.name}</span>
                       <span className="shrink-0 text-[12px] text-[#9a9a9a]">{a.sizeLabel}</span>

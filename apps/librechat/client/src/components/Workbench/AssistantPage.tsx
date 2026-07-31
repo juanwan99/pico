@@ -5,11 +5,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot, Smartphone, Plus, MessageSquare, ChevronRight, Sparkles } from 'lucide-react';
 import WorkbenchShell from './WorkbenchShell';
-import {
-  preferredModelForExpert,
-  setActiveExpert,
-  setPicoModelMode,
-} from '~/utils/picoModelPref';
+import { preferredModelForExpert, setActiveExpert, setPicoModelMode } from '~/utils/picoModelPref';
+import { appendPendingPrompt } from './workbenchSession';
 
 const ASSISTANTS = [
   {
@@ -46,7 +43,7 @@ export default function AssistantPage() {
     try {
       if (a.expert) {
         sessionStorage.setItem('pico:pendingExpert', a.expert);
-        sessionStorage.setItem('pico:pendingPrompt', `请以「${a.expert}」的角色协助完成任务：`);
+        appendPendingPrompt(`请以「${a.expert}」的角色协助完成任务：`);
         setActiveExpert(a.expert);
         setPicoModelMode(preferredModelForExpert(a.expert));
       } else {
@@ -83,7 +80,7 @@ export default function AssistantPage() {
               className={
                 openId === a.id
                   ? 'flex w-full items-center gap-3 rounded-lg border border-[#1a1a1a] bg-white p-3.5 text-left shadow-sm'
-                  : 'flex w-full items-center gap-3 rounded-lg border border-black/[0.06] bg-white p-3.5 text-left hover:border-black/12'
+                  : 'hover:border-black/12 flex w-full items-center gap-3 rounded-lg border border-black/[0.06] bg-white p-3.5 text-left'
               }
             >
               <div className="flex size-10 items-center justify-center rounded-lg bg-[#1a1a1a] text-white">

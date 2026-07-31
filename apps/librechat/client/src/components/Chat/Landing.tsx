@@ -149,7 +149,6 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
       if (expert) {
         sessionStorage.removeItem('pico:pendingExpert');
         setExpertBadge(expert);
-        fillPrompt(`请以「${expert}」的角色协助完成任务：`);
       }
       const connector = sessionStorage.getItem('pico:pendingConnector');
       if (connector) {
@@ -180,25 +179,33 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
   return (
     <div className="pico-wb-landing flex w-full flex-col items-center px-6 pb-6 pt-10 sm:pt-[156px]">
       <div className="flex w-full max-w-[797px] flex-col items-center">
-        <h1 className="text-center text-[30px] font-semibold leading-none tracking-normal text-[#1a1a1a] sm:text-[34px] dark:text-text-primary">
+        <h1 className="text-center text-[30px] font-semibold leading-none tracking-normal text-[#1a1a1a] dark:text-text-primary sm:text-[34px]">
           Pico，我帮你
         </h1>
         {name ? (
           <p className="mt-2.5 text-[13px] text-[#8c8c8c]">{name}，描述任务即可开始</p>
         ) : null}
         {expertBadge || connectorBadge || skillBadge ? (
-          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#edf1f4] px-3 py-1 text-[12px] font-medium text-[#3d3d3d]">
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
             {skillBadge ? (
-              <>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#edf1f4] px-3 py-1 text-[12px] font-medium text-[#3d3d3d]">
                 <ScrollText className="h-3.5 w-3.5" />
                 技能 · {skillBadge}
-              </>
-            ) : expertBadge ? (
-              `专家 · ${expertBadge}`
-            ) : (
-              `连接器 · ${connectorBadge}`
-            )}
-            <span className="text-[#8c8c8c]">· 模型 {model}</span>
+              </span>
+            ) : null}
+            {expertBadge ? (
+              <span className="rounded-full bg-[#edf1f4] px-3 py-1 text-[12px] font-medium text-[#3d3d3d]">
+                专家 · {expertBadge}
+              </span>
+            ) : null}
+            {connectorBadge ? (
+              <span className="rounded-full bg-[#edf1f4] px-3 py-1 text-[12px] font-medium text-[#3d3d3d]">
+                连接器 · {connectorBadge}
+              </span>
+            ) : null}
+            <span className="rounded-full bg-[#edf1f4] px-3 py-1 text-[12px] text-[#8c8c8c]">
+              模型 {model}
+            </span>
           </div>
         ) : null}
 
