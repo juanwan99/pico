@@ -191,6 +191,28 @@ report:
 on_done: set VQ-005 VQ-006 VQ-007 DONE；通知总管收 N7 停止线
 ```
 
+### VQ-008 · #114 部署后取消终态复测
+
+```yaml
+id: VQ-008
+status: OPEN
+priority: P0
+context_reset: false
+target_pr: 114
+title: cancel_requested must end as cancelled (not token_cap)
+deploy_gate:
+  - PR #114 ## DEPLOYED
+  - health.git_sha matches #114 tip (880b714… or newer containing it)
+test_plan:
+  - 公网点停止 → 停止中
+  - cancel_requested=1 或 run.cancel_requested
+  - 终态必须 cancelled（token_cap failed = FAIL）
+  - 历史时间线 PASS
+report:
+  - ## TEST REPORT on #114 + 交叉 #108
+on_done: close VQ-005/006/007/008 if all cancel path green
+```
+
 ### VQ-000 · 模板（勿删）
 
 ```yaml
