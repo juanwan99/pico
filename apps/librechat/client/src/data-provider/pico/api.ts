@@ -125,6 +125,7 @@ export type PicoAutomation = {
   prompt: string;
   schedule_kind: string;
   schedule: Record<string, unknown>;
+  workspace_id?: string | null;
   enabled: boolean;
   last_run_at?: string | null;
   next_run_at?: string | null;
@@ -139,6 +140,7 @@ export async function createPicoAutomation(body: {
   prompt: string;
   schedule_kind: string;
   schedule: Record<string, unknown>;
+  workspace_id?: string;
 }) {
   return picoFetch<{ automation: PicoAutomation }>(`/v1/automations`, {
     method: 'POST',
@@ -151,10 +153,16 @@ export async function setPicoAutomationEnabled(id: string, enabled: boolean) {
   return picoFetch<{ automation: PicoAutomation }>(path, { method: 'POST' });
 }
 
+export async function runPicoAutomation(id: string) {
+  return picoFetch<{ automation: PicoAutomation; task: PicoTask; run: PicoRun }>(
+    `/v1/automations/${id}/run`,
+    { method: 'POST' },
+  );
+}
+
 export async function deletePicoAutomation(id: string) {
   return picoFetch<{ ok: boolean }>(`/v1/automations/${id}`, { method: 'DELETE' });
 }
-
 
 export type PicoChange = {
   id: string;

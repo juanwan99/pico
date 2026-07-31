@@ -534,6 +534,25 @@ async def disable_automation(
     return {"automation": _auto_dict(row)}
 
 
+@app.post("/v1/automations/{auto_id}/run")
+async def run_automation_once(
+    auto_id: str,
+    principal: Principal = Depends(require_scope("ai:run")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app import automation_service
+
+    result = await automation_service.run_once(session, principal, auto_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="not found")
+    automation, task, run = result
+    return {
+        "automation": _auto_dict(automation),
+        "task": _task_dict(task),
+        "run": _run_dict(run),
+    }
+
+
 @app.delete("/v1/automations/{auto_id}")
 async def delete_automation(
     auto_id: str,
@@ -1049,4 +1068,3 @@ if _DIST.is_dir() and (_DIST / "index.html").is_file():
         # no favicon asset yet — avoid noisy 404 JSON in preview
         from fastapi import Response
         return Response(status_code=204)
-

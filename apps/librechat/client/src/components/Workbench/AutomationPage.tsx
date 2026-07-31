@@ -2,7 +2,7 @@
  * Automation list + create form backed by Pico /v1/automations.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
@@ -11,6 +11,7 @@ import {
   Clock3,
   FolderKanban,
   Loader2,
+  Play,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -22,8 +23,10 @@ import {
   createPicoAutomation,
   deletePicoAutomation,
   listPicoAutomations,
+  runPicoAutomation,
   setPicoAutomationEnabled,
   type PicoAutomation,
+  type PicoRun,
 } from '~/data-provider/pico/api';
 
 type Mode = 'list' | 'create';
@@ -49,7 +52,7 @@ type AutomationUiMeta = {
 
 const MODELS = ['kimi-k2.6', 'Kimi-K3', 'moonshot-v1-8k', 'pico-agent'] as const;
 
-const WORKSPACES = [
+const BASE_WORKSPACES = [
   { id: 'account-default', label: '账号默认工作空间', supported: true },
   { id: 'personal', label: '个人工作空间', supported: false },
   { id: 'current-project', label: '当前项目空间', supported: false },
@@ -90,7 +93,12 @@ const BINDINGS: {
   { id: 'none', kind: 'none', label: '不绑定', detail: '直接执行提示词' },
   { id: 'skill-chat', kind: 'skill', label: '技能 · skill.chat', detail: '保存 N2 技能偏好' },
   { id: 'skill-read', kind: 'skill', label: '技能 · skill.read', detail: '保存 N2 技能偏好' },
-  { id: 'skill-write-s7', kind: 'skill', label: '技能 · skill.write_s7', detail: '保存 N2 技能偏好' },
+  {
+    id: 'skill-write-s7',
+    kind: 'skill',
+    label: '技能 · skill.write_s7',
+    detail: '保存 N2 技能偏好',
+  },
   { id: 'expert-docs', kind: 'expert', label: '专家 · 文档助理', detail: '保存专家偏好' },
   { id: 'expert-research', kind: 'expert', label: '专家 · 研究分析', detail: '保存专家偏好' },
 ];
@@ -212,6 +220,18 @@ function Toggle({
 }
 
 export default function AutomationPage() {
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('projectId') || '';
+  const returnPath = searchParams.get('return') || '';
+  const workspaces = useMemo(
+    () =>
+      BASE_WORKSPACES.map((workspace) =>
+        workspace.id === 'current-project' && projectId
+          ? { ...workspace, supported: true }
+          : workspace,
+      ),
+    [projectId],
+  );
   const [mode, setMode] = useState<Mode>('list');
   const [list, setList] = useState<PicoAutomation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -219,6 +239,7 @@ export default function AutomationPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PicoAutomation | null>(null);
+  const [runResults, setRunResults] = useState<Record<string, PicoRun>>({});
 
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -226,7 +247,7 @@ export default function AutomationPage() {
   const [scheduleKind, setScheduleKind] = useState<ScheduleKind>('periodic');
   const [time, setTime] = useState('09:00');
   const [intervalMin, setIntervalMin] = useState(60);
-  const [workspaceId, setWorkspaceId] = useState('account-default');
+  const [workspaceId, setWorkspaceId] = useState(projectId ? 'current-project' : 'account-default');
   const [permission, setPermission] = useState<PermissionMode>('account-default');
   const [bindingId, setBindingId] = useState('none');
   const [createEnabled, setCreateEnabled] = useState(true);
@@ -255,9 +276,8 @@ export default function AutomationPage() {
   }, [refresh]);
 
   const selectedWorkspace =
-    WORKSPACES.find((workspace) => workspace.id === workspaceId) ?? WORKSPACES[0];
-  const selectedPermission =
-    PERMISSIONS.find((item) => item.id === permission) ?? PERMISSIONS[0];
+    workspaces.find((workspace) => workspace.id === workspaceId) ?? workspaces[0];
+  const selectedPermission = PERMISSIONS.find((item) => item.id === permission) ?? PERMISSIONS[0];
   const selectedBinding = BINDINGS.find((binding) => binding.id === bindingId) ?? BINDINGS[0];
 
   const uiMeta = useMemo<AutomationUiMeta>(
@@ -265,7 +285,10 @@ export default function AutomationPage() {
       schema: 'pico.automation-ui/v1',
       model,
       workspace: {
-        id: selectedWorkspace.id,
+        id:
+          selectedWorkspace.id === 'current-project' && projectId
+            ? projectId
+            : selectedWorkspace.id,
         label: selectedWorkspace.label,
       },
       permission,
@@ -276,7 +299,7 @@ export default function AutomationPage() {
       },
       requested_enabled: createEnabled,
     }),
-    [createEnabled, model, permission, selectedBinding, selectedWorkspace],
+    [createEnabled, model, permission, projectId, selectedBinding, selectedWorkspace],
   );
 
   const schedulePayload = useMemo<Record<string, unknown>>(() => {
@@ -301,7 +324,7 @@ export default function AutomationPage() {
     setScheduleKind('periodic');
     setTime('09:00');
     setIntervalMin(60);
-    setWorkspaceId('account-default');
+    setWorkspaceId(projectId ? 'current-project' : 'account-default');
     setPermission('account-default');
     setBindingId('none');
     setCreateEnabled(true);
@@ -322,14 +345,15 @@ export default function AutomationPage() {
     let created: PicoAutomation | null = null;
     try {
       const bodyPrompt =
-        model && model !== 'Auto'
-          ? `【模型偏好：${model}】\n${prompt.trim()}`
-          : prompt.trim();
+        model && model !== 'Auto' ? `【模型偏好：${model}】\n${prompt.trim()}` : prompt.trim();
       const result = await createPicoAutomation({
         name: name.trim(),
         prompt: bodyPrompt,
         schedule_kind: scheduleKind,
         schedule: schedulePayload,
+        ...(selectedWorkspace.id === 'current-project' && projectId
+          ? { workspace_id: projectId }
+          : {}),
       });
       created = result.automation;
       if (!createEnabled) {
@@ -360,9 +384,26 @@ export default function AutomationPage() {
     setActionError(null);
     try {
       const { automation } = await setPicoAutomationEnabled(item.id, !item.enabled);
+      setList((current) => current.map((entry) => (entry.id === item.id ? automation : entry)));
+    } catch (e) {
+      setActionError(friendlyError(e instanceof Error ? e.message : String(e)));
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  const onRunOnce = async (item: PicoAutomation) => {
+    if (pendingId) {
+      return;
+    }
+    setPendingId(item.id);
+    setActionError(null);
+    try {
+      const result = await runPicoAutomation(item.id);
       setList((current) =>
-        current.map((entry) => (entry.id === item.id ? automation : entry)),
+        current.map((entry) => (entry.id === item.id ? result.automation : entry)),
       );
+      setRunResults((current) => ({ ...current, [item.id]: result.run }));
     } catch (e) {
       setActionError(friendlyError(e instanceof Error ? e.message : String(e)));
     } finally {
@@ -416,7 +457,11 @@ export default function AutomationPage() {
               disabled={!name.trim() || !prompt.trim() || saving}
               onClick={() => void onSave()}
             >
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {saving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Check className="h-3.5 w-3.5" />
+              )}
               {saving ? '保存中' : '保存'}
             </button>
           </div>
@@ -556,7 +601,7 @@ export default function AutomationPage() {
                   <h2 className="text-[13px] font-semibold">工作空间</h2>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                  {WORKSPACES.map((workspace) => (
+                  {workspaces.map((workspace) => (
                     <button
                       key={workspace.id}
                       type="button"
@@ -622,6 +667,7 @@ export default function AutomationPage() {
                 <label className="mt-3 block">
                   <span className="mb-1 block text-[12px] text-[#6b6b6b]">绑定偏好</span>
                   <select
+                    aria-label="绑定偏好"
                     value={bindingId}
                     onChange={(e) => setBindingId(e.target.value)}
                     className="h-9 w-full rounded-md border border-black/[0.1] bg-white px-2.5 text-[13px] outline-none dark:bg-surface-secondary"
@@ -646,7 +692,14 @@ export default function AutomationPage() {
               <dl className="divide-y divide-black/[0.05] px-4">
                 {[
                   ['模型偏好', model],
-                  ['频率', scheduleKind === 'periodic' ? `每天 ${time}` : scheduleKind === 'interval' ? `每 ${intervalMin} 分钟` : '单次执行'],
+                  [
+                    '频率',
+                    scheduleKind === 'periodic'
+                      ? `每天 ${time}`
+                      : scheduleKind === 'interval'
+                        ? `每 ${intervalMin} 分钟`
+                        : '单次执行',
+                  ],
                   ['工作空间', selectedWorkspace.label],
                   ['权限', selectedPermission.label],
                   ['能力', selectedBinding.label],
@@ -669,8 +722,8 @@ export default function AutomationPage() {
                 />
               </div>
               <div className="border-t border-amber-100 bg-amber-50 px-4 py-3 text-[11px] leading-4 text-amber-900">
-                调度频率与启用状态由服务端真实执行。工作空间、权限、技能/专家保存在
-                schedule.pico_ui，当前仅作兼容元数据；若需立即验证技能快照，请从能力中心发起一次任务。
+                调度频率、启用状态与项目空间由服务端真实执行。权限、技能/专家保存在
+                schedule.pico_ui，当前仅作兼容元数据；保存后可用“运行一次”立即验证真实运行。
               </div>
             </aside>
           </div>
@@ -684,8 +737,19 @@ export default function AutomationPage() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#f5f5f5] dark:bg-presentation">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/[0.06] bg-white px-4 dark:border-border-light dark:bg-surface-primary">
-        <div className="min-w-0">
-          <h1 className="text-[15px] font-semibold text-[#1a1a1a] dark:text-text-primary">自动化</h1>
+        <div className="flex min-w-0 items-center gap-2">
+          {returnPath ? (
+            <Link
+              to={returnPath}
+              className="rounded-md p-1 text-[#6b6b6b] hover:bg-black/[0.04]"
+              aria-label="返回项目"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          ) : null}
+          <h1 className="text-[15px] font-semibold text-[#1a1a1a] dark:text-text-primary">
+            自动化
+          </h1>
         </div>
         <button
           type="button"
@@ -744,7 +808,7 @@ export default function AutomationPage() {
           ) : null}
 
           <div className="overflow-hidden rounded-lg border border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-primary">
-            <div className="hidden grid-cols-[minmax(0,1fr)_150px_170px_104px] gap-3 border-b border-black/[0.05] bg-[#fafafa] px-4 py-2 text-[11px] text-[#8c8c8c] md:grid">
+            <div className="hidden grid-cols-[minmax(0,1fr)_150px_170px_150px] gap-3 border-b border-black/[0.05] bg-[#fafafa] px-4 py-2 text-[11px] text-[#8c8c8c] md:grid">
               <span>任务</span>
               <span>执行频率</span>
               <span>运行记录</span>
@@ -790,7 +854,7 @@ export default function AutomationPage() {
                   return (
                     <li
                       key={item.id}
-                      className="grid gap-3 px-4 py-3 hover:bg-[#fcfcfc] md:grid-cols-[minmax(0,1fr)_150px_170px_104px]"
+                      className="grid gap-3 px-4 py-3 hover:bg-[#fcfcfc] md:grid-cols-[minmax(0,1fr)_150px_170px_150px]"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -831,9 +895,14 @@ export default function AutomationPage() {
                       <div className="space-y-1 text-[11px] text-[#8c8c8c] md:pt-0.5">
                         <p>上次 {formatDate(item.last_run_at)}</p>
                         <p>下次 {formatDate(item.next_run_at)}</p>
+                        {runResults[item.id] ? (
+                          <p className="text-emerald-700" role="status">
+                            已创建运行 · {runResults[item.id].status}
+                          </p>
+                        ) : null}
                       </div>
 
-                      <div className="flex items-center justify-between gap-2 md:justify-end">
+                      <div className="flex flex-wrap items-center justify-between gap-2 md:justify-end">
                         <div className="flex items-center gap-2">
                           {pendingId === item.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin text-[#8c8c8c]" />
@@ -849,6 +918,17 @@ export default function AutomationPage() {
                             {item.enabled ? '已启用' : '已停用'}
                           </span>
                         </div>
+                        <button
+                          type="button"
+                          aria-label={`运行一次 ${item.name}`}
+                          title="立即创建并执行一次真实运行"
+                          disabled={pendingId !== null}
+                          onClick={() => void onRunOnce(item)}
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-[#5f5f5f] hover:bg-black/[0.04] disabled:opacity-40"
+                        >
+                          <Play className="h-3.5 w-3.5" />
+                          运行一次
+                        </button>
                         <button
                           type="button"
                           aria-label={`删除 ${item.name}`}
@@ -895,7 +975,10 @@ export default function AutomationPage() {
               “{deleteTarget.name}”将被永久删除，已有任务与运行记录不会随之删除。
             </p>
             {actionError ? (
-              <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-[12px] text-red-700">
+              <p
+                role="alert"
+                className="mt-3 rounded-md bg-red-50 px-3 py-2 text-[12px] text-red-700"
+              >
                 {actionError}
               </p>
             ) : null}
