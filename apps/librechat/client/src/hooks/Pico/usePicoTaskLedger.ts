@@ -85,8 +85,10 @@ export function usePicoTaskLedger(
   const [events, setEvents] = useState<PicoRunEvent[]>([]);
   const [artifacts, setArtifacts] = useState<PicoArtifact[]>([]);
   const [loading, setLoading] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [cancelRequestInFlight, setCancelRequestInFlight] = useState(false);
+  const [cancelRequestedRunId, setCancelRequestedRunId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
@@ -96,18 +98,33 @@ export function usePicoTaskLedger(
         runId ??
         (run && ['queued', 'running', 'preparing'].includes(run.status) ? run.id : undefined);
       if (!targetRunId) {
+        setCancelError('停止运行失败：未找到正在运行的任务');
         return;
       }
-      setCancelling(true);
-      setError(null);
+      setCancelRequestInFlight(true);
+      setCancelRequestedRunId(targetRunId);
+      setCancelError(null);
       try {
         const result = await cancelPicoRun(targetRunId);
         setRun(result.run);
+        if (!['queued', 'running', 'preparing'].includes(result.run.status)) {
+          setCancelRequestedRunId(null);
+        }
         setTick((n) => n + 1);
-      } catch {
-        setError('停止运行失败，请稍后重试');
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (message.includes('401')) {
+          setCancelError('停止运行失败：登录已失效，请刷新页面后重新登录');
+        } else if (message.includes('404')) {
+          setCancelError('停止运行失败：运行不存在或无权限');
+        } else if (message.includes('502') || message.includes('unavailable')) {
+          setCancelError('停止运行失败：账本服务暂时不可用，请稍后重试');
+        } else {
+          setCancelError('停止运行失败，请稍后重试');
+        }
+        setCancelRequestedRunId(null);
       } finally {
-        setCancelling(false);
+        setCancelRequestInFlight(false);
       }
     },
     [run],
@@ -148,6 +165,11 @@ export function usePicoTaskLedger(
   }, [conversationId, tick]);
 
   useEffect(() => {
+    setCancelError(null);
+    setCancelRequestedRunId(null);
+  }, [conversationId]);
+
+  useEffect(() => {
     if (!conversationId || conversationId === 'new') {
       setTask(null);
       setRun(null);
@@ -158,7 +180,7 @@ export function usePicoTaskLedger(
     let cancelled = false;
     const load = async () => {
       setLoading(true);
-      setError(null);
+      setLoadError(null);
       try {
         // Query real id first; if empty (first msg race), also try pending_*
         let tasks = (await listPicoTasks(conversationId)).tasks || [];
@@ -209,11 +231,11 @@ export function usePicoTaskLedger(
           const msg = e instanceof Error ? e.message : String(e);
           // user-facing short Chinese for common fetch failures
           if (msg.includes('401')) {
-            setError('登录已失效，请刷新页面后重新登录');
+            setLoadError('登录已失效，请刷新页面后重新登录');
           } else if (msg.includes('502') || msg.includes('unavailable')) {
-            setError('账本服务暂时不可用，请稍后重试');
+            setLoadError('账本服务暂时不可用，请稍后重试');
           } else {
-            setError(msg.slice(0, 120));
+            setLoadError(msg.slice(0, 120));
           }
         }
       } finally {
@@ -256,9 +278,15 @@ export function usePicoTaskLedger(
     artifacts,
     statusLabel: statusLabel(run, isSubmitting, artifacts),
     loading,
-    error,
+    error: cancelError ?? loadError,
     refresh,
-    cancelling,
+    cancelling:
+      cancelRequestInFlight ||
+      Boolean(
+        cancelRequestedRunId &&
+          cancelRequestedRunId === run?.id &&
+          ['queued', 'running', 'preparing'].includes(run.status),
+      ),
     cancelRun,
   };
 }
