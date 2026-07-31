@@ -77,7 +77,8 @@ LEASE：遵守条目 files_lease；冲突则让出。
 
 ```yaml
 id: EQ-001
-status: OPEN
+status: DONE
+done_note: "N4 #78 merged+DEPLOYED 4a5dc7b"
 priority: P0
 assignee: E2
 fallback: E1
@@ -101,7 +102,8 @@ deliver:
 
 ```yaml
 id: EQ-002
-status: OPEN
+status: CANCELLED
+done_note: "N4 未阻塞代理；E2 已交付"
 priority: P1
 assignee: E1
 title: 仅当 E2 阻塞在「无 GET /api/pico/.../events 代理或 API」时接手
@@ -128,6 +130,52 @@ files_lease:
 deliver:
   - 部署缺口 ## DEPLOYED 或 ## BLOCKED
   - 小 PR 把已完成条目标 DONE
+```
+
+### EQ-004 · N5 失败 Run 可见
+
+```yaml
+id: EQ-004
+status: OPEN
+priority: P0
+assignee: E2
+fallback: E1
+task_doc: docs/DAY-TASK-N5-FAILED-RUN-VISIBLE.md
+title: N5 failed/cancelled runs visible on timeline
+files_lease:
+  - apps/librechat/client/**
+  - apps/librechat/api/server/routes/pico.js
+deliver:
+  - PR RISK:黄 FAST
+  - ## DEPLOYED
+  - unlocks VQ-003
+```
+
+### EQ-005 · N5 API 错误载荷（若 E2 需要）
+
+```yaml
+id: EQ-005
+status: OPEN
+priority: P2
+assignee: E1
+title: 仅当失败 Run 缺 error 字段时补 API/事件
+files_lease:
+  - services/api/**
+  - services/orchestrator/**
+depends: EQ-004
+```
+
+### EQ-006 · 部署巡检续
+
+```yaml
+id: EQ-006
+status: OPEN
+priority: P2
+assignee: E3
+title: 确保 #78/#后续 tip 已 DEPLOYED；队列 DONE 回写；BLOCKED 升级总管
+files_lease:
+  - docs/EXECUTION-QUEUE.md
+  - docs/VALIDATION-QUEUE.md
 ```
 
 ### EQ-000 · 模板
