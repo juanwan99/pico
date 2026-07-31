@@ -20,6 +20,7 @@ EXEC: ③ 每轮只读 **本文件 + 所列 PR**，禁止只靠聊天
 ```
 
 **业主不必每次复制长提示词。**  
+**上下文默认不清理**（`context_reset: false`）；见 [`docs/CONTEXT-POLICY.md`](./CONTEXT-POLICY.md)。  
 聊天里的「给：③」只是备份；**以本文件为准。**
 
 ---
@@ -37,6 +38,7 @@ EXEC: ③ 每轮只读 **本文件 + 所列 PR**，禁止只靠聊天
 4) 每条的 deploy_gate / test_plan 必须满足才测；否则静默等待（勿刷屏 BLOCKED）
 5) 测完在 target_pr 评论 ## TEST REPORT；然后尽量把该条 status 改为 DONE（小 PR 或评论请总管改）
 HARD: 只 pico；禁 edu-cloud；禁 PROXY=1；禁打印 key；禁用 CI 代替生产；禁假 DEPLOYED。
+CONTEXT: 默认不清理。仅 context_reset: true 才清会话；漏写=false。
 ```
 
 频率：建议 10–15 分钟。任务名可固定：`Pico VALIDATION-QUEUE`。
@@ -75,6 +77,7 @@ on_done: set status DONE; pause heartbeat if no other OPEN
 id: VQ-002
 status: OPEN
 priority: P1
+context_reset: false
 target_pr: null
 related_docs: [docs/DAY-TASK-N4-RUN-TIMELINE.md]
 title: N4 过程可见验收
@@ -98,6 +101,7 @@ on_done: set status DONE
 id: VQ-003
 status: OPEN
 priority: P1
+context_reset: false
 target_pr: null
 title: N5 failed tool/run visible
 deploy_gate:

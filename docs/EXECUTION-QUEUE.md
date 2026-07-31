@@ -20,6 +20,8 @@ PAIR: docs/VALIDATION-QUEUE.md（验证）· docs/SPRINT-FAST.md · docs/RACI-GR
 
 **业主不必转贴。** 聊天派工仅备份。
 
+**上下文：** 默认 **不清理**（`context_reset: false`）。详见 [`docs/CONTEXT-POLICY.md`](./CONTEXT-POLICY.md)。总管漏写 = 不清理。无业主值守时禁止窗自作主张 /new。
+
 ---
 
 ## 1. 三窗身份（固定）
@@ -53,6 +55,7 @@ PAIR: docs/VALIDATION-QUEUE.md（验证）· docs/SPRINT-FAST.md · docs/RACI-GR
 8) 尽量把本文件对应条目改为 DONE（小 PR）或评论请总管改
 HARD：只 pico；禁 edu-cloud；禁 PROXY=1；禁打印 key；无 GitHub 回写=未交付；15 分钟卡住必须 ## BLOCKED。
 LEASE：遵守条目 files_lease；冲突则让出。
+CONTEXT：默认不清理会话。仅当条目或总管写明 context_reset: true 才 /new；漏写=false。文件与记忆冲突以 main 队列为准。
 ```
 
 频率建议：**10–15 分钟**（或空闲时更短）。  
@@ -138,6 +141,7 @@ deliver:
 id: EQ-004
 status: OPEN
 priority: P0
+context_reset: false
 assignee: E2
 fallback: E1
 task_doc: docs/DAY-TASK-N5-FAILED-RUN-VISIBLE.md
@@ -157,6 +161,7 @@ deliver:
 id: EQ-005
 status: OPEN
 priority: P2
+context_reset: false
 assignee: E1
 title: 仅当失败 Run 缺 error 字段时补 API/事件
 files_lease:
@@ -171,6 +176,7 @@ depends: EQ-004
 id: EQ-006
 status: OPEN
 priority: P2
+context_reset: false
 assignee: E3
 title: 确保 #78/#后续 tip 已 DEPLOYED；队列 DONE 回写；BLOCKED 升级总管
 files_lease:
@@ -191,7 +197,7 @@ title: TEMPLATE
 
 ## 5. 总管如何派工（不经业主）
 
-1. 在本文件「当前队列」顶部加 `EQ-00x`，`status: OPEN`，写 `assignee` / `files_lease` / `task_doc`  
+1. 在本文件「当前队列」顶部加 `EQ-00x`，`status: OPEN`，写 `assignee` / `files_lease` / `task_doc` / **`context_reset: false|true`（默认 false）**  
 2. 合 main  
 3. 三窗下一轮 pull 自动接到  
 

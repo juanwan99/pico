@@ -29,3 +29,9 @@ poll → 分类（可合 / 等验 / 阻塞 / 空闲）
   → 空闲则派 EQ/VQ 新条目
   → 红档写 ## REVIEW
 ```
+
+## 派工与上下文（固化）
+
+- 更新 EXECUTION/VALIDATION 队列时 **必须** 带 `context_reset: false|true`
+- **默认 false**；无业主值守时 **禁止** 要求各窗清上下文，除非会话已串台且提供冷启动必读
+- 漏写按 false 执行
