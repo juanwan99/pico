@@ -142,4 +142,17 @@ def test_new_tools_have_strict_openai_schemas() -> None:
     }
     assert expected <= schemas.keys()
     assert schemas["workspace_write_file"]["required"] == ["title", "content"]
+    assert schemas["workspace_read_file"] == {
+        "type": "object",
+        "properties": {
+            "artifact_id": {
+                "type": "string",
+                "description": "Artifact id; provide this or title",
+            },
+            "title": {
+                "type": "string",
+                "description": "Artifact title; provide this or artifact_id",
+            },
+        },
+    }
     assert schemas["calculator"]["required"] == ["expression"]

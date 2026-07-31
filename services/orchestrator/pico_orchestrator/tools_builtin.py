@@ -356,10 +356,15 @@ def openai_tool_schemas(
         "workspace_read_file": {
             "type": "object",
             "properties": {
-                "artifact_id": {"type": "string"},
-                "title": {"type": "string"},
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Artifact id; provide this or title",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Artifact title; provide this or artifact_id",
+                },
             },
-            "anyOf": [{"required": ["artifact_id"]}, {"required": ["title"]}],
         },
         "workspace_list_files": {
             "type": "object",
