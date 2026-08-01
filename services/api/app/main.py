@@ -811,6 +811,28 @@ async def cancel_run(
     return {"run": _run_dict(run)}
 
 
+@app.post("/v1/runs/{run_id}/retry")
+async def retry_run(
+    run_id: str,
+    principal: Principal = Depends(require_scope("ai:run")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    source_run = await run_service.get_run_for_principal(session, run_id, principal)
+    if not source_run:
+        raise HTTPException(status_code=404, detail="run not found")
+    try:
+        retry = await run_service.retry_failed_run(session, source_run)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await run_service.start_run_background(retry.id, principal)
+    return {
+        "run": _run_dict(retry),
+        "retried_from_run_id": source_run.id,
+    }
+
+
 @app.get("/v1/runs/{run_id}/events")
 async def run_events(
     run_id: str,

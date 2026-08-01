@@ -5,6 +5,7 @@ import {
   listPicoRunEvents,
   listPicoTaskRuns,
   listPicoTasks,
+  retryPicoRun,
 } from '~/data-provider/pico/api';
 import { pickPreferredRun, pickPreferredTaskRuns, usePicoTaskLedger } from './usePicoTaskLedger';
 
@@ -15,6 +16,7 @@ jest.mock('~/data-provider/pico/api', () => ({
   listPicoTaskRuns: jest.fn(),
   listPicoTasks: jest.fn(),
   rebindConversation: jest.fn(),
+  retryPicoRun: jest.fn(),
 }));
 
 const mockedListTasks = jest.mocked(listPicoTasks);
@@ -22,6 +24,7 @@ const mockedGetTask = jest.mocked(getPicoTask);
 const mockedListRuns = jest.mocked(listPicoTaskRuns);
 const mockedListEvents = jest.mocked(listPicoRunEvents);
 const mockedCancelRun = jest.mocked(cancelPicoRun);
+const mockedRetryRun = jest.mocked(retryPicoRun);
 
 describe('pickPreferredRun / pickPreferredTaskRuns', () => {
   it('prefers an active run over a newer terminal run on the same task', () => {
@@ -343,6 +346,45 @@ describe('usePicoTaskLedger', () => {
     expect(mockedCancelRun).toHaveBeenCalledWith('run-running');
     await waitFor(() => expect(result.current.run?.status).toBe('cancelled'));
     expect(result.current.statusLabel).toBe('已取消');
+    unmount();
+  });
+
+  it('retries a failed run as a distinct queued ledger run', async () => {
+    mockedListTasks.mockResolvedValue({ tasks: [{ id: 'task-failed', title: '失败任务' }] });
+    mockedGetTask.mockResolvedValue({
+      task: { id: 'task-failed', title: '失败任务' },
+      artifacts: [],
+    });
+    mockedListRuns.mockResolvedValue({
+      runs: [
+        {
+          id: 'run-failed',
+          task_id: 'task-failed',
+          status: 'failed',
+          error: 'provider unavailable',
+        },
+      ],
+    });
+    mockedListEvents.mockResolvedValue({ events: [] });
+    mockedRetryRun.mockResolvedValue({
+      run: { id: 'run-retry', task_id: 'task-failed', status: 'queued' },
+      retried_from_run_id: 'run-failed',
+    });
+
+    const { result, unmount } = renderHook(() => usePicoTaskLedger('conversation-failed', false));
+    await waitFor(() => expect(result.current.run?.status).toBe('failed'));
+    mockedListRuns.mockResolvedValue({
+      runs: [
+        { id: 'run-retry', task_id: 'task-failed', status: 'queued' },
+        { id: 'run-failed', task_id: 'task-failed', status: 'failed' },
+      ],
+    });
+
+    await act(async () => result.current.rerunFailedRun());
+
+    expect(mockedRetryRun).toHaveBeenCalledWith('run-failed');
+    expect(result.current.run).toMatchObject({ id: 'run-retry', status: 'queued' });
+    expect(result.current.statusLabel).toBe('等待模型响应');
     unmount();
   });
 

@@ -6,6 +6,7 @@ import {
   listPicoTaskRuns,
   listPicoTasks,
   rebindConversation,
+  retryPicoRun,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -23,6 +24,8 @@ export type PicoLedgerState = {
   refresh: () => void;
   cancelling: boolean;
   cancelRun: (runId?: string) => Promise<void>;
+  rerunning: boolean;
+  rerunFailedRun: (runId?: string) => Promise<void>;
 };
 
 const ACTIVE_RUN_STATUSES = new Set(['queued', 'running', 'preparing']);
@@ -122,9 +125,11 @@ export function usePicoTaskLedger(
   const [artifacts, setArtifacts] = useState<PicoArtifact[]>([]);
   const [loading, setLoading] = useState(false);
   const [cancelRequestInFlight, setCancelRequestInFlight] = useState(false);
+  const [rerunRequestInFlight, setRerunRequestInFlight] = useState(false);
   const [cancelRequestedRunId, setCancelRequestedRunId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [rerunError, setRerunError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const activeRun = isActiveRun(run);
   const runRef = useRef(run);
@@ -166,6 +171,39 @@ export function usePicoTaskLedger(
     },
     [run],
   );
+  const rerunFailedRun = useCallback(
+    async (runId?: string) => {
+      const targetRunId = runId ?? (run?.status === 'failed' ? run.id : undefined);
+      if (!targetRunId) {
+        setRerunError('重新运行失败：未找到失败的任务');
+        return;
+      }
+      setRerunRequestInFlight(true);
+      setRerunError(null);
+      try {
+        const result = await retryPicoRun(targetRunId);
+        setRun(result.run);
+        setEvents([]);
+        setTick((n) => n + 1);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (message.includes('401')) {
+          setRerunError('重新运行失败：登录已失效，请刷新页面后重新登录');
+        } else if (message.includes('404')) {
+          setRerunError('重新运行失败：运行不存在或无权限');
+        } else if (message.includes('409')) {
+          setRerunError('重新运行失败：该任务当前不可重跑，请刷新后再试');
+        } else if (message.includes('502') || message.includes('unavailable')) {
+          setRerunError('重新运行失败：账本服务暂时不可用，请稍后重试');
+        } else {
+          setRerunError('重新运行失败，请稍后重试');
+        }
+      } finally {
+        setRerunRequestInFlight(false);
+      }
+    },
+    [run],
+  );
 
   // Rebind pending_* → real conversation id once LibreChat assigns one
   useEffect(() => {
@@ -203,6 +241,7 @@ export function usePicoTaskLedger(
 
   useEffect(() => {
     setCancelError(null);
+    setRerunError(null);
     setCancelRequestedRunId(null);
   }, [conversationId]);
 
@@ -339,11 +378,13 @@ export function usePicoTaskLedger(
     artifacts,
     statusLabel: statusLabel(run, isSubmitting, artifacts),
     loading,
-    error: cancelError ?? loadError,
+    error: rerunError ?? cancelError ?? loadError,
     refresh,
     cancelling:
       cancelRequestInFlight ||
       Boolean(cancelRequestedRunId && cancelRequestedRunId === run?.id && isActiveRun(run)),
     cancelRun,
+    rerunning: rerunRequestInFlight,
+    rerunFailedRun,
   };
 }

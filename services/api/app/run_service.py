@@ -180,6 +180,53 @@ async def request_cancel(session: AsyncSession, run: RunRow) -> RunRow:
     return run
 
 
+async def retry_failed_run(session: AsyncSession, source_run: RunRow) -> RunRow:
+    """Create a distinct ledger Run from a failed Run's immutable context."""
+    if source_run.status != "failed":
+        raise ValueError("only failed runs can be retried")
+
+    active = await session.execute(
+        select(RunRow.id).where(
+            RunRow.task_id == source_run.task_id,
+            RunRow.status.in_(("queued", "preparing", "running")),
+        ).limit(1)
+    )
+    if active.scalar_one_or_none() is not None:
+        raise RuntimeError("task already has an active run")
+
+    retry_run = RunRow(
+        id=new_id(),
+        task_id=source_run.task_id,
+        status="queued",
+        prompt=source_run.prompt,
+        model="",
+        token_usage_json=_merge_token_usage(
+            None,
+            None,
+            _run_skill_snapshot(source_run),
+        ),
+    )
+    session.add(retry_run)
+    await session.flush()
+    await append_event(
+        session,
+        source_run.id,
+        "run.retry_requested",
+        {"retry_run_id": retry_run.id},
+        commit=False,
+    )
+    await append_event(
+        session,
+        retry_run.id,
+        "run.retry_created",
+        {"source_run_id": source_run.id},
+        commit=False,
+    )
+    await session.commit()
+    await session.refresh(retry_run)
+    return retry_run
+
+
 async def start_run_background(run_id: str, principal: Principal) -> None:
     """Schedule agent loop in-process (Phase 1 single-node)."""
     asyncio.create_task(_execute_run(run_id, principal))
