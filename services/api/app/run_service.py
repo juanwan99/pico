@@ -137,16 +137,19 @@ async def get_run_for_principal(
     return run
 
 
-async def list_tasks(session: AsyncSession, principal: Principal) -> list[TaskRow]:
-    result = await session.execute(
-        select(TaskRow)
-        .where(
-            TaskRow.school_id == principal.school_id,
-            TaskRow.membership_id == principal.membership_id,
-        )
-        .order_by(TaskRow.created_at.desc())
-        .limit(50)
+async def list_tasks(
+    session: AsyncSession,
+    principal: Principal,
+    *,
+    conversation_id: str | None = None,
+) -> list[TaskRow]:
+    query = select(TaskRow).where(
+        TaskRow.school_id == principal.school_id,
+        TaskRow.membership_id == principal.membership_id,
     )
+    if conversation_id:
+        query = query.where(TaskRow.conversation_id == conversation_id)
+    result = await session.execute(query.order_by(TaskRow.created_at.desc()).limit(50))
     return list(result.scalars().all())
 
 

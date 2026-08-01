@@ -6,6 +6,7 @@ import asyncio
 import json
 import sys
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -183,6 +184,66 @@ def test_pending_conversation_rebind_is_membership_scoped(client, monkeypatch) -
     )
     assert repeated.status_code == 200
     assert repeated.json()["updated"] == 0
+
+
+def test_conversation_filter_applies_before_account_task_limit(client) -> None:
+    owner = _headers(client, "member-history-limit")
+    outsider = _headers(client, "member-history-outsider")
+    target_id = new_id()
+    target_conversation_id = "conversation-older-than-account-window"
+
+    async def seed_tasks() -> None:
+        base = datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None)
+        factory = session_factory()
+        async with factory() as session:
+            session.add(
+                TaskRow(
+                    id=target_id,
+                    school_id="school-a",
+                    membership_id="member-history-limit",
+                    title="需要从历史找回的任务",
+                    conversation_id=target_conversation_id,
+                    created_at=base,
+                )
+            )
+            session.add_all(
+                [
+                    TaskRow(
+                        id=new_id(),
+                        school_id="school-a",
+                        membership_id="member-history-limit",
+                        title=f"更新任务 {index}",
+                        conversation_id=f"newer-conversation-{index}",
+                        created_at=base + timedelta(minutes=index + 1),
+                    )
+                    for index in range(55)
+                ]
+            )
+            await session.commit()
+
+    client.portal.call(seed_tasks)
+
+    account_window = client.get("/v1/tasks", headers=owner)
+    assert account_window.status_code == 200, account_window.text
+    account_rows = account_window.json()["tasks"]
+    assert len(account_rows) == 50
+    assert target_id not in {task["id"] for task in account_rows}
+
+    historical = client.get(
+        "/v1/tasks",
+        headers=owner,
+        params={"conversation_id": target_conversation_id},
+    )
+    assert historical.status_code == 200, historical.text
+    assert [task["id"] for task in historical.json()["tasks"]] == [target_id]
+
+    hidden = client.get(
+        "/v1/tasks",
+        headers=outsider,
+        params={"conversation_id": target_conversation_id},
+    )
+    assert hidden.status_code == 200, hidden.text
+    assert hidden.json()["tasks"] == []
 
 
 def test_proxy_membership_header_is_required_and_cannot_conflict(client) -> None:
