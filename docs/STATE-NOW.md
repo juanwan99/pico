@@ -94,13 +94,18 @@ main ≠ 生产。#152/#153 合 main **≠** 已 DEPLOYED **≠** #142 PASS。
 
 ---
 
-## 6. 下一刀（不派工时也适用）
+## 6. 下一刀（速度清理期 · 只此顺序）
 
 ```text
-1) 恢复生产部署通道（跳板/DNS/SSH）
-2) 部署含 #152+#153 的 main → ## DEPLOYED
-3) 重跑 #142 → chat/stop 证据
-4) 编排归位 KA-3 另授权，不与 1–3 抢叙事
+0) 跳板机配置 Host pico-prod（IP，非 DNS）→ scripts/check-deploy-channel.sh
+1) 若公网 502/不可达：先恢复 compose+nginx 健康（同机）
+2) PICO_DEPLOY_SHA=$main_tip bash scripts/prod-update.sh → ## DEPLOYED
+3) 重跑 #142（chat/stop/login）
+4) 关闭已完成的 DIAG/实现 issue，避免假 OPEN 队列
+5) KA-3 / 编排归位：另授权，不插队
 ```
 
-product PASS: **NOT CLAIMED** · 编排目标未宣称完成
+**issue 卫生：** #143/#144 DIAG 已 ACCEPT 且 FIX 已合 main → 应关闭或标「等部署验证」。  
+**#142** 保持 OPEN 直至新生产 SHA 烟测。
+
+product PASS: **NOT CLAIMED** · 编排目标未宣称完成 · `run_agent_loop` 不是目标
