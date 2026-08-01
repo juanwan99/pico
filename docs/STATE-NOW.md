@@ -29,13 +29,20 @@ Pico = **独立 AI 工作台底座**（对话 + Agent + 产物 + **唯一 AI 账
 
 | 面 | 完整 SHA | 含义 |
 |----|----------|------|
-| **main tip** | `ff1dc7c0f95414dbbc3e4d7cd1b5444bb0e0b43d` | 含 #124 队列关闭文档 |
-| **生产应用** | `768d0bd56858acacf859cf9a8cd357f68dc2f1ba` | 运行中的应用码；EQ-031 `## DEPLOYED` + Controller **ACCEPTED** |
-| 差异 | tip − 生产 | **仅 docs 队列**，无应用代码漂移 |
+| **main tip** | `fd66ce23991c963090d7be07faa594a3737942ed` | Merge #145；含 KA-0 / KA-1 / KA-2 |
+| **生产应用** | `ddf269b704c7e4a13e9d02718c3dbab1db4d0b42` | #142 `## TEST REPORT` 报告并经总管采信的生产应用 SHA |
+| 差异 | tip − 生产 | main **ahead 20 commits**；含正本清源 docs、KA-0/1 骨架及 KA-2 默认关闭的应用代码 |
 
-生产已验（部署门，**不是**产品功能 PASS）：login 200、端口 loopback、pico-dev 401、HEAD=health=`768d0bd…`。
+上述差异**不是**生产换核证据：#145 没有部署，生产仍运行 `ddf269b…`；KA-2 的
+`PICO_KIMI_AGENT_RUNTIME` 在代码与生产示例中都默认 `0`，现行默认执行核仍是
+`pico_orchestrator.runner.run_agent_loop`。
 
-**禁止再写：**「main ≈ 768d0bd」「生产还在 567ab9e」「要先派窗重复 health」。
+#142 是产品主路径 **FAIL** 证据，而不是部署/产品 PASS：login PASS；chat FAIL
+（`400 status code (no body)`）；retry 入口 PASS（未再次长跑）；stop FAIL
+（已记 `run.cancel_requested`，15 秒后仍 `running`）；pico-dev 401 PASS。
+
+**禁止再写：**「main 与生产相同」「#145 已部署/已换核」「KA-2 合并 = Kimi Agent 已接入完成」
+或继续引用 `768d0bd…` / `ff1dc7c…` 作为当前 tip。
 
 ---
 
@@ -59,11 +66,11 @@ Pico = **独立 AI 工作台底座**（对话 + Agent + 产物 + **唯一 AI 账
 
 ---
 
-## 3. 已收口（勿重开，无回归证据时）
+## 3. 历史收口（新回归证据优先）
 
 | 主题 | 证据锚点 | 勿做 |
 |------|----------|------|
-| 停止 → cancelled | VQ-008 PASS · #117 · 生产曾 `567ab9e…` 起 | **禁止**无新回归时重复 VQ-008 |
+| 停止 → cancelled | 历史 VQ-008 PASS · #117；**已被 #142 新回归覆盖** | 当前看 #144；禁止拿旧 PASS 覆盖 stop FAIL |
 | Skill 目录 ADR | `docs/ADR-SKILL-CATALOG.md` **ACCEPTED A** | 禁止第二套技能商店 |
 | 3 日底座冲刺 | `docs/SPRINT-3DAY-PUSH.md` COMPLETED | 勿当现行日任务 |
 | P0 安全 / 多条 N 轨 | 见 VALIDATION-QUEUE 已 DONE 项 | 勿用旧 DAY-TASK 根路径当现行 |
@@ -83,21 +90,27 @@ Skill 正确表述：
 | TRUTH-FREEZE v1.0 | 已合 |
 | 污染标注 POLLUTION-SWEEP | 已合 |
 | KIMI-AGENT-GAP 只读 | 已合 main（#133 起；后续修订见 git log） |
-| 业主核验 | **待** |
-| Kimi Agent 生产真接 | **未开始**（下阶段） |
+| KA-0 可安装性/入口 | **已合 #137**；pin 可从公网 PyPI 安装，真实模型 hello 未验 |
+| KA-1 Wire→账本契约 | **已合 #140**；mapper + 无密钥单测，不是生产接线 |
+| KA-2 flag-only Session 路径 | **已合 #145**；默认 OFF、未部署、无真实 provider 证据 |
+| Kimi Agent 生产真接 | **未完成**；默认仍 `run_agent_loop`，禁止宣称已接入 |
+
+KA-2 的准确含义：main 中存在可选 Kimi Session 路径；仅显式设置
+`PICO_KIMI_AGENT_RUNTIME=1` 才会选择它。**合 main ≠ 生产开 flag ≠ 生产换核 ≠ 产品 PASS。**
 
 ## 4. 未完成门禁（当前）
 
 | 优先级 | 项 | 状态 |
 |--------|-----|------|
-| **P0 当前唯一** | **#119 + #120 独立生产产品验证** | 代码已在 `768d0bd…`；**尚无 `## TEST REPORT`** |
-| P1 | #121 Harness 边界文档 | **Draft + CONFLICTING**；未冻结 |
-| P1 | 部署脚本 UI readiness / 假 BLOCKED | 债；有报告 |
-| P1 | 用户级 failed Run 重跑闭环 | 缺 |
-| 后置 | 项目—资产—产物版本厚度、自动化诚实、M5 edu、像素终局 | 债/后置 |
+| **P0 总门** | **#142 生产主路径烟测** | `## TEST REPORT` 已被总管采信为 **FAIL**；issue 保持 OPEN |
+| **P0 · chat** | **#143 PROD-CHAT-400-DIAG** | OPEN；调查中，尚无 `## DIAG REPORT` |
+| **P0 · stop** | **#144 PROD-STOP-STUCK-DIAG** | OPEN；调查中，尚无 `## DIAG REPORT` |
+| 后置 | KA-3 生产默认切核 | **不得因 KA-2 已合而提前**；须另卡、真实证据与门禁 |
+| 后置 | 项目—资产—产物版本厚度、自动化诚实、像素终局 | 债/后置 |
 
-**#119/#120 正确说法：** 已实现、已上线（在生产应用 SHA 内）；**等待独立生产验证**。  
-**禁止**因 DEPLOYED 写成产品 PASS。
+**#142 正确说法：** 抽检已完成且 verdict=FAIL；它暴露 chat 400 与 stop 不到诚实终态。
+#143 / #144 是定位根因的调查卡，不是已修复证据。禁止用 CI、DEPLOYED 或 KA-2 合并覆盖
+这两个生产失败。
 
 ---
 
@@ -112,6 +125,9 @@ Skill 正确表述：
 - main tip 与生产应用 SHA 混为一谈  
 - Harness #121 已合已冻结  
 - 总管沙箱 = 用户预览机 / 可直连生产改代码  
+- KA-2 已合 main = 生产已经启用 Kimi Agent
+- `PICO_KIMI_AGENT_RUNTIME` 默认值为 1
+- #142 已完成所以产品主路径 PASS
 
 ---
 
@@ -129,7 +145,13 @@ Skill 正确表述：
 
 ## 7. 下一动作（总管）
 
-**仅一项：** 窗口 1 · 验证 · #119/#120 生产行为 · 结果 `## TEST REPORT` @ #119。  
-生产 SHA 门槛 = **`768d0bd…`**（业主已确认，**不必**再派窗只查 health）。
+当前 P0 调查并行：
 
-收口后由总管核证据再派下一项或请业主给下一功能需求。
+1. 窗口 1 · #143 `PROD-CHAT-400-DIAG` → 写 `## DIAG REPORT`，交叉 #142。
+2. 窗口 3 · #144 `PROD-STOP-STUCK-DIAG` → 写 `## DIAG REPORT`，交叉 #142。
+
+两卡当前都仍 OPEN 且无诊断报告。生产基线按 #142 采信
+`ddf269b704c7e4a13e9d02718c3dbab1db4d0b42`；不要拿 main
+`fd66ce23991c963090d7be07faa594a3737942ed` 冒充生产运行版本。
+
+诊断收口后由总管派修复/验证；KA-3 与任何生产 flag 切换必须另行授权和验收。
