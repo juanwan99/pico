@@ -2,10 +2,9 @@
 
 > **真源冻结：[TRUTH-FREEZE.md](./TRUTH-FREEZE.md) v1.0。**  
 > **编排目标（唯一）= 开源 Kimi Agent。**  
-> **`run_agent_loop` = 实现债，从未是目标。** 禁止「长期是自研环」污染话术。
+> **`run_agent_loop` = 实现债，从未是目标。** 禁止把过渡实现写成第二目标。
 
-
-```
+```text
 DOC: docs/STATE-NOW.md
 STATUS: BINDING snapshot
 UPDATED: 2026-08-01
@@ -20,92 +19,73 @@ TRUTH_ORDER: GitHub 证据（PR/DIAG/DEPLOYED/TEST）> 本页 SHA 句 > 聊天
 |----|------|
 | 产品 | 学校向 **独立 AI 工作台**底座（LibreChat 壳 + Pico 账本/控制面 + 模型 HTTPS） |
 | **编排目标** | **只此一个：开源 Kimi Agent 真接入**（+ 账本/白名单/S7） |
-| **编排实现债** | 代码默认路径仍可能经 `run_agent_loop` → **要归位清掉**，**不是**第二目标 |
-| 模型 | Kimi/Moonshot HTTPS 优先 |
-| 禁 | Plan B 运行时；教师默认沙箱；edu-cloud；假接入；把债说成目标 |
+| **编排实现债** | 默认路径仍可能经 `run_agent_loop`；它要归位清掉，**不是目标**，也不是双轨架构 |
+| 当前授权 | **KA-3 未授权**；不得开 flag、切运行时或声称已接入 |
+| 禁 | Plan B 运行时；教师默认沙箱；edu-cloud；假接入；把实现债说成目标 |
 
 **用户成功：** 登录 → 下任务 → 过程可见 → 产物 → 能停/找回/再试 → 状态诚实。
 
 ---
 
-## 1. SHA
+## 1. SHA 与生产证据
 
 | 面 | SHA | 含义 |
 |----|-----|------|
-| main tip（写页时） | `a1a06e54c4680ee12778033594dc48ca9d528456` | 含 #152 模型合同、#153 durable cancel 等 |
-| 生产硬证（最新烟测/诊断锚） | `ddf269b704c7e4a13e9d02718c3dbab1db4d0b42` | #142/#143/#144；**部署若未跟上 tip，生产仍旧** |
+| main tip（写页时） | `d5148cb462477d06013eea9818176aa522d1625c` | Merge #164；相对生产仅增加取码 runbook 文档 |
+| **生产应用** | `c1a97a700ae418810d88d99eeb5c697e4da130f0` | #161 `## DEPLOYED` + CONTROLLER ACCEPT；标准 `git fetch` + `prod-update.sh`，HEAD / `origin/main` / `health.git_sha` 三一致 |
+| 历史主路径 PASS | `674707dd1125289b57fbcfde069b06b8e45fd009` | #142 CONTROLLER ACCEPT：login / chat / stop / retry 入口 / pico-dev 401；**仅该历史 SHA 的主路径烟测** |
 
-main ≠ 生产。#152/#153 合 main **≠** 已 DEPLOYED **≠** #142 PASS。
+生产证据以 #161 的 `c1a97a7…` 为准：公网 login 200，UI readiness 在第 10/30 次成功，KA flag OFF。
 
----
-
-## 2. 编排认知消毒（业主重申）
-
-| 错误（污染） | 正确 |
-|--------------|------|
-| 「长期目标/现状战略是自研 run_agent_loop」 | **目标从未是自研环**；环 = 进仓后的**实现债** |
-| 「我们选了自研环当架构」 | **未选**；要归位到 Kimi Agent |
-| 「有环 + KA-2 = 双目标」 | 目标唯一；KA-2 = flag-off **归位候选实现**；环 = 待移除占用 |
-| pin/sdk 绿 = 已接入 | **否** |
+`d5148cb…` main tip 的新增内容仅为 #164 文档；**main ≠ 生产**，#142 的历史 PASS 也不能自动外推为新 tip 烟测 PASS。
 
 ---
 
-## 3. 日用门禁（产品速度主路径）
+## 2. 日用门禁（状态诚实）
 
-| 项 | 状态 |
-|----|------|
-| #142 烟测 | OPEN · FAIL 锚旧生产；**待部署 tip 后重跑** |
-| #143 chat 400 | DIAG ACCEPT；**#152 已合 main**；部署曾 BLOCKED（pico-prod DNS） |
-| #144 stop zombie | DIAG ACCEPT；**#153 已合 main**；待部署/重验 |
-| #151 | 实现已进 #153；issue 可收口到部署/验证 |
+| 项 | 当前状态 | 可宣称范围 |
+|----|----------|------------|
+| #142 历史全项烟测 | **CLOSED · ACCEPT PASS** @ `674707dd…` | 仅该 SHA 的主路径；不是全站或编排完成 |
+| #161 标准路径部署 | **CLOSED · ACCEPT DEPLOYED** @ `c1a97a7…` | 部署成立；product PASS 未宣称 |
+| #162 tip 轻烟测 | **OPEN · BLOCKED，待有效重跑** | 前次抢跑时仍见 `674707dd…`；后次执行窗无法访问生产 loopback。均未执行 login/chat/stop，不能写 PASS |
+| #165 浏览器/视觉验证 | **OPEN · NOT EXECUTED** | 尚无 `## VISION REPORT`；不能把 DISPATCH 当完成 |
 
-**P0 不是再讨论编排哲学，是：部署 → 重验 → 过 #142。**
+当前能说：生产已经按标准路径运行 `c1a97a7…`。
 
----
-
-## 4. 速度阻碍 · 深度清理清单（VELO）
-
-| ID | 阻碍 | 处置 |
-|----|------|------|
-| V1 | 把实现债讲成目标史 | **本 PR 消毒**；聊天/总管再犯当场纠 |
-| V2 | 自动 E1 队列当派工权威 | EXECUTION-QUEUE 已 SUPERSEDED |
-| V3 | 旧 PLAN/POLISH/PREVIEW issue 占注意力 | **关闭** #1/#21/#28 为 SUPERSEDED（见评论） |
-| V4 | 文档轮转代替部署 | STATE-NOW 写明：无 DEPLOYED 不算前进 |
-| V5 | 部署跳板 `pico-prod` 不可解析 | **速度 P0 基建**；修好前一切 FIX 合 main 仍不产生用户价值 |
-| V6 | 等「完美 KA-3」再日用上线 | **禁止**；日用与归位可分轨，归位须授权但不挡部署已合 FIX |
-| V7 | 控制器/多文流程税 | 现行权威 = 任务卡+Issue；CONTROLLER-* 机制说明，**非**第二真源 |
-| V8 | 污染阶段无限加戏 | 清单项 7 业主签可选；**不**用新长文挡部署 |
-| V9 | Plan B / harness 讨论回流 | #121 已拒；再开直接关 |
-| V10 | 无证据 PASS | 保留；**这是质量门不是拖速门**——拖速的是假完成返工 |
-
-**保留的「慢」：** exact SHA、TEST REPORT、不自 PASS、禁 edu-cloud——换可信，不砍。
-
-**砍的「慢」：** 假目标叙事、自动假派工、过期 issue、未部署的合入狂欢、用编排辩论挡部署。
-
-详见 [VELOCITY-CLEAN.md](./VELOCITY-CLEAN.md)。
+当前不能说：`c1a97a7…` 的 tip 烟测已 PASS、视觉验证已完成、全站 PASS、Kimi Agent 已接入。
 
 ---
 
-## 5. 角色
+## 3. 运维收口
 
-总管：对齐目标、清污染、审证据、少流程多闭环。  
-窗口：任务卡执行 + GitHub 回写。  
-业主：目标与授权；少被技术假目标干扰。
+| 项 | 状态 | 证据/意义 |
+|----|------|-----------|
+| #157 生产取码通道 | **CLOSED · ACCEPT DONE** | read-only deploy key；生产 `git fetch origin main` 成功，不再依赖 bundle 特批 |
+| #160 UI readiness 重试 | **MERGED** @ `c1a97a7…` | 生产 #161 实测 `attempt=1..9 status=000`、第 10 次 ready；假部署失败债已收口 |
+| #164 main refspec runbook | **MERGED** @ `d5148cb…` | 文档钉死 `+refs/heads/main:refs/remotes/origin/main`，防 preview refspec 回归；文档卡无需部署 |
+
+#161 中出现的旧 preview refspec 与 Docker socket 权限均已当场修正，最终标准部署成功；不粉饰过程，也不再把已收口项列为当前 P0。
 
 ---
 
-## 6. 下一刀（速度清理期 · 只此顺序）
+## 4. HOLD 与授权边界
+
+- **#159 = OPEN · HOLD_AUTH。** 历史 orphan/zombie run 的生产账本清理涉及 DB 写入；业主未授权，禁止执行或假收口。
+- **KA-3 = 未授权。** 不开 `PICO_KIMI_AGENT_RUNTIME`，不切核，不以 KA-0/1/2、SDK pin 或 CI 绿冒充 Kimi Agent 真接入。
+- `run_agent_loop` 只是待归位实现债；目标始终且仅为开源 Kimi Agent。
+
+---
+
+## 5. 下一项（只做验证收口）
 
 ```text
-0) 跳板机配置 Host pico-prod（IP，非 DNS）→ scripts/check-deploy-channel.sh
-1) 若公网 502/不可达：先恢复 compose+nginx 健康（同机）
-2) PICO_DEPLOY_SHA=$main_tip bash scripts/prod-update.sh → ## DEPLOYED
-3) 重跑 #142（chat/stop/login）
-4) 关闭已完成的 DIAG/实现 issue，避免假 OPEN 队列
-5) KA-3 / 编排归位：另授权，不插队
+1) 由能 SSH 生产的验证窗重跑 #162：先核 health.git_sha == c1a97a7…，再测 login / 短聊 / stop→cancelled。
+2) 由有认证浏览器/视觉能力的窗口完成 #165，并回写 ## VISION REPORT。
+3) 总管只按新报告收口；无报告、BLOCKED 或仅有 DISPATCH 均不得写 PASS。
 ```
 
-**issue 卫生：** #143/#144 DIAG 已 ACCEPT 且 FIX 已合 main → 应关闭或标「等部署验证」。  
-**#142** 保持 OPEN 直至新生产 SHA 烟测。
+本状态刷新卡：**deployment NONE**。
 
-product PASS: **NOT CLAIMED** · 编排目标未宣称完成 · `run_agent_loop` 不是目标
+#159 继续 HOLD；KA-3 继续等待业主另行授权，不插队当前验证收口。
+
+product PASS: **NOT CLAIMED（仅 #142 历史主路径 PASS）** · 编排目标未宣称完成 · `run_agent_loop` 不是目标
