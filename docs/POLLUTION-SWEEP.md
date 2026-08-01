@@ -54,12 +54,13 @@ TRUTH: docs/TRUTH-FREEZE.md v1.0
 
 1. [x] TRUTH-FREEZE v1.0 已合 main  
 2. [x] WHAT-IS-PICO / 禁 Plan B 已合  
-3. [x] 活动文档假完成表述已 scrub（README/ARCHITECTURE/DEMO/MVP/CORRECTED/AGENTS…）  
+3. [ ] 活动文档假完成 + **archive 权威泄漏** 已 scrub（#135 REVISE 后补丁）  
 4. [x] 编排代码注释/pin 话术已标 TRANSITIONAL  
-5. [x] archive 标明非真源  
-6. [x] KIMI-AGENT-GAP 只读差距清单已落盘  
+5. [ ] archive 被直链页含 HISTORICAL banner 且活动文档不奉为当前权威  
+6. [x] KIMI-AGENT-GAP 只读差距清单已落盘（#135 后精确化）  
 7. [ ] 业主/总核验（本文件 + TRUTH-FREEZE + GAP）签字式确认  
 8. [ ] （可选）生产部署含文档 tip — 不挡阶段认知完成  
+9. [x] 代码标注 PR 不静默改包 API：`__init__.py` re-export 已恢复（#135 fix）  
 
 **本阶段不做：** 切换 Kimi Agent 生产路径、删除 runner、引入其它运行时。
 
@@ -70,3 +71,14 @@ TRUTH: docs/TRUTH-FREEZE.md v1.0
 | MVP-3DAY / CORRECTED-GOALS / AGENTS S2 金句 | 目标/现状分离 |
 | docs/KIMI-AGENT-GAP.md | 新增只读差距与归位切片规划 |
 | 阶段完成清单 | 上表 |
+
+
+## 第三轮（#135 REVISE 补丁）
+
+| 项 | 动作 |
+|----|------|
+| DEMO / DEPLOY-PUBLIC archive 权威泄漏 | 改指 TRUTH-FREEZE / STATE-NOW |
+| 被直链 archive 页 | 置顶 HISTORICAL ONLY banner |
+| KIMI-AGENT-GAP | direct vs pico-agent 路径；禁预置 fallback；DONE 加 exact-SHA |
+| VERSIONING / STATE-NOW / requirements | 索引与 pin 注释修正 |
+| `__init__.py` re-export | 恢复兼容导出 + 诚实 docstring |
