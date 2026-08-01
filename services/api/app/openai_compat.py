@@ -904,13 +904,28 @@ async def chat_completions(
                 )
                 raise
             except Exception as e:  # noqa: BLE001
-                await _finalize_run(
-                    run_id,
-                    status="failed",
-                    error=str(e),
-                    task_id=task_id,
-                )
-                await q.put(("error", e))
+                # If stop already requested, do not report failed+sqlite noise.
+                factory_local = session_factory()
+                cancel_hit = False
+                async with factory_local() as session:
+                    run = await session.get(RunRow, run_id)
+                    cancel_hit = bool(run and (run.cancel_requested or run.status == "cancelled"))
+                if cancel_hit:
+                    await _finalize_run(
+                        run_id,
+                        status="cancelled",
+                        error=None,
+                        task_id=task_id,
+                    )
+                    await q.put(("done", type("R", (), {"final_text": "", "error": None, "status": "cancelled"})()))
+                else:
+                    await _finalize_run(
+                        run_id,
+                        status="failed",
+                        error=str(e),
+                        task_id=task_id,
+                    )
+                    await q.put(("error", e))
 
         task = asyncio.create_task(run())
         saw_text = False
