@@ -82,7 +82,7 @@ Skill 正确表述：
 |----|------|
 | TRUTH-FREEZE v1.0 | 已合 |
 | 污染标注 POLLUTION-SWEEP | 已合 |
-| KIMI-AGENT-GAP 只读 | 见本 PR / main |
+| KIMI-AGENT-GAP 只读 | 已合 main（#133 起；后续修订见 git log） |
 | 业主核验 | **待** |
 | Kimi Agent 生产真接 | **未开始**（下阶段） |
 

@@ -2,7 +2,7 @@
 
 ```
 DOC: docs/KIMI-AGENT-GAP.md
-STATUS: BINDING inventory for next phase (integration NOT started here)
+STATUS: NEXT-PHASE inventory（非运行时选型备选清单；integration NOT started）
 DATE: 2026-08-01
 TRUTH: docs/TRUTH-FREEZE.md O1–O4 · docs/WHAT-IS-PICO.md §4
 SCOPE: 只读盘点；不切换生产运行时；不预埋其它 harness
@@ -41,11 +41,14 @@ LibreChat / 客户端
       → pins.assert_pins()
 ```
 
-**入口文件（保留，归位时改接线）：**
+**入口文件（归位时改接线）：**
 
-- `services/api/app/run_service.py` — 调 `run_agent_loop`
-- `services/api/app/openai_compat.py` — 直连/agent 路径调 `run_agent_loop`
-- `services/orchestrator/pico_orchestrator/runner.py` — 过渡实现体
+| 路径 | 现状 |
+|------|------|
+| `run_service.py` | 任务/Run 执行 → **`run_agent_loop`** |
+| `openai_compat.py` **pico-agent**（非流式/流式） | → **`run_agent_loop`** |
+| `openai_compat.py` **直连模型**（默认 chat） | → **`stream_chat` / 直连补全**，**不**走 `run_agent_loop` |
+| `runner.py` | 过渡多步实现体 |
 
 ---
 
@@ -57,7 +60,7 @@ LibreChat / 客户端
 | `agents/pico.yaml` + `system.md` | 角色与危险工具 exclude 列表 | 可能迁到真 Agent 配置 |
 | `safety.py` | 启动证明 tools 不含 Shell/File/Web | 真接后改证「运行时配置」或保留双证 |
 | `pins.py` | 包版本锁 | 真接后锁**实际跑的**包/版本 |
-| `runner.py` | 过渡执行 | **替换或降为 fallback（仅业主再授权）** |
+| `runner.py` | 过渡执行 | **真接后默认移除生产路径**；是否短暂 dual-run **禁止预写进方案**，须业主书面再议 |
 | allowlist gateway / 账本 emit | Pico 控制面 | **必须保留**；Agent 事件映射进来 |
 
 ---
@@ -71,7 +74,13 @@ LibreChat / 客户端
 3. 步骤/工具/终态 **写入 Pico 账本**（Event 可追踪）。  
 4. 停止/取消与现控制面语义兼容（或文档化差异 + 测试）。  
 5. **禁止**仅靠 `assert_pins()` 绿或 yaml 存在宣称「已接入」。  
-6. 文档 TRUTH-FREEZE / WHAT-IS-PICO **O2 现状句**更新为已接入，并升冻结小版本。
+6. 文档 TRUTH-FREEZE / WHAT-IS-PICO **O2 现状句**更新为已接入，并升冻结小版本。  
+7. **exact-SHA 验收证据（必须）：**  
+   - 实际加载的 Kimi Agent runtime/发行物身份（版本或 commit）  
+   - 路由断言：`run_service` + `openai_compat` 的 **pico-agent** 两入口进入真运行时；**direct chat** 仍不误走 Agent（除非产品改口径）  
+   - 白名单 / 账本事件 / 取消 的集成测试挂在该 SHA  
+   - 生产 `## TEST REPORT`（该 SHA）；**不得**用 pin、单文件 CI 或 yaml 代替  
+8. **生产路径不存在可选过渡 `run_agent_loop` fallback**（dual-run 若曾用于迁移，须在 DONE 前关闭）。
 
 ---
 
@@ -94,9 +103,9 @@ LibreChat / 客户端
 ```text
 切片 KA-0  固定可安装的 Kimi Agent 发行物 + 最小 hello（非生产）
 切片 KA-1  适配器：单次多步 → 账本事件（fake/录制测）
-切片 KA-2  接线 run_service / openai_compat 开关（默认仍过渡环）
-切片 KA-3  生产默认切真运行时 + 取消/技能回归
-切片 KA-4  卸装饰依赖或降级；TRUTH-FREEZE 升版 O2=已接入
+切片 KA-2  **迁移门**（临时开关仅用于切流；默认仍过渡环；**不是**长期双运行时产品）
+切片 KA-3  生产默认切真运行时 + 取消/技能回归；**关闭**过渡环生产入口
+切片 KA-4  卸装饰依赖或降级；TRUTH-FREEZE 升版 O2=已接入；**生产无 optional fallback runner**
 ```
 
 **本正本清源阶段在 KA-0 之前结束。**

@@ -1,3 +1,6 @@
+> **HISTORICAL ONLY · 非真源 · 不得覆盖 [TRUTH-FREEZE](../TRUTH-FREEZE.md) / [STATE-NOW](../STATE-NOW.md) / [WHAT-IS-PICO](../WHAT-IS-PICO.md)**
+> 归档页：`CALIBRATION-NOW`。冲突时一律以冻结真源为准。
+
 # Pico 主线校准（深度排查 · 剔除过时记忆）
 
 ```

@@ -10,7 +10,7 @@ STATUS: 演示说明（非 PASS 证书）
 ```
 
 > 过时句（NextChat / make product :8000）已废。启动以 `scripts/run-product.sh` / `startup.sh` 为准。  
-> 全景：`docs/archive/CALIBRATION-NOW.md` · 总控：`docs/archive/ORCHESTRATION-PLAN.md`
+> **当前真源：** `docs/TRUTH-FREEZE.md` · `docs/STATE-NOW.md` · `docs/KIMI-AGENT-GAP.md`（`docs/archive/**` 仅历史，非真源）
 
 ---
 

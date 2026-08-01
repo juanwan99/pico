@@ -146,6 +146,7 @@ bash scripts/vps-apply-kimi-key.sh
 
 聊天里贴过的 key 视为已泄露，稳定后建议在 Moonshot 控制台**轮换**。
 
-## 调查结果真源
+## 历史调查（非真源）
 
-Codex 生产部署调查整理见 **[docs/archive/CODEX-VPS-INVESTIGATION.md](./archive/CODEX-VPS-INVESTIGATION.md)**（后续任务先读）。
+现行部署以本页正式步骤 + 生产机状态 + `docs/STATE-NOW.md` 为准。
+Codex 早期 VPS 调查仅作历史：`docs/archive/CODEX-VPS-INVESTIGATION.md`（**HISTORICAL ONLY**）。
