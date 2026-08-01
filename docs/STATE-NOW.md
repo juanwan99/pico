@@ -76,16 +76,20 @@ TRUTH_ORDER: GitHub 证据（PR/DIAG/DEPLOYED/TEST）> 本页 SHA 句 > 聊天
 
 ---
 
-## 5. 下一项（只做验证收口）
+## 5. 进度方式（已切换轻量 · 见 FAST-PATH）
+
+**默认不再拆多张验证卡。** 见 [FAST-PATH.md](./FAST-PATH.md)：
 
 ```text
-1) 由能 SSH 生产的验证窗重跑 #162：先核 health.git_sha == c1a97a7…，再测 login / 短聊 / stop→cancelled。
-2) 由有认证浏览器/视觉能力的窗口完成 #165，并回写 ## VISION REPORT。
-3) 总管只按新报告收口；无报告、BLOCKED 或仅有 DISPATCH 均不得写 PASS。
+改 → 合 main → prod-update tip → remote-health + 聊/停自测 → 三行报告
 ```
 
-本状态刷新卡：**deployment NONE**。
+工具已就绪：`scripts/prod-update.sh`（含 fetch 预检）· `scripts/remote-health.sh`。
 
-#159 继续 HOLD；KA-3 继续等待业主另行授权，不插队当前验证收口。
+| 仍 OPEN 的旧验证债 | 处理 |
+|--------------------|------|
+| #162 / #165 | **收口方式**：部署窗按 FAST-PATH 做一次自测三行即可关；不必再开新体系 |
+| #159 zombie | HOLD 待授权 |
+| #170 KA-3 | HOLD 待业主书面授权 |
 
 product PASS: **NOT CLAIMED（仅 #142 历史主路径 PASS）** · 编排目标未宣称完成 · `run_agent_loop` 不是目标

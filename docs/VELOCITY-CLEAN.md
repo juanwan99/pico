@@ -1,5 +1,7 @@
 # 速度阻碍清理（VELOCITY-CLEAN）
 
+> **日常请直接用 [FAST-PATH.md](./FAST-PATH.md)**（改合装测一体）。本页是清障记录，不是第二套流程 OS。
+
 ```
 DOC: docs/VELOCITY-CLEAN.md
 STATUS: BINDING for process hygiene

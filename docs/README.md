@@ -35,6 +35,7 @@ GOALS: docs/TRUTH-FREEZE.md · docs/WHAT-IS-PICO.md （目标）；STATE-NOW（�
 | **0c** | **[KIMI-AGENT-GAP.md](./KIMI-AGENT-GAP.md)** | **真接差距 + KA-0…4 状态（默认未归位）** |
 | **0d** | **[POLLUTION-SWEEP.md](./POLLUTION-SWEEP.md)** | **污染清理执行记录** |
 | **0e** | **[VELOCITY-CLEAN.md](./VELOCITY-CLEAN.md)** | **速度阻碍清理（部署主链）** |
+| **0f** | **[FAST-PATH.md](./FAST-PATH.md)** | **日常快路径（改合装测 · 禁重体系）** |
 | 0 | GitHub PR/Issue/Actions | **Task state & evidence** |
 | 1 | [AGENTS.md](../AGENTS.md) | Machine + human HARD scope |
 | 2 | [ONEFLOW.md](./ONEFLOW.md) | Delivery OS + closed loops |
