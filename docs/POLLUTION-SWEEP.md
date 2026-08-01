@@ -54,10 +54,10 @@ TRUTH: docs/TRUTH-FREEZE.md v1.0
 
 1. [x] TRUTH-FREEZE v1.0 已合 main  
 2. [x] WHAT-IS-PICO / 禁 Plan B 已合  
-3. [ ] 活动文档假完成 + **archive 权威泄漏** 已 scrub（#135 REVISE 后补丁）  
+3. [x] 活动文档假完成 + **archive 权威泄漏** 已 scrub（#136）  
 4. [x] 编排代码注释/pin 话术已标 TRANSITIONAL  
-5. [ ] archive 被直链页含 HISTORICAL banner 且活动文档不奉为当前权威  
-6. [x] KIMI-AGENT-GAP 只读差距清单已落盘（#135 后精确化）  
+5. [x] archive 被直链页含 HISTORICAL banner 且活动文档不奉为当前权威（#136）  
+6. [x] KIMI-AGENT-GAP 只读差距清单已落盘并按 #135 精确化（#133+#136）  
 7. [ ] 业主/总核验（本文件 + TRUTH-FREEZE + GAP）签字式确认  
 8. [ ] （可选）生产部署含文档 tip — 不挡阶段认知完成  
 9. [x] 代码标注 PR 不静默改包 API：`__init__.py` re-export 已恢复（#135 fix）  
