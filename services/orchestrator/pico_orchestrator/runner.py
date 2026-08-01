@@ -1,8 +1,12 @@
-"""Server-side multi-step tool loop: Kimi model API + Pico allowlist gateway.
+"""TRANSITIONAL multi-step tool loop (not production target architecture).
 
-Host Shell/File/Web/MCP remain off (agent pin + gateway). Tools exposed to the
-model are ONLY the Pico allowlist. Not a home-grown agent OS — thin control
-plane around the pinned Kimi HTTPS API tool-calling path.
+Calls Kimi (or compatible) HTTPS via AsyncOpenAI + Pico allowlist gateway.
+Host Shell/File/Web/MCP stay off. Tools = Pico allowlist only.
+
+TRUTH (docs/TRUTH-FREEZE.md · WHAT-IS-PICO §4):
+  TARGET   = open-source Kimi Agent runtime drives multi-step; events → Pico ledger
+  CURRENT  = this file (self-built tool loop) — transitional debt (D8)
+  FORBIDDEN= calling this "Kimi Agent already integrated" or expanding it into an agent OS
 """
 
 from __future__ import annotations
@@ -64,10 +68,11 @@ async def run_agent_loop(
     history: list[dict[str, Any]] | None = None,
     artifact_store: ArtifactStore | None = None,
 ) -> RunResult:
-    """Execute multi-step tool loop; emit ordered events via callback.
+    """Execute TRANSITIONAL multi-step tool loop; emit ordered events.
 
-    Underlying agent = pinned Kimi model HTTPS API + allowlist tool gateway
-    (not a custom agent OS). Optional `history` is prior OpenAI-style messages.
+    Uses Kimi model HTTPS API + allowlist gateway. This is NOT the open-source
+    Kimi Agent runtime (target per TRUTH-FREEZE). Optional `history` = prior
+    OpenAI-style messages.
     """
     caps = caps or RunCaps()
     cfg = resolve_provider()

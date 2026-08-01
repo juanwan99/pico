@@ -106,7 +106,11 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 
 ---
 
-## 3. 污染源清单与处置（清理 · 第一刀文档）
+## 3. 污染源清单与处置
+
+> 执行记录：[POLLUTION-SWEEP.md](./POLLUTION-SWEEP.md)（本轮起持续更新）
+
+### 3.0 第一刀文档（已做，见 TRUTH-FREEZE 合入史）
 
 | ID | 污染 | 处置（本 PR） |
 |----|------|----------------|
@@ -118,10 +122,11 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | X6 | 自研环路径依赖 | **D8 路线 P0**；代码清理另窗，本 PR 只钉真源 |
 | X7 | 执行沙箱/开发者 narrative 混进教师主路径 | **T0 C1：默认不做** |
 
-**代码污染（登记，本 PR 不删业务代码）：**
+**代码污染：**
 
-- `services/orchestrator/pico_orchestrator/runner.py` 自研环 = 过渡执行器  
-- `kimi-agent-sdk` / `kimi-cli` pin 而无主路径调用 = 装饰依赖（归位时处理）  
+- `runner.py` 自研环 = 过渡执行器（**已标注 TRANSITIONAL**，见 POLLUTION-SWEEP）  
+- `kimi-agent-sdk` / `kimi-cli` pin ≠ 已接入（**已标注**）  
+- 真替换运行时 = 后续归位切片，不在标注 sweep 宣称完成  
 
 ---
 

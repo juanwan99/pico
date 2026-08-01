@@ -68,7 +68,7 @@ AI 账本    = Pico DB 内 Task/Run/Event（非 edu 业务真源）
 
 | 项 | 规则 |
 |----|------|
-| Kimi Agent 栈 | **pin** 在 requirements / freeze 检查；升 pin 单独 PR + 黄档审查 |
+| Kimi Agent 栈 | **pin** 在 requirements / freeze 检查（**pin ≠ 已接入运行时**）；升 pin 单独 PR + 黄档审查；真接入见 TRUTH-FREEZE D8 |
 | 模型 | 默认 API 名可配置；**不**把「随便改模型」当无门禁 |
 | 危险工具 | `pico.yaml` + `PICO_DANGEROUS_TOOLS_ENABLED=false`；改安全默认 = **红** |
 

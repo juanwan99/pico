@@ -1,4 +1,10 @@
-"""Pinned Kimi Agent SDK / runtime versions (D1 freeze)."""
+"""Pinned versions of kimi-agent-sdk / kimi-cli (install freeze).
+
+These pins do NOT prove the open-source Kimi Agent runtime is the execution path.
+Today they support version lock + safety yaml loading (see safety.py).
+Execution path: transitional runner.py until Kimi Agent is truly wired
+(docs/TRUTH-FREEZE.md O1–O3, debt D8).
+"""
 
 from __future__ import annotations
 

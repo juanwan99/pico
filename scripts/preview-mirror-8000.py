@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# DEPRECATED-FOR-OWNER-PATH: Sandbox preview mirror — not production.
 """Public :8000 and used for sticky preview → LibreChat :3080."""
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
