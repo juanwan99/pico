@@ -2,10 +2,10 @@
 
 ```
 DOC: docs/KIMI-AGENT-GAP.md
-STATUS: NEXT-PHASE inventory（非运行时选型备选清单；integration NOT started）
+STATUS: LIVING inventory（唯一目标路径 = Kimi Agent；生产默认仍未归位）
 DATE: 2026-08-01
-TRUTH: docs/TRUTH-FREEZE.md O1–O4 · docs/WHAT-IS-PICO.md §4
-SCOPE: 只读盘点；不切换生产运行时；不预埋其它 harness
+TRUTH: docs/TRUTH-FREEZE.md O1–O4 · docs/WHAT-IS-PICO.md §4 · docs/STATE-NOW.md
+SCOPE: 差距与切片状态；不切换生产默认运行时；不预埋其它 harness / Plan B
 ```
 
 ---
@@ -15,40 +15,63 @@ SCOPE: 只读盘点；不切换生产运行时；不预埋其它 harness
 | 问题 | 答案 |
 |------|------|
 | 目标运行时 | **开源 Kimi Agent**（唯一路径） |
-| 今日执行核 | `pico_orchestrator.runner.run_agent_loop`（AsyncOpenAI 工具环） |
+| 今日**默认**执行核 | `run_agent_runtime(use_kimi_agent=False)` → **`run_agent_loop`**（AsyncOpenAI 工具环） |
+| main 上实验路径 | KA-2：`PICO_KIMI_AGENT_RUNTIME=1` 时 → `run_kimi_agent`（Session + KA-1 adapter）；**默认 0** |
 | pin 包 | `kimi-agent-sdk==0.0.5`、`kimi-cli==1.12.0` |
-| pin 实际用途 | 版本检查 + `kimi_cli.agentspec.load_agent_spec` 读 yaml 做危险工具关断证明 |
-| 是否主路径调用 SDK 跑多步 | **否** |
-| 本阶段是否换核 | **否**（业主要求：先正本清源；换核另阶段 + 核验） |
+| pin 实际用途（默认路径） | 版本检查 + `kimi_cli.agentspec.load_agent_spec` 读 yaml 做危险工具关断证明 |
+| 是否**默认**主路径调用 SDK 跑多步 | **否** |
+| 生产是否已换核 / 已开 flag | **否**（deployment NONE；生产应用 SHA 见 STATE-NOW） |
+| 是否可宣称「已接入完成」 | **否**（见 §3 完成定义；mock 测 ≠ 真接） |
+
+**切片进度（代码合 main ≠ 产品 PASS）：**
+
+| 切片 | 状态 | 证据 |
+|------|------|------|
+| KA-0 可安装/入口 | **DONE（摸底）** | #137 |
+| KA-1 Wire→账本契约 | **DONE（契约+单测）** | #140 |
+| KA-2 flag-only Session | **DONE（默认 OFF）** | #145 · 见 §9 |
+| KA-3 生产默认切核 | **未开始** | 须业主授权 + 真实证据 |
+| KA-4 卸过渡入口 / 升 TRUTH O2 | **未开始** | 依赖 KA-3 DONE |
 
 ---
 
-## 1. 调用链（现状）
+## 1. 调用链（现状 · post-KA-2）
 
 ```text
 LibreChat / 客户端
   → Pico API (openai_compat / run_service)
-      → run_agent_loop()     ← 真执行
-          → AsyncOpenAI(base_url=Kimi…)
-          → AllowlistGateway 工具
+      → run_agent_runtime(use_kimi_agent=settings.pico_kimi_agent_runtime)
+           │
+           ├─ false / 默认 / 生产预期
+           │    → run_agent_loop()     ← 默认真执行
+           │         → AsyncOpenAI(base_url=Kimi…)
+           │         → AllowlistGateway 工具
+           │
+           └─ true（仅显式 PICO_KIMI_AGENT_RUNTIME=1）
+                → run_kimi_agent()     ← 实验路径（§9）
+                     → Session.prompt(merge_wire_messages=True)
+                     → KimiWireEventAdapter → 账本 emit
+                     → 工具仅 kimi_tools → AllowlistGateway
       → 账本 Event / Artifact / 终态
 
 并行（非执行核）:
   startup / security_proof
-      → assert_dangerous_tools_off(pico.yaml)
+      → assert_dangerous_tools_off(pico.yaml | pico-kimi-runtime.yaml)
           → kimi_cli.agentspec.load_agent_spec
   CI / check_agent_pin
       → pins.assert_pins()
 ```
 
-**入口文件（归位时改接线）：**
+**入口文件：**
 
 | 路径 | 现状 |
 |------|------|
-| `run_service.py` | 任务/Run 执行 → **`run_agent_loop`** |
-| `openai_compat.py` **pico-agent**（非流式/流式） | → **`run_agent_loop`** |
-| `openai_compat.py` **直连模型**（默认 chat） | → **`stream_chat` / 直连补全**，**不**走 `run_agent_loop` |
-| `runner.py` | 过渡多步实现体 |
+| `run_service.py` | → **`run_agent_runtime`**（flag 默认 false → 旧环） |
+| `openai_compat.py` **pico-agent**（非流式/流式） | → **`run_agent_runtime`**（同上） |
+| `openai_compat.py` **直连模型**（默认 chat） | → **`stream_chat` / 直连补全**，**不**走 agent runtime |
+| `runtime.py` | 选择器；默认不 import Session |
+| `runner.py` | 过渡多步实现体（**仍保留**；默认路径） |
+| `kimi_runtime.py` / `kimi_adapter.py` / `kimi_tools.py` | KA-2/KA-1 实验路径；flag OFF 时生产调用不应进入 |
 
 ---
 
@@ -57,15 +80,16 @@ LibreChat / 客户端
 | 资产 | 角色 | 归位时 |
 |------|------|--------|
 | `KIMI_API_KEY` / provider | 模型 HTTPS | **保留** |
-| `agents/pico.yaml` + `system.md` | 角色与危险工具 exclude 列表 | 可能迁到真 Agent 配置 |
+| `agents/pico.yaml` + `system.md` | 角色与危险工具 exclude（旧环/安全证明） | 可能与 runtime agent 配置对齐 |
+| `agents/pico-kimi-runtime.yaml` | KA-2 Session 专用 agent；仅 gateway wrapper 工具 | 真接默认后可能升为唯一 agent 文件 |
 | `safety.py` | 启动证明 tools 不含 Shell/File/Web | 真接后改证「运行时配置」或保留双证 |
 | `pins.py` | 包版本锁 | 真接后锁**实际跑的**包/版本 |
-| `runner.py` | 过渡执行 | **真接后默认移除生产路径**；是否短暂 dual-run **禁止预写进方案**，须业主书面再议 |
+| `runner.py` | 过渡执行 | **KA-3/4 后默认移除生产路径**；是否短暂 dual-run **禁止预写**，须业主书面再议 |
 | allowlist gateway / 账本 emit | Pico 控制面 | **必须保留**；Agent 事件映射进来 |
 
 ---
 
-## 3. 真接完成定义（下一阶段验收 · 非本阶段宣称）
+## 3. 真接完成定义（验收 · 禁止提前宣称）
 
 必须同时满足：
 
@@ -73,7 +97,7 @@ LibreChat / 客户端
 2. 工具仅经 **Pico 白名单网关**（或等价强制策略），Host Shell/File/Web 默认关。  
 3. 步骤/工具/终态 **写入 Pico 账本**（Event 可追踪）。  
 4. 停止/取消与现控制面语义兼容（或文档化差异 + 测试）。  
-5. **禁止**仅靠 `assert_pins()` 绿或 yaml 存在宣称「已接入」。  
+5. **禁止**仅靠 `assert_pins()` 绿、yaml 存在、或 **KA-2 flag 代码合 main** 宣称「已接入」。  
 6. 文档 TRUTH-FREEZE / WHAT-IS-PICO **O2 现状句**更新为已接入，并升冻结小版本。  
 7. **exact-SHA 验收证据（必须）：**  
    - 实际加载的 Kimi Agent runtime/发行物身份（版本或 commit）  
@@ -94,30 +118,32 @@ LibreChat / 客户端
 | G4 | 技能快照 | Skill 与工具交集现挂 runner；需挂真运行时 |
 | G5 | 发行源与可重复安装 | KA-0 已证公网 PyPI 可装 pin；仍未固定 wheel hash / 内部镜像，见 §7 |
 | G6 | 测试 | 大量单测 mock `run_agent_loop`；归位需新契约测 |
-| G7 | 名实 | 历史文档/注释已清一波；归位 PR 须再扫 |
+| G7 | 名实 | 活动文档须持续扫；**禁止** harness「可替换多运行时」叙事回潮（见 #121 拒合） |
 
 ---
 
-## 5. 建议实施切片（仅规划 · 本阶段不执行）
+## 5. 实施切片（状态）
 
 ```text
-切片 KA-0  固定可安装的 Kimi Agent 发行物 + 最小 hello（非生产）
-切片 KA-1  适配器：单次多步 → 账本事件（fake/录制测）
-切片 KA-2  **迁移门**（临时开关仅用于切流；默认仍过渡环；**不是**长期双运行时产品）
-切片 KA-3  生产默认切真运行时 + 取消/技能回归；**关闭**过渡环生产入口
-切片 KA-4  卸装饰依赖或降级；TRUTH-FREEZE 升版 O2=已接入；**生产无 optional fallback runner**
+切片 KA-0  固定可安装的 Kimi Agent 发行物 + 入口探测（非生产）     ✅ #137
+切片 KA-1  适配器：Wire → 账本事件（契约 + 无密钥单测）           ✅ #140
+切片 KA-2  flag-only Session 路径（默认 OFF；非长期双核产品）     ✅ #145
+切片 KA-3  生产默认切真运行时 + 取消/技能回归；关闭过渡环入口      ⏳ 未授权
+切片 KA-4  卸装饰依赖或降级；TRUTH-FREEZE 升版 O2=已接入         ⏳
 ```
 
-**本正本清源阶段在 KA-0 之前结束。**
+**正本清源文档阶段**已收口目标句；**工程真接**仍以 KA-3/4 + §3 为准。  
+**禁止**因 KA-2 已合跳过授权直接 KA-3。
 
 ---
 
-## 6. 明确不在本阶段做
+## 6. 明确不做（现行）
 
-- 切换生产默认运行时  
-- 预埋 Pi/OpenCode  
+- 切换生产默认运行时 / 生产 `PICO_KIMI_AGENT_RUNTIME=1`（无授权）  
+- 预埋 Pi / OpenCode / 「可替换 harness」多运行时真源（**#121 拒合**）  
 - 删除 `runner.py` 导致现网不可用  
-- 宣称 S2「已钉版本 Kimi Agent 跑多步」为已完成  
+- 宣称 S2「已钉版本 Kimi Agent 跑多步」或「编排已接入完成」  
+- 用日用修复（chat/stop）证明 O1 已完成（见 TRUTH-FREEZE O5）  
 
 ---
 
@@ -208,10 +234,11 @@ KA-1 新增 `pico_orchestrator.kimi_adapter.KimiWireEventAdapter`：它是纯 ma
 继续负责 `run_id + seq` 的顺序和唯一性。
 
 ```
+# 以下边界描述的是 **KA-1 合入当时**（#140）；KA-2（#145）已接线 selector + flag。
 deployment: NONE
 production runtime switch: NONE
-run_service/openai_compat wiring: NONE
-feature flag: NONE
+run_service/openai_compat wiring: NONE   # KA-1 当时；现经 run_agent_runtime，见 §1/§9
+feature flag: NONE                       # KA-1 当时；现有 PICO_KIMI_AGENT_RUNTIME 默认 0
 run_agent_loop change: NONE
 ```
 

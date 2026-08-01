@@ -68,26 +68,27 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 **Doc index (truth order):** [`docs/README.md`](docs/README.md) — prefer GitHub over prose.
 
 **Context policy:** [`docs/CONTEXT-POLICY.md`](docs/CONTEXT-POLICY.md)（默认不清理上下文）  
-**Controller bot (7x24):** [`docs/CONTROLLER-BOT.md`](docs/CONTROLLER-BOT.md)  
+**Controller bot (7x24):** [`docs/CONTROLLER-BOT.md`](docs/CONTROLLER-BOT.md) — 机制说明；**派工以总管任务卡 + STATE-NOW 为准**  
 **Controller poll:** [`docs/CONTROLLER-POLL.md`](docs/CONTROLLER-POLL.md)  
-**Execution queue (×3):** [`docs/EXECUTION-QUEUE.md`](docs/EXECUTION-QUEUE.md)  
-**Validation queue (direct dispatch):** [`docs/VALIDATION-QUEUE.md`](docs/VALIDATION-QUEUE.md)  
+**Execution queue:** [`docs/EXECUTION-QUEUE.md`](docs/EXECUTION-QUEUE.md) — **SUPERSEDED** 自动 E1/E2/E3；勿当现行派工  
+**Validation queue:** [`docs/VALIDATION-QUEUE.md`](docs/VALIDATION-QUEUE.md)  
 **FAST sprint:** [`docs/SPRINT-FAST.md`](docs/SPRINT-FAST.md)  
 **P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
 **Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
-**24h Standalone AI:** [`docs/STANDALONE-AI-24H.md`](docs/STANDALONE-AI-24H.md)  
-**Current day task:** [`docs/DAY-TASK-2026-07-30-SKILL-UX.md`](docs/DAY-TASK-2026-07-30-SKILL-UX.md)  
-**Current plan:** [`docs/PARALLEL-SPRINT-PLAN.md`](docs/PARALLEL-SPRINT-PLAN.md) (BINDING-v2).  
+**24h Standalone AI:** [`docs/STANDALONE-AI-24H.md`](docs/STANDALONE-AI-24H.md) (historical baseline)  
+**Current dispatch:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) §4–§7（窗口 1/2/3；P0 = 日用 #142/#143/#144）  
+**Kimi gap:** [`docs/KIMI-AGENT-GAP.md`](docs/KIMI-AGENT-GAP.md)（默认未归位；KA-0/1/2 ≠ 已接入）  
 **Skill ADR:** [`docs/ADR-SKILL-CATALOG.md`](docs/ADR-SKILL-CATALOG.md).  
-**Completed foundation sprint:** [`docs/SPRINT-3DAY-PUSH.md`](docs/SPRINT-3DAY-PUSH.md) (COMPLETED).
+**Completed foundation sprint:** [`docs/SPRINT-3DAY-PUSH.md`](docs/SPRINT-3DAY-PUSH.md) (COMPLETED).  
+**Completed day task (do not re-open):** [`docs/DAY-TASK-2026-07-30-SKILL-UX.md`](docs/DAY-TASK-2026-07-30-SKILL-UX.md)
 
-Do **not** use `docs/archive/**` or new HANDOFF markdown as task truth.
+Do **not** use `docs/archive/**`, new HANDOFF markdown, or open PR **#121 harness multi-runtime** as task truth.
 
 ## Product rules
 
 - AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.
-- **Target:** open-source Kimi Agent runtime + Kimi HTTPS API; no custom agent OS as end state.
-- **Current:** transitional tool-loop may still run multi-step; do not claim Kimi Agent integrated (TRUTH-FREEZE / KIMI-AGENT-GAP).
+- **Target:** open-source Kimi Agent runtime + Kimi HTTPS API; no custom agent OS as end state; **no Plan B runtime pre-seed**.
+- **Current:** default multi-step path is transitional `run_agent_loop` via `run_agent_runtime` (flag off); do **not** claim Kimi Agent integrated (TRUTH-FREEZE / KIMI-AGENT-GAP).
 - Tenant fail-closed; **Pico owns the unique AI ledger**.
 - Pricing docs may stay DRAFT; do not freeze commercial FIXED unless owner orders.
 - Prefer smallest correct fix; delete dual-run croft rather than stack adapters.
