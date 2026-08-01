@@ -81,6 +81,38 @@ describe('usePicoTaskLedger', () => {
     unmount();
   });
 
+  it('keeps polling an active ledger run after a historical page reload', async () => {
+    jest.useFakeTimers();
+    mockedListTasks.mockResolvedValue({
+      tasks: [{ id: 'task-active', title: '长任务', conversation_id: 'conversation-active' }],
+    });
+    mockedGetTask.mockResolvedValue({
+      task: { id: 'task-active', title: '长任务' },
+      artifacts: [],
+    });
+    mockedListRuns.mockResolvedValue({
+      runs: [{ id: 'run-active', task_id: 'task-active', status: 'running' }],
+    });
+    mockedListEvents.mockResolvedValue({ events: [] });
+
+    const { result, unmount } = renderHook(() => usePicoTaskLedger('conversation-active', false));
+
+    try {
+      await waitFor(() => expect(result.current.run?.status).toBe('running'));
+      expect(mockedListRuns).toHaveBeenCalledTimes(1);
+
+      for (let tick = 0; tick < 5; tick += 1) {
+        await act(async () => {
+          jest.advanceTimersByTime(2000);
+        });
+        await waitFor(() => expect(mockedListRuns).toHaveBeenCalledTimes(tick + 2));
+      }
+    } finally {
+      unmount();
+      jest.useRealTimers();
+    }
+  });
+
   it('cancels a running historical run and refreshes its terminal state', async () => {
     mockedListTasks.mockResolvedValue({ tasks: [{ id: 'task-running', title: '运行中任务' }] });
     mockedGetTask.mockResolvedValue({

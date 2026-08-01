@@ -68,3 +68,11 @@ FAIL → 总管开 **修复写入任务**，测试窗 **复测** 闭环。
 ## 6. 当前优先用例（Standalone A/B）
 
 见 `docs/TEST-TASK-AB-WORKSPACE.md`（随本变更入库）。
+
+### P0 长任务刷新恢复
+
+1. 发起一个持续时间超过 10 秒的任务，记录 `conversation_id` / `task_id` / `run_id`。
+2. 在 Run 为 `queued` / `preparing` / `running` 时刷新页面，或从历史重新进入该会话。
+3. 不再次发送消息；页面必须继续从 Pico 唯一账本轮询，最终显示与 Run 一致的
+   `succeeded` / `failed` / `cancelled` 终态，并在产物稍晚落账时自动补齐。
+4. 若账本请求失败，页面显示可理解错误；不得以本地提交态冒充终态。
