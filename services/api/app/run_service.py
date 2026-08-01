@@ -334,6 +334,19 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                 return
             if run.status in ("succeeded", "failed", "cancelled"):
                 return
+            # Prefer honest cancel over masking a late cancel with sqlite/other crash.
+            if run.cancel_requested:
+                run.status = "cancelled"
+                run.ended_at = _utcnow()
+                run.error = None
+                await session.commit()
+                await append_event(
+                    session,
+                    run_id,
+                    "run.status",
+                    {"status": "cancelled"},
+                )
+                return
             run.status = "failed"
             run.ended_at = _utcnow()
             run.error = str(exc)

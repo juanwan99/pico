@@ -33,6 +33,13 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "无法连接模型服务。请检查网络或稍后重试。"
     if "not found" in low:
         return "找不到对应的会话或运行记录。"
+    if (
+        "database is locked" in low
+        or "operationalerror" in low
+        or "sqlite3" in low
+        or "disk i/o" in low
+    ):
+        return "服务繁忙，请稍后重试。若刚点了停止，请刷新查看是否已结束。"
     if "missing bearer" in low or "invalid token" in low or "expired" in low:
         return "登录已失效，请打开设置重新获取令牌。"
     if "cross_school" in low or "tenant" in low:

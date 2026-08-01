@@ -27,3 +27,10 @@ def test_enrich():
     p = enrich_fail_payload({"status": "failed", "reason": "token_cap", "code": "token_cap"})
     assert "user_message" in p
     assert "上限" in p["user_message"]
+
+def test_sqlite_lock_not_leaked_to_user() -> None:
+    msg = user_message_for_error("(sqlite3.OperationalError) database is locked")
+    assert "sqlite" not in msg.lower()
+    assert "OperationalError" not in msg
+    assert "重试" in msg or "繁忙" in msg
+

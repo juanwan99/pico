@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
@@ -20,7 +21,7 @@ from sqlalchemy import (
     select,
     text,
 )
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -235,7 +236,9 @@ def _migrate_sqlite_sync(conn) -> None:
 def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.execute("PRAGMA busy_timeout=5000")
+    # Concurrent cancel + emit under aiosqlite needs WAL + longer wait (prod #165 lock).
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.close()
 
 
@@ -275,7 +278,8 @@ async def append_event(
     *,
     commit: bool = True,
 ) -> EventRow:
-    for attempt in range(2):
+    last_err: Exception | None = None
+    for attempt in range(5):
         try:
             async with session.begin_nested():
                 result = await session.execute(
@@ -298,7 +302,16 @@ async def append_event(
                 await session.commit()
             await session.refresh(row)
             return row
-        except IntegrityError:
-            if attempt:
+        except IntegrityError as exc:
+            last_err = exc
+            if attempt >= 4:
                 raise
-    raise RuntimeError("event sequence allocation exhausted")
+            await session.rollback()
+        except OperationalError as exc:
+            last_err = exc
+            # sqlite "database is locked" under concurrent cancel/emit
+            if attempt >= 4:
+                raise
+            await session.rollback()
+            await asyncio.sleep(0.05 * (attempt + 1))
+    raise RuntimeError(f"event sequence allocation exhausted: {last_err!r}")
