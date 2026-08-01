@@ -24,7 +24,7 @@ CODEX_INPUT: REVISE 六条 → 安全/唯一账本/CI 吸收；真连 edu 时点
 | 错误旧理解 | 固定正确理解 |
 |------------|----------------|
 | 「教师空间」= 网盘 / 5GB 文件主线 | **AI 空间** = ChatGPT / Grok / Kimi **类产品**（体验 + Agent 编排 + 产物） |
-| 自研交互与 Agent 框架 | **深度对齐成熟 AI 产品 IA**（Claude 式对话+产物）；**编排 = 开源 Kimi Agent**（薄改） |
+| 自研交互与 Agent 框架 | **深度对齐成熟 AI 产品 IA**；**编排目标 = 开源 Kimi Agent**（薄改；**现状见 TRUTH-FREEZE**，禁假完成） |
 | 最底层自托管大模型 | **最底层 = 模型 HTTPS API**（Kimi 和/或 DeepSeek） |
 | 在 AI 仓重做教务 | **业务在 edu-cloud**；Pico 提供 AI 底座，**日后对接** |
 | AI 与教务同一仓抢节奏 | **Pico 独立仓、独立节奏** |
