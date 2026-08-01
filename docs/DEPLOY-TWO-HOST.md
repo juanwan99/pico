@@ -59,6 +59,25 @@ Codex @ dev-ecs  --ssh pico-prod-->  /opt/pico pull + rebuild + DEPLOYED
 - 用户可 `git pull` + `docker compose`
 - 安全组：优先仅允许 **dev-ecs 内网 IP** 访问 22
 
+**生产 fetch refspec 必须钉住 main：**
+
+```bash
+cd /opt/pico
+git config --replace-all remote.origin.fetch \
+  '+refs/heads/main:refs/remotes/origin/main'
+test "$(git config --get-all remote.origin.fetch)" = \
+  '+refs/heads/main:refs/remotes/origin/main'
+```
+
+禁止保留指向 preview 分支的 `remote.origin.fetch`。否则
+`git fetch origin main` 可能只更新 `FETCH_HEAD`，而不更新部署脚本校验的
+`origin/main`。配置后可用下列命令验证：
+
+```bash
+git fetch origin main
+test "$(git rev-parse origin/main)" = "$(git rev-parse FETCH_HEAD)"
+```
+
 ### 3.2 dev-ecs 上 `~/.ssh/config`
 
 ```sshconfig
