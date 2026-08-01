@@ -72,7 +72,7 @@ Phase 3  Integrate 与 edu 联调 + edu 旧 AI 退役
 | ID | 标准 |
 |----|------|
 | **S1** | **真实**模型 API 端到端（Kimi **或** DeepSeek 先通一条）；流式到 UI；密钥仅服务端。**Mock 不能代替 S1。** |
-| **S2** | **已钉版本**的 Kimi Agent 在服务端跑多步工具环（非前端假进度）。 |
+| **S2** | **目标**：钉版本开源 Kimi Agent 在服务端跑多步（非前端假进度）。**现状**：过渡 `run_agent_loop`（见 TRUTH-FREEZE / KIMI-AGENT-GAP）。 |
 | **S3** | Pico DB 持久化 Task + Run + 有序 Event（+ 产物元数据）；取消/失败/成功正确；**唯一 AI 账本。** |
 | **S4** | 请求身份来自 **Pico 校验的短时凭证**（claim 形状与未来 edu 签发 **一致**：iss/aud/exp/school_id/membership_id/scopes）。Phase 1 由 **Pico 测试签发器** 签发；body/prompt **不得**扩权。 |
 | **S5** | 三区 UI 真接通：历史/任务、输入+流式+工具时间线、≥1 类产物；错误态诚实。 |
@@ -134,7 +134,7 @@ Pico Web (Vue 3 + Vite)
     │
 Pico API + 凭证校验（测试签发 / 未来 edu 签发同形）
     │
-Orchestrator: Kimi Agent（版本钉死）+ allowlist 网关
+Orchestrator: **目标** Kimi Agent（版本钉死）+ allowlist；**现状** 过渡工具环 + allowlist
     ├── Model HTTPS API (Kimi | DeepSeek)
     └── Tools: FakeEdu 只读 + 其他白名单
     │
@@ -151,7 +151,7 @@ Pico DB ── Task / Run / Event / Artifact   ← 唯一 AI 真源
 |----|--------|
 | 语言 | **Python 3.11+**（API/编排） |
 | 前端 | **Vue 3 + Vite** |
-| Agent | **lock 文件钉死** Kimi Agent SDK/runtime 的 version 或 commit |
+| Agent | **lock 钉死**目标运行时版本；**pin  alone 不算 S2 完成**（见 KIMI-AGENT-GAP） |
 | 主模型 | **Kimi API**（无 key 则停表；DeepSeek 仅当 Kimi 不可用且仍为真 API） |
 | 花费 | 单 Run 最大时长、最大 token、有限重试（防夜间刷爆） |
 | 合同草稿 | §4 四份至少骨架入库 |

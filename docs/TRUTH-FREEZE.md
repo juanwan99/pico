@@ -95,6 +95,8 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | **T3** | **[CORRECTED-GOALS.md](./CORRECTED-GOALS.md)** | 目标校正表 | 须与 T0/T1 一致 |
 | **T4** | **[AGENTS.md](../AGENTS.md)** | 执行 HARD | 指针指向 T0–T3 |
 | **T5** | **[DEBT-BACKLOG.md](./DEBT-BACKLOG.md)** | 债（含 D8 编排） | 可增行；不改 T0 目标 |
+| **T5b** | **[KIMI-AGENT-GAP.md](./KIMI-AGENT-GAP.md)** | 真接差距只读 | 归位阶段更新 |
+| **T5c** | **[POLLUTION-SWEEP.md](./POLLUTION-SWEEP.md)** | 污染清理账 | 执行记录 |
 | **T6** | **[ONEFLOW.md](./ONEFLOW.md)** + **[SPRINT-FAST.md](./SPRINT-FAST.md)** | 交付纪律 | 流程，不改产品定义 |
 | **T7** | **[ADR-SKILL-CATALOG.md](./ADR-SKILL-CATALOG.md)** | 技能唯一目录=LibreChat Skills | 保持 ACCEPTED A |
 
@@ -150,5 +152,6 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | **v1.0** | 2026-08-01 | 首次冻结：产品/四层/编排唯一 Kimi Agent/禁 Plan B/禁教师执行沙箱/文档权威序/污染处置 |
+| **v1.0+** | 2026-08-01 | 污染清理+GAP 清单落盘（**目标句未改**；见 POLLUTION-SWEEP / KIMI-AGENT-GAP） |
 
 升版规则：任何 P1–W5 / A1–A4 / O1–O5 / C1–C6 的修改 → **v1.x** 新 PR，标题含 `TRUTH-FREEZE`。

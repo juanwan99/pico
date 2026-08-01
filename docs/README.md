@@ -28,6 +28,7 @@ ONEFLOW: docs/ONEFLOW.md
 |----------|------|------|
 | **0** | **[TRUTH-FREEZE.md](./TRUTH-FREEZE.md)** | **真源冻结 v1.0（防丢失 · 权威决策集）** |
 | **0†** | **[POLLUTION-SWEEP.md](./POLLUTION-SWEEP.md)** | **污染清理执行记录** |
+| **0‡** | **[KIMI-AGENT-GAP.md](./KIMI-AGENT-GAP.md)** | **Kimi Agent 真接差距（只读·下阶段输入）** |
 | **0a** | **[WHAT-IS-PICO.md](./WHAT-IS-PICO.md)** | **Pico 是什么 / 编排目标vs现状** |
 | **0b** | **[STATE-NOW.md](./STATE-NOW.md)** | **正本清源：当前 SHA、派发、门禁、过时记忆黑名单** |
 | 0 | GitHub PR/Issue/Actions | **Task state & evidence** |
