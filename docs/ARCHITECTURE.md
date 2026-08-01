@@ -13,6 +13,8 @@
 - Every run requires school + membership (or explicit platform principal).
 - Model cannot widen scope via prompt.
 - Cross-school tool access fail-closed.
+- Historical Task lookup applies `school_id` + `membership_id` + `conversation_id`
+  before the bounded result window; account growth must not hide an older conversation's ledger.
 
 ## Integration contract (sketch)
 

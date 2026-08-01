@@ -644,9 +644,11 @@ async def tasks(
     principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    rows = await run_service.list_tasks(session, principal)
-    if conversation_id:
-        rows = [r for r in rows if getattr(r, "conversation_id", None) == conversation_id]
+    rows = await run_service.list_tasks(
+        session,
+        principal,
+        conversation_id=conversation_id,
+    )
     return {"tasks": [_task_dict(t) for t in rows]}
 
 

@@ -25,6 +25,12 @@ export type PicoLedgerState = {
   cancelRun: (runId?: string) => Promise<void>;
 };
 
+const ACTIVE_RUN_STATUSES = new Set(['queued', 'running', 'preparing']);
+
+function isActiveRun(run: PicoRun | null): run is PicoRun {
+  return Boolean(run && ACTIVE_RUN_STATUSES.has(run.status));
+}
+
 function statusLabel(
   run: PicoRun | null,
   isSubmitting: boolean,
@@ -39,7 +45,7 @@ function statusLabel(
     }
     return null;
   }
-  if (run.status === 'running' || run.status === 'queued' || run.status === 'preparing') {
+  if (isActiveRun(run)) {
     return '等待模型响应';
   }
   if (run.status === 'succeeded') {
@@ -90,13 +96,12 @@ export function usePicoTaskLedger(
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const activeRun = isActiveRun(run);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
   const cancelRun = useCallback(
     async (runId?: string) => {
-      const targetRunId =
-        runId ??
-        (run && ['queued', 'running', 'preparing'].includes(run.status) ? run.id : undefined);
+      const targetRunId = runId ?? (isActiveRun(run) ? run.id : undefined);
       if (!targetRunId) {
         setCancelError('停止运行失败：未找到正在运行的任务');
         return;
@@ -107,7 +112,7 @@ export function usePicoTaskLedger(
       try {
         const result = await cancelPicoRun(targetRunId);
         setRun(result.run);
-        if (!['queued', 'running', 'preparing'].includes(result.run.status)) {
+        if (!isActiveRun(result.run)) {
           setCancelRequestedRunId(null);
         }
         setTick((n) => n + 1);
@@ -250,16 +255,17 @@ export function usePicoTaskLedger(
     };
   }, [conversationId, tick, isSubmitting]);
 
-  // poll while submitting + short tail after finish (artifacts may lag)
+  // The ledger is the source of truth after reload: keep polling an active Run
+  // even when LibreChat no longer has the original in-memory submitting state.
   useEffect(() => {
     if (!conversationId || conversationId === 'new') {
       return;
     }
-    if (isSubmitting) {
+    if (isSubmitting || activeRun) {
       const id = window.setInterval(() => setTick((n) => n + 1), 2000);
       return () => window.clearInterval(id);
     }
-    // after submit ends, refresh a few times for artifact
+    // After the ledger reaches a terminal state, refresh a few times for artifacts.
     let n = 0;
     const id = window.setInterval(() => {
       n += 1;
@@ -269,7 +275,7 @@ export function usePicoTaskLedger(
       }
     }, 1500);
     return () => window.clearInterval(id);
-  }, [isSubmitting, conversationId]);
+  }, [isSubmitting, conversationId, activeRun]);
 
   return {
     task,
