@@ -99,6 +99,29 @@ describe('Pico proxy routes', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('forwards failed run retry requests to Pico API', async () => {
+    const response = await request(app).post('/api/pico/v1/runs/run-1/retry');
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/runs/run-1/retry',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: expect.stringMatching(/^Bearer /),
+          'X-Pico-Membership-Id': 'member-123',
+        }),
+      }),
+    );
+  });
+
+  it('rejects invalid run ids for retry requests', async () => {
+    const response = await request(app).post('/api/pico/v1/runs/bad.id/retry');
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('forwards the read-only skill catalog request to Pico API', async () => {
     const response = await request(app).get('/api/pico/v1/skills/catalog');
 
