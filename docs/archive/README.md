@@ -1,11 +1,14 @@
-# Archived documentation
+# docs/archive — 非真源
 
 ```
-STATUS: ARCHIVE · NOT AUTHORITY
-RULE: GitHub PR/SHA/CI/DEPLOYED = sole durable task truth (docs/ONEFLOW.md)
+STATUS: HISTORICAL ONLY
 ```
 
-Files here are **historical**. Do not use them as current shell, topology, or progress.
-Re-derive facts from: code, tests, GitHub, `docs/README.md` active list.
+本目录文档**不得**覆盖：
 
-To recover old text: `git log -- docs/archive/<name>` or history before the hygiene PR.
+- `docs/TRUTH-FREEZE.md`
+- `docs/WHAT-IS-PICO.md`
+- `docs/STATE-NOW.md`
+- `docs/CORRECTED-GOALS.md`
+
+其中关于「Kimi Agent 已驱动编排 / 已接入」等完成态表述，以 **TRUTH-FREEZE O2** 为准（现状为过渡自研环，目标为真接入）。

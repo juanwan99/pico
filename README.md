@@ -4,17 +4,18 @@
 
 ## 目标（校正）
 
-详见 **[docs/README.md](docs/README.md)**（文档真源索引）· **[docs/CORRECTED-GOALS.md](docs/CORRECTED-GOALS.md)** · **[docs/MVP-3DAY.md](docs/MVP-3DAY.md) v1.2** · **[AGENTS.md](AGENTS.md)**
+详见 **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md)**（冻结真源）· **[docs/README.md](docs/README.md)** · **[docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)** · **[docs/CORRECTED-GOALS.md](docs/CORRECTED-GOALS.md)** · **[docs/MVP-3DAY.md](docs/MVP-3DAY.md) v1.2** · **[AGENTS.md](AGENTS.md)**
 
 任务进度与证据以 **GitHub PR/SHA/CI** 为准（[OneFlow](docs/ONEFLOW.md)）；勿用交接 MD。
 
 | | |
 |--|--|
-| 产品 | Claude / Codex / WorkBuddy **品类**的 AI 空间 + Agent + 产物 |
-| 编排 | 开源 Kimi Agent（钉版本） |
-| 模型 | HTTPS API（Kimi 优先） |
+| 产品 | Claude / Codex / WorkBuddy **品类**的 AI 工作台 + 产物 + **唯一 AI 账本** |
+| 模型 | HTTPS API（**Kimi 优先**，已用） |
+| 编排 | **目标** = 开源 Kimi Agent 真接入；**现状** = 过渡自研环（见 [docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) · [docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)） |
 | 账本 | **仅 Pico**（禁止与 edu 双 AI） |
 | 范围 | **只写本仓**；edu 对接后置 |
+| 真源冻结 | **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.0**（防丢失） |
 
 ## 当前产品壳
 

@@ -2,6 +2,7 @@
 
 ```
 DOC: docs/OVERALL-ARCHITECTURE.md
+SUPERSEDED_IN_PART_BY: docs/TRUTH-FREEZE.md v1.0 + docs/WHAT-IS-PICO.md（产品/编排/沙箱边界以冻结真源为准）
 STATUS: DRAFT v0.2 — 不确定项已由架构默认建议填齐（待业主一键 ACK 后升 FIXED v1.0）
 SCALE: 起步 10 校 × ~100 教师 ≈ 1000 席位
 RELATED:
@@ -19,7 +20,7 @@ DATE: 2026-07-29
 
 | 维度 | 决策 |
 |------|------|
-| 产品 | **Claude/Codex 式 AI 工作台** + 开源编排 + 模型 HTTPS API；**非网盘、非自研 Agent OS** |
+| 产品 | **Claude/Codex 式 AI 工作台** + 模型 HTTPS API；编排**目标**开源 Kimi Agent（现状见 TRUTH-FREEZE）；**非网盘、非自研 Agent OS 终局** |
 | 边界 | **edu** = 人/班/考务/成绩真源；**Pico** = 唯一 AI 账本 + Agent + 工作台 |
 | 租户 | `school_id` 校级；`membership_id` 校内用户。教师是租户成员，**不是**一人一机 |
 | 部署 | **混合：默认 Standard（共享）；Dedicated 一校一单元为加价 SKU** |
