@@ -6,7 +6,7 @@ import {
   listPicoTaskRuns,
   listPicoTasks,
 } from '~/data-provider/pico/api';
-import { usePicoTaskLedger } from './usePicoTaskLedger';
+import { pickPreferredRun, pickPreferredTaskRuns, usePicoTaskLedger } from './usePicoTaskLedger';
 
 jest.mock('~/data-provider/pico/api', () => ({
   cancelPicoRun: jest.fn(),
@@ -22,6 +22,31 @@ const mockedGetTask = jest.mocked(getPicoTask);
 const mockedListRuns = jest.mocked(listPicoTaskRuns);
 const mockedListEvents = jest.mocked(listPicoRunEvents);
 const mockedCancelRun = jest.mocked(cancelPicoRun);
+
+describe('pickPreferredRun / pickPreferredTaskRuns', () => {
+  it('prefers an active run over a newer terminal run on the same task', () => {
+    const preferred = pickPreferredRun([
+      { id: 'run-new', task_id: 't1', status: 'succeeded' },
+      { id: 'run-old-active', task_id: 't1', status: 'running' },
+    ]);
+    expect(preferred?.id).toBe('run-old-active');
+  });
+
+  it('prefers a task that still has an active run over a newer terminal task', () => {
+    const preferred = pickPreferredTaskRuns([
+      {
+        task: { id: 'task-new', title: 'newer terminal' },
+        runs: [{ id: 'run-new', task_id: 'task-new', status: 'succeeded' }],
+      },
+      {
+        task: { id: 'task-old', title: 'older active' },
+        runs: [{ id: 'run-old', task_id: 'task-old', status: 'running' }],
+      },
+    ]);
+    expect(preferred?.task.id).toBe('task-old');
+    expect(preferred?.run?.id).toBe('run-old');
+  });
+});
 
 describe('usePicoTaskLedger', () => {
   beforeEach(() => {
@@ -107,6 +132,185 @@ describe('usePicoTaskLedger', () => {
         });
         await waitFor(() => expect(mockedListRuns).toHaveBeenCalledTimes(tick + 2));
       }
+    } finally {
+      unmount();
+      jest.useRealTimers();
+    }
+  });
+
+  it('tracks a reloaded latest active run through status changes until terminal', async () => {
+    jest.useFakeTimers();
+    mockedListTasks.mockResolvedValue({
+      tasks: [{ id: 'task-long', title: '长任务', conversation_id: 'conversation-long' }],
+    });
+    mockedGetTask.mockResolvedValue({
+      task: { id: 'task-long', title: '长任务' },
+      artifacts: [],
+    });
+    mockedListEvents.mockResolvedValue({ events: [] });
+    mockedListRuns
+      .mockResolvedValueOnce({
+        runs: [{ id: 'run-long', task_id: 'task-long', status: 'running' }],
+      })
+      .mockResolvedValueOnce({
+        runs: [{ id: 'run-long', task_id: 'task-long', status: 'running' }],
+      })
+      .mockResolvedValueOnce({
+        runs: [{ id: 'run-long', task_id: 'task-long', status: 'running' }],
+      })
+      .mockResolvedValue({
+        runs: [{ id: 'run-long', task_id: 'task-long', status: 'succeeded' }],
+      });
+
+    const { result, unmount } = renderHook(() => usePicoTaskLedger('conversation-long', false));
+
+    try {
+      await waitFor(() => expect(result.current.run?.status).toBe('running'));
+      expect(result.current.statusLabel).toBe('等待模型响应');
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await waitFor(() => expect(mockedListRuns).toHaveBeenCalledTimes(2));
+      expect(result.current.run?.status).toBe('running');
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await waitFor(() => expect(mockedListRuns).toHaveBeenCalledTimes(3));
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await waitFor(() => expect(result.current.run?.status).toBe('succeeded'));
+      expect(result.current.statusLabel).toBe('已完成');
+
+      const callsAtTerminal = mockedListRuns.mock.calls.length;
+      // Terminal path uses a short 1.5s × 4 tail, then must stop continuous polling.
+      await act(async () => {
+        jest.advanceTimersByTime(1500 * 4 + 500);
+      });
+      await waitFor(() =>
+        expect(mockedListRuns.mock.calls.length).toBeGreaterThan(callsAtTerminal),
+      );
+      const callsAfterTail = mockedListRuns.mock.calls.length;
+
+      await act(async () => {
+        jest.advanceTimersByTime(10000);
+      });
+      expect(mockedListRuns.mock.calls.length).toBe(callsAfterTail);
+    } finally {
+      unmount();
+      jest.useRealTimers();
+    }
+  });
+
+  it('resumes polling for queued/preparing runs after reload (isSubmitting=false)', async () => {
+    jest.useFakeTimers();
+    mockedListTasks.mockResolvedValue({
+      tasks: [{ id: 'task-queued', title: '排队任务' }],
+    });
+    mockedGetTask.mockResolvedValue({
+      task: { id: 'task-queued', title: '排队任务' },
+      artifacts: [],
+    });
+    mockedListEvents.mockResolvedValue({ events: [] });
+    mockedListRuns.mockResolvedValue({
+      runs: [{ id: 'run-queued', task_id: 'task-queued', status: 'queued' }],
+    });
+
+    const { result, unmount } = renderHook(() => usePicoTaskLedger('conversation-queued', false));
+
+    try {
+      await waitFor(() => expect(result.current.run?.status).toBe('queued'));
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await waitFor(() => expect(mockedListRuns).toHaveBeenCalledTimes(2));
+
+      mockedListRuns.mockResolvedValue({
+        runs: [{ id: 'run-queued', task_id: 'task-queued', status: 'preparing' }],
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await waitFor(() => expect(result.current.run?.status).toBe('preparing'));
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await waitFor(() => expect(mockedListRuns).toHaveBeenCalledTimes(4));
+    } finally {
+      unmount();
+      jest.useRealTimers();
+    }
+  });
+
+  it('follows a conversation active run even when a newer task is already terminal', async () => {
+    jest.useFakeTimers();
+    mockedListTasks.mockResolvedValue({
+      tasks: [
+        { id: 'task-new', title: '新任务已完成', conversation_id: 'conversation-mixed' },
+        { id: 'task-old', title: '旧任务仍运行', conversation_id: 'conversation-mixed' },
+      ],
+    });
+    mockedGetTask.mockImplementation(async (taskId: string) => ({
+      task: { id: taskId, title: taskId },
+      artifacts: [],
+    }));
+    mockedListRuns.mockImplementation(async (taskId: string) => {
+      if (taskId === 'task-new') {
+        return { runs: [{ id: 'run-new', task_id: 'task-new', status: 'succeeded' }] };
+      }
+      return { runs: [{ id: 'run-old', task_id: 'task-old', status: 'running' }] };
+    });
+    mockedListEvents.mockResolvedValue({ events: [] });
+
+    const { result, unmount } = renderHook(() => usePicoTaskLedger('conversation-mixed', false));
+
+    try {
+      await waitFor(() => expect(result.current.run?.id).toBe('run-old'));
+      expect(result.current.task?.id).toBe('task-old');
+      expect(result.current.run?.status).toBe('running');
+
+      const runsBefore = mockedListRuns.mock.calls.length;
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await waitFor(() => expect(mockedListRuns.mock.calls.length).toBeGreaterThan(runsBefore));
+      expect(result.current.run?.id).toBe('run-old');
+    } finally {
+      unmount();
+      jest.useRealTimers();
+    }
+  });
+
+  it('does not drop an active run when a poll briefly returns an empty task list', async () => {
+    jest.useFakeTimers();
+    mockedListTasks
+      .mockResolvedValueOnce({
+        tasks: [{ id: 'task-sticky', title: '粘性活跃', conversation_id: 'conversation-sticky' }],
+      })
+      .mockResolvedValue({ tasks: [] });
+    mockedGetTask.mockResolvedValue({
+      task: { id: 'task-sticky', title: '粘性活跃' },
+      artifacts: [],
+    });
+    mockedListRuns.mockResolvedValue({
+      runs: [{ id: 'run-sticky', task_id: 'task-sticky', status: 'running' }],
+    });
+    mockedListEvents.mockResolvedValue({ events: [] });
+
+    const { result, unmount } = renderHook(() => usePicoTaskLedger('conversation-sticky', false));
+
+    try {
+      await waitFor(() => expect(result.current.run?.status).toBe('running'));
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await waitFor(() => expect(mockedListTasks.mock.calls.length).toBeGreaterThanOrEqual(2));
+      expect(result.current.run?.id).toBe('run-sticky');
+      expect(result.current.run?.status).toBe('running');
     } finally {
       unmount();
       jest.useRealTimers();
