@@ -89,13 +89,26 @@ if [ "$HEALTH_SHA" != "$CURRENT_SHA" ]; then
 fi
 echo "[pico] health.git_sha exact match: $HEALTH_SHA"
 
-# Product UI must actually serve /login. Transport failure (set -e) and non-200 both fail closed.
-UI_LOGIN_CODE="$(
-  curl -sS -o /dev/null -w "%{http_code}" --max-time 5 \
-    http://127.0.0.1:8080/login
-)"
+# Product UI must actually serve /login. Allow LibreChat up to about 60 seconds
+# after recreate to become ready; transport failures and non-200 responses fail closed.
+UI_LOGIN_CODE="000"
+UI_READY_ATTEMPTS=30
+echo "[pico] UI readiness: waiting for /login HTTP 200 (${UI_READY_ATTEMPTS} attempts, 1s interval)"
+for attempt in $(seq 1 "$UI_READY_ATTEMPTS"); do
+  if UI_LOGIN_CODE="$(
+    curl -s -o /dev/null -w "%{http_code}" --max-time 1 \
+      http://127.0.0.1:8080/login
+  )" && [ "$UI_LOGIN_CODE" = "200" ]; then
+    echo "[pico] UI ready attempt=${attempt}/${UI_READY_ATTEMPTS}"
+    break
+  fi
+  echo "[pico] UI not ready attempt=${attempt}/${UI_READY_ATTEMPTS} status=${UI_LOGIN_CODE:-000}" >&2
+  if [ "$attempt" -lt "$UI_READY_ATTEMPTS" ]; then
+    sleep 1
+  fi
+done
 if [ "$UI_LOGIN_CODE" != "200" ]; then
-  echo "[pico] FATAL: UI /login HTTP status not 200 got=${UI_LOGIN_CODE}" >&2
+  echo "[pico] FATAL: UI /login did not become ready after ${UI_READY_ATTEMPTS} attempts; last_status=${UI_LOGIN_CODE:-000}" >&2
   exit 7
 fi
 echo "[pico] ui_login=${UI_LOGIN_CODE}"
