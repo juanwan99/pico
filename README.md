@@ -11,14 +11,20 @@
 | | |
 |--|--|
 | 产品 | Claude / Codex / WorkBuddy **品类**的 AI 空间 + Agent + 产物 |
-| 编排 | 开源 Kimi Agent（钉版本） |
-| 模型 | HTTPS API（Kimi 优先） |
-| 账本 | **仅 Pico**（禁止与 edu 双 AI） |
+| 产品壳 | LibreChat（React）长期保留，渐进优化，不承载可信执行状态 |
+| 控制面 | **Pico 自有**租户、项目、Task/Run/Event/Artifact 与自动化 |
+| 执行 | 标准 Harness 边界；当前为 Pico 薄工具循环，未来可经 Adapter 替换 |
+| 模型 | 可替换 HTTPS Provider（Kimi 优先，DeepSeek 备用） |
+| 账本 | **仅 Pico**（禁止 Harness 或 edu 建第二套 AI 真源） |
 | 范围 | **只写本仓**；edu 对接后置 |
 
 ## 当前产品壳
 
 **LibreChat** → [`apps/librechat`](apps/librechat)（MIT 魔改，接 Pico OpenAI 兼容 API）
+
+架构边界见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) 与
+[`docs/ADR-HARNESS-BOUNDARY.md`](docs/ADR-HARNESS-BOUNDARY.md)：Pico 掌握控制面和唯一账本，
+第三方 Harness 只能作为可替换执行引擎接入，不能直接成为产品状态真源。
 
 | 服务 | 地址 |
 |------|------|

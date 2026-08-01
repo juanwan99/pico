@@ -1,12 +1,12 @@
-**Context policy:** [`docs/CONTEXT-POLICY.md`](docs/CONTEXT-POLICY.md)（默认不清理上下文）  
-**Controller bot (7x24):** [`docs/CONTROLLER-BOT.md`](docs/CONTROLLER-BOT.md)  
-**Controller poll:** [`docs/CONTROLLER-POLL.md`](docs/CONTROLLER-POLL.md)  
-**Execution queue (×3):** [`docs/EXECUTION-QUEUE.md`](docs/EXECUTION-QUEUE.md)  
-**Validation queue:** [`docs/VALIDATION-QUEUE.md`](./VALIDATION-QUEUE.md)  
-**FAST sprint:** [`docs/SPRINT-FAST.md`](docs/SPRINT-FAST.md)  
-**P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
-**Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
-**24h plan:** [docs/STANDALONE-AI-24H.md](./STANDALONE-AI-24H.md)
+- **Context policy:** [`docs/CONTEXT-POLICY.md`](./CONTEXT-POLICY.md)（默认不清理上下文）
+- **Controller bot (7x24):** [`docs/CONTROLLER-BOT.md`](./CONTROLLER-BOT.md)
+- **Controller poll:** [`docs/CONTROLLER-POLL.md`](./CONTROLLER-POLL.md)
+- **Execution queue (×3):** [`docs/EXECUTION-QUEUE.md`](./EXECUTION-QUEUE.md)
+- **Validation queue:** [`docs/VALIDATION-QUEUE.md`](./VALIDATION-QUEUE.md)
+- **FAST sprint:** [`docs/SPRINT-FAST.md`](./SPRINT-FAST.md)
+- **P0 security:** [`docs/P0-SECURITY-HARDENING.md`](./P0-SECURITY-HARDENING.md)
+- **Test window:** [`docs/TEST-WINDOW.md`](./TEST-WINDOW.md)
+- **24h plan:** [docs/STANDALONE-AI-24H.md](./STANDALONE-AI-24H.md)
 
 # Pico documentation index
 
@@ -33,6 +33,7 @@ ONEFLOW: docs/ONEFLOW.md
 | 2c | [templates/](./templates/) | 日间任务 / 审查 / CANDIDATE-DEPLOYED |
 | 3 | [MVP-3DAY.md](./MVP-3DAY.md) | Product law v1.2 FIXED |
 | 4 | [CORRECTED-GOALS.md](./CORRECTED-GOALS.md) | Product memory (not netdisk/SaaS) |
+| 4b | [ARCHITECTURE.md](./ARCHITECTURE.md) · [ADR-HARNESS-BOUNDARY.md](./ADR-HARNESS-BOUNDARY.md) | **壳 / Pico 控制面 / Harness / 模型稳定边界** |
 | 5 | [PARALLEL-SPRINT-PLAN.md](./PARALLEL-SPRINT-PLAN.md) | **Current** execution plan (BINDING-v2) |
 | 6 | [ADR-SKILL-CATALOG.md](./ADR-SKILL-CATALOG.md) | Skill catalog decision |
 | 7 | [WORKFLOW.md](./WORKFLOW.md) · [VERSIONING.md](./VERSIONING.md) | Windows / risk / SHA |
@@ -41,7 +42,7 @@ ONEFLOW: docs/ONEFLOW.md
 | 9 | [MASTER-PLAN.md](./MASTER-PLAN.md) | Phase map M0–M5 (nav only) |
 | 9b | [DAY-TASK-2026-07-30-SKILL-UX.md](./DAY-TASK-2026-07-30-SKILL-UX.md) | **当前日间派工**（Skill+UX 双轨） |
 | 10 | Night cards: [N1](./NIGHT-CARD-N1-W-MAINPATH.md) · [N2](./NIGHT-CARD-N2-SKILL-THIN.md) · [N3-THICK](./NIGHT-CARD-N3-THICK.md) · [N4-THICK](./NIGHT-CARD-N4-THICK.md) · [policy](./NIGHT-CARD-POLICY.md) | Executable card; **evidence still on PR** |
-| 11 | [DEMO.md](./DEMO.md) · [DEPLOY-TWO-HOST.md](./DEPLOY-TWO-HOST.md) · [DEPLOY-PUBLIC.md](./DEPLOY-TWO-HOST.md](./DEPLOY-TWO-HOST.md) · [DEPLOY-PUBLIC.md) | Demo & public deploy notes |
+| 11 | [DEMO.md](./DEMO.md) · [DEPLOY-TWO-HOST.md](./DEPLOY-TWO-HOST.md) · [DEPLOY-PUBLIC.md](./DEPLOY-PUBLIC.md) | Demo & public deploy notes |
 | 12 | [PIXEL-DIFF.md](./PIXEL-DIFF.md) · matrices when present | UX evidence (not task status) |
 
 ## Repeatable smokes

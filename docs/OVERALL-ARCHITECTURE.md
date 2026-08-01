@@ -10,7 +10,7 @@ RELATED:
   - docs/archive/DEPLOY-AND-PRICING.md（部署/收费讨论底稿）
   - docs/archive/UNDERLYING-AGENT.md
   - docs/PHASE2-CONTRACTS.md / PHASE3-INTEGRATION.md
-DATE: 2026-07-29
+DATE: 2026-08-01
 ```
 
 ---
@@ -19,8 +19,10 @@ DATE: 2026-07-29
 
 | 维度 | 决策 |
 |------|------|
-| 产品 | **Claude/Codex 式 AI 工作台** + 开源编排 + 模型 HTTPS API；**非网盘、非自研 Agent OS** |
+| 产品 | **Claude/Codex/WorkBuddy 品类 AI 工作台**；LibreChat 壳长期保留、渐进优化 |
 | 边界 | **edu** = 人/班/考务/成绩真源；**Pico** = 唯一 AI 账本 + Agent + 工作台 |
+| 控制面 | 租户、项目、Task/Run/Event/Artifact、自动化和终态永久由 Pico 掌握 |
+| Harness | 经标准 Contract + Adapter 接入可替换执行引擎；不 Fork 深改、不建第二账本 |
 | 租户 | `school_id` 校级；`membership_id` 校内用户。教师是租户成员，**不是**一人一机 |
 | 部署 | **混合：默认 Standard（共享）；Dedicated 一校一单元为加价 SKU** |
 | 首期 10 校 | **全部 Standard**；有书面隔离要求再开 Dedicated |
@@ -48,16 +50,21 @@ DATE: 2026-07-29
                     │  · 鉴权（JWT principal）        │
                     │  · Task / Run / Event / 产物   │
                     │  · 配额与计费科目               │
-                    │  · Agent 多步工具环             │
+                    │  · Harness Contract / Adapter   │
                     │  · OpenAI 兼容入口              │
                     └──────┬──────────────┬────────┘
-                           │              │
-              模型 API     │              │ 引用/只读工具
+                           │              │ 引用/只读工具
                            ▼              ▼
                     ┌────────────┐  ┌─────────────────────┐
-                    │ Kimi 等    │  │ edu 业务 API         │
-                    │ HTTPS API  │  │ + 校侧考试对象存储    │
-                    └────────────┘  └─────────────────────┘
+                    │ Harness    │  │ edu 业务 API         │
+                    │ Runtime    │  │ + 校侧考试对象存储    │
+                    └─────┬──────┘  └─────────────────────┘
+                          │ 模型 API
+                          ▼
+                    ┌────────────┐
+                    │ Kimi 等    │
+                    │ HTTPS API  │
+                    └────────────┘
 ```
 
 | 在 Pico | 不在 Pico |
@@ -67,6 +74,7 @@ DATE: 2026-07-29
 | 白名单工具网关 | 默认 Shell/全域网盘 |
 | 模型密钥（平台或校 BYOK） | 与 edu 双跑第二套 AI 账本 |
 | 配额/点/账单聚合 | 教务审批流最终落库（edu 确认后） |
+| Harness 适配与契约测试 | Harness 自建产品状态真源或直接访问 Pico DB |
 
 ---
 
@@ -76,14 +84,15 @@ DATE: 2026-07-29
 
 | 层 | 职责 | 当前实现要点 |
 |----|------|----------------|
-| **L1 体验层** | 会话、Markdown、工具展示、设置 | `apps/librechat`（中文默认） |
-| **L2 API 控制面** | 鉴权、任务、流式/兼容协议、变更确认 | `services/api` FastAPI |
-| **L3 编排层** | 多步 tool-calling、事件发射、超时/token 帽 | `pico_orchestrator.run_agent_loop` |
-| **L4 工具网关** | 白名单、校隔离、跨校 fail-closed | `AllowlistGateway` |
-| **L5 模型提供商** | Kimi / 可扩展 DeepSeek 等 | `provider.resolve_provider` |
-| **L6 账本存储** | Task/Run/Event/Artifact/Change | SQL（可演进 Postgres） |
-| **L7 计量计费** | 点池、科目、超额 | **方案层已定，工程分阶段** |
-| **L8 集成** | edu 凭证、只读适配、回写提案 | Phase 2 合同 / Phase 3 对接 |
+| **L1 体验层** | 会话、任务、项目、结果呈现 | `apps/librechat`（React；技术选型基本冻结） |
+| **L2 Pico 控制面** | 鉴权、项目、Task/Run/Event/Artifact、自动化、终态 | `services/api` FastAPI |
+| **L3 Harness Contract/Adapter** | 规范输入/事件/控制/能力/版本，隔离厂商语义 | 当前隐含在 `openai_compat.py` + `run_service.py`，待最小提取 |
+| **L4 Harness Runtime** | 多步 tool-calling、上下文执行、运行时事件 | 当前 `pico_orchestrator.run_agent_loop` 薄循环；未来可替换 |
+| **L5 工具网关** | 白名单、技能策略、校隔离、跨校 fail-closed | `AllowlistGateway` |
+| **L6 模型提供商** | Kimi / DeepSeek / 后续合格 Provider | `provider.resolve_provider` |
+| **L7 账本存储** | Task/Run/Event/Artifact/Change | Pico SQL（当前 SQLite，可演进 Postgres） |
+| **L8 计量计费** | 点池、科目、超额 | **方案层已定，工程分阶段** |
+| **L9 集成** | edu 凭证、只读适配、回写提案 | Phase 2 合同 / Phase 3 对接 |
 
 ### 2.2 核心领域对象
 
@@ -109,8 +118,9 @@ UI 发送
   → 校验 JWT / 代理密钥 → Principal
   → 配额预检（科目 bucket）
   → 创建 Task + Run
-  → run_agent_loop（模型 + 白名单工具）
-  → 写 Event；汇总 token → 扣点
+  → Harness Adapter.start（当前落到 run_agent_loop）
+  → Harness 仅通过 Pico 白名单网关调用工具
+  → 规范化并写 Event；Pico 校验终态/Artifact；汇总 token → 扣点
   → 返回流式/完整助手消息
 ```
 
@@ -219,20 +229,31 @@ UI 发送
 
 ---
 
-## 6. Agent 与模型
+## 6. Harness、Agent 与模型
 
 ```text
-底层 Agent ≠ 另一颗更强模型
-          = 钉版本能力边界 + Kimi HTTPS API + 服务端多步工具环 + 白名单
+Pico 产品核心 ≠ 某个具体 Agent Runtime 或模型
+              = Pico 控制面 + 唯一账本 + 稳定 Harness Contract
+
+Harness Runtime
+              = 可替换模型循环 + 上下文执行 + 工具协调
+
+Model Provider
+              = 可替换 HTTPS 推理能力
 ```
 
 | 项 | 现状/目标 |
 |----|-----------|
-| 钉版本 | `kimi-agent-sdk 0.0.5` / `kimi-cli 1.12.0`（pin） |
-| 默认模型 | `moonshot-v1-8k`（可配置） |
+| 当前运行事实 | `pico_orchestrator.run_agent_loop` 通过 `AsyncOpenAI` 调 OpenAI-compatible API |
+| Kimi 依赖 | `kimi-agent-sdk 0.0.5` / `kimi-cli 1.12.0` 钉版本；完整 Kimi Runtime 当前不在执行热路径 |
+| 默认模型 | Kimi（当前默认配置见代码）；DeepSeek 为备用 Provider |
 | 工具示例 | `pico_echo` / `fake_edu_list_classes` / `pico_propose_change` |
 | UI 接入 | OpenAI 兼容 `/v1/chat/completions` |
-| 质量边界 | 同 API 则推理≈Kimi；通用 Agent 能力弱于官方全家桶；学校可控与账本更强 |
+| Pico 边界 | Harness 不得直接访问 Pico DB、扩大 Principal、绕过工具网关或维护第二账本 |
+| 替换原则 | 第三方 Harness 尽量不改源码；固定版本，经 Adapter + 契约测试接入 |
+| 选择状态 | 未预选 DeepSeek Harness/Codex 等终局 Runtime；发布、许可和生产语义验证后再选 |
+
+绑定决策：[`docs/ADR-HARNESS-BOUNDARY.md`](./ADR-HARNESS-BOUNDARY.md)。
 
 ---
 
@@ -352,10 +373,12 @@ SchoolPlan
 
 | 组件 | 选型 |
 |------|------|
-| 控制面 | Python 3.11+ / FastAPI |
-| 编排 | 服务端多步 tool loop + pin Kimi 相关版本 |
+| 控制面 | Python ≥3.12 / FastAPI（以 `pyproject.toml` 为准） |
+| Harness 边界 | Pico Contract + Adapter；控制面只依赖标准接口 |
+| 当前执行 | Pico 服务端薄 tool loop；保留为首个 Harness 实现 |
 | UI | LibreChat（MIT 产品壳）+ 中文 |
 | 协议 | REST + SSE；OpenAI 兼容聊天 |
+| 模型 | 可替换 HTTPS Provider；Kimi 优先、DeepSeek 备用 |
 | DB | SQLite（开发）→ Postgres（生产建议） |
 | 部署 | Docker/单二进制镜像；Standard/Dedicated 同镜像 |
 
@@ -365,8 +388,8 @@ SchoolPlan
 
 | 阶段 | 技术 | 定价相关 |
 |------|------|----------|
-| **P1 已做** | 独立 Pico、账本、工具环、LibreChat、兼容 API | 不阻塞；内部可记 usage |
-| **P1.5** | 校级钱包表、bucket、预检扣减、管理员用量视图 | 基础包+点可试运营 |
+| **P1 已做** | 独立 Pico、唯一账本、薄工具环、LibreChat、兼容 API | 不阻塞；内部可记 usage |
+| **P1.5** | 日用可靠性 + 最小 Harness Contract/契约测试；校级钱包和用量视图 | 基础包+点可试运营 |
 | **P2** | edu 合同字段、context_refs | 合同与科目对齐 |
 | **P3** | 真只读/确认回写 | 阅卷链路联调 |
 | **P4** | Dedicated IaC、校存储网关、个人充值支付 | 模块/阅卷/个人 SKU 上线 |
@@ -382,6 +405,9 @@ SchoolPlan
 | 双 AI 账本 | 对账与责任混乱 |
 | 无包量无限模型 | 成本不可控 |
 | 默认开 Shell | 安全与验收风险 |
+| Harness 直接接管租户/账本 | 形成厂商锁定、双真源和不可审计终态 |
+| Fork 后深改第三方 Harness | 升级困难；替换成本重新回到 Pico |
+| 未发布 Harness 提前绑定 | 无法验证许可、协议、取消/恢复和生产稳定性 |
 
 ---
 

@@ -3,7 +3,7 @@
 ```
 DOC: docs/CORRECTED-GOALS.md
 STATUS: OWNER-ALIGNED SNAPSHOT
-DATE: 2026-07-29
+DATE: 2026-08-01
 REPO: juanwan99/pico ONLY
 PLAN: docs/MVP-3DAY.md v1.2 FIXED（无授权不升 v1.3）
 ```
@@ -21,12 +21,14 @@ PLAN: docs/MVP-3DAY.md v1.2 FIXED（无授权不升 v1.3）
 | **类 Claude / Codex / Grok / WorkBuddy 品类** 的 AI 工作空间 | 自研教务 SaaS、考试系统 |
 | **对话 + Agent 编排 + 产物 + AI 账本** | 重做学生/考试/成绩业务 |
 | **模型 = HTTPS API**（Kimi 优先，可 DeepSeek） | 默认自托管 GPU 大模型 |
-| **编排 = 开源 Kimi Agent 薄改**（钉版本） | 自研 Agent OS |
+| **Pico 控制面 + 可替换 Harness 接口** | 把产品状态绑定到某个 Agent Runtime |
+| 当前执行 = Pico 薄工具循环；成熟 Harness 后续经 Adapter 接入 | Fork 后深改第三方 Harness / 自研 Agent OS |
 | **唯一 AI 事实账本**（Task/Run/Event/Artifact…） | 与 edu 双 AI 真源并行 |
 | **Phase 1 独立交付** | 日常改 edu-cloud / 以联调 edu 为 Phase1 门禁 |
 
 **一句话：**  
-Pico = 学校场景可用的 **AI 工作台产品**（壳 + 服务端 Agent + 模型 API + 租户账本），业务数据仍归 edu；对接后置。
+Pico = 学校场景可用的 **AI 工作台产品**（LibreChat 壳 + Pico 控制面/唯一账本 +
+可替换 Harness + 模型 Provider），业务数据仍归 edu；对接后置。
 
 ---
 
@@ -49,7 +51,7 @@ Pico = 学校场景可用的 **AI 工作台产品**（壳 + 服务端 Agent + �
 | ID | 含义（摘要） |
 |----|----------------|
 | S1 | 真模型 API 端到端 + 流式 UI；密钥仅服务端 |
-| S2 | 钉版本 Kimi Agent 服务端多步工具环 |
+| S2 | 服务端多步工具环；当前薄 loop 调 Kimi HTTPS，Kimi SDK/CLI 依赖保持钉版本 |
 | S3 | Task/Run/有序 Event 持久化 = 唯一 AI 账本 |
 | S4 | 短时凭证（school_id/membership_id 同形）；Phase1 测试签发 |
 | S5 | **产品级 UI 真接通**（见下节壳） |
@@ -75,7 +77,7 @@ Pico = 学校场景可用的 **AI 工作台产品**（壳 + 服务端 Agent + �
 - 模式 + 能力 chip + 大输入  
 - 流式对话 + 工具步骤 + 产物  
 
-### 4.2 当前默认壳（2026-07-29）
+### 4.2 当前默认壳（2026-08-01）
 
 | 状态 | 路径 | 说明 |
 |------|------|------|
@@ -86,15 +88,25 @@ Pico = 学校场景可用的 **AI 工作台产品**（壳 + 服务端 Agent + �
 | **禁止** | LobeChat 商用分发风险壳 | 许可不适合直接魔改售卖 |
 | **禁止** | 逆向 WorkBuddy | 只可参考公开 IA / 开源 clean-room |
 
-**壳与核的边界：**
+**壳、控制面、Harness 与模型的边界：**
 
 ```text
-LibreChat（或后续更贴 WorkBuddy 的 MIT 壳）
-  = 产品 UI / 会话呈现
-Pico API + orchestrator + DB
-  = 唯一 AI 账本 / 租户 / 工具环 / 模型密钥
-禁止：LibreChat Mongo 会话变成「第二套 AI 业务真源」长期双账本
+LibreChat
+  = 长期产品壳 / 会话呈现（技术选型基本冻结，体验渐进优化）
+Pico API + DB
+  = 租户 / 项目 / 自动化 / 唯一 Task-Run-Event-Artifact 账本
+Pico Harness Contract + Adapter
+  = 隔离产品领域与具体执行引擎
+Harness Runtime
+  = 可替换模型循环 / 规划 / 工具协调；不得成为状态真源
+Model Provider
+  = Kimi 优先、DeepSeek 备用，可经能力验证扩展
+
+禁止：LibreChat Mongo 或 Harness Thread/Session 变成第二套 AI 业务真源
 ```
+
+详细边界：[`docs/ARCHITECTURE.md`](./ARCHITECTURE.md) ·
+[`docs/ADR-HARNESS-BOUNDARY.md`](./ADR-HARNESS-BOUNDARY.md)。
 
 ### 4.3 预览（Grok 沙箱）正确记忆
 
@@ -133,10 +145,12 @@ Pico API + orchestrator + DB
 
 ## 5. 技术冻结（仍有效）
 
-- Python **3.11+**（kimi-agent-sdk 实际要求 **≥3.12**）
+- Python **≥3.12**（以 `pyproject.toml` 为当前工程事实；MVP 早期 3.11+ 描述已过时）
 - 前端壳：当前 **LibreChat (React)**；历史文档中的 Vue3 叙述以壳选型更新为准（不强制改回 Vue）
-- **钉死** Kimi Agent 版本（见 `agent_pins` / requirements）
-- Kimi API 优先
+- 当前薄执行循环继续可用；不把它扩张成自研 Agent OS
+- Kimi Agent SDK/CLI 版本继续钉住用于现有 AgentSpec/安全依赖；不得误述为完整运行热路径
+- Harness 通过 Pico 标准 Adapter 可替换；尚未选择终局第三方 Harness
+- 模型 Provider 可替换：Kimi API 优先，DeepSeek 备用；新增 Provider 须做能力验证
 
 ---
 
@@ -162,6 +176,9 @@ Pico API + orchestrator + DB
 | 16 | **本机 8080 200 = Live Preview 好了** | 必须 Playwright 8080 **且** 理解 6014 门禁；用户侧看面板 |
 | 17 | **白屏就换 NextChat/自研壳** | 6014 不转发 8080 时 **任何前端都白** |
 | 18 | **设 PROXY=1 修代理** | **禁止**；崩 LibreChat undici |
+| 19 | 安装了 Kimi Agent SDK = 当前完整运行时由它承担 | 当前热路径是 Pico 薄 tool-calling loop；SDK/CLI 主要承担钉版本和 AgentSpec 安全依赖 |
+| 20 | 换成熟 Harness 就可把 Pico 账本/租户一起交出去 | Harness 仅为可替换执行引擎；Pico 永久掌握控制面和唯一账本 |
+| 21 | Codex/未来 DeepSeek Harness 可直接替换 LibreChat | 完整产品壳并非可直接自托管替换物；只经标准 Adapter 评估执行能力 |
 
 ---
 
@@ -182,12 +199,12 @@ Pico API + orchestrator + DB
 
 ## 8. 近期正确优先级（不升计划版本前提下）
 
-1. **预览稳定出 LibreChat 登录/聊天**（用户可见，非仅本机 200）  
-2. 中文 + 去 LibreChat 品牌 → Pico  
-3. 真流式 + 失败可读（Pico API）  
-4. 首页/IA 向 WorkBuddy 任务台收敛（LibreChat 主题魔改，不从零）  
-5. 账本/membership/安全项按既有 L1b 清单巩固  
-6. edu 真联调 / 定价 FIXED → **后置**，非本窗主线  
+1. **P0 日用可靠性**：恢复/重试、错误可理解、会话历史与账本一致、自动化状态诚实。
+2. **P0 成果可靠**：产物打开/下载/归属可靠，失败不产生伪成功成果。
+3. **P1 工作台闭环**：项目—会话—Task/Run—输入资产—产出版本，状态逐步服务端化。
+4. **P1 Harness 边界**：从当前调用提取最小标准接口和契约测试，不先造万能框架。
+5. **P1 壳体验**：继续在 LibreChat 上优化任务/结果 IA，不换壳、不从零重写。
+6. edu 真联调、商业定价 FIXED 和规模化基础设施 → 按授权/阶段后置。
 
 ---
 
@@ -197,11 +214,11 @@ Pico API + orchestrator + DB
 1. 只写 juanwan99/pico；永不写 edu-cloud。
 2. 产品 = AI 工作台，不是网盘/教务。
 3. 唯一 AI 账本在 Pico；禁止双跑。
-4. 壳 = apps/librechat（MIT 魔改）；禁 apps/web / 禁拆 WorkBuddy。
-5. 核 = Pico API + Kimi Agent 钉版本 + 模型 HTTPS API。
+4. 壳 = apps/librechat（MIT 魔改，技术选型基本冻结）；禁 apps/web / 禁拆 WorkBuddy。
+5. 核 = Pico 控制面 + 唯一账本；Harness 与模型都必须可替换。
 6. 公网预览只应是 UI :8080；API 仅 loopback；pin target 8080。
 7. 白屏先查 6014 空 body vs 8080 Welcome back；勿误判换壳。
-8. S1–S8 仍是 Phase1 标尺；商业定价未 FIXED。
+8. 当前执行是 Pico 薄循环；不冒充完整 Kimi Agent Runtime，不绑定未发布 Harness。
 9. 流程：CANDIDATE+SHA → CI → 审 → 值守合；不自 PASS。
 10. 无授权不改 MVP v1.2 计划正文。
 ```
