@@ -228,15 +228,34 @@ async def freeze_meta(settings: Settings = Depends(get_settings)) -> dict:
 
 @app.get("/v1/meta/agent-safety")
 async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
+    """Prove dangerous tools are off for the default agent file AND the Kimi runtime file.
+
+    Canary/KA path loads ``pico-kimi-runtime.yaml``; checking only ``pico.yaml`` is misleading.
+    """
     from pico_orchestrator.safety import assert_dangerous_tools_off
+
+    if settings.pico_dangerous_tools_enabled:
+        raise HTTPException(status_code=500, detail="PICO_DANGEROUS_TOOLS_ENABLED must be false")
 
     agent_path = Path(settings.pico_agent_file)
     if not agent_path.is_absolute():
         agent_path = _ROOT / agent_path
-    if settings.pico_dangerous_tools_enabled:
-        raise HTTPException(status_code=500, detail="PICO_DANGEROUS_TOOLS_ENABLED must be false")
+
+    kimi_path = (
+        Path(__file__).resolve().parents[2]
+        / "orchestrator"
+        / "agents"
+        / "pico-kimi-runtime.yaml"
+    )
+    # main.py is services/api/app/main.py → parents[2] = services
+    paths: list[Path] = [agent_path]
+    if kimi_path.is_file() and kimi_path.resolve() != agent_path.resolve():
+        paths.append(kimi_path)
+
+    proofs: list[dict] = []
     try:
-        proof = assert_dangerous_tools_off(agent_path)
+        for path in paths:
+            proofs.append(assert_dangerous_tools_off(path))
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -246,7 +265,13 @@ async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
                 "detail": str(e),
             },
         ) from e
-    return {"ok": True, "proof": proof}
+    return {
+        "ok": True,
+        # backward compatible single proof = last checked (Kimi file when present)
+        "proof": proofs[-1],
+        "proofs": proofs,
+        "agent_files_checked": [str(p) for p in paths],
+    }
 
 
 @app.post("/v1/dev/token", response_model=TokenResponse)

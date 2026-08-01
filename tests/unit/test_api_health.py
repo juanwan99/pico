@@ -70,3 +70,16 @@ def test_agent_safety_endpoint() -> None:
     body = r.json()
     assert body["ok"] is True
     assert body["proof"]["dangerous_off"] is True
+
+
+def test_agent_safety_checks_kimi_runtime_yaml() -> None:
+    client = TestClient(app)
+    r = client.get("/v1/meta/agent-safety")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    checked = " ".join(body.get("agent_files_checked") or [])
+    assert "pico-kimi-runtime.yaml" in checked
+    assert body["proof"]["dangerous_off"] is True
+    assert "pico-kimi-runtime.yaml" in body["proof"]["agent_file"]
+
