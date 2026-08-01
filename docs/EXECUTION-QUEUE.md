@@ -78,6 +78,40 @@ CONTEXT：默认不清理会话。仅当条目或总管写明 context_reset: tru
 
 > **MANUAL_DISPATCH 2026-07-31**：业主要求手动派发。E2 必须认领 EQ-013+014；E3 必须部署 tip `eaf9875`+；E1 待命或协助 E2 API。context_reset: false。
 
+### EQ-031 · 部署最新可靠性与清理主线
+
+```yaml
+id: EQ-031
+status: OPEN
+priority: P0
+context_reset: false
+assignee: E3
+task_type: DEPLOY
+target_pr: 122
+target_floor_sha: af31ccce6c5a33b915a8e847dcb10861d4071f26
+target_sha_rule: "认领时 origin/main 的完整 SHA；必须包含 target_floor_sha，且部署时仍为 origin/main tip"
+title: 部署最新 main（含 #119/#120/#122）并回写诚实生产证据
+files_lease:
+  - docs/EXECUTION-QUEUE.md  # 仅用于请求总管收口；部署时不改业务代码
+preflight:
+  - production /opt/pico worktree clean; dirty means BLOCKED, never stash/reset
+  - target exact-SHA main CI green
+  - bootstrap scripts/prod-update.sh from the target Git object; do not trust an older checked-out script
+deliver:
+  - "## CLAIM E3 on PR #122 with target full SHA"
+  - production HEAD == health.git_sha == claimed origin/main tip
+  - local and public /login HTTP 200 with product HTML
+  - 18765/27017/8080 not bound to 0.0.0.0 or wildcard
+  - production Bearer pico-dev returns 401
+  - "## DEPLOYED or ## BLOCKED on PR #122; no product PASS claim"
+avoid:
+  - PROXY=1
+  - printing or changing secrets
+  - edu-cloud or any other repository
+  - repeating VQ-008 cancellation validation without regression evidence
+result_sink: https://github.com/juanwan99/pico/pull/122
+```
+
 
 ### EQ-001 · N4 Run 过程时间线
 
