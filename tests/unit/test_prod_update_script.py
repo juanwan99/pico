@@ -44,14 +44,29 @@ def _fake_runtime(
     *,
     login_code: str = "200",
     login_network_fail: bool = False,
+    login_failures_before_success: int = 0,
 ) -> Path:
     """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w)."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "docker").write_text("#!/usr/bin/env bash\nexit 0\n")
     (bin_dir / "ss").write_text("#!/usr/bin/env bash\nexit 0\n")
+    (bin_dir / "sleep").write_text("#!/usr/bin/env bash\nexit 0\n")
     if login_network_fail:
         login_body = "  */login) exit 7 ;;\n"
+    elif login_failures_before_success:
+        login_body = (
+            "  */login)\n"
+            "    state=\"$(dirname \"$0\")/login-attempts\"\n"
+            "    attempts=0\n"
+            "    if [ -f \"$state\" ]; then read -r attempts <\"$state\"; fi\n"
+            "    attempts=$((attempts + 1))\n"
+            "    printf '%s' \"$attempts\" >\"$state\"\n"
+            f"    if [ \"$attempts\" -le {login_failures_before_success} ]; then "
+            "printf '000'; exit 7; fi\n"
+            f"    printf '%s' '{login_code}'\n"
+            "    ;;\n"
+        )
     else:
         # Real prod-update uses: curl -o /dev/null -w "%{http_code}" …/login
         login_body = f"  */login) printf '%s' '{login_code}' ;;\n"
@@ -104,6 +119,16 @@ def test_prod_update_deploys_exact_clean_main_sha(tmp_path: Path) -> None:
     assert "[pico] done" in result.stdout
 
 
+def test_prod_update_retries_transient_login_network_failure(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, login_failures_before_success=2)
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert "UI not ready attempt=1/30 status=000" in result.stderr
+    assert "UI ready attempt=3/30" in result.stdout
+    assert "ui_login=200" in result.stdout
+
+
 def test_prod_update_refuses_dirty_worktree(tmp_path: Path) -> None:
     production, sha = _production_checkout(tmp_path)
     (production / "local-note.txt").write_text("do not hide me\n")
@@ -128,8 +153,8 @@ def test_prod_update_refuses_login_http_404(tmp_path: Path) -> None:
     bin_dir = _fake_runtime(tmp_path, login_code="404")
     result = _run_prod_update(production, sha, bin_dir)
     assert result.returncode == 7
-    assert "UI /login HTTP status not 200" in result.stderr
-    assert "got=404" in result.stderr
+    assert "UI /login did not become ready after 30 attempts" in result.stderr
+    assert "last_status=404" in result.stderr
     assert "[pico] done" not in result.stdout
 
 
@@ -138,8 +163,8 @@ def test_prod_update_refuses_login_http_502(tmp_path: Path) -> None:
     bin_dir = _fake_runtime(tmp_path, login_code="502")
     result = _run_prod_update(production, sha, bin_dir)
     assert result.returncode == 7
-    assert "UI /login HTTP status not 200" in result.stderr
-    assert "got=502" in result.stderr
+    assert "UI /login did not become ready after 30 attempts" in result.stderr
+    assert "last_status=502" in result.stderr
     assert "[pico] done" not in result.stdout
 
 
@@ -147,5 +172,7 @@ def test_prod_update_refuses_login_network_failure(tmp_path: Path) -> None:
     production, sha = _production_checkout(tmp_path)
     bin_dir = _fake_runtime(tmp_path, login_network_fail=True)
     result = _run_prod_update(production, sha, bin_dir)
-    assert result.returncode != 0
+    assert result.returncode == 7
+    assert "UI /login did not become ready after 30 attempts" in result.stderr
+    assert "last_status=000" in result.stderr
     assert "[pico] done" not in result.stdout
