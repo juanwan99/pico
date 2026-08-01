@@ -30,7 +30,7 @@ async def _emit_to(events: list[tuple[str, dict[str, Any]]], kind: str, payload:
 
 
 @pytest.mark.asyncio
-async def test_runtime_flag_defaults_to_old_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_runtime_canary_gate_is_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
     async def old_loop(**_kwargs: Any) -> RunResult:
@@ -44,19 +44,49 @@ async def test_runtime_flag_defaults_to_old_loop(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_loop)
     monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
 
-    default = await run_agent_runtime(prompt="hello")
-    enabled = await run_agent_runtime(use_kimi_agent=True, prompt="hello")
+    principal = Principal()
+    gate_off = await run_agent_runtime(
+        use_kimi_agent=False,
+        kimi_agent_canary_membership_ids={principal.membership_id},
+        principal=principal,
+        prompt="hello",
+    )
+    not_allowlisted = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_membership_ids={"member-b"},
+        principal=principal,
+        prompt="hello",
+    )
+    allowlisted = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_membership_ids={principal.membership_id},
+        principal=principal,
+        prompt="hello",
+    )
 
-    assert (default.final_text, enabled.final_text) == ("old", "kimi")
-    assert calls == ["old", "kimi"]
+    assert (gate_off.final_text, not_allowlisted.final_text, allowlisted.final_text) == (
+        "old",
+        "old",
+        "kimi",
+    )
+    assert calls == ["old", "old", "kimi"]
 
 
 def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_KIMI_AGENT_RUNTIME", raising=False)
-    assert Settings(_env_file=None).pico_kimi_agent_runtime is False
+    monkeypatch.delenv("PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS", raising=False)
+    defaults = Settings(_env_file=None)
+    assert defaults.pico_kimi_agent_runtime is False
+    assert defaults.kimi_agent_canary_membership_id_set == frozenset()
 
     monkeypatch.setenv("PICO_KIMI_AGENT_RUNTIME", "1")
-    assert Settings(_env_file=None).pico_kimi_agent_runtime is True
+    monkeypatch.setenv(
+        "PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS",
+        " member-a,member-b,member-a ",
+    )
+    enabled = Settings(_env_file=None)
+    assert enabled.pico_kimi_agent_runtime is True
+    assert enabled.kimi_agent_canary_membership_id_set == {"member-a", "member-b"}
 
 
 @pytest.mark.asyncio

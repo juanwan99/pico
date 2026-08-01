@@ -16,7 +16,7 @@ SCOPE: 差距与切片状态；不切换生产默认运行时；不预埋其它 
 |------|------|
 | 目标运行时 | **开源 Kimi Agent**（唯一路径） |
 | 今日**默认**执行核 | `run_agent_runtime(use_kimi_agent=False)` → **`run_agent_loop`**（AsyncOpenAI 工具环） |
-| main 上实验路径 | KA-2：`PICO_KIMI_AGENT_RUNTIME=1` 时 → `run_kimi_agent`（Session + KA-1 adapter）；**默认 0** |
+| main 上实验路径 | KA-3A：总闸为 `1` 且 membership 命中 canary allowlist 时 → `run_kimi_agent`；**总闸默认 0、allowlist 默认空** |
 | pin 包 | `kimi-agent-sdk==0.0.5`、`kimi-cli==1.12.0` |
 | pin 实际用途（默认路径） | 版本检查 + `kimi_cli.agentspec.load_agent_spec` 读 yaml 做危险工具关断证明 |
 | 是否**默认**主路径调用 SDK 跑多步 | **否** |
@@ -47,7 +47,7 @@ LibreChat / 客户端
            │         → AsyncOpenAI(base_url=Kimi…)
            │         → AllowlistGateway 工具
            │
-           └─ true（仅显式 PICO_KIMI_AGENT_RUNTIME=1）
+           └─ true（总闸为 1 且 membership 命中 canary allowlist）
                 → run_kimi_agent()     ← 实验路径（§9）
                      → Session.prompt(merge_wire_messages=True)
                      → KimiWireEventAdapter → 账本 emit
@@ -298,23 +298,26 @@ tool part / 非法参数 / 孤立 result / 未完成 call 的 fail-closed 行为
 
 ### 9.1 开关与路由
 
-唯一开关为：
+两级门禁为：
 
 ```dotenv
 PICO_KIMI_AGENT_RUNTIME=0
+PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS=
 ```
 
-`Settings.pico_kimi_agent_runtime` 默认 `False`；`.env.example` 与
-`.env.production.example` 都显式为 `0`。`run_service`、OpenAI-compatible 非流式
+`Settings.pico_kimi_agent_runtime` 默认 `False`，membership allowlist 默认空；因此即使
+误把总闸设为 `1`，空 allowlist 也不会放量。未获业主授权不得在生产打开总闸。
+`.env.example` 与 `.env.production.example` 都显式保持安全默认。`run_service`、OpenAI-compatible 非流式
 `pico-agent`、流式 `pico-agent` 三处统一调用 `run_agent_runtime(...)`：
 
 | flag | 执行路径 |
 |---|---|
-| 未设置 / `0` / false | 原 `run_agent_loop(...)`，参数与事件处理不变 |
-| `1` / true | `run_kimi_agent(...)` → `Session.prompt(..., merge_wire_messages=True)` → `KimiWireEventAdapter` → 原 `emit/append_event` |
+| 总闸未设置 / `0` / false | 全部主体走原 `run_agent_loop(...)`，参数与事件处理不变 |
+| 总闸 `1` + membership 未命中（含空 allowlist） | 该主体仍走 `run_agent_loop(...)` |
+| 总闸 `1` + membership 命中 | `run_kimi_agent(...)` → `Session.prompt(..., merge_wire_messages=True)` → `KimiWireEventAdapter` → 原 `emit/append_event` |
 
-Direct-chat 模型仍走 `stream_chat`，不受此 flag 影响。selector 在 flag 关闭时不导入或创建
-Kimi Session；KA-2 没有 fallback/dual-run：选中的路径失败就按该路径失败，不暗中重跑另一核。
+Direct-chat 模型仍走 `stream_chat`，不受此门禁影响。selector 对未命中主体不导入或创建
+Kimi Session；KA-3A 没有 fallback/dual-run：选中的路径失败就按该路径失败，不暗中重跑另一核。
 
 ```
 deployment: NONE

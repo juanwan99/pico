@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     pico_run_max_retries: int = 2
     # Experimental KA-2 path. False keeps every production call on run_agent_loop.
     pico_kimi_agent_runtime: bool = False
+    # Safe canary default: an empty membership allowlist routes nobody to KA-2.
+    pico_kimi_agent_canary_membership_ids: str = ""
     pico_chat_rpm: int = 30
     pico_chat_max_concurrent: int = 2
     pico_allowed_models: str = ""
@@ -95,6 +97,14 @@ class Settings(BaseSettings):
     @property
     def allowed_model_list(self) -> list[str]:
         return [model.strip() for model in self.pico_allowed_models.split(",") if model.strip()]
+
+    @property
+    def kimi_agent_canary_membership_id_set(self) -> frozenset[str]:
+        return frozenset(
+            membership_id.strip()
+            for membership_id in self.pico_kimi_agent_canary_membership_ids.split(",")
+            if membership_id.strip()
+        )
 
     def validate_production(self) -> None:
         """Fail closed before a production process starts serving traffic."""
