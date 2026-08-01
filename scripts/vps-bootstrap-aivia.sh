@@ -88,7 +88,7 @@ keys = {
   "MONGO_URI": "mongodb://mongo:27017/LibreChat",
   "OPENAI_REVERSE_PROXY": "http://pico-api:18765/v1",
   "ENDPOINTS": "openAI",
-  "OPENAI_MODELS": "moonshot-v1-8k,pico-agent",
+  "OPENAI_MODELS": "kimi-k2.6,pico-agent",
   "APP_TITLE": "Pico",
   "ALLOW_REGISTRATION": "false",
   "ALLOW_UNVERIFIED_EMAIL_LOGIN": "false",
