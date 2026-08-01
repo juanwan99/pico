@@ -95,3 +95,14 @@ Do **not** use `docs/archive/**`, new HANDOFF markdown, or open PR **#121 harnes
 - Tenant fail-closed; **Pico owns the unique AI ledger**.
 - Pricing docs may stay DRAFT; do not freeze commercial FIXED unless owner orders.
 - Prefer smallest correct fix; delete dual-run croft rather than stack adapters.
+
+## Speed vs safety (owner 2026-08-01)
+
+**Default rhythm:** [docs/FAST-PATH.md](docs/FAST-PATH.md) only.
+
+**KEEP:** secrets out of git; KA flag default OFF + empty canary; allowlist tools; exact-SHA deploy; CI green; no unauthorized prod KA cutover; no fake "integrated".
+
+**CUT:** multi-card ceremonies, auto E1 queue, per-gap micro-issues, long controller reviews on green diffs, wrong-window smoke.
+
+PRs stay (one writer / one branch / CI). Do **not** split one theme into many waiting rounds.
+
