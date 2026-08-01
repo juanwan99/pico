@@ -4,7 +4,34 @@
 DOC: docs/DEPLOY-TWO-HOST.md
 STATUS: BINDING 运维约定
 DATE: 2026-07-30
+UPDATED: 2026-08-01
 ```
+
+## 0. 速度 · 通道前提（VELO V5）
+
+`pico-prod` **不是**公网 DNS 名，**不是**会自动解析的主机名。  
+它只是 **dev-ecs 上 `~/.ssh/config` 的 Host 别名**。未配置时：
+
+```text
+ssh: Could not resolve hostname pico-prod  →  部署 BLOCKED  →  合 main 对用户零价值
+```
+
+**一次性必须完成（业主/运维）：**
+
+1. 在 **能 SSH 到生产机的机器**（文档称 dev-ecs）写入下面 `Host pico-prod`（`HostName` 用生产机 IP；公网 A 记录文档值为 `139.196.147.40`，若已变以实际为准）。  
+2. `ssh -o BatchMode=yes pico-prod 'hostname; test -d /opt/pico && echo HAS_PICO'` 成功。  
+3. 再允许任何「部署窗」任务；失败只写 `## BLOCKED`，禁止假 DEPLOYED。
+
+**无跳板时的等价路径（不强制别名）：**
+
+```bash
+# 若你已在生产机本机 shell：
+cd /opt/pico
+PICO_DEPLOY_SHA=<40-char-main-tip> bash scripts/prod-update.sh
+curl -sf http://127.0.0.1:18765/health
+```
+
+总管/执行窗 **不得**把「解析不了 pico-prod」写成产品代码问题。
 
 ## 1. 角色
 
@@ -36,7 +63,8 @@ Codex @ dev-ecs  --ssh pico-prod-->  /opt/pico pull + rebuild + DEPLOYED
 
 ```sshconfig
 Host pico-prod
-  HostName REPLACE_PICO_PROD_IP
+  # 公网文档 IP（DEPLOY-PUBLIC）；变更时只改这一行，勿幻想 DNS 里有 pico-prod
+  HostName 139.196.147.40
   User REPLACE_DEPLOY_USER
   IdentityFile ~/.ssh/pico_prod_deploy
   IdentitiesOnly yes
@@ -45,7 +73,9 @@ Host pico-prod
   ServerAliveCountMax 3
 ```
 
-（若需再跳：加 `ProxyJump other-host`。）
+（若需再跳：加 `ProxyJump other-host`。User/IdentityFile 必须换成真实部署账号与密钥。）
+
+**禁止**在未配置 IdentityFile 时指望 `ssh pico-prod` 成功。
 
 ### 3.3 自检（在 dev-ecs）
 
