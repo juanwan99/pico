@@ -22,6 +22,7 @@ from kimi_agent_sdk import (
     RunCancelled,
     Session,
     StatusUpdate,
+    StepBegin,
     TextPart,
     TurnEnd,
 )
@@ -35,6 +36,13 @@ from pico_orchestrator.tools_builtin import build_default_gateway
 
 _AGENT_FILE = Path(__file__).resolve().parents[1] / "agents" / "pico-kimi-runtime.yaml"
 _CANCEL_POLL_SECONDS = 0.05
+_USAGE_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "input_cache_read",
+    "input_cache_creation",
+)
 
 
 async def run_kimi_agent(
@@ -86,12 +94,15 @@ async def run_kimi_agent(
     final_parts: list[str] = []
     token_usage: dict[str, int] | None = None
     terminal_status: str | None = None
+    current_step: int | None = None
+    usage_by_step: dict[int | str, dict[str, int]] = {}
+    unscoped_usage_updates = 0
 
     with TemporaryDirectory(prefix="pico-kimi-") as temp_dir:
         work_dir = Path(temp_dir)
         skills_dir = work_dir / "skills"
         skills_dir.mkdir()
-        with bind_gateway_tools(gateway, principal) as tool_context:
+        with bind_gateway_tools(gateway, principal, emit=emit) as tool_context:
             stop_watcher = asyncio.Event()
             timed_out = asyncio.Event()
             token_cap_exceeded = asyncio.Event()
@@ -139,23 +150,58 @@ async def run_kimi_agent(
                             if contract_failure:
                                 session.cancel()
                                 continue
+                            if token_cap_exceeded.is_set():
+                                session.cancel()
+                                continue
+                            if isinstance(message, StepBegin):
+                                current_step = message.n
                             try:
                                 for event in adapter.feed(message):
-                                    await emit(event.type, event.payload)
+                                    payload = event.payload
+                                    if event.type == "run.usage":
+                                        step_total = payload.get("total_tokens")
+                                        if isinstance(step_total, int):
+                                            if current_step is None:
+                                                unscoped_usage_updates += 1
+                                                usage_key: int | str = (
+                                                    f"update:{unscoped_usage_updates}"
+                                                )
+                                            else:
+                                                usage_key = current_step
+                                            usage_by_step[usage_key] = {
+                                                field: int(payload.get(field) or 0)
+                                                for field in _USAGE_FIELDS
+                                            }
+                                            cumulative = {
+                                                field: sum(
+                                                    usage[field]
+                                                    for usage in usage_by_step.values()
+                                                )
+                                                for field in _USAGE_FIELDS
+                                            }
+                                            payload = {
+                                                **payload,
+                                                **{
+                                                    f"cumulative_{field}": value
+                                                    for field, value in cumulative.items()
+                                                },
+                                            }
+                                            token_usage = {
+                                                "total_tokens": cumulative["total_tokens"]
+                                            }
+                                    await emit(event.type, payload)
                                     if event.type == "run.status":
-                                        terminal_status = str(event.payload.get("status") or "")
-                                    elif event.type == "run.usage":
-                                        total = event.payload.get("total_tokens")
-                                        if isinstance(total, int):
-                                            token_usage = {"total_tokens": total}
+                                        terminal_status = str(payload.get("status") or "")
                             except KimiEventContractError as exc:
                                 contract_failure.append(str(exc))
                                 session.cancel()
                                 continue
                             if isinstance(message, TextPart):
                                 final_parts.append(message.text)
-                            elif isinstance(message, StatusUpdate) and _over_token_cap(
-                                message, caps
+                            elif (
+                                isinstance(message, StatusUpdate)
+                                and token_usage is not None
+                                and token_usage["total_tokens"] > caps.max_tokens
                             ):
                                 token_cap_exceeded.set()
                                 session.cancel()
@@ -309,14 +355,6 @@ async def _watch_cancel(
             )
         except TimeoutError:
             pass
-
-
-def _over_token_cap(update: StatusUpdate, caps: RunCaps) -> bool:
-    usage = update.token_usage
-    if usage is None:
-        return False
-    total = usage.input_other + usage.input_cache_read + usage.input_cache_creation + usage.output
-    return total > caps.max_tokens
 
 
 def _user_input(
