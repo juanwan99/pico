@@ -23,8 +23,48 @@ if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
   exit 2
 fi
 
+print_main_refspec_help() {
+  echo "[pico] configured remote.origin.fetch:" >&2
+  git config --get-all remote.origin.fetch 2>/dev/null | sed 's/^/[pico]   /' >&2 || true
+  echo "[pico] fix: git config --replace-all remote.origin.fetch '+refs/heads/main:refs/remotes/origin/main'" >&2
+  echo "[pico] then rerun: git fetch origin main" >&2
+}
+
 git fetch origin main
-MAIN_SHA="$(git rev-parse origin/main)"
+if ! FETCH_SHA="$(git rev-parse --verify 'FETCH_HEAD^{commit}' 2>/dev/null)"; then
+  echo "[pico] BLOCKED: fetch completed but FETCH_HEAD is not a commit" >&2
+  print_main_refspec_help
+  exit 3
+fi
+if ! MAIN_SHA="$(git rev-parse --verify 'refs/remotes/origin/main^{commit}' 2>/dev/null)"; then
+  echo "[pico] BLOCKED: origin/main is missing after fetching main" >&2
+  print_main_refspec_help
+  exit 3
+fi
+if [ "$MAIN_SHA" != "$FETCH_SHA" ]; then
+  echo "[pico] BLOCKED: origin/main did not advance to the fetched main tip" >&2
+  echo "[pico] FETCH_HEAD=$FETCH_SHA" >&2
+  echo "[pico] origin/main=$MAIN_SHA" >&2
+  print_main_refspec_help
+  exit 3
+fi
+
+ORIGIN_FETCH_REFSPECS="$(git config --get-all remote.origin.fetch 2>/dev/null || true)"
+FETCH_TRACKS_MAIN=0
+while IFS= read -r refspec; do
+  normalized_refspec="${refspec#+}"
+  if [ "$normalized_refspec" = 'refs/heads/main:refs/remotes/origin/main' ] || \
+    [ "$normalized_refspec" = 'refs/heads/*:refs/remotes/origin/*' ]; then
+    FETCH_TRACKS_MAIN=1
+    break
+  fi
+done <<<"$ORIGIN_FETCH_REFSPECS"
+if [ "$FETCH_TRACKS_MAIN" -ne 1 ]; then
+  echo "[pico] BLOCKED: remote.origin.fetch does not track main as origin/main" >&2
+  print_main_refspec_help
+  exit 3
+fi
+
 if [ "$DEPLOY_SHA" != "$MAIN_SHA" ]; then
   echo "[pico] BLOCKED: requested SHA is not the current origin/main tip" >&2
   echo "[pico] requested=$DEPLOY_SHA" >&2
