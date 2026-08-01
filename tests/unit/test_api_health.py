@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from app.main import app
+from app.settings import Settings, get_settings
 
 
 def test_health() -> None:
@@ -24,7 +25,29 @@ def test_health() -> None:
         "chat_max_concurrent": 2,
         "key_scope": "membership_or_ip",
     }
+    assert body["kimi_agent_runtime_enabled"] is False
+    assert body["kimi_agent_canary_configured"] is False
     assert not any("secret" in key or "token" in key for key in body)
+
+
+def test_health_exposes_only_non_sensitive_canary_state() -> None:
+    membership_id = "private-member-id"
+    settings = Settings(
+        _env_file=None,
+        pico_kimi_agent_runtime=True,
+        pico_kimi_agent_canary_membership_ids=membership_id,
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        response = TestClient(app).get("/health")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kimi_agent_runtime_enabled"] is True
+    assert body["kimi_agent_canary_configured"] is True
+    assert membership_id not in response.text
 
 
 def test_dev_token_and_me() -> None:

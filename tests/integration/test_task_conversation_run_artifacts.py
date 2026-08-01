@@ -168,7 +168,7 @@ def _stub_agent(monkeypatch, result: RunResult) -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_runtime_flag_routes_old_by_default_and_kimi_only_when_enabled(
+async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -199,7 +199,11 @@ async def test_agent_runtime_flag_routes_old_by_default_and_kimi_only_when_enabl
 
     monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_runtime)
     monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_runtime)
-    base_settings = Settings(_env_file=None, pico_kimi_agent_runtime=False)
+    base_settings = Settings(
+        _env_file=None,
+        pico_kimi_agent_runtime=False,
+        pico_kimi_agent_canary_membership_ids="member-runtime-flag",
+    )
     token = issue_test_token(
         school_id="school-a",
         membership_id="member-runtime-flag",
@@ -222,9 +226,21 @@ async def test_agent_runtime_flag_routes_old_by_default_and_kimi_only_when_enabl
         return response["choices"][0]["message"]["content"]
 
     assert await complete(base_settings, "conversation-old-runtime") == "old"
-    enabled_settings = Settings(_env_file=None, pico_kimi_agent_runtime=True)
-    assert await complete(enabled_settings, "conversation-kimi-runtime") == "kimi"
-    assert calls == ["old", "kimi"]
+    not_allowlisted_settings = Settings(
+        _env_file=None,
+        pico_kimi_agent_runtime=True,
+        pico_kimi_agent_canary_membership_ids="another-member",
+    )
+    assert await complete(
+        not_allowlisted_settings, "conversation-not-allowlisted-runtime"
+    ) == "old"
+    allowlisted_settings = Settings(
+        _env_file=None,
+        pico_kimi_agent_runtime=True,
+        pico_kimi_agent_canary_membership_ids="member-runtime-flag",
+    )
+    assert await complete(allowlisted_settings, "conversation-kimi-runtime") == "kimi"
+    assert calls == ["old", "old", "kimi"]
 
 
 def _complete(

@@ -1,6 +1,6 @@
 """Feature-flagged Kimi Agent Session runtime.
 
-This module is reachable only through ``run_agent_runtime(use_kimi_agent=True)``.
+This module is reachable only when the runtime gate is on and the principal is allowlisted.
 The production default remains the transitional ``run_agent_loop``.
 """
 
