@@ -14,7 +14,7 @@ STATUS: LIVING
 | D5 | 限流仅单机 IP 内存 | P0 有意简化 | 多实例前必换 |
 | D6 | usage 为估计值 | P0 | 后置接上游 |
 | D7 | LibreChat CI 非完整 npm | 体检 P1 | 后置 |
-| D8 | Kimi CLI 依赖链 vs 自研循环叙事 | 体检 P1 | 后置 |
+| D8 | **编排名实分裂**：目标开源 Kimi Agent；现状自研环；cli/sdk 多作 pin | 正本清源 2026-08-01 | **路线 P0 · 归位前禁扩自研环** |
 | D9 | 像素 / WorkBuddy 全面对标 | 产品后置 | 后置 |
 | D10 | M5 edu 真联调 | 需授权 | 授权后 |
 | D11 | 未知 skill 工具已 deny-all，但回复 artifact extractor 仍可产生写入 | #70 生产 TEST REPORT @ `77e3181…` | **N3 回归修复** |

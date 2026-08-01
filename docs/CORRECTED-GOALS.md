@@ -2,6 +2,7 @@
 
 ```
 DOC: docs/CORRECTED-GOALS.md
+SEE_ALSO: docs/WHAT-IS-PICO.md（2026-08-01 正本清源）
 STATUS: OWNER-ALIGNED SNAPSHOT
 DATE: 2026-07-29
 REPO: juanwan99/pico ONLY
@@ -21,12 +22,13 @@ PLAN: docs/MVP-3DAY.md v1.2 FIXED（无授权不升 v1.3）
 | **类 Claude / Codex / Grok / WorkBuddy 品类** 的 AI 工作空间 | 自研教务 SaaS、考试系统 |
 | **对话 + Agent 编排 + 产物 + AI 账本** | 重做学生/考试/成绩业务 |
 | **模型 = HTTPS API**（Kimi 优先，可 DeepSeek） | 默认自托管 GPU 大模型 |
-| **编排 = 开源 Kimi Agent 薄改**（钉版本） | 自研 Agent OS |
+| **编排目标 = 开源 Kimi Agent 薄改**；**现状见 WHAT-IS-PICO §4（过渡自研环·未归位）** | 把自研环宣传成已完成开源 Agent；自研 Agent OS 当终局 |
 | **唯一 AI 事实账本**（Task/Run/Event/Artifact…） | 与 edu 双 AI 真源并行 |
 | **Phase 1 独立交付** | 日常改 edu-cloud / 以联调 edu 为 Phase1 门禁 |
 
 **一句话：**  
-Pico = 学校场景可用的 **AI 工作台产品**（壳 + 服务端 Agent + 模型 API + 租户账本），业务数据仍归 edu；对接后置。
+Pico = 学校场景可用的 **AI 工作台产品**（LibreChat 壳 + 唯一 AI 账本/控制面 + 模型 HTTPS API + 编排核）；业务数据仍归 edu；对接后置。
+**编排：** 目标为开源 Kimi Agent 薄改；**当前为过渡自研工具环** —— 见 [WHAT-IS-PICO.md](./WHAT-IS-PICO.md)。
 
 ---
 

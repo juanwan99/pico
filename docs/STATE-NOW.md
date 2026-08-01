@@ -1,5 +1,8 @@
 # Pico 当前真源快照（总管 · 正本清源）
 
+> **产品定义：[WHAT-IS-PICO.md](./WHAT-IS-PICO.md)。编排目标=开源 Kimi Agent；现状=过渡自研环，禁假称已接入。**
+
+
 ```
 DOC: docs/STATE-NOW.md
 STATUS: BINDING snapshot · 覆盖聊天里冲突的进度/角色/SHA 口述
