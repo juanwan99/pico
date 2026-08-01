@@ -89,8 +89,16 @@ if [ "$HEALTH_SHA" != "$CURRENT_SHA" ]; then
 fi
 echo "[pico] health.git_sha exact match: $HEALTH_SHA"
 
-curl -sS -o /dev/null -w "ui_login=%{http_code}\n" --max-time 5 \
-  http://127.0.0.1:8080/login
+# Product UI must actually serve /login. Transport failure (set -e) and non-200 both fail closed.
+UI_LOGIN_CODE="$(
+  curl -sS -o /dev/null -w "%{http_code}" --max-time 5 \
+    http://127.0.0.1:8080/login
+)"
+if [ "$UI_LOGIN_CODE" != "200" ]; then
+  echo "[pico] FATAL: UI /login HTTP status not 200 got=${UI_LOGIN_CODE}" >&2
+  exit 7
+fi
+echo "[pico] ui_login=${UI_LOGIN_CODE}"
 
 # Security: API must not listen on all interfaces.
 if command -v ss >/dev/null 2>&1; then

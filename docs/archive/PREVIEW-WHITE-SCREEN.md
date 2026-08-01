@@ -87,7 +87,7 @@ TIP_NOW: 65d7079bfbd3cef7df40c13f0d34cea4987a5caa (+ local startup Mongo probe f
 - 禁止 `PROXY=1`  
 - Mongo 真库 **27117** + **27017 HTTP 盾** → 8080  
 - `startup.sh` Mongo 探测改为 **27117**（避免与盾混淆）  
-- 证据截图：`screenshots/preview-8080*.png` / `preview-6014.png`
+- 证据截图：`docs/archive/assets/preview/preview-8080-login.png` / `preview-8080-after-login.png` / `preview-8080-workbench.png` / `preview-6014.png`
 
 ### 平台侧建议
 
