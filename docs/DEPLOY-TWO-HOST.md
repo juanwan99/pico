@@ -57,6 +57,7 @@ Codex @ dev-ecs  --ssh pico-prod-->  /opt/pico pull + rebuild + DEPLOYED
 
 - 路径：`/opt/pico` → 远程 `juanwan99/pico`
 - 用户可 `git pull` + `docker compose`
+- **属主：** `/opt/pico` 与 `.git`（含 `.git/objects`）必须属于**部署用户**（如 `ops:ops`）。若曾用 root 写过仓库，会出现 `git fetch` 权限失败（见 #175）；修复：`chown -R ops:ops /opt/pico`（用户名以现网为准），禁止长期 root 残留。
 - 安全组：优先仅允许 **dev-ecs 内网 IP** 访问 22
 
 **生产 fetch refspec 必须钉住 main：**

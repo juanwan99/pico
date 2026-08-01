@@ -14,6 +14,7 @@ NOT: multi-window OS · auto E1 queue · 长文总管仪式
 ## 默认五步（开发/部署同一条线）
 
 ```bash
+# 0) 生产 /opt/pico 与 .git 须属部署用户（非 root），否则 fetch 失败（#175）
 # 1–2) 小 PR，CI 绿，合 main（总管或有合权的人）
 
 # 3) 生产（ssh 进 /opt/pico 或跳板后）
