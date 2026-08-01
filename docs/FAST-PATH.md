@@ -106,3 +106,34 @@ stop: OK/FAIL
 
 业主授权 > TRUTH-FREEZE 目标/禁项 > **本页节奏** > STATE-NOW 快照 > 聊天  
 与本页冲突的「多卡仪式 / 总管八股」以本页为准废止。
+
+---
+
+## 单关键路径极速模式（BINDING · 2026-08-01 业主确认）
+
+**主线只做 Kimi 真接。** 日常默认即本模式。
+
+| 规则 | |
+|------|--|
+| 一目标一 PR | 代码+测试+必要观测一次收完 |
+| 绿档 | CI 绿即合 |
+| 黄档 | 仅一次 exact-SHA 审查 |
+| 部署 | 窗1 **一次** |
+| 验收 | 窗4 **一次** |
+| 失败 | 关闸 + **一个**修复 PR |
+| 禁止 | 流程文档轮转、准备性 Issue、3A/3B 微切片、重复草稿 PR |
+
+### Kimi canary（须业主书面授权）
+
+```text
+1) 窗1：prod-update tip（flag 仍可先 OFF 装码）
+2) 窗1：仅当已授权 → RUNTIME=1 + CANARY_MEMBERSHIP_IDS=单会员
+3) recreate pico-api；health 核 SHA + runtime_enabled + canary_configured
+4) 窗4：一次验完真 provider / runtime / 账本 / deny / cap / cancel
+5) 失败：RUNTIME=0、名单空、recreate，基线 chat/stop
+6) 通过后再议扩名单或 #170 默认切流；此前不宣称接入完成
+```
+
+**五条底线：** 单会员白名单 · 危险工具关 · 只经 AllowlistGateway · 限额/取消/审计 · exact SHA 可回滚。
+
+
