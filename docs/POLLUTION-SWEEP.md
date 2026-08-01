@@ -65,9 +65,11 @@ TRUTH: docs/TRUTH-FREEZE.md v1.0
 8. [ ] （可选）生产部署含文档 tip — 不挡阶段认知完成  
 9. [x] 代码标注 PR 不静默改包 API：`__init__.py` re-export 已恢复（#135 fix）  
 10. [x] STATE-NOW 与 #142/#145 证据对齐（#147）  
-11. [ ] GAP §0/§1 与 KA-2 selector 名实一致 + #121 拒合（本轮）  
+11. [x] GAP §0/§1 与 KA-2 selector 名实一致 + #121 拒合（#148）  
 
-**本阶段不做：** 切换 Kimi Agent 生产默认、删除 runner、引入其它运行时。
+**本阶段不做：** 切换 Kimi Agent 生产默认、删除 runner、引入其它**替代目标**运行时（Plan B）。  
+**说明：** main 允许「默认旧环 + flag-off Kimi 候选」互斥实现；**不等于**第二替代目标 / dual-run。  
+**整表 DONE：** 仍差项 7（及可选 8）；不得仅因第四轮已合宣称污染阶段全部完成。
 
 ## 第二轮清理
 
@@ -96,3 +98,13 @@ TRUTH: docs/TRUTH-FREEZE.md v1.0
 | #121 harness 可替换边界 PR | **CONTROLLER REJECT** — 与 TRUTH-FREEZE O4 冲突；关闭不合并 |
 | EXECUTION-QUEUE | 顶栏 SUPERSEDED：现行派工 = 窗口 1/2/3 手动卡，非 E1 自动心跳 |
 | 目标重申 | WHAT-IS / CORRECTED-GOALS 不改目标句；本轮只清名实与过期快照 |
+
+## 第五轮（STATE-NOW post-DIAG · 2026-08-01）
+
+| 项 | 动作 |
+|----|------|
+| STATE-NOW tip | 对齐 main `b5db109…` |
+| #143/#144 | DIAG COMPLETE → P0 改为 FIX 队列 |
+| 运行时口径 | 互斥候选路径 ≠ Plan B 第二目标 runtime |
+| 清单 11 | 勾选 #148 已完成项 |
+
