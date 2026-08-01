@@ -171,13 +171,46 @@ async def list_runs_for_task(session: AsyncSession, task_id: str) -> list[RunRow
 
 async def request_cancel(session: AsyncSession, run: RunRow) -> RunRow:
     run.cancel_requested = 1
-    # Immediate terminal cancel if still queued; running worker polls cancel_requested.
-    if run.status == "queued":
+    if run.status in ("queued", "preparing", "running"):
         run.status = "cancelled"
         run.ended_at = _utcnow()
+        run.error = None
     await session.commit()
     await session.refresh(run)
     return run
+
+
+async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
+    """Finalize non-terminal runs whose in-process owner was lost on restart."""
+    active = (
+        await session.execute(
+            select(RunRow).where(
+                RunRow.status.in_(("queued", "preparing", "running"))
+            )
+        )
+    ).scalars().all()
+    counts = {"cancelled": 0, "failed": 0}
+    for run in active:
+        if run.cancel_requested:
+            run.status = "cancelled"
+            run.error = None
+        else:
+            run.status = "failed"
+            run.error = "run owner was lost during API restart"
+        run.ended_at = _utcnow()
+        counts[run.status] += 1
+        await append_event(
+            session,
+            run.id,
+            "run.status",
+            {
+                "status": run.status,
+                "reason": "api_restart_reconciliation",
+            },
+            commit=False,
+        )
+    await session.commit()
+    return counts
 
 
 async def retry_failed_run(session: AsyncSession, source_run: RunRow) -> RunRow:
@@ -299,6 +332,8 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             run = await session.get(RunRow, run_id)
             if run is None:
                 return
+            if run.status in ("succeeded", "failed", "cancelled"):
+                return
             run.status = "failed"
             run.ended_at = _utcnow()
             run.error = str(exc)
@@ -324,6 +359,8 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
     async with factory() as session:
         run = await session.get(RunRow, run_id)
         if run is None:
+            return
+        if run.status in ("succeeded", "failed", "cancelled"):
             return
         run.status = result.status
         run.ended_at = _utcnow()
