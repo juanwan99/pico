@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# DEPRECATED-FOR-OWNER-PATH: Sandbox/mis-pin shield — production uses host network + nginx; keep only if still useful.
 """HTTP shield on :27017 — mis-pinned Live Preview hits this instead of Mongo wire protocol.
 
 Mongo lives on 27117. Preview discovery often probes 27017; native mongod answers with

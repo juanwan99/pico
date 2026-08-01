@@ -1,10 +1,6 @@
-"""Pico orchestrator: Kimi Agent adapter + allowlist gateway."""
+"""Pico orchestrator package.
 
-from pico_orchestrator.pins import AGENT_PINS
-from pico_orchestrator.safety import DANGEROUS_TOOL_PATHS, load_pico_agent_tools
-
-__all__ = [
-    "AGENT_PINS",
-    "DANGEROUS_TOOL_PATHS",
-    "load_pico_agent_tools",
-]
+CURRENT: transitional OpenAI-compatible tool loop + allowlist gateway + pin checks.
+TARGET:  open-source Kimi Agent runtime (see docs/TRUTH-FREEZE.md). Do not describe
+this package as "Kimi Agent integrated" until the runtime path is real.
+"""

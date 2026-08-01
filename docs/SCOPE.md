@@ -3,7 +3,7 @@
 | In Pico | In edu-cloud |
 |---------|----------------|
 | AI workspace UI | School membership, exams, grades, deploy |
-| Kimi Agent hosting/adapters | Business APIs and data owners |
+| Kimi Agent hosting/adapters (**target runtime**; transitional tool-loop until wired) | Business APIs and data owners |
 | Model API keys & providers (AI) | Production OneFlow for school app |
 | Generic artifacts | Domain tables (students, exams, …) |
 | Tool interface | Tool implementations that read/write school DB |

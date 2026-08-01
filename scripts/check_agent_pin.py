@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Verify installed Kimi Agent pins match D1 freeze."""
+"""Verify installed kimi-agent-sdk / kimi-cli versions match freeze pins.
+
+Not a proof that open-source Kimi Agent runtime executes multi-step runs.
+"""
 from __future__ import annotations
 
 import sys
@@ -19,7 +22,7 @@ def main() -> int:
     except RuntimeError as e:
         print("FAIL:", e)
         return 1
-    print("OK: agent pins match freeze")
+    print("OK: package pins match freeze (not runtime-integration proof)")
     return 0
 
 

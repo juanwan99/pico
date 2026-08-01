@@ -47,9 +47,9 @@ curl -sf http://127.0.0.1:18765/health
 | 模型选择 | 行为 | 对应 |
 |----------|------|------|
 | **kimi-k2.6 / Kimi-K3 / moonshot-***（默认聊天） | **直连 Kimi HTTPS**，流式对话；账本仍记 Task/Run | **S1 主路径** |
-| **pico-agent** | **钉版本 Kimi Agent 多步工具环**（allowlist：echo / FakeEdu 班级 / 提案） | **S2 编排路径** |
+| **pico-agent** | **多步工具环（过渡实现）** + allowlist（echo / FakeEdu / 提案）；**目标**为开源 Kimi Agent 真接入（见 TRUTH-FREEZE） | **S2 路径（名实未归位前勿称已接 Kimi Agent）** |
 
-- 编排 runtime 钉死：`kimi-agent-sdk==0.0.5`、`kimi-cli==1.12.0`（`pico_orchestrator.pins`）  
+- 包版本 pin：`kimi-agent-sdk==0.0.5`、`kimi-cli==1.12.0`（**pin ≠ 运行时已接入**；见 TRUTH-FREEZE O2）  
 - Shell / 主机 File / 开放 Web / MCP：**默认关**  
 - **不要**把「默认能聊」说成「默认多步 Agent」——二者模型入口不同  
 
@@ -98,4 +98,4 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/api/pico/v1/task
 
 ## 一句话对外
 
-> Pico 是独立 AI 工作台：LibreChat 壳 + 服务端账本 + Kimi 真模型；默认直连对话，编排走 `pico-agent`；今天不连 edu，不宣称 Live Preview 在无鉴权代理下必通。
+> Pico 是独立 AI 工作台：LibreChat 壳 + 服务端账本 + Kimi 真模型；默认直连对话；`pico-agent` 为过渡多步环（目标=开源 Kimi Agent）。不连 edu；公网以 pico.aivia.asia 为准。
