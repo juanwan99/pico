@@ -41,3 +41,7 @@ context_reset: false   # 默认；true 仅总管显式要求
 
 - 派工（改 EXECUTION/VALIDATION-QUEUE 或 PR 评论）时写明 context_reset  
 - 默认写 `false`；仅在会话已严重污染/串台时用 `true`  
+
+## 正本清源
+
+长上下文污染时：总管可令 `context: CLEAR` 后只保留 `docs/STATE-NOW.md` + 本任务提示词；默认仍为 KEEP。
