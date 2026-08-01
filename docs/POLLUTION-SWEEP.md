@@ -108,3 +108,13 @@ TRUTH: docs/TRUTH-FREEZE.md v1.0
 | 运行时口径 | 互斥候选路径 ≠ Plan B 第二目标 runtime |
 | 清单 11 | 勾选 #148 已完成项 |
 
+## 第六轮（目标消毒 + 速度 · 2026-08-01）
+
+| 项 | 动作 |
+|----|------|
+| 业主纠偏 | **禁止**「长期是自研 run_agent_loop」；目标从未是自研环 |
+| TRUTH-FREEZE O1–O3 | 标明实现事实≠目标；反污染句 |
+| WHAT-IS §4.2 | 同上 |
+| STATE-NOW / VELOCITY-CLEAN | 速度阻碍清单与部署主链 |
+| 过期 issue | #1/#21/#28 SUPERSEDED 关闭 |
+

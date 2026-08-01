@@ -87,8 +87,9 @@ Do **not** use `docs/archive/**`, new HANDOFF markdown, or open PR **#121 harnes
 ## Product rules
 
 - AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.
-- **Target:** open-source Kimi Agent runtime + Kimi HTTPS API; no custom agent OS as end state; **no Plan B runtime pre-seed**.
-- **Current:** default multi-step path is transitional `run_agent_loop` via `run_agent_runtime` (flag off); do **not** claim Kimi Agent integrated (TRUTH-FREEZE / KIMI-AGENT-GAP).
+- **Target (only):** open-source Kimi Agent runtime + Kimi HTTPS API. **Owner never set self-built loop as the goal.** No Plan B runtime.
+- **Implementation debt (not a goal):** code may still default through transitional `run_agent_loop` (flag off). Never narrate this as “long-term architecture.” Do **not** claim Kimi Agent integrated.
+- **Speed:** deploy + smoke beat new process docs; see `docs/VELOCITY-CLEAN.md`.
 - Tenant fail-closed; **Pico owns the unique AI ledger**.
 - Pricing docs may stay DRAFT; do not freeze commercial FIXED unless owner orders.
 - Prefer smallest correct fix; delete dual-run croft rather than stack adapters.
