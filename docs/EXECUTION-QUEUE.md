@@ -82,7 +82,8 @@ CONTEXT：默认不清理会话。仅当条目或总管写明 context_reset: tru
 
 ```yaml
 id: EQ-031
-status: OPEN
+status: DONE
+done_note: "2026-08-01 E3 deployed origin/main 768d0bd56858acacf859cf9a8cd357f68dc2f1ba; exact-SHA CI green; production HEAD/health.git_sha exact-match; local/public login 200; protected ports loopback-only; pico-dev 401; ## DEPLOYED on #122"
 priority: P0
 context_reset: false
 assignee: E3
