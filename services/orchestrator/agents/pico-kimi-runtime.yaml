@@ -1,0 +1,32 @@
+# Experimental Kimi Agent entry. Loaded only when PICO_KIMI_AGENT_RUNTIME=1.
+# Every callable below is a Pico AllowlistGateway wrapper; host tools stay off.
+version: 1
+agent:
+  name: pico
+  system_prompt_path: ./system.md
+  system_prompt_args:
+    ROLE_ADDITIONAL: |
+      You are Pico, an AI workspace agent for school educators.
+      You have NO shell, host filesystem, web browsing, MCP, or subagent tools.
+      Every available tool is a request-scoped Pico allowlist gateway wrapper.
+      Never claim a tool ran unless its result is present.
+  tools:
+    - "pico_orchestrator.kimi_tools:PicoEcho"
+    - "pico_orchestrator.kimi_tools:FakeEduListClasses"
+    - "pico_orchestrator.kimi_tools:PicoProposeChange"
+    - "pico_orchestrator.kimi_tools:WorkspaceWriteFile"
+    - "pico_orchestrator.kimi_tools:WorkspaceReadFile"
+    - "pico_orchestrator.kimi_tools:WorkspaceListFiles"
+    - "pico_orchestrator.kimi_tools:StructuredOutline"
+    - "pico_orchestrator.kimi_tools:Calculator"
+  exclude_tools:
+    - "kimi_cli.tools.shell:Shell"
+    - "kimi_cli.tools.file:ReadFile"
+    - "kimi_cli.tools.file:ReadMediaFile"
+    - "kimi_cli.tools.file:Glob"
+    - "kimi_cli.tools.file:Grep"
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.web:SearchWeb"
+    - "kimi_cli.tools.web:FetchURL"
+    - "kimi_cli.tools.multiagent:Task"

@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     pico_run_max_seconds: int = 120
     pico_run_max_tokens: int = 8000
     pico_run_max_retries: int = 2
+    # Experimental KA-2 path. False keeps every production call on run_agent_loop.
+    pico_kimi_agent_runtime: bool = False
     pico_chat_rpm: int = 30
     pico_chat_max_concurrent: int = 2
     pico_allowed_models: str = ""

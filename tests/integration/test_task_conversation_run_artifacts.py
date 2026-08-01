@@ -83,6 +83,66 @@ def _stub_agent(monkeypatch, result: RunResult) -> None:
     monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", fake_run_agent_loop)
 
 
+@pytest.mark.asyncio
+async def test_agent_runtime_flag_routes_old_by_default_and_kimi_only_when_enabled(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    db = tmp_path / "runtime-flag.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+    monkeypatch.setenv("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
+    monkeypatch.setenv("PICO_ENV", "development")
+
+    from app import db as dbmod
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+    calls: list[str] = []
+
+    async def old_runtime(*, emit, **_kwargs) -> RunResult:
+        calls.append("old")
+        await emit("run.status", {"status": "running"})
+        await emit("run.status", {"status": "succeeded"})
+        return RunResult(status="succeeded", final_text="old")
+
+    async def kimi_runtime(*, emit, **_kwargs) -> RunResult:
+        calls.append("kimi")
+        await emit("run.status", {"status": "running", "runtime": "kimi-agent"})
+        await emit("run.status", {"status": "succeeded", "runtime": "kimi-agent"})
+        return RunResult(status="succeeded", final_text="kimi")
+
+    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_runtime)
+    monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_runtime)
+    base_settings = Settings(_env_file=None, pico_kimi_agent_runtime=False)
+    token = issue_test_token(
+        school_id="school-a",
+        membership_id="member-runtime-flag",
+        settings=base_settings,
+    )
+
+    async def complete(settings: Settings, conversation: str) -> str:
+        response = await chat_completions(
+            ChatCompletionRequest(
+                model="pico-agent",
+                stream=False,
+                messages=[ChatMessage(role="user", content="hello")],
+            ),
+            authorization=f"Bearer {token}",
+            x_conversation_id=conversation,
+            x_workspace_id=None,
+            x_pico_membership_id=None,
+            settings=settings,
+        )
+        return response["choices"][0]["message"]["content"]
+
+    assert await complete(base_settings, "conversation-old-runtime") == "old"
+    enabled_settings = Settings(_env_file=None, pico_kimi_agent_runtime=True)
+    assert await complete(enabled_settings, "conversation-kimi-runtime") == "kimi"
+    assert calls == ["old", "kimi"]
+
+
 def _complete(
     client: TestClient,
     headers: dict[str, str],

@@ -10,4 +10,4 @@ You are **Pico**, the AI foundation for the 微与积 education product line.
 
 ## Role
 
-{{ROLE_ADDITIONAL}}
+${ROLE_ADDITIONAL}
