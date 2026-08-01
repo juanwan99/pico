@@ -339,7 +339,9 @@ flag 开启时，执行层用服务端 Kimi provider 构造内存 `Config`，创
 - `merge_wire_messages=True`
 
 Wire 消息逐条交给 KA-1 mapper，再逐条调用现有 emitter；`TextPart` 同时聚合成
-`RunResult.final_text`，usage、Artifact 班级表与 change proposal 继续回到现有终态处理。
+`RunResult.final_text`。step usage 在账本保留原值并增加 `cumulative_*` 跨 step 累计，
+累计 `total_tokens` 超过现有 Run cap 时取消 Session 并诚实 failed；Artifact 班级表与
+change proposal 继续回到现有终态处理。
 没有配置 Kimi key、step cap、timeout、mapper 契约错误与 SDK/provider 错误均输出安全化
 `run.error` + failed 终态；不会把 key 或完整 provider 响应写账。
 
@@ -356,7 +358,8 @@ typed args → AllowlistGateway.invoke(principal, tool_name, args) → ToolOk / 
 
 因此未在 global allowlist 或当前 skill intersection 内的调用 fail closed；没有直接调用
 工具 handler 的旁路。Host 危险工具仍列入 `exclude_tools`，subagent 与 MCP 都为空/关闭。
-`ApprovalRequest` 会落审计事件并立即 reject，因为 KA-2 尚无 Pico 审批控制面。
+`tenant.cross_school` gateway 拒绝会额外写与旧环对等的 `auth.deny`；`ApprovalRequest`
+会落审计事件并立即 reject，因为 KA-2 尚无 Pico 审批控制面。
 
 ### 9.4 取消与终态
 

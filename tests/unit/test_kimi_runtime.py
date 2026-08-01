@@ -6,9 +6,25 @@ from typing import Any, Self
 
 import pytest
 from app.settings import Settings
-from kimi_agent_sdk import RunCancelled, StepBegin, TextPart, TurnBegin, TurnEnd
+from kimi_agent_sdk import (
+    RunCancelled,
+    StatusUpdate,
+    StepBegin,
+    TextPart,
+    TokenUsage,
+    ToolCall,
+    ToolResult,
+    TurnBegin,
+    TurnEnd,
+)
 from pico_orchestrator.gateway import AllowlistGateway, ToolSpec
-from pico_orchestrator.kimi_tools import EchoParams, PicoEcho, bind_gateway_tools
+from pico_orchestrator.kimi_tools import (
+    EchoParams,
+    FakeEduListClasses,
+    ListClassesParams,
+    PicoEcho,
+    bind_gateway_tools,
+)
 from pico_orchestrator.provider import ProviderConfig
 from pico_orchestrator.runner import RunCaps, RunResult
 from pico_orchestrator.runtime import run_agent_runtime
@@ -165,6 +181,147 @@ async def test_kimi_tool_wrapper_has_no_bypass_around_gateway() -> None:
     assert result.is_error is False
     assert calls == [("school-a", "pico_echo", {"text": "hello"})]
     assert context.results == [("pico_echo", {"echo": "hello"})]
+
+
+@pytest.mark.asyncio
+async def test_kimi_gateway_cross_school_rejection_emits_auth_deny_and_tool_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pico_orchestrator import kimi_runtime
+
+    class DenySession:
+        async def __aenter__(self) -> Self:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def prompt(self, user_input: str, **_kwargs: Any):
+            yield TurnBegin(user_input=user_input)
+            yield ToolCall(
+                id="deny-call",
+                function=ToolCall.FunctionBody(
+                    name="fake_edu_list_classes",
+                    arguments='{"school_id":"school-b"}',
+                ),
+            )
+            result = await FakeEduListClasses()(
+                ListClassesParams(school_id="school-b")
+            )
+            yield ToolResult(tool_call_id="deny-call", return_value=result)
+            yield TurnEnd()
+
+        def cancel(self) -> None:
+            raise AssertionError("cancel should not be called")
+
+    async def create(**_kwargs: Any) -> DenySession:
+        return DenySession()
+
+    monkeypatch.setattr(kimi_runtime.Session, "create", create)
+    monkeypatch.setattr(
+        kimi_runtime,
+        "resolve_provider",
+        lambda: ProviderConfig("kimi", "test-only", "https://example.invalid/v1", "kimi-test"),
+    )
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    result = await kimi_runtime.run_kimi_agent(
+        prompt="hello",
+        principal=Principal(),
+        emit=lambda kind, payload: _emit_to(events, kind, payload),
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(max_seconds=5),
+    )
+
+    assert result.status == "succeeded"
+    assert [(kind, payload.get("ok")) for kind, payload in events if kind == "tool.result"] == [
+        ("tool.result", False)
+    ]
+    assert [payload for kind, payload in events if kind == "auth.deny"] == [
+        {
+            "code": "tenant.cross_school",
+            "message": "Cross-school deny: token=school-a tool=school-b",
+            "token_school_id": "school-a",
+            "tool": "fake_edu_list_classes",
+            "arguments": {"school_id": "school-b"},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_kimi_usage_accumulates_across_steps_and_fails_over_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pico_orchestrator import kimi_runtime
+
+    class TokenCapSession:
+        cancelled = False
+
+        async def __aenter__(self) -> Self:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def prompt(self, user_input: str, **_kwargs: Any):
+            yield TurnBegin(user_input=user_input)
+            yield StepBegin(n=1)
+            yield StatusUpdate(
+                message_id="step-1",
+                token_usage=TokenUsage(input_other=30, output=20),
+            )
+            yield StepBegin(n=2)
+            yield StatusUpdate(
+                message_id="step-2",
+                token_usage=TokenUsage(input_other=40, output=20),
+            )
+            if self.cancelled:
+                raise RunCancelled()
+            yield TurnEnd()
+
+        def cancel(self) -> None:
+            self.cancelled = True
+
+    session = TokenCapSession()
+
+    async def create(**_kwargs: Any) -> TokenCapSession:
+        return session
+
+    monkeypatch.setattr(kimi_runtime.Session, "create", create)
+    monkeypatch.setattr(
+        kimi_runtime,
+        "resolve_provider",
+        lambda: ProviderConfig("kimi", "test-only", "https://example.invalid/v1", "kimi-test"),
+    )
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    result = await kimi_runtime.run_kimi_agent(
+        prompt="hello",
+        principal=Principal(),
+        emit=lambda kind, payload: _emit_to(events, kind, payload),
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(max_seconds=5, max_tokens=100),
+    )
+
+    usage_events = [payload for kind, payload in events if kind == "run.usage"]
+    assert [payload["total_tokens"] for payload in usage_events] == [50, 60]
+    assert [payload["cumulative_total_tokens"] for payload in usage_events] == [50, 110]
+    assert session.cancelled is True
+    assert result.status == "failed"
+    assert result.error == "Kimi Agent token cap exceeded: 100"
+    assert result.token_usage == {"total_tokens": 110}
+    assert ("run.error", {"code": "token_cap", "error": result.error}) in events
+    terminal = [
+        payload for kind, payload in events if kind == "run.status" and payload["status"] != "running"
+    ]
+    assert terminal == [
+        {
+            "status": "failed",
+            "reason": result.error,
+            "code": "token_cap",
+            "runtime": "kimi-agent",
+        }
+    ]
 
 
 @pytest.mark.asyncio

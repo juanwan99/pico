@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -15,11 +15,14 @@ from pydantic import BaseModel, Field
 
 from pico_orchestrator.gateway import AllowlistGateway, Principal, ToolError
 
+AuditEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
+
 
 @dataclass(slots=True)
 class GatewayToolContext:
     gateway: AllowlistGateway
     principal: Principal
+    emit: AuditEmitter | None = None
     results: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
 
@@ -32,10 +35,11 @@ _TOOL_CONTEXT: ContextVar[GatewayToolContext | None] = ContextVar(
 def bind_gateway_tools(
     gateway: AllowlistGateway,
     principal: Principal,
+    emit: AuditEmitter | None = None,
 ) -> Iterator[GatewayToolContext]:
     """Bind request-scoped authority for Kimi-created tool tasks."""
 
-    context = GatewayToolContext(gateway=gateway, principal=principal)
+    context = GatewayToolContext(gateway=gateway, principal=principal, emit=emit)
     token = _TOOL_CONTEXT.set(context)
     try:
         yield context
@@ -59,6 +63,17 @@ class _GatewayTool(CallableTool2[BaseModel]):
         try:
             result = await context.gateway.invoke(context.principal, self.name, arguments)
         except ToolError as exc:
+            if exc.code == "tenant.cross_school" and context.emit is not None:
+                await context.emit(
+                    "auth.deny",
+                    {
+                        "code": exc.code,
+                        "message": exc.message,
+                        "token_school_id": context.principal.school_id,
+                        "tool": self.name,
+                        "arguments": arguments,
+                    },
+                )
             return KimiToolError(
                 message=f"{exc.code}: {exc.message}",
                 brief=exc.message,
