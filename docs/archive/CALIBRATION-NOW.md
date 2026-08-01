@@ -64,7 +64,7 @@ AUTHORITY: VERDICT_AUTHORITY NONE — 本页不自 PASS
 | 走 6014 无鉴权 | **空 body = 纯白** → **Preview 层**，非「API 没写」 |
 | **禁止** | 因白屏立刻换壳；只 curl 8080 就对用户说「预览好了」；设 `PROXY=1` |
 
-演示登录：`teacher@example.com` / `pico-demo-123`
+演示登录：`teacher@example.com` / `<redacted-demo-password>`
 
 ---
 

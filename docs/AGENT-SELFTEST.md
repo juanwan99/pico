@@ -25,8 +25,12 @@ DOC: docs/AGENT-SELFTEST.md
 ## 命令
 
 ```bash
-# 栈已启动时
-bash scripts/agent-selftest.sh
+# 栈已启动时；UI 登录凭据只从当前进程环境传入
+DEMO_EMAIL='<temporary-email>' DEMO_PASSWORD='<temporary-12+-char-password>' \
+  bash scripts/agent-selftest.sh
+
+# 不需要 UI 凭据时只跑 API 路径
+PICO_SELFTEST_API_ONLY=1 bash scripts/agent-selftest.sh
 # 期望 SELFTEST_OK
 ```
 

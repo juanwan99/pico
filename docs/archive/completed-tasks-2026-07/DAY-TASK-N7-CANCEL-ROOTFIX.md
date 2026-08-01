@@ -2,7 +2,7 @@
 
 ```
 TYPE: HOTFIX
-STATUS: OPEN
+STATUS: COMPLETED · historical
 RISK: 黄 · FAST
 context_reset: false
 PRIOR: #107 已部署 6fd3007；VQ-006 FAIL

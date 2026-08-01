@@ -262,7 +262,7 @@ These are proposed for a later code-changing M1 slice, not deleted here.
 | `docs/HANDOFF.md` | Already has a stale warning and contains historical decisions | Prefer a short tombstone/redirect to `MASTER-PLAN.md`, not silent deletion |
 | `docs/OVERALL-ARCHITECTURE.md` | Referenced architecture/pricing draft with useful non-shell content | Correct NextChat lines; keep DRAFT status |
 | `docs/VERSIONING.md`, `docs/WORKFLOW.md` | Binding and linked by `AGENTS.md` | Correct shell/topology examples in place |
-| `screenshots/**`, `screenshots/preview-diagnose.json` | Tracked visual/diagnostic evidence, not runtime inputs | Retain until a separate evidence-retention policy exists |
+| `screenshots/**`, `docs/archive/assets/preview/preview-diagnose.json` | Tracked visual/diagnostic evidence, not runtime inputs | Retain until a separate evidence-retention policy exists |
 
 ### 4.3 False positives
 

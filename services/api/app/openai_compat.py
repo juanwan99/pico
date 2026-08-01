@@ -1,4 +1,4 @@
-"""OpenAI-compatible /v1/chat/completions — so OSS UIs (NextChat etc.) plug in."""
+"""OpenAI-compatible /v1/chat/completions for LibreChat and API clients."""
 
 from __future__ import annotations
 
@@ -14,7 +14,13 @@ from fastapi.responses import StreamingResponse
 from pico_orchestrator.user_errors import user_message_for_error
 from pydantic import BaseModel
 
-from app.auth import Principal, decode_token, enforce_scope, scope_proxy_principal
+from app.auth import (
+    LEGACY_PROXY_MEMBERSHIP_ID,
+    Principal,
+    decode_token,
+    enforce_scope,
+    scope_proxy_principal,
+)
 from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
 
@@ -119,7 +125,7 @@ def _principal_from_auth(
         ):
             return Principal(
                 school_id="school-a",
-                membership_id="nextchat-user",
+                membership_id=LEGACY_PROXY_MEMBERSHIP_ID,
                 scopes=["ai:run", "ai:read", "ai:confirm"],
                 iss=settings.pico_jwt_iss,
                 aud=settings.pico_jwt_aud,

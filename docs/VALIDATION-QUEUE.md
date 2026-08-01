@@ -80,7 +80,7 @@ done_note: "2026-07-31 production TEST REPORT on #78: overall FAIL; N4 timeline/
 priority: P1
 context_reset: false
 target_pr: null
-related_docs: [docs/DAY-TASK-N4-RUN-TIMELINE.md]
+related_docs: [docs/archive/completed-tasks-2026-07/DAY-TASK-N4-RUN-TIMELINE.md]
 title: N4 过程可见验收
 deploy_gate:
   - A merged PR implementing N4 exists with ## DEPLOYED

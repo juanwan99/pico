@@ -2,7 +2,7 @@
 
 ```
 TYPE: TEST
-STATUS: OPEN
+STATUS: COMPLETED · historical
 AGAINST: main 含 #60+#59（目标 SHA 以生产 health 为准，期望 d0bd3fb 或更新 tip）
 EXEC: 测试窗（独立 · 非写入自嗨）
 ENV: 优先 production via jump；演示 teacher@example.com

@@ -38,7 +38,7 @@ main=prod + ## DEPLOYED。
 - 一夜只做 Track W；不做 Skill 大改、不做 M5、不做全面像素
 - OneFlow：CANDIDATE → CI 绿 → 合 main → 生产对齐 → DEPLOYED
 - 生产 /opt/pico · https://pico.aivia.asia
-- 演示 teacher@example.com / pico-demo-123
+- 演示 teacher@example.com / <redacted-demo-password>
 - LEASES：见下；勿改 Skill 核 / edu_adapter
 
 ## LEASES（本卡）

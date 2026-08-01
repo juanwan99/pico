@@ -3,7 +3,7 @@
 ```
 TYPE: DAY
 SPRINT: docs/SPRINT-FAST.md（仍在 7 日窗内）
-STATUS: OPEN · 总管派工
+STATUS: COMPLETED · historical
 PRIOR: N1 P0 + N2 轨 C 已 DEPLOYED（业主确认继续推进）
 RISK: 黄（行为安全 · 非改 JWT 语义）→ FAST 代合可
 ```

@@ -1,4 +1,4 @@
-**Execution queue:** [docs/EXECUTION-QUEUE.md](docs/EXECUTION-QUEUE.md)
+**Execution queue:** [docs/EXECUTION-QUEUE.md](./EXECUTION-QUEUE.md)
 
 # 快模式冲刺（BINDING · 7 日）
 
@@ -29,8 +29,8 @@ TRUTH: GitHub only · 无回写 = 未交付
 |----|------|----------|
 | **N1** | P0 安全 **生产落地** | main 含 #67；生产 `## DEPLOYED`；`## TEST REPORT` 对 [TEST-TASK-P0-SECURITY](./TEST-TASK-P0-SECURITY.md) **PASS** |
 | **N2** | 轨 C 自动化真跑 | [#64](https://github.com/juanwan99/pico/pull/64) 合 main → 部署 → 冒烟「运行一次」有 Run |
-| **N3** | 未知 Skill fail-closed | [DAY-TASK-N3](./DAY-TASK-N3-SKILL-FAILCLOSED.md) 合+部署+TEST PASS |
-| **N4** | Run 过程时间线最小可见 | [DAY-TASK-N4](./DAY-TASK-N4-RUN-TIMELINE.md) 合+部署+VQ-002 PASS |
+| **N3** | 未知 Skill fail-closed | [DAY-TASK-N3](./archive/completed-tasks-2026-07/DAY-TASK-N3-SKILL-FAILCLOSED.md) 合+部署+TEST PASS |
+| **N4** | Run 过程时间线最小可见 | [DAY-TASK-N4](./archive/completed-tasks-2026-07/DAY-TASK-N4-RUN-TIMELINE.md) 合+部署+VQ-002 PASS |
 
 ### 本周冻结（禁止插队）
 
@@ -89,7 +89,9 @@ DEBT: （无则写 none）
 
 ### 当前执行焦点
 
-N1/N2/N3 已完成。下一步：**N6**（N5 已合）；见 EXECUTION-QUEUE EQ-007/008 → `docs/DAY-TASK-N4-RUN-TIMELINE.md`；验证看 `VALIDATION-QUEUE` VQ-002
+N1–N8 已完成；VQ-008 已在 production SHA
+`567ab9edfdd436a3507b4774e8180e673e0dd779` 独立 PASS。新工作只从
+`EXECUTION-QUEUE.md` / `VALIDATION-QUEUE.md` 的 `status: OPEN` 条目认领；不得重开归档任务卡。
 
 
 ### 【给：③ 验证窗 · 本地】

@@ -27,7 +27,7 @@ RISK: medium — 大面积 UI + 矩阵 + 可选 CI e2e；不写 edu-cloud
 - 不自 PASS 终局 · 不升 v1.3 · 不宣称像素 100%
 - 证据只在 GitHub PR；禁止新 HANDOFF.md
 - 默认 edu_mode=fake；不真连 edu
-- 演示 teacher@example.com / pico-demo-123 · https://pico.aivia.asia
+- 演示 teacher@example.com / <redacted-demo-password> · https://pico.aivia.asia
 - **停工条件**：下列「强制包」全部 完成或 书面 BLOCKED+原因，且有效工作建议 ≥3h；禁止主路径已绿就收工
 
 ## RISK（本卡允许）

@@ -15,6 +15,9 @@ from app.settings import Settings, get_settings
 
 _bearer = HTTPBearer(auto_error=False)
 REGISTERED_SCOPES = frozenset({"ai:read", "ai:run", "ai:confirm", "ai:admin"})
+# Persisted fallback ledger key. Rename only with a data migration; normal
+# LibreChat requests replace it with the authenticated membership header.
+LEGACY_PROXY_MEMBERSHIP_ID = "nextchat-user"
 
 
 @dataclass(frozen=True)
@@ -157,7 +160,7 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
     ):
         return Principal(
             school_id="school-a",
-            membership_id="nextchat-user",
+            membership_id=LEGACY_PROXY_MEMBERSHIP_ID,
             scopes=["ai:run", "ai:read", "ai:confirm"],
             iss=s.pico_jwt_iss,
             aud=s.pico_jwt_aud,

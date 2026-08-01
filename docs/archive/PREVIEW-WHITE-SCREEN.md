@@ -46,8 +46,8 @@ TIP_NOW: 65d7079bfbd3cef7df40c13f0d34cea4987a5caa (+ local startup Mongo probe f
 | pin `:6015` | `{"port":8080}` |
 | Playwright `:8080/login` | **欢迎回来** + 邮箱/密码/继续；console **0** |
 | Playwright 登录后 `/c/new` | 任务台 IA：**新建任务 / 助理 / 项目 / 专家·技能·连接器 / 自动化**；「Pico，描述任务即可开始」 |
-| 演示账号 | `teacher@example.com` / `pico-demo-123`（本沙箱已 register 成功） |
-| 截图 | `screenshots/preview-8080-login.png` / `preview-8080-after-login.png` / `preview-8080-workbench.png` / `preview-6014.png` |
+| 演示账号 | `teacher@example.com` / `<redacted-demo-password>`（本沙箱已 register 成功） |
+| 截图 | `assets/preview/preview-8080-login.png` / `preview-8080-after-login.png` / `preview-8080-workbench.png` / `preview-6014.png` |
 
 **本窗诚实结论：** 本机产品栈 **绿**（8080 视觉通过）；用户 Live Preview 若仍白/「Port not found」→ **6014 鉴权或边缘隧道**，**禁止**谎称预览已通。
 
@@ -75,7 +75,7 @@ TIP_NOW: 65d7079bfbd3cef7df40c13f0d34cea4987a5caa (+ local startup Mongo probe f
 | 字段 | 值 |
 |------|-----|
 | Email | `teacher@example.com` |
-| Password | `pico-demo-123` |
+| Password | `<redacted-demo-password>` |
 
 4. 点 Continue / 继续。  
 5. 若超过约 10 秒连「Pico 正在加载…」都没有 → 仍是面板未吃到 8080（平台层），不是账号错。
@@ -87,7 +87,7 @@ TIP_NOW: 65d7079bfbd3cef7df40c13f0d34cea4987a5caa (+ local startup Mongo probe f
 - 禁止 `PROXY=1`  
 - Mongo 真库 **27117** + **27017 HTTP 盾** → 8080  
 - `startup.sh` Mongo 探测改为 **27117**（避免与盾混淆）  
-- 证据截图：`screenshots/preview-8080*.png` / `preview-6014.png`
+- 证据截图：`docs/archive/assets/preview/preview-8080-login.png` / `preview-8080-after-login.png` / `preview-8080-workbench.png` / `preview-6014.png`
 
 ### 平台侧建议
 
@@ -149,4 +149,4 @@ It looks like you are trying to access MongoDB over HTTP on the native driver po
 
 ## 用户看得见：走公网部署
 
-见 [`docs/DEPLOY-PUBLIC.md`](./DEPLOY-PUBLIC.md)。正式观看入口只使用生产 HTTPS 域名。
+见 [`docs/DEPLOY-PUBLIC.md`](../DEPLOY-PUBLIC.md)。正式观看入口只使用生产 HTTPS 域名。

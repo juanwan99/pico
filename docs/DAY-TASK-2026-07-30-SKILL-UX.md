@@ -3,7 +3,7 @@
 ```
 DOC: docs/DAY-TASK-2026-07-30-SKILL-UX.md
 TYPE: DAY
-STATUS: OPEN · 总管派工
+STATUS: COMPLETED · #55 Skill expansion + #56 UX debt
 DATE: 2026-07-30
 TOTAL: Grok（总管/审查）
 EXEC: Codex（写入）· 云端

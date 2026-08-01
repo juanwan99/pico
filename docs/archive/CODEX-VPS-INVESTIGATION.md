@@ -211,7 +211,7 @@ docker compose -f /opt/pico/docker-compose.host.yml logs --tail=80 pico-api
 cd /opt/pico && bash scripts/vps-fix-login.sh
 ```
 期望 `DEMO_LOGIN=OK`。然后浏览器：
-`teacher@example.com` / `pico-demo-123`
+`teacher@example.com` / `<redacted-demo-password>`
 
 机制：
 - `PICO_SEED_DEMO_USER` 启动播种（compose 挂载 seed 源码，免全量 rebuild）
@@ -220,7 +220,7 @@ cd /opt/pico && bash scripts/vps-fix-login.sh
 ### P0.4 登录（2026-07-30 业主确认）
 
 **已可登录** https://pico.aivia.asia/login  
-演示号 `teacher@example.com` / `pico-demo-123`（seed/fix-login 路径）。
+演示号 `teacher@example.com` / `<redacted-demo-password>`（seed/fix-login 路径）。
 
 下一默认：浏览器任务台发「只回：演示OK」闭合 UI 真聊（S1 本机此前已 200）。
 

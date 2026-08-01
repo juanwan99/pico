@@ -7,7 +7,7 @@ STATUS: CHECKLIST（执行时勾选；非 PASS 证书）
 DATE: 2026-07-30
 SHELL: apps/librechat @ :8080
 API: 127.0.0.1:18765
-LOGIN: teacher@example.com / pico-demo-123
+LOGIN: teacher@example.com / <redacted-demo-password>
 ```
 
 ## 使用方式

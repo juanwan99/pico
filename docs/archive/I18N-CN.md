@@ -27,7 +27,7 @@ DEFAULT: zh-Hans（简体中文）
 ## 演示账号
 
 - 邮箱：`teacher@example.com`  
-- 密码：`pico-demo-123`  
+- 密码：`<redacted-demo-password>`
 - 登录页应显示：**欢迎回来**（不是 Welcome back）
 
 ## 历史说明

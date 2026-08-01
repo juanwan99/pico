@@ -2,7 +2,7 @@
 
 ```
 DOC: docs/STANDALONE-AI-24H.md
-STATUS: BINDING · 总管派工
+STATUS: COMPLETED · foundation delivered through #117; do not redispatch
 DATE: 2026-07-30
 HORIZON: ~24 小时墙钟（可跨日间+夜间）
 TOTAL: Grok（总管/审查/合 main）
@@ -12,7 +12,7 @@ DEPLOY: docs/DEPLOY-TWO-HOST.md（有跳板则部署；无则只合 main + 诚�
 PRODUCT: 不接 edu 也具备完整 AI 工作台能力
 ```
 
-## 0. 插队门禁（总管 2026-07-30）
+## 0. Historical gate（2026-07-30）
 
 Codex 体检后：**P0 安全收口优先于轨 C 加厚**。见 `docs/P0-SECURITY-HARDENING.md`。
 
@@ -116,7 +116,7 @@ Codex 体检后：**P0 安全收口优先于轨 C 加厚**。见 `docs/P0-SECURI
 
 规则：`docs/NIGHT-CARD-POLICY.md` + RACI §3（约 6h、≥3 强制包+储备）。
 
-任务书：`docs/NIGHT-CARD-24H-W3-STANDALONE.md`
+任务书：`docs/archive/completed-tasks-2026-07/NIGHT-CARD-24H-W3-STANDALONE.md`
 
 ---
 

@@ -191,12 +191,9 @@ RELATED: docs/WORKFLOW.md · docs/VERSIONING.md · AGENTS.md
 ## 9. 发布闭环（阶段 A 现行）
 
 ```bash
-# 生产机（示例）
+# 生产机（示例；SHA 来自已合并 main 的完整 40 位提交）
 cd /opt/pico
-git fetch origin
-git checkout main
-git pull --ff-only origin main
-# 或: EXPECT_SHA_PREFIX=... bash scripts/prod-update.sh
+PICO_DEPLOY_SHA=<40-char-main-sha> bash scripts/prod-update.sh
 # API 变更 → 重建 pico-api；前端变更 → 重建 librechat
 curl -sS http://127.0.0.1:18765/health   # git_sha 应对齐
 ss -lntp | grep -E '18765|8080|27017'      # 仅 127.0.0.1

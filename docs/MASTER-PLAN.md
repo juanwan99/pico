@@ -6,7 +6,7 @@ STATUS: WORKING · 执行导航（不升格替代 MVP-3DAY v1.2）
 DATE: 2026-07-30
 REPO: juanwan99/pico ONLY
 PLAN_LAW: docs/MVP-3DAY.md v1.2 FIXED（无业主授权不升 v1.3）
-BRANCH: grok/pico-preview-librechat-p0 → main（CANDIDATE · 不自 PASS · 值守合）
+BRANCH: main（功能分支 → CANDIDATE · 不自 PASS · 值守合）
 RELATED:
   - docs/ONEFLOW.md（执行操作系统）
   - docs/SPRINT-3DAY-PUSH.md（3 日加速收口）

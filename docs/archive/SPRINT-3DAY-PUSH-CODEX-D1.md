@@ -19,7 +19,7 @@ ONEFLOW: docs/ONEFLOW.md
 - 禁 PROXY=1 · 禁公网 18765/27017/8080 · 禁打印 key  
 - 前端不像素战役；仅 S7 所需最小 UI  
 - 生产 /opt/pico · docker-compose.host.yml · https://pico.aivia.asia  
-- 演示 teacher@example.com / pico-demo-123  
+- 演示 teacher@example.com / <redacted-demo-password>
 
 ## 必读
 

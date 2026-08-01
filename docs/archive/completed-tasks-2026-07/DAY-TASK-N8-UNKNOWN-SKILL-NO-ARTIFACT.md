@@ -2,7 +2,7 @@
 
 ```
 TYPE: DAY
-STATUS: OPEN
+STATUS: COMPLETED · historical
 RISK: 黄 · FAST
 context_reset: false
 PRIOR: DEBT D11 / N3 回归

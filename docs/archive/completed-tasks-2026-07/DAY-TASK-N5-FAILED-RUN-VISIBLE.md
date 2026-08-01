@@ -2,7 +2,7 @@
 
 ```
 TYPE: DAY
-STATUS: OPEN
+STATUS: COMPLETED · historical
 RISK: 黄 · FAST
 PRIOR: N4 timeline 已合 #78
 ```
