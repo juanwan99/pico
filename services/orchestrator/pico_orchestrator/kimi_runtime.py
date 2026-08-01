@@ -1,0 +1,400 @@
+"""Feature-flagged Kimi Agent Session runtime.
+
+This module is reachable only through ``run_agent_runtime(use_kimi_agent=True)``.
+The production default remains the transitional ``run_agent_loop``.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Any
+
+from kaos.path import KaosPath
+from kimi_agent_sdk import (
+    ApprovalRequest,
+    Config,
+    LLMNotSet,
+    MaxStepsReached,
+    RunCancelled,
+    Session,
+    StatusUpdate,
+    TextPart,
+    TurnEnd,
+)
+
+from pico_orchestrator.gateway import ArtifactStore, Principal
+from pico_orchestrator.kimi_adapter import KimiEventContractError, KimiWireEventAdapter
+from pico_orchestrator.kimi_tools import GatewayToolContext, bind_gateway_tools
+from pico_orchestrator.provider import resolve_provider
+from pico_orchestrator.runner import EventEmitter, RunCaps, RunResult
+from pico_orchestrator.tools_builtin import build_default_gateway
+
+_AGENT_FILE = Path(__file__).resolve().parents[1] / "agents" / "pico-kimi-runtime.yaml"
+_CANCEL_POLL_SECONDS = 0.05
+
+
+async def run_kimi_agent(
+    *,
+    prompt: str,
+    principal: Principal,
+    emit: EventEmitter,
+    is_cancelled: Callable[[], Awaitable[bool]],
+    caps: RunCaps | None = None,
+    history: list[dict[str, Any]] | None = None,
+    artifact_store: ArtifactStore | None = None,
+) -> RunResult:
+    """Run one Kimi Session turn and map its merged Wire stream to Pico events."""
+
+    caps = caps or RunCaps()
+    if await is_cancelled():
+        await emit("run.status", {"status": "cancelled", "runtime": "kimi-agent"})
+        return RunResult(status="cancelled", final_text="")
+
+    provider = resolve_provider()
+    if provider is None or provider.name != "kimi":
+        return await _failed_result(
+            emit,
+            code="model.unconfigured",
+            reason="Kimi Agent runtime requires server-side KIMI_API_KEY",
+        )
+
+    config = Config.model_validate(
+        {
+            "default_model": "pico-runtime",
+            "models": {
+                "pico-runtime": {
+                    "provider": "pico-kimi",
+                    "model": provider.model,
+                    "max_context_size": 128_000,
+                }
+            },
+            "providers": {
+                "pico-kimi": {
+                    "type": "kimi",
+                    "base_url": provider.base_url,
+                    "api_key": provider.api_key,
+                }
+            },
+        }
+    )
+    gateway = build_default_gateway(artifact_store).restricted_to(caps.allowed_tools)
+    adapter = KimiWireEventAdapter()
+    final_parts: list[str] = []
+    token_usage: dict[str, int] | None = None
+    terminal_status: str | None = None
+
+    with TemporaryDirectory(prefix="pico-kimi-") as temp_dir:
+        work_dir = Path(temp_dir)
+        skills_dir = work_dir / "skills"
+        skills_dir.mkdir()
+        with bind_gateway_tools(gateway, principal) as tool_context:
+            stop_watcher = asyncio.Event()
+            timed_out = asyncio.Event()
+            token_cap_exceeded = asyncio.Event()
+            contract_failure: list[str] = []
+            try:
+                session = await Session.create(
+                    work_dir=KaosPath(work_dir),
+                    config=config,
+                    model="pico-runtime",
+                    yolo=False,
+                    agent_file=_AGENT_FILE,
+                    mcp_configs=[],
+                    skills_dir=KaosPath(skills_dir),
+                    max_steps_per_turn=caps.max_steps,
+                    max_retries_per_step=max(1, caps.max_retries),
+                    max_ralph_iterations=0,
+                )
+                async with session:
+                    watcher = asyncio.create_task(
+                        _watch_cancel(
+                            session,
+                            is_cancelled,
+                            stop_watcher,
+                            timed_out,
+                            caps.max_seconds,
+                        )
+                    )
+                    try:
+                        async for message in session.prompt(
+                            _user_input(prompt, history, caps.skill_instruction),
+                            merge_wire_messages=True,
+                        ):
+                            if isinstance(message, TurnEnd) and await is_cancelled():
+                                session.cancel()
+                                await emit(
+                                    "run.status",
+                                    {"status": "cancelled", "runtime": "kimi-agent"},
+                                )
+                                return _result(
+                                    "cancelled",
+                                    final_parts,
+                                    token_usage=token_usage,
+                                    tool_context=tool_context,
+                                )
+                            if contract_failure:
+                                session.cancel()
+                                continue
+                            try:
+                                for event in adapter.feed(message):
+                                    await emit(event.type, event.payload)
+                                    if event.type == "run.status":
+                                        terminal_status = str(event.payload.get("status") or "")
+                                    elif event.type == "run.usage":
+                                        total = event.payload.get("total_tokens")
+                                        if isinstance(total, int):
+                                            token_usage = {"total_tokens": total}
+                            except KimiEventContractError as exc:
+                                contract_failure.append(str(exc))
+                                session.cancel()
+                                continue
+                            if isinstance(message, TextPart):
+                                final_parts.append(message.text)
+                            elif isinstance(message, StatusUpdate) and _over_token_cap(
+                                message, caps
+                            ):
+                                token_cap_exceeded.set()
+                                session.cancel()
+                            elif isinstance(message, ApprovalRequest):
+                                # No Pico approval control plane exists in KA-2.
+                                message.resolve("reject")
+                    finally:
+                        stop_watcher.set()
+                        watcher.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await watcher
+            except RunCancelled:
+                if timed_out.is_set():
+                    return await _failed_result(
+                        emit,
+                        code="timeout",
+                        reason=f"Kimi Agent timeout after {caps.max_seconds}s",
+                        final_parts=final_parts,
+                        token_usage=token_usage,
+                        tool_context=tool_context,
+                    )
+                if token_cap_exceeded.is_set():
+                    return await _failed_result(
+                        emit,
+                        code="token_cap",
+                        reason=f"Kimi Agent token cap exceeded: {caps.max_tokens}",
+                        final_parts=final_parts,
+                        token_usage=token_usage,
+                        tool_context=tool_context,
+                    )
+                if contract_failure:
+                    return await _failed_result(
+                        emit,
+                        code="kimi.event_contract",
+                        reason=contract_failure[0],
+                        final_parts=final_parts,
+                        token_usage=token_usage,
+                        tool_context=tool_context,
+                    )
+                await emit("run.status", {"status": "cancelled", "runtime": "kimi-agent"})
+                return _result(
+                    "cancelled",
+                    final_parts,
+                    token_usage=token_usage,
+                    tool_context=tool_context,
+                )
+            except LLMNotSet:
+                return await _failed_result(
+                    emit,
+                    code="model.unconfigured",
+                    reason="Kimi Agent LLM is not configured",
+                    final_parts=final_parts,
+                    tool_context=tool_context,
+                )
+            except MaxStepsReached:
+                return await _failed_result(
+                    emit,
+                    code="kimi.max_steps",
+                    reason="Kimi Agent reached the step limit",
+                    final_parts=final_parts,
+                    token_usage=token_usage,
+                    tool_context=tool_context,
+                )
+            except KimiEventContractError as exc:
+                return await _failed_result(
+                    emit,
+                    code="kimi.event_contract",
+                    reason=str(exc),
+                    final_parts=final_parts,
+                    token_usage=token_usage,
+                    tool_context=tool_context,
+                )
+            except asyncio.CancelledError:
+                if "session" in locals():
+                    session.cancel()
+                raise
+            except Exception as exc:  # noqa: BLE001 - sanitize provider/runtime failures
+                return await _failed_result(
+                    emit,
+                    code="kimi.runtime_error",
+                    reason=f"Kimi Agent runtime error ({type(exc).__name__})",
+                    final_parts=final_parts,
+                    token_usage=token_usage,
+                    tool_context=tool_context,
+                )
+
+    if timed_out.is_set():
+        return await _failed_result(
+            emit,
+            code="timeout",
+            reason=f"Kimi Agent timeout after {caps.max_seconds}s",
+            final_parts=final_parts,
+            token_usage=token_usage,
+            tool_context=tool_context,
+        )
+    if token_cap_exceeded.is_set():
+        return await _failed_result(
+            emit,
+            code="token_cap",
+            reason=f"Kimi Agent token cap exceeded: {caps.max_tokens}",
+            final_parts=final_parts,
+            token_usage=token_usage,
+            tool_context=tool_context,
+        )
+    if contract_failure:
+        return await _failed_result(
+            emit,
+            code="kimi.event_contract",
+            reason=contract_failure[0],
+            final_parts=final_parts,
+            token_usage=token_usage,
+            tool_context=tool_context,
+        )
+    if terminal_status != "succeeded":
+        return await _failed_result(
+            emit,
+            code="kimi.missing_terminal",
+            reason="Kimi Agent stream ended without TurnEnd",
+            final_parts=final_parts,
+            token_usage=token_usage,
+        )
+    return _result(
+        "succeeded",
+        final_parts,
+        token_usage=token_usage,
+        tool_context=tool_context,
+    )
+
+
+async def _watch_cancel(
+    session: Session,
+    is_cancelled: Callable[[], Awaitable[bool]],
+    stop: asyncio.Event,
+    timed_out: asyncio.Event,
+    max_seconds: int,
+) -> None:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max_seconds
+    while not stop.is_set():
+        if await is_cancelled():
+            session.cancel()
+            return
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            timed_out.set()
+            session.cancel()
+            return
+        try:
+            await asyncio.wait_for(
+                stop.wait(), timeout=min(_CANCEL_POLL_SECONDS, remaining)
+            )
+        except TimeoutError:
+            pass
+
+
+def _over_token_cap(update: StatusUpdate, caps: RunCaps) -> bool:
+    usage = update.token_usage
+    if usage is None:
+        return False
+    total = usage.input_other + usage.input_cache_read + usage.input_cache_creation + usage.output
+    return total > caps.max_tokens
+
+
+def _user_input(
+    prompt: str,
+    history: list[dict[str, Any]] | None,
+    skill_instruction: str,
+) -> str:
+    parts: list[str] = []
+    if skill_instruction:
+        parts.append(f"<pico_skill_instruction>\n{skill_instruction}\n</pico_skill_instruction>")
+    transcript: list[str] = []
+    for item in (history or [])[-20:]:
+        role = item.get("role")
+        content = item.get("content")
+        if role in {"user", "assistant"} and content:
+            transcript.append(f"{role}: {str(content)[:4000]}")
+    if transcript:
+        parts.append("<conversation_history>\n" + "\n".join(transcript) + "\n</conversation_history>")
+    parts.append(prompt)
+    return "\n\n".join(parts)
+
+
+async def _failed_result(
+    emit: EventEmitter,
+    *,
+    code: str,
+    reason: str,
+    final_parts: list[str] | None = None,
+    token_usage: dict[str, int] | None = None,
+    tool_context: GatewayToolContext | None = None,
+) -> RunResult:
+    await emit("run.error", {"code": code, "error": reason})
+    await emit(
+        "run.status",
+        {"status": "failed", "reason": reason, "code": code, "runtime": "kimi-agent"},
+    )
+    result = _result(
+        "failed",
+        final_parts or [],
+        error=reason,
+        token_usage=token_usage,
+        tool_context=tool_context,
+    )
+    return result
+
+
+def _result(
+    status: str,
+    final_parts: list[str],
+    *,
+    error: str | None = None,
+    token_usage: dict[str, int] | None = None,
+    tool_context: GatewayToolContext | None = None,
+) -> RunResult:
+    artifact_markdown: str | None = None
+    change_proposal: dict[str, Any] | None = None
+    for name, value in tool_context.results if tool_context else []:
+        if name == "fake_edu_list_classes":
+            artifact_markdown = _classes_artifact(value)
+        elif name == "pico_propose_change":
+            change_proposal = value
+    return RunResult(
+        status=status,
+        final_text="".join(final_parts).strip(),
+        error=error,
+        token_usage=token_usage,
+        artifact_markdown=artifact_markdown,
+        change_proposal=change_proposal,
+    )
+
+
+def _classes_artifact(result: dict[str, Any]) -> str:
+    lines = [
+        f"# 班级列表（{result.get('school_id', '')}）",
+        "",
+        "| ID | 名称 |",
+        "|----|------|",
+    ]
+    for item in result.get("classes") or []:
+        lines.append(f"| {item.get('id', '')} | {item.get('name', '')} |")
+    return "\n".join(lines)

@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass
+from typing import Any, Self
+
+import pytest
+from app.settings import Settings
+from kimi_agent_sdk import RunCancelled, StepBegin, TextPart, TurnBegin, TurnEnd
+from pico_orchestrator.gateway import AllowlistGateway, ToolSpec
+from pico_orchestrator.kimi_tools import EchoParams, PicoEcho, bind_gateway_tools
+from pico_orchestrator.provider import ProviderConfig
+from pico_orchestrator.runner import RunCaps, RunResult
+from pico_orchestrator.runtime import run_agent_runtime
+
+
+@dataclass
+class Principal:
+    school_id: str = "school-a"
+    membership_id: str = "member-a"
+    scopes: list[str] | None = None
+
+
+async def _not_cancelled() -> bool:
+    return False
+
+
+async def _emit_to(events: list[tuple[str, dict[str, Any]]], kind: str, payload: dict[str, Any]) -> None:
+    events.append((kind, payload))
+
+
+@pytest.mark.asyncio
+async def test_runtime_flag_defaults_to_old_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    async def old_loop(**_kwargs: Any) -> RunResult:
+        calls.append("old")
+        return RunResult(status="succeeded", final_text="old")
+
+    async def kimi_loop(**_kwargs: Any) -> RunResult:
+        calls.append("kimi")
+        return RunResult(status="succeeded", final_text="kimi")
+
+    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_loop)
+    monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
+
+    default = await run_agent_runtime(prompt="hello")
+    enabled = await run_agent_runtime(use_kimi_agent=True, prompt="hello")
+
+    assert (default.final_text, enabled.final_text) == ("old", "kimi")
+    assert calls == ["old", "kimi"]
+
+
+def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PICO_KIMI_AGENT_RUNTIME", raising=False)
+    assert Settings(_env_file=None).pico_kimi_agent_runtime is False
+
+    monkeypatch.setenv("PICO_KIMI_AGENT_RUNTIME", "1")
+    assert Settings(_env_file=None).pico_kimi_agent_runtime is True
+
+
+@pytest.mark.asyncio
+async def test_kimi_path_maps_mock_session_without_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator import kimi_runtime
+
+    created: dict[str, Any] = {}
+    prompt_options: dict[str, Any] = {}
+
+    class FakeSession:
+        async def __aenter__(self) -> Self:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def prompt(self, user_input: str, **kwargs: Any):
+            prompt_options.update(user_input=user_input, **kwargs)
+            yield TurnBegin(user_input=user_input)
+            yield StepBegin(n=1)
+            yield TextPart(text="hello from Kimi")
+            yield TurnEnd()
+
+        def cancel(self) -> None:
+            raise AssertionError("cancel should not be called")
+
+    async def create(**kwargs: Any) -> FakeSession:
+        created.update(kwargs)
+        return FakeSession()
+
+    monkeypatch.setattr(kimi_runtime.Session, "create", create)
+    monkeypatch.setattr(
+        kimi_runtime,
+        "resolve_provider",
+        lambda: ProviderConfig("kimi", "test-only", "https://example.invalid/v1", "kimi-test"),
+    )
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    result = await kimi_runtime.run_kimi_agent(
+        prompt="hello",
+        principal=Principal(),
+        emit=lambda kind, payload: _emit_to(events, kind, payload),
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(max_seconds=5, max_steps=2),
+    )
+
+    assert result.status == "succeeded"
+    assert result.final_text == "hello from Kimi"
+    assert prompt_options["merge_wire_messages"] is True
+    assert created["yolo"] is False
+    assert created["mcp_configs"] == []
+    assert created["agent_file"].name == "pico-kimi-runtime.yaml"
+    assert events == [
+        ("run.status", {"status": "running", "runtime": "kimi-agent"}),
+        ("agent.step", {"step": 1, "phase": "model"}),
+        ("message.delta", {"text": "hello from Kimi"}),
+        ("run.status", {"status": "succeeded", "runtime": "kimi-agent"}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_kimi_tool_wrapper_has_no_bypass_around_gateway() -> None:
+    calls: list[tuple[str, str, dict[str, Any]]] = []
+
+    async def echo(principal: Principal, arguments: dict[str, Any]) -> dict[str, Any]:
+        calls.append((principal.school_id, "pico_echo", arguments))
+        return {"echo": arguments["text"]}
+
+    gateway = AllowlistGateway()
+    gateway.register(
+        ToolSpec(name="pico_echo", description="test", handler=echo, school_scoped=False)
+    )
+    with bind_gateway_tools(gateway, Principal()) as context:
+        result = await PicoEcho()(EchoParams(text="hello"))
+
+    assert result.is_error is False
+    assert calls == [("school-a", "pico_echo", {"text": "hello"})]
+    assert context.results == [("pico_echo", {"echo": "hello"})]
+
+
+@pytest.mark.asyncio
+async def test_cancel_request_calls_session_cancel_and_emits_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pico_orchestrator import kimi_runtime
+
+    class BlockingSession:
+        cancelled = False
+
+        async def __aenter__(self) -> Self:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def prompt(self, user_input: str, **_kwargs: Any):
+            yield TurnBegin(user_input=user_input)
+            while not self.cancelled:
+                await asyncio.sleep(0.01)
+            raise RunCancelled()
+
+        def cancel(self) -> None:
+            self.cancelled = True
+
+    session = BlockingSession()
+
+    async def create(**_kwargs: Any) -> BlockingSession:
+        return session
+
+    checks = 0
+
+    async def cancelled() -> bool:
+        nonlocal checks
+        checks += 1
+        return checks > 1
+
+    monkeypatch.setattr(kimi_runtime.Session, "create", create)
+    monkeypatch.setattr(
+        kimi_runtime,
+        "resolve_provider",
+        lambda: ProviderConfig("kimi", "test-only", "https://example.invalid/v1", "kimi-test"),
+    )
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    result = await kimi_runtime.run_kimi_agent(
+        prompt="hello",
+        principal=Principal(),
+        emit=lambda kind, payload: _emit_to(events, kind, payload),
+        is_cancelled=cancelled,
+        caps=RunCaps(max_seconds=5),
+    )
+
+    assert session.cancelled is True
+    assert result.status == "cancelled"
+    assert events[-1] == ("run.status", {"status": "cancelled", "runtime": "kimi-agent"})
+    assert sum(1 for kind, payload in events if kind == "run.status" and payload["status"] == "cancelled") == 1

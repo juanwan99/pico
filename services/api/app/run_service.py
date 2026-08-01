@@ -233,7 +233,8 @@ async def start_run_background(run_id: str, principal: Principal) -> None:
 
 
 async def _execute_run(run_id: str, principal: Principal) -> None:
-    from pico_orchestrator.runner import RunCaps, provider_label, run_agent_loop
+    from pico_orchestrator.runner import RunCaps, provider_label
+    from pico_orchestrator.runtime import run_agent_runtime
     from pico_orchestrator.user_errors import enrich_fail_payload, user_message_for_error
 
     settings = get_settings()
@@ -280,7 +281,8 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             caps.allowed_tools = list(skill_snapshot.get("tools") or [])
             caps.skill_instruction = instruction_for_snapshot(skill_snapshot)
 
-        result = await run_agent_loop(
+        result = await run_agent_runtime(
+            use_kimi_agent=settings.pico_kimi_agent_runtime,
             prompt=prompt,
             principal=principal,
             emit=emit,

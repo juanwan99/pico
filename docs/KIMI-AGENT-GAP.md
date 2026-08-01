@@ -88,9 +88,9 @@ LibreChat / 客户端
 
 | ID | 缺口 | 说明 |
 |----|------|------|
-| G1 | 运行时适配层未接线 | KA-1 只有纯事件 mapper 骨架；尚无 `Session` 执行、网关注入或生产调用 |
-| G2 | 事件映射待集成验证 | KA-1 已定映射契约与单测，尚未用真实/录制 Wire 流及 Pico DB 集成验证，见 §8 |
-| G3 | 取消/超时 | 现 cancel 挂在自研环；真接需同等契约 |
+| G1 | 运行时适配层未默认启用 | KA-2 已有 flag-only `Session` 执行与网关桥；默认仍走旧环，见 §9 |
+| G2 | 事件映射待真实流验证 | KA-2 mock Session + Pico DB 路由已测；尚无获准凭据下的真实 Wire 集成证据 |
+| G3 | 取消/超时待真实流验证 | KA-2 已实现 `is_cancelled → session.cancel` 与 timeout，mock 测通过；真实 provider 仍待测 |
 | G4 | 技能快照 | Skill 与工具交集现挂 runner；需挂真运行时 |
 | G5 | 发行源与可重复安装 | KA-0 已证公网 PyPI 可装 pin；仍未固定 wheel hash / 内部镜像，见 §7 |
 | G6 | 测试 | 大量单测 mock `run_agent_loop`；归位需新契约测 |
@@ -264,3 +264,86 @@ Kimi host tool，也没有给生产代码增加 fallback、dual-run 或 feature 
 网络或密钥，覆盖：正常 turn 顺序、call/result 关联、step usage、思考内容不落账、残缺
 tool part / 非法参数 / 孤立 result / 未完成 call 的 fail-closed 行为。这只能证明 mapper
 契约，**不能**证明 Kimi Agent 已接入或产品 PASS。
+
+---
+
+## 9. KA-2 默认关闭的 Kimi Session 路径（2026-08-01）
+
+### 9.1 开关与路由
+
+唯一开关为：
+
+```dotenv
+PICO_KIMI_AGENT_RUNTIME=0
+```
+
+`Settings.pico_kimi_agent_runtime` 默认 `False`；`.env.example` 与
+`.env.production.example` 都显式为 `0`。`run_service`、OpenAI-compatible 非流式
+`pico-agent`、流式 `pico-agent` 三处统一调用 `run_agent_runtime(...)`：
+
+| flag | 执行路径 |
+|---|---|
+| 未设置 / `0` / false | 原 `run_agent_loop(...)`，参数与事件处理不变 |
+| `1` / true | `run_kimi_agent(...)` → `Session.prompt(..., merge_wire_messages=True)` → `KimiWireEventAdapter` → 原 `emit/append_event` |
+
+Direct-chat 模型仍走 `stream_chat`，不受此 flag 影响。selector 在 flag 关闭时不导入或创建
+Kimi Session；KA-2 没有 fallback/dual-run：选中的路径失败就按该路径失败，不暗中重跑另一核。
+
+```
+deployment: NONE
+production flag value: 0 / OFF
+production default runtime: run_agent_loop
+runner deletion: NONE
+product PASS: NOT CLAIMED
+```
+
+### 9.2 Session 配置与 Wire 落账
+
+flag 开启时，执行层用服务端 Kimi provider 构造内存 `Config`，创建隔离临时 work dir 与
+空 skills dir，显式传入：
+
+- `agent_file=agents/pico-kimi-runtime.yaml`
+- `yolo=False`
+- `mcp_configs=[]`
+- `max_steps_per_turn` / retry / timeout 来自现有 `RunCaps`
+- `merge_wire_messages=True`
+
+Wire 消息逐条交给 KA-1 mapper，再逐条调用现有 emitter；`TextPart` 同时聚合成
+`RunResult.final_text`，usage、Artifact 班级表与 change proposal 继续回到现有终态处理。
+没有配置 Kimi key、step cap、timeout、mapper 契约错误与 SDK/provider 错误均输出安全化
+`run.error` + failed 终态；不会把 key 或完整 provider 响应写账。
+
+### 9.3 工具只能经过 AllowlistGateway
+
+新 agent spec **没有** Kimi Shell/File/Web/MCP/Task，只列出
+`pico_orchestrator.kimi_tools:*` 包装器。执行每个 turn 前创建
+`build_default_gateway(artifact_store).restricted_to(caps.allowed_tools)`，再把 verified
+`Principal` 与 gateway 绑定到 request/task-local context。每个 Kimi callable 的唯一实现是：
+
+```text
+typed args → AllowlistGateway.invoke(principal, tool_name, args) → ToolOk / ToolError
+```
+
+因此未在 global allowlist 或当前 skill intersection 内的调用 fail closed；没有直接调用
+工具 handler 的旁路。Host 危险工具仍列入 `exclude_tools`，subagent 与 MCP 都为空/关闭。
+`ApprovalRequest` 会落审计事件并立即 reject，因为 KA-2 尚无 Pico 审批控制面。
+
+### 9.4 取消与终态
+
+Session 运行期间有独立 watcher 轮询原 `is_cancelled()`：命中后调用 `session.cancel()`；
+SDK `RunCancelled` 映射为唯一 `run.status=cancelled`。外层 task cancellation 也先调用
+`session.cancel()` 再向上传播。timeout 与 token cap fail closed；`TurnEnd` 才能形成
+succeeded，流结束却没有 `TurnEnd` 记为 failed。
+
+### 9.5 无密钥测试与剩余边界
+
+- selector 单测：默认/false 只调旧 `run_agent_loop`；true 只调 Kimi path。
+- mock Session 单测：断言 `merge_wire_messages=True`、`yolo=False`、无 MCP，Wire 事件经
+  adapter 落账，不访问网络。
+- cancel 单测：ledger cancel → `session.cancel()` → cancelled exactly once。
+- gateway wrapper 单测：只有 `AllowlistGateway.invoke` 能产出工具成功结果。
+- API/DB 集成测：同一 `pico-agent` 入口在 flag false/true 时分别命中旧/Kimi mock 路径。
+- security 测：flagged agent 只暴露 gateway wrapper，危险 host tools 全部关闭。
+
+仍未完成：真实 Kimi provider/Wire 录制验证、生产开 flag、生产默认切核、真实取消竞态和
+KA-3 回归。因此 KA-2 只证明**默认关闭的候选路径可测试**，不得称为「已接入完成」或产品 PASS。

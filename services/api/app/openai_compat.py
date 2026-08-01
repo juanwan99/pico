@@ -509,7 +509,8 @@ async def _run_and_collect(
     history: list[dict[str, Any]] | None = None,
     skill_snapshot: dict[str, Any] | None = None,
 ) -> Any:
-    from pico_orchestrator.runner import RunCaps, run_agent_loop
+    from pico_orchestrator.runner import RunCaps
+    from pico_orchestrator.runtime import run_agent_runtime
     from pico_orchestrator.skill_policy import instruction_for_snapshot
 
     from app.artifact_store import LedgerArtifactStore
@@ -534,7 +535,8 @@ async def _run_and_collect(
     )
     if skill_snapshot:
         await emit("skill.snapshot", skill_snapshot)
-    result = await run_agent_loop(
+    result = await run_agent_runtime(
+        use_kimi_agent=settings.pico_kimi_agent_runtime,
         prompt=prompt,
         principal=principal,  # structural Principal protocol
         emit=emit,
@@ -796,7 +798,8 @@ async def chat_completions(
             return
 
         # pico-agent: progressive deltas from agent loop (not wait-then-fake-chunk)
-        from pico_orchestrator.runner import RunCaps, run_agent_loop
+        from pico_orchestrator.runner import RunCaps
+        from pico_orchestrator.runtime import run_agent_runtime
 
         from app.db import init_db
 
@@ -867,7 +870,8 @@ async def chat_completions(
                 )
                 if skill_snapshot:
                     await emit("skill.snapshot", skill_snapshot)
-                result = await run_agent_loop(
+                result = await run_agent_runtime(
+                    use_kimi_agent=settings.pico_kimi_agent_runtime,
                     prompt=prompt,
                     principal=principal,
                     emit=emit,
