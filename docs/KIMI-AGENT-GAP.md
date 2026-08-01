@@ -88,8 +88,8 @@ LibreChat / 客户端
 
 | ID | 缺口 | 说明 |
 |----|------|------|
-| G1 | 无运行时适配层 | 没有 `KimiAgentRuntime.run(prompt) -> events` 适配器 |
-| G2 | 事件模型未映射 | Agent 事件 → Pico `run.*` / tool 事件表未设计落地 |
+| G1 | 运行时适配层未接线 | KA-1 只有纯事件 mapper 骨架；尚无 `Session` 执行、网关注入或生产调用 |
+| G2 | 事件映射待集成验证 | KA-1 已定映射契约与单测，尚未用真实/录制 Wire 流及 Pico DB 集成验证，见 §8 |
 | G3 | 取消/超时 | 现 cancel 挂在自研环；真接需同等契约 |
 | G4 | 技能快照 | Skill 与工具交集现挂 runner；需挂真运行时 |
 | G5 | 发行源与可重复安装 | KA-0 已证公网 PyPI 可装 pin；仍未固定 wheel hash / 内部镜像，见 §7 |
@@ -191,3 +191,76 @@ kimi --print --final-message-only \
 provider 配置下验证。适配器还必须显式处理 `LLMNotSet`，不能只依赖 CLI 进程退出码判成成功。
 本结果没有修改 `services/orchestrator/pico_orchestrator/runner.py`，也没有接线 LibreChat、
 开启生产开关、删除 runner 或预埋其它 harness。
+
+---
+
+## 8. KA-1 适配契约与骨架（2026-08-01）
+
+### 8.1 选择与边界
+
+账本适配采用低层 `Session.prompt(..., merge_wire_messages=True)` 的 `WireMessage` 流。
+高层 `kimi_agent_sdk.prompt(...)` 只产出聚合后的 `Message`，适合简单调用，但会丢失
+`TurnBegin`、`StepBegin`、工具结果和中断等账本所需边界，因此**不作为 Pico 账本真接入口**。
+
+KA-1 新增 `pico_orchestrator.kimi_adapter.KimiWireEventAdapter`：它是纯 mapper，只把一个
+已合并的 Wire 消息转换为零个或多个 `{type, payload}`，不创建 `Session`、不调模型、
+不运行工具、不写数据库。调用方后续把结果逐条交给现有 `append_event` emitter，数据库
+继续负责 `run_id + seq` 的顺序和唯一性。
+
+```
+deployment: NONE
+production runtime switch: NONE
+run_service/openai_compat wiring: NONE
+feature flag: NONE
+run_agent_loop change: NONE
+```
+
+### 8.2 Wire → Pico 事件映射
+
+| Kimi SDK / Wire 输入 | Pico 账本输出 | 关键 payload / 规则 |
+|---|---|---|
+| `TurnBegin` | `run.status` | `status=running`, `runtime=kimi-agent`；不重复存一份 prompt |
+| `StepBegin(n)` | `agent.step` | `step=n`, `phase=model` |
+| `TextPart` | `message.delta` | `text` 原样增量写入，空文本忽略 |
+| `ThinkPart` | **不落账** | 禁止持久化私有推理 / chain-of-thought |
+| `StatusUpdate` | `run.usage` | step 级 input/output/cache/total、`context_usage`、`message_id`；标 `scope=step`，不得误当累计值 |
+| 已合并 `ToolCall` | `tool.call` | `tool`, JSON object `arguments`, `call_id`；坏 JSON / 非 object fail closed |
+| `ToolCallPart` | **契约错误** | 表示调用方漏设 `merge_wire_messages=True`，禁止用残缺参数落账 |
+| `ToolResult` | `tool.result` | 用 `call_id` 关联前置 call；`tool`, `ok`, `result`, `message`；孤立 result fail closed |
+| `ApprovalRequest` | `tool.approval_required` | `request_id`, `call_id`, `sender`, `action`, `description`；当前无审批控制面，后续执行层必须 reject/fail closed，禁止 `yolo` 放行 |
+| `ApprovalResponse` | `tool.approval_resolved` | `request_id`, `response`，仅作审计 |
+| `CompactionBegin/End` | `agent.step` | `phase=compaction.begin/end` |
+| `StepInterrupted` | `agent.step` | `phase=interrupted`；本事件本身不猜测 cancelled 还是 failed |
+| `TurnEnd` | `run.status` | 无未完成 tool call 时唯一终态 `succeeded` |
+| `SubagentEvent` | **契约错误** | Pico agent spec 已关闭 `Task`；出现即 fail closed，不递归执行 |
+| 未知 Wire 类型 | **契约错误** | pin 升级后先补映射与测试，禁止静默丢审计事件 |
+
+工具 call/result 必须同 `call_id` 配对，且 `tool.call` 永远先于 `tool.result`。一个 turn
+只能有一个 `TurnBegin` 和一个终态；`TurnEnd` 后继续收到消息、重复 call id、未完成 call
+均为契约错误。`KimiWireEventAdapter` 不记录 SDK 配置、provider secret 或操作员环境。
+
+### 8.3 执行层终态与取消契约（KA-2/KA-3 实现）
+
+KA-1 不实现执行层，但固定以下调用方责任，避免后续把 Wire 事件误当完整运行时：
+
+1. 创建 `Session` 后并发观察 Pico `is_cancelled()`；命中时调用 `session.cancel()`。
+2. `RunCancelled` 或已确认的 Pico cancel → 唯一 `run.status {status=cancelled}`。
+3. `LLMNotSet` → `run.error {code=model.unconfigured}`，随后唯一 failed 终态。
+4. `MaxStepsReached` → `run.error {code=kimi.max_steps}`，随后 failed。
+5. provider / SDK / mapper 契约异常 → 安全化 `run.error`，随后 failed；不得把密钥、完整
+   provider 响应或堆栈写进用户可见 payload。
+6. 终态必须 exactly once；`StepInterrupted` 仅提供过程证据，不能自行决定终态。
+
+### 8.4 工具安全契约
+
+事件转换**不等于**工具隔离。真接执行层必须只把 Pico `AllowlistGateway` 包装成 Kimi
+可调用工具，并继续携带 `Principal`；`agents/pico.yaml` 的 Host Shell/File/Web/MCP/Task
+关闭证明仍是硬门禁。任何未经过 Pico gateway 的 `ToolCall` 都不得执行。KA-1 没有注册
+Kimi host tool，也没有给生产代码增加 fallback、dual-run 或 feature 开关。
+
+### 8.5 无密钥单测
+
+`tests/unit/test_kimi_adapter.py` 直接构造 pin 版本的 Wire 类型，不创建 `Session`、不访问
+网络或密钥，覆盖：正常 turn 顺序、call/result 关联、step usage、思考内容不落账、残缺
+tool part / 非法参数 / 孤立 result / 未完成 call 的 fail-closed 行为。这只能证明 mapper
+契约，**不能**证明 Kimi Agent 已接入或产品 PASS。
