@@ -82,6 +82,19 @@ def _fake_runtime(
     return bin_dir
 
 
+def _advance_origin_main(tmp_path: Path, production: Path) -> str:
+    updater = tmp_path / "updater"
+    origin = _run("git", "remote", "get-url", "origin", cwd=production).stdout.strip()
+    _run("git", "clone", "--branch", "main", origin, str(updater), cwd=tmp_path)
+    _run("git", "config", "user.email", "ci@pico.local", cwd=updater)
+    _run("git", "config", "user.name", "Pico CI", cwd=updater)
+    (updater / "tip.txt").write_text("new main tip\n")
+    _run("git", "add", "tip.txt", cwd=updater)
+    _run("git", "commit", "-m", "advance main", cwd=updater)
+    _run("git", "push", "origin", "main", cwd=updater)
+    return _run("git", "rev-parse", "HEAD", cwd=updater).stdout.strip()
+
+
 def _run_prod_update(production: Path, sha: str, bin_dir: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash", str(production / "scripts" / "prod-update.sh")],
@@ -117,6 +130,54 @@ def test_prod_update_deploys_exact_clean_main_sha(tmp_path: Path) -> None:
     assert f"health.git_sha exact match: {sha}" in result.stdout
     assert "ui_login=200" in result.stdout
     assert "[pico] done" in result.stdout
+
+
+def test_prod_update_refuses_stale_origin_main_after_fetch(tmp_path: Path) -> None:
+    production, _ = _production_checkout(tmp_path)
+    new_sha = _advance_origin_main(tmp_path, production)
+    _run(
+        "git",
+        "config",
+        "--replace-all",
+        "remote.origin.fetch",
+        "+refs/heads/preview:refs/remotes/origin/preview",
+        cwd=production,
+    )
+    result = _run_prod_update(production, new_sha, _fake_runtime(tmp_path))
+    assert result.returncode == 3
+    assert "origin/main did not advance to the fetched main tip" in result.stderr
+    assert f"FETCH_HEAD={new_sha}" in result.stderr
+    assert "+refs/heads/preview:refs/remotes/origin/preview" in result.stderr
+    assert "git config --replace-all remote.origin.fetch" in result.stderr
+    assert "[pico] done" not in result.stdout
+
+
+def test_prod_update_refuses_preview_refspec_even_when_tip_matches(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    _run(
+        "git",
+        "config",
+        "--replace-all",
+        "remote.origin.fetch",
+        "+refs/heads/preview:refs/remotes/origin/preview",
+        cwd=production,
+    )
+    result = _run_prod_update(production, sha, _fake_runtime(tmp_path))
+    assert result.returncode == 3
+    assert "remote.origin.fetch does not track main as origin/main" in result.stderr
+    assert "git config --replace-all remote.origin.fetch" in result.stderr
+    assert "[pico] done" not in result.stdout
+
+
+def test_prod_update_refuses_requested_sha_behind_fetched_main(tmp_path: Path) -> None:
+    production, old_sha = _production_checkout(tmp_path)
+    new_sha = _advance_origin_main(tmp_path, production)
+    result = _run_prod_update(production, old_sha, _fake_runtime(tmp_path))
+    assert result.returncode == 3
+    assert "requested SHA is not the current origin/main tip" in result.stderr
+    assert f"requested={old_sha}" in result.stderr
+    assert f"origin/main={new_sha}" in result.stderr
+    assert "[pico] done" not in result.stdout
 
 
 def test_prod_update_retries_transient_login_network_failure(tmp_path: Path) -> None:
