@@ -86,7 +86,8 @@ Do **not** use `docs/archive/**` or new HANDOFF markdown as task truth.
 ## Product rules
 
 - AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.
-- Kimi Agent + model HTTPS APIs; no custom agent OS.
+- **Target:** open-source Kimi Agent runtime + Kimi HTTPS API; no custom agent OS as end state.
+- **Current:** transitional tool-loop may still run multi-step; do not claim Kimi Agent integrated (TRUTH-FREEZE / KIMI-AGENT-GAP).
 - Tenant fail-closed; **Pico owns the unique AI ledger**.
 - Pricing docs may stay DRAFT; do not freeze commercial FIXED unless owner orders.
 - Prefer smallest correct fix; delete dual-run croft rather than stack adapters.

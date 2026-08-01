@@ -51,7 +51,7 @@ Pico = 学校场景可用的 **AI 工作台产品**（LibreChat 壳 + 唯一 AI 
 | ID | 含义（摘要） |
 |----|----------------|
 | S1 | 真模型 API 端到端 + 流式 UI；密钥仅服务端 |
-| S2 | 钉版本 Kimi Agent 服务端多步工具环 |
+| S2 | 钉版本 **开源 Kimi Agent** 服务端多步（**目标**；现状过渡环见 TRUTH-FREEZE） |
 | S3 | Task/Run/有序 Event 持久化 = 唯一 AI 账本 |
 | S4 | 短时凭证（school_id/membership_id 同形）；Phase1 测试签发 |
 | S5 | **产品级 UI 真接通**（见下节壳） |
@@ -137,7 +137,7 @@ Pico API + orchestrator + DB
 
 - Python **3.11+**（kimi-agent-sdk 实际要求 **≥3.12**）
 - 前端壳：当前 **LibreChat (React)**；历史文档中的 Vue3 叙述以壳选型更新为准（不强制改回 Vue）
-- **钉死** Kimi Agent 版本（见 `agent_pins` / requirements）
+- **钉死**目标 Kimi Agent 版本；**pin ≠ 已接入**（见 `docs/KIMI-AGENT-GAP.md`）
 - Kimi API 优先
 
 ---
@@ -200,7 +200,7 @@ Pico API + orchestrator + DB
 2. 产品 = AI 工作台，不是网盘/教务。
 3. 唯一 AI 账本在 Pico；禁止双跑。
 4. 壳 = apps/librechat（MIT 魔改）；禁 apps/web / 禁拆 WorkBuddy。
-5. 核 = Pico API + Kimi Agent 钉版本 + 模型 HTTPS API。
+5. 核 = Pico API + **（目标）Kimi Agent 真接入** + 模型 HTTPS API；过渡期允许标注债的工具环。
 6. 公网预览只应是 UI :8080；API 仅 loopback；pin target 8080。
 7. 白屏先查 6014 空 body vs 8080 Welcome back；勿误判换壳。
 8. S1–S8 仍是 Phase1 标尺；商业定价未 FIXED。

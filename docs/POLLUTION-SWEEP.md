@@ -46,3 +46,27 @@ TRUTH: docs/TRUTH-FREEZE.md v1.0
 - `python scripts/check_agent_pin.py`（若环境已装依赖）  
 - 单测不因 docstring 变更失败  
 - 不宣称产品 PASS / 编排归位完成  
+
+
+## 阶段完成定义（正本清源 · 污染清理）
+
+本阶段 **DONE** 当且仅当：
+
+1. [x] TRUTH-FREEZE v1.0 已合 main  
+2. [x] WHAT-IS-PICO / 禁 Plan B 已合  
+3. [x] 活动文档假完成表述已 scrub（README/ARCHITECTURE/DEMO/MVP/CORRECTED/AGENTS…）  
+4. [x] 编排代码注释/pin 话术已标 TRANSITIONAL  
+5. [x] archive 标明非真源  
+6. [x] KIMI-AGENT-GAP 只读差距清单已落盘  
+7. [ ] 业主/总核验（本文件 + TRUTH-FREEZE + GAP）签字式确认  
+8. [ ] （可选）生产部署含文档 tip — 不挡阶段认知完成  
+
+**本阶段不做：** 切换 Kimi Agent 生产路径、删除 runner、引入其它运行时。
+
+## 第二轮清理（本 PR）
+
+| 项 | 动作 |
+|----|------|
+| MVP-3DAY / CORRECTED-GOALS / AGENTS S2 金句 | 目标/现状分离 |
+| docs/KIMI-AGENT-GAP.md | 新增只读差距与归位切片规划 |
+| 阶段完成清单 | 上表 |
