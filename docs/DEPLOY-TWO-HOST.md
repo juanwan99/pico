@@ -98,6 +98,8 @@ Host pico-prod
 
 ### 3.3 自检（在 dev-ecs）
 
+一键只读核对生产 health：`bash scripts/remote-health.sh [SSH_HOST]`（默认 `pico-prod`）；成功仅打印 `ok` / `git_sha`，SSH、curl 或响应校验失败均非零退出。
+
 ```bash
 ssh -o BatchMode=yes -o ConnectTimeout=8 pico-prod \
   'hostname; test -d /opt/pico && echo HAS_PICO; curl -sS --max-time 3 http://127.0.0.1:18765/health | head -c 240'
