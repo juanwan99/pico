@@ -85,7 +85,8 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 Do **not** use `docs/archive/**`, new HANDOFF markdown, or open PR **#121 harness multi-runtime** as task truth.
 
 ## Product rules
-- **Ship speed:** default [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. No multi-issue process OS.
+- **Ship speed:** default [docs/FAST-PATH.md]. Windows: **1=deploy**, **2/3=write**, **4=verify (logged-in + vision + browser)** — not the deploy window.
+- See also [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. No multi-issue process OS.
 
 - AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.
 - **Target (only):** open-source Kimi Agent runtime + Kimi HTTPS API. **Owner never set self-built loop as the goal.** No Plan B runtime.
