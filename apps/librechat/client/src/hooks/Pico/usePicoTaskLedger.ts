@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   cancelPicoRun,
   getPicoTask,
@@ -26,9 +26,39 @@ export type PicoLedgerState = {
 };
 
 const ACTIVE_RUN_STATUSES = new Set(['queued', 'running', 'preparing']);
+/** How many newest tasks to inspect when recovering an active Run after reload. */
+const ACTIVE_RUN_SCAN_LIMIT = 5;
 
-function isActiveRun(run: PicoRun | null): run is PicoRun {
+function isActiveRun(run: PicoRun | null | undefined): run is PicoRun {
   return Boolean(run && ACTIVE_RUN_STATUSES.has(run.status));
+}
+
+/** Prefer an active Run over a merely newest terminal Run (runs are newest-first). */
+export function pickPreferredRun(runs: PicoRun[]): PicoRun | null {
+  if (!runs.length) {
+    return null;
+  }
+  return runs.find((r) => isActiveRun(r)) ?? runs[0] ?? null;
+}
+
+/**
+ * Among the newest conversation tasks, prefer one whose ledger still has an
+ * active Run so reload keeps following progress instead of freezing on a
+ * newer terminal task that would only get the short tail poll.
+ */
+export function pickPreferredTaskRuns(
+  entries: Array<{ task: PicoTask; runs: PicoRun[] }>,
+): { task: PicoTask; run: PicoRun | null; runs: PicoRun[] } | null {
+  if (!entries.length) {
+    return null;
+  }
+  const withActive = entries.find((entry) => entry.runs.some((r) => isActiveRun(r)));
+  const chosen = withActive ?? entries[0];
+  return {
+    task: chosen.task,
+    runs: chosen.runs,
+    run: pickPreferredRun(chosen.runs),
+  };
 }
 
 function statusLabel(
@@ -97,6 +127,8 @@ export function usePicoTaskLedger(
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const activeRun = isActiveRun(run);
+  const runRef = useRef(run);
+  runRef.current = run;
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
   const cancelRun = useCallback(
@@ -195,34 +227,57 @@ export function usePicoTaskLedger(
             tasks = (await listPicoTasks(pending)).tasks || [];
           }
         }
-        const latest = tasks[0] ?? null;
         if (cancelled) {
           return;
         }
-        setTask(latest);
-        if (!latest) {
-          setRun(null);
-          setEvents([]);
-          setArtifacts([]);
+        if (!tasks.length) {
+          // Transient empty list must not drop an active Run we already follow
+          // (reload recovery would otherwise fall into the short terminal tail).
+          if (!isActiveRun(runRef.current)) {
+            setTask(null);
+            setRun(null);
+            setEvents([]);
+            setArtifacts([]);
+          }
           return;
         }
-        const [detail, runsRes] = await Promise.all([
-          getPicoTask(latest.id),
-          listPicoTaskRuns(latest.id),
-        ]);
+
+        const scan = tasks.slice(0, ACTIVE_RUN_SCAN_LIMIT);
+        const entries = await Promise.all(
+          scan.map(async (candidate) => ({
+            task: candidate,
+            runs: (await listPicoTaskRuns(candidate.id)).runs || [],
+          })),
+        );
         if (cancelled) {
           return;
         }
+
+        const preferred = pickPreferredTaskRuns(entries);
+        if (!preferred) {
+          if (!isActiveRun(runRef.current)) {
+            setTask(null);
+            setRun(null);
+            setEvents([]);
+            setArtifacts([]);
+          }
+          return;
+        }
+
+        const detail = await getPicoTask(preferred.task.id);
+        if (cancelled) {
+          return;
+        }
+
+        setTask(preferred.task);
         setArtifacts(detail.artifacts || []);
-        const runs = runsRes.runs || [];
-        const latestRun = runs[0] ?? null;
-        setRun(latestRun);
-        if (!latestRun) {
+        setRun(preferred.run);
+        if (!preferred.run) {
           setEvents([]);
           return;
         }
         try {
-          const eventsRes = await listPicoRunEvents(latestRun.id);
+          const eventsRes = await listPicoRunEvents(preferred.run.id);
           if (!cancelled) {
             setEvents(eventsRes.events || []);
           }
@@ -288,11 +343,7 @@ export function usePicoTaskLedger(
     refresh,
     cancelling:
       cancelRequestInFlight ||
-      Boolean(
-        cancelRequestedRunId &&
-          cancelRequestedRunId === run?.id &&
-          ['queued', 'running', 'preparing'].includes(run.status),
-      ),
+      Boolean(cancelRequestedRunId && cancelRequestedRunId === run?.id && isActiveRun(run)),
     cancelRun,
   };
 }
