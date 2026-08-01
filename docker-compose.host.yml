@@ -81,7 +81,9 @@ services:
       OPENAI_REVERSE_PROXY: http://127.0.0.1:18765/v1
       OPENAI_API_KEY: ${PICO_OPENAI_PROXY_KEY:?set a strong internal proxy key}
       ENDPOINTS: openAI
-      OPENAI_MODELS: moonshot-v1-8k,kimi-k2.6,pico-agent
+      # Keep the shell contract identical to the API fail-closed allowlist.
+      # The first entry is LibreChat's default for a new conversation.
+      OPENAI_MODELS: ${PICO_ALLOWED_MODELS:?set PICO_ALLOWED_MODELS}
       APP_TITLE: Pico
       ALLOW_REGISTRATION: "false"
       ALLOW_EMAIL_LOGIN: "true"

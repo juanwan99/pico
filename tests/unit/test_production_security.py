@@ -20,6 +20,12 @@ from app.rate_limit import ChatAdmission, _rate_limit_key
 from app.settings import Settings
 
 
+def test_host_shell_models_follow_api_allowlist() -> None:
+    compose = (ROOT / "docker-compose.host.yml").read_text()
+    assert "OPENAI_MODELS: ${PICO_ALLOWED_MODELS:?set PICO_ALLOWED_MODELS}" in compose
+    assert "OPENAI_MODELS: moonshot-v1-8k" not in compose
+
+
 def _valid_production(**overrides: object) -> Settings:
     values: dict[str, object] = {
         "pico_env": "production",
