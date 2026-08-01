@@ -2,7 +2,7 @@
 
 ```
 DOC: docs/P0-SECURITY-HARDENING.md
-STATUS: OPEN · 总管派工（吸收 Codex 体检 5757b05 基线）
+STATUS: BASELINE COMPLETED · #67；安全规则继续有效
 DATE: 2026-07-30
 PRIORITY: 高于轨 C 加厚 / 高于 M5
 TOTAL: Grok

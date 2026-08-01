@@ -88,14 +88,14 @@ done_note: "N4 #78 merged+DEPLOYED 4a5dc7b"
 priority: P0
 assignee: E2
 fallback: E1
-task_doc: docs/DAY-TASK-N4-RUN-TIMELINE.md
+task_doc: docs/archive/completed-tasks-2026-07/DAY-TASK-N4-RUN-TIMELINE.md
 title: N4 Run 事件时间线最小可见
 files_lease:
   - apps/librechat/client/**
   - apps/librechat/api/server/routes/pico.js
   - apps/librechat/**/data-provider/**
   - tests/**  # only if adding UI/proxy tests
-  - docs/DAY-TASK-N4-RUN-TIMELINE.md  # optional notes only
+  - docs/archive/completed-tasks-2026-07/DAY-TASK-N4-RUN-TIMELINE.md  # optional notes only
 avoid:
   - services/orchestrator/**  # unless must wire event types
 deliver:
@@ -148,7 +148,7 @@ priority: P0
 context_reset: false
 assignee: E2
 fallback: E1
-task_doc: docs/DAY-TASK-N5-FAILED-RUN-VISIBLE.md
+task_doc: docs/archive/completed-tasks-2026-07/DAY-TASK-N5-FAILED-RUN-VISIBLE.md
 title: N5 failed/cancelled runs visible on timeline
 files_lease:
   - apps/librechat/client/**
@@ -199,7 +199,7 @@ priority: P0
 context_reset: false
 assignee: E2
 fallback: E1
-task_doc: docs/DAY-TASK-N6-SKILL-HUB-TOOLS.md
+task_doc: docs/archive/completed-tasks-2026-07/DAY-TASK-N6-SKILL-HUB-TOOLS.md
 title: Skill hub shows policy-bound tools (read-only)
 files_lease:
   - apps/librechat/client/**
@@ -221,7 +221,7 @@ done_note: "N6b #87 merged 597acfb; check DEPLOYED"
 priority: P1
 context_reset: false
 assignee: E1
-task_doc: docs/DAY-TASK-N6-RATELIMIT-MEMBERSHIP.md
+task_doc: docs/archive/completed-tasks-2026-07/DAY-TASK-N6-RATELIMIT-MEMBERSHIP.md
 title: Rate limit key prefers membership_id
 files_lease:
   - services/api/app/rate_limit.py
@@ -306,7 +306,7 @@ priority: P0
 context_reset: false
 assignee: E2
 fallback: E1
-task_doc: docs/DAY-TASK-N7-HISTORY-RUN-TIMELINE.md
+task_doc: docs/archive/completed-tasks-2026-07/DAY-TASK-N7-HISTORY-RUN-TIMELINE.md
 title: History task opens run timeline
 files_lease:
   - apps/librechat/client/**
@@ -327,7 +327,7 @@ priority: P0
 context_reset: false
 assignee: E2
 fallback: E1
-task_doc: docs/DAY-TASK-N7-CANCEL-RUN.md
+task_doc: docs/archive/completed-tasks-2026-07/DAY-TASK-N7-CANCEL-RUN.md
 title: Cancel in-flight run from UI
 files_lease:
   - apps/librechat/client/**
@@ -348,7 +348,7 @@ done_note: "#97 merged eaf9875; await E3 DEPLOYED"
 priority: P1
 context_reset: false
 assignee: E1
-task_doc: docs/DAY-TASK-N7-EVENT-SEQ-UNIQUE.md
+task_doc: docs/archive/completed-tasks-2026-07/DAY-TASK-N7-EVENT-SEQ-UNIQUE.md
 title: Event (run_id, seq) unique + foreign_keys
 files_lease:
   - services/api/**
@@ -402,7 +402,7 @@ done_note: "#102 merged 28107fa; CI green and production health.git_sha exact-ma
 priority: P1
 context_reset: false
 assignee: E1
-task_doc: docs/DAY-TASK-N8-UNKNOWN-SKILL-NO-ARTIFACT.md
+task_doc: docs/archive/completed-tasks-2026-07/DAY-TASK-N8-UNKNOWN-SKILL-NO-ARTIFACT.md
 title: unknown skill cannot create artifacts via extractor
 files_lease:
   - services/api/**
@@ -437,7 +437,7 @@ priority: P0
 context_reset: false
 assignee: E2
 fallback: E1
-task_doc: docs/DAY-TASK-N7-CANCEL-ROOTFIX.md
+task_doc: docs/archive/completed-tasks-2026-07/DAY-TASK-N7-CANCEL-ROOTFIX.md
 title: Root-fix public stop → POST cancel 200 + cancelled
 files_lease:
   - apps/librechat/client/**
@@ -466,7 +466,8 @@ depends: EQ-023 merge
 
 ```yaml
 id: EQ-025
-status: OPEN
+status: CANCELLED
+done_note: "VQ-008 PASS; cancel API/proxy assistance no longer needed"
 priority: P1
 context_reset: false
 assignee: E1
@@ -508,7 +509,8 @@ files_lease:
 
 ```yaml
 id: EQ-028
-status: OPEN
+status: CANCELLED
+done_note: "VQ-008 PASS; contingency idle slot closed"
 priority: P2
 context_reset: false
 assignee: E1

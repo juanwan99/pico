@@ -1,4 +1,4 @@
-"""Pico API — Phase 1 control plane (D1–D3)."""
+"""Pico API control plane and AI ledger."""
 
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="Pico API",
     version="0.4.0",
-    description="Phase 1 MVP control plane",
+    description="Pico control plane and AI ledger",
     lifespan=lifespan,
 )
 
@@ -161,7 +161,6 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
     return {
         "ok": True,
         "service": "pico-api",
-        "phase": "3-integrate",
         "git_sha": _resolve_git_sha(),
         "edu_mode": settings.pico_edu_mode,
         "rate_limit": {
@@ -178,25 +177,16 @@ async def meta_version(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.pins import AGENT_PINS, installed_versions
     from pico_orchestrator.provider import resolve_provider
 
-    web_dir = _ROOT / "apps" / "web"
     librechat = _ROOT / "apps" / "librechat" / "package.json"
-    nextchat = _ROOT / "apps" / "nextchat" / "package.json"
-    if librechat.is_file():
-        product_ui = "librechat"
-    elif nextchat.is_file():
-        product_ui = "nextchat"
-    else:
-        product_ui = "missing"
+    product_ui = "librechat" if librechat.is_file() else "missing"
     cfg = resolve_provider()
-    apps_web = web_dir.is_dir()
     return {
         "ok": True,
         "service": "pico-api",
         "git_sha": _resolve_git_sha(),
         "api_version": app.version,
         "product_ui": product_ui,
-        "apps_web_present": apps_web,
-        "product_ui_ok": product_ui in {"librechat", "nextchat"} and not apps_web,
+        "product_ui_ok": product_ui == "librechat",
         "agent_pins": AGENT_PINS,
         "installed": installed_versions(),
         "dangerous_tools_enabled": settings.pico_dangerous_tools_enabled,
@@ -1067,23 +1057,3 @@ async def phase3_meta(settings: Settings = Depends(get_settings)) -> dict:
         "handoff_enabled": settings.pico_edu_handoff_enabled,
         "hook_token_configured": bool(settings.pico_hook_service_token),
     }
-
-# ----- SPA (single-port product on :8080) -----
-_DIST = Path(__file__).resolve().parents[3] / "apps" / "web" / "dist"
-if _DIST.is_dir() and (_DIST / "index.html").is_file():
-    from fastapi.responses import FileResponse
-    from fastapi.staticfiles import StaticFiles
-
-    _assets = _DIST / "assets"
-    if _assets.is_dir():
-        app.mount("/assets", StaticFiles(directory=str(_assets)), name="assets")
-
-    @app.get("/")
-    async def spa_index():
-        return FileResponse(_DIST / "index.html")
-
-    @app.get("/favicon.ico")
-    async def favicon():
-        # no favicon asset yet — avoid noisy 404 JSON in preview
-        from fastapi import Response
-        return Response(status_code=204)

@@ -126,7 +126,7 @@ Pico API + orchestrator + DB
 5. 首屏保留无 JS 可见「Pico 正在加载…」；若 10 秒内连这句都没有 → **面板没吃到 8080 HTML**。  
 6. 证据写 `docs/archive/PREVIEW-WHITE-SCREEN.md`，诚实：本机绿 ≠ Live Preview 绿。
 
-**演示登录（LibreChat）：** `teacher@example.com` / `pico-demo-123`  
+**演示登录（LibreChat）：** 管理员临时创建并通过安全渠道提供；仓库不保存固定密码。
 详见 `docs/archive/PREVIEW-WHITE-SCREEN.md`。
 
 ---
@@ -175,7 +175,7 @@ Pico API + orchestrator + DB
 | Pico API | `127.0.0.1:18765`（OpenAI 兼容 `/v1/chat/completions` 等） |
 | 账本 / Agent | `services/api` + `services/orchestrator` |
 | 启动 | `scripts/run-product.sh` + pin 预览到 8080 |
-| 演示账号 | `teacher@example.com` / `pico-demo-123` |
+| 演示账号 | 默认关闭播种；临时凭据须使用 12 位以上随机密码并在演示后关闭 |
 | 已知风险 | Grok preview-proxy 鉴权空 body；版本约 0.1.11；in-container 可绿但 Live Preview 依赖平台会话 |
 
 ---

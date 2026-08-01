@@ -71,21 +71,15 @@ ssh -o BatchMode=yes -o ConnectTimeout=8 pico-prod \
 ## 5. 部署命令模板（dev-ecs 上）
 
 ```bash
-EXPECT_SHA="${EXPECT_SHA:?set full main sha}"
+PICO_DEPLOY_SHA="${PICO_DEPLOY_SHA:?set full 40-character main SHA}"
 
 ssh -o BatchMode=yes pico-prod "set -euo pipefail
 cd /opt/pico
-git fetch origin
-git checkout main
-git pull --ff-only origin main
-echo HEAD=\$(git rev-parse HEAD)
-# optional pin:
-# test \$(git rev-parse HEAD) = $EXPECT_SHA
 if [ -x scripts/prod-update.sh ]; then
-  bash scripts/prod-update.sh
+  PICO_DEPLOY_SHA=$PICO_DEPLOY_SHA bash scripts/prod-update.sh
 else
-  docker compose -f docker-compose.host.yml build librechat pico-api
-  docker compose -f docker-compose.host.yml up -d
+  echo 'BLOCKED: exact-SHA deploy script missing' >&2
+  exit 2
 fi
 curl -sS --max-time 5 http://127.0.0.1:18765/health
 ss -lntp | grep -E '18765|8080|27017' || true

@@ -26,7 +26,7 @@ RISK: medium
 - 不自 PASS 终局 · 不升 v1.3 · 不宣称像素 100%
 - 证据只在 GitHub PR；禁止新 HANDOFF.md
 - 生产默认 edu fake · 不真连 edu
-- 演示 teacher@example.com / pico-demo-123 · https://pico.aivia.asia
+- 演示 teacher@example.com / <redacted-demo-password> · https://pico.aivia.asia
 - 强制包未完禁止收工；有效产出建议 ≥3h
 
 ## 阶段 0（必须先做 · 还 N3 债）— 目标 ≤90min

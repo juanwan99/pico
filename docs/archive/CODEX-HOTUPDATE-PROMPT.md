@@ -9,6 +9,6 @@
 cd /opt/pico && bash scripts/prod-update.sh
 # 登录坏：bash scripts/vps-fix-login.sh
 # 本机：curl health 18765；login API；S1 chat 演示OK
-# 浏览器：https://pico.aivia.asia/login teacher@example.com / pico-demo-123
+# 浏览器：https://pico.aivia.asia/login teacher@example.com / <redacted-demo-password>
 报告：SHA、compose ps、health、login、S1、浏览器 Y/N。不合 main。
 ```

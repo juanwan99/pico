@@ -2,7 +2,7 @@
 
 ```
 TYPE: DAY
-STATUS: OPEN
+STATUS: COMPLETED · historical
 RISK: 黄 · FAST 可代合
 context_reset: false
 ```

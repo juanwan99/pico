@@ -65,6 +65,8 @@ FAIL → 总管开 **修复写入任务**，测试窗 **复测** 闭环。
 - **TEST REPORT PASS** = 行为门禁（人/脚本在真环境）  
 - DEPLOYED = 生产 SHA + **关键用例 TEST 过**（或明确 BLOCKED 原因）
 
-## 6. 当前优先用例（Standalone A/B）
+## 6. 当前优先用例
 
-见 `docs/TEST-TASK-AB-WORKSPACE.md`（随本变更入库）。
+当前无 OPEN 验证条目。新验证只从 `docs/VALIDATION-QUEUE.md` 的
+`status: OPEN` 条目认领；旧 Standalone A/B 用例已归档至
+`docs/archive/completed-tasks-2026-07/TEST-TASK-AB-WORKSPACE.md`。

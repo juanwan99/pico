@@ -8,8 +8,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 API="${PICO_API:-http://127.0.0.1:18765}"
 UI="${PICO_UI:-http://127.0.0.1:8080}"
-EMAIL="${DEMO_EMAIL:-teacher@example.com}"
-PASS="${DEMO_PASSWORD:-pico-demo-123}"
+EMAIL="${DEMO_EMAIL:-}"
+PASS="${DEMO_PASSWORD:-}"
 API_ONLY="${PICO_SELFTEST_API_ONLY:-0}"
 FAIL=0
 
@@ -54,6 +54,10 @@ fi
 if [ "$API_ONLY" = "1" ]; then
   skip "UI / auth / playwright"
 else
+  if [ -z "$EMAIL" ] || [ "${#PASS}" -lt 12 ]; then
+    echo "BLOCKED: UI selftest requires DEMO_EMAIL and a 12+ character DEMO_PASSWORD" >&2
+    exit 2
+  fi
   uicode=$(curl -sS --max-time 10 -o /tmp/pico-st-login.html -w '%{http_code}' "$UI/login" || echo ERR)
   if [ "$uicode" = "200" ] && grep -qiE 'root|Pico|html' /tmp/pico-st-login.html; then
     pass "UI /login http=$uicode"

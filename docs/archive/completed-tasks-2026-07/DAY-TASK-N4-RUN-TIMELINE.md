@@ -3,7 +3,7 @@
 ```
 TYPE: DAY
 SPRINT: docs/SPRINT-FAST.md（7 日窗内）
-STATUS: OPEN
+STATUS: COMPLETED · historical
 RISK: 黄 · FAST 代合可
 PRIOR: N1/N2/N3 已 PASS（含 #72 UI run-once）
 ```

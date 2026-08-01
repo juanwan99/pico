@@ -20,7 +20,6 @@ def test_meta_version_reports_product_shell() -> None:
     assert body["ok"] is True
     assert "git_sha" in body
     assert body["product_ui"] == "librechat"
-    assert body["apps_web_present"] is False
     assert body["product_ui_ok"] is True
     assert "agent_pins" in body
 
@@ -29,4 +28,6 @@ def test_health_includes_git_sha() -> None:
     client = TestClient(app)
     r = client.get("/health")
     assert r.status_code == 200
-    assert "git_sha" in r.json()
+    body = r.json()
+    assert "git_sha" in body
+    assert "phase" not in body

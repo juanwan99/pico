@@ -22,7 +22,7 @@ verdict and does not claim owner acceptance or exact 100% pixel parity.
 
 ## N1 Main-Path Evidence Addendum
 
-Collected on 2026-07-30 for `docs/NIGHT-CARD-N1-W-MAINPATH.md`.
+Collected on 2026-07-30 for `docs/archive/completed-tasks-2026-07/NIGHT-CARD-N1-W-MAINPATH.md`.
 This addendum covers the six N1 main-path steps only and does not claim full-site
 pixel completion.
 

@@ -48,8 +48,7 @@ OWNER_VPS: 轻量应用服务器 华东2 · 公网 139.196.147.40 · 宝塔面�
 # 若还没有 git：
 # yum install -y git || apt-get install -y git
 
-git clone --branch grok/pico-preview-librechat-p0 --single-branch \
-  https://github.com/juanwan99/pico.git /opt/pico
+git clone --branch main --single-branch https://github.com/juanwan99/pico.git /opt/pico
 cd /opt/pico
 bash scripts/vps-bootstrap-aivia.sh
 ```
@@ -136,7 +135,10 @@ docker compose -f docker-compose.product.yml up -d --build
 
 ```bash
 export KIMI_API_KEY='sk-...'   # 只在服务器环境变量里
-cd /opt/pico && git pull --ff-only origin grok/pico-preview-librechat-p0 || true
+cd /opt/pico
+git fetch origin main
+export PICO_DEPLOY_SHA="$(git rev-parse origin/main)"
+bash scripts/prod-update.sh
 bash scripts/vps-apply-kimi-key.sh
 ```
 

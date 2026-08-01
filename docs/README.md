@@ -1,12 +1,12 @@
-**Context policy:** [`docs/CONTEXT-POLICY.md`](docs/CONTEXT-POLICY.md)（默认不清理上下文）  
-**Controller bot (7x24):** [`docs/CONTROLLER-BOT.md`](docs/CONTROLLER-BOT.md)  
-**Controller poll:** [`docs/CONTROLLER-POLL.md`](docs/CONTROLLER-POLL.md)  
-**Execution queue (×3):** [`docs/EXECUTION-QUEUE.md`](docs/EXECUTION-QUEUE.md)  
-**Validation queue:** [`docs/VALIDATION-QUEUE.md`](./VALIDATION-QUEUE.md)  
-**FAST sprint:** [`docs/SPRINT-FAST.md`](docs/SPRINT-FAST.md)  
-**P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
-**Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
-**24h plan:** [docs/STANDALONE-AI-24H.md](./STANDALONE-AI-24H.md)
+- **Context policy:** [`docs/CONTEXT-POLICY.md`](./CONTEXT-POLICY.md)（默认不清理上下文）
+- **Controller bot (7x24):** [`docs/CONTROLLER-BOT.md`](./CONTROLLER-BOT.md)
+- **Controller poll:** [`docs/CONTROLLER-POLL.md`](./CONTROLLER-POLL.md)
+- **Execution queue (×3):** [`docs/EXECUTION-QUEUE.md`](./EXECUTION-QUEUE.md)
+- **Validation queue:** [`docs/VALIDATION-QUEUE.md`](./VALIDATION-QUEUE.md)
+- **FAST sprint:** [`docs/SPRINT-FAST.md`](./SPRINT-FAST.md)
+- **P0 security:** [`docs/P0-SECURITY-HARDENING.md`](./P0-SECURITY-HARDENING.md)
+- **Test window:** [`docs/TEST-WINDOW.md`](./TEST-WINDOW.md)
+- **Completed 24h baseline:** [docs/STANDALONE-AI-24H.md](./STANDALONE-AI-24H.md)
 
 # Pico documentation index
 
@@ -39,9 +39,8 @@ ONEFLOW: docs/ONEFLOW.md
 | 8 | [M5-INTEGRATION-RUNBOOK.md](./M5-INTEGRATION-RUNBOOK.md) · [M5-API-CHECKLIST.md](./M5-API-CHECKLIST.md) | M5 筹备（未授权不真连） |
 | 8b | [PHASE2-CONTRACTS.md](./PHASE2-CONTRACTS.md) · [PHASE3-INTEGRATION.md](./PHASE3-INTEGRATION.md) · [contracts/](./contracts/) | Integration contracts |
 | 9 | [MASTER-PLAN.md](./MASTER-PLAN.md) | Phase map M0–M5 (nav only) |
-| 9b | [DAY-TASK-2026-07-30-SKILL-UX.md](./DAY-TASK-2026-07-30-SKILL-UX.md) | **当前日间派工**（Skill+UX 双轨） |
-| 10 | Night cards: [N1](./NIGHT-CARD-N1-W-MAINPATH.md) · [N2](./NIGHT-CARD-N2-SKILL-THIN.md) · [N3-THICK](./NIGHT-CARD-N3-THICK.md) · [N4-THICK](./NIGHT-CARD-N4-THICK.md) · [policy](./NIGHT-CARD-POLICY.md) | Executable card; **evidence still on PR** |
-| 11 | [DEMO.md](./DEMO.md) · [DEPLOY-TWO-HOST.md](./DEPLOY-TWO-HOST.md) · [DEPLOY-PUBLIC.md](./DEPLOY-TWO-HOST.md](./DEPLOY-TWO-HOST.md) · [DEPLOY-PUBLIC.md) | Demo & public deploy notes |
+| 10 | [NIGHT-CARD-POLICY.md](./NIGHT-CARD-POLICY.md) | Night execution policy; completed cards are archived |
+| 11 | [DEMO.md](./DEMO.md) · [DEPLOY-TWO-HOST.md](./DEPLOY-TWO-HOST.md) · [DEPLOY-PUBLIC.md](./DEPLOY-PUBLIC.md) | Demo & public deploy notes |
 | 12 | [PIXEL-DIFF.md](./PIXEL-DIFF.md) · matrices when present | UX evidence (not task status) |
 
 ## Repeatable smokes
@@ -53,6 +52,8 @@ ONEFLOW: docs/ONEFLOW.md
 | Path | Note |
 |------|------|
 | [SPRINT-3DAY-PUSH.md](./SPRINT-3DAY-PUSH.md) | Foundation sprint **COMPLETED** — do not re-open as current plan |
+| [DAY-TASK-2026-07-30-SKILL-UX.md](./DAY-TASK-2026-07-30-SKILL-UX.md) | Skill expansion and UX debt completed by #55/#56 |
+| [archive/completed-tasks-2026-07/](./archive/completed-tasks-2026-07/) | Completed day/night/test cards; never use for dispatch |
 | [archive/](./archive/) | Retired handoffs, snapshots, prompts |
 
 ## Hygiene rule

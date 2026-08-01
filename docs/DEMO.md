@@ -17,7 +17,7 @@ STATUS: 演示说明（非 PASS 证书）
 ## 生产入口（业主）
 
 - **https://pico.aivia.asia/login**（HTTPS only）
-- 演示：`teacher@example.com` / `pico-demo-123`
+- 演示凭据由管理员临时创建并通过安全渠道提供；仓库不保存固定密码。
 - 模型 key 在服务器 `/opt/pico/.env` 的 `KIMI_API_KEY`（不进 Git）
 
 ## 30 秒启动（沙箱 / 本机 agent）
@@ -36,7 +36,7 @@ curl -sf http://127.0.0.1:18765/health
 | 产品 UI | **http://127.0.0.1:8080**（预览须 pin 8080） |
 | LibreChat | :3080 |
 | Pico API | **仅** 127.0.0.1:18765 |
-| 演示登录 | `teacher@example.com` / `pico-demo-123` |
+| 演示登录 | 设置 `PICO_DEMO_SEED=1`、临时邮箱和 12 位以上随机密码；演示后关闭 |
 
 **Live Preview：** 若经 :6014 且无鉴权，常见 403 空 body = 纯白；**不等于**产品挂。详见 `PREVIEW-WHITE-SCREEN.md`。
 
@@ -79,7 +79,7 @@ curl -sS -H 'Authorization: Bearer sk-pico-dev' -H 'X-Pico-Membership-Id: demo' 
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/api/pico/v1/tasks
 ```
 
-主路径勾选清单：`docs/archive/REGRESSION-MAINPATH.md` · 最近实跑：`docs/REGRESSION-MAINPATH-RUN.md`
+主路径勾选清单：`docs/archive/REGRESSION-MAINPATH.md` · 最近实跑：`docs/archive/REGRESSION-MAINPATH-RUN.md`
 
 ---
 

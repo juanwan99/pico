@@ -37,7 +37,7 @@ RESERVE: 见文末 §储备
 - 不自 PASS 终局 · 不升 v1.3 · 不全面像素 · 不做 M5 真连
 - 一夜主轨 = S；W 矩阵正文勿大改（LEASES）
 - 完成证据在 GitHub PR（CANDIDATE）；禁止新 HANDOFF.md
-- 演示 teacher@example.com / pico-demo-123 · https://pico.aivia.asia
+- 演示 teacher@example.com / <redacted-demo-password> · https://pico.aivia.asia
 
 ## LEASES
 可写：
