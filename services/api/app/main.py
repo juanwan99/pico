@@ -73,6 +73,9 @@ async def lifespan(_app: FastAPI):
     get_settings().validate_production()
     _sync_settings_to_environ()
     await init_db()
+    factory = run_service.session_factory()
+    async with factory() as session:
+        await run_service.reconcile_orphaned_runs(session)
     from app import automation_service
 
     automation_service.start_scheduler()
@@ -808,6 +811,8 @@ async def cancel_run(
         raise HTTPException(status_code=404, detail="run not found")
     run = await run_service.request_cancel(session, run)
     await append_event(session, run.id, "run.cancel_requested", {})
+    if run.status == "cancelled":
+        await append_event(session, run.id, "run.status", {"status": "cancelled"})
     return {"run": _run_dict(run)}
 
 

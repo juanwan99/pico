@@ -34,8 +34,92 @@ from app.openai_compat import (
     _finalize_run,
     chat_completions,
 )
+from app.run_service import reconcile_orphaned_runs, request_cancel
 from app.settings import Settings, get_settings
 from pico_orchestrator.runner import RunResult
+
+
+@pytest.mark.asyncio
+async def test_running_cancel_is_immediately_terminal_and_sticky(tmp_path, monkeypatch) -> None:
+    db = tmp_path / "durable-cancel.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+    from app import db as dbmod
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+    factory = session_factory()
+    async with factory() as session:
+        task = TaskRow(
+            id=new_id(),
+            school_id="school-a",
+            membership_id="member-a",
+            title="cancel",
+        )
+        run = RunRow(id=new_id(), task_id=task.id, status="running")
+        session.add_all((task, run))
+        await session.commit()
+        await request_cancel(session, run)
+        assert run.cancel_requested == 1
+        assert run.status == "cancelled"
+        assert run.ended_at is not None
+
+    await _finalize_run(run.id, status="succeeded", final_text="late success")
+    async with factory() as session:
+        persisted = await session.get(RunRow, run.id)
+        assert persisted is not None
+        assert persisted.status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_startup_reconciliation_finalizes_ownerless_runs(tmp_path, monkeypatch) -> None:
+    db = tmp_path / "orphan-reconciliation.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+    from app import db as dbmod
+    from sqlalchemy import select
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+    factory = session_factory()
+    async with factory() as session:
+        task = TaskRow(
+            id=new_id(),
+            school_id="school-a",
+            membership_id="member-a",
+            title="orphans",
+        )
+        cancelled = RunRow(
+            id=new_id(), task_id=task.id, status="running", cancel_requested=1
+        )
+        failed = RunRow(id=new_id(), task_id=task.id, status="preparing")
+        terminal = RunRow(id=new_id(), task_id=task.id, status="succeeded")
+        session.add_all((task, cancelled, failed, terminal))
+        await session.commit()
+        counts = await reconcile_orphaned_runs(session)
+        assert counts == {"cancelled": 1, "failed": 1}
+
+    async with factory() as session:
+        assert (await session.get(RunRow, cancelled.id)).status == "cancelled"
+        failed_row = await session.get(RunRow, failed.id)
+        assert failed_row is not None
+        assert failed_row.status == "failed"
+        assert failed_row.ended_at is not None
+        assert "API restart" in (failed_row.error or "")
+        assert (await session.get(RunRow, terminal.id)).status == "succeeded"
+        events = list(
+            (
+                await session.execute(
+                    select(EventRow).where(
+                        EventRow.run_id.in_((cancelled.id, failed.id)),
+                        EventRow.type == "run.status",
+                    )
+                )
+            ).scalars()
+        )
+        assert {event.payload["status"] for event in events} == {"cancelled", "failed"}
 
 
 @pytest.fixture()
