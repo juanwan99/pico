@@ -193,6 +193,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     canCancel={Boolean(cancellableRunId)}
                     cancelling={ledger.cancelling}
                     onCancel={() => void ledger.cancelRun(cancellableRunId)}
+                    canRerun={ledger.run?.status === 'failed'}
+                    rerunning={ledger.rerunning}
+                    onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
                   />
                   {ledger.error ? (
                     <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900">

@@ -310,6 +310,91 @@ def test_non_stream_agent_reuses_one_run_and_preserves_failure(client, monkeypat
     assert run_rows[0]["error"] == "provider unavailable"
 
 
+def test_failed_run_retry_creates_distinct_auditable_run(client, monkeypatch) -> None:
+    _stub_agent(
+        monkeypatch,
+        RunResult(status="failed", final_text="", error="provider unavailable"),
+    )
+    owner = _headers(client, "member-retry-owner")
+    outsider = _headers(client, "member-retry-outsider")
+    conversation_id = "conversation-failed-retry"
+
+    failed = client.post(
+        "/v1/chat/completions",
+        headers=owner,
+        json={
+            "model": "pico-agent",
+            "stream": False,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        f"【Pico-Convo:{conversation_id}】\n"
+                        "【Pico-Skill:skill.chat】\n请完成这个任务"
+                    ),
+                }
+            ],
+        },
+    )
+    assert failed.status_code == 200, failed.text
+
+    tasks = client.get(
+        "/v1/tasks",
+        headers=owner,
+        params={"conversation_id": conversation_id},
+    ).json()["tasks"]
+    assert len(tasks) == 1
+    task_id = tasks[0]["id"]
+    source_run = client.get(f"/v1/tasks/{task_id}/runs", headers=owner).json()["runs"][0]
+    assert source_run["status"] == "failed"
+
+    started: list[str] = []
+
+    async def record_background_start(run_id: str, _principal) -> None:
+        started.append(run_id)
+
+    monkeypatch.setattr("app.run_service.start_run_background", record_background_start)
+
+    response = client.post(f"/v1/runs/{source_run['id']}/retry", headers=owner)
+
+    assert response.status_code == 200, response.text
+    retry_run = response.json()["run"]
+    assert response.json()["retried_from_run_id"] == source_run["id"]
+    assert retry_run["id"] != source_run["id"]
+    assert retry_run["task_id"] == source_run["task_id"]
+    assert retry_run["status"] == "queued"
+    assert retry_run["prompt"] == source_run["prompt"]
+    assert retry_run["token_usage"]["skill_snapshot"] == source_run["token_usage"][
+        "skill_snapshot"
+    ]
+    assert started == [retry_run["id"]]
+
+    runs = client.get(f"/v1/tasks/{task_id}/runs", headers=owner).json()["runs"]
+    assert {run["id"] for run in runs} == {source_run["id"], retry_run["id"]}
+    assert {run["id"]: run["status"] for run in runs} == {
+        source_run["id"]: "failed",
+        retry_run["id"]: "queued",
+    }
+
+    source_events = client.get(
+        f"/v1/runs/{source_run['id']}/events",
+        headers=owner,
+    ).json()["events"]
+    retry_events = client.get(
+        f"/v1/runs/{retry_run['id']}/events",
+        headers=owner,
+    ).json()["events"]
+    assert source_events[-1]["type"] == "run.retry_requested"
+    assert source_events[-1]["payload"] == {"retry_run_id": retry_run["id"]}
+    assert len(retry_events) == 1
+    assert retry_events[0]["type"] == "run.retry_created"
+    assert retry_events[0]["payload"] == {"source_run_id": source_run["id"]}
+
+    assert client.post(f"/v1/runs/{source_run['id']}/retry", headers=outsider).status_code == 404
+    assert client.post(f"/v1/runs/{source_run['id']}/retry", headers=owner).status_code == 409
+    assert client.post(f"/v1/runs/{retry_run['id']}/retry", headers=owner).status_code == 409
+
+
 def test_skill_write_s7_records_snapshot_and_existing_change_path(client, monkeypatch) -> None:
     _stub_agent(
         monkeypatch,
