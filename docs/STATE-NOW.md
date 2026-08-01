@@ -84,12 +84,14 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 
 ---
 
-## 5. 下一刀（速度）
+## 5. 节奏（砍税后）
+
+见 [FAST-PATH.md](./FAST-PATH.md) KEEP/CUT。
 
 ```text
-日用主路径 P0：已阶段性打通（#176 PASS）
-默认：FAST-PATH 继续叠功能；能并行则 2/3 写 ∥ 1 装 ∥ 4 验
-编排：仅授权后动 KA-3
+日用：9a9ddba 基线曾 PASS；main 已含 canary/deny/cap/safety（flag OFF）
+推进：少卡、大 PR、窗1装、窗4点；KA 放量仅授权后
+HOLD：#170 切流 · #159 zombie（须授权）
 ```
 
-product PASS: **NOT CLAIMED（仅 #176 级主路径烟测 PASS @ 9a9ddba）**
+product PASS: **NOT CLAIMED** · 编排完成: **NOT CLAIMED**

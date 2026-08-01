@@ -1,73 +1,108 @@
-# 快路径（加快进度 · 禁止自建重体系）
+# 快路径（BINDING · 砍流程税）
 
 ```
 DOC: docs/FAST-PATH.md
-STATUS: BINDING default for day-to-day ship
-DATE: 2026-08-01
-NOT: multi-window OS · auto E1 queue · 长文总管仪式
+STATUS: BINDING — 日常唯一默认节奏
+UPDATED: 2026-08-01
+OWNER_ORDER: 在必要安全下砍掉一切阻碍
 ```
 
 ## 一句话
 
-**改 → 合 → 装 → 点两下 → 三行报告。** 同一会话做完。不要拆 4 张验证卡。
+**改 → CI 绿 → 合 → 窗1 装 tip → 窗4 点聊/停 → 三行回执。**  
+能并刀并刀；能一个 PR 做完绝不拆五张卡。
 
-## 默认五步（开发/部署同一条线）
+---
+
+## KEEP · 必要安全（不可砍）
+
+| 门禁 | 为什么留 |
+|------|----------|
+| 密钥 / JWT / `.env` 不进 GitHub、不进 Issue | 泄露即事故 |
+| 生产 `PICO_KIMI_AGENT_RUNTIME` 默认 **OFF**；canary 名单默认 **空** | 防全量误切 Agent |
+| **未业主书面授权** 不得生产开 flag / 默认切 KA-3 / 清 zombie DB | 授权边界 |
+| 工具 **AllowlistGateway**；危险 host 工具关断证明 | 学校场景底线 |
+| `prod-update` **exact SHA** + health.git_sha 对齐 | 防假部署 |
+| CI 绿再合 main（lint/test） | 防直接推坏 main |
+| 窗4 对用户路径：login / 真聊 / 停 至少各一次（改动碰运行时/UI 时） | 防「合了但不能用」 |
+| 禁 edu-cloud 写仓；禁 PROXY=1 进应用；禁 Plan B 换核 | 真源红线 |
+| 禁宣称「已接入 Kimi Agent」除非有生产账本+授权证据 | 防假完成 |
+
+除此以外的「流程」默认视为 **可砍税**。
+
+---
+
+## CUT · 已砍 / 禁止再搞（阻碍速度）
+
+| 砍掉 | 说明 |
+|------|------|
+| 自动 E1 队列当派工权威 | SUPERSEDED |
+| 同一功能默认拆：调查卡+写入卡+部署卡+烟测卡+视觉卡+文档卡 | **禁止**；最多「写一 PR + 装一次 + 点一次」 |
+| KA 再拆 3A/3B/3C… 每缺口一张 Issue 等一轮 | **禁止**；同主题 **一个 PR 打尽** |
+| 总管每刀必「深度审查长文」 | 仅黄/红/换核/授权变更才长审；绿档 CI+扫一眼合 |
+| 无登录态的窗1 硬跑 chat/stop | 必 BLOCKED，纯浪费 |
+| 为清理而写的第三套 CONTROLLER OS / RACI / 状态机 | 禁止 |
+| 文档轮转代替用户价值 | 禁止用长文冒充进度 |
+| 未授权生产开 flag「为了快」 | **不是快，是炸** |
+
+**PR 本身不砍。** 慢的是「碎 PR + 等人贴卡」，不是「有一个 PR」。
+
+---
+
+## 默认动作（人）
+
+| 谁 | 做什么 | 不做 |
+|----|--------|------|
+| **窗2/3** | 一个主题一个分支/PR，CI 绿求合 | 不拆五张调查 |
+| **合权/总管** | 绿档快合；黄扫关键路径 | 不叠第二审批戏 |
+| **窗1** | `prod-update` tip；remote-health | 不装浏览器验聊 |
+| **窗4** | 登录+聊+停；三行报告 | 不改码不部署 |
+| **业主** | 目标与授权（KA canary / 切流 / 清库） | 少被技术假流程打扰 |
+
+### 窗编号（钉死）
+
+| 窗 | 职责 |
+|----|------|
+| **1** | 部署 |
+| **2/3** | 写入（可并行） |
+| **4** | 验证（已登录+视觉+操控网页） |
+
+---
+
+## 命令（部署 · 窗1）
 
 ```bash
-# 0) 生产 /opt/pico 与 .git 须属部署用户（非 root），否则 fetch 失败（#175）
-# 1–2) 小 PR，CI 绿，合 main（总管或有合权的人）
-
-# 3) 生产（ssh 进 /opt/pico 或跳板后）
+# /opt/pico 与 .git 属部署用户（非 root）
 git fetch origin main
 TIP=$(git rev-parse origin/main)
 PICO_DEPLOY_SHA=$TIP bash scripts/prod-update.sh
-
-# 4) 同人立刻自测（不要另派无 ssh 的窗）
-# 跳板上：
-bash scripts/remote-health.sh          # 或: bash scripts/remote-health.sh aliyun
-# 浏览器：login → 聊一句 → 停一下
-
-# 5) Issue 三行（可贴在任意相关 issue，禁止空喊「做完了」）
-# SHA: <health.git_sha>
-# chat: OK/FAIL
-# stop: OK/FAIL
+# 跳板：bash scripts/remote-health.sh
 ```
 
+## 回执（最少）
 
-## 窗口约定（业主 2026-08-01 钉死）
+```text
+SHA: <health.git_sha>
+chat: OK/FAIL
+stop: OK/FAIL
+```
 
-| 窗口 | 职责 |
-|------|------|
-| **窗口 1** | **部署窗**（ssh 生产、`prod-update`、remote-health） |
-| **窗口 2** | 写入（代码/文档 PR） |
-| **窗口 3** | 写入/调查（可并行另一写入或 DIAG） |
-| **窗口 4** | **独立验证窗**：已登录账号 + **视觉** + 可操控网页点测（login/chat/stop）；**不是**窗口 1 |
+有 Issue 就贴评论；**不要**为回执再开新流程 Issue。
 
-派工时 `window:` 必须写 1|2|3|4，禁止用含糊的「验证窗/部署窗」替代编号（可同时写编号+职责）。
-窗口 4 有账号与视觉时，生产 chat/stop 烟测默认派 **窗口 4**，不要派给窗口 1（窗口 1 往往无浏览器登录态）。
+---
 
-## 硬禁（会变慢的）
+## 编排（Kimi Agent）加速而不降安全
 
-- 为同一功能连开「部署卡 + 烟测卡 + 视觉卡 + 文档卡」当默认  
-- 无 ssh 的窗去验生产 loopback（必 BLOCKED）  
-- 再造自动派工 / RACI / 控制器第二真源  
-- 没授权就开 KA flag 或写「已接入」  
-- 用新长文代替部署和点测  
+```text
+仓内：能并的缺口并成少数大 PR（门禁/审计/safety 已并进 main 的继续用）
+生产：tip 可勤装，flag 保持 0 + 名单空
+放量：仅业主书面授权 canary（总闸+名单）后，窗4 出 runtime=kimi-agent 证据
+默认切流：#170，另授权，禁止偷做
+```
 
-## 仍要保留（防假完成，不是体系）
+---
 
-- CI 绿再合  
-- exact SHA 部署（`prod-update.sh`）  
-- 聊/停各点一次  
-- 密钥不进 GitHub  
+## 权威顺序
 
-## 大变更才加码
-
-黄/红、换核（KA-3）、清生产 DB：另说，**不**套进日常五步。
-
-## 与旧文档
-
-- 详细运维：`DEPLOY-TWO-HOST.md`  
-- 目标冻结：`TRUTH-FREEZE.md`  
-- 快照：`STATE-NOW.md`  
-- 日常默认以 **本页** 为准，冲突时目标类仍听 TRUTH-FREEZE。
+业主授权 > TRUTH-FREEZE 目标/禁项 > **本页节奏** > STATE-NOW 快照 > 聊天  
+与本页冲突的「多卡仪式 / 总管八股」以本页为准废止。

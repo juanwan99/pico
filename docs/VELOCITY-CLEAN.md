@@ -1,6 +1,7 @@
 # 速度阻碍清理（VELOCITY-CLEAN）
 
-> **日常请直接用 [FAST-PATH.md](./FAST-PATH.md)**（改合装测一体）。本页是清障记录，不是第二套流程 OS。
+> **日常请直接用 [FAST-PATH.md](./FAST-PATH.md)**。
+> **2026-08-01：在必要安全下砍掉一切阻碍** — KEEP/CUT 清单以 FAST-PATH 为准；本页仅历史清障，**不是**第二套流程。
 
 ```
 DOC: docs/VELOCITY-CLEAN.md
