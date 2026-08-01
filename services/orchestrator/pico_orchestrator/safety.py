@@ -32,6 +32,9 @@ DANGEROUS_PREFIXES: tuple[str, ...] = (
 DEFAULT_AGENT_FILE = (
     Path(__file__).resolve().parents[1] / "agents" / "pico.yaml"
 )
+KIMI_RUNTIME_AGENT_FILE = (
+    Path(__file__).resolve().parents[1] / "agents" / "pico-kimi-runtime.yaml"
+)
 
 
 def load_pico_agent_tools(agent_file: Path | None = None) -> list[str]:

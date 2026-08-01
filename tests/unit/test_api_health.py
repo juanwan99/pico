@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -69,4 +70,30 @@ def test_agent_safety_endpoint() -> None:
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True
+    assert body["runtime"] == "kimi-agent"
+    proof_path = Path(body["proof"]["agent_file"])
+    assert proof_path == (
+        ROOT / "services/orchestrator/agents/pico-kimi-runtime.yaml"
+    ).resolve()
     assert body["proof"]["dangerous_off"] is True
+    assert body["proof"]["violations"] == []
+    assert body["proof"]["mcp_configured"] is False
+    assert body["proof"]["tools"]
+    assert all(
+        tool.startswith("pico_orchestrator.kimi_tools:")
+        for tool in body["proof"]["tools"]
+    )
+
+
+def test_agent_safety_endpoint_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unsafe_proof(_agent_file: Path) -> dict:
+        raise AssertionError("dangerous runtime tool")
+
+    monkeypatch.setattr(
+        "pico_orchestrator.safety.assert_dangerous_tools_off",
+        unsafe_proof,
+    )
+    response = TestClient(app).get("/v1/meta/agent-safety")
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "safety.check_failed"

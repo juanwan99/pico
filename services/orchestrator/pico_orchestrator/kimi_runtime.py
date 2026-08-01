@@ -32,9 +32,9 @@ from pico_orchestrator.kimi_adapter import KimiEventContractError, KimiWireEvent
 from pico_orchestrator.kimi_tools import GatewayToolContext, bind_gateway_tools
 from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.runner import EventEmitter, RunCaps, RunResult
+from pico_orchestrator.safety import KIMI_RUNTIME_AGENT_FILE
 from pico_orchestrator.tools_builtin import build_default_gateway
 
-_AGENT_FILE = Path(__file__).resolve().parents[1] / "agents" / "pico-kimi-runtime.yaml"
 _CANCEL_POLL_SECONDS = 0.05
 _USAGE_FIELDS = (
     "input_tokens",
@@ -113,7 +113,7 @@ async def run_kimi_agent(
                     config=config,
                     model="pico-runtime",
                     yolo=False,
-                    agent_file=_AGENT_FILE,
+                    agent_file=KIMI_RUNTIME_AGENT_FILE,
                     mcp_configs=[],
                     skills_dir=KaosPath(skills_dir),
                     max_steps_per_turn=caps.max_steps,

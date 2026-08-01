@@ -360,6 +360,8 @@ typed args → AllowlistGateway.invoke(principal, tool_name, args) → ToolOk / 
 工具 handler 的旁路。Host 危险工具仍列入 `exclude_tools`，subagent 与 MCP 都为空/关闭。
 `tenant.cross_school` gateway 拒绝会额外写与旧环对等的 `auth.deny`；`ApprovalRequest`
 会落审计事件并立即 reject，因为 KA-2 尚无 Pico 审批控制面。
+`/v1/meta/agent-safety` 始终校验传给 `Session.create` 的同一
+`pico-kimi-runtime.yaml` 路径；总闸 OFF 时也可先证明候选运行时危险工具关闭。
 
 ### 9.4 取消与终态
 

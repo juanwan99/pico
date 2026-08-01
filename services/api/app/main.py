@@ -228,15 +228,16 @@ async def freeze_meta(settings: Settings = Depends(get_settings)) -> dict:
 
 @app.get("/v1/meta/agent-safety")
 async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
-    from pico_orchestrator.safety import assert_dangerous_tools_off
+    from pico_orchestrator.safety import (
+        KIMI_RUNTIME_AGENT_FILE,
+        assert_dangerous_tools_off,
+    )
 
-    agent_path = Path(settings.pico_agent_file)
-    if not agent_path.is_absolute():
-        agent_path = _ROOT / agent_path
     if settings.pico_dangerous_tools_enabled:
         raise HTTPException(status_code=500, detail="PICO_DANGEROUS_TOOLS_ENABLED must be false")
     try:
-        proof = assert_dangerous_tools_off(agent_path)
+        # This is the exact path passed to Kimi Session.create, even while the gate is OFF.
+        proof = assert_dangerous_tools_off(KIMI_RUNTIME_AGENT_FILE)
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -246,7 +247,7 @@ async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
                 "detail": str(e),
             },
         ) from e
-    return {"ok": True, "proof": proof}
+    return {"ok": True, "runtime": "kimi-agent", "proof": proof}
 
 
 @app.post("/v1/dev/token", response_model=TokenResponse)
