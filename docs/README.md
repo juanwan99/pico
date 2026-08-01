@@ -26,7 +26,8 @@ ONEFLOW: docs/ONEFLOW.md
 
 | Priority | Path | Role |
 |----------|------|------|
-| **0a** | **[STATE-NOW.md](./STATE-NOW.md)** | **正本清源：当前 SHA、派发、门禁、过时记忆黑名单** |
+| **0a** | **[WHAT-IS-PICO.md](./WHAT-IS-PICO.md)** | **Pico 是什么 / 编排目标vs现状** |
+| **0b** | **[STATE-NOW.md](./STATE-NOW.md)** | **正本清源：当前 SHA、派发、门禁、过时记忆黑名单** |
 | 0 | GitHub PR/Issue/Actions | **Task state & evidence** |
 | 1 | [AGENTS.md](../AGENTS.md) | Machine + human HARD scope |
 | 2 | [ONEFLOW.md](./ONEFLOW.md) | Delivery OS + closed loops |

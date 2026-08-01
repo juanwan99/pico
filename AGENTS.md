@@ -62,7 +62,8 @@ Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
 Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 
-**Current snapshot (正本清源):** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — SHA、窗口派发、门禁、过时记忆黑名单。  
+**What is Pico:** [`docs/WHAT-IS-PICO.md`](docs/WHAT-IS-PICO.md)  
+**Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — SHA、窗口派发、门禁、过时记忆黑名单。  
 **Doc index (truth order):** [`docs/README.md`](docs/README.md) — prefer GitHub over prose.
 
 **Context policy:** [`docs/CONTEXT-POLICY.md`](docs/CONTEXT-POLICY.md)（默认不清理上下文）  
