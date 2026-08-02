@@ -93,8 +93,29 @@ describe('TeacherTaskHome', () => {
 
   it('shows an honest empty state after a successful empty response', () => {
     renderHome();
-    expect(screen.getByRole('status')).toHaveTextContent('暂无任务记录');
+    expect(screen.getByTestId('teacher-task-empty')).toHaveTextContent('暂无任务记录');
+    expect(screen.getByTestId('teacher-task-empty-start')).toHaveAttribute('href', '/c/new');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows a short failure hint for failed runs and groups by day', () => {
+    const withError: PicoTask[] = [
+      {
+        id: 'task-failed',
+        title: '失败后待处理',
+        conversation_id: 'conversation-1',
+        created_at: '2026-08-02T03:00:00Z',
+        latest_run: {
+          id: 'run-failed',
+          status: 'failed',
+          error: '处理超时',
+          ended_at: '2026-08-02T04:00:00Z',
+        },
+      },
+    ];
+    renderHome({ tasks: withError });
+    expect(screen.getByTestId('teacher-task-fail-hint')).toHaveTextContent('处理超时');
+    expect(screen.getByTestId('teacher-task-day-groups')).toBeInTheDocument();
   });
 
   it('uses the latest-run time and keeps only conversation-bound tasks', () => {
