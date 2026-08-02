@@ -250,6 +250,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     picoArtifacts={ledger.artifacts}
                     runEvents={ledger.events}
                     run={ledger.run}
+                    canRerun={ledger.run?.status === 'failed'}
+                    rerunning={ledger.rerunning}
+                    onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
                     onClose={() => setResultOpen(false)}
                   />
                 ) : null}
