@@ -7,7 +7,9 @@ const VISIBLE_EVENT_TYPES = new Set([
   'tool.call',
   'tool.result',
   'artifact.created',
+  'agent.step',
   'run.status',
+  'run.error',
 ]);
 
 function textValue(payload: Record<string, unknown>, ...keys: string[]): string | null {
@@ -55,14 +57,51 @@ export function describePicoRunEvent(event: PicoRunEvent): {
       detail: ok ? '成功' : ['失败', code ? `错误码：${code}` : null].filter(Boolean).join(' · '),
     };
   }
+  if (event.type === 'agent.step') {
+    const phase = textValue(payload, 'phase', 'name') || '步骤';
+    const n = payload.n ?? payload.step ?? payload.index;
+    const stepLabel = typeof n === 'number' || typeof n === 'string' ? ` #${n}` : '';
+    return {
+      title: `智能体步骤${stepLabel}`,
+      detail: phase,
+    };
+  }
+  if (event.type === 'run.error') {
+    return {
+      title: '运行出错',
+      detail:
+        textValue(payload, 'user_message', 'message', 'reason') ||
+        '本次运行未能完成，请稍后重试。',
+    };
+  }
   if (event.type === 'run.status') {
     const status = textValue(payload, 'status');
     const code = textValue(payload, 'code', 'error_code');
+    const runtime = textValue(payload, 'runtime');
+    const runtimeLabel =
+      runtime === 'kimi-agent'
+        ? 'Kimi Agent'
+        : runtime
+          ? runtime
+          : null;
+    if (status === 'running' || status === 'queued' || status === 'preparing') {
+      return {
+        title: status === 'running' ? '正在运行' : '排队中',
+        detail: runtimeLabel ? `运行时 · ${runtimeLabel}` : null,
+      };
+    }
+    if (status === 'succeeded') {
+      return {
+        title: '运行成功',
+        detail: runtimeLabel ? `运行时 · ${runtimeLabel}` : null,
+      };
+    }
     if (status === 'failed') {
       return {
         title: '运行失败',
         detail: [
           textValue(payload, 'user_message') || '本次运行未能完成，请稍后重试。',
+          runtimeLabel ? `运行时 · ${runtimeLabel}` : null,
           code ? `错误码：${code}` : null,
         ]
           .filter(Boolean)
@@ -72,7 +111,12 @@ export function describePicoRunEvent(event: PicoRunEvent): {
     if (status === 'cancelled') {
       return {
         title: '运行已取消',
-        detail: code ? `已停止生成 · 错误码：${code}` : '已停止生成',
+        detail: [
+          code ? `已停止生成 · 错误码：${code}` : '已停止生成',
+          runtimeLabel ? `运行时 · ${runtimeLabel}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
       };
     }
   }
@@ -86,8 +130,11 @@ export function describePicoRunEvent(event: PicoRunEvent): {
 }
 
 function EventIcon({ type }: { type: string }) {
-  if (type === 'run.status') {
+  if (type === 'run.status' || type === 'run.error') {
     return <AlertCircle className="h-3.5 w-3.5" />;
+  }
+  if (type === 'agent.step') {
+    return <Circle className="h-3.5 w-3.5" />;
   }
   if (type === 'tool.call' || type === 'tool.result') {
     return <Wrench className="h-3.5 w-3.5" />;
@@ -117,7 +164,9 @@ export default function RunTimeline({
       if (event.type !== 'run.status') {
         return true;
       }
-      return ['failed', 'cancelled'].includes(String(event.payload?.status || ''));
+      return ['queued', 'preparing', 'running', 'succeeded', 'failed', 'cancelled'].includes(
+        String(event.payload?.status || ''),
+      );
     })
     .sort((a, b) => a.seq - b.seq);
   const terminalStatus =
