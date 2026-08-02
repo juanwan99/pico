@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -28,6 +29,13 @@ from app.settings import get_settings
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+@dataclass(frozen=True)
+class CancelResult:
+    run: RunRow
+    request_recorded: bool
+    status_changed: bool
 
 
 def _json_dict(raw: str | None) -> dict[str, Any]:
@@ -169,15 +177,38 @@ async def list_runs_for_task(session: AsyncSession, task_id: str) -> list[RunRow
     return list(result.scalars().all())
 
 
-async def request_cancel(session: AsyncSession, run: RunRow) -> RunRow:
-    run.cancel_requested = 1
-    if run.status in ("queued", "preparing", "running"):
-        run.status = "cancelled"
-        run.ended_at = _utcnow()
-        run.error = None
+async def request_cancel(session: AsyncSession, run: RunRow) -> CancelResult:
+    if run.status == "cancelled":
+        return CancelResult(run=run, request_recorded=False, status_changed=False)
+    if run.status not in ("queued", "preparing", "running"):
+        raise ValueError("run is already terminal")
+
+    request_was_pending = bool(run.cancel_requested)
+    result = await session.execute(
+        update(RunRow)
+        .where(
+            RunRow.id == run.id,
+            RunRow.status.in_(("queued", "preparing", "running")),
+        )
+        .values(
+            cancel_requested=1,
+            status="cancelled",
+            ended_at=_utcnow(),
+            error=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
     await session.commit()
     await session.refresh(run)
-    return run
+    if result.rowcount == 1:
+        return CancelResult(
+            run=run,
+            request_recorded=not request_was_pending,
+            status_changed=True,
+        )
+    if run.status == "cancelled":
+        return CancelResult(run=run, request_recorded=False, status_changed=False)
+    raise ValueError("run is already terminal")
 
 
 async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:

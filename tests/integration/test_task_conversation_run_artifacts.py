@@ -58,12 +58,24 @@ async def test_running_cancel_is_immediately_terminal_and_sticky(tmp_path, monke
             title="cancel",
         )
         run = RunRow(id=new_id(), task_id=task.id, status="running")
-        session.add_all((task, run))
+        terminal = RunRow(id=new_id(), task_id=task.id, status="succeeded")
+        session.add_all((task, run, terminal))
         await session.commit()
-        await request_cancel(session, run)
-        assert run.cancel_requested == 1
-        assert run.status == "cancelled"
-        assert run.ended_at is not None
+        first_cancel = await request_cancel(session, run)
+        assert first_cancel.run.cancel_requested == 1
+        assert first_cancel.run.status == "cancelled"
+        assert first_cancel.run.ended_at is not None
+        assert first_cancel.request_recorded is True
+        assert first_cancel.status_changed is True
+
+        repeated_cancel = await request_cancel(session, first_cancel.run)
+        assert repeated_cancel.run.status == "cancelled"
+        assert repeated_cancel.request_recorded is False
+        assert repeated_cancel.status_changed is False
+
+        with pytest.raises(ValueError, match="already terminal"):
+            await request_cancel(session, terminal)
+        assert terminal.cancel_requested == 0
 
     await _finalize_run(run.id, status="succeeded", final_text="late success")
     async with factory() as session:

@@ -49,10 +49,12 @@ function ledgerResponse(url: string, status = 'running', cancelRequested = false
 }
 
 let refreshLedger: () => void = () => undefined;
+let cancelLedgerRun: (runId?: string) => Promise<void> = async () => undefined;
 
 function CancelHarness() {
   const ledger = usePicoTaskLedger('conversation-live', false);
   refreshLedger = ledger.refresh;
+  cancelLedgerRun = ledger.cancelRun;
   const runId = ['queued', 'running', 'preparing'].includes(ledger.run?.status || '')
     ? ledger.run?.id
     : undefined;
@@ -88,8 +90,7 @@ describe('Pico cancel button integration', () => {
     global.fetch = originalFetch;
   });
 
-  it('clicks the rendered stop button, sends the exact POST, and shows cancelled', async () => {
-    let runStatus = 'running';
+  it('shows cancelled even when a stale active poll follows the cancel response', async () => {
     let resolveCancel!: (value: Response) => void;
     const cancelResponse = new Promise<Response>((resolve) => {
       resolveCancel = resolve;
@@ -100,9 +101,9 @@ describe('Pico cancel button integration', () => {
         expect(init?.method).toBe('POST');
         return cancelResponse;
       }
-      return Promise.resolve(ledgerResponse(url, runStatus));
+      return Promise.resolve(ledgerResponse(url, 'running'));
     });
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = fetchMock as unknown as typeof fetch;
 
     render(<CancelHarness />);
     expect(screen.getByTestId('task-run-bar')).toHaveClass('mt-[52px]', 'z-20');
@@ -117,16 +118,21 @@ describe('Pico cancel button integration', () => {
       }),
     );
 
-    runStatus = 'cancelled';
     resolveCancel(response({ run: { id: 'run-live', task_id: 'task-live', status: 'cancelled' } }));
 
     expect(await screen.findByText('已停止')).toBeInTheDocument();
+
+    const callsBeforeRefresh = fetchMock.mock.calls.length;
+    act(() => refreshLedger());
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBeforeRefresh));
+    expect(screen.getByText('已停止')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '停止' })).not.toBeInTheDocument();
   });
 
   it('restores a pending stop request without offering a second active stop', async () => {
     global.fetch = jest.fn((input: RequestInfo | URL) =>
       Promise.resolve(ledgerResponse(String(input), 'running', true)),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     render(<CancelHarness />);
 
@@ -134,15 +140,49 @@ describe('Pico cancel button integration', () => {
     expect(screen.getByRole('button', { name: '停止中' })).toBeDisabled();
   });
 
-  it('keeps a failed cancellation visible while ledger polling continues', async () => {
+  it('deduplicates cancel calls before React can disable the stop button', async () => {
+    let resolveCancel!: (value: Response) => void;
+    let cancelCalls = 0;
+    const cancelResponse = new Promise<Response>((resolve) => {
+      resolveCancel = resolve;
+    });
     const fetchMock = jest.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/api/pico/v1/runs/run-live/cancel')) {
-        return Promise.resolve(response({ error: 'pico_upstream_unavailable' }, 502));
+        cancelCalls += 1;
+        return cancelResponse;
       }
       return Promise.resolve(ledgerResponse(url));
     });
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(<CancelHarness />);
+    await screen.findByRole('button', { name: '停止' });
+
+    act(() => {
+      void cancelLedgerRun('run-live');
+      void cancelLedgerRun('run-live');
+    });
+
+    await waitFor(() => expect(cancelCalls).toBe(1));
+    expect(screen.getByRole('button', { name: '停止中' })).toBeDisabled();
+
+    resolveCancel(response({ run: { id: 'run-live', task_id: 'task-live', status: 'cancelled' } }));
+    expect(await screen.findByText('已停止')).toBeInTheDocument();
+  });
+
+  it('keeps a failed cancellation visible while polling, then follows terminal ledger truth', async () => {
+    let runStatus = 'running';
+    const fetchMock = jest.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/pico/v1/runs/run-live/cancel')) {
+        return Promise.resolve(
+          response({ error: 'pico_upstream_unavailable', detail: 'internal stack secret' }, 502),
+        );
+      }
+      return Promise.resolve(ledgerResponse(url, runStatus));
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
 
     render(<CancelHarness />);
     fireEvent.click(await screen.findByRole('button', { name: '停止' }));
@@ -156,5 +196,11 @@ describe('Pico cancel button integration', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       '停止运行失败：账本服务暂时不可用，请稍后重试',
     );
+    expect(screen.queryByText(/internal stack secret/)).not.toBeInTheDocument();
+
+    runStatus = 'cancelled';
+    act(() => refreshLedger());
+    expect(await screen.findByText('已停止')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 });

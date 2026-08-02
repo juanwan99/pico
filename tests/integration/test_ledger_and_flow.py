@@ -272,17 +272,15 @@ async def test_change_terminal_transition_has_one_winner() -> None:
         assert terminal_audits[0].action == f"change.{stored.status}"
 
 
-@pytest.mark.skip(
-    reason="SQLite lock flake under concurrent worker+cancel; tracked DEBT; covered by product cancel fix EQ-023",
-)
 def test_cancel_queued_run(client: TestClient, monkeypatch):
-    """Cancel before/during run — terminal status correct."""
+    """Cancel is immediately terminal and repeated requests do not duplicate events."""
     tok = _token(client)
     h = {"Authorization": f"Bearer {tok}"}
 
-    # Avoid real model: force fail path by clearing keys for this process
-    monkeypatch.delenv("KIMI_API_KEY", raising=False)
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    async def no_background_start(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(run_service, "start_run_background", no_background_start)
 
     r = client.post(
         "/v1/tasks",
@@ -291,19 +289,23 @@ def test_cancel_queued_run(client: TestClient, monkeypatch):
     )
     assert r.status_code == 200
     run_id = r.json()["run"]["id"]
-    # Immediately cancel
-    c = client.post(f"/v1/runs/{run_id}/cancel", headers=h, json={})
-    assert c.status_code == 200
+    first = client.post(f"/v1/runs/{run_id}/cancel", headers=h, json={})
+    assert first.status_code == 200, first.text
+    assert first.json()["run"]["status"] == "cancelled"
+    assert first.json()["run"]["cancel_requested"] is True
 
-    # Wait for worker
-    status = None
-    for _ in range(30):
-        time.sleep(0.1)
-        st = client.get(f"/v1/runs/{run_id}", headers=h).json()["run"]["status"]
-        status = st
-        if st in ("cancelled", "failed", "succeeded"):
-            break
-    assert status in ("cancelled", "failed", "succeeded")
+    repeated = client.post(f"/v1/runs/{run_id}/cancel", headers=h, json={})
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["run"]["status"] == "cancelled"
+
+    events = client.get(f"/v1/runs/{run_id}/events", headers=h).json()["events"]
+    assert [event["type"] for event in events].count("run.cancel_requested") == 1
+    cancelled = [
+        event
+        for event in events
+        if event["type"] == "run.status" and event["payload"].get("status") == "cancelled"
+    ]
+    assert len(cancelled) == 1
 
 
 @pytest.mark.skipif(
