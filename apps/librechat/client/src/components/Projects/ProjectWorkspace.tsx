@@ -22,7 +22,12 @@ import { QueryKeys } from 'librechat-data-provider';
 import type { ConversationListResponse, TConversation } from 'librechat-data-provider';
 import { Spinner } from '@librechat/client';
 import { useConversationsInfiniteQuery, useProjectQuery } from '~/data-provider';
-import { getPicoTask, listPicoTasks, type PicoArtifact } from '~/data-provider/pico/api';
+import {
+  getPicoTask,
+  labelForLatestRun,
+  listPicoTasks,
+  type PicoArtifact,
+} from '~/data-provider/pico/api';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { cn, clearMessagesCache } from '~/utils';
 import ProjectChatList from './ProjectChatList';
@@ -114,6 +119,7 @@ export default function ProjectWorkspace() {
   const [taskQuery, setTaskQuery] = useState('');
   const [bindings, setBindings] = useState<ProjectBindings>({});
   const [projectArtifacts, setProjectArtifacts] = useState<ProjectArtifact[]>([]);
+  const [taskStatusByConvo, setTaskStatusByConvo] = useState<Record<string, string>>({});
   const [assetPreview, setAssetPreview] = useState<ProjectArtifact | null>(null);
   const [isCollectingArtifacts, setIsCollectingArtifacts] = useState(false);
   const [assetNotice, setAssetNotice] = useState('');
@@ -350,6 +356,14 @@ export default function ProjectWorkspace() {
       setAssetNotice('');
       try {
         const { tasks } = await listPicoTasks();
+        const statusMap: Record<string, string> = {};
+        for (const task of tasks || []) {
+          const label = labelForLatestRun(task.latest_run);
+          if (label && task.conversation_id) {
+            statusMap[task.conversation_id] = label;
+          }
+        }
+        setTaskStatusByConvo(statusMap);
         const projectTasks = (tasks || []).filter(
           (task) =>
             task.workspace_id === activeProjectId ||
@@ -591,6 +605,11 @@ export default function ProjectWorkspace() {
                           <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
                             {titleOf(c)}
                           </span>
+                          {c.conversationId && taskStatusByConvo[c.conversationId] ? (
+                            <span className="shrink-0 rounded-full bg-[#edf1f4] px-1.5 py-0.5 text-[10px] font-medium text-[#3d3d3d]">
+                              {taskStatusByConvo[c.conversationId]}
+                            </span>
+                          ) : null}
                           <span className="text-[11px] text-[#9a9a9a]">
                             {timeLabel(c.updatedAt as string)}
                           </span>
@@ -641,22 +660,42 @@ export default function ProjectWorkspace() {
                     : '暂无与你相关的动态。发起任务或发布留言后会出现在此。'}
                 </div>
               ) : (
-                conversations.slice(0, 20).map((c) => (
+                conversations.slice(0, 20).map((c) => {
+                  const statusLabel =
+                    (c.conversationId && taskStatusByConvo[c.conversationId]) || null;
+                  const failed = statusLabel === '失败';
+                  const active = statusLabel === '进行中' || statusLabel === '停止中';
+                  return (
                   <button
                     key={c.conversationId}
                     type="button"
                     onClick={() => openChat(c)}
                     className="flex w-full items-start gap-3 rounded-lg border border-black/[0.06] bg-white px-4 py-3 text-left hover:bg-[#fafafa] dark:border-border-light dark:bg-surface-secondary"
                   >
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#5a9a6a]" />
+                    <CheckCircle2
+                      className={
+                        failed
+                          ? 'mt-0.5 h-4 w-4 shrink-0 text-[#9a3b3b]'
+                          : active
+                            ? 'mt-0.5 h-4 w-4 shrink-0 text-[#3b6fd9]'
+                            : 'mt-0.5 h-4 w-4 shrink-0 text-[#5a9a6a]'
+                      }
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="text-[12px] text-[#9a9a9a]">
                         任务更新 · {timeLabel(c.updatedAt as string)}
+                        {statusLabel ? ` · ${statusLabel}` : ''}
                       </p>
                       <p className="mt-0.5 truncate text-[13.5px] font-medium">{titleOf(c)}</p>
                     </div>
+                    {statusLabel ? (
+                      <span className="shrink-0 rounded-full bg-[#edf1f4] px-2 py-0.5 text-[10px] font-medium text-[#3d3d3d]">
+                        {statusLabel}
+                      </span>
+                    ) : null}
                   </button>
-                ))
+                  );
+                })
               )}
             </div>
           )}

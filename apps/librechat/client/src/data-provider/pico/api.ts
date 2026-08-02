@@ -12,13 +12,48 @@ export type PicoArtifact = {
   run_id?: string | null;
 };
 
+export type PicoTaskLatestRun = {
+  id: string;
+  status: string;
+  cancel_requested?: boolean;
+  model?: string | null;
+  error?: string | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+};
+
 export type PicoTask = {
   id: string;
   title: string;
   conversation_id?: string | null;
   workspace_id?: string | null;
   created_at?: string | null;
+  latest_run?: PicoTaskLatestRun | null;
 };
+
+/** Teacher-facing one-line status for task lists. */
+export function labelForLatestRun(run?: PicoTaskLatestRun | null): string | null {
+  if (!run) {
+    return null;
+  }
+  if (run.cancel_requested && ['queued', 'preparing', 'running'].includes(run.status)) {
+    return '停止中';
+  }
+  switch (run.status) {
+    case 'queued':
+    case 'preparing':
+    case 'running':
+      return '进行中';
+    case 'succeeded':
+      return '已完成';
+    case 'failed':
+      return '失败';
+    case 'cancelled':
+      return '已停止';
+    default:
+      return run.status;
+  }
+}
 
 export type PicoRun = {
   id: string;
