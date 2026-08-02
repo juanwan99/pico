@@ -20,6 +20,7 @@ import FavoritesList from '~/components/Nav/Favorites/FavoritesList';
 import { useActiveJobs } from '~/data-provider';
 import Convo from './Convo';
 import store from '~/store';
+import { PicoConversationStatusProvider } from '~/hooks/Pico/PicoConversationStatusContext';
 
 export type CellPosition = {
   columnIndex: number;
@@ -458,6 +459,7 @@ const Conversations: FC<ConversationsProps> = ({
   );
 
   return (
+    <PicoConversationStatusProvider>
     <div className="relative flex h-full min-h-0 flex-col pb-2 text-sm text-text-primary">
       <div className="px-3">
         <ChatsHeader
@@ -492,6 +494,7 @@ const Conversations: FC<ConversationsProps> = ({
         </div>
       )}
     </div>
+    </PicoConversationStatusProvider>
   );
 };
 

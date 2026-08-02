@@ -14,6 +14,7 @@ import { ConvoOptions } from './ConvoOptions';
 import RenameForm from './RenameForm';
 import { cn, logger } from '~/utils';
 import ConvoLink from './ConvoLink';
+import { useConversationLedgerStatus } from '~/hooks/Pico/PicoConversationStatusContext';
 import store from '~/store';
 
 interface ConversationProps {
@@ -39,6 +40,7 @@ function Conversation({
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const isShiftHeld = useShiftKey();
   const { conversationId, title = '' } = conversation;
+  const ledgerStatus = useConversationLedgerStatus(conversationId);
 
   const [titleInput, setTitleInput] = useState(title || '');
   const [renaming, setRenaming] = useState(false);
@@ -268,6 +270,7 @@ function Conversation({
           isActiveConvo={isActiveConvo}
           isPopoverActive={isPopoverActive}
           title={title}
+          ledgerStatus={ledgerStatus}
           onRename={handleRename}
           isSmallScreen={isSmallScreen}
           localize={localize}
