@@ -10,6 +10,7 @@ import asyncio
 import os
 import shutil
 import tempfile
+import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from pathlib import Path
@@ -113,15 +114,13 @@ async def run_kimi_agent(
     usage_by_step: dict[int | str, dict[str, int]] = {}
     unscoped_usage_updates = 0
 
-    work_base = Path(os.environ.get("PICO_KIMI_WORKDIR_BASE", "/tmp/pico-kimi-work"))
-    try:
-        work_base.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        work_base = Path(tempfile.gettempdir()) / "pico-kimi-work"
-        work_base.mkdir(parents=True, exist_ok=True)
+    work_base = _kimi_work_base()
+    _sweep_old_kimi_runs(work_base)
+    # Session-owned sandbox (may be reset by the SDK). Agent bundle lives outside it.
     work_dir = Path(tempfile.mkdtemp(prefix="run-", dir=str(work_base)))
     skills_dir = work_dir / "skills"
     skills_dir.mkdir(parents=True, exist_ok=True)
+    work_agent_file = _stage_shared_agent_bundle(work_base)
     try:
         with bind_gateway_tools(gateway, principal, emit=emit) as tool_context:
             stop_watcher = asyncio.Event()
@@ -129,7 +128,6 @@ async def run_kimi_agent(
             token_cap_exceeded = asyncio.Event()
             contract_failure: list[str] = []
             try:
-                work_agent_file = _stage_agent_bundle(work_dir)
                 session = await Session.create(
                     work_dir=KaosPath(work_dir),
                     config=config,
@@ -301,13 +299,43 @@ async def run_kimi_agent(
                     session.cancel()
                 raise
             except Exception as exc:  # noqa: BLE001 - sanitize provider/runtime failures
+                missing = isinstance(exc, (FileNotFoundError, OSError)) or (
+                    "No such file" in str(exc)
+                )
+                path_hint = str(exc)
+                # If Session wiped its sandbox after tools already ran, prefer ledger truth
+                # over a hard fail when we already have assistant text or tool results.
+                if missing and (
+                    final_parts
+                    or (tool_context is not None and tool_context.results)
+                ):
+                    await emit(
+                        "run.error",
+                        enrich_fail_payload(
+                            {
+                                "code": "kimi.workdir_race",
+                                "error": path_hint,
+                                "recovered": True,
+                            }
+                        ),
+                    )
+                    if terminal_status != "succeeded":
+                        await emit(
+                            "run.status",
+                            {"status": "succeeded", "runtime": "kimi-agent", "recovered": True},
+                        )
+                    return _result(
+                        "succeeded",
+                        final_parts,
+                        token_usage=token_usage,
+                        tool_context=tool_context,
+                    )
                 return await _failed_result(
                     emit,
                     code="kimi.runtime_error",
                     reason=(
                         f"Kimi Agent runtime error ({type(exc).__name__}: {exc})"
-                        if isinstance(exc, (FileNotFoundError, OSError))
-                        or "No such file" in str(exc)
+                        if missing
                         else f"Kimi Agent runtime error ({type(exc).__name__})"
                     ),
                     final_parts=final_parts,
@@ -316,7 +344,10 @@ async def run_kimi_agent(
                 )
 
     finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
+        # Only the per-run sandbox. Agent bundle is shared and must survive.
+        await asyncio.sleep(0)
+        if work_dir.is_dir():
+            shutil.rmtree(work_dir, ignore_errors=True)
 
     if timed_out.is_set():
         return await _failed_result(
@@ -360,6 +391,58 @@ async def run_kimi_agent(
         tool_context=tool_context,
     )
 
+
+
+def _kimi_work_base() -> Path:
+    """Prefer durable app data over ephemeral /tmp (survives scrubbers + volume)."""
+    env = os.environ.get("PICO_KIMI_WORKDIR_BASE", "").strip()
+    candidates: list[Path] = []
+    if env:
+        candidates.append(Path(env))
+    candidates.append(Path("/app/data/kimi-work"))
+    candidates.append(Path(tempfile.gettempdir()) / "pico-kimi-work")
+    for base in candidates:
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            probe = base / ".pico-write-probe"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink(missing_ok=True)
+            return base
+        except OSError:
+            continue
+    # Last resort: relative local dir
+    fallback = Path("data/kimi-work").resolve()
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
+def _sweep_old_kimi_runs(work_base: Path, *, max_age_sec: int = 3600) -> None:
+    """Best-effort cleanup of prior run dirs. Never delete the active run dir here."""
+    now = time.time()
+    try:
+        children = list(work_base.iterdir())
+    except OSError:
+        return
+    for child in children:
+        if not child.is_dir() or not child.name.startswith("run-"):
+            continue
+        try:
+            age = now - child.stat().st_mtime
+            if age >= max_age_sec:
+                shutil.rmtree(child, ignore_errors=True)
+        except OSError:
+            continue
+
+
+def _stage_shared_agent_bundle(work_base: Path) -> Path:
+    """Stage yaml+system.md under work_base/agent-bundle (NOT under Session work_dir).
+
+    Kimi Session may reset/clear ``work_dir`` during a turn. Keeping the agent
+    spec outside that directory prevents mid-run FileNotFoundError on the bundle.
+    """
+    bundle = work_base / "agent-bundle"
+    bundle.mkdir(parents=True, exist_ok=True)
+    return _stage_agent_bundle(bundle)
 
 def _stage_agent_bundle(work_dir: Path) -> Path:
     """Stage agent yaml + system.md where Session resolves paths.

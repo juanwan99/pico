@@ -57,6 +57,8 @@ services:
       PICO_ALLOWED_MODELS: ${PICO_ALLOWED_MODELS:?set PICO_ALLOWED_MODELS}
       PICO_OPENAI_PROXY_KEY: ${PICO_OPENAI_PROXY_KEY:?set a strong internal proxy key}
       PICO_GIT_SHA: ${PICO_GIT_SHA:-unknown}
+      # Durable Kimi Session sandboxes (not ephemeral container /tmp)
+      PICO_KIMI_WORKDIR_BASE: /app/data/kimi-work
     volumes:
       - pico_data:/app/data
       - ./.env:/app/.env:ro
