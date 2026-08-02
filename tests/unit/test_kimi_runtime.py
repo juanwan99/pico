@@ -63,48 +63,85 @@ async def test_runtime_canary_gate_is_fail_closed(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
 
     principal = Principal()
+    joint = (principal.school_id, principal.membership_id)
     gate_off = await run_agent_runtime(
         use_kimi_agent=False,
-        kimi_agent_canary_membership_ids={principal.membership_id},
+        kimi_agent_canary_principals={joint},
         principal=principal,
         prompt="hello",
     )
     not_allowlisted = await run_agent_runtime(
         use_kimi_agent=True,
-        kimi_agent_canary_membership_ids={"member-b"},
+        kimi_agent_canary_principals={("school-a", "member-b")},
+        principal=principal,
+        prompt="hello",
+    )
+    bare_membership_ignored = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_principals={principal.membership_id},
+        principal=principal,
+        prompt="hello",
+    )
+    wrong_school = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_principals={("other-school", principal.membership_id)},
         principal=principal,
         prompt="hello",
     )
     allowlisted = await run_agent_runtime(
         use_kimi_agent=True,
-        kimi_agent_canary_membership_ids={principal.membership_id},
+        kimi_agent_canary_principals={joint},
+        principal=principal,
+        prompt="hello",
+    )
+    allowlisted_string = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_principals={f"{principal.school_id}:{principal.membership_id}"},
         principal=principal,
         prompt="hello",
     )
 
-    assert (gate_off.final_text, not_allowlisted.final_text, allowlisted.final_text) == (
+    assert (
+        gate_off.final_text,
+        not_allowlisted.final_text,
+        bare_membership_ignored.final_text,
+        wrong_school.final_text,
+        allowlisted.final_text,
+        allowlisted_string.final_text,
+    ) == (
+        "old",
+        "old",
         "old",
         "old",
         "kimi",
+        "kimi",
     )
-    assert calls == ["old", "old", "kimi"]
+    assert calls == ["old", "old", "old", "old", "kimi", "kimi"]
 
 
 def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_KIMI_AGENT_RUNTIME", raising=False)
     monkeypatch.delenv("PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS", raising=False)
+    monkeypatch.delenv("PICO_KIMI_AGENT_CANARY_BATCH", raising=False)
     defaults = Settings(_env_file=None)
     assert defaults.pico_kimi_agent_runtime is False
-    assert defaults.kimi_agent_canary_membership_id_set == frozenset()
+    assert defaults.kimi_agent_canary_principal_set == frozenset()
+    assert defaults.kimi_agent_canary_membership_count == 0
 
     monkeypatch.setenv("PICO_KIMI_AGENT_RUNTIME", "1")
     monkeypatch.setenv(
         "PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS",
-        " member-a,member-b,member-a ",
+        " school-a:member-a,school-b:member-b,school-a:member-a,bare-only ",
     )
+    monkeypatch.setenv("PICO_KIMI_AGENT_CANARY_BATCH", "BATCH-unit")
     enabled = Settings(_env_file=None)
     assert enabled.pico_kimi_agent_runtime is True
-    assert enabled.kimi_agent_canary_membership_id_set == {"member-a", "member-b"}
+    assert enabled.kimi_agent_canary_principal_set == {
+        ("school-a", "member-a"),
+        ("school-b", "member-b"),
+    }
+    assert enabled.kimi_agent_canary_membership_count == 2
+    assert enabled.pico_kimi_agent_canary_batch == "BATCH-unit"
 
 
 @pytest.mark.asyncio

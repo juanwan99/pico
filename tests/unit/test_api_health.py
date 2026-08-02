@@ -27,15 +27,20 @@ def test_health() -> None:
     }
     assert body["kimi_agent_runtime_enabled"] is False
     assert body["kimi_agent_canary_configured"] is False
+    assert body["kimi_agent_canary_membership_count"] == 0
+    assert "kimi_agent_canary_batch" not in body
     assert not any("secret" in key or "token" in key for key in body)
 
 
 def test_health_exposes_only_non_sensitive_canary_state() -> None:
+    school_id = "private-school-id"
     membership_id = "private-member-id"
+    joint = f"{school_id}:{membership_id}"
     settings = Settings(
         _env_file=None,
         pico_kimi_agent_runtime=True,
-        pico_kimi_agent_canary_membership_ids=membership_id,
+        pico_kimi_agent_canary_membership_ids=joint,
+        pico_kimi_agent_canary_batch="BATCH-test",
     )
     app.dependency_overrides[get_settings] = lambda: settings
     try:
@@ -47,7 +52,32 @@ def test_health_exposes_only_non_sensitive_canary_state() -> None:
     body = response.json()
     assert body["kimi_agent_runtime_enabled"] is True
     assert body["kimi_agent_canary_configured"] is True
+    assert body["kimi_agent_canary_membership_count"] == 1
+    assert body["kimi_agent_canary_batch"] == "BATCH-test"
     assert membership_id not in response.text
+    assert school_id not in response.text
+    assert joint not in response.text
+
+
+def test_health_ignores_bare_membership_canary_entries() -> None:
+    """Membership-only config must not count (joint key required)."""
+    settings = Settings(
+        _env_file=None,
+        pico_kimi_agent_runtime=True,
+        pico_kimi_agent_canary_membership_ids="bare-member-only,school-a:m1",
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        response = TestClient(app).get("/health")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    body = response.json()
+    assert body["kimi_agent_canary_membership_count"] == 1
+    assert body["kimi_agent_canary_configured"] is True
+    assert "bare-member-only" not in response.text
+    assert "school-a" not in response.text
+    assert "m1" not in response.text
 
 
 def test_dev_token_and_me() -> None:

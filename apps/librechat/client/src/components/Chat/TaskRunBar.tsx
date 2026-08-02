@@ -45,10 +45,10 @@ function TaskRunBar({
 
   return (
     <div
-      className="dark:bg-surface-primary/90 relative z-20 mt-[52px] flex h-11 shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white px-4 py-0 dark:border-border-light"
+      className="dark:bg-surface-primary/90 relative z-20 mt-[52px] flex min-h-11 shrink-0 items-center gap-2 overflow-hidden border-b border-black/[0.06] bg-white px-3 py-1 dark:border-border-light sm:px-4"
       data-testid="task-run-bar"
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 overflow-hidden">
         <p className="truncate text-[13px] font-medium text-[#1a1a1a] dark:text-text-primary">
           {displayTitle}
         </p>

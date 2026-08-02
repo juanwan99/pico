@@ -591,8 +591,8 @@ async def _run_and_collect(
         await emit("skill.snapshot", skill_snapshot)
     result = await run_agent_runtime(
         use_kimi_agent=settings.pico_kimi_agent_runtime,
-        kimi_agent_canary_membership_ids=(
-            settings.kimi_agent_canary_membership_id_set
+        kimi_agent_canary_principals=(
+            settings.kimi_agent_canary_principal_set
         ),
         prompt=prompt,
         principal=principal,  # structural Principal protocol
@@ -929,8 +929,8 @@ async def chat_completions(
                     await emit("skill.snapshot", skill_snapshot)
                 result = await run_agent_runtime(
                     use_kimi_agent=settings.pico_kimi_agent_runtime,
-                    kimi_agent_canary_membership_ids=(
-                        settings.kimi_agent_canary_membership_id_set
+                    kimi_agent_canary_principals=(
+                        settings.kimi_agent_canary_principal_set
                     ),
                     prompt=prompt,
                     principal=principal,
