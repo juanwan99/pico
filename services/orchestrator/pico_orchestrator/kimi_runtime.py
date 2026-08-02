@@ -11,7 +11,8 @@ import shutil
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from pathlib import Path
-from tempfile import TemporaryDirectory
+import os
+import tempfile
 from typing import Any
 
 from kaos.path import KaosPath
@@ -112,10 +113,16 @@ async def run_kimi_agent(
     usage_by_step: dict[int | str, dict[str, int]] = {}
     unscoped_usage_updates = 0
 
-    with TemporaryDirectory(prefix="pico-kimi-") as temp_dir:
-        work_dir = Path(temp_dir)
-        skills_dir = work_dir / "skills"
-        skills_dir.mkdir()
+    work_base = Path(os.environ.get("PICO_KIMI_WORKDIR_BASE", "/tmp/pico-kimi-work"))
+    try:
+        work_base.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        work_base = Path(tempfile.gettempdir()) / "pico-kimi-work"
+        work_base.mkdir(parents=True, exist_ok=True)
+    work_dir = Path(tempfile.mkdtemp(prefix="run-", dir=str(work_base)))
+    skills_dir = work_dir / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    try:
         with bind_gateway_tools(gateway, principal, emit=emit) as tool_context:
             stop_watcher = asyncio.Event()
             timed_out = asyncio.Event()
@@ -307,6 +314,9 @@ async def run_kimi_agent(
                     token_usage=token_usage,
                     tool_context=tool_context,
                 )
+
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
     if timed_out.is_set():
         return await _failed_result(
