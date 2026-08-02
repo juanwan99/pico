@@ -53,6 +53,7 @@ services:
       ENDPOINTS: openAI
       OPENAI_MODELS: moonshot-v1-8k,pico-agent
       APP_TITLE: Pico
+      TITLE_CONVO: "false"
       ALLOW_REGISTRATION: "false"
       ALLOW_UNVERIFIED_EMAIL_LOGIN: "false"
       PICO_DEMO_SEED: ${PICO_DEMO_SEED:-0}

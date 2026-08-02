@@ -21,6 +21,10 @@ export function taskTimeValue(task: PicoTask): string | null {
   return task.latest_run?.ended_at || task.latest_run?.started_at || task.created_at || null;
 }
 
+function startOfLocalDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
 function dayKey(task: PicoTask): string {
   const value = taskTimeValue(task);
   if (!value) {
@@ -29,6 +33,18 @@ function dayKey(task: PicoTask): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return '未知日期';
+  }
+  const today = startOfLocalDay(new Date());
+  const day = startOfLocalDay(date);
+  const diffDays = Math.round((today - day) / 86_400_000);
+  if (diffDays === 0) {
+    return '今天';
+  }
+  if (diffDays === 1) {
+    return '昨天';
+  }
+  if (diffDays === 2) {
+    return '前天';
   }
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',

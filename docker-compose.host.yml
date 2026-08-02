@@ -87,6 +87,7 @@ services:
       # The first entry is LibreChat's default for a new conversation.
       OPENAI_MODELS: ${PICO_ALLOWED_MODELS:?set PICO_ALLOWED_MODELS}
       APP_TITLE: Pico
+      TITLE_CONVO: "false"
       ALLOW_REGISTRATION: "false"
       ALLOW_EMAIL_LOGIN: "true"
       ALLOW_UNVERIFIED_EMAIL_LOGIN: "false"
