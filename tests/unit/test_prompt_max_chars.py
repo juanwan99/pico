@@ -30,7 +30,10 @@ def test_chat_rejects_overlong_prompt() -> None:
         long_text = "测" * 200
         r = client.post(
             "/v1/chat/completions",
-            headers={"Authorization": "Bearer pico-dev"},
+            headers={
+                "Authorization": "Bearer pico-dev",
+                "X-Pico-Membership-Id": "test-member",
+            },
             json={
                 "model": "kimi-k2.6",
                 "messages": [{"role": "user", "content": long_text}],
