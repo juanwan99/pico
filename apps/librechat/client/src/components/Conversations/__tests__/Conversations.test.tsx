@@ -1,5 +1,5 @@
 import React, { createRef } from 'react';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { RecoilRoot } from 'recoil';
 import type { CellMeasurerCache, List } from 'react-virtualized';
@@ -68,9 +68,29 @@ const mockFavoritesState: { favorites: FavoriteEntry[]; isLoading: boolean } = {
 
 let mockShowMarketplace = true;
 
+const mockPicoTaskState = {
+  tasks: [],
+  statusByConversationId: {},
+  loading: false,
+  error: null,
+  refresh: jest.fn(),
+};
+
+jest.mock('~/hooks/Pico/usePicoConversationStatusMap', () => ({
+  usePicoConversationStatusMap: () => mockPicoTaskState,
+}));
+
 jest.mock('~/hooks', () => ({
   useFavorites: () => mockFavoritesState,
-  useLocalize: () => (key: string) => key,
+  useLocalize: () => (key: string) =>
+    (
+      ({
+        com_ui_pico_conversations: '对话',
+        com_ui_pico_sidebar_views: '侧栏视图',
+        com_ui_pico_task_history: '任务历史',
+        com_ui_pico_task_history_empty: '暂无任务记录',
+      }) as Record<string, string>
+    )[key] || key,
   useShowMarketplace: () => mockShowMarketplace,
   useNewConvo: () => ({ newConversation: jest.fn() }),
   useElementSize: () => ({ ref: jest.fn(), width: 300, height: 600 }),
@@ -116,6 +136,7 @@ describe('Conversations – favorites CellMeasurerCache key invalidation', () =>
     mockFavoritesState.favorites = [];
     mockFavoritesState.isLoading = false;
     mockShowMarketplace = true;
+    mockPicoTaskState.refresh.mockClear();
   });
 
   const Wrapper = () => (
@@ -190,6 +211,17 @@ describe('Conversations – favorites CellMeasurerCache key invalidation', () =>
 
     expect(cache.has(0, 0)).toBe(true);
     expect(cache.getHeight(0, 0)).toBe(88);
+  });
+
+  it('switches from ordinary conversations to the dedicated task history view', () => {
+    render(<Wrapper />);
+
+    expect(screen.getByTestId('virtual-list')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '任务历史' }));
+
+    expect(screen.getByTestId('teacher-task-home')).toBeInTheDocument();
+    expect(screen.getByText('暂无任务记录')).toBeInTheDocument();
+    expect(screen.queryByTestId('virtual-list')).not.toBeInTheDocument();
   });
 });
 

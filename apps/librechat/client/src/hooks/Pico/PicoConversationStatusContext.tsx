@@ -1,13 +1,15 @@
 import React, { createContext, useContext } from 'react';
-import {
-  usePicoConversationStatusMap,
-  type ConversationStatusMap,
-} from './usePicoConversationStatusMap';
+import type { ConversationStatusMap } from './usePicoConversationStatusMap';
 
 const Ctx = createContext<ConversationStatusMap>({});
 
-export function PicoConversationStatusProvider({ children }: { children: React.ReactNode }) {
-  const { statusByConversationId } = usePicoConversationStatusMap(true);
+export function PicoConversationStatusProvider({
+  children,
+  statusByConversationId,
+}: {
+  children: React.ReactNode;
+  statusByConversationId: ConversationStatusMap;
+}) {
   return <Ctx.Provider value={statusByConversationId}>{children}</Ctx.Provider>;
 }
 
