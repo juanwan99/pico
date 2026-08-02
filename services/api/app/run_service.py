@@ -177,6 +177,24 @@ async def list_runs_for_task(session: AsyncSession, task_id: str) -> list[RunRow
     return list(result.scalars().all())
 
 
+async def latest_runs_for_tasks(
+    session: AsyncSession, task_ids: list[str]
+) -> dict[str, RunRow]:
+    """Map task_id -> newest RunRow (one query; pick max created_at per task)."""
+    if not task_ids:
+        return {}
+    result = await session.execute(
+        select(RunRow)
+        .where(RunRow.task_id.in_(task_ids))
+        .order_by(RunRow.created_at.desc())
+    )
+    out: dict[str, RunRow] = {}
+    for row in result.scalars().all():
+        if row.task_id not in out:
+            out[row.task_id] = row
+    return out
+
+
 async def request_cancel(session: AsyncSession, run: RunRow) -> CancelResult:
     if run.status == "cancelled":
         return CancelResult(run=run, request_recorded=False, status_changed=False)

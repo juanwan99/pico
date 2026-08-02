@@ -681,7 +681,26 @@ async def tasks(
         principal,
         conversation_id=conversation_id,
     )
-    return {"tasks": [_task_dict(t) for t in rows]}
+    latest = await run_service.latest_runs_for_tasks(session, [t.id for t in rows])
+    out = []
+    for task in rows:
+        item = _task_dict(task)
+        run = latest.get(task.id)
+        if run is not None:
+            # Compact summary for list UIs — no prompt body.
+            item["latest_run"] = {
+                "id": run.id,
+                "status": run.status,
+                "cancel_requested": bool(run.cancel_requested),
+                "model": run.model,
+                "error": run.error,
+                "started_at": run.started_at.isoformat() if run.started_at else None,
+                "ended_at": run.ended_at.isoformat() if run.ended_at else None,
+            }
+        else:
+            item["latest_run"] = None
+        out.append(item)
+    return {"tasks": out}
 
 
 @app.get("/v1/tasks/{task_id}")

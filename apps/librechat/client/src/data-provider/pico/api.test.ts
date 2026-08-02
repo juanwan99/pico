@@ -1,5 +1,5 @@
 import { getTokenHeader } from 'librechat-data-provider';
-import { getPicoArtifactContent } from './api';
+import { getPicoArtifactContent, labelForLatestRun } from './api';
 
 jest.mock('librechat-data-provider', () => ({
   getTokenHeader: jest.fn(),
@@ -38,5 +38,18 @@ describe('getPicoArtifactContent', () => {
         Authorization: 'Bearer browser-jwt',
       }),
     });
+  });
+});
+
+describe('labelForLatestRun', () => {
+  it('maps ledger run status to teacher-facing labels', () => {
+    expect(labelForLatestRun(null)).toBeNull();
+    expect(labelForLatestRun({ id: '1', status: 'running' })).toBe('进行中');
+    expect(
+      labelForLatestRun({ id: '1', status: 'running', cancel_requested: true }),
+    ).toBe('停止中');
+    expect(labelForLatestRun({ id: '1', status: 'cancelled' })).toBe('已停止');
+    expect(labelForLatestRun({ id: '1', status: 'failed' })).toBe('失败');
+    expect(labelForLatestRun({ id: '1', status: 'succeeded' })).toBe('已完成');
   });
 });
