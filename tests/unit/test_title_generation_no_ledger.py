@@ -12,14 +12,13 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from app.main import app  # noqa: E402
-from app.openai_compat import (  # noqa: E402
+from app.main import app
+from app.openai_compat import (
     ChatMessage,
     _is_title_generation_request,
     _synthetic_title_from_messages,
 )
-from app.settings import Settings, get_settings  # noqa: E402
-
+from app.settings import Settings, get_settings
 
 TITLE_PROMPTS = [
     (

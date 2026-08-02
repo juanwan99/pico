@@ -201,11 +201,11 @@ def _is_title_generation_request(prompt: str, messages: list[ChatMessage]) -> bo
     if any(marker in blob for marker in markers):
         return True
     # Structured-title style: instructions + tiny response budget is not a user task.
-    if "title" in blob and "conversation" in blob and (
-        "5 words" in blob or "5-word" in blob or "concise title" in blob
-    ):
-        return True
-    return False
+    return (
+        "title" in blob
+        and "conversation" in blob
+        and ("5 words" in blob or "5-word" in blob or "concise title" in blob)
+    )
 
 
 def _synthetic_title_from_messages(messages: list[ChatMessage], prompt: str) -> str:
