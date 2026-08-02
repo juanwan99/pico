@@ -44,6 +44,14 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "登录已失效，请打开设置重新获取令牌。"
     if "cross_school" in low or "tenant" in low:
         return "跨校访问已被拒绝（租户隔离）。"
+    if (
+        c in ("kimi.event_contract", "kimi.runtime_error")
+        or "event_contract" in low
+        or "kimi.runtime" in low
+        or "filenotfound" in low
+        or ("no such file" in low and any(x in low for x in ("agent", "yaml", "system.md", "pico-kimi")))
+    ):
+        return "智能体任务未正常完成，请重试。若持续失败请联系管理员。"
     if not text:
         return "出了点问题，请重试。若持续失败，请联系管理员。"
     # Keep short; avoid dumping stack traces
