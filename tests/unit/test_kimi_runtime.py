@@ -126,6 +126,7 @@ async def test_kimi_path_maps_mock_session_without_network(monkeypatch: pytest.M
             yield TurnBegin(user_input=user_input)
             yield StepBegin(n=1)
             yield TextPart(text="hello from Kimi")
+            yield StepBegin(n=2)
             yield TurnEnd()
 
         def cancel(self) -> None:
@@ -166,6 +167,7 @@ async def test_kimi_path_maps_mock_session_without_network(monkeypatch: pytest.M
         ("run.status", {"status": "running", "runtime": "kimi-agent"}),
         ("agent.step", {"step": 1, "phase": "model"}),
         ("message.delta", {"text": "hello from Kimi"}),
+        ("agent.step", {"step": 2, "phase": "model"}),
         ("run.status", {"status": "succeeded", "runtime": "kimi-agent"}),
     ]
 
@@ -378,7 +380,15 @@ async def test_kimi_usage_accumulates_across_steps_and_fails_over_cap(
     assert result.status == "failed"
     assert result.error == "Kimi Agent token cap exceeded: 100"
     assert result.token_usage == {"total_tokens": 110}
-    assert ("run.error", {"code": "token_cap", "error": result.error}) in events
+    expected_user_message = "本次回答超出长度上限，请缩短问题或新开对话后再试。"
+    assert (
+        "run.error",
+        {
+            "code": "token_cap",
+            "error": result.error,
+            "user_message": expected_user_message,
+        },
+    ) in events
     terminal = [
         payload for kind, payload in events if kind == "run.status" and payload["status"] != "running"
     ]
@@ -388,6 +398,7 @@ async def test_kimi_usage_accumulates_across_steps_and_fails_over_cap(
             "reason": result.error,
             "code": "token_cap",
             "runtime": "kimi-agent",
+            "user_message": expected_user_message,
         }
     ]
 

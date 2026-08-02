@@ -34,6 +34,7 @@ from pico_orchestrator.kimi_tools import GatewayToolContext, bind_gateway_tools
 from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.runner import EventEmitter, RunCaps, RunResult
 from pico_orchestrator.tools_builtin import build_default_gateway
+from pico_orchestrator.user_errors import enrich_fail_payload
 
 
 def _agent_bundle_dir() -> Path:
@@ -410,10 +411,20 @@ async def _failed_result(
     token_usage: dict[str, int] | None = None,
     tool_context: GatewayToolContext | None = None,
 ) -> RunResult:
-    await emit("run.error", {"code": code, "error": reason})
+    await emit(
+        "run.error",
+        enrich_fail_payload({"code": code, "error": reason}),
+    )
     await emit(
         "run.status",
-        {"status": "failed", "reason": reason, "code": code, "runtime": "kimi-agent"},
+        enrich_fail_payload(
+            {
+                "status": "failed",
+                "reason": reason,
+                "code": code,
+                "runtime": "kimi-agent",
+            }
+        ),
     )
     result = _result(
         "failed",
