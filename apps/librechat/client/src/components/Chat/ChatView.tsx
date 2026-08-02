@@ -246,6 +246,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     messages={flatMessages}
                     taskTitle={taskTitle || ledger.task?.title}
                     runStatusLabel={runStatusLabel}
+                    processHint={ledger.processHint}
                     picoArtifacts={ledger.artifacts}
                     runEvents={ledger.events}
                     run={ledger.run}
