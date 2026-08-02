@@ -35,6 +35,8 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "模型调用繁忙（限流）。请稍后再试。"
     if "connect" in low or "connection" in low or "network" in low or "timed out" in low:
         return "无法连接模型服务。请检查网络或稍后重试。"
+    if "owner was lost" in low or "api restart" in low or "greenlet" in low:
+        return "服务刚完成维护或重启，请重新打开任务后重试。"
     if "not found" in low:
         return "找不到对应的会话或运行记录。"
     if (

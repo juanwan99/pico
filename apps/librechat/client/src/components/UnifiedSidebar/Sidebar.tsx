@@ -32,7 +32,8 @@ import type { NavLink } from '~/common';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { clearMessagesCache, cn } from '~/utils';
 import store from '~/store';
-import TaskListSection from '~/components/Workbench/TaskListSection';
+import TeacherTaskHome from '~/components/Conversations/TeacherTaskHome';
+import { usePicoConversationStatusMap } from '~/hooks/Pico/usePicoConversationStatusMap';
 import { rememberTaskRoute } from '~/components/Workbench/workbenchSession';
 
 const AccountSettings = lazy(() => import('~/components/Nav/AccountSettings'));
@@ -150,6 +151,16 @@ function Sidebar({
     newConversation();
     navigate('/c/new');
   }, [queryClient, conversationId, newConversation, navigate]);
+
+  const {
+    tasks: picoTasks,
+    loading: isTaskHistoryLoading,
+    error: taskHistoryError,
+    refresh: refreshTaskHistory,
+  } = usePicoConversationStatusMap(true);
+  const handleTaskOpen = useCallback(() => {
+    // Desktop rail stays open; TeacherTaskHome still needs the onOpen callback.
+  }, []);
 
   useEffect(() => {
     if (!moreMenu) {
@@ -387,7 +398,18 @@ function Sidebar({
           })}
         </nav>
 
-        <TaskListSection />
+        <div className="mt-3 min-h-0 flex-1 border-t border-black/[0.05] pt-2" data-testid="sidebar-task-history">
+          <div className="mb-1 flex items-center justify-between px-2.5">
+            <span className="text-[12px] font-medium text-[#6b6b6b]">任务历史</span>
+          </div>
+          <TeacherTaskHome
+            tasks={picoTasks}
+            loading={isTaskHistoryLoading}
+            error={taskHistoryError}
+            onRetry={refreshTaskHistory}
+            onOpen={handleTaskOpen}
+          />
+        </div>
 
         <div className="mt-1 shrink-0 px-3.5 pb-2">
           <button

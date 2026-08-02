@@ -14,6 +14,10 @@ interface:
   agents: true
 endpoints:
   openAI:
+    # Auto-title via LLM would re-enter pico-agent and create ghost Task/Run rows.
+    # Titles still derive from the first user turn / ledger; API also short-circuits
+    # any residual title prompts (stage #260 P0).
+    titleConvo: false
     headers:
       X-Pico-Membership-Id: "{{LIBRECHAT_USER_ID}}"
       X-Conversation-Id: "{{LIBRECHAT_BODY_CONVERSATIONID}}"

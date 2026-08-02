@@ -171,6 +171,111 @@ def _estimated_usage(prompt: str, completion: str) -> dict[str, int | bool]:
     }
 
 
+
+def _all_message_text(messages: list[ChatMessage]) -> str:
+    parts: list[str] = []
+    for message in messages or []:
+        parts.append(_content_text(message.content))
+    return "\n".join(parts)
+
+
+def _is_title_generation_request(prompt: str, messages: list[ChatMessage]) -> bool:
+    """Detect LibreChat auto-title / auxiliary title prompts.
+
+    These must never create durable pico-agent Task/Run rows (stage #260 P0).
+    """
+    blob = f"{_all_message_text(messages)}\n{prompt or ''}".lower()
+    markers = (
+        "analyze this conversation and provide",
+        "provide a concise, 5-word-or-less title",
+        "please generate a concise title",
+        "a concise title for the conversation",
+        "concise title in the detected language",
+        "only return the title itself",
+        "5 words or less, no punctuation",
+        "using title case conventions",
+        "a concise title (max 40 characters)",
+        "generate a short title",
+        "write a short title",
+    )
+    if any(marker in blob for marker in markers):
+        return True
+    # Structured-title style: instructions + tiny response budget is not a user task.
+    if "title" in blob and "conversation" in blob and (
+        "5 words" in blob or "5-word" in blob or "concise title" in blob
+    ):
+        return True
+    return False
+
+
+def _synthetic_title_from_messages(messages: list[ChatMessage], prompt: str) -> str:
+    """Local title only — no model call, no ledger, no tools."""
+    import re
+
+    blob = _all_message_text(messages) or (prompt or "")
+    # Prefer embedded user turn if title prompt quoted it.
+    for pattern in (
+        r"(?im)^\s*user\s*:\s*(.+)$",
+        r"(?im)conversation:\s*(.+)$",
+        r"(?is)\{convo\}\s*(.+)$",
+    ):
+        match = re.search(pattern, blob)
+        if match:
+            blob = match.group(1).strip()
+            break
+    # Drop instruction scaffolding lines.
+    cleaned_lines: list[str] = []
+    for line in blob.splitlines():
+        low = line.strip().lower()
+        if not line.strip():
+            continue
+        if any(
+            skip in low
+            for skip in (
+                "analyze this conversation",
+                "provide a concise",
+                "please generate",
+                "only return the title",
+                "detected language",
+                "title case",
+                "title:",
+            )
+        ):
+            continue
+        cleaned_lines.append(line.strip())
+    seed = cleaned_lines[0] if cleaned_lines else (prompt or "新对话")
+    seed = re.sub(r"\s+", " ", seed).strip(" \"'`，。；：,.!?")
+    if not seed:
+        seed = "新对话"
+    if len(seed) > 40:
+        seed = seed[:37].rstrip() + "…"
+    return seed
+
+
+def _title_completion_payload(
+    *,
+    completion_id: str,
+    created: int,
+    model: str,
+    title: str,
+    prompt: str,
+) -> dict[str, Any]:
+    return {
+        "id": completion_id,
+        "object": "chat.completion",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": title},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": _estimated_usage(prompt, title),
+    }
+
+
 def _last_user_prompt(messages: list[ChatMessage]) -> str:
     for m in reversed(messages):
         if m.role == "user":
@@ -689,6 +794,48 @@ async def chat_completions(
                 "请缩短问题后重试；系统不会静默截断后继续执行。"
             ),
         )
+
+    # LibreChat auto-title / auxiliary requests: answer without durable Task/Run.
+    if _is_title_generation_request(prompt, body.messages):
+        title = _synthetic_title_from_messages(body.messages, prompt)
+        completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+        created = int(time.time())
+        model = body.model or "pico-agent"
+        if body.stream:
+
+            async def title_event_stream() -> AsyncIterator[bytes]:
+                def chunk(delta: dict, *, finish: str | None = None) -> bytes:
+                    return _sse_chunk(
+                        {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": delta,
+                                    "finish_reason": finish,
+                                }
+                            ],
+                        }
+                    ).encode()
+
+                yield chunk({"role": "assistant"})
+                if title:
+                    yield chunk({"content": title})
+                yield chunk({}, finish="stop")
+                yield b"data: [DONE]\n\n"
+
+            return StreamingResponse(title_event_stream(), media_type="text/event-stream")
+        return _title_completion_payload(
+            completion_id=completion_id,
+            created=created,
+            model=model,
+            title=title,
+            prompt=prompt,
+        )
+
     history = _history_for_agent(body.messages)
     model = _model_preference_from_prompt(raw_prompt) or body.model or settings.kimi_model or "pico-agent"
     if skill_snapshot and skill_snapshot.get("tools"):
