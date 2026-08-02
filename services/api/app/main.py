@@ -874,6 +874,8 @@ async def cancel_task_active_runs(
     principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    from app.db import append_event
+
     task = await run_service.get_task_for_principal(session, task_id, principal)
     if not task:
         raise HTTPException(status_code=404, detail="task not found")
