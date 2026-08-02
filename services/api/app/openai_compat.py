@@ -342,23 +342,31 @@ async def _finalize_run(
     factory = session_factory()
     async with factory() as session:
         requested_status = status
+        mark_cancel = status == "cancelled"
+        values: dict = {
+            "status": case(
+                (RunRow.cancel_requested != 0, "cancelled"),
+                else_=status,
+            ),
+            "error": case(
+                (RunRow.cancel_requested != 0, None),
+                else_=error,
+            ),
+            "ended_at": _utcnow(),
+        }
+        if mark_cancel:
+            values["cancel_requested"] = case(
+                (RunRow.cancel_requested != 0, RunRow.cancel_requested),
+                else_=1,
+            )
+
         claimed = await session.execute(
             update(RunRow)
             .where(
                 RunRow.id == run_id,
                 RunRow.status.not_in(terminal),
             )
-            .values(
-                status=case(
-                    (RunRow.cancel_requested != 0, "cancelled"),
-                    else_=status,
-                ),
-                error=case(
-                    (RunRow.cancel_requested != 0, None),
-                    else_=error,
-                ),
-                ended_at=_utcnow(),
-            )
+            .values(**values)
         )
         if claimed.rowcount != 1:
             await session.rollback()
@@ -372,7 +380,21 @@ async def _finalize_run(
             await session.rollback()
             raise ValueError("run/task mismatch during finalize")
         status = run.status
-        if status == "cancelled" and requested_status != "cancelled":
+        if status == "cancelled":
+            # Honest ledger when stop only tears down the stream.
+            await append_event(
+                session,
+                run_id,
+                "run.cancel_requested",
+                {
+                    "source": (
+                        "stream_or_finalize"
+                        if requested_status == "cancelled"
+                        else "flag_before_finalize"
+                    )
+                },
+                commit=False,
+            )
             await append_event(
                 session,
                 run_id,
