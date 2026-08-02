@@ -48,5 +48,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["services/api/app", "services/orchestrator/pico_orchestrator"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"services/orchestrator/pico_orchestrator/agent_assets" = "pico_orchestrator/agent_assets"
+
 [tool.ruff.lint]
 ignore = ["B008"]  # FastAPI Depends() in defaults is idiomatic

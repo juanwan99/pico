@@ -35,7 +35,16 @@ from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.runner import EventEmitter, RunCaps, RunResult
 from pico_orchestrator.tools_builtin import build_default_gateway
 
-_AGENT_DIR = Path(__file__).resolve().parents[1] / "agents"
+def _agent_bundle_dir() -> Path:
+    """Prefer package data (wheel/image), fall back to repo agents/."""
+    packaged = Path(__file__).resolve().parent / "agent_assets"
+    if (packaged / "pico-kimi-runtime.yaml").is_file() and (packaged / "system.md").is_file():
+        return packaged
+    repo = Path(__file__).resolve().parents[1] / "agents"
+    return repo
+
+
+_AGENT_DIR = _agent_bundle_dir()
 _AGENT_FILE = _AGENT_DIR / "pico-kimi-runtime.yaml"
 _SYSTEM_PROMPT_FILE = _AGENT_DIR / "system.md"
 _CANCEL_POLL_SECONDS = 0.05
