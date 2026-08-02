@@ -23,6 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from app.settings import get_settings
@@ -187,16 +188,31 @@ _Session: async_sessionmaker[AsyncSession] | None = None
 
 
 def _normalize_url(url: str) -> str:
+    def _abs_sqlite_file(raw: str) -> str:
+        if not raw or raw.startswith(":"):
+            return raw
+        path = Path(raw).expanduser()
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        else:
+            path = path.resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path.as_posix()
+
     if url.startswith("sqlite:///"):
         path = url.removeprefix("sqlite:///")
-        if path.startswith("./") or not path.startswith("/"):
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        if path and not path.startswith(":"):
+            path = _abs_sqlite_file(path)
+            return f"sqlite+aiosqlite:///{path}"
         return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
     if url.startswith("sqlite+aiosqlite:///"):
-        if ":///" in url:
-            raw = url.split("sqlite+aiosqlite:///")[-1]
-            if raw and not raw.startswith(":"):
-                Path(raw).parent.mkdir(parents=True, exist_ok=True)
+        raw = url.split("sqlite+aiosqlite:///", 1)[-1]
+        # strip query if any
+        file_part = raw.split("?", 1)[0]
+        if file_part and not file_part.startswith(":"):
+            abs_path = _abs_sqlite_file(file_part)
+            suffix = raw[len(file_part) :]
+            return f"sqlite+aiosqlite:///{abs_path}{suffix}"
         return url
     return url
 
@@ -238,7 +254,9 @@ def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
     cursor.execute("PRAGMA foreign_keys=ON")
     # Concurrent cancel + emit under aiosqlite needs WAL + longer wait (prod #165 lock).
     cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.execute("PRAGMA busy_timeout=60000")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA temp_store=MEMORY")
     cursor.close()
 
 
@@ -246,7 +264,17 @@ async def init_db() -> None:
     global _engine, _Session
     settings = get_settings()
     url = _normalize_url(settings.pico_database_url)
-    _engine = create_async_engine(url, echo=False)
+    engine_kwargs: dict[str, Any] = {"echo": False}
+    if "sqlite" in url:
+        # aiosqlite + default QueuePool can surface "unable to open database file"
+        # under overlapping runs/cancel (stage #256 concurrent window).
+        # NullPool: one connection per checkout; WAL + busy_timeout handle locks.
+        engine_kwargs["poolclass"] = NullPool
+        engine_kwargs["connect_args"] = {
+            "timeout": 30.0,
+            "check_same_thread": False,
+        }
+    _engine = create_async_engine(url, **engine_kwargs)
     if "sqlite" in url:
         event.listen(_engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
     _Session = async_sessionmaker(_engine, expire_on_commit=False)
@@ -309,7 +337,7 @@ async def append_event(
             await session.rollback()
         except OperationalError as exc:
             last_err = exc
-            # sqlite "database is locked" under concurrent cancel/emit
+            # sqlite locked / unable to open under concurrent cancel/emit
             if attempt >= 4:
                 raise
             await session.rollback()
