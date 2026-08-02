@@ -5,7 +5,8 @@ DOC: docs/FAST-PATH.md
 STATUS: BINDING — 日常唯一默认节奏
 UPDATED: 2026-08-01
 OWNER_ORDER: 在必要安全下砍掉一切阻碍
-AUTONOMOUS: docs/AUTONOMOUS-GOAL.md — 业主终验制已启用
+AUTONOMOUS: docs/AUTONOMOUS-GOAL.md — 成功门禁 A–I
+STAGE_PACKAGE: docs/STAGE-PACKAGE-MODE.md — BINDING 单窗阶段包
 ```
 
 ## 一句话

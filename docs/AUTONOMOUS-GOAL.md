@@ -5,6 +5,7 @@ DOC: docs/AUTONOMOUS-GOAL.md
 STATUS: BINDING — 业主 2026-08-02 起用：agent 自跑自测，业主只管终局验收
 REPO: juanwan99/pico ONLY
 PROD: https://pico.aivia.asia
+ORG: docs/STAGE-PACKAGE-MODE.md（BINDING 单窗阶段包）
 SEE: docs/FAST-PATH.md · docs/CORRECTED-GOALS.md · docs/AGENT-SELFTEST.md
 ```
 
@@ -174,3 +175,6 @@ gh api repos/juanwan99/pico/commits/main --jq .sha
 ```
 
 已知快照（会过期）：P0 修在 main 后，生产若仍落后 → **先 SPEED deploy 再 VERIFY**，禁止未装就宣称修好。
+
+
+> **组织法（2026-08-02）：** 日常推进改用 [STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md)（单窗阶段包）。本页 **A–I 仍为成功门禁**；多窗碎卡默认废止。
