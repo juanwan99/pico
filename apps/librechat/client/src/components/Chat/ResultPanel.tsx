@@ -229,6 +229,8 @@ export default function ResultPanel({
   const [expanded, setExpanded] = useState(false);
   const [artifactAction, setArtifactAction] = useState<ArtifactAction | null>(null);
   const [artifactError, setArtifactError] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState<string | null>(null);
   const navigate = useNavigate();
   const tokenUsageLabel = formatRunTokenUsage(run);
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
@@ -289,7 +291,8 @@ export default function ResultPanel({
   const openArtifact = async (artifact: ArtifactItem) => {
     setArtifactAction({ id: artifact.id, type: 'open' });
     setArtifactError(null);
-    let objectUrl: string | null = null;
+    setPreviewText(null);
+    setPreviewTitle(null);
     try {
       if (artifact.url) {
         const url = safeArtifactUrl(artifact.url);
@@ -302,34 +305,33 @@ export default function ResultPanel({
         }
         return;
       }
-      // Fetch first, then open — avoids blank-tab races / control timeouts.
       const blob = await readArtifactBlob(artifact, false);
-      objectUrl = URL.createObjectURL(blob);
+      // In-panel preview for text — no popup dependency (W4: open must show content).
+      const looksText =
+        artifact.kind === 'txt' ||
+        /text|json|markdown|plain/i.test(blob.type || '') ||
+        /\.(txt|md|json|csv|log)$/i.test(artifact.name || '');
+      if (looksText || blob.size <= 512_000) {
+        const text = await blob.text();
+        setPreviewTitle(artifact.name || '产物预览');
+        setPreviewText(text);
+        return;
+      }
+      const objectUrl = URL.createObjectURL(blob);
       const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
       if (!opened) {
-        // Popup blocked: fall back to same-tab navigation is worse; force download.
         const anchor = document.createElement('a');
         anchor.href = objectUrl;
-        anchor.download = artifact.name || 'artifact.txt';
-        anchor.rel = 'noopener';
+        anchor.download = artifact.name || 'artifact.bin';
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
-        setArtifactError('弹窗被拦截，已改为下载产物文件');
-        return;
+        setArtifactError('无法预览该类型产物，已改为下载');
       }
-      window.setTimeout(() => {
-        if (objectUrl) {
-          URL.revokeObjectURL(objectUrl);
-        }
-      }, 60_000);
-      objectUrl = null;
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (openError) {
       setArtifactError(artifactActionError('open', openError));
     } finally {
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
       setArtifactAction((current) =>
         current?.id === artifact.id && current.type === 'open' ? null : current,
       );
@@ -489,6 +491,29 @@ export default function ResultPanel({
 
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col">
+        {previewText !== null ? (
+          <div
+            className="mb-2 rounded-lg border border-black/[0.08] bg-white p-2 dark:border-border-light dark:bg-surface-secondary"
+            data-testid="artifact-inline-preview"
+          >
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="truncate text-[12px] font-medium text-[#3d3d3d]">{previewTitle}</p>
+              <button
+                type="button"
+                className="text-[11px] text-[#6b6b6b] underline"
+                onClick={() => {
+                  setPreviewText(null);
+                  setPreviewTitle(null);
+                }}
+              >
+                关闭预览
+              </button>
+            </div>
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-[#fafafa] p-2 text-[12px] leading-relaxed text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary">
+              {previewText}
+            </pre>
+          </div>
+        ) : null}
         {artifactError ? (
           <p
             className="border-b border-red-100 bg-red-50 px-3 py-2 text-[11.5px] text-red-700"
