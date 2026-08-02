@@ -308,6 +308,55 @@ def test_cancel_queued_run(client: TestClient, monkeypatch):
     assert len(cancelled) == 1
 
 
+def test_cancel_active_response_survives_expired_orm_state(
+    client: TestClient,
+    monkeypatch,
+):
+    """Concurrent event retry must not turn a durable cancel into HTTP 500."""
+    tok = _token(client)
+    h = {"Authorization": f"Bearer {tok}"}
+
+    async def no_background_start(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(run_service, "start_run_background", no_background_start)
+    created = client.post(
+        "/v1/tasks",
+        headers=h,
+        json={"title": "cancel-active", "prompt": "long task"},
+    )
+    assert created.status_code == 200, created.text
+    task_id = created.json()["task"]["id"]
+    run_id = created.json()["run"]["id"]
+
+    from app import db as dbmod
+
+    async def expire_after_event(session, *_args, **_kwargs):
+        # append_event may call session.rollback() while retrying a concurrent
+        # event sequence collision; rollback expires previously loaded rows.
+        session.expire_all()
+
+    monkeypatch.setattr(dbmod, "append_event", expire_after_event)
+    response = client.post(
+        f"/v1/tasks/{task_id}/cancel-active",
+        headers=h,
+        json={},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "runs": [
+            {
+                **created.json()["run"],
+                "status": "cancelled",
+                "cancel_requested": True,
+                "ended_at": response.json()["runs"][0]["ended_at"],
+            }
+        ],
+        "cancelled": 1,
+    }
+    assert response.json()["runs"][0]["id"] == run_id
+
+
 @pytest.mark.skipif(
     not os.environ.get("KIMI_API_KEY"),
     reason="S1 real key required for multi-step loop",

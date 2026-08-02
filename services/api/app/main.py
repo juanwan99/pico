@@ -861,11 +861,21 @@ async def cancel_run(
         result = await run_service.request_cancel(session, run)
     except ValueError:
         raise HTTPException(status_code=409, detail="run is already terminal") from None
+    # Event allocation may roll the session back on a concurrent seq collision,
+    # expiring ORM attributes.  Snapshot the response before appending events so
+    # cancellation still returns its durable terminal state.
+    run_payload = _run_dict(result.run)
+    cancelled_run_id = run_payload["id"]
     if result.request_recorded:
-        await append_event(session, run.id, "run.cancel_requested", {})
+        await append_event(session, cancelled_run_id, "run.cancel_requested", {})
     if result.status_changed:
-        await append_event(session, run.id, "run.status", {"status": "cancelled"})
-    return {"run": _run_dict(result.run)}
+        await append_event(
+            session,
+            cancelled_run_id,
+            "run.status",
+            {"status": "cancelled"},
+        )
+    return {"run": run_payload}
 
 
 @app.post("/v1/tasks/{task_id}/cancel-active")
@@ -882,11 +892,25 @@ async def cancel_task_active_runs(
     results = await run_service.cancel_active_runs_for_task(session, task_id)
     runs = []
     for result in results:
+        # See cancel_run: append_event can expire ORM state after a SQLite
+        # sequence collision, so never serialize result.run after event writes.
+        run_payload = _run_dict(result.run)
+        cancelled_run_id = run_payload["id"]
         if result.request_recorded:
-            await append_event(session, result.run.id, "run.cancel_requested", {"source": "task_cancel"})
+            await append_event(
+                session,
+                cancelled_run_id,
+                "run.cancel_requested",
+                {"source": "task_cancel"},
+            )
         if result.status_changed:
-            await append_event(session, result.run.id, "run.status", {"status": "cancelled"})
-        runs.append(_run_dict(result.run))
+            await append_event(
+                session,
+                cancelled_run_id,
+                "run.status",
+                {"status": "cancelled"},
+            )
+        runs.append(run_payload)
     return {"runs": runs, "cancelled": len(runs)}
 
 
