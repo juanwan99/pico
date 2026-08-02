@@ -8,6 +8,7 @@ import {
   retryPicoRun,
 } from '~/data-provider/pico/api';
 import {
+  mergePolledRun,
   pickPreferredRun,
   pickPreferredTaskRuns,
   recoveryTaskCandidates,
@@ -32,6 +33,28 @@ const mockedCancelRun = jest.mocked(cancelPicoRun);
 const mockedRetryRun = jest.mocked(retryPicoRun);
 
 describe('pickPreferredRun / pickPreferredTaskRuns', () => {
+  it('does not regress an acknowledged stop when an older poll arrives', () => {
+    const cancelled = { id: 'run-1', task_id: 'task-1', status: 'cancelled' };
+    expect(mergePolledRun(cancelled, { id: 'run-1', task_id: 'task-1', status: 'running' })).toBe(
+      cancelled,
+    );
+
+    const stopping = {
+      id: 'run-2',
+      task_id: 'task-1',
+      status: 'running',
+      cancel_requested: true,
+    };
+    expect(
+      mergePolledRun(stopping, {
+        id: 'run-2',
+        task_id: 'task-1',
+        status: 'running',
+        cancel_requested: false,
+      }),
+    ).toBe(stopping);
+  });
+
   it('prefers an active run over a newer terminal run on the same task', () => {
     const preferred = pickPreferredRun([
       { id: 'run-new', task_id: 't1', status: 'succeeded' },

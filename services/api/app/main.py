@@ -838,11 +838,15 @@ async def cancel_run(
     run = await run_service.get_run_for_principal(session, run_id, principal)
     if not run:
         raise HTTPException(status_code=404, detail="run not found")
-    run = await run_service.request_cancel(session, run)
-    await append_event(session, run.id, "run.cancel_requested", {})
-    if run.status == "cancelled":
+    try:
+        result = await run_service.request_cancel(session, run)
+    except ValueError:
+        raise HTTPException(status_code=409, detail="run is already terminal") from None
+    if result.request_recorded:
+        await append_event(session, run.id, "run.cancel_requested", {})
+    if result.status_changed:
         await append_event(session, run.id, "run.status", {"status": "cancelled"})
-    return {"run": _run_dict(run)}
+    return {"run": _run_dict(result.run)}
 
 
 @app.post("/v1/runs/{run_id}/retry")

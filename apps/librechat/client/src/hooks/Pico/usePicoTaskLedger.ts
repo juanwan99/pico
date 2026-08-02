@@ -39,6 +39,25 @@ function isActiveRun(run: PicoRun | null | undefined): run is PicoRun {
   return Boolean(run && ACTIVE_RUN_STATUSES.has(run.status));
 }
 
+/** Do not let an older poll undo a locally acknowledged stop for the same Run. */
+export function mergePolledRun(current: PicoRun | null, incoming: PicoRun | null): PicoRun | null {
+  if (!current || !incoming || current.id !== incoming.id) {
+    return incoming;
+  }
+  if (current.status === 'cancelled' && isActiveRun(incoming)) {
+    return current;
+  }
+  if (
+    isActiveRun(current) &&
+    current.cancel_requested &&
+    isActiveRun(incoming) &&
+    !incoming.cancel_requested
+  ) {
+    return current;
+  }
+  return incoming;
+}
+
 /** Prefer an active Run over a merely newest terminal Run (runs are newest-first). */
 export function pickPreferredRun(runs: PicoRun[]): PicoRun | null {
   if (!runs.length) {
@@ -248,45 +267,83 @@ export function usePicoTaskLedger(
   const runRef = useRef(run);
   const taskRef = useRef(task);
   const recoveryDeadlineRef = useRef(0);
+  const cancelRequestRunIdRef = useRef<string | null>(null);
+  const cancelErrorRunIdRef = useRef<string | null>(null);
   runRef.current = run;
   taskRef.current = task;
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
-  const cancelRun = useCallback(
-    async (runId?: string) => {
-      const targetRunId = runId ?? (isActiveRun(run) ? run.id : undefined);
-      if (!targetRunId) {
-        setCancelError('停止运行失败：未找到正在运行的任务');
-        return;
-      }
-      setCancelRequestInFlight(true);
-      setCancelRequestedRunId(targetRunId);
-      setCancelError(null);
-      try {
-        const result = await cancelPicoRun(targetRunId);
-        setRun(result.run);
-        if (!isActiveRun(result.run)) {
-          setCancelRequestedRunId(null);
-        }
-        setTick((n) => n + 1);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        if (message.includes('401')) {
-          setCancelError('停止运行失败：登录已失效，请刷新页面后重新登录');
-        } else if (message.includes('404')) {
-          setCancelError('停止运行失败：运行不存在或无权限');
-        } else if (message.includes('502') || message.includes('unavailable')) {
-          setCancelError('停止运行失败：账本服务暂时不可用，请稍后重试');
-        } else {
-          setCancelError('停止运行失败，请稍后重试');
-        }
+  const cancelRun = useCallback(async (runId?: string) => {
+    const currentRun = runRef.current;
+    const targetRunId = runId ?? (isActiveRun(currentRun) ? currentRun.id : undefined);
+    if (!targetRunId || (currentRun?.id === targetRunId && !isActiveRun(currentRun))) {
+      setCancelError('停止运行失败：未找到正在运行的任务');
+      return;
+    }
+    if (
+      (currentRun?.id === targetRunId && currentRun.cancel_requested) ||
+      cancelRequestRunIdRef.current === targetRunId
+    ) {
+      return;
+    }
+    cancelRequestRunIdRef.current = targetRunId;
+    cancelErrorRunIdRef.current = null;
+    setCancelRequestInFlight(true);
+    setCancelRequestedRunId(targetRunId);
+    setCancelError(null);
+    try {
+      const result = await cancelPicoRun(targetRunId);
+      runRef.current = result.run;
+      setRun(result.run);
+      cancelErrorRunIdRef.current = null;
+      if (!isActiveRun(result.run)) {
+        cancelRequestRunIdRef.current = null;
         setCancelRequestedRunId(null);
-      } finally {
-        setCancelRequestInFlight(false);
+      } else if (!result.run.cancel_requested) {
+        cancelRequestRunIdRef.current = null;
+        setCancelRequestedRunId(null);
       }
-    },
-    [run],
-  );
+      setTick((n) => n + 1);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      cancelErrorRunIdRef.current = targetRunId;
+      cancelRequestRunIdRef.current = null;
+      if (message.includes('401')) {
+        setCancelError('停止运行失败：登录已失效，请刷新页面后重新登录');
+      } else if (message.includes('403')) {
+        setCancelError('停止运行失败：当前账号没有停止权限');
+      } else if (message.includes('404')) {
+        setCancelError('停止运行失败：运行不存在或无权限');
+      } else if (message.includes('409')) {
+        setCancelError('停止运行失败：任务已结束，请核对最新状态');
+      } else if (message.includes('502') || message.includes('unavailable')) {
+        setCancelError('停止运行失败：账本服务暂时不可用，请稍后重试');
+      } else {
+        setCancelError('停止运行失败，请稍后重试');
+      }
+      setCancelRequestedRunId(null);
+      setTick((n) => n + 1);
+    } finally {
+      setCancelRequestInFlight(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!run || !isActiveRun(run)) {
+      cancelRequestRunIdRef.current = null;
+    } else if (run.cancel_requested) {
+      cancelRequestRunIdRef.current = run.id;
+    }
+    const failedRunId = cancelErrorRunIdRef.current;
+    if (
+      cancelError &&
+      failedRunId &&
+      (!run || run.id !== failedRunId || !isActiveRun(run) || Boolean(run.cancel_requested))
+    ) {
+      cancelErrorRunIdRef.current = null;
+      setCancelError(null);
+    }
+  }, [cancelError, run]);
   const rerunFailedRun = useCallback(
     async (runId?: string) => {
       const targetRunId = runId ?? (run?.status === 'failed' ? run.id : undefined);
@@ -365,6 +422,8 @@ export function usePicoTaskLedger(
     setCancelRequestedRunId(null);
     runRef.current = null;
     taskRef.current = null;
+    cancelRequestRunIdRef.current = null;
+    cancelErrorRunIdRef.current = null;
     if (!conversationId || conversationId === 'new') {
       recoveryDeadlineRef.current = 0;
       setRecovering(false);
@@ -449,15 +508,17 @@ export function usePicoTaskLedger(
         setTask(preferred.task);
         taskRef.current = preferred.task;
         setArtifacts(detail.artifacts || []);
-        setRun(preferred.run);
+        const nextRun = mergePolledRun(runRef.current, preferred.run);
+        runRef.current = nextRun;
+        setRun(nextRun);
         recoveryDeadlineRef.current = 0;
         setRecovering(false);
-        if (!preferred.run) {
+        if (!nextRun) {
           setEvents([]);
           return;
         }
         try {
-          const eventsRes = await listPicoRunEvents(preferred.run.id);
+          const eventsRes = await listPicoRunEvents(nextRun.id);
           if (!cancelled) {
             setEvents(eventsRes.events || []);
           }
