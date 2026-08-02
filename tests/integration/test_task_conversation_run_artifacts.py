@@ -677,6 +677,7 @@ async def test_direct_stream_aclose_finalizes_run_as_cancelled(tmp_path, monkeyp
             await session.execute(select(RunRow).where(RunRow.task_id == task.id))
         ).scalar_one()
         assert run.status == "cancelled"
+        assert run.cancel_requested == 1
         assert run.error == "stream disconnected"
 
 
