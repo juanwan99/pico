@@ -158,6 +158,13 @@ export async function cancelPicoRun(runId: string) {
   return picoFetch<{ run: PicoRun }>(`/v1/runs/${runId}/cancel`, { method: 'POST' });
 }
 
+export async function cancelPicoTaskActiveRuns(taskId: string) {
+  return picoFetch<{ runs: PicoRun[]; cancelled: number }>(
+    `/v1/tasks/${taskId}/cancel-active`,
+    { method: 'POST' },
+  );
+}
+
 export async function retryPicoRun(runId: string) {
   return picoFetch<{ run: PicoRun; retried_from_run_id: string }>(`/v1/runs/${runId}/retry`, {
     method: 'POST',

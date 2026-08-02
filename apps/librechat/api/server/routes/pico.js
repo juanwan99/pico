@@ -176,6 +176,14 @@ router.post('/v1/runs/:runId/cancel', (req, res) => {
     return res.status(400).json({ error: 'bad_request', message: e.message });
   }
 });
+router.post('/v1/tasks/:taskId/cancel-active', (req, res) => {
+  try {
+    assertId(req.params.taskId, 'taskId');
+    return proxy(req, res, `/v1/tasks/${req.params.taskId}/cancel-active`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
 router.post('/v1/runs/:runId/retry', (req, res) => {
   try {
     assertId(req.params.runId, 'runId');

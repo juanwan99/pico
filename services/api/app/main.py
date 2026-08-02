@@ -868,6 +868,26 @@ async def cancel_run(
     return {"run": _run_dict(result.run)}
 
 
+@app.post("/v1/tasks/{task_id}/cancel-active")
+async def cancel_task_active_runs(
+    task_id: str,
+    principal: Principal = Depends(require_scope("ai:run")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    task = await run_service.get_task_for_principal(session, task_id, principal)
+    if not task:
+        raise HTTPException(status_code=404, detail="task not found")
+    results = await run_service.cancel_active_runs_for_task(session, task_id)
+    runs = []
+    for result in results:
+        if result.request_recorded:
+            await append_event(session, result.run.id, "run.cancel_requested", {"source": "task_cancel"})
+        if result.status_changed:
+            await append_event(session, result.run.id, "run.status", {"status": "cancelled"})
+        runs.append(_run_dict(result.run))
+    return {"runs": runs, "cancelled": len(runs)}
+
+
 @app.post("/v1/runs/{run_id}/retry")
 async def retry_run(
     run_id: str,

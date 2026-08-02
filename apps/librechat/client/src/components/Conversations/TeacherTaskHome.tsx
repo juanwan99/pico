@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Clock3, ListTodo } from 'lucide-react';
 import { labelForLatestRun, type PicoTask } from '~/data-provider/pico/api';
 import { useLocalize } from '~/hooks';
@@ -40,15 +40,21 @@ function formatTaskTime(task: PicoTask): string {
 }
 
 function TaskRow({ task, onOpen }: { task: PicoTask; onOpen: () => void }) {
+  const navigate = useNavigate();
   const status = labelForLatestRun(task.latest_run) || '暂无运行';
   const time = formatTaskTime(task);
   const conversationId = task.conversation_id as string;
   const title = task.title?.trim() || '未命名任务';
+  const href = `/c/${encodeURIComponent(conversationId)}`;
 
   return (
     <Link
-      to={`/c/${encodeURIComponent(conversationId)}`}
-      onClick={onOpen}
+      to={href}
+      onClick={(event) => {
+        event.preventDefault();
+        onOpen();
+        navigate(href);
+      }}
       className="group flex min-h-14 items-center gap-2 rounded-lg px-2 py-2 outline-none hover:bg-surface-active-alt focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-white"
       aria-label={`${title}，${status}，${time}`}
       data-testid="teacher-task-row"

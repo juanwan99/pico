@@ -329,6 +329,7 @@ async def _finalize_run(
     final_text: str | None = None,
     task_id: str | None = None,
     user_prompt: str | None = None,
+    change_proposal: dict | None = None,
 ) -> None:
     from sqlalchemy import case, select, update
 
@@ -519,6 +520,37 @@ async def _finalize_run(
                     {"change_id": change.id, "title": change.title},
                     commit=False,
                 )
+        # Tool-path S7: persist pico_propose_change even when skill does not require_s7.
+        if change_proposal and status in ("succeeded", "failed"):
+            existing_tool_change = await session.execute(
+                select(ChangeProposalRow.id).where(ChangeProposalRow.run_id == run_id).limit(1)
+            )
+            if existing_tool_change.scalar_one_or_none() is None:
+                task_row = await session.get(TaskRow, run.task_id)
+                if task_row is not None:
+                    prop = change_proposal.get("proposal") or change_proposal
+                    if isinstance(prop, dict):
+                        change = ChangeProposalRow(
+                            id=new_id(),
+                            school_id=task_row.school_id,
+                            membership_id=task_row.membership_id,
+                            task_id=run.task_id,
+                            run_id=run.id,
+                            title=str(prop.get("title") or "变更提案"),
+                            summary=str(prop.get("summary") or ""),
+                            payload_json=json.dumps(
+                                prop.get("payload") or {}, ensure_ascii=False
+                            ),
+                            status="proposed",
+                        )
+                        session.add(change)
+                        await append_event(
+                            session,
+                            run_id,
+                            "change.proposed",
+                            {"change_id": change.id, "title": change.title},
+                            commit=False,
+                        )
         await session.commit()
 
 
@@ -546,7 +578,7 @@ async def _run_and_collect(
     async def is_cancelled() -> bool:
         async with factory() as session:
             run = await session.get(RunRow, run_id)
-            return bool(run and run.cancel_requested)
+            return bool(run and (run.cancel_requested or run.status == "cancelled"))
 
     caps = RunCaps(
         max_seconds=settings.pico_run_max_seconds,
@@ -880,7 +912,7 @@ async def chat_completions(
         async def is_cancelled() -> bool:
             async with factory() as session:
                 run = await session.get(RunRow, run_id)
-                return bool(run and run.cancel_requested)
+                return bool(run and (run.cancel_requested or run.status == "cancelled"))
 
         async def run() -> None:
             try:
@@ -919,6 +951,7 @@ async def chat_completions(
                     final_text=result.final_text,
                     task_id=task_id,
                     user_prompt=prompt,
+                    change_proposal=getattr(result, "change_proposal", None),
                 )
                 await q.put(("done", result))
             except asyncio.CancelledError:

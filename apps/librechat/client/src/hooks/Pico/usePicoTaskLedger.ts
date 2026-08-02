@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   cancelPicoRun,
+  cancelPicoTaskActiveRuns,
   getPicoTask,
   listPicoRunEvents,
   listPicoTaskRuns,
@@ -292,14 +293,29 @@ export function usePicoTaskLedger(
     setCancelRequestedRunId(targetRunId);
     setCancelError(null);
     try {
-      const result = await cancelPicoRun(targetRunId);
-      runRef.current = result.run;
-      setRun(result.run);
+      let resultRun: PicoRun | null = null;
+      try {
+        const result = await cancelPicoRun(targetRunId);
+        resultRun = result.run;
+      } catch (firstError) {
+        const message = firstError instanceof Error ? firstError.message : String(firstError);
+        const taskId = taskRef.current?.id;
+        if (taskId && (message.includes('409') || message.includes('404'))) {
+          const batch = await cancelPicoTaskActiveRuns(taskId);
+          resultRun = batch.runs[0] ?? runRef.current;
+        } else {
+          throw firstError;
+        }
+      }
+      if (resultRun) {
+        runRef.current = resultRun;
+        setRun(resultRun);
+      }
       cancelErrorRunIdRef.current = null;
-      if (!isActiveRun(result.run)) {
+      if (!resultRun || !isActiveRun(resultRun)) {
         cancelRequestRunIdRef.current = null;
         setCancelRequestedRunId(null);
-      } else if (!result.run.cancel_requested) {
+      } else if (!resultRun.cancel_requested) {
         cancelRequestRunIdRef.current = null;
         setCancelRequestedRunId(null);
       }
@@ -346,7 +362,9 @@ export function usePicoTaskLedger(
   }, [cancelError, run]);
   const rerunFailedRun = useCallback(
     async (runId?: string) => {
-      const targetRunId = runId ?? (run?.status === 'failed' ? run.id : undefined);
+      const current = runRef.current;
+      const targetRunId =
+        runId ?? (current?.status === 'failed' ? current.id : undefined);
       if (!targetRunId) {
         setRerunError('重新运行失败：未找到失败的任务');
         return;
@@ -355,8 +373,12 @@ export function usePicoTaskLedger(
       setRerunError(null);
       try {
         const result = await retryPicoRun(targetRunId);
+        runRef.current = result.run;
         setRun(result.run);
         setEvents([]);
+        setCancelError(null);
+        setCancelRequestedRunId(null);
+        cancelRequestRunIdRef.current = null;
         setTick((n) => n + 1);
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -375,7 +397,7 @@ export function usePicoTaskLedger(
         setRerunRequestInFlight(false);
       }
     },
-    [run],
+    [],
   );
 
   // Rebind pending_* → real conversation id once LibreChat assigns one
