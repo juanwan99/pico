@@ -261,6 +261,16 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   >
                     <PanelRightOpen className="h-3.5 w-3.5" />
                     结果区
+                    {(ledger.artifacts?.length ?? 0) > 0 ? (
+                      <span
+                        className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#3b6fd9] px-1.5 text-[10px] font-semibold text-white"
+                        data-testid="result-artifact-count"
+                      >
+                        {ledger.artifacts.length}
+                      </span>
+                    ) : ledger.processHint ? (
+                      <span className="ml-0.5 h-2 w-2 rounded-full bg-[#3b6fd9]" aria-hidden />
+                    ) : null}
                   </button>
                 ) : null}
               </div>

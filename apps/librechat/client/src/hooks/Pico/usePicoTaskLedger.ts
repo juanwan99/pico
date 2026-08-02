@@ -165,6 +165,10 @@ function statusLabel(
         base = `已完成 ${Math.max(1, Math.round(ms / 1000))}s`;
       }
     }
+    const artN = artifacts.length;
+    if (artN > 0) {
+      base = `${base} · ${artN} 个产物`;
+    }
     return runtime ? `${base} · ${runtime}` : base;
   }
   if (run.status === 'failed') {
