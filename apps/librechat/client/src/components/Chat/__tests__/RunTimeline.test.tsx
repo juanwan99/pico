@@ -81,4 +81,25 @@ describe('RunTimeline', () => {
     expect(screen.getByText('运行已取消')).toBeInTheDocument();
     expect(screen.getByText('已停止生成')).toBeInTheDocument();
   });
+
+  it('shows kimi-agent runtime and agent steps in the process timeline', () => {
+    render(
+      <RunTimeline
+        run={run('running')}
+        events={[
+          event('run-running', 1, 'run.status', {
+            status: 'running',
+            runtime: 'kimi-agent',
+          }),
+          event('step', 2, 'agent.step', { n: 1, phase: 'tool' }),
+          event('call', 3, 'tool.call', { tool: 'calculator' }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('正在运行')).toBeInTheDocument();
+    expect(screen.getByText('运行时 · Kimi Agent')).toBeInTheDocument();
+    expect(screen.getByText(/智能体步骤/)).toBeInTheDocument();
+    expect(screen.getByText('调用工具 · calculator')).toBeInTheDocument();
+  });
 });

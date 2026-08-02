@@ -64,10 +64,48 @@ export function pickPreferredTaskRuns(
   };
 }
 
+function friendlyFailureLabel(run: PicoRun, events: PicoRunEvent[]): string {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (event.type !== 'run.status' && event.type !== 'run.error') {
+      continue;
+    }
+    const payload = event.payload || {};
+    const userMessage = payload.user_message;
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return `失败：${userMessage.trim().slice(0, 48)}`;
+    }
+  }
+  const raw = (run.error || '').trim();
+  if (!raw) {
+    return '失败';
+  }
+  // Keep technical stacks out of the task bar.
+  if (/traceback|filenotfound|sqlite|toolcall|event_contract/i.test(raw)) {
+    return '失败：智能体任务未正常完成，请重试';
+  }
+  return `失败：${raw.slice(0, 40)}`;
+}
+
+function runtimeHint(events: PicoRunEvent[]): string | null {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (event.type !== 'run.status') {
+      continue;
+    }
+    const runtime = event.payload?.runtime;
+    if (runtime === 'kimi-agent') {
+      return 'Kimi Agent';
+    }
+  }
+  return null;
+}
+
 function statusLabel(
   run: PicoRun | null,
   isSubmitting: boolean,
   artifacts: PicoArtifact[],
+  events: PicoRunEvent[] = [],
 ): string | null {
   if (isSubmitting) {
     return '等待模型响应';
@@ -79,19 +117,22 @@ function statusLabel(
     return null;
   }
   if (isActiveRun(run)) {
-    return '等待模型响应';
+    const runtime = runtimeHint(events);
+    return runtime ? `等待模型响应 · ${runtime}` : '等待模型响应';
   }
   if (run.status === 'succeeded') {
+    const runtime = runtimeHint(events);
+    let base = '已完成';
     if (run.started_at && run.ended_at) {
       const ms = Date.parse(run.ended_at) - Date.parse(run.started_at);
       if (!Number.isNaN(ms) && ms > 0) {
-        return `已完成 ${Math.max(1, Math.round(ms / 1000))}s`;
+        base = `已完成 ${Math.max(1, Math.round(ms / 1000))}s`;
       }
     }
-    return '已完成';
+    return runtime ? `${base} · ${runtime}` : base;
   }
   if (run.status === 'failed') {
-    return run.error ? `失败：${run.error.slice(0, 40)}` : '失败';
+    return friendlyFailureLabel(run, events);
   }
   if (run.status === 'cancelled') {
     return '已取消';
@@ -376,7 +417,7 @@ export function usePicoTaskLedger(
     run,
     events,
     artifacts,
-    statusLabel: statusLabel(run, isSubmitting, artifacts),
+    statusLabel: statusLabel(run, isSubmitting, artifacts, events),
     loading,
     error: rerunError ?? cancelError ?? loadError,
     refresh,
