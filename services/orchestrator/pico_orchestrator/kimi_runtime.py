@@ -35,6 +35,7 @@ from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.runner import EventEmitter, RunCaps, RunResult
 from pico_orchestrator.tools_builtin import build_default_gateway
 
+
 def _agent_bundle_dir() -> Path:
     """Prefer package data (wheel/image), fall back to repo agents/."""
     packaged = Path(__file__).resolve().parent / "agent_assets"
