@@ -1,4 +1,4 @@
-import { useMemo, memo, type FC, useCallback, useEffect, useRef } from 'react';
+import { useMemo, memo, type FC, useCallback, useEffect, useRef, useState } from 'react';
 import throttle from 'lodash/throttle';
 import { useRecoilValue } from 'recoil';
 import { ChevronDown } from 'lucide-react';
@@ -21,6 +21,8 @@ import { useActiveJobs } from '~/data-provider';
 import Convo from './Convo';
 import store from '~/store';
 import { PicoConversationStatusProvider } from '~/hooks/Pico/PicoConversationStatusContext';
+import { usePicoConversationStatusMap } from '~/hooks/Pico/usePicoConversationStatusMap';
+import TeacherTaskHome from './TeacherTaskHome';
 
 export type CellPosition = {
   columnIndex: number;
@@ -144,6 +146,53 @@ const ChatsHeader: FC<ChatsHeaderProps> = memo(({ isExpanded, onToggle }) => {
 
 ChatsHeader.displayName = 'ChatsHeader';
 
+type SidebarView = 'conversations' | 'tasks';
+
+const SidebarViewSwitch: FC<{
+  value: SidebarView;
+  onChange: (value: SidebarView) => void;
+}> = memo(({ value, onChange }) => {
+  const localize = useLocalize();
+  return (
+    <div
+      className="mb-2 grid grid-cols-2 rounded-lg bg-surface-secondary p-0.5 text-xs"
+      role="tablist"
+      aria-label={localize('com_ui_pico_sidebar_views')}
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={value === 'conversations'}
+        className={cn(
+          'rounded-md px-2 py-1 font-medium outline-none focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-white',
+          value === 'conversations'
+            ? 'bg-surface-primary text-text-primary shadow-sm'
+            : 'text-text-secondary hover:text-text-primary',
+        )}
+        onClick={() => onChange('conversations')}
+      >
+        {localize('com_ui_pico_conversations')}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={value === 'tasks'}
+        className={cn(
+          'rounded-md px-2 py-1 font-medium outline-none focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-white',
+          value === 'tasks'
+            ? 'bg-surface-primary text-text-primary shadow-sm'
+            : 'text-text-secondary hover:text-text-primary',
+        )}
+        onClick={() => onChange('tasks')}
+      >
+        {localize('com_ui_pico_task_history')}
+      </button>
+    </div>
+  );
+});
+
+SidebarViewSwitch.displayName = 'SidebarViewSwitch';
+
 const PinnedHeader: FC = memo(() => {
   const localize = useLocalize();
   return (
@@ -193,6 +242,7 @@ const Conversations: FC<ConversationsProps> = ({
   showFavorites = true,
 }) => {
   const localize = useLocalize();
+  const [sidebarView, setSidebarView] = useState<SidebarView>('conversations');
   const search = useRecoilValue(store.search);
   const { favorites, isLoading: isFavoritesLoading } = useFavorites();
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
@@ -203,6 +253,13 @@ const Conversations: FC<ConversationsProps> = ({
     width: listWidth,
     height: listHeight,
   } = useElementSize<HTMLDivElement>();
+  const {
+    tasks: picoTasks,
+    statusByConversationId,
+    loading: isTaskHistoryLoading,
+    error: taskHistoryError,
+    refresh: refreshTaskHistory,
+  } = usePicoConversationStatusMap(true);
 
   const favoritesContentKeyRef = useRef('');
 
@@ -458,42 +515,62 @@ const Conversations: FC<ConversationsProps> = ({
     [flattenedItems.length, throttledLoadMore],
   );
 
-  return (
-    <PicoConversationStatusProvider>
-    <div className="relative flex h-full min-h-0 flex-col pb-2 text-sm text-text-primary">
-      <div className="px-3">
-        <ChatsHeader
-          isExpanded={isChatsExpanded}
-          onToggle={() => setIsChatsExpanded(!isChatsExpanded)}
+  let sidebarContent: React.ReactNode;
+  if (!isChatsExpanded) {
+    sidebarContent = null;
+  } else if (sidebarView === 'tasks') {
+    sidebarContent = (
+      <TeacherTaskHome
+        tasks={picoTasks}
+        loading={isTaskHistoryLoading}
+        error={taskHistoryError}
+        onRetry={refreshTaskHistory}
+        onOpen={toggleNav}
+      />
+    );
+  } else if (isSearchLoading) {
+    sidebarContent = (
+      <div className="flex flex-1 items-center justify-center">
+        <Spinner className="text-text-primary" />
+        <span className="ml-2 text-text-primary">{localize('com_ui_loading')}</span>
+      </div>
+    );
+  } else {
+    sidebarContent = (
+      <div ref={listContainerRef} className="min-h-0 flex-1 overflow-hidden">
+        <List
+          ref={containerRef}
+          width={listWidth}
+          height={listHeight}
+          deferredMeasurementCache={cache}
+          rowCount={flattenedItems.length}
+          rowHeight={getRowHeight}
+          rowRenderer={rowRenderer}
+          overscanRowCount={10}
+          aria-readonly={false}
+          className="outline-none"
+          aria-label={localize('com_ui_conversations')}
+          onRowsRendered={handleRowsRendered}
+          tabIndex={-1}
+          style={{ outline: 'none' }}
+          containerRole="rowgroup"
         />
       </div>
-      {isSearchLoading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <Spinner className="text-text-primary" />
-          <span className="ml-2 text-text-primary">{localize('com_ui_loading')}</span>
-        </div>
-      ) : (
-        <div ref={listContainerRef} className="min-h-0 flex-1 overflow-hidden">
-          <List
-            ref={containerRef}
-            width={listWidth}
-            height={listHeight}
-            deferredMeasurementCache={cache}
-            rowCount={flattenedItems.length}
-            rowHeight={getRowHeight}
-            rowRenderer={rowRenderer}
-            overscanRowCount={10}
-            aria-readonly={false}
-            className="outline-none"
-            aria-label={localize('com_ui_conversations')}
-            onRowsRendered={handleRowsRendered}
-            tabIndex={-1}
-            style={{ outline: 'none' }}
-            containerRole="rowgroup"
+    );
+  }
+
+  return (
+    <PicoConversationStatusProvider statusByConversationId={statusByConversationId}>
+      <div className="relative flex h-full min-h-0 flex-col pb-2 text-sm text-text-primary">
+        <div className="px-3">
+          <ChatsHeader
+            isExpanded={isChatsExpanded}
+            onToggle={() => setIsChatsExpanded(!isChatsExpanded)}
           />
+          <SidebarViewSwitch value={sidebarView} onChange={setSidebarView} />
         </div>
-      )}
-    </div>
+        {sidebarContent}
+      </div>
     </PicoConversationStatusProvider>
   );
 };
