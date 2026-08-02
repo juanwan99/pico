@@ -114,18 +114,22 @@ export function formatRunTokenUsage(run?: PicoRun | null): string | null {
   if (!usage) {
     return null;
   }
-  const input = tokenCount(usage.input_tokens);
-  const output = tokenCount(usage.output_tokens);
+  // Provider-native usage may use input/output or OpenAI-style prompt/completion.
+  const input = tokenCount(usage.input_tokens) ?? tokenCount(usage.prompt_tokens);
+  const output = tokenCount(usage.output_tokens) ?? tokenCount(usage.completion_tokens);
   const total =
     tokenCount(usage.total_tokens) ?? (input != null && output != null ? input + output : null);
   const format = (value: number) => value.toLocaleString('zh-CN');
+  // Upstream estimate path sets estimated=true — always label for teachers.
+  const estimated = usage.estimated === true;
+  const prefix = estimated ? '用量（估算）' : '用量';
   if (input != null && output != null) {
-    return `用量 · 输入 ${format(input)} · 输出 ${format(output)}${
+    return `${prefix} · 输入 ${format(input)} · 输出 ${format(output)}${
       total != null ? ` · 共 ${format(total)} tokens` : ''
     }`;
   }
   if (total != null) {
-    return `用量 · ${format(total)} tokens`;
+    return `${prefix} · ${format(total)} tokens`;
   }
   return null;
 }

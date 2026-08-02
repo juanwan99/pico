@@ -42,8 +42,12 @@ class Settings(BaseSettings):
     pico_run_max_retries: int = 2
     # Experimental KA-2 path. False keeps every production call on run_agent_loop.
     pico_kimi_agent_runtime: bool = False
-    # Safe canary default: an empty membership allowlist routes nobody to KA-2.
+    # Safe canary default: empty allowlist routes nobody to KA-2.
+    # Entries MUST be joint keys school_id:membership_id (comma-separated).
+    # Bare membership-only values are ignored (fail-closed; no written uniqueness contract).
     pico_kimi_agent_canary_membership_ids: str = ""
+    # Optional opaque batch label for ops (never a principal id). Shown on /health only.
+    pico_kimi_agent_canary_batch: str = ""
     pico_chat_rpm: int = 30
     pico_chat_max_concurrent: int = 2
     pico_allowed_models: str = ""
@@ -99,12 +103,28 @@ class Settings(BaseSettings):
         return [model.strip() for model in self.pico_allowed_models.split(",") if model.strip()]
 
     @property
+    def kimi_agent_canary_principal_set(self) -> frozenset[tuple[str, str]]:
+        """Joint canary keys as (school_id, membership_id). Bare membership is ignored."""
+        principals: set[tuple[str, str]] = set()
+        for raw in self.pico_kimi_agent_canary_membership_ids.split(","):
+            entry = raw.strip()
+            if not entry or ":" not in entry:
+                continue
+            school_id, membership_id = entry.split(":", 1)
+            school_id = school_id.strip()
+            membership_id = membership_id.strip()
+            if school_id and membership_id:
+                principals.add((school_id, membership_id))
+        return frozenset(principals)
+
+    @property
+    def kimi_agent_canary_membership_count(self) -> int:
+        return len(self.kimi_agent_canary_principal_set)
+
+    @property
     def kimi_agent_canary_membership_id_set(self) -> frozenset[str]:
-        return frozenset(
-            membership_id.strip()
-            for membership_id in self.pico_kimi_agent_canary_membership_ids.split(",")
-            if membership_id.strip()
-        )
+        """Deprecated membership-only view. Prefer kimi_agent_canary_principal_set."""
+        return frozenset(membership_id for _, membership_id in self.kimi_agent_canary_principal_set)
 
     def validate_production(self) -> None:
         """Fail closed before a production process starts serving traffic."""

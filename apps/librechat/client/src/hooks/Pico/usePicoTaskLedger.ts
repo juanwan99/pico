@@ -149,19 +149,13 @@ function runtimeHint(events: PicoRunEvent[]): string | null {
   return null;
 }
 
-function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null {
-  if (!isActiveRun(run)) {
-    return null;
-  }
-  if (run.cancel_requested) {
-    return '停止请求已提交，等待任务结束';
-  }
+function lastProcessStep(events: PicoRunEvent[]): string | null {
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
     if (event.type === 'tool.call') {
       const tool = event.payload?.tool ?? event.payload?.name;
       if (typeof tool === 'string' && tool.trim()) {
-        return `正在调用 · ${tool.trim()}`;
+        return `调用 · ${tool.trim()}`;
       }
     }
     if (event.type === 'tool.result') {
@@ -181,8 +175,35 @@ function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null
       return bits.join(' · ');
     }
   }
+  return null;
+}
+
+function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null {
+  // Teachers need a fixed process strip: runtime · step/tool · terminal when known.
   const runtime = runtimeHint(events);
-  return runtime ? `运行中 · ${runtime}` : '正在处理…';
+  const step = lastProcessStep(events);
+  if (run?.cancel_requested && isActiveRun(run)) {
+    return ['停止请求已提交', runtime, step].filter(Boolean).join(' · ');
+  }
+  if (isActiveRun(run)) {
+    if (step) {
+      return [runtime ? `运行中 · ${runtime}` : '运行中', step].join(' · ');
+    }
+    return runtime ? `运行中 · ${runtime}` : '正在处理…';
+  }
+  if (!run && !runtime && !step) {
+    return null;
+  }
+  const terminal =
+    run?.status === 'succeeded'
+      ? '终态 · 成功'
+      : run?.status === 'failed'
+        ? '终态 · 失败'
+        : run?.status === 'cancelled'
+          ? '终态 · 已停止'
+          : null;
+  const bits = [runtime ? `运行时 · ${runtime}` : null, step, terminal].filter(Boolean);
+  return bits.length ? bits.join(' · ') : null;
 }
 
 function statusLabel(

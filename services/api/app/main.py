@@ -161,21 +161,26 @@ async def root_info() -> dict:
 
 @app.get("/health")
 async def health(settings: Settings = Depends(get_settings)) -> dict:
-    return {
+    # Never echo canary principal IDs — only counts / opaque batch labels.
+    canary_count = settings.kimi_agent_canary_membership_count
+    batch = (settings.pico_kimi_agent_canary_batch or "").strip()
+    body: dict = {
         "ok": True,
         "service": "pico-api",
         "git_sha": _resolve_git_sha(),
         "edu_mode": settings.pico_edu_mode,
         "kimi_agent_runtime_enabled": settings.pico_kimi_agent_runtime,
-        "kimi_agent_canary_configured": bool(
-            settings.kimi_agent_canary_membership_id_set
-        ),
+        "kimi_agent_canary_configured": canary_count > 0,
+        "kimi_agent_canary_membership_count": canary_count,
         "rate_limit": {
             "chat_rpm": settings.pico_chat_rpm,
             "chat_max_concurrent": settings.pico_chat_max_concurrent,
             "key_scope": "membership_or_ip",
         },
     }
+    if batch:
+        body["kimi_agent_canary_batch"] = batch
+    return body
 
 
 @app.get("/v1/meta/version")

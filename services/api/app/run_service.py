@@ -383,8 +383,8 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
 
         result = await run_agent_runtime(
             use_kimi_agent=settings.pico_kimi_agent_runtime,
-            kimi_agent_canary_membership_ids=(
-                settings.kimi_agent_canary_membership_id_set
+            kimi_agent_canary_principals=(
+                settings.kimi_agent_canary_principal_set
             ),
             prompt=prompt,
             principal=principal,

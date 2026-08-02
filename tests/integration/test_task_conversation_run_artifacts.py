@@ -214,7 +214,7 @@ async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
     base_settings = Settings(
         _env_file=None,
         pico_kimi_agent_runtime=False,
-        pico_kimi_agent_canary_membership_ids="member-runtime-flag",
+        pico_kimi_agent_canary_membership_ids="school-a:member-runtime-flag",
     )
     token = issue_test_token(
         school_id="school-a",
@@ -241,18 +241,26 @@ async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
     not_allowlisted_settings = Settings(
         _env_file=None,
         pico_kimi_agent_runtime=True,
-        pico_kimi_agent_canary_membership_ids="another-member",
+        pico_kimi_agent_canary_membership_ids="school-a:another-member",
     )
     assert await complete(
         not_allowlisted_settings, "conversation-not-allowlisted-runtime"
     ) == "old"
-    allowlisted_settings = Settings(
+    bare_membership_settings = Settings(
         _env_file=None,
         pico_kimi_agent_runtime=True,
         pico_kimi_agent_canary_membership_ids="member-runtime-flag",
     )
+    assert await complete(
+        bare_membership_settings, "conversation-bare-membership-runtime"
+    ) == "old"
+    allowlisted_settings = Settings(
+        _env_file=None,
+        pico_kimi_agent_runtime=True,
+        pico_kimi_agent_canary_membership_ids="school-a:member-runtime-flag",
+    )
     assert await complete(allowlisted_settings, "conversation-kimi-runtime") == "kimi"
-    assert calls == ["old", "old", "kimi"]
+    assert calls == ["old", "old", "old", "kimi"]
 
 
 def _complete(

@@ -43,6 +43,11 @@ describe('ResultPanel token usage', () => {
     expect(
       formatRunTokenUsage(run({ input_tokens: 1000, output_tokens: 234, total_tokens: 1234 })),
     ).toBe('用量 · 输入 1,000 · 输出 234 · 共 1,234 tokens');
+    expect(
+      formatRunTokenUsage(
+        run({ prompt_tokens: 10, completion_tokens: 5, total_tokens: 15, estimated: true }),
+      ),
+    ).toBe('用量（估算） · 输入 10 · 输出 5 · 共 15 tokens');
     expect(formatRunTokenUsage(run({ skill_snapshot: { id: 'analysis' } }))).toBeNull();
   });
 
@@ -54,6 +59,19 @@ describe('ResultPanel token usage', () => {
     );
 
     expect(screen.getByTestId('result-token-usage')).toHaveTextContent('用量 · 42 tokens');
+  });
+
+  it('labels estimated token usage for teachers', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run({ total_tokens: 99, estimated: true })}
+          runStatusLabel="已完成"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('result-token-usage')).toHaveTextContent('用量（估算） · 99 tokens');
   });
 
   it('shows the failed user message consistently in the overview and timeline', () => {
