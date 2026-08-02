@@ -289,29 +289,47 @@ export default function ResultPanel({
   const openArtifact = async (artifact: ArtifactItem) => {
     setArtifactAction({ id: artifact.id, type: 'open' });
     setArtifactError(null);
-    let preview: Window | null = null;
+    let objectUrl: string | null = null;
     try {
       if (artifact.url) {
         const url = safeArtifactUrl(artifact.url);
         if (!url) {
           throw new Error('invalid artifact URL');
         }
-        window.open(url, '_blank', 'noopener,noreferrer');
+        const opened = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!opened) {
+          throw new Error('artifact preview blocked');
+        }
         return;
       }
-      preview = window.open('', '_blank');
-      if (!preview) {
-        throw new Error('artifact preview blocked');
-      }
-      preview.opener = null;
+      // Fetch first, then open — avoids blank-tab races / control timeouts.
       const blob = await readArtifactBlob(artifact, false);
-      const url = URL.createObjectURL(blob);
-      preview.location.href = url;
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      objectUrl = URL.createObjectURL(blob);
+      const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        // Popup blocked: fall back to same-tab navigation is worse; force download.
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = artifact.name || 'artifact.txt';
+        anchor.rel = 'noopener';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        setArtifactError('弹窗被拦截，已改为下载产物文件');
+        return;
+      }
+      window.setTimeout(() => {
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
+      }, 60_000);
+      objectUrl = null;
     } catch (openError) {
-      preview?.close();
       setArtifactError(artifactActionError('open', openError));
     } finally {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
       setArtifactAction((current) =>
         current?.id === artifact.id && current.type === 'open' ? null : current,
       );
@@ -338,7 +356,9 @@ export default function ResultPanel({
         anchor.href = objectUrl;
       }
       anchor.download = artifact.name || 'artifact.txt';
+      document.body.appendChild(anchor);
       anchor.click();
+      anchor.remove();
     } catch (downloadError) {
       setArtifactError(artifactActionError('download', downloadError));
     } finally {

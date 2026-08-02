@@ -297,7 +297,12 @@ async def run_kimi_agent(
                 return await _failed_result(
                     emit,
                     code="kimi.runtime_error",
-                    reason=f"Kimi Agent runtime error ({type(exc).__name__})",
+                    reason=(
+                        f"Kimi Agent runtime error ({type(exc).__name__}: {exc})"
+                        if isinstance(exc, (FileNotFoundError, OSError))
+                        or "No such file" in str(exc)
+                        else f"Kimi Agent runtime error ({type(exc).__name__})"
+                    ),
                     final_parts=final_parts,
                     token_usage=token_usage,
                     tool_context=tool_context,
@@ -347,40 +352,60 @@ async def run_kimi_agent(
 
 
 def _stage_agent_bundle(work_dir: Path) -> Path:
-    """Put the agent spec and its relative prompt inside the Session workspace."""
+    """Stage agent yaml + system.md where Session resolves paths.
 
+    Kimi Session treats ``work_dir`` as the resolution root for relative
+    ``system_prompt_path: ./system.md``. Staging only under ``work_dir/agent/``
+    causes intermittent FileNotFoundError. Copy to **work_dir root** and keep a
+    duplicate under ``agent/`` for debugging.
+    """
+
+    work_dir.mkdir(parents=True, exist_ok=True)
     agent_dir = work_dir / "agent"
     agent_dir.mkdir(parents=True, exist_ok=True)
-    sources = []
-    # Prefer packaged agent_assets, then repo agents/, then resolved paths.
+
+    resolved: list[Path] = []
     for candidate in (_AGENT_FILE, _SYSTEM_PROMPT_FILE):
         if candidate.is_file():
-            sources.append(candidate)
+            resolved.append(candidate)
             continue
         alt = Path(__file__).resolve().parents[1] / "agents" / candidate.name
         if alt.is_file():
-            sources.append(alt)
+            resolved.append(alt)
             continue
         raise FileNotFoundError(
-            f"Kimi agent asset missing: {candidate} (and agents/{candidate.name})"
+            f"Kimi agent asset missing: {candidate} (also tried {alt})"
         )
-    for source in sources:
+
+    for source in resolved:
+        shutil.copy2(source, work_dir / source.name)
         shutil.copy2(source, agent_dir / source.name)
-    staged = (agent_dir / "pico-kimi-runtime.yaml").resolve()
-    # Rewrite system_prompt_path to absolute staged system.md so Session cwd cannot break it.
-    system_staged = (agent_dir / "system.md").resolve()
+
+    staged = (work_dir / "pico-kimi-runtime.yaml").resolve()
+    system_staged = (work_dir / "system.md").resolve()
+    if not staged.is_file() or not system_staged.is_file():
+        raise FileNotFoundError(
+            f"staged agent assets incomplete under {work_dir}: "
+            f"yaml={staged.is_file()} system={system_staged.is_file()}"
+        )
+
+    # Force relative prompt path next to the yaml (SDK-safe).
     text = staged.read_text(encoding="utf-8")
-    if "system_prompt_path:" in text:
-        lines = []
-        for line in text.splitlines(keepends=True):
-            if "system_prompt_path:" in line:
-                indent = line.split("system_prompt_path:")[0]
-                lines.append(f"{indent}system_prompt_path: {system_staged.as_posix()}\n")
-            else:
-                lines.append(line)
-        staged.write_text("".join(lines), encoding="utf-8")
-    if not system_staged.is_file():
-        raise FileNotFoundError(f"staged system prompt missing: {system_staged}")
+    lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        if "system_prompt_path:" in line:
+            indent = line.split("system_prompt_path:")[0]
+            nl = "\n" if line.endswith("\n") else ""
+            lines.append(f"{indent}system_prompt_path: ./system.md{nl}")
+        else:
+            lines.append(line)
+    staged.write_text("".join(lines), encoding="utf-8")
+
+    # Preflight open — surface the real path if anything is wrong.
+    with staged.open("rb") as handle:
+        handle.read(64)
+    with system_staged.open("rb") as handle:
+        handle.read(64)
     return staged
 
 
