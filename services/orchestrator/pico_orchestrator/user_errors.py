@@ -11,6 +11,10 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
     low = text.lower()
     c = (code or "").lower()
 
+    if "输入过长" in text or "too long" in low or "max_prompt" in low or c == "prompt_too_long":
+        return "输入过长。请缩短问题后重试；系统不会静默截断后继续执行。"
+    if "unable to open database file" in low:
+        return "服务繁忙，请稍后重试。"
     if code == "token_cap" or "token cap" in low:
         return "本次回答超出长度上限，请缩短问题或新开对话后再试。"
     if "timeout" in low:

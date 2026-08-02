@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     pico_kimi_agent_canary_batch: str = ""
     pico_chat_rpm: int = 30
     pico_chat_max_concurrent: int = 2
+    # Reject (do not silent-truncate) user prompts longer than this many chars.
+    pico_chat_max_prompt_chars: int = 12000
     pico_allowed_models: str = ""
 
     pico_api_host: str = "0.0.0.0"
@@ -169,6 +171,8 @@ class Settings(BaseSettings):
             errors.append("PICO_CHAT_RPM must be greater than zero")
         if self.pico_chat_max_concurrent <= 0:
             errors.append("PICO_CHAT_MAX_CONCURRENT must be greater than zero")
+        if self.pico_chat_max_prompt_chars <= 0:
+            errors.append("PICO_CHAT_MAX_PROMPT_CHARS must be greater than zero")
         if self.pico_run_max_tokens <= 0:
             errors.append("PICO_RUN_MAX_TOKENS must be greater than zero")
         if self.pico_dangerous_tools_enabled:

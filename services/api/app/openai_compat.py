@@ -679,6 +679,16 @@ async def chat_completions(
     prompt = re.sub(r"【权限：[^】]+】", "", prompt)
     prompt = re.sub(r"【模型偏好：[^】]+】", "", prompt)
     prompt = re.sub(r"【项目指令：[^】]+】", "", prompt).strip() or raw_prompt
+    max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 12000) or 12000)
+    if len(prompt) > max_chars:
+        # Explicit reject — never silent-truncate then execute (stage #260 A1).
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"输入过长（{len(prompt)} 字，上限 {max_chars} 字）。"
+                "请缩短问题后重试；系统不会静默截断后继续执行。"
+            ),
+        )
     history = _history_for_agent(body.messages)
     model = _model_preference_from_prompt(raw_prompt) or body.model or settings.kimi_model or "pico-agent"
     if skill_snapshot and skill_snapshot.get("tools"):
