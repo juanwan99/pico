@@ -59,6 +59,33 @@ function formatSize(n?: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+function tokenCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.round(value)
+    : null;
+}
+
+export function formatRunTokenUsage(run?: PicoRun | null): string | null {
+  const usage = run?.token_usage;
+  if (!usage) {
+    return null;
+  }
+  const input = tokenCount(usage.input_tokens);
+  const output = tokenCount(usage.output_tokens);
+  const total =
+    tokenCount(usage.total_tokens) ?? (input != null && output != null ? input + output : null);
+  const format = (value: number) => value.toLocaleString('zh-CN');
+  if (input != null && output != null) {
+    return `用量 · 输入 ${format(input)} · 输出 ${format(output)}${
+      total != null ? ` · 共 ${format(total)} tokens` : ''
+    }`;
+  }
+  if (total != null) {
+    return `用量 · ${format(total)} tokens`;
+  }
+  return null;
+}
+
 function collectArtifacts(messages: TMessage[] | null | undefined): ArtifactItem[] {
   if (!messages?.length) {
     return [];
@@ -154,6 +181,7 @@ export default function ResultPanel({
   const [browserIndex, setBrowserIndex] = useState(-1);
   const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
+  const tokenUsageLabel = formatRunTokenUsage(run);
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
     if (picoArtifacts?.length) {
@@ -382,7 +410,7 @@ export default function ResultPanel({
       <div className="flex min-h-0 flex-1 flex-col">
         {view === 'overview' && (
           <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
-            {taskTitle || runStatusLabel || processHint ? (
+            {taskTitle || runStatusLabel || processHint || tokenUsageLabel ? (
               <div
                 className={cn(
                   'mb-3 rounded-lg px-3 py-2',
@@ -396,9 +424,7 @@ export default function ResultPanel({
                 )}
                 data-testid="result-status-banner"
               >
-                {taskTitle ? (
-                  <p className="truncate text-[13px] font-medium">{taskTitle}</p>
-                ) : null}
+                {taskTitle ? <p className="truncate text-[13px] font-medium">{taskTitle}</p> : null}
                 {runStatusLabel ? (
                   <p
                     className={cn(
@@ -414,8 +440,19 @@ export default function ResultPanel({
                   </p>
                 ) : null}
                 {processHint ? (
-                  <p className="mt-0.5 truncate text-[12px] text-[#3b6fd9]" data-testid="result-process-hint">
+                  <p
+                    className="mt-0.5 truncate text-[12px] text-[#3b6fd9]"
+                    data-testid="result-process-hint"
+                  >
                     {processHint}
+                  </p>
+                ) : null}
+                {tokenUsageLabel ? (
+                  <p
+                    className="mt-0.5 truncate text-[11px] text-[#6b6b6b] dark:text-text-secondary"
+                    data-testid="result-token-usage"
+                  >
+                    {tokenUsageLabel}
                   </p>
                 ) : null}
               </div>
