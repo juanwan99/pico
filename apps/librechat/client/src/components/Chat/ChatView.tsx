@@ -203,7 +203,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                       账本：{ledger.error}
                     </div>
                   ) : null}
-                  <ChangeConfirmBanner taskId={ledger.task?.id} />
+                  <ChangeConfirmBanner taskId={ledger.task?.id} onChanged={ledger.refresh} />
                 </>
               )}
               <div className="flex min-h-0 flex-1 flex-row">
