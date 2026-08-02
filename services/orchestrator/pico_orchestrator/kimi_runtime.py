@@ -350,10 +350,38 @@ def _stage_agent_bundle(work_dir: Path) -> Path:
     """Put the agent spec and its relative prompt inside the Session workspace."""
 
     agent_dir = work_dir / "agent"
-    agent_dir.mkdir()
-    for source in (_AGENT_FILE, _SYSTEM_PROMPT_FILE):
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    sources = []
+    # Prefer packaged agent_assets, then repo agents/, then resolved paths.
+    for candidate in (_AGENT_FILE, _SYSTEM_PROMPT_FILE):
+        if candidate.is_file():
+            sources.append(candidate)
+            continue
+        alt = Path(__file__).resolve().parents[1] / "agents" / candidate.name
+        if alt.is_file():
+            sources.append(alt)
+            continue
+        raise FileNotFoundError(
+            f"Kimi agent asset missing: {candidate} (and agents/{candidate.name})"
+        )
+    for source in sources:
         shutil.copy2(source, agent_dir / source.name)
-    return (agent_dir / _AGENT_FILE.name).resolve()
+    staged = (agent_dir / "pico-kimi-runtime.yaml").resolve()
+    # Rewrite system_prompt_path to absolute staged system.md so Session cwd cannot break it.
+    system_staged = (agent_dir / "system.md").resolve()
+    text = staged.read_text(encoding="utf-8")
+    if "system_prompt_path:" in text:
+        lines = []
+        for line in text.splitlines(keepends=True):
+            if "system_prompt_path:" in line:
+                indent = line.split("system_prompt_path:")[0]
+                lines.append(f"{indent}system_prompt_path: {system_staged.as_posix()}\n")
+            else:
+                lines.append(line)
+        staged.write_text("".join(lines), encoding="utf-8")
+    if not system_staged.is_file():
+        raise FileNotFoundError(f"staged system prompt missing: {system_staged}")
+    return staged
 
 
 async def _watch_cancel(

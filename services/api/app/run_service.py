@@ -229,6 +229,24 @@ async def request_cancel(session: AsyncSession, run: RunRow) -> CancelResult:
     raise ValueError("run is already terminal")
 
 
+async def cancel_active_runs_for_task(
+    session: AsyncSession, task_id: str
+) -> list[CancelResult]:
+    """Cancel every non-terminal run on a task (chat UI stop by task)."""
+    rows = (
+        await session.execute(
+            select(RunRow).where(
+                RunRow.task_id == task_id,
+                RunRow.status.in_(("queued", "preparing", "running")),
+            )
+        )
+    ).scalars().all()
+    out: list[CancelResult] = []
+    for run in rows:
+        out.append(await request_cancel(session, run))
+    return out
+
+
 async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
     """Finalize non-terminal runs whose in-process owner was lost on restart."""
     active = (
@@ -342,7 +360,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         async def is_cancelled() -> bool:
             async with factory() as session:
                 run = await session.get(RunRow, run_id)
-                return bool(run and run.cancel_requested)
+                return bool(run and (run.cancel_requested or run.status == "cancelled"))
 
         caps = RunCaps(
             max_seconds=settings.pico_run_max_seconds,
