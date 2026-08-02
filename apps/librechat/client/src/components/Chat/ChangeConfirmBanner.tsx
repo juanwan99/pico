@@ -1,23 +1,58 @@
 /**
- * S7 minimal human confirm — list proposed changes; confirm / reject.
+ * S7 human confirmation — show task-scoped changes and make terminal state explicit.
  * No school business write; audit only.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, X, FileWarning, Loader2, Plus } from 'lucide-react';
+import { Check, FileWarning, Loader2, X } from 'lucide-react';
 import {
   confirmPicoChange,
-  createPicoChange,
   listPicoChanges,
   rejectPicoChange,
   type PicoChange,
 } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
 
-export default function ChangeConfirmBanner({
-  taskId,
-}: {
+const STATUS_LABEL: Record<PicoChange['status'], string> = {
+  proposed: '待确认',
+  confirmed: '已确认',
+  rejected: '已拒绝',
+};
+
+const STATUS_CLASS: Record<PicoChange['status'], string> = {
+  proposed: 'bg-amber-100 text-amber-800',
+  confirmed: 'bg-emerald-50 text-emerald-700',
+  rejected: 'bg-red-50 text-red-700',
+};
+
+const CONFIRM_LABEL = '确认';
+const REJECT_LABEL = '拒绝';
+
+function safeChangeError(action: '读取' | '确认' | '拒绝', error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('401')) {
+    return `${action}变更失败：登录已失效，请刷新页面后重新登录`;
+  }
+  if (message.includes('403')) {
+    return `${action}变更失败：当前账号没有操作权限`;
+  }
+  if (message.includes('404')) {
+    return `${action}变更失败：变更不存在或无权限`;
+  }
+  if (message.includes('400') || message.includes('409') || message.includes('cannot transition')) {
+    return `${action}变更失败：状态已更新，请核对最新结果`;
+  }
+  if (message.includes('502') || message.includes('unavailable')) {
+    return `${action}变更失败：变更服务暂时不可用，请稍后重试`;
+  }
+  return `${action}变更失败，请稍后重试`;
+}
+
+type ChangeConfirmBannerProps = {
   taskId?: string | null;
-}) {
+  onChanged?: () => void | Promise<void>;
+};
+
+export default function ChangeConfirmBanner({ taskId, onChanged }: ChangeConfirmBannerProps) {
   const [items, setItems] = useState<PicoChange[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -30,7 +65,7 @@ export default function ChangeConfirmBanner({
   const refresh = useCallback(async () => {
     const requestedTaskId = taskId;
     const version = ++requestVersion.current;
-    if (!taskId) {
+    if (!requestedTaskId) {
       setItems([]);
       setLoading(false);
       return;
@@ -38,17 +73,16 @@ export default function ChangeConfirmBanner({
     setLoading(true);
     setError(null);
     try {
-      const { changes } = await listPicoChanges({ taskId });
+      const { changes } = await listPicoChanges({ taskId: requestedTaskId });
       if (version !== requestVersion.current || currentTaskId.current !== requestedTaskId) {
         return;
       }
       setItems((changes || []).filter((item) => item.task_id === requestedTaskId));
-    } catch (e) {
+    } catch (refreshError) {
       if (version !== requestVersion.current || currentTaskId.current !== requestedTaskId) {
         return;
       }
-      setError(e instanceof Error ? e.message : String(e));
-      setItems([]);
+      setError(safeChangeError('读取', refreshError));
     } finally {
       if (version === requestVersion.current && currentTaskId.current === requestedTaskId) {
         setLoading(false);
@@ -59,6 +93,7 @@ export default function ChangeConfirmBanner({
   useEffect(() => {
     requestVersion.current += 1;
     setItems([]);
+    setBusyId(null);
     setError(null);
     setToast(null);
     void refresh();
@@ -69,73 +104,40 @@ export default function ChangeConfirmBanner({
     };
   }, [refresh, taskId]);
 
-  const onConfirm = async (id: string) => {
+  const transition = async (id: string, action: 'confirm' | 'reject') => {
+    const requestedTaskId = taskId;
     const item = items.find((candidate) => candidate.id === id);
-    if (!taskId || item?.task_id !== taskId || item.status !== 'proposed') {
-      setError('提案已切换或状态已更新，请刷新后重试');
+    if (!requestedTaskId || item?.task_id !== requestedTaskId || item.status !== 'proposed') {
+      setError('变更已切换或状态已更新，请核对最新结果');
       return;
     }
     setBusyId(id);
     setError(null);
     try {
-      const { change } = await confirmPicoChange(id);
-      if (currentTaskId.current !== taskId) {
+      const { change } =
+        action === 'confirm' ? await confirmPicoChange(id) : await rejectPicoChange(id);
+      if (currentTaskId.current !== requestedTaskId) {
         return;
       }
-      setToast(`已确认 ${change.id}（仅审计，不写学校业务库）`);
+      setItems((current) =>
+        current.map((candidate) => (candidate.id === change.id ? change : candidate)),
+      );
       await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const onReject = async (id: string) => {
-    const item = items.find((candidate) => candidate.id === id);
-    if (!taskId || item?.task_id !== taskId || item.status !== 'proposed') {
-      setError('提案已切换或状态已更新，请刷新后重试');
-      return;
-    }
-    setBusyId(id);
-    setError(null);
-    try {
-      const { change } = await rejectPicoChange(id);
-      if (currentTaskId.current !== taskId) {
+      if (currentTaskId.current !== requestedTaskId) {
         return;
       }
-      setToast(`已拒绝 ${change.id}`);
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const onDemoPropose = async () => {
-    if (!taskId) {
-      setError('任务账本尚未就绪');
-      return;
-    }
-    setBusyId('create');
-    setError(null);
-    try {
-      const { change } = await createPicoChange({
-        title: '演示提案：更新班级备注',
-        summary: 'S7 人确认路径演示。确认后只记审计，不会写入学校教务库。',
-        payload: { demo: true, action: 'update_class_note', value: 'Pico 演示' },
-        task_id: taskId,
-      });
-      if (currentTaskId.current !== taskId) {
+      setToast(action === 'confirm' ? '变更已确认，状态已刷新' : '变更已拒绝，状态已刷新');
+      void Promise.resolve(onChanged?.()).catch(() => undefined);
+    } catch (transitionError) {
+      if (currentTaskId.current !== requestedTaskId) {
         return;
       }
-      setToast(`已创建待确认提案 ${change.id}`);
       await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (currentTaskId.current === requestedTaskId) {
+        setError(safeChangeError(action === 'confirm' ? '确认' : '拒绝', transitionError));
+      }
     } finally {
-      setBusyId(null);
+      setBusyId((current) => (current === id ? null : current));
     }
   };
 
@@ -143,114 +145,89 @@ export default function ChangeConfirmBanner({
     if (!toast) {
       return;
     }
-    const t = window.setTimeout(() => setToast(null), 4000);
-    return () => window.clearTimeout(t);
+    const timeout = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  if (!items.length && !error && !toast) {
-    return (
-      <div className="flex items-center justify-between gap-2 border-b border-amber-100 bg-amber-50/80 px-3 py-1.5 text-[12px] text-amber-900">
-        <span className="inline-flex items-center gap-1.5">
-          <FileWarning className="h-3.5 w-3.5 opacity-70" />
-          业务变更须人工确认 · 无静默写库
-        </span>
-        {taskId ? (
-          <button
-            type="button"
-            onClick={() => void onDemoPropose()}
-            disabled={busyId === 'create'}
-            className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium ring-1 ring-amber-200 hover:bg-amber-50 disabled:opacity-50"
-          >
-            {busyId === 'create' ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Plus className="h-3 w-3" />
-            )}
-            新建演示提案
-          </button>
-        ) : null}
-      </div>
-    );
+  if (!taskId || (!items.length && !error)) {
+    return null;
   }
 
   const hasPending = items.some((item) => item.status === 'proposed');
+  let heading = '业务变更确认状态（S7）';
+  if (hasPending) {
+    heading = '待确认业务变更（S7）';
+  } else if (items.length) {
+    heading = '业务变更确认记录（S7）';
+  }
 
   return (
     <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-950">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1.5 font-medium">
-          <FileWarning className="h-3.5 w-3.5" />
-          {hasPending ? '待确认变更（S7）' : '变更提案（S7）'}
-          {loading ? <Loader2 className="h-3 w-3 animate-spin opacity-60" /> : null}
-        </span>
-        <button
-          type="button"
-          onClick={() => void onDemoPropose()}
-          disabled={busyId === 'create'}
-          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] ring-1 ring-amber-200"
-        >
-          <Plus className="h-3 w-3" />
-          演示提案
-        </button>
+      <div className="mb-1.5 flex items-center gap-1.5 font-medium">
+        <FileWarning className="h-3.5 w-3.5" />
+        <span>{heading}</span>
+        {loading ? <Loader2 className="h-3 w-3 animate-spin opacity-60" /> : null}
       </div>
       {error ? <p className="mb-1 text-[11px] text-red-700">{error}</p> : null}
       {toast ? <p className="mb-1 text-[11px] text-emerald-800">{toast}</p> : null}
-      <ul className="space-y-2">
-        {items.map((c) => (
-          <li
-            key={c.id}
-            className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-white/90 px-2.5 py-2 ring-1 ring-amber-100"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium text-[#1a1a1a]">{c.title}</p>
-              {c.summary ? (
-                <p className="mt-0.5 line-clamp-2 text-[11.5px] text-[#6b6b6b]">{c.summary}</p>
-              ) : null}
-              <p className="mt-1 break-all font-mono text-[10px] text-[#8a6a20]">
-                change id: {c.id}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              {c.status === 'proposed' && c.task_id === taskId ? (
-                <>
-                  <button
-                    type="button"
-                    disabled={busyId === c.id}
-                    onClick={() => void onConfirm(c.id)}
+      {items.length ? (
+        <ul className="space-y-2">
+          {items.map((change) => {
+            const title = change.title.trim() || '未命名变更';
+            const summary = change.summary.trim() || '未提供变更摘要';
+            return (
+              <li
+                key={change.id}
+                className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-white/90 px-2.5 py-2 ring-1 ring-amber-100"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="break-words font-medium text-[#1a1a1a]" title={title}>
+                    {title}
+                  </p>
+                  <p className="mt-0.5 line-clamp-2 text-[11.5px] text-[#6b6b6b]" title={summary}>
+                    {summary}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <span
                     className={cn(
-                      'inline-flex items-center gap-1 rounded-md bg-[#1a1a1a] px-2 py-1 text-[11px] font-medium text-white',
-                      busyId === c.id && 'opacity-50',
+                      'rounded-md px-2 py-1 text-[11px] font-medium',
+                      STATUS_CLASS[change.status],
                     )}
                   >
-                    <Check className="h-3 w-3" />
-                    确认
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busyId === c.id}
-                    onClick={() => void onReject(c.id)}
-                    className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-medium text-red-700 ring-1 ring-red-200"
-                  >
-                    <X className="h-3 w-3" />
-                    拒绝
-                  </button>
-                </>
-              ) : (
-                <span
-                  className={cn(
-                    'rounded-md px-2 py-1 text-[11px] font-medium',
-                    c.status === 'confirmed'
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : 'bg-red-50 text-red-700',
-                  )}
-                >
-                  {c.status === 'confirmed' ? '已确认' : '已拒绝'}
-                </span>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+                    {STATUS_LABEL[change.status]}
+                  </span>
+                  {change.status === 'proposed' && change.task_id === taskId ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={busyId === change.id}
+                        onClick={() => void transition(change.id, 'confirm')}
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-md bg-[#1a1a1a] px-2 py-1 text-[11px] font-medium text-white',
+                          busyId === change.id && 'opacity-50',
+                        )}
+                      >
+                        <Check className="h-3 w-3" />
+                        {CONFIRM_LABEL}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === change.id}
+                        onClick={() => void transition(change.id, 'reject')}
+                        className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-medium text-red-700 ring-1 ring-red-200"
+                      >
+                        <X className="h-3 w-3" />
+                        {REJECT_LABEL}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </div>
   );
 }

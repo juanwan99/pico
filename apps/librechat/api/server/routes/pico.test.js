@@ -137,4 +137,46 @@ describe('Pico proxy routes', () => {
       }),
     );
   });
+
+  it('forwards only supported filters when listing task changes', async () => {
+    const response = await request(app).get(
+      '/api/pico/v1/changes?task_id=task-1&status=proposed&unsafe=secret',
+    );
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/changes?task_id=task-1&status=proposed',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          'X-Pico-Membership-Id': 'member-123',
+        }),
+      }),
+    );
+  });
+
+  it.each(['confirm', 'reject'])('forwards change %s requests to Pico API', async (action) => {
+    const response = await request(app).post(`/api/pico/v1/changes/change-1/${action}`);
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      `http://127.0.0.1:18765/v1/changes/change-1/${action}`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'X-Pico-Membership-Id': 'member-123',
+        }),
+      }),
+    );
+  });
+
+  it.each(['confirm', 'reject'])(
+    'rejects invalid change ids for %s without calling Pico API',
+    async (action) => {
+      const response = await request(app).post(`/api/pico/v1/changes/bad.id/${action}`);
+
+      expect(response.status).toBe(400);
+      expect(global.fetch).not.toHaveBeenCalled();
+    },
+  );
 });
