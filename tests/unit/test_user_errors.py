@@ -34,3 +34,14 @@ def test_sqlite_lock_not_leaked_to_user() -> None:
     assert "OperationalError" not in msg
     assert "重试" in msg or "繁忙" in msg
 
+
+def test_kimi_contract_and_runtime_errors_are_user_safe() -> None:
+    msg = user_message_for_error("partial ToolCall", code="kimi.event_contract")
+    assert "智能体" in msg
+    assert "ToolCall" not in msg
+    msg2 = user_message_for_error(
+        "FileNotFoundError: /tmp/x/system.md", code="kimi.runtime_error"
+    )
+    assert "智能体" in msg2
+    assert "FileNotFound" not in msg2
+
