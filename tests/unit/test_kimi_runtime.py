@@ -135,11 +135,13 @@ async def test_kimi_path_maps_mock_session_without_network(monkeypatch: pytest.M
     async def create(**kwargs: Any) -> FakeSession:
         agent_file = kwargs["agent_file"]
         assert agent_file.is_absolute()
-        # Staged at Session work_dir root so relative ./system.md resolves.
         assert agent_file.name == "pico-kimi-runtime.yaml"
+        # Bundle is shared outside Session work_dir (agent-bundle).
+        assert agent_file.parent.name == "agent-bundle" or (
+            agent_file.parent / "system.md"
+        ).is_file()
         assert "system_prompt_path: ./system.md" in agent_file.read_text()
         assert (agent_file.parent / "system.md").is_file()
-        assert (agent_file.parent / "agent" / "system.md").is_file()
         created.update(kwargs)
         return FakeSession()
 
