@@ -5,6 +5,7 @@ DOC: docs/FAST-PATH.md
 STATUS: BINDING — 日常唯一默认节奏
 UPDATED: 2026-08-01
 OWNER_ORDER: 在必要安全下砍掉一切阻碍
+AUTONOMOUS: docs/AUTONOMOUS-GOAL.md — 业主终验制已启用
 ```
 
 ## 一句话
