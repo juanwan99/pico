@@ -78,7 +78,7 @@ describe('RunTimeline', () => {
   it('shows a cancelled run even when the event stream has no terminal event', () => {
     render(<RunTimeline run={run('cancelled')} events={[]} />);
 
-    expect(screen.getByText('运行已取消')).toBeInTheDocument();
+    expect(screen.getByText('运行已停止')).toBeInTheDocument();
     expect(screen.getByText('已停止生成')).toBeInTheDocument();
   });
 
