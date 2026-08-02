@@ -23,7 +23,7 @@ function response(body: unknown, status = 200): Response {
   } as Response;
 }
 
-function ledgerResponse(url: string, status = 'running'): Response {
+function ledgerResponse(url: string, status = 'running', cancelRequested = false): Response {
   if (url.includes('/v1/tasks?')) {
     return response({ tasks: [{ id: 'task-live', title: '运行中任务' }] });
   }
@@ -31,7 +31,16 @@ function ledgerResponse(url: string, status = 'running'): Response {
     return response({ task: { id: 'task-live', title: '运行中任务' }, artifacts: [] });
   }
   if (url.endsWith('/v1/tasks/task-live/runs')) {
-    return response({ runs: [{ id: 'run-live', task_id: 'task-live', status }] });
+    return response({
+      runs: [
+        {
+          id: 'run-live',
+          task_id: 'task-live',
+          status,
+          cancel_requested: cancelRequested,
+        },
+      ],
+    });
   }
   if (url.endsWith('/v1/runs/run-live/events')) {
     return response({ events: [] });
@@ -51,7 +60,7 @@ function CancelHarness() {
     ledger.statusLabel &&
     (ledger.statusLabel.startsWith('已完成') ||
       ledger.statusLabel.startsWith('失败') ||
-      ledger.statusLabel.startsWith('已取消'))
+      ledger.statusLabel.startsWith('已停止'))
       ? ledger.statusLabel
       : null;
 
@@ -65,6 +74,7 @@ function CancelHarness() {
         canCancel={Boolean(runId)}
         cancelling={ledger.cancelling}
         onCancel={() => void ledger.cancelRun(runId)}
+        processHint={ledger.processHint}
       />
       {ledger.error ? <div role="alert">{ledger.error}</div> : null}
     </>
@@ -110,7 +120,18 @@ describe('Pico cancel button integration', () => {
     runStatus = 'cancelled';
     resolveCancel(response({ run: { id: 'run-live', task_id: 'task-live', status: 'cancelled' } }));
 
-    expect(await screen.findByText('已取消')).toBeInTheDocument();
+    expect(await screen.findByText('已停止')).toBeInTheDocument();
+  });
+
+  it('restores a pending stop request without offering a second active stop', async () => {
+    global.fetch = jest.fn((input: RequestInfo | URL) =>
+      Promise.resolve(ledgerResponse(String(input), 'running', true)),
+    ) as typeof fetch;
+
+    render(<CancelHarness />);
+
+    expect(await screen.findByText('停止请求已提交，等待任务结束')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '停止中' })).toBeDisabled();
   });
 
   it('keeps a failed cancellation visible while ledger polling continues', async () => {

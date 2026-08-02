@@ -36,7 +36,10 @@ function TaskRunBar({
   const displayTitle = title && title !== 'New Chat' && title !== '新对话' ? title : '当前任务';
   const failed = Boolean(statusLabel?.startsWith('失败') || completedLabel?.startsWith('失败'));
   const cancelled = Boolean(
-    statusLabel?.startsWith('已取消') || completedLabel?.startsWith('已取消'),
+    statusLabel?.startsWith('已停止') ||
+      completedLabel?.startsWith('已停止') ||
+      statusLabel?.startsWith('已取消') ||
+      completedLabel?.startsWith('已取消'),
   );
   const rerunLabel = rerunning ? '重新运行中' : '重新运行';
 
@@ -92,7 +95,7 @@ function TaskRunBar({
       ) : cancelled ? (
         <span className="inline-flex max-w-[50%] items-center gap-1.5 rounded-full bg-[#f3f3f3] px-2.5 py-1 text-[12px] font-medium text-[#6b6b6b]">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{completedLabel || statusLabel || '已取消'}</span>
+          <span className="truncate">{completedLabel || statusLabel || '已停止'}</span>
         </span>
       ) : completedLabel ? (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eef7ee] px-2.5 py-1 text-[12px] font-medium text-[#2d6a3e]">

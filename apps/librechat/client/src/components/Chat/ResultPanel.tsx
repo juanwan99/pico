@@ -479,14 +479,14 @@ export default function ResultPanel({
                   <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa] px-4 py-10 text-[#9a9a9a]">
                     <FileText className="h-9 w-9 opacity-30" strokeWidth={1.25} />
                     <p className="text-[13px] font-medium text-[#6b6b6b]">
-                      {runStatusLabel?.startsWith('失败') || runStatusLabel?.startsWith('已取消')
+                      {runStatusLabel?.startsWith('失败') || runStatusLabel?.startsWith('已停止')
                         ? '本次未产出文件'
                         : '暂无产物'}
                     </p>
                     <p className="max-w-[15rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
                       {runStatusLabel?.startsWith('失败')
                         ? '可点击下方「重新运行」再试；过程步骤见上方时间线'
-                        : runStatusLabel?.startsWith('已取消')
+                        : runStatusLabel?.startsWith('已停止')
                           ? '已停止。需要结果时可重新发起任务'
                           : '任务完成后，文件产物会列在这里供打开/下载'}
                     </p>

@@ -7,7 +7,12 @@ import {
   listPicoTasks,
   retryPicoRun,
 } from '~/data-provider/pico/api';
-import { pickPreferredRun, pickPreferredTaskRuns, usePicoTaskLedger } from './usePicoTaskLedger';
+import {
+  pickPreferredRun,
+  pickPreferredTaskRuns,
+  recoveryTaskCandidates,
+  usePicoTaskLedger,
+} from './usePicoTaskLedger';
 
 jest.mock('~/data-provider/pico/api', () => ({
   cancelPicoRun: jest.fn(),
@@ -48,6 +53,23 @@ describe('pickPreferredRun / pickPreferredTaskRuns', () => {
     ]);
     expect(preferred?.task.id).toBe('task-old');
     expect(preferred?.run?.id).toBe('run-old');
+  });
+
+  it('scans every task during reload recovery and keeps the tracked task afterward', () => {
+    const tasks = Array.from({ length: 6 }, (_value, index) => ({
+      id: `task-${index + 1}`,
+      title: `task ${index + 1}`,
+    }));
+
+    expect(recoveryTaskCandidates(tasks, null, true)).toHaveLength(6);
+    expect(recoveryTaskCandidates(tasks, 'task-6', false).map((task) => task.id)).toEqual([
+      'task-1',
+      'task-2',
+      'task-3',
+      'task-4',
+      'task-5',
+      'task-6',
+    ]);
   });
 });
 
@@ -135,6 +157,42 @@ describe('usePicoTaskLedger', () => {
         });
         await waitFor(() => expect(mockedListRuns).toHaveBeenCalledTimes(tick + 2));
       }
+    } finally {
+      unmount();
+      jest.useRealTimers();
+    }
+  });
+
+  it('keeps the reload recovery window open until a delayed active task appears', async () => {
+    jest.useFakeTimers();
+    mockedListTasks
+      .mockResolvedValueOnce({ tasks: [] })
+      .mockResolvedValueOnce({ tasks: [] })
+      .mockResolvedValueOnce({ tasks: [] })
+      .mockResolvedValueOnce({ tasks: [] })
+      .mockResolvedValueOnce({ tasks: [] })
+      .mockResolvedValue({
+        tasks: [{ id: 'task-delayed', title: '延迟任务' }],
+      });
+    mockedGetTask.mockResolvedValue({
+      task: { id: 'task-delayed', title: '延迟任务' },
+      artifacts: [],
+    });
+    mockedListRuns.mockResolvedValue({
+      runs: [{ id: 'run-delayed', task_id: 'task-delayed', status: 'running' }],
+    });
+    mockedListEvents.mockResolvedValue({ events: [] });
+
+    const { result, unmount } = renderHook(() => usePicoTaskLedger('conversation-delayed', false));
+
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await act(async () => {
+          jest.advanceTimersByTime(2000);
+        });
+      }
+      await waitFor(() => expect(result.current.run?.id).toBe('run-delayed'));
+      expect(result.current.statusLabel).toBe('等待模型响应');
     } finally {
       unmount();
       jest.useRealTimers();
@@ -253,6 +311,10 @@ describe('usePicoTaskLedger', () => {
     mockedListTasks.mockResolvedValue({
       tasks: [
         { id: 'task-new', title: '新任务已完成', conversation_id: 'conversation-mixed' },
+        { id: 'task-2', title: '已完成 2', conversation_id: 'conversation-mixed' },
+        { id: 'task-3', title: '已完成 3', conversation_id: 'conversation-mixed' },
+        { id: 'task-4', title: '已完成 4', conversation_id: 'conversation-mixed' },
+        { id: 'task-5', title: '已完成 5', conversation_id: 'conversation-mixed' },
         { id: 'task-old', title: '旧任务仍运行', conversation_id: 'conversation-mixed' },
       ],
     });
@@ -263,6 +325,9 @@ describe('usePicoTaskLedger', () => {
     mockedListRuns.mockImplementation(async (taskId: string) => {
       if (taskId === 'task-new') {
         return { runs: [{ id: 'run-new', task_id: 'task-new', status: 'succeeded' }] };
+      }
+      if (taskId !== 'task-old') {
+        return { runs: [{ id: `run-${taskId}`, task_id: taskId, status: 'succeeded' }] };
       }
       return { runs: [{ id: 'run-old', task_id: 'task-old', status: 'running' }] };
     });
@@ -285,6 +350,31 @@ describe('usePicoTaskLedger', () => {
       unmount();
       jest.useRealTimers();
     }
+  });
+
+  it('clears an active run when navigating to a different conversation', async () => {
+    mockedListTasks.mockImplementation(async (conversationId?: string) => {
+      if (conversationId === 'conversation-a') {
+        return { tasks: [{ id: 'task-a', title: 'A' }] };
+      }
+      return { tasks: [] };
+    });
+    mockedGetTask.mockResolvedValue({ task: { id: 'task-a', title: 'A' }, artifacts: [] });
+    mockedListRuns.mockResolvedValue({
+      runs: [{ id: 'run-a', task_id: 'task-a', status: 'running' }],
+    });
+    mockedListEvents.mockResolvedValue({ events: [] });
+
+    const { result, rerender, unmount } = renderHook(
+      ({ conversationId }) => usePicoTaskLedger(conversationId, false),
+      { initialProps: { conversationId: 'conversation-a' } },
+    );
+    await waitFor(() => expect(result.current.run?.id).toBe('run-a'));
+
+    rerender({ conversationId: 'conversation-b' });
+    await waitFor(() => expect(result.current.run).toBeNull());
+    expect(result.current.task).toBeNull();
+    unmount();
   });
 
   it('does not drop an active run when a poll briefly returns an empty task list', async () => {
@@ -345,7 +435,7 @@ describe('usePicoTaskLedger', () => {
 
     expect(mockedCancelRun).toHaveBeenCalledWith('run-running');
     await waitFor(() => expect(result.current.run?.status).toBe('cancelled'));
-    expect(result.current.statusLabel).toBe('已取消');
+    expect(result.current.statusLabel).toBe('已停止');
     unmount();
   });
 

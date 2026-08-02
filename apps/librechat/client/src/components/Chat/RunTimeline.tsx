@@ -70,20 +70,14 @@ export function describePicoRunEvent(event: PicoRunEvent): {
     return {
       title: '运行出错',
       detail:
-        textValue(payload, 'user_message', 'message', 'reason') ||
-        '本次运行未能完成，请稍后重试。',
+        textValue(payload, 'user_message', 'message', 'reason') || '本次运行未能完成，请稍后重试。',
     };
   }
   if (event.type === 'run.status') {
     const status = textValue(payload, 'status');
     const code = textValue(payload, 'code', 'error_code');
     const runtime = textValue(payload, 'runtime');
-    const runtimeLabel =
-      runtime === 'kimi-agent'
-        ? 'Kimi Agent'
-        : runtime
-          ? runtime
-          : null;
+    const runtimeLabel = runtime === 'kimi-agent' ? 'Kimi Agent' : runtime ? runtime : null;
     if (status === 'running' || status === 'queued' || status === 'preparing') {
       return {
         title: status === 'running' ? '正在运行' : '排队中',
@@ -110,7 +104,7 @@ export function describePicoRunEvent(event: PicoRunEvent): {
     }
     if (status === 'cancelled') {
       return {
-        title: '运行已取消',
+        title: '运行已停止',
         detail: [
           code ? `已停止生成 · 错误码：${code}` : '已停止生成',
           runtimeLabel ? `运行时 · ${runtimeLabel}` : null,

@@ -33,6 +33,7 @@ export type PicoLedgerState = {
 const ACTIVE_RUN_STATUSES = new Set(['queued', 'running', 'preparing']);
 /** How many newest tasks to inspect when recovering an active Run after reload. */
 const ACTIVE_RUN_SCAN_LIMIT = 5;
+const RECOVERY_WINDOW_MS = 30_000;
 
 function isActiveRun(run: PicoRun | null | undefined): run is PicoRun {
   return Boolean(run && ACTIVE_RUN_STATUSES.has(run.status));
@@ -66,17 +67,42 @@ export function pickPreferredTaskRuns(
   };
 }
 
-function friendlyFailureLabel(run: PicoRun, events: PicoRunEvent[]): string {
+export function recoveryTaskCandidates(
+  tasks: PicoTask[],
+  trackedTaskId: string | null,
+  exhaustive: boolean,
+): PicoTask[] {
+  if (exhaustive || tasks.length <= ACTIVE_RUN_SCAN_LIMIT) {
+    return tasks;
+  }
+  const candidates = tasks.slice(0, ACTIVE_RUN_SCAN_LIMIT);
+  const tracked = trackedTaskId
+    ? tasks.find((candidate) => candidate.id === trackedTaskId)
+    : undefined;
+  if (tracked && !candidates.some((candidate) => candidate.id === tracked.id)) {
+    candidates.push(tracked);
+  }
+  return candidates;
+}
+
+export function failedRunUserMessage(events: PicoRunEvent[]): string | null {
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
     if (event.type !== 'run.status' && event.type !== 'run.error') {
       continue;
     }
-    const payload = event.payload || {};
-    const userMessage = payload.user_message;
+    const userMessage = event.payload?.user_message;
     if (typeof userMessage === 'string' && userMessage.trim()) {
-      return `失败：${userMessage.trim().slice(0, 48)}`;
+      return userMessage.trim();
     }
+  }
+  return null;
+}
+
+function friendlyFailureLabel(run: PicoRun, events: PicoRunEvent[]): string {
+  const userMessage = failedRunUserMessage(events);
+  if (userMessage) {
+    return `失败：${userMessage}`;
   }
   const raw = (run.error || '').trim();
   if (!raw) {
@@ -107,6 +133,9 @@ function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null
   if (!isActiveRun(run)) {
     return null;
   }
+  if (run.cancel_requested) {
+    return '停止请求已提交，等待任务结束';
+  }
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
     if (event.type === 'tool.call') {
@@ -136,13 +165,18 @@ function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null
   return runtime ? `运行中 · ${runtime}` : '正在处理…';
 }
 
-
 function statusLabel(
   run: PicoRun | null,
   isSubmitting: boolean,
   artifacts: PicoArtifact[],
   events: PicoRunEvent[] = [],
 ): string | null {
+  if (run?.cancel_requested && isActiveRun(run)) {
+    return '正在停止';
+  }
+  if (run?.status === 'cancelled') {
+    return '已停止';
+  }
   if (isSubmitting) {
     return '等待模型响应';
   }
@@ -173,9 +207,6 @@ function statusLabel(
   }
   if (run.status === 'failed') {
     return friendlyFailureLabel(run, events);
-  }
-  if (run.status === 'cancelled') {
-    return '已取消';
   }
   return run.status;
 }
@@ -211,10 +242,14 @@ export function usePicoTaskLedger(
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [rerunError, setRerunError] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(true);
   const [tick, setTick] = useState(0);
   const activeRun = isActiveRun(run);
   const runRef = useRef(run);
+  const taskRef = useRef(task);
+  const recoveryDeadlineRef = useRef(0);
   runRef.current = run;
+  taskRef.current = task;
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
   const cancelRun = useCallback(
@@ -321,9 +356,27 @@ export function usePicoTaskLedger(
   }, [conversationId, tick]);
 
   useEffect(() => {
+    setTask(null);
+    setRun(null);
+    setEvents([]);
+    setArtifacts([]);
     setCancelError(null);
     setRerunError(null);
     setCancelRequestedRunId(null);
+    runRef.current = null;
+    taskRef.current = null;
+    if (!conversationId || conversationId === 'new') {
+      recoveryDeadlineRef.current = 0;
+      setRecovering(false);
+      return;
+    }
+    recoveryDeadlineRef.current = Date.now() + RECOVERY_WINDOW_MS;
+    setRecovering(true);
+    const timeout = window.setTimeout(() => {
+      recoveryDeadlineRef.current = 0;
+      setRecovering(false);
+    }, RECOVERY_WINDOW_MS);
+    return () => window.clearTimeout(timeout);
   }, [conversationId]);
 
   useEffect(() => {
@@ -362,7 +415,11 @@ export function usePicoTaskLedger(
           return;
         }
 
-        const scan = tasks.slice(0, ACTIVE_RUN_SCAN_LIMIT);
+        const scan = recoveryTaskCandidates(
+          tasks,
+          taskRef.current?.id ?? null,
+          recoveryDeadlineRef.current > Date.now(),
+        );
         const entries = await Promise.all(
           scan.map(async (candidate) => ({
             task: candidate,
@@ -390,8 +447,11 @@ export function usePicoTaskLedger(
         }
 
         setTask(preferred.task);
+        taskRef.current = preferred.task;
         setArtifacts(detail.artifacts || []);
         setRun(preferred.run);
+        recoveryDeadlineRef.current = 0;
+        setRecovering(false);
         if (!preferred.run) {
           setEvents([]);
           return;
@@ -436,7 +496,7 @@ export function usePicoTaskLedger(
     if (!conversationId || conversationId === 'new') {
       return;
     }
-    if (isSubmitting || activeRun) {
+    if (isSubmitting || activeRun || recovering) {
       const id = window.setInterval(() => setTick((n) => n + 1), 2000);
       return () => window.clearInterval(id);
     }
@@ -450,7 +510,7 @@ export function usePicoTaskLedger(
       }
     }, 1500);
     return () => window.clearInterval(id);
-  }, [isSubmitting, conversationId, activeRun]);
+  }, [isSubmitting, conversationId, activeRun, recovering]);
 
   return {
     task,
@@ -464,6 +524,7 @@ export function usePicoTaskLedger(
     refresh,
     cancelling:
       cancelRequestInFlight ||
+      Boolean(run?.cancel_requested && isActiveRun(run)) ||
       Boolean(cancelRequestedRunId && cancelRequestedRunId === run?.id && isActiveRun(run)),
     cancelRun,
     rerunning: rerunRequestInFlight,

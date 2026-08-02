@@ -186,7 +186,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                       ledger.statusLabel &&
                       (ledger.statusLabel.startsWith('已完成') ||
                         ledger.statusLabel.startsWith('失败') ||
-                        ledger.statusLabel.startsWith('已取消'))
+                        ledger.statusLabel.startsWith('已停止'))
                         ? ledger.statusLabel
                         : null
                     }

@@ -24,6 +24,7 @@ export type PicoRun = {
   id: string;
   task_id: string;
   status: string;
+  cancel_requested?: boolean;
   model?: string;
   error?: string | null;
   started_at?: string | null;
