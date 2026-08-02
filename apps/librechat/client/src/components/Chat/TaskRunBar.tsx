@@ -18,12 +18,14 @@ function TaskRunBar({
   canRerun,
   rerunning,
   onRerun,
+  processHint,
 }: {
   title?: string | null;
   isSubmitting: boolean;
   completedLabel?: string | null;
   model?: string | null;
   statusLabel?: string | null;
+  processHint?: string | null;
   canCancel?: boolean;
   cancelling?: boolean;
   onCancel?: () => void;
@@ -48,6 +50,11 @@ function TaskRunBar({
           {displayTitle}
         </p>
         {model ? <p className="truncate text-[11px] text-[#8c8c8c]">模型 {model}</p> : null}
+        {processHint ? (
+          <p className="truncate text-[11px] text-[#3b6fd9]" data-testid="task-process-hint">
+            {processHint}
+          </p>
+        ) : null}
       </div>
       {canCancel ? (
         <>
