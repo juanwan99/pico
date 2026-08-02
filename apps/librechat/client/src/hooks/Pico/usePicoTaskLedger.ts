@@ -19,6 +19,8 @@ export type PicoLedgerState = {
   events: PicoRunEvent[];
   artifacts: PicoArtifact[];
   statusLabel: string | null;
+  /** Live one-line process for the task bar while a run is active. */
+  processHint: string | null;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -100,6 +102,40 @@ function runtimeHint(events: PicoRunEvent[]): string | null {
   }
   return null;
 }
+
+function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null {
+  if (!isActiveRun(run)) {
+    return null;
+  }
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (event.type === 'tool.call') {
+      const tool = event.payload?.tool ?? event.payload?.name;
+      if (typeof tool === 'string' && tool.trim()) {
+        return `正在调用 · ${tool.trim()}`;
+      }
+    }
+    if (event.type === 'tool.result') {
+      const tool = event.payload?.tool ?? event.payload?.name;
+      if (typeof tool === 'string' && tool.trim()) {
+        const ok = event.payload?.ok !== false;
+        return ok ? `工具完成 · ${tool.trim()}` : `工具失败 · ${tool.trim()}`;
+      }
+    }
+    if (event.type === 'agent.step') {
+      const n = event.payload?.n ?? event.payload?.step;
+      const phase = event.payload?.phase;
+      const bits = [
+        typeof n === 'number' || typeof n === 'string' ? `步骤 ${n}` : '智能体步骤',
+        typeof phase === 'string' && phase.trim() ? phase.trim() : null,
+      ].filter(Boolean);
+      return bits.join(' · ');
+    }
+  }
+  const runtime = runtimeHint(events);
+  return runtime ? `运行中 · ${runtime}` : '正在处理…';
+}
+
 
 function statusLabel(
   run: PicoRun | null,
@@ -418,6 +454,7 @@ export function usePicoTaskLedger(
     events,
     artifacts,
     statusLabel: statusLabel(run, isSubmitting, artifacts, events),
+    processHint: processHint(run, events),
     loading,
     error: rerunError ?? cancelError ?? loadError,
     refresh,

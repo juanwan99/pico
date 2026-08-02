@@ -196,6 +196,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     canRerun={ledger.run?.status === 'failed'}
                     rerunning={ledger.rerunning}
                     onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
+                    processHint={ledger.processHint}
                   />
                   {ledger.error ? (
                     <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900">
