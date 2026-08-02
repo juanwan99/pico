@@ -21,6 +21,7 @@ import {
   ExternalLink,
   Download,
   Search,
+  RotateCcw,
 } from 'lucide-react';
 import type { TMessage } from 'librechat-data-provider';
 import {
@@ -127,6 +128,9 @@ export default function ResultPanel({
   picoArtifacts,
   runEvents,
   run,
+  canRerun,
+  rerunning,
+  onRerun,
 }: {
   messages?: TMessage[] | null;
   taskTitle?: string;
@@ -136,6 +140,9 @@ export default function ResultPanel({
   picoArtifacts?: PicoArtifact[] | null;
   runEvents?: PicoRunEvent[] | null;
   run?: PicoRun | null;
+  canRerun?: boolean;
+  rerunning?: boolean;
+  onRerun?: () => void;
 }) {
   const [view, setView] = useState<TopView>('overview');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -440,8 +447,24 @@ export default function ResultPanel({
                         : '暂无产物'}
                     </p>
                     <p className="max-w-[15rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
-                      概览 / 工作空间文件 / 浏览器 — 与任务台右栏一致
+                      {runStatusLabel?.startsWith('失败')
+                        ? '可点击下方「重新运行」再试；过程步骤见上方时间线'
+                        : runStatusLabel?.startsWith('已取消')
+                          ? '已停止。需要结果时可重新发起任务'
+                          : '任务完成后，文件产物会列在这里供打开/下载'}
                     </p>
+                    {canRerun && onRerun ? (
+                      <button
+                        type="button"
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-3 py-1.5 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#f3f3f3] disabled:opacity-60"
+                        onClick={onRerun}
+                        disabled={rerunning}
+                        data-testid="result-panel-rerun"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        {rerunning ? '重新运行中' : '重新运行'}
+                      </button>
+                    ) : null}
                   </div>
                 )}
               </div>
