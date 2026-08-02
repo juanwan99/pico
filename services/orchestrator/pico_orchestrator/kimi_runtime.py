@@ -345,11 +345,7 @@ async def run_kimi_agent(
 
     finally:
         # Only the per-run sandbox. Agent bundle is shared and must survive.
-        # Defer slightly so Session teardown cannot race the rmtree.
-        try:
-            await asyncio.sleep(0)
-        except Exception:  # noqa: BLE001
-            pass
+        await asyncio.sleep(0)
         if work_dir.is_dir():
             shutil.rmtree(work_dir, ignore_errors=True)
 
