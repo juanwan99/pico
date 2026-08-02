@@ -1,8 +1,4 @@
-"""Pure Kimi Wire-to-Pico ledger event mapping.
-
-KA-1 defines the adapter contract only.  Nothing in the production API imports
-or calls this module yet; ``run_agent_loop`` remains the active runtime.
-"""
+"""Pure Kimi Wire-to-Pico ledger event mapping."""
 
 from __future__ import annotations
 
@@ -45,16 +41,18 @@ class KimiEventContractError(RuntimeError):
 class KimiWireEventAdapter:
     """Map one merged Kimi ``Session.prompt`` Wire stream to ledger events.
 
-    The caller must request ``merge_wire_messages=True``.  In particular, this
-    ensures a ``ToolCall`` contains its complete JSON arguments before it is
-    made durable.  Runtime execution, cancellation, and gateway dispatch are
-    deliberately outside this KA-1 mapping skeleton.
+    The caller requests ``merge_wire_messages=True``, but provider streams can
+    still expose a trailing ``ToolCallPart``.  Incomplete tool calls therefore
+    remain buffered until their arguments are complete and safe to persist.
     """
 
     def __init__(self) -> None:
         self._started = False
         self._ended = False
         self._tool_names: dict[str, str] = {}
+        self._pending_calls: dict[str, ToolCall] = {}
+        self._seen_call_ids: set[str] = set()
+        self._last_call_id: str | None = None
 
     def feed(self, message: WireMessage) -> list[LedgerEvent]:
         """Convert a Wire message without performing I/O or running a tool."""
@@ -89,33 +87,55 @@ class KimiWireEventAdapter:
                 return [LedgerEvent("run.usage", payload)] if payload else []
             case ToolCall() as call:
                 self._require_started(message)
-                if call.id in self._tool_names:
+                if call.id in self._seen_call_ids:
                     raise KimiEventContractError(f"duplicate tool call id: {call.id}")
-                arguments = self._parse_arguments(call.function.arguments, call.id)
-                self._tool_names[call.id] = call.function.name
-                return [
-                    LedgerEvent(
-                        "tool.call",
-                        {
-                            "tool": call.function.name,
-                            "arguments": arguments,
-                            "call_id": call.id,
-                        },
+                self._seen_call_ids.add(call.id)
+                self._last_call_id = call.id
+                if not call.function.arguments:
+                    self._pending_calls[call.id] = call.model_copy(deep=True)
+                    return []
+                try:
+                    arguments = self._parse_arguments(
+                        call.function.arguments, call.id
                     )
-                ]
-            case ToolCallPart():
-                raise KimiEventContractError(
-                    "partial ToolCall received; use Session.prompt(merge_wire_messages=True)"
-                )
+                except KimiEventContractError:
+                    self._pending_calls[call.id] = call.model_copy(deep=True)
+                    return []
+                self._tool_names[call.id] = call.function.name
+                return [self._tool_call_event(call, arguments)]
+            case ToolCallPart() as part:
+                self._require_started(message)
+                call_id = self._last_call_id
+                if call_id is None or call_id not in self._pending_calls:
+                    # Kimi's own message aggregator drops an orphan part: it
+                    # has no call id and cannot be attached safely.
+                    return []
+                call = self._pending_calls[call_id]
+                call.merge_in_place(part)
+                try:
+                    arguments = self._parse_arguments(call.function.arguments, call_id)
+                except KimiEventContractError:
+                    return []
+                self._pending_calls.pop(call_id)
+                self._tool_names[call_id] = call.function.name
+                return [self._tool_call_event(call, arguments)]
             case ToolResult() as result:
                 self._require_started(message)
+                call_events: list[LedgerEvent] = []
                 tool_name = self._tool_names.pop(result.tool_call_id, None)
+                if tool_name is None and result.tool_call_id in self._pending_calls:
+                    call = self._pending_calls.pop(result.tool_call_id)
+                    arguments = self._parse_arguments(
+                        call.function.arguments, result.tool_call_id
+                    )
+                    tool_name = call.function.name
+                    call_events.append(self._tool_call_event(call, arguments))
                 if tool_name is None:
                     raise KimiEventContractError(
                         f"tool result without preceding call: {result.tool_call_id}"
                     )
                 value = result.return_value.model_dump(mode="json")
-                return [
+                return call_events + [
                     LedgerEvent(
                         "tool.result",
                         {
@@ -160,7 +180,7 @@ class KimiWireEventAdapter:
                 return [LedgerEvent("agent.step", {"phase": "interrupted"})]
             case TurnEnd():
                 self._require_started(message)
-                if self._tool_names:
+                if self._tool_names or self._pending_calls:
                     raise KimiEventContractError("TurnEnd received with unfinished tool calls")
                 self._ended = True
                 return [
@@ -181,6 +201,19 @@ class KimiWireEventAdapter:
             raise KimiEventContractError(
                 f"{type(message).__name__} received before TurnBegin"
             )
+
+    @staticmethod
+    def _tool_call_event(
+        call: ToolCall, arguments: dict[str, Any]
+    ) -> LedgerEvent:
+        return LedgerEvent(
+            "tool.call",
+            {
+                "tool": call.function.name,
+                "arguments": arguments,
+                "call_id": call.id,
+            },
+        )
 
     @staticmethod
     def _parse_arguments(raw: str | None, call_id: str) -> dict[str, Any]:

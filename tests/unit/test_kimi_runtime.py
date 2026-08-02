@@ -13,6 +13,8 @@ from kimi_agent_sdk import (
     TextPart,
     TokenUsage,
     ToolCall,
+    ToolCallPart,
+    ToolOk,
     ToolResult,
     TurnBegin,
     TurnEnd,
@@ -130,6 +132,11 @@ async def test_kimi_path_maps_mock_session_without_network(monkeypatch: pytest.M
             raise AssertionError("cancel should not be called")
 
     async def create(**kwargs: Any) -> FakeSession:
+        agent_file = kwargs["agent_file"]
+        assert agent_file.is_absolute()
+        assert agent_file.parent.name == "agent"
+        assert "system_prompt_path: ./system.md" in agent_file.read_text()
+        assert (agent_file.parent / "system.md").read_text()
         created.update(kwargs)
         return FakeSession()
 
@@ -161,6 +168,67 @@ async def test_kimi_path_maps_mock_session_without_network(monkeypatch: pytest.M
         ("message.delta", {"text": "hello from Kimi"}),
         ("run.status", {"status": "succeeded", "runtime": "kimi-agent"}),
     ]
+
+
+@pytest.mark.asyncio
+async def test_kimi_path_completes_split_tool_call_without_contract_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pico_orchestrator import kimi_runtime
+
+    class PartialToolSession:
+        async def __aenter__(self) -> Self:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def prompt(self, user_input: str, **_kwargs: Any):
+            yield TurnBegin(user_input=user_input)
+            yield ToolCall(
+                id="split-call",
+                function=ToolCall.FunctionBody(
+                    name="calculator", arguments=None
+                ),
+            )
+            yield ToolCallPart(arguments_part='{"expression":"6 * 7"}')
+            yield ToolResult(
+                tool_call_id="split-call", return_value=ToolOk(output="42")
+            )
+            yield TextPart(text="42")
+            yield TurnEnd()
+
+        def cancel(self) -> None:
+            raise AssertionError("cancel should not be called")
+
+    async def create(**_kwargs: Any) -> PartialToolSession:
+        return PartialToolSession()
+
+    monkeypatch.setattr(kimi_runtime.Session, "create", create)
+    monkeypatch.setattr(
+        kimi_runtime,
+        "resolve_provider",
+        lambda: ProviderConfig(
+            "kimi", "test-only", "https://example.invalid/v1", "kimi-test"
+        ),
+    )
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    result = await kimi_runtime.run_kimi_agent(
+        prompt="calculate",
+        principal=Principal(),
+        emit=lambda kind, payload: _emit_to(events, kind, payload),
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(max_seconds=5),
+    )
+
+    assert result.status == "succeeded"
+    assert result.final_text == "42"
+    assert [kind for kind, _payload in events if kind.startswith("tool.")] == [
+        "tool.call",
+        "tool.result",
+    ]
+    assert all(kind != "run.error" for kind, _payload in events)
 
 
 @pytest.mark.asyncio

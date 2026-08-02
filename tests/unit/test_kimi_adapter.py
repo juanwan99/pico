@@ -102,19 +102,69 @@ def test_does_not_persist_thinking_content() -> None:
     assert adapter.feed(ThinkPart(think="private reasoning")) == []
 
 
-def test_rejects_unmerged_tool_parts_and_invalid_arguments() -> None:
+@pytest.mark.parametrize(
+    ("initial_arguments", "arguments_part"),
+    [
+        ('{"expression":"6 *', ' 7"}'),
+        (None, '{"expression":"6 * 7"}'),
+    ],
+)
+def test_buffers_partial_tool_call_until_result(
+    initial_arguments: str | None, arguments_part: str
+) -> None:
     adapter = KimiWireEventAdapter()
     adapter.feed(TurnBegin(user_input="hello"))
 
-    with pytest.raises(KimiEventContractError, match="merge_wire_messages=True"):
-        adapter.feed(ToolCallPart(arguments_part='{"x":'))
+    call = ToolCall(
+        id="split-call",
+        function=ToolCall.FunctionBody(
+            name="calculator", arguments=initial_arguments
+        ),
+    )
+    assert adapter.feed(call) == []
+    call_events = adapter.feed(ToolCallPart(arguments_part=arguments_part))
+    result_events = adapter.feed(
+        ToolResult(tool_call_id="split-call", return_value=ToolOk(output="42"))
+    )
+    events = call_events + result_events
+
+    assert [(event.type, event.payload) for event in events] == [
+        (
+            "tool.call",
+            {
+                "tool": "calculator",
+                "arguments": {"expression": "6 * 7"},
+                "call_id": "split-call",
+            },
+        ),
+        (
+            "tool.result",
+            {
+                "tool": "calculator",
+                "ok": True,
+                "result": "42",
+                "message": "",
+                "call_id": "split-call",
+            },
+        ),
+    ]
+
+
+def test_ignores_orphan_tool_call_part_and_rejects_invalid_arguments() -> None:
+    adapter = KimiWireEventAdapter()
+    adapter.feed(TurnBegin(user_input="hello"))
+
+    assert adapter.feed(ToolCallPart(arguments_part='{"orphan":true}')) == []
 
     invalid = ToolCall(
         id="bad-call",
         function=ToolCall.FunctionBody(name="calculator", arguments="not-json"),
     )
+    assert adapter.feed(invalid) == []
     with pytest.raises(KimiEventContractError, match="invalid tool arguments"):
-        adapter.feed(invalid)
+        adapter.feed(
+            ToolResult(tool_call_id="bad-call", return_value=ToolOk(output="unused"))
+        )
 
 
 def test_requires_call_before_result_and_no_unfinished_call_at_turn_end() -> None:
