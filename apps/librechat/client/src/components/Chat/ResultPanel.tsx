@@ -122,6 +122,7 @@ export default function ResultPanel({
   messages,
   taskTitle,
   runStatusLabel,
+  processHint,
   onClose,
   picoArtifacts,
   runEvents,
@@ -130,6 +131,7 @@ export default function ResultPanel({
   messages?: TMessage[] | null;
   taskTitle?: string;
   runStatusLabel?: string;
+  processHint?: string | null;
   onClose?: () => void;
   picoArtifacts?: PicoArtifact[] | null;
   runEvents?: PicoRunEvent[] | null;
@@ -373,11 +375,41 @@ export default function ResultPanel({
       <div className="flex min-h-0 flex-1 flex-col">
         {view === 'overview' && (
           <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
-            {taskTitle || runStatusLabel ? (
-              <div className="mb-3 rounded-lg bg-[#fafafa] px-3 py-2 dark:bg-surface-tertiary">
-                {taskTitle ? <p className="truncate text-[13px] font-medium">{taskTitle}</p> : null}
+            {taskTitle || runStatusLabel || processHint ? (
+              <div
+                className={cn(
+                  'mb-3 rounded-lg px-3 py-2',
+                  run?.status === 'failed'
+                    ? 'bg-[#fdeeee] dark:bg-red-950/30'
+                    : run?.status === 'succeeded'
+                      ? 'bg-[#eef7ee] dark:bg-emerald-950/20'
+                      : run?.status === 'cancelled'
+                        ? 'bg-[#f3f3f3] dark:bg-surface-tertiary'
+                        : 'bg-[#f0f5ff] dark:bg-surface-tertiary',
+                )}
+                data-testid="result-status-banner"
+              >
+                {taskTitle ? (
+                  <p className="truncate text-[13px] font-medium">{taskTitle}</p>
+                ) : null}
                 {runStatusLabel ? (
-                  <p className="mt-0.5 text-[12px] text-[#6b6b6b]">{runStatusLabel}</p>
+                  <p
+                    className={cn(
+                      'mt-0.5 text-[12px]',
+                      run?.status === 'failed'
+                        ? 'text-[#9a3b3b]'
+                        : run?.status === 'succeeded'
+                          ? 'text-[#2d6a3e]'
+                          : 'text-[#3d3d3d] dark:text-text-secondary',
+                    )}
+                  >
+                    {runStatusLabel}
+                  </p>
+                ) : null}
+                {processHint ? (
+                  <p className="mt-0.5 truncate text-[12px] text-[#3b6fd9]" data-testid="result-process-hint">
+                    {processHint}
+                  </p>
                 ) : null}
               </div>
             ) : null}
