@@ -138,6 +138,49 @@ describe('Pico proxy routes', () => {
     );
   });
 
+  it.each([
+    ['inline', '', 'inline; filename="result.txt"'],
+    ['download', '?download=true&unsafe=secret', 'attachment; filename="result.txt"'],
+  ])('proxies artifact bytes and safe headers for %s', async (_mode, query, disposition) => {
+    const bytes = Buffer.from([0, 1, 2, 255]);
+    global.fetch.mockResolvedValueOnce({
+      status: 200,
+      headers: {
+        get: (name) =>
+          ({
+            'content-type': 'application/octet-stream',
+            'content-disposition': disposition,
+            'x-content-type-options': 'nosniff',
+          })[name],
+      },
+      arrayBuffer: async () => bytes,
+    });
+
+    const response = await request(app).get(`/api/pico/v1/artifacts/artifact-1/content${query}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(bytes);
+    expect(response.headers['content-type']).toMatch(/^application\/octet-stream/);
+    expect(response.headers['content-disposition']).toBe(disposition);
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `http://127.0.0.1:18765/v1/artifacts/artifact-1/content${query ? '?download=true' : ''}`,
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          'X-Pico-Membership-Id': 'member-123',
+        }),
+      }),
+    );
+  });
+
+  it('rejects invalid artifact ids without calling Pico API', async () => {
+    const response = await request(app).get('/api/pico/v1/artifacts/bad.id/content');
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('forwards only supported filters when listing task changes', async () => {
     const response = await request(app).get(
       '/api/pico/v1/changes?task_id=task-1&status=proposed&unsafe=secret',

@@ -110,6 +110,10 @@ async function proxy(req, res, path, options = {}) {
     if (disposition) {
       res.setHeader('Content-Disposition', disposition);
     }
+    const contentTypeOptions = r.headers.get('x-content-type-options');
+    if (contentTypeOptions) {
+      res.setHeader('X-Content-Type-Options', contentTypeOptions);
+    }
     res.send(body);
   } catch (err) {
     logger.error('[pico proxy]', err);

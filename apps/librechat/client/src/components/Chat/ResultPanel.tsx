@@ -20,6 +20,7 @@ import {
   RotateCw,
   ExternalLink,
   Download,
+  Loader2,
   Search,
   RotateCcw,
 } from 'lucide-react';
@@ -39,12 +40,55 @@ type TopView = 'overview' | 'files' | 'browser';
 type ArtifactItem = {
   id: string;
   name: string;
+  kindLabel: string;
   sizeLabel: string;
   kind: 'txt' | 'file' | 'other';
   url?: string;
   body?: string;
   picoArtifact?: boolean;
 };
+
+type ArtifactAction = {
+  id: string;
+  type: 'open' | 'download';
+};
+
+const UNNAMED_ARTIFACT = '未命名产物';
+const UNNAMED_ATTACHMENT = '未命名附件';
+const UNKNOWN_KIND = '类型未知';
+
+function artifactActionError(action: ArtifactAction['type'], error: unknown): string {
+  const verb = action === 'open' ? '打开' : '下载';
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('401')) {
+    return `${verb}产物失败：登录已失效，请刷新页面后重新登录`;
+  }
+  if (message.includes('403') || message.includes('404')) {
+    return `${verb}产物失败：产物不存在或无权限`;
+  }
+  if (message.includes('502') || message.includes('unavailable')) {
+    return `${verb}产物失败：产物服务暂时不可用，请稍后重试`;
+  }
+  return `${verb}产物失败，请稍后重试`;
+}
+
+function safeArtifactUrl(raw: string): string | null {
+  try {
+    const url = new URL(raw, window.location.origin);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function artifactGlyphKind(name: string, kind: string): ArtifactItem['kind'] {
+  const value = `${name} ${kind}`.toLowerCase();
+  return /(?:\.txt|\.md|text|markdown)/.test(value) ? 'txt' : 'file';
+}
+
+function inlineArtifactBlob(body: string): Blob {
+  return new Blob([body], { type: 'text/plain;charset=utf-8' });
+}
 
 function formatSize(n?: number): string {
   if (n == null || Number.isNaN(n)) {
@@ -108,17 +152,20 @@ function collectArtifacts(messages: TMessage[] | null | undefined): ArtifactItem
         }
         seen.add(id);
         const name = String(
-          (f as { filename?: string }).filename ?? (f as { name?: string }).name ?? '附件',
-        );
+          (f as { filename?: string }).filename ?? (f as { name?: string }).name ?? '',
+        ).trim();
+        const kindLabel = String((f as { type?: string }).type || '').trim() || '附件';
         const bytes =
           (f as { bytes?: number; size?: number }).bytes ?? (f as { size?: number }).size;
-        const lower = name.toLowerCase();
+        const body = (f as { text?: unknown }).text;
         out.push({
           id,
-          name,
+          name: name || UNNAMED_ATTACHMENT,
+          kindLabel,
           sizeLabel: formatSize(typeof bytes === 'number' ? bytes : undefined) || '—',
-          kind: lower.endsWith('.txt') || lower.endsWith('.md') ? 'txt' : 'file',
+          kind: artifactGlyphKind(name, kindLabel),
           url: (f as { filepath?: string; preview?: string }).filepath,
+          body: typeof body === 'string' ? body : undefined,
         });
       }
     }
@@ -180,20 +227,28 @@ export default function ResultPanel({
   const [browserHistory, setBrowserHistory] = useState<string[]>([]);
   const [browserIndex, setBrowserIndex] = useState(-1);
   const [expanded, setExpanded] = useState(false);
+  const [artifactAction, setArtifactAction] = useState<ArtifactAction | null>(null);
+  const [artifactError, setArtifactError] = useState<string | null>(null);
   const navigate = useNavigate();
   const tokenUsageLabel = formatRunTokenUsage(run);
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
     if (picoArtifacts?.length) {
-      return picoArtifacts.map((a) => ({
-        id: a.id,
-        name: a.title || a.kind || '产物',
-        sizeLabel: a.inline ? `${Math.min(a.inline.length, 9999)}B` : '—',
-        kind: (a.title || '').toLowerCase().endsWith('.txt') ? ('txt' as const) : ('file' as const),
-        url: undefined as string | undefined,
-        body: a.inline,
-        picoArtifact: true,
-      }));
+      return picoArtifacts.map((artifact) => {
+        const name = artifact.title?.trim() || UNNAMED_ARTIFACT;
+        const kindLabel = artifact.kind?.trim() || UNKNOWN_KIND;
+        const body = typeof artifact.inline === 'string' ? artifact.inline : undefined;
+        return {
+          id: artifact.id,
+          name,
+          kindLabel,
+          sizeLabel: body !== undefined ? formatSize(inlineArtifactBlob(body).size) || '0B' : '—',
+          kind: artifactGlyphKind(name, kindLabel),
+          url: undefined as string | undefined,
+          body,
+          picoArtifact: true,
+        };
+      });
     }
     return messageArts;
   }, [picoArtifacts, messageArts]);
@@ -221,73 +276,79 @@ export default function ResultPanel({
     return artifacts.filter((a) => a.name.toLowerCase().includes(q));
   }, [artifacts, fileQuery]);
 
-  const openArtifact = async (a: ArtifactItem & { body?: string }) => {
-    if (a.url) {
-      // only allow http(s) relative-safe opens
-      try {
-        const u = new URL(a.url, window.location.origin);
-        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-          return;
-        }
-        window.open(u.toString(), '_blank', 'noopener,noreferrer');
-      } catch {
-        /* ignore */
-      }
-      return;
+  const readArtifactBlob = async (artifact: ArtifactItem, download: boolean): Promise<Blob> => {
+    if (artifact.body !== undefined) {
+      return inlineArtifactBlob(artifact.body);
     }
-    if (a.picoArtifact) {
-      const preview = window.open('', '_blank');
-      if (preview) {
-        preview.opener = null;
-      }
-      try {
-        const blob = await getPicoArtifactContent(a.id);
-        const url = URL.createObjectURL(blob);
-        if (preview) {
-          preview.location.href = url;
-        }
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      } catch {
-        preview?.close();
-      }
-      return;
+    if (artifact.picoArtifact) {
+      return getPicoArtifactContent(artifact.id, download);
     }
-    if (a.body) {
-      const w = window.open('', '_blank');
-      if (w) {
-        w.document.title = a.name || '产物';
-        const pre = w.document.createElement('pre');
-        pre.style.cssText = 'white-space:pre-wrap;font:14px/1.5 system-ui;padding:16px;margin:0';
-        pre.textContent = a.body; // textContent — no HTML injection
-        w.document.body.appendChild(pre);
+    throw new Error('artifact content unavailable');
+  };
+
+  const openArtifact = async (artifact: ArtifactItem) => {
+    setArtifactAction({ id: artifact.id, type: 'open' });
+    setArtifactError(null);
+    let preview: Window | null = null;
+    try {
+      if (artifact.url) {
+        const url = safeArtifactUrl(artifact.url);
+        if (!url) {
+          throw new Error('invalid artifact URL');
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
       }
+      preview = window.open('', '_blank');
+      if (!preview) {
+        throw new Error('artifact preview blocked');
+      }
+      preview.opener = null;
+      const blob = await readArtifactBlob(artifact, false);
+      const url = URL.createObjectURL(blob);
+      preview.location.href = url;
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (openError) {
+      preview?.close();
+      setArtifactError(artifactActionError('open', openError));
+    } finally {
+      setArtifactAction((current) =>
+        current?.id === artifact.id && current.type === 'open' ? null : current,
+      );
     }
   };
 
-  const downloadArtifact = async (artifact: ArtifactItem & { body?: string }) => {
-    if (artifact.url) {
-      void openArtifact(artifact);
-      return;
-    }
-    let blob: Blob;
-    if (artifact.picoArtifact) {
-      try {
-        blob = await getPicoArtifactContent(artifact.id, true);
-      } catch {
-        return;
+  const downloadArtifact = async (artifact: ArtifactItem) => {
+    setArtifactAction({ id: artifact.id, type: 'download' });
+    setArtifactError(null);
+    let objectUrl: string | null = null;
+    try {
+      const anchor = document.createElement('a');
+      if (artifact.url) {
+        const url = safeArtifactUrl(artifact.url);
+        if (!url) {
+          throw new Error('invalid artifact URL');
+        }
+        anchor.href = url;
+        anchor.rel = 'noopener noreferrer';
+        anchor.target = '_blank';
+      } else {
+        const blob = await readArtifactBlob(artifact, true);
+        objectUrl = URL.createObjectURL(blob);
+        anchor.href = objectUrl;
       }
-    } else {
-      if (!artifact.body) {
-        return;
+      anchor.download = artifact.name || 'artifact.txt';
+      anchor.click();
+    } catch (downloadError) {
+      setArtifactError(artifactActionError('download', downloadError));
+    } finally {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
       }
-      blob = new Blob([artifact.body], { type: 'text/plain;charset=utf-8' });
+      setArtifactAction((current) =>
+        current?.id === artifact.id && current.type === 'download' ? null : current,
+      );
     }
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = artifact.name || 'artifact.txt';
-    anchor.click();
-    URL.revokeObjectURL(url);
   };
 
   const loadBrowserUrl = (raw: string) => {
@@ -408,6 +469,15 @@ export default function ResultPanel({
 
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col">
+        {artifactError ? (
+          <p
+            className="border-b border-red-100 bg-red-50 px-3 py-2 text-[11.5px] text-red-700"
+            role="alert"
+            data-testid="artifact-action-error"
+          >
+            {artifactError}
+          </p>
+        ) : null}
         {view === 'overview' && (
           <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
             {taskTitle || runStatusLabel || processHint || tokenUsageLabel ? (
@@ -514,31 +584,42 @@ export default function ResultPanel({
                   >
                     <FileGlyph kind={a.kind} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-medium text-[#1a1a1a] dark:text-text-primary">
+                      <p
+                        className="truncate text-[13px] font-medium text-[#1a1a1a] dark:text-text-primary"
+                        title={a.name}
+                      >
                         {a.name}
                       </p>
-                      {a.sizeLabel ? (
-                        <p className="text-[11px] text-[#9a9a9a]">{a.sizeLabel}</p>
-                      ) : null}
+                      <p className="truncate text-[11px] text-[#9a9a9a]" title={a.kindLabel}>
+                        {a.kindLabel} · {a.sizeLabel}
+                      </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {a.body ? (
+                      {a.url || a.picoArtifact || a.body !== undefined ? (
                         <button
                           type="button"
                           className="flex h-9 w-9 items-center justify-center rounded-md text-[#8c8c8c] hover:bg-[#f3f3f3]"
                           onClick={() => void downloadArtifact(a)}
+                          disabled={artifactAction !== null}
                           aria-label={`下载${a.name}`}
                           title="下载"
                         >
-                          <Download className="h-3.5 w-3.5" />
+                          {artifactAction?.id === a.id && artifactAction.type === 'download' ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5" />
+                          )}
                         </button>
                       ) : null}
                       <button
                         type="button"
                         className="h-9 rounded-lg bg-[#f3f3f3] px-3 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#e8e8e8] dark:bg-surface-tertiary dark:text-text-primary"
                         onClick={() => void openArtifact(a)}
+                        disabled={artifactAction !== null}
                       >
-                        打开
+                        {artifactAction?.id === a.id && artifactAction.type === 'open'
+                          ? '打开中'
+                          : '打开'}
                       </button>
                     </div>
                   </li>
@@ -580,14 +661,39 @@ export default function ResultPanel({
                         aria-label={a.name}
                       />
                       <FileGlyph kind={a.kind} />
-                      <span className="min-w-0 flex-1 truncate text-[13px]">{a.name}</span>
-                      <span className="shrink-0 text-[12px] text-[#9a9a9a]">{a.sizeLabel}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px]" title={a.name}>
+                          {a.name}
+                        </span>
+                        <span
+                          className="block truncate text-[11px] text-[#9a9a9a]"
+                          title={a.kindLabel}
+                        >
+                          {a.kindLabel} · {a.sizeLabel}
+                        </span>
+                      </span>
+                      {a.url || a.picoArtifact || a.body !== undefined ? (
+                        <button
+                          type="button"
+                          className="rounded-md px-2 py-1 text-[11.5px] font-medium text-[#3d3d3d] hover:bg-[#f0f0f0] disabled:opacity-50"
+                          onClick={() => void downloadArtifact(a)}
+                          disabled={artifactAction !== null}
+                          aria-label={`下载${a.name}`}
+                        >
+                          {artifactAction?.id === a.id && artifactAction.type === 'download'
+                            ? '下载中'
+                            : '下载'}
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="rounded-md px-2 py-1 text-[11.5px] font-medium text-[#3d3d3d] hover:bg-[#f0f0f0]"
                         onClick={() => void openArtifact(a)}
+                        disabled={artifactAction !== null}
                       >
-                        打开
+                        {artifactAction?.id === a.id && artifactAction.type === 'open'
+                          ? '打开中'
+                          : '打开'}
                       </button>
                     </li>
                   ))}
