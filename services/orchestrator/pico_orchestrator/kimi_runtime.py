@@ -7,6 +7,7 @@ The production default remains the transitional ``run_agent_loop``.
 from __future__ import annotations
 
 import asyncio
+import shutil
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from pathlib import Path
@@ -34,7 +35,9 @@ from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.runner import EventEmitter, RunCaps, RunResult
 from pico_orchestrator.tools_builtin import build_default_gateway
 
-_AGENT_FILE = Path(__file__).resolve().parents[1] / "agents" / "pico-kimi-runtime.yaml"
+_AGENT_DIR = Path(__file__).resolve().parents[1] / "agents"
+_AGENT_FILE = _AGENT_DIR / "pico-kimi-runtime.yaml"
+_SYSTEM_PROMPT_FILE = _AGENT_DIR / "system.md"
 _CANCEL_POLL_SECONDS = 0.05
 _USAGE_FIELDS = (
     "input_tokens",
@@ -108,12 +111,13 @@ async def run_kimi_agent(
             token_cap_exceeded = asyncio.Event()
             contract_failure: list[str] = []
             try:
+                work_agent_file = _stage_agent_bundle(work_dir)
                 session = await Session.create(
                     work_dir=KaosPath(work_dir),
                     config=config,
                     model="pico-runtime",
                     yolo=False,
-                    agent_file=_AGENT_FILE,
+                    agent_file=work_agent_file,
                     mcp_configs=[],
                     skills_dir=KaosPath(skills_dir),
                     max_steps_per_turn=caps.max_steps,
@@ -329,6 +333,16 @@ async def run_kimi_agent(
         token_usage=token_usage,
         tool_context=tool_context,
     )
+
+
+def _stage_agent_bundle(work_dir: Path) -> Path:
+    """Put the agent spec and its relative prompt inside the Session workspace."""
+
+    agent_dir = work_dir / "agent"
+    agent_dir.mkdir()
+    for source in (_AGENT_FILE, _SYSTEM_PROMPT_FILE):
+        shutil.copy2(source, agent_dir / source.name)
+    return (agent_dir / _AGENT_FILE.name).resolve()
 
 
 async def _watch_cancel(
