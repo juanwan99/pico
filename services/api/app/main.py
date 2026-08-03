@@ -797,7 +797,7 @@ async def get_artifact_content(
     encoding = getattr(artifact, "content_encoding", None) or "utf8"
     try:
         raw = decode_artifact_payload(artifact.inline, encoding)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=500, detail="artifact payload corrupt") from exc
 
     # Security: non-download HTML must not be navigable as active content via API.

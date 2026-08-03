@@ -39,7 +39,7 @@ def decode_artifact_payload(inline: str | None, encoding: str | None) -> bytes:
     if enc == ENCODING_BASE64:
         try:
             return base64.b64decode(payload.encode("ascii"), validate=False)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise ToolError("artifact.corrupt", "Binary artifact payload is corrupt") from exc
     return payload.encode("utf-8")
 
