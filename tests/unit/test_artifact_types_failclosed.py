@@ -8,15 +8,26 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from pico_orchestrator.artifact_types import is_valid_ooxml_package, title_protected_extension
-from pico_orchestrator.document_generators import build_docx_document, build_html_document, build_pptx_document
+from pico_orchestrator.artifact_types import (
+    is_valid_ooxml_package,
+    title_protected_extension,
+)
+from pico_orchestrator.document_generators import (
+    build_docx_document,
+    build_html_document,
+    build_pptx_document,
+)
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.tools_builtin import build_default_gateway
 
 
 class Mem:
     async def write(self, principal, *, title, content, kind):
-        return {"title": title, "kind": kind, "size": len(content) if isinstance(content, (str, bytes)) else 0}
+        return {
+            "title": title,
+            "kind": kind,
+            "size": len(content) if isinstance(content, (str, bytes)) else 0,
+        }
 
     async def read(self, *a, **k):
         return None
@@ -28,7 +39,10 @@ class Mem:
 class P:
     school_id = "s"
     membership_id = "m"
-    scopes = ["ai:run"]
+    scopes: list[str] = []  # class default unused; instance sets below
+
+    def __init__(self) -> None:
+        self.scopes = ["ai:run"]
 
 
 @pytest.mark.asyncio
@@ -54,6 +68,5 @@ def test_ooxml_validation():
 
 
 def test_html_generator_not_protected_write():
-    # generators produce real bytes; validation only for download/write paths
     html = build_html_document(title="t.html", marker="M")
     assert b"Content-Security-Policy" in html

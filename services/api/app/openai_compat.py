@@ -459,16 +459,16 @@ def _wants_deliverable_document(prompt: str) -> bool:
     import re
 
     text = prompt or ""
-    if re.search(
-        r"\.(?:html?|docx|pptx)\b|"
-        r"\b(?:html|docx|pptx|powerpoint)\b|"
-        r"幻灯片|课件|网页文件|word\s*文档|PPT|Power\s*Point|"
-        r"生成\s*(?:html|网页|word|docx|ppt|pptx|幻灯片)",
-        text,
-        re.IGNORECASE,
-    ):
-        return True
-    return False
+    return bool(
+        re.search(
+            r"\.(?:html?|docx|pptx)\b|"
+            r"\b(?:html|docx|pptx|powerpoint)\b|"
+            r"幻灯片|课件|网页文件|word\s*文档|PPT|Power\s*Point|"
+            r"生成\s*(?:html|网页|word|docx|ppt|pptx|幻灯片)",
+            text,
+            re.IGNORECASE,
+        )
+    )
 
 
 async def _finalize_run(
