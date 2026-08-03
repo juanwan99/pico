@@ -74,12 +74,23 @@ def test_proxy_principal_requires_valid_membership_header() -> None:
         scope_proxy_principal(proxy, None)
     assert missing.value.status_code == 401
 
+    # Spaces / empty joint parts remain invalid.
     with pytest.raises(HTTPException) as invalid:
-        scope_proxy_principal(proxy, "member:other")
+        scope_proxy_principal(proxy, "member other")
     assert invalid.value.status_code == 400
+
+    with pytest.raises(HTTPException) as bad_joint:
+        scope_proxy_principal(proxy, "school-b:")
+    assert bad_joint.value.status_code == 400
 
     scoped = scope_proxy_principal(proxy, "member-a")
     assert scoped.membership_id == "member-a"
+    assert scoped.school_id == "school-a"
+
+    # Joint canary grammar is intentional for reverse isolation (same mid, other school).
+    joint = scope_proxy_principal(proxy, "school-b:member-a")
+    assert joint.school_id == "school-b"
+    assert joint.membership_id == "member-a"
 
 
 def test_openai_compat_rejects_proxy_in_production() -> None:
