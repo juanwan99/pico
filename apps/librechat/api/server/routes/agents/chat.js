@@ -22,6 +22,8 @@ const addTitle = require('~/server/services/Endpoints/agents/title');
 const { getRoleByName } = require('~/models');
 
 const router = express.Router();
+const picoChatSizeLimit = require('~/server/middleware/picoChatSizeLimit');
+router.use(picoChatSizeLimit);
 
 const checkAgentAccess = generateCheckAccess({
   permissionType: PermissionTypes.AGENTS,

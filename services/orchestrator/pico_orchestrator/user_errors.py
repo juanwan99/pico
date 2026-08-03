@@ -48,8 +48,12 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "服务繁忙，请稍后重试。若刚点了停止，请刷新查看是否已结束。"
     if "missing bearer" in low or "invalid token" in low or "expired" in low:
         return "登录已失效，请打开设置重新获取令牌。"
-    if "cross_school" in low or "tenant" in low:
+    if "cross_school" in low or "cross-school" in low or "tenant" in low:
         return "跨校访问已被拒绝（租户隔离）。"
+    if "max_steps" in low or "max steps" in low or "step limit" in low or "too many steps" in low:
+        return "步骤过多已停止。请把任务拆短后重试。"
+    if "max_tokens" in low or "token cap" in low or c == "token_cap":
+        return "本次回答超出长度上限，请缩短问题或新开对话后再试。"
     if (
         c in ("kimi.event_contract", "kimi.runtime_error")
         or "event_contract" in low
@@ -68,9 +72,12 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
 
 def enrich_fail_payload(payload: dict) -> dict:
     """Ensure failed run.status / run.error payloads expose user_message."""
+    from pico_orchestrator.redact import redact_tenant_text
+
     out = dict(payload)
     raw = out.get("reason") or out.get("error") or out.get("message")
     code = out.get("code") if isinstance(out.get("code"), str) else None
     if out.get("status") == "failed" or "error" in out or out.get("reason"):
-        out.setdefault("user_message", user_message_for_error(str(raw) if raw else None, code=code))
+        msg = user_message_for_error(str(raw) if raw else None, code=code)
+        out.setdefault("user_message", redact_tenant_text(msg))
     return out

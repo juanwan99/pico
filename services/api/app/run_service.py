@@ -449,29 +449,45 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         run.ended_at = _utcnow()
         run.error = result.error
         skill_snapshot = _run_skill_snapshot(run)
+        # Pico has no billing-grade meters; always mark usage as estimated for UI.
+        usage_for_store = dict(result.token_usage or {}) if result.token_usage else None
+        if usage_for_store is not None:
+            usage_for_store["estimated"] = True
         run.token_usage_json = _merge_token_usage(
             run.token_usage_json,
-            result.token_usage,
+            usage_for_store,
             skill_snapshot,
         )
+        from pico_orchestrator.redact import redact_tenant_text
+
         if result.status == "failed" and not result.final_text:
             await append_event(
                 session,
                 run_id,
                 "message.final",
                 {
-                    "text": user_message_for_error(result.error),
+                    "text": redact_tenant_text(
+                        user_message_for_error(result.error),
+                        school_id=principal.school_id,
+                        membership_id=principal.membership_id,
+                    ),
                     "role": "assistant",
                     "kind": "error",
                 },
             )
         if result.final_text:
-            # final assistant message event if not already
+            # final assistant message event if not already — never leak tenant IDs.
             await append_event(
                 session,
                 run_id,
                 "message.final",
-                {"text": result.final_text},
+                {
+                    "text": redact_tenant_text(
+                        result.final_text,
+                        school_id=principal.school_id,
+                        membership_id=principal.membership_id,
+                    )
+                },
             )
         if result.artifact_markdown:
             art = ArtifactRow(

@@ -93,10 +93,18 @@ class AllowlistGateway:
         if spec.school_scoped:
             target = arguments.get("school_id")
             if target is not None and str(target) != principal.school_id:
+                # No raw school IDs in user-visible tool errors (stage #265 T11).
                 raise ToolError(
                     "tenant.cross_school",
-                    f"Cross-school deny: token={principal.school_id} tool={target}",
+                    "跨校访问已被拒绝（租户隔离）。",
                 )
             # Default school_id from token when omitted
             arguments = {**arguments, "school_id": principal.school_id}
-        return await spec.handler(principal, arguments)
+        result = await spec.handler(principal, arguments)
+        from pico_orchestrator.redact import redact_tenant_payload
+
+        return redact_tenant_payload(
+            result,
+            school_id=principal.school_id,
+            membership_id=principal.membership_id,
+        )

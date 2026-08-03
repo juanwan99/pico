@@ -68,10 +68,9 @@ class _GatewayTool(CallableTool2[BaseModel]):
                     "auth.deny",
                     {
                         "code": exc.code,
-                        "message": exc.message,
-                        "token_school_id": context.principal.school_id,
+                        "message": "跨校访问已被拒绝（租户隔离）。",
                         "tool": self.name,
-                        "arguments": arguments,
+                        # Never put raw school/membership IDs in events (stage #265 T11).
                     },
                 )
             return KimiToolError(

@@ -120,9 +120,8 @@ export function formatRunTokenUsage(run?: PicoRun | null): string | null {
   const total =
     tokenCount(usage.total_tokens) ?? (input != null && output != null ? input + output : null);
   const format = (value: number) => value.toLocaleString('zh-CN');
-  // Upstream estimate path sets estimated=true — always label for teachers.
-  const estimated = usage.estimated === true;
-  const prefix = estimated ? '用量（估算）' : '用量';
+  // Stage #265 T04: always mark token usage as estimate (no billing meters).
+  const prefix = '用量（估算）';
   if (input != null && output != null) {
     return `${prefix} · 输入 ${format(input)} · 输出 ${format(output)}${
       total != null ? ` · 共 ${format(total)} tokens` : ''
