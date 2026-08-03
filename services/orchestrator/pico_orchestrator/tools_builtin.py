@@ -8,6 +8,10 @@ import operator
 import re
 from typing import Any
 
+from pico_orchestrator.artifact_types import (
+    reject_fake_protected_write_message,
+    title_protected_extension,
+)
 from pico_orchestrator.document_generators import (
     build_docx_document,
     build_html_document,
@@ -120,6 +124,12 @@ def _workspace_handlers(
 ) -> tuple[Any, Any, Any, Any, Any, Any]:
     async def write_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _artifact_title(args)
+        protected = title_protected_extension(title)
+        if protected:
+            raise ToolError(
+                "tool.invalid_arguments",
+                reject_fake_protected_write_message(protected),
+            )
         content = _required_text(args, "content", maximum=_MAX_ARTIFACT_CONTENT)
         kind = str(args.get("kind") or "file").strip().lower()
         if kind not in {"doc", "file", "json", "outline", "text"}:

@@ -800,8 +800,28 @@ async def get_artifact_content(
     except Exception as exc:
         raise HTTPException(status_code=500, detail="artifact payload corrupt") from exc
 
+    # Fail-closed: never serve renamed text as legitimate Office packages.
+    if ext in {".docx", ".pptx"}:
+        from pico_orchestrator.artifact_types import is_valid_ooxml_package
+
+        if not is_valid_ooxml_package(raw, ext):
+            raise HTTPException(
+                status_code=415,
+                detail=(
+                    f"产物不是合法的 {ext} OOXML 包（禁止改后缀文本冒充）。"
+                    "请使用 generate_docx_document / generate_pptx_document 重新生成。"
+                ),
+            )
+    # HTML claimed but looks like a ZIP/binary package without text markup → reject as html
+    if ext in {".html", ".htm"} and raw[:2] == b"PK":
+        raise HTTPException(
+            status_code=415,
+            detail="产物不是合法 HTML（疑似二进制改后缀）。请使用 generate_html_document。",
+        )
+
     # Security: non-download HTML must not be navigable as active content via API.
     # UI sandboxed preview still uses the body bytes; filename drives preview mode.
+    # Shell still applies iframe sandbox; do not rely on payload CSP alone.
     if ext in {".html", ".htm"} and not download:
         media_type = "text/plain; charset=utf-8"
     elif download or guessed_media_type in safe_inline_media_types:

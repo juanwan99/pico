@@ -27,6 +27,24 @@ class SkillPolicy:
 
 
 _POLICIES: dict[str, SkillPolicy] = {
+    "skill-deliverable": SkillPolicy(
+        id="skill-deliverable",
+        name="skill.deliverable",
+        requested_tools=(
+            "generate_html_document",
+            "generate_docx_document",
+            "generate_pptx_document",
+            "workspace_list_files",
+            "workspace_read_file",
+        ),
+        risk="low",
+        instruction=(
+            "本轮交付 HTML / Word / PPT：必须分别调用 generate_html_document、"
+            "generate_docx_document、generate_pptx_document；每份文件使用用户可见的唯一 marker；"
+            "禁止 workspace_write_file 或代码块改后缀冒充 .html/.docx/.pptx；"
+            "完成后简要说明文件名与 marker。"
+        ),
+    ),
     "skill-chat": SkillPolicy(
         id="skill-chat",
         name="skill.chat",
@@ -152,6 +170,9 @@ _POLICIES: dict[str, SkillPolicy] = {
 }
 
 _ALIASES = {
+    "deliverable": "skill-deliverable",
+    "skill.deliverable": "skill-deliverable",
+    "skill-deliverable": "skill-deliverable",
     "chat": "skill-chat",
     "skill.chat": "skill-chat",
     "skill-chat": "skill-chat",
