@@ -187,13 +187,30 @@ _engine = None
 _Session: async_sessionmaker[AsyncSession] | None = None
 
 
+def _sqlite_base_dir() -> Path:
+    """Stable base for relative sqlite paths (never follow process cwd).
+
+    Concurrent agent work may chdir into workspaces; resolving `./data/pico.db`
+    against Path.cwd() caused intermittent "unable to open database file".
+    Prefer /app (container), else nearest repo/package root with data|services.
+    """
+    app_root = Path("/app")
+    if app_root.is_dir():
+        return app_root
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / "data").is_dir() or (parent / "services").is_dir():
+            return parent
+    return Path.cwd()
+
+
 def _normalize_url(url: str) -> str:
     def _abs_sqlite_file(raw: str) -> str:
         if not raw or raw.startswith(":"):
             return raw
         path = Path(raw).expanduser()
         if not path.is_absolute():
-            path = (Path.cwd() / path).resolve()
+            path = (_sqlite_base_dir() / path).resolve()
         else:
             path = path.resolve()
         path.parent.mkdir(parents=True, exist_ok=True)

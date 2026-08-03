@@ -367,13 +367,15 @@ async def _ledger_task_run(
     status: str = "running",
 ) -> tuple[str, str]:
     """Create Task+Run rows for any chat completion path."""
-    from app.db import init_db
+    from app.db import _utcnow, init_db
 
     await init_db()
     factory = session_factory()
     task_id = new_id()
     run_id = new_id()
     title = prompt[:80]
+    # Running rows must stamp started_at so A5/G9 overlap timelines are auditable.
+    started = _utcnow() if status == "running" else None
     async with factory() as session:
         session.add(
             TaskRow(
@@ -392,6 +394,7 @@ async def _ledger_task_run(
                 status=status,
                 prompt=prompt,
                 model=model or "",
+                started_at=started,
                 token_usage_json=json.dumps(
                     {"skill_snapshot": skill_snapshot} if skill_snapshot else {},
                     ensure_ascii=False,
@@ -917,6 +920,7 @@ async def chat_completions(
                 final_text=result.final_text,
                 task_id=task_id,
                 user_prompt=prompt,
+                change_proposal=getattr(result, "change_proposal", None),
             )
         return {
             "id": completion_id,
@@ -1047,6 +1051,8 @@ async def chat_completions(
                     workspace_id=workspace_id,
                 )
             )
+            from app.db import _utcnow
+
             session.add(
                 RunRow(
                     id=run_id,
@@ -1054,6 +1060,7 @@ async def chat_completions(
                     status="running",
                     prompt=prompt,
                     model=model,
+                    started_at=_utcnow(),
                     token_usage_json=json.dumps(
                         {"skill_snapshot": skill_snapshot} if skill_snapshot else {},
                         ensure_ascii=False,

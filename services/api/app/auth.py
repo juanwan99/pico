@@ -244,7 +244,13 @@ def scope_proxy_principal(
     principal: Principal,
     membership_id: str | None,
 ) -> Principal:
-    """When using dev proxy key, bind ledger rows to LibreChat user id."""
+    """When using dev/proxy key, bind ledger rows to LibreChat principal.
+
+    Membership header may be a bare id (school stays proxy default) or a joint
+    canary key ``school_id:membership_id`` matching production canary config shape.
+    Joint form is required for reverse isolation tests on the proxy auth chain
+    (same membership, different school) without inventing a second auth path.
+    """
     if not principal.raw.get("proxy"):
         return principal
     mid = (membership_id or "").strip()
@@ -253,21 +259,46 @@ def scope_proxy_principal(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="proxy membership header required",
         )
-    # allow uuid / mongo id / slug only
     import re
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", mid):
+
+    school_id = principal.school_id
+    membership = mid
+    # Joint key: school:membership (same grammar as canary allowlist entries).
+    if ":" in mid:
+        school_part, mem_part = mid.split(":", 1)
+        school_part = school_part.strip()
+        mem_part = mem_part.strip()
+        if (
+            school_part
+            and mem_part
+            and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", school_part)
+            and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", mem_part)
+        ):
+            school_id = school_part
+            membership = mem_part
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="invalid proxy joint membership header",
+            )
+    elif not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", mid):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid proxy membership header",
         )
     return Principal(
-        school_id=principal.school_id,
-        membership_id=mid,
+        school_id=school_id,
+        membership_id=membership,
         scopes=principal.scopes,
         iss=principal.iss,
         aud=principal.aud,
         exp=principal.exp,
-        raw={**principal.raw, "scoped_membership": mid},
+        raw={
+            **principal.raw,
+            "scoped_membership": membership,
+            "scoped_school": school_id,
+            "joint_header": ":" in mid,
+        },
     )
 
 
