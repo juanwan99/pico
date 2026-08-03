@@ -718,18 +718,30 @@ async def get_task(
     if not task:
         raise HTTPException(status_code=404, detail="task not found")
     arts = await run_service.list_artifacts_for_task(session, task_id)
-    return {
-        "task": _task_dict(task),
-        "artifacts": [
+    artifacts_out: list[dict] = []
+    for a in arts:
+        encoding = getattr(a, "content_encoding", None) or "utf8"
+        byte_size = int(getattr(a, "byte_size", 0) or 0)
+        sha = getattr(a, "content_sha256", None) or ""
+        # Never embed base64 binary into the task JSON as fake text.
+        inline_value = a.inline if encoding == "utf8" else None
+        if not byte_size and encoding == "utf8":
+            byte_size = len((a.inline or "").encode("utf-8"))
+        artifacts_out.append(
             {
                 "id": a.id,
                 "kind": a.kind,
                 "title": a.title,
-                "inline": a.inline,
+                "inline": inline_value,
                 "run_id": a.run_id,
+                "content_encoding": encoding,
+                "byte_size": byte_size,
+                "content_sha256": sha,
             }
-            for a in arts
-        ],
+        )
+    return {
+        "task": _task_dict(task),
+        "artifacts": artifacts_out,
     }
 
 
@@ -740,6 +752,8 @@ async def get_artifact_content(
     principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
+    from app.artifact_store import decode_artifact_payload
+
     artifact = await run_service.get_artifact_for_principal(
         session,
         artifact_id,
@@ -749,16 +763,24 @@ async def get_artifact_content(
         raise HTTPException(status_code=404, detail="artifact not found")
 
     filename = (artifact.title or f"{artifact.id}.txt").replace("\r", "").replace("\n", "")
-    fallback = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._") or "artifact.txt"
+    fallback = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._") or "artifact.bin"
     disposition = "attachment" if download else "inline"
     extension_media_types = {
         ".csv": "text/csv",
         ".json": "application/json",
         ".md": "text/markdown",
         ".txt": "text/plain",
+        ".html": "text/html; charset=utf-8",
+        ".htm": "text/html; charset=utf-8",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     }
     ext = Path(filename).suffix.lower()
-    guessed_media_type = extension_media_types.get(ext) or mimetypes.guess_type(filename)[0] or "text/plain"
+    guessed_media_type = (
+        extension_media_types.get(ext)
+        or mimetypes.guess_type(filename)[0]
+        or "application/octet-stream"
+    )
     safe_inline_media_types = {
         "application/json",
         "image/bmp",
@@ -769,14 +791,27 @@ async def get_artifact_content(
         "text/csv",
         "text/markdown",
         "text/plain",
+        "text/html",
+        "text/html; charset=utf-8",
     }
-    media_type = (
-        guessed_media_type
-        if download or guessed_media_type in safe_inline_media_types
-        else "text/plain"
-    )
+    encoding = getattr(artifact, "content_encoding", None) or "utf8"
+    try:
+        raw = decode_artifact_payload(artifact.inline, encoding)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail="artifact payload corrupt") from exc
+
+    # Security: non-download HTML must not be navigable as active content via API.
+    # UI sandboxed preview still uses the body bytes; filename drives preview mode.
+    if ext in {".html", ".htm"} and not download:
+        media_type = "text/plain; charset=utf-8"
+    elif download or guessed_media_type in safe_inline_media_types:
+        media_type = guessed_media_type
+    else:
+        media_type = "application/octet-stream"
+
+    digest = getattr(artifact, "content_sha256", None) or ""
     return Response(
-        content=(artifact.inline or "").encode("utf-8"),
+        content=raw,
         media_type=media_type,
         headers={
             "Content-Disposition": (
@@ -784,6 +819,9 @@ async def get_artifact_content(
                 f"filename*=UTF-8''{quote(filename)}"
             ),
             "X-Content-Type-Options": "nosniff",
+            "X-Pico-Content-Encoding": encoding,
+            "X-Pico-Content-SHA256": digest,
+            "X-Pico-Byte-Size": str(len(raw)),
         },
     )
 

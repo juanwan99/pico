@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 from typing import Any
 
 from pico_orchestrator.gateway import Principal, ToolError
@@ -9,6 +11,37 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import ArtifactRow, RunRow, TaskRow, append_event, new_id
+
+ENCODING_UTF8 = "utf8"
+ENCODING_BASE64 = "base64"
+
+
+def encode_artifact_payload(content: str | bytes) -> tuple[str, str, int, str]:
+    """Return (stored_inline, encoding, byte_size, sha256_hex)."""
+    if isinstance(content, bytes):
+        raw = content
+        stored = base64.b64encode(raw).decode("ascii")
+        encoding = ENCODING_BASE64
+    elif isinstance(content, str):
+        raw = content.encode("utf-8")
+        stored = content
+        encoding = ENCODING_UTF8
+    else:
+        raise ToolError("tool.invalid_arguments", "content must be str or bytes")
+    digest = hashlib.sha256(raw).hexdigest()
+    return stored, encoding, len(raw), digest
+
+
+def decode_artifact_payload(inline: str | None, encoding: str | None) -> bytes:
+    """Restore original bytes from ledger storage."""
+    enc = (encoding or ENCODING_UTF8).strip().lower() or ENCODING_UTF8
+    payload = inline or ""
+    if enc == ENCODING_BASE64:
+        try:
+            return base64.b64decode(payload.encode("ascii"), validate=False)
+        except Exception as exc:  # noqa: BLE001
+            raise ToolError("artifact.corrupt", "Binary artifact payload is corrupt") from exc
+    return payload.encode("utf-8")
 
 
 class LedgerArtifactStore:
@@ -66,9 +99,10 @@ class LedgerArtifactStore:
         principal: Principal,
         *,
         title: str,
-        content: str,
+        content: str | bytes,
         kind: str,
     ) -> dict[str, Any]:
+        stored, encoding, byte_size, digest = encode_artifact_payload(content)
         async with self._factory() as session:
             task = await self._task_for_write(session, principal, title)
             artifact = ArtifactRow(
@@ -77,7 +111,10 @@ class LedgerArtifactStore:
                 run_id=self._run_id,
                 kind=kind,
                 title=title,
-                inline=content,
+                inline=stored,
+                content_encoding=encoding,
+                content_sha256=digest,
+                byte_size=byte_size,
             )
             session.add(artifact)
             await session.flush()
@@ -91,6 +128,9 @@ class LedgerArtifactStore:
                         "title": artifact.title,
                         "kind": artifact.kind,
                         "source": "workspace_write_file",
+                        "content_encoding": encoding,
+                        "byte_size": byte_size,
+                        "content_sha256": digest,
                     },
                     commit=False,
                 )
@@ -101,7 +141,10 @@ class LedgerArtifactStore:
                 "run_id": artifact.run_id,
                 "title": artifact.title,
                 "kind": artifact.kind,
-                "size": len(content.encode("utf-8")),
+                "size": byte_size,
+                "byte_size": byte_size,
+                "content_encoding": encoding,
+                "content_sha256": digest,
             }
 
     def _owned_artifacts(self, principal: Principal):
@@ -116,17 +159,44 @@ class LedgerArtifactStore:
 
     @staticmethod
     def _artifact_dict(artifact: ArtifactRow, *, content: bool) -> dict[str, Any]:
+        encoding = getattr(artifact, "content_encoding", None) or ENCODING_UTF8
+        byte_size = int(getattr(artifact, "byte_size", 0) or 0)
+        if byte_size <= 0:
+            # Legacy rows before byte_size column.
+            if encoding == ENCODING_BASE64:
+                try:
+                    byte_size = len(decode_artifact_payload(artifact.inline, encoding))
+                except ToolError:
+                    byte_size = 0
+            else:
+                byte_size = len((artifact.inline or "").encode("utf-8"))
+        digest = getattr(artifact, "content_sha256", None) or ""
+        if not digest:
+            try:
+                digest = hashlib.sha256(
+                    decode_artifact_payload(artifact.inline, encoding)
+                ).hexdigest()
+            except ToolError:
+                digest = ""
         data: dict[str, Any] = {
             "artifact_id": artifact.id,
             "task_id": artifact.task_id,
             "run_id": artifact.run_id,
             "title": artifact.title,
             "kind": artifact.kind,
-            "size": len((artifact.inline or "").encode("utf-8")),
+            "size": byte_size,
+            "byte_size": byte_size,
+            "content_encoding": encoding,
+            "content_sha256": digest,
             "created_at": artifact.created_at.isoformat() if artifact.created_at else None,
         }
         if content:
-            data["content"] = artifact.inline or ""
+            if encoding == ENCODING_BASE64:
+                # Do not pretend binary is UTF-8 text.
+                data["content_base64"] = artifact.inline or ""
+                data["content"] = None
+            else:
+                data["content"] = artifact.inline or ""
         return data
 
     async def read(

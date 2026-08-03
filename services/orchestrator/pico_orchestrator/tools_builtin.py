@@ -8,6 +8,11 @@ import operator
 import re
 from typing import Any
 
+from pico_orchestrator.document_generators import (
+    build_docx_document,
+    build_html_document,
+    build_pptx_document,
+)
 from pico_orchestrator.edu_adapter import EduAdapterError, list_classes
 from pico_orchestrator.gateway import (
     AllowlistGateway,
@@ -21,6 +26,8 @@ _MAX_ARTIFACT_CONTENT = 200_000
 _MAX_CALC_ABS = 1e100
 _MAX_CALC_EXPRESSION = 200
 _MAX_OUTLINE_TEXT = 100_000
+_MAX_DOC_BODY = 50_000
+_MAX_MARKER = 200
 
 
 class _UnavailableArtifactStore:
@@ -84,9 +91,33 @@ async def _propose_change(principal: Principal, args: dict[str, Any]) -> dict[st
     }
 
 
+def _optional_text(args: dict[str, Any], key: str, *, maximum: int) -> str | None:
+    value = args.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ToolError("tool.invalid_arguments", f"{key} must be a string")
+    if len(value) > maximum:
+        raise ToolError("tool.invalid_arguments", f"{key} exceeds {maximum} characters")
+    return value
+
+
+def _marker_arg(args: dict[str, Any]) -> str:
+    return _required_text(args, "marker", maximum=_MAX_MARKER)
+
+
+def _ensure_extension(title: str, ext: str) -> str:
+    lower = title.lower()
+    if lower.endswith(ext):
+        return title
+    # Strip a wrong extension then append the real one — never rename text to OOXML.
+    base = title.rsplit(".", 1)[0] if "." in title.split("/")[-1] else title
+    return f"{base}{ext}"
+
+
 def _workspace_handlers(
     store: ArtifactStore,
-) -> tuple[Any, Any, Any]:
+) -> tuple[Any, Any, Any, Any, Any, Any]:
     async def write_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _artifact_title(args)
         content = _required_text(args, "content", maximum=_MAX_ARTIFACT_CONTENT)
@@ -128,7 +159,61 @@ def _workspace_handlers(
         artifacts = await store.list(principal, limit=limit)
         return {"artifacts": artifacts, "count": len(artifacts)}
 
-    return write_file, read_file, list_files
+    async def generate_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        title = _ensure_extension(_artifact_title(args), ".html")
+        marker = _marker_arg(args)
+        body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+        try:
+            raw = build_html_document(title=title, marker=marker, body=body)
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        result = await store.write(
+            principal,
+            title=title,
+            content=raw,
+            kind="html",
+        )
+        result["format"] = "html"
+        result["marker"] = marker
+        return result
+
+    async def generate_docx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        title = _ensure_extension(_artifact_title(args), ".docx")
+        marker = _marker_arg(args)
+        body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+        try:
+            raw = build_docx_document(title=title, marker=marker, body=body)
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        result = await store.write(
+            principal,
+            title=title,
+            content=raw,
+            kind="docx",
+        )
+        result["format"] = "docx"
+        result["marker"] = marker
+        return result
+
+    async def generate_pptx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        title = _ensure_extension(_artifact_title(args), ".pptx")
+        marker = _marker_arg(args)
+        body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+        try:
+            raw = build_pptx_document(title=title, marker=marker, body=body)
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        result = await store.write(
+            principal,
+            title=title,
+            content=raw,
+            kind="pptx",
+        )
+        result["format"] = "pptx"
+        result["marker"] = marker
+        return result
+
+    return write_file, read_file, list_files, generate_html, generate_docx, generate_pptx
 
 
 def _outline_heading(line: str) -> tuple[int, str] | None:
@@ -234,7 +319,14 @@ def build_default_gateway(
 ) -> AllowlistGateway:
     gw = AllowlistGateway()
     store = artifact_store or _UnavailableArtifactStore()
-    write_file, read_file, list_files = _workspace_handlers(store)
+    (
+        write_file,
+        read_file,
+        list_files,
+        generate_html,
+        generate_docx,
+        generate_pptx,
+    ) = _workspace_handlers(store)
     gw.register(
         ToolSpec(
             name="pico_echo",
@@ -286,6 +378,39 @@ def build_default_gateway(
             name="workspace_list_files",
             description="List Artifacts owned by the current membership.",
             handler=list_files,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="generate_html_document",
+            description=(
+                "Create a real .html Artifact with a unique visible marker. "
+                "Safe for sandbox preview (no external scripts). Args: title, marker, body?"
+            ),
+            handler=generate_html,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="generate_docx_document",
+            description=(
+                "Create a real OOXML .docx Artifact (ZIP with Content_Types + word/document.xml) "
+                "containing a unique marker. Args: title, marker, body?"
+            ),
+            handler=generate_docx,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="generate_pptx_document",
+            description=(
+                "Create a real OOXML .pptx Artifact (presentation + ≥1 slide) "
+                "containing a unique marker. Args: title, marker, body?"
+            ),
+            handler=generate_pptx,
             school_scoped=False,
         )
     )
@@ -373,6 +498,51 @@ def openai_tool_schemas(
             "properties": {
                 "limit": {"type": "integer", "minimum": 1, "maximum": 100}
             },
+        },
+        "generate_html_document": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Filename, preferably ending with .html",
+                },
+                "marker": {
+                    "type": "string",
+                    "description": "Unique visible marker string required in the HTML body",
+                },
+                "body": {"type": "string", "description": "Optional extra body text"},
+            },
+            "required": ["title", "marker"],
+        },
+        "generate_docx_document": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Filename, preferably ending with .docx",
+                },
+                "marker": {
+                    "type": "string",
+                    "description": "Unique visible marker string required in the document",
+                },
+                "body": {"type": "string", "description": "Optional extra paragraph text"},
+            },
+            "required": ["title", "marker"],
+        },
+        "generate_pptx_document": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Filename, preferably ending with .pptx",
+                },
+                "marker": {
+                    "type": "string",
+                    "description": "Unique visible marker string required on the slide",
+                },
+                "body": {"type": "string", "description": "Optional extra slide text"},
+            },
+            "required": ["title", "marker"],
         },
         "structured_outline": {
             "type": "object",

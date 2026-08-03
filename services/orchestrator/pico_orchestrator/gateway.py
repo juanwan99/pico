@@ -21,14 +21,18 @@ class Principal(Protocol):
 
 
 class ArtifactStore(Protocol):
-    """Membership-scoped Artifact ledger used by workspace tools."""
+    """Membership-scoped Artifact ledger used by workspace tools.
+
+    ``content`` may be ``str`` (UTF-8 text) or ``bytes`` (binary-safe path).
+    Binary is stored via base64 encoding; download restores exact bytes.
+    """
 
     async def write(
         self,
         principal: Principal,
         *,
         title: str,
-        content: str,
+        content: str | bytes,
         kind: str,
     ) -> dict[str, Any]: ...
 

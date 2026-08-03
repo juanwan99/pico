@@ -124,7 +124,11 @@ class ArtifactRow(Base):
     run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(64), default="doc")
     title: Mapped[str] = mapped_column(String(512), default="")
+    # Payload storage: utf8 text OR base64(binary). Never force binary through UTF-8.
     inline: Mapped[str] = mapped_column(Text, default="")
+    content_encoding: Mapped[str] = mapped_column(String(16), default="utf8")
+    content_sha256: Mapped[str] = mapped_column(String(64), default="")
+    byte_size: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     task: Mapped[TaskRow] = relationship(back_populates="artifacts")
@@ -244,6 +248,25 @@ def _migrate_sqlite_sync(conn) -> None:
         conn.execute(text("ALTER TABLE tasks ADD COLUMN conversation_id VARCHAR(128)"))
     if "workspace_id" not in tcols:
         conn.execute(text("ALTER TABLE tasks ADD COLUMN workspace_id VARCHAR(36)"))
+
+    try:
+        art_rows = conn.execute(text("PRAGMA table_info(artifacts)")).fetchall()
+    except Exception:  # noqa: BLE001
+        art_rows = []
+    acols = {r[1] for r in art_rows}
+    if acols:
+        if "content_encoding" not in acols:
+            conn.execute(
+                text(
+                    "ALTER TABLE artifacts ADD COLUMN content_encoding VARCHAR(16) DEFAULT 'utf8'"
+                )
+            )
+        if "content_sha256" not in acols:
+            conn.execute(
+                text("ALTER TABLE artifacts ADD COLUMN content_sha256 VARCHAR(64) DEFAULT ''")
+            )
+        if "byte_size" not in acols:
+            conn.execute(text("ALTER TABLE artifacts ADD COLUMN byte_size INTEGER DEFAULT 0"))
 
     duplicate_runs = conn.execute(
         text("SELECT run_id FROM events GROUP BY run_id, seq HAVING COUNT(*) > 1")

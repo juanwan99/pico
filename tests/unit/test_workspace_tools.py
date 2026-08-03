@@ -35,17 +35,38 @@ class MemoryArtifactStore:
         principal: Principal,
         *,
         title: str,
-        content: str,
+        content: str | bytes,
         kind: str,
     ) -> dict[str, Any]:
+        if isinstance(content, bytes):
+            size = len(content)
+            encoding = "base64"
+            import base64
+            import hashlib
+
+            stored = base64.b64encode(content).decode("ascii")
+            digest = hashlib.sha256(content).hexdigest()
+            text_content = None
+            content_b64 = stored
+        else:
+            size = len(content.encode("utf-8"))
+            encoding = "utf8"
+            digest = __import__("hashlib").sha256(content.encode("utf-8")).hexdigest()
+            text_content = content
+            content_b64 = None
         row = {
             "artifact_id": f"artifact-{sum(map(len, self.rows.values())) + 1}",
             "title": title,
-            "content": content,
+            "content": text_content,
+            "content_base64": content_b64,
             "kind": kind,
+            "size": size,
+            "byte_size": size,
+            "content_encoding": encoding,
+            "content_sha256": digest,
         }
         self._rows(principal).append(row)
-        return {key: value for key, value in row.items() if key != "content"}
+        return {key: value for key, value in row.items() if key not in {"content", "content_base64"}}
 
     async def read(
         self,
