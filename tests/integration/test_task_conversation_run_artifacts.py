@@ -1085,10 +1085,11 @@ def test_finalize_paths_expose_identical_run_and_artifact_contract(
     assert hidden_content.status_code == 404
 
 
-def test_active_artifact_is_plain_text_inline_and_attachment_on_download(
+def test_protected_html_fence_is_not_stored_as_file_artifact(
     client,
     monkeypatch,
 ) -> None:
+    """Fail-closed: ```file:*.html fences must not become downloadable HTML artifacts."""
     file_body = "<script>window.localStorage.clear()</script>"
     _stub_provider(
         monkeypatch,
@@ -1103,9 +1104,36 @@ def test_active_artifact_is_plain_text_inline_and_attachment_on_download(
     )
 
     detail = client.get(f"/v1/tasks/{task_id}", headers=owner)
+    file_artifacts = [
+        item
+        for item in detail.json()["artifacts"]
+        if item["kind"] == "file" and str(item.get("title") or "").lower().endswith(".html")
+    ]
+    assert file_artifacts == [], "protected .html fence must not be ledgered as file"
+
+
+def test_active_txt_artifact_is_plain_text_inline_and_attachment_on_download(
+    client,
+    monkeypatch,
+) -> None:
+    file_body = "safe-txt-body"
+    _stub_provider(
+        monkeypatch,
+        f"已生成：\n```file:safe.txt\n{file_body}\n```",
+    )
+    owner = _headers(client, "member-active-artifact-txt")
+    task_id = _complete(
+        client,
+        owner,
+        conversation_id="conversation-active-artifact-txt",
+        stream=False,
+    )
+
+    detail = client.get(f"/v1/tasks/{task_id}", headers=owner)
     file_artifact = next(
         item for item in detail.json()["artifacts"] if item["kind"] == "file"
     )
+    assert file_artifact["title"] == "safe.txt"
 
     content = client.get(
         f"/v1/artifacts/{file_artifact['id']}/content",
@@ -1123,5 +1151,5 @@ def test_active_artifact_is_plain_text_inline_and_attachment_on_download(
     )
     assert download.status_code == 200, download.text
     assert download.content == file_body.encode()
-    assert download.headers["content-type"].startswith("text/html")
+    assert download.headers["content-type"].startswith("text/plain")
     assert download.headers["content-disposition"].startswith("attachment;")

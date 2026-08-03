@@ -406,8 +406,14 @@ async def _ledger_task_run(
 
 
 def _extract_file_artifacts(text: str) -> list[tuple[str, str]]:
-    """Parse fenced file blocks into (filename, body)."""
+    """Parse fenced file blocks into (filename, body).
+
+    Protected extensions (.html/.docx/.pptx) are never accepted from fences —
+    those must come from generate_*_document tools (fail-closed anti-fake).
+    """
     import re
+
+    from pico_orchestrator.artifact_types import title_protected_extension
 
     out: list[tuple[str, str]] = []
     if not text:
@@ -418,8 +424,12 @@ def _extract_file_artifacts(text: str) -> list[tuple[str, str]]:
     ):
         name = m.group(1).strip()
         body = m.group(2).rstrip()
-        if name:
-            out.append((name[:200], body[:50000]))
+        if not name:
+            continue
+        if title_protected_extension(name):
+            # Drop pseudo Office/HTML fences rather than storing fake bytes.
+            continue
+        out.append((name[:200], body[:50000]))
     return out
 
 
@@ -442,6 +452,23 @@ def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
     if cm:
         body = cm.group(1).strip().strip("\"'「」")
     return [(name, body or "hi")]
+
+
+def _wants_deliverable_document(prompt: str) -> bool:
+    """Detect teacher NL asking for HTML / Word / PPT deliverables."""
+    import re
+
+    text = prompt or ""
+    return bool(
+        re.search(
+            r"\.(?:html?|docx|pptx)\b|"
+            r"\b(?:html|docx|pptx|powerpoint)\b|"
+            r"幻灯片|课件|网页文件|word\s*文档|PPT|Power\s*Point|"
+            r"生成\s*(?:html|网页|word|docx|ppt|pptx|幻灯片)",
+            text,
+            re.IGNORECASE,
+        )
+    )
 
 
 async def _finalize_run(
@@ -562,6 +589,9 @@ async def _finalize_run(
                 key = ("file", name)
                 if key in existing_keys:
                     continue
+                import hashlib
+
+                raw_bytes = body.encode("utf-8")
                 artifact = ArtifactRow(
                     id=new_id(),
                     task_id=run.task_id,
@@ -569,6 +599,9 @@ async def _finalize_run(
                     kind="file",
                     title=name,
                     inline=body,
+                    content_encoding="utf8",
+                    content_sha256=hashlib.sha256(raw_bytes).hexdigest(),
+                    byte_size=len(raw_bytes),
                 )
                 session.add(artifact)
                 existing_keys.add(key)
@@ -791,6 +824,9 @@ async def chat_completions(
             or body.metadata.get("skill_id")
             or body.metadata.get("skillId")
         )
+    # Teacher NL asking for HTML/Word/PPT → force tool path (generate_*), not direct chat.
+    if not skill_snapshot and _wants_deliverable_document(raw_prompt):
+        skill_snapshot = snapshot_for_skill("skill-deliverable")
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
     # strip ledger markers from model-visible prompt; project instruction → system
@@ -881,7 +917,9 @@ async def chat_completions(
                 "你是 Pico，面向学校场景的 AI 助手。"
                 "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
                 "不要编造不存在的学校数据。"
-                "若用户要求创建或生成文件（如 hello.txt），请在回复中用代码块输出完整内容，格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
+                "若用户要求创建或生成纯文本文件（如 hello.txt），请在回复中用代码块输出完整内容，"
+                "格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
+                "禁止用代码块或改后缀冒充 .html / .docx / .pptx；此类交付须走专用生成工具路径。"
             )
             if project_instruction:
                 system = system + "\n【项目约束】" + project_instruction
@@ -974,7 +1012,9 @@ async def chat_completions(
                 "你是 Pico，面向学校场景的 AI 助手。"
                 "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
                 "不要编造不存在的学校数据。"
-                "若用户要求创建或生成文件（如 hello.txt），请在回复中用代码块输出完整内容，格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
+                "若用户要求创建或生成纯文本文件（如 hello.txt），请在回复中用代码块输出完整内容，"
+                "格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
+                "禁止用代码块或改后缀冒充 .html / .docx / .pptx；此类交付须走专用生成工具路径。"
             )
             if project_instruction:
                 system = system + "\n【项目约束】" + project_instruction

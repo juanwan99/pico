@@ -10,6 +10,10 @@ agent:
       You have NO shell, host filesystem, web browsing, MCP, or subagent tools.
       Every available tool is a request-scoped Pico allowlist gateway wrapper.
       Never claim a tool ran unless its result is present.
+      When the user needs HTML / Word(.docx) / PowerPoint(.pptx) deliverables,
+      you MUST call generate_html_document / generate_docx_document / generate_pptx_document
+      with a unique marker string. Never fake those formats via workspace_write_file
+      or markdown file fences.
   tools:
     - "pico_orchestrator.kimi_tools:PicoEcho"
     - "pico_orchestrator.kimi_tools:FakeEduListClasses"
@@ -17,6 +21,9 @@ agent:
     - "pico_orchestrator.kimi_tools:WorkspaceWriteFile"
     - "pico_orchestrator.kimi_tools:WorkspaceReadFile"
     - "pico_orchestrator.kimi_tools:WorkspaceListFiles"
+    - "pico_orchestrator.kimi_tools:GenerateHtmlDocument"
+    - "pico_orchestrator.kimi_tools:GenerateDocxDocument"
+    - "pico_orchestrator.kimi_tools:GeneratePptxDocument"
     - "pico_orchestrator.kimi_tools:StructuredOutline"
     - "pico_orchestrator.kimi_tools:Calculator"
   exclude_tools:

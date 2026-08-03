@@ -126,7 +126,10 @@ class WorkspaceWriteParams(BaseModel):
 
 class WorkspaceWriteFile(_GatewayTool):
     name = "workspace_write_file"
-    description = "Write text to the caller's Artifact ledger, never to a host path."
+    description = (
+        "Write plain text to the Artifact ledger. "
+        "Do NOT use for .html/.docx/.pptx — use generate_*_document tools instead."
+    )
     params = WorkspaceWriteParams
 
 
@@ -169,3 +172,36 @@ class Calculator(_GatewayTool):
     name = "calculator"
     description = "Safely evaluate a numeric expression without shell or code execution."
     params = CalculatorParams
+
+
+class GenerateDocParams(BaseModel):
+    title: str
+    marker: str
+    body: str | None = None
+
+
+class GenerateHtmlDocument(_GatewayTool):
+    name = "generate_html_document"
+    description = (
+        "Create a real .html Artifact with a unique visible marker "
+        "(safe HTML, no external scripts)."
+    )
+    params = GenerateDocParams
+
+
+class GenerateDocxDocument(_GatewayTool):
+    name = "generate_docx_document"
+    description = (
+        "Create a real OOXML .docx Artifact (ZIP with Content_Types + word/document.xml) "
+        "containing a unique marker."
+    )
+    params = GenerateDocParams
+
+
+class GeneratePptxDocument(_GatewayTool):
+    name = "generate_pptx_document"
+    description = (
+        "Create a real OOXML .pptx Artifact (presentation + ≥1 slide) "
+        "containing a unique marker."
+    )
+    params = GenerateDocParams
