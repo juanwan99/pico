@@ -39,7 +39,6 @@ class Mem:
 class P:
     school_id = "s"
     membership_id = "m"
-    scopes: list[str] = []  # class default unused; instance sets below
 
     def __init__(self) -> None:
         self.scopes = ["ai:run"]
