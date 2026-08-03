@@ -5,6 +5,9 @@ allowed-tools:
   - workspace_read_file
   - structured_outline
   - workspace_write_file
+  - generate_html_document
+  - generate_docx_document
+  - generate_pptx_document
 disable-model-invocation: true
 user-invocable: true
 always-apply: false

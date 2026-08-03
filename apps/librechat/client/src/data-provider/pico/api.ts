@@ -8,8 +8,12 @@ export type PicoArtifact = {
   id: string;
   kind: string;
   title: string;
-  inline?: string;
+  /** UTF-8 text only; binary artifacts omit this and must be fetched via content API. */
+  inline?: string | null;
   run_id?: string | null;
+  content_encoding?: 'utf8' | 'base64' | string;
+  byte_size?: number;
+  content_sha256?: string;
 };
 
 export type PicoTaskLatestRun = {

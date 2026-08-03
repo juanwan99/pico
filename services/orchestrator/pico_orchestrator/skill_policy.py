@@ -69,22 +69,33 @@ _POLICIES: dict[str, SkillPolicy] = {
             "workspace_read_file",
             "structured_outline",
             "workspace_write_file",
+            "generate_html_document",
+            "generate_docx_document",
+            "generate_pptx_document",
         ),
         risk="low",
         instruction=(
             "本轮使用 skill.summarize：提炼用户提供内容的要点、结论与待办；"
             "可读取工作区材料、生成结构化结果并把总结保存为工作区产物；"
+            "需要交付 HTML/Word/PPT 时必须调用专用 generate_*_document 工具（真文件，禁止改后缀冒充）；"
             "不得补写原文中不存在的事实。"
         ),
     ),
     "skill-lesson-outline": SkillPolicy(
         id="skill-lesson-outline",
         name="skill.lesson_outline",
-        requested_tools=("structured_outline", "workspace_write_file"),
+        requested_tools=(
+            "structured_outline",
+            "workspace_write_file",
+            "generate_html_document",
+            "generate_docx_document",
+            "generate_pptx_document",
+        ),
         risk="low",
         instruction=(
             "本轮使用 skill.lesson_outline：按教学目标、重点难点、活动与检查点生成课程大纲；"
-            "缺少年级或课时信息时明确假设，可把大纲保存为工作区产物。"
+            "缺少年级或课时信息时明确假设，可把大纲保存为工作区产物；"
+            "需要 HTML/Word/PPT 交付时必须调用 generate_html_document / generate_docx_document / generate_pptx_document。"
         ),
     ),
     "skill-quiz-draft": SkillPolicy(
@@ -94,27 +105,44 @@ _POLICIES: dict[str, SkillPolicy] = {
             "workspace_read_file",
             "structured_outline",
             "workspace_write_file",
+            "generate_html_document",
+            "generate_docx_document",
+            "generate_pptx_document",
         ),
         risk="low",
         instruction=(
             "本轮使用 skill.quiz_draft：根据用户给定材料起草题目、答案与简短解析；"
-            "可读取工作区材料并保存草稿；题目仅为草稿，提醒用户发布前复核。"
+            "可读取工作区材料并保存草稿；题目仅为草稿，提醒用户发布前复核；"
+            "需要 HTML/Word/PPT 交付时必须调用专用 generate_*_document 工具。"
         ),
     ),
     "skill-translate": SkillPolicy(
         id="skill-translate",
         name="skill.translate",
-        requested_tools=("workspace_read_file", "workspace_write_file"),
+        requested_tools=(
+            "workspace_read_file",
+            "workspace_write_file",
+            "generate_html_document",
+            "generate_docx_document",
+            "generate_pptx_document",
+        ),
         risk="low",
         instruction=(
             "本轮使用 skill.translate：忠实翻译用户提供内容，保留格式、专名与语气；"
-            "可读取工作区材料并保存译文；不确定术语应标注而非臆造。"
+            "可读取工作区材料并保存译文；不确定术语应标注而非臆造；"
+            "需要 HTML/Word/PPT 交付时必须调用专用 generate_*_document 工具。"
         ),
     ),
     "skill-meeting-notes": SkillPolicy(
         id="skill-meeting-notes",
         name="skill.meeting_notes",
-        requested_tools=("structured_outline", "workspace_write_file"),
+        requested_tools=(
+            "structured_outline",
+            "workspace_write_file",
+            "generate_html_document",
+            "generate_docx_document",
+            "generate_pptx_document",
+        ),
         risk="low",
         instruction=(
             "本轮使用 skill.meeting_notes：把用户提供的会议内容整理为议题、决定、"

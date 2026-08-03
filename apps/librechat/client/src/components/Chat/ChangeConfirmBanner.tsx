@@ -201,21 +201,25 @@ export default function ChangeConfirmBanner({ taskId, onChanged }: ChangeConfirm
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
+                        data-testid="s7-confirm-button"
                         disabled={busyId === change.id}
                         onClick={() => void transition(change.id, 'confirm')}
                         className={cn(
                           'inline-flex items-center gap-1 rounded-md bg-[#1a1a1a] px-2 py-1 text-[11px] font-medium text-white',
                           busyId === change.id && 'opacity-50',
                         )}
+                        aria-busy={busyId === change.id || undefined}
                       >
                         <Check className="h-3 w-3" />
                         {CONFIRM_LABEL}
                       </button>
                       <button
                         type="button"
+                        data-testid="s7-reject-button"
                         disabled={busyId === change.id}
                         onClick={() => void transition(change.id, 'reject')}
                         className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-medium text-red-700 ring-1 ring-red-200"
+                        aria-busy={busyId === change.id || undefined}
                       >
                         <X className="h-3 w-3" />
                         {REJECT_LABEL}

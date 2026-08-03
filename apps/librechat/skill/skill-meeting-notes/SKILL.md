@@ -4,6 +4,9 @@ description: Structure meeting content and optionally save the notes as an artif
 allowed-tools:
   - structured_outline
   - workspace_write_file
+  - generate_html_document
+  - generate_docx_document
+  - generate_pptx_document
 disable-model-invocation: true
 user-invocable: true
 always-apply: false

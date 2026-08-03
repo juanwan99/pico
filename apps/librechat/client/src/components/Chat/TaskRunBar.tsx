@@ -64,9 +64,11 @@ function TaskRunBar({
           <RunLoadingIndicator className="rounded-full bg-[#edf1f4] px-2.5 py-1 text-[12px] font-medium text-[#3d3d3d]" />
           <button
             type="button"
+            data-testid="task-stop-button"
             className="inline-flex items-center gap-1 rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[12px] font-medium text-[#6b3f3f] hover:bg-[#fdeeee] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-surface-secondary"
             onClick={onCancel}
             disabled={cancelling}
+            aria-busy={cancelling || undefined}
           >
             <Square className="h-3 w-3 fill-current" />
             {cancelling ? '停止中' : '停止'}
@@ -83,9 +85,11 @@ function TaskRunBar({
           {canRerun && (
             <button
               type="button"
+              data-testid="task-rerun-button"
               className="inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#f3f3f3] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-surface-secondary"
               onClick={onRerun}
               disabled={rerunning}
+              aria-busy={rerunning || undefined}
             >
               <RotateCcw className="h-3 w-3" />
               {rerunLabel}
