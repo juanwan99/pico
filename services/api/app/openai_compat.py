@@ -180,31 +180,46 @@ def _all_message_text(messages: list[ChatMessage]) -> str:
 
 
 def _is_title_generation_request(prompt: str, messages: list[ChatMessage]) -> bool:
-    """Detect LibreChat auto-title / auxiliary title prompts.
+    """Detect LibreChat *automatic* title prompts only (high precision).
 
-    These must never create durable pico-agent Task/Run rows (stage #260 P0).
+    Must never create durable Task/Run for shell auto-title traffic (stage #260).
+    Must NOT swallow real user tasks such as「请生成一个短标题」/「write a short title for …」.
+    Match multi-signal LibreChat scaffolds only — never a single short phrase.
     """
     blob = f"{_all_message_text(messages)}\n{prompt or ''}".lower()
-    markers = (
-        "analyze this conversation and provide",
-        "provide a concise, 5-word-or-less title",
-        "please generate a concise title",
-        "a concise title for the conversation",
-        "concise title in the detected language",
-        "only return the title itself",
-        "5 words or less, no punctuation",
-        "using title case conventions",
-        "a concise title (max 40 characters)",
-        "generate a short title",
-        "write a short title",
-    )
-    if any(marker in blob for marker in markers):
+
+    # @librechat/agents createTitleRunnable default (language + title structured)
+    if (
+        "analyze this conversation and provide" in blob
+        and "detected language" in blob
+        and (
+            "concise title in the detected language" in blob
+            or ("5 words or less" in blob and "no punctuation" in blob)
+        )
+    ):
         return True
-    # Structured-title style: instructions + tiny response budget is not a user task.
+
+    # @librechat/agents createCompletionTitleRunnable default
+    if (
+        "provide a concise, 5-word-or-less title for the conversation" in blob
+        and "only return the title itself" in blob
+        and ("title case" in blob or "conversation:" in blob)
+    ):
+        return True
+
+    # assistants endpoint title.js scaffold
+    if (
+        "please generate a concise title (max 40 characters) for a conversation that starts with"
+        in blob
+    ):
+        return True
+
+    # Same assistants scaffold with User:/Assistant:/Title: layout (no single-phrase match)
     return (
-        "title" in blob
-        and "conversation" in blob
-        and ("5 words" in blob or "5-word" in blob or "concise title" in blob)
+        "concise title" in blob
+        and "conversation that starts with" in blob
+        and "user:" in blob
+        and "title:" in blob
     )
 
 

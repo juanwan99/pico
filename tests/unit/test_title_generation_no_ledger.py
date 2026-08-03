@@ -1,4 +1,7 @@
-"""Auto-title / auxiliary requests must not create durable Task/Run (stage #260 P0)."""
+"""LibreChat auto-title short-circuit: high precision, no durable Task/Run.
+
+Stage #260 REVISE: must not swallow real user title-writing tasks.
+"""
 
 from __future__ import annotations
 
@@ -20,7 +23,8 @@ from app.openai_compat import (
 )
 from app.settings import Settings, get_settings
 
-TITLE_PROMPTS = [
+# Exact LibreChat / agents scaffold shapes (must short-circuit).
+AUTO_TITLE_PROMPTS = [
     (
         "Analyze this conversation and provide:\n"
         "1. The detected language of the conversation\n"
@@ -40,20 +44,35 @@ TITLE_PROMPTS = [
     ),
 ]
 
+# Real teacher tasks that mention "title" / 「标题」 — must go through ledger/agent.
+REAL_USER_TITLE_TASKS = [
+    "请帮我生成一个短标题，主题是期末考试复习计划",
+    "写一个短标题，用于班级周报首页",
+    "generate a short title for my class newsletter about spring sports day",
+    "write a short title for this essay about photosynthesis",
+    "请生成简洁的课程标题：三年级数学分数入门",
+    "用计算器算 1+1，并把结果写入 notes.txt",
+]
 
-def test_detector_matches_librechat_title_shapes() -> None:
-    for prompt in TITLE_PROMPTS:
-        assert _is_title_generation_request(prompt, [ChatMessage(role="user", content=prompt)])
-    assert not _is_title_generation_request(
-        "请用计算器计算 1+1，并把结果写入 notes.txt",
-        [ChatMessage(role="user", content="请用计算器计算 1+1，并把结果写入 notes.txt")],
-    )
+
+def test_detector_matches_only_librechat_scaffolds() -> None:
+    for prompt in AUTO_TITLE_PROMPTS:
+        assert _is_title_generation_request(
+            prompt, [ChatMessage(role="user", content=prompt)]
+        ), prompt[:80]
+
+
+def test_detector_does_not_swallow_real_user_title_tasks() -> None:
+    for prompt in REAL_USER_TITLE_TASKS:
+        assert not _is_title_generation_request(
+            prompt, [ChatMessage(role="user", content=prompt)]
+        ), prompt
 
 
 def test_synthetic_title_prefers_user_turn() -> None:
     title = _synthetic_title_from_messages(
-        [ChatMessage(role="user", content=TITLE_PROMPTS[0])],
-        TITLE_PROMPTS[0],
+        [ChatMessage(role="user", content=AUTO_TITLE_PROMPTS[0])],
+        AUTO_TITLE_PROMPTS[0],
     )
     assert title
     assert "stage260" in title or "创建" in title
@@ -72,14 +91,14 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def test_title_generation_does_not_touch_ledger(monkeypatch) -> None:
-    ledger = AsyncMock(side_effect=AssertionError("ledger must not be called for title requests"))
+def test_auto_title_does_not_touch_ledger(monkeypatch) -> None:
+    ledger = AsyncMock(side_effect=AssertionError("ledger must not be called for auto-title"))
     monkeypatch.setattr("app.openai_compat._ledger_task_run", ledger)
     monkeypatch.setattr("app.openai_compat._run_and_collect", ledger)
 
     client = _client()
     try:
-        for prompt in TITLE_PROMPTS:
+        for prompt in AUTO_TITLE_PROMPTS:
             r = client.post(
                 "/v1/chat/completions",
                 headers={
@@ -101,8 +120,8 @@ def test_title_generation_does_not_touch_ledger(monkeypatch) -> None:
         app.dependency_overrides.pop(get_settings, None)
 
 
-def test_title_generation_stream_skips_ledger(monkeypatch) -> None:
-    ledger = AsyncMock(side_effect=AssertionError("ledger must not be called for title requests"))
+def test_auto_title_stream_skips_ledger(monkeypatch) -> None:
+    ledger = AsyncMock(side_effect=AssertionError("ledger must not be called for auto-title"))
     monkeypatch.setattr("app.openai_compat._ledger_task_run", ledger)
 
     client = _client()
@@ -115,12 +134,60 @@ def test_title_generation_stream_skips_ledger(monkeypatch) -> None:
             },
             json={
                 "model": "pico-agent",
-                "messages": [{"role": "user", "content": TITLE_PROMPTS[1]}],
+                "messages": [{"role": "user", "content": AUTO_TITLE_PROMPTS[1]}],
                 "stream": True,
             },
         )
         assert r.status_code == 200, r.text
         assert "data:" in r.text
         assert ledger.await_count == 0
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+def test_real_user_title_task_enters_ledger_path(monkeypatch) -> None:
+    """Reverse: real user title-writing tasks must not be short-circuited."""
+    calls: list[dict] = []
+
+    async def fake_ledger(**kwargs):  # type: ignore[no-untyped-def]
+        calls.append(kwargs)
+        return "task-real-1", "run-real-1"
+
+    async def fake_run_and_collect(*_a, **_k):  # type: ignore[no-untyped-def]
+        class R:
+            status = "succeeded"
+            final_text = "建议标题：期末复习周计划"
+            error = None
+
+        return R()
+
+    async def fake_finalize(*_a, **_k):  # type: ignore[no-untyped-def]
+        return None
+
+    monkeypatch.setattr("app.openai_compat._ledger_task_run", fake_ledger)
+    monkeypatch.setattr("app.openai_compat._run_and_collect", fake_run_and_collect)
+    monkeypatch.setattr("app.openai_compat._finalize_run", fake_finalize)
+
+    client = _client()
+    try:
+        prompt = "请帮我生成一个短标题，主题是期末考试复习计划"
+        r = client.post(
+            "/v1/chat/completions",
+            headers={
+                "Authorization": "Bearer pico-dev",
+                "X-Pico-Membership-Id": "test-member",
+            },
+            json={
+                "model": "pico-agent",
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+            },
+        )
+        assert r.status_code == 200, r.text
+        assert len(calls) == 1, f"expected exactly one Task/Run, got {len(calls)}"
+        body = r.json()
+        assert "建议标题" in body["choices"][0]["message"]["content"] or body["choices"][0][
+            "message"
+        ]["content"]
     finally:
         app.dependency_overrides.pop(get_settings, None)
