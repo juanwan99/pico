@@ -318,12 +318,25 @@ async def run_agent_loop(
     if artifact_md:
         tool_notes.append("【工具产物 · 班级列表】\n" + artifact_md)
     if change_proposal:
+        from pico_orchestrator.redact import redact_tenant_payload
+
+        safe_prop = redact_tenant_payload(
+            change_proposal,
+            school_id=principal.school_id,
+            membership_id=principal.membership_id,
+        )
         tool_notes.append(
             "【变更提案 · 待人工确认】\n"
-            + json.dumps(change_proposal, ensure_ascii=False, indent=2)
+            + json.dumps(safe_prop, ensure_ascii=False, indent=2)
         )
     if tool_notes:
         text = (text + "\n\n" if text else "") + "\n\n".join(tool_notes)
+
+    from pico_orchestrator.redact import redact_tenant_text
+
+    text = redact_tenant_text(
+        text, school_id=principal.school_id, membership_id=principal.membership_id
+    )
 
     await emit(
         "run.status",
@@ -337,7 +350,7 @@ async def run_agent_loop(
     return RunResult(
         status="succeeded",
         final_text=text,
-        token_usage={"total_tokens": total_tokens},
+        token_usage={"total_tokens": total_tokens, "estimated": True},
         artifact_markdown=artifact_md,
         change_proposal=change_proposal,
     )

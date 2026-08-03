@@ -39,10 +39,10 @@ function run(tokenUsage?: Record<string, unknown>): PicoRun {
 
 describe('ResultPanel token usage', () => {
   it('formats total-only and detailed token usage', () => {
-    expect(formatRunTokenUsage(run({ total_tokens: 1234 }))).toBe('用量 · 1,234 tokens');
+    expect(formatRunTokenUsage(run({ total_tokens: 1234 }))).toBe('用量（估算） · 1,234 tokens');
     expect(
       formatRunTokenUsage(run({ input_tokens: 1000, output_tokens: 234, total_tokens: 1234 })),
-    ).toBe('用量 · 输入 1,000 · 输出 234 · 共 1,234 tokens');
+    ).toBe('用量（估算） · 输入 1,000 · 输出 234 · 共 1,234 tokens');
     expect(
       formatRunTokenUsage(
         run({ prompt_tokens: 10, completion_tokens: 5, total_tokens: 15, estimated: true }),
@@ -58,7 +58,7 @@ describe('ResultPanel token usage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('result-token-usage')).toHaveTextContent('用量 · 42 tokens');
+    expect(screen.getByTestId('result-token-usage')).toHaveTextContent('用量（估算） · 42 tokens');
   });
 
   it('labels estimated token usage for teachers', () => {

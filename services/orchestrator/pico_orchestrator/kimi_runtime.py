@@ -597,19 +597,31 @@ def _result(
             artifact_markdown = _classes_artifact(value)
         elif name == "pico_propose_change":
             change_proposal = value
+    from pico_orchestrator.redact import redact_tenant_text
+
+    principal = getattr(tool_context, "principal", None) if tool_context else None
+    final_text = redact_tenant_text(
+        "".join(final_parts).strip(),
+        school_id=getattr(principal, "school_id", None),
+        membership_id=getattr(principal, "membership_id", None),
+    )
+    usage_out = dict(token_usage) if token_usage else None
+    if usage_out is not None:
+        usage_out["estimated"] = True
     return RunResult(
         status=status,
-        final_text="".join(final_parts).strip(),
+        final_text=final_text,
         error=error,
-        token_usage=token_usage,
+        token_usage=usage_out,
         artifact_markdown=artifact_markdown,
         change_proposal=change_proposal,
     )
 
 
 def _classes_artifact(result: dict[str, Any]) -> str:
+    # Never put school_id into teacher-visible markdown (stage #265 T11).
     lines = [
-        f"# 班级列表（{result.get('school_id', '')}）",
+        "# 班级列表（本校）",
         "",
         "| ID | 名称 |",
         "|----|------|",

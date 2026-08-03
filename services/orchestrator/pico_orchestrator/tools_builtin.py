@@ -51,10 +51,11 @@ def _artifact_title(args: dict[str, Any]) -> str:
 
 
 async def _echo(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+    # Never echo raw tenant IDs into model/tool transcripts (stage #265 T11).
     return {
         "echo": args.get("text", ""),
-        "school_id": principal.school_id,
-        "membership_id": principal.membership_id,
+        "scope": "current_user",
+        "ok": True,
     }
 
 
@@ -71,15 +72,14 @@ async def _fake_edu_list_classes(
 
 
 async def _propose_change(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+    # Proposal is bound to principal in the ledger; do not surface raw IDs to the model/UI.
     return {
         "proposal": {
             "title": args.get("title") or "未命名变更提案",
             "summary": args.get("summary") or "",
             "payload": args.get("payload") or {},
-            "school_id": principal.school_id,
-            "membership_id": principal.membership_id,
             "status": "proposed",
-            "note": "Requires human confirm before any edu write-back (Phase 3).",
+            "note": "需教师确认后才会写回（S7）。",
         }
     }
 

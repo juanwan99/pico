@@ -113,6 +113,17 @@ export default function useSubmitMessage() {
       if (!data) {
         return console.warn('No data provided to submitMessage');
       }
+      // Stage #265 F1: hard-reject overlong input before LibreChat agent work.
+      // Keep aligned with API PICO_CHAT_MAX_PROMPT_CHARS (default 12000).
+      const rawText = typeof data.text === 'string' ? data.text : '';
+      const stripped = rawText.replace(/【[^】]+】/g, '').trim();
+      const maxChars = 12000;
+      if (stripped.length > maxChars) {
+        window.alert(
+          `输入过长（${stripped.length} 字，上限 ${maxChars} 字）。请缩短问题后重试；系统不会静默截断后继续执行。`,
+        );
+        return;
+      }
       const latestMessage = getLatestMessage();
       const rootMessages = getMessages();
       const isLatestInRootMessages = rootMessages?.some(
