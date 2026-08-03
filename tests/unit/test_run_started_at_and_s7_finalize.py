@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -18,7 +17,6 @@ async def test_ledger_task_run_sets_started_at_when_running(tmp_path, monkeypatc
     from app import db as db_mod
     from app.auth import Principal
     from app.openai_compat import _ledger_task_run
-    from app.settings import Settings
 
     db_path = tmp_path / "pico.db"
     monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
@@ -56,7 +54,7 @@ async def test_ledger_task_run_sets_started_at_when_running(tmp_path, monkeypatc
 async def test_finalize_persists_tool_change_proposal(tmp_path, monkeypatch):
     from app import db as db_mod
     from app.auth import Principal
-    from app.db import ChangeProposalRow, RunRow, TaskRow, new_id
+    from app.db import ChangeProposalRow, RunRow
     from app.openai_compat import _finalize_run, _ledger_task_run
 
     db_path = tmp_path / "pico.db"
