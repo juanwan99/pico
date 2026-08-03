@@ -28,12 +28,15 @@ async def test_allowlist_and_cross_school() -> None:
 
     a = P(school_id="school-a", membership_id="m1", scopes=["ai:run"])
     out = await gw.invoke(a, "fake_edu_list_classes", {})
-    assert out["school_id"] == "school-a"
+    # Raw school_id must not surface in tool results (stage #265 T11).
+    assert out["school_id"] == "[已脱敏]"
     assert len(out["classes"]) >= 1
 
     with pytest.raises(ToolError) as ei:
         await gw.invoke(a, "fake_edu_list_classes", {"school_id": "school-b"})
     assert ei.value.code == "tenant.cross_school"
+    assert "school-a" not in ei.value.message
+    assert "school-b" not in ei.value.message
 
     with pytest.raises(ToolError) as ei2:
         await gw.invoke(a, "evil.shell", {})

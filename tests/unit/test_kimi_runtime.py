@@ -351,10 +351,8 @@ async def test_kimi_gateway_cross_school_rejection_emits_auth_deny_and_tool_resu
     assert [payload for kind, payload in events if kind == "auth.deny"] == [
         {
             "code": "tenant.cross_school",
-            "message": "Cross-school deny: token=school-a tool=school-b",
-            "token_school_id": "school-a",
+            "message": "跨校访问已被拒绝（租户隔离）。",
             "tool": "fake_edu_list_classes",
-            "arguments": {"school_id": "school-b"},
         }
     ]
 
@@ -420,7 +418,7 @@ async def test_kimi_usage_accumulates_across_steps_and_fails_over_cap(
     assert session.cancelled is True
     assert result.status == "failed"
     assert result.error == "Kimi Agent token cap exceeded: 100"
-    assert result.token_usage == {"total_tokens": 110}
+    assert result.token_usage == {"total_tokens": 110, "estimated": True}
     expected_user_message = "本次回答超出长度上限，请缩短问题或新开对话后再试。"
     assert (
         "run.error",
