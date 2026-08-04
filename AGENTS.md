@@ -77,7 +77,8 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 **Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
 **24h Standalone AI:** [`docs/STANDALONE-AI-24H.md`](docs/STANDALONE-AI-24H.md) (historical baseline)  
 **Current dispatch:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) §4–§7（窗口 1/2/3；P0 = 日用 #142/#143/#144）  
-**Kimi gap:** [`docs/KIMI-AGENT-GAP.md`](docs/KIMI-AGENT-GAP.md)（默认未归位；KA-0/1/2 ≠ 已接入）  
+**Kimi gap:** [`docs/KIMI-AGENT-GAP.md`](docs/KIMI-AGENT-GAP.md)（**生产默认已切** #278 · KA-4 软 #284 · 全球 PASS 未宣称）  
+**KA-4 soft:** [`docs/KA4-SOFT.md`](docs/KA4-SOFT.md) · ops: [`docs/OPS-RUNBOOK-STABILIZE.md`](docs/OPS-RUNBOOK-STABILIZE.md)  
 **Skill ADR:** [`docs/ADR-SKILL-CATALOG.md`](docs/ADR-SKILL-CATALOG.md).  
 **Completed foundation sprint:** [`docs/SPRINT-3DAY-PUSH.md`](docs/SPRINT-3DAY-PUSH.md) (COMPLETED).  
 **Completed day task (do not re-open):** [`docs/DAY-TASK-2026-07-30-SKILL-UX.md`](docs/DAY-TASK-2026-07-30-SKILL-UX.md)
@@ -90,7 +91,8 @@ Do **not** use `docs/archive/**`, new HANDOFF markdown, or open PR **#121 harnes
 
 - AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.
 - **Target (only):** open-source Kimi Agent runtime + Kimi HTTPS API. **Owner never set self-built loop as the goal.** No Plan B runtime.
-- **Implementation debt (not a goal):** code may still default through transitional `run_agent_loop` (flag off). Never narrate this as “long-term architecture.” Do **not** claim Kimi Agent integrated.
+- **Prod default (post #278):** `pico-agent` → Kimi Agent when RUNTIME=1 + empty canary (scope=all). **Keep-kimi.**
+- **Implementation debt (not a goal):** `runner.py` / `run_agent_loop` may remain for **RUNTIME=0 or emergency only**. Never narrate residual files as “product goal.” Do **not** self-claim global product PASS or orchestration complete. **Do not delete runner** as a completion signal (KA-4 soft).
 - **Speed:** deploy + smoke beat new process docs; see `docs/VELOCITY-CLEAN.md`.
 - Tenant fail-closed; **Pico owns the unique AI ledger**.
 - Pricing docs may stay DRAFT; do not freeze commercial FIXED unless owner orders.
@@ -100,7 +102,7 @@ Do **not** use `docs/archive/**`, new HANDOFF markdown, or open PR **#121 harnes
 
 **Default rhythm:** [docs/FAST-PATH.md](docs/FAST-PATH.md) only.
 
-**KEEP:** secrets out of git; KA flag default OFF + empty canary; allowlist tools; exact-SHA deploy; CI green; no unauthorized prod KA cutover; no fake "integrated".
+**KEEP:** secrets out of git; allowlist tools; exact-SHA deploy; CI green; prod KA cutover only with AUTH; no fake global PASS; runner retained for rollback/emergency.
 
 **CUT:** multi-card ceremonies, auto E1 queue, per-gap micro-issues, long controller reviews on green diffs, wrong-window smoke.
 
