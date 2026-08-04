@@ -20,8 +20,8 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 |----|------|
 | 产品 | 学校向独立 AI 工作台底座（LibreChat 壳 + Pico 账本/控制面 + Kimi HTTPS） |
 | 编排目标 | **只此一个：开源 Kimi Agent 真接入** |
-| 实现债 | 默认路径仍可能经 `run_agent_loop` → 待归位；**不是目标** |
-| 授权 | **KA-3 未授权**（#170 HOLD）；#159 zombie HOLD |
+| 实现债 | 生产默认 `pico-agent` 已切 **Kimi Agent**（#278 · tip `5baf0cf…` · scope=all）；`run_agent_loop` 仅 RUNTIME=0 / emergency |
+| 授权 | **KA-3 已授权并执行**（#170 KA3_AUTH prod-default · #278）；全球 product PASS **未宣称** |
 | 禁 | Plan B；教师默认沙箱；edu-cloud；假接入 |
 
 ## 窗口地图（BINDING）
@@ -79,7 +79,7 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 
 ## 4. HOLD
 
-- **#170 KA-3** — 须业主书面授权  
+- **#170 / #278 KA-3** — prod-default 已切（ENGINEERING）；product PASS 仍 NOT CLAIMED  
 - **#159 zombie 清库** — 须授权  
 
 ---

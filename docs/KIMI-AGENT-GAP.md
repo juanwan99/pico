@@ -2,7 +2,7 @@
 
 ```
 DOC: docs/KIMI-AGENT-GAP.md
-STATUS: LIVING inventory（唯一目标路径 = Kimi Agent；生产默认仍未归位）
+STATUS: LIVING inventory（唯一目标路径 = Kimi Agent；**生产默认已切** · #278 · 全球 product PASS 未宣称）
 DATE: 2026-08-01
 TRUTH: docs/TRUTH-FREEZE.md O1–O4 · docs/WHAT-IS-PICO.md §4 · docs/STATE-NOW.md
 SCOPE: 差距与切片状态；不切换生产默认运行时；不预埋其它 harness / Plan B
@@ -15,11 +15,11 @@ SCOPE: 差距与切片状态；不切换生产默认运行时；不预埋其它 
 | 问题 | 答案 |
 |------|------|
 | 目标运行时 | **开源 Kimi Agent**（唯一路径） |
-| 今日**默认**执行核 | `run_agent_runtime(use_kimi_agent=False)` → **`run_agent_loop`**（AsyncOpenAI 工具环） |
-| main 上实验路径 | KA-3A：总闸为 `1` 且 membership 命中 canary allowlist 时 → `run_kimi_agent`；**总闸默认 0、allowlist 默认空** |
+| 今日**默认**执行核（生产） | `PICO_KIMI_AGENT_RUNTIME=1` + **空 canary** → **`run_kimi_agent`**（scope=all · #278） |
+| canary 限制模式 | 非空 joint 名单时仅名单进 KA；RUNTIME=0 或 emergency → `run_agent_loop` |
 | pin 包 | `kimi-agent-sdk==0.0.5`、`kimi-cli==1.12.0` |
 | pin 实际用途（默认路径） | 版本检查 + `kimi_cli.agentspec.load_agent_spec` 读 yaml 做危险工具关断证明 |
-| 是否**默认**主路径调用 SDK 跑多步 | **否** |
+| 是否**默认**主路径调用 SDK 跑多步 | **是**（生产 scope=all 时；见 #278 TEST REPORT） |
 | 生产是否已换核 / 已开 flag | **否**（deployment NONE；生产应用 SHA 见 STATE-NOW） |
 | 是否可宣称「已接入完成」 | **否**（见 §3 完成定义；mock 测 ≠ 真接） |
 
@@ -30,8 +30,8 @@ SCOPE: 差距与切片状态；不切换生产默认运行时；不预埋其它 
 | KA-0 可安装/入口 | **DONE（摸底）** | #137 |
 | KA-1 Wire→账本契约 | **DONE（契约+单测）** | #140 |
 | KA-2 flag-only Session | **DONE（默认 OFF）** | #145 · 见 §9 |
-| KA-3 生产默认切核 | **未开始** | 须业主授权 + 真实证据 |
-| KA-4 卸过渡入口 / 升 TRUTH O2 | **未开始** | 依赖 KA-3 DONE |
+| KA-3 生产默认切核 | **ENGINEERING DONE** | #278 · AUTH #170 · tip `5baf0cf…` · scope=all |
+| KA-4 卸过渡入口 / 升 TRUTH O2 | **部分** | loop 文件仍在；默认路径不可达；TRUTH O2 可升「默认已切 · PASS 未宣称」 |
 
 ---
 
@@ -128,7 +128,7 @@ LibreChat / 客户端
 切片 KA-0  固定可安装的 Kimi Agent 发行物 + 入口探测（非生产）     ✅ #137
 切片 KA-1  适配器：Wire → 账本事件（契约 + 无密钥单测）           ✅ #140
 切片 KA-2  flag-only Session 路径（默认 OFF；非长期双核产品）     ✅ #145
-切片 KA-3  生产默认切真运行时 + 取消/技能回归；关闭过渡环入口      ⏳ 未授权
+切片 KA-3  生产默认切真运行时 + 取消/技能回归；关闭过渡环默认入口      ✅ #278
 切片 KA-4  卸装饰依赖或降级；TRUTH-FREEZE 升版 O2=已接入         ⏳
 ```
 
