@@ -105,6 +105,26 @@ describe('ResultPanel token usage', () => {
     expect(screen.getByText('模型服务暂时繁忙，请稍后重试。')).toBeInTheDocument();
     expect(screen.queryByText(/technical provider failure/)).not.toBeInTheDocument();
   });
+
+  it('exposes result-panel-rerun on the status banner when canRerun', async () => {
+    const user = userEvent.setup();
+    const onRerun = jest.fn();
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={{ ...run(), status: 'failed' }}
+          runStatusLabel="失败：本次回答超出长度上限"
+          canRerun
+          onRerun={onRerun}
+        />
+      </MemoryRouter>,
+    );
+
+    const btn = screen.getByTestId('result-panel-rerun');
+    expect(btn).toBeInTheDocument();
+    await user.click(btn);
+    expect(onRerun).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('ResultPanel artifact actions', () => {

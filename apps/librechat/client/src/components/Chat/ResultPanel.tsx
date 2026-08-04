@@ -623,37 +623,56 @@ export default function ResultPanel({
                 )}
                 data-testid="result-status-banner"
               >
-                {taskTitle ? <p className="truncate text-[13px] font-medium">{taskTitle}</p> : null}
-                {runStatusLabel ? (
-                  <p
-                    className={cn(
-                      'mt-0.5 text-[12px]',
-                      run?.status === 'failed'
-                        ? 'text-[#9a3b3b]'
-                        : run?.status === 'succeeded'
-                          ? 'text-[#2d6a3e]'
-                          : 'text-[#3d3d3d] dark:text-text-secondary',
-                    )}
-                  >
-                    {runStatusLabel}
-                  </p>
-                ) : null}
-                {processHint ? (
-                  <p
-                    className="mt-0.5 truncate text-[12px] text-[#3b6fd9]"
-                    data-testid="result-process-hint"
-                  >
-                    {processHint}
-                  </p>
-                ) : null}
-                {tokenUsageLabel ? (
-                  <p
-                    className="mt-0.5 truncate text-[11px] text-[#6b6b6b] dark:text-text-secondary"
-                    data-testid="result-token-usage"
-                  >
-                    {tokenUsageLabel}
-                  </p>
-                ) : null}
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    {taskTitle ? (
+                      <p className="truncate text-[13px] font-medium">{taskTitle}</p>
+                    ) : null}
+                    {runStatusLabel ? (
+                      <p
+                        className={cn(
+                          'mt-0.5 text-[12px]',
+                          run?.status === 'failed'
+                            ? 'text-[#9a3b3b]'
+                            : run?.status === 'succeeded'
+                              ? 'text-[#2d6a3e]'
+                              : 'text-[#3d3d3d] dark:text-text-secondary',
+                        )}
+                      >
+                        {runStatusLabel}
+                      </p>
+                    ) : null}
+                    {processHint ? (
+                      <p
+                        className="mt-0.5 truncate text-[12px] text-[#3b6fd9]"
+                        data-testid="result-process-hint"
+                      >
+                        {processHint}
+                      </p>
+                    ) : null}
+                    {tokenUsageLabel ? (
+                      <p
+                        className="mt-0.5 truncate text-[11px] text-[#6b6b6b] dark:text-text-secondary"
+                        data-testid="result-token-usage"
+                      >
+                        {tokenUsageLabel}
+                      </p>
+                    ) : null}
+                  </div>
+                  {canRerun && onRerun ? (
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#f3f3f3] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-surface-secondary"
+                      onClick={onRerun}
+                      disabled={rerunning}
+                      aria-busy={rerunning || undefined}
+                      data-testid="result-panel-rerun"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      {rerunning ? '重新运行中' : '重新运行'}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
 
@@ -684,23 +703,11 @@ export default function ResultPanel({
                     </p>
                     <p className="max-w-[15rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
                       {runStatusLabel?.startsWith('失败')
-                        ? '可点击下方「重新运行」再试；过程步骤见上方时间线'
+                        ? '可点击上方「重新运行」再试；过程步骤见上方时间线'
                         : runStatusLabel?.startsWith('已停止')
                           ? '已停止。需要结果时可重新发起任务'
                           : '任务完成后，文件产物会列在这里供打开/下载'}
                     </p>
-                    {canRerun && onRerun ? (
-                      <button
-                        type="button"
-                        className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-3 py-1.5 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#f3f3f3] disabled:opacity-60"
-                        onClick={onRerun}
-                        disabled={rerunning}
-                        data-testid="result-panel-rerun"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        {rerunning ? '重新运行中' : '重新运行'}
-                      </button>
-                    ) : null}
                   </div>
                 )}
               </div>
