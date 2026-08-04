@@ -3127,9 +3127,19 @@ html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
   width: 100vw !important;
 }
 @media (max-width: 1024px) {
+  /*
+   * Mobile drawer must not cover Header + TaskRunBar.
+   * Previously inset:0 + z-index:200 sat on top of task-rerun-button so
+   * elementFromPoint hit result-status-banner instead of the control strip
+   * (390×844 failed-rerun hit-test regression, #270 HIT).
+   * top clears absolute Header (52px) + TaskRunBar min strip (~44px).
+   */
   .pico-result-panel:not(.pico-result-panel--expanded) {
     position: fixed;
-    inset: 0;
+    top: 5.75rem;
+    right: 0;
+    bottom: 0;
+    left: 0;
     z-index: 200;
     display: flex !important;
     width: 100vw !important;
