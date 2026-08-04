@@ -23,9 +23,12 @@ def _is_allow_all_entry(entry: Any) -> bool:
 
 
 def canary_allows_all(canary_principals: Collection[Any]) -> bool:
-    """Empty canary or explicit ``*`` / ``*:*`` means every principal is eligible."""
-    if not canary_principals:
-        return True
+    """True only when canary entries include explicit ``*`` / ``*:*``.
+
+    An empty collection does **not** mean all principals — that requires the
+    settings-level intentional empty allowlist (``kimi_agent_allow_all=True``).
+    Non-empty raw config that parses to zero joints is fail-closed (nobody).
+    """
     return any(_is_allow_all_entry(entry) for entry in canary_principals)
 
 
@@ -66,19 +69,20 @@ def should_use_kimi_agent(
     school_id: str,
     membership_id: str,
     canary_principals: Collection[Any],
+    kimi_agent_allow_all: bool = False,
     legacy_agent_loop_emergency: bool = False,
 ) -> bool:
     """Decide whether the multi-step agent path uses Kimi Agent.
 
-    Production default (KA-3): ``use_kimi_agent=True`` and empty canary → all
-    principals. Non-empty canary restricts to joint keys. Emergency forces the
-    transitional ``run_agent_loop`` path. There is no silent dual-run/fallback.
+    - ``kimi_agent_allow_all=True``: every principal (prod-default empty canary or ``*``).
+    - Otherwise only joint-key canary hits; empty/invalid canary ⇒ nobody (legacy).
+    - Emergency forces transitional ``run_agent_loop``. No silent dual-run/fallback.
     """
     if legacy_agent_loop_emergency:
         return False
     if not use_kimi_agent:
         return False
-    if canary_allows_all(canary_principals):
+    if kimi_agent_allow_all or canary_allows_all(canary_principals):
         return True
     return principal_in_canary(
         school_id=school_id,
@@ -92,16 +96,15 @@ async def run_agent_runtime(
     use_kimi_agent: bool = False,
     kimi_agent_canary_principals: Collection[Any] = (),
     kimi_agent_canary_membership_ids: Collection[Any] | None = None,
+    kimi_agent_allow_all: bool = False,
     legacy_agent_loop_emergency: bool = False,
     **kwargs: Any,
 ) -> Any:
     """Dispatch to Kimi Agent when the gate allows; otherwise transitional loop.
 
-    When ``use_kimi_agent`` is true and the canary collection is empty (or
-    contains ``*`` / ``*:*``), every principal uses Kimi Agent — production
-    default after KA-3. A non-empty joint-key list keeps restricted canary
-    mode. ``legacy_agent_loop_emergency`` forces ``run_agent_loop`` (default
-    off). Failures do not silently fall back between runtimes.
+    ``kimi_agent_allow_all`` must be set explicitly for prod-default (empty raw
+    canary). An empty principal collection alone does **not** open all routes —
+    that would turn bare-only misconfig into accidental full cutover.
     """
 
     canary = (
@@ -117,6 +120,7 @@ async def run_agent_runtime(
         school_id=school_id,
         membership_id=membership_id,
         canary_principals=canary,
+        kimi_agent_allow_all=kimi_agent_allow_all,
         legacy_agent_loop_emergency=legacy_agent_loop_emergency,
     )
     if not use_kimi:
