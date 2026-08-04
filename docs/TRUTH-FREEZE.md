@@ -48,8 +48,8 @@ SUPERSEDES: 一切未列入本冻结集的冲突口述、过时 README 金句、
 | # | 冻结句 |
 |---|--------|
 | O1 | **目标（唯一）** = 开源 **Kimi Agent** 驱动多步；事件进入 Pico 账本。**业主从未把自研环当产品目标。** |
-| O2 | **实现事实** = 生产 `pico-agent` 默认进 **Kimi Agent**（#278 · RUNTIME=1 · 空 canary=全员）；**全球 product PASS 未宣称**；direct chat 不误走 agent |
-| O3 | `run_agent_loop` = **过渡实现债**，生产默认**不可达**（仅 RUNTIME=0 或 `PICO_LEGACY_AGENT_LOOP_EMERGENCY=1`）；**不是**路线图选项 |
+| O2 | **实现事实** = 生产 `pico-agent` 默认进 **Kimi Agent**（#278 ACCEPT · tip `18b7c2b…` · RUNTIME=1 · 空 canary=全员）；**全球 product PASS 未宣称**；direct chat 不误走 agent |
+| O3 | `run_agent_loop` = **过渡实现债**，生产默认**不可达**（仅 RUNTIME=0 或 `PICO_LEGACY_AGENT_LOOP_EMERGENCY=1`）；文件可保留（KA-4 **软**）；**不是**路线图选项；**禁止**以删文件宣称完成 |
 | O4 | **禁止预埋** Plan B / Pi / OpenCode 等其它运行时进真源；**走不通 → 停工交业主再议** |
 | O5 | 刷新/历史/停止/重试 = **控制面与壳通路**，不得用来证明 O1 已完成 |
 
