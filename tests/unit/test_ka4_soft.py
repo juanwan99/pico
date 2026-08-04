@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from app.settings import Settings
 from pico_orchestrator.runtime import should_use_kimi_agent
 
