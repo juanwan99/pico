@@ -85,6 +85,25 @@ def test_health_ignores_bare_membership_canary_entries() -> None:
     assert "m1" not in response.text
 
 
+def test_health_reports_bare_only_canary_as_fail_closed_scope() -> None:
+    settings = Settings(
+        _env_file=None,
+        pico_kimi_agent_runtime=True,
+        pico_kimi_agent_canary_membership_ids="bare-member-only",
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        response = TestClient(app).get("/health")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    body = response.json()
+    assert body["kimi_agent_scope"] == "canary"
+    assert body["kimi_agent_canary_configured"] is False
+    assert body["kimi_agent_canary_membership_count"] == 0
+    assert "bare-member-only" not in response.text
+
+
 def test_dev_token_and_me() -> None:
     client = TestClient(app)
     r = client.post(
@@ -117,4 +136,3 @@ def test_agent_safety_checks_kimi_runtime_yaml() -> None:
     assert "pico-kimi-runtime.yaml" in checked
     assert body["proof"]["dangerous_off"] is True
     assert "pico-kimi-runtime.yaml" in body["proof"]["agent_file"]
-

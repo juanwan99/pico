@@ -125,6 +125,23 @@ class Settings(BaseSettings):
         return frozenset(principals)
 
     @property
+    def kimi_agent_runtime_canary_entries(self) -> frozenset[object]:
+        """Routing entries that preserve an invalid, non-empty config intent.
+
+        An actually empty value means KA-3 prod-default (all principals).  A
+        non-empty value that contains no valid joint key must stay non-empty so
+        the runtime selector fails closed instead of mistaking it for default-all.
+        """
+        principals = self.kimi_agent_canary_principal_set
+        if self.kimi_agent_allow_all_token:
+            return frozenset({"*"})
+        if principals:
+            return frozenset(principals)
+        if self.pico_kimi_agent_canary_membership_ids.strip():
+            return frozenset({"__invalid_canary_config__"})
+        return frozenset()
+
+    @property
     def kimi_agent_canary_membership_count(self) -> int:
         return len(self.kimi_agent_canary_principal_set)
 
@@ -145,7 +162,7 @@ class Settings(BaseSettings):
             return "off"
         if self.kimi_agent_allow_all_token:
             return "all"
-        if self.kimi_agent_canary_membership_count == 0:
+        if not self.pico_kimi_agent_canary_membership_ids.strip():
             # Empty canary with runtime on = prod-default all.
             return "all"
         return "canary"

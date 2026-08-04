@@ -748,7 +748,7 @@ async def _run_and_collect(
     result = await run_agent_runtime(
         use_kimi_agent=settings.pico_kimi_agent_runtime,
         kimi_agent_canary_principals=(
-            settings.kimi_agent_canary_principal_set
+            settings.kimi_agent_runtime_canary_entries
         ),
         legacy_agent_loop_emergency=settings.pico_legacy_agent_loop_emergency,
         prompt=prompt,
@@ -1150,7 +1150,7 @@ async def chat_completions(
                 result = await run_agent_runtime(
                     use_kimi_agent=settings.pico_kimi_agent_runtime,
                     kimi_agent_canary_principals=(
-                        settings.kimi_agent_canary_principal_set
+                        settings.kimi_agent_runtime_canary_entries
                     ),
                     legacy_agent_loop_emergency=settings.pico_legacy_agent_loop_emergency,
                     prompt=prompt,

@@ -228,6 +228,14 @@ def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: p
     assert enabled.kimi_agent_scope == "canary"
     empty_all = Settings(pico_kimi_agent_runtime=True, pico_kimi_agent_canary_membership_ids="")
     assert empty_all.kimi_agent_scope == "all"
+    assert empty_all.kimi_agent_runtime_canary_entries == frozenset()
+    invalid_canary = Settings(
+        pico_kimi_agent_runtime=True,
+        pico_kimi_agent_canary_membership_ids="bare-only",
+    )
+    assert invalid_canary.kimi_agent_scope == "canary"
+    assert invalid_canary.kimi_agent_canary_membership_count == 0
+    assert invalid_canary.kimi_agent_runtime_canary_entries
 
 
 @pytest.mark.asyncio
