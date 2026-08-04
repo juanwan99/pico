@@ -40,14 +40,16 @@ class Settings(BaseSettings):
     pico_run_max_seconds: int = 120
     pico_run_max_tokens: int = 8000
     pico_run_max_retries: int = 2
-    # Experimental KA-2 path. False keeps every production call on run_agent_loop.
+    # Kimi Agent master gate. When true, an empty canary list means all principals.
     pico_kimi_agent_runtime: bool = False
-    # Safe canary default: empty allowlist routes nobody to KA-2.
+    # Optional limited-canary scope. Empty means all when the runtime gate is true.
     # Entries MUST be joint keys school_id:membership_id (comma-separated).
     # Bare membership-only values are ignored (fail-closed; no written uniqueness contract).
     pico_kimi_agent_canary_membership_ids: str = ""
     # Optional opaque batch label for ops (never a principal id). Shown on /health only.
     pico_kimi_agent_canary_batch: str = ""
+    # Explicit rollback override. This is not a silent runtime failure fallback.
+    pico_legacy_agent_loop_emergency: bool = False
     pico_chat_rpm: int = 30
     pico_chat_max_concurrent: int = 2
     # Reject (do not silent-truncate) user prompts longer than this many chars.
@@ -110,6 +112,9 @@ class Settings(BaseSettings):
         principals: set[tuple[str, str]] = set()
         for raw in self.pico_kimi_agent_canary_membership_ids.split(","):
             entry = raw.strip()
+            if entry in {"*", "*:*"}:
+                principals.add(("*", "*"))
+                continue
             if not entry or ":" not in entry:
                 continue
             school_id, membership_id = entry.split(":", 1)
@@ -122,6 +127,19 @@ class Settings(BaseSettings):
     @property
     def kimi_agent_canary_membership_count(self) -> int:
         return len(self.kimi_agent_canary_principal_set)
+
+    @property
+    def kimi_agent_scope(self) -> str:
+        if not self.pico_kimi_agent_runtime or self.pico_legacy_agent_loop_emergency:
+            return "off"
+        principals = self.kimi_agent_canary_principal_set
+        if not principals:
+            if self.pico_kimi_agent_canary_membership_ids.strip():
+                return "off"
+            return "all"
+        if ("*", "*") in principals:
+            return "all"
+        return "canary"
 
     @property
     def kimi_agent_canary_membership_id_set(self) -> frozenset[str]:

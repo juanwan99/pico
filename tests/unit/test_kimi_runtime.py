@@ -48,7 +48,9 @@ async def _emit_to(events: list[tuple[str, dict[str, Any]]], kind: str, payload:
 
 
 @pytest.mark.asyncio
-async def test_runtime_canary_gate_is_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_runtime_scope_defaults_to_kimi_and_canary_is_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[str] = []
 
     async def old_loop(**_kwargs: Any) -> RunResult:
@@ -67,6 +69,12 @@ async def test_runtime_canary_gate_is_fail_closed(monkeypatch: pytest.MonkeyPatc
     gate_off = await run_agent_runtime(
         use_kimi_agent=False,
         kimi_agent_canary_principals={joint},
+        principal=principal,
+        prompt="hello",
+    )
+    default_all = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_principals=set(),
         principal=principal,
         prompt="hello",
     )
@@ -100,33 +108,53 @@ async def test_runtime_canary_gate_is_fail_closed(monkeypatch: pytest.MonkeyPatc
         principal=principal,
         prompt="hello",
     )
+    wildcard = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_principals={"*"},
+        principal=principal,
+        prompt="hello",
+    )
+    emergency = await run_agent_runtime(
+        use_kimi_agent=True,
+        legacy_agent_loop_emergency=True,
+        principal=principal,
+        prompt="hello",
+    )
 
     assert (
         gate_off.final_text,
+        default_all.final_text,
         not_allowlisted.final_text,
         bare_membership_ignored.final_text,
         wrong_school.final_text,
         allowlisted.final_text,
         allowlisted_string.final_text,
+        wildcard.final_text,
+        emergency.final_text,
     ) == (
         "old",
+        "kimi",
         "old",
         "old",
         "old",
         "kimi",
         "kimi",
+        "kimi",
+        "old",
     )
-    assert calls == ["old", "old", "old", "old", "kimi", "kimi"]
+    assert calls == ["old", "kimi", "old", "old", "old", "kimi", "kimi", "kimi", "old"]
 
 
 def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_KIMI_AGENT_RUNTIME", raising=False)
     monkeypatch.delenv("PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS", raising=False)
     monkeypatch.delenv("PICO_KIMI_AGENT_CANARY_BATCH", raising=False)
+    monkeypatch.delenv("PICO_LEGACY_AGENT_LOOP_EMERGENCY", raising=False)
     defaults = Settings(_env_file=None)
     assert defaults.pico_kimi_agent_runtime is False
     assert defaults.kimi_agent_canary_principal_set == frozenset()
     assert defaults.kimi_agent_canary_membership_count == 0
+    assert defaults.kimi_agent_scope == "off"
 
     monkeypatch.setenv("PICO_KIMI_AGENT_RUNTIME", "1")
     monkeypatch.setenv(
@@ -142,6 +170,19 @@ def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: p
     }
     assert enabled.kimi_agent_canary_membership_count == 2
     assert enabled.pico_kimi_agent_canary_batch == "BATCH-unit"
+    assert enabled.kimi_agent_scope == "canary"
+
+    monkeypatch.setenv("PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS", "")
+    all_enabled = Settings(_env_file=None)
+    assert all_enabled.kimi_agent_scope == "all"
+
+    monkeypatch.setenv("PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS", "*")
+    wildcard_enabled = Settings(_env_file=None)
+    assert wildcard_enabled.kimi_agent_scope == "all"
+
+    monkeypatch.setenv("PICO_LEGACY_AGENT_LOOP_EMERGENCY", "1")
+    emergency = Settings(_env_file=None)
+    assert emergency.kimi_agent_scope == "off"
 
 
 @pytest.mark.asyncio

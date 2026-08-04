@@ -1,4 +1,4 @@
-"""Runtime selector with the Kimi Agent gate and canary scope defaulting off."""
+"""Runtime selector for the Kimi Agent production-default and canary scopes."""
 
 from __future__ import annotations
 
@@ -45,13 +45,17 @@ def principal_in_canary(
 async def run_agent_runtime(
     *,
     use_kimi_agent: bool = False,
+    legacy_agent_loop_emergency: bool = False,
+    kimi_agent_all_principals: bool | None = None,
     kimi_agent_canary_principals: Collection[Any] = (),
     kimi_agent_canary_membership_ids: Collection[Any] | None = None,
     **kwargs: Any,
 ) -> Any:
-    """Dispatch allowlisted principals to Kimi without changing the default path.
+    """Dispatch principals to Kimi according to the runtime scope.
 
-    Canary matching requires school_id + membership_id jointly. The legacy
+    With the runtime enabled, an empty canary collection means all principals;
+    a non-empty collection retains joint-key canary matching. The emergency
+    legacy override is explicit and never acts as a failure fallback. The legacy
     ``kimi_agent_canary_membership_ids`` kwarg is accepted only as an alias for
     joint principal collections (same shape); bare membership ids never match.
     """
@@ -64,12 +68,26 @@ async def run_agent_runtime(
     principal = kwargs.get("principal")
     school_id = str(getattr(principal, "school_id", "") or "")
     membership_id = str(getattr(principal, "membership_id", "") or "")
-    use_kimi_canary = use_kimi_agent and principal_in_canary(
-        school_id=school_id,
-        membership_id=membership_id,
-        canary_principals=canary,
+    wildcard = any(
+        entry in {"*", "*:*"}
+        or (isinstance(entry, (tuple, list)) and tuple(entry) == ("*", "*"))
+        for entry in canary
     )
-    if not use_kimi_canary:
+    all_principals = not canary if kimi_agent_all_principals is None else kimi_agent_all_principals
+    use_kimi_runtime = (
+        use_kimi_agent
+        and not legacy_agent_loop_emergency
+        and (
+            all_principals
+            or wildcard
+            or principal_in_canary(
+                school_id=school_id,
+                membership_id=membership_id,
+                canary_principals=canary,
+            )
+        )
+    )
+    if not use_kimi_runtime:
         from pico_orchestrator.runner import run_agent_loop
 
         return await run_agent_loop(**kwargs)

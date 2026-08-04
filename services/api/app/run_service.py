@@ -383,6 +383,8 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
 
         result = await run_agent_runtime(
             use_kimi_agent=settings.pico_kimi_agent_runtime,
+            legacy_agent_loop_emergency=settings.pico_legacy_agent_loop_emergency,
+            kimi_agent_all_principals=settings.kimi_agent_scope == "all",
             kimi_agent_canary_principals=(
                 settings.kimi_agent_canary_principal_set
             ),
