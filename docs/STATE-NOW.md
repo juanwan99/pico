@@ -42,7 +42,7 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 | 面 | SHA | 含义 |
 |----|-----|------|
 | main tip（写页时） | `c37ee1eea8bd1cbb0c3a3a2e6c4e18b00114a7ad` | 含窗口地图等文档；**写页后若再合 PR 以 GitHub 为准** |
-| **生产应用** | **`9a9ddba3e6a3c425c3db3e599081f8da9394e8e8`** | #175 DEPLOYED ACCEPT；含 #174 stop/sqlite |
+| **生产应用** | **`18b7c2b161bc0424f309ecb2b88f3db001990b8f`** | #278 REVISE 部署；bare canary fail-closed + 默认 scope=all |
 | 历史全项烟测 | `674707dd…` | #142 PASS（旧 tip，仅历史） |
 
 生产硬证：#175 health 三一致 + #176 窗4 点测。
@@ -58,10 +58,10 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 | #174 stop/sqlite 修复 | **在生产**并被 #176 验证 |
 | #165 旧视觉 FAIL | **CLOSED**（被 #176 覆盖） |
 | 全站 product PASS | **NOT CLAIMED** |
-| Kimi Agent 已接入 | **NOT CLAIMED**（flag OFF） |
+| Kimi Agent 默认工程路径 | **DONE**（#278；runtime ON · scope=all · emergency false） |
 
-**当前可以说：** 生产 `9a9ddba` 上能登录、能真聊、能停到 cancelled。  
-**不能说：** 全站验收完、编排已是开源 Kimi Agent。
+**当前可以说：** 生产 `pico-agent` 默认进入 Kimi Agent，过渡环仅显式回滚可达。
+**不能说：** 全球 product PASS、orchestration complete 或 fresh 全产品验收已完成。
 
 ---
 
