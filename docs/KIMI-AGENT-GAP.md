@@ -2,10 +2,10 @@
 
 ```
 DOC: docs/KIMI-AGENT-GAP.md
-STATUS: LIVING inventory（唯一目标路径 = Kimi Agent；**生产默认已切** · #278 · 全球 product PASS 未宣称）
-DATE: 2026-08-01
-TRUTH: docs/TRUTH-FREEZE.md O1–O4 · docs/WHAT-IS-PICO.md §4 · docs/STATE-NOW.md
-SCOPE: 差距与切片状态；不切换生产默认运行时；不预埋其它 harness / Plan B
+STATUS: LIVING inventory（唯一目标路径 = Kimi Agent；**生产默认已切** · #278 ACCEPT @ 18b7c2b… · 全球 product PASS 未宣称）
+DATE: 2026-08-05
+TRUTH: docs/TRUTH-FREEZE.md O1–O4 · docs/WHAT-IS-PICO.md §4 · docs/STATE-NOW.md · docs/KA4-SOFT.md
+SCOPE: 差距与切片状态；不预埋其它 harness / Plan B；**禁硬删 runner**
 ```
 
 ---
@@ -16,12 +16,12 @@ SCOPE: 差距与切片状态；不切换生产默认运行时；不预埋其它 
 |------|------|
 | 目标运行时 | **开源 Kimi Agent**（唯一路径） |
 | 今日**默认**执行核（生产） | `PICO_KIMI_AGENT_RUNTIME=1` + **空 canary** → **`run_kimi_agent`**（scope=all · #278） |
-| canary 限制模式 | 非空 joint 名单时仅名单进 KA；RUNTIME=0 或 emergency → `run_agent_loop` |
+| canary 限制模式 | 非空 joint 名单时仅名单进 KA；**无效 non-empty bare → fail-closed legacy**（#282）；RUNTIME=0 或 emergency → `run_agent_loop` |
 | pin 包 | `kimi-agent-sdk==0.0.5`、`kimi-cli==1.12.0` |
 | pin 实际用途（默认路径） | 版本检查 + `kimi_cli.agentspec.load_agent_spec` 读 yaml 做危险工具关断证明 |
-| 是否**默认**主路径调用 SDK 跑多步 | **是**（生产 scope=all 时；见 #278 TEST REPORT） |
-| 生产是否已换核 / 已开 flag | **否**（deployment NONE；生产应用 SHA 见 STATE-NOW） |
-| 是否可宣称「已接入完成」 | **否**（见 §3 完成定义；mock 测 ≠ 真接） |
+| 是否**默认**主路径调用 SDK 跑多步 | **是**（生产 scope=all；#278 TEST REPORT + #284 复审） |
+| 生产是否已换核 | **是（工程默认路径）** · tip/`health.git_sha` `18b7c2b…` · **≠** 全球 product PASS |
+| 是否可宣称「编排 complete / 全球 PASS」 | **否**（须业主另句；本清单禁止自升） |
 
 **切片进度（代码合 main ≠ 产品 PASS）：**
 
@@ -29,29 +29,32 @@ SCOPE: 差距与切片状态；不切换生产默认运行时；不预埋其它 
 |------|------|------|
 | KA-0 可安装/入口 | **DONE（摸底）** | #137 |
 | KA-1 Wire→账本契约 | **DONE（契约+单测）** | #140 |
-| KA-2 flag-only Session | **DONE（默认 OFF）** | #145 · 见 §9 |
-| KA-3 生产默认切核 | **ENGINEERING DONE** | #278 · AUTH #170 · tip `5baf0cf…` · scope=all |
-| KA-4 卸过渡入口 / 升 TRUTH O2 | **部分** | loop 文件仍在；默认路径不可达；TRUTH O2 可升「默认已切 · PASS 未宣称」 |
+| KA-2 flag-only Session | **DONE（历史默认 OFF）** | #145 · 见 §9 |
+| KA-3 生产默认切核 | **OWNER ACCEPT** | #278 · AUTH #170 · tip `18b7c2b…` · scope=all · bare fail-closed |
+| KA-4 卸过渡入口 | **软 DONE（#284）** | 文档+断言：默认不可达 loop；**保留** `runner.py`；**不**宣称物理清除 · 见 [KA4-SOFT.md](./KA4-SOFT.md) |
 
 ---
 
-## 1. 调用链（现状 · post-KA-2）
+## 1. 调用链（现状 · post-KA-3 / KA-4 软）
 
 ```text
 LibreChat / 客户端
   → Pico API (openai_compat / run_service)
-      → run_agent_runtime(use_kimi_agent=settings.pico_kimi_agent_runtime)
+      → run_agent_runtime(
+            use_kimi_agent=settings.pico_kimi_agent_runtime,
+            kimi_agent_allow_all=settings.kimi_agent_default_all,
+            legacy_agent_loop_emergency=settings.pico_legacy_agent_loop_emergency,
+            …)
            │
-           ├─ false / 默认 / 生产预期
-           │    → run_agent_loop()     ← 默认真执行
-           │         → AsyncOpenAI(base_url=Kimi…)
-           │         → AllowlistGateway 工具
+           ├─ 生产默认：RUNTIME=1 + 空 canary（allow_all）且 emergency=0
+           │    → run_kimi_agent()     ← 默认真执行
+           │         → Session.prompt / Wire→账本
+           │         → 工具仅 kimi_tools → AllowlistGateway
            │
-           └─ true（总闸为 1 且 membership 命中 canary allowlist）
-                → run_kimi_agent()     ← 实验路径（§9）
-                     → Session.prompt(merge_wire_messages=True)
-                     → KimiWireEventAdapter → 账本 emit
-                     → 工具仅 kimi_tools → AllowlistGateway
+           └─ RUNTIME=0 或 emergency=1 或 canary 未命中（含无效 bare fail-closed）
+                → run_agent_loop()     ← 过渡债 / 回滚 / emergency
+                     → AsyncOpenAI(base_url=Kimi…)
+                     → AllowlistGateway 工具
       → 账本 Event / Artifact / 终态
 
 并行（非执行核）:
@@ -66,12 +69,12 @@ LibreChat / 客户端
 
 | 路径 | 现状 |
 |------|------|
-| `run_service.py` | → **`run_agent_runtime`**（flag 默认 false → 旧环） |
+| `run_service.py` | → **`run_agent_runtime`**（生产 env 默认进 Kimi） |
 | `openai_compat.py` **pico-agent**（非流式/流式） | → **`run_agent_runtime`**（同上） |
 | `openai_compat.py` **直连模型**（默认 chat） | → **`stream_chat` / 直连补全**，**不**走 agent runtime |
-| `runtime.py` | 选择器；默认不 import Session |
-| `runner.py` | 过渡多步实现体（**仍保留**；默认路径） |
-| `kimi_runtime.py` / `kimi_adapter.py` / `kimi_tools.py` | KA-2/KA-1 实验路径；flag OFF 时生产调用不应进入 |
+| `runtime.py` | 选择器；无静默 dual-run |
+| `runner.py` | 过渡多步实现体（**KA-4 软：保留文件**；默认路径**不可达**） |
+| `kimi_runtime.py` / `kimi_adapter.py` / `kimi_tools.py` | 生产默认多步路径 |
 
 ---
 
@@ -128,12 +131,11 @@ LibreChat / 客户端
 切片 KA-0  固定可安装的 Kimi Agent 发行物 + 入口探测（非生产）     ✅ #137
 切片 KA-1  适配器：Wire → 账本事件（契约 + 无密钥单测）           ✅ #140
 切片 KA-2  flag-only Session 路径（默认 OFF；非长期双核产品）     ✅ #145
-切片 KA-3  生产默认切真运行时 + 取消/技能回归；关闭过渡环默认入口      ✅ #278
-切片 KA-4  卸装饰依赖或降级；TRUTH-FREEZE 升版 O2=已接入         ⏳
+切片 KA-3  生产默认切真运行时 + 取消/技能回归；关闭过渡环默认入口      ✅ #278 ACCEPT
+切片 KA-4  软：默认不可达 loop + 文档/断言；保留 runner；不写 complete   ✅ 软 #284（硬删不做）
 ```
 
-**正本清源文档阶段**已收口目标句；**工程真接**仍以 KA-3/4 + §3 为准。  
-**禁止**因 KA-2 已合跳过授权直接 KA-3。
+**正本清源文档阶段**已收口目标句；**KA-3 默认路径已签**；全球 product PASS / orchestration complete 仍 **NOT CLAIMED**。
 
 ---
 

@@ -8,7 +8,7 @@
 ```text
 DOC: docs/STATE-NOW.md
 STATUS: BINDING snapshot
-UPDATED: 2026-08-01
+UPDATED: 2026-08-05
 TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 ```
 
@@ -20,9 +20,10 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 |----|------|
 | 产品 | 学校向独立 AI 工作台底座（LibreChat 壳 + Pico 账本/控制面 + Kimi HTTPS） |
 | 编排目标 | **只此一个：开源 Kimi Agent 真接入** |
-| 实现债 | 生产默认 `pico-agent` 已切 **Kimi Agent**（#278 · tip `5baf0cf…` · scope=all）；`run_agent_loop` 仅 RUNTIME=0 / emergency |
-| 授权 | **KA-3 已授权并执行**（#170 KA3_AUTH prod-default · #278）；全球 product PASS **未宣称** |
-| 禁 | Plan B；教师默认沙箱；edu-cloud；假接入 |
+| 实现现状 | 生产默认 `pico-agent` → **Kimi Agent**（#278 OWNER ACCEPT · tip/`health.git_sha` `18b7c2b…` · scope=**all** · emergency **false**） |
+| 实现债 | `runner.py` / `run_agent_loop` **仍在仓**；默认路径**不可达**（仅 RUNTIME=0 或 emergency）；**KA-4 软**见 [KA4-SOFT.md](./KA4-SOFT.md) · #284 |
+| 授权 | **KA-3 已签**（#170 KA3_AUTH · #278）；全球 product PASS **未宣称**；orchestration complete **未宣称** |
+| 禁 | Plan B；教师默认沙箱；edu-cloud；假接入；硬删 runner 当完成证据 |
 
 ## 窗口地图（BINDING）
 
@@ -41,11 +42,11 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 
 | 面 | SHA | 含义 |
 |----|-----|------|
-| main tip（写页时） | `c37ee1eea8bd1cbb0c3a3a2e6c4e18b00114a7ad` | 含窗口地图等文档；**写页后若再合 PR 以 GitHub 为准** |
-| **生产应用** | **`9a9ddba3e6a3c425c3db3e599081f8da9394e8e8`** | #175 DEPLOYED ACCEPT；含 #174 stop/sqlite |
-| 历史全项烟测 | `674707dd…` | #142 PASS（旧 tip，仅历史） |
+| **main tip / 生产应用（写页时）** | **`18b7c2b161bc0424f309ecb2b88f3db001990b8f`** | #282 bare fail-closed + #280 KA-3 default · #278 ACCEPT |
+| health 对齐 | exact · scope=`all` · batch=`BATCH-KA3-DEFAULT` | loopback `/health` |
+| 历史 | `9a9ddba…` / `5baf0cf…` 等 | 仅考古；**勿覆盖当前 tip** |
 
-生产硬证：#175 health 三一致 + #176 窗4 点测。
+运维字段解读：[OPS-RUNBOOK-STABILIZE.md](./OPS-RUNBOOK-STABILIZE.md)。
 
 ---
 
@@ -53,15 +54,15 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 
 | 项 | 状态 |
 |----|------|
-| #175 部署 | **CLOSED · ACCEPT** @ `9a9ddba…` |
-| #176 窗4 chat/stop | **CLOSED · ACCEPT PASS**（login/chat/stop cancelled；sqlite_leak none） |
-| #174 stop/sqlite 修复 | **在生产**并被 #176 验证 |
-| #165 旧视觉 FAIL | **CLOSED**（被 #176 覆盖） |
+| #278 P-KA3-DEFAULT | **CLOSED · OWNER ACCEPT** @ `18b7c2b…` |
+| 生产默认 runtime | **kimi-agent**（空 canary=全员） |
+| bare/无效 canary | **fail-closed**（不得误变 scope=all） |
+| #284 冻 tip 稳定包 | **进行中 / 见 Issue**（复审 · residual 软 · KA-4 软 · 不写 complete） |
 | 全站 product PASS | **NOT CLAIMED** |
-| Kimi Agent 已接入 | **NOT CLAIMED**（flag OFF） |
+| orchestration complete | **NOT CLAIMED** |
 
-**当前可以说：** 生产 `9a9ddba` 上能登录、能真聊、能停到 cancelled。  
-**不能说：** 全站验收完、编排已是开源 Kimi Agent。
+**当前可以说：** 生产 tip `18b7c2b…` 上 pico-agent 默认进 Kimi Agent；可回滚；runner 文件保留。  
+**不能说：** 全球 product PASS、编排 complete、自研环已物理删除。
 
 ---
 
@@ -69,29 +70,31 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 
 | 项 | 状态 |
 |----|------|
-| deploy key 取码 #157 | DONE |
-| UI readiness 重试 #160 | 在生产路径 |
-| fetch refspec / preflight #164/#172 | 文档+脚本 |
-| remote-health #171 | 脚本在 main |
-| 生产 `.git` 属主 | #175 已修为部署用户；runbook 见 DEPLOY-TWO-HOST / FAST-PATH |
+| deploy key / remote-health / prod-update | 脚本在 main |
+| 登录限流 · 测密 · health 字段 | [OPS-RUNBOOK-STABILIZE.md](./OPS-RUNBOOK-STABILIZE.md) |
+| KA-3 回滚 OFF→恢复 | #278 K6 已实测 |
 
 ---
 
-## 4. HOLD
+## 4. HOLD / residual（软 · 不阻断 #278）
 
-- **#170 / #278 KA-3** — prod-default 已切（ENGINEERING）；product PASS 仍 NOT CLAIMED  
+- 全球 product PASS / orchestration complete — **须业主另句**  
+- in-flight cancel 弱（终态 cancel→409）  
+- REST 自读路径易混（正确：`/v1/artifacts/{id}/content`）  
 - **#159 zombie 清库** — 须授权  
+- KA-4 **硬删 runner** — **不做**（软交付即可）  
 
 ---
 
-## 5. 节奏（砍税后）
+## 5. 节奏
 
 见 [FAST-PATH.md](./FAST-PATH.md) KEEP/CUT。
 
 ```text
-日用：9a9ddba 基线曾 PASS；main 已含 canary/deny/cap/safety（flag OFF）
-推进：少卡、大 PR、窗1装、窗4点；KA 放量仅授权后
-HOLD：#170 切流 · #159 zombie（须授权）
+当前 tip/prod: 18b7c2b… · scope=all · keep-kimi
+KA-3: OWNER ACCEPT · #278
+推进: #284 稳定包（只测/文档/软断言；部署≤1 仅必要）
+禁: 假 PASS · complete 自升 · 删 runner · Pi/DeepSeek 默认
 ```
 
 product PASS: **NOT CLAIMED** · 编排完成: **NOT CLAIMED**
