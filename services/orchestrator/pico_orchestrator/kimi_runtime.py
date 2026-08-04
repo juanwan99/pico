@@ -1,7 +1,8 @@
-"""Feature-flagged Kimi Agent Session runtime.
+"""Kimi Agent Session runtime (multi-step production path).
 
-This module is reachable only when the runtime gate is on and the principal is allowlisted.
-The production default remains the transitional ``run_agent_loop``.
+Reachable when the runtime gate routes a principal here (KA-3: default when
+``PICO_KIMI_AGENT_RUNTIME=1`` and canary is empty or ``*``). Failures must not
+silently fall back to ``run_agent_loop``.
 """
 
 from __future__ import annotations

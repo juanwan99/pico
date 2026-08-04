@@ -40,14 +40,19 @@ class Settings(BaseSettings):
     pico_run_max_seconds: int = 120
     pico_run_max_tokens: int = 8000
     pico_run_max_retries: int = 2
-    # Experimental KA-2 path. False keeps every production call on run_agent_loop.
+    # Kimi Agent multi-step path. False → transitional run_agent_loop for all.
+    # True + empty canary (or *) → all principals use Kimi Agent (KA-3 prod default).
+    # True + non-empty joint keys → restricted canary only.
     pico_kimi_agent_runtime: bool = False
-    # Safe canary default: empty allowlist routes nobody to KA-2.
-    # Entries MUST be joint keys school_id:membership_id (comma-separated).
-    # Bare membership-only values are ignored (fail-closed; no written uniqueness contract).
+    # Joint canary keys school_id:membership_id (comma-separated).
+    # Empty (with runtime on) = ALL principals. Bare membership-only values ignored.
+    # Tokens "*" or "*:*" also mean all principals.
     pico_kimi_agent_canary_membership_ids: str = ""
     # Optional opaque batch label for ops (never a principal id). Shown on /health only.
     pico_kimi_agent_canary_batch: str = ""
+    # Emergency only: force transitional run_agent_loop for all (default OFF).
+    # Does not dual-run; completely overrides Kimi routing when true.
+    pico_legacy_agent_loop_emergency: bool = False
     pico_chat_rpm: int = 30
     pico_chat_max_concurrent: int = 2
     # Reject (do not silent-truncate) user prompts longer than this many chars.
@@ -106,22 +111,44 @@ class Settings(BaseSettings):
 
     @property
     def kimi_agent_canary_principal_set(self) -> frozenset[tuple[str, str]]:
-        """Joint canary keys as (school_id, membership_id). Bare membership is ignored."""
+        """Joint canary keys as (school_id, membership_id). Bare/* tokens ignored here."""
         principals: set[tuple[str, str]] = set()
         for raw in self.pico_kimi_agent_canary_membership_ids.split(","):
             entry = raw.strip()
-            if not entry or ":" not in entry:
+            if not entry or entry in {"*", "*:*"} or ":" not in entry:
                 continue
             school_id, membership_id = entry.split(":", 1)
             school_id = school_id.strip()
             membership_id = membership_id.strip()
-            if school_id and membership_id:
+            if school_id and membership_id and school_id != "*":
                 principals.add((school_id, membership_id))
         return frozenset(principals)
 
     @property
     def kimi_agent_canary_membership_count(self) -> int:
         return len(self.kimi_agent_canary_principal_set)
+
+    @property
+    def kimi_agent_allow_all_token(self) -> bool:
+        """True when canary string contains explicit * / *:* all-principals token."""
+        for raw in self.pico_kimi_agent_canary_membership_ids.split(","):
+            if raw.strip() in {"*", "*:*"}:
+                return True
+        return False
+
+    @property
+    def kimi_agent_scope(self) -> str:
+        """Observable routing scope for /health: off | canary | all."""
+        if self.pico_legacy_agent_loop_emergency:
+            return "off"
+        if not self.pico_kimi_agent_runtime:
+            return "off"
+        if self.kimi_agent_allow_all_token:
+            return "all"
+        if self.kimi_agent_canary_membership_count == 0:
+            # Empty canary with runtime on = prod-default all.
+            return "all"
+        return "canary"
 
     @property
     def kimi_agent_canary_membership_id_set(self) -> frozenset[str]:

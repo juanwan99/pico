@@ -386,6 +386,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             kimi_agent_canary_principals=(
                 settings.kimi_agent_canary_principal_set
             ),
+            legacy_agent_loop_emergency=settings.pico_legacy_agent_loop_emergency,
             prompt=prompt,
             principal=principal,
             emit=emit,

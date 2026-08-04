@@ -38,3 +38,27 @@ def test_canary_accepts_joint_string_entries() -> None:
         membership_id="m2",
         canary_principals=["s1:m1", "s2:m2"],
     )
+
+
+def test_canary_allows_all_empty_and_star() -> None:
+    from pico_orchestrator.runtime import canary_allows_all, should_use_kimi_agent
+
+    assert canary_allows_all(()) is True
+    assert canary_allows_all([]) is True
+    assert canary_allows_all({"*"}) is True
+    assert canary_allows_all({"*:*"}) is True
+    assert canary_allows_all({("school-a", "m1")}) is False
+
+    assert should_use_kimi_agent(
+        use_kimi_agent=True,
+        school_id="s",
+        membership_id="m",
+        canary_principals=(),
+    )
+    assert not should_use_kimi_agent(
+        use_kimi_agent=True,
+        school_id="s",
+        membership_id="m",
+        canary_principals=(),
+        legacy_agent_loop_emergency=True,
+    )
