@@ -119,6 +119,87 @@ async def test_runtime_canary_gate_is_fail_closed(monkeypatch: pytest.MonkeyPatc
     assert calls == ["old", "old", "old", "old", "kimi", "kimi"]
 
 
+@pytest.mark.asyncio
+async def test_runtime_empty_canary_means_all_when_gate_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """KA-3: RUNTIME on + empty canary → every principal uses Kimi Agent."""
+    calls: list[str] = []
+
+    async def old_loop(**_kwargs: Any) -> RunResult:
+        calls.append("old")
+        return RunResult(status="succeeded", final_text="old")
+
+    async def kimi_loop(**_kwargs: Any) -> RunResult:
+        calls.append("kimi")
+        return RunResult(status="succeeded", final_text="kimi")
+
+    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_loop)
+    monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
+
+    principal = Principal(school_id="any-school", membership_id="any-member")
+    result = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_principals=(),
+        principal=principal,
+        prompt="hello",
+    )
+    assert result.final_text == "kimi"
+    assert calls == ["kimi"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_star_token_means_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    async def old_loop(**_kwargs: Any) -> RunResult:
+        calls.append("old")
+        return RunResult(status="succeeded", final_text="old")
+
+    async def kimi_loop(**_kwargs: Any) -> RunResult:
+        calls.append("kimi")
+        return RunResult(status="succeeded", final_text="kimi")
+
+    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_loop)
+    monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
+
+    principal = Principal()
+    result = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_principals={"*"},
+        principal=principal,
+        prompt="hello",
+    )
+    assert result.final_text == "kimi"
+    assert calls == ["kimi"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_emergency_forces_legacy_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    async def old_loop(**_kwargs: Any) -> RunResult:
+        calls.append("old")
+        return RunResult(status="succeeded", final_text="old")
+
+    async def kimi_loop(**_kwargs: Any) -> RunResult:
+        calls.append("kimi")
+        return RunResult(status="succeeded", final_text="kimi")
+
+    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_loop)
+    monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
+
+    principal = Principal()
+    joint = (principal.school_id, principal.membership_id)
+    result = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_principals={joint},
+        legacy_agent_loop_emergency=True,
+        principal=principal,
+        prompt="hello",
+    )
+    assert result.final_text == "old"
+    assert calls == ["old"]
+
+
 def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_KIMI_AGENT_RUNTIME", raising=False)
     monkeypatch.delenv("PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS", raising=False)
@@ -126,6 +207,8 @@ def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: p
     defaults = Settings(_env_file=None)
     assert defaults.pico_kimi_agent_runtime is False
     assert defaults.kimi_agent_canary_principal_set == frozenset()
+    assert defaults.pico_legacy_agent_loop_emergency is False
+    assert defaults.kimi_agent_scope == "off"
     assert defaults.kimi_agent_canary_membership_count == 0
 
     monkeypatch.setenv("PICO_KIMI_AGENT_RUNTIME", "1")
@@ -142,6 +225,9 @@ def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: p
     }
     assert enabled.kimi_agent_canary_membership_count == 2
     assert enabled.pico_kimi_agent_canary_batch == "BATCH-unit"
+    assert enabled.kimi_agent_scope == "canary"
+    empty_all = Settings(pico_kimi_agent_runtime=True, pico_kimi_agent_canary_membership_ids="")
+    assert empty_all.kimi_agent_scope == "all"
 
 
 @pytest.mark.asyncio

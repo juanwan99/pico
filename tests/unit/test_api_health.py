@@ -26,6 +26,8 @@ def test_health() -> None:
         "key_scope": "membership_or_ip",
     }
     assert body["kimi_agent_runtime_enabled"] is False
+    assert body["kimi_agent_scope"] == "off"
+    assert body["legacy_agent_loop_emergency"] is False
     assert body["kimi_agent_canary_configured"] is False
     assert body["kimi_agent_canary_membership_count"] == 0
     assert "kimi_agent_canary_batch" not in body
@@ -51,6 +53,8 @@ def test_health_exposes_only_non_sensitive_canary_state() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["kimi_agent_runtime_enabled"] is True
+    assert body["kimi_agent_scope"] == "canary"
+    assert body["legacy_agent_loop_emergency"] is False
     assert body["kimi_agent_canary_configured"] is True
     assert body["kimi_agent_canary_membership_count"] == 1
     assert body["kimi_agent_canary_batch"] == "BATCH-test"
@@ -74,6 +78,7 @@ def test_health_ignores_bare_membership_canary_entries() -> None:
 
     body = response.json()
     assert body["kimi_agent_canary_membership_count"] == 1
+    assert body["kimi_agent_scope"] == "canary"
     assert body["kimi_agent_canary_configured"] is True
     assert "bare-member-only" not in response.text
     assert "school-a" not in response.text

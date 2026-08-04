@@ -170,8 +170,10 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         "git_sha": _resolve_git_sha(),
         "edu_mode": settings.pico_edu_mode,
         "kimi_agent_runtime_enabled": settings.pico_kimi_agent_runtime,
+        "kimi_agent_scope": settings.kimi_agent_scope,
         "kimi_agent_canary_configured": canary_count > 0,
         "kimi_agent_canary_membership_count": canary_count,
+        "legacy_agent_loop_emergency": settings.pico_legacy_agent_loop_emergency,
         "rate_limit": {
             "chat_rpm": settings.pico_chat_rpm,
             "chat_max_concurrent": settings.pico_chat_max_concurrent,
