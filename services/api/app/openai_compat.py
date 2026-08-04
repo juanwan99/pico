@@ -750,6 +750,7 @@ async def _run_and_collect(
         kimi_agent_canary_principals=(
             settings.kimi_agent_canary_principal_set
         ),
+        kimi_agent_allow_all=settings.kimi_agent_default_all,
         legacy_agent_loop_emergency=settings.pico_legacy_agent_loop_emergency,
         prompt=prompt,
         principal=principal,  # structural Principal protocol
@@ -1152,6 +1153,7 @@ async def chat_completions(
                     kimi_agent_canary_principals=(
                         settings.kimi_agent_canary_principal_set
                     ),
+                    kimi_agent_allow_all=settings.kimi_agent_default_all,
                     legacy_agent_loop_emergency=settings.pico_legacy_agent_loop_emergency,
                     prompt=prompt,
                     principal=principal,

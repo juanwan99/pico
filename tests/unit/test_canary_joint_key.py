@@ -43,22 +43,32 @@ def test_canary_accepts_joint_string_entries() -> None:
 def test_canary_allows_all_empty_and_star() -> None:
     from pico_orchestrator.runtime import canary_allows_all, should_use_kimi_agent
 
-    assert canary_allows_all(()) is True
-    assert canary_allows_all([]) is True
+    # empty collection alone is NOT all (needs allow_all flag)
+    assert canary_allows_all(()) is False
+    assert canary_allows_all([]) is False
     assert canary_allows_all({"*"}) is True
     assert canary_allows_all({"*:*"}) is True
     assert canary_allows_all({("school-a", "m1")}) is False
 
+    assert not should_use_kimi_agent(
+        use_kimi_agent=True,
+        school_id="s",
+        membership_id="m",
+        canary_principals=(),
+        kimi_agent_allow_all=False,
+    )
     assert should_use_kimi_agent(
         use_kimi_agent=True,
         school_id="s",
         membership_id="m",
         canary_principals=(),
+        kimi_agent_allow_all=True,
     )
     assert not should_use_kimi_agent(
         use_kimi_agent=True,
         school_id="s",
         membership_id="m",
         canary_principals=(),
+        kimi_agent_allow_all=True,
         legacy_agent_loop_emergency=True,
     )

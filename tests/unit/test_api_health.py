@@ -85,6 +85,28 @@ def test_health_ignores_bare_membership_canary_entries() -> None:
     assert "m1" not in response.text
 
 
+
+
+def test_health_bare_only_canary_is_not_scope_all() -> None:
+    """Non-empty invalid canary raw must not report scope=all (REVISE bare footgun)."""
+    settings = Settings(
+        _env_file=None,
+        pico_kimi_agent_runtime=True,
+        pico_kimi_agent_canary_membership_ids="bare-member-only",
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        response = TestClient(app).get("/health")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    body = response.json()
+    assert body["kimi_agent_runtime_enabled"] is True
+    assert body["kimi_agent_scope"] == "canary"
+    assert body["kimi_agent_canary_membership_count"] == 0
+    assert body["kimi_agent_canary_configured"] is False
+
+
 def test_dev_token_and_me() -> None:
     client = TestClient(app)
     r = client.post(

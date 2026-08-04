@@ -137,17 +137,30 @@ class Settings(BaseSettings):
         return False
 
     @property
+    def kimi_agent_default_all(self) -> bool:
+        """True only for intentional full cutover: RUNTIME on, no emergency,
+        and canary raw is empty/whitespace OR contains explicit * / *:*.
+
+        Non-empty raw strings that parse to zero joint keys (e.g. bare-only)
+        are **not** default-all — fail-closed canary mode with zero hits.
+        """
+        if self.pico_legacy_agent_loop_emergency or not self.pico_kimi_agent_runtime:
+            return False
+        if self.kimi_agent_allow_all_token:
+            return True
+        return self.pico_kimi_agent_canary_membership_ids.strip() == ""
+
+    @property
     def kimi_agent_scope(self) -> str:
         """Observable routing scope for /health: off | canary | all."""
         if self.pico_legacy_agent_loop_emergency:
             return "off"
         if not self.pico_kimi_agent_runtime:
             return "off"
-        if self.kimi_agent_allow_all_token:
+        if self.kimi_agent_default_all:
             return "all"
-        if self.kimi_agent_canary_membership_count == 0:
-            # Empty canary with runtime on = prod-default all.
-            return "all"
+        # RUNTIME on but not intentional empty/* : restricted canary
+        # (may have zero valid joints → nobody on KA; fail-closed).
         return "canary"
 
     @property

@@ -136,14 +136,24 @@ async def test_runtime_empty_canary_means_all_when_gate_on(monkeypatch: pytest.M
     monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
 
     principal = Principal(school_id="any-school", membership_id="any-member")
+    # empty principals without allow_all → fail-closed legacy
+    no_all = await run_agent_runtime(
+        use_kimi_agent=True,
+        kimi_agent_canary_principals=(),
+        kimi_agent_allow_all=False,
+        principal=principal,
+        prompt="hello",
+    )
+    assert no_all.final_text == "old"
     result = await run_agent_runtime(
         use_kimi_agent=True,
         kimi_agent_canary_principals=(),
+        kimi_agent_allow_all=True,
         principal=principal,
         prompt="hello",
     )
     assert result.final_text == "kimi"
-    assert calls == ["kimi"]
+    assert calls == ["old", "kimi"]
 
 
 @pytest.mark.asyncio
@@ -226,8 +236,13 @@ def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: p
     assert enabled.kimi_agent_canary_membership_count == 2
     assert enabled.pico_kimi_agent_canary_batch == "BATCH-unit"
     assert enabled.kimi_agent_scope == "canary"
-    empty_all = Settings(pico_kimi_agent_runtime=True, pico_kimi_agent_canary_membership_ids="")
+    empty_all = Settings(_env_file=None, pico_kimi_agent_runtime=True, pico_kimi_agent_canary_membership_ids="")
     assert empty_all.kimi_agent_scope == "all"
+    assert empty_all.kimi_agent_default_all is True
+    bare_only = Settings(_env_file=None, pico_kimi_agent_runtime=True, pico_kimi_agent_canary_membership_ids="bare-member-only")
+    assert bare_only.kimi_agent_scope == "canary"
+    assert bare_only.kimi_agent_default_all is False
+    assert bare_only.kimi_agent_canary_membership_count == 0
 
 
 @pytest.mark.asyncio
