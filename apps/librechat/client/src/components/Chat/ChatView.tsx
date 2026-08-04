@@ -259,7 +259,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                 {!resultOpen && !isLandingPage ? (
                   <button
                     type="button"
-                    className="absolute right-3 top-14 z-20 inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-[12px] font-medium shadow-sm dark:bg-surface-secondary"
+                    className="absolute right-3 top-14 z-[220] inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-[12px] font-medium shadow-sm dark:bg-surface-secondary"
                     onClick={() => setResultOpen(true)}
                     data-testid="result-panel-toggle"
                   >
