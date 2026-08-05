@@ -223,10 +223,10 @@ export default function FilesHubPage() {
       setWarning(null);
       blob = await getPicoArtifactContent(row.id, true);
     } catch (downloadError) {
+      const detail =
+        downloadError instanceof Error ? downloadError.message : String(downloadError);
       setWarning(
-        downloadError instanceof Error
-          ? `下载失败：${downloadError.message}`
-          : `下载失败：${String(downloadError)}`,
+        `下载失败：${detail}。请用本页「下载文件」或 GET /api/pico/v1/artifacts/{id}/content?download=true（勿用虚构 /download 尾缀）。`,
       );
       return;
     }
@@ -431,10 +431,12 @@ export default function FilesHubPage() {
                       <button
                         type="button"
                         onClick={() => void downloadFile(selected)}
-                        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-black/[0.08] px-2.5 text-[11.5px] text-[#444] hover:bg-black/[0.04]"
+                        data-testid="files-hub-download-button"
+                        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-[#1a1a1a] px-3 text-[12px] font-semibold text-white hover:bg-black"
+                        title="下载到本地（/api/pico/v1/artifacts/{id}/content?download=true）"
                       >
                         <Download className="h-3.5 w-3.5" />
-                        下载
+                        下载文件
                       </button>
                     ) : null}
                   </div>
