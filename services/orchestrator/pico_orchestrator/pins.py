@@ -2,7 +2,7 @@
 
 These pins do NOT prove the open-source Kimi Agent runtime is the execution path.
 Today they support version lock + safety yaml loading (see safety.py).
-Execution path: transitional runner.py until Kimi Agent is truly wired
+Execution path: Kimi Agent runtime (KA-4 HARD; transitional runner removed)
 (docs/TRUTH-FREEZE.md O1–O3, debt D8).
 """
 

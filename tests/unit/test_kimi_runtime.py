@@ -28,7 +28,7 @@ from pico_orchestrator.kimi_tools import (
     bind_gateway_tools,
 )
 from pico_orchestrator.provider import ProviderConfig
-from pico_orchestrator.runner import RunCaps, RunResult
+from pico_orchestrator.run_types import RunCaps, RunResult
 from pico_orchestrator.runtime import run_agent_runtime
 
 
@@ -47,19 +47,20 @@ async def _emit_to(events: list[tuple[str, dict[str, Any]]], kind: str, payload:
     events.append((kind, payload))
 
 
+
+async def _noop_emit(_kind: str, _payload: dict[str, Any]) -> None:
+    return None
+
+
 @pytest.mark.asyncio
 async def test_runtime_canary_gate_is_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missed canary / gate off fail closed — no transitional loop (KA-4 HARD)."""
     calls: list[str] = []
-
-    async def old_loop(**_kwargs: Any) -> RunResult:
-        calls.append("old")
-        return RunResult(status="succeeded", final_text="old")
 
     async def kimi_loop(**_kwargs: Any) -> RunResult:
         calls.append("kimi")
         return RunResult(status="succeeded", final_text="kimi")
 
-    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_loop)
     monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
 
     principal = Principal()
@@ -69,54 +70,51 @@ async def test_runtime_canary_gate_is_fail_closed(monkeypatch: pytest.MonkeyPatc
         kimi_agent_canary_principals={joint},
         principal=principal,
         prompt="hello",
+        emit=_noop_emit,
     )
     not_allowlisted = await run_agent_runtime(
         use_kimi_agent=True,
         kimi_agent_canary_principals={("school-a", "member-b")},
         principal=principal,
         prompt="hello",
+        emit=_noop_emit,
     )
     bare_membership_ignored = await run_agent_runtime(
         use_kimi_agent=True,
         kimi_agent_canary_principals={principal.membership_id},
         principal=principal,
         prompt="hello",
+        emit=_noop_emit,
     )
     wrong_school = await run_agent_runtime(
         use_kimi_agent=True,
         kimi_agent_canary_principals={("other-school", principal.membership_id)},
         principal=principal,
         prompt="hello",
+        emit=_noop_emit,
     )
     allowlisted = await run_agent_runtime(
         use_kimi_agent=True,
         kimi_agent_canary_principals={joint},
         principal=principal,
         prompt="hello",
+        emit=_noop_emit,
     )
     allowlisted_string = await run_agent_runtime(
         use_kimi_agent=True,
         kimi_agent_canary_principals={f"{principal.school_id}:{principal.membership_id}"},
         principal=principal,
         prompt="hello",
+        emit=_noop_emit,
     )
 
-    assert (
-        gate_off.final_text,
-        not_allowlisted.final_text,
-        bare_membership_ignored.final_text,
-        wrong_school.final_text,
-        allowlisted.final_text,
-        allowlisted_string.final_text,
-    ) == (
-        "old",
-        "old",
-        "old",
-        "old",
-        "kimi",
-        "kimi",
-    )
-    assert calls == ["old", "old", "old", "old", "kimi", "kimi"]
+    assert gate_off.status == "failed" and "KA-4 HARD" in (gate_off.error or "")
+    assert not_allowlisted.status == "failed"
+    assert bare_membership_ignored.status == "failed"
+    assert wrong_school.status == "failed"
+    assert allowlisted.final_text == "kimi"
+    assert allowlisted_string.final_text == "kimi"
+    assert calls == ["kimi", "kimi"]
 
 
 @pytest.mark.asyncio
@@ -124,51 +122,43 @@ async def test_runtime_empty_canary_means_all_when_gate_on(monkeypatch: pytest.M
     """KA-3: RUNTIME on + empty canary → every principal uses Kimi Agent."""
     calls: list[str] = []
 
-    async def old_loop(**_kwargs: Any) -> RunResult:
-        calls.append("old")
-        return RunResult(status="succeeded", final_text="old")
-
     async def kimi_loop(**_kwargs: Any) -> RunResult:
         calls.append("kimi")
         return RunResult(status="succeeded", final_text="kimi")
 
-    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_loop)
     monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
 
     principal = Principal(school_id="any-school", membership_id="any-member")
-    # empty principals without allow_all → fail-closed legacy
     no_all = await run_agent_runtime(
         use_kimi_agent=True,
         kimi_agent_canary_principals=(),
         kimi_agent_allow_all=False,
         principal=principal,
         prompt="hello",
+        emit=_noop_emit,
     )
-    assert no_all.final_text == "old"
+    assert no_all.status == "failed"
+    assert "KA-4 HARD" in (no_all.error or "")
     result = await run_agent_runtime(
         use_kimi_agent=True,
         kimi_agent_canary_principals=(),
         kimi_agent_allow_all=True,
         principal=principal,
         prompt="hello",
+        emit=_noop_emit,
     )
     assert result.final_text == "kimi"
-    assert calls == ["old", "kimi"]
+    assert calls == ["kimi"]
 
 
 @pytest.mark.asyncio
 async def test_runtime_star_token_means_all(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
-    async def old_loop(**_kwargs: Any) -> RunResult:
-        calls.append("old")
-        return RunResult(status="succeeded", final_text="old")
-
     async def kimi_loop(**_kwargs: Any) -> RunResult:
         calls.append("kimi")
         return RunResult(status="succeeded", final_text="kimi")
 
-    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_loop)
     monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
 
     principal = Principal()
@@ -177,24 +167,21 @@ async def test_runtime_star_token_means_all(monkeypatch: pytest.MonkeyPatch) -> 
         kimi_agent_canary_principals={"*"},
         principal=principal,
         prompt="hello",
+        emit=_noop_emit,
     )
     assert result.final_text == "kimi"
     assert calls == ["kimi"]
 
 
 @pytest.mark.asyncio
-async def test_runtime_emergency_forces_legacy_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_runtime_emergency_is_noop_still_uses_kimi(monkeypatch: pytest.MonkeyPatch) -> None:
+    """KA-4 HARD: emergency no longer forces loop; allowlisted path still Kimi."""
     calls: list[str] = []
-
-    async def old_loop(**_kwargs: Any) -> RunResult:
-        calls.append("old")
-        return RunResult(status="succeeded", final_text="old")
 
     async def kimi_loop(**_kwargs: Any) -> RunResult:
         calls.append("kimi")
         return RunResult(status="succeeded", final_text="kimi")
 
-    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_loop)
     monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_loop)
 
     principal = Principal()
@@ -205,9 +192,22 @@ async def test_runtime_emergency_forces_legacy_loop(monkeypatch: pytest.MonkeyPa
         legacy_agent_loop_emergency=True,
         principal=principal,
         prompt="hello",
+        emit=_noop_emit,
     )
-    assert result.final_text == "old"
-    assert calls == ["old"]
+    assert result.final_text == "kimi"
+    assert calls == ["kimi"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_no_import_of_removed_runner() -> None:
+    import importlib.util
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    runner = root / "services" / "orchestrator" / "pico_orchestrator" / "runner.py"
+    assert not runner.is_file()
+    assert importlib.util.find_spec("pico_orchestrator.runner") is None
+
 
 
 def test_settings_flag_is_false_by_default_and_explicitly_enabled(monkeypatch: pytest.MonkeyPatch) -> None:

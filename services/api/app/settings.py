@@ -40,9 +40,10 @@ class Settings(BaseSettings):
     pico_run_max_seconds: int = 120
     pico_run_max_tokens: int = 8000
     pico_run_max_retries: int = 2
-    # Kimi Agent multi-step path. False → transitional run_agent_loop for all.
+    # Kimi Agent multi-step path (only multi-step implementation after KA-4 HARD).
+    # False → pico-agent multi-step fail-closed (no transitional loop).
     # True + empty canary (or *) → all principals use Kimi Agent (KA-3 prod default).
-    # True + non-empty joint keys → restricted canary only.
+    # True + non-empty joint keys → restricted canary only; miss = fail-closed.
     pico_kimi_agent_runtime: bool = False
     # Joint canary keys school_id:membership_id (comma-separated).
     # Empty (with runtime on) = ALL principals. Bare membership-only values ignored.
@@ -50,8 +51,8 @@ class Settings(BaseSettings):
     pico_kimi_agent_canary_membership_ids: str = ""
     # Optional opaque batch label for ops (never a principal id). Shown on /health only.
     pico_kimi_agent_canary_batch: str = ""
-    # Emergency only: force transitional run_agent_loop for all (default OFF).
-    # Does not dual-run; completely overrides Kimi routing when true.
+    # DEPRECATED no-op (KA-4 HARD): previously forced transitional loop.
+    # Kept for env compatibility /health visibility; does not change routing.
     pico_legacy_agent_loop_emergency: bool = False
     pico_chat_rpm: int = 30
     pico_chat_max_concurrent: int = 2
@@ -144,7 +145,7 @@ class Settings(BaseSettings):
         Non-empty raw strings that parse to zero joint keys (e.g. bare-only)
         are **not** default-all — fail-closed canary mode with zero hits.
         """
-        if self.pico_legacy_agent_loop_emergency or not self.pico_kimi_agent_runtime:
+        if not self.pico_kimi_agent_runtime:
             return False
         if self.kimi_agent_allow_all_token:
             return True
@@ -153,8 +154,6 @@ class Settings(BaseSettings):
     @property
     def kimi_agent_scope(self) -> str:
         """Observable routing scope for /health: off | canary | all."""
-        if self.pico_legacy_agent_loop_emergency:
-            return "off"
         if not self.pico_kimi_agent_runtime:
             return "off"
         if self.kimi_agent_default_all:

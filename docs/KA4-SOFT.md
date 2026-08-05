@@ -1,3 +1,7 @@
+> **SUPERSEDED by KA-4 HARD (#288):** transitional `run_agent_loop` / `runner.py` **removed** (plan A).  
+> Emergency→loop is a permanent **no-op**. Rollback = **redeploy previous tip**.  
+> This file is historical soft boundary only.
+
 # KA-4 软交付（不删 runner）
 
 ```

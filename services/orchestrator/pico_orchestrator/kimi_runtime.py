@@ -2,7 +2,7 @@
 
 Reachable when the runtime gate routes a principal here (KA-3: default when
 ``PICO_KIMI_AGENT_RUNTIME=1`` and canary is empty or ``*``). Failures must not
-silently fall back to ``run_agent_loop``.
+silently fall back — transitional loop was removed (KA-4 HARD).
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from pico_orchestrator.gateway import ArtifactStore, Principal
 from pico_orchestrator.kimi_adapter import KimiEventContractError, KimiWireEventAdapter
 from pico_orchestrator.kimi_tools import GatewayToolContext, bind_gateway_tools
 from pico_orchestrator.provider import resolve_provider
-from pico_orchestrator.runner import EventEmitter, RunCaps, RunResult
+from pico_orchestrator.run_types import EventEmitter, RunCaps, RunResult
 from pico_orchestrator.tools_builtin import build_default_gateway
 from pico_orchestrator.user_errors import enrich_fail_payload
 

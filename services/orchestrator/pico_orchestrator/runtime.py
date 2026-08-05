@@ -1,9 +1,24 @@
-"""Runtime selector: Kimi Agent default when gate is on; no silent dual-run."""
+"""Runtime selector: Kimi Agent only for multi-step; no transitional loop.
+
+KA-4 HARD (#288): ``run_agent_loop`` is removed. Routes that do not select Kimi
+Agent fail closed with an explicit error. Emergency→loop is a permanent no-op.
+Rollback = redeploy a previous git tip (not dual-run).
+"""
 
 from __future__ import annotations
 
 from collections.abc import Collection
 from typing import Any
+
+from pico_orchestrator.run_types import RunResult
+from pico_orchestrator.user_errors import enrich_fail_payload
+
+_LEGACY_LOOP_REMOVED = (
+    "transitional run_agent_loop removed (KA-4 HARD); "
+    "pico-agent multi-step requires Kimi Agent routing "
+    "(PICO_KIMI_AGENT_RUNTIME=1 and principal allowed). "
+    "Rollback = redeploy previous tip."
+)
 
 
 def _as_principal_key(school_id: str, membership_id: str) -> tuple[str, str] | None:
@@ -72,14 +87,14 @@ def should_use_kimi_agent(
     kimi_agent_allow_all: bool = False,
     legacy_agent_loop_emergency: bool = False,
 ) -> bool:
-    """Decide whether the multi-step agent path uses Kimi Agent.
+    """Decide whether multi-step uses Kimi Agent (only remaining implementation).
 
+    - ``legacy_agent_loop_emergency`` is **ignored** (KA-4 HARD no-op; no loop).
     - ``kimi_agent_allow_all=True``: every principal (prod-default empty canary or ``*``).
-    - Otherwise only joint-key canary hits; empty/invalid canary ⇒ nobody (legacy).
-    - Emergency forces transitional ``run_agent_loop``. No silent dual-run/fallback.
+    - Otherwise only joint-key canary hits; empty/invalid canary ⇒ not selected
+      (caller must fail closed — no ``run_agent_loop``).
     """
-    if legacy_agent_loop_emergency:
-        return False
+    del legacy_agent_loop_emergency  # permanent no-op; kept in signature for call sites
     if not use_kimi_agent:
         return False
     if kimi_agent_allow_all or canary_allows_all(canary_principals):
@@ -91,6 +106,20 @@ def should_use_kimi_agent(
     )
 
 
+async def _fail_closed_no_loop(*, emit: Any, reason: str, code: str = "runtime.loop_removed") -> RunResult:
+    payload = enrich_fail_payload(
+        {
+            "status": "failed",
+            "reason": reason,
+            "code": code,
+            "runtime": None,
+        }
+    )
+    if emit is not None:
+        await emit("run.status", payload)
+    return RunResult(status="failed", final_text="", error=reason)
+
+
 async def run_agent_runtime(
     *,
     use_kimi_agent: bool = False,
@@ -100,11 +129,10 @@ async def run_agent_runtime(
     legacy_agent_loop_emergency: bool = False,
     **kwargs: Any,
 ) -> Any:
-    """Dispatch to Kimi Agent when the gate allows; otherwise transitional loop.
+    """Dispatch only to Kimi Agent when the gate allows; else fail closed.
 
-    ``kimi_agent_allow_all`` must be set explicitly for prod-default (empty raw
-    canary). An empty principal collection alone does **not** open all routes —
-    that would turn bare-only misconfig into accidental full cutover.
+    No transitional ``run_agent_loop``. ``legacy_agent_loop_emergency`` is a
+    no-op. ``kimi_agent_allow_all`` must be set for prod-default empty canary.
     """
 
     canary = (
@@ -124,9 +152,26 @@ async def run_agent_runtime(
         legacy_agent_loop_emergency=legacy_agent_loop_emergency,
     )
     if not use_kimi:
-        from pico_orchestrator.runner import run_agent_loop
-
-        return await run_agent_loop(**kwargs)
+        emit = kwargs.get("emit")
+        if legacy_agent_loop_emergency:
+            reason = (
+                "PICO_LEGACY_AGENT_LOOP_EMERGENCY is no-op (KA-4 HARD); "
+                + _LEGACY_LOOP_REMOVED
+            )
+            code = "runtime.emergency_noop"
+        elif not use_kimi_agent:
+            reason = (
+                "PICO_KIMI_AGENT_RUNTIME is off; "
+                + _LEGACY_LOOP_REMOVED
+            )
+            code = "runtime.kimi_required"
+        else:
+            reason = (
+                "principal not on Kimi Agent canary/allow-all; "
+                + _LEGACY_LOOP_REMOVED
+            )
+            code = "runtime.not_allowlisted"
+        return await _fail_closed_no_loop(emit=emit, reason=reason, code=code)
 
     from pico_orchestrator.kimi_runtime import run_kimi_agent
 
