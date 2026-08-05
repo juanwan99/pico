@@ -384,10 +384,13 @@ export function usePicoTaskLedger(
   const rerunFailedRun = useCallback(
     async (runId?: string) => {
       const current = runRef.current;
-      const targetRunId =
-        runId ?? (current?.status === 'failed' ? current.id : undefined);
+      // H8: terminal runs (failed/succeeded/cancelled) may be re-run
+      const terminal =
+        current &&
+        ['failed', 'succeeded', 'cancelled'].includes(current.status || '');
+      const targetRunId = runId ?? (terminal ? current.id : undefined);
       if (!targetRunId) {
-        setRerunError('重新运行失败：未找到失败的任务');
+        setRerunError('重新运行失败：未找到可重跑的任务');
         return;
       }
       setRerunRequestInFlight(true);

@@ -3,13 +3,14 @@
 ```
 DOC: docs/PRODUCT-PASS-CONTRACT.md
 STATUS: BINDING contract
-STAGE: #295 P-POST-RESIDUAL-MEGA
+STAGE: #295 / #298 GLOBAL 已签 / #299 harden
 DATE: 2026-08-05
-SCOPE: 定义 only — 本文件不自动执行全球 PASS 实测全集
+SCOPE: 定义 + 已签状态句；本文件不自动重跑全球 PASS 实测全集
 ```
 
-**全球 product PASS: NOT CLAIMED**（除非业主按 §4 签字句签过）。  
-**ENGINEERING complete ≠ product PASS**（见 §5）。
+**全球 product PASS: CLAIMED** @ `38067b824c2e5fd5e445d7f33a20089c8f13360d`  
+（#298 `OWNER ACCEPT: P-GLOBAL-PASS-CLOSE` 同时覆盖 ENGINEERING-COMPLETE + GLOBAL-PRODUCT-PASS。）  
+**ENGINEERING complete ≠ product PASS**（见 §5）；**禁止执行窗自签重开**。
 
 ---
 

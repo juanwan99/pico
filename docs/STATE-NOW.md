@@ -8,7 +8,7 @@
 ```text
 DOC: docs/STATE-NOW.md
 STATUS: BINDING snapshot
-UPDATED: 2026-08-05 (P-POST-RESIDUAL-MEGA #295)
+UPDATED: 2026-08-05 (P-POST-GLOBAL-HARDEN #299 · post #298 GLOBAL PASS)
 TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 ```
 
@@ -20,9 +20,9 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 |----|------|
 | 产品 | 学校向独立 AI 工作台底座（LibreChat 壳 + Pico 账本/控制面 + Kimi HTTPS） |
 | 编排目标 | **只此一个：开源 Kimi Agent 真接入** |
-| 实现 | 生产默认 `pico-agent` → **Kimi Agent only**（#278+#288 HARD）；`run_agent_loop`/`runner.py` **已删**；RUNTIME=0/旧 emergency **fail-closed**；health **`legacy_loop_unavailable=true`**（#295 F，不再暴露 raw emergency）；回滚=**redeploy 旧 tip** |
-| 授权 | **KA-3 已签**（#170 KA3_AUTH · #278）；**KA-4 HARD 已合**（#288/#289）；编排路径 **ENGINEERING complete**（#295 · 证据矩阵）；全球 product PASS **未宣称**（合同见 [PRODUCT-PASS-CONTRACT.md](./PRODUCT-PASS-CONTRACT.md)） |
-| 禁 | Plan B；教师默认沙箱；edu-cloud；假接入；自升全球 product PASS |
+| 实现 | 生产默认 `pico-agent` → **Kimi Agent only**（#278+#288 HARD）；`run_agent_loop`/`runner.py` **已删**；RUNTIME=0/旧 emergency **fail-closed**；health **`legacy_loop_unavailable=true`**（#295 F）；回滚=**redeploy 旧 tip** |
+| 授权 | **KA-3 已签** · **KA-4 HARD 已合** · 编排 **ENGINEERING complete** · **全球 product PASS 已签**（#298 @ `38067b82…`） |
+| 禁 | Plan B；教师默认沙箱；edu-cloud；假接入；**自签重开**全球 product PASS |
 
 ## 窗口地图（BINDING）
 
@@ -41,9 +41,17 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 
 | 面 | SHA | 含义 |
 |----|-----|------|
-| **main tip（写页时基线）** | **`b2158a399aab44adae26df92ee93f73cc43e0c87`** | #290 residual R1–R9 · #292；#295 本包从此 tip 起 |
-| health 对齐 | exact · scope=`all` · batch=`BATCH-KA3-DEFAULT` · `legacy_loop_unavailable=true` | loopback `/health` |
-| 历史 | `096bbb2…` / `18b7c2b…` 等 | 仅考古；**勿覆盖当前 tip** |
+| **main tip（写页时基线）** | **`38067b824c2e5fd5e445d7f33a20089c8f13360d`** | #295 residual mega · #297；#298 GLOBAL PASS 签于本 tip |
+| health 对齐 | exact · scope=`all` · batch=`BATCH-KA3-DEFAULT` · `legacy_loop_unavailable=true` | **loopback** `/health` 或登录后 `/api/pico/health`（策略 A） |
+| 历史 | `b2158a3…` / `096bbb2…` 等 | 仅考古；**勿覆盖当前 tip** |
+
+### 1.1 窗4 tip 对齐路径（策略 A · #299 H1）
+
+| 路径 | 谁用 | 字段 |
+|------|------|------|
+| 公网 `GET /health` | 探活 | 常仅 `OK` — **不**作为 git_sha 真源 |
+| loopback `GET 127.0.0.1:18765/health` | 窗1 / `remote-health.sh` | **运维字段真源**（含 git_sha） |
+| 登录后 `GET /api/pico/health` | **窗4 验证** | 需 JWT；JSON 含 `git_sha`（**禁止**把全量 health 无设计公网裸露） |
 
 运维字段解读：[OPS-RUNBOOK-STABILIZE.md](./OPS-RUNBOOK-STABILIZE.md) · [KIMI-OPERATIONS.md](./KIMI-OPERATIONS.md)。
 
@@ -55,16 +63,18 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 |----|------|
 | #278 P-KA3-DEFAULT | **CLOSED · OWNER ACCEPT** |
 | 生产默认 runtime | **kimi-agent**（空 canary=全员） |
-| bare/无效 canary | **fail-closed**（不得误变 scope=all） |
+| bare/无效 canary | **fail-closed** |
 | #284 稳定 | **CLOSED/ACCEPT** |
 | #288 KA-4 HARD | **合入 main** · runner 已删 · loop unavailable |
 | #290 residual R1–R9 | **合入** #292 |
-| #295 residual mega | **进行中**（ENGINEERING complete 合同 + UX/运维） |
-| 全站 product PASS | **NOT CLAIMED**（定义见 PRODUCT-PASS-CONTRACT） |
-| orchestration ENGINEERING complete | **允许声明**（证据齐 · **≠** product PASS） |
+| #295 residual mega | **CLOSED** · ENGINEERING complete 合同 |
+| #298 GLOBAL-PASS-CLOSE | **CLOSED · OWNER ACCEPT** @ `38067b82…`（含 ENGINEERING-COMPLETE + GLOBAL-PRODUCT-PASS） |
+| #299 POST-GLOBAL-HARDEN | **进行中**（四根因链加固 · 非重签 GLOBAL） |
+| 全站 product PASS | **CLAIMED @ 38067b82…**（#298 业主签；本包不重开） |
+| orchestration ENGINEERING complete | **CLAIMED**（#295/#298） |
 
-**当前可以说：** 生产 tip 上 pico-agent 默认进 Kimi Agent；编排路径 **ENGINEERING complete**；可 redeploy 回滚；过渡环已物理删除。  
-**不能说：** 全球 product PASS。
+**当前可以说：** 生产 tip 上 pico-agent 默认进 Kimi Agent；编排 **ENGINEERING complete**；全球 product PASS **已签**于 tip `38067b82…`；可 redeploy 回滚。  
+**不能说：** 未部署 tip 上自升 PASS；密钥进 Issue；无 AUTH 实转生产密。
 
 ---
 
@@ -74,26 +84,21 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 |----|------|
 | deploy key / remote-health / prod-update | 脚本在 main |
 | 登录限流 · 测密 · health 字段 | [OPS-RUNBOOK-STABILIZE.md](./OPS-RUNBOOK-STABILIZE.md) |
+| 502 持续采样 | jump 公网 cron + prod loopback · DUTY 见 runbook §7 |
+| 凭据 SSOT | **密码器条目**（非仓库/Issue 明文）· 生产 seed 默认关 |
 | KA-3 回滚 OFF→恢复 | #278 K6 已实测 |
 | 最小测路径（无 host py3.12） | `bash scripts/run-min-tests.sh` 或 CI Python 3.12 |
 
 ---
 
-## 4. residual（#290 关闭表）
+## 4. residual / harden
 
-见阶段 Issue #290 成果包关闭表。摘要目标：
-
-| ID | 项 |
-|----|-----|
-| R1 | in-flight cancel → sticky cancelled |
-| R2 | 产物 content 路径人话 |
-| R3 | 公网 login 502 采样/分类 |
-| R4 | 真登录 + 390 可点 |
-| R5 | REST/proxy 自读路径表 |
-| R6 | 双开不脏账本 + 忙态人话 |
-| R7 | tip == health.git_sha exact |
-| R8 | 容器/CI 一键最小测 |
-| R9 | emergency 语义 no-op 诚实 |
+| 源 | 状态 |
+|----|------|
+| #290 R1–R9 | 关闭（#292） |
+| #295 mega | ENGINEERING complete |
+| #298 G1–G8 | G1–G6/G8 关；**G7 测密实转 BLOCKED**（无 AUTH） |
+| #299 H1–H10 | 本包：验证面/凭据 SSOT/移动层叠/真源文档 |
 
 ---
 
@@ -102,11 +107,12 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 见 [FAST-PATH.md](./FAST-PATH.md) KEEP/CUT。
 
 ```text
-当前 tip 基线: b2158a3… · scope=all · keep-kimi · legacy_loop_unavailable=true
+当前 tip 基线: 38067b82… · scope=all · keep-kimi · legacy_loop_unavailable=true
 KA-3: OWNER ACCEPT · #278
 KA-4 HARD: main · #288/#289
-推进: #295 P-POST-RESIDUAL-MEGA
-禁: 假全球 product PASS · 无证 ENGINEERING · 回 loop · Pi/DeepSeek 默认
+GLOBAL product PASS: OWNER ACCEPT · #298 @ 38067b82…
+推进: #299 P-POST-GLOBAL-HARDEN（加固 · 不重开 GLOBAL）
+禁: 假重签 GLOBAL · 密钥进 Issue · 无 AUTH 实转 · pe 假绿 · 回 loop · Pi/DeepSeek 默认
 ```
 
-product PASS: **NOT CLAIMED** · orchestration: **ENGINEERING complete**（≠ product PASS）
+product PASS: **CLAIMED @ 38067b824c2e5fd5e445d7f33a20089c8f13360d** · orchestration: **ENGINEERING complete**

@@ -193,7 +193,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     canCancel={Boolean(cancellableRunId)}
                     cancelling={ledger.cancelling}
                     onCancel={() => void ledger.cancelRun(cancellableRunId)}
-                    canRerun={ledger.run?.status === 'failed'}
+                    canRerun={['failed', 'succeeded', 'cancelled'].includes(
+                      ledger.run?.status || '',
+                    )}
                     rerunning={ledger.rerunning}
                     onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
                     processHint={ledger.processHint}
@@ -250,7 +252,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     picoArtifacts={ledger.artifacts}
                     runEvents={ledger.events}
                     run={ledger.run}
-                    canRerun={ledger.run?.status === 'failed'}
+                    canRerun={['failed', 'succeeded', 'cancelled'].includes(
+                      ledger.run?.status || '',
+                    )}
                     rerunning={ledger.rerunning}
                     onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
                     onClose={() => setResultOpen(false)}
