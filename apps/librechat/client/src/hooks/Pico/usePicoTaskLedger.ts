@@ -186,10 +186,12 @@ function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null
     return ['停止请求已提交', runtime, step].filter(Boolean).join(' · ');
   }
   if (isActiveRun(run)) {
+    // Package B: job lives on the server; tab close does not stop it.
+    const cloud = '云端继续中';
     if (step) {
-      return [runtime ? `运行中 · ${runtime}` : '运行中', step].join(' · ');
+      return [cloud, runtime, step].filter(Boolean).join(' · ');
     }
-    return runtime ? `运行中 · ${runtime}` : '正在处理…';
+    return runtime ? `${cloud} · ${runtime}` : `${cloud} · 关闭页面任务仍会继续`;
   }
   if (!run && !runtime && !step) {
     return null;
@@ -229,7 +231,8 @@ function statusLabel(
   }
   if (isActiveRun(run)) {
     const runtime = runtimeHint(events);
-    return runtime ? `等待模型响应 · ${runtime}` : '等待模型响应';
+    // Durable default: ledger is source of truth after reload / tab close.
+    return runtime ? `云端运行中 · ${runtime}` : '云端运行中（关闭页面不中断）';
   }
   if (run.status === 'succeeded') {
     const runtime = runtimeHint(events);

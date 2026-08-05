@@ -7,6 +7,7 @@ import json
 import time
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -1115,6 +1116,21 @@ async def chat_completions(
         async def emit(event_type: str, payload: dict[str, Any]) -> None:
             async with factory() as session:
                 await append_event(session, run_id, event_type, payload)
+                # Checkpoint survives client detach (package B).
+                if event_type == "tool.result":
+                    tool_name = payload.get("name") or payload.get("tool") or "tool"
+                    await append_event(
+                        session,
+                        run_id,
+                        "run.checkpoint",
+                        {
+                            "kind": "tool.result",
+                            "tool": tool_name,
+                            "summary": str(
+                                payload.get("summary") or payload.get("ok") or ""
+                            )[:200],
+                        },
+                    )
             if event_type == "message.delta":
                 text = str(payload.get("text") or "")
                 if text:
@@ -1136,6 +1152,8 @@ async def chat_completions(
                     await q.put(("status", f"\n〔仍在处理… 已用时 {elapsed}s〕\n"))
                 else:
                     await q.put(("status", "\n〔仍在处理…〕\n"))
+            elif event_type == "run.checkpoint":
+                await q.put(("status", "\n〔检查点已保存〕\n"))
 
         async def is_cancelled() -> bool:
             async with factory() as session:
@@ -1146,14 +1164,31 @@ async def chat_completions(
             try:
                 from app.artifact_store import LedgerArtifactStore
 
-                caps = settings.delivery_run_caps(
-                    allowed_tools=(
-                        list(skill_snapshot.get("tools") or []) if skill_snapshot else None
-                    ),
-                    skill_instruction=instruction_for_snapshot(skill_snapshot),
-                )
+                # Detach-on mode uses durable wall so leave-and-return jobs can exceed 900s.
+                if settings.pico_run_detach_on_disconnect:
+                    caps = settings.durable_run_caps(
+                        allowed_tools=(
+                            list(skill_snapshot.get("tools") or []) if skill_snapshot else None
+                        ),
+                        skill_instruction=instruction_for_snapshot(skill_snapshot),
+                    )
+                else:
+                    caps = settings.delivery_run_caps(
+                        allowed_tools=(
+                            list(skill_snapshot.get("tools") or []) if skill_snapshot else None
+                        ),
+                        skill_instruction=instruction_for_snapshot(skill_snapshot),
+                    )
                 if skill_snapshot:
                     await emit("skill.snapshot", skill_snapshot)
+                await emit(
+                    "run.durable",
+                    {
+                        "detach_on_disconnect": settings.pico_run_detach_on_disconnect,
+                        "max_seconds": caps.max_seconds,
+                        "policy": "client_is_subscriber",
+                    },
+                )
                 result = await run_agent_runtime(
                     use_kimi_agent=settings.pico_kimi_agent_runtime,
                     kimi_agent_canary_principals=(
@@ -1184,11 +1219,12 @@ async def chat_completions(
                 )
                 await q.put(("done", result))
             except asyncio.CancelledError:
+                # Only explicit task.cancel() (legacy kill path) lands here.
                 await asyncio.shield(
                     _finalize_run(
                         run_id,
                         status="cancelled",
-                        error="stream disconnected",
+                        error="run cancelled",
                         task_id=task_id,
                     )
                 )
@@ -1207,7 +1243,16 @@ async def chat_completions(
                         error=None,
                         task_id=task_id,
                     )
-                    await q.put(("done", type("R", (), {"final_text": "", "error": None, "status": "cancelled"})()))
+                    await q.put(
+                        (
+                            "done",
+                            type(
+                                "R",
+                                (),
+                                {"final_text": "", "error": None, "status": "cancelled"},
+                            )(),
+                        )
+                    )
                 else:
                     await _finalize_run(
                         run_id,
@@ -1217,12 +1262,22 @@ async def chat_completions(
                     )
                     await q.put(("error", e))
 
-        task = asyncio.create_task(run())
+        bg_task = asyncio.create_task(run())
         saw_text = False
-        interrupted = False
+        detach = settings.pico_run_detach_on_disconnect
         try:
             while True:
-                kind, payload = await q.get()
+                try:
+                    kind, payload = await asyncio.wait_for(q.get(), timeout=1.0)
+                except TimeoutError:
+                    if bg_task.done():
+                        # Drain any terminal item that raced the timeout.
+                        if not q.empty():
+                            kind, payload = q.get_nowait()
+                        else:
+                            break
+                    else:
+                        continue
                 if kind == "delta":
                     saw_text = True
                     yield chunk({"content": str(payload)})
@@ -1247,26 +1302,53 @@ async def chat_completions(
                         for i in range(0, len(text), step):
                             yield chunk({"content": text[i : i + step]})
                     break
-        finally:
-            if not task.done():
-                interrupted = True
-                task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            except Exception as wait_err:  # noqa: BLE001
-                # runner already reported; avoid breaking the SSE trailer
-                _ = wait_err
-            if interrupted:
+        except (asyncio.CancelledError, GeneratorExit):
+            # Client closed the SSE. Durable default: keep bg_task alive.
+            if detach and not bg_task.done():
                 await asyncio.shield(
-                    _finalize_run(
-                        run_id,
-                        status="cancelled",
-                        error="stream disconnected",
-                        task_id=task_id,
+                    emit(
+                        "run.client_detached",
+                        {
+                            "reason": "sse_disconnect",
+                            "message": "客户端已断开；任务在云端继续。",
+                            "run_id": run_id,
+                            "task_id": task_id,
+                        },
                     )
                 )
+                # Do not cancel bg_task — ledger remains source of truth.
+                return
+            if not bg_task.done():
+                bg_task.cancel()
+            raise
+        finally:
+            if not detach:
+                # Legacy: stream lifetime owns the job.
+                if not bg_task.done():
+                    bg_task.cancel()
+                try:
+                    await bg_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as wait_err:  # noqa: BLE001
+                    _ = wait_err
+            elif bg_task.done():
+                # Detach mode but job already finished while client was connected.
+                with suppress(Exception):
+                    await bg_task
+
+        if detach and not bg_task.done():
+            # Client left the generator normally without consuming done — keep job.
+            await emit(
+                "run.client_detached",
+                {
+                    "reason": "stream_end_while_running",
+                    "message": "客户端流结束；任务在云端继续。",
+                    "run_id": run_id,
+                    "task_id": task_id,
+                },
+            )
+            return
 
         yield chunk({}, finish="stop")
         yield b"data: [DONE]\n\n"
