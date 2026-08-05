@@ -719,7 +719,7 @@ async def _run_and_collect(
     history: list[dict[str, Any]] | None = None,
     skill_snapshot: dict[str, Any] | None = None,
 ) -> Any:
-    from pico_orchestrator.runner import RunCaps
+    from pico_orchestrator.run_types import RunCaps
     from pico_orchestrator.runtime import run_agent_runtime
     from pico_orchestrator.skill_policy import instruction_for_snapshot
 
@@ -1073,7 +1073,7 @@ async def chat_completions(
             return
 
         # pico-agent: progressive deltas from agent loop (not wait-then-fake-chunk)
-        from pico_orchestrator.runner import RunCaps
+        from pico_orchestrator.run_types import RunCaps
         from pico_orchestrator.runtime import run_agent_runtime
 
         from app.db import init_db

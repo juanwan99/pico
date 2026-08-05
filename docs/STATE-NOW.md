@@ -8,7 +8,7 @@
 ```text
 DOC: docs/STATE-NOW.md
 STATUS: BINDING snapshot
-UPDATED: 2026-08-05
+UPDATED: 2026-08-05 (KA-4 HARD)
 TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 ```
 
@@ -21,7 +21,7 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 | 产品 | 学校向独立 AI 工作台底座（LibreChat 壳 + Pico 账本/控制面 + Kimi HTTPS） |
 | 编排目标 | **只此一个：开源 Kimi Agent 真接入** |
 | 实现现状 | 生产默认 `pico-agent` → **Kimi Agent**（#278 OWNER ACCEPT · tip/`health.git_sha` `18b7c2b…` · scope=**all** · emergency **false**） |
-| 实现债 | `runner.py` / `run_agent_loop` **仍在仓**；默认路径**不可达**（仅 RUNTIME=0 或 emergency）；**KA-4 软**见 [KA4-SOFT.md](./KA4-SOFT.md) · #284 |
+| 实现 | 生产默认 `pico-agent` → **Kimi Agent only**（#278+#288 HARD）；`run_agent_loop`/`runner.py` **已删**；RUNTIME=0/旧 emergency **fail-closed**；回滚=**redeploy 旧 tip** |
 | 授权 | **KA-3 已签**（#170 KA3_AUTH · #278）；全球 product PASS **未宣称**；orchestration complete **未宣称** |
 | 禁 | Plan B；教师默认沙箱；edu-cloud；假接入；硬删 runner 当完成证据 |
 
@@ -57,7 +57,8 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 | #278 P-KA3-DEFAULT | **CLOSED · OWNER ACCEPT** @ `18b7c2b…` |
 | 生产默认 runtime | **kimi-agent**（空 canary=全员） |
 | bare/无效 canary | **fail-closed**（不得误变 scope=all） |
-| #284 冻 tip 稳定包 | **进行中 / 见 Issue**（复审 · residual 软 · KA-4 软 · 不写 complete） |
+| #284 KA-4 软 | **CLOSED/ACCEPT** · #288 HARD 物理收敛进行中 |
+| #288 KA-4 HARD | **进行中** · 删 runner · emergency no-op |
 | 全站 product PASS | **NOT CLAIMED** |
 | orchestration complete | **NOT CLAIMED** |
 
@@ -82,7 +83,7 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 - in-flight cancel 弱（终态 cancel→409）  
 - REST 自读路径易混（正确：`/v1/artifacts/{id}/content`）  
 - **#159 zombie 清库** — 须授权  
-- KA-4 **硬删 runner** — **不做**（软交付即可）  
+- KA-4 HARD (#288) — 物理删 runner（授权后）  
 
 ---
 

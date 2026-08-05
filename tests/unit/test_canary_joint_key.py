@@ -64,7 +64,8 @@ def test_canary_allows_all_empty_and_star() -> None:
         canary_principals=(),
         kimi_agent_allow_all=True,
     )
-    assert not should_use_kimi_agent(
+    # KA-4 HARD: emergency is no-op — still selects Kimi when allow_all
+    assert should_use_kimi_agent(
         use_kimi_agent=True,
         school_id="s",
         membership_id="m",

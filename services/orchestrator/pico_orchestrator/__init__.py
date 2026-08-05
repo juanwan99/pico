@@ -1,8 +1,7 @@
 """Pico orchestrator package.
 
-CURRENT: transitional OpenAI-compatible tool loop + allowlist gateway + pin checks.
-TARGET:  open-source Kimi Agent runtime (docs/TRUTH-FREEZE.md). Do not describe
-this package as "Kimi Agent integrated" until the runtime path is real.
+TARGET/CURRENT: open-source Kimi Agent multi-step runtime + allowlist gateway
++ pin checks (KA-4 HARD: transitional run_agent_loop removed).
 
 Package root re-exports below are kept for compatibility (pins/safety symbols).
 """

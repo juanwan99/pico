@@ -72,10 +72,11 @@ ssh pico-prod 'curl -sf --max-time 5 http://127.0.0.1:18765/health'
 | 目标态 | 配置 |
 |--------|------|
 | 生产默认 | `PICO_KIMI_AGENT_RUNTIME=1` + **空** canary → scope=`all` |
-| 紧急回 loop | `PICO_KIMI_AGENT_RUNTIME=0` **或** `PICO_LEGACY_AGENT_LOOP_EMERGENCY=1` → recreate |
+| 紧急回 loop | **不可用**（KA-4 HARD）：`RUNTIME=0` / emergency → multi-step **fail-closed**，不进 loop |
 | 有限 canary | RUNTIME=1 + 非空 **joint** `school:membership` 列表 |
+| **回滚** | **redeploy previous tip**（`PICO_DEPLOY_SHA=<old> bash scripts/prod-update.sh`） |
 
-**禁止：** 失败时静默 dual-run；默认 DeepSeek/Pi；删除 `runner.py` 当「清理完成」证据。
+**禁止：** 静默 dual-run；默认 DeepSeek/Pi；假删 runner。
 
 ---
 

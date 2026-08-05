@@ -36,7 +36,7 @@ from app.openai_compat import (
 )
 from app.run_service import reconcile_orphaned_runs, request_cancel
 from app.settings import Settings, get_settings
-from pico_orchestrator.runner import RunResult
+from pico_orchestrator.run_types import RunResult
 
 
 @pytest.mark.asyncio
@@ -140,6 +140,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
     monkeypatch.setenv("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
     monkeypatch.setenv("PICO_ENV", "development")
+    # KA-4 HARD: multi-step requires Kimi Agent routing (no transitional loop)
+    monkeypatch.setenv("PICO_KIMI_AGENT_RUNTIME", "1")
+    monkeypatch.setenv("PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS", "")
+    monkeypatch.setenv("PICO_LEGACY_AGENT_LOOP_EMERGENCY", "0")
 
     from app import db as dbmod
     from app.settings import get_settings
@@ -171,12 +175,12 @@ def _stub_provider(monkeypatch, text: str) -> None:
 
 
 def _stub_agent(monkeypatch, result: RunResult) -> None:
-    async def fake_run_agent_loop(*, emit, **_kwargs) -> RunResult:
-        await emit("run.status", {"status": "running"})
-        await emit("run.status", {"status": result.status})
+    async def fake_kimi(*, emit, **_kwargs) -> RunResult:
+        await emit("run.status", {"status": "running", "runtime": "kimi-agent"})
+        await emit("run.status", {"status": result.status, "runtime": "kimi-agent"})
         return result
 
-    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", fake_run_agent_loop)
+    monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", fake_kimi)
 
 
 @pytest.mark.asyncio
@@ -184,6 +188,7 @@ async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
     tmp_path,
     monkeypatch,
 ) -> None:
+    """KA-4 HARD: non-KA routes fail closed; only allowlisted hits Kimi."""
     db = tmp_path / "runtime-flag.db"
     monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
     monkeypatch.setenv("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
@@ -197,19 +202,12 @@ async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
     await init_db()
     calls: list[str] = []
 
-    async def old_runtime(*, emit, **_kwargs) -> RunResult:
-        calls.append("old")
-        await emit("run.status", {"status": "running"})
-        await emit("run.status", {"status": "succeeded"})
-        return RunResult(status="succeeded", final_text="old")
-
     async def kimi_runtime(*, emit, **_kwargs) -> RunResult:
         calls.append("kimi")
         await emit("run.status", {"status": "running", "runtime": "kimi-agent"})
         await emit("run.status", {"status": "succeeded", "runtime": "kimi-agent"})
         return RunResult(status="succeeded", final_text="kimi")
 
-    monkeypatch.setattr("pico_orchestrator.runner.run_agent_loop", old_runtime)
     monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_runtime)
     base_settings = Settings(
         _env_file=None,
@@ -222,7 +220,7 @@ async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
         settings=base_settings,
     )
 
-    async def complete(settings: Settings, conversation: str) -> str:
+    async def complete(settings: Settings, conversation: str) -> dict:
         response = await chat_completions(
             ChatCompletionRequest(
                 model="pico-agent",
@@ -235,32 +233,33 @@ async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
             x_pico_membership_id=None,
             settings=settings,
         )
-        return response["choices"][0]["message"]["content"]
+        return response
 
-    assert await complete(base_settings, "conversation-old-runtime") == "old"
+    # RUNTIME off → fail closed (no loop)
+    off = await complete(base_settings, "conversation-old-runtime")
+    assert "KA-4 HARD" in (off["choices"][0]["message"]["content"] or off.get("error", "") or str(off))
     not_allowlisted_settings = Settings(
         _env_file=None,
         pico_kimi_agent_runtime=True,
         pico_kimi_agent_canary_membership_ids="school-a:another-member",
     )
-    assert await complete(
-        not_allowlisted_settings, "conversation-not-allowlisted-runtime"
-    ) == "old"
+    miss = await complete(not_allowlisted_settings, "conversation-not-allowlisted-runtime")
+    assert "KA-4 HARD" in str(miss)
     bare_membership_settings = Settings(
         _env_file=None,
         pico_kimi_agent_runtime=True,
         pico_kimi_agent_canary_membership_ids="member-runtime-flag",
     )
-    assert await complete(
-        bare_membership_settings, "conversation-bare-membership-runtime"
-    ) == "old"
+    bare = await complete(bare_membership_settings, "conversation-bare-membership-runtime")
+    assert "KA-4 HARD" in str(bare)
     allowlisted_settings = Settings(
         _env_file=None,
         pico_kimi_agent_runtime=True,
         pico_kimi_agent_canary_membership_ids="school-a:member-runtime-flag",
     )
-    assert await complete(allowlisted_settings, "conversation-kimi-runtime") == "kimi"
-    assert calls == ["old", "old", "old", "kimi"]
+    hit = await complete(allowlisted_settings, "conversation-kimi-runtime")
+    assert hit["choices"][0]["message"]["content"] == "kimi"
+    assert calls == ["kimi"]
 
 
 def _complete(
@@ -715,7 +714,6 @@ async def test_agent_stream_polls_ledger_cancel_request(tmp_path, monkeypatch) -
     dbmod._engine = None
     dbmod._Session = None
     await init_db()
-    settings = Settings()
 
     async def cancel_aware_runner(*, emit, is_cancelled, **_kwargs) -> RunResult:
         factory = session_factory()
@@ -728,8 +726,13 @@ async def test_agent_stream_polls_ledger_cancel_request(tmp_path, monkeypatch) -
         return RunResult(status="cancelled", final_text="")
 
     monkeypatch.setattr(
-        "pico_orchestrator.runner.run_agent_loop",
+        "pico_orchestrator.kimi_runtime.run_kimi_agent",
         cancel_aware_runner,
+    )
+    settings = Settings(
+        _env_file=None,
+        pico_kimi_agent_runtime=True,
+        pico_kimi_agent_canary_membership_ids="",
     )
     token = issue_test_token(
         school_id="school-a",
