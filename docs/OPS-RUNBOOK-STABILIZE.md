@@ -13,6 +13,19 @@ AUTH_HEALTH: GET /api/pico/health  (登录后 · 策略 A · 含 git_sha)
 
 ---
 
+## 0.1 分级 Run 预算（P-COMPLEX-DONE · 包 A）
+
+| 档 | 用途 | 默认 |
+|----|------|------|
+| **delivery** | `pico-agent` / 课件等多步 | `PICO_RUN_MAX_SECONDS=900` · steps=24 · tokens=32000 |
+| **short** | 直连模型短聊 | `PICO_RUN_SHORT_MAX_SECONDS=120` · tokens=8000 |
+
+- 交付档 **禁止** 仍为 `120`（会 `Kimi Agent timeout after 120s` 杀课件）。
+- 改 env 后须 recreate `pico-api`；可用 `bash scripts/apply-tiered-run-caps.sh --remote pico-prod`。
+- 长稳 30min+ / 关页续跑属 **包 B**，勿把 `MAX_SECONDS` 调到数小时冒充完成。
+
+---
+
 ## 1. 读 health（生产）
 
 ```bash

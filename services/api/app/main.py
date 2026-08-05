@@ -223,11 +223,7 @@ async def freeze_meta(settings: Settings = Depends(get_settings)) -> dict:
         "plan": "MVP-3DAY v1.2 FIXED",
         "agent_pins": AGENT_PINS,
         "installed": installed_versions(),
-        "spend_caps": {
-            "max_seconds": settings.pico_run_max_seconds,
-            "max_tokens": settings.pico_run_max_tokens,
-            "max_retries": settings.pico_run_max_retries,
-        },
+        "spend_caps": settings.spend_caps_dict(),
         "dangerous_tools_enabled_setting": settings.pico_dangerous_tools_enabled,
         "model_ready": cfg is not None,
         "model_provider": cfg.name if cfg else None,

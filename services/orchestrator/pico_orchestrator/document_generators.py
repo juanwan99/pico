@@ -22,6 +22,23 @@ def _require_marker(marker: str) -> str:
     return value
 
 
+def _html_body_paragraphs(body: str | None, *, marker: str) -> str:
+    """Escape body into one or more <p> blocks (blank-line separated)."""
+    raw = (body or "").strip() or f"Pico HTML deliverable · {marker}"
+    # Cap runaway agent output while still allowing full lesson pages.
+    if len(raw) > 50_000:
+        raw = raw[:50_000]
+    chunks = [part.strip() for part in raw.replace("\r\n", "\n").split("\n\n") if part.strip()]
+    if not chunks:
+        chunks = [f"Pico HTML deliverable · {marker}"]
+    parts: list[str] = []
+    for chunk in chunks:
+        # Single newlines inside a paragraph become <br/>; still fully escaped.
+        lines = [html.escape(line) for line in chunk.split("\n")]
+        parts.append("<p>" + "<br />\n".join(lines) + "</p>")
+    return "\n  ".join(parts)
+
+
 def build_html_document(
     *,
     title: str,
@@ -32,7 +49,7 @@ def build_html_document(
     marker = _require_marker(marker)
     safe_title = html.escape((title or "Pico HTML").strip() or "Pico HTML")
     safe_marker = html.escape(marker)
-    safe_body = html.escape((body or "").strip() or f"Pico HTML deliverable · {marker}")
+    body_html = _html_body_paragraphs(body, marker=marker)
     # CSP meta + no script tags + no external links. Preview also sandboxes.
     doc = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -42,14 +59,15 @@ def build_html_document(
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{safe_title}</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.5; }}
+    body {{ font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.5; max-width: 48rem; }}
+    h1 {{ font-size: 1.5rem; }}
     .marker {{ font-family: ui-monospace, monospace; background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }}
   </style>
 </head>
 <body>
   <h1>{safe_title}</h1>
   <p>标记：<span class="marker" data-pico-marker="{safe_marker}">{safe_marker}</span></p>
-  <p>{safe_body}</p>
+  {body_html}
 </body>
 </html>
 """

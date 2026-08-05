@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+import importlib.util
 import io
-import sys
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
-
-from pico_orchestrator.document_generators import (
-    build_docx_document,
-    build_html_document,
-    build_pptx_document,
+_PATH = (
+    ROOT
+    / "services"
+    / "orchestrator"
+    / "pico_orchestrator"
+    / "document_generators.py"
 )
+_SPEC = importlib.util.spec_from_file_location("document_generators", _PATH)
+_mod = importlib.util.module_from_spec(_SPEC)
+assert _SPEC.loader is not None
+_SPEC.loader.exec_module(_mod)
+build_docx_document = _mod.build_docx_document
+build_html_document = _mod.build_html_document
+build_pptx_document = _mod.build_pptx_document
 
 
 def test_html_contains_marker_and_csp() -> None:
@@ -23,6 +30,17 @@ def test_html_contains_marker_and_csp() -> None:
     assert "Content-Security-Policy" in text
     assert "<script" not in text.lower()
     assert "http://evil" not in text
+
+
+def test_html_multi_paragraph_body_for_courseware() -> None:
+    marker = "MENDEL_HTML_MARK"
+    body = "分离定律：一对相对性状。\n\n自由组合：两对独立遗传。"
+    raw = build_html_document(title="mendel.html", marker=marker, body=body)
+    text = raw.decode("utf-8")
+    assert text.count("<p>") >= 3  # marker line + 2 body paragraphs
+    assert "分离定律" in text
+    assert "自由组合" in text
+    assert "<script" not in text.lower()
 
 
 def test_docx_is_real_ooxml_zip() -> None:

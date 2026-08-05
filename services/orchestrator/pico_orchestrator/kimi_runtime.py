@@ -53,6 +53,8 @@ _AGENT_DIR = _agent_bundle_dir()
 _AGENT_FILE = _AGENT_DIR / "pico-kimi-runtime.yaml"
 _SYSTEM_PROMPT_FILE = _AGENT_DIR / "system.md"
 _CANCEL_POLL_SECONDS = 0.05
+# Teacher-visible progress while a long delivery run is still alive (package A).
+_HEARTBEAT_SECONDS = 30.0
 _USAGE_FIELDS = (
     "input_tokens",
     "output_tokens",
@@ -149,6 +151,7 @@ async def run_kimi_agent(
                             stop_watcher,
                             timed_out,
                             caps.max_seconds,
+                            emit=emit,
                         )
                     )
                     try:
@@ -509,18 +512,43 @@ async def _watch_cancel(
     stop: asyncio.Event,
     timed_out: asyncio.Event,
     max_seconds: int,
+    *,
+    emit: EventEmitter | None = None,
+    heartbeat_seconds: float = _HEARTBEAT_SECONDS,
 ) -> None:
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + max_seconds
+    started = loop.time()
+    deadline = started + max_seconds
+    last_heartbeat = started
     while not stop.is_set():
         if await is_cancelled():
             session.cancel()
             return
-        remaining = deadline - loop.time()
+        now = loop.time()
+        remaining = deadline - now
         if remaining <= 0:
             timed_out.set()
             session.cancel()
             return
+        if (
+            emit is not None
+            and heartbeat_seconds > 0
+            and (now - last_heartbeat) >= heartbeat_seconds
+        ):
+            elapsed = int(now - started)
+            try:
+                await emit(
+                    "run.heartbeat",
+                    {
+                        "elapsed_seconds": elapsed,
+                        "remaining_seconds": max(0, int(remaining)),
+                        "max_seconds": max_seconds,
+                        "runtime": "kimi-agent",
+                    },
+                )
+            except Exception:  # noqa: BLE001 — never kill the run on UI heartbeat failure
+                pass
+            last_heartbeat = now
         try:
             await asyncio.wait_for(
                 stop.wait(), timeout=min(_CANCEL_POLL_SECONDS, remaining)

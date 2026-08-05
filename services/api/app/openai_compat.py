@@ -719,7 +719,6 @@ async def _run_and_collect(
     history: list[dict[str, Any]] | None = None,
     skill_snapshot: dict[str, Any] | None = None,
 ) -> Any:
-    from pico_orchestrator.run_types import RunCaps
     from pico_orchestrator.runtime import run_agent_runtime
     from pico_orchestrator.skill_policy import instruction_for_snapshot
 
@@ -736,10 +735,7 @@ async def _run_and_collect(
             run = await session.get(RunRow, run_id)
             return bool(run and (run.cancel_requested or run.status == "cancelled"))
 
-    caps = RunCaps(
-        max_seconds=settings.pico_run_max_seconds,
-        max_tokens=settings.pico_run_max_tokens,
-        max_retries=settings.pico_run_max_retries,
+    caps = settings.delivery_run_caps(
         allowed_tools=list(skill_snapshot.get("tools") or []) if skill_snapshot else None,
         skill_instruction=instruction_for_snapshot(skill_snapshot),
     )
@@ -897,12 +893,16 @@ async def chat_completions(
     if skill_snapshot and skill_snapshot.get("tools"):
         model = "pico-agent"
     _assert_model_allowed(model, settings)
-    effective_max_tokens = _effective_max_tokens(body.max_tokens, settings.pico_run_max_tokens)
+    # Direct model = short tier; pico-agent = delivery tier for token ceiling.
+    use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+    token_ceiling = (
+        settings.pico_run_short_max_tokens if use_direct else settings.pico_run_max_tokens
+    )
+    effective_max_tokens = _effective_max_tokens(body.max_tokens, token_ceiling)
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
 
     # Direct Kimi (or DeepSeek) for non-agent models — real HTTPS API, not mock
-    use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
     if not body.stream:
         task_id, run_id = await _ledger_task_run(
             principal=principal,
@@ -1073,7 +1073,6 @@ async def chat_completions(
             return
 
         # pico-agent: progressive deltas from agent loop (not wait-then-fake-chunk)
-        from pico_orchestrator.run_types import RunCaps
         from pico_orchestrator.runtime import run_agent_runtime
 
         from app.db import init_db
@@ -1124,11 +1123,19 @@ async def chat_completions(
                 # light status for first step only — avoid spam
                 if payload.get("step") == 1:
                     await q.put(("status", "正在思考…\n"))
+                elif isinstance(payload.get("step"), int) and payload["step"] > 1:
+                    await q.put(("status", f"\n〔步骤 {payload['step']}〕\n"))
             elif event_type == "tool.call":
                 name = payload.get("name") or payload.get("tool") or "tool"
                 await q.put(("status", f"\n〔调用工具 {name}〕\n"))
             elif event_type == "tool.result":
                 await q.put(("status", "〔工具完成〕\n"))
+            elif event_type == "run.heartbeat":
+                elapsed = payload.get("elapsed_seconds")
+                if elapsed is not None:
+                    await q.put(("status", f"\n〔仍在处理… 已用时 {elapsed}s〕\n"))
+                else:
+                    await q.put(("status", "\n〔仍在处理…〕\n"))
 
         async def is_cancelled() -> bool:
             async with factory() as session:
@@ -1139,11 +1146,10 @@ async def chat_completions(
             try:
                 from app.artifact_store import LedgerArtifactStore
 
-                caps = RunCaps(
-                    max_seconds=settings.pico_run_max_seconds,
-                    max_tokens=settings.pico_run_max_tokens,
-                    max_retries=settings.pico_run_max_retries,
-                    allowed_tools=list(skill_snapshot.get("tools") or []) if skill_snapshot else None,
+                caps = settings.delivery_run_caps(
+                    allowed_tools=(
+                        list(skill_snapshot.get("tools") or []) if skill_snapshot else None
+                    ),
                     skill_instruction=instruction_for_snapshot(skill_snapshot),
                 )
                 if skill_snapshot:
@@ -1230,7 +1236,12 @@ async def chat_completions(
                 elif kind == "done":
                     result = payload
                     if not saw_text:
-                        text = getattr(result, "final_text", None) or getattr(result, "error", None) or ""
+                        text = getattr(result, "final_text", None) or ""
+                        if not text and getattr(result, "status", None) == "failed":
+                            # Prefer Chinese user_message for timeout / max_steps / token_cap
+                            text = user_message_for_error(getattr(result, "error", None))
+                        if not text:
+                            text = getattr(result, "error", None) or ""
                         # small pieces if only final blob
                         step = 32
                         for i in range(0, len(text), step):

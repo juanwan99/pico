@@ -16,9 +16,12 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
     if "unable to open database file" in low:
         return "服务繁忙，请稍后重试。"
     if code == "token_cap" or "token cap" in low:
-        return "本次回答超出长度上限，请缩短问题或新开对话后再试。"
-    if "timeout" in low:
-        return "处理超时。请重试，或把问题拆短一些。"
+        return "本次回答超出长度上限。可点「再跑一次」，或缩短问题后重试。"
+    if c == "timeout" or "timeout" in low or "timed out" in low:
+        return (
+            "处理超时。可点「再跑一次」继续生成，"
+            "或把任务拆短；交付类任务默认预算约 15 分钟。"
+        )
     if "cancelled" in low or c == "cancelled":
         return "已停止生成。"
     if (
@@ -37,7 +40,7 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "请求过于频繁或模型限流。请稍后再试，勿并行轰炸。"
     if c in ("runtime.emergency_noop", "runtime.loop_removed", "runtime.kimi_required"):
         return "多智能体运行时当前不可用（已卸过渡环）。请确认 Kimi Agent 已开启，或联系管理员 redeploy 回滚。"
-    if "connect" in low or "connection" in low or "network" in low or "timed out" in low:
+    if "connect" in low or "connection" in low or "network" in low:
         return "无法连接模型服务。请检查网络或稍后重试。"
     if "owner was lost" in low or "api restart" in low or "greenlet" in low:
         return "服务刚完成维护或重启，请重新打开任务后重试。"
@@ -54,10 +57,17 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "登录已失效，请打开设置重新获取令牌。"
     if "cross_school" in low or "cross-school" in low or "tenant" in low:
         return "跨校访问已被拒绝（租户隔离）。"
-    if "max_steps" in low or "max steps" in low or "step limit" in low or "too many steps" in low:
-        return "步骤过多已停止。请把任务拆短后重试。"
+    if (
+        c in ("kimi.max_steps", "max_steps")
+        or "max_steps" in low
+        or "max steps" in low
+        or "step limit" in low
+        or "too many steps" in low
+        or "reached the step limit" in low
+    ):
+        return "步骤过多已停止。可点「再跑一次」继续，或把任务拆成更小步骤。"
     if "max_tokens" in low or "token cap" in low or c == "token_cap":
-        return "本次回答超出长度上限，请缩短问题或新开对话后再试。"
+        return "本次回答超出长度上限。可点「再跑一次」，或缩短问题后重试。"
     if (
         c in ("kimi.event_contract", "kimi.runtime_error")
         or "event_contract" in low
