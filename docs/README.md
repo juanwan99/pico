@@ -32,7 +32,8 @@ GOALS: docs/TRUTH-FREEZE.md · docs/WHAT-IS-PICO.md （目标）；STATE-NOW（�
 | **0** | **[TRUTH-FREEZE.md](./TRUTH-FREEZE.md)** | **真源冻结 v1.0（防丢失 · 权威决策集）** |
 | **0a** | **[WHAT-IS-PICO.md](./WHAT-IS-PICO.md)** | **Pico 是什么 / 编排目标 vs 现状** |
 | **0b** | **[STATE-NOW.md](./STATE-NOW.md)** | **当前 SHA、派发、门禁、黑名单** |
-| **0c** | **[KIMI-AGENT-GAP.md](./KIMI-AGENT-GAP.md)** | **真接差距 + KA-0…4 状态（默认未归位）** |
+| **0c** | **[KIMI-AGENT-GAP.md](./KIMI-AGENT-GAP.md)** | **真接差距 + KA 状态 + ENGINEERING complete 证据** |
+| **0c2** | **[PRODUCT-PASS-CONTRACT.md](./PRODUCT-PASS-CONTRACT.md)** | **全球 product PASS 定义合同（≠ ENGINEERING）** |
 | **0d** | **[POLLUTION-SWEEP.md](./POLLUTION-SWEEP.md)** | **污染清理执行记录** |
 | **0e** | **[VELOCITY-CLEAN.md](./VELOCITY-CLEAN.md)** | **速度阻碍清理（部署主链）** |
 | **0f** | **[FAST-PATH.md](./FAST-PATH.md)** | **日常快路径（改合装测 · 禁重体系）** |

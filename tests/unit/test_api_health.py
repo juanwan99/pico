@@ -27,9 +27,10 @@ def test_health() -> None:
     }
     assert body["kimi_agent_runtime_enabled"] is False
     assert body["kimi_agent_scope"] == "off"
-    assert body["legacy_agent_loop_emergency"] is False
-    # R9: flag may exist; effect is always permanent no-op (no loop restore).
-    assert body["legacy_agent_loop_emergency_effect"] == "noop"
+    # F (#295): raw emergency env no longer exposed; loop permanently unavailable.
+    assert body["legacy_loop_unavailable"] is True
+    assert "legacy_agent_loop_emergency" not in body
+    assert "legacy_agent_loop_emergency_effect" not in body
     assert body["kimi_agent_canary_configured"] is False
     assert body["kimi_agent_canary_membership_count"] == 0
     assert "kimi_agent_canary_batch" not in body
@@ -56,7 +57,8 @@ def test_health_exposes_only_non_sensitive_canary_state() -> None:
     body = response.json()
     assert body["kimi_agent_runtime_enabled"] is True
     assert body["kimi_agent_scope"] == "canary"
-    assert body["legacy_agent_loop_emergency"] is False
+    assert body["legacy_loop_unavailable"] is True
+    assert "legacy_agent_loop_emergency" not in body
     assert body["kimi_agent_canary_configured"] is True
     assert body["kimi_agent_canary_membership_count"] == 1
     assert body["kimi_agent_canary_batch"] == "BATCH-test"

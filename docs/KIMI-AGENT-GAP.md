@@ -2,10 +2,10 @@
 
 ```
 DOC: docs/KIMI-AGENT-GAP.md
-STATUS: LIVING inventory（唯一目标路径 = Kimi Agent；**生产默认已切** · #278 ACCEPT @ 18b7c2b… · 全球 product PASS 未宣称）
+STATUS: LIVING inventory（唯一目标路径 = Kimi Agent；**生产默认已切** · #278 ACCEPT · **ENGINEERING complete** @ #295 · 全球 product PASS 未宣称）
 DATE: 2026-08-05
-TRUTH: docs/TRUTH-FREEZE.md O1–O4 · docs/WHAT-IS-PICO.md §4 · docs/STATE-NOW.md · docs/KA4-SOFT.md · docs/KIMI-OPERATIONS.md · docs/OPS-RUNBOOK-STABILIZE.md
-SCOPE: 差距与切片状态；不预埋其它 harness / Plan B；**禁硬删 runner**
+TRUTH: docs/TRUTH-FREEZE.md O1–O4 · docs/WHAT-IS-PICO.md §4 · docs/STATE-NOW.md · docs/PRODUCT-PASS-CONTRACT.md · docs/KIMI-OPERATIONS.md · docs/OPS-RUNBOOK-STABILIZE.md
+SCOPE: 差距与切片状态；不预埋其它 harness / Plan B；runner 已 HARD 删除
 ```
 
 ---
@@ -20,8 +20,9 @@ SCOPE: 差距与切片状态；不预埋其它 harness / Plan B；**禁硬删 ru
 | pin 包 | `kimi-agent-sdk==0.0.5`、`kimi-cli==1.12.0` |
 | pin 实际用途（默认路径） | 版本检查 + `kimi_cli.agentspec.load_agent_spec` 读 yaml 做危险工具关断证明 |
 | 是否**默认**主路径调用 SDK 跑多步 | **是**（生产 scope=all；#278 TEST REPORT + #284 复审） |
-| 生产是否已换核 | **是（工程默认路径）** · tip/`health.git_sha` `18b7c2b…` · **≠** 全球 product PASS |
-| 是否可宣称「编排 complete / 全球 PASS」 | **否**（须业主另句；本清单禁止自升） |
+| 生产是否已换核 | **是（工程默认路径）** · tip exact · **≠** 全球 product PASS |
+| 编排 ENGINEERING complete | **是**（#295 · 证据矩阵见下 · **≠** 全球 product PASS） |
+| 全球 product PASS | **NOT CLAIMED**（合同 [PRODUCT-PASS-CONTRACT.md](./PRODUCT-PASS-CONTRACT.md)） |
 
 **切片进度（代码合 main ≠ 产品 PASS）：**
 
@@ -32,6 +33,23 @@ SCOPE: 差距与切片状态；不预埋其它 harness / Plan B；**禁硬删 ru
 | KA-2 flag-only Session | **DONE（历史默认 OFF）** | #145 · 见 §9 |
 | KA-3 生产默认切核 | **OWNER ACCEPT** | #278 · AUTH #170 · tip `18b7c2b…` · scope=all · bare fail-closed |
 | KA-4 卸过渡入口 | **HARD DONE（#288 plan A）** | **删除** `runner.py`/`run_agent_loop`；emergency no-op；非 KA 路由 fail-closed；回滚=redeploy tip |
+| 编排 ENGINEERING complete | **DONE（#295）** | 证据矩阵齐；文档句冻结；**≠** 全球 product PASS |
+
+### ENGINEERING complete 证据矩阵（#295 B）
+
+| 证据 | 锚点 |
+|------|------|
+| 默认 multi-step = Kimi Agent | 生产 health `kimi_agent_scope=all` · `kimi_agent_runtime_enabled=true` · run events `runtime` |
+| 无 `run_agent_loop` | 树无 `runner.py`；`def run_agent_loop` 不存在；`tests/unit/test_ka4_soft.py` |
+| fail-closed 非 KA | RUNTIME=0 / 未命中 canary → `runtime.*` fail；单测 `test_kimi_runtime` / `test_ka4_soft` |
+| Wire/session 关键路径 | `kimi_runtime.py` / `run_service.py` → `run_agent_runtime` → `run_kimi_agent` |
+| cancel sticky | `POST /v1/runs/{id}/cancel` → status `cancelled`；再 cancel 仍 sticky（#290 R1 + #295 E） |
+| 真产物 | artifact `content_sha256` + `GET …/content?download=true` 非空 |
+| health 不误导 loop | `legacy_loop_unavailable=true`；**无** raw `legacy_agent_loop_emergency` 字段（#295 F） |
+
+**冻结句：**
+
+> Orchestration path is **ENGINEERING complete** at tip (Kimi-only multi-step; no transitional loop). **Global product PASS: NOT CLAIMED.**
 
 ---
 

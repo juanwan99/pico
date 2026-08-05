@@ -173,9 +173,9 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         "kimi_agent_scope": settings.kimi_agent_scope,
         "kimi_agent_canary_configured": canary_count > 0,
         "kimi_agent_canary_membership_count": canary_count,
-        # Env flag may still be present; effect is permanent no-op (KA-4 HARD).
-        "legacy_agent_loop_emergency": settings.pico_legacy_agent_loop_emergency,
-        "legacy_agent_loop_emergency_effect": "noop",
+        # KA-4 HARD / #295 F: do not echo raw emergency env (misread as "can restore loop").
+        # Permanent signal only: transitional loop is unavailable; rollback = redeploy tip.
+        "legacy_loop_unavailable": True,
         "rate_limit": {
             "chat_rpm": settings.pico_chat_rpm,
             "chat_max_concurrent": settings.pico_chat_max_concurrent,

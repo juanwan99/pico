@@ -63,16 +63,18 @@ const UNKNOWN_KIND = '类型未知';
 function artifactActionError(action: ArtifactAction['type'], error: unknown): string {
   const verb = action === 'open' ? '打开' : '下载';
   const message = error instanceof Error ? error.message : String(error);
+  const pathHint =
+    '正确路径：结果区「下载」按钮，或 GET /api/pico/v1/artifacts/{id}/content?download=true（勿用虚构 /download 尾缀）';
   if (message.includes('401')) {
-    return `${verb}产物失败：登录已失效，请刷新页面后重新登录`;
+    return `${verb}产物失败：登录已失效，请刷新页面后重新登录。${pathHint}`;
   }
   if (message.includes('403') || message.includes('404')) {
-    return `${verb}产物失败：产物不存在或无权限。请用结果区按钮打开/下载（路径 /api/pico/v1/artifacts/{id}/content），勿使用虚构 /download 尾缀`;
+    return `${verb}产物失败：产物不存在或无权限。${pathHint}`;
   }
   if (message.includes('502') || message.includes('unavailable')) {
-    return `${verb}产物失败：产物服务暂时不可用，请稍后重试`;
+    return `${verb}产物失败：产物服务暂时不可用，请稍后重试。${pathHint}`;
   }
-  return `${verb}产物失败，请稍后重试`;
+  return `${verb}产物失败，请稍后重试。${pathHint}`;
 }
 
 function safeArtifactUrl(raw: string): string | null {
@@ -731,32 +733,10 @@ export default function ResultPanel({
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {a.url || a.picoArtifact || a.body !== undefined ? (
-                        <button
-                          type="button"
-                          data-testid="artifact-download-button"
-                          className="flex h-9 w-9 items-center justify-center rounded-md text-[#8c8c8c] hover:bg-[#f3f3f3] disabled:cursor-not-allowed disabled:opacity-60"
-                          onClick={() => void downloadArtifact(a)}
-                          disabled={artifactAction !== null}
-                          aria-label={`下载${a.name}`}
-                          title="下载"
-                          aria-busy={
-                            artifactAction?.id === a.id && artifactAction.type === 'download'
-                              ? true
-                              : undefined
-                          }
-                        >
-                          {artifactAction?.id === a.id && artifactAction.type === 'download' ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Download className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      ) : null}
                       <button
                         type="button"
                         data-testid="artifact-open-button"
-                        className="h-9 rounded-lg bg-[#f3f3f3] px-3 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#e8e8e8] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-surface-tertiary dark:text-text-primary"
+                        className="h-9 rounded-lg border border-black/[0.08] bg-white px-3 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-light dark:bg-surface-secondary dark:text-text-primary"
                         onClick={() => void openArtifact(a)}
                         disabled={artifactAction !== null}
                         aria-busy={
@@ -769,6 +749,29 @@ export default function ResultPanel({
                           ? '打开中'
                           : '打开'}
                       </button>
+                      {a.url || a.picoArtifact || a.body !== undefined ? (
+                        <button
+                          type="button"
+                          data-testid="artifact-download-button"
+                          className="inline-flex h-9 items-center gap-1 rounded-lg bg-[#1a1a1a] px-3 text-[12px] font-semibold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-[#1a1a1a]"
+                          onClick={() => void downloadArtifact(a)}
+                          disabled={artifactAction !== null}
+                          aria-label={`下载${a.name}`}
+                          title="下载到本地（路径 /api/pico/v1/artifacts/{id}/content?download=true）"
+                          aria-busy={
+                            artifactAction?.id === a.id && artifactAction.type === 'download'
+                              ? true
+                              : undefined
+                          }
+                        >
+                          {artifactAction?.id === a.id && artifactAction.type === 'download' ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5" />
+                          )}
+                          下载
+                        </button>
+                      ) : null}
                     </div>
                   </li>
                 ))}
@@ -820,19 +823,6 @@ export default function ResultPanel({
                           {a.kindLabel} · {a.sizeLabel}
                         </span>
                       </span>
-                      {a.url || a.picoArtifact || a.body !== undefined ? (
-                        <button
-                          type="button"
-                          className="rounded-md px-2 py-1 text-[11.5px] font-medium text-[#3d3d3d] hover:bg-[#f0f0f0] disabled:opacity-50"
-                          onClick={() => void downloadArtifact(a)}
-                          disabled={artifactAction !== null}
-                          aria-label={`下载${a.name}`}
-                        >
-                          {artifactAction?.id === a.id && artifactAction.type === 'download'
-                            ? '下载中'
-                            : '下载'}
-                        </button>
-                      ) : null}
                       <button
                         type="button"
                         className="rounded-md px-2 py-1 text-[11.5px] font-medium text-[#3d3d3d] hover:bg-[#f0f0f0]"
@@ -843,6 +833,22 @@ export default function ResultPanel({
                           ? '打开中'
                           : '打开'}
                       </button>
+                      {a.url || a.picoArtifact || a.body !== undefined ? (
+                        <button
+                          type="button"
+                          data-testid="artifact-download-button"
+                          className="inline-flex items-center gap-1 rounded-md bg-[#1a1a1a] px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-black disabled:opacity-50 dark:bg-white dark:text-[#1a1a1a]"
+                          onClick={() => void downloadArtifact(a)}
+                          disabled={artifactAction !== null}
+                          aria-label={`下载${a.name}`}
+                          title="下载到本地（/api/pico/v1/artifacts/{id}/content?download=true）"
+                        >
+                          <Download className="h-3 w-3" />
+                          {artifactAction?.id === a.id && artifactAction.type === 'download'
+                            ? '下载中'
+                            : '下载'}
+                        </button>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
