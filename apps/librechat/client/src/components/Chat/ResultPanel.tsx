@@ -316,7 +316,10 @@ export default function ResultPanel({
 
   const readArtifactBlob = async (artifact: ArtifactItem, download: boolean): Promise<Blob> => {
     // Binary artifacts always fetch bytes from the content API (bytes-safe).
-    if (artifact.picoArtifact && (artifact.contentEncoding === 'base64' || artifact.body === undefined)) {
+    if (
+      artifact.picoArtifact &&
+      (artifact.contentEncoding === 'base64' || artifact.body === undefined)
+    ) {
       return getPicoArtifactContent(artifact.id, download);
     }
     if (artifact.body !== undefined) {
@@ -735,7 +738,7 @@ export default function ResultPanel({
                         <button
                           type="button"
                           data-testid="artifact-download-button"
-                          className="flex h-9 w-9 items-center justify-center rounded-md text-[#8c8c8c] hover:bg-[#f3f3f3] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="flex h-9 items-center justify-center gap-1 rounded-lg border border-[#d8d8d8] bg-white px-2.5 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#f3f3f3] disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-light dark:bg-surface-secondary dark:text-text-primary"
                           onClick={() => void downloadArtifact(a)}
                           disabled={artifactAction !== null}
                           aria-label={`下载${a.name}`}
@@ -749,7 +752,10 @@ export default function ResultPanel({
                           {artifactAction?.id === a.id && artifactAction.type === 'download' ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
-                            <Download className="h-3.5 w-3.5" />
+                            <>
+                              <Download className="h-3.5 w-3.5" />
+                              下载
+                            </>
                           )}
                         </button>
                       ) : null}

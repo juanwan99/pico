@@ -31,8 +31,7 @@ ssh pico-prod 'curl -sf --max-time 5 http://127.0.0.1:18765/health'
 | `kimi_agent_scope` | **`all`** | 空 canary = 全员 Kimi Agent |
 | `kimi_agent_canary_membership_count` | `0` | 故意空名单；**非**「无人进 KA」 |
 | `kimi_agent_canary_configured` | `false` | raw canary 空 |
-| `legacy_agent_loop_emergency` | **`false`（建议）** | env 旗标；**不**恢复 loop |
-| `legacy_agent_loop_emergency_effect` | **`noop` 恒定** | KA-4 HARD：true 也不回 loop |
+| legacy emergency health 字段 | **不再暴露** | KA-4 HARD 后避免暗示存在回 loop 开关；旧 env 即使残留也无效 |
 | `kimi_agent_canary_batch` | 如 `BATCH-KA3-DEFAULT` | 运维标签，非 principal |
 | `rate_limit.chat_rpm` | 正数（现网常见 30） | 聊天 RPM |
 | `rate_limit.chat_max_concurrent` | 正数（现网常见 2） | 并发上限 |
@@ -44,7 +43,7 @@ ssh pico-prod 'curl -sf --max-time 5 http://127.0.0.1:18765/health'
 |------|----------|
 | `git_sha` ≠ tip | 停签；查是否未部署或部署错 SHA |
 | `scope=off` 且 runtime false | multi-step fail-closed（**无** loop） |
-| `emergency=true` | 旗标误开 — 效果仍是 **noop**；关 env 消歧，回滚靠 redeploy |
+| 旧 emergency env 残留 | 无运行时效果且 health 不暴露；清理 env 消歧，回滚靠 redeploy |
 | `scope=canary` 且 count=0 | 可能是 **无效 non-empty canary** fail-closed — 查 raw 串 |
 
 ---
@@ -86,7 +85,7 @@ ssh pico-prod 'curl -sf --max-time 5 http://127.0.0.1:18765/health'
 | 路径 | 期望 |
 |------|------|
 | 公网 `GET /health` | 200 `OK`（无字段） |
-| loopback `GET /health` | JSON · git_sha · scope · emergency_effect |
+| loopback `GET /health` | JSON · git_sha · scope；不暴露 legacy emergency 字段 |
 | UI 代理 `GET /api/pico/health` | **需登录**；200 JSON（无 token → 401） |
 | 公网 `GET /api/health` | 404 人话/非账本（**勿当** Pico 入口） |
 | 账本 `GET /api/pico/v1/tasks` 等 | 需 JWT |
