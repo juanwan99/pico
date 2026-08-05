@@ -281,9 +281,13 @@ async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
 
 
 async def retry_failed_run(session: AsyncSession, source_run: RunRow) -> RunRow:
-    """Create a distinct ledger Run from a failed Run's immutable context."""
-    if source_run.status != "failed":
-        raise ValueError("only failed runs can be retried")
+    """Create a distinct ledger Run from a terminal Run's immutable context.
+
+    Allowed sources: failed | succeeded | cancelled (H8: 成功态「再跑一次」).
+    Active runs (queued/preparing/running) are rejected below via active check.
+    """
+    if source_run.status not in ("failed", "succeeded", "cancelled"):
+        raise ValueError("only terminal runs can be retried")
 
     active = await session.execute(
         select(RunRow.id).where(

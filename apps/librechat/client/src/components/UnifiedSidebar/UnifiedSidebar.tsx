@@ -126,6 +126,16 @@ function UnifiedSidebar() {
     };
   }, []);
 
+  // H6 / R-C: on narrow viewports the drawer overlays the workbench.
+  // Entering mobile (or first paint with localStorage=true from desktop)
+  // must default-collapse so #pico-wb-home-input is reachable without
+  // guessing to close the nav first. User can still open via OpenSidebar.
+  useEffect(() => {
+    if (isSmallScreen) {
+      handleCollapse();
+    }
+  }, [isSmallScreen, handleCollapse]);
+
   useEffect(() => {
     if (!isSmallScreen || !expanded) {
       return;

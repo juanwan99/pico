@@ -574,6 +574,58 @@ def test_failed_run_retry_creates_distinct_auditable_run(client, monkeypatch) ->
     assert client.post(f"/v1/runs/{retry_run['id']}/retry", headers=owner).status_code == 409
 
 
+def test_succeeded_run_retry_creates_distinct_run(client, monkeypatch) -> None:
+    """H8: terminal succeeded runs may be re-run (再跑一次)."""
+    _stub_agent(
+        monkeypatch,
+        RunResult(status="succeeded", final_text="ok", error=""),
+    )
+    owner = _headers(client, "member-retry-ok")
+    conversation_id = "conversation-succeeded-retry"
+
+    ok = client.post(
+        "/v1/chat/completions",
+        headers=owner,
+        json={
+            "model": "pico-agent",
+            "stream": False,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        f"【Pico-Convo:{conversation_id}】\n"
+                        "【Pico-Skill:skill.chat】\n请完成这个任务"
+                    ),
+                }
+            ],
+        },
+    )
+    assert ok.status_code == 200, ok.text
+
+    tasks = client.get(
+        "/v1/tasks",
+        headers=owner,
+        params={"conversation_id": conversation_id},
+    ).json()["tasks"]
+    task_id = tasks[0]["id"]
+    source_run = client.get(f"/v1/tasks/{task_id}/runs", headers=owner).json()["runs"][0]
+    assert source_run["status"] == "succeeded"
+
+    started: list[str] = []
+
+    async def record_background_start(run_id: str, _principal) -> None:
+        started.append(run_id)
+
+    monkeypatch.setattr("app.run_service.start_run_background", record_background_start)
+
+    response = client.post(f"/v1/runs/{source_run['id']}/retry", headers=owner)
+    assert response.status_code == 200, response.text
+    retry_run = response.json()["run"]
+    assert retry_run["id"] != source_run["id"]
+    assert retry_run["status"] == "queued"
+    assert started == [retry_run["id"]]
+
+
 def test_skill_write_s7_records_snapshot_and_existing_change_path(client, monkeypatch) -> None:
     _stub_agent(
         monkeypatch,

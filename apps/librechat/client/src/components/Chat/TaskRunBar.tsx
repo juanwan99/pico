@@ -102,10 +102,25 @@ function TaskRunBar({
           <span className="truncate">{completedLabel || statusLabel || '已停止'}</span>
         </span>
       ) : completedLabel ? (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eef7ee] px-2.5 py-1 text-[12px] font-medium text-[#2d6a3e]">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          {completedLabel}
-        </span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="inline-flex min-w-0 max-w-[240px] items-center gap-1.5 rounded-full bg-[#eef7ee] px-2.5 py-1 text-[12px] font-medium text-[#2d6a3e]">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{completedLabel}</span>
+          </span>
+          {canRerun ? (
+            <button
+              type="button"
+              data-testid="task-rerun-button"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#f3f3f3] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-surface-secondary"
+              onClick={onRerun}
+              disabled={rerunning}
+              aria-busy={rerunning || undefined}
+            >
+              <RotateCcw className="h-3 w-3" />
+              {rerunning ? '重新运行中' : '再跑一次'}
+            </button>
+          ) : null}
+        </div>
       ) : (
         <span
           className={cn(

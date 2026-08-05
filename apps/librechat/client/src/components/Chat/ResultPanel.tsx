@@ -330,7 +330,21 @@ export default function ResultPanel({
     throw new Error('artifact content unavailable');
   };
 
+  const dismissOverlayMenus = () => {
+    // H7 / R-C: attach menu / dropdown backdrops can sit above the download
+    // CTA for one frame. Dismiss floating menus on the download path so the
+    // click is never stolen by a leftover backdrop (no pe hack).
+    try {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+    } catch {
+      /* ignore */
+    }
+  };
+
   const openArtifact = async (artifact: ArtifactItem) => {
+    dismissOverlayMenus();
     setArtifactAction({ id: artifact.id, type: 'open' });
     setArtifactError(null);
     setPreviewText(null);
@@ -393,6 +407,7 @@ export default function ResultPanel({
   };
 
   const downloadArtifact = async (artifact: ArtifactItem) => {
+    dismissOverlayMenus();
     setArtifactAction({ id: artifact.id, type: 'download' });
     setArtifactError(null);
     let objectUrl: string | null = null;
@@ -671,7 +686,11 @@ export default function ResultPanel({
                       data-testid="result-panel-rerun"
                     >
                       <RotateCcw className="h-3 w-3" />
-                      {rerunning ? '重新运行中' : '重新运行'}
+                      {rerunning
+                        ? '重新运行中'
+                        : run?.status === 'failed'
+                          ? '重新运行'
+                          : '再跑一次'}
                     </button>
                   ) : null}
                 </div>
