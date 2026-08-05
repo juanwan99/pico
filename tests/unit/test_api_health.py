@@ -28,6 +28,8 @@ def test_health() -> None:
     assert body["kimi_agent_runtime_enabled"] is False
     assert body["kimi_agent_scope"] == "off"
     assert body["legacy_agent_loop_emergency"] is False
+    # R9: flag may exist; effect is always permanent no-op (no loop restore).
+    assert body["legacy_agent_loop_emergency_effect"] == "noop"
     assert body["kimi_agent_canary_configured"] is False
     assert body["kimi_agent_canary_membership_count"] == 0
     assert "kimi_agent_canary_batch" not in body

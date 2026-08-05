@@ -173,7 +173,9 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         "kimi_agent_scope": settings.kimi_agent_scope,
         "kimi_agent_canary_configured": canary_count > 0,
         "kimi_agent_canary_membership_count": canary_count,
+        # Env flag may still be present; effect is permanent no-op (KA-4 HARD).
         "legacy_agent_loop_emergency": settings.pico_legacy_agent_loop_emergency,
+        "legacy_agent_loop_emergency_effect": "noop",
         "rate_limit": {
             "chat_rpm": settings.pico_chat_rpm,
             "chat_max_concurrent": settings.pico_chat_max_concurrent,
@@ -762,7 +764,18 @@ async def get_artifact_content(
         principal,
     )
     if artifact is None:
-        raise HTTPException(status_code=404, detail="artifact not found")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "artifact.not_found",
+                "message": (
+                    "找不到该产物。请用 GET /v1/artifacts/{id}/content"
+                    "（可选 ?download=true）下载，不要用虚构的 /download 尾缀。"
+                ),
+                "user_message": "找不到该产物。请从任务结果区打开或下载；路径为 /v1/artifacts/{id}/content。",
+                "correct_path": f"/v1/artifacts/{artifact_id}/content",
+            },
+        )
 
     filename = (artifact.title or f"{artifact.id}.txt").replace("\r", "").replace("\n", "")
     fallback = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._") or "artifact.bin"
@@ -925,7 +938,16 @@ async def cancel_run(
     try:
         result = await run_service.request_cancel(session, run)
     except ValueError:
-        raise HTTPException(status_code=409, detail="run is already terminal") from None
+        # Already succeeded/failed (not sticky cancelled). Never pretend cancel worked.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "run.already_terminal",
+                "message": "该任务已结束，无法再停止。请刷新查看最终状态。",
+                "user_message": "该任务已结束，无法再停止。请刷新查看最终状态。",
+                "status": run.status,
+            },
+        ) from None
     # Event allocation may roll the session back on a concurrent seq collision,
     # expiring ORM attributes.  Snapshot the response before appending events so
     # cancellation still returns its durable terminal state.
@@ -940,7 +962,8 @@ async def cancel_run(
             "run.status",
             {"status": "cancelled"},
         )
-    return {"run": run_payload}
+    # Sticky cancelled: first cancel and idempotent re-cancel both return 200 + cancelled.
+    return {"run": run_payload, "cancel": "ok"}
 
 
 @app.post("/v1/tasks/{task_id}/cancel-active")

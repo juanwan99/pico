@@ -45,3 +45,17 @@ def test_kimi_contract_and_runtime_errors_are_user_safe() -> None:
     assert "智能体" in msg2
     assert "FileNotFound" not in msg2
 
+
+def test_capacity_and_emergency_messages_are_human() -> None:
+    busy = user_message_for_error("chat capacity exceeded", code="concurrency_limit")
+    assert "繁忙" in busy or "并发" in busy
+    assert "traceback" not in busy.lower()
+    rl = user_message_for_error("429 rate limit", code="rate_limit")
+    assert "限流" in rl or "频繁" in rl
+    noop = user_message_for_error(
+        "PICO_LEGACY_AGENT_LOOP_EMERGENCY is no-op",
+        code="runtime.emergency_noop",
+    )
+    assert "过渡" in noop or "Kimi" in noop
+    assert "run_agent_loop" not in noop
+

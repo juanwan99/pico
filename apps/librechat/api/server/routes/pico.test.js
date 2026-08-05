@@ -222,4 +222,13 @@ describe('Pico proxy routes', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     },
   );
+
+  it('returns human 404 for unknown teacher self-read paths', async () => {
+    const response = await request(app).get('/api/pico/v1/artifacts/artifact-1/download');
+
+    expect(response.status).toBe(404);
+    expect(response.body.message).toMatch(/content|产物|路径|Pico/i);
+    expect(response.body.user_message).toBeTruthy();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });

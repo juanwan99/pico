@@ -281,4 +281,17 @@ router.post('/v1/changes/:id/reject', (req, res) => {
   }
 });
 
+// R5: teacher self-read wrong paths → human 404 (not opaque Express default).
+router.use((req, res) => {
+  res.status(404).json({
+    error: 'not_found',
+    message:
+      '未知 Pico 路径。教师常用：/api/pico/health、/api/pico/v1/tasks、' +
+      '/api/pico/v1/runs/{id}、/api/pico/v1/artifacts/{id}/content?download=true。' +
+      '需登录 JWT；公网 /api/health 不是 Pico 账本入口。',
+    user_message:
+      '找不到该接口。请从工作台结果区打开产物，或使用 /api/pico/v1/artifacts/{id}/content。',
+  });
+});
+
 module.exports = router;
