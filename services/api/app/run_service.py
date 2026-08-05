@@ -337,7 +337,7 @@ async def start_run_background(run_id: str, principal: Principal) -> None:
 
 
 async def _execute_run(run_id: str, principal: Principal) -> None:
-    from pico_orchestrator.run_types import RunCaps, provider_label
+    from pico_orchestrator.run_types import provider_label
     from pico_orchestrator.runtime import run_agent_runtime
     from pico_orchestrator.user_errors import enrich_fail_payload, user_message_for_error
 
@@ -366,24 +366,26 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                 run = await session.get(RunRow, run_id)
                 return bool(run and (run.cancel_requested or run.status == "cancelled"))
 
-        caps = RunCaps(
-            max_seconds=settings.pico_run_max_seconds,
-            max_tokens=settings.pico_run_max_tokens,
-            max_retries=settings.pico_run_max_retries,
-        )
-
         async with factory() as session:
             run = await session.get(RunRow, run_id)
             assert run is not None
             prompt = run.prompt
             skill_snapshot = _run_skill_snapshot(run)
 
+        allowed_tools = None
+        skill_instruction = ""
         if skill_snapshot:
             await emit("skill.snapshot", skill_snapshot)
             from pico_orchestrator.skill_policy import instruction_for_snapshot
 
-            caps.allowed_tools = list(skill_snapshot.get("tools") or [])
-            caps.skill_instruction = instruction_for_snapshot(skill_snapshot)
+            allowed_tools = list(skill_snapshot.get("tools") or [])
+            skill_instruction = instruction_for_snapshot(skill_snapshot)
+
+        # Ledger / agent runs always use delivery-tier budgets (not short chat).
+        caps = settings.delivery_run_caps(
+            allowed_tools=allowed_tools,
+            skill_instruction=skill_instruction,
+        )
 
         result = await run_agent_runtime(
             use_kimi_agent=settings.pico_kimi_agent_runtime,

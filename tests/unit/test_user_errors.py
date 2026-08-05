@@ -20,7 +20,15 @@ def test_no_key_message():
 
 
 def test_timeout():
-    assert "超时" in user_message_for_error("timeout after 120s")
+    msg = user_message_for_error("Kimi Agent timeout after 120s", code="timeout")
+    assert "超时" in msg
+    assert "再跑一次" in msg
+
+
+def test_max_steps_mentions_retry():
+    msg = user_message_for_error("Kimi Agent reached the step limit", code="kimi.max_steps")
+    assert "步骤" in msg
+    assert "再跑一次" in msg
 
 
 def test_enrich():

@@ -17,10 +17,12 @@ EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 @dataclass
 class RunCaps:
-    max_seconds: int = 120
-    max_tokens: int = 8000
+    # Defaults match delivery tier (pico-agent). Short-chat callers pass short caps.
+    # See pico_orchestrator.run_caps and PICO_RUN_* / PICO_RUN_SHORT_* env keys.
+    max_seconds: int = 900
+    max_tokens: int = 32_000
     max_retries: int = 2
-    max_steps: int = 8
+    max_steps: int = 24
     allowed_tools: list[str] | None = None
     skill_instruction: str = ""
 

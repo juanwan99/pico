@@ -37,9 +37,15 @@ class Settings(BaseSettings):
     pico_edu_jwt_public_key_pem: str = ""  # optional RS256 public key PEM
     pico_accept_test_issuer: bool = True  # set false in production after edu issuer live
 
-    pico_run_max_seconds: int = 120
-    pico_run_max_tokens: int = 8000
+    # --- Tiered run budgets (P-COMPLEX-DONE package A) ---
+    # Delivery / pico-agent multi-step (HTML 课件等): default 900s, not 120s freeze.
+    pico_run_max_seconds: int = 900
+    pico_run_max_tokens: int = 32_000
+    pico_run_max_steps: int = 24
     pico_run_max_retries: int = 2
+    # Short / direct-model chat: keep snappy day-use turns.
+    pico_run_short_max_seconds: int = 120
+    pico_run_short_max_tokens: int = 8000
     # Kimi Agent multi-step path (only multi-step implementation after KA-4 HARD).
     # False → pico-agent multi-step fail-closed (no transitional loop).
     # True + empty canary (or *) → all principals use Kimi Agent (KA-3 prod default).
@@ -167,6 +173,48 @@ class Settings(BaseSettings):
         """Deprecated membership-only view. Prefer kimi_agent_canary_principal_set."""
         return frozenset(membership_id for _, membership_id in self.kimi_agent_canary_principal_set)
 
+    def delivery_run_caps(
+        self,
+        *,
+        allowed_tools: list[str] | None = None,
+        skill_instruction: str = "",
+    ):
+        """RunCaps for pico-agent / multi-step delivery (courseware, tools)."""
+        from pico_orchestrator.run_caps import caps_for_tier
+
+        return caps_for_tier(
+            "delivery",
+            max_seconds=self.pico_run_max_seconds,
+            max_tokens=self.pico_run_max_tokens,
+            max_steps=self.pico_run_max_steps,
+            max_retries=self.pico_run_max_retries,
+            allowed_tools=allowed_tools,
+            skill_instruction=skill_instruction,
+        )
+
+    def short_run_caps(self):
+        """RunCaps for direct-model short chat (no multi-step agent)."""
+        from pico_orchestrator.run_caps import caps_for_tier
+
+        return caps_for_tier(
+            "short",
+            max_seconds=self.pico_run_short_max_seconds,
+            max_tokens=self.pico_run_short_max_tokens,
+            max_retries=self.pico_run_max_retries,
+        )
+
+    def spend_caps_dict(self) -> dict:
+        from pico_orchestrator.run_caps import spend_caps_public
+
+        return spend_caps_public(
+            delivery_seconds=self.pico_run_max_seconds,
+            delivery_tokens=self.pico_run_max_tokens,
+            delivery_steps=self.pico_run_max_steps,
+            delivery_retries=self.pico_run_max_retries,
+            short_seconds=self.pico_run_short_max_seconds,
+            short_tokens=self.pico_run_short_max_tokens,
+        )
+
     def validate_production(self) -> None:
         """Fail closed before a production process starts serving traffic."""
         if not self.is_production:
@@ -214,6 +262,14 @@ class Settings(BaseSettings):
             errors.append("PICO_CHAT_MAX_PROMPT_CHARS must be greater than zero")
         if self.pico_run_max_tokens <= 0:
             errors.append("PICO_RUN_MAX_TOKENS must be greater than zero")
+        if self.pico_run_max_seconds <= 0:
+            errors.append("PICO_RUN_MAX_SECONDS must be greater than zero")
+        if self.pico_run_max_steps <= 0:
+            errors.append("PICO_RUN_MAX_STEPS must be greater than zero")
+        if self.pico_run_short_max_seconds <= 0:
+            errors.append("PICO_RUN_SHORT_MAX_SECONDS must be greater than zero")
+        if self.pico_run_short_max_tokens <= 0:
+            errors.append("PICO_RUN_SHORT_MAX_TOKENS must be greater than zero")
         if self.pico_dangerous_tools_enabled:
             errors.append("PICO_DANGEROUS_TOOLS_ENABLED must remain false")
 
