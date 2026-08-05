@@ -1,9 +1,8 @@
-"""Tiered run budgets: short chat vs delivery (pico-agent / multi-step).
+"""Tiered run budgets: short / delivery / durable.
 
-Package A (P-COMPLEX-DONE): delivery defaults are long enough for HTML courseware
-(≈15 min), while direct-model short chat keeps a tighter wall clock so day-to-day
-turns stay snappy. Never use a single global multi-hour cap as a substitute for
-durable jobs (package B).
+Package A: delivery (≈900s) for courseware multi-step.
+Package B: durable jobs need detach-from-browser + optional longer wall
+(default 3600s). Never treat a multi-hour global timeout alone as “durable.”
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from typing import Literal
 
 from pico_orchestrator.run_types import RunCaps
 
-RunTier = Literal["short", "delivery"]
+RunTier = Literal["short", "delivery", "durable"]
 
 # Code defaults (env overrides via Settings; keep in sync with .env.example).
 DELIVERY_MAX_SECONDS = 900
@@ -25,6 +24,11 @@ SHORT_MAX_SECONDS = 120
 SHORT_MAX_TOKENS = 8_000
 SHORT_MAX_STEPS = 8
 SHORT_MAX_RETRIES = 2
+
+DURABLE_MAX_SECONDS = 3600
+DURABLE_MAX_TOKENS = 64_000
+DURABLE_MAX_STEPS = 48
+DURABLE_MAX_RETRIES = 2
 
 
 def caps_for_tier(
@@ -47,6 +51,13 @@ def caps_for_tier(
             max_tokens=SHORT_MAX_TOKENS,
             max_steps=SHORT_MAX_STEPS,
             max_retries=SHORT_MAX_RETRIES,
+        )
+    elif tier == "durable":
+        base = RunCaps(
+            max_seconds=DURABLE_MAX_SECONDS,
+            max_tokens=DURABLE_MAX_TOKENS,
+            max_steps=DURABLE_MAX_STEPS,
+            max_retries=DURABLE_MAX_RETRIES,
         )
     else:
         base = RunCaps(
@@ -74,6 +85,8 @@ def spend_caps_public(
     delivery_retries: int,
     short_seconds: int,
     short_tokens: int,
+    durable_seconds: int = DURABLE_MAX_SECONDS,
+    detach_on_disconnect: bool = True,
 ) -> dict:
     """Non-sensitive cap snapshot for /health and /v1/meta/freeze."""
     return {
@@ -90,5 +103,9 @@ def spend_caps_public(
         "short": {
             "max_seconds": short_seconds,
             "max_tokens": short_tokens,
+        },
+        "durable": {
+            "max_seconds": durable_seconds,
+            "detach_on_disconnect": detach_on_disconnect,
         },
     }

@@ -1020,6 +1020,62 @@ async def retry_run(
     }
 
 
+class DurableJobRequest(BaseModel):
+    """Start a server-owned staged durable job (package B)."""
+
+    wall_seconds: int = Field(default=1800, ge=5, le=3600)
+    stages: int | None = Field(default=None, ge=2, le=120)
+    title: str | None = None
+    conversation_id: str | None = None
+
+
+@app.post("/v1/durable-jobs")
+async def create_durable_job(
+    body: DurableJobRequest,
+    principal: Principal = Depends(require_scope("ai:run")),
+) -> dict:
+    """Create a durable staged job that continues after client disconnect.
+
+    Gold path: wall_seconds>=1800 with checkpoints. Not a substitute for HA.
+    """
+    from app.durable_job import start_durable_job
+
+    try:
+        info = await start_durable_job(
+            principal=principal,
+            wall_seconds=body.wall_seconds,
+            stages=body.stages,
+            title=body.title,
+            conversation_id=body.conversation_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"job": info, "policy": "detach_on_disconnect_default"}
+
+
+@app.post("/v1/runs/{run_id}/continue-durable")
+async def continue_durable_run(
+    run_id: str,
+    principal: Principal = Depends(require_scope("ai:run")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Continue a terminal durable_job from its last checkpoint stage."""
+    from app.durable_job import start_durable_job
+
+    source = await run_service.get_run_for_principal(session, run_id, principal)
+    if not source:
+        raise HTTPException(status_code=404, detail="run not found")
+    try:
+        info = await start_durable_job(
+            principal=principal,
+            wall_seconds=1800,
+            resume_from_run_id=source.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"job": info, "continued_from_run_id": source.id}
+
+
 @app.get("/v1/runs/{run_id}/events")
 async def run_events(
     run_id: str,

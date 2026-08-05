@@ -22,7 +22,18 @@ AUTH_HEALTH: GET /api/pico/health  (登录后 · 策略 A · 含 git_sha)
 
 - 交付档 **禁止** 仍为 `120`（会 `Kimi Agent timeout after 120s` 杀课件）。
 - 改 env 后须 recreate `pico-api`；可用 `bash scripts/apply-tiered-run-caps.sh --remote pico-prod`。
-- 长稳 30min+ / 关页续跑属 **包 B**，勿把 `MAX_SECONDS` 调到数小时冒充完成。
+
+### 0.2 Durable Run（P-LONG-DURABLE · 包 B）
+
+| 项 | 默认 |
+|----|------|
+| 页关 / SSE 断 | **不杀 job**（`PICO_RUN_DETACH_ON_DISCONNECT=1`） |
+| 长跑墙钟 | `PICO_RUN_DURABLE_MAX_SECONDS=3600` |
+| 权威 | 服务端 ledger（Task/Run/Event/Artifact） |
+| 部署 | 进程重启 in-flight 可能丢 → 失败可 **续跑/retry**；见 `docs/ADR-DURABLE-RUN.md` |
+
+- **禁止** 只把 `MAX_SECONDS` 拧到 28800 冒充 durable。
+- 金路径：`POST /v1/durable-jobs`（wall≥1800）+ 关页后轮询 run 仍 running/succeeded。
 
 ---
 

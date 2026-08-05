@@ -14,6 +14,8 @@ DELIVERY_STEPS="${PICO_RUN_MAX_STEPS:-24}"
 DELIVERY_RETRIES="${PICO_RUN_MAX_RETRIES:-2}"
 SHORT_SECONDS="${PICO_RUN_SHORT_MAX_SECONDS:-120}"
 SHORT_TOKENS="${PICO_RUN_SHORT_MAX_TOKENS:-8000}"
+DURABLE_SECONDS="${PICO_RUN_DURABLE_MAX_SECONDS:-3600}"
+DETACH="${PICO_RUN_DETACH_ON_DISCONNECT:-1}"
 
 patch_env_file() {
   local env_file="$1"
@@ -38,6 +40,8 @@ updates = {
     "PICO_RUN_MAX_RETRIES": "2",
     "PICO_RUN_SHORT_MAX_SECONDS": "120",
     "PICO_RUN_SHORT_MAX_TOKENS": "8000",
+    "PICO_RUN_DURABLE_MAX_SECONDS": "3600",
+    "PICO_RUN_DETACH_ON_DISCONNECT": "1",
 }
 # Allow env overrides when script is invoked with exports
 import os
@@ -84,6 +88,8 @@ if [[ "${1:-}" == "--remote" ]]; then
      PICO_RUN_MAX_RETRIES=${DELIVERY_RETRIES} \
      PICO_RUN_SHORT_MAX_SECONDS=${SHORT_SECONDS} \
      PICO_RUN_SHORT_MAX_TOKENS=${SHORT_TOKENS} \
+     PICO_RUN_DURABLE_MAX_SECONDS=${DURABLE_SECONDS} \
+     PICO_RUN_DETACH_ON_DISCONNECT=${DETACH} \
      bash -s" <<'REMOTE'
 set -euo pipefail
 ENV_FILE="${PICO_ENV_FILE:-/opt/pico/.env}"
@@ -105,6 +111,8 @@ updates = {
     "PICO_RUN_MAX_RETRIES": os.environ.get("PICO_RUN_MAX_RETRIES", "2"),
     "PICO_RUN_SHORT_MAX_SECONDS": os.environ.get("PICO_RUN_SHORT_MAX_SECONDS", "120"),
     "PICO_RUN_SHORT_MAX_TOKENS": os.environ.get("PICO_RUN_SHORT_MAX_TOKENS", "8000"),
+    "PICO_RUN_DURABLE_MAX_SECONDS": os.environ.get("PICO_RUN_DURABLE_MAX_SECONDS", "3600"),
+    "PICO_RUN_DETACH_ON_DISCONNECT": os.environ.get("PICO_RUN_DETACH_ON_DISCONNECT", "1"),
 }
 lines = text.splitlines(keepends=True)
 seen = set()

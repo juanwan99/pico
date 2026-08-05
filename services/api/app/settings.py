@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     # Short / direct-model chat: keep snappy day-use turns.
     pico_run_short_max_seconds: int = 120
     pico_run_short_max_tokens: int = 8000
+    # Durable long jobs (package B): wall cap for staged jobs / long agent when detach on.
+    # Must pair with detach+checkpoint — never “only raise this to 8h.”
+    pico_run_durable_max_seconds: int = 3600
+    # Page close / SSE abort: default continue job (durable). 0 = legacy kill-on-disconnect.
+    pico_run_detach_on_disconnect: bool = True
     # Kimi Agent multi-step path (only multi-step implementation after KA-4 HARD).
     # False → pico-agent multi-step fail-closed (no transitional loop).
     # True + empty canary (or *) → all principals use Kimi Agent (KA-3 prod default).
@@ -203,6 +208,25 @@ class Settings(BaseSettings):
             max_retries=self.pico_run_max_retries,
         )
 
+    def durable_run_caps(
+        self,
+        *,
+        allowed_tools: list[str] | None = None,
+        skill_instruction: str = "",
+    ):
+        """RunCaps for durable long jobs (detach-from-browser)."""
+        from pico_orchestrator.run_caps import caps_for_tier
+
+        return caps_for_tier(
+            "durable",
+            max_seconds=self.pico_run_durable_max_seconds,
+            max_tokens=max(self.pico_run_max_tokens, 64_000),
+            max_steps=max(self.pico_run_max_steps, 48),
+            max_retries=self.pico_run_max_retries,
+            allowed_tools=allowed_tools,
+            skill_instruction=skill_instruction,
+        )
+
     def spend_caps_dict(self) -> dict:
         from pico_orchestrator.run_caps import spend_caps_public
 
@@ -213,6 +237,8 @@ class Settings(BaseSettings):
             delivery_retries=self.pico_run_max_retries,
             short_seconds=self.pico_run_short_max_seconds,
             short_tokens=self.pico_run_short_max_tokens,
+            durable_seconds=self.pico_run_durable_max_seconds,
+            detach_on_disconnect=self.pico_run_detach_on_disconnect,
         )
 
     def validate_production(self) -> None:
@@ -270,6 +296,8 @@ class Settings(BaseSettings):
             errors.append("PICO_RUN_SHORT_MAX_SECONDS must be greater than zero")
         if self.pico_run_short_max_tokens <= 0:
             errors.append("PICO_RUN_SHORT_MAX_TOKENS must be greater than zero")
+        if self.pico_run_durable_max_seconds <= 0:
+            errors.append("PICO_RUN_DURABLE_MAX_SECONDS must be greater than zero")
         if self.pico_dangerous_tools_enabled:
             errors.append("PICO_DANGEROUS_TOOLS_ENABLED must remain false")
 
