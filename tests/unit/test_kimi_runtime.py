@@ -520,7 +520,7 @@ async def test_kimi_usage_accumulates_across_steps_and_fails_over_cap(
     assert result.status == "failed"
     assert result.error == "Kimi Agent token cap exceeded: 100"
     assert result.token_usage == {"total_tokens": 110, "estimated": True}
-    expected_user_message = "本次回答超出长度上限，请缩短问题或新开对话后再试。"
+    expected_user_message = "本次回答超出长度上限。可点「再跑一次」，或缩短问题后重试。"
     assert (
         "run.error",
         {
