@@ -144,3 +144,43 @@ async def test_chat_admission_isolated_by_membership_on_same_ip() -> None:
 def test_chat_rate_limit_falls_back_to_ip_without_principal() -> None:
     scope = {"client": ("203.0.113.10", 1234), "headers": []}
     assert _rate_limit_key(scope, Settings()) == "ip:203.0.113.10"
+
+
+@pytest.mark.asyncio
+async def test_chat_rate_limit_middleware_returns_human_chinese_429(monkeypatch) -> None:
+    """R6: busy/rate-limit responses carry Chinese user_message, not bare stacks."""
+    import app.rate_limit as rl
+    from app.rate_limit import ChatRateLimitMiddleware
+    from app.settings import Settings
+
+    class _App:
+        async def __call__(self, scope, receive, send):
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok"})
+
+    settings = Settings(_env_file=None, pico_chat_rpm=1, pico_chat_max_concurrent=0)
+    monkeypatch.setattr(rl, "get_settings", lambda: settings)
+    middleware = ChatRateLimitMiddleware(_App())
+    scope = {
+        "type": "http",
+        "path": "/v1/chat/completions",
+        "method": "POST",
+        "client": ("203.0.113.10", 1),
+        "headers": [],
+    }
+    messages: list[dict] = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"{}", "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    await middleware(scope, receive, send)
+    starts = [m for m in messages if m.get("type") == "http.response.start"]
+    assert starts and starts[0]["status"] == 429
+    body = b"".join(
+        m.get("body", b"") for m in messages if m.get("type") == "http.response.body"
+    ).decode("utf-8")
+    assert "user_message" in body
+    assert any(token in body for token in ("并发", "繁忙", "限流", "频繁"))

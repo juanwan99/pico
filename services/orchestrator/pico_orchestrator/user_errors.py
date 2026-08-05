@@ -31,8 +31,12 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         or "401" in low
     ):
         return "模型服务未配置或密钥无效。请管理员配置 KIMI_API_KEY / DEEPSEEK_API_KEY 后重试。"
-    if "rate limit" in low or "429" in low:
-        return "模型调用繁忙（限流）。请稍后再试。"
+    if "rate limit" in low or "429" in low or c in ("rate_limit", "concurrency_limit"):
+        if c == "concurrency_limit" or "concurrency" in low:
+            return "当前对话繁忙（并发已满）。请稍后再试，或关闭其他进行中的任务。"
+        return "请求过于频繁或模型限流。请稍后再试，勿并行轰炸。"
+    if c in ("runtime.emergency_noop", "runtime.loop_removed", "runtime.kimi_required"):
+        return "多智能体运行时当前不可用（已卸过渡环）。请确认 Kimi Agent 已开启，或联系管理员 redeploy 回滚。"
     if "connect" in low or "connection" in low or "network" in low or "timed out" in low:
         return "无法连接模型服务。请检查网络或稍后重试。"
     if "owner was lost" in low or "api restart" in low or "greenlet" in low:

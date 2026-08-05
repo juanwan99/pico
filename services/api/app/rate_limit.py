@@ -67,15 +67,27 @@ class ChatRateLimitMiddleware:
             max_concurrent=settings.pico_chat_max_concurrent,
         )
         if reason:
+            # Human-readable Chinese for teachers; no bare 429 stacks.
+            if reason == "concurrency_limit":
+                message = "当前对话繁忙（并发已满）。请稍后再试，或关闭其他进行中的任务。"
+            else:
+                message = "请求过于频繁（限流）。请稍后再试，勿并行轰炸。"
             body = json.dumps(
-                {"detail": {"code": reason, "message": "chat capacity exceeded"}}
-            ).encode()
+                {
+                    "detail": {
+                        "code": reason,
+                        "message": message,
+                        "user_message": message,
+                    }
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
             await send(
                 {
                     "type": "http.response.start",
                     "status": 429,
                     "headers": [
-                        (b"content-type", b"application/json"),
+                        (b"content-type", b"application/json; charset=utf-8"),
                         (b"retry-after", b"1" if reason == "concurrency_limit" else b"60"),
                     ],
                 }

@@ -67,7 +67,7 @@ function artifactActionError(action: ArtifactAction['type'], error: unknown): st
     return `${verb}产物失败：登录已失效，请刷新页面后重新登录`;
   }
   if (message.includes('403') || message.includes('404')) {
-    return `${verb}产物失败：产物不存在或无权限`;
+    return `${verb}产物失败：产物不存在或无权限。请用结果区按钮打开/下载（路径 /api/pico/v1/artifacts/{id}/content），勿使用虚构 /download 尾缀`;
   }
   if (message.includes('502') || message.includes('unavailable')) {
     return `${verb}产物失败：产物服务暂时不可用，请稍后重试`;

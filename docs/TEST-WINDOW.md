@@ -42,6 +42,18 @@ PAIRS: docs/RACI-GROK-CODEX.md · docs/ONEFLOW.md
 
 演示账号：`teacher@example.com` / 任务书给定；**禁止打印密钥**。
 
+### 3.1 最小自动化测（R8 · host 可能无 py3.12）
+
+仓库 `requires-python >= 3.12`。执行窗若只有 3.10：
+
+```bash
+# 一键：优先 python3.12 / .venv，否则 docker python:3.12-slim
+bash scripts/run-min-tests.sh
+# 与 CI 对齐：.github/workflows/ci.yml → setup-python 3.12 → pytest tests/unit + integration
+```
+
+Docker 镜像构建本身用 `python:3.12-slim`（`Dockerfile.pico-api`）。
+
 ## 4. 标准 TEST REPORT（贴 PR 或 Issue）
 
 ```text
