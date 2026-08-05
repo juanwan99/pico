@@ -546,8 +546,9 @@ async def _watch_cancel(
                         "runtime": "kimi-agent",
                     },
                 )
-            except Exception:  # noqa: BLE001 — never kill the run on UI heartbeat failure
-                pass
+            except Exception as heartbeat_exc:  # noqa: BLE001
+                # Never kill the run on UI heartbeat failure.
+                _ = heartbeat_exc
             last_heartbeat = now
         try:
             await asyncio.wait_for(

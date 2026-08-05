@@ -32,7 +32,7 @@ def _load_isolated(name: str, path: Path, *, deps: dict | None = None):
     if name.endswith("run_types") and "pico_orchestrator.provider" not in sys.modules:
         stub = types.ModuleType("pico_orchestrator.provider")
 
-        class ProviderConfig:  # noqa: D401
+        class ProviderConfig:
             pass
 
         def resolve_provider():
