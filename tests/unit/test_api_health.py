@@ -28,6 +28,8 @@ def test_health() -> None:
     assert body["kimi_agent_runtime_enabled"] is False
     assert body["kimi_agent_scope"] == "off"
     assert body["legacy_agent_loop_emergency"] is False
+    assert body["legacy_agent_loop_emergency_semantics"] == "no-op"
+    assert body["legacy_agent_loop_available"] is False
     assert body["kimi_agent_canary_configured"] is False
     assert body["kimi_agent_canary_membership_count"] == 0
     assert "kimi_agent_canary_batch" not in body
@@ -139,4 +141,3 @@ def test_agent_safety_checks_kimi_runtime_yaml() -> None:
     assert "pico-kimi-runtime.yaml" in checked
     assert body["proof"]["dangerous_off"] is True
     assert "pico-kimi-runtime.yaml" in body["proof"]["agent_file"]
-

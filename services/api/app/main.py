@@ -174,6 +174,10 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         "kimi_agent_canary_configured": canary_count > 0,
         "kimi_agent_canary_membership_count": canary_count,
         "legacy_agent_loop_emergency": settings.pico_legacy_agent_loop_emergency,
+        # KA-4 HARD: the legacy input is retained for configuration compatibility,
+        # but it can no longer select a removed runtime.
+        "legacy_agent_loop_emergency_semantics": "no-op",
+        "legacy_agent_loop_available": False,
         "rate_limit": {
             "chat_rpm": settings.pico_chat_rpm,
             "chat_max_concurrent": settings.pico_chat_max_concurrent,
@@ -739,6 +743,8 @@ async def get_task(
                 "content_encoding": encoding,
                 "byte_size": byte_size,
                 "content_sha256": sha,
+                "content_url": f"/v1/artifacts/{a.id}/content",
+                "download_url": f"/v1/artifacts/{a.id}/content?download=true",
             }
         )
     return {

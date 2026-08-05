@@ -1042,6 +1042,12 @@ def test_finalize_paths_expose_identical_run_and_artifact_contract(
     file_artifact = next(item for item in artifacts if item["kind"] == "file")
     assert file_artifact["inline"] == file_body
     assert file_artifact["run_id"]
+    assert file_artifact["content_url"] == (
+        f"/v1/artifacts/{file_artifact['id']}/content"
+    )
+    assert file_artifact["download_url"] == (
+        f"/v1/artifacts/{file_artifact['id']}/content?download=true"
+    )
 
     content = client.get(
         f"/v1/artifacts/{file_artifact['id']}/content",

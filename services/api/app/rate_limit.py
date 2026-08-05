@@ -67,8 +67,14 @@ class ChatRateLimitMiddleware:
             max_concurrent=settings.pico_chat_max_concurrent,
         )
         if reason:
+            message = (
+                "当前会话仍在处理中，请等待完成或停止后再试。"
+                if reason == "concurrency_limit"
+                else "请求较多，请稍后再试。"
+            )
             body = json.dumps(
-                {"detail": {"code": reason, "message": "chat capacity exceeded"}}
+                {"detail": {"code": reason, "message": message}},
+                ensure_ascii=False,
             ).encode()
             await send(
                 {

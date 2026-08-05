@@ -10,7 +10,9 @@ SECRETS: never print, copy to GitHub, or commit
    40 位 main SHA。再从生产 loopback health 核 `kimi_agent_scope`、
    `kimi_agent_runtime_enabled`、`kimi_agent_canary_configured`、
    `kimi_agent_canary_membership_count`、`kimi_agent_canary_batch` 与
-   `legacy_agent_loop_emergency`。公网 `/health` 只返回 OK 时不能据此猜内部字段。
+   `legacy_agent_loop_emergency`。该字段只回显兼容输入；必须同时看到
+   `legacy_agent_loop_emergency_semantics=no-op` 与 `legacy_agent_loop_available=false`，
+   它不再能切回已删除的自研环。公网 `/health` 只返回 OK 时不能据此猜内部字段。
 2. **登录限流先止损。** 登录或 chat 出现 429 时停止并发/自动重试，保留状态码、时间窗和
    脱敏请求类别；按 health 的 `rate_limit` 摘要检查 RPM、并发上限及联合键作用域。不要
    临时放宽租户键、关闭限流或使用 `PROXY=1` 绕过。
@@ -19,11 +21,11 @@ SECRETS: never print, copy to GitHub, or commit
    参数或 GitHub 评论中出现原值；旧值撤销后再运行错密拒绝与正常登录各一次。
 4. **按字段判路由。** `scope=all` 表示 runtime 开且有意空 canary（或显式 `*`）；
    `scope=canary` 表示仅合法 school+membership 联合键命中；`scope=off` 表示 runtime 关。
-   emergency 必须为 false；true 表示显式回到过渡环，不能称为默认 Kimi 路径。
-5. **异常时安全回退并回写。** 运行时 P0 才按已授权回滚流程将 runtime 关或显式开启
-   emergency，recreate `pico-api` 后再核 exact SHA/scope；15 分钟内在阶段 Issue 写
-   `## BLOCKED`。未获得配置变更授权时只收集脱敏事实，不改生产。
+   emergency 无论输入为何都为 no-op；`scope=off` 会 fail-closed，不会回到过渡环。
+5. **异常时安全回退并回写。** 运行时 P0 才按已授权回滚流程 redeploy 上一个已知良好
+   tip，再核 exact SHA/scope；15 分钟内在阶段 Issue 写 `## BLOCKED`。未获得配置变更
+   授权时只收集脱敏事实，不改生产。
 
-默认路径约束由 `tests/unit/test_kimi_runtime.py` 断言：runtime 开且有意空 canary 时走
-Kimi Agent；emergency 或 runtime 关时才走保留的 `run_agent_loop`。该文件仍存在是回滚
-能力，不代表默认 dual-run，也不等于全球 product PASS。
+默认路径约束由 `tests/unit/test_kimi_runtime.py` 断言：runtime 开且有意空 canary时走
+Kimi Agent；emergency 是 no-op，runtime 关时 multi-step fail-closed。仓内不再有
+`run_agent_loop`；这不等于全球 product PASS。

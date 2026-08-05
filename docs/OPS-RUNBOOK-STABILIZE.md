@@ -31,7 +31,9 @@ ssh pico-prod 'curl -sf --max-time 5 http://127.0.0.1:18765/health'
 | `kimi_agent_scope` | **`all`** | 空 canary = 全员 Kimi Agent |
 | `kimi_agent_canary_membership_count` | `0` | 故意空名单；**非**「无人进 KA」 |
 | `kimi_agent_canary_configured` | `false` | raw canary 空 |
-| `legacy_agent_loop_emergency` | **`false`** | 自研环紧急开关必须关 |
+| `legacy_agent_loop_emergency` | 兼容输入（建议 `false`） | KA-4 HARD 后为 no-op，不能切回已删除的自研环 |
+| `legacy_agent_loop_emergency_semantics` | **`no-op`** | 明示旧 emergency 不改变运行时 |
+| `legacy_agent_loop_available` | **`false`** | 自研环不可用；回滚只能 redeploy 旧 tip |
 | `kimi_agent_canary_batch` | 如 `BATCH-KA3-DEFAULT` | 运维标签，非 principal |
 | `rate_limit.chat_rpm` | 正数（现网常见 30） | 聊天 RPM |
 | `rate_limit.chat_max_concurrent` | 正数（现网常见 2） | 并发上限 |
@@ -42,9 +44,9 @@ ssh pico-prod 'curl -sf --max-time 5 http://127.0.0.1:18765/health'
 | 现象 | 优先动作 |
 |------|----------|
 | `git_sha` ≠ tip | 停签；查是否未部署或部署错 SHA |
-| `scope=off` 且 runtime false | 已回滚到 loop 安全态 |
-| `emergency=true` | 紧急自研环开着 — 非授权默认，应关 |
-| `scope=canary` 且 count=0 | 可能是 **无效 non-empty canary** fail-closed（全员 legacy）— 查 raw 串 |
+| `scope=off` 且 runtime false | multi-step 已 fail-closed；不会回到自研环 |
+| `emergency=true` | 兼容输入异常但仍是 no-op；按配置漂移处理 |
+| `scope=canary` 且 count=0 | 可能是 **无效 non-empty canary** fail-closed — 查 raw 串 |
 
 ---
 

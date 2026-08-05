@@ -188,6 +188,8 @@ class LedgerArtifactStore:
             "byte_size": byte_size,
             "content_encoding": encoding,
             "content_sha256": digest,
+            "content_url": f"/v1/artifacts/{artifact.id}/content",
+            "download_url": f"/v1/artifacts/{artifact.id}/content?download=true",
             "created_at": artifact.created_at.isoformat() if artifact.created_at else None,
         }
         if content:
