@@ -211,7 +211,9 @@ RELATED:
 | 规则 | |
 |------|---|
 | **产品主仓** | **仅 `juanwan99/pico`** |
-| **禁止** | 日常改 edu-cloud；把 aivia 场景卡当 Pico 主线 |
+| **执行编制** | **单窗 SOLO**（[STAGE-PACKAGE-MODE](./STAGE-PACKAGE-MODE.md)）；旧窗1/2/4 = 职责别名，**非**并行派工 |
+| **错误记忆** | [MEMORY-RESET.md](./MEMORY-RESET.md) — 开场必清 |
+| **禁止** | 日常改 edu-cloud；把 aivia 场景卡当 Pico 主线；多窗碎卡磨洋工 |
 | **密钥** | 仅服务端；禁止进 Git/Issue |
 | **合并** | CI + 审查纪律按 `AGENTS.md` / OneFlow；**不自 PASS** |
 | **进度真源** | GitHub PR / SHA / CI / DEPLOYED / 测试报告 |
@@ -223,10 +225,12 @@ RELATED:
 ```text
 [ ] 读本文 §1 目标 + 六条
 [ ] 读本文 §2 方案 + §3 禁区
+[ ] 读 docs/MEMORY-RESET.md（清错误记忆 · 单窗 SOLO）
 [ ] 读 docs/STATE-NOW.md（当前 tip / 健康）
 [ ] 确认：门脸=Pico，核=Pi，模型=DeepSeek
+[ ] 确认：单窗 SOLO（不派窗1+2+4 三张并行卡）
 [ ] 确认：不做 Dify 门脸终局、不做场景卷对标、不做双核真源
-[ ] 若改冻结文：先 PR TRUTH-FREEZE v1.1，再改编排代码
+[ ] 冻结文 TRUTH-FREEZE v1.1 已与本文对齐（或随本包）
 [ ] 动手只写 pico 仓（除非业主明文授权其它仓）
 ```
 

@@ -64,7 +64,9 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 
 **Truth freeze:** [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md)  
 **What is Pico:** [`docs/WHAT-IS-PICO.md`](docs/WHAT-IS-PICO.md)  
-**Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — SHA、窗口派发、门禁、过时记忆黑名单。  
+**Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — tip、门禁。  
+**Memory reset:** [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md) — 错误记忆黑名单 · **单窗 SOLO**。  
+**Stage package:** [`docs/STAGE-PACKAGE-MODE.md`](docs/STAGE-PACKAGE-MODE.md) — 单窗阶段包（废默认多窗碎卡）。  
 **Doc index (truth order):** [`docs/README.md`](docs/README.md) — prefer GitHub over prose.
 
 **Context policy:** [`docs/CONTEXT-POLICY.md`](docs/CONTEXT-POLICY.md)（默认不清理上下文）  
@@ -76,8 +78,8 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 **P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
 **Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
 **24h Standalone AI:** [`docs/STANDALONE-AI-24H.md`](docs/STANDALONE-AI-24H.md) (historical baseline)  
-**Current dispatch:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) §4–§7（窗口 1/2/3；P0 = 日用 #142/#143/#144）  
-**Kimi gap:** [`docs/KIMI-AGENT-GAP.md`](docs/KIMI-AGENT-GAP.md)（默认已切 #278 · **KA-4 HARD #288** 删 loop · 全球 PASS 未宣称）  
+**Current dispatch:** **单窗 SOLO** · 日卡 [`docs/DAY-TASK-P0-PI-CUTOVER.md`](docs/DAY-TASK-P0-PI-CUTOVER.md) · [#310](https://github.com/juanwan99/pico/issues/310)  
+**Kimi legacy:** [`docs/KIMI-AGENT-GAP.md`](docs/KIMI-AGENT-GAP.md) 仅考古/回滚；**产品默认 = Pi**  
 **KA-4:** soft historical [`docs/KA4-SOFT.md`](docs/KA4-SOFT.md) **superseded** · ops: [`docs/OPS-RUNBOOK-STABILIZE.md`](docs/OPS-RUNBOOK-STABILIZE.md)  
 **Skill ADR:** [`docs/ADR-SKILL-CATALOG.md`](docs/ADR-SKILL-CATALOG.md).  
 **Completed foundation sprint:** [`docs/SPRINT-3DAY-PUSH.md`](docs/SPRINT-3DAY-PUSH.md) (COMPLETED).  
@@ -86,25 +88,24 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 Do **not** use `docs/archive/**`, new HANDOFF markdown, or open PR **#121 harness multi-runtime** as task truth.
 
 ## Product rules
-- **Ship speed:** default [docs/FAST-PATH.md]. Windows: **1=deploy**, **2/3=write**, **4=verify (logged-in + vision + browser)** — not the deploy window.
-- See also [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. No multi-issue process OS.
-
-- AI foundation only (conversation + agent + ledger + artifacts). Not netdisk, not school SaaS rebuild.
-- **Target (only):** open-source Kimi Agent runtime + Kimi HTTPS API. **Owner never set self-built loop as the goal.** No Plan B runtime.
-- **Prod default (post #278):** `pico-agent` → Kimi Agent when RUNTIME=1 + empty canary (scope=all). **Keep-kimi.**
-- **KA-4 HARD:** transitional `run_agent_loop` / `runner.py` **removed**. Multi-step = Kimi Agent only. Emergency→loop is **no-op**. Rollback = redeploy prior tip. Do **not** self-claim global product PASS or orchestration complete.
+- **Org:** default **single-window SOLO** — [docs/STAGE-PACKAGE-MODE.md](docs/STAGE-PACKAGE-MODE.md). Old windows 1/2/4 are **duty aliases**, not parallel staffing. See [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md).
+- **Ship steps:** [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. **One window** runs the chain; no multi-issue process OS.
+- **Product goal:** Web WorkBuddy degree (six bars) — [docs/HANDOFF-WB-PI.md](docs/HANDOFF-WB-PI.md).
+- **Default runtime:** **Pi** + **DeepSeek**. Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted** (never the goal).
+- **Prod flags:** `PICO_PI_AGENT_RUNTIME=1` default; legacy Kimi only if emergency. Do **not** claim `CLAIM-WB-DEGREE-WEB` until six bars + GitHub evidence.
+- **KA-4 HARD:** `run_agent_loop` / `runner.py` **removed**. Rollback multi-step = redeploy prior tip or legacy flag — not revive loop.
 - **Speed:** deploy + smoke beat new process docs; see `docs/VELOCITY-CLEAN.md`.
 - Tenant fail-closed; **Pico owns the unique AI ledger**.
-- Pricing docs may stay DRAFT; do not freeze commercial FIXED unless owner orders.
-- Prefer smallest correct fix; delete dual-run croft rather than stack adapters.
+- Prefer smallest correct fix; no dual-run; no dual-kernel product truth.
 
-## Speed vs safety (owner 2026-08-01)
+## Speed vs safety
 
-**Default rhythm:** [docs/FAST-PATH.md](docs/FAST-PATH.md) only.
+**Default org:** stage package + **SOLO** ([STAGE-PACKAGE-MODE](docs/STAGE-PACKAGE-MODE.md)).  
+**Default tech rhythm:** [docs/FAST-PATH.md](docs/FAST-PATH.md) steps inside one window.
 
-**KEEP:** secrets out of git; allowlist tools; exact-SHA deploy; CI green; prod KA cutover only with AUTH; no fake global PASS; no dual-run; no Pi/DeepSeek default.
+**KEEP:** secrets out of git; allowlist tools; exact-SHA deploy; CI green; no fake global / WB CLAIM; no dual-run; **Pi + DeepSeek default**.
 
-**CUT:** multi-card ceremonies, auto E1 queue, per-gap micro-issues, long controller reviews on green diffs, wrong-window smoke.
+**CUT:** multi-window daily dispatch, multi-card ceremonies, auto E1 queue, per-gap micro-issues, Kimi-as-only-goal memory, Dify-as-product, scene-exam-as-WB.
 
-PRs stay (one writer / one branch / CI). Do **not** split one theme into many waiting rounds.
+PRs stay (one writer / one branch / CI). Do **not** split one theme into many waiting rounds or many windows.
 

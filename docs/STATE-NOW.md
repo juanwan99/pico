@@ -2,15 +2,17 @@
 
 > **真源冻结：[TRUTH-FREEZE.md](./TRUTH-FREEZE.md) v1.1。**  
 > **产品目标权威：[HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md)。**  
+> **错误记忆黑名单：[MEMORY-RESET.md](./MEMORY-RESET.md)。**  
+> **组织法：[STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md) — 单窗 SOLO。**  
 > **编排默认 = Pi；模型默认 = DeepSeek。**  
-> **Kimi Agent = 遗产回滚路径，非产品唯一目标。**  
-> **`run_agent_loop` = 已物理删除（KA-4 HARD）；从未是目标。**
+> **Kimi Agent = 遗产回滚，非产品唯一目标。**  
+> **`run_agent_loop` = 已删；从未是目标。**
 
 ```text
 DOC: docs/STATE-NOW.md
 STATUS: BINDING snapshot
-UPDATED: 2026-08-06 (PI-KERNEL-REPLACE · HANDOFF-WB-PI)
-TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
+UPDATED: 2026-08-06 (MEMORY-RESET · SOLO single-window · PI-KERNEL)
+TRUTH_ORDER: GitHub 证据 > HANDOFF-WB-PI > TRUTH-FREEZE > MEMORY-RESET > 本页 > 聊天
 ```
 
 ---
@@ -20,46 +22,75 @@ TRUTH_ORDER: GitHub 证据 > 本页 > 聊天
 | 层 | 内容 |
 |----|------|
 | 产品 | 任务型 AI 工作台（Web）· WorkBuddy 程度六条 |
-| 编排目标 | **默认唯一：Pi Agent harness** |
+| 编排 | **默认唯一：Pi**（`run_pi_agent`） |
 | 模型 | **DeepSeek HTTPS 为主** |
-| 实现 | `run_agent_runtime` → `run_pi_agent`；账本 Event 映射；allowlist gateway 工具 |
-| 遗产 | `PICO_LEGACY_KIMI_AGENT_RUNTIME` → `run_kimi_agent`（可选回滚） |
-| 禁 | 双核并列真源；Dify 门脸终局；场景考卷对标；自研 loop 回流；edu-cloud |
+| 实现 | 账本 Event；allowlist gateway；`legacy_loop_unavailable=true` |
+| 遗产 | `PICO_LEGACY_KIMI_*` 可选回滚 · 非主叙事 |
+| 禁 | 双核真源 · Dify 门脸终局 · 场景卷对标 · loop 回流 · edu-cloud |
 
 **用户成功：** 登录 → 开放派活 → 过程可见 → 产物 → 能停/找回/再试 → 状态诚实。
 
 ---
 
-## 1. 切换说明（本包）
+## 1. 执行编制（BINDING · 单窗）
+
+| 角色 | 职责 |
+|------|------|
+| **执行窗 SOLO（唯一默认）** | 端到端：写码 → CI → 合（权限内）→ 装 tip → health → 登录点验 → 回写 Issue |
+| **业主** | 方向 / 阶段成果包 ACCEPT·REVISE |
+| **总管** | 阶段计划 · 禁区 · 阶段末核真源；**不**日常多窗碎派 |
+
+**旧「窗1/2/3/4」= 职责别名，不是并行编制。** 详见 [MEMORY-RESET.md](./MEMORY-RESET.md) §1.2。  
+技术步骤仍可记：改 → 合 → 装 → 验（[FAST-PATH.md](./FAST-PATH.md)），**由同一窗串行**。
+
+---
+
+## 2. 切换与 health（Pi 包）
 
 | 项 | 值 |
 |----|-----|
 | 默认 runtime | `pi-agent` |
-| env | `PICO_PI_AGENT_RUNTIME=1`（默认 True） |
-| 模型 env | `DEEPSEEK_API_KEY` + `PICO_MODEL_PROVIDER=deepseek` |
-| health 字段 | `default_runtime` / `pi_agent_runtime_enabled` / `pi_agent_scope` |
-| 旧 health | `kimi_agent_*` 仍暴露（legacy 可观测） |
-| 旧 loop | `legacy_loop_unavailable=true` 不变 |
+| env | `PICO_PI_AGENT_RUNTIME=1` · `PICO_MODEL_PROVIDER=deepseek` · `DEEPSEEK_*` |
+| health | `default_runtime` / `pi_agent_*` / `legacy_loop_unavailable=true` |
+| 旧字段 | `kimi_agent_*` 可观测，非默认 |
 
 ---
 
-## 2. 上一 tip 考古（Kimi 时代 · 勿覆盖产品目标）
+## 3. tip / 考古
 
 | 面 | SHA | 含义 |
 |----|-----|------|
-| 历史 GLOBAL PASS tip | `38067b824c2e5fd5e445d7f33a20089c8f13360d` | #298 签于 Kimi 路径 ENGINEERING complete |
-| 本包 | 待合入 tip | Pi 默认核替换；**不得**用旧 GLOBAL PASS 冒充 WB 六条完成 |
+| 历史 GLOBAL PASS tip | `38067b824c2e5fd5e445d7f33a20089c8f13360d` | Kimi 时代 · **不得**冒充六条 |
+| 代码 PR | [#309](https://github.com/juanwan99/pico/pull/309) | Pi 默认核 · 待合 / 合后写 tip |
+| 日卡 | [#310](https://github.com/juanwan99/pico/issues/310) · [DAY-TASK-P0-PI-CUTOVER](./DAY-TASK-P0-PI-CUTOVER.md) | SOLO 执行 |
 
 ---
 
-## 3. 推进
+## 4. 错误记忆速查（摘要 · 全文见 MEMORY-RESET）
 
 ```text
-当前：Pi 内核替换落地（代码）· 文档 TRUTH-FREEZE v1.1
-P0 余量：公网门脸稳 + DeepSeek 实钥接通 + 开放域当场题跑通 + 取消可用
-P1：产物露出 · ≥3 Skill 前台 · 同会话改 · 完成态
-CLAIM-WB-DEGREE-WEB：P0/P1 未满六条 → NO
-禁：假绿 · 密钥进仓 · 双核并列 · Dify 门脸叙事
+KILL:
+  - 多窗日常派工（1部署+2写+4验 必须并行）
+  - 唯一目标=Kimi · keep-kimi 主叙事
+  - 禁 Pi/DeepSeek
+  - Dify 门脸终局 · aivia 场景卷=WB 完成
+  - 旧 GLOBAL PASS = CLAIM-WB-DEGREE-WEB
+  - 自 PASS · 密钥进 Issue · 写 edu-cloud
+KEEP:
+  - 单窗 SOLO · Pi + DeepSeek · Pico 账本唯一
+  - 开放域当场题 · exact-SHA 部署 · 诚实失败
 ```
 
-product PASS (WB 六条): **NOT CLAIMED** · orchestration default: **pi-agent**
+---
+
+## 5. 推进
+
+```text
+MODE: SOLO single-window
+当前: Pi 内核替换（#309）· 文档 v1.1 · MEMORY-RESET
+P0 余: 合 tip · 公网 DeepSeek 实钥 · 当场题 · 取消
+P1: 产物 · ≥3 Skill 前台 · 同会话改 · 完成态
+CLAIM-WB-DEGREE-WEB: NO
+```
+
+product PASS (WB 六条): **NOT CLAIMED** · orchestration default: **pi-agent** · dispatch: **SOLO**

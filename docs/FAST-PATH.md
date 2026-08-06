@@ -2,8 +2,10 @@
 
 ```
 DOC: docs/FAST-PATH.md
-STATUS: BINDING — 日常唯一默认节奏
-UPDATED: 2026-08-01
+STATUS: BINDING — 技术步骤节奏（装 tip / 点聊）
+ORG: docs/STAGE-PACKAGE-MODE.md — **单窗 SOLO** 执行；本文步骤由同一窗串行
+MEMORY: docs/MEMORY-RESET.md — 废「必须多窗并行派工」
+UPDATED: 2026-08-06
 OWNER_ORDER: 在必要安全下砍掉一切阻碍
 AUTONOMOUS: docs/AUTONOMOUS-GOAL.md — 成功门禁 A–I
 STAGE_PACKAGE: docs/STAGE-PACKAGE-MODE.md — BINDING 单窗阶段包
@@ -11,8 +13,10 @@ STAGE_PACKAGE: docs/STAGE-PACKAGE-MODE.md — BINDING 单窗阶段包
 
 ## 一句话
 
-**改 → CI 绿 → 合 → 窗1 装 tip → 窗4 点聊/停 → 三行回执。**  
-能并刀并刀；能一个 PR 做完绝不拆五张卡。
+**改 → CI 绿 → 合 → 装 tip → 点聊/停 → 三行回执。**  
+**同一执行窗串行完成**（不默认拆窗1/2/4 三张卡）。能并刀并刀；能一个 PR 做完绝不拆五张卡。
+
+---
 
 ---
 
@@ -28,7 +32,8 @@ STAGE_PACKAGE: docs/STAGE-PACKAGE-MODE.md — BINDING 单窗阶段包
 | CI 绿再合 main（lint/test） | 防直接推坏 main |
 | 窗4 对用户路径：login / 真聊 / 停 至少各一次（改动碰运行时/UI 时） | 防「合了但不能用」 |
 | 禁 edu-cloud 写仓；禁 PROXY=1 进应用；禁 Plan B 换核 | 真源红线 |
-| 禁宣称「已接入 Kimi Agent」除非有生产账本+授权证据 | 防假完成 |
+| 禁宣称「WB 程度 / CLAIM-WB-DEGREE-WEB」除非六条+GitHub 证据 | 防假完成 |
+| 禁宣称默认核仍是 Kimi（产品叙事） | 默认 = Pi + DeepSeek |
 
 除此以外的「流程」默认视为 **可砍税**。
 
@@ -55,23 +60,24 @@ STAGE_PACKAGE: docs/STAGE-PACKAGE-MODE.md — BINDING 单窗阶段包
 
 | 谁 | 做什么 | 不做 |
 |----|--------|------|
-| **窗2/3** | 一个主题一个分支/PR，CI 绿求合 | 不拆五张调查 |
-| **合权/总管** | 绿档快合；黄扫关键路径 | 不叠第二审批戏 |
-| **窗1** | `prod-update` tip；remote-health | 不装浏览器验聊 |
-| **窗4** | 登录+聊+停；三行报告 | 不改码不部署 |
-| **业主** | 目标与授权（KA canary / 切流 / 清库） | 少被技术假流程打扰 |
+| **执行窗 SOLO** | 写 PR → CI → 合（权限内）→ prod-update → 登录聊/停 → 回执 | 不拆多窗等待 |
+| **总管** | 阶段计划；黄/红审合；阶段末核真源 | 不日常碎派 1+2+4 |
+| **业主** | 目标与阶段成果包验收 | 少被技术假流程打扰 |
 
-### 窗编号（钉死）
+### 职责别名（非并行编制 · 单窗 SOLO）
 
-| 窗 | 职责 |
-|----|------|
-| **1** | 部署 |
-| **2/3** | 写入（可并行） |
-| **4** | 验证（已登录+视觉+操控网页） |
+| 旧称 | 职责 | 谁做 |
+|------|------|------|
+| 窗2/3 | 写入 | **SOLO** |
+| 窗1 | 部署 | **SOLO** |
+| 窗4 | 验证 | **SOLO** |
+| 总管 | 阶段核真源 / 黄红合 | 总管 |
+
+历史多窗表 **SUPERSEDED** 为日常编制。见 [MEMORY-RESET.md](./MEMORY-RESET.md)。
 
 ---
 
-## 命令（部署 · 窗1）
+## 命令（部署 · SOLO）
 
 ```bash
 # /opt/pico 与 .git 属部署用户（非 root）
@@ -93,13 +99,13 @@ stop: OK/FAIL
 
 ---
 
-## 编排（Kimi Agent）加速而不降安全
+## 编排（Pi + DeepSeek）加速而不降安全
 
 ```text
-仓内：能并的缺口并成少数大 PR（门禁/审计/safety 已并进 main 的继续用）
-生产：tip 可勤装，flag 保持 0 + 名单空
-放量：仅业主书面授权 canary（总闸+名单）后，窗4 出 runtime=kimi-agent 证据
-默认切流：#170，另授权，禁止偷做
+仓内：能并的缺口并成少数大 PR；默认核 Pi（#309）
+生产：tip 勤装；PICO_PI_AGENT_RUNTIME=1；DEEPSEEK 实钥（密码器）
+验收：SOLO 登录开放域当场题 + stop；health default_runtime=pi-agent
+禁：Kimi 主叙事假绿 · 场景卷冒充 CLAIM-WB-DEGREE-WEB · 多窗碎卡
 ```
 
 ---
@@ -113,7 +119,7 @@ stop: OK/FAIL
 
 ## 单关键路径极速模式（BINDING · 2026-08-01 业主确认）
 
-**主线只做 Kimi 真接。** 日常默认即本模式。
+**主线：Pi + DeepSeek 真接 + 单窗 SOLO。** 日常默认即本模式。
 
 | 规则 | |
 |------|--|
@@ -125,7 +131,7 @@ stop: OK/FAIL
 | 失败 | 关闸 + **一个**修复 PR |
 | 禁止 | 流程文档轮转、准备性 Issue、3A/3B 微切片、重复草稿 PR |
 
-### Kimi canary（须业主书面授权）
+### 遗产：Kimi canary（仅回滚 · 非产品主路径）
 
 ```text
 1) 窗1：prod-update tip（flag 仍可先 OFF 装码）

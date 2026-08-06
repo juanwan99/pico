@@ -6,15 +6,15 @@ STATUS: BINDING FREEZE v1.1
 FROZEN_AT: 2026-08-06
 PURPOSE: 固定产品/架构真源，防止聊天与旧文档再次冲掉校准结论
 AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO；代码/PR 证据可更新「实现现状」，不可偷偷改「目标」
-SUPERSEDES: v1.0「唯一编排 = Kimi Agent / 禁 Pi」；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
-RELATED: docs/HANDOFF-WB-PI.md（产品目标权威）
+SUPERSEDES: v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+RELATED: docs/HANDOFF-WB-PI.md → docs/MEMORY-RESET.md（产品目标权威）
 ```
 
 ---
 
 ## 0. 怎么用（防丢失）
 
-1. **新窗 / 总管 / 执行窗** 必读顺序：  
+1. **新窗 / 总管 / 执行窗（默认单窗 SOLO）** 必读顺序：  
    `HANDOFF-WB-PI` → `TRUTH-FREEZE` → `WHAT-IS-PICO` → `STATE-NOW` → `AGENTS.md` → 任务卡  
 2. **改目标类句子**（产品是什么、编排唯一路径、禁项）= **升冻结小版本**（v1.2…）并走 PR，禁止只在聊天改口。  
 3. **改实现现状**（生产 SHA、某门是否 PASS）= 更新 `STATE-NOW` + GitHub 证据；**不要**改写本文件的「目标」段。  
@@ -74,7 +74,7 @@ RELATED: docs/HANDOFF-WB-PI.md（产品目标权威）
 |---|--------|
 | W1 | 只写 `juanwan99/pico`（产品主仓） |
 | W2 | 禁 PROXY=1；禁打印密钥 |
-| W3 | 窗口 1/2/3 手动派卡；无自动触发当可靠机制 |
+| W3 | **单窗 SOLO** 端到端（STAGE-PACKAGE）；旧窗1/2/4 仅职责别名；无自动 E1 派工 |
 | W4 | 不自 PASS；DEPLOYED ≠ 产品 PASS；禁假绿 CLAIM |
 | W5 | aivia-workbench = 非产品主仓；Dify/场景卷 ≠ WB 程度完成 |
 
@@ -130,6 +130,6 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | **v1.0** | 2026-08-01 | 首次冻结：Kimi Agent 唯一 / 禁 Pi |
-| **v1.1** | 2026-08-06 | 对齐 HANDOFF-WB-PI：默认 Pi + DeepSeek；Kimi 遗产回滚；禁双核真源 |
+| **v1.1** | 2026-08-06 | 对齐 HANDOFF-WB-PI：默认 Pi + DeepSeek；Kimi 遗产回滚；禁双核真源；**单窗 SOLO**（废多窗日常派） |
 
 升版规则：任何 P1–W5 / A1–A4 / O1–O7 / C1–C7 的修改 → **v1.x** 新 PR，标题含 `TRUTH-FREEZE`。
