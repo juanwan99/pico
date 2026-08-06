@@ -78,4 +78,5 @@ New long plans: **one ACTIVE plan** at a time. Previous plan → COMPLETED heade
 
 **Binding product direction:** [HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md) — Pico full stack + Pi + DeepSeek · Web WorkBuddy-degree six bars.  
 **Memory reset:** [MEMORY-RESET.md](./MEMORY-RESET.md) · **SOLO:** [STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md).  
-**Current day card:** [DAY-TASK-P0-PI-CUTOVER.md](./DAY-TASK-P0-PI-CUTOVER.md) · issue #310.
+**Task card standard:** [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（CLAIM/BASE/PRODUCT）。  
+**Current day card:** **T-P0-PI-CUTOVER** · [DAY-TASK-P0-PI-CUTOVER.md](./DAY-TASK-P0-PI-CUTOVER.md) · issue #310.

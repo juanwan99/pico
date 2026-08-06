@@ -1,146 +1,144 @@
-# 日间任务书 · P0 Pi+DeepSeek 落地（单窗 SOLO）
+# 标准任务卡 · T-P0-PI-CUTOVER
 
 ```
-TYPE: DAY
-CARD: DAY-TASK-P0-PI-CUTOVER
-TRACK: P0-PI-CUTOVER
-STATUS: OPEN · 2026-08-06
-MODE: SOLO · 单窗端到端（非多窗派工）
-TOTAL: Grok（总管 · 阶段核真源）
-EXEC: 唯一执行窗（写+装+验串行）
-RISK: 黄/红（生产默认 runtime 切流 + env）
-PLAN: docs/HANDOFF-WB-PI.md · docs/TRUTH-FREEZE.md v1.1
-ORG: docs/STAGE-PACKAGE-MODE.md · docs/MEMORY-RESET.md
-CODE: PR #309
-TEST: docs/TEST-TASK-P0-PI-CUTOVER.md
+DOC: docs/DAY-TASK-P0-PI-CUTOVER.md
+TYPE: STANDARD-TASK-CARD
+ID: T-P0-PI-CUTOVER
 ISSUE: #310
-context_reset: false
+CODE: #309
+STATUS: OPEN · 正式派发体例
+DATE: 2026-08-06
 ```
 
-## 锁定句
-
-```text
-目标：Web 上 WorkBuddy 程度（六条）
-方案：回 Pico 整车 + 默认编排核 Pi + DeepSeek
-不做：Dify 门脸终局、场景考卷当对标、双核并列真源
-执行：单窗 SOLO · 改→合→装→验
-```
-
-## 指针
-
-| 项 | 值 |
-|----|-----|
-| 产品真源 | [HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md) |
-| 清源 | [MEMORY-RESET.md](./MEMORY-RESET.md) |
-| 冻结 | [TRUTH-FREEZE.md](./TRUTH-FREEZE.md) v1.1 |
-| 快照 | [STATE-NOW.md](./STATE-NOW.md) |
-| 组织 | [STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md) |
-| 技术步骤 | [FAST-PATH.md](./FAST-PATH.md)（步骤参考；**不**拆多窗） |
-| 代码 | [#309](https://github.com/juanwan99/pico/pull/309) |
-| Issue | [#310](https://github.com/juanwan99/pico/issues/310) |
-
-## 目标（单一）
-
-**合 #309 → 生产 tip 默认 Pi + DeepSeek → 开放域当场题（过程/回复/停）→ health 自证。**  
-**不宣称** `CLAIM-WB-DEGREE-WEB`。
-
-## 非目标
-
-六条全绿 · ≥3 Skill 前台 · KB/MCP · 像素 · workDir · loop 回流 · Dify 门脸 · 写 edu · 多窗碎卡。
-
-## HARD
-
-- 仅 `juanwan99/pico`
-- 禁 PROXY=1 · 禁公网裸露 18765/27017 · 禁打印/Issue 贴 key
-- CI 红 ⇒ 不合；默认 runtime 切流：审后合
-- exact SHA 部署 + `health.git_sha` 对齐
-- 禁假绿（场景卷 / 旧 #298 PASS 冒充六条）
-- **禁把本卡再拆成窗1/2/4 三张等待卡**
-
-## LEASES（SOLO 可写）
-
-- `services/orchestrator/**` · 相关 api/health · 本卡 docs
-- 生产 env（密码器，不进仓）
-- Issue #310 回写
-- 禁：edu-cloud · aivia 主刀 · P1 Skill 大战
+> **以 Issue [#310](https://github.com/juanwan99/pico/issues/310) 正文为准。** 本文与 Issue 同步。
 
 ---
 
-## 【给：唯一执行窗 SOLO】（复制即开）
-
 ```text
-# MEMORY RESET 先读
-docs/MEMORY-RESET.md · docs/HANDOFF-WB-PI.md · docs/DAY-TASK-P0-PI-CUTOVER.md
+════════════════════════════════════
+标准任务卡 · T-P0-PI-CUTOVER
+════════════════════════════════════
+执行窗：SOLO（唯一）
+上下文：KEEP（已 MEMORY-RESET；勿 /new 清掉真源）
+角色：执行窗端到端 · 总管仅黄/红合与阶段核真源
+RISK: 黄/红（生产默认 runtime 切流 + env 语义）
+FAST: YES（一主题一闭环；禁拆五张卡）
+仓：https://github.com/juanwan99/pico
+载体回写：https://github.com/juanwan99/pico/issues/310
+BASE：  1e06440dcabee4c643454483094541cdfc601182
+PRODUCT：UNKNOWN（开跑前 loopback /api health.git_sha 校准；考古参考 38067b824c2e5fd5e445d7f33a20089c8f13360d）
+关联：PR #309 @ bc09c54f19eabf00bf838904ee5509541f7520ae
+      docs/HANDOFF-WB-PI.md · docs/MEMORY-RESET.md · docs/TRUTH-FREEZE.md v1.1
+      docs/TEST-TASK-P0-PI-CUTOVER.md · docs/TASK-CARD-STANDARD.md
 
-# 单窗串行，不要等别的窗
-MODE=SOLO
+【锁定句】
+目标：Web 上 WorkBuddy 程度（六条）
+方案：Pico 整车 + Pi + DeepSeek
+执行：单窗 SOLO（改→合→装→验 同一窗串行）
+不做：Dify 门脸 · 场景卷对标 · 双核真源 · 多窗碎派
 
-## A 合码
-1) 读 PR #309（Pi 默认 + TRUTH-FREEZE v1.1 + MEMORY-RESET）
-2) CI 绿 → merge main（若无合权：贴 CANDIDATE 等总管，仍不拆窗）
-3) TIP=$(git rev-parse origin/main)  # full 40-char
-4) 贴 #310: ## MERGED · SHA=…
+【你是谁】
+唯一执行窗 SOLO：写/合（权限内）/装 tip/登录点验/回写 #310。
+不是「只等窗4」的半窗；不是并行三窗编制。
 
-## B 装 tip
-5) 密码器（勿贴 Issue）:
-   DEEPSEEK_API_KEY=…
-   PICO_MODEL_PROVIDER=deepseek
-   PICO_PI_AGENT_RUNTIME=1
-   PICO_LEGACY_KIMI_AGENT_RUNTIME=0
-   PICO_KIMI_AGENT_RUNTIME=0
-6) PICO_DEPLOY_SHA=$TIP bash scripts/prod-update.sh
-7) health: git_sha==TIP · default_runtime=pi-agent · pi_agent_scope=all
-8) 贴 #310:
+【真源】
+1) HANDOFF-WB-PI  2) MEMORY-RESET  3) TRUTH-FREEZE v1.1
+4) STATE-NOW  5) 本卡 Issue 正文  6) GitHub SHA/CI/DEPLOYED
+聊天摘要不覆盖正文。
+
+【目标】
+合 #309 → 生产 tip 默认 multi-step=Pi、模型=DeepSeek →
+开放域当场题可跑（有过程/有回复/能停）→ health 自证 pi-agent。
+人话：登录→派活→见过程→有回复→能停。
+不宣称 CLAIM-WB-DEGREE-WEB。
+
+【IN】（只做这些）
+A 合码
+  - #309 CI 绿 → merge main
+  - tip = origin/main full 40-char
+  - ## MERGED 贴 #310
+B 装 tip
+  - 密码器：DEEPSEEK_API_KEY、PICO_MODEL_PROVIDER=deepseek、
+    PICO_PI_AGENT_RUNTIME=1、LEGACY_KIMI=0、KIMI_RUNTIME=0
+  - PICO_DEPLOY_SHA=$TIP bash scripts/prod-update.sh
+  - health：git_sha==TIP · default_runtime=pi-agent · pi_agent_scope=all
+    · legacy_loop_unavailable=true · kimi_agent_runtime_enabled=false
+  - ## DEPLOYED 贴 #310（更新 PRODUCT=线上 sha）
+C 点验（同一窗 · 已登录）
+  - 按 docs/TEST-TASK-P0-PI-CUTOVER.md（PI-T1…T12）
+  - 开放域当场题（禁 aivia 固定卷）
+  - ## TEST REPORT 贴 #310
+D 可选修洞
+  - 仅阻断主路径时一个 follow-up PR，不扩 P1
+
+【OUT】（本卡严禁）
+- CLAIM-WB-DEGREE-WEB=YES / 六条全绿自签
+- ≥3 Skill 前台、KB、MCP、像素、桌面 workDir（P1/P2）
+- 复活 run_agent_loop · 双核并列真源
+- Dify 门脸终局 · aivia 场景卷当验收
+- 写 edu-cloud · 密钥进 Git/Issue
+- 拆成窗1部署卡+窗2写卡+窗4验卡 三张等待
+- 用旧 GLOBAL PASS @ 38067b82 冒充本卡完成
+
+【验收】
+1. main tip 含 Pi 默认核 + TRUTH-FREEZE v1.1（#309 MERGED）
+2. ## DEPLOYED：health.git_sha = tip；default_runtime=pi-agent；scope=all
+3. ## TEST REPORT：PI-T1…T12 表；三行 chat/stop；verdict PASS|FAIL
+4. 开放域当场题非空回复；过程或 run 状态诚实；停止可用或 N/A+说明
+5. 作者不自签 CLAIM-WB-DEGREE-WEB；不自签产品终局 PASS
+
+【禁止】
+HARD：仅 juanwan99/pico · 禁 PROXY=1 · 禁公网裸露 18765/27017 · 禁打印 key
+CI 红不合；假绿（场景卷/旧 PASS）禁止；失败 ## BLOCKED 一行原因
+
+【CLAIM】（复制即认领）
+CLAIM T-P0-PI-CUTOVER（SOLO）
+BASE 1e06440dcabee4c643454483094541cdfc601182
+PRODUCT UNKNOWN
+合 #309 装 tip 默认 Pi+DeepSeek 并当场题验收
+
+【回写模板】
+## MERGED
+SHA: <40>
+PR: #309
+
 ## DEPLOYED
-SHA: <40字>
+SHA: <health.git_sha>
 default_runtime: pi-agent
 pi_agent_scope: all
+PRODUCT: <同 SHA · 校准后改 CLAIM 块>
 
-## C 点验（同一窗 · 已登录）
-9) 读 docs/TEST-TASK-P0-PI-CUTOVER.md
-10) 登录公网 → 开放域当场题（禁背 aivia 卷）→ 过程/回复 → 停
-11) 贴 #310: ## TEST REPORT（表格式）
-12) 禁止 CLAIM-WB-DEGREE-WEB=YES
+## TEST REPORT
+（见 TEST-TASK-P0-PI-CUTOVER 表）
+verdict: PASS|FAIL
+CLAIM-WB-DEGREE-WEB: NO
 
-卡住: ## BLOCKED + 一行原因。做完即停。
-```
+## MEMORY RESET（若新会话）
+MODE: SOLO · DEFAULT: Pi+DeepSeek · KILL: multi-window/Kimi-goal/Dify/scene-exam
 
----
-
-## 生产 env（密码器 · 勿贴值）
-
-```bash
-DEEPSEEK_API_KEY=<密码器>
-PICO_MODEL_PROVIDER=deepseek
-PICO_PI_AGENT_RUNTIME=1
-PICO_LEGACY_KIMI_AGENT_RUNTIME=0
-PICO_KIMI_AGENT_RUNTIME=0
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-DEEPSEEK_MODEL=deepseek-chat
-```
-
-## 验收
-
-| 门 | 证据（同一 Issue #310） |
-|----|-------------------------|
-| 合码 | ## MERGED + tip SHA |
-| 部署 | ## DEPLOYED + health 字段 |
-| 点验 | ## TEST REPORT |
-| 禁宣 | 不写 CLAIM-WB-DEGREE-WEB=YES |
-
-无 GitHub 回写 = 未交付。
-
-## 结束回写
-
-```text
 HANDOFF-WB-PI 执行回写
-DATE:
-TIP_SHA:
-MODE: SOLO
-PI_DEFAULT: yes/no
-DEEPSEEK: yes/no
-六条: 1__ 2__ 3__ 4__ 5__ 6__
-证据: #310
+DATE: / TIP_SHA: / MODE: SOLO
+PI_DEFAULT: / DEEPSEEK: / 六条: 1__…6__
 CLAIM-WB-DEGREE-WEB: NO
 下一刀: P1 产物+Skill 前台+同会话改
+
+【合入】
+- 默认：总管审后合 #309（runtime 切流 · 黄/红）
+- 绿档文档-only follow-up 可按 FAST 代合
+- 执行窗 VERDICT_AUTHORITY: NONE · 不自 PASS 产品
+════════════════════════════════════
 ```
+
+## 开跑前校准（执行窗 · 2 分钟）
+
+```bash
+# BASE
+git fetch origin main && git rev-parse origin/main
+# PRODUCT（线上 · 密码器机 / 跳板）
+# curl -sS http://127.0.0.1:18765/health | jq -r .git_sha
+# 将校准后的 PRODUCT 写回 #310 CLAIM 块后再大干
+```
+
+## 测试对表
+
+见 [TEST-TASK-P0-PI-CUTOVER.md](./TEST-TASK-P0-PI-CUTOVER.md)。

@@ -3,6 +3,7 @@
 > **真源冻结：[TRUTH-FREEZE.md](./TRUTH-FREEZE.md) v1.1。**  
 > **产品目标权威：[HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md)。**  
 > **错误记忆黑名单：[MEMORY-RESET.md](./MEMORY-RESET.md)。**  
+> **派卡体例：[TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（CLAIM/BASE/PRODUCT）。**  
 > **组织法：[STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md) — 单窗 SOLO。**  
 > **编排默认 = Pi；模型默认 = DeepSeek。**  
 > **Kimi Agent = 遗产回滚，非产品唯一目标。**  
@@ -62,7 +63,7 @@ TRUTH_ORDER: GitHub 证据 > HANDOFF-WB-PI > TRUTH-FREEZE > MEMORY-RESET > 本�
 |----|-----|------|
 | 历史 GLOBAL PASS tip | `38067b824c2e5fd5e445d7f33a20089c8f13360d` | Kimi 时代 · **不得**冒充六条 |
 | 代码 PR | [#309](https://github.com/juanwan99/pico/pull/309) | Pi 默认核 · 待合 / 合后写 tip |
-| 日卡 | [#310](https://github.com/juanwan99/pico/issues/310) · [DAY-TASK-P0-PI-CUTOVER](./DAY-TASK-P0-PI-CUTOVER.md) | SOLO 执行 |
+| 日卡 | [#310](https://github.com/juanwan99/pico/issues/310) · **T-P0-PI-CUTOVER** · [DAY-TASK](./DAY-TASK-P0-PI-CUTOVER.md) | SOLO · CLAIM/BASE/PRODUCT |
 
 ---
 

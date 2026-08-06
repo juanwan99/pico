@@ -2,7 +2,7 @@
 
 ```
 TYPE: TEST
-PAIR: docs/DAY-TASK-P0-PI-CUTOVER.md
+PAIR: T-P0-PI-CUTOVER · docs/DAY-TASK-P0-PI-CUTOVER.md
 EXEC: 同一 SOLO 执行窗（已登录 + 视觉 + 操控）
 ISSUE: #310
 MODE: 非独立「窗4编制」——职责别名 only
