@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -88,7 +88,7 @@ def build_change_handoff(
             "confirmed_at": (
                 confirmed_at
                 if confirmed_at.tzinfo is not None
-                else confirmed_at.replace(tzinfo=UTC)
+                else confirmed_at.replace(tzinfo=timezone.utc)
             ).isoformat(),
             "confirmed_by": confirmed_by,
         }

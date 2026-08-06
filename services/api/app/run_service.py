@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select, update
@@ -28,7 +28,7 @@ from app.settings import get_settings
 
 
 def _utcnow() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @dataclass(frozen=True)
@@ -388,7 +388,10 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         )
 
         result = await run_agent_runtime(
-            use_kimi_agent=settings.pico_kimi_agent_runtime,
+            use_pi_agent=settings.pico_pi_agent_runtime,
+            pi_agent_canary_principals=settings.pi_agent_canary_principal_set,
+            pi_agent_allow_all=settings.pi_agent_default_all,
+            use_kimi_agent=settings.legacy_kimi_enabled,
             kimi_agent_canary_principals=(
                 settings.kimi_agent_canary_principal_set
             ),

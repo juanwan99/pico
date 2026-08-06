@@ -57,6 +57,9 @@ def _sync_settings_to_environ() -> None:
         "KIMI_BASE_URL": s.kimi_base_url,
         "KIMI_MODEL": s.kimi_model,
         "DEEPSEEK_API_KEY": s.deepseek_api_key,
+        "DEEPSEEK_BASE_URL": s.deepseek_base_url,
+        "DEEPSEEK_MODEL": s.deepseek_model,
+        "PICO_MODEL_PROVIDER": s.pico_model_provider,
         "PICO_EDU_MODE": s.pico_edu_mode,
         "PICO_EDU_BASE_URL": s.pico_edu_base_url,
         "PICO_EDU_SERVICE_TOKEN": s.pico_edu_service_token,
@@ -162,19 +165,29 @@ async def root_info() -> dict:
 @app.get("/health")
 async def health(settings: Settings = Depends(get_settings)) -> dict:
     # Never echo canary principal IDs — only counts / opaque batch labels.
-    canary_count = settings.kimi_agent_canary_membership_count
-    batch = (settings.pico_kimi_agent_canary_batch or "").strip()
+    pi_canary = settings.pi_agent_canary_membership_count
+    pi_batch = (settings.pico_pi_agent_canary_batch or "").strip()
+    kimi_canary = settings.kimi_agent_canary_membership_count
+    kimi_batch = (settings.pico_kimi_agent_canary_batch or "").strip()
     body: dict = {
         "ok": True,
         "service": "pico-api",
         "git_sha": _resolve_git_sha(),
         "edu_mode": settings.pico_edu_mode,
-        "kimi_agent_runtime_enabled": settings.pico_kimi_agent_runtime,
+        # Product default multi-step kernel (HANDOFF-WB-PI)
+        "default_runtime": "pi-agent" if settings.pico_pi_agent_runtime else (
+            "kimi-agent" if settings.legacy_kimi_enabled else None
+        ),
+        "pi_agent_runtime_enabled": settings.pico_pi_agent_runtime,
+        "pi_agent_scope": settings.pi_agent_scope,
+        "pi_agent_canary_configured": pi_canary > 0,
+        "pi_agent_canary_membership_count": pi_canary,
+        # Legacy Kimi fields (rollback observability; not product default)
+        "kimi_agent_runtime_enabled": settings.legacy_kimi_enabled,
         "kimi_agent_scope": settings.kimi_agent_scope,
-        "kimi_agent_canary_configured": canary_count > 0,
-        "kimi_agent_canary_membership_count": canary_count,
-        # KA-4 HARD / #295 F: do not echo raw emergency env (misread as "can restore loop").
-        # Permanent signal only: transitional loop is unavailable; rollback = redeploy tip.
+        "kimi_agent_canary_configured": kimi_canary > 0,
+        "kimi_agent_canary_membership_count": kimi_canary,
+        # KA-4 HARD: transitional self-built loop remains unavailable
         "legacy_loop_unavailable": True,
         "rate_limit": {
             "chat_rpm": settings.pico_chat_rpm,
@@ -182,8 +195,10 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
             "key_scope": "membership_or_ip",
         },
     }
-    if batch:
-        body["kimi_agent_canary_batch"] = batch
+    if pi_batch:
+        body["pi_agent_canary_batch"] = pi_batch
+    if kimi_batch:
+        body["kimi_agent_canary_batch"] = kimi_batch
     return body
 
 
@@ -233,9 +248,10 @@ async def freeze_meta(settings: Settings = Depends(get_settings)) -> dict:
 
 @app.get("/v1/meta/agent-safety")
 async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
-    """Prove dangerous tools are off for the default agent file AND the Kimi runtime file.
+    """Prove dangerous tools are off for default agent file (and legacy Kimi yaml if present).
 
-    Canary/KA path loads ``pico-kimi-runtime.yaml``; checking only ``pico.yaml`` is misleading.
+    Pi default path uses Pico allowlist tools only (no host shell/web).
+    Legacy Kimi yaml is still checked when the file exists.
     """
     from pico_orchestrator.safety import assert_dangerous_tools_off
 
@@ -252,9 +268,11 @@ async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
         / "agents"
         / "pico-kimi-runtime.yaml"
     )
-    # main.py is services/api/app/main.py → parents[2] = services
     paths: list[Path] = [agent_path]
-    if kimi_path.is_file() and kimi_path.resolve() != agent_path.resolve():
+    # Only enforce Kimi yaml when legacy path enabled or file coexists for safety proof.
+    if settings.legacy_kimi_enabled and kimi_path.is_file() and kimi_path.resolve() != agent_path.resolve():
+        paths.append(kimi_path)
+    elif kimi_path.is_file() and kimi_path.resolve() != agent_path.resolve():
         paths.append(kimi_path)
 
     proofs: list[dict] = []

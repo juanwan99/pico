@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -50,7 +50,7 @@ def _handoff() -> dict:
         title="Update class note",
         summary="Teacher confirmed the proposal",
         payload={"domain": "classes", "action": "update"},
-        confirmed_at=datetime(2026, 7, 30, 12, 0, tzinfo=UTC),
+        confirmed_at=datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc),
         confirmed_by="m-edu",
     )
 

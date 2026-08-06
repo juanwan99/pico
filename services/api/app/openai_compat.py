@@ -70,14 +70,17 @@ def _model_preference_from_prompt(prompt: str) -> str | None:
         "pico": "pico-agent",
         "pico agent": "pico-agent",
         "kimi-k3": "kimi-k3",
+        "deepseek": "deepseek-chat",
+        "deepseek-chat": "deepseek-chat",
+        "deepseek-reasoner": "deepseek-reasoner",
     }
     normalized = aliases.get(requested.lower(), requested)
     if normalized.lower() == "auto":
         return None
 
-    from pico_orchestrator.provider import KNOWN_KIMI_MODELS
+    from pico_orchestrator.provider import KNOWN_DEEPSEEK_MODELS, KNOWN_KIMI_MODELS
 
-    allowed = {"pico-agent", *KNOWN_KIMI_MODELS}
+    allowed = {"pico-agent", *KNOWN_DEEPSEEK_MODELS, *KNOWN_KIMI_MODELS}
     return normalized if normalized in allowed else None
 
 
@@ -743,7 +746,10 @@ async def _run_and_collect(
     if skill_snapshot:
         await emit("skill.snapshot", skill_snapshot)
     result = await run_agent_runtime(
-        use_kimi_agent=settings.pico_kimi_agent_runtime,
+        use_pi_agent=settings.pico_pi_agent_runtime,
+        pi_agent_canary_principals=settings.pi_agent_canary_principal_set,
+        pi_agent_allow_all=settings.pi_agent_default_all,
+        use_kimi_agent=settings.legacy_kimi_enabled,
         kimi_agent_canary_principals=(
             settings.kimi_agent_canary_principal_set
         ),
@@ -770,11 +776,21 @@ async def list_models(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     enforce_scope(_principal_from_auth(authorization, settings), "ai:read")
-    from pico_orchestrator.provider import DEFAULT_KIMI_MODEL, KNOWN_KIMI_MODELS
+    from pico_orchestrator.provider import (
+        DEFAULT_DEEPSEEK_MODEL,
+        DEFAULT_KIMI_MODEL,
+        KNOWN_DEEPSEEK_MODELS,
+        KNOWN_KIMI_MODELS,
+    )
 
-    default = settings.kimi_model or DEFAULT_KIMI_MODEL
+    if settings.deepseek_api_key.strip() and settings.pico_model_provider.strip().lower() != "kimi":
+        default = settings.deepseek_model or DEFAULT_DEEPSEEK_MODEL
+        known = list(KNOWN_DEEPSEEK_MODELS) + list(KNOWN_KIMI_MODELS)
+    else:
+        default = settings.kimi_model or settings.deepseek_model or DEFAULT_DEEPSEEK_MODEL
+        known = list(KNOWN_KIMI_MODELS) + list(KNOWN_DEEPSEEK_MODELS)
     ids = []
-    for mid in [default, *KNOWN_KIMI_MODELS, "pico-agent"]:
+    for mid in [default, *known, "pico-agent"]:
         if mid not in ids:
             ids.append(mid)
     return {
@@ -890,7 +906,7 @@ async def chat_completions(
         )
 
     history = _history_for_agent(body.messages)
-    model = _model_preference_from_prompt(raw_prompt) or body.model or settings.kimi_model or "pico-agent"
+    model = _model_preference_from_prompt(raw_prompt) or body.model or settings.deepseek_model or settings.kimi_model or "pico-agent"
     if skill_snapshot and skill_snapshot.get("tools"):
         model = "pico-agent"
     _assert_model_allowed(model, settings)
@@ -1190,7 +1206,10 @@ async def chat_completions(
                     },
                 )
                 result = await run_agent_runtime(
-                    use_kimi_agent=settings.pico_kimi_agent_runtime,
+                    use_pi_agent=settings.pico_pi_agent_runtime,
+                    pi_agent_canary_principals=settings.pi_agent_canary_principal_set,
+                    pi_agent_allow_all=settings.pi_agent_default_all,
+                    use_kimi_agent=settings.legacy_kimi_enabled,
                     kimi_agent_canary_principals=(
                         settings.kimi_agent_canary_principal_set
                     ),

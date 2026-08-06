@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     deepseek_model: str = "deepseek-chat"
+    # Product default model provider when both keys present: deepseek | kimi
+    pico_model_provider: str = "deepseek"
 
     # Phase 1 test issuer (HS256)
     pico_jwt_secret: str = "change-me-dev-only-not-for-prod-32b!"
@@ -51,19 +53,21 @@ class Settings(BaseSettings):
     pico_run_durable_max_seconds: int = 3600
     # Page close / SSE abort: default continue job (durable). 0 = legacy kill-on-disconnect.
     pico_run_detach_on_disconnect: bool = True
-    # Kimi Agent multi-step path (only multi-step implementation after KA-4 HARD).
-    # False → pico-agent multi-step fail-closed (no transitional loop).
-    # True + empty canary (or *) → all principals use Kimi Agent (KA-3 prod default).
-    # True + non-empty joint keys → restricted canary only; miss = fail-closed.
-    pico_kimi_agent_runtime: bool = False
-    # Joint canary keys school_id:membership_id (comma-separated).
-    # Empty (with runtime on) = ALL principals. Bare membership-only values ignored.
-    # Tokens "*" or "*:*" also mean all principals.
+
+    # --- Pi Agent (product default multi-step kernel · HANDOFF-WB-PI) ---
+    # True + empty canary (or *) → all principals use Pi (prod default).
+    # True + non-empty joint keys → restricted canary only; miss = fail-closed unless allow_all.
+    pico_pi_agent_runtime: bool = True
+    pico_pi_agent_canary_membership_ids: str = ""
+    pico_pi_agent_canary_batch: str = ""
+
+    # Legacy Kimi Agent multi-step (rollback only; off by default).
+    # Prefer PICO_LEGACY_KIMI_AGENT_RUNTIME; PICO_KIMI_AGENT_RUNTIME still accepted.
+    pico_legacy_kimi_agent_runtime: bool = False
+    pico_kimi_agent_runtime: bool = False  # alias env; OR'd with legacy flag in properties
     pico_kimi_agent_canary_membership_ids: str = ""
-    # Optional opaque batch label for ops (never a principal id). Shown on /health only.
     pico_kimi_agent_canary_batch: str = ""
     # DEPRECATED no-op (KA-4 HARD): previously forced transitional loop.
-    # Kept for env compatibility /health visibility; does not change routing.
     pico_legacy_agent_loop_emergency: bool = False
     pico_chat_rpm: int = 30
     pico_chat_max_concurrent: int = 2
@@ -121,6 +125,54 @@ class Settings(BaseSettings):
     def allowed_model_list(self) -> list[str]:
         return [model.strip() for model in self.pico_allowed_models.split(",") if model.strip()]
 
+    # --- Pi canary ---
+    @property
+    def pi_agent_canary_principal_set(self) -> frozenset[tuple[str, str]]:
+        principals: set[tuple[str, str]] = set()
+        for raw in self.pico_pi_agent_canary_membership_ids.split(","):
+            entry = raw.strip()
+            if not entry or entry in {"*", "*:*"} or ":" not in entry:
+                continue
+            school_id, membership_id = entry.split(":", 1)
+            school_id = school_id.strip()
+            membership_id = membership_id.strip()
+            if school_id and membership_id and school_id != "*":
+                principals.add((school_id, membership_id))
+        return frozenset(principals)
+
+    @property
+    def pi_agent_canary_membership_count(self) -> int:
+        return len(self.pi_agent_canary_principal_set)
+
+    @property
+    def pi_agent_allow_all_token(self) -> bool:
+        for raw in self.pico_pi_agent_canary_membership_ids.split(","):
+            if raw.strip() in {"*", "*:*"}:
+                return True
+        return False
+
+    @property
+    def pi_agent_default_all(self) -> bool:
+        """True for intentional full cutover: Pi on + empty/* canary."""
+        if not self.pico_pi_agent_runtime:
+            return False
+        if self.pi_agent_allow_all_token:
+            return True
+        return self.pico_pi_agent_canary_membership_ids.strip() == ""
+
+    @property
+    def pi_agent_scope(self) -> str:
+        if not self.pico_pi_agent_runtime:
+            return "off"
+        if self.pi_agent_default_all:
+            return "all"
+        return "canary"
+
+    # --- Legacy Kimi canary (rollback) ---
+    @property
+    def legacy_kimi_enabled(self) -> bool:
+        return bool(self.pico_legacy_kimi_agent_runtime or self.pico_kimi_agent_runtime)
+
     @property
     def kimi_agent_canary_principal_set(self) -> frozenset[tuple[str, str]]:
         """Joint canary keys as (school_id, membership_id). Bare/* tokens ignored here."""
@@ -142,7 +194,6 @@ class Settings(BaseSettings):
 
     @property
     def kimi_agent_allow_all_token(self) -> bool:
-        """True when canary string contains explicit * / *:* all-principals token."""
         for raw in self.pico_kimi_agent_canary_membership_ids.split(","):
             if raw.strip() in {"*", "*:*"}:
                 return True
@@ -150,13 +201,7 @@ class Settings(BaseSettings):
 
     @property
     def kimi_agent_default_all(self) -> bool:
-        """True only for intentional full cutover: RUNTIME on, no emergency,
-        and canary raw is empty/whitespace OR contains explicit * / *:*.
-
-        Non-empty raw strings that parse to zero joint keys (e.g. bare-only)
-        are **not** default-all — fail-closed canary mode with zero hits.
-        """
-        if not self.pico_kimi_agent_runtime:
+        if not self.legacy_kimi_enabled:
             return False
         if self.kimi_agent_allow_all_token:
             return True
@@ -164,18 +209,14 @@ class Settings(BaseSettings):
 
     @property
     def kimi_agent_scope(self) -> str:
-        """Observable routing scope for /health: off | canary | all."""
-        if not self.pico_kimi_agent_runtime:
+        if not self.legacy_kimi_enabled:
             return "off"
         if self.kimi_agent_default_all:
             return "all"
-        # RUNTIME on but not intentional empty/* : restricted canary
-        # (may have zero valid joints → nobody on KA; fail-closed).
         return "canary"
 
     @property
     def kimi_agent_canary_membership_id_set(self) -> frozenset[str]:
-        """Deprecated membership-only view. Prefer kimi_agent_canary_principal_set."""
         return frozenset(membership_id for _, membership_id in self.kimi_agent_canary_principal_set)
 
     def delivery_run_caps(
@@ -269,13 +310,18 @@ class Settings(BaseSettings):
                 )
 
         if not (self.kimi_api_key.strip() or self.deepseek_api_key.strip()):
-            errors.append("configure KIMI_API_KEY or DEEPSEEK_API_KEY")
+            errors.append("configure DEEPSEEK_API_KEY (preferred) or KIMI_API_KEY")
         if not self.allowed_model_list:
             errors.append("PICO_ALLOWED_MODELS must contain at least one production model")
         else:
-            provider_model = (
-                self.kimi_model if self.kimi_api_key.strip() else self.deepseek_model
-            ).strip()
+            if self.deepseek_api_key.strip() and (
+                self.pico_model_provider.strip().lower() != "kimi" or not self.kimi_api_key.strip()
+            ):
+                provider_model = self.deepseek_model.strip()
+            else:
+                provider_model = (
+                    self.kimi_model if self.kimi_api_key.strip() else self.deepseek_model
+                ).strip()
             if provider_model not in self.allowed_model_list:
                 errors.append(
                     "the configured provider model must appear in PICO_ALLOWED_MODELS"
@@ -300,6 +346,8 @@ class Settings(BaseSettings):
             errors.append("PICO_RUN_DURABLE_MAX_SECONDS must be greater than zero")
         if self.pico_dangerous_tools_enabled:
             errors.append("PICO_DANGEROUS_TOOLS_ENABLED must remain false")
+        if not self.pico_pi_agent_runtime and not self.legacy_kimi_enabled:
+            errors.append("enable PICO_PI_AGENT_RUNTIME (default) or legacy Kimi for multi-step")
 
         if errors:
             raise ValueError("invalid production configuration: " + "; ".join(errors))

@@ -27,19 +27,28 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
     if (
         "no kimi_api_key" in low or "尚未配置" in text or "kimi_api_key" in low
         or "no deepseek" in low
+        or "deepseek_api_key" in low
         or "blocked s1" in low
         or "api key" in low
         or "authentication" in low
         or "unauthorized" in low
         or "401" in low
+        or "model.unconfigured" in low
+        or c == "model.unconfigured"
     ):
-        return "模型服务未配置或密钥无效。请管理员配置 KIMI_API_KEY / DEEPSEEK_API_KEY 后重试。"
+        return "模型服务未配置或密钥无效。请管理员配置 DEEPSEEK_API_KEY（推荐）或 KIMI_API_KEY 后重试。"
     if "rate limit" in low or "429" in low or c in ("rate_limit", "concurrency_limit"):
         if c == "concurrency_limit" or "concurrency" in low:
             return "当前对话繁忙（并发已满）。请稍后再试，或关闭其他进行中的任务。"
         return "请求过于频繁或模型限流。请稍后再试，勿并行轰炸。"
-    if c in ("runtime.emergency_noop", "runtime.loop_removed", "runtime.kimi_required"):
-        return "多智能体运行时当前不可用（已卸过渡环）。请确认 Kimi Agent 已开启，或联系管理员 redeploy 回滚。"
+    if c in (
+        "runtime.emergency_noop",
+        "runtime.loop_removed",
+        "runtime.kimi_required",
+        "runtime.pi_required",
+        "runtime.not_allowlisted",
+    ):
+        return "多智能体运行时当前不可用。请确认 Pi 编排已开启，或联系管理员。"
     if "connect" in low or "connection" in low or "network" in low:
         return "无法连接模型服务。请检查网络或稍后重试。"
     if "owner was lost" in low or "api restart" in low or "greenlet" in low:
@@ -58,7 +67,7 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
     if "cross_school" in low or "cross-school" in low or "tenant" in low:
         return "跨校访问已被拒绝（租户隔离）。"
     if (
-        c in ("kimi.max_steps", "max_steps")
+        c in ("kimi.max_steps", "max_steps", "pi.max_steps")
         or "max_steps" in low
         or "max steps" in low
         or "step limit" in low
@@ -69,9 +78,10 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
     if "max_tokens" in low or "token cap" in low or c == "token_cap":
         return "本次回答超出长度上限。可点「再跑一次」，或缩短问题后重试。"
     if (
-        c in ("kimi.event_contract", "kimi.runtime_error")
+        c in ("kimi.event_contract", "kimi.runtime_error", "pi.runtime_error", "pi.empty_response")
         or "event_contract" in low
         or "kimi.runtime" in low
+        or "pi.runtime" in low
         or "filenotfound" in low
         or ("no such file" in low and any(x in low for x in ("agent", "yaml", "system.md", "pico-kimi")))
     ):

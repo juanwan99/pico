@@ -1,28 +1,26 @@
-"""Pinned versions of kimi-agent-sdk / kimi-cli (install freeze).
+"""Runtime identity + optional legacy Kimi package pins.
 
-These pins do NOT prove the open-source Kimi Agent runtime is the execution path.
-Today they support version lock + safety yaml loading (see safety.py).
-Execution path: Kimi Agent runtime (KA-4 HARD; transitional runner removed)
-(docs/TRUTH-FREEZE.md O1–O3, debt D8).
+Product default multi-step kernel = Pi (pico_orchestrator.pi_runtime).
+kimi-agent-sdk / kimi-cli pins only matter when legacy Kimi path is enabled.
 """
 
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
-# Binding pins — must match requirements.txt / docs/D1-FREEZE.md
 PINNED_KIMI_AGENT_SDK = "0.0.5"
 PINNED_KIMI_CLI = "1.12.0"
 
 AGENT_PINS = {
-    "kimi-agent-sdk": PINNED_KIMI_AGENT_SDK,
-    "kimi-cli": PINNED_KIMI_CLI,
+    "default_runtime": "pi-agent",
+    "kimi-agent-sdk": PINNED_KIMI_AGENT_SDK,  # legacy optional
+    "kimi-cli": PINNED_KIMI_CLI,  # legacy optional + safety yaml loader
 }
 
 
 def installed_versions() -> dict[str, str | None]:
-    out: dict[str, str | None] = {}
-    for name in AGENT_PINS:
+    out: dict[str, str | None] = {"default_runtime": "pi-agent"}
+    for name in ("kimi-agent-sdk", "kimi-cli"):
         try:
             out[name] = version(name)
         except PackageNotFoundError:
@@ -31,10 +29,19 @@ def installed_versions() -> dict[str, str | None]:
 
 
 def assert_pins() -> None:
+    """Legacy pin check — only hard-fails when packages are installed at wrong version.
+
+    Pi path does not require kimi packages. Mismatch on installed legacy packages still fails.
+    """
     installed = installed_versions()
     mismatches: list[str] = []
-    for name, expected in AGENT_PINS.items():
+    for name, expected in (
+        ("kimi-agent-sdk", PINNED_KIMI_AGENT_SDK),
+        ("kimi-cli", PINNED_KIMI_CLI),
+    ):
         got = installed.get(name)
+        if got is None:
+            continue  # optional for Pi-only deploys
         if got != expected:
             mismatches.append(f"{name}: expected {expected}, got {got!r}")
     if mismatches:
