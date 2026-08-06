@@ -71,3 +71,7 @@ GOALS: docs/TRUTH-FREEZE.md · docs/WHAT-IS-PICO.md （目标）；STATE-NOW（�
 ## Hygiene rule
 
 New long plans: **one ACTIVE plan** at a time. Previous plan → COMPLETED header or `docs/archive/`.
+
+## Owner handoff (2026-08-06)
+
+**Binding product direction:** [HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md) — Pico full stack + Pi + DeepSeek · Web WorkBuddy-degree six bars.
