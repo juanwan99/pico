@@ -474,13 +474,15 @@ def _wants_deliverable_document(prompt: str) -> bool:
             r"\.(?:html?|docx|pptx)\b|"
             r"\b(?:html|docx|pptx|powerpoint)\b|"
             r"幻灯片|课件|网页文件|word\s*文档|PPT|Power\s*Point|"
-            # 生成 + type (allow short fillers: 可下载 / 一份 / …)
-            r"生成.{0,12}(?:html|网页|word|docx|ppt|pptx|幻灯片|文档)|"
+            # 生成 + type (allow longer Chinese fillers between verb and type)
+            r"生成.{0,40}(?:html|网页|word|docx|ppt|pptx|幻灯片|文档)|"
             # 可下载/下载/导出/改版 + Word/文档
-            r"(?:可下载|下载|导出|重新生成|改一版|改版|一页).{0,16}"
+            r"(?:可下载|下载|导出|重新生成|改一版|改版|一页).{0,24}"
             r"(?:Word|word|WORD|文档|docx|PPT|pptx|html|幻灯片|课件)|"
             # Word/docx 文件|文档|下载
-            r"(?:Word|word|WORD|docx|PPT|pptx).{0,12}(?:文件|文档|下载)",
+            r"(?:Word|word|WORD|docx|PPT|pptx).{0,16}(?:文件|文档|下载)|"
+            # bare “方案/说明/通知 Word” without 生成 immediately nearby
+            r"(?:方案|说明|通知|报告|小结).{0,8}(?:Word|word|docx|PPT|pptx)"
             text,
             re.IGNORECASE,
         )

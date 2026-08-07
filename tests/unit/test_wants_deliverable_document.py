@@ -44,6 +44,9 @@ def test_plain_chinese_word_download_hits() -> None:
     assert wants("生成一份 Word 文档") is True
     assert wants("请生成docx文件") is True
     assert wants("做一份 PPT 课件") is True
+    assert wants(
+        "请生成一份较完整的社区年度活动方案 Word，分章节写背景、目标。"
+    ) is True
 
 
 def test_explicit_suffix_still_hits() -> None:
