@@ -10,8 +10,9 @@
 - [ ] `PICO_ACCEPT_TEST_ISSUER=false`
 - [ ] `PICO_ALLOW_TEST_ISSUER_BREAK_GLASS=false`
 - [ ] `PICO_OPENAI_PROXY_KEY` 为 LibreChat→Pico 内网专用随机值（至少 32 字符）
-- [ ] 配置 `KIMI_API_KEY` 或 `DEEPSEEK_API_KEY`
-- [ ] `PICO_ALLOWED_MODELS` 仅含获批模型
+- [ ] 配置 `DEEPSEEK_API_KEY`（推荐）或 `KIMI_API_KEY`
+- [ ] `PICO_MODEL_PROVIDER=deepseek`（产品默认脑）
+- [ ] `PICO_ALLOWED_MODELS` **首项**为可用 DeepSeek（推荐 `deepseek-chat,pico-agent`）；**禁止**把坏的 `kimi-k2.x` 放第一位作默认
 - [ ] `PICO_CHAT_RPM`、`PICO_CHAT_MAX_CONCURRENT`、`PICO_RUN_MAX_TOKENS` 为正数
 - [ ] `ALLOW_REGISTRATION=false`、`ALLOW_UNVERIFIED_EMAIL_LOGIN=false`
 - [ ] `PICO_DEMO_SEED=0`

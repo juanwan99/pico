@@ -42,7 +42,8 @@ services:
       OPENAI_REVERSE_PROXY: http://pico-api:18765/v1
       OPENAI_API_KEY: pico-dev
       ENDPOINTS: openAI
-      OPENAI_MODELS: moonshot-v1-8k,kimi-k2.6,pico-agent
+      # First entry = default new-chat model (must be usable DeepSeek, not broken kimi).
+      OPENAI_MODELS: deepseek-chat,pico-agent
       APP_TITLE: Pico
       ALLOW_REGISTRATION: "true"
       SEARCH: "false"

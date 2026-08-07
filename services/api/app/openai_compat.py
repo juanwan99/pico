@@ -157,6 +157,33 @@ def _assert_model_allowed(model: str, settings: Settings) -> None:
         raise HTTPException(status_code=400, detail="model is not allowed")
 
 
+def _coerce_default_model(model: str, settings: Settings) -> str:
+    """Rewrite legacy broken Kimi defaults onto DeepSeek when allowlist moved.
+
+    Owner E2E-DEFAULT: new chats must work without manually picking DeepSeek.
+    Old browser prefs that still hold ``kimi-k2.x`` should not dead-end when
+    production allowlist is ``deepseek-chat,pico-agent`` only.
+    """
+    from pico_orchestrator.provider import is_kimi_model
+
+    bare = _normalized_model(model or "")
+    if not bare or not is_kimi_model(bare):
+        return model
+    allowed = {_normalized_model(item) for item in settings.allowed_model_list}
+    if allowed and bare in allowed:
+        return model  # Kimi still explicitly allowed
+    # Prefer product DeepSeek default when key/provider says so.
+    prefer_deepseek = (
+        settings.deepseek_api_key.strip()
+        and settings.pico_model_provider.strip().lower() != "kimi"
+    )
+    if prefer_deepseek or (settings.deepseek_api_key.strip() and not settings.kimi_api_key.strip()):
+        target = (settings.deepseek_model or "deepseek-chat").strip() or "deepseek-chat"
+        if not allowed or _normalized_model(target) in allowed:
+            return target
+    return model
+
+
 def _effective_max_tokens(requested: int | None, cap: int) -> int:
     default = min(2048, cap)
     return min(requested if requested and requested > 0 else default, cap)
@@ -842,22 +869,38 @@ async def list_models(
         DEFAULT_DEEPSEEK_MODEL,
         KNOWN_DEEPSEEK_MODELS,
         KNOWN_KIMI_MODELS,
+        owned_by_for_model,
     )
 
+    # Product default = DeepSeek first (LibreChat uses first OPENAI_MODELS entry;
+    # API list order stays aligned for honest branding).
     if settings.deepseek_api_key.strip() and settings.pico_model_provider.strip().lower() != "kimi":
         default = settings.deepseek_model or DEFAULT_DEEPSEEK_MODEL
         known = list(KNOWN_DEEPSEEK_MODELS) + list(KNOWN_KIMI_MODELS)
     else:
         default = settings.kimi_model or settings.deepseek_model or DEFAULT_DEEPSEEK_MODEL
         known = list(KNOWN_KIMI_MODELS) + list(KNOWN_DEEPSEEK_MODELS)
-    ids = []
-    for mid in [default, *known, "pico-agent"]:
-        if mid not in ids:
-            ids.append(mid)
+    # Production allowlist (first entry = shell default) wins when set.
+    allow = settings.allowed_model_list
+    if allow:
+        ids: list[str] = []
+        for mid in allow:
+            bare = _normalized_model(mid)
+            if bare and bare not in ids:
+                ids.append(bare)
+    else:
+        ids = []
+        for mid in [default, *known, "pico-agent"]:
+            if mid not in ids:
+                ids.append(mid)
     return {
         "object": "list",
         "data": [
-            {"id": mid, "object": "model", "owned_by": "pico-kimi" if mid != "pico-agent" else "pico"}
+            {
+                "id": mid,
+                "object": "model",
+                "owned_by": owned_by_for_model(mid),
+            }
             for mid in ids
         ],
     }
@@ -970,6 +1013,10 @@ async def chat_completions(
     model = _model_preference_from_prompt(raw_prompt) or body.model or settings.deepseek_model or settings.kimi_model or "pico-agent"
     if skill_snapshot and skill_snapshot.get("tools"):
         model = "pico-agent"
+    # Residual LibreChat prefs may still say kimi-k2.x after product default
+    # moved to DeepSeek. Remount onto the product brain when Kimi is not in the
+    # production allowlist so default-path chat does not 400.
+    model = _coerce_default_model(model, settings)
     _assert_model_allowed(model, settings)
     # Direct model = short tier; pico-agent = delivery tier for token ceiling.
     use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
