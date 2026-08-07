@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -40,7 +40,7 @@ def issue_test_token(
 ) -> str:
     """Phase 1 test issuer — same claim shape as edu Phase 3 issuer."""
     s = settings or get_settings()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     exp = now + timedelta(seconds=s.pico_jwt_ttl_seconds)
     payload = {
         "iss": s.pico_jwt_iss,

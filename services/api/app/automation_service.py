@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -21,7 +21,7 @@ _stop = asyncio.Event()
 
 
 def _parse_next_run(kind: str, schedule: dict[str, Any], from_dt: datetime | None = None) -> datetime | None:
-    now = from_dt or datetime.now(timezone.utc).replace(tzinfo=None)
+    now = from_dt or datetime.now(UTC).replace(tzinfo=None)
     kind = (kind or "periodic").lower()
     if kind == "once":
         # ISO at schedule.at

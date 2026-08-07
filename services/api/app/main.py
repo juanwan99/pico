@@ -270,9 +270,7 @@ async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
     )
     paths: list[Path] = [agent_path]
     # Only enforce Kimi yaml when legacy path enabled or file coexists for safety proof.
-    if settings.legacy_kimi_enabled and kimi_path.is_file() and kimi_path.resolve() != agent_path.resolve():
-        paths.append(kimi_path)
-    elif kimi_path.is_file() and kimi_path.resolve() != agent_path.resolve():
+    if settings.legacy_kimi_enabled and kimi_path.is_file() and kimi_path.resolve() != agent_path.resolve() or kimi_path.is_file() and kimi_path.resolve() != agent_path.resolve():
         paths.append(kimi_path)
 
     proofs: list[dict] = []

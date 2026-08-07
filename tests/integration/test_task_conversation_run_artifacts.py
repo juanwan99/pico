@@ -6,7 +6,7 @@ import asyncio
 import json
 import sys
 from collections.abc import AsyncIterator
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -372,7 +372,7 @@ def test_conversation_filter_applies_before_account_task_limit(client) -> None:
     target_conversation_id = "conversation-older-than-account-window"
 
     async def seed_tasks() -> None:
-        base = datetime(2026, 1, 1, tzinfo=timezone.utc).replace(tzinfo=None)
+        base = datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None)
         factory = session_factory()
         async with factory() as session:
             session.add(

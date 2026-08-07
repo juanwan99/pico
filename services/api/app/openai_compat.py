@@ -778,7 +778,6 @@ async def list_models(
     enforce_scope(_principal_from_auth(authorization, settings), "ai:read")
     from pico_orchestrator.provider import (
         DEFAULT_DEEPSEEK_MODEL,
-        DEFAULT_KIMI_MODEL,
         KNOWN_DEEPSEEK_MODELS,
         KNOWN_KIMI_MODELS,
     )

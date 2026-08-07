@@ -407,7 +407,8 @@ async def _watch_cancel(
             timed_out.set()
             return
         if now - last_heartbeat >= _HEARTBEAT_SECONDS:
-            try:
+            # Heartbeat must never abort the run; ledger write failures are non-fatal.
+            with suppress(Exception):
                 await emit(
                     "run.heartbeat",
                     {
@@ -416,8 +417,6 @@ async def _watch_cancel(
                         "runtime": RUNTIME_LABEL,
                     },
                 )
-            except Exception:  # noqa: BLE001
-                pass
             last_heartbeat = now
         try:
             await asyncio.wait_for(stop.wait(), timeout=_CANCEL_POLL_SECONDS)
