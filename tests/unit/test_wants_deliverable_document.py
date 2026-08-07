@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 
@@ -23,7 +22,7 @@ def _load_wants():
     # find next \ndef at beginning of line that is not nested
     end = None
     for i, line in enumerate(rest.splitlines()[1:], start=1):
-        if line.startswith("def ") or line.startswith("async def ") or line.startswith("class "):
+        if line.startswith(("def ", "async def ", "class ")):
             # reconstruct end offset
             end = sum(len(l) + 1 for l in rest.splitlines()[:i])
             break
