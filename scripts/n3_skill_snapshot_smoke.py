@@ -125,6 +125,17 @@ SKILLS = [
         "risk": "low",
         "prompt": "整理会议：决定周五发布，李老师负责复核。",
     },
+    {
+        "id": "skill-kb-ask",
+        "name": "skill.kb_ask",
+        "declared_tools": [
+            "kb_search",
+            "workspace_list_files",
+            "workspace_read_file",
+        ],
+        "risk": "read",
+        "prompt": "根据已挂载材料回答：会议时间是什么？",
+    },
 ]
 
 

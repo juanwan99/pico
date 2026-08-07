@@ -167,6 +167,21 @@ _POLICIES: dict[str, SkillPolicy] = {
             "负责人和待办，并可保存为工作区产物；没有明确负责人的事项标为待确认。"
         ),
     ),
+    "skill-kb-ask": SkillPolicy(
+        id="skill-kb-ask",
+        name="skill.kb_ask",
+        requested_tools=(
+            "kb_search",
+            "workspace_list_files",
+            "workspace_read_file",
+        ),
+        risk="read",
+        instruction=(
+            "本轮使用 skill.kb_ask（P2 知识库试点）：必须先用 kb_search 或 workspace_list_files "
+            "查阅已挂载的工作区材料；回答时引用 artifact_id/标题与摘录；"
+            "若 kb_search 返回 honest_miss=true，必须诚实说明未命中，禁止编造材料内容。"
+        ),
+    ),
 }
 
 _ALIASES = {
@@ -205,6 +220,11 @@ _ALIASES = {
     "meeting_notes": "skill-meeting-notes",
     "skill.meeting_notes": "skill-meeting-notes",
     "skill-meeting-notes": "skill-meeting-notes",
+    "kb-ask": "skill-kb-ask",
+    "kb_ask": "skill-kb-ask",
+    "skill.kb_ask": "skill-kb-ask",
+    "skill-kb-ask": "skill-kb-ask",
+    "pico-kb-ask": "skill-kb-ask",
 }
 
 

@@ -60,6 +60,7 @@ services:
       # Durable Kimi Session sandboxes (not ephemeral container /tmp)
       PICO_PI_AGENT_RUNTIME: "${PICO_PI_AGENT_RUNTIME:-1}"
       PICO_LEGACY_KIMI_AGENT_RUNTIME: "${PICO_LEGACY_KIMI_AGENT_RUNTIME:-0}"
+      PICO_MCP_ALLOWLIST: "${PICO_MCP_ALLOWLIST:-mcp_time,mcp_workspace_stat}"
       PICO_MODEL_PROVIDER: "${PICO_MODEL_PROVIDER:-deepseek}"
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}"

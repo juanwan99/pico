@@ -88,6 +88,9 @@ class Settings(BaseSettings):
 
     pico_agent_file: str = "services/orchestrator/agents/pico.yaml"
     pico_dangerous_tools_enabled: bool = False
+    # P2 MCP allowlist bridge (comma-separated known safe tool names).
+    # Default pilot: mcp_time,mcp_workspace_stat. Empty string disables MCP tools.
+    pico_mcp_allowlist: str = "mcp_time,mcp_workspace_stat"
     pico_env: str = "development"
     pico_allow_test_issuer_break_glass: bool = False
 

@@ -25,6 +25,7 @@ from pico_orchestrator.gateway import (
     ToolError,
     ToolSpec,
 )
+from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
 
 _MAX_ARTIFACT_CONTENT = 200_000
 _MAX_CALC_ABS = 1e100
@@ -32,6 +33,9 @@ _MAX_CALC_EXPRESSION = 200
 _MAX_OUTLINE_TEXT = 100_000
 _MAX_DOC_BODY = 50_000
 _MAX_MARKER = 200
+_MAX_KB_QUERY = 500
+_MAX_KB_EXCERPT = 280
+_SKIP_KB_TITLES = frozenset({"回复摘要"})
 
 
 class _UnavailableArtifactStore:
@@ -119,9 +123,26 @@ def _ensure_extension(title: str, ext: str) -> str:
     return f"{base}{ext}"
 
 
+def _excerpt_around(text: str, query: str, *, width: int = _MAX_KB_EXCERPT) -> str:
+    low = text.lower()
+    q = query.lower()
+    idx = low.find(q)
+    if idx < 0:
+        snippet = text.strip().replace("\n", " ")
+        return snippet[:width] + ("…" if len(snippet) > width else "")
+    start = max(0, idx - width // 4)
+    end = min(len(text), idx + len(query) + width // 2)
+    snippet = text[start:end].strip().replace("\n", " ")
+    if start > 0:
+        snippet = "…" + snippet
+    if end < len(text):
+        snippet = snippet + "…"
+    return snippet[:width]
+
+
 def _workspace_handlers(
     store: ArtifactStore,
-) -> tuple[Any, Any, Any, Any, Any, Any]:
+) -> tuple[Any, Any, Any, Any, Any, Any, Any]:
     async def write_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _artifact_title(args)
         protected = title_protected_extension(title)
@@ -168,6 +189,77 @@ def _workspace_handlers(
             raise ToolError("tool.invalid_arguments", "limit must be between 1 and 100")
         artifacts = await store.list(principal, limit=limit)
         return {"artifacts": artifacts, "count": len(artifacts)}
+
+    async def kb_search(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        """P2 KB pilot: full-text scan of membership Artifact materials (no vector DB)."""
+        query = _required_text(args, "query", maximum=_MAX_KB_QUERY)
+        try:
+            limit = int(args.get("limit") or 20)
+        except (TypeError, ValueError) as exc:
+            raise ToolError("tool.invalid_arguments", "limit must be an integer") from exc
+        if not 1 <= limit <= 50:
+            raise ToolError("tool.invalid_arguments", "limit must be between 1 and 50")
+        listed = await store.list(principal, limit=min(100, max(limit * 3, 20)))
+        hits: list[dict[str, Any]] = []
+        q_low = query.lower()
+        for meta in listed:
+            title = str(meta.get("title") or "")
+            if title in _SKIP_KB_TITLES:
+                continue
+            art_id = str(meta.get("artifact_id") or meta.get("id") or "")
+            if not art_id:
+                continue
+            full = await store.read(principal, artifact_id=art_id, title=None)
+            if not full:
+                continue
+            content = full.get("content")
+            if not isinstance(content, str):
+                # Binary materials: title-only match
+                if q_low not in title.lower():
+                    continue
+                hits.append(
+                    {
+                        "artifact_id": art_id,
+                        "title": title,
+                        "kind": full.get("kind"),
+                        "excerpt": f"（二进制材料，标题命中：{title}）",
+                        "match": "title",
+                    }
+                )
+                continue
+            title_hit = q_low in title.lower()
+            body_hit = q_low in content.lower()
+            if not title_hit and not body_hit:
+                continue
+            hits.append(
+                {
+                    "artifact_id": art_id,
+                    "title": title,
+                    "kind": full.get("kind"),
+                    "excerpt": _excerpt_around(content if body_hit else title, query),
+                    "match": "title+body" if title_hit and body_hit else (
+                        "title" if title_hit else "body"
+                    ),
+                }
+            )
+            if len(hits) >= limit:
+                break
+        if not hits:
+            return {
+                "hits": [],
+                "count": 0,
+                "honest_miss": True,
+                "user_message": (
+                    "未在已挂载的工作区材料中命中该问题。"
+                    "请先生成或上传材料到产物账本后再问，或换关键词。"
+                ),
+            }
+        return {
+            "hits": hits,
+            "count": len(hits),
+            "honest_miss": False,
+            "user_message": f"命中 {len(hits)} 条材料依据（Artifact 账本全文检索试点，非向量库）。",
+        }
 
     async def generate_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _ensure_extension(_artifact_title(args), ".html")
@@ -223,7 +315,15 @@ def _workspace_handlers(
         result["marker"] = marker
         return result
 
-    return write_file, read_file, list_files, generate_html, generate_docx, generate_pptx
+    return (
+        write_file,
+        read_file,
+        list_files,
+        kb_search,
+        generate_html,
+        generate_docx,
+        generate_pptx,
+    )
 
 
 def _outline_heading(line: str) -> tuple[int, str] | None:
@@ -333,6 +433,7 @@ def build_default_gateway(
         write_file,
         read_file,
         list_files,
+        kb_search,
         generate_html,
         generate_docx,
         generate_pptx,
@@ -393,6 +494,18 @@ def build_default_gateway(
     )
     gw.register(
         ToolSpec(
+            name="kb_search",
+            description=(
+                "P2 knowledge pilot: search membership Artifact materials by keyword "
+                "(full-text on ledger text, no vector DB). Returns excerpts + artifact_id "
+                "citations, or honest_miss when nothing matches. Args: query, limit?"
+            ),
+            handler=kb_search,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
             name="generate_html_document",
             description=(
                 "Create a real .html Artifact with a unique visible marker. "
@@ -440,6 +553,9 @@ def build_default_gateway(
             school_scoped=False,
         )
     )
+    # P2 MCP allowlist bridge (safe tools only; empty allowlist → none registered)
+    for spec in mcp_tool_specs(store):
+        gw.register(spec)
     return gw
 
 
@@ -509,6 +625,17 @@ def openai_tool_schemas(
                 "limit": {"type": "integer", "minimum": 1, "maximum": 100}
             },
         },
+        "kb_search": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Keyword or question fragment to find in mounted materials",
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            },
+            "required": ["query"],
+        },
         "generate_html_document": {
             "type": "object",
             "properties": {
@@ -564,6 +691,7 @@ def openai_tool_schemas(
             "properties": {"expression": {"type": "string"}},
             "required": ["expression"],
         },
+        **mcp_openai_parameters(),
     }
     schemas: list[dict[str, Any]] = []
     for name, spec in gw.tools.items():

@@ -44,7 +44,7 @@ describe('getPicoArtifactContent', () => {
 describe('labelForLatestRun', () => {
   it('maps ledger run status to teacher-facing labels', () => {
     expect(labelForLatestRun(null)).toBeNull();
-    expect(labelForLatestRun({ id: '1', status: 'running' })).toBe('进行中');
+    expect(labelForLatestRun({ id: '1', status: 'running' })).toBe('仍在处理…');
     expect(
       labelForLatestRun({ id: '1', status: 'running', cancel_requested: true }),
     ).toBe('停止中');
