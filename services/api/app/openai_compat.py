@@ -725,6 +725,54 @@ async def _finalize_run(
                             {"change_id": change.id, "title": change.title},
                             commit=False,
                         )
+
+        # S2.2 fail-closed: deliverable skill without a real HTML/Word/PPT artifact
+        # must not report success (blocks bare-model / hallucinated tool-call green).
+        if (
+            isinstance(skill_snapshot, dict)
+            and skill_snapshot.get("name") == "skill.deliverable"
+            and status == "succeeded"
+            and _wants_deliverable_document(user_prompt or run.prompt or "")
+        ):
+            art_rows = await session.execute(
+                select(ArtifactRow.kind, ArtifactRow.title, ArtifactRow.byte_size).where(
+                    ArtifactRow.run_id == run_id
+                )
+            )
+            has_real_file = False
+            for kind, title, byte_size in art_rows.all():
+                title_s = str(title or "")
+                kind_s = str(kind or "").lower()
+                if title_s in {"回复摘要"}:
+                    continue
+                if kind_s in {"docx", "html", "htm", "pptx"}:
+                    has_real_file = True
+                    break
+                lower = title_s.lower()
+                if lower.endswith((".docx", ".html", ".htm", ".pptx")) and (
+                    byte_size or 0
+                ) > 0:
+                    has_real_file = True
+                    break
+            if not has_real_file:
+                run.status = "failed"
+                run.error = (
+                    "交件未生成可下载的真文件（HTML/Word/PPT）。"
+                    "请点「再跑一次」或重新描述「生成可下载 Word/HTML」；"
+                    "纯文字摘要不能当作文件交付。"
+                )
+                await append_event(
+                    session,
+                    run_id,
+                    "run.status",
+                    {
+                        "status": "failed",
+                        "reason": "deliverable_missing_artifact",
+                        "runtime": "fail-closed",
+                    },
+                    commit=False,
+                )
+
         await session.commit()
 
 
