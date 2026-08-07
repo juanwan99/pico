@@ -4,18 +4,24 @@
 
 ## 目标（校正）
 
-详见 **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md)**（冻结真源）· **[docs/README.md](docs/README.md)** · **[docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)** · **[docs/CORRECTED-GOALS.md](docs/CORRECTED-GOALS.md)** · **[docs/MVP-3DAY.md](docs/MVP-3DAY.md) v1.2** · **[AGENTS.md](AGENTS.md)**
+详见 **[docs/HANDOFF-WB-PI.md](docs/HANDOFF-WB-PI.md)**（产品真源）· **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.1** · **[docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)** · **[AGENTS.md](AGENTS.md)**
 
-任务进度与证据以 **GitHub PR/SHA/CI** 为准（[OneFlow](docs/ONEFLOW.md)）；勿用交接 MD。
+任务进度与证据以 **GitHub PR/SHA/CI** 为准（[OneFlow](docs/ONEFLOW.md)）。
 
 | | |
 |--|--|
-| 产品 | Claude / Codex / WorkBuddy **品类**的 AI 工作台 + 产物 + **唯一 AI 账本** |
-| 模型 | HTTPS API（**Kimi 优先**，已用） |
-| 编排 | **目标** = 开源 Kimi Agent 真接入；**现状** = 过渡自研环（见 [docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) · [docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)） |
+| 产品 | 任务型 AI 工作台（Web）· **WorkBuddy 程度六条** |
+| 模型 | HTTPS API（**DeepSeek 为主**；Kimi 可选后备） |
+| 编排 | **默认 = Pi Agent harness**；Kimi Agent = 遗产回滚 |
 | 账本 | **仅 Pico**（禁止与 edu 双 AI） |
 | 范围 | **只写本仓**；edu 对接后置 |
-| 真源冻结 | **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.0**（防丢失） |
+| 真源冻结 | **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.1** |
+
+```text
+目标：Web 上 WorkBuddy 程度（六条）
+方案：回 Pico 整车 + 默认编排核 Pi + DeepSeek
+不做：Dify 门脸终局、场景考卷当对标、双核并列真源
+```
 
 ## 当前产品壳
 
@@ -29,13 +35,3 @@
 ```bash
 ./scripts/run-product.sh
 ```
-
-生产默认关闭开放注册和演示账号播种。仅在获批演示窗显式设置
-`PICO_DEMO_SEED=1`、邮箱及 12 位以上随机密码；不要使用仓库内固定密码。
-
-## 禁止
-
-- 改 edu-cloud  
-- 恢复 `apps/web` 自研三栏  
-- 拆闭源 WorkBuddy  
-- 自 PASS / 无人合 main  

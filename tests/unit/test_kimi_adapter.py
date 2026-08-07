@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import pytest
+
+pytest.importorskip("kimi_agent_sdk")
+
+
+import pytest
 from kimi_agent_sdk import (
     StatusUpdate,
     StepBegin,

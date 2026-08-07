@@ -14,7 +14,7 @@
 STATUS: BINDING navigation
 TRUTH: code + tests + GitHub (PR/SHA/CI/DEPLOY comments) outrank all prose
 ONEFLOW: docs/ONEFLOW.md
-GOALS: docs/TRUTH-FREEZE.md · docs/WHAT-IS-PICO.md （目标）；STATE-NOW（快照）
+GOALS: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · WHAT-IS-PICO；STATE-NOW（快照）；MEMORY-RESET（清错）
 ```
 
 ## Do not
@@ -29,9 +29,12 @@ GOALS: docs/TRUTH-FREEZE.md · docs/WHAT-IS-PICO.md （目标）；STATE-NOW（�
 
 | Priority | Path | Role |
 |----------|------|------|
-| **0** | **[TRUTH-FREEZE.md](./TRUTH-FREEZE.md)** | **真源冻结 v1.0（防丢失 · 权威决策集）** |
+| **0** | **[TRUTH-FREEZE.md](./TRUTH-FREEZE.md)** | **真源冻结 v1.1（防丢失 · 权威决策集）** |
 | **0a** | **[WHAT-IS-PICO.md](./WHAT-IS-PICO.md)** | **Pico 是什么 / 编排目标 vs 现状** |
-| **0b** | **[STATE-NOW.md](./STATE-NOW.md)** | **当前 SHA、派发、门禁、黑名单** |
+| **0b** | **[STATE-NOW.md](./STATE-NOW.md)** | **当前 tip、门禁、单窗 SOLO** |
+| **0b′** | **[MEMORY-RESET.md](./MEMORY-RESET.md)** | **错误记忆黑名单（开场必清）** |
+| **0b″** | **[STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md)** | **单窗阶段包（废多窗碎派）** |
+| **0b‴** | **[TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)** | **任务卡格式真源（CLAIM/BASE/PRODUCT）** |
 | **0c** | **[KIMI-AGENT-GAP.md](./KIMI-AGENT-GAP.md)** | **真接差距 + KA 状态 + ENGINEERING complete 证据** |
 | **0c2** | **[PRODUCT-PASS-CONTRACT.md](./PRODUCT-PASS-CONTRACT.md)** | **全球 product PASS 定义合同（≠ ENGINEERING）** |
 | **0d** | **[POLLUTION-SWEEP.md](./POLLUTION-SWEEP.md)** | **污染清理执行记录** |
@@ -74,4 +77,7 @@ New long plans: **one ACTIVE plan** at a time. Previous plan → COMPLETED heade
 
 ## Owner handoff (2026-08-06)
 
-**Binding product direction:** [HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md) — Pico full stack + Pi + DeepSeek · Web WorkBuddy-degree six bars.
+**Binding product direction:** [HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md) — Pico full stack + Pi + DeepSeek · Web WorkBuddy-degree six bars.  
+**Memory reset:** [MEMORY-RESET.md](./MEMORY-RESET.md) · **SOLO:** [STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md).  
+**Task card standard:** [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（CLAIM/BASE/PRODUCT）。  
+**Current day card:** **T-P0-PI-CUTOVER** · [DAY-TASK-P0-PI-CUTOVER.md](./DAY-TASK-P0-PI-CUTOVER.md) · issue #310.

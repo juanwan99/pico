@@ -64,6 +64,6 @@ def test_capacity_and_emergency_messages_are_human() -> None:
         "PICO_LEGACY_AGENT_LOOP_EMERGENCY is no-op",
         code="runtime.emergency_noop",
     )
-    assert "过渡" in noop or "Kimi" in noop
+    assert "Pi" in noop or "编排" in noop or "Kimi" in noop or "过渡" in noop
     assert "run_agent_loop" not in noop
 

@@ -4,9 +4,11 @@
 DOC: docs/STAGE-PACKAGE-MODE.md
 STATUS: BINDING — 业主 2026-08-02 对齐 edu-core 阶段包
 SUPERSEDES: 默认多窗碎卡调度；日常「执行完毕审查」微观循环
-KEEPS: 真源纪律、红线、不自 PASS、Kimi 受控、#170 须授权
+KEEPS: 真源纪律、红线、不自 PASS、Pi+DeepSeek 默认、Kimi 仅遗产回滚
 SEE: docs/AUTONOMOUS-GOAL.md（总目标 A–I 仍为成功定义）
-      docs/FAST-PATH.md（技术节奏可参考，服从本页组织法）
+      docs/FAST-PATH.md（技术步骤可参考，服从本页组织法）
+      docs/MEMORY-RESET.md（错误记忆黑名单 · 废多窗日常派）
+      docs/HANDOFF-WB-PI.md（产品真源）
 REPO: juanwan99/pico ONLY
 PROD: https://pico.aivia.asia
 ```
@@ -62,6 +64,10 @@ PROD: https://pico.aivia.asia
 ```
 
 ## 5. 任务卡最小结构（SOLO）
+
+**完整格式真源：** [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（CLAIM/BASE/PRODUCT + 锁定句）。
+
+最小结构摘要：
 
 ```text
 【Pico 阶段 SOLO 卡】

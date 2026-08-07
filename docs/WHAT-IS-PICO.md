@@ -3,7 +3,7 @@
 ```
 DOC: docs/WHAT-IS-PICO.md
 STATUS: BINDING · 覆盖一切冲突的产品口述与旧文档金句
-FREEZE: docs/TRUTH-FREEZE.md v1.0（目标决策以防丢失）
+FREEZE: docs/TRUTH-FREEZE.md v1.1 · HANDOFF-WB-PI（默认 Pi + DeepSeek）
 OWNER: 业主目标 + 总管落盘
 TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可更新「现状」；不可偷偷改「目标」
 ```
@@ -26,7 +26,7 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 | **品类** | 类 Claude / Codex / WorkBuddy 的 **任务型 AI 工作台**（对话 + 办事 + 产物） |
 | **用户** | 教师/管理者等（学校场景），先独立可试用 |
 | **壳** | **`apps/librechat`（MIT）** 中文工作台；禁止回潮 web/nextchat/workbench；禁止拆闭源 WorkBuddy |
-| **智能** | **云端模型 HTTPS API**（**Kimi / Moonshot 优先**，可 DeepSeek 等） |
+| **智能** | **云端模型 HTTPS API**（**DeepSeek 为主**，Kimi 可选后备） |
 | **过程真源** | **Pico 唯一 AI 账本**：Task / Run / Event / Artifact / Change(S7)… |
 | **控制面** | 租户/membership、工具白名单、停止、重试、技能策略、限流与安全门 |
 | **与 edu** | **Pico = AI 过程真源**；**edu = 业务数据真源**；真联调后置；**禁止写 edu-cloud** |
@@ -62,14 +62,15 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 
 ## 4. 编排 · 目标 vs 现状（彻底诚实）
 
-### 4.1 目标（BINDING · 业主原意）
+### 4.1 目标（BINDING · 2026-08-06 · HANDOFF-WB-PI）
 
 ```text
-编排 = 开源 Kimi Agent（钉版本）薄改接入
+编排 = Pi Agent harness（默认唯一 multi-step）
      + Pico 账本 / 白名单 / S7 / 停止·重试控制面
-模型 = Kimi HTTPS API（锁定）
+模型 = DeepSeek HTTPS API（主）
+Kimi Agent = 遗产/可选回滚，非产品唯一目标
 禁止：自研 Agent OS 当产品主叙事或终局
-禁止：预写「Plan B 换 Pi/其它」进架构真源；走不通再议
+禁止：双核并列真源（Pi + Reasonix + Kimi 同时「官方唯一」）
 ```
 
 ### 4.2 实现事实（2026-08-01 · **不是目标**）

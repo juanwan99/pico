@@ -25,6 +25,9 @@ def test_health() -> None:
         "chat_max_concurrent": 2,
         "key_scope": "membership_or_ip",
     }
+    assert body["default_runtime"] == "pi-agent"
+    assert body["pi_agent_runtime_enabled"] is True
+    assert body["pi_agent_scope"] == "all"
     assert body["kimi_agent_runtime_enabled"] is False
     assert body["kimi_agent_scope"] == "off"
     # F (#295): raw emergency env no longer exposed; loop permanently unavailable.

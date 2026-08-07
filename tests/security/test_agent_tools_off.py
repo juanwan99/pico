@@ -49,6 +49,9 @@ def test_agent_yaml_has_no_shell_file_web_literals() -> None:
 def test_flagged_kimi_agent_exposes_only_gateway_wrappers() -> None:
     import sys
 
+    import pytest
+
+    pytest.importorskip("kimi_cli")
     sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
     from kimi_cli.agentspec import load_agent_spec
     from pico_orchestrator.safety import DANGEROUS_TOOL_PATHS, assert_dangerous_tools_off

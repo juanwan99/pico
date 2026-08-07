@@ -1,3 +1,6 @@
+import pytest
+
+pytest.importorskip("kimi_agent_sdk")
 import sys
 from pathlib import Path
 

@@ -1,9 +1,8 @@
 """Pico orchestrator package.
 
-TARGET/CURRENT: open-source Kimi Agent multi-step runtime + allowlist gateway
-+ pin checks (KA-4 HARD: transitional run_agent_loop removed).
-
-Package root re-exports below are kept for compatibility (pins/safety symbols).
+TARGET/CURRENT: Pi Agent multi-step runtime (default) + allowlist gateway.
+Model: DeepSeek HTTPS (primary). Legacy Kimi Agent path optional rollback only.
+Transitional run_agent_loop remains removed (KA-4 HARD).
 """
 
 from pico_orchestrator.pins import AGENT_PINS

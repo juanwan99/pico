@@ -1,8 +1,7 @@
-"""Runtime selector: Kimi Agent only for multi-step; no transitional loop.
+"""Runtime selector: Pi Agent is the default multi-step kernel (HANDOFF-WB-PI).
 
-KA-4 HARD (#288): ``run_agent_loop`` is removed. Routes that do not select Kimi
-Agent fail closed with an explicit error. Emergency→loop is a permanent no-op.
-Rollback = redeploy a previous git tip (not dual-run).
+Kimi Agent path is legacy opt-in only (``PICO_LEGACY_KIMI_AGENT_RUNTIME``).
+Transitional ``run_agent_loop`` remains removed (KA-4 HARD); do not revive it.
 """
 
 from __future__ import annotations
@@ -13,12 +12,15 @@ from typing import Any
 from pico_orchestrator.run_types import RunResult
 from pico_orchestrator.user_errors import enrich_fail_payload
 
-_LEGACY_LOOP_REMOVED = (
-    "transitional run_agent_loop removed (KA-4 HARD); "
-    "pico-agent multi-step requires Kimi Agent routing "
-    "(PICO_KIMI_AGENT_RUNTIME=1 and principal allowed). "
-    "Rollback = redeploy previous tip."
+_NO_RUNTIME = (
+    "no multi-step runtime selected; enable PICO_PI_AGENT_RUNTIME=1 (default) "
+    "or PICO_LEGACY_KIMI_AGENT_RUNTIME=1 for rollback. "
+    "transitional run_agent_loop remains removed (KA-4 HARD)."
 )
+
+# Test hooks: when set, dispatch uses these callables instead of real modules.
+_PI_IMPL: Any = None
+_KIMI_IMPL: Any = None
 
 
 def _as_principal_key(school_id: str, membership_id: str) -> tuple[str, str] | None:
@@ -30,7 +32,6 @@ def _as_principal_key(school_id: str, membership_id: str) -> tuple[str, str] | N
 
 
 def _is_allow_all_entry(entry: Any) -> bool:
-    """True for explicit all-principals canary tokens."""
     if not isinstance(entry, str):
         return False
     token = entry.strip()
@@ -38,12 +39,7 @@ def _is_allow_all_entry(entry: Any) -> bool:
 
 
 def canary_allows_all(canary_principals: Collection[Any]) -> bool:
-    """True only when canary entries include explicit ``*`` / ``*:*``.
-
-    An empty collection does **not** mean all principals — that requires the
-    settings-level intentional empty allowlist (``kimi_agent_allow_all=True``).
-    Non-empty raw config that parses to zero joints is fail-closed (nobody).
-    """
+    """True only when canary entries include explicit ``*`` / ``*:*``."""
     return any(_is_allow_all_entry(entry) for entry in canary_principals)
 
 
@@ -53,12 +49,7 @@ def principal_in_canary(
     membership_id: str,
     canary_principals: Collection[Any],
 ) -> bool:
-    """True only when the joint (school_id, membership_id) is allowlisted.
-
-    Accepts canary entries as (school, membership) tuples or "school:membership"
-    strings. Bare membership strings never match (fail-closed).
-    Explicit ``*`` / ``*:*`` are handled by :func:`canary_allows_all`, not here.
-    """
+    """True only when the joint (school_id, membership_id) is allowlisted."""
     key = _as_principal_key(school_id, membership_id)
     if key is None:
         return False
@@ -78,6 +69,28 @@ def principal_in_canary(
     return False
 
 
+def should_use_pi_agent(
+    *,
+    use_pi_agent: bool,
+    school_id: str = "",
+    membership_id: str = "",
+    canary_principals: Collection[Any] = (),
+    pi_agent_allow_all: bool = True,
+) -> bool:
+    """Decide whether multi-step uses Pi (product default kernel)."""
+    if not use_pi_agent:
+        return False
+    if pi_agent_allow_all or canary_allows_all(canary_principals):
+        return True
+    if not canary_principals:
+        return False
+    return principal_in_canary(
+        school_id=school_id,
+        membership_id=membership_id,
+        canary_principals=canary_principals,
+    )
+
+
 def should_use_kimi_agent(
     *,
     use_kimi_agent: bool,
@@ -87,14 +100,8 @@ def should_use_kimi_agent(
     kimi_agent_allow_all: bool = False,
     legacy_agent_loop_emergency: bool = False,
 ) -> bool:
-    """Decide whether multi-step uses Kimi Agent (only remaining implementation).
-
-    - ``legacy_agent_loop_emergency`` is **ignored** (KA-4 HARD no-op; no loop).
-    - ``kimi_agent_allow_all=True``: every principal (prod-default empty canary or ``*``).
-    - Otherwise only joint-key canary hits; empty/invalid canary ⇒ not selected
-      (caller must fail closed — no ``run_agent_loop``).
-    """
-    del legacy_agent_loop_emergency  # permanent no-op; kept in signature for call sites
+    """Legacy Kimi Agent gate (rollback only). Emergency flag is a permanent no-op."""
+    del legacy_agent_loop_emergency
     if not use_kimi_agent:
         return False
     if kimi_agent_allow_all or canary_allows_all(canary_principals):
@@ -106,7 +113,9 @@ def should_use_kimi_agent(
     )
 
 
-async def _fail_closed_no_loop(*, emit: Any, reason: str, code: str = "runtime.loop_removed") -> RunResult:
+async def _fail_closed_no_loop(
+    *, emit: Any, reason: str, code: str = "runtime.loop_removed"
+) -> RunResult:
     payload = enrich_fail_payload(
         {
             "status": "failed",
@@ -122,57 +131,72 @@ async def _fail_closed_no_loop(*, emit: Any, reason: str, code: str = "runtime.l
 
 async def run_agent_runtime(
     *,
+    use_pi_agent: bool = True,
+    pi_agent_canary_principals: Collection[Any] = (),
+    pi_agent_allow_all: bool = True,
     use_kimi_agent: bool = False,
+    use_legacy_kimi_agent: bool | None = None,
     kimi_agent_canary_principals: Collection[Any] = (),
     kimi_agent_canary_membership_ids: Collection[Any] | None = None,
     kimi_agent_allow_all: bool = False,
     legacy_agent_loop_emergency: bool = False,
     **kwargs: Any,
 ) -> Any:
-    """Dispatch only to Kimi Agent when the gate allows; else fail closed.
+    """Dispatch multi-step to Pi (default) or legacy Kimi; never the removed loop.
 
-    No transitional ``run_agent_loop``. ``legacy_agent_loop_emergency`` is a
-    no-op. ``kimi_agent_allow_all`` must be set for prod-default empty canary.
+    Preference order when both enabled: **Pi wins** (product default).
+    ``use_legacy_kimi_agent`` is an alias of ``use_kimi_agent``.
     """
+    del legacy_agent_loop_emergency
+
+    if use_legacy_kimi_agent is not None:
+        use_kimi_agent = bool(use_legacy_kimi_agent)
+
+    principal = kwargs.get("principal")
+    school_id = str(getattr(principal, "school_id", "") or "")
+    membership_id = str(getattr(principal, "membership_id", "") or "")
+    emit = kwargs.get("emit")
+
+    use_pi = should_use_pi_agent(
+        use_pi_agent=use_pi_agent,
+        school_id=school_id,
+        membership_id=membership_id,
+        canary_principals=pi_agent_canary_principals,
+        pi_agent_allow_all=pi_agent_allow_all,
+    )
+    if use_pi:
+        if _PI_IMPL is not None:
+            return await _PI_IMPL(**kwargs)
+        from pico_orchestrator.pi_runtime import run_pi_agent
+
+        return await run_pi_agent(**kwargs)
 
     canary = (
         kimi_agent_canary_principals
         if kimi_agent_canary_principals
         else (kimi_agent_canary_membership_ids or ())
     )
-    principal = kwargs.get("principal")
-    school_id = str(getattr(principal, "school_id", "") or "")
-    membership_id = str(getattr(principal, "membership_id", "") or "")
     use_kimi = should_use_kimi_agent(
         use_kimi_agent=use_kimi_agent,
         school_id=school_id,
         membership_id=membership_id,
         canary_principals=canary,
         kimi_agent_allow_all=kimi_agent_allow_all,
-        legacy_agent_loop_emergency=legacy_agent_loop_emergency,
     )
-    if not use_kimi:
-        emit = kwargs.get("emit")
-        if legacy_agent_loop_emergency:
-            reason = (
-                "PICO_LEGACY_AGENT_LOOP_EMERGENCY is no-op (KA-4 HARD); "
-                + _LEGACY_LOOP_REMOVED
-            )
-            code = "runtime.emergency_noop"
-        elif not use_kimi_agent:
-            reason = (
-                "PICO_KIMI_AGENT_RUNTIME is off; "
-                + _LEGACY_LOOP_REMOVED
-            )
-            code = "runtime.kimi_required"
-        else:
-            reason = (
-                "principal not on Kimi Agent canary/allow-all; "
-                + _LEGACY_LOOP_REMOVED
-            )
-            code = "runtime.not_allowlisted"
-        return await _fail_closed_no_loop(emit=emit, reason=reason, code=code)
+    if use_kimi:
+        if _KIMI_IMPL is not None:
+            return await _KIMI_IMPL(**kwargs)
+        from pico_orchestrator.kimi_runtime import run_kimi_agent
 
-    from pico_orchestrator.kimi_runtime import run_kimi_agent
+        return await run_kimi_agent(**kwargs)
 
-    return await run_kimi_agent(**kwargs)
+    if use_kimi_agent and not use_kimi:
+        reason = "principal not on legacy Kimi Agent canary/allow-all; " + _NO_RUNTIME
+        code = "runtime.not_allowlisted"
+    elif not use_pi_agent and not use_kimi_agent:
+        reason = _NO_RUNTIME
+        code = "runtime.pi_required"
+    else:
+        reason = "Pi gate off / not allowlisted and no legacy Kimi; " + _NO_RUNTIME
+        code = "runtime.pi_required"
+    return await _fail_closed_no_loop(emit=emit, reason=reason, code=code)

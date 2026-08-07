@@ -1,7 +1,7 @@
-"""Shared multi-step run types (no transitional loop implementation).
+"""Shared multi-step run types.
 
-Used by Kimi Agent runtime and API wiring. The self-built ``run_agent_loop``
-was removed in KA-4 HARD (#288); rollback is redeploy of a prior tip.
+Used by Pi Agent runtime (default), legacy Kimi path, and API wiring.
+The self-built ``run_agent_loop`` was removed in KA-4 HARD (#288); do not revive it.
 """
 
 from __future__ import annotations

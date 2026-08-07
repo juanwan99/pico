@@ -1,4 +1,4 @@
-"""Model HTTPS provider adapters (Kimi first, DeepSeek fallback). Keys server-side only."""
+"""Model HTTPS provider adapters. Product default = DeepSeek; Kimi optional fallback."""
 
 from __future__ import annotations
 
@@ -8,7 +8,14 @@ from dataclasses import dataclass
 
 from openai import AsyncOpenAI
 
-# Current Moonshot / Kimi API model IDs (2026). Prefer kimi-* for new accounts.
+DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+DEFAULT_DEEPSEEK_BASE = "https://api.deepseek.com/v1"
+KNOWN_DEEPSEEK_MODELS = (
+    "deepseek-chat",
+    "deepseek-reasoner",
+)
+
+# Optional fallback (legacy / dual-key ops)
 DEFAULT_KIMI_MODEL = "kimi-k2.6"
 DEFAULT_KIMI_BASE = "https://api.moonshot.cn/v1"
 KNOWN_KIMI_MODELS = (
@@ -35,10 +42,31 @@ class ProviderConfig:
 
 
 def resolve_provider() -> ProviderConfig | None:
+    """Prefer DeepSeek (product brain); fall back to Kimi if only that key exists.
+
+    Override order with ``PICO_MODEL_PROVIDER=deepseek|kimi`` when both keys set.
+    """
+    prefer = (os.environ.get("PICO_MODEL_PROVIDER") or "deepseek").strip().lower()
+    ds_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
     kimi_key = os.environ.get("KIMI_API_KEY", "").strip() or os.environ.get(
         "MOONSHOT_API_KEY", ""
     ).strip()
-    if kimi_key:
+
+    def deepseek() -> ProviderConfig | None:
+        if not ds_key:
+            return None
+        return ProviderConfig(
+            name="deepseek",
+            api_key=ds_key,
+            base_url=os.environ.get("DEEPSEEK_BASE_URL", DEFAULT_DEEPSEEK_BASE).strip()
+            or DEFAULT_DEEPSEEK_BASE,
+            model=os.environ.get("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL).strip()
+            or DEFAULT_DEEPSEEK_MODEL,
+        )
+
+    def kimi() -> ProviderConfig | None:
+        if not kimi_key:
+            return None
         return ProviderConfig(
             name="kimi",
             api_key=kimi_key,
@@ -46,15 +74,11 @@ def resolve_provider() -> ProviderConfig | None:
             or DEFAULT_KIMI_BASE,
             model=os.environ.get("KIMI_MODEL", DEFAULT_KIMI_MODEL).strip() or DEFAULT_KIMI_MODEL,
         )
-    ds_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
-    if ds_key:
-        return ProviderConfig(
-            name="deepseek",
-            api_key=ds_key,
-            base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
-            model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
-        )
-    return None
+
+    if prefer == "kimi":
+        return kimi() or deepseek()
+    # default deepseek first
+    return deepseek() or kimi()
 
 
 def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
@@ -62,7 +86,6 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
     req = (requested or "").strip()
     if not req or req in {"pico-agent", "pico"} or req.startswith("pico-"):
         return cfg.model
-    # LibreChat sometimes prefixes openAI/
     if "/" in req:
         req = req.split("/")[-1]
     return req
@@ -78,13 +101,13 @@ async def stream_chat(
 ) -> AsyncIterator[str]:
     """Stream assistant text deltas from the real model API (token-level).
 
-    Raises RuntimeError if no API key is configured (S1 BLOCKED).
+    Raises RuntimeError if no API key is configured.
     """
     cfg = resolve_provider()
     if cfg is None:
         raise RuntimeError(
-            "尚未配置 Kimi 密钥：请在服务端设置 KIMI_API_KEY（或 MOONSHOT_API_KEY）。"
-            "密钥只放服务端，勿写入前端。"
+            "尚未配置模型密钥：请在服务端设置 DEEPSEEK_API_KEY（推荐）"
+            "或 KIMI_API_KEY / MOONSHOT_API_KEY。密钥只放服务端，勿写入前端。"
         )
     client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
     model_id = resolve_model_id(model, cfg)
@@ -105,16 +128,19 @@ async def stream_chat(
             max_tokens=max_tokens,
         )
     except Exception as e:
-        # Surface readable Chinese for common failures
         msg = str(e)
         low = msg.lower()
-        if "401" in msg or "invalid" in low and "key" in low or "unauthorized" in low:
-            raise RuntimeError("Kimi 密钥无效或未授权，请检查 KIMI_API_KEY。") from e
-        if "404" in msg or "model" in low and "not" in low:
-            raise RuntimeError(f"模型不可用：{model_id}。请换 kimi-k2.6 / kimi-k3 等当前型号。") from e
+        if "401" in msg or ("invalid" in low and "key" in low) or "unauthorized" in low:
+            raise RuntimeError(
+                f"{cfg.name} 密钥无效或未授权，请检查服务端 API Key。"
+            ) from e
+        if "404" in msg or ("model" in low and "not" in low):
+            raise RuntimeError(
+                f"模型不可用：{model_id}。请检查 DEEPSEEK_MODEL / KIMI_MODEL。"
+            ) from e
         if "429" in msg or "rate" in low:
-            raise RuntimeError("Kimi 调用过于频繁，请稍后再试。") from e
-        raise RuntimeError(f"Kimi 调用失败：{msg}") from e
+            raise RuntimeError("模型调用过于频繁，请稍后再试。") from e
+        raise RuntimeError(f"模型调用失败：{msg}") from e
 
     async for chunk in stream:
         delta = chunk.choices[0].delta.content if chunk.choices else None
