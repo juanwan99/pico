@@ -275,11 +275,11 @@ async def stream_chat(
         if can_fallback:
             try:
                 stream = await _open_stream(fallback, fallback.model)
+            except Exception as fallback_exc:  # noqa: BLE001 — surface as user RuntimeError
+                e = fallback_exc
+            else:
                 cfg = fallback
                 model_id = fallback.model
-            except Exception as e2:
-                e = e2
-            else:
                 async for chunk in stream:
                     delta = chunk.choices[0].delta.content if chunk.choices else None
                     if delta:
