@@ -47,7 +47,7 @@ export function labelForLatestRun(run?: PicoTaskLatestRun | null): string | null
     case 'queued':
     case 'preparing':
     case 'running':
-      return '进行中';
+      return '仍在处理…';
     case 'succeeded':
       return '已完成';
     case 'failed':

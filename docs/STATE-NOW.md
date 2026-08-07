@@ -12,7 +12,7 @@
 ```text
 DOC: docs/STATE-NOW.md
 STATUS: BINDING snapshot
-UPDATED: 2026-08-07 (P1 closed · tip 0963b9d · CLAIM-WB still NO)
+UPDATED: 2026-08-07 (P2 T-P2-EXTEND in flight · CLAIM-WB still NO)
 TRUTH_ORDER: GitHub 证据 > HANDOFF-WB-PI > TRUTH-FREEZE > MEMORY-RESET > 本页 > 聊天
 ```
 

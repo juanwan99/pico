@@ -116,7 +116,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const cancellableRunId = ['queued', 'running', 'preparing'].includes(ledger.run?.status || '')
     ? ledger.run?.id
     : undefined;
-  const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '等待模型响应' : undefined);
+  const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '仍在处理…' : undefined);
   const showResultPanel = resultOpen && !isLandingPage && conversationId !== Constants.SEARCH;
 
   useEffect(() => {

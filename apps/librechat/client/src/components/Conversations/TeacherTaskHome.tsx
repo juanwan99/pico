@@ -7,6 +7,7 @@ import { cn } from '~/utils';
 
 const STATUS_CLASS: Record<string, string> = {
   进行中: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200',
+  '仍在处理…': 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200',
   停止中: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100',
   失败: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
   已停止: 'bg-surface-tertiary text-text-secondary',

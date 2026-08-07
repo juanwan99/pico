@@ -53,6 +53,10 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "无法连接模型服务。请检查网络或稍后重试。"
     if "owner was lost" in low or "api restart" in low or "greenlet" in low:
         return "服务刚完成维护或重启，请重新打开任务后重试。"
+    if c in ("kb.miss", "kb.not_found") or "honest_miss" in low or "未在已挂载" in text:
+        return "未在已挂载材料中找到依据。请先生成或上传材料后再问，或换关键词。"
+    if c.startswith("mcp.") or "mcp allowlist" in low or "mcp_bridge" in low:
+        return "MCP 工具当前不可用或不在白名单。请联系管理员检查 PICO_MCP_ALLOWLIST。"
     if "not found" in low:
         return "找不到对应的会话或运行记录。"
     if (

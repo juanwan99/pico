@@ -101,6 +101,10 @@ const SKILL_COPY: Record<string, SkillCopy> = {
     desc: '结构化会议决定、负责人和待办并可保存',
     prompt: '请把以下会议内容整理为议题、决定、负责人和待办；未明确负责人时标为待确认：',
   },
+  'skill-kb-ask': {
+    desc: 'P2 知识库试点：检索已挂载材料并引用依据（非向量库）',
+    prompt: '请根据已挂载的工作区材料回答：',
+  },
 };
 
 function riskLabel(skill: PicoSkillPolicy): string {

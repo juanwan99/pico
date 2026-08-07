@@ -195,6 +195,10 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
             "key_scope": "membership_or_ip",
         },
     }
+    # P2 MCP allowlist observability (tool names only — no secrets)
+    from pico_orchestrator.mcp_bridge import mcp_health_fields
+
+    body.update(mcp_health_fields(settings.pico_mcp_allowlist))
     if pi_batch:
         body["pi_agent_canary_batch"] = pi_batch
     if kimi_batch:
