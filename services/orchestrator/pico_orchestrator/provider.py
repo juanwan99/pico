@@ -188,6 +188,36 @@ def owned_by_for_model(model_id: str) -> str:
     return "pico"
 
 
+def _messages_for_chat(
+    prompt: str,
+    *,
+    history: list[dict] | None,
+    system: str | None,
+) -> list[dict]:
+    messages: list[dict] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    for h in history or []:
+        role = h.get("role")
+        content = h.get("content")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": str(content)})
+    messages.append({"role": "user", "content": prompt})
+    return messages
+
+
+def _is_auth_error(exc: Exception) -> bool:
+    msg = str(exc)
+    low = msg.lower()
+    return "401" in msg or ("invalid" in low and "key" in low) or "unauthorized" in low
+
+
+def _is_model_missing_error(exc: Exception) -> bool:
+    msg = str(exc)
+    low = msg.lower()
+    return "404" in msg or ("model" in low and "not" in low) or "invalid_request" in low
+
+
 async def stream_chat(
     prompt: str,
     *,
@@ -199,6 +229,10 @@ async def stream_chat(
     """Stream assistant text deltas from the real model API (token-level).
 
     Raises RuntimeError if no API key is configured.
+
+    If the UI still selects a broken Kimi model while DeepSeek is the product
+    brain and has a working key, fall back to DeepSeek rather than failing the
+    default path with a generic service error.
     """
     cfg = resolve_provider_for_model(model)
     if cfg is None:
@@ -215,32 +249,50 @@ async def stream_chat(
             "尚未配置模型密钥：请在服务端设置 DEEPSEEK_API_KEY（推荐）"
             "或 KIMI_API_KEY / MOONSHOT_API_KEY。密钥只放服务端，勿写入前端。"
         )
-    client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+
+    messages = _messages_for_chat(prompt, history=history, system=system)
     model_id = resolve_model_id(model, cfg)
-    messages: list[dict] = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    for h in history or []:
-        role = h.get("role")
-        content = h.get("content")
-        if role in ("user", "assistant") and content:
-            messages.append({"role": role, "content": str(content)})
-    messages.append({"role": "user", "content": prompt})
-    try:
-        stream = await client.chat.completions.create(
-            model=model_id,
+
+    async def _open_stream(provider: ProviderConfig, mid: str):
+        client = AsyncOpenAI(api_key=provider.api_key, base_url=provider.base_url)
+        return await client.chat.completions.create(
+            model=mid,
             messages=messages,
             stream=True,
             max_tokens=max_tokens,
         )
+
+    try:
+        stream = await _open_stream(cfg, model_id)
     except Exception as e:
+        # Broken Kimi key / unavailable kimi model → remount product DeepSeek.
+        fallback = _deepseek_config()
+        can_fallback = (
+            cfg.name == "kimi"
+            and fallback is not None
+            and (_is_auth_error(e) or _is_model_missing_error(e))
+        )
+        if can_fallback:
+            try:
+                stream = await _open_stream(fallback, fallback.model)
+                cfg = fallback
+                model_id = fallback.model
+            except Exception as e2:
+                e = e2
+            else:
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta.content if chunk.choices else None
+                    if delta:
+                        yield delta
+                return
+
         msg = str(e)
         low = msg.lower()
-        if "401" in msg or ("invalid" in low and "key" in low) or "unauthorized" in low:
+        if _is_auth_error(e):
             raise RuntimeError(
                 f"{cfg.name} 密钥无效或未授权，请检查服务端 API Key。"
             ) from e
-        if "404" in msg or ("model" in low and "not" in low):
+        if _is_model_missing_error(e):
             raise RuntimeError(
                 f"模型不可用：{model_id}。请检查 DEEPSEEK_MODEL / KIMI_MODEL。"
             ) from e
