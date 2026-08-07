@@ -459,16 +459,28 @@ def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
 
 
 def _wants_deliverable_document(prompt: str) -> bool:
-    """Detect teacher NL asking for HTML / Word / PPT deliverables."""
+    """Detect teacher NL asking for HTML / Word / PPT deliverables.
+
+    Must catch plain Chinese phrasing without tool names or .docx suffixes
+    (S1.5 / S2.2: 「重新生成可下载 Word」 must not fall into direct-chat fake success).
+    """
     import re
 
     text = prompt or ""
+    if not text.strip():
+        return False
     return bool(
         re.search(
             r"\.(?:html?|docx|pptx)\b|"
             r"\b(?:html|docx|pptx|powerpoint)\b|"
             r"幻灯片|课件|网页文件|word\s*文档|PPT|Power\s*Point|"
-            r"生成\s*(?:html|网页|word|docx|ppt|pptx|幻灯片)",
+            # 生成 + type (allow short fillers: 可下载 / 一份 / …)
+            r"生成.{0,12}(?:html|网页|word|docx|ppt|pptx|幻灯片|文档)|"
+            # 可下载/下载/导出/改版 + Word/文档
+            r"(?:可下载|下载|导出|重新生成|改一版|改版|一页).{0,16}"
+            r"(?:Word|word|WORD|文档|docx|PPT|pptx|html|幻灯片|课件)|"
+            # Word/docx 文件|文档|下载
+            r"(?:Word|word|WORD|docx|PPT|pptx).{0,12}(?:文件|文档|下载)",
             text,
             re.IGNORECASE,
         )
