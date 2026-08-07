@@ -12,7 +12,7 @@
 ```text
 DOC: docs/STATE-NOW.md
 STATUS: BINDING snapshot
-UPDATED: 2026-08-07 (P2 T-P2-EXTEND in flight · CLAIM-WB still NO)
+UPDATED: 2026-08-07 (P2 closed · tip 14615ba · CLAIM-WB still NO)
 TRUTH_ORDER: GitHub 证据 > HANDOFF-WB-PI > TRUTH-FREEZE > MEMORY-RESET > 本页 > 聊天
 ```
 
@@ -52,7 +52,7 @@ TRUTH_ORDER: GitHub 证据 > HANDOFF-WB-PI > TRUTH-FREEZE > MEMORY-RESET > 本�
 |----|-----|
 | 默认 runtime | `pi-agent` |
 | env | `PICO_PI_AGENT_RUNTIME=1` · `PICO_MODEL_PROVIDER=deepseek` · `DEEPSEEK_*` |
-| health | `default_runtime` / `pi_agent_*` / `legacy_loop_unavailable=true` |
+| health | `default_runtime` / `pi_agent_*` / `legacy_loop_unavailable=true` / `mcp_allowlist_*` |
 | 旧字段 | `kimi_agent_*` 可观测，非默认 |
 
 ---
@@ -61,10 +61,11 @@ TRUTH_ORDER: GitHub 证据 > HANDOFF-WB-PI > TRUTH-FREEZE > MEMORY-RESET > 本�
 
 | 面 | SHA / 链接 | 含义 |
 |----|------------|------|
-| **main / 生产 tip** | **`0963b9d9767c7e7d6cd62f1236abe639052a7c36`** | #312 + #311 DEPLOYED+TEST PASS |
+| **main / 生产 tip** | **`14615ba2c9fbbebfd3d8dd16a24188f10f310f4d`** | #315 · #313 DEPLOYED+TEST PASS |
 | 历史 GLOBAL PASS tip | `38067b824c2e5fd5e445d7f33a20089c8f13360d` | Kimi 时代 · **不得**冒充六条 |
-| P0 换核 | [#310](https://github.com/juanwan99/pico/issues/310) · T-P0-PI-CUTOVER · tip `1a53637…` | **工程闭环** · Pi+DeepSeek |
-| P1 表面 | [#311](https://github.com/juanwan99/pico/issues/311) · T-P1-WB-SURFACE | **工程闭环** · 产物/Skill/同会话/完成态演示 |
+| P0 换核 | [#310](https://github.com/juanwan99/pico/issues/310) · T-P0-PI-CUTOVER | **工程闭环** · Pi+DeepSeek |
+| P1 表面 | [#311](https://github.com/juanwan99/pico/issues/311) · T-P1-WB-SURFACE | **工程闭环** · 产物/Skill/同会话/完成态 |
+| P2 加深 | [#313](https://github.com/juanwan99/pico/issues/313) · T-P2-EXTEND | **工程闭环** · KB 试点 + MCP 桥 2 + 手感 |
 
 ---
 
@@ -77,10 +78,12 @@ KILL:
   - 禁 Pi/DeepSeek
   - Dify 门脸终局 · aivia 场景卷=WB 完成
   - 旧 GLOBAL PASS = CLAIM-WB-DEGREE-WEB
+  - 「MCP 桥」= 完整 MCP 协议栈 / 任意市场
   - 自 PASS · 密钥进 Issue · 写 edu-cloud
 KEEP:
   - 单窗 SOLO · Pi + DeepSeek · Pico 账本唯一
   - 开放域当场题 · exact-SHA 部署 · 诚实失败
+  - KB = 账本全文试点（非向量内核）
 ```
 
 ---
@@ -89,11 +92,12 @@ KEEP:
 
 ```text
 MODE: SOLO single-window
-tip: 0963b9d9767c7e7d6cd62f1236abe639052a7c36
-P0: CLOSED 工程门（#310）· Pi+DeepSeek
-P1: CLOSED 工程门（#311）· 产物+≥3 Skill+同会话改+完成态 · 演示级六条可指
-CLAIM-WB-DEGREE-WEB: NO  ← 未书面签产品终局；需专卡取证才可议 YES
-下一刀: P2（KB/MCP/手感）或 CLAIM-WB-DEGREE-WEB 取证卡（另开）
+tip: 14615ba2c9fbbebfd3d8dd16a24188f10f310f4d
+P0: CLOSED · #310
+P1: CLOSED · #311
+P2: CLOSED 工程门 · #313 · KB+MCP桥+手感 · 不签六条
+CLAIM-WB-DEGREE-WEB: NO  ← 需专卡取证才可议 YES
+下一刀: CLAIM-WB-DEGREE-WEB 取证卡 或 P3 自动化（另开）
 ```
 
 product PASS (WB 六条): **NOT CLAIMED** · orchestration default: **pi-agent** · dispatch: **SOLO**
