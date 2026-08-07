@@ -63,7 +63,7 @@ def is_kimi_model(model: str | None) -> bool:
         return False
     if bare in {m.lower() for m in KNOWN_KIMI_MODELS}:
         return True
-    return bare.startswith("kimi") or bare.startswith("moonshot")
+    return bare.startswith(("kimi", "moonshot"))
 
 
 def is_agent_model(model: str | None) -> bool:
