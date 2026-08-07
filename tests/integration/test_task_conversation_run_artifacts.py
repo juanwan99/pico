@@ -140,9 +140,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
     monkeypatch.setenv("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
     monkeypatch.setenv("PICO_ENV", "development")
-    # KA-4 HARD: multi-step requires Kimi Agent routing (no transitional loop)
-    monkeypatch.setenv("PICO_KIMI_AGENT_RUNTIME", "1")
-    monkeypatch.setenv("PICO_KIMI_AGENT_CANARY_MEMBERSHIP_IDS", "")
+    # HANDOFF-WB-PI: multi-step default = Pi (no transitional loop / no kimi required)
+    monkeypatch.setenv("PICO_PI_AGENT_RUNTIME", "1")
+    monkeypatch.setenv("PICO_LEGACY_KIMI_AGENT_RUNTIME", "0")
+    monkeypatch.setenv("PICO_KIMI_AGENT_RUNTIME", "0")
     monkeypatch.setenv("PICO_LEGACY_AGENT_LOOP_EMERGENCY", "0")
 
     from app import db as dbmod
@@ -175,12 +176,15 @@ def _stub_provider(monkeypatch, text: str) -> None:
 
 
 def _stub_agent(monkeypatch, result: RunResult) -> None:
-    async def fake_kimi(*, emit, **_kwargs) -> RunResult:
-        await emit("run.status", {"status": "running", "runtime": "kimi-agent"})
-        await emit("run.status", {"status": result.status, "runtime": "kimi-agent"})
+    """Stub default multi-step kernel (Pi) without importing legacy kimi_runtime."""
+    import pico_orchestrator.runtime as rt
+
+    async def fake_pi(*, emit, **_kwargs) -> RunResult:
+        await emit("run.status", {"status": "running", "runtime": "pi-agent"})
+        await emit("run.status", {"status": result.status, "runtime": "pi-agent"})
         return result
 
-    monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", fake_kimi)
+    monkeypatch.setattr(rt, "_PI_IMPL", fake_pi)
 
 
 @pytest.mark.asyncio
@@ -188,7 +192,9 @@ async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
     tmp_path,
     monkeypatch,
 ) -> None:
-    """KA-4 HARD: non-KA routes fail closed; only allowlisted hits Kimi."""
+    """Pi canary: off/miss fail closed; joint allowlist hits Pi (no kimi import)."""
+    import pico_orchestrator.runtime as rt
+
     db = tmp_path / "runtime-flag.db"
     monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
     monkeypatch.setenv("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
@@ -202,17 +208,19 @@ async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
     await init_db()
     calls: list[str] = []
 
-    async def kimi_runtime(*, emit, **_kwargs) -> RunResult:
-        calls.append("kimi")
-        await emit("run.status", {"status": "running", "runtime": "kimi-agent"})
-        await emit("run.status", {"status": "succeeded", "runtime": "kimi-agent"})
-        return RunResult(status="succeeded", final_text="kimi")
+    async def pi_runtime(*, emit, **_kwargs) -> RunResult:
+        calls.append("pi")
+        await emit("run.status", {"status": "running", "runtime": "pi-agent"})
+        await emit("run.status", {"status": "succeeded", "runtime": "pi-agent"})
+        return RunResult(status="succeeded", final_text="pi")
 
-    monkeypatch.setattr("pico_orchestrator.kimi_runtime.run_kimi_agent", kimi_runtime)
+    monkeypatch.setattr(rt, "_PI_IMPL", pi_runtime)
     base_settings = Settings(
         _env_file=None,
+        pico_pi_agent_runtime=False,
+        pico_legacy_kimi_agent_runtime=False,
         pico_kimi_agent_runtime=False,
-        pico_kimi_agent_canary_membership_ids="school-a:member-runtime-flag",
+        pico_pi_agent_canary_membership_ids="school-a:member-runtime-flag",
     )
     token = issue_test_token(
         school_id="school-a",
@@ -240,26 +248,32 @@ async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
     assert "KA-4 HARD" in (off["choices"][0]["message"]["content"] or off.get("error", "") or str(off))
     not_allowlisted_settings = Settings(
         _env_file=None,
-        pico_kimi_agent_runtime=True,
-        pico_kimi_agent_canary_membership_ids="school-a:another-member",
+        pico_pi_agent_runtime=True,
+        pico_legacy_kimi_agent_runtime=False,
+        pico_kimi_agent_runtime=False,
+        pico_pi_agent_canary_membership_ids="school-a:another-member",
     )
     miss = await complete(not_allowlisted_settings, "conversation-not-allowlisted-runtime")
     assert "KA-4 HARD" in str(miss)
     bare_membership_settings = Settings(
         _env_file=None,
-        pico_kimi_agent_runtime=True,
-        pico_kimi_agent_canary_membership_ids="member-runtime-flag",
+        pico_pi_agent_runtime=True,
+        pico_legacy_kimi_agent_runtime=False,
+        pico_kimi_agent_runtime=False,
+        pico_pi_agent_canary_membership_ids="member-runtime-flag",
     )
     bare = await complete(bare_membership_settings, "conversation-bare-membership-runtime")
     assert "KA-4 HARD" in str(bare)
     allowlisted_settings = Settings(
         _env_file=None,
-        pico_kimi_agent_runtime=True,
-        pico_kimi_agent_canary_membership_ids="school-a:member-runtime-flag",
+        pico_pi_agent_runtime=True,
+        pico_legacy_kimi_agent_runtime=False,
+        pico_kimi_agent_runtime=False,
+        pico_pi_agent_canary_membership_ids="school-a:member-runtime-flag",
     )
-    hit = await complete(allowlisted_settings, "conversation-kimi-runtime")
-    assert hit["choices"][0]["message"]["content"] == "kimi"
-    assert calls == ["kimi"]
+    hit = await complete(allowlisted_settings, "conversation-pi-runtime")
+    assert hit["choices"][0]["message"]["content"] == "pi"
+    assert calls == ["pi"]
 
 
 def _complete(
@@ -767,6 +781,8 @@ async def test_agent_stream_polls_ledger_cancel_request(tmp_path, monkeypatch) -
     dbmod._Session = None
     await init_db()
 
+    import pico_orchestrator.runtime as rt
+
     async def cancel_aware_runner(*, emit, is_cancelled, **_kwargs) -> RunResult:
         factory = session_factory()
         async with factory() as session:
@@ -777,14 +793,13 @@ async def test_agent_stream_polls_ledger_cancel_request(tmp_path, monkeypatch) -
         await emit("run.status", {"status": "cancelled"})
         return RunResult(status="cancelled", final_text="")
 
-    monkeypatch.setattr(
-        "pico_orchestrator.kimi_runtime.run_kimi_agent",
-        cancel_aware_runner,
-    )
+    monkeypatch.setattr(rt, "_PI_IMPL", cancel_aware_runner)
     settings = Settings(
         _env_file=None,
-        pico_kimi_agent_runtime=True,
-        pico_kimi_agent_canary_membership_ids="",
+        pico_pi_agent_runtime=True,
+        pico_legacy_kimi_agent_runtime=False,
+        pico_kimi_agent_runtime=False,
+        pico_pi_agent_canary_membership_ids="",
     )
     token = issue_test_token(
         school_id="school-a",
