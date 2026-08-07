@@ -482,7 +482,7 @@ def _wants_deliverable_document(prompt: str) -> bool:
             # Word/docx 文件|文档|下载
             r"(?:Word|word|WORD|docx|PPT|pptx).{0,16}(?:文件|文档|下载)|"
             # bare “方案/说明/通知 Word” without 生成 immediately nearby
-            r"(?:方案|说明|通知|报告|小结).{0,8}(?:Word|word|docx|PPT|pptx)"
+            r"(?:方案|说明|通知|报告|小结).{0,8}(?:Word|word|docx|PPT|pptx)",
             text,
             re.IGNORECASE,
         )
