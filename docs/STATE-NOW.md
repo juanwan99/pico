@@ -12,7 +12,7 @@
 ```text
 DOC: docs/STATE-NOW.md
 STATUS: BINDING snapshot
-UPDATED: 2026-08-06 (MEMORY-RESET · SOLO single-window · PI-KERNEL)
+UPDATED: 2026-08-07 (P0 tip 1a53637 · P1 card T-P1-WB-SURFACE)
 TRUTH_ORDER: GitHub 证据 > HANDOFF-WB-PI > TRUTH-FREEZE > MEMORY-RESET > 本页 > 聊天
 ```
 
@@ -62,8 +62,9 @@ TRUTH_ORDER: GitHub 证据 > HANDOFF-WB-PI > TRUTH-FREEZE > MEMORY-RESET > 本�
 | 面 | SHA | 含义 |
 |----|-----|------|
 | 历史 GLOBAL PASS tip | `38067b824c2e5fd5e445d7f33a20089c8f13360d` | Kimi 时代 · **不得**冒充六条 |
-| 代码 PR | [#309](https://github.com/juanwan99/pico/pull/309) | Pi 默认核 · 待合 / 合后写 tip |
-| 日卡 | [#310](https://github.com/juanwan99/pico/issues/310) · **T-P0-PI-CUTOVER** · [DAY-TASK](./DAY-TASK-P0-PI-CUTOVER.md) | SOLO · CLAIM/BASE/PRODUCT |
+| **main / 生产 tip** | **`1a53637516fbb5803c2c4afb487ccdb9fc6ff834`** | #309 squash · Pi 默认 · #310 DEPLOYED+TEST PASS |
+| 日卡 P0 | [#310](https://github.com/juanwan99/pico/issues/310) · T-P0-PI-CUTOVER | **闭环**（不自签六条） |
+| 日卡 P1 | **T-P1-WB-SURFACE** · [DAY-TASK](./DAY-TASK-P1-WB-SURFACE.md) | 产物+Skill 前台+同会话改 |
 
 ---
 
@@ -88,9 +89,9 @@ KEEP:
 
 ```text
 MODE: SOLO single-window
-当前: Pi 内核替换（#309）· 文档 v1.1 · MEMORY-RESET
-P0 余: 合 tip · 公网 DeepSeek 实钥 · 当场题 · 取消
-P1: 产物 · ≥3 Skill 前台 · 同会话改 · 完成态
+tip: 1a53637516fbb5803c2c4afb487ccdb9fc6ff834
+P0: CLOSED 工程门 · Pi+DeepSeek 公网可证（#310）· 不签六条
+当前刀: T-P1-WB-SURFACE（产物露出 · ≥3 Skill 前台 · 同会话改 · 完成态）
 CLAIM-WB-DEGREE-WEB: NO
 ```
 
