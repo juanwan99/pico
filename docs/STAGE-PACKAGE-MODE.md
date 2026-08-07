@@ -65,6 +65,10 @@ PROD: https://pico.aivia.asia
 
 ## 5. 任务卡最小结构（SOLO）
 
+**完整格式真源：** [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（CLAIM/BASE/PRODUCT + 锁定句）。
+
+最小结构摘要：
+
 ```text
 【Pico 阶段 SOLO 卡】
 执行窗：SOLO（唯一）

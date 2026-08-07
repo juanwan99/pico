@@ -232,6 +232,7 @@ RELATED:
 [ ] 确认：不做 Dify 门脸终局、不做场景卷对标、不做双核真源
 [ ] 冻结文 TRUTH-FREEZE v1.1 已与本文对齐（或随本包）
 [ ] 动手只写 pico 仓（除非业主明文授权其它仓）
+[ ] 派卡体例：docs/TASK-CARD-STANDARD.md（CLAIM/BASE/PRODUCT）
 ```
 
 ---

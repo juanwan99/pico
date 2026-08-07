@@ -81,7 +81,8 @@ TRUTH: docs/HANDOFF-WB-PI.md > docs/TRUTH-FREEZE.md v1.1 > 本页 > 聊天
 3) docs/MEMORY-RESET.md      ← 本文（清错）
 4) docs/STATE-NOW.md         ← tip/健康快照
 5) docs/STAGE-PACKAGE-MODE.md← 单窗阶段包
-6) docs/DAY-TASK-P0-PI-CUTOVER.md ← 现行刀
+6) docs/TASK-CARD-STANDARD.md  ← 任务卡格式
+7) docs/DAY-TASK-P0-PI-CUTOVER.md ← 现行刀 T-P0-PI-CUTOVER
 ```
 
 aivia-workbench：只读其 HANDOFF/CANON/MEMORY-RESET 知「已降级」，**不**在本仓派 GENERAL-WB 主刀。
