@@ -32,8 +32,10 @@ def _valid_production(**overrides: object) -> Settings:
         "pico_jwt_secret": "jwt-" + "a" * 40,
         "pico_accept_test_issuer": False,
         "pico_openai_proxy_key": "proxy-" + "b" * 40,
-        "kimi_api_key": "model-key",
-        "pico_allowed_models": "kimi-k2.6,pico-agent",
+        # Product default brain = DeepSeek (first allowlist entry = shell default).
+        "deepseek_api_key": "model-key",
+        "pico_model_provider": "deepseek",
+        "pico_allowed_models": "deepseek-chat,pico-agent",
         "pico_chat_rpm": 30,
         "pico_chat_max_concurrent": 2,
         "pico_run_max_tokens": 4096,
@@ -49,7 +51,7 @@ def _valid_production(**overrides: object) -> Settings:
         ({"pico_jwt_secret": "change-me-dev-only-not-for-prod-32b!"}, "PICO_JWT_SECRET"),
         ({"pico_jwt_secret": ""}, "PICO_JWT_SECRET"),
         ({"pico_openai_proxy_key": "pico-dev"}, "PICO_OPENAI_PROXY_KEY"),
-        ({"kimi_api_key": "", "deepseek_api_key": ""}, "KIMI_API_KEY"),
+        ({"kimi_api_key": "", "deepseek_api_key": ""}, "DEEPSEEK_API_KEY|KIMI_API_KEY"),
         ({"pico_allowed_models": ""}, "PICO_ALLOWED_MODELS"),
         ({"pico_allowed_models": "pico-agent"}, "provider model"),
     ],
@@ -88,10 +90,22 @@ def test_production_rejects_default_proxy_but_accepts_strong_internal_proxy() ->
 
 def test_production_model_allowlist_rejects_unknown() -> None:
     settings = _valid_production()
-    _assert_model_allowed("openAI/kimi-k2.6", settings)
+    _assert_model_allowed("openAI/deepseek-chat", settings)
     with pytest.raises(HTTPException) as rejected:
         _assert_model_allowed("unknown-expensive-model", settings)
     assert rejected.value.status_code == 400
+
+
+def test_production_template_defaults_to_deepseek_not_kimi() -> None:
+    """E1/E2E-DEFAULT: shell default must not be broken kimi-k2.x."""
+    example = (ROOT / ".env.production.example").read_text(encoding="utf-8")
+    assert "PICO_ALLOWED_MODELS=deepseek-chat,pico-agent" in example
+    assert "PICO_ALLOWED_MODELS=kimi-k2.6" not in example
+    compose = (ROOT / "docker-compose.host.yml").read_text(encoding="utf-8")
+    assert "OPENAI_MODELS: ${PICO_ALLOWED_MODELS:?set PICO_ALLOWED_MODELS}" in compose
+    # Dev compose first entry = deepseek-chat
+    dev = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "OPENAI_MODELS: deepseek-chat,pico-agent" in dev
 
 
 def test_requested_tokens_are_clamped_to_global_cap() -> None:
