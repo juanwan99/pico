@@ -7,7 +7,8 @@ User-visible chat must default to filenames + how to open, never a self-check re
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 # Titles that are bookkeeping, not user downloads.
 _BOOKKEEPING = frozenset({"回复摘要", "summary", "run summary"})
@@ -50,9 +51,7 @@ def is_bookkeeping_title(title: str | None) -> bool:
         return True
     if t in _BOOKKEEPING:
         return True
-    if t.lower() in _BOOKKEEPING:
-        return True
-    return False
+    return t.lower() in _BOOKKEEPING
 
 
 def titles_from_tool_results(

@@ -483,9 +483,11 @@ def _build_instruction(
         "- 禁止用代码块改后缀冒充 .html/.docx/.pptx。",
         "- 禁止把多个交付物合并成「一个文件里的多个标题」冒充多产物。",
         "- 扩展名必须与类型一致（.md/.txt/.html/.docx…）；禁止 .mdd 等错误后缀。",
-        "- **用户主回复=人包**：文件名、用途、打开/下载方式、可改什么；"
-        "禁止向用户输出 artifact_id / L0 / L1 / verification_level / interaction_status / "
-        "source_wall / encoding / 账本术语 / 完整 HTML 源码墙。机审字段只给系统。",
+        (
+            "- **用户主回复=人包**：文件名、用途、打开/下载方式、可改什么；"
+            "禁止向用户输出 artifact_id / L0 / L1 / verification_level / interaction_status / "
+            "source_wall / encoding / 账本术语 / 完整 HTML 源码墙。机审字段只给系统。"
+        ),
     ]
     if multi or min_artifacts >= 2:
         parts.append(
