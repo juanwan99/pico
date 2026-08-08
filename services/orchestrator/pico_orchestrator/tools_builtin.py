@@ -226,7 +226,10 @@ def _workspace_handlers(
     store: ArtifactStore,
 ) -> tuple[Any, Any, Any, Any, Any, Any, Any, Any]:
     async def write_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        from pico_orchestrator.delivery_policy import normalize_artifact_title
+
         title = _artifact_title(args)
+        title, ext_fix = normalize_artifact_title(title)
         protected = title_protected_extension(title)
         if protected:
             raise ToolError(
@@ -237,12 +240,16 @@ def _workspace_handlers(
         kind = str(args.get("kind") or "file").strip().lower()
         if kind not in {"doc", "file", "json", "outline", "text"}:
             raise ToolError("tool.invalid_arguments", "unsupported artifact kind")
-        return await store.write(
+        result = await store.write(
             principal,
             title=title,
             content=content,
             kind=kind,
         )
+        if ext_fix:
+            result = dict(result)
+            result["extension_corrected"] = ext_fix
+        return result
 
     async def read_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         artifact_id = args.get("artifact_id")

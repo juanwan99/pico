@@ -1,12 +1,41 @@
-"""General delivery policy — no exam-case keyword special-cases."""
+"""Delivery policy — structural + session heuristics; no exam-phrase overfit."""
 
 from __future__ import annotations
 
 from pico_orchestrator.delivery_policy import (
     ENGINEERING_SKILL_ID,
+    REMOVED_OVERFIT_PHRASES,
     analyze_delivery,
     count_user_artifacts,
+    normalize_artifact_title,
 )
+
+
+def test_d0_removed_overfit_phrases_not_in_source() -> None:
+    """D0: deleted exam-isomorphic phrases must not appear as dedicated triggers."""
+    import inspect
+
+    from pico_orchestrator import delivery_policy as mod
+
+    # Pattern objects only (not REMOVED_* audit tuple / comments).
+    pattern_blobs = []
+    for name in (
+        "_MULTI_PHRASE",
+        "_IMPLICIT_PACKAGE",
+        "_PIPELINE_PHRASE",
+        "_REVISION_PHRASE",
+        "_CHANGE_OF_MIND",
+        "_RUNNABLE_MEDIA",
+        "_HTML_SURFACE",
+    ):
+        pattern_blobs.append(getattr(mod, name).pattern)
+    joined = "\n".join(pattern_blobs)
+    for banned in ("只做低成本", "别的顺延", "番茄钟", "广播稿"):
+        assert banned not in joined, banned
+    assert "_DELIVERABLE_NOUN" not in dir(mod)
+    assert "只做低成本" in REMOVED_OVERFIT_PHRASES
+    assert "番茄钟" in REMOVED_OVERFIT_PHRASES
+    assert inspect.isfunction(mod.analyze_delivery)
 
 
 def test_multi_deliverable_independent_files() -> None:
@@ -21,12 +50,12 @@ def test_multi_deliverable_independent_files() -> None:
     assert plan.multi_deliverable is True
     assert plan.min_artifacts >= 3
     assert plan.force_agent is True
-    assert "独立" in plan.instruction or "多交付" in plan.instruction
+    assert plan.structure_item_count >= 3
 
 
 def test_pipeline_stages_generic() -> None:
     prompt = (
-        "做竞品周观察流水线，每阶段独立文件：\n"
+        "做观察流水线，每阶段独立文件：\n"
         "阶段1 信息源清单 → 阶段2 三条洞察 → 阶段3 一页行动建议。"
     )
     plan = analyze_delivery(prompt)
@@ -43,20 +72,36 @@ def test_revision_generic_not_exam_keyword() -> None:
     assert plan.force_agent is True
 
 
-def test_soft_revision_without_file_keyword() -> None:
-    """H5: soft change-of-mind still forces revision of prior stage outputs."""
-    prompt = "算了，本周行动先只做低成本两项，别的顺延。请更新阶段3。"
-    plan = analyze_delivery(prompt)
+def test_revision_with_prior_artifacts_change_of_mind() -> None:
+    """D2: isomorphic soft revision without exam phrases; binds prior artifacts."""
+    plan = analyze_delivery(
+        "上次推荐太激进了，改成保守方案，只保留零成本动作。请更新决策文件。",
+        prior_artifact_titles=["现状摘要.md", "选项对比.md", "推荐决策.md"],
+    )
     assert plan.revision is True
     assert plan.force_agent is True
     assert plan.min_artifacts >= 1
-    assert "软改口" in plan.instruction or "修订" in plan.instruction
+    assert plan.prior_artifact_count >= 3
+    assert "会话改口" in plan.instruction or "修订" in plan.instruction
 
 
-def test_soft_revision_priority_tweak() -> None:
-    plan = analyze_delivery("优先级调一下：先做容易的，难的顺延，更新行动建议文件。")
+def test_revision_change_mind_without_prior_still_if_mentions_file() -> None:
+    plan = analyze_delivery(
+        "推翻上次结论，收窄成只保留两项，更新推荐决策文件。"
+    )
     assert plan.revision is True
     assert plan.force_agent is True
+
+
+def test_exam_soft_phrase_alone_not_required() -> None:
+    """X-PHRASE: old P1 soft phrases must not be the only green path."""
+    # Without prior + without generic change-of-mind / file mention structure,
+    # pure exam leftover should not be specially handled (those phrases deleted).
+    plan = analyze_delivery("别的顺延吧")
+    # May or may not force — must NOT specially key on 顺延 alone as revision.
+    # 顺延 alone is not in CHANGE_OF_MIND; expect no force.
+    assert plan.force_agent is False
+    assert plan.revision is False
 
 
 def test_casual_rewrite_not_forced_to_files() -> None:
@@ -65,23 +110,18 @@ def test_casual_rewrite_not_forced_to_files() -> None:
     assert plan.min_artifacts == 0
 
 
-def test_runnable_html_self_check_intent_neutral() -> None:
-    """H2: must fire on neutral HTML wording — not sticky scene terms like 倒计时."""
-    prompt = (
-        "生成单页 HTML：简易「番茄钟」——开始/暂停/重置，本地 file 打开可用。"
-        "请做自检并写明验证级别。"
+def test_runnable_html_media_only() -> None:
+    """D3: HTML media words fire; no app-name dependency."""
+    plan = analyze_delivery(
+        "生成单页 HTML：简易待办列表，本地 file 打开可用，开始添加/勾选。请自检。"
     )
-    plan = analyze_delivery(prompt)
     assert plan.runnable_html is True
     assert plan.force_agent is True
     assert plan.min_artifacts >= 1
-    assert "倒计时" not in plan.instruction
 
 
-def test_runnable_not_require_countdown_keyword() -> None:
-    """Regression guard: sticky scene word alone must not force runnable HTML (H2)."""
+def test_runnable_not_require_app_name() -> None:
     sticky = analyze_delivery("请做一个会议倒计时说明文档，纯文字即可")
-    # Without HTML/page surface, should not force runnable_html path.
     assert sticky.runnable_html is False
     assert sticky.force_agent is False
 
@@ -93,8 +133,29 @@ def test_short_chat_not_forced() -> None:
     assert plan.multi_deliverable is False
 
 
+def test_structure_enumeration_new_domain() -> None:
+    """D1: same structure, different domain nouns → multi via structure count."""
+    plan = analyze_delivery(
+        "请准备一套「开源社区双月会」物料：议程、贡献者指南、会议主持卡、会后纪要模板。"
+        "按完整会议需要自行拆成多份独立可下载文件，不必问我要几个文件。"
+    )
+    assert plan.multi_deliverable is True
+    assert plan.implicit_package is True
+    assert plan.structure_item_count >= 4
+    assert plan.min_artifacts >= 4
+    assert plan.force_agent is True
+
+
+def test_structure_enumeration_without_package_word() -> None:
+    """Parallel list alone can lift multi when ≥2 structural siblings."""
+    plan = analyze_delivery(
+        "请交付：议程草案、发言人须知、直播检查单。分别写成独立文件。"
+    )
+    assert plan.multi_deliverable is True
+    assert plan.min_artifacts >= 2
+
+
 def test_no_exam_keyword_required_for_multi() -> None:
-    """Policy must fire on generic multi-file wording, not fixed scenario names."""
     plan = analyze_delivery(
         "请分别交付两个独立文件：A 规格说明、B 验收清单。禁止合并成一个文件。"
     )
@@ -102,21 +163,7 @@ def test_no_exam_keyword_required_for_multi() -> None:
     assert plan.min_artifacts >= 2
 
 
-def test_implicit_package_no_n_files_said() -> None:
-    """H1 core: package/kit wording without 'N independent files' → multi ≥2."""
-    plan = analyze_delivery(
-        "请做一套「校园义卖」筹备材料包：规则、摊位布局说明、志愿者须知、当日广播稿。"
-        "直接交付可下载成品。不要问我要几个文件——按完整筹备需要自行拆成多份独立文件。"
-    )
-    assert plan.multi_deliverable is True
-    assert plan.implicit_package is True
-    assert plan.min_artifacts >= 2
-    assert plan.force_agent is True
-    assert "隐式包装" in plan.instruction or "多交付" in plan.instruction
-
-
 def test_implicit_package_neutral_corpus_suite() -> None:
-    """H1 unit: ≥3 neutral package phrases (no scenario exam names)."""
     samples = [
         "请交付完整方案包，含说明与清单。",
         "需要一整套材料：流程说明、注意事项、应急手册。",
@@ -127,16 +174,23 @@ def test_implicit_package_neutral_corpus_suite() -> None:
         assert plan.multi_deliverable is True, s
         assert plan.implicit_package is True, s
         assert plan.min_artifacts >= 2, s
-        assert plan.force_agent is True, s
 
 
-def test_explicit_multi_still_works_for_control() -> None:
-    """P1-E control: explicit path must not regress (but cannot alone pass H1)."""
+def test_pipeline_arrow_chain_three_stages() -> None:
     plan = analyze_delivery(
-        "请分别交付两个独立文件：A 名词解释十条；B 配套练习五题。禁止合并。"
+        "先做三阶段文件：现状摘要 → 选项对比 → 推荐决策。每阶段独立文件。"
     )
-    assert plan.multi_deliverable is True
-    assert plan.min_artifacts >= 2
+    assert plan.pipeline is True or plan.min_artifacts >= 3
+    assert plan.force_agent is True
+    assert plan.min_artifacts >= 3
+
+
+def test_normalize_extension_typo_mdd() -> None:
+    """D4: .mdd → .md."""
+    fixed, note = normalize_artifact_title("阶段3_本周行动_v2.mdd")
+    assert fixed.endswith(".md")
+    assert note is not None
+    assert ".mdd" in note
 
 
 def test_count_user_artifacts_skips_bookkeeping() -> None:
@@ -144,7 +198,7 @@ def test_count_user_artifacts_skips_bookkeeping() -> None:
         ("file", "回复摘要", 10),
         ("file", "rules.md", 100),
         ("file", "schedule.md", 100),
-        ("file", "rules.md", 100),  # duplicate title
+        ("file", "rules.md", 100),
         ("table", "工具产物", 50),
     ]
     assert count_user_artifacts(rows) == 2

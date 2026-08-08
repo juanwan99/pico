@@ -519,6 +519,8 @@ def _wants_deliverable_document(prompt: str) -> bool:
 def _resolve_skill_for_prompt(
     raw_prompt: str,
     skill_snapshot: dict[str, Any] | None,
+    *,
+    prior_artifact_titles: list[str] | None = None,
 ) -> tuple[dict[str, Any] | None, Any]:
     """Attach auto skill for engineering delivery without overriding explicit skills.
 
@@ -530,7 +532,9 @@ def _resolve_skill_for_prompt(
     )
     from pico_orchestrator.skill_policy import snapshot_for_skill
 
-    plan = analyze_delivery(raw_prompt)
+    plan = analyze_delivery(
+        raw_prompt, prior_artifact_titles=prior_artifact_titles
+    )
     if skill_snapshot is not None:
         return skill_snapshot, plan
     # Multi-file / pipeline / runnable → engineering package (includes workspace_write).
@@ -546,19 +550,61 @@ def _instruction_with_delivery(
     skill_snapshot: dict[str, Any] | None,
     prompt: str,
     plan: Any | None = None,
+    *,
+    prior_artifact_titles: list[str] | None = None,
 ) -> str:
     """Merge skill catalog instruction with generic engineering-delivery discipline."""
     from pico_orchestrator.delivery_policy import analyze_delivery
     from pico_orchestrator.skill_policy import instruction_for_snapshot
 
     base = instruction_for_snapshot(skill_snapshot)
-    plan = plan if plan is not None else analyze_delivery(prompt)
+    plan = (
+        plan
+        if plan is not None
+        else analyze_delivery(prompt, prior_artifact_titles=prior_artifact_titles)
+    )
     extra = getattr(plan, "instruction", "") or ""
     if not extra or not getattr(plan, "engineering", False):
         return base
     if base:
         return f"{base}\n{extra}"
     return extra
+
+
+async def _prior_artifact_titles_for_principal(principal: Any) -> list[str]:
+    """Session artifact graph for revision binding (D2). Best-effort, never raises."""
+    try:
+        from pico_orchestrator.delivery_policy import is_bookkeeping_title
+        from sqlalchemy import select
+
+        from app.db import ArtifactRow, TaskRow
+
+        factory = session_factory()
+        async with factory() as session:
+            rows = await session.execute(
+                select(ArtifactRow.title)
+                .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+                .where(
+                    TaskRow.school_id == principal.school_id,
+                    TaskRow.membership_id == principal.membership_id,
+                )
+                .order_by(ArtifactRow.created_at.desc())
+                .limit(40)
+            )
+            titles: list[str] = []
+            seen: set[str] = set()
+            for (title,) in rows.all():
+                t = str(title or "").strip()
+                if not t or is_bookkeeping_title(t):
+                    continue
+                key = t.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                titles.append(t)
+            return titles
+    except Exception:  # noqa: BLE001 — policy must not fail chat
+        return []
 
 
 async def _finalize_run(
@@ -573,7 +619,7 @@ async def _finalize_run(
 ) -> None:
     from sqlalchemy import case, select, update
 
-    from app.db import ArtifactRow, ChangeProposalRow, EventRow, _utcnow
+    from app.db import ArtifactRow, ChangeProposalRow, EventRow, TaskRow, _utcnow
     from app.run_service import _json_dict, _skill_s7_payload
 
     terminal = ("succeeded", "failed", "cancelled")
@@ -806,7 +852,22 @@ async def _finalize_run(
         )
 
         prompt_for_plan = user_prompt or run.prompt or ""
-        plan = analyze_delivery(prompt_for_plan)
+        # Prefer principal-scoped prior titles when available on the run's school/membership.
+        prior_titles: list[str] = []
+        try:
+            task = await session.get(TaskRow, run.task_id) if run.task_id else None
+            if task is not None:
+
+                class _P:
+                    school_id = task.school_id
+                    membership_id = task.membership_id
+
+                prior_titles = await _prior_artifact_titles_for_principal(_P())
+        except Exception:  # noqa: BLE001
+            prior_titles = []
+        plan = analyze_delivery(
+            prompt_for_plan, prior_artifact_titles=prior_titles
+        )
         art_rows = await session.execute(
             select(ArtifactRow.kind, ArtifactRow.title, ArtifactRow.byte_size).where(
                 ArtifactRow.run_id == run_id
@@ -838,6 +899,12 @@ async def _finalize_run(
                     "implicit_package": bool(
                         getattr(plan, "implicit_package", False)
                     ),
+                    "structure_item_count": int(
+                        getattr(plan, "structure_item_count", 0) or 0
+                    ),
+                    "prior_artifact_count": int(
+                        getattr(plan, "prior_artifact_count", 0) or 0
+                    ),
                     "ok": (
                         user_art_count >= plan.min_artifacts
                         if plan.min_artifacts > 0
@@ -847,7 +914,8 @@ async def _finalize_run(
                     "note": (
                         "Prefer run.status + delivery.summary + artifact list over "
                         "client stream timeout alone. "
-                        "Scripts: scripts/wait_delivery_summary.py"
+                        "Scripts: scripts/wait_delivery_summary.py. "
+                        "Human lens: open files in app/browser; L0≠人类可用."
                     ),
                 },
                 commit=False,
@@ -973,6 +1041,12 @@ async def _run_and_collect(
                 "implicit_package": bool(
                     getattr(delivery_plan, "implicit_package", False)
                 ),
+                "structure_item_count": int(
+                    getattr(delivery_plan, "structure_item_count", 0) or 0
+                ),
+                "prior_artifact_count": int(
+                    getattr(delivery_plan, "prior_artifact_count", 0) or 0
+                ),
             },
         )
     result = await run_agent_runtime(
@@ -1083,8 +1157,12 @@ async def chat_completions(
             or body.metadata.get("skill_id")
             or body.metadata.get("skillId")
         )
+    # D2: bind revision to session artifact graph (prior deliverables).
+    prior_titles = await _prior_artifact_titles_for_principal(principal)
     # Engineering multi/pipeline/runnable OR classic Office/HTML → force agent tool path.
-    skill_snapshot, delivery_plan = _resolve_skill_for_prompt(raw_prompt, skill_snapshot)
+    skill_snapshot, delivery_plan = _resolve_skill_for_prompt(
+        raw_prompt, skill_snapshot, prior_artifact_titles=prior_titles
+    )
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
     # strip ledger markers from model-visible prompt; project instruction → system
@@ -1467,6 +1545,12 @@ async def chat_completions(
                             "min_artifacts": delivery_plan.min_artifacts,
                             "implicit_package": bool(
                                 getattr(delivery_plan, "implicit_package", False)
+                            ),
+                            "structure_item_count": int(
+                                getattr(delivery_plan, "structure_item_count", 0) or 0
+                            ),
+                            "prior_artifact_count": int(
+                                getattr(delivery_plan, "prior_artifact_count", 0) or 0
                             ),
                         },
                     )
