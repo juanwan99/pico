@@ -64,12 +64,13 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮是工程交付（多产物 / 流水线落盘 / 可运行物 / 修订联动）："
-            "每个交付物或阶段必须独立写入 Artifact（不同 title）；"
+            "本轮是工程交付（多产物 / 隐式方案包 / 流水线落盘 / 可运行物 / 修订联动）："
+            "用户说「方案包/套件/一整套」而未报文件数时，仍须拆成多份独立 Artifact；"
+            "每个交付物或阶段必须独立写入（不同 title，文件名体现用途）；"
             "真 Office/HTML 用 generate_*_document，其它用 workspace_write_file；"
-            "修订时先 list/read 再写更新或版本号新文件；"
-            "HTML 交互页必须 verify_html_document，未跑通项写明未验证；"
-            "禁止聊天长文冒充多文件包。"
+            "修订或软改口（还是改成/算了/优先级调一下）时先 list/read 再写更新或版本号新文件；"
+            "HTML 交互页必须 verify_html_document（L0），L1 未点则写 not_run；"
+            "禁止聊天长文冒充多文件包；禁止源码墙冒充人类可用界面。"
         ),
     ),
     "skill-chat": SkillPolicy(

@@ -835,14 +835,19 @@ async def _finalize_run(
                     "pipeline": plan.pipeline,
                     "revision": plan.revision,
                     "runnable_html": plan.runnable_html,
+                    "implicit_package": bool(
+                        getattr(plan, "implicit_package", False)
+                    ),
                     "ok": (
                         user_art_count >= plan.min_artifacts
                         if plan.min_artifacts > 0
                         else True
                     ),
+                    "human_titles": titles[:40],
                     "note": (
                         "Prefer run.status + delivery.summary + artifact list over "
-                        "client stream timeout alone."
+                        "client stream timeout alone. "
+                        "Scripts: scripts/wait_delivery_summary.py"
                     ),
                 },
                 commit=False,
@@ -965,6 +970,9 @@ async def _run_and_collect(
                 "revision": delivery_plan.revision,
                 "runnable_html": delivery_plan.runnable_html,
                 "min_artifacts": delivery_plan.min_artifacts,
+                "implicit_package": bool(
+                    getattr(delivery_plan, "implicit_package", False)
+                ),
             },
         )
     result = await run_agent_runtime(
@@ -1457,6 +1465,9 @@ async def chat_completions(
                             "revision": delivery_plan.revision,
                             "runnable_html": delivery_plan.runnable_html,
                             "min_artifacts": delivery_plan.min_artifacts,
+                            "implicit_package": bool(
+                                getattr(delivery_plan, "implicit_package", False)
+                            ),
                         },
                     )
                 await emit(
