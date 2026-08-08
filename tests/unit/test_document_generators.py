@@ -43,6 +43,37 @@ def test_html_multi_paragraph_body_for_courseware() -> None:
     assert "<script" not in text.lower()
 
 
+def test_html_full_document_body_not_source_wall() -> None:
+    """H3 human-lens: full HTML page body must stay interactive, not escaped prose."""
+    marker = "POMO_UI_MARK"
+    body = """<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><title>t</title></head>
+<body>
+  <button id="start" type="button">开始</button>
+  <button id="pause" type="button">暂停</button>
+  <button id="reset" type="button">重置</button>
+  <script>
+    document.getElementById('start').onclick = function () {};
+  </script>
+</body></html>"""
+    raw = build_html_document(title="timer.html", marker=marker, body=body)
+    text = raw.decode("utf-8")
+    assert "<button" in text.lower()
+    assert "开始" in text
+    # Must NOT escape the whole document into visible source wall.
+    assert "&lt;button" not in text
+    assert "&lt;script" not in text
+    assert marker in text
+    assert "script-src 'unsafe-inline'" in text
+    # Remote scripts stripped.
+    remote = build_html_document(
+        title="x.html",
+        marker="R1",
+        body='<!DOCTYPE html><html><body><script src="https://evil.example/x.js"></script><button>ok</button></body></html>',
+    ).decode("utf-8")
+    assert "evil.example" not in remote
+
+
 def test_docx_is_real_ooxml_zip() -> None:
     marker = "P270_DOCX_MARK"
     raw = build_docx_document(title="lesson.docx", marker=marker, body="body")

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import html
 import io
+import re
 import zipfile
 from xml.sax.saxutils import escape
 
@@ -39,18 +40,115 @@ def _html_body_paragraphs(body: str | None, *, marker: str) -> str:
     return "\n  ".join(parts)
 
 
+def _looks_like_full_html_document(raw: str) -> bool:
+    """True when agent passed a complete page (not prose to escape into <p>)."""
+    s = (raw or "").lstrip().lower()
+    if not s:
+        return False
+    if s.startswith(("<!doctype html", "<html")):
+        return True
+    # Fragment that is already a self-contained interactive page shell.
+    return "<html" in s[:500] and ("</html>" in s or "<body" in s)
+
+
+def _strip_remote_script_src(doc: str) -> str:
+    """Remove external script src (keep inline scripts for local interactivity)."""
+    return re.sub(
+        r"<script\b[^>]*\bsrc\s*=\s*[\"']https?://[^\"']*[\"'][^>]*>\s*</script>",
+        "<!-- stripped remote script -->",
+        doc,
+        flags=re.IGNORECASE,
+    )
+
+
+def _inject_marker_into_html(doc: str, *, marker: str, title: str) -> str:
+    """Ensure marker is present; do not wrap interactive markup as escaped prose."""
+    safe_marker = html.escape(marker)
+    marker_html = (
+        f'<p data-pico-marker-line="1">标记：'
+        f'<span class="marker" data-pico-marker="{safe_marker}">{safe_marker}</span></p>'
+    )
+    if "data-pico-marker=" not in doc:
+        if re.search(r"<body\b[^>]*>", doc, flags=re.IGNORECASE):
+            doc = re.sub(
+                r"(<body\b[^>]*>)",
+                r"\1\n  " + marker_html,
+                doc,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        else:
+            doc = marker_html + "\n" + doc
+    # Prefer caller title when document title is empty/generic.
+    if title and re.search(r"<title>\s*</title>", doc, flags=re.IGNORECASE):
+        doc = re.sub(
+            r"<title>\s*</title>",
+            f"<title>{html.escape(title)}</title>",
+            doc,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    # Interactive local pages need inline script; keep remote blocked via strip.
+    # If CSP forbids scripts entirely, button handlers die → source-wall UX.
+    csp_interactive = (
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
+        "script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; "
+        "frame-ancestors 'none';"
+    )
+    if re.search(
+        r'http-equiv=["\']Content-Security-Policy["\']', doc, re.IGNORECASE
+    ):
+        doc = re.sub(
+            r'(<meta\b[^>]*http-equiv=["\']Content-Security-Policy["\'][^>]*content=["\'])([^"\']*)(["\'])',
+            rf"\1{csp_interactive}\3",
+            doc,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    elif re.search(r"<head\b", doc, re.IGNORECASE):
+        doc = re.sub(
+            r"(<head\b[^>]*>)",
+            rf'\1\n  <meta http-equiv="Content-Security-Policy" content="{csp_interactive}" />',
+            doc,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    return doc
+
+
 def build_html_document(
     *,
     title: str,
     marker: str,
     body: str | None = None,
 ) -> bytes:
-    """HTML bytes with unique marker, no external scripts/styles."""
+    """HTML bytes with unique marker.
+
+    - Prose body → safe escaped paragraphs inside a shell (no script).
+    - Full HTML document body → kept as interactive page (remote scripts stripped).
+      This prevents H-CODEDUMP where agents pass real UI source only to see it
+      escaped into a source wall.
+    """
     marker = _require_marker(marker)
     safe_title = html.escape((title or "Pico HTML").strip() or "Pico HTML")
     safe_marker = html.escape(marker)
-    body_html = _html_body_paragraphs(body, marker=marker)
-    # CSP meta + no script tags + no external links. Preview also sandboxes.
+    raw_body = (body or "").strip()
+    if len(raw_body) > 50_000:
+        raw_body = raw_body[:50_000]
+
+    if _looks_like_full_html_document(raw_body):
+        doc = _strip_remote_script_src(raw_body)
+        doc = _inject_marker_into_html(
+            doc, marker=marker, title=(title or "").strip() or "Pico HTML"
+        )
+        if "data-pico-marker=" not in doc:
+            # Extremely broken fragment — fall through to shell path.
+            pass
+        else:
+            return doc.encode("utf-8")
+
+    body_html = _html_body_paragraphs(raw_body or None, marker=marker)
+    # Prose shell: CSP blocks scripts (static reading page).
     doc = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
