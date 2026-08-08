@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, ClassVar
 
 from pico_orchestrator.gateway import Principal
 from pico_orchestrator.tools_builtin import build_default_gateway
@@ -12,7 +12,7 @@ from pico_orchestrator.tools_builtin import build_default_gateway
 class _P:
     school_id = "s1"
     membership_id = "m1"
-    scopes = ["ai:run"]
+    scopes: ClassVar[list[str]] = ["ai:run"]
 
 
 class _MemStore:

@@ -12,7 +12,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-
 # Titles that are bookkeeping, not user deliverables.
 _SKIP_TITLES = frozenset({"回复摘要", "工具产物"})
 
