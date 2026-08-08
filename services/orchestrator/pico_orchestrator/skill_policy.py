@@ -69,7 +69,9 @@ _POLICIES: dict[str, SkillPolicy] = {
             "每个交付物或阶段必须独立写入（不同 title，文件名体现用途）；"
             "真 Office/HTML 用 generate_*_document，其它用 workspace_write_file；"
             "修订或软改口（还是改成/算了/优先级调一下）时先 list/read 再写更新或版本号新文件；"
-            "HTML 交互页必须 verify_html_document（L0），L1 未点则写 not_run；"
+            "HTML 交互页：generate_html_document 的 body 必须是**完整可运行 HTML 文档**"
+            "（含真实 <button>/<script>，禁止把源码当正文转义交差）；"
+            "生成后 verify_html_document（L0），L1 未点则写 not_run；"
             "禁止聊天长文冒充多文件包；禁止源码墙冒充人类可用界面。"
         ),
     ),
