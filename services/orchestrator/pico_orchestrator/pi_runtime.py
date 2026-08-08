@@ -40,7 +40,7 @@ You are **Pico**, a task-oriented AI workbench agent (Pi-style minimal harness).
 - Short answers: do not force a file. Delivery tasks: produce real artifact(s).
 - Multi-deliverable / pipeline stages: one tool write per independent file — never a single long chat dump with fake multi-H1 sections.
 - Revisions: list/read prior artifacts, then write updated or versioned files for affected deliverables.
-- Runnable HTML: generate then verify_html_document; report 未验证 honestly.
+- Runnable HTML: generate then verify_html_document (system only); user reply = filenames + download guidance, never L0 field dumps or full HTML source walls.
 - On failure, say so honestly. Never claim success without tool evidence.
 
 ## Skill instruction (if any)
@@ -241,7 +241,22 @@ async def run_pi_agent(
 
             if content:
                 final_parts.append(content)
-                await emit("message.delta", {"text": content})
+                # Only stream the terminal user-facing turn (no tool_calls).
+                # Intermediate "thinking" content stays in model context only —
+                # avoids leaking mid-loop verify jargon into the chat bubble.
+                if not tool_calls:
+                    from pico_orchestrator.human_package import (
+                        sanitize_user_facing_text,
+                        titles_from_tool_results,
+                    )
+
+                    stream_text = sanitize_user_facing_text(
+                        content,
+                        artifact_titles=titles_from_tool_results(
+                            tool_context_results
+                        ),
+                    )
+                    await emit("message.delta", {"text": stream_text or content})
 
             if not tool_calls:
                 await emit(
@@ -475,10 +490,19 @@ def _result(
             artifact_markdown = _classes_artifact(value)
         elif name == "pico_propose_change":
             change_proposal = value
+    from pico_orchestrator.human_package import (
+        sanitize_user_facing_text,
+        titles_from_tool_results,
+    )
     from pico_orchestrator.redact import redact_tenant_text
 
+    raw = "\n".join(p for p in final_parts if p).strip()
+    titles = titles_from_tool_results(tool_results)
+    # Prefer the last assistant turn as the human package base when multi-step.
+    base = (final_parts[-1] if final_parts else raw) or raw
+    human = sanitize_user_facing_text(base, artifact_titles=titles)
     final_text = redact_tenant_text(
-        "\n".join(p for p in final_parts if p).strip(),
+        human,
         school_id=getattr(principal, "school_id", None),
         membership_id=getattr(principal, "membership_id", None),
     )

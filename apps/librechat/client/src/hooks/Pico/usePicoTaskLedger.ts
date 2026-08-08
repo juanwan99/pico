@@ -243,9 +243,11 @@ function statusLabel(
         base = `已完成 ${Math.max(1, Math.round(ms / 1000))}s`;
       }
     }
-    const artN = artifacts.length;
+    const artN = artifacts.filter(
+      (a) => !(a.kind === 'doc' && (a.title || '').trim() === '回复摘要'),
+    ).length;
     if (artN > 0) {
-      base = `${base} · ${artN} 个产物`;
+      base = `${base} · ${artN} 个可下载文件`;
     }
     return runtime ? `${base} · ${runtime}` : base;
   }

@@ -477,12 +477,17 @@ def _build_instruction(
     prior_titles: list[str],
 ) -> str:
     parts: list[str] = [
-        "【工程交付纪律 · 通用】",
-        "- 短答可不建文件；一旦用户要交付物，必须用工具写入 Artifact 账本，禁止只在聊天里交卷。",
+        "【工程交付纪律 · 对工具/系统 · 非用户体检单】",
+        "- 短答可不建文件；一旦用户要交付物，必须用工具写入账本，禁止只在聊天里交卷。",
         "- 真 Office/HTML 用 generate_*_document；其它文本/清单/说明用 workspace_write_file。",
         "- 禁止用代码块改后缀冒充 .html/.docx/.pptx。",
         "- 禁止把多个交付物合并成「一个文件里的多个标题」冒充多产物。",
         "- 扩展名必须与类型一致（.md/.txt/.html/.docx…）；禁止 .mdd 等错误后缀。",
+        (
+            "- **用户主回复=人包**：文件名、用途、打开/下载方式、可改什么；"
+            "禁止向用户输出 artifact_id / L0 / L1 / verification_level / interaction_status / "
+            "source_wall / encoding / 账本术语 / 完整 HTML 源码墙。机审字段只给系统。"
+        ),
     ]
     if multi or min_artifacts >= 2:
         parts.append(
@@ -515,13 +520,15 @@ def _build_instruction(
     if runnable:
         parts.append(
             "- 可运行 HTML：body 传完整可交互文档（真 button/script，禁止源码墙）；"
-            "生成后 verify_html_document（L0）；L1 未点击则写 not_run；"
-            "禁止空话「全部完美/人类可用」。"
+            "生成后必须调用 verify_html_document（结果供系统，勿向用户复读字段名）；"
+            "未做真机点击时不要对用户空口「全部完美/已可交互」。"
+            "交付动作=指引用户在结果区下载文件名并本地打开。"
         )
     if min_artifacts > 0:
         parts.append(
-            f"- 本轮成功条件：账本中本 run 至少 {min_artifacts} 个用户可见产物"
+            f"- 本轮成功条件（系统）：账本中本 run 至少 {min_artifacts} 个用户可见产物"
             "（排除「回复摘要」类记账标题）。"
+            "对用户：列出这些文件名并指向下载，勿念成功条件字段。"
         )
     return "\n".join(parts)
 

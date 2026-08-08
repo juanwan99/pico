@@ -10,7 +10,7 @@ RISK: 红 · FAST: YES
 仓：https://github.com/juanwan99/pico
 文档：docs/RCA-HUMAN-DELIVERY-SURFACE.md
       docs/PLAN-HUMAN-DELIVERY-SURFACE.md
-载体：（Issue）
+载体：https://github.com/juanwan99/pico/issues/350
 
 【锁定句】
 目标：Web 上 WorkBuddy 程度 · 以人为本

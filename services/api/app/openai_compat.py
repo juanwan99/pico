@@ -748,7 +748,11 @@ async def _finalize_run(
                     {
                         "artifact_id": artifact.id,
                         "title": name,
+                        "user_label": name,
                         "kind": "file",
+                        "download_path": (
+                            f"/v1/artifacts/{artifact.id}/content?download=true"
+                        ),
                     },
                     commit=False,
                 )

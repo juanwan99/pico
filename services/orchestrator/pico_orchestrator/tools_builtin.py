@@ -469,11 +469,12 @@ def _workspace_handlers(
         verification_level = "L0_structure"
         interaction_status = "not_run"
         honest = (
-            "L0 结构自检完成（verification_level=L0_structure）。"
-            "L1 浏览器/真机点击未执行（interaction_status=not_run）。"
-            "含 not_verified 的项不得写成「全部完美/已可运行/人类可用」。"
+            "结构自检完成（系统侧）。未做浏览器真机点击。"
+            "对用户：只说明文件名与如何下载打开；勿复读 verification_level/L0/L1 字段。"
+            "不得空口「全部完美/已可运行/人类可用」。"
             if overall != "fail"
-            else "L0 结构自检失败：存在 fail 项，禁止宣称页面已可运行或人类可用。"
+            else "结构自检失败（系统侧）：存在 fail 项；应修复或诚实告知可能无法使用，"
+            "仍勿向用户粘贴机读字段表。"
         )
         return {
             "ok": overall != "fail",
@@ -727,9 +728,11 @@ def build_default_gateway(
         ToolSpec(
             name="verify_html_document",
             description=(
-                "L0 static structure self-check for an HTML artifact (or inline content). "
-                "Returns verification_level=L0_structure, interaction_status=not_run, "
-                "and pass/fail/not_verified per check — never claims browser/human usability. "
+                "System-side static HTML structure self-check (artifact or inline content). "
+                "Returns machine JSON for the control plane (overall/checks). "
+                "Do NOT paste field names (verification_level, interaction_status, L0/L1) "
+                "into the user chat — use results only to decide fix-or-honest-failure. "
+                "Never claims browser/human usability. "
                 "Args: artifact_id? | title? | content?"
             ),
             handler=verify_html,

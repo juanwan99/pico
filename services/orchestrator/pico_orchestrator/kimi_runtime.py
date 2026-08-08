@@ -627,11 +627,20 @@ def _result(
             artifact_markdown = _classes_artifact(value)
         elif name == "pico_propose_change":
             change_proposal = value
+    from pico_orchestrator.human_package import (
+        sanitize_user_facing_text,
+        titles_from_tool_results,
+    )
     from pico_orchestrator.redact import redact_tenant_text
 
     principal = getattr(tool_context, "principal", None) if tool_context else None
+    results = list(tool_context.results) if tool_context else []
+    titles = titles_from_tool_results(results)
+    raw = "".join(final_parts).strip()
+    base = (final_parts[-1] if final_parts else raw) or raw
+    human = sanitize_user_facing_text(base, artifact_titles=titles)
     final_text = redact_tenant_text(
-        "".join(final_parts).strip(),
+        human,
         school_id=getattr(principal, "school_id", None),
         membership_id=getattr(principal, "membership_id", None),
     )

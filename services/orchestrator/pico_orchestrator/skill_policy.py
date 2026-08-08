@@ -45,8 +45,9 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_docx_document / generate_pptx_document（每份唯一 marker）；"
             "其它文本/清单/多产物用 workspace_write_file 各写独立 title；"
             "禁止代码块改后缀冒充 .html/.docx/.pptx；"
-            "多交付时禁止单文件多标题冒充；HTML 可运行页生成后应 verify_html_document；"
-            "完成后说明各文件名与 marker。"
+            "多交付时禁止单文件多标题冒充；HTML 可运行页生成后应 verify_html_document"
+            "（校验供系统；勿向用户复读 verification_level 等字段）；"
+            "用户回复只给文件名与下载/打开指引，禁止贴全量源码或 Artifact ID。"
         ),
     ),
     "skill-engineering-delivery": SkillPolicy(
@@ -71,8 +72,8 @@ _POLICIES: dict[str, SkillPolicy] = {
             "会话改口（推翻/收窄/改成保守等）时先 list/read 已交付产物再写更新或版本号新文件；"
             "HTML 交互页：generate_html_document 的 body 必须是**完整可运行 HTML 文档**"
             "（含真实 <button>/<script>，禁止把源码当正文转义交差）；"
-            "生成后 verify_html_document（L0），L1 未点则写 not_run；"
-            "扩展名与类型一致；禁止聊天长文冒充多文件包；禁止源码墙冒充人类可用界面。"
+            "生成后 verify_html_document（系统侧）；用户侧只报文件名并指引结果区下载；"
+            "扩展名与类型一致；禁止聊天长文/全量 HTML 源码墙冒充交付。"
         ),
     ),
     "skill-chat": SkillPolicy(

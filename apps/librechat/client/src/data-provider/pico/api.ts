@@ -8,12 +8,16 @@ export type PicoArtifact = {
   id: string;
   kind: string;
   title: string;
+  /** Human-facing label (filename); never prefer UUID in UI. */
+  user_label?: string;
   /** UTF-8 text only; binary artifacts omit this and must be fetched via content API. */
   inline?: string | null;
   run_id?: string | null;
   content_encoding?: 'utf8' | 'base64' | string;
   byte_size?: number;
   content_sha256?: string;
+  /** Relative download path on Pico API (proxied via /api/pico). */
+  download_path?: string;
 };
 
 export type PicoTaskLatestRun = {

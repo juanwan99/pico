@@ -126,11 +126,15 @@ class LedgerArtifactStore:
                     {
                         "artifact_id": artifact.id,
                         "title": artifact.title,
+                        "user_label": artifact.title,
                         "kind": artifact.kind,
                         "source": "workspace_write_file",
                         "content_encoding": encoding,
                         "byte_size": byte_size,
                         "content_sha256": digest,
+                        "download_path": (
+                            f"/v1/artifacts/{artifact.id}/content?download=true"
+                        ),
                     },
                     commit=False,
                 )
@@ -140,11 +144,13 @@ class LedgerArtifactStore:
                 "task_id": task.id,
                 "run_id": artifact.run_id,
                 "title": artifact.title,
+                "user_label": artifact.title,
                 "kind": artifact.kind,
                 "size": byte_size,
                 "byte_size": byte_size,
                 "content_encoding": encoding,
                 "content_sha256": digest,
+                "download_path": f"/v1/artifacts/{artifact.id}/content?download=true",
             }
 
     def _owned_artifacts(self, principal: Principal):
