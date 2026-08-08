@@ -262,32 +262,50 @@ export default function ResultPanel({
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
     if (picoArtifacts?.length) {
-      return picoArtifacts.map((artifact) => {
-        const name = artifact.title?.trim() || UNNAMED_ARTIFACT;
-        const kindLabel = artifact.kind?.trim() || UNKNOWN_KIND;
-        const encoding = (artifact.content_encoding || 'utf8').toLowerCase();
-        // Binary (base64) must never be treated as UTF-8 text in the panel.
-        const body =
-          encoding === 'utf8' && typeof artifact.inline === 'string' ? artifact.inline : undefined;
-        const byteSize =
-          typeof artifact.byte_size === 'number' && artifact.byte_size >= 0
-            ? artifact.byte_size
-            : body !== undefined
-              ? inlineArtifactBlob(body, name).size
+      const mapped = picoArtifacts
+        .filter((artifact) => {
+          // Bookkeeping "回复摘要" is not a user download — hide from first-class chips.
+          const title = (artifact.title || artifact.user_label || '').trim();
+          if (artifact.kind === 'doc' && title === '回复摘要') {
+            return false;
+          }
+          return true;
+        })
+        .map((artifact) => {
+          const name =
+            artifact.user_label?.trim() || artifact.title?.trim() || UNNAMED_ARTIFACT;
+          const kindLabel = artifact.kind?.trim() || UNKNOWN_KIND;
+          const encoding = (artifact.content_encoding || 'utf8').toLowerCase();
+          // Binary (base64) must never be treated as UTF-8 text in the panel.
+          const body =
+            encoding === 'utf8' && typeof artifact.inline === 'string'
+              ? artifact.inline
               : undefined;
-        return {
-          id: artifact.id,
-          name,
-          kindLabel,
-          sizeLabel: formatSize(byteSize) || '—',
-          kind: artifactGlyphKind(name, kindLabel),
-          url: undefined as string | undefined,
-          body,
-          picoArtifact: true,
-          contentEncoding: encoding,
-          byteSize,
-          contentSha256: artifact.content_sha256,
-        };
+          const byteSize =
+            typeof artifact.byte_size === 'number' && artifact.byte_size >= 0
+              ? artifact.byte_size
+              : body !== undefined
+                ? inlineArtifactBlob(body, name).size
+                : undefined;
+          return {
+            id: artifact.id,
+            name,
+            kindLabel,
+            sizeLabel: formatSize(byteSize) || '—',
+            kind: artifactGlyphKind(name, kindLabel),
+            url: undefined as string | undefined,
+            body,
+            picoArtifact: true,
+            contentEncoding: encoding,
+            byteSize,
+            contentSha256: artifact.content_sha256,
+          };
+        });
+      // Filename-first: real files before misc.
+      return mapped.sort((a, b) => {
+        const rank = (x: ArtifactItem) =>
+          x.kind === 'html' ? 0 : x.kind === 'txt' ? 1 : x.kind === 'file' ? 2 : 3;
+        return rank(a) - rank(b) || a.name.localeCompare(b.name, 'zh');
       });
     }
     return messageArts;
@@ -701,7 +719,9 @@ export default function ResultPanel({
 
             {artifacts.length === 0 ? (
               <div className="flex min-h-[240px] flex-col px-1 pt-2">
-                <p className="mb-2 text-[12px] font-medium tracking-normal text-[#8c8c8c]">产物</p>
+                <p className="mb-2 text-[12px] font-medium tracking-normal text-[#8c8c8c]">
+                  可下载文件
+                </p>
                 {runStatusLabel?.includes('等待') ? (
                   <div className="flex flex-1 flex-col justify-center gap-3 rounded-xl border border-black/[0.06] bg-[#fafafa] px-5 py-10 dark:border-border-light dark:bg-surface-tertiary">
                     <RunLoadingIndicator
@@ -733,11 +753,20 @@ export default function ResultPanel({
                 )}
               </div>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-2" data-testid="human-delivery-chips">
+                <li className="list-none px-0.5 pb-1">
+                  <p className="text-[12px] font-semibold text-[#1a1a1a] dark:text-text-primary">
+                    可下载文件（{artifacts.length}）
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-[#8c8c8c]">
+                    文件名可点「下载」到本机；HTML 用浏览器打开。不以 ID 为主标签。
+                  </p>
+                </li>
                 {artifacts.map((a) => (
                   <li
                     key={a.id}
                     className="flex items-center gap-2 rounded-lg border border-black/[0.06] bg-white px-2.5 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-border-light dark:bg-surface-secondary"
+                    data-testid="human-delivery-chip"
                   >
                     <FileGlyph kind={a.kind} />
                     <div className="min-w-0 flex-1">

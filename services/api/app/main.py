@@ -752,11 +752,13 @@ async def get_task(
                 "id": a.id,
                 "kind": a.kind,
                 "title": a.title,
+                "user_label": a.title,
                 "inline": inline_value,
                 "run_id": a.run_id,
                 "content_encoding": encoding,
                 "byte_size": byte_size,
                 "content_sha256": sha,
+                "download_path": f"/v1/artifacts/{a.id}/content?download=true",
             }
         )
     return {
