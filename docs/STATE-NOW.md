@@ -1,103 +1,59 @@
-# Pico 当前真源快照（总管 · 正本清源）
-
-> **真源冻结：[TRUTH-FREEZE.md](./TRUTH-FREEZE.md) v1.1。**  
-> **产品目标权威：[HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md)。**  
-> **错误记忆黑名单：[MEMORY-RESET.md](./MEMORY-RESET.md)。**  
-> **派卡体例：[TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（CLAIM/BASE/PRODUCT）。**  
-> **组织法：[STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md) — 单窗 SOLO。**  
-> **编排默认 = Pi；模型默认 = DeepSeek。**  
-> **Kimi Agent = 遗产回滚，非产品唯一目标。**  
-> **`run_agent_loop` = 已删；从未是目标。**
+# STATE-NOW · Pico（本窗真源）
 
 ```text
-DOC: docs/STATE-NOW.md
-STATUS: BINDING snapshot
-UPDATED: 2026-08-07 (P2 closed · tip 14615ba · CLAIM-WB still NO)
-TRUTH_ORDER: GitHub 证据 > HANDOFF-WB-PI > TRUTH-FREEZE > MEMORY-RESET > 本页 > 聊天
+DATE: 2026-08-08
+仓: juanwan99/pico ONLY
+窗: SOLO / 总管·审查（本对话）
+CLAIM-WB-DEGREE-WEB: NO
 ```
 
----
+## 锁定句（不变）
 
-## 0. 产品与目标
+```text
+目标：Web 上 WorkBuddy 程度（六条）
+方案：Pico 整车 + 默认编排核 Pi + DeepSeek
+不做：Dify 门脸终局 · 场景卷对标 · 双核并列真源
+验收：人以公网 UI 拿得到、打得开为准（非机审绿）
+```
 
-| 层 | 内容 |
+## 本窗职责边界（BINDING）
+
+| 做 | 不做 |
 |----|------|
-| 产品 | 任务型 AI 工作台（Web）· WorkBuddy 程度六条 |
-| 编排 | **默认唯一：Pi**（`run_pi_agent`） |
-| 模型 | **DeepSeek HTTPS 为主** |
-| 实现 | 账本 Event；allowlist gateway；`legacy_loop_unavailable=true` |
-| 遗产 | `PICO_LEGACY_KIMI_*` 可选回滚 · 非主叙事 |
-| 禁 | 双核真源 · Dify 门脸终局 · 场景卷对标 · loop 回流 · edu-cloud |
+| **仅** `juanwan99/pico` | **禁止** edu-core / aivia 当本窗任务 |
+| 人本交付面、公网 tip、任务卡派发/审查 | 流转 UI 美化、教务批准 500 等（他仓他窗） |
+| 派发条体例可 **参考** 他仓格式 | 不得把他仓 Issue 当本窗派发对象 |
 
-**用户成功：** 登录 → 开放派活 → 过程可见 → 产物 → 能停/找回/再试 → 状态诚实。
-
----
-
-## 1. 执行编制（BINDING · 单窗）
-
-| 角色 | 职责 |
-|------|------|
-| **执行窗 SOLO（唯一默认）** | 端到端：写码 → CI → 合（权限内）→ 装 tip → health → 登录点验 → 回写 Issue |
-| **业主** | 方向 / 阶段成果包 ACCEPT·REVISE |
-| **总管** | 阶段计划 · 禁区 · 阶段末核真源；**不**日常多窗碎派 |
-
-**旧「窗1/2/3/4」= 职责别名，不是并行编制。** 详见 [MEMORY-RESET.md](./MEMORY-RESET.md) §1.2。  
-技术步骤仍可记：改 → 合 → 装 → 验（[FAST-PATH.md](./FAST-PATH.md)），**由同一窗串行**。
-
----
-
-## 2. 切换与 health（Pi 包）
+## 工程状态（代码）
 
 | 项 | 值 |
 |----|-----|
-| 默认 runtime | `pi-agent` |
-| env | `PICO_PI_AGENT_RUNTIME=1` · `PICO_MODEL_PROVIDER=deepseek` · `DEEPSEEK_*` |
-| health | `default_runtime` / `pi_agent_*` / `legacy_loop_unavailable=true` / `mcp_allowlist_*` |
-| 旧字段 | `kimi_agent_*` 可观测，非默认 |
+| main tip | `5a900f69906630c8ad3843b371909eecc998ac4e`（#351 人包+下载） |
+| HDS1–H5 | 已合 main |
+| HDS6 执行 #352 | 回执已填 · **请求 Ready** · 产品 PASS 未签 |
+| 审查 #353 | **当前活动卡** · 待 CLAIM 审完 |
+| CLAIM-WB | **NO** |
 
----
-
-## 3. tip / 卡
-
-| 面 | SHA / 链接 | 含义 |
-|----|------------|------|
-| **main / 生产 tip** | **`14615ba2c9fbbebfd3d8dd16a24188f10f310f4d`** | #315 · #313 DEPLOYED+TEST PASS |
-| 历史 GLOBAL PASS tip | `38067b824c2e5fd5e445d7f33a20089c8f13360d` | Kimi 时代 · **不得**冒充六条 |
-| P0 换核 | [#310](https://github.com/juanwan99/pico/issues/310) · T-P0-PI-CUTOVER | **工程闭环** · Pi+DeepSeek |
-| P1 表面 | [#311](https://github.com/juanwan99/pico/issues/311) · T-P1-WB-SURFACE | **工程闭环** · 产物/Skill/同会话/完成态 |
-| P2 加深 | [#313](https://github.com/juanwan99/pico/issues/313) · T-P2-EXTEND | **工程闭环** · KB 试点 + MCP 桥 2 + 手感 |
-
----
-
-## 4. 错误记忆速查（摘要 · 全文见 MEMORY-RESET）
+## 主线进度
 
 ```text
-KILL:
-  - 多窗日常派工（1部署+2写+4验 必须并行）
-  - 唯一目标=Kimi · keep-kimi 主叙事
-  - 禁 Pi/DeepSeek
-  - Dify 门脸终局 · aivia 场景卷=WB 完成
-  - 旧 GLOBAL PASS = CLAIM-WB-DEGREE-WEB
-  - 「MCP 桥」= 完整 MCP 协议栈 / 任意市场
-  - 自 PASS · 密钥进 Issue · 写 edu-cloud
-KEEP:
-  - 单窗 SOLO · Pi + DeepSeek · Pico 账本唯一
-  - 开放域当场题 · exact-SHA 部署 · 诚实失败
-  - KB = 账本全文试点（非向量内核）
+1) Kimi→Pi + DeepSeek     工程完成
+2) 公网默认路径             基本完成
+3) 人本交付 RCA + HDS1–H5  代码合入
+4) HDS6 公网 UI 下载验收   执行完成 · 审查未结
+5) WorkBuddy 六条 CLAIM    未签
 ```
 
----
-
-## 5. 推进
+## 当前唯一活动卡
 
 ```text
-MODE: SOLO single-window
-tip: 14615ba2c9fbbebfd3d8dd16a24188f10f310f4d
-P0: CLOSED · #310
-P1: CLOSED · #311
-P2: CLOSED 工程门 · #313 · KB+MCP桥+手感 · 不签六条
-CLAIM-WB-DEGREE-WEB: NO  ← 需专卡取证才可议 YES
-下一刀: CLAIM-WB-DEGREE-WEB 取证卡 或 P3 自动化（另开）
+审查卡 · T-HUMAN-DELIVERY-HDS6-REVIEW
+细卡: https://github.com/juanwan99/pico/issues/353
+对象: #352 执行回执
 ```
 
-product PASS (WB 六条): **NOT CLAIMED** · orchestration default: **pi-agent** · dispatch: **SOLO**
+## 已知余量（审查后另卡，不塞进审查）
+
+- 多产物 fail-closed 导致 run 顶栏红、但单 HTML 可下（#352 诚实）  
+- 主气泡仍可能见工具过程行  
+- 截图多在执行窗本地路径  
