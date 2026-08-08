@@ -45,12 +45,10 @@ def _looks_like_full_html_document(raw: str) -> bool:
     s = (raw or "").lstrip().lower()
     if not s:
         return False
-    if s.startswith("<!doctype html") or s.startswith("<html"):
+    if s.startswith(("<!doctype html", "<html")):
         return True
     # Fragment that is already a self-contained interactive page shell.
-    if "<html" in s[:500] and ("</html>" in s or "<body" in s):
-        return True
-    return False
+    return "<html" in s[:500] and ("</html>" in s or "<body" in s)
 
 
 def _strip_remote_script_src(doc: str) -> str:
@@ -97,7 +95,9 @@ def _inject_marker_into_html(doc: str, *, marker: str, title: str) -> str:
         "script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; "
         "frame-ancestors 'none';"
     )
-    if re.search(r'http-equiv=["\']Content-Security-Policy["\']', doc, re.I):
+    if re.search(
+        r'http-equiv=["\']Content-Security-Policy["\']', doc, re.IGNORECASE
+    ):
         doc = re.sub(
             r'(<meta\b[^>]*http-equiv=["\']Content-Security-Policy["\'][^>]*content=["\'])([^"\']*)(["\'])',
             rf"\1{csp_interactive}\3",
@@ -105,7 +105,7 @@ def _inject_marker_into_html(doc: str, *, marker: str, title: str) -> str:
             count=1,
             flags=re.IGNORECASE,
         )
-    elif re.search(r"<head\b", doc, re.I):
+    elif re.search(r"<head\b", doc, re.IGNORECASE):
         doc = re.sub(
             r"(<head\b[^>]*>)",
             rf'\1\n  <meta http-equiv="Content-Security-Policy" content="{csp_interactive}" />',
