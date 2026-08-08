@@ -458,11 +458,15 @@ def _workspace_handlers(
             overall = "pass"
         else:
             overall = "partial"
+        # H3: layered verification — L0 structure only; L1 interaction never claimed here.
+        verification_level = "L0_structure"
+        interaction_status = "not_run"
         honest = (
-            "结构自检完成（未执行浏览器/真机点击）。"
-            "含 not_verified 的项不得写成「全部完美/已可运行」。"
+            "L0 结构自检完成（verification_level=L0_structure）。"
+            "L1 浏览器/真机点击未执行（interaction_status=not_run）。"
+            "含 not_verified 的项不得写成「全部完美/已可运行/人类可用」。"
             if overall != "fail"
-            else "结构自检失败：存在 fail 项，禁止宣称页面已可运行。"
+            else "L0 结构自检失败：存在 fail 项，禁止宣称页面已可运行或人类可用。"
         )
         return {
             "ok": overall != "fail",
@@ -470,6 +474,21 @@ def _workspace_handlers(
             "source": source,
             "checks": checks,
             "honest_note": honest,
+            "verification_level": verification_level,
+            "interaction_status": interaction_status,
+            "levels": {
+                "L0": {
+                    "name": "structure",
+                    "status": overall,
+                    "ran": True,
+                },
+                "L1": {
+                    "name": "browser_interaction",
+                    "status": "not_run",
+                    "ran": False,
+                    "note": "本工具不做无头浏览器；交互须人类点击或另报 L1 证据",
+                },
+            },
             **art_meta,
         }
 
@@ -701,8 +720,9 @@ def build_default_gateway(
         ToolSpec(
             name="verify_html_document",
             description=(
-                "Static structure self-check for an HTML artifact (or inline content). "
-                "Returns pass/fail/not_verified per check — never claims browser runtime. "
+                "L0 static structure self-check for an HTML artifact (or inline content). "
+                "Returns verification_level=L0_structure, interaction_status=not_run, "
+                "and pass/fail/not_verified per check — never claims browser/human usability. "
                 "Args: artifact_id? | title? | content?"
             ),
             handler=verify_html,
