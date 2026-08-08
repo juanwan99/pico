@@ -257,9 +257,7 @@ def _is_structure_segment(chunk: str) -> bool:
     if s.count("，") + s.count(",") >= 2:
         return False
     # Must contain a letter/digit/CJK char.
-    if not re.search(r"[\w\u4e00-\u9fff]", s, re.UNICODE):
-        return False
-    return True
+    return bool(re.search(r"[\w\u4e00-\u9fff]", s, re.UNICODE))
 
 
 def _count_parallel_list_items(text: str) -> int:
@@ -283,9 +281,7 @@ def _count_parallel_list_items(text: str) -> int:
                 tail = text.split(sep, 1)[1]
                 body = re.split(r"[。！？\n]", tail, maxsplit=1)[0]
                 break
-    elif has_dunhao or has_arrow:
-        body = text
-    elif has_cn_join:
+    elif has_dunhao or has_arrow or has_cn_join:
         body = text
     else:
         # English/Chinese comma alone in free prose is too noisy — skip.
@@ -405,14 +401,14 @@ def analyze_delivery(
             re.IGNORECASE,
         )
     )
-    revision_targets_files = False
-    if wants_revision:
-        if prior_n >= 1 and (change_mind or hard_revision):
-            revision_targets_files = True
-        elif hard_revision and mentions_deliverable:
-            revision_targets_files = True
-        elif change_mind and mentions_deliverable:
-            revision_targets_files = True
+    revision_targets_files = bool(
+        wants_revision
+        and (
+            (prior_n >= 1 and (change_mind or hard_revision))
+            or (hard_revision and mentions_deliverable)
+            or (change_mind and mentions_deliverable)
+        )
+    )
 
     # Single-stage revision must not re-floor pipeline min.
     pipeline_setup = bool(

@@ -574,10 +574,10 @@ def _instruction_with_delivery(
 async def _prior_artifact_titles_for_principal(principal: Any) -> list[str]:
     """Session artifact graph for revision binding (D2). Best-effort, never raises."""
     try:
+        from pico_orchestrator.delivery_policy import is_bookkeeping_title
         from sqlalchemy import select
 
         from app.db import ArtifactRow, TaskRow
-        from pico_orchestrator.delivery_policy import is_bookkeeping_title
 
         factory = session_factory()
         async with factory() as session:
@@ -619,7 +619,7 @@ async def _finalize_run(
 ) -> None:
     from sqlalchemy import case, select, update
 
-    from app.db import ArtifactRow, ChangeProposalRow, EventRow, _utcnow
+    from app.db import ArtifactRow, ChangeProposalRow, EventRow, TaskRow, _utcnow
     from app.run_service import _json_dict, _skill_s7_payload
 
     terminal = ("succeeded", "failed", "cancelled")
@@ -855,8 +855,6 @@ async def _finalize_run(
         # Prefer principal-scoped prior titles when available on the run's school/membership.
         prior_titles: list[str] = []
         try:
-            from app.db import TaskRow
-
             task = await session.get(TaskRow, run.task_id) if run.task_id else None
             if task is not None:
 
