@@ -287,7 +287,9 @@ def _count_parallel_list_items(text: str) -> int:
         # English/Chinese comma alone in free prose is too noisy — skip.
         return 0
 
-    parts = re.split(r"[、,，;；/|]|→|->|\s+与\s+|\s+和\s+|\s+及\s+", body)
+    # Note: bare "/" is NOT a list separator — UI action chains like
+    # 「添加/勾选/删除」must not inflate multi-file min_artifacts.
+    parts = re.split(r"[、,，;；|]|→|->|\s+与\s+|\s+和\s+|\s+及\s+", body)
     hits = [p.strip() for p in parts if _is_structure_segment(p)]
     # Drop segments that look like imperative prose / media meta, not list labels.
     clean: list[str] = []
