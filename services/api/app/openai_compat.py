@@ -516,6 +516,51 @@ def _wants_deliverable_document(prompt: str) -> bool:
     )
 
 
+def _resolve_skill_for_prompt(
+    raw_prompt: str,
+    skill_snapshot: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, Any]:
+    """Attach auto skill for engineering delivery without overriding explicit skills.
+
+    Returns (skill_snapshot, DeliveryPlan).
+    """
+    from pico_orchestrator.delivery_policy import (
+        ENGINEERING_SKILL_ID,
+        analyze_delivery,
+    )
+    from pico_orchestrator.skill_policy import snapshot_for_skill
+
+    plan = analyze_delivery(raw_prompt)
+    if skill_snapshot is not None:
+        return skill_snapshot, plan
+    # Multi-file / pipeline / runnable → engineering package (includes workspace_write).
+    if plan.force_agent:
+        return snapshot_for_skill(ENGINEERING_SKILL_ID), plan
+    # Single Office/HTML deliverable → classic deliverable skill.
+    if _wants_deliverable_document(raw_prompt):
+        return snapshot_for_skill("skill-deliverable"), plan
+    return None, plan
+
+
+def _instruction_with_delivery(
+    skill_snapshot: dict[str, Any] | None,
+    prompt: str,
+    plan: Any | None = None,
+) -> str:
+    """Merge skill catalog instruction with generic engineering-delivery discipline."""
+    from pico_orchestrator.delivery_policy import analyze_delivery
+    from pico_orchestrator.skill_policy import instruction_for_snapshot
+
+    base = instruction_for_snapshot(skill_snapshot)
+    plan = plan if plan is not None else analyze_delivery(prompt)
+    extra = getattr(plan, "instruction", "") or ""
+    if not extra or not getattr(plan, "engineering", False):
+        return base
+    if base:
+        return f"{base}\n{extra}"
+    return extra
+
+
 async def _finalize_run(
     run_id: str,
     *,
@@ -753,24 +798,76 @@ async def _finalize_run(
                             commit=False,
                         )
 
-        # S2.2 fail-closed: deliverable skill without a real HTML/Word/PPT artifact
-        # must not report success (blocks bare-model / hallucinated tool-call green).
-        if (
-            isinstance(skill_snapshot, dict)
-            and skill_snapshot.get("name") == "skill.deliverable"
-            and status == "succeeded"
-            and _wants_deliverable_document(user_prompt or run.prompt or "")
-        ):
-            art_rows = await session.execute(
-                select(ArtifactRow.kind, ArtifactRow.title, ArtifactRow.byte_size).where(
-                    ArtifactRow.run_id == run_id
-                )
+        # Fail-closed delivery: real artifacts required when intent demands them.
+        from pico_orchestrator.delivery_policy import (
+            analyze_delivery,
+            count_user_artifacts,
+            is_bookkeeping_title,
+        )
+
+        prompt_for_plan = user_prompt or run.prompt or ""
+        plan = analyze_delivery(prompt_for_plan)
+        art_rows = await session.execute(
+            select(ArtifactRow.kind, ArtifactRow.title, ArtifactRow.byte_size).where(
+                ArtifactRow.run_id == run_id
             )
+        )
+        art_list = list(art_rows.all())
+        titles = [
+            str(title or "")
+            for _kind, title, _bs in art_list
+            if title and not is_bookkeeping_title(str(title))
+        ]
+        user_art_count = count_user_artifacts(art_list)
+
+        # G5 observability: machine-readable delivery summary (always, when we have a plan).
+        if status in ("succeeded", "failed", "cancelled"):
+            await append_event(
+                session,
+                run_id,
+                "delivery.summary",
+                {
+                    "status": status,
+                    "artifact_count": user_art_count,
+                    "min_required": plan.min_artifacts,
+                    "titles": titles[:40],
+                    "multi_deliverable": plan.multi_deliverable,
+                    "pipeline": plan.pipeline,
+                    "revision": plan.revision,
+                    "runnable_html": plan.runnable_html,
+                    "ok": (
+                        user_art_count >= plan.min_artifacts
+                        if plan.min_artifacts > 0
+                        else True
+                    ),
+                    "note": (
+                        "Prefer run.status + delivery.summary + artifact list over "
+                        "client stream timeout alone."
+                    ),
+                },
+                commit=False,
+            )
+
+        # S2.2: classic Office/HTML deliverable skill without a real protected file.
+        skill_name = (
+            skill_snapshot.get("name") if isinstance(skill_snapshot, dict) else None
+        )
+        if (
+            skill_name in {"skill.deliverable", "skill.engineering_delivery"}
+            and status == "succeeded"
+            and (
+                _wants_deliverable_document(prompt_for_plan)
+                or plan.runnable_html
+            )
+            and plan.min_artifacts <= 1
+            and not plan.multi_deliverable
+            and not plan.pipeline
+        ):
             has_real_file = False
-            for kind, title, byte_size in art_rows.all():
+            for kind, title, byte_size in art_list:
                 title_s = str(title or "")
                 kind_s = str(kind or "").lower()
-                if title_s in {"回复摘要"}:
+                if is_bookkeeping_title(title_s):
                     continue
                 if kind_s in {"docx", "html", "htm", "pptx"}:
                     has_real_file = True
@@ -799,6 +896,30 @@ async def _finalize_run(
                     },
                     commit=False,
                 )
+                status = "failed"
+
+        # G1/G2/G4: multi-artifact / pipeline / revision min count fail-closed.
+        if status == "succeeded" and plan.min_artifacts > 0:
+            if user_art_count < plan.min_artifacts:
+                run.status = "failed"
+                run.error = (
+                    f"工程交付未满足多产物要求：需要至少 {plan.min_artifacts} 个独立文件，"
+                    f"本轮仅 {user_art_count} 个。"
+                    "请分文件写入（禁止单长文多标题冒充），再跑一次。"
+                )
+                await append_event(
+                    session,
+                    run_id,
+                    "run.status",
+                    {
+                        "status": "failed",
+                        "reason": "delivery_min_artifacts",
+                        "min_required": plan.min_artifacts,
+                        "artifact_count": user_art_count,
+                        "runtime": "fail-closed",
+                    },
+                    commit=False,
+                )
 
         await session.commit()
 
@@ -811,9 +932,9 @@ async def _run_and_collect(
     run_id: str,
     history: list[dict[str, Any]] | None = None,
     skill_snapshot: dict[str, Any] | None = None,
+    delivery_plan: Any | None = None,
 ) -> Any:
     from pico_orchestrator.runtime import run_agent_runtime
-    from pico_orchestrator.skill_policy import instruction_for_snapshot
 
     from app.artifact_store import LedgerArtifactStore
 
@@ -830,10 +951,23 @@ async def _run_and_collect(
 
     caps = settings.delivery_run_caps(
         allowed_tools=list(skill_snapshot.get("tools") or []) if skill_snapshot else None,
-        skill_instruction=instruction_for_snapshot(skill_snapshot),
+        skill_instruction=_instruction_with_delivery(
+            skill_snapshot, prompt, delivery_plan
+        ),
     )
     if skill_snapshot:
         await emit("skill.snapshot", skill_snapshot)
+    if delivery_plan is not None and getattr(delivery_plan, "engineering", False):
+        await emit(
+            "delivery.plan",
+            {
+                "multi_deliverable": delivery_plan.multi_deliverable,
+                "pipeline": delivery_plan.pipeline,
+                "revision": delivery_plan.revision,
+                "runnable_html": delivery_plan.runnable_html,
+                "min_artifacts": delivery_plan.min_artifacts,
+            },
+        )
     result = await run_agent_runtime(
         use_pi_agent=settings.pico_pi_agent_runtime,
         pi_agent_canary_principals=settings.pi_agent_canary_principal_set,
@@ -931,7 +1065,6 @@ async def chat_completions(
     enforce_scope(principal, "ai:run")
     raw_prompt_with_skill = _last_user_prompt(body.messages)
     from pico_orchestrator.skill_policy import (
-        instruction_for_snapshot,
         snapshot_for_skill,
         snapshot_from_prompt,
     )
@@ -943,9 +1076,8 @@ async def chat_completions(
             or body.metadata.get("skill_id")
             or body.metadata.get("skillId")
         )
-    # Teacher NL asking for HTML/Word/PPT → force tool path (generate_*), not direct chat.
-    if not skill_snapshot and _wants_deliverable_document(raw_prompt):
-        skill_snapshot = snapshot_for_skill("skill-deliverable")
+    # Engineering multi/pipeline/runnable OR classic Office/HTML → force agent tool path.
+    skill_snapshot, delivery_plan = _resolve_skill_for_prompt(raw_prompt, skill_snapshot)
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
     # strip ledger markers from model-visible prompt; project instruction → system
@@ -1050,8 +1182,11 @@ async def chat_completions(
             )
             if project_instruction:
                 system = system + "\n【项目约束】" + project_instruction
-            if skill_snapshot:
-                system = system + "\n" + instruction_for_snapshot(skill_snapshot)
+            delivery_instr = _instruction_with_delivery(
+                skill_snapshot, prompt, delivery_plan
+            )
+            if delivery_instr:
+                system = system + "\n" + delivery_instr
             parts: list[str] = []
             try:
                 async for piece in stream_chat(
@@ -1076,6 +1211,7 @@ async def chat_completions(
                 run_id=run_id,
                 history=history,
                 skill_snapshot=skill_snapshot,
+                delivery_plan=delivery_plan,
             )
             text = result.final_text or result.error or "(empty)"
             await _finalize_run(
@@ -1145,8 +1281,11 @@ async def chat_completions(
             )
             if project_instruction:
                 system = system + "\n【项目约束】" + project_instruction
-            if skill_snapshot:
-                system = system + "\n" + instruction_for_snapshot(skill_snapshot)
+            delivery_instr = _instruction_with_delivery(
+                skill_snapshot, prompt, delivery_plan
+            )
+            if delivery_instr:
+                system = system + "\n" + delivery_instr
             parts: list[str] = []
             finalized = False
             try:
@@ -1289,22 +1428,38 @@ async def chat_completions(
                 from app.artifact_store import LedgerArtifactStore
 
                 # Detach-on mode uses durable wall so leave-and-return jobs can exceed 900s.
+                skill_instr = _instruction_with_delivery(
+                    skill_snapshot, prompt, delivery_plan
+                )
                 if settings.pico_run_detach_on_disconnect:
                     caps = settings.durable_run_caps(
                         allowed_tools=(
                             list(skill_snapshot.get("tools") or []) if skill_snapshot else None
                         ),
-                        skill_instruction=instruction_for_snapshot(skill_snapshot),
+                        skill_instruction=skill_instr,
                     )
                 else:
                     caps = settings.delivery_run_caps(
                         allowed_tools=(
                             list(skill_snapshot.get("tools") or []) if skill_snapshot else None
                         ),
-                        skill_instruction=instruction_for_snapshot(skill_snapshot),
+                        skill_instruction=skill_instr,
                     )
                 if skill_snapshot:
                     await emit("skill.snapshot", skill_snapshot)
+                if delivery_plan is not None and getattr(
+                    delivery_plan, "engineering", False
+                ):
+                    await emit(
+                        "delivery.plan",
+                        {
+                            "multi_deliverable": delivery_plan.multi_deliverable,
+                            "pipeline": delivery_plan.pipeline,
+                            "revision": delivery_plan.revision,
+                            "runnable_html": delivery_plan.runnable_html,
+                            "min_artifacts": delivery_plan.min_artifacts,
+                        },
+                    )
                 await emit(
                     "run.durable",
                     {

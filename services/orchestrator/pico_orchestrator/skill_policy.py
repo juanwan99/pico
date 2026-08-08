@@ -34,15 +34,42 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_html_document",
             "generate_docx_document",
             "generate_pptx_document",
+            "workspace_write_file",
             "workspace_list_files",
             "workspace_read_file",
+            "verify_html_document",
         ),
         risk="low",
         instruction=(
-            "本轮交付 HTML / Word / PPT：必须分别调用 generate_html_document、"
-            "generate_docx_document、generate_pptx_document；每份文件使用用户可见的唯一 marker；"
-            "禁止 workspace_write_file 或代码块改后缀冒充 .html/.docx/.pptx；"
-            "完成后简要说明文件名与 marker。"
+            "本轮交付真实文件：HTML/Word/PPT 必须分别调用 generate_html_document / "
+            "generate_docx_document / generate_pptx_document（每份唯一 marker）；"
+            "其它文本/清单/多产物用 workspace_write_file 各写独立 title；"
+            "禁止代码块改后缀冒充 .html/.docx/.pptx；"
+            "多交付时禁止单文件多标题冒充；HTML 可运行页生成后应 verify_html_document；"
+            "完成后说明各文件名与 marker。"
+        ),
+    ),
+    "skill-engineering-delivery": SkillPolicy(
+        id="skill-engineering-delivery",
+        name="skill.engineering_delivery",
+        requested_tools=(
+            "workspace_write_file",
+            "workspace_list_files",
+            "workspace_read_file",
+            "generate_html_document",
+            "generate_docx_document",
+            "generate_pptx_document",
+            "verify_html_document",
+            "structured_outline",
+        ),
+        risk="low",
+        instruction=(
+            "本轮是工程交付（多产物 / 流水线落盘 / 可运行物 / 修订联动）："
+            "每个交付物或阶段必须独立写入 Artifact（不同 title）；"
+            "真 Office/HTML 用 generate_*_document，其它用 workspace_write_file；"
+            "修订时先 list/read 再写更新或版本号新文件；"
+            "HTML 交互页必须 verify_html_document，未跑通项写明未验证；"
+            "禁止聊天长文冒充多文件包。"
         ),
     ),
     "skill-chat": SkillPolicy(
@@ -188,6 +215,12 @@ _ALIASES = {
     "deliverable": "skill-deliverable",
     "skill.deliverable": "skill-deliverable",
     "skill-deliverable": "skill-deliverable",
+    "engineering": "skill-engineering-delivery",
+    "engineering-delivery": "skill-engineering-delivery",
+    "engineering_delivery": "skill-engineering-delivery",
+    "skill.engineering_delivery": "skill-engineering-delivery",
+    "skill-engineering-delivery": "skill-engineering-delivery",
+    "package": "skill-engineering-delivery",
     "chat": "skill-chat",
     "skill.chat": "skill-chat",
     "skill-chat": "skill-chat",

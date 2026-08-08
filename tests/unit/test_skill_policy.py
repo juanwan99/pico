@@ -16,6 +16,8 @@ def test_normalize_aliases():
     assert normalize_skill_id("write_s7") == "skill-write-s7"
     assert normalize_skill_id("lesson_outline") == "skill-lesson-outline"
     assert normalize_skill_id("skill.meeting_notes") == "skill-meeting-notes"
+    assert normalize_skill_id("engineering") == "skill-engineering-delivery"
+    assert normalize_skill_id("package") == "skill-engineering-delivery"
     assert normalize_skill_id("") is None
 
 
@@ -31,6 +33,31 @@ def test_snapshot_tools_subset_of_gateway():
             False,
         ),
         "skill-write-s7": (["pico_propose_change"], True),
+        "skill-deliverable": (
+            [
+                "generate_html_document",
+                "generate_docx_document",
+                "generate_pptx_document",
+                "workspace_write_file",
+                "workspace_list_files",
+                "workspace_read_file",
+                "verify_html_document",
+            ],
+            False,
+        ),
+        "skill-engineering-delivery": (
+            [
+                "workspace_write_file",
+                "workspace_list_files",
+                "workspace_read_file",
+                "generate_html_document",
+                "generate_docx_document",
+                "generate_pptx_document",
+                "verify_html_document",
+                "structured_outline",
+            ],
+            False,
+        ),
         "skill-summarize": (
             [
                 "workspace_read_file",

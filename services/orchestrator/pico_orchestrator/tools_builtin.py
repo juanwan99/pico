@@ -140,9 +140,91 @@ def _excerpt_around(text: str, query: str, *, width: int = _MAX_KB_EXCERPT) -> s
     return snippet[:width]
 
 
+def _static_html_checks(content: str) -> list[dict[str, Any]]:
+    """Structure-only HTML checks (no browser). Honest statuses: pass|fail|not_verified."""
+    text = content or ""
+    low = text.lower()
+    checks: list[dict[str, Any]] = []
+
+    def add(name: str, status: str, detail: str) -> None:
+        checks.append({"name": name, "status": status, "detail": detail})
+
+    has_doc = bool(
+        re.search(r"<!doctype\s+html|<html[\s>]|<body[\s>]", low)
+        or ("<html" in low)
+    )
+    add(
+        "document_shell",
+        "pass" if has_doc else "fail",
+        "has doctype/html/body" if has_doc else "missing html document shell",
+    )
+
+    # Interactive surfaces commonly needed for "local runnable" pages.
+    has_input = bool(re.search(r"<input[\s>]|<textarea[\s>]|<select[\s>]", low))
+    has_button = bool(
+        re.search(r"<button[\s>]|type\s*=\s*[\"']submit[\"']|onclick\s*=", low)
+    )
+    has_script = "<script" in low
+    if has_input or has_button or has_script:
+        add(
+            "interactive_surface",
+            "pass" if (has_input or has_button) else "fail",
+            f"input={has_input} button={has_button} script={has_script}",
+        )
+    else:
+        add(
+            "interactive_surface",
+            "not_verified",
+            "no form controls found — static page may be intentional",
+        )
+
+    # Empty submit / required fields: only structural signal.
+    has_required = "required" in low or "aria-required" in low
+    if has_input:
+        add(
+            "empty_submit_guard",
+            "pass" if (has_required or has_script) else "not_verified",
+            "required attr or script present"
+            if (has_required or has_script)
+            else "no required/script guard detected (static check only)",
+        )
+    else:
+        add(
+            "empty_submit_guard",
+            "not_verified",
+            "no inputs to validate",
+        )
+
+    # Persistence hints (localStorage / sessionStorage).
+    if "localstorage" in low or "sessionstorage" in low:
+        add(
+            "refresh_persistence_hint",
+            "pass",
+            "storage API referenced (runtime not executed)",
+        )
+    else:
+        add(
+            "refresh_persistence_hint",
+            "not_verified",
+            "no localStorage/sessionStorage — refresh persistence not proven",
+        )
+
+    # Dangerous remote script loads (soft warning).
+    remote_script = bool(
+        re.search(r"<script[^>]+src\s*=\s*[\"']https?://", low)
+    )
+    add(
+        "no_remote_script",
+        "fail" if remote_script else "pass",
+        "external script src found" if remote_script else "no external script src",
+    )
+
+    return checks
+
+
 def _workspace_handlers(
     store: ArtifactStore,
-) -> tuple[Any, Any, Any, Any, Any, Any, Any]:
+) -> tuple[Any, Any, Any, Any, Any, Any, Any, Any]:
     async def write_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _artifact_title(args)
         protected = title_protected_extension(title)
@@ -315,6 +397,82 @@ def _workspace_handlers(
         result["marker"] = marker
         return result
 
+    async def verify_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        """Static HTML self-check — never claims runtime PASS without evidence."""
+        artifact_id = args.get("artifact_id")
+        title = args.get("title")
+        artifact_id = str(artifact_id).strip() if artifact_id is not None else None
+        title = str(title).strip() if title is not None else None
+        inline = args.get("content")
+        content: str | None = None
+        source = "inline"
+        art_meta: dict[str, Any] = {}
+        if isinstance(inline, str) and inline.strip():
+            content = inline
+            if len(content) > _MAX_ARTIFACT_CONTENT:
+                raise ToolError(
+                    "tool.invalid_arguments",
+                    f"content exceeds {_MAX_ARTIFACT_CONTENT} characters",
+                )
+        else:
+            if not artifact_id and not title:
+                raise ToolError(
+                    "tool.invalid_arguments",
+                    "artifact_id, title, or content is required",
+                )
+            result = await store.read(
+                principal,
+                artifact_id=artifact_id or None,
+                title=title or None,
+            )
+            if result is None:
+                raise ToolError("artifact.not_found", "Artifact not found")
+            art_meta = {
+                "artifact_id": result.get("artifact_id"),
+                "title": result.get("title"),
+                "kind": result.get("kind"),
+            }
+            body = result.get("content")
+            if not isinstance(body, str):
+                return {
+                    "ok": False,
+                    "overall": "fail",
+                    "checks": [
+                        {
+                            "name": "content_readable",
+                            "status": "fail",
+                            "detail": "artifact is binary or empty text",
+                        }
+                    ],
+                    "honest_note": "无法对二进制/空内容做 HTML 结构自检",
+                    **art_meta,
+                }
+            content = body
+            source = "artifact"
+        assert content is not None
+        checks = _static_html_checks(content)
+        statuses = {c["status"] for c in checks}
+        if "fail" in statuses:
+            overall = "fail"
+        elif statuses == {"pass"} or statuses <= {"pass"}:
+            overall = "pass"
+        else:
+            overall = "partial"
+        honest = (
+            "结构自检完成（未执行浏览器/真机点击）。"
+            "含 not_verified 的项不得写成「全部完美/已可运行」。"
+            if overall != "fail"
+            else "结构自检失败：存在 fail 项，禁止宣称页面已可运行。"
+        )
+        return {
+            "ok": overall != "fail",
+            "overall": overall,
+            "source": source,
+            "checks": checks,
+            "honest_note": honest,
+            **art_meta,
+        }
+
     return (
         write_file,
         read_file,
@@ -323,6 +481,7 @@ def _workspace_handlers(
         generate_html,
         generate_docx,
         generate_pptx,
+        verify_html,
     )
 
 
@@ -437,6 +596,7 @@ def build_default_gateway(
         generate_html,
         generate_docx,
         generate_pptx,
+        verify_html,
     ) = _workspace_handlers(store)
     gw.register(
         ToolSpec(
@@ -539,6 +699,18 @@ def build_default_gateway(
     )
     gw.register(
         ToolSpec(
+            name="verify_html_document",
+            description=(
+                "Static structure self-check for an HTML artifact (or inline content). "
+                "Returns pass/fail/not_verified per check — never claims browser runtime. "
+                "Args: artifact_id? | title? | content?"
+            ),
+            handler=verify_html,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
             name="structured_outline",
             description="Turn headings or bullet text into a nested JSON outline.",
             handler=_structured_outline,
@@ -635,6 +807,23 @@ def openai_tool_schemas(
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
             },
             "required": ["query"],
+        },
+        "verify_html_document": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Artifact id to verify (or title or content)",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Exact artifact title to verify",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Inline HTML to check when no artifact id/title",
+                },
+            },
         },
         "generate_html_document": {
             "type": "object",
