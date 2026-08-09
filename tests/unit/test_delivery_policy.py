@@ -176,6 +176,57 @@ def test_same_session_revision_not_multi_from_change_list() -> None:
     assert plan.min_artifacts == 1
 
 
+def test_same_session_round2_revision_numbered_changes_not_multi() -> None:
+    """H2: 「第二轮修改」+ numbered change list + one v3 file is revision, not min=3 multi."""
+    plan = analyze_delivery(
+        "请在同一会话继续第二轮修改（仍不要新开聊）：\n"
+        "1) 新增独立章节「对外口径草案」\n"
+        "2) 行动项新增：林启在 08-11 前确认排班表\n"
+        "3) 风险与依赖里把某项标为「本周必须拍板」\n"
+        "输出 v3（ops-weekly-brief-v3.md 或等价清晰版本），可下载。",
+        prior_artifact_titles=["ops-weekly-brief.md", "ops-weekly-brief-v2.md"],
+    )
+    assert plan.revision is True
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts == 1
+    assert plan.force_agent is True
+
+
+def test_single_named_versioned_file_not_multi_from_bullets() -> None:
+    """One target filename + section bullets must not fail-close as multi-file kit."""
+    plan = analyze_delivery(
+        "请输出更新版 Markdown 文件 risk-register-v2.md，并按下列改点调整：\n"
+        "1) 把截止日从周五改到下周一\n"
+        "2) 新增一条残留风险说明\n"
+        "3) 行动项 Owner 写清",
+        prior_artifact_titles=["risk-register.md"],
+    )
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts == 1
+    assert plan.force_agent is True
+
+
+def test_negated_multi_file_phrase_stays_single() -> None:
+    """「不要拆成多个独立文件」must not trigger multi min_artifacts."""
+    plan = analyze_delivery(
+        "上一轮失败了。请补交：只需要一份可下载的 ops-weekly-brief-v3.md"
+        "（单文件 Markdown 即可）。不要拆成多个独立文件。",
+        prior_artifact_titles=["ops-weekly-brief.md", "ops-weekly-brief-v2.md"],
+    )
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts == 1
+    assert plan.force_agent is True
+
+
+def test_forbid_merge_still_multi() -> None:
+    """Positive multi + 禁止合并 must remain multi-file."""
+    plan = analyze_delivery(
+        "请分别交付三个独立可下载文件：a.md、b.md、c.md。禁止合并成一个文件。"
+    )
+    assert plan.multi_deliverable is True
+    assert plan.min_artifacts >= 3
+
+
 def test_single_html_features_with_he_not_multi() -> None:
     """G1: 「含分页和测验」is one document's features, not two files."""
     plan = analyze_delivery("写一个 HTML 互动页，含分页和测验，本地打开可用")
