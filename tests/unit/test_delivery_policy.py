@@ -363,3 +363,72 @@ def test_count_user_artifacts_skips_bookkeeping() -> None:
 
 def test_engineering_skill_id_stable() -> None:
     assert ENGINEERING_SKILL_ID == "skill-engineering-delivery"
+
+
+def test_creative_multipart_with_explicit_n_files_not_structure_min() -> None:
+    """B1: creative ①②③ / 镜头 / 阶段 content packing ≠ N files when explicit N given.
+
+    Must not demand min=14+; true multi of 3 named files stays min in [2, 4].
+    """
+    prompt = (
+        "请做音乐影像文案资产交付（本环境可不渲染成片，须诚实写边界）。\n"
+        "必须分别落盘 3 个独立可下载文件（禁止合并成一个长文多标题）：\n"
+        "1) lyrics.md — 完整歌词\n"
+        "2) storyboard.json — 分镜脚本\n"
+        "3) timeline.md — 结构时间轴与可发布资产清单\n"
+        "\n"
+        "创作结构（写入上述文件内容，不是额外文件数）：\n"
+        "① 作品主题与受众\n"
+        "② 情绪曲线\n"
+        "③ 主歌A\n"
+        "④ 主歌B\n"
+        "⑤ 副歌钩子\n"
+        "⑥ 桥段\n"
+        "⑦ 尾奏\n"
+        "⑧ 人声编排说明\n"
+        "1. 镜头开场\n"
+        "2. 镜头过门\n"
+        "3. 镜头高潮\n"
+        "4. 镜头收束\n"
+        "5. 字幕层\n"
+        "6. 色板备注\n"
+        "阶段1 前奏\n"
+        "阶段2 主歌\n"
+        "阶段3 副歌\n"
+        "阶段4 桥\n"
+        "阶段5 尾\n"
+    )
+    plan = analyze_delivery(prompt)
+    assert plan.multi_deliverable is True
+    assert plan.force_agent is True
+    assert plan.min_artifacts == 3
+    # Raw structure may still be high (observability); min must not follow it.
+    assert plan.structure_item_count >= 3
+    assert plan.min_artifacts < plan.structure_item_count or plan.structure_item_count <= 3
+
+
+def test_true_multi_three_files_still_strict() -> None:
+    """B2: 真 multi ≥3 仍严 — explicit three independent files."""
+    plan = analyze_delivery(
+        "请分别交付三个独立可下载文件：a-spec.md、b-checklist.md、c-notes.md。"
+        "禁止合并成一个文件。"
+    )
+    assert plan.multi_deliverable is True
+    assert plan.min_artifacts >= 3
+    assert plan.force_agent is True
+
+
+def test_looks_like_clarification_positive_and_negative() -> None:
+    from pico_orchestrator.delivery_policy import looks_like_clarification
+
+    ask = (
+        "开始之前我想先确认两点：\n"
+        "1）你更希望 Web 单页还是多页？\n"
+        "2）要不要积分与连续打卡？\n"
+        "请回复后我再落盘可下载文件。"
+    )
+    assert looks_like_clarification(ask) is True
+    claim = "已生成 tracker.html，请在结果区下载打开。"
+    assert looks_like_clarification(claim) is False
+    chat_only_code = "```file:tracker.html\n<html></html>\n```\n文件已写好。"
+    assert looks_like_clarification(chat_only_code) is False

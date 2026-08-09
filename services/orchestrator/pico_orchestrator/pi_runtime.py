@@ -278,6 +278,36 @@ async def run_pi_agent(
                 # Delivery landing gate: chat-only "I wrote the file" is not success.
                 writes = count_write_tool_successes(tool_context_results)
                 landing_ok = min_arts <= 0 or writes >= min_arts
+                final_blob = "\n".join(final_parts).strip()
+                # Clarification / awaiting-user turns: model asks questions, no write
+                # claim → honest non-failure (do not scare-fail as missing artifact).
+                from pico_orchestrator.delivery_policy import looks_like_clarification
+
+                is_clarify = (
+                    not landing_ok
+                    and writes == 0
+                    and looks_like_clarification(final_blob or content or "")
+                )
+                if is_clarify:
+                    stream_body = content or final_blob
+                    if stream_body:
+                        await emit("message.delta", {"text": stream_body})
+                    await emit(
+                        "run.status",
+                        {
+                            "status": "succeeded",
+                            "runtime": RUNTIME_LABEL,
+                            "awaiting_user": True,
+                            "reason": "clarification",
+                        },
+                    )
+                    return _result(
+                        "succeeded",
+                        final_parts,
+                        token_usage=token_usage,
+                        tool_results=tool_context_results,
+                        principal=principal,
+                    )
                 if (
                     not landing_ok
                     and landing_retries < 1

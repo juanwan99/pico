@@ -406,7 +406,12 @@ def _count_lettered_items(text: str) -> int:
 
 
 def _count_structure_items(text: str) -> int:
-    """Primary min signal: structural enumeration across patterns."""
+    """Observability count: structural enumeration across patterns (raw).
+
+    Do **not** feed this raw count straight into min_artifacts when an explicit
+    file count or named multi-file set is present — creative briefs pack
+    ①②③ / 镜头 / 段落 outlines that are content parts, not independent files.
+    """
     return max(
         _count_numbered_items(text),
         _count_parallel_list_items(text),
@@ -415,13 +420,42 @@ def _count_structure_items(text: str) -> int:
     )
 
 
+def _count_named_files(text: str) -> set[str]:
+    """Filenames with common deliverable extensions mentioned in the prompt."""
+    return {
+        m.group(0).lower()
+        for m in re.finditer(
+            r"[\w\u4e00-\u9fff.-]+\.(?:md|txt|html|docx|pptx|pdf|json|csv|lrc|srt)\b",
+            text or "",
+            re.IGNORECASE,
+        )
+    }
+
+
+def _stage_as_file_language(text: str) -> bool:
+    """True when stages are framed as independent deliverables, not content parts."""
+    return bool(
+        re.search(
+            r"(?:"
+            r"每阶段|各阶段|"
+            r"阶段.{0,12}独立\s*(?:文件|产物|交付)|"
+            r"独立\s*(?:文件|产物).{0,16}阶段|"
+            r"每阶段.{0,8}(?:文件|产物|落盘)|"
+            r"pipeline\s+stage"
+            r")",
+            text or "",
+            re.IGNORECASE,
+        )
+    )
+
+
 def _count_pipeline_stages(text: str) -> int:
     """Count multi-stage pipeline intent. Single「阶段一」label alone → 0.
 
-    Requires ≥2 distinct numbered stages, a ≥3-hop arrow chain, or a strong
-    pipeline phrase (流水线/每阶段/各阶段). Prevents meta prefixes like
-    「阶段一验收」from inflating min_artifacts to 3 and fail-closing chat
-    or single-file office work.
+    Requires ≥2 distinct numbered stages **with stage-as-file language**, a
+    ≥3-hop arrow chain with deliverable framing, or a strong pipeline phrase
+    (流水线/每阶段/各阶段). Bare content packing like「阶段1 前奏 / 阶段2 主歌」
+    inside a creative brief must **not** inflate min_artifacts.
     """
     stages: set[str] = set()
     for m in re.finditer(r"阶段\s*([1-9一二三四五六七八])", text or ""):
@@ -437,16 +471,66 @@ def _count_pipeline_stages(text: str) -> int:
         ok = sum(1 for p in arrow_parts if _is_structure_segment(p.strip()[:36]))
         if ok >= 3:
             arrow_n = ok
-            stages.update(str(i) for i in range(ok))
-    # ≥2 distinct numbered stages = real pipeline enumeration
-    if len(stages) >= 2:
+    stage_files = _stage_as_file_language(text or "")
+    strong_phrase = bool(_PIPELINE_PHRASE.search(text or ""))
+    # Numbered 阶段/步骤 only count when framed as independent stage files
+    # or paired with strong pipeline language — not creative section labels.
+    if len(stages) >= 2 and (stage_files or strong_phrase):
         return max(len(stages), arrow_n)
-    if arrow_n >= 3:
+    if arrow_n >= 3 and (stage_files or strong_phrase or _EXPLICIT_MULTI_FILE.search(text or "")):
         return arrow_n
     # Strong phrase without numbers → default 3-stage kit
-    if _PIPELINE_PHRASE.search(text or ""):
+    if strong_phrase:
         return 3
     return 0
+
+
+def looks_like_clarification(text: str) -> bool:
+    """True when the assistant is asking the user to clarify — not claiming delivery.
+
+    Generic: no topic-word tables. Used so clarification turns are not fail-closed
+    as deliverable_missing_artifact (chat-only claims still fail).
+    """
+    s = (text or "").strip()
+    if len(s) < 8:
+        return False
+    # Claimed / completed delivery → not clarification.
+    # Future tense ("再落盘可下载…") is still clarification; past/done claims are not.
+    if re.search(
+        r"(?:"
+        r"已(?:生成|写入|落盘|交付|创建|完成|导出)|"
+        r"文件已|"
+        r"请(?:在结果区)?下载|"
+        r"(?:artifact|产物).{0,8}(?:已|生成)|"
+        r"```(?:file:|html|python|javascript)"
+        r")",
+        s,
+        re.IGNORECASE,
+    ):
+        return False
+    q_marks = s.count("？") + s.count("?")
+    clarify_cue = bool(
+        re.search(
+            r"(?:"
+            r"请问|请确认|需要确认|方便说明|先确认|先问|"
+            r"几个问题|两点确认|想先了解|还想确认|先确认两点|"
+            r"你希望|您希望|更倾向|哪一种|是否需要|要不要|"
+            r"可以先|在开始.{0,8}之前|开始之前|"
+            r"澄清|确认一下|补充一下|回复后我再|"
+            r"which\s+(?:do\s+you|would\s+you)|"
+            r"could\s+you\s+(?:confirm|clarify|tell)|"
+            r"before\s+i\s+(?:start|begin|write|generate)"
+            r")",
+            s,
+            re.IGNORECASE,
+        )
+    )
+    if clarify_cue and (q_marks >= 1 or "：" in s or ":" in s or "）" in s or ")" in s):
+        return True
+    # Multiple questions without delivery claim.
+    if q_marks >= 2 and len(s) < 1200:
+        return True
+    return False
 
 
 def normalize_artifact_title(title: str) -> tuple[str, str | None]:
@@ -507,7 +591,7 @@ def analyze_delivery(
     structure_n = _count_structure_items(text)
     explicit_n = _count_explicit_n_files(text)
     pipeline_n = _count_pipeline_stages(text)
-    # pipeline_n already requires ≥2 stages or strong phrase; do not OR bare labels.
+    # pipeline_n already gates on stage-as-file / strong phrase (not bare 阶段 labels).
     pipeline = pipeline_n >= 2 or bool(_PIPELINE_PHRASE.search(text))
 
     hard_revision = bool(_REVISION_PHRASE.search(text))
@@ -564,14 +648,7 @@ def analyze_delivery(
     ):
         structure_multi = False
     # One named file target (e.g. brief-v3.md) + change bullets ≠ N independent files.
-    named_files = {
-        m.group(0).lower()
-        for m in re.finditer(
-            r"[\w\u4e00-\u9fff.-]+\.(?:md|txt|html|docx|pptx|pdf)\b",
-            text,
-            re.IGNORECASE,
-        )
-    }
+    named_files = _count_named_files(text)
     single_named_file = len(named_files) == 1
     if (
         single_named_file
@@ -597,16 +674,41 @@ def analyze_delivery(
         pipeline = False
         pipeline_n = 0
 
+    # --- min_artifacts ---
+    # Prefer **file-count signals** (explicit N files / ≥2 named files) over raw
+    # structure packing (①②③ creative parts, 镜头 lists, content 阶段 labels).
+    # True multi "分别写 N 文件" still min≥N; creative multi-parts ≠ N files.
+    named_n = len(named_files)
+    file_count_signals: list[int] = []
+    if explicit_n >= 2:
+        file_count_signals.append(explicit_n)
+    if named_n >= 2 and (multi_phrase or explicit_multi or explicit_n >= 2 or multi):
+        file_count_signals.append(named_n)
+
     min_arts = 0
     if multi:
-        candidates = [2]
-        if explicit_n >= 2:
-            candidates.append(explicit_n)
-        if structure_n >= 2 and not single_unit:
-            candidates.append(structure_n)
-        min_arts = max(candidates)
+        if file_count_signals:
+            # Explicit/named file count wins — do not max with structure_n.
+            min_arts = max(file_count_signals)
+            min_arts = max(min_arts, 2)
+        else:
+            candidates = [2]
+            # Structure-only multi: parallel/lettered deliverable lists still count.
+            # Prefer parallel+lettered over raw numbered content packing when both exist.
+            parallel_n = _count_parallel_list_items(text)
+            lettered_n = _count_lettered_items(text)
+            deliverable_struct = max(parallel_n, lettered_n, 0)
+            if deliverable_struct >= 2 and not single_unit:
+                candidates.append(deliverable_struct)
+            elif structure_n >= 2 and not single_unit:
+                # Numbered-only structure without explicit file N: use structure but
+                # cap hard so content outlines cannot demand dozens of files.
+                candidates.append(min(structure_n, 6))
+            min_arts = max(candidates)
     if pipeline:
-        min_arts = max(min_arts, pipeline_n if pipeline_n >= 2 else 3)
+        # Pipeline floor only when no explicit multi-file count already set the bar.
+        if not file_count_signals:
+            min_arts = max(min_arts, pipeline_n if pipeline_n >= 2 else 3)
     if runnable and min_arts == 0:
         min_arts = 1
     if revision_targets_files and min_arts == 0:
