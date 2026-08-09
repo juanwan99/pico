@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>校园失物招领</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: #f0faf5;
+    color: #1f2d2a;
+    min-height: 100vh;
+  }
+  .page { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+
+  /* 顶栏 */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(135deg, #0fa79a, #189684);
+    color: #fff; border-radius: 16px; padding: 20px 24px;
+    box-shadow: 0 6px 18px rgba(15,167,154,.25);
+  }
+  header h1 { font-size: 24px; letter-spacing: 1px; }
+  header .sub { font-size: 13px; opacity: .9; margin-top: 6px; }
+
+  /* 搜索框 */
+  .toolbar { display: flex; gap: 12px; margin: 20px 0; flex-wrap: wrap; align-items: center; }
+  .searchbox {
+    flex: 1; min-width: 240px; display: flex; background: #fff;
+    border: 2px solid #b9e8dd; border-radius: 30px; overflow: hidden;
+  }
+  .searchbox input {
+    flex: 1; border: none; outline: none; padding: 12px 18px;
+    font-size: 15px; background: transparent;
+  }
+  .searchbox button {
+    background: #0fa79a; color: #fff; border: none; padding: 0 22px;
+    font-size: 15px; cursor: pointer; transition: background .2s;
+  }
+  .searchbox button:hover { background: #0c8a7f; }
+  .cats { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cat-btn {
+    border: 1.5px solid #9fdccd; background: #fff; color: #0b6b62;
+    padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 14px;
+    transition: all .2s;
+  }
+  .cat-btn.active { background: #0fa79a; color: #fff; border-color: #0fa79a; }
+
+  /* 卡片网格 */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+  .card {
+    background: #fff; border-radius: 16px; overflow: hidden;
+    box-shadow: 0 4px 12px rgba(15,167,154,.12);
+    cursor: pointer; transition: transform .2s, box-shadow .2s;
+  }
+  .card:hover { transform: translateY(-4px); box-shadow: 0 10px 22px rgba(15,167,154,.22); }
+
+  /* 图片占位 */
+  .thumb {
+    height: 150px; display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,.9); font-size: 14px; letter-spacing: 2px;
+  }
+  .c-mobile { background: linear-gradient(135deg,#22b8a0,#0fa79a); }
+  .c-id { background: linear-gradient(135deg,#5aba tto0,#3aa;#0fa79a); }
+  .thumb-line { display: inline-block; }
+
+  .card-body { padding: 14px 16px 16px; }
+  .name { font-size: 17px; font-weight: 700; }
+  .meta { font-size: 13px; color: #6b7d78; margin-top: 8px; line-height: 1.7; }
+  .status {
+    display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 12px;
+    margin-top: 10px;
+  }
+  .status.open { background: #e4f6ef; color: #0b7a6a; }
+  .status.claimed { background: #e9eceb; color: #7a8a86; text-decoration: line-through; }
+
+  .empty { text-align: center; color: #7a8a86; padding: 60px 20px; font-size: 16px; }
+  footer { text-align: center; color: #a0b4ae; font-size: 13px; margin-top: 32px; }
+</style>
+</head>
+<body>
+  <p data-pico-marker-line="1">标记：<span class="marker" data-pico-marker="校园失物招领">校园失物招领</span></p>
+<div class="page">
+
+  <header>
+    <div>
+      <h1>🏫 校园失物招领</h1>
+      <div class="sub">捡到先挂墙 · 丢了来认领</div>
+    </div>
+    <div style="font-size:22px;">🛎️</div>
+  </header>
+
+  <div class="toolbar">
+    <div class="searchbox">
+      <input id="searchInput" type="text" placeholder="🔍 搜索物品名称、地点…">
+      <button id="searchBtn">搜索</button>
+    </div>
+    <div class="cats" id="catBar"></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none;">没有匹配的记录，换个关键词试试吧～</div>
+
+  <footer>校园失物招领 · 一张在线自挂墙 · 数据仅供演示</footer>
+</div>
+
+<script>
+// 演示数据（图片用占位，无真实上传）
+const items = [
+  { name:"黑色蓝牙耳机", kind:"数码", where:"图书馆3楼自习区", time:"今天 09:40", pic:"🎧", status:"待领取" },
+  { name:"学生证（王同学）", kind:"证件", where:"第一食堂门口", time:"昨天 17:20", pic:"🪪", status:"待认领" },
+  { name:"蓝色雨伞", kind:"其他", where:"教学楼A栋大厅", time:"昨天 17:20", pic:"☂️", status:"待领取" },
+  { name:"计算器（卡西欧）", kind:"数码", where:"实验楼405", time:"前天 15:05", pic:"🧮", status:"已认领" },
+  { name:"红色保温杯", kind:"生活", where:"操场看台", time:"前天 11:30", pic:"🥤", status:"待领取" },
+  { name:"深灰色保温杯", kind:"生活", where:"宿舍楼B区门口", time:"3天前", pic:"☕", status:"待领取" },
+  { name:"iPhone充电线", kind:"数码", where:"体育馆存包柜", time:"3天前", pic:"🔌", status:"已认领" },
+  { name:"考研数学辅导书", kind:"书本", where:"自习室", time:"4天前", pic:"📚", status:"待领取" },
+  { name:"白色耳机", kind:"数码", where:"图书馆", time:"今天 10:10", pic:"🎧", status:"待领取" },
+  { name:"学生卡", kind:"证件", where:"教学楼B栋", time:"2天前", pic:"🪪", status:"待认领" }
+];
+
+const cats = ["全部","数码","证件","生活","书本","其他"];
+
+// 分类按钮
+const catBar = document.getElementById("catBar");
+cats.forEach(c=>{
+  const b=document.createElement("button");
+  b.className="cat-btn"+(c==="全部"?" active":"");
+  b.textContent=c;
+  b.onclick=()=>{document.querySelectorAll(".cat-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");render();};
+  catBar.appendChild(b);
+});
+
+function colorOf(k){
+  const map={数码:"#0fa79a",证件:"#2a9d8f",生活:"#48bfb0",书本:"#67d4c3",其他:"#8fd9cb"};
+  return map[k]||"#0fa79a";
+}
+function picBg(k){ return "background:linear-gradient(135deg,#25b09b,#0fa79a)"; }
+
+function render(){
+  const kw=document.getElementById("searchInput").value.trim().toLowerCase();
+  const active=document.querySelector(".cat-btn.active");
+  const cat=active?active.textContent:"全部";
+
+  const list=items.filter(it=>{
+    const okCat = cat==="全部" || it.kind===cat;
+    const okKw = !kw ||
+      it.name.toLowerCase().includes(kw) ||
+      (it.where || "").toLowerCase().includes(kw) ||
+      (it.time||"").toLowerCase().includes(kw);
+    return okCat && okKw;
+  });
+
+  const grid=document.getElementById("grid");
+  grid.innerHTML="";
+  document.getElementById("empty").style.display = list.length?"none":"block";
+
+  list.forEach(it=>{
+    const c=document.createElement("div");
+    c.className="card";
+    const claimed = it.status==="已认领";
+    c.innerHTML=`
+      <div class="thumb" style="background:linear-gradient(135deg,#25b09b,#0fa79a)">${it.pic}</div>
+      <div class="card-body">
+        <div class="name">${it.name}</div>
+        <div class="meta">
+          📍 ${it.where}<br>
+          🕐 ${it.time}<br>
+          🏷️ ${it.kind}
+        </div>
+        <span class="status ${claimed?'claimed':'open'}">${it.status}</span>
+      </div>`;
+    grid.appendChild(c);
+  });
+}
+
+document.getElementById("searchBtn").onclick=render;
+document.getElementById("searchInput").addEventListener("keyup",e=>{if(e.key==="Enter")render();});
+
+render();
+</script>
+</body>
+</html>

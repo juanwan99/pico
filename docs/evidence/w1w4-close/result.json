@@ -1,0 +1,49 @@
+{
+  "task": "T-W1W4-CLOSE",
+  "issue": 382,
+  "pr": 381,
+  "merge_sha": "74baecc960f70b2c181e79891cda96eefa7132cd",
+  "live_tip": "74baecc960f70b2c181e79891cda96eefa7132cd",
+  "public": "https://pico.aivia.asia",
+  "claim_wb": "NO",
+  "product_pass": false,
+  "steps": [
+    {
+      "id": "C0",
+      "ok": true,
+      "detail": "merge #381 squash → 74baecc960f70b2c181e79891cda96eefa7132cd; CI green run 31302780038; APPROVE-MERGE"
+    },
+    {
+      "id": "C1",
+      "ok": true,
+      "detail": "prod-update; health.git_sha exact match; tip API align; ui_login=200"
+    },
+    {
+      "id": "C2-A5",
+      "ok": true,
+      "conversation": "https://pico.aivia.asia/c/712da500-073d-42b3-85d8-fe085a0f8d54",
+      "clarify_run": "985046eb-1889-4297-afbe-385da9600df6",
+      "deliver_run": "85616a3d-dd5a-4c4a-9814-644cab3a99a9",
+      "artifact": "lost-found-board.html",
+      "bytes": 7625,
+      "false_fail_on_clarify": false
+    },
+    {
+      "id": "C3-B3",
+      "ok": true,
+      "conversation": "https://pico.aivia.asia/c/910e3a30-329b-4e09-ac31-c24d6656618f",
+      "run": "30cdaa14-1bee-4920-9a97-f99c1cfe9276",
+      "files": ["jog-poster-copy.md", "jog-route-safety.md", "jog-checklist.md"],
+      "min14_false_red": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "C4",
+      "ok": true,
+      "chat": "https://pico.aivia.asia/c/17b49fbb-1399-432f-bbe7-d2f9680a72bf",
+      "multi": "https://pico.aivia.asia/c/06d6a44c-75e7-4f41-aa40-d9b34eaa0974",
+      "failclosed": "https://pico.aivia.asia/c/11b85e5c-a22e-4b99-a6dd-dbc71770262a",
+      "notes": "chat no false fail; multi 3 files succeeded; delivery+forbid-write → 暂无产物 no fake downloadable"
+    }
+  ]
+}
