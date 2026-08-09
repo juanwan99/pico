@@ -232,6 +232,20 @@ async def meta_version(settings: Settings = Depends(get_settings)) -> dict:
     }
 
 
+@app.get("/v1/meta/tip")
+async def meta_tip() -> dict:
+    """Minimal public tip probe — full 40-char git_sha only (G4).
+
+    Product UI exposes the same shape at GET /api/pico/tip (no JWT).
+    See docs/TIP-PROBE.md.
+    """
+    return {
+        "ok": True,
+        "service": "pico-api",
+        "git_sha": _resolve_git_sha(),
+    }
+
+
 @app.get("/v1/meta/freeze")
 async def freeze_meta(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.pins import AGENT_PINS, installed_versions

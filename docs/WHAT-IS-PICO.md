@@ -26,7 +26,8 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 | **品类** | 类 Claude / Codex / WorkBuddy 的 **任务型 AI 工作台**（对话 + 办事 + 产物） |
 | **用户** | 教师/管理者等（学校场景），先独立可试用 |
 | **壳** | **`apps/librechat`（MIT）** 中文工作台；禁止回潮 web/nextchat/workbench；禁止拆闭源 WorkBuddy |
-| **智能** | **云端模型 HTTPS API**（**DeepSeek 为主**，Kimi 可选后备） |
+| **智能** | **云端模型 HTTPS API**（**DeepSeek 为主**，Kimi 可选后备密钥） |
+| **编排** | **默认 Pi Agent harness**（v1.1）；Kimi Agent = 遗产回滚 |
 | **过程真源** | **Pico 唯一 AI 账本**：Task / Run / Event / Artifact / Change(S7)… |
 | **控制面** | 租户/membership、工具白名单、停止、重试、技能策略、限流与安全门 |
 | **与 edu** | **Pico = AI 过程真源**；**edu = 业务数据真源**；真联调后置；**禁止写 edu-cloud** |
@@ -54,8 +55,8 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 ```text
 1. 壳     LibreChat 工作台 UI
 2. 控制面  Pico API：身份、Run 生命周期、产物、S7、安全
-3. 编排核  目标 vs 现状见 §4
-4. 模型    Kimi 等 HTTPS API
+3. 编排核  默认 Pi（目标 vs 现状见 §4）
+4. 模型    DeepSeek 主 · Kimi 可选后备
 ```
 
 ---
@@ -73,33 +74,34 @@ Kimi Agent = 遗产/可选回滚，非产品唯一目标
 禁止：双核并列真源（Pi + Reasonix + Kimi 同时「官方唯一」）
 ```
 
-### 4.2 实现事实（2026-08-01 · **不是目标**）
+### 4.2 实现事实（2026-08-09 · **不是目标**）
 
-> **业主澄清：** 产品目标**从来只有**开源 Kimi Agent。  
-> `run_agent_loop` **从未**是目标、路线图或「长期架构选择」。  
-> 它只是进仓后的**过渡实现债**；把它说成「长期是自研环」= **污染**。
+> **真源：** TRUTH-FREEZE **v1.1** + HANDOFF-WB-PI。  
+> 旧 v1.0「唯一核 = Kimi Agent / 禁 Pi」**已作废**。  
+> `run_agent_loop` **从未**是产品目标；已移除，**禁止**复活为终局叙事。
 
 ```text
-模型：Kimi HTTPS API                          ✅ 在用（目标一致）
-多步代码路径：仍可能经 run_agent_loop         ⚠️ 实现债 · 待归位清掉
-kimi-agent-sdk / kimi-cli：pin + yaml 安全证明  ⚠️ 证明≠已接入
-「目标/长期是自研环」                          ❌ 错误认知 · 污染
-「已用开源 Kimi Agent 编排」                    ❌ 名实不符（目标未完成）
+编排默认：Pi harness（PICO_PI_AGENT_RUNTIME）     ✅ 代码默认路径（须以生产 tip 核）
+模型默认：DeepSeek HTTPS API                      ✅ 产品主模型
+Kimi Agent 模块                                   ⚠️ 遗产 / flag 可选回滚 · 非默认目标
+Kimi HTTPS 密钥                                   ⚠️ 可选后备 · 非产品主叙事
+「目标/长期是自研环」                              ❌ 污染 · 禁止
+「唯一目标仍是 Kimi Agent」                        ❌ 过期 v1.0 · 禁止再写
+「Pi + Kimi + Reasonix 同时官方唯一」              ❌ 双核并列 · 禁止
 ```
 
-偏航锚点：约 2026-07-29 多步环进仓 → 2026-07-30 PR #30 合 main  
-（**实现落入债**，不是业主改目标）。文档曾重申目标，归位仍未完成。
+历史偏航：约 2026-07-29 自研多步环进仓 → 后清债；2026-08-06 业主纠偏为 **Pi + DeepSeek**。  
+实现是否已在公网 tip 对齐，以 `STATE-NOW` + 生产 tip 为准，**不得**用本节冒充 DEPLOYED。
 
 ### 4.3 即日起纪律
 
-1. 禁止宣称编排已是开源 Kimi Agent。  
-2. 归位完成前禁止往自研环堆「小 OS」能力。  
-3. 允许代码里暂时还在的环作 TRANSITIONAL **债**（非产品选项），必须在本页/债表标明；**禁止当目标宣传**。  
-4. 归位完成 = 生产多步 Run 主路径由开源 **Kimi Agent** 运行时驱动，事件入 Pico 账本。  
-5. 刷新/历史/停止/重试属控制面与通路，不得用来证明编排目标已达成。  
-6. **编排路径唯一：开源 Kimi Agent（+ Kimi 模型）。**  
-   - **禁止**在真源/架构文档中预埋 Plan B、Pi、OpenCode 或其它运行时备选（以免执行窗误会可自行换核）。  
-   - 若 Kimi Agent **证伪走不通**：停止换核尝试，**书面交业主重新讨论**；不得擅自切换运行时。
+1. **默认唯一 multi-step = Pi**；事件入 Pico 账本。模型主叙事 = **DeepSeek**。  
+2. **禁止**再写「编排唯一 = 开源 Kimi Agent」或「禁预埋 Pi」——那是 v1.0，已被 v1.1 取代。  
+3. **禁止**复活 `run_agent_loop` / 自研 Agent OS 当产品主叙事。  
+4. Kimi Agent 仅作 **遗产回滚**（显式 flag）；不得与 Pi 并列「官方唯一」。  
+5. 刷新/历史/停止/重试属控制面与壳通路，不得单独证明 O1 已完成。  
+6. 若 Pi 路径证伪走不通：停止擅自换核，**书面交业主**；不得静默切到第二「唯一」核。  
+7. 本阶段（PLAN-TWO-PHASE 阶段一）**不做**连接器 / MCP / Skill 摊子上架；禁定向题词 if。
 
 ---
 
@@ -108,8 +110,8 @@ kimi-agent-sdk / kimi-cli：pin + yaml 安全证明  ⚠️ 证明≠已接入
 | 阶段 | 状态 |
 |------|------|
 | 公网可跑 / 主链可演示 | 大体具备 |
-| 日用可靠 | 进行中 |
-| **编排归位** | **未完成 · 路线 P0** |
+| 日用可靠 + 交付语义 | **阶段一主线**（PLAN-TWO-PHASE-WB） |
+| WorkBuddy 程度（六条 · W1–W5） | 阶段二；阶段一全优前不开 |
 | edu / 像素终局 | 后置 |
 
 ---
@@ -123,5 +125,5 @@ kimi-agent-sdk / kimi-cli：pin + yaml 安全证明  ⚠️ 证明≠已接入
 ## 7. 三句记忆
 
 1. Pico 是 AI 工作台底座（壳 + 账本 + 控制面 + 模型 API），不是网盘/教务。  
-2. Kimi 模型在用；开源 Kimi Agent 编排是目标，不是已完成现状。  
-3. 自研工具环是过渡债务，禁止假称薄改已完成。
+2. **目标默认：Pi 编排 + DeepSeek 模型**（TRUTH-FREEZE v1.1）；Kimi Agent 是遗产回滚，不是产品唯一目标。  
+3. 自研工具环与双核并列真源均禁止；实现现状以 tip/STATE-NOW 为准，禁止假称完成。

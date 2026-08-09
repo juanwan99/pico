@@ -1,15 +1,17 @@
 /**
  * Proxy Pico ledger API. Browser → LibreChat (JWT required) → Pico loopback.
- * HARD: never expose unauthenticated; never trust client-supplied upstream URL.
+ * HARD: ledger/task/artifact paths require JWT; never trust client-supplied upstream URL.
+ * Exception (G4 tip observability): GET /api/pico/tip is public and returns only
+ * {ok, git_sha, service} — no membership, canary, or secret fields.
  */
 const express = require('express');
 const { logger } = require('~/config');
 const { requireJwtAuth } = require('~/server/middleware');
 
 const router = express.Router();
-router.use(requireJwtAuth);
 
 const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const SHA_RE = /^[0-9a-fA-F]{40}$/;
 
 function picoBase() {
   const raw =
@@ -31,6 +33,28 @@ function picoBase() {
     return 'http://127.0.0.1:18765';
   }
 }
+
+/**
+ * Public tip probe (no JWT). Minimal build identity for delivery cards / ops.
+ * Full health JSON remains JWT-gated at /api/pico/health.
+ */
+router.get('/tip', async (_req, res) => {
+  try {
+    const r = await fetch(`${picoBase()}/health`);
+    const j = await r.json();
+    const sha = typeof j.git_sha === 'string' ? j.git_sha : null;
+    res.status(r.status).json({
+      ok: j.ok === true,
+      git_sha: sha && SHA_RE.test(sha) ? sha : sha,
+      service: typeof j.service === 'string' ? j.service : 'pico-api',
+    });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'upstream_unavailable' });
+  }
+});
+
+// All remaining ledger routes require an authenticated product session.
+router.use(requireJwtAuth);
 
 function picoKey() {
   return process.env.PICO_OPENAI_PROXY_KEY || process.env.OPENAI_API_KEY || 'sk-pico-dev';
@@ -286,9 +310,9 @@ router.use((req, res) => {
   res.status(404).json({
     error: 'not_found',
     message:
-      '未知 Pico 路径。教师常用：/api/pico/health、/api/pico/v1/tasks、' +
+      '未知 Pico 路径。教师常用：/api/pico/tip（公网 tip）、/api/pico/health、/api/pico/v1/tasks、' +
       '/api/pico/v1/runs/{id}、/api/pico/v1/artifacts/{id}/content?download=true。' +
-      '需登录 JWT；公网 /api/health 不是 Pico 账本入口。',
+      '除 /tip 外需登录 JWT；公网 SPA /health 只返回 OK，不是 Pico 账本 tip。',
     user_message:
       '找不到该接口。请从工作台结果区打开产物，或使用 /api/pico/v1/artifacts/{id}/content。',
   });

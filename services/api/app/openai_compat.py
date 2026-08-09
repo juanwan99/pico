@@ -886,6 +886,14 @@ async def _finalize_run(
         user_art_count = count_user_artifacts(art_list)
 
         # G5 observability: machine-readable delivery summary (always, when we have a plan).
+        # G1 ok: multi/pipeline require min count; single-unit with ≥1 file is user-visible OK.
+        multi_or_pipeline = bool(plan.multi_deliverable or plan.pipeline)
+        if plan.min_artifacts <= 0:
+            delivery_ok = True
+        elif multi_or_pipeline:
+            delivery_ok = user_art_count >= plan.min_artifacts
+        else:
+            delivery_ok = user_art_count >= 1
         if status in ("succeeded", "failed", "cancelled"):
             await append_event(
                 session,
@@ -909,17 +917,14 @@ async def _finalize_run(
                     "prior_artifact_count": int(
                         getattr(plan, "prior_artifact_count", 0) or 0
                     ),
-                    "ok": (
-                        user_art_count >= plan.min_artifacts
-                        if plan.min_artifacts > 0
-                        else True
-                    ),
+                    "ok": delivery_ok if status == "succeeded" else False,
                     "human_titles": titles[:40],
                     "note": (
                         "Prefer run.status + delivery.summary + artifact list over "
                         "client stream timeout alone. "
                         "Scripts: scripts/wait_delivery_summary.py. "
-                        "Human lens: open files in app/browser; L0≠人类可用."
+                        "Human lens: open files in app/browser; L0≠人类可用. "
+                        "G1: single-unit + ≥1 file is ok even if heuristic min was higher."
                     ),
                 },
                 commit=False,
@@ -975,8 +980,16 @@ async def _finalize_run(
                 )
                 status = "failed"
 
-        # G1/G2/G4: multi-artifact / pipeline / revision min count fail-closed.
-        if status == "succeeded" and plan.min_artifacts > 0 and user_art_count < plan.min_artifacts:
+        # G1: fail-closed min count only for true multi/pipeline intent.
+        # Single-unit delivery with ≥1 user-visible file must not fail solely
+        # because a heuristic expected more content-sections-as-files.
+        fail_closed_min = (
+            status == "succeeded"
+            and plan.min_artifacts > 0
+            and user_art_count < plan.min_artifacts
+            and (multi_or_pipeline or user_art_count == 0)
+        )
+        if fail_closed_min:
             run.status = "failed"
             run.error = (
                 f"工程交付未满足多产物要求：需要至少 {plan.min_artifacts} 个独立文件，"
@@ -996,6 +1009,7 @@ async def _finalize_run(
                 },
                 commit=False,
             )
+            # else path: keep succeeded; delivery.summary.ok already True for single-unit ≥1
 
         await session.commit()
 
@@ -1488,24 +1502,24 @@ async def chat_completions(
                 if text:
                     await q.put(("delta", text))
             elif event_type == "agent.step" and payload.get("phase") == "model":
-                # light status for first step only — avoid spam
+                # G2: user main channel stays human-package only.
+                # Tool/step process lives in ledger + ResultPanel timeline, not bubble.
                 if payload.get("step") == 1:
-                    await q.put(("status", "正在思考…\n"))
-                elif isinstance(payload.get("step"), int) and payload["step"] > 1:
-                    await q.put(("status", f"\n〔步骤 {payload['step']}〕\n"))
+                    await q.put(("status", "正在准备…\n"))
             elif event_type == "tool.call":
-                name = payload.get("name") or payload.get("tool") or "tool"
-                await q.put(("status", f"\n〔调用工具 {name}〕\n"))
+                # Engineer trail only (already appended to ledger above).
+                pass
             elif event_type == "tool.result":
-                await q.put(("status", "〔工具完成〕\n"))
+                pass
             elif event_type == "run.heartbeat":
                 elapsed = payload.get("elapsed_seconds")
                 if elapsed is not None:
-                    await q.put(("status", f"\n〔仍在处理… 已用时 {elapsed}s〕\n"))
+                    await q.put(("status", f"\n仍在处理…（已用时 {elapsed}s）\n"))
                 else:
-                    await q.put(("status", "\n〔仍在处理…〕\n"))
+                    await q.put(("status", "\n仍在处理…\n"))
             elif event_type == "run.checkpoint":
-                await q.put(("status", "\n〔检查点已保存〕\n"))
+                # Checkpoint is engineer state — do not spam the user bubble.
+                pass
 
         async def is_cancelled() -> bool:
             async with factory() as session:
