@@ -1,4 +1,5 @@
 -r requirements.txt
 pytest>=8.3,<9
 pytest-asyncio>=0.24,<1
-ruff>=0.8,<1
+# Exact pin — CI must print this version; same SHA → same lint (E1).
+ruff==0.16.1

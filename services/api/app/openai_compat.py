@@ -486,29 +486,34 @@ def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
 
 
 def _wants_deliverable_document(prompt: str) -> bool:
-    """Detect teacher NL asking for HTML / Word / PPT deliverables.
+    """Detect NL asking for HTML / Word / PPT *as the deliverable*.
 
-    Must catch plain Chinese phrasing without tool names or .docx suffixes
-    (S1.5 / S2.2: 「重新生成可下载 Word」 must not fall into direct-chat fake success).
+    Must catch plain Chinese phrasing (S1.5 / S2.2: 「重新生成可下载 Word」).
+    Must **not** fire on format names that only appear inside pasted source
+    material (e.g. 「历史文档格式杂（pdf/docx/截图）」 while user wants Markdown).
     """
     import re
 
     text = prompt or ""
     if not text.strip():
         return False
+    # Delivery-intent verbs / packaging words near Office/HTML types.
+    intent = (
+        r"(?:生成|重新生成|下载|可下载|导出|交付|做成|输出|改一版|改版|"
+        r"做一份|写一份|整理成|准备一份|generate|export|download|create)"
+    )
+    office = r"(?:html|网页|word|docx|ppt|pptx|幻灯片|课件|Power\s*Point|powerpoint)"
+    if re.search(rf"{intent}.{{0,40}}{office}", text, re.IGNORECASE):
+        return True
+    if re.search(rf"{office}.{{0,16}}(?:文件|文档|下载|file)", text, re.IGNORECASE):
+        return True
+    if re.search(r"\.(?:html?|docx|pptx)\b", text, re.IGNORECASE) and re.search(
+        intent, text, re.IGNORECASE
+    ):
+        return True
+    # Explicit “方案/说明 Word” packaging (not bare format lists in materials).
     return bool(
         re.search(
-            r"\.(?:html?|docx|pptx)\b|"
-            r"\b(?:html|docx|pptx|powerpoint)\b|"
-            r"幻灯片|课件|网页文件|word\s*文档|PPT|Power\s*Point|"
-            # 生成 + type (allow longer Chinese fillers between verb and type)
-            r"生成.{0,40}(?:html|网页|word|docx|ppt|pptx|幻灯片|文档)|"
-            # 可下载/下载/导出/改版 + Word/文档
-            r"(?:可下载|下载|导出|重新生成|改一版|改版|一页).{0,24}"
-            r"(?:Word|word|WORD|文档|docx|PPT|pptx|html|幻灯片|课件)|"
-            # Word/docx 文件|文档|下载
-            r"(?:Word|word|WORD|docx|PPT|pptx).{0,16}(?:文件|文档|下载)|"
-            # bare “方案/说明/通知 Word” without 生成 immediately nearby
             r"(?:方案|说明|通知|报告|小结).{0,8}(?:Word|word|docx|PPT|pptx)",
             text,
             re.IGNORECASE,
@@ -930,7 +935,10 @@ async def _finalize_run(
                 commit=False,
             )
 
-        # S2.2: classic Office/HTML deliverable skill without a real protected file.
+        # S2.2: deliverable skill without a real user-visible file.
+        # Office/HTML binary required only when the user asked for those types;
+        # Markdown / .txt / generic workspace files are valid office deliverables
+        # (O1 long-material notes must not fail solely because materials mention docx).
         skill_name = (
             skill_snapshot.get("name") if isinstance(skill_snapshot, dict) else None
         )
@@ -940,33 +948,55 @@ async def _finalize_run(
             and (
                 _wants_deliverable_document(prompt_for_plan)
                 or plan.runnable_html
+                or plan.min_artifacts >= 1
             )
             and plan.min_artifacts <= 1
             and not plan.multi_deliverable
             and not plan.pipeline
         ):
+            import re as _re
+
+            wants_office_binary = bool(
+                _re.search(
+                    r"(?:生成|重新生成|下载|可下载|导出|交付|做成|输出).{0,40}"
+                    r"(?:Word|word|docx|PPT|pptx|html|幻灯片|课件|网页)",
+                    prompt_for_plan,
+                    _re.IGNORECASE,
+                )
+            ) or bool(plan.runnable_html)
             has_real_file = False
             for kind, title, byte_size in art_list:
                 title_s = str(title or "")
                 kind_s = str(kind or "").lower()
                 if is_bookkeeping_title(title_s):
                     continue
-                if kind_s in {"docx", "html", "htm", "pptx"}:
-                    has_real_file = True
-                    break
                 lower = title_s.lower()
-                if lower.endswith((".docx", ".html", ".htm", ".pptx")) and (
-                    byte_size or 0
-                ) > 0:
-                    has_real_file = True
-                    break
+                size_ok = (byte_size or 0) > 0
+                if wants_office_binary:
+                    if kind_s in {"docx", "html", "htm", "pptx"} and size_ok:
+                        has_real_file = True
+                        break
+                    if lower.endswith((".docx", ".html", ".htm", ".pptx")) and size_ok:
+                        has_real_file = True
+                        break
+                else:
+                    # Any non-bookkeeping titled artifact with bytes (md/txt/file/doc…).
+                    if size_ok and title_s.strip():
+                        has_real_file = True
+                        break
             if not has_real_file:
                 run.status = "failed"
-                run.error = (
-                    "交件未生成可下载的真文件（HTML/Word/PPT）。"
-                    "请点「再跑一次」或重新描述「生成可下载 Word/HTML」；"
-                    "纯文字摘要不能当作文件交付。"
-                )
+                if wants_office_binary:
+                    run.error = (
+                        "交件未生成可下载的真文件（HTML/Word/PPT）。"
+                        "请点「再跑一次」或重新描述「生成可下载 Word/HTML」；"
+                        "纯文字摘要不能当作文件交付。"
+                    )
+                else:
+                    run.error = (
+                        "交件未写入可下载文件。请用工具落盘后再交；"
+                        "纯聊天复述不能当作文件交付。"
+                    )
                 await append_event(
                     session,
                     run_id,

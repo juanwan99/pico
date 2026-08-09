@@ -1,29 +1,14 @@
-"""S2.2: NL deliverable detection must not require tool names or .docx suffix."""
+"""S2.2: NL deliverable detection — Office/HTML intent, not material format noise."""
 
 from __future__ import annotations
 
-import re
+import sys
+from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "services" / "api"))
 
-def wants_deliverable_document(prompt: str) -> bool:
-    """Mirror of services/api/app/openai_compat._wants_deliverable_document."""
-    text = prompt or ""
-    if not text.strip():
-        return False
-    return bool(
-        re.search(
-            r"\.(?:html?|docx|pptx)\b|"
-            r"\b(?:html|docx|pptx|powerpoint)\b|"
-            r"幻灯片|课件|网页文件|word\s*文档|PPT|Power\s*Point|"
-            r"生成.{0,40}(?:html|网页|word|docx|ppt|pptx|幻灯片|文档)|"
-            r"(?:可下载|下载|导出|重新生成|改一版|改版|一页).{0,24}"
-            r"(?:Word|word|WORD|文档|docx|PPT|pptx|html|幻灯片|课件)|"
-            r"(?:Word|word|WORD|docx|PPT|pptx).{0,16}(?:文件|文档|下载)|"
-            r"(?:方案|说明|通知|报告|小结).{0,8}(?:Word|word|docx|PPT|pptx)",
-            text,
-            re.IGNORECASE,
-        )
-    )
+from app.openai_compat import _wants_deliverable_document as wants_deliverable_document
 
 
 def test_plain_chinese_word_download_hits() -> None:
@@ -48,7 +33,7 @@ def test_plain_chinese_word_download_hits() -> None:
 
 def test_explicit_suffix_still_hits() -> None:
     assert wants_deliverable_document("请实际生成 .docx 文件") is True
-    assert wants_deliverable_document("output.pptx please") is True
+    assert wants_deliverable_document("please generate output.pptx") is True
 
 
 def test_short_answer_and_chat_do_not_hit() -> None:
@@ -56,3 +41,12 @@ def test_short_answer_and_chat_do_not_hit() -> None:
     assert wants_deliverable_document("你好") is False
     assert wants_deliverable_document("你是什么模型") is False
     assert wants_deliverable_document("") is False
+
+
+def test_material_mentions_docx_not_office_deliverable() -> None:
+    """O1: pasted material listing pdf/docx must not force Word/HTML fail-closed."""
+    prompt = (
+        "请整理成一份可下载的客户拜访纪要 Markdown 文件（visit-notes.md）。\n"
+        "材料：历史文档格式杂（pdf/docx/截图），担心召回质量。"
+    )
+    assert wants_deliverable_document(prompt) is False
