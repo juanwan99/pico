@@ -45,6 +45,7 @@ _MARKDOWN_TABLE_L0 = re.compile(
 )
 
 # Tool/process chrome that must not linger in the user main bubble (G2).
+# Long process diaries are stripped; short mid-run UI chrome is not final_text.
 _PROCESS_LINE = re.compile(
     r"(?m)^[ \t]*[〔\[]?(?:"
     r"调用工具|工具完成|步骤\s*\d+|检查点已保存|仍在处理|正在思考|正在准备"
@@ -53,10 +54,36 @@ _PROCESS_LINE = re.compile(
 _PROCESS_INLINE = re.compile(
     r"[〔\[](?:调用工具[^〕\]]*|工具完成|步骤\s*\d+|检查点已保存)[〕\]]"
 )
-_ENGINEER_VERIFY_LINE = re.compile(
-    r"(?im)^(?:[ \t]*verify\b.*(?:base64|不可读|二进制|系统侧|复读).*$|"
-    r"[ \t]*正在准备[.。…]*[ \t]*$)"
+
+# L0 / structure self-check engineer wall (#394 Y1) — main bubble never a lab report.
+# Structural phrases from verify_html honest_note or model paraphrases.
+_L0_SELFCHECK_LINE = re.compile(
+    r"(?im)^[ \t]*(?:"
+    r".*(?:结构自检|静态自检|系统侧|二进制编码|content_encoding|"
+    r"verification_level|interaction_status|"
+    r"未做浏览器|未经真机|真机点击|无头浏览器|"
+    r"未宣称\s*L1|不夸大其可用性|写入账本|"
+    r"机读字段|自检说明|L0[_ ]?structure|L1[_ ]?(?:browser|交互)?).*"
+    r"|[ \t]*verify\b.*(?:base64|不可读|二进制|系统侧|复读).*"
+    r"|[ \t]*正在准备[.。…]*[ \t]*"
+    r")$"
 )
+# Mid-paragraph L0 walls when the model packs self-check into one long line with product copy.
+_L0_SELFCHECK_INLINE = re.compile(
+    r"(?i)(?:"
+    r"由于系统侧[^。\n]{0,120}(?:自检|账本|编码)[^。\n]{0,80}[。.]?"
+    r"|静态自检[^。\n]{0,100}[。.]?"
+    r"|结构自检[^。\n]{0,100}[。.]?"
+    r"|未经真机点击[^。\n]{0,80}[。.]?"
+    r"|未做浏览器真机点击[^。\n]{0,80}[。.]?"
+    r"|不夸大其可用性[。.]?"
+    r"|我如实说明[：:]?"
+    r"|对用户[：:]只说明[^。\n]{0,80}[。.]?"
+    r"|勿复读[^。\n]{0,60}[。.]?"
+    r"|本工具不做无头浏览器[^。\n]{0,80}[。.]?"
+    r")"
+)
+_ENGINEER_VERIFY_LINE = _L0_SELFCHECK_LINE
 
 
 # Tool-parameter monologue / planning diary (#384 / T-FIX-MAIN-BUBBLE-CLEAN).
@@ -134,18 +161,20 @@ def _strip_jargon(text: str) -> str:
     text = _MARKDOWN_TABLE_L0.sub("", text)
     text = _PROCESS_INLINE.sub("", text)
     text = _TOOL_MONOLOGUE_BLOCK.sub("", text)
+    text = _L0_SELFCHECK_INLINE.sub("", text)
     lines: list[str] = []
     for line in text.splitlines():
         if _JARGON_LINE.search(line):
             continue
         if _PROCESS_LINE.search(line):
             continue
-        if _ENGINEER_VERIFY_LINE.search(line):
+        if _L0_SELFCHECK_LINE.search(line):
             continue
         if _TOOL_MONOLOGUE_LINE.search(line):
             continue
         cleaned = _JARGON_INLINE.sub("", line)
         cleaned = _TOOL_NAME_BARE.sub("", cleaned)
+        cleaned = _L0_SELFCHECK_INLINE.sub("", cleaned)
         # Drop leftover empty bullet rows after inline strip.
         if cleaned.strip() in {"-", "*", "·", "•", "|", "||"}:
             continue

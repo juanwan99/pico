@@ -138,3 +138,44 @@ def test_empty_sanitize_with_titles_yields_card() -> None:
     )
     assert "lost-found.html" in out
     assert "generate_html" not in out
+
+
+def test_strips_l0_selfcheck_wall_from_main_bubble() -> None:
+    """#394 Y1: L0/structure self-check engineer wall must not remain in final_text."""
+    raw = (
+        "正在准备...\n"
+        "HTML 已生成并落盘。由于系统侧对该产物做了二进制编码存储，"
+        "静态自检无法直接读取其文本，但文件已正常写入账本、可下载。"
+        "我如实说明：页面按标准完整 HTML 生成，含真实按钮与脚本，"
+        "本地浏览器打开即可用；未经真机点击测试，不夸大其可用性。\n"
+        "已生成文件：物业值班备忘板.html\n"
+        "如何打开：在结果区点下载或打开。"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=["物业值班备忘板.html"])
+    assert "L0" not in out
+    assert "结构自检" not in out
+    assert "静态自检" not in out
+    assert "系统侧" not in out
+    assert "二进制编码" not in out
+    assert "账本" not in out
+    assert "真机点击" not in out
+    assert "不夸大" not in out
+    assert "verification_level" not in out.lower()
+    assert "物业值班备忘板.html" in out
+    # Human how-to kept or re-injected via card
+    assert "下载" in out or "打开" in out
+
+
+def test_preserves_human_filename_and_clarification_not_l0() -> None:
+    """Clarifications + human filenames survive; monologue/#375 posture unchanged."""
+    clarify = "请问需要几个栏目？主色是蓝还是绿？"
+    out = sanitize_user_facing_text(clarify, artifact_titles=[])
+    assert "栏目" in out
+    assert "主色" in out
+
+    named = sanitize_user_facing_text(
+        "已准备好失物招领板，文件名见下。",
+        artifact_titles=["失物招领板.html"],
+    )
+    assert "失物招领板.html" in named
+    assert "结构自检" not in named

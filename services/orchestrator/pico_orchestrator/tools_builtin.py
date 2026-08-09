@@ -358,10 +358,16 @@ def _workspace_handlers(
             raw = build_html_document(title=title, marker=marker, body=body)
         except ValueError as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        # Store HTML as UTF-8 text so verify_html + human open can read it.
+        # build_html_document returns bytes; base64 storage made L0 self-check
+        # fail closed and models recited engineer walls into the main bubble (#394 Y1).
+        content: str | bytes = raw
+        if isinstance(raw, bytes):
+            content = raw.decode("utf-8")
         result = await store.write(
             principal,
             title=title,
-            content=raw,
+            content=content,
             kind="html",
         )
         result["format"] = "html"
@@ -440,7 +446,19 @@ def _workspace_handlers(
                 "kind": result.get("kind"),
             }
             body = result.get("content")
-            if not isinstance(body, str):
+            if not isinstance(body, str) or not body.strip():
+                # Legacy base64 HTML (bytes write path) — decode for structure only.
+                b64 = result.get("content_base64")
+                if isinstance(b64, str) and b64.strip():
+                    import base64
+
+                    try:
+                        body = base64.b64decode(b64.encode("ascii"), validate=False).decode(
+                            "utf-8", errors="replace"
+                        )
+                    except Exception:  # noqa: BLE001 — corrupt payload → fail check
+                        body = None
+            if not isinstance(body, str) or not body.strip():
                 return {
                     "ok": False,
                     "overall": "fail",
@@ -451,7 +469,8 @@ def _workspace_handlers(
                             "detail": "artifact is binary or empty text",
                         }
                     ],
-                    "honest_note": "无法对二进制/空内容做 HTML 结构自检",
+                    # Machine-only note — never user-facing prose (human_package strips echoes).
+                    "honest_note": "internal_only: content_unreadable; fix artifact, do not narrate to user",
                     **art_meta,
                 }
             content = body
@@ -466,15 +485,13 @@ def _workspace_handlers(
         else:
             overall = "partial"
         # H3: layered verification — L0 structure only; L1 interaction never claimed here.
+        # honest_note is control-plane only; models must not paste it into main bubble.
         verification_level = "L0_structure"
         interaction_status = "not_run"
         honest = (
-            "结构自检完成（系统侧）。未做浏览器真机点击。"
-            "对用户：只说明文件名与如何下载打开；勿复读 verification_level/L0/L1 字段。"
-            "不得空口「全部完美/已可运行/人类可用」。"
+            "internal_only: structure_ok; user reply = filename + open/download only; no L0/L1 dump"
             if overall != "fail"
-            else "结构自检失败（系统侧）：存在 fail 项；应修复或诚实告知可能无法使用，"
-            "仍勿向用户粘贴机读字段表。"
+            else "internal_only: structure_fail; fix or honest short failure; no field table to user"
         )
         return {
             "ok": overall != "fail",
@@ -494,7 +511,7 @@ def _workspace_handlers(
                     "name": "browser_interaction",
                     "status": "not_run",
                     "ran": False,
-                    "note": "本工具不做无头浏览器；交互须人类点击或另报 L1 证据",
+                    "note": "internal_only: no headless browser in this tool",
                 },
             },
             **art_meta,

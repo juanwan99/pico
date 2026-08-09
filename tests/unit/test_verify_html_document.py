@@ -72,12 +72,14 @@ def test_verify_html_pass_structure() -> None:
     assert out["overall"] in {"pass", "partial"}
     assert out["ok"] is True
     assert "honest_note" in out
-    assert "浏览器" in out["honest_note"] or "未执行" in out["honest_note"]
+    # #394: honest_note is control-plane only — no user-facing self-check prose.
+    assert "internal_only" in out["honest_note"]
+    assert "结构自检" not in out["honest_note"]
     # H3: layered verification — never claim human-usable from structure alone.
     assert out.get("verification_level") == "L0_structure"
     assert out.get("interaction_status") == "not_run"
     assert out.get("levels", {}).get("L1", {}).get("status") == "not_run"
-    assert "人类可用" not in out["honest_note"] or "不得" in out["honest_note"]
+    assert "人类可用" not in out["honest_note"]
     names = {c["name"] for c in out["checks"]}
     assert "document_shell" in names
 
