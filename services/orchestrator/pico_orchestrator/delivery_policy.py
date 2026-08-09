@@ -72,13 +72,22 @@ _PIPELINE_PHRASE = re.compile(
 )
 
 # Hard revision verbs (files / versions) — generic.
+# Includes multi-round same-session revision ("第二轮修改") and versioned
+# re-delivery ("输出 v3 / 更新版"), not bare chat「修改一下语气」.
 _REVISION_PHRASE = re.compile(
     r"(?:"
     r"改成|改为|改一版|改版|修订|更新\s*(?:一下|版本|文件)|"
     r"把.{1,40}(?:改|更新|调整)|"
     r"联动\s*改|"
     r"同步\s*(?:更新|修改)|"
-    r"revi(?:se|sion)|update\s+the\s+(?:file|document|artifact)"
+    r"第[一二三四五六七八九\d]+\s*轮\s*(?:修改|改版|改)|"
+    r"再改(?:一版|一次|一遍)?|"
+    r"继续\s*(?:修改|改版|改一版|改)|"
+    r"同一会话.{0,16}(?:修改|改版|改一版|继续改|再改)|"
+    r"输出\s*(?:更新版|新版|v\d+)|"
+    r"更新版\s*(?:Markdown|markdown|文件|文档|md)?"
+    r"|[-_]v\d+\.(?:md|txt|html|docx|pptx|pdf)\b"
+    r"|revi(?:se|sion)|update\s+the\s+(?:file|document|artifact)"
     r")",
     re.IGNORECASE,
 )
@@ -526,6 +535,29 @@ def analyze_delivery(
         and not _EXPLICIT_MULTI_FILE.search(text)
     ):
         structure_multi = False
+    # One named file target (e.g. brief-v3.md) + change bullets ≠ N independent files.
+    named_files = {
+        m.group(0).lower()
+        for m in re.finditer(
+            r"[\w\u4e00-\u9fff.-]+\.(?:md|txt|html|docx|pptx|pdf)\b",
+            text,
+            re.IGNORECASE,
+        )
+    }
+    single_named_file = len(named_files) == 1
+    if (
+        single_named_file
+        and not multi_phrase
+        and not implicit_pkg
+        and explicit_n < 2
+        and not _EXPLICIT_MULTI_FILE.search(text)
+    ):
+        structure_multi = False
+        if not single_unit and (
+            revision_targets_files
+            or re.search(r"可下载|Markdown|markdown|更新版|落盘", text, re.I)
+        ):
+            single_unit = True
     multi = multi_phrase or implicit_pkg or explicit_n >= 2 or structure_multi
 
     # Single-unit intent wins over weak pipeline misreads (meta「阶段一」etc.).
