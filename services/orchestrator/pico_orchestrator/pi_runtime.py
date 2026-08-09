@@ -271,8 +271,21 @@ async def run_pi_agent(
                 ]
             messages.append(assistant_msg)
 
-            if content:
+            # M2: tool-planning turns keep content in model context only.
+            # Never accumulate tool monologue into user-facing final_parts / stream.
+            if content and not tool_calls:
                 final_parts.append(content)
+            elif content and tool_calls:
+                # Optional short progress only if not monologue (usually empty).
+                from pico_orchestrator.human_package import (
+                    looks_like_tool_monologue,
+                    sanitize_user_facing_text,
+                )
+
+                if not looks_like_tool_monologue(content):
+                    cleaned = sanitize_user_facing_text(content, artifact_titles=[])
+                    if cleaned and len(cleaned) <= 80:
+                        await emit("message.delta", {"text": cleaned})
 
             if not tool_calls:
                 # Delivery landing gate: chat-only "I wrote the file" is not success.
@@ -289,7 +302,13 @@ async def run_pi_agent(
                     and looks_like_clarification(final_blob or content or "")
                 )
                 if is_clarify:
-                    stream_body = content or final_blob
+                    from pico_orchestrator.human_package import sanitize_user_facing_text
+
+                    stream_body = sanitize_user_facing_text(
+                        content or final_blob,
+                        artifact_titles=[],
+                        force_card_if_artifacts=False,
+                    )
                     if stream_body:
                         await emit("message.delta", {"text": stream_body})
                     await emit(
@@ -343,19 +362,27 @@ async def run_pi_agent(
 
                 # Only stream the terminal user-facing turn after landing OK.
                 # Intermediate "thinking" content stays in model context only.
-                if content:
+                if content or tool_context_results:
                     from pico_orchestrator.human_package import (
                         sanitize_user_facing_text,
                         titles_from_tool_results,
                     )
 
+                    titles = titles_from_tool_results(tool_context_results)
                     stream_text = sanitize_user_facing_text(
                         content,
-                        artifact_titles=titles_from_tool_results(
-                            tool_context_results
-                        ),
+                        artifact_titles=titles,
                     )
-                    await emit("message.delta", {"text": stream_text or content})
+                    # Never fall back to raw model content (tool monologue leak).
+                    if stream_text:
+                        await emit("message.delta", {"text": stream_text})
+                    elif titles:
+                        stream_text = sanitize_user_facing_text(
+                            "",
+                            artifact_titles=titles,
+                        )
+                        if stream_text:
+                            await emit("message.delta", {"text": stream_text})
 
                 await emit(
                     "run.status",
