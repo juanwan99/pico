@@ -1,0 +1,40 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-09T13:55:12.103Z",
+  "base": "https://pico.aivia.asia",
+  "card": "visual-gate-infra",
+  "scene": "smoke",
+  "prompt": "只回一句：视觉门OK，不要调用工具，不要输出代码。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "74baecc960f70b2c181e79891cda96eefa7132cd",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/3bf1ef4f-fab6-4227-b2a6-b90a856c83f1",
+  "out_dir": "docs/evidence/visual-gate-infra/smoke",
+  "frames": {
+    "V0": "docs/evidence/visual-gate-infra/smoke/V0-send.png",
+    "V1": "docs/evidence/visual-gate-infra/smoke/V1-process-main.png",
+    "V2": "docs/evidence/visual-gate-infra/smoke/V2-final.png",
+    "V2_390": "docs/evidence/visual-gate-infra/smoke/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": false
+  },
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [
+    "V3 skipped (--skip-v3)"
+  ],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

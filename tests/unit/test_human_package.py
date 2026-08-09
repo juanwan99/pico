@@ -91,3 +91,50 @@ def test_strips_tool_process_chrome_from_bubble() -> None:
     assert "工具完成" not in out
     assert "artifact_id" not in out.lower()
     assert "demo.html" in out
+
+
+def test_strips_tool_parameter_monologue() -> None:
+    """M3: generate_*/JSON-escape diary must not remain in user bubble."""
+    raw = (
+        "Let me build the generate_html_document body parameter with JSON escape.\n"
+        "I'll call workspace_write_file next after fixing the arguments.\n"
+        "课件已写好，请下载打开。"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=["demo-board.html"])
+    assert "generate_html_document" not in out
+    assert "JSON escape" not in out
+    assert "workspace_write" not in out.lower()
+    assert "demo-board.html" in out
+    assert "下载" in out
+
+
+def test_looks_like_tool_monologue_detects_planning() -> None:
+    from pico_orchestrator.human_package import looks_like_tool_monologue
+
+    assert looks_like_tool_monologue(
+        "Let me construct the tool parameters for generate_html_document"
+    )
+    assert looks_like_tool_monologue("调用工具 generate_html_document 并写入 body")
+    assert not looks_like_tool_monologue("请问需要横版还是竖版布局？")
+
+
+def test_clarification_questions_preserved() -> None:
+    raw = (
+        "为了做好失物招领板，请确认：\n"
+        "1. 需要几个栏目？\n"
+        "2. 主色是蓝还是绿？\n"
+        "3. 是否需要搜索框？"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=[])
+    assert "栏目" in out
+    assert "主色" in out
+    assert "搜索框" in out
+
+
+def test_empty_sanitize_with_titles_yields_card() -> None:
+    out = sanitize_user_facing_text(
+        "generate_html_document body JSON escape workspace_write_file",
+        artifact_titles=["lost-found.html"],
+    )
+    assert "lost-found.html" in out
+    assert "generate_html" not in out

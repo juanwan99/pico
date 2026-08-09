@@ -54,6 +54,30 @@ _PROCESS_INLINE = re.compile(
     r"[〔\[](?:调用工具[^〕\]]*|工具完成|步骤\s*\d+|检查点已保存)[〕\]]"
 )
 
+# Tool-parameter monologue / planning diary (#384 / T-FIX-MAIN-BUBBLE-CLEAN).
+# Structural patterns — not a per-prompt denylist.
+_TOOL_MONOLOGUE_LINE = re.compile(
+    r"(?im)^[ \t]*(?:"
+    r".*\b(?:generate_(?:html|docx|pptx)_document|workspace_write(?:_file)?)\b.*|"
+    r".*(?:JSON\s*escape|escape\s*JSON|body\s*参数|tool\s*参数|"
+    r"function\.arguments|tool_calls?)\b.*|"
+    r"(?:Let me|I'll|I will|I need to|First|Next|Then)\b.*"
+    r"(?:tool|function|generate_|workspace_write|argument|parameter|JSON|escape).*"
+    r"|(?:我先|让我|我将|接下来|首先)\b.*(?:工具|参数|转义|落盘|写文件|构造).*"
+    r")$"
+)
+_TOOL_MONOLOGUE_BLOCK = re.compile(
+    r"(?is)(?:Let me (?:build|construct|call|prepare|write)|"
+    r"I'll (?:use|call|invoke|write)|"
+    r"I need to (?:call|use|invoke)|"
+    r"我先(?:构造|准备|调用)|让我(?:构造|调用|写))"
+    r"[^\n]{0,200}"
+)
+_TOOL_NAME_BARE = re.compile(
+    r"(?i)\b(?:generate_(?:html|docx|pptx)_document|workspace_write_file|"
+    r"verify_html_document)\b"
+)
+
 
 def is_bookkeeping_title(title: str | None) -> bool:
     t = (title or "").strip()
@@ -104,21 +128,50 @@ def _strip_html_dumps(text: str) -> str:
 def _strip_jargon(text: str) -> str:
     text = _MARKDOWN_TABLE_L0.sub("", text)
     text = _PROCESS_INLINE.sub("", text)
+    text = _TOOL_MONOLOGUE_BLOCK.sub("", text)
     lines: list[str] = []
     for line in text.splitlines():
         if _JARGON_LINE.search(line):
             continue
         if _PROCESS_LINE.search(line):
             continue
+        if _TOOL_MONOLOGUE_LINE.search(line):
+            continue
         cleaned = _JARGON_INLINE.sub("", line)
+        cleaned = _TOOL_NAME_BARE.sub("", cleaned)
         # Drop leftover empty bullet rows after inline strip.
         if cleaned.strip() in {"-", "*", "·", "•", "|", "||"}:
+            continue
+        if not cleaned.strip():
             continue
         lines.append(cleaned)
     text = "\n".join(lines)
     # Collapse 3+ blank lines.
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+def looks_like_tool_monologue(text: str) -> bool:
+    """True when the blob is mostly tool-planning diary (for stream gates)."""
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    if _TOOL_MONOLOGUE_BLOCK.search(raw):
+        return True
+    if _TOOL_NAME_BARE.search(raw) and len(raw) < 800:
+        # Bare tool name in a short bubble is almost never user-facing product copy.
+        return True
+    lines = [ln for ln in raw.splitlines() if ln.strip()]
+    if not lines:
+        return False
+    hits = sum(
+        1
+        for ln in lines
+        if _TOOL_MONOLOGUE_LINE.search(ln)
+        or _PROCESS_LINE.search(ln)
+        or _JARGON_LINE.search(ln)
+    )
+    return hits >= max(1, (len(lines) + 1) // 2)
 
 
 def _human_card(titles: list[str]) -> str:
