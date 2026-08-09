@@ -44,6 +44,16 @@ _MARKDOWN_TABLE_L0 = re.compile(
     r"(?:\|[^\n]*\|\s*\n)+"
 )
 
+# Tool/process chrome that must not linger in the user main bubble (G2).
+_PROCESS_LINE = re.compile(
+    r"(?m)^[ \t]*[〔\[]?(?:"
+    r"调用工具|工具完成|步骤\s*\d+|检查点已保存|仍在处理|正在思考|正在准备"
+    r")[^〕\]]*[〕\]]?[ \t]*$"
+)
+_PROCESS_INLINE = re.compile(
+    r"[〔\[](?:调用工具[^〕\]]*|工具完成|步骤\s*\d+|检查点已保存)[〕\]]"
+)
+
 
 def is_bookkeeping_title(title: str | None) -> bool:
     t = (title or "").strip()
@@ -93,9 +103,12 @@ def _strip_html_dumps(text: str) -> str:
 
 def _strip_jargon(text: str) -> str:
     text = _MARKDOWN_TABLE_L0.sub("", text)
+    text = _PROCESS_INLINE.sub("", text)
     lines: list[str] = []
     for line in text.splitlines():
         if _JARGON_LINE.search(line):
+            continue
+        if _PROCESS_LINE.search(line):
             continue
         cleaned = _JARGON_INLINE.sub("", line)
         # Drop leftover empty bullet rows after inline strip.

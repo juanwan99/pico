@@ -7,7 +7,8 @@ SECRETS: never print, copy to GitHub, or commit
 UPDATED: 2026-08-05 (#295 residual mega F)
 ```
 
-1. **先核版本。** 执行 `bash scripts/remote-health.sh`；`git_sha` 必须等于拟验证的
+1. **先核版本。** 优先 `curl -sS https://pico.aivia.asia/api/pico/tip`（见 `docs/TIP-PROBE.md`），
+   或 `bash scripts/remote-health.sh`；`git_sha` 必须等于拟验证的
    40 位 main SHA。再从生产 loopback health 核 `kimi_agent_scope`、
    `kimi_agent_runtime_enabled`、`kimi_agent_canary_configured`、
    `kimi_agent_canary_membership_count`、`kimi_agent_canary_batch` 与

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><title>T-CAP-DELIVERY-FOUNDATION 证据</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:24px;color:#1a1a1a;background:#fafafa}
+h1{font-size:20px} table{border-collapse:collapse;background:#fff;width:100%}
+th,td{border:1px solid #ddd;padding:8px 10px;font-size:13px;text-align:left}
+th{background:#f0f0f0} .ok{color:#0a7;font-weight:600} .code{white-space:pre-wrap;background:#111;color:#eee;padding:12px;border-radius:8px;font-size:12px}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#e8f5ef;color:#0a7;font-size:12px}
+</style></head><body>
+<h1>T-CAP-DELIVERY-FOUNDATION · 回归证据（策略/人包）</h1>
+<p><span class="badge">单元 29 passed</span> · CLAIM-WB NO · 非产品 PASS</p>
+<table><tr><th>场景</th><th>multi</th><th>min_artifacts</th><th>runnable</th><th>implicit</th><th>提示词摘要</th></tr>
+<tr><td>G5-① 单 HTML 课件</td><td>False</td><td>1</td><td>True</td><td>False</td><td>请生成一份可离线互动 HTML 课件：潮汐与月相观察日记（入门），3 页知识+日记页+小测验，浏览器本地打开可用。</td></tr>
+<tr><td>G5-② 隐式多文件</td><td>True</td><td>3</td><td>False</td><td>True</td><td>需要一整套材料：流程说明、注意事项、应急手册。</td></tr>
+<tr><td>G5-③ 闲聊</td><td>False</td><td>0</td><td>False</td><td>False</td><td>你是什么模型</td></tr>
+<tr><td>G1 显式双文件</td><td>True</td><td>2</td><td>False</td><td>False</td><td>请分别交付两个独立文件：A 规格说明、B 验收清单。禁止合并成一个文件。</td></tr>
+</table>
+<h2>G2 人包剥离</h2>
+<p>输入（含工具过程+机审字段）→ 输出：</p>
+<div class="code">IN:
+〔调用工具 generate_html_document〕
+〔工具完成〕
+课件已就绪
+artifact_id: abc
+
+OUT:
+已准备好文件：**demo.html**
+请在右侧「结果 / 产物」区点击 **下载** 或 **打开**。HTML 请用浏览器本地打开使用。
+若要改内容，直接说即可。
+</div>
+<h2>G4 tip 约定</h2>
+<ul>
+<li>公网：GET /api/pico/tip → {ok, git_sha, service}</li>
+<li>内网：bash scripts/remote-health.sh</li>
+<li>文档：docs/TIP-PROBE.md</li>
+</ul>
+<p class="ok">G1 单 HTML 不再 multi=true/min≥2（根因：结构枚举误伤内容段）</p>
+</body></html>
