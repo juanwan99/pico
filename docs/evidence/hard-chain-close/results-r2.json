@@ -1,0 +1,117 @@
+{
+  "tip": {
+    "ok": true,
+    "git_sha": "933388fad009b3c3920ff8a47a28b3837978ed68",
+    "service": "pico-api"
+  },
+  "steps": [
+    {
+      "step": "tip",
+      "tip": {
+        "ok": true,
+        "git_sha": "933388fad009b3c3920ff8a47a28b3837978ed68",
+        "service": "pico-api"
+      }
+    },
+    {
+      "step": "H1-sent",
+      "url": "https://pico.aivia.asia/c/new"
+    },
+    {
+      "step": "H1-done",
+      "url": "https://pico.aivia.asia/c/e7cae92b-bc29-4708-b2c0-1ef1c4c895d4",
+      "terminal": "succeeded",
+      "has_fail": false,
+      "names": [
+        "close-brief.md"
+      ],
+      "n_dl": 1,
+      "files": [
+        "close-brief.md"
+      ]
+    },
+    {
+      "step": "H2a-sent",
+      "url": "https://pico.aivia.asia/c/e7cae92b-bc29-4708-b2c0-1ef1c4c895d4"
+    },
+    {
+      "step": "H2a-done",
+      "url": "https://pico.aivia.asia/c/e7cae92b-bc29-4708-b2c0-1ef1c4c895d4",
+      "terminal": "succeeded",
+      "has_fail": false,
+      "names": [
+        "close-brief-v2.md"
+      ],
+      "n_dl": 1,
+      "files": [
+        "close-brief-v2.md"
+      ]
+    },
+    {
+      "step": "H2b-sent",
+      "url": "https://pico.aivia.asia/c/e7cae92b-bc29-4708-b2c0-1ef1c4c895d4"
+    },
+    {
+      "step": "H2b-done",
+      "url": "https://pico.aivia.asia/c/e7cae92b-bc29-4708-b2c0-1ef1c4c895d4",
+      "terminal": "succeeded",
+      "has_fail": false,
+      "names": [
+        "close-brief-v3.md"
+      ],
+      "n_dl": 1,
+      "files": [
+        "close-brief-v3.md"
+      ]
+    }
+  ],
+  "H1": {
+    "url": "https://pico.aivia.asia/c/e7cae92b-bc29-4708-b2c0-1ef1c4c895d4",
+    "terminal": "succeeded",
+    "has_fail": false,
+    "names": [
+      "close-brief.md"
+    ],
+    "downloaded": [
+      {
+        "name": "close-brief.md",
+        "bytes": 1299,
+        "path": "H1r-close-brief.md",
+        "head": "# 项目周会简报（close-brief）\n\n> 会时：2026-08-09 14:00–14:45 ｜ 线上 · 45 分钟\n\n## 一、摘要\n\n- 会议：项目周会（线上），时长 45 分钟（2026-0"
+      }
+    ]
+  },
+  "H2a": {
+    "url": "https://pico.aivia.asia/c/e7cae92b-bc29-4708-b2c0-1ef1c4c895d4",
+    "terminal": "succeeded",
+    "has_fail": false,
+    "names": [
+      "close-brief-v2.md"
+    ],
+    "downloaded": [
+      {
+        "name": "close-brief-v2.md",
+        "bytes": 1573,
+        "path": "H2ar-close-brief-v2.md",
+        "head": "# 项目周会简报（close-brief · v2）\n\n> 会时：2026-08-09 14:00–14:45 ｜ 线上 · 45 分钟\n> 版本说明：v2 相比 v1，①私有化报价时限由「本周五（0"
+      }
+    ]
+  },
+  "H2b": {
+    "url": "https://pico.aivia.asia/c/e7cae92b-bc29-4708-b2c0-1ef1c4c895d4",
+    "terminal": "succeeded",
+    "has_fail": false,
+    "names": [
+      "close-brief-v3.md"
+    ],
+    "downloaded": [
+      {
+        "name": "close-brief-v3.md",
+        "bytes": 2626,
+        "path": "H2br-close-brief-v3.md",
+        "head": "# 项目周会简报（close-brief · v3）\n\n> 会时：2026-08-09 14:00–14:45 ｜ 线上 · 45 分钟\n> 版本说明：v3 相比 v2，①新增独立章节「对外口径草案�"
+      }
+    ]
+  },
+  "session": "https://pico.aivia.asia/c/e7cae92b-bc29-4708-b2c0-1ef1c4c895d4"
+}

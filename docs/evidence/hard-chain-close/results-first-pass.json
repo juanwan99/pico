@@ -1,0 +1,165 @@
+{
+  "base": "https://pico.aivia.asia",
+  "tip": {
+    "ok": true,
+    "git_sha": "933388fad009b3c3920ff8a47a28b3837978ed68",
+    "service": "pico-api"
+  },
+  "steps": [
+    {
+      "step": "tip",
+      "tip": {
+        "ok": true,
+        "git_sha": "933388fad009b3c3920ff8a47a28b3837978ed68",
+        "service": "pico-api"
+      }
+    },
+    {
+      "step": "login",
+      "url": "https://pico.aivia.asia/c/new"
+    },
+    {
+      "step": "H1-sent",
+      "url": "https://pico.aivia.asia/c/new"
+    },
+    {
+      "step": "H1-done",
+      "url": "https://pico.aivia.asia/c/847372df-3ab6-4235-9d28-5078b9f81680",
+      "terminal": "succeeded",
+      "has_fail": false,
+      "names": [
+        "close-brief.md"
+      ],
+      "n_dl": 1,
+      "files": [
+        "close-brief.md"
+      ]
+    },
+    {
+      "step": "H2a-sent",
+      "url": "https://pico.aivia.asia/c/847372df-3ab6-4235-9d28-5078b9f81680"
+    },
+    {
+      "step": "H2a-done",
+      "url": "https://pico.aivia.asia/c/847372df-3ab6-4235-9d28-5078b9f81680",
+      "terminal": "succeeded",
+      "has_fail": false,
+      "names": [
+        "close-brief-v2.md"
+      ],
+      "n_dl": 1,
+      "files": [
+        "close-brief-v2.md"
+      ]
+    },
+    {
+      "step": "H2b-sent",
+      "url": "https://pico.aivia.asia/c/847372df-3ab6-4235-9d28-5078b9f81680"
+    },
+    {
+      "step": "H2b-done",
+      "url": "https://pico.aivia.asia/c/847372df-3ab6-4235-9d28-5078b9f81680",
+      "terminal": "failed",
+      "has_fail": true,
+      "names": [
+        "close-brief-v3.md"
+      ],
+      "n_dl": 0,
+      "files": []
+    },
+    {
+      "step": "M3-sent",
+      "url": "https://pico.aivia.asia/c/new"
+    },
+    {
+      "step": "M3-done",
+      "url": "https://pico.aivia.asia/c/73128de8-6976-45ba-9e23-9a040d4d0322",
+      "terminal": "succeeded",
+      "has_fail": false,
+      "names": [
+        "store-open-checklist.md",
+        "store-staff-roster.md",
+        "store-customer-sms.md"
+      ],
+      "n_dl": 3,
+      "files": [
+        "store-customer-sms.md",
+        "store-open-checklist.md",
+        "store-staff-roster.md"
+      ]
+    }
+  ],
+  "H1": {
+    "url": "https://pico.aivia.asia/c/847372df-3ab6-4235-9d28-5078b9f81680",
+    "terminal": "succeeded",
+    "has_fail": false,
+    "names": [
+      "close-brief.md"
+    ],
+    "downloaded": [
+      {
+        "name": "close-brief.md",
+        "path": "H1-close-brief.md",
+        "bytes": 987,
+        "head": "# 项目周会简报 · 2026-08-09\n\n## 摘要\n- **会时**：2026-08-09 14:00–14:45（线上）\n- **与会**：交付经理沈舟、客户成功叶岚、工程值班马珂\n- **重点**：Q3 试点�"
+      }
+    ]
+  },
+  "H2a": {
+    "url": "https://pico.aivia.asia/c/847372df-3ab6-4235-9d28-5078b9f81680",
+    "terminal": "succeeded",
+    "has_fail": false,
+    "names": [
+      "close-brief-v2.md"
+    ],
+    "downloaded": [
+      {
+        "name": "close-brief-v2.md",
+        "path": "H2a-close-brief-v2.md",
+        "bytes": 1376,
+        "head": "# 项目周会简报 · 2026-08-09（v2 更新版）\n\n> 相对 v1 的变更：① 私有化报价时间由「本周五前」调整为「下周二前」；② 新增行动项「沈舟 08-11 前确认�"
+      }
+    ]
+  },
+  "H2b": {
+    "url": "https://pico.aivia.asia/c/847372df-3ab6-4235-9d28-5078b9f81680",
+    "terminal": "failed",
+    "has_fail": true,
+    "names": [
+      "close-brief-v3.md"
+    ],
+    "downloaded": []
+  },
+  "session_H2": "https://pico.aivia.asia/c/847372df-3ab6-4235-9d28-5078b9f81680",
+  "M3": {
+    "url": "https://pico.aivia.asia/c/73128de8-6976-45ba-9e23-9a040d4d0322",
+    "terminal": "succeeded",
+    "has_fail": false,
+    "names": [
+      "store-open-checklist.md",
+      "store-staff-roster.md",
+      "store-customer-sms.md"
+    ],
+    "downloaded": [
+      {
+        "name": "store-customer-sms.md",
+        "path": "M3-store-customer-sms.md",
+        "bytes": 843,
+        "head": "# 北区开店筹备 · 3 条可复制短讯\n\n> 说明：可直接复制使用，括号内内容请按实际替换。\n\n---\n\n## 短讯 1 · 开业邀请\n\n【北区[店名]】您好！本店将于 [日�"
+      },
+      {
+        "name": "store-open-checklist.md",
+        "path": "M3-store-open-checklist.md",
+        "bytes": 1647,
+        "head": "# 北区开店筹备 · 开店检查表\n\n> 用途：开业前逐项打勾，全部通过后方可正式开门。\n\n---\n\n## 一、证照与合规\n\n- [ ] 营业执照已办理并悬挂于店内显眼位�"
+      },
+      {
+        "name": "store-staff-roster.md",
+        "path": "M3-store-staff-roster.md",
+        "bytes": 1987,
+        "head": "# 北区开店筹备 · 首周排班表（上 / 下午）\n\n> 说明：上午 09:00–15:00　下午 15:00–21:00　\n> 「主」= 当班负责人；「助」= 助理 / 收银；「兼」= 兼职机动"
+      }
+    ]
+  },
+  "session_M3": "https://pico.aivia.asia/c/73128de8-6976-45ba-9e23-9a040d4d0322"
+}
