@@ -333,18 +333,17 @@ def _count_parallel_list_items(text: str) -> int:
                 break
         # Title + content description after colon is often one document, not N files.
         # e.g. 「课件：潮汐日记，3 页知识+日记页」 — unless explicit multi-file language.
+        # Only count if body itself is a clear parallel deliverable list (顿号 etc.).
         if (
             _looks_like_single_unit(text)
             and not has_dunhao
             and not has_arrow
             and not _EXPLICIT_MULTI_FILE.search(text)
+            and "、" not in body
+            and not re.search(r"\s+与\s+|\s+和\s+|\s+及\s+", body)
         ):
-            # Only count if body itself is a clear parallel deliverable list (顿号 etc.).
-            if "、" not in body and not re.search(
-                r"\s+与\s+|\s+和\s+|\s+及\s+", body
-            ):
-                # comma-separated description of sections → not multi-file
-                return 0
+            # comma-separated description of sections → not multi-file
+            return 0
     elif has_dunhao or has_arrow or (has_cn_join and not feature_only):
         body = text
     else:

@@ -983,28 +983,33 @@ async def _finalize_run(
         # G1: fail-closed min count only for true multi/pipeline intent.
         # Single-unit delivery with ≥1 user-visible file must not fail solely
         # because a heuristic expected more content-sections-as-files.
-        if status == "succeeded" and plan.min_artifacts > 0 and user_art_count < plan.min_artifacts:
-            if multi_or_pipeline or user_art_count == 0:
-                run.status = "failed"
-                run.error = (
-                    f"工程交付未满足多产物要求：需要至少 {plan.min_artifacts} 个独立文件，"
-                    f"本轮仅 {user_art_count} 个。"
-                    "请分文件写入（禁止单长文多标题冒充），再跑一次。"
-                )
-                await append_event(
-                    session,
-                    run_id,
-                    "run.status",
-                    {
-                        "status": "failed",
-                        "reason": "delivery_min_artifacts",
-                        "min_required": plan.min_artifacts,
-                        "artifact_count": user_art_count,
-                        "runtime": "fail-closed",
-                    },
-                    commit=False,
-                )
-            # else: keep succeeded; delivery.summary.ok already True for single-unit ≥1
+        fail_closed_min = (
+            status == "succeeded"
+            and plan.min_artifacts > 0
+            and user_art_count < plan.min_artifacts
+            and (multi_or_pipeline or user_art_count == 0)
+        )
+        if fail_closed_min:
+            run.status = "failed"
+            run.error = (
+                f"工程交付未满足多产物要求：需要至少 {plan.min_artifacts} 个独立文件，"
+                f"本轮仅 {user_art_count} 个。"
+                "请分文件写入（禁止单长文多标题冒充），再跑一次。"
+            )
+            await append_event(
+                session,
+                run_id,
+                "run.status",
+                {
+                    "status": "failed",
+                    "reason": "delivery_min_artifacts",
+                    "min_required": plan.min_artifacts,
+                    "artifact_count": user_art_count,
+                    "runtime": "fail-closed",
+                },
+                commit=False,
+            )
+            # else path: keep succeeded; delivery.summary.ok already True for single-unit ≥1
 
         await session.commit()
 
