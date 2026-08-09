@@ -206,6 +206,27 @@ def test_single_named_versioned_file_not_multi_from_bullets() -> None:
     assert plan.force_agent is True
 
 
+def test_negated_multi_file_phrase_stays_single() -> None:
+    """「不要拆成多个独立文件」must not trigger multi min_artifacts."""
+    plan = analyze_delivery(
+        "上一轮失败了。请补交：只需要一份可下载的 ops-weekly-brief-v3.md"
+        "（单文件 Markdown 即可）。不要拆成多个独立文件。",
+        prior_artifact_titles=["ops-weekly-brief.md", "ops-weekly-brief-v2.md"],
+    )
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts == 1
+    assert plan.force_agent is True
+
+
+def test_forbid_merge_still_multi() -> None:
+    """Positive multi + 禁止合并 must remain multi-file."""
+    plan = analyze_delivery(
+        "请分别交付三个独立可下载文件：a.md、b.md、c.md。禁止合并成一个文件。"
+    )
+    assert plan.multi_deliverable is True
+    assert plan.min_artifacts >= 3
+
+
 def test_single_html_features_with_he_not_multi() -> None:
     """G1: 「含分页和测验」is one document's features, not two files."""
     plan = analyze_delivery("写一个 HTML 互动页，含分页和测验，本地打开可用")

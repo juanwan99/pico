@@ -308,7 +308,9 @@ def _looks_like_single_unit(text: str) -> bool:
     """True when the user asks for one document/page (not N independent files)."""
     if not text:
         return False
-    if _EXPLICIT_MULTI_FILE.search(text) or _IMPLICIT_PACKAGE.search(text):
+    # Negated multi ("不要拆成多个独立文件") must not block single-unit.
+    scan = _strip_negated_multi_clauses(text)
+    if _EXPLICIT_MULTI_FILE.search(scan) or _IMPLICIT_PACKAGE.search(text):
         return False
     if _count_explicit_n_files(text) >= 2:
         return False
@@ -460,6 +462,30 @@ def normalize_artifact_title(title: str) -> tuple[str, str | None]:
     return t, None
 
 
+def _strip_negated_multi_clauses(text: str) -> str:
+    """Drop clauses that *forbid* multi-file packing so they do not fire multi.
+
+    e.g. 「不要拆成多个独立文件」「别分成多份文件」are single-unit intent.
+    Keep positive multi (「分别交付」「禁止合并成一个文件」).
+    """
+    if not text:
+        return text
+    cleaned = re.sub(
+        r"(?:不要|别|请勿|无需|不用|切勿)\s*"
+        r"(?:"
+        r"(?:拆成|分成)\s*多\s*(?:个|份)?\s*(?:独立\s*)?(?:可下载\s*)?(?:文件|产物|交付|文档)?"
+        r"|多个?\s*(?:独立\s*)?(?:可下载\s*)?(?:文件|产物|交付|文档)"
+        r"|独立\s*(?:可下载\s*)?文件"
+        r"|分文件"
+        r"|多(?:个|份)\s*(?:独立\s*)?(?:文件|产物|交付|文档)"
+        r")",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return cleaned
+
+
 def analyze_delivery(
     prompt: str,
     *,
@@ -475,7 +501,8 @@ def analyze_delivery(
         else len(prior_titles)
     )
 
-    multi_phrase = bool(_MULTI_PHRASE.search(text))
+    multi_scan = _strip_negated_multi_clauses(text)
+    multi_phrase = bool(_MULTI_PHRASE.search(multi_scan))
     implicit_pkg = bool(_IMPLICIT_PACKAGE.search(text))
     structure_n = _count_structure_items(text)
     explicit_n = _count_explicit_n_files(text)
@@ -527,12 +554,13 @@ def analyze_delivery(
     structure_multi = structure_n >= 2 and not single_unit
     # O2: same-session revision enumerates *changes* (改成…，并新增…), not N files.
     # Do not promote structure_multi for revision unless multi-file language is explicit.
+    explicit_multi = bool(_EXPLICIT_MULTI_FILE.search(multi_scan))
     if (
         revision_targets_files
         and not multi_phrase
         and not implicit_pkg
         and explicit_n < 2
-        and not _EXPLICIT_MULTI_FILE.search(text)
+        and not explicit_multi
     ):
         structure_multi = False
     # One named file target (e.g. brief-v3.md) + change bullets ≠ N independent files.
@@ -550,12 +578,16 @@ def analyze_delivery(
         and not multi_phrase
         and not implicit_pkg
         and explicit_n < 2
-        and not _EXPLICIT_MULTI_FILE.search(text)
+        and not explicit_multi
     ):
         structure_multi = False
         if not single_unit and (
             revision_targets_files
-            or re.search(r"可下载|Markdown|markdown|更新版|落盘", text, re.I)
+            or re.search(
+                r"可下载|Markdown|markdown|更新版|落盘",
+                text,
+                re.IGNORECASE,
+            )
         ):
             single_unit = True
     multi = multi_phrase or implicit_pkg or explicit_n >= 2 or structure_multi
