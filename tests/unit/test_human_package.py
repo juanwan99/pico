@@ -76,3 +76,18 @@ def test_fenced_html_stripped() -> None:
     out = sanitize_user_facing_text(raw, artifact_titles=["x.html"])
     assert "```html" not in out
     assert "x.html" in out
+
+
+def test_strips_tool_process_chrome_from_bubble() -> None:
+    """G2: tool/process lines must not remain in user-facing package."""
+    raw = (
+        "〔调用工具 generate_html_document〕\n"
+        "〔工具完成〕\n"
+        "课件已就绪，请下载使用。\n"
+        "artifact_id: should-go\n"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=["demo.html"])
+    assert "调用工具" not in out
+    assert "工具完成" not in out
+    assert "artifact_id" not in out.lower()
+    assert "demo.html" in out

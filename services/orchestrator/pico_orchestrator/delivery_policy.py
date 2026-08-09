@@ -129,6 +129,40 @@ _HTML_SURFACE = re.compile(
     r"(?i)html|网页|页面|\bpage\b|单页",
 )
 
+# Single delivery unit (one file/page/doc) — language-level, not domain titles.
+# Prevents content sections inside one HTML/课件 from inflating multi-file min.
+_SINGLE_UNIT = re.compile(
+    r"(?:"
+    r"一\s*[份个张本]|单\s*[页个份文件]|"
+    r"(?:做|生成|写|交付|准备|制作)\s*一\s*[份个张]|"
+    r"一份.{0,20}(?:html|HTML|网页|页面|课件|教案|文档|互动页)|"
+    r"(?:html|HTML|网页|页面|课件).{0,12}(?:一份|一个|单页)|"
+    r"single[- ]?page|"
+    r"one\s+(?:html|page|file|document)"
+    r")",
+    re.IGNORECASE,
+)
+
+# Explicit multi-file language (overrides single-unit).
+_EXPLICIT_MULTI_FILE = re.compile(
+    r"(?:"
+    r"分别\s*(?:交付|生成|写出|落盘|下载|写成)|"
+    r"独立\s*(?:可下载\s*)?文件|"
+    r"多(?:个|份)\s*(?:独立\s*)?(?:文件|产物|交付|文档)|"
+    r"分文件|"
+    r"禁止\s*(?:合并|合成)\s*(?:成\s*)?(?:一|单)\s*(?:个|份)\s*文件|"
+    r"separate\s+(?:files?|artifacts?)|"
+    r"not\s+a\s+single\s+file"
+    r")",
+    re.IGNORECASE,
+)
+
+# Feature pairs inside one document (含分页和测验) — not multi-file lists.
+_FEATURE_JOIN = re.compile(
+    r"(?:含|有|带|包括|具备|附带|含有)\s*.{0,20}(?:与|和|及).{0,20}",
+    re.IGNORECASE,
+)
+
 # Numbered deliverable lines: "1) foo" / "1. bar" / "① baz" / "阶段1 …"
 _NUMBERED_ITEM = re.compile(
     r"(?m)^\s*(?:"
@@ -260,11 +294,23 @@ def _is_structure_segment(chunk: str) -> bool:
     return bool(re.search(r"[\w\u4e00-\u9fff]", s, re.UNICODE))
 
 
+def _looks_like_single_unit(text: str) -> bool:
+    """True when the user asks for one document/page (not N independent files)."""
+    if not text:
+        return False
+    if _EXPLICIT_MULTI_FILE.search(text) or _IMPLICIT_PACKAGE.search(text):
+        return False
+    if _count_explicit_n_files(text) >= 2:
+        return False
+    return bool(_SINGLE_UNIT.search(text))
+
+
 def _count_parallel_list_items(text: str) -> int:
     """Count顿号/comma/与|和|及 parallel enumerations (structure-first).
 
     Prefers content after first colon. Does **not** require domain nouns.
     Avoids treating prose commas (「改成更短一点，语气友好」) as multi-deliverable.
+    Also avoids feature pairs inside one document (「含分页和测验」).
     """
     if not text:
         return 0
@@ -273,6 +319,10 @@ def _count_parallel_list_items(text: str) -> int:
     has_arrow = ("→" in text) or ("->" in text)
     # Dual short labels joined by 与|和|及 (e.g. 说明与清单).
     has_cn_join = bool(re.search(r"\S{1,16}\s*(?:与|和|及)\s*\S{1,16}", text))
+    # Content features of one unit are not multi-file lists.
+    feature_only = bool(_FEATURE_JOIN.search(text)) and not has_dunhao and not has_arrow
+    if feature_only and not has_colon and not _EXPLICIT_MULTI_FILE.search(text):
+        return 0
 
     body = text
     if has_colon:
@@ -281,7 +331,21 @@ def _count_parallel_list_items(text: str) -> int:
                 tail = text.split(sep, 1)[1]
                 body = re.split(r"[。！？\n]", tail, maxsplit=1)[0]
                 break
-    elif has_dunhao or has_arrow or has_cn_join:
+        # Title + content description after colon is often one document, not N files.
+        # e.g. 「课件：潮汐日记，3 页知识+日记页」 — unless explicit multi-file language.
+        if (
+            _looks_like_single_unit(text)
+            and not has_dunhao
+            and not has_arrow
+            and not _EXPLICIT_MULTI_FILE.search(text)
+        ):
+            # Only count if body itself is a clear parallel deliverable list (顿号 etc.).
+            if "、" not in body and not re.search(
+                r"\s+与\s+|\s+和\s+|\s+及\s+", body
+            ):
+                # comma-separated description of sections → not multi-file
+                return 0
+    elif has_dunhao or has_arrow or (has_cn_join and not feature_only):
         body = text
     else:
         # English/Chinese comma alone in free prose is too noisy — skip.
@@ -294,18 +358,21 @@ def _count_parallel_list_items(text: str) -> int:
     # Drop segments that look like imperative prose / media meta, not list labels.
     clean: list[str] = []
     for h in hits:
-        if re.search(r"^(?:把|请|将|让|把刚才)", h):
+        if re.search(r"^(?:把|请|将|让|把刚才|含|有|带)", h):
             continue
         if re.search(r"改成|改为|语气|友好", h) and len(h) > 10:
             continue
         if re.search(
-            r"本地\s*打开|可打开|浏览器|自检|file\s*打开|可用$|请做",
+            r"本地\s*打开|可打开|浏览器|自检|file\s*打开|可用$|请做|"
+            r"^\d+\s*页|分页|测验|小测验|日记页|知识页",
             h,
             re.IGNORECASE,
         ):
             continue
         clean.append(h)
     return len(clean) if len(clean) >= 2 else 0
+
+
 def _count_lettered_items(text: str) -> int:
     found = _LETTERED_ITEM.findall(text or "")
     # Filter short noise
@@ -420,14 +487,19 @@ def analyze_delivery(
         pipeline = False
         pipeline_n = 0
 
-    multi = multi_phrase or implicit_pkg or explicit_n >= 2 or structure_n >= 2
+    # G1: structure enumeration alone must not force multi-file when the user
+    # asked for a single unit (one HTML/课件/文档). Explicit multi/package/pipeline
+    # still force multi. No title/keyword exam tables.
+    single_unit = _looks_like_single_unit(text)
+    structure_multi = structure_n >= 2 and not single_unit
+    multi = multi_phrase or implicit_pkg or explicit_n >= 2 or structure_multi
 
     min_arts = 0
     if multi:
         candidates = [2]
         if explicit_n >= 2:
             candidates.append(explicit_n)
-        if structure_n >= 2:
+        if structure_n >= 2 and not single_unit:
             candidates.append(structure_n)
         min_arts = max(candidates)
     if pipeline:
@@ -435,6 +507,11 @@ def analyze_delivery(
     if runnable and min_arts == 0:
         min_arts = 1
     if revision_targets_files and min_arts == 0:
+        min_arts = 1
+    # Single-unit runnable/document: success needs one file, not N content sections.
+    if single_unit and not multi and not pipeline and min_arts == 0 and (
+        runnable or revision_targets_files
+    ):
         min_arts = 1
 
     force_agent = multi or pipeline or runnable or revision_targets_files
