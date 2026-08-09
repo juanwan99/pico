@@ -25,6 +25,11 @@ class RunCaps:
     max_steps: int = 24
     allowed_tools: list[str] | None = None
     skill_instruction: str = ""
+    # Delivery landing gate (T-AGENT-LANDING-RELIABLE): when >0, Pi will not
+    # report runtime success until at least this many write/generate tool
+    # successes land — or it fails closed after one landing retry.
+    # 0 = short chat / no file required.
+    min_artifacts: int = 0
 
 
 @dataclass

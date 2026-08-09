@@ -935,10 +935,11 @@ async def _finalize_run(
                 commit=False,
             )
 
-        # S2.2: deliverable skill without a real user-visible file.
+        # S2.2 / landing: deliverable skill without a real user-visible file.
         # Office/HTML binary required only when the user asked for those types;
         # Markdown / .txt / generic workspace files are valid office deliverables
         # (O1 long-material notes must not fail solely because materials mention docx).
+        # When min_artifacts>=1 (incl. multi), zero real files must never stay succeeded.
         skill_name = (
             skill_snapshot.get("name") if isinstance(skill_snapshot, dict) else None
         )
@@ -949,11 +950,20 @@ async def _finalize_run(
                 _wants_deliverable_document(prompt_for_plan)
                 or plan.runnable_html
                 or plan.min_artifacts >= 1
+                or plan.force_agent
             )
-            and plan.min_artifacts <= 1
-            and not plan.multi_deliverable
-            and not plan.pipeline
+            and (
+                plan.min_artifacts <= 1
+                or user_art_count == 0
+            )
+            and not (
+                plan.multi_deliverable
+                and user_art_count > 0
+                and user_art_count < plan.min_artifacts
+            )
         ):
+            # multi short-delivery (1 of N) is handled by delivery_min_artifacts below;
+            # this block catches chat-only / zero-byte "success".
             import re as _re
 
             wants_office_binary = bool(
@@ -1075,6 +1085,21 @@ async def _run_and_collect(
             skill_snapshot, prompt, delivery_plan
         ),
     )
+    # Landing gate: force min_artifacts into Pi so chat-only "done" cannot succeed.
+    from dataclasses import replace as _dc_replace
+
+    need = 0
+    if delivery_plan is not None:
+        need = int(getattr(delivery_plan, "min_artifacts", 0) or 0)
+        if bool(getattr(delivery_plan, "force_agent", False)) and need < 1:
+            need = 1
+    skill_name = (
+        skill_snapshot.get("name") if isinstance(skill_snapshot, dict) else None
+    )
+    if skill_name in {"skill.deliverable", "skill.engineering_delivery"} and need < 1:
+        need = 1
+    if need > 0:
+        caps = _dc_replace(caps, min_artifacts=need)
     if skill_snapshot:
         await emit("skill.snapshot", skill_snapshot)
     if delivery_plan is not None and getattr(delivery_plan, "engineering", False):
