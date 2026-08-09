@@ -151,6 +151,31 @@ def test_single_unit_new_surface_not_multi() -> None:
     assert plan.force_agent is True
 
 
+def test_office_markdown_long_material_single_file() -> None:
+    """O1: long office material → one Markdown file, not multi fail-closed."""
+    plan = analyze_delivery(
+        "根据以下材料，请整理成一份可下载的「客户拜访纪要」Markdown 文件"
+        "（单文件即可，visit-notes.md）。历史文档格式杂（pdf/docx/截图）。"
+        "请输出结构化纪要。"
+    )
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts == 1
+    assert plan.force_agent is True
+
+
+def test_same_session_revision_not_multi_from_change_list() -> None:
+    """O2: 改一版 + 改成…并新增… is one-file revision, not two deliverables."""
+    plan = analyze_delivery(
+        "请在同一会话里改一版：把行动项里「3 个工作日内发试点方案」改成「5 个工作日内」，"
+        "并新增一条「客户法务条款对齐」由我方法务跟进；输出更新版 Markdown"
+        "（visit-notes-v2.md），文件须可再下载打开。",
+        prior_artifact_titles=["visit-notes.md"],
+    )
+    assert plan.revision is True
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts == 1
+
+
 def test_single_html_features_with_he_not_multi() -> None:
     """G1: 「含分页和测验」is one document's features, not two files."""
     plan = analyze_delivery("写一个 HTML 互动页，含分页和测验，本地打开可用")

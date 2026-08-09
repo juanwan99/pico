@@ -189,6 +189,68 @@ async def test_finalize_true_multi_short_delivery_fail_closed(tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
+async def test_finalize_markdown_office_notes_not_office_binary_fail(
+    tmp_path, monkeypatch
+) -> None:
+    """O1: Markdown visit notes with size>0 must succeed (not HTML/Word-only gate)."""
+    from app.db import ArtifactRow, RunRow, TaskRow, new_id
+    from app.openai_compat import _finalize_run
+
+    factory = await _boot_db(tmp_path, monkeypatch, "finalize-md-ok.db")
+    task_id = new_id()
+    run_id = new_id()
+    prompt = (
+        "根据以下材料，请整理成一份可下载的「客户拜访纪要」Markdown 文件"
+        "（visit-notes.md）。材料含 pdf/docx 提及。单文件即可。"
+    )
+    body = b"# visit notes\n- [ ] action\n"
+    async with factory() as session:
+        session.add(
+            TaskRow(
+                id=task_id,
+                school_id="school-a",
+                membership_id="member-e4-md",
+                title="md-notes",
+            )
+        )
+        session.add(
+            RunRow(
+                id=run_id,
+                task_id=task_id,
+                status="running",
+                prompt=prompt,
+                model="test-model",
+            )
+        )
+        session.add(
+            ArtifactRow(
+                id=new_id(),
+                task_id=task_id,
+                run_id=run_id,
+                kind="file",
+                title="visit-notes.md",
+                inline=body.decode(),
+                content_encoding="utf8",
+                byte_size=len(body),
+            )
+        )
+        await session.commit()
+
+    await _finalize_run(
+        run_id,
+        status="succeeded",
+        final_text="已生成 visit-notes.md，请下载。",
+        task_id=task_id,
+        user_prompt=prompt,
+    )
+    async with factory() as session:
+        run = await session.get(RunRow, run_id)
+        assert run is not None
+        assert run.status == "succeeded"
+        assert run.error is None
+
+
+@pytest.mark.asyncio
 async def test_finalize_true_multi_full_delivery_succeeds(tmp_path, monkeypatch) -> None:
     """True multi + enough independent files → remains succeeded."""
     from app.db import ArtifactRow, RunRow, TaskRow, new_id

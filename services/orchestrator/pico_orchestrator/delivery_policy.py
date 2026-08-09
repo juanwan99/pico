@@ -360,9 +360,9 @@ def _count_parallel_list_items(text: str) -> int:
     # domain noun table as dedicated filters — see REMOVED_OVERFIT_PHRASES).
     clean: list[str] = []
     for h in hits:
-        if re.search(r"^(?:把|请|将|让|把刚才|含|有|带)", h):
+        if re.search(r"^(?:把|请|将|让|把刚才|含|有|带|并|且|输出|文件须|再)", h):
             continue
-        if re.search(r"改成|改为|语气|友好", h) and len(h) > 10:
+        if re.search(r"改成|改为|语气|友好|新增一条|跟进|更新版|可再下载", h) and len(h) > 8:
             continue
         # Media / openability meta (language-level).
         if re.search(
@@ -516,6 +516,16 @@ def analyze_delivery(
     # still force multi. No title/keyword exam tables.
     single_unit = _looks_like_single_unit(text)
     structure_multi = structure_n >= 2 and not single_unit
+    # O2: same-session revision enumerates *changes* (改成…，并新增…), not N files.
+    # Do not promote structure_multi for revision unless multi-file language is explicit.
+    if (
+        revision_targets_files
+        and not multi_phrase
+        and not implicit_pkg
+        and explicit_n < 2
+        and not _EXPLICIT_MULTI_FILE.search(text)
+    ):
+        structure_multi = False
     multi = multi_phrase or implicit_pkg or explicit_n >= 2 or structure_multi
 
     # Single-unit intent wins over weak pipeline misreads (meta「阶段一」etc.).
