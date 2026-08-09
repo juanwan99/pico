@@ -129,21 +129,30 @@ async function shot(page, filePath, opts = {}) {
 }
 
 async function mainBubbleText(page) {
-  // Prefer message list / main chat region; fall back to body.
-  const selectors = [
+  // Prefer assistant message bubbles only — NOT the right engineer sidebar
+  // (tool names there are expected; #384 veto is main-bubble only).
+  const prefer = [
+    '[data-testid="message-content"]',
+    '[data-testid="messages-view"] .markdown',
     '[data-testid="messages-view"]',
+    'main [class*="message"]',
     'main',
-    '[class*="messages"]',
-    'body',
   ];
-  for (const sel of selectors) {
-    const loc = page.locator(sel).first();
-    if (await loc.count()) {
-      const t = await loc.innerText().catch(() => '');
-      if (t && t.trim().length > 0) return t;
+  for (const sel of prefer) {
+    const loc = page.locator(sel);
+    const n = await loc.count();
+    if (!n) continue;
+    // Concat visible message texts (user + assistant), exclude empty.
+    const parts = [];
+    const limit = Math.min(n, 40);
+    for (let i = 0; i < limit; i++) {
+      const t = await loc.nth(i).innerText().catch(() => '');
+      if (t && t.trim()) parts.push(t.trim());
     }
+    if (parts.length) return parts.join('\n\n');
   }
-  return page.locator('body').innerText().catch(() => '');
+  // Last resort: still avoid full body if possible
+  return page.locator('main').innerText().catch(() => page.locator('body').innerText().catch(() => ''));
 }
 
 function scanMonologue(text) {
