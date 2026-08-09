@@ -1,0 +1,86 @@
+{
+  "at": "2026-08-09T14:17:03Z",
+  "host": "iZf8z2piigunrk8ixto7hnZ",
+  "repo_root": "/home/ops/pico",
+  "catalog_ref": "docs/TOOLING-CATALOG.md",
+  "binding": [
+    "#386",
+    "#387",
+    "#384"
+  ],
+  "claim_wb": "NO",
+  "product_ready": false,
+  "tools": {
+    "node": {
+      "ok": true,
+      "version": "v22.22.2"
+    },
+    "playwright_cli": {
+      "ok": true,
+      "version": "Version 1.59.0"
+    },
+    "playwright_mcp": {
+      "ok": true,
+      "browser": "chromium"
+    },
+    "chrome_devtools_mcp": {
+      "ok": true
+    },
+    "gh": {
+      "ok": true
+    },
+    "git": {
+      "ok": true
+    },
+    "pytest": {
+      "ok": true
+    },
+    "ruff": {
+      "ok": true
+    },
+    "docker": {
+      "ok": true
+    },
+    "ssh": {
+      "ok": true
+    },
+    "visual_gate_script": {
+      "ok": false,
+      "path": "scripts/visual-gate.mjs"
+    },
+    "tip_pin_script": {
+      "ok": false,
+      "path": "scripts/tip-pin.sh"
+    },
+    "remote_health_script": {
+      "ok": true,
+      "path": "scripts/remote-health.sh"
+    },
+    "tooling_catalog_doc": {
+      "ok": true,
+      "path": "docs/TOOLING-CATALOG.md"
+    },
+    "demo_secret": {
+      "ok": true,
+      "email_set": true,
+      "note": "presence only; values never printed"
+    },
+    "tip_public": {
+      "ok": true,
+      "git_sha": "74baecc960f70b2c181e79891cda96eefa7132cd",
+      "url": "https://pico.aivia.asia/api/pico/tip"
+    },
+    "retired_mechanisms": {
+      "ok": true,
+      "clear": true,
+      "cool_blocks_active": false,
+      "edu_supervisor_window_active": false,
+      "archive_present": true,
+      "archive_dir": "/home/ops/archive/retired-mechanisms-20260809"
+    }
+  },
+  "missing": [
+    "visual_gate_script"
+  ],
+  "blocked_for_visual_gate": true
+}
