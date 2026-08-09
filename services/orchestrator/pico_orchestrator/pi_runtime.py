@@ -27,6 +27,36 @@ RUNTIME_LABEL = "pi-agent"
 _CANCEL_POLL_SECONDS = 0.05
 _HEARTBEAT_SECONDS = 30.0
 
+# Tools that create user-visible downloadable artifacts in the ledger.
+_WRITE_TOOLS = frozenset(
+    {
+        "workspace_write_file",
+        "generate_html_document",
+        "generate_docx_document",
+        "generate_pptx_document",
+    }
+)
+
+_LANDING_NUDGE = (
+    "【系统落盘门闩】本轮交付意图要求写入可下载文件，但工具账本尚未落盘足够产物。"
+    "请立即调用 workspace_write_file 或 generate_*_document 写入真实文件；"
+    "禁止只在聊天里复述正文或假装已交付。写完后再用人话说明文件名与如何下载。"
+)
+
+
+def count_write_tool_successes(
+    tool_results: list[tuple[str, dict[str, Any]]] | None,
+) -> int:
+    """Count successful write/generate tool results (landing evidence)."""
+    n = 0
+    for name, value in tool_results or []:
+        if name not in _WRITE_TOOLS:
+            continue
+        if isinstance(value, dict) and value.get("error"):
+            continue
+        n += 1
+    return n
+
 _DEFAULT_SYSTEM = """# Pico · Pi harness
 
 You are **Pico**, a task-oriented AI workbench agent (Pi-style minimal harness).
@@ -96,6 +126,8 @@ async def run_pi_agent(
         "output_tokens": 0,
         "total_tokens": 0,
     }
+    landing_retries = 0
+    min_arts = max(0, int(getattr(caps, "min_artifacts", 0) or 0))
     stop = asyncio.Event()
     timed_out = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -241,10 +273,47 @@ async def run_pi_agent(
 
             if content:
                 final_parts.append(content)
-                # Only stream the terminal user-facing turn (no tool_calls).
-                # Intermediate "thinking" content stays in model context only —
-                # avoids leaking mid-loop verify jargon into the chat bubble.
-                if not tool_calls:
+
+            if not tool_calls:
+                # Delivery landing gate: chat-only "I wrote the file" is not success.
+                writes = count_write_tool_successes(tool_context_results)
+                landing_ok = min_arts <= 0 or writes >= min_arts
+                if (
+                    not landing_ok
+                    and landing_retries < 1
+                    and step < max(1, caps.max_steps)
+                ):
+                    landing_retries += 1
+                    await emit(
+                        "delivery.landing_retry",
+                        {
+                            "min_artifacts": min_arts,
+                            "write_tool_successes": writes,
+                            "attempt": landing_retries,
+                            "runtime": RUNTIME_LABEL,
+                        },
+                    )
+                    messages.append({"role": "user", "content": _LANDING_NUDGE})
+                    # Do not stream the chat-only claim as a terminal success.
+                    continue
+
+                if not landing_ok:
+                    return await _failed_result(
+                        emit,
+                        code="delivery.missing_artifact",
+                        reason=(
+                            "交付意图下未写入可下载文件（聊天复述不能当作交件）。"
+                            "请再跑一次或明确要求用工具落盘。"
+                        ),
+                        final_parts=final_parts,
+                        token_usage=token_usage,
+                        tool_results=tool_context_results,
+                        principal=principal,
+                    )
+
+                # Only stream the terminal user-facing turn after landing OK.
+                # Intermediate "thinking" content stays in model context only.
+                if content:
                     from pico_orchestrator.human_package import (
                         sanitize_user_facing_text,
                         titles_from_tool_results,
@@ -258,7 +327,6 @@ async def run_pi_agent(
                     )
                     await emit("message.delta", {"text": stream_text or content})
 
-            if not tool_calls:
                 await emit(
                     "run.status",
                     {"status": "succeeded", "runtime": RUNTIME_LABEL},
