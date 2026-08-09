@@ -521,11 +521,121 @@ def _wants_deliverable_document(prompt: str) -> bool:
     )
 
 
+def _is_clear_non_delivery_turn(text: str) -> bool:
+    """User clearly left the delivery thread (thanks / model-id / cancel)."""
+    import re
+
+    t = (text or "").strip()
+    if not t:
+        return True
+    if re.search(
+        r"(?:"
+        r"你是什么模型|你是谁|谢谢|没事了|算了|不用了|取消|"
+        r"just\s+chatting|what\s+model\s+are\s+you"
+        r")",
+        t,
+        re.IGNORECASE,
+    ) and len(t) < 80:
+        return True
+    # Very short pure ack without delivery verbs.
+    return len(t) <= 12 and not re.search(
+        r"文件|html|交付|生成|写|做|改|继续|要|用|按|Web|网页|下载",
+        t,
+        re.IGNORECASE,
+    )
+
+
+def _sticky_delivery_plan(
+    raw_prompt: str,
+    history: list[dict[str, Any]] | None,
+    *,
+    prior_artifact_titles: list[str] | None = None,
+) -> Any:
+    """Keep force_agent/min_artifacts when the user continues a delivery thread.
+
+    Same-session clarify → answer must return to pi-agent + landing gate, not
+    silent deepseek-chat code-block delivery. No topic-word tables.
+    """
+    from dataclasses import replace
+
+    from pico_orchestrator.delivery_policy import analyze_delivery
+
+    plan = analyze_delivery(
+        raw_prompt, prior_artifact_titles=prior_artifact_titles
+    )
+    if plan.force_agent:
+        return plan
+    if _is_clear_non_delivery_turn(raw_prompt):
+        return plan
+    # Walk prior user turns for engineering / delivery intent.
+    prior_delivery = None
+    for item in reversed(history or []):
+        if item.get("role") != "user":
+            continue
+        content = str(item.get("content") or "").strip()
+        if not content:
+            continue
+        prior = analyze_delivery(
+            content, prior_artifact_titles=prior_artifact_titles
+        )
+        if prior.force_agent or prior.engineering:
+            prior_delivery = prior
+            break
+    if prior_delivery is None:
+        # Assistant just asked clarification after a delivery ask: still stick
+        # if any earlier user turn forced agent (already handled) OR last
+        # assistant looks like clarification and prior titles / history exists.
+        last_asst = None
+        for item in reversed(history or []):
+            if item.get("role") == "assistant":
+                last_asst = str(item.get("content") or "")
+                break
+        if last_asst:
+            from pico_orchestrator.delivery_policy import looks_like_clarification
+
+            if looks_like_clarification(last_asst):
+                # Re-scan user turns without requiring force (weaker stick).
+                for item in reversed(history or []):
+                    if item.get("role") != "user":
+                        continue
+                    content = str(item.get("content") or "").strip()
+                    if not content:
+                        continue
+                    prior = analyze_delivery(
+                        content, prior_artifact_titles=prior_artifact_titles
+                    )
+                    if prior.engineering or prior.min_artifacts > 0 or prior.runnable_html:
+                        prior_delivery = prior
+                        break
+    if prior_delivery is None:
+        return plan
+    # Inherit delivery force; min at least 1 so landing gate stays on.
+    need = max(
+        1,
+        int(prior_delivery.min_artifacts or 0),
+        int(plan.min_artifacts or 0),
+    )
+    # If prior was multi and current message is a short answer, keep prior multi min.
+    if prior_delivery.multi_deliverable or prior_delivery.pipeline:
+        need = max(need, int(prior_delivery.min_artifacts or 2))
+    return replace(
+        prior_delivery,
+        min_artifacts=need,
+        force_agent=True,
+        revision=prior_delivery.revision or bool(prior_artifact_titles),
+        prior_artifact_count=max(
+            int(getattr(prior_delivery, "prior_artifact_count", 0) or 0),
+            len(prior_artifact_titles or []),
+        ),
+    )
+
+
 def _resolve_skill_for_prompt(
     raw_prompt: str,
     skill_snapshot: dict[str, Any] | None,
     *,
     prior_artifact_titles: list[str] | None = None,
+    history: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any] | None, Any]:
     """Attach auto skill for engineering delivery without overriding explicit skills.
 
@@ -533,14 +643,16 @@ def _resolve_skill_for_prompt(
     """
     from pico_orchestrator.delivery_policy import (
         ENGINEERING_SKILL_ID,
-        analyze_delivery,
     )
     from pico_orchestrator.skill_policy import snapshot_for_skill
 
-    plan = analyze_delivery(
-        raw_prompt, prior_artifact_titles=prior_artifact_titles
+    plan = _sticky_delivery_plan(
+        raw_prompt,
+        history,
+        prior_artifact_titles=prior_artifact_titles,
     )
     if skill_snapshot is not None:
+        # Explicit skill still inherits sticky force/min via plan.
         return skill_snapshot, plan
     # Multi-file / pipeline / runnable → engineering package (includes workspace_write).
     if plan.force_agent:
@@ -549,6 +661,25 @@ def _resolve_skill_for_prompt(
     if _wants_deliverable_document(raw_prompt):
         return snapshot_for_skill("skill-deliverable"), plan
     return None, plan
+
+
+def _caps_with_landing_min(caps: Any, delivery_plan: Any, skill_snapshot: dict | None) -> Any:
+    """Apply min_artifacts landing gate onto RunCaps (stream + non-stream)."""
+    from dataclasses import replace as _dc_replace
+
+    need = 0
+    if delivery_plan is not None:
+        need = int(getattr(delivery_plan, "min_artifacts", 0) or 0)
+        if bool(getattr(delivery_plan, "force_agent", False)) and need < 1:
+            need = 1
+    skill_name = (
+        skill_snapshot.get("name") if isinstance(skill_snapshot, dict) else None
+    )
+    if skill_name in {"skill.deliverable", "skill.engineering_delivery"} and need < 1:
+        need = 1
+    if need > 0:
+        return _dc_replace(caps, min_artifacts=need)
+    return caps
 
 
 def _instruction_with_delivery(
@@ -995,39 +1126,63 @@ async def _finalize_run(
                         has_real_file = True
                         break
             if not has_real_file:
-                run.status = "failed"
-                if wants_office_binary:
-                    run.error = (
-                        "交件未生成可下载的真文件（HTML/Word/PPT）。"
-                        "请点「再跑一次」或重新描述「生成可下载 Word/HTML」；"
-                        "纯文字摘要不能当作文件交付。"
+                from pico_orchestrator.delivery_policy import looks_like_clarification
+
+                # Clarification / awaiting-user: honest non-failure (not chat-only claim).
+                if looks_like_clarification(final_text or ""):
+                    await append_event(
+                        session,
+                        run_id,
+                        "delivery.summary",
+                        {
+                            "status": "succeeded",
+                            "artifact_count": user_art_count,
+                            "min_required": plan.min_artifacts,
+                            "ok": False,
+                            "awaiting_user": True,
+                            "reason": "clarification",
+                            "note": "Model asked clarifying questions; not a delivery failure.",
+                        },
+                        commit=False,
                     )
                 else:
-                    run.error = (
-                        "交件未写入可下载文件。请用工具落盘后再交；"
-                        "纯聊天复述不能当作文件交付。"
+                    run.status = "failed"
+                    if wants_office_binary:
+                        run.error = (
+                            "交件未生成可下载的真文件（HTML/Word/PPT）。"
+                            "请点「再跑一次」或重新描述「生成可下载 Word/HTML」；"
+                            "纯文字摘要不能当作文件交付。"
+                        )
+                    else:
+                        run.error = (
+                            "交件未写入可下载文件。请用工具落盘后再交；"
+                            "纯聊天复述不能当作文件交付。"
+                        )
+                    await append_event(
+                        session,
+                        run_id,
+                        "run.status",
+                        {
+                            "status": "failed",
+                            "reason": "deliverable_missing_artifact",
+                            "runtime": "fail-closed",
+                        },
+                        commit=False,
                     )
-                await append_event(
-                    session,
-                    run_id,
-                    "run.status",
-                    {
-                        "status": "failed",
-                        "reason": "deliverable_missing_artifact",
-                        "runtime": "fail-closed",
-                    },
-                    commit=False,
-                )
-                status = "failed"
+                    status = "failed"
 
         # G1: fail-closed min count only for true multi/pipeline intent.
         # Single-unit delivery with ≥1 user-visible file must not fail solely
         # because a heuristic expected more content-sections-as-files.
+        # Clarification turns (awaiting user) must not fail on min either.
+        from pico_orchestrator.delivery_policy import looks_like_clarification as _is_clarify
+
         fail_closed_min = (
             status == "succeeded"
             and plan.min_artifacts > 0
             and user_art_count < plan.min_artifacts
             and (multi_or_pipeline or user_art_count == 0)
+            and not _is_clarify(final_text or "")
         )
         if fail_closed_min:
             run.status = "failed"
@@ -1086,20 +1241,7 @@ async def _run_and_collect(
         ),
     )
     # Landing gate: force min_artifacts into Pi so chat-only "done" cannot succeed.
-    from dataclasses import replace as _dc_replace
-
-    need = 0
-    if delivery_plan is not None:
-        need = int(getattr(delivery_plan, "min_artifacts", 0) or 0)
-        if bool(getattr(delivery_plan, "force_agent", False)) and need < 1:
-            need = 1
-    skill_name = (
-        skill_snapshot.get("name") if isinstance(skill_snapshot, dict) else None
-    )
-    if skill_name in {"skill.deliverable", "skill.engineering_delivery"} and need < 1:
-        need = 1
-    if need > 0:
-        caps = _dc_replace(caps, min_artifacts=need)
+    caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
     if skill_snapshot:
         await emit("skill.snapshot", skill_snapshot)
     if delivery_plan is not None and getattr(delivery_plan, "engineering", False):
@@ -1232,10 +1374,6 @@ async def chat_completions(
         )
     # D2: bind revision to session artifact graph (prior deliverables).
     prior_titles = await _prior_artifact_titles_for_principal(principal)
-    # Engineering multi/pipeline/runnable OR classic Office/HTML → force agent tool path.
-    skill_snapshot, delivery_plan = _resolve_skill_for_prompt(
-        raw_prompt, skill_snapshot, prior_artifact_titles=prior_titles
-    )
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
     # strip ledger markers from model-visible prompt; project instruction → system
@@ -1300,8 +1438,24 @@ async def chat_completions(
         )
 
     history = _history_for_agent(body.messages)
+    # Engineering multi/pipeline/runnable OR classic Office/HTML → force agent tool path.
+    # Sticky: same-session delivery continuation (after clarify) stays on pico-agent.
+    skill_snapshot, delivery_plan = _resolve_skill_for_prompt(
+        raw_prompt,
+        skill_snapshot,
+        prior_artifact_titles=prior_titles,
+        history=history,
+    )
     model = _model_preference_from_prompt(raw_prompt) or body.model or settings.deepseek_model or settings.kimi_model or "pico-agent"
     if skill_snapshot and skill_snapshot.get("tools"):
+        model = "pico-agent"
+    # Sticky delivery must not silent-route to deepseek-chat direct.
+    if (
+        delivery_plan is not None
+        and getattr(delivery_plan, "force_agent", False)
+        and model not in {"pico-agent", "pico"}
+        and not str(model).startswith("pico-")
+    ):
         model = "pico-agent"
     # Residual LibreChat prefs may still say kimi-k2.x after product default
     # moved to DeepSeek. Remount onto the product brain when Kimi is not in the
@@ -1603,6 +1757,8 @@ async def chat_completions(
                         ),
                         skill_instruction=skill_instr,
                     )
+                # Stream path must apply the same landing min as non-stream.
+                caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
                 if skill_snapshot:
                     await emit("skill.snapshot", skill_snapshot)
                 if delivery_plan is not None and getattr(
