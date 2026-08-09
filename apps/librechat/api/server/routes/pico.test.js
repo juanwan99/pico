@@ -28,6 +28,29 @@ describe('Pico proxy routes', () => {
     delete global.fetch;
   });
 
+  it('exposes public tip probe with minimal fields only', async () => {
+    const sha = '5a900f69906630c8ad3843b371909eecc998ac4e';
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      json: async () => ({
+        ok: true,
+        service: 'pico-api',
+        git_sha: sha,
+        pi_agent_canary_membership_count: 99,
+      }),
+    });
+    const response = await request(app).get('/api/pico/tip');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      ok: true,
+      git_sha: sha,
+      service: 'pico-api',
+    });
+    expect(response.body.pi_agent_canary_membership_count).toBeUndefined();
+    expect(response.body.membership).toBeUndefined();
+    expect(global.fetch).toHaveBeenCalledWith('http://127.0.0.1:18765/health');
+  });
+
   it('forwards automation run-once requests to Pico API', async () => {
     const response = await request(app).post('/api/pico/v1/automations/automation-1/run');
 

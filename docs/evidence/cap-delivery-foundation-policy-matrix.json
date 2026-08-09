@@ -1,0 +1,34 @@
+[
+  {
+    "name": "G5-① 单 HTML 课件",
+    "prompt": "请生成一份可离线互动 HTML 课件：潮汐与月相观察日记（入门），3 页知识+日记页+小测验，浏览器本地打开可用。",
+    "multi": false,
+    "min": 1,
+    "runnable": true,
+    "impl": false
+  },
+  {
+    "name": "G5-② 隐式多文件",
+    "prompt": "需要一整套材料：流程说明、注意事项、应急手册。",
+    "multi": true,
+    "min": 3,
+    "runnable": false,
+    "impl": true
+  },
+  {
+    "name": "G5-③ 闲聊",
+    "prompt": "你是什么模型",
+    "multi": false,
+    "min": 0,
+    "runnable": false,
+    "impl": false
+  },
+  {
+    "name": "G1 显式双文件",
+    "prompt": "请分别交付两个独立文件：A 规格说明、B 验收清单。禁止合并成一个文件。",
+    "multi": true,
+    "min": 2,
+    "runnable": false,
+    "impl": false
+  }
+]

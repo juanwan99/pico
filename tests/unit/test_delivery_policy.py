@@ -118,6 +118,36 @@ def test_runnable_html_media_only() -> None:
     assert plan.runnable_html is True
     assert plan.force_agent is True
     assert plan.min_artifacts >= 1
+    assert plan.multi_deliverable is False
+
+
+def test_single_html_courseware_not_multi_file() -> None:
+    """G1: content sections of one HTML must not force multi-file fail-closed."""
+    plan = analyze_delivery(
+        "请生成一份可离线互动 HTML 课件：潮汐与月相观察日记（入门），"
+        "3 页知识+日记页+小测验，浏览器本地打开可用。"
+    )
+    assert plan.runnable_html is True
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts == 1
+    assert plan.force_agent is True
+
+
+def test_single_html_features_with_he_not_multi() -> None:
+    """G1: 「含分页和测验」is one document's features, not two files."""
+    plan = analyze_delivery("写一个 HTML 互动页，含分页和测验，本地打开可用")
+    assert plan.runnable_html is True
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts == 1
+
+
+def test_explicit_multi_still_forces_min() -> None:
+    """G1: true multi intent still requires ≥2 files."""
+    plan = analyze_delivery(
+        "请分别交付两个独立文件：A 规格说明、B 验收清单。禁止合并成一个文件。"
+    )
+    assert plan.multi_deliverable is True
+    assert plan.min_artifacts >= 2
 
 
 def test_runnable_not_require_app_name() -> None:
