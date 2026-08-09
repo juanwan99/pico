@@ -215,6 +215,39 @@ def test_pipeline_arrow_chain_three_stages() -> None:
     assert plan.min_artifacts >= 3
 
 
+def test_meta_phase_label_not_pipeline() -> None:
+    """Bare「阶段一…」meta prefix must not inflate min_artifacts / fail-close chat."""
+    plan = analyze_delivery(
+        "【阶段一验收·当场新题】随便聊聊：你能用一句话说适合处理哪类办公杂事吗？不要生成文件。"
+    )
+    assert plan.pipeline is False
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts == 0
+    assert plan.force_agent is False
+
+
+def test_single_office_markdown_not_multi_from_sections() -> None:
+    """One Markdown + content sections (顿号) stays single-unit; not multi min=3."""
+    plan = analyze_delivery(
+        "【阶段一验收】请做一份给创业团队的「客户拜访纪要」Markdown 单文件交付。"
+        "文件名建议 visit-notes.md。内容含：拜访对象、讨论要点、承诺事项、下次跟进。"
+        "只要这一份文件，不要拆成多文件。"
+    )
+    assert plan.multi_deliverable is False
+    assert plan.pipeline is False
+    assert plan.min_artifacts == 1
+    assert plan.force_agent is True
+
+
+def test_true_numbered_pipeline_stages_still_multi() -> None:
+    plan = analyze_delivery(
+        "做观察流水线，每阶段独立文件：\n"
+        "阶段1 信息源清单 → 阶段2 三条洞察 → 阶段3 一页行动建议。"
+    )
+    assert plan.pipeline is True
+    assert plan.min_artifacts >= 3
+
+
 def test_normalize_extension_typo_mdd() -> None:
     """D4: .mdd → .md."""
     fixed, note = normalize_artifact_title("阶段3_本周行动_v2.mdd")

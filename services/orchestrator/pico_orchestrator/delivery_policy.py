@@ -57,15 +57,16 @@ _IMPLICIT_PACKAGE = re.compile(
     re.IGNORECASE,
 )
 
+# Strong pipeline language only. Bare「阶段一/步骤1」alone is NOT enough —
+# those appear in meta labels (「阶段一验收」) and section titles without
+# meaning multi-stage deliverable pipelines.
 _PIPELINE_PHRASE = re.compile(
     r"(?:"
     r"流水线|"
     r"每阶段|"
     r"各阶段|"
-    r"阶段\s*[1-9一二三四五六]|"
-    r"步骤\s*[1-9一二三四五六]|"
-    r"stage\s*[1-9]|"
-    r"pipeline\s+stage"
+    r"pipeline\s+stage|"
+    r"multi[- ]?stage\s+pipeline"
     r")",
     re.IGNORECASE,
 )
@@ -236,7 +237,7 @@ class DeliveryPlan:
 
 def _count_explicit_n_files(text: str) -> int:
     m = re.search(
-        r"([2-9]|10|[两二三四五六七])\s*个\s*(?:独立\s*)?(?:文件|产物|交付|文档)",
+        r"([2-9]|10|[两二三四五六七])\s*个\s*(?:独立\s*)?(?:可下载\s*)?(?:文件|产物|交付|文档)",
         text,
     )
     if not m:
@@ -394,7 +395,14 @@ def _count_structure_items(text: str) -> int:
 
 
 def _count_pipeline_stages(text: str) -> int:
-    stages = set()
+    """Count multi-stage pipeline intent. Single「阶段一」label alone → 0.
+
+    Requires ≥2 distinct numbered stages, a ≥3-hop arrow chain, or a strong
+    pipeline phrase (流水线/每阶段/各阶段). Prevents meta prefixes like
+    「阶段一验收」from inflating min_artifacts to 3 and fail-closing chat
+    or single-file office work.
+    """
+    stages: set[str] = set()
     for m in re.finditer(r"阶段\s*([1-9一二三四五六七八])", text or ""):
         stages.add(m.group(1))
     for m in re.finditer(r"步骤\s*([1-9一二三四五六七八])", text or ""):
@@ -403,12 +411,18 @@ def _count_pipeline_stages(text: str) -> int:
         stages.add(m.group(1))
     # Arrow chains: 现状摘要 → 选项对比 → 推荐决策
     arrow_parts = re.split(r"\s*→\s*|\s*->\s*", text or "")
+    arrow_n = 0
     if len(arrow_parts) >= 3:
         ok = sum(1 for p in arrow_parts if _is_structure_segment(p.strip()[:36]))
         if ok >= 3:
+            arrow_n = ok
             stages.update(str(i) for i in range(ok))
-    if stages:
-        return len(stages)
+    # ≥2 distinct numbered stages = real pipeline enumeration
+    if len(stages) >= 2:
+        return max(len(stages), arrow_n)
+    if arrow_n >= 3:
+        return arrow_n
+    # Strong phrase without numbers → default 3-stage kit
     if _PIPELINE_PHRASE.search(text or ""):
         return 3
     return 0
@@ -447,7 +461,8 @@ def analyze_delivery(
     structure_n = _count_structure_items(text)
     explicit_n = _count_explicit_n_files(text)
     pipeline_n = _count_pipeline_stages(text)
-    pipeline = pipeline_n > 0 or bool(_PIPELINE_PHRASE.search(text))
+    # pipeline_n already requires ≥2 stages or strong phrase; do not OR bare labels.
+    pipeline = pipeline_n >= 2 or bool(_PIPELINE_PHRASE.search(text))
 
     hard_revision = bool(_REVISION_PHRASE.search(text))
     change_mind = bool(_CHANGE_OF_MIND.search(text))
@@ -493,6 +508,11 @@ def analyze_delivery(
     structure_multi = structure_n >= 2 and not single_unit
     multi = multi_phrase or implicit_pkg or explicit_n >= 2 or structure_multi
 
+    # Single-unit intent wins over weak pipeline misreads (meta「阶段一」etc.).
+    if single_unit and not multi and not multi_phrase and not implicit_pkg:
+        pipeline = False
+        pipeline_n = 0
+
     min_arts = 0
     if multi:
         candidates = [2]
@@ -507,13 +527,29 @@ def analyze_delivery(
         min_arts = 1
     if revision_targets_files and min_arts == 0:
         min_arts = 1
-    # Single-unit runnable/document: success needs one file, not N content sections.
-    if single_unit and not multi and not pipeline and min_arts == 0 and (
-        runnable or revision_targets_files
-    ):
+    # Single-unit file/page delivery: success needs one file, not N content sections.
+    # Require clear file/surface language so bare「做一个…说明」chat stays force_agent=False.
+    single_file_delivery = bool(
+        single_unit
+        and not multi
+        and not pipeline
+        and re.search(
+            r"(?:"
+            r"单文件|独立文件|可下载|"
+            r"\.(?:md|txt|html|docx|pptx|pdf)\b|"
+            r"markdown|Markdown|"
+            r"html|HTML|网页|课件|"
+            r"交付\s*(?:一份|一个|文件)|"
+            r"文件名"
+            r")",
+            text,
+            re.IGNORECASE,
+        )
+    )
+    if single_file_delivery and min_arts == 0:
         min_arts = 1
 
-    force_agent = multi or pipeline or runnable or revision_targets_files
+    force_agent = multi or pipeline or runnable or revision_targets_files or single_file_delivery
 
     instruction = _build_instruction(
         multi=multi,
