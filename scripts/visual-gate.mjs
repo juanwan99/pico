@@ -50,7 +50,7 @@ function loadPlaywright() {
 
 const { chromium } = loadPlaywright();
 
-// #384 main-bubble one-strike patterns (fail-soft heuristic; human still reads PNGs)
+// #384 / #394 main-bubble one-strike patterns (fail-soft heuristic; human still reads PNGs)
 const MONOLOGUE_RES = [
   /\bgenerate_(?:html|docx|pptx)_document\b/i,
   /\bworkspace_write(?:_file)?\b/i,
@@ -63,6 +63,8 @@ const MONOLOGUE_RES = [
   /\bLet me (?:build|construct|call)\b/i,
   /我先构造\s*tool/i,
   /\btool\s*参数\b/i,
+  // #394 Y1 — L0 / structure self-check engineer wall in main bubble
+  /结构自检|静态自检|系统侧|二进制编码|未做浏览器真机|未经真机点击|未宣称\s*L1|L0_structure|interaction_status/i,
 ];
 
 function parseArgs(argv) {
@@ -256,13 +258,80 @@ async function waitSettled(page, timeoutMs) {
   return { sawStreaming, text: await mainBubbleText(page), timedOut: true };
 }
 
+async function inspectHtmlHumanPage(page) {
+  // Prefer in-panel sandboxed preview iframe after 打开.
+  const iframe = page.locator('[data-testid="artifact-html-iframe"]');
+  if (await iframe.count()) {
+    const handle = await iframe.elementHandle().catch(() => null);
+    if (handle) {
+      const frame = await handle.contentFrame().catch(() => null);
+      if (frame) {
+        const bodyText = await frame.locator('body').innerText().catch(() => '');
+        const title = await frame.title().catch(() => '');
+        const buttons = await frame.locator('button, input[type="button"], a.btn, [role="button"]').count().catch(() => 0);
+        const headings = await frame.locator('h1, h2, h3, table, th').count().catch(() => 0);
+        return {
+          kind: 'html-iframe',
+          title,
+          body_snippet: (bodyText || '').slice(0, 240),
+          button_count: buttons,
+          structure_count: headings,
+          human_page:
+            Boolean((title && title.trim()) || (bodyText && bodyText.trim().length > 8)) &&
+            (buttons > 0 || headings > 0 || /新增|导出|状态|事项|负责人|表格|button/i.test(bodyText || '')),
+        };
+      }
+    }
+    // iframe present but cross-origin opaque — still opened product UI.
+    return {
+      kind: 'html-iframe-present',
+      human_page: true,
+      note: 'iframe present; content opaque to automation',
+    };
+  }
+  return null;
+}
+
 async function tryOpenProduct(page, outDir) {
-  // Click a downloadable chip / file link in results area if present.
+  // #394 Y2: V3 must be the opened human page (title/buttons), not only result chips.
+  // Prefer result-panel 「打开」 which loads HTML into artifact-html-iframe.
+  const openBtn = page.getByTestId('artifact-open-button');
+  if (await openBtn.count()) {
+    await openBtn.first().click({ timeout: 8000 }).catch(() => null);
+    await page.waitForTimeout(1500);
+    // Wait for HTML preview iframe or text preview
+    await page
+      .locator('[data-testid="artifact-html-iframe"], [data-testid="artifact-inline-preview"]')
+      .first()
+      .waitFor({ state: 'visible', timeout: 12000 })
+      .catch(() => {});
+    await page.waitForTimeout(800);
+    const human = await inspectHtmlHumanPage(page);
+    await shot(page, path.join(outDir, 'V3-open-product.png'), { fullPage: true });
+    if (human) {
+      return {
+        opened: true,
+        via: 'artifact-open-button',
+        human_page: !!human.human_page,
+        preview: human,
+      };
+    }
+    // Open clicked but preview missing — still better than chip-only if panel changed.
+    const panelText = await page.locator('.pico-result-panel, [data-testid="human-delivery-chips"]').innerText().catch(() => '');
+    return {
+      opened: true,
+      via: 'artifact-open-button',
+      human_page: /预览|HTML|关闭预览/i.test(panelText || ''),
+      note: 'open clicked; iframe not detected',
+    };
+  }
+
+  // Fallback: links / download chips / generic open
   const candidates = [
     page.getByRole('link', { name: /\.(html?|md|docx?|pptx?|pdf|txt)$/i }),
     page.locator('a[download]'),
-    page.getByText(/\.(html?|md|docx?|pptx?)$/i),
-    page.getByRole('button', { name: /下载|打开|Open|Download/i }),
+    page.getByRole('button', { name: /打开|Open/i }),
+    page.getByRole('button', { name: /下载|Download/i }),
   ];
   for (const loc of candidates) {
     if (await loc.count()) {
@@ -276,17 +345,31 @@ async function tryOpenProduct(page, outDir) {
       await page.waitForTimeout(1200);
       if (popup) {
         await popup.waitForLoadState('domcontentloaded').catch(() => {});
+        const bodyText = await popup.locator('body').innerText().catch(() => '');
+        const title = await popup.title().catch(() => '');
+        const buttons = await popup.locator('button, input[type="button"]').count().catch(() => 0);
         await shot(popup, path.join(outDir, 'V3-open-product.png'), { fullPage: true });
         await popup.close().catch(() => {});
-        return { opened: true, via: 'popup' };
+        return {
+          opened: true,
+          via: 'popup',
+          human_page: Boolean(title || (bodyText && bodyText.length > 8) || buttons > 0),
+          preview: { title, button_count: buttons, body_snippet: (bodyText || '').slice(0, 240) },
+        };
       }
+      const human = await inspectHtmlHumanPage(page);
       await shot(page, path.join(outDir, 'V3-open-product.png'), { fullPage: true });
-      return { opened: true, via: 'same-tab' };
+      return {
+        opened: true,
+        via: 'same-tab',
+        human_page: human ? !!human.human_page : false,
+        preview: human || undefined,
+      };
     }
   }
   // No product — still capture a frame stating empty results area
   await shot(page, path.join(outDir, 'V3-open-product.png'), { fullPage: true });
-  return { opened: false, via: 'no-chip' };
+  return { opened: false, via: 'no-chip', human_page: false };
 }
 
 async function run() {
@@ -421,10 +504,14 @@ Env: DEMO_EMAIL DEMO_PASSWORD (or PICO_E2E_*) PICO_PUBLIC_BASE
     monologue_hits: monologueHits,
     monologue_clean: monologueHits.length === 0,
     v3,
+    v3_human_page: !!(v3 && v3.human_page),
     missing_frames: missing,
     frames_complete: missing.length === 0,
+    // #394: HTML scenes should open a real preview page (not chip-only V3).
     scene_visual_pass_eligible:
-      missing.length === 0 && monologueHits.length === 0,
+      missing.length === 0 &&
+      monologueHits.length === 0 &&
+      (args.skipProduct || !v3 || v3.opened === false || v3.human_page !== false),
     notes,
     wording: {
       if_pass: '场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）',

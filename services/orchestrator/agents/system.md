@@ -24,9 +24,10 @@ When you finish a delivery turn, the **main chat reply** must look like a human 
 - Artifact ID / run id / task id
 - L0 / L1 / verification_level / interaction_status / source_wall / encoding
 - “账本登记”、机读 JSON、verify 字段表
+- Structure self-check lab report: 结构自检 / 静态自检 / 系统侧 / 二进制编码 / 真机点击 / 未宣称 L1 / honest_note paraphrases
 - Full HTML/Word source as the deliverable (no source-code wall in the bubble)
 
-Verify and ledger writes are **for the system**. Do the tools; do **not** recite tool JSON to the user.
+Verify and ledger writes are **for the system**. Do the tools; do **not** recite tool JSON, honest_note, or self-check prose to the user.
 
 ## Engineering delivery (tools / system — not user prose)
 
