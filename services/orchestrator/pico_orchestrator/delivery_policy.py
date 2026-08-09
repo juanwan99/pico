@@ -311,7 +311,7 @@ def _count_parallel_list_items(text: str) -> int:
 
     Prefers content after first colon. Does **not** require domain nouns.
     Avoids treating prose commas (「改成更短一点，语气友好」) as multi-deliverable.
-    Also avoids feature pairs inside one document (「含分页和测验」).
+    Also avoids feature pairs inside one document via _FEATURE_JOIN.
     """
     if not text:
         return 0
@@ -333,7 +333,7 @@ def _count_parallel_list_items(text: str) -> int:
                 body = re.split(r"[。！？\n]", tail, maxsplit=1)[0]
                 break
         # Title + content description after colon is often one document, not N files.
-        # e.g. 「课件：潮汐日记，3 页知识+日记页」 — unless explicit multi-file language.
+        # e.g. single-unit doc title with section packing after colon.
         # Only count if body itself is a clear parallel deliverable list (顿号 etc.).
         if (
             _looks_like_single_unit(text)
@@ -355,18 +355,28 @@ def _count_parallel_list_items(text: str) -> int:
     # 「添加/勾选/删除」must not inflate multi-file min_artifacts.
     parts = re.split(r"[、,，;；|]|→|->|\s+与\s+|\s+和\s+|\s+及\s+", body)
     hits = [p.strip() for p in parts if _is_structure_segment(p)]
-    # Drop segments that look like imperative prose / media meta, not list labels.
+    # Drop segments that look like imperative prose / media meta / content packing,
+    # not independent deliverable labels. Structural/grammar only (E3: no sample-face
+    # domain noun table as dedicated filters — see REMOVED_OVERFIT_PHRASES).
     clean: list[str] = []
     for h in hits:
         if re.search(r"^(?:把|请|将|让|把刚才|含|有|带)", h):
             continue
         if re.search(r"改成|改为|语气|友好", h) and len(h) > 10:
             continue
+        # Media / openability meta (language-level).
         if re.search(
-            r"本地\s*打开|可打开|浏览器|自检|file\s*打开|可用$|请做|"
-            r"^\d+\s*页|分页|测验|小测验|日记页|知识页",
+            r"本地\s*打开|可打开|浏览器|自检|file\s*打开|可用$|请做",
             h,
             re.IGNORECASE,
+        ):
+            continue
+        # Packing density / section-role grammar: "3 页…", pure "…页" content-role labels
+        # (not file deliverables). Avoid domain word tables.
+        if re.search(r"^\d+\s*页", h):
+            continue
+        if re.fullmatch(r"[\w\u4e00-\u9fff]{1,10}页", h) and not re.search(
+            r"(?:文件|文档|清单|说明|手册|纪要|方案|模板|稿)", h
         ):
             continue
         clean.append(h)
@@ -694,4 +704,9 @@ REMOVED_OVERFIT_PHRASES: tuple[str, ...] = (
     "本周…只做",  # soft-revision exam phrase
     "顺延",  # as primary soft trigger
     "番茄钟",  # runnable app name
+    "日记页",  # sample-face content section (E3: structural filter instead)
+    "知识页",  # sample-face content section
+    "小测验",  # sample-face content section
+    "分页",  # sample-face UI feature word as multi-file filter
+    "测验",  # sample-face alone as multi-file filter
 )

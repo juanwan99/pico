@@ -42,10 +42,12 @@ router.get('/tip', async (_req, res) => {
   try {
     const r = await fetch(`${picoBase()}/health`);
     const j = await r.json();
-    const sha = typeof j.git_sha === 'string' ? j.git_sha : null;
+    const rawSha = typeof j.git_sha === 'string' ? j.git_sha : null;
+    // E2: only a full 40-char hex SHA is tip truth; invalid/short → null (never no-op pass-through).
+    const gitSha = rawSha && SHA_RE.test(rawSha) ? rawSha : null;
     res.status(r.status).json({
-      ok: j.ok === true,
-      git_sha: sha && SHA_RE.test(sha) ? sha : sha,
+      ok: j.ok === true && Boolean(gitSha),
+      git_sha: gitSha,
       service: typeof j.service === 'string' ? j.service : 'pico-api',
     });
   } catch (e) {

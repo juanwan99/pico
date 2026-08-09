@@ -51,6 +51,25 @@ describe('Pico proxy routes', () => {
     expect(global.fetch).toHaveBeenCalledWith('http://127.0.0.1:18765/health');
   });
 
+  it.each(['unknown', 'abc', '5a900f69906630c8ad3843b371909eecc998ac4', 'not-a-sha', ''])(
+    'rejects non-40-hex git_sha as tip truth (%s)',
+    async (badSha) => {
+      global.fetch = jest.fn().mockResolvedValue({
+        status: 200,
+        json: async () => ({
+          ok: true,
+          service: 'pico-api',
+          git_sha: badSha,
+        }),
+      });
+      const response = await request(app).get('/api/pico/tip');
+      expect(response.status).toBe(200);
+      expect(response.body.git_sha).toBeNull();
+      expect(response.body.ok).toBe(false);
+      expect(response.body.service).toBe('pico-api');
+    },
+  );
+
   it('forwards automation run-once requests to Pico API', async () => {
     const response = await request(app).post('/api/pico/v1/automations/automation-1/run');
 

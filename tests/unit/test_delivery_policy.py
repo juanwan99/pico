@@ -32,6 +32,12 @@ def test_d0_removed_overfit_phrases_not_in_source() -> None:
     joined = "\n".join(pattern_blobs)
     for banned in ("只做低成本", "别的顺延", "番茄钟", "广播稿"):
         assert banned not in joined, banned
+    # E3: sample-face domain filters must not live as dedicated regex tokens
+    # in the parallel-list cleaner source body (grammar filters only).
+    cleaner_src = inspect.getsource(mod._count_parallel_list_items)
+    for banned in ("日记页", "知识页", "小测验", "分页", "测验"):
+        assert banned not in cleaner_src, banned
+        assert banned in REMOVED_OVERFIT_PHRASES
     assert "_DELIVERABLE_NOUN" not in dir(mod)
     assert "只做低成本" in REMOVED_OVERFIT_PHRASES
     assert "番茄钟" in REMOVED_OVERFIT_PHRASES
@@ -126,6 +132,18 @@ def test_single_html_courseware_not_multi_file() -> None:
     plan = analyze_delivery(
         "请生成一份可离线互动 HTML 课件：潮汐与月相观察日记（入门），"
         "3 页知识+日记页+小测验，浏览器本地打开可用。"
+    )
+    assert plan.runnable_html is True
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts == 1
+    assert plan.force_agent is True
+
+
+def test_single_unit_new_surface_not_multi() -> None:
+    """E3: new prompt surface (no sample-face 日记页/小测验) stays single-file."""
+    plan = analyze_delivery(
+        "请生成一份可离线互动 HTML：城市骑行安全入门，"
+        "含三段图文与自测题，浏览器本地打开可用。"
     )
     assert plan.runnable_html is True
     assert plan.multi_deliverable is False
