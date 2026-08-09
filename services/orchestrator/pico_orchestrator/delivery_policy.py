@@ -528,9 +528,7 @@ def looks_like_clarification(text: str) -> bool:
     if clarify_cue and (q_marks >= 1 or "：" in s or ":" in s or "）" in s or ")" in s):
         return True
     # Multiple questions without delivery claim.
-    if q_marks >= 2 and len(s) < 1200:
-        return True
-    return False
+    return bool(q_marks >= 2 and len(s) < 1200)
 
 
 def normalize_artifact_title(title: str) -> tuple[str, str | None]:
@@ -705,10 +703,9 @@ def analyze_delivery(
                 # cap hard so content outlines cannot demand dozens of files.
                 candidates.append(min(structure_n, 6))
             min_arts = max(candidates)
-    if pipeline:
-        # Pipeline floor only when no explicit multi-file count already set the bar.
-        if not file_count_signals:
-            min_arts = max(min_arts, pipeline_n if pipeline_n >= 2 else 3)
+    # Pipeline floor only when no explicit multi-file count already set the bar.
+    if pipeline and not file_count_signals:
+        min_arts = max(min_arts, pipeline_n if pipeline_n >= 2 else 3)
     if runnable and min_arts == 0:
         min_arts = 1
     if revision_targets_files and min_arts == 0:

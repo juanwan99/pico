@@ -538,13 +538,11 @@ def _is_clear_non_delivery_turn(text: str) -> bool:
     ) and len(t) < 80:
         return True
     # Very short pure ack without delivery verbs.
-    if len(t) <= 12 and not re.search(
+    return len(t) <= 12 and not re.search(
         r"文件|html|交付|生成|写|做|改|继续|要|用|按|Web|网页|下载",
         t,
         re.IGNORECASE,
-    ):
-        return True
-    return False
+    )
 
 
 def _sticky_delivery_plan(

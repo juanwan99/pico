@@ -76,9 +76,9 @@ def test_short_chat_still_not_forced() -> None:
 @pytest.mark.asyncio
 async def test_finalize_clarification_not_false_fail(tmp_path, monkeypatch) -> None:
     """A1/A4: clarification turn with delivery skill must not deliverable_missing fail."""
+    from app import db as db_mod
     from app.db import EventRow, RunRow, TaskRow, new_id
     from app.openai_compat import _finalize_run
-    from app import db as db_mod
     from app.settings import get_settings
 
     db_path = tmp_path / "clarify.db"
@@ -159,9 +159,9 @@ async def test_finalize_clarification_not_false_fail(tmp_path, monkeypatch) -> N
 @pytest.mark.asyncio
 async def test_finalize_chat_only_claim_still_fails(tmp_path, monkeypatch) -> None:
     """C1 / #375: chat-only delivery claim still fail-closed."""
+    from app import db as db_mod
     from app.db import EventRow, RunRow, TaskRow, new_id
     from app.openai_compat import _finalize_run
-    from app import db as db_mod
     from app.settings import get_settings
 
     db_path = tmp_path / "chat-only.db"
