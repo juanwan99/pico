@@ -1,0 +1,48 @@
+{
+  "tip": "20f1712cea0ff9bc0f7732d15cb182a676c31bc2",
+  "merge_sha": "20f1712cea0ff9bc0f7732d15cb182a676c31bc2",
+  "session_url": "https://pico.aivia.asia/c/055904fb-3774-49b6-8361-68d5a8889209",
+  "l4": {
+    "status": "succeeded",
+    "topbar": "已完成 · 1 个可下载文件 · 终态成功",
+    "artifact_id": "3f87aa2d-23aa-410b-9d11-f64c0f29ec32",
+    "run_id": "90d9a51c-d9d7-4cce-85e9-cde9d8e2c11f",
+    "file": "property-weekly-outline.md",
+    "bytes": 1558,
+    "screenshots": [
+      "screenshots/L4-final.png",
+      "screenshots/L4-390.png"
+    ]
+  },
+  "l5a": {
+    "status": "succeeded",
+    "topbar": "已完成 · 1 个可下载文件 · 终态成功",
+    "artifact_id": "4124a453-6975-4e1a-b43a-6471ea31a8be",
+    "run_id": "98de457a-94e3-4a1e-b4d7-7f5a91313b12",
+    "file": "property-weekly-outline-v2.md",
+    "bytes": 1363,
+    "contains": [
+      "设备维保与能耗",
+      "能耗优化"
+    ],
+    "screenshots": [
+      "screenshots/L5a-final.png",
+      "screenshots/L5a-390.png"
+    ]
+  },
+  "l5b": {
+    "status": "succeeded_chat_only",
+    "topbar": "已完成 · 终态成功（无「N 个可下载文件」）",
+    "right_panel": "可下载文件 · 暂无产物",
+    "run_id": "cf802b36-5ee9-4553-839a-f0be626e824b",
+    "file_artifacts": 0,
+    "only": "回复摘要",
+    "honest": true,
+    "screenshots": [
+      "screenshots/L5b-final.png",
+      "screenshots/L5b-390.png"
+    ]
+  },
+  "CLAIM_WB": "NO",
+  "PASS": "未签"
+}
