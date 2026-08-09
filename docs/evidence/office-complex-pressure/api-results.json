@@ -1,0 +1,66 @@
+{
+  "tip": {
+    "ok": true,
+    "service": "pico-api",
+    "git_sha": "9f3e7cdade5086cb4cbb56282b347917b2d164d2",
+    "edu_mode": "fake",
+    "default_runtime": "pi-agent",
+    "pi_agent_runtime_enabled": true,
+    "pi_agent_scope": "all",
+    "pi_agent_canary_configured": false,
+    "pi_agent_canary_membership_count": 0,
+    "kimi_agent_runtime_enabled": false,
+    "kimi_agent_scope": "off",
+    "kimi_agent_canary_configured": false,
+    "kimi_agent_canary_membership_count": 0,
+    "legacy_loop_unavailable": true,
+    "rate_limit": {
+      "chat_rpm": 30,
+      "chat_max_concurrent": 2,
+      "key_scope": "membership_or_ip"
+    },
+    "mcp_allowlist_enabled": true,
+    "mcp_allowlist_count": 2,
+    "mcp_tools": [
+      "mcp_time",
+      "mcp_workspace_stat"
+    ],
+    "kimi_agent_canary_batch": "BATCH-KA3-DEFAULT"
+  },
+  "mid": "office-pressure-o42564",
+  "runs": [
+    {
+      "id": "O1",
+      "status": 200,
+      "text_len": 367,
+      "text_head": "已整理完成 ✅\n\n**文件名：`visit-notes.md`**\n\n内容结构（要点清晰、可勾选）：\n- **会议信息表** — 时间、形式、双方与会人\n- **背景** — 项目目标、试点范围、核心关切\n- **讨论要点与决议** — 私有化 / SSO / 试点标准 / 内容质量，以及我方承诺\n- **行动项** — 已用 `- [ ]` 复选框格式，勾选即可用\n- **未决事项** — 数据出境条款法务审阅确认\n- **风险提示** — 验收口径、私有化合规\n\n**使用方法：** 在结果区（文件芯片旁）点击**下载**即可保存；本地用任意 Markdown 编辑器 / Typora / VS Code 或浏览器插件打开即可查看与勾选。\n\n需要微调随时说，例如：补充负责人联系方式、调整行动项截止日期，或补充会议结论等级。",
+      "markers": {
+        "has_md": true,
+        "has_download": true,
+        "has_fail_text": false
+      }
+    },
+    {
+      "id": "O2",
+      "status": 200,
+      "text_len": 397,
+      "text_head": "改好了 ✅ 已生成更新版，原 v1 完整保留可追溯。\n\n**文件名：`visit-notes-v2.md`**\n\n本版相对 v1 的变更：\n- **行动项**「3 个工作日内发试点方案」→ **5 个工作日内**（对应 DDL 同步顺延至 2026-08-15）\n- **新增行动项**：「客户法务条款对齐」，由 **我方法务** 跟进（合同模板中云服务 / 数据出境条款与私有化定位的匹配），未决事项中同步关联此项\n\n其余内容（背景、决议、试点标准、风险提示）保持不变。文件顶部已加说明注释，打开即可看清本次修订点。\n\n**使用方法：** 在结果区文件芯片旁点击**下载**保存；本地用 Typora / VS Code / 任意 Markdown 工具打开即可查看与勾选行动项（`- [ ]` 复选框格式）。\n\n如需继续调整，随时说，例如补充法务负责人姓名、或把试点成功标准加为正式验收项。",
+      "markers": {
+        "has_md": true,
+        "has_download": true,
+        "has_fail_text": false
+      }
+    },
+    {
+      "id": "O3",
+      "status": 200,
+      "text_len": 407,
+      "text_head": "三个独立文件已全部交付完成。\n\n**已为您准备好 3 个可下载文件：**\n\n1. **活动规则说明.md** —— 面向居民，包含活动时间地点、摊主/买家参与规则、6 条安全须知，及款项用途与联系方式。\n2. **志愿者排班表.md** —— 覆盖上午（8:30–12:00）与下午（12:00–16:30）两班，各 8 个岗位角色与职责清晰，并附午间交接要点。\n3. **居民通知短讯合集.md** —— 提供 3 条可直接复制的短讯（前期预热 / 活动当日 / 活动后致谢），只需替换其中的占位电话即可发送。\n\n**如何使用：** 在上方结果面板找到对应文件名，点击「**下载**」/「**打开**」即可获取，均为标准 `.md` 文本文件，用记事本、Typora、Obsidian 或任何文本编辑器都能打开。\n\n如需调整——比如改活动日期、地点、增删岗位、换短讯语气，或再补充一份摊位报名表，直",
+      "markers": {
+        "has_md": true,
+        "has_download": true,
+        "has_fail_text": false
+      }
+    }
+  ]
+}
