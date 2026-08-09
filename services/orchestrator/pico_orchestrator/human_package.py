@@ -53,6 +53,11 @@ _PROCESS_LINE = re.compile(
 _PROCESS_INLINE = re.compile(
     r"[〔\[](?:调用工具[^〕\]]*|工具完成|步骤\s*\d+|检查点已保存)[〕\]]"
 )
+_ENGINEER_VERIFY_LINE = re.compile(
+    r"(?im)^(?:[ \t]*verify\b.*(?:base64|不可读|二进制|系统侧|复读).*$|"
+    r"[ \t]*正在准备[.。…]*[ \t]*$)"
+)
+
 
 # Tool-parameter monologue / planning diary (#384 / T-FIX-MAIN-BUBBLE-CLEAN).
 # Structural patterns — not a per-prompt denylist.
@@ -134,6 +139,8 @@ def _strip_jargon(text: str) -> str:
         if _JARGON_LINE.search(line):
             continue
         if _PROCESS_LINE.search(line):
+            continue
+        if _ENGINEER_VERIFY_LINE.search(line):
             continue
         if _TOOL_MONOLOGUE_LINE.search(line):
             continue
