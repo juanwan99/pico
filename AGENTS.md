@@ -56,6 +56,9 @@ goal → one PR → CANDIDATE+SHA → CI green → review(if Y/R) → MERGED mai
 
 Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
+**Tooling contract:** [`docs/TOOLING-CATALOG.md`](docs/TOOLING-CATALOG.md) · probe: `bash scripts/tool-status.sh --json` · card header: [`docs/templates/CARD-HEADER-TOOLING.md`](docs/templates/CARD-HEADER-TOOLING.md).  
+Do **not** route Cool/Keel/supervisor/mailbox/relay/self-drive. Visual Ready still requires [#384](https://github.com/juanwan99/pico/issues/384) frames — catalog does not replace reading PNGs.
+
 ---
 
 ## Corrected goals snapshot
