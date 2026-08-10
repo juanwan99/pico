@@ -69,3 +69,24 @@ def test_explicit_multi_file_still_forced() -> None:
 
     assert analyze_delivery("请分别交付 3 个独立 HTML 文件：A.html B.html C.html。").min_artifacts >= 3
     assert analyze_delivery("请交付 4 个独立可下载文件：甲.md 乙.md 丙.md 丁.md。").min_artifacts == 4
+
+
+def test_single_piece_with_landing_intent_requires_one_file() -> None:
+    """假绿 guard: 单件创作题带「工具落盘」必须 min=1，防聊天-only 冒充交付。
+
+    W2-R2B 曾以 min=0 让「纯聊天回复摘要」succeeded（0 真文件）——W2 正文/续写
+    必须可下载，聊天复述不能算交付。
+    """
+    from pico_orchestrator.delivery_policy import analyze_delivery
+
+    plan = analyze_delivery(
+        "请按内容流水线做一篇悬疑短篇：①流水线；②拆标杆；③设定；"
+        "④写正文第一章（至少800字）；⑤去AI味检查；⑥同会话续写一段。工具落盘。"
+    )
+    assert plan.min_artifacts >= 1, plan.min_artifacts
+    assert plan.multi_deliverable is False
+
+    # 纯闲聊（无交付/落盘意图）仍不强制 agent、不需要文件。
+    casual = analyze_delivery("你是什么模型")
+    assert casual.force_agent is False
+    assert casual.min_artifacts == 0
