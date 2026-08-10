@@ -19,7 +19,7 @@ CLAIM-WB: NO
 | A0 | tip/运行时/二进制实查 | PASS | 开工 add0ad8 → 部署后 62e1454 · pi-true · binary=true · HOSTED_LOOP=off | |
 | A1 | 部署不丢 pi | PASS | prod-update 全链跑通 · health true_pi_binary_available=true · PR #439 DEPLOYED | |
 | A2 | 健康字段一致 | PASS | default_runtime=pi-true · true_pi_default_enabled=true · phase=p2-default | |
-| B1 | 裸多文件 ×2 | | | |
+| B1 | 裸多文件 ×2 | **FAIL → 修复** | 复现：3 文件只落 1 仍 succeeded（min=0 假绿）· 修复 SHA 6049351 | 不得 0 文件 ok |
 | B2 | min 冲突 | | | |
 | B3 | 禁落盘诱导 | | | |
 | C-W1a | 习惯打卡小工具 | | | W1.1–W1.6 |
