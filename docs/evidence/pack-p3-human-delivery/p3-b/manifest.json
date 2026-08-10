@@ -1,0 +1,44 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T07:56:53.645Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p3-human-delivery",
+  "scene": "p3-b",
+  "prompt": "【P3S1-B】请把下面这段「年中经销商大会策划转写」一次做完一整条交付链：①150字要点；②正式策划案文档（可下载 Markdown，含主题/日程/预算三节）；③分工清单（责任人+截止日+勾选框）；④会前通知文案（可复制）。材料：6月18日上海办会、预计80家经销商、预算30万。请交付真实可下载文件（至少：策划案+分工清单）。完成后用人话总结文件名与用途、怎么打开。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "9428ba27d198c07c4b4b85f3719eb22a87ed3c46",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/400dfd68-baf7-4fcb-b9f3-8bbf51d1457d",
+  "out_dir": "docs/evidence/pack-p3-human-delivery/p3-b",
+  "frames": {
+    "V0": "docs/evidence/pack-p3-human-delivery/p3-b/V0-send.png",
+    "V1": "docs/evidence/pack-p3-human-delivery/p3-b/V1-process-main.png",
+    "V2": "docs/evidence/pack-p3-human-delivery/p3-b/V2-final.png",
+    "V3": "docs/evidence/pack-p3-human-delivery/p3-b/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p3-human-delivery/p3-b/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": false,
+    "main_delivery_strip": true,
+    "note": "open clicked; iframe not detected"
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

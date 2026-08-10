@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T08:14:41.991Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p3-human-delivery",
+  "scene": "s4-a",
+  "prompt": "【P3S4-A】请制作可下载的 HTML 互动页「珠峰登山准备清单」：大标题、八项准备勾选（点了变 ✓）、按钮「随机提示」「重置」。用工具落盘生成真文件，完成后用人话告诉我文件名、里面有什么、怎么打开。聊天里不要贴大段源码。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/a49f2a37-550e-44c1-92c0-be8a8e5b997a",
+  "out_dir": "docs/evidence/pack-p3-human-delivery/s4-a",
+  "frames": {
+    "V0": "docs/evidence/pack-p3-human-delivery/s4-a/V0-send.png",
+    "V1": "docs/evidence/pack-p3-human-delivery/s4-a/V1-process-main.png",
+    "V2": "docs/evidence/pack-p3-human-delivery/s4-a/V2-final.png",
+    "V3": "docs/evidence/pack-p3-human-delivery/s4-a/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p3-human-delivery/s4-a/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "珠峰登山准备清单",
+      "body_snippet": "标记：珠峰登山准备清单\n\n🏔️ 珠峰登山准备清单\n\n勾选你已完成的事项，点击条目切换\n\n随机提示\n重置",
+      "button_count": 2,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
