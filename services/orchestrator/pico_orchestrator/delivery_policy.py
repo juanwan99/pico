@@ -143,8 +143,8 @@ _HTML_SURFACE = re.compile(
 # Prevents content sections inside one HTML/课件 from inflating multi-file min.
 _SINGLE_UNIT = re.compile(
     r"(?:"
-    r"一\s*[份个张本]|单\s*[页个份文件]|"
-    r"(?:做|生成|写|交付|准备|制作)\s*一\s*[份个张]|"
+    r"一\s*[份个张本篇首支段]|单\s*[页个份文件]|"
+    r"(?:做|生成|写|交付|准备|制作)\s*一\s*[份个张本篇首支段]|"
     r"一份.{0,20}(?:html|HTML|网页|页面|课件|教案|文档|互动页)|"
     r"(?:html|HTML|网页|页面|课件).{0,12}(?:一份|一个|单页)|"
     # P2/P3: 「做可下载 HTML 互动页/课件 X：区块…」 is ONE page, not N files.
@@ -252,7 +252,9 @@ class DeliveryPlan:
 
 def _count_explicit_n_files(text: str) -> int:
     m = re.search(
-        r"([2-9]|10|[两二三四五六七])\s*个\s*(?:独立\s*)?(?:可下载\s*)?(?:文件|产物|交付|文档)",
+        # Allow natural qualifiers between the count and the noun:
+        # 「至少 3 个真文件」「3 个独立可下载文件」「3 个可下载文档」.
+        r"([2-9]|10|[两二三四五六七])\s*个\s*(?:独立\s*)?(?:真\s*)?(?:可下载\s*)?(?:文件|产物|交付|文档)",
         text,
     )
     if not m:
