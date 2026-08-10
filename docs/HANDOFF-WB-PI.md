@@ -114,7 +114,7 @@ RELATED:
 
 | 项 | 决定 |
 |----|------|
-| **默认核** | **Pi**（业主在用；极简；模型越强壳越赚） |
+| **默认核** | **真 Pi RPC**（`default_runtime=pi-true` · #435；hosted `pi-agent` 仅 `PICO_HOSTED_LOOP` 回滚） |
 | **模型** | **DeepSeek** 为主（产品对外脑力） |
 | **Reasonix** | **不**并列真源；若实验须 flag，不得写「唯一目标」 |
 | **Kimi Agent** | 仓内已有 ENGINEERING 路径 = **遗产/可选回滚**，**不再**作为产品唯一目标 |

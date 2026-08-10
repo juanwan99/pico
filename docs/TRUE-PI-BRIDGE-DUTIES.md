@@ -3,7 +3,8 @@
 ```text
 DOC: docs/TRUE-PI-BRIDGE-DUTIES.md
 DATE: 2026-08-10
-Issue: #431 · #433
+Issue: #431 · #433 · #435 · #436
+默认 multi-step: pi-true（DEFAULT=1）· 回滚: HOSTED_LOOP=1
 CLAIM-WB: NO
 ```
 

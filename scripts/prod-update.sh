@@ -129,6 +129,25 @@ if [ "$HEALTH_SHA" != "$CURRENT_SHA" ]; then
 fi
 echo "[pico] health.git_sha exact match: $HEALTH_SHA"
 
+# True-Pi binary must ship with the production API image (D1 / T-OPS-TRUE-PI-HYGIENE).
+# docker-compose.host.yml builds Dockerfile.pico-api.true-pi — lean rebuilds must not
+# silently drop pi while DEFAULT=1 is expected.
+if ! python3 -c '
+import json, sys
+path = sys.argv[1]
+health = json.load(open(path))
+ok = health.get("true_pi_binary_available") is True
+pin = health.get("true_pi_package_pin") or ""
+print(f"[pico] true_pi_binary_available={ok}")
+print(f"[pico] true_pi_package_pin={pin}")
+if not ok:
+    print("[pico] FATAL: true_pi_binary_available is not true after deploy", file=sys.stderr)
+    print("[pico] fix: ensure compose builds Dockerfile.pico-api.true-pi", file=sys.stderr)
+    raise SystemExit(8)
+' "$HEALTH_FILE"; then
+  exit 8
+fi
+
 # Product UI must actually serve /login. Allow LibreChat up to about 60 seconds
 # after recreate to become ready; transport failures and non-200 responses fail closed.
 UI_LOGIN_CODE="000"

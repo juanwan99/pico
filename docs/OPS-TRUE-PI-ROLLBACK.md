@@ -3,82 +3,100 @@
 ```text
 DOC: docs/OPS-TRUE-PI-ROLLBACK.md
 DATE: 2026-08-10
-Issue: #433 · #431
+Issue: #433 · #431 · #435 · #436
 钉版: @mariozechner/pi-coding-agent@0.73.1
 CLAIM-WB: NO
 ```
 
 ---
 
-## 开关一览
+## 常态（清场后）
 
-| 环境变量 | 作用 |
-|----------|------|
-| `PICO_TRUE_PI_DEFAULT=1` | multi-step **默认真核** |
-| `PICO_TRUE_PI_CANARY=school:member,...` 或 `*` | 灰度（默认仍 hosted，仅名单走真核） |
-| `PICO_TRUE_PI_BYPASS=1` | 强制全量真核（运维/预发） |
-| `PICO_TRUE_PI_SHADOW=1` | hosted 主路径后旁路对账（不切主） |
-| **`PICO_HOSTED_LOOP=1`** | **一键回滚 hosted `pi_runtime`** |
-| `PICO_TRUE_PI_BIN` | pi 可执行文件路径 |
-| `PICO_TRUE_PI_SESSION_ROOT` | session 目录父路径 |
-| `DEEPSEEK_API_KEY` | 模型密钥（与现网一致） |
+| 态 | 条件 | health.default_runtime | health.true_pi_phase |
+|----|------|------------------------|---------------------|
+| **真核默认** | `PICO_TRUE_PI_DEFAULT=1` · `HOSTED_LOOP` 未设 | `pi-true` | `p2-default` |
+| **事故回滚** | **`PICO_HOSTED_LOOP=1`**（唯一事故路径） | `pi-agent` | `hosted-rollback` |
+
+生产**不**长期开：`BYPASS` · `SHADOW` · 与 DEFAULT 双开的装饰性 `CANARY=*`。
 
 ---
 
-## 镜像 / 进程
+## 开关一览
 
-### 最低要求（真核路径）
+| 环境变量 | 作用 | 生产常态 |
+|----------|------|----------|
+| `PICO_TRUE_PI_DEFAULT=1` | multi-step **默认真核** | **开** |
+| **`PICO_HOSTED_LOOP=1`** | **一键回滚 hosted `pi_runtime`** | **关**（事故时开） |
+| `PICO_TRUE_PI_CANARY=school:member,...` | 灰度（DEFAULT 关时名单走真核） | **关**（DEFAULT 已开时忽略/勿装饰） |
+| `PICO_TRUE_PI_BYPASS=1` | 强制全量真核（运维窗口） | **关** |
+| `PICO_TRUE_PI_SHADOW=1` | hosted 后旁路对账 | **关** |
+| `PICO_TRUE_PI_BIN` | pi 可执行路径 | 镜像内 PATH 即可 |
+| `PICO_TRUE_PI_SESSION_ROOT` | session 目录父路径 | 可选 |
+| `DEEPSEEK_API_KEY` | 模型密钥（与 hosted 同） | 生产已有 |
 
-- Node.js ≥ 20（现网 22 OK）
-- 全局或镜像内：`npm i -g @mariozechner/pi-coding-agent@0.73.1`
-- `pi` 在 PATH，或设 `PICO_TRUE_PI_BIN`
-- 扩展文件：`services/true_pi_bridge/pico-gateway-tools.ts` 随仓拷贝
+优先级：`HOSTED_LOOP` > `BYPASS` > `DEFAULT` > `CANARY` > hosted。
 
-### Dockerfile 备注
+---
 
-默认 `Dockerfile.pico-api` 仍是 **纯 Python lean 镜像**（公网未开真核时零影响）。  
-开真核时使用 `Dockerfile.pico-api.true-pi`（含 Node + 钉版 pi），或宿主机 sidecar 安装 pi。
+## 镜像 / 部署真源
+
+### 生产 compose（host）
+
+- `docker-compose.host.yml` → **`Dockerfile.pico-api.true-pi`**
+- 钉版：`@mariozechner/pi-coding-agent@0.73.1`（Node ≥ 20，镜像装 22）
+- `scripts/prod-update.sh` 部署后校验：`health.true_pi_binary_available=true`（失败 exit 8）
+
+### Lean 镜像
+
+- `Dockerfile.pico-api` = 纯 Python，**不含** pi
+- **禁止**在 `DEFAULT=1` 的公网路径用 lean 覆盖 true-pi 镜像
 
 ### health 自证
 
 ```text
-GET /health
+GET /health  (loopback 18765 或 SSH 通道)
 default_runtime: pi-true | pi-agent
 true_pi_binary_available: true|false
 true_pi_default_enabled: true|false
 true_pi_hosted_loop_forced: true|false
+true_pi_phase: p2-default | hosted-rollback | p2-canary | p2-bypass | p1-shadow | idle
 true_pi_package_pin: @mariozechner/pi-coding-agent@0.73.1
 ```
 
 ---
 
-## 回滚（事故 / R 红）
+## 事故回滚（唯一路径）
 
 ```bash
 # 1) 立即回 hosted（无需重新部署代码）
-export PICO_HOSTED_LOOP=1
-# 或取消 true default:
-unset PICO_TRUE_PI_DEFAULT
-# 2) 重启 API 进程 / 容器使 env 生效
-# 3) 验证
-curl -sS https://pico.aivia.asia/health | jq '{default_runtime,true_pi_hosted_loop_forced,true_pi_binary_available}'
-# 期望 default_runtime=pi-agent（或 true_pi_hosted_loop_forced=true）
-# 4) 开放域 1 题冒烟
-# 5) Issue 贴 ## ROLLBACK · tip · 原因
+# 在 /opt/pico/.env：
+#   PICO_HOSTED_LOOP=1
+# 保留 PICO_TRUE_PI_DEFAULT=1 亦可（HOSTED 优先）
+cd /opt/pico
+docker compose -f docker-compose.host.yml up -d --force-recreate --no-deps pico-api
+
+# 2) 验证（loopback）
+curl -sf http://127.0.0.1:18765/health | python3 -c \
+  'import json,sys; h=json.load(sys.stdin); print({k:h.get(k) for k in
+   ["default_runtime","true_pi_hosted_loop_forced","true_pi_binary_available","true_pi_phase"]})'
+# 期望: default_runtime=pi-agent · true_pi_hosted_loop_forced=true · phase=hosted-rollback
+
+# 3) 开放域 1 题冒烟（hosted）
+# 4) Issue 贴 ## ROLLBACK · tip · 原因
+
+# 恢复真核：删 .env 中 PICO_HOSTED_LOOP 行 → 再 recreate pico-api
 ```
 
-**禁止：** 为回滚删除 `pi_runtime.py`；为刷绿关闭落盘门闩。
+**禁止：** 为回滚删除 `pi_runtime.py`；为刷绿关闭落盘门闩；用关 `DEFAULT` 代替 `HOSTED_LOOP` 当唯一文档路径（可关，但事故首选 HOSTED）。
 
 ---
 
-## 推荐切主顺序
+## 切主后观察（已完成见 #435）
 
 ```text
-1. 部署含 true_pi 的 tip（#432+）
-2. 宿主机/镜像安装钉版 pi · health.true_pi_binary_available=true
-3. LIVE L1–L5 绿（旁路 BYPASS 或 canary）
-4. PICO_TRUE_PI_CANARY 灰度
-5. PICO_TRUE_PI_DEFAULT=1 · 观察
-6. R1–R7 回归
-7. 任一红 → PICO_HOSTED_LOOP=1
+1. tip 含 true_pi 代码
+2. 镜像 Dockerfile.pico-api.true-pi · binary=true
+3. PICO_TRUE_PI_DEFAULT=1 · HOSTED/BYPASS/SHADOW 关 · 无装饰 CANARY
+4. health: default_runtime=pi-true · phase=p2-default
+5. 任一红 → PICO_HOSTED_LOOP=1
 ```

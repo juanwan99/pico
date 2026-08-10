@@ -234,6 +234,28 @@ def test_health_fields_phase2(monkeypatch: pytest.MonkeyPatch) -> None:
     assert hf["true_pi_phase"] == "p2-default"
 
 
+def test_health_phase_hosted_rollback_overrides_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(TRUE_PI_DEFAULT_ENV, "1")
+    monkeypatch.setenv(HOSTED_LOOP_ENV, "1")
+    hf = health_fields()
+    assert hf["true_pi_hosted_loop_forced"] is True
+    assert hf["true_pi_default_enabled"] is True
+    assert hf["true_pi_phase"] == "hosted-rollback"
+    assert default_runtime_for_health() == "pi-agent"
+
+
+def test_health_phase_canary_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(HOSTED_LOOP_ENV, raising=False)
+    monkeypatch.delenv(TRUE_PI_DEFAULT_ENV, raising=False)
+    monkeypatch.delenv("PICO_TRUE_PI_BYPASS", raising=False)
+    monkeypatch.setenv(TRUE_PI_CANARY_ENV, "school-a:member-a")
+    hf = health_fields()
+    assert hf["true_pi_phase"] == "p2-canary"
+    assert default_runtime_for_health() == "pi-agent"
+
+
 def test_health_endpoint_default_runtime_true(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(TRUE_PI_DEFAULT_ENV, "1")
     monkeypatch.delenv(HOSTED_LOOP_ENV, raising=False)

@@ -30,7 +30,11 @@ services:
     image: pico-api:v13
     build:
       context: .
-      dockerfile: Dockerfile.pico-api
+      # Production multi-step default is true Pi; image must ship pinned pi CLI.
+      # Lean (no Node): Dockerfile.pico-api — not used by host deploy path.
+      dockerfile: Dockerfile.pico-api.true-pi
+      args:
+        PICO_GIT_SHA: ${PICO_GIT_SHA:-unknown}
     restart: unless-stopped
     network_mode: host
     # CRITICAL: host network + public IP risk — always bind loopback only
@@ -67,6 +71,15 @@ services:
       DEEPSEEK_MODEL: "${DEEPSEEK_MODEL:-deepseek-chat}"
       PICO_KIMI_WORKDIR_BASE: /app/data/kimi-work
       PICO_PI_WORKDIR_BASE: /app/data/pi-work
+      # True-Pi cutover (env_file wins when set; listed for ops visibility)
+      # DEFAULT multi-step = pi-true when PICO_TRUE_PI_DEFAULT=1
+      # Accident rollback: PICO_HOSTED_LOOP=1 only (see docs/OPS-TRUE-PI-ROLLBACK.md)
+      PICO_TRUE_PI_DEFAULT: ${PICO_TRUE_PI_DEFAULT:-}
+      PICO_HOSTED_LOOP: ${PICO_HOSTED_LOOP:-}
+      PICO_TRUE_PI_CANARY: ${PICO_TRUE_PI_CANARY:-}
+      PICO_TRUE_PI_BYPASS: ${PICO_TRUE_PI_BYPASS:-}
+      PICO_TRUE_PI_SHADOW: ${PICO_TRUE_PI_SHADOW:-}
+      PICO_TRUE_PI_BIN: ${PICO_TRUE_PI_BIN:-}
     volumes:
       - pico_data:/app/data
       - ./.env:/app/.env:ro
