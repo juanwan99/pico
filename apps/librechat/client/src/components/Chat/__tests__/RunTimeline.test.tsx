@@ -126,4 +126,48 @@ describe('RunTimeline', () => {
     // A bare 「失败」 badge must not contradict the terminal success.
     expect(screen.queryByText(/^失败$/)).not.toBeInTheDocument();
   });
+
+  it('labels recovered steps neutrally from the event stream alone (P2-E4)', () => {
+    // Surfaces that render the timeline without the `run` prop (automation
+    // page) must still derive the terminal success from the run.status event.
+    render(
+      <RunTimeline
+        events={[
+          event('tool-failed', 1, 'tool.result', {
+            tool: 'generate_html_document',
+            ok: false,
+          }),
+          event('tool-ok', 2, 'tool.result', {
+            tool: 'generate_html_document',
+            ok: true,
+          }),
+          event('run-ok', 3, 'run.status', { status: 'succeeded' }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('失败 · 已恢复')).toBeInTheDocument();
+    expect(screen.getByText('运行成功')).toBeInTheDocument();
+    expect(screen.queryByText(/^失败$/)).not.toBeInTheDocument();
+  });
+
+  it('keeps a bare failure while the run has not reached a terminal success (P2-E4)', () => {
+    // No terminal succeeded event yet: the failed step is still a real failure
+    // and must be labeled as such (transient state, run still in progress).
+    render(
+      <RunTimeline
+        events={[
+          event('run-running', 1, 'run.status', { status: 'running' }),
+          event('tool-failed', 2, 'tool.result', {
+            tool: 'workspace_write_file',
+            ok: false,
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('正在运行')).toBeInTheDocument();
+    expect(screen.getByText('失败')).toBeInTheDocument();
+    expect(screen.queryByText('失败 · 已恢复')).not.toBeInTheDocument();
+  });
 });

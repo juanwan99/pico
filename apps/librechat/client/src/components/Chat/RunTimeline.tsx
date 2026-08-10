@@ -189,6 +189,17 @@ export default function RunTimeline({
     });
   }
 
+  // P2-E4 badge truth: recover whether the run ended successfully from the run
+  // object OR the run's own terminal event. Some surfaces render a timeline
+  // without the `run` prop (e.g. the automation page); deriving success from
+  // the event stream keeps recovered tool steps labeled 「失败 · 已恢复」 instead
+  // of a bare 「失败」 that contradicts the terminal success.
+  const runSucceeded =
+    run?.status === 'succeeded' ||
+    allEvents.some(
+      (event) => event.type === 'run.status' && event.payload?.status === 'succeeded',
+    );
+
   return (
     <section className="mb-3" aria-label="执行步骤">
       <p className="mb-2 text-[12px] font-medium text-[#8c8c8c]">执行步骤</p>
@@ -199,7 +210,7 @@ export default function RunTimeline({
       ) : (
         <ol className="space-y-1.5">
           {visible.map((event) => {
-            const description = describePicoRunEvent(event, run?.status === 'succeeded');
+            const description = describePicoRunEvent(event, runSucceeded);
             return (
               <li
                 key={event.id}

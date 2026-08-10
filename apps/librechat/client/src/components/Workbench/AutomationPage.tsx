@@ -995,7 +995,7 @@ export default function AutomationPage() {
                       </div>
                       {runResults[item.id] ? (
                         <div className="md:col-span-4">
-                          <RunTimeline events={runEvents[item.id]} />
+                          <RunTimeline events={runEvents[item.id]} run={runResults[item.id]} />
                         </div>
                       ) : null}
                     </li>
