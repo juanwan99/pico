@@ -1,0 +1,44 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T08:54:50.795Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "w2-r1",
+  "prompt": "【P4W2-R1】请按内容流水线做一篇短篇科幻小说：①先给流水线（扫榜→选标杆→拆前三章→设定候选→正文）；②拆一个标杆的开局钩子/核心设定/节奏/章末钩子（骨架表）；③给出选定设定；④写正文第一章（至少800字，非大纲）；⑤做去AI味检查（模板句/感官/节奏）；⑥同会话续写一段。工具落盘交付文档。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/618ecbe0-9e98-43d4-9533-4f51cdbbe300",
+  "out_dir": "docs/evidence/pack-p4-capability/w2-r1",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/w2-r1/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/w2-r1/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/w2-r1/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/w2-r1/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/w2-r1/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": false,
+    "main_delivery_strip": true,
+    "note": "open clicked; iframe not detected"
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

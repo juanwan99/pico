@@ -1,0 +1,42 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T10:30:54.935Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "w2-r2b",
+  "prompt": "【P4W2-R2B】请按内容流水线做一篇悬疑短篇：①流水线（扫榜→拆前三章→设定→正文）；②拆标杆开局钩子/核心设定/节奏/章末钩子（骨架表）；③给出设定；④写正文第一章（至少800字，非大纲）；⑤去AI味检查（模板句/感官/节奏）；⑥同会话续写一段。工具落盘。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "73a77b5aa409b1213b41093146d7598150673b54",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/7dc2152a-089b-4ff0-99f7-11381f24c30d",
+  "out_dir": "docs/evidence/pack-p4-capability/w2-r2b",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/w2-r2b/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/w2-r2b/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/w2-r2b/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/w2-r2b/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/w2-r2b/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "same-tab",
+    "human_page": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

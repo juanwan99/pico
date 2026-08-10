@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T08:50:16.681Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "w1-r1",
+  "prompt": "【P4W1-R1】请帮我做一个\"阅读打卡\"小工具：记录每天读了几页、连续天数、月度统计。先问清我想要的保存方式与界面要点（或一次列出等价清单），再做可打开使用的网页，给打开说明，并做五项自测（添加/状态切换/重进仍在/删除/空值拦截）逐项给结论。工具落盘。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/05ccfa28-71bd-4abf-8006-8a36341ebb6f",
+  "out_dir": "docs/evidence/pack-p4-capability/w1-r1",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/w1-r1/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/w1-r1/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/w1-r1/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/w1-r1/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/w1-r1/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "阅读打卡工具",
+      "body_snippet": "标记：阅读打卡 · P4W1-R1\n\n📖 阅读打卡\n阅读打卡 · P4W1-R1 · 数据保存在本浏览器（localStorage）\n今日打卡\n记录页数\n未打卡\n统计\n0\n连续打卡(天)\n0\n本月总页数\n0\n本月打卡天数\n历史记录\n导出备份\n导入备份\n说明：数据保存在当前浏览器。若换设备/清缓存会丢失，可先\"导出备份\"。",
+      "button_count": 3,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T09:31:53.932Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "w1-r3",
+  "prompt": "【P4W1-R3】请帮我做一个\"记账本\"小工具：记收支、分类、月度汇总。先澄清数据保存与分类方式（或等价清单一次问清），再做可打开网页，给打开说明与五项自测逐项结论。工具落盘。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/ef9ffc16-9195-4a62-a9b7-df5d62bc14d0",
+  "out_dir": "docs/evidence/pack-p4-capability/w1-r3",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/w1-r3/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/w1-r3/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/w1-r3/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/w1-r3/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/w1-r3/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "same-tab",
+    "human_page": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

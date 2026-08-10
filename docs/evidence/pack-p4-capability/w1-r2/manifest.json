@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T09:27:35.140Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "w1-r2",
+  "prompt": "【P4W1-R2】请帮我做一个\"喝水提醒\"小工具：每 2 小时提醒一次、记录今日杯数、周统计。先问清保存方式（本地/云端）与样式偏好（或列出等价确认清单），再做可打开网页并给打开说明与五项自测（添加/切换/重进仍在/删除/空值拦截）逐项结论。工具落盘。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/2f9d2604-9586-43f2-9fea-65cab169dd6e",
+  "out_dir": "docs/evidence/pack-p4-capability/w1-r2",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/w1-r2/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/w1-r2/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/w1-r2/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/w1-r2/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/w1-r2/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "喝水提醒",
+      "body_snippet": "标记：喝水提醒 · 每2小时健康记录 P4W1-R2\n\n💧 喝水提醒\n每 2 小时提醒 · 数据保存本机\n0\n今日（杯 · 约250ml/杯）\n➕ 记一杯\n➖ 减一杯\n🔄 重置今日\n⏰ 提醒间隔（分钟）\n✔ 应用间隔\n📊 本周统计\n数据仅存于当前浏览器。关闭页面后无法在后台自动弹窗（浏览器限制）。",
+      "button_count": 4,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

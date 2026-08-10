@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T10:09:08.670Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "o2-r2",
+  "prompt": "【P4O2-R2】请做可下载的 HTML 互动页「二十四节气小卡」：大标题、节气切换按钮、每节气一句俗语与温度区间。工具落盘，勿贴源码，完成后用人话说明文件名与打开方式。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/4a82efae-6948-4c44-834f-78672c9bd980",
+  "out_dir": "docs/evidence/pack-p4-capability/o2-r2",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/o2-r2/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/o2-r2/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/o2-r2/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/o2-r2/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/o2-r2/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "二十四节气小卡",
+      "body_snippet": "标记：二十四节气小卡 · 互动页\n\n二十四节气小卡\n· 一季一俗 · 一候一温 ·\n‹ 上一个\n下一个 ›\n共 24 张节气卡 · 俗语与气温区间仅供参考 · 可按顶部按钮或左右翻页切换",
+      "button_count": 2,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
