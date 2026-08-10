@@ -147,6 +147,9 @@ _SINGLE_UNIT = re.compile(
     r"(?:做|生成|写|交付|准备|制作)\s*一\s*[份个张]|"
     r"一份.{0,20}(?:html|HTML|网页|页面|课件|教案|文档|互动页)|"
     r"(?:html|HTML|网页|页面|课件).{0,12}(?:一份|一个|单页)|"
+    # P2: 「做可下载 HTML 互动页/课件 X：区块…」 is ONE page, not N files.
+    r"(?:做|生成|写|交付|准备|制作|给我|输出)\s*(?:可下载\s*)?"
+    r"(?:html|HTML|网页|页面|课件|互动页|单页|教案)[^。！？；;\n]{0,24}|"
     r"single[- ]?page|"
     r"one\s+(?:html|page|file|document)"
     r")",

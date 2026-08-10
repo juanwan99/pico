@@ -22,7 +22,10 @@ function textValue(payload: Record<string, unknown>, ...keys: string[]): string 
   return null;
 }
 
-export function describePicoRunEvent(event: PicoRunEvent): {
+export function describePicoRunEvent(
+  event: PicoRunEvent,
+  runSucceeded = false,
+): {
   title: string;
   detail: string | null;
 } {
@@ -52,9 +55,17 @@ export function describePicoRunEvent(event: PicoRunEvent): {
   if (event.type === 'tool.result') {
     const ok = payload.ok !== false;
     const code = textValue(payload, 'code', 'error_code');
+    // P2 status-truth: a tool step that failed but the run still succeeded was
+    // recovered — label it as such instead of a bare red-ish「失败」that
+    // contradicts the terminal success.
+    const detail = ok
+      ? '成功'
+      : runSucceeded
+        ? '失败 · 已恢复'
+        : ['失败', code ? `错误码：${code}` : null].filter(Boolean).join(' · ');
     return {
       title: `工具结果 · ${textValue(payload, 'tool', 'name') || '未命名工具'}`,
-      detail: ok ? '成功' : ['失败', code ? `错误码：${code}` : null].filter(Boolean).join(' · '),
+      detail,
     };
   }
   if (event.type === 'agent.step') {
@@ -188,7 +199,7 @@ export default function RunTimeline({
       ) : (
         <ol className="space-y-1.5">
           {visible.map((event) => {
-            const description = describePicoRunEvent(event);
+            const description = describePicoRunEvent(event, run?.status === 'succeeded');
             return (
               <li
                 key={event.id}

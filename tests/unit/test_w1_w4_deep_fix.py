@@ -329,8 +329,11 @@ async def test_apply_delivery_gate_min_artifacts_fail_closed(
     factory = db_mod.session_factory()
 
     prompt = (
-        "请做可下载 HTML 互动页「动物细胞结构标认」：标题、五个结构名称列表、"
-        "两个按钮「随机高亮」「重置」。工具落盘，勿贴源码。"
+        "【复盘链】请把下面这段「季度复盘会议转写」一次做完一整条交付链："
+        "①先写150字要点；②生成正式复盘文档（可下载Markdown，含成绩/不足/改进措施三节）；"
+        "③提取整改清单（责任人+截止日+勾选框）；④写成可复制的执行通知文案。"
+        "材料：本季度新签客户18家但续费率降到71%。"
+        "请交付真实可下载文件（至少：复盘+整改清单）。"
     )
     task_id = new_id()
     run_id = new_id()
@@ -391,7 +394,7 @@ async def test_apply_delivery_gate_min_artifacts_fail_closed(
         run = await session.get(RunRow, run_id)
         assert run is not None
         assert run.status == "failed"
-        assert run.error and "需要至少 3 个独立文件" in run.error
+        assert run.error and "需要至少 4 个独立文件" in run.error
         failed_events = [
             e
             for e in (
@@ -407,7 +410,7 @@ async def test_apply_delivery_gate_min_artifacts_fail_closed(
         assert failed_events
         event = failed_events[-1]
         assert event.payload.get("reason") == "delivery_min_artifacts"
-        assert event.payload.get("min_required") == 3
+        assert event.payload.get("min_required") == 4
         assert event.payload.get("artifact_count") == 1
         assert event.payload.get("user_message") == run.error
         summary = [
@@ -446,8 +449,11 @@ async def test_execute_run_applies_delivery_gate(tmp_path, monkeypatch) -> None:
     factory = db_mod.session_factory()
 
     prompt = (
-        "请做可下载 HTML 互动页「动物细胞结构标认」：标题、五个结构名称列表、"
-        "两个按钮「随机高亮」「重置」。工具落盘，勿贴源码。完成后只用人话说明。"
+        "【复盘链】请把下面这段「季度复盘会议转写」一次做完一整条交付链："
+        "①先写150字要点；②生成正式复盘文档（可下载Markdown，含成绩/不足/改进措施三节）；"
+        "③提取整改清单（责任人+截止日+勾选框）；④写成可复制的执行通知文案。"
+        "材料：本季度新签客户18家但续费率降到71%。"
+        "请交付真实可下载文件（至少：复盘+整改清单）。完成后只用人话说明。"
     )
     task_id = new_id()
     run_id = new_id()
@@ -508,7 +514,7 @@ async def test_execute_run_applies_delivery_gate(tmp_path, monkeypatch) -> None:
         run = await session.get(RunRow, run_id)
         assert run is not None
         assert run.status == "failed", "retry path must fail closed on under-delivery"
-        assert run.error and "需要至少 3 个独立文件" in run.error
+        assert run.error and "需要至少 4 个独立文件" in run.error
         failed_events = [
             e
             for e in (
