@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T09:03:46.717Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "w4-r1",
+  "prompt": "【P4W4-R1】请做一套\"校园民谣\"作品包：①完整歌词（两段主歌+副歌+桥段，分段完整可唱）；②结构时间轴（段落/小节表）；③发布资产（封面文案+一句话介绍+标签建议）。若无法渲染成片，请明确写\"未渲染\"。工具落盘。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/961294f6-cad1-4123-ae6c-bae442f8775d",
+  "out_dir": "docs/evidence/pack-p4-capability/w4-r1",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/w4-r1/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/w4-r1/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/w4-r1/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/w4-r1/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/w4-r1/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "校园民谣《风从教室吹过》作品总览.html",
+      "body_snippet": "校园民谣《风从教室吹过》作品总览.html\n\n标记：风从教室吹过 作品包总览\n\n《风从教室吹过》校园民谣作品包总览页\n本页汇总：#1 完整歌词 #2 结构时间轴 #3 发布资产 #4 和弦简谱\n全部为文字/乐谱阶段，未渲染成可播放成片。可在此查看歌词全文与结构总览。",
+      "button_count": 0,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

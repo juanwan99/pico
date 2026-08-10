@@ -1,0 +1,44 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T09:51:28.027Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "w4-r3",
+  "prompt": "【P4W4-R3】请做一套\"城市夜跑电台\"音频作品包：①完整口播稿（分段完整）；②结构时间轴（段落/时间表）；③发布资产（封面文案+一句话介绍+标签建议）。若无法渲染音频请明确写\"未渲染\"。工具落盘。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/85c6b890-d321-471c-8ddc-dae35a3066d6",
+  "out_dir": "docs/evidence/pack-p4-capability/w4-r3",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/w4-r3/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/w4-r3/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/w4-r3/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/w4-r3/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/w4-r3/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": false,
+    "main_delivery_strip": true,
+    "note": "open clicked; iframe not detected"
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T10:48:15.479Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "w1-r3b",
+  "prompt": "【P4W1-R3B】请帮我做一个\"记账本\"小工具：记收支、分类、月度汇总。先列出 2-3 个澄清问题并给出默认假设（数据保存/分类方式），然后直接做出可打开网页，给打开说明与五项自测（添加/切换/重进仍在/删除/空值拦截）逐项结论。工具落盘。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "6fd55ab80aa1575bdf49b68e6f3984a4e65f0dd4",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/f7edbb5d-22b5-46fd-8c31-99be5d631283",
+  "out_dir": "docs/evidence/pack-p4-capability/w1-r3b",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/w1-r3b/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/w1-r3b/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/w1-r3b/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/w1-r3b/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/w1-r3b/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "记账本",
+      "body_snippet": "标记：记账本 · 收支分类月度汇总 · P4W1-R3B\n\n记账本\n收支 · 分类 · 月度汇总（数据保存在本机浏览器 localStorage）\n类型\n支出\n收入\n金额（元）\n分类\n日期\n备注（可选）\n \n＋ 添加\n本月收入\n0.00\n本月支出\n0.00\n本月结余\n0.00\n近 6 个月收支趋势：\n月份\t收入\t支出\t结余\n账单明细",
+      "button_count": 1,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

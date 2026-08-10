@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T10:04:53.767Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "o1-r2",
+  "prompt": "【P4O1-R2】请为\"年度合作伙伴答谢晚宴\"做一套材料：主议程、嘉宾名单、后勤保障单（至少 3 个真文件，可下载），内容相互咬合一致。工具落盘，完成后用人话说明文件名与用途。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/94a6f0fb-05d9-4637-a4d9-79300742f4b4",
+  "out_dir": "docs/evidence/pack-p4-capability/o1-r2",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/o1-r2/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/o1-r2/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/o1-r2/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/o1-r2/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/o1-r2/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "年度合作伙伴答谢晚宴-会前检查清单.html",
+      "body_snippet": "标记：年度合作伙伴答谢晚宴 · 会前检查清单\n\n使用说明\n\n此清单综合主议程、嘉宾名单与后勤保障单，供活动前一日及当日快速核对。可离线打开。\n\n一、接待与签到（对应后勤单）\n□ 签到本、签到笔 40 支到位\n□ 胸花 6 枚（管理层及特邀）\n□ 名卡/桌牌 45 套，含表彰嘉宾专属台签\n二、会场与设备（对应后勤单）\n□ 大屏/投影、音响、灯光 18:00 前调试完成\n□ 话筒 2 支 + 备用电池 2 组\n□ 颁奖背景板、抽奖箱及号码球\n三、餐饮酒水（19:15 自助餐开启）",
+      "button_count": 0,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

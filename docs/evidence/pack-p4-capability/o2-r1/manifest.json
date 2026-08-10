@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T09:17:17.392Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p4-capability",
+  "scene": "o2-r1",
+  "prompt": "【P4O2-R1】请做可下载的 HTML 互动页「四季古诗配图」：大标题、四个季节切换按钮、每季一首古诗与一段画面描述。工具落盘生成真文件，勿贴源码，完成后用人话说明文件名与打开方式。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/1a1771bc-a90c-4b6b-aba3-a4c5db9a1437",
+  "out_dir": "docs/evidence/pack-p4-capability/o2-r1",
+  "frames": {
+    "V0": "docs/evidence/pack-p4-capability/o2-r1/V0-send.png",
+    "V1": "docs/evidence/pack-p4-capability/o2-r1/V1-process-main.png",
+    "V2": "docs/evidence/pack-p4-capability/o2-r1/V2-final.png",
+    "V3": "docs/evidence/pack-p4-capability/o2-r1/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p4-capability/o2-r1/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "四季古诗配图",
+      "body_snippet": "标记：四季古诗配图互动页\n\n四季古诗配图\n轻点季节按钮，感受四时诗意与画意\n🌱 春\n☀️ 夏\n🍂 秋\n❄️ 冬\n🌱",
+      "button_count": 4,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
