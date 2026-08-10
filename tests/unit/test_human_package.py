@@ -166,6 +166,24 @@ def test_strips_l0_selfcheck_wall_from_main_bubble() -> None:
     assert "下载" in out or "打开" in out
 
 
+def test_strips_system_side_verification_english() -> None:
+    """#399 R3: English system-side verification voice must leave main bubble."""
+    raw = (
+        "正在准备...\n"
+        "Now let me run the system-side verification check on the HTML."
+        "课件已做好并完成结构校验，页面为完整可运行的 HTML。\n"
+        "文件：孟德尔遗传定律_入门课件.html\n"
+        "怎么打开：在结果区点下载。"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=["孟德尔遗传定律_入门课件.html"])
+    assert "system-side" not in out.lower()
+    assert "let me run" not in out.lower()
+    assert "verification check" not in out.lower()
+    assert "完成结构校验" not in out
+    assert "孟德尔遗传定律_入门课件.html" in out
+    assert "下载" in out or "打开" in out
+
+
 def test_preserves_human_filename_and_clarification_not_l0() -> None:
     """Clarifications + human filenames survive; monologue/#375 posture unchanged."""
     clarify = "请问需要几个栏目？主色是蓝还是绿？"

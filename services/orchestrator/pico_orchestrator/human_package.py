@@ -81,9 +81,20 @@ _L0_SELFCHECK_INLINE = re.compile(
     r"|对用户[：:]只说明[^。\n]{0,80}[。.]?"
     r"|勿复读[^。\n]{0,60}[。.]?"
     r"|本工具不做无头浏览器[^。\n]{0,80}[。.]?"
+    # #399 R3: English system-side / structure-check engineer voice in main bubble
+    r"|(?:Now\s+)?let me run the system-side verification[^.。\n]*[.。]?"
+    r"|system-side verification(?:\s+check)?[^.。\n]*[.。]?"
+    r"|完成结构校验[。.]?"
+    r"|结构校验[，,]?页面为完整可运行[^。\n]{0,80}[。.]?"
     r")"
 )
 _ENGINEER_VERIFY_LINE = _L0_SELFCHECK_LINE
+# Pure engineer EN self-check lines (no Chinese product copy mixed in).
+_ENGINEER_EN_LINE = re.compile(
+    r"(?im)^[ \t]*(?:Now\s+)?(?:let me|I'll|I will|I need to)\b.*"
+    r"(?:verification|system-side|structure\s*check|self-?check).*$"
+)
+# Do not use _ENGINEER_EN_LINE alone to drop mixed EN+中文 lines — strip inline first.
 
 
 # Tool-parameter monologue / planning diary (#384 / T-FIX-MAIN-BUBBLE-CLEAN).
@@ -94,16 +105,18 @@ _TOOL_MONOLOGUE_LINE = re.compile(
     r".*(?:JSON\s*escape|escape\s*JSON|body\s*参数|tool\s*参数|"
     r"function\.arguments|tool_calls?)\b.*|"
     r"(?:Let me|I'll|I will|I need to|First|Next|Then)\b.*"
-    r"(?:tool|function|generate_|workspace_write|argument|parameter|JSON|escape).*"
-    r"|(?:我先|让我|我将|接下来|首先)\b.*(?:工具|参数|转义|落盘|写文件|构造).*"
+    r"(?:tool|function|generate_|workspace_write|argument|parameter|JSON|escape|"
+    r"verification|system-side).*"
+    r"|(?:我先|让我|我将|接下来|首先)\b.*(?:工具|参数|转义|落盘|写文件|构造|校验).*"
     r")$"
 )
 _TOOL_MONOLOGUE_BLOCK = re.compile(
-    r"(?is)(?:Let me (?:build|construct|call|prepare|write)|"
-    r"I'll (?:use|call|invoke|write)|"
-    r"I need to (?:call|use|invoke)|"
-    r"我先(?:构造|准备|调用)|让我(?:构造|调用|写))"
-    r"[^\n]{0,200}"
+    # Bound engineer planning clauses; stop before Chinese product copy when possible.
+    r"(?is)(?:(?:Now\s+)?Let me (?:build|construct|call|prepare|write|run)\b[^\n\u4e00-\u9fff]{0,160}"
+    r"|I'll (?:use|call|invoke|write|run)\b[^\n\u4e00-\u9fff]{0,120}"
+    r"|I need to (?:call|use|invoke|run)\b[^\n\u4e00-\u9fff]{0,120}"
+    r"|我先(?:构造|准备|调用)[^\n]{0,80}"
+    r"|让我(?:构造|调用|写)[^\n]{0,80})"
 )
 _TOOL_NAME_BARE = re.compile(
     r"(?i)\b(?:generate_(?:html|docx|pptx)_document|workspace_write_file|"
@@ -160,8 +173,9 @@ def _strip_html_dumps(text: str) -> str:
 def _strip_jargon(text: str) -> str:
     text = _MARKDOWN_TABLE_L0.sub("", text)
     text = _PROCESS_INLINE.sub("", text)
-    text = _TOOL_MONOLOGUE_BLOCK.sub("", text)
+    # Self-check walls before monologue blocks so EN+中文 lines keep product copy.
     text = _L0_SELFCHECK_INLINE.sub("", text)
+    text = _TOOL_MONOLOGUE_BLOCK.sub("", text)
     lines: list[str] = []
     for line in text.splitlines():
         if _JARGON_LINE.search(line):
@@ -175,6 +189,9 @@ def _strip_jargon(text: str) -> str:
         cleaned = _JARGON_INLINE.sub("", line)
         cleaned = _TOOL_NAME_BARE.sub("", cleaned)
         cleaned = _L0_SELFCHECK_INLINE.sub("", cleaned)
+        # After inline strip, drop pure remaining EN engineer lines.
+        if _ENGINEER_EN_LINE.search(cleaned):
+            continue
         # Drop leftover empty bullet rows after inline strip.
         if cleaned.strip() in {"-", "*", "·", "•", "|", "||"}:
             continue
@@ -206,6 +223,8 @@ def looks_like_tool_monologue(text: str) -> bool:
         if _TOOL_MONOLOGUE_LINE.search(ln)
         or _PROCESS_LINE.search(ln)
         or _JARGON_LINE.search(ln)
+        or _ENGINEER_EN_LINE.search(ln)
+        or _L0_SELFCHECK_LINE.search(ln)
     )
     return hits >= max(1, (len(lines) + 1) // 2)
 

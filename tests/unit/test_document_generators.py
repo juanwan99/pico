@@ -43,6 +43,21 @@ def test_html_multi_paragraph_body_for_courseware() -> None:
     assert "<script" not in text.lower()
 
 
+def test_html_fragment_not_escaped_tag_wall() -> None:
+    """#399 R2: fragment markup must stay real tags, not &lt;h2&gt; wall."""
+    marker = "FRAG_HTML_MARK"
+    body = "<h2>分离定律</h2>\n<p>一对等位基因在形成配子时分离。</p>\n<button type='button'>下一节</button>"
+    raw = build_html_document(title="mendel-frag.html", marker=marker, body=body)
+    text = raw.decode("utf-8")
+    assert "<!DOCTYPE html>" in text
+    assert "<h2>分离定律</h2>" in text
+    assert "<button" in text.lower()
+    assert "&lt;h2" not in text
+    assert "&lt;button" not in text
+    assert marker in text
+    assert "script-src 'unsafe-inline'" in text
+
+
 def test_html_full_document_body_not_source_wall() -> None:
     """H3 human-lens: full HTML page body must stay interactive, not escaped prose."""
     marker = "POMO_UI_MARK"

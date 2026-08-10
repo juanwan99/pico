@@ -51,6 +51,63 @@ def _looks_like_full_html_document(raw: str) -> bool:
     return "<html" in s[:500] and ("</html>" in s or "<body" in s)
 
 
+def _looks_like_html_markup(raw: str) -> bool:
+    """True when body is HTML markup (full page or fragment) — must not escape to a tag wall.
+
+    #399 R2: models often pass ``<h2>…</h2><button>…`` without doctype/html.
+    Escaping those tags into ``&lt;h2&gt;`` makes downloads open as a source/tag wall.
+    Plain prose without tags still uses the safe paragraph shell.
+    """
+    if _looks_like_full_html_document(raw):
+        return True
+    s = (raw or "").strip()
+    if not s or "<" not in s:
+        return False
+    # Structural / interactive tags ⇒ treat as markup to preserve.
+    if re.search(
+        r"<\s*(?:button|input|table|thead|tbody|tr|td|th|form|script|style|"
+        r"div|section|article|nav|header|footer|main|h[1-6]|ul|ol|li|a|span|"
+        r"p|img|label|select|textarea|details|summary)\b",
+        s,
+        flags=re.IGNORECASE,
+    ):
+        return True
+    # ≥2 generic tags is almost never pure prose.
+    tags = re.findall(r"<\s*/?\s*[a-zA-Z][a-zA-Z0-9]*\b", s)
+    return len(tags) >= 2
+
+
+def _wrap_html_fragment(raw_body: str, *, title: str, marker: str) -> str:
+    """Wrap an HTML fragment in a minimal interactive document shell (tags kept)."""
+    safe_title = html.escape((title or "Pico HTML").strip() or "Pico HTML")
+    safe_marker = html.escape(marker)
+    body = _strip_remote_script_src(raw_body)
+    csp = (
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
+        "script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; "
+        "frame-ancestors 'none';"
+    )
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="{csp}" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{safe_title}</title>
+  <style>
+    body {{ font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.5; max-width: 48rem; }}
+    h1, h2, h3 {{ line-height: 1.25; }}
+    .marker {{ font-family: ui-monospace, monospace; background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }}
+  </style>
+</head>
+<body>
+  <p data-pico-marker-line="1">标记：<span class="marker" data-pico-marker="{safe_marker}">{safe_marker}</span></p>
+  {body}
+</body>
+</html>
+"""
+
+
 def _strip_remote_script_src(doc: str) -> str:
     """Remove external script src (keep inline scripts for local interactivity)."""
     return re.sub(
@@ -136,16 +193,22 @@ def build_html_document(
     if len(raw_body) > 50_000:
         raw_body = raw_body[:50_000]
 
+    page_title = (title or "").strip() or "Pico HTML"
     if _looks_like_full_html_document(raw_body):
         doc = _strip_remote_script_src(raw_body)
-        doc = _inject_marker_into_html(
-            doc, marker=marker, title=(title or "").strip() or "Pico HTML"
-        )
+        doc = _inject_marker_into_html(doc, marker=marker, title=page_title)
         if "data-pico-marker=" not in doc:
-            # Extremely broken fragment — fall through to shell path.
+            # Extremely broken fragment — fall through to markup/prose paths.
             pass
         else:
             return doc.encode("utf-8")
+
+    # #399 R2: HTML fragments keep real tags (wrap shell); only pure prose is escaped.
+    if raw_body and _looks_like_html_markup(raw_body) and not _looks_like_full_html_document(
+        raw_body
+    ):
+        doc = _wrap_html_fragment(raw_body, title=page_title, marker=marker)
+        return doc.encode("utf-8")
 
     body_html = _html_body_paragraphs(raw_body or None, marker=marker)
     # Prose shell: CSP blocks scripts (static reading page).
