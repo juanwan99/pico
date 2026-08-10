@@ -322,6 +322,25 @@ def _title_completion_payload(
     }
 
 
+def _strip_pico_markers(text: str) -> str:
+    """Remove Pico-internal ledger markers before delivery analysis / model view.
+
+    P1-RELIABLE-LAND: routing (force_agent) must analyze the clean user prompt;
+    the markers (Pico-User / Pico-Convo / 权限 / 模型偏好 / …) mask delivery intent
+    and caused long-chain prompts to misroute to direct deepseek-chat.
+    """
+    import re
+
+    t = str(text or "")
+    t = re.sub(r"【Pico-Convo:[^】]+】", "", t)
+    t = re.sub(r"【Pico-User:[^】]+】", "", t)
+    t = re.sub(r"【工作空间：[^】]+】", "", t)
+    t = re.sub(r"【权限：[^】]+】", "", t)
+    t = re.sub(r"【模型偏好：[^】]+】", "", t)
+    t = re.sub(r"【项目指令：[^】]+】", "", t)
+    return t
+
+
 def _last_user_prompt(messages: list[ChatMessage]) -> str:
     for m in reversed(messages):
         if m.role == "user":
@@ -345,7 +364,7 @@ def _history_for_agent(messages: list[ChatMessage]) -> list[dict[str, Any]]:
     for m in trimmed[-20:]:  # cap context
         if m.role not in ("user", "assistant"):
             continue
-        text = _content_text(m.content).strip()
+        text = _strip_pico_markers(_content_text(m.content)).strip()
         if text:
             out.append({"role": m.role, "content": text})
     return out
@@ -450,7 +469,7 @@ def _extract_file_artifacts(text: str) -> list[tuple[str, str]]:
     if not text:
         return out
     for m in re.finditer(
-        r"```(?:file:)?([A-Za-z0-9._\-]+\.[A-Za-z0-9]{1,12})\s*\n([\s\S]*?)```",
+        r"```(?:file:)?([\w.\-]+\.[A-Za-z0-9]{1,12})\s*\n([\s\S]*?)```",
         text,
     ):
         name = m.group(1).strip()
@@ -471,7 +490,7 @@ def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
     if not user_prompt:
         return []
     um = re.search(
-        r"(?:创建|生成|写|保存).{0,40}?([A-Za-z0-9._\-]+\.(?:txt|md|csv|json))",
+        r"(?:创建|生成|写|保存).{0,40}?([\w.\-]+\.(?:txt|md|csv|json))",
         user_prompt,
         re.IGNORECASE,
     )
@@ -1168,14 +1187,11 @@ async def chat_completions(
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
     # strip ledger markers from model-visible prompt; project instruction → system
+    # P1: marker-strip BEFORE delivery analysis too — the markers mask force_agent
+    # intent and misroute multi-deliverable chains to direct deepseek-chat.
     m_proj = re.search(r"【项目指令：([^】]+)】", raw_prompt)
     project_instruction = m_proj.group(1).strip() if m_proj else ""
-    prompt = re.sub(r"【Pico-Convo:[^】]+】", "", raw_prompt)
-    prompt = re.sub(r"【Pico-User:[^】]+】", "", prompt)
-    prompt = re.sub(r"【工作空间：[^】]+】", "", prompt)
-    prompt = re.sub(r"【权限：[^】]+】", "", prompt)
-    prompt = re.sub(r"【模型偏好：[^】]+】", "", prompt)
-    prompt = re.sub(r"【项目指令：[^】]+】", "", prompt).strip() or raw_prompt
+    prompt = _strip_pico_markers(raw_prompt).strip() or raw_prompt
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 12000) or 12000)
     if len(prompt) > max_chars:
         # Explicit reject — never silent-truncate then execute (stage #260 A1).
@@ -1231,8 +1247,9 @@ async def chat_completions(
     history = _history_for_agent(body.messages)
     # Engineering multi/pipeline/runnable OR classic Office/HTML → force agent tool path.
     # Sticky: same-session delivery continuation (after clarify) stays on pico-agent.
+    # Use the marker-stripped prompt so delivery intent is not masked (P1).
     skill_snapshot, delivery_plan = _resolve_skill_for_prompt(
-        raw_prompt,
+        prompt,
         skill_snapshot,
         prior_artifact_titles=prior_titles,
         history=history,
