@@ -199,6 +199,10 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.mcp_bridge import mcp_health_fields
 
     body.update(mcp_health_fields(settings.pico_mcp_allowlist))
+    # True-Pi phase-1 shadow observability only — never changes default_runtime.
+    from pico_orchestrator.true_pi.config import health_fields as true_pi_health_fields
+
+    body.update(true_pi_health_fields())
     if pi_batch:
         body["pi_agent_canary_batch"] = pi_batch
     if kimi_batch:
