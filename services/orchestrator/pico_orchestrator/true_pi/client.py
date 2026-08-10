@@ -354,7 +354,11 @@ class TruePiRpcClient:
 
 
 def scripted_open_domain_success() -> list[dict[str, Any]]:
-    """Minimal happy-path event script for matrix tests."""
+    """Minimal happy-path event script for matrix tests.
+
+    Mirrors pi 0.73.x: terminal signal is agent_end (willRetry false),
+    not always agent_settled.
+    """
     return [
         {"type": "agent_start"},
         {"type": "turn_start"},
@@ -375,12 +379,13 @@ def scripted_open_domain_success() -> list[dict[str, Any]]:
             "type": "message_end",
             "message": {
                 "role": "assistant",
-                "content": "已写入 notes.md，请从产物列表下载。",
+                "content": [
+                    {"type": "text", "text": "已写入 notes.md，请从产物列表下载。"},
+                ],
             },
         },
-        {"type": "turn_end", "toolResults": []},
+        {"type": "turn_end", "toolResults": [], "message": {"role": "assistant", "content": "已写入 notes.md，请从产物列表下载。"}},
         {"type": "agent_end", "willRetry": False, "messages": []},
-        {"type": "agent_settled"},
     ]
 
 

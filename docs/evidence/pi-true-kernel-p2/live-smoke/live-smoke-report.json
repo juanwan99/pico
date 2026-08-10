@@ -1,0 +1,144 @@
+{
+  "at": "2026-08-10T13:59:57Z",
+  "pi_available": true,
+  "package_pin": "@mariozechner/pi-coding-agent@0.73.1",
+  "cases": [
+    {
+      "id": "L1",
+      "ok": true,
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 3650,
+      "runtime_label": "pi-true",
+      "artifact_count": 1,
+      "artifact_titles": [
+        "live-l1-notes.md"
+      ],
+      "event_kinds": [
+        "agent.end",
+        "agent.settled",
+        "agent.step",
+        "message.delta",
+        "run.status",
+        "tool.call",
+        "tool.result"
+      ],
+      "tool_calls": [
+        "workspace_write_file"
+      ],
+      "has_tool_events": true,
+      "unknown_storm": 0,
+      "pass": true,
+      "reason": "ok"
+    },
+    {
+      "id": "L2",
+      "ok": true,
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 22171,
+      "runtime_label": "pi-true",
+      "artifact_count": 2,
+      "artifact_titles": [
+        "live-l2.html",
+        "live-l2.html"
+      ],
+      "event_kinds": [
+        "agent.end",
+        "agent.settled",
+        "agent.step",
+        "message.delta",
+        "run.status",
+        "tool.call",
+        "tool.result"
+      ],
+      "tool_calls": [
+        "generate_html_document",
+        "generate_html_document",
+        "verify_html_document",
+        "verify_html_document",
+        "workspace_read_file",
+        "generate_html_document",
+        "verify_html_document",
+        "workspace_write_file"
+      ],
+      "has_tool_events": true,
+      "unknown_storm": 0,
+      "pass": true,
+      "reason": "ok"
+    },
+    {
+      "id": "L3",
+      "ok": true,
+      "status": "failed",
+      "error": "True Pi timeout after 8s",
+      "elapsed_ms": 8068,
+      "runtime_label": "pi-true",
+      "artifact_count": 1,
+      "artifact_titles": [
+        "pico-harness-selftest-README"
+      ],
+      "event_kinds": [
+        "agent.step",
+        "run.error",
+        "run.status",
+        "tool.call",
+        "tool.result"
+      ],
+      "tool_calls": [
+        "workspace_list_files",
+        "verify_html_document",
+        "workspace_write_file"
+      ],
+      "has_tool_events": true,
+      "unknown_storm": 0,
+      "pass": true,
+      "reason": "ok"
+    },
+    {
+      "id": "L4",
+      "ok": true,
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 4403,
+      "runtime_label": "pi-true",
+      "artifact_count": 2,
+      "artifact_titles": [
+        "a.md",
+        "b.md"
+      ],
+      "event_kinds": [
+        "agent.end",
+        "agent.settled",
+        "agent.step",
+        "message.delta",
+        "run.status",
+        "tool.call",
+        "tool.result"
+      ],
+      "tool_calls": [
+        "workspace_write_file",
+        "workspace_write_file"
+      ],
+      "has_tool_events": true,
+      "unknown_storm": 0,
+      "pass": true,
+      "reason": "delivered >=2 files"
+    },
+    {
+      "id": "L5",
+      "pass": true,
+      "reason": "map_event ok",
+      "event_kinds": [
+        "agent.end",
+        "agent.settled",
+        "agent.step",
+        "message.delta",
+        "run.status",
+        "tool.call",
+        "tool.result"
+      ]
+    }
+  ],
+  "LIVE_SMOKE": "PASS"
+}

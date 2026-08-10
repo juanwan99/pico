@@ -1,0 +1,39 @@
+# Pico API image with true-Pi RPC binary (phase-2 optional).
+# Use when multi-step default or canary needs pi --mode rpc.
+# Lean default remains Dockerfile.pico-api (no Node).
+
+FROM python:3.12-slim
+
+WORKDIR /app
+ARG PICO_GIT_SHA=unknown
+ENV PICO_GIT_SHA=${PICO_GIT_SHA}
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PATH="/usr/local/bin:${PATH}"
+
+# Node 22 for pi CLI (Debian bookworm)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pin true Pi harness (ADR-PI-TRUE-KERNEL-RPC)
+RUN npm install -g @mariozechner/pi-coding-agent@0.73.1 \
+    && pi --version
+
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --upgrade pip
+
+COPY requirements.txt /app/requirements.txt
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ -r /app/requirements.txt
+
+COPY services /app/services
+COPY packages /app/packages
+COPY pyproject.toml /app/pyproject.toml
+
+RUN mkdir -p /app/data /tmp/pico-true-pi-sessions
+
+EXPOSE 18765
+CMD ["uvicorn", "app.main:app", "--app-dir", "services/api", "--host", "127.0.0.1", "--port", "18765"]

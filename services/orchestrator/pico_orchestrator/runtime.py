@@ -207,13 +207,42 @@ async def run_agent_runtime(
         pi_agent_allow_all=pi_agent_allow_all,
     )
     if use_pi:
+        # Phase-2: optional true-Pi default / canary (rollback: PICO_HOSTED_LOOP=1).
+        use_true = False
+        try:
+            from pico_orchestrator.true_pi.config import (
+                should_use_true_pi,
+                true_pi_available,
+            )
+
+            use_true = should_use_true_pi(
+                school_id=school_id,
+                membership_id=membership_id,
+            )
+        except Exception:  # noqa: BLE001
+            use_true = False
+
+        if use_true and _PI_IMPL is None:
+            if not true_pi_available():
+                return await _fail_closed_no_loop(
+                    emit=emit,
+                    reason=(
+                        "true Pi selected (default/canary/bypass) but pi binary "
+                        "not available; install pin or set PICO_HOSTED_LOOP=1"
+                    ),
+                    code="true_pi.binary_missing",
+                )
+            from pico_orchestrator.true_pi.runtime import run_true_pi_agent
+
+            return await run_true_pi_agent(**kwargs)
+
         if _PI_IMPL is not None:
             result = await _PI_IMPL(**kwargs)
         else:
             from pico_orchestrator.pi_runtime import run_pi_agent
 
             result = await run_pi_agent(**kwargs)
-        # Phase-1 true-Pi shadow: never blocks / never replaces hosted result.
+        # Phase-1 shadow: never blocks / never replaces hosted result.
         _maybe_schedule_true_pi_shadow(hosted_result=result, **kwargs)
         return result
 
