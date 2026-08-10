@@ -77,3 +77,12 @@ events: `artifact.created`(日程表) → `artifact.created`(回复摘要) → `
 |----|------|
 | V2 终态 | [V2-final.png](./V2-final.png) |
 | V2 390 | [V2-final-390.png](./V2-final-390.png) |
+
+## 复现 #2（同根因 · ×2 题面）
+
+> 请交付 4 个独立可下载的 Markdown 文件，关于「公司年会筹备」：①年会方案 ②节目单 ③人员分工 ④物料清单。每份内容完整、可独立使用，逐份用工具落盘，缺一不可。
+
+- 结果：**已完成 17s · 2 个可下载文件**（用户要求 4）
+- run `a7069fcd-8f95-47df-bce1-7a14e4bbe0b4` · task `f4cb3aad-4419-4153-8c90-d7598ccc7fa5` · conv `fcd9cbb3-aefe-4e46-a7ec-0ef2a7aeb7e3`
+- delivery.summary: `artifact_count=2` · `min_required=0` · `multi_deliverable=false` · `ok=true`
+- 帧: [V2-final-case2.png](./V2-final-case2.png)

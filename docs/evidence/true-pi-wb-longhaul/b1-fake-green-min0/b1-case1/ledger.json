@@ -1,0 +1,38 @@
+{
+  "base": "https://pico.aivia.asia",
+  "conversation_id": "22679395-13cd-40cc-878d-b70dea52d964",
+  "tip": "62e1454cf961eb98f0d75734fedb6555c4d93a7c",
+  "task": {
+    "id": "3eab95bd-23f8-4a8f-8d46-3d6ffd8a14a2",
+    "title": "请一次交付 3 个独立可下载的 Markdown 文件：关于「新员工入职培训」的三份材料——①培训日程表 ②培训内容大纲 ③考核清单。每份内容充实、可独立使用，逐份用工具落盘，缺一不可。"
+  },
+  "run": {
+    "id": "dd83e775-dda9-48a1-a449-7e42d635ba1a",
+    "status": "succeeded",
+    "model": "deepseek-chat",
+    "error": null,
+    "started_at": "2026-08-10T15:39:03.277337",
+    "ended_at": "2026-08-10T15:39:21.308796"
+  },
+  "delivery_summary": {
+    "status": "succeeded",
+    "artifact_count": 1,
+    "min_required": 0,
+    "titles": [
+      "新员工入职培训日程表.md"
+    ],
+    "multi_deliverable": false,
+    "pipeline": false,
+    "revision": false,
+    "runnable_html": false,
+    "implicit_package": false,
+    "structure_item_count": 0,
+    "prior_artifact_count": 31,
+    "ok": true
+  },
+  "events_types": [
+    "artifact.created",
+    "artifact.created",
+    "delivery.summary"
+  ]
+}
