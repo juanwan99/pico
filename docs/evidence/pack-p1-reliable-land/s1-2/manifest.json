@@ -1,0 +1,42 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T03:45:59.656Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p1-reliable-land",
+  "scene": "s1-2",
+  "prompt": "【P1S1-2】请把下面这段「季度复盘会议转写」一次做完一整条交付链：①先写150字要点；②生成正式复盘文档（可下载Markdown，含成绩/不足/改进措施三节）；③提取整改清单（责任人+截止日+勾选框）；④写成可复制的执行通知文案。材料：本季度新签客户18家但续费率降到71%；实施团队人均并行6个项目，交付周期拉长；客服反馈老客户投诉响应变慢；负责人决定下季度成立专职续费小组，实施总监两周内交人员调整方案。请交付真实可下载文件（至少：复盘+整改清单），末尾诚实说明：无真实外发通道，通知文案以可复制文本交付。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "1c1b740e19271a42195444609b92a3322475888f",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/b7d28601-7364-451e-b128-6c675fa0ba76",
+  "out_dir": "docs/evidence/pack-p1-reliable-land/s1-2",
+  "frames": {
+    "V0": "docs/evidence/pack-p1-reliable-land/s1-2/V0-send.png",
+    "V1": "docs/evidence/pack-p1-reliable-land/s1-2/V1-process-main.png",
+    "V2": "docs/evidence/pack-p1-reliable-land/s1-2/V2-final.png",
+    "V3": "docs/evidence/pack-p1-reliable-land/s1-2/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p1-reliable-land/s1-2/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "same-tab",
+    "human_page": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

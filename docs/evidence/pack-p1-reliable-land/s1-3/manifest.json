@@ -1,0 +1,42 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T03:46:41.896Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p1-reliable-land",
+  "scene": "s1-3",
+  "prompt": "【P1S1-3】请把下面这段「新人培训需求转写」一次做完一整条交付链：①先写150字要点；②生成正式培训计划文档（可下载Markdown，含目标/课程安排/考核三节）；③提取任务清单（负责人+时间+勾选框）；④写成可复制的开班通知文案。材料：新入职6名运营，需在两周内掌握后台操作与数据看板；老员工反馈现有文档更新滞后；培训负责人建议采用「录屏+实操练习+结课测验」模式；经理要求下周一前定稿培训计划，运营组长本周五前梳理常见问题清单。请交付真实可下载文件（至少：计划+任务清单），末尾诚实说明：无真实外发通道，通知文案以可复制文本交付。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "1c1b740e19271a42195444609b92a3322475888f",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/e4f9272f-d21e-44f5-a342-edbf042a44e6",
+  "out_dir": "docs/evidence/pack-p1-reliable-land/s1-3",
+  "frames": {
+    "V0": "docs/evidence/pack-p1-reliable-land/s1-3/V0-send.png",
+    "V1": "docs/evidence/pack-p1-reliable-land/s1-3/V1-process-main.png",
+    "V2": "docs/evidence/pack-p1-reliable-land/s1-3/V2-final.png",
+    "V3": "docs/evidence/pack-p1-reliable-land/s1-3/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p1-reliable-land/s1-3/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "same-tab",
+    "human_page": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

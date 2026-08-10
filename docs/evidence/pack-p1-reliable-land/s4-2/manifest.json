@@ -1,0 +1,44 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T04:16:08.599Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p1-reliable-land",
+  "scene": "s4-2",
+  "prompt": "【P1S4-2】请把下面这段「客服月度复盘转写」一次做完一整条交付链：①150字要点；②正式客服月报文档（可下载Markdown，含指标/问题/改进三节）；③改进清单（责任人+截止日+勾选框）；④复盘群通知文案（可复制）。材料：本月工单量环比+30%，平均首响从2小时升到5小时；满意度从92%降到84%；质检发现话术不一致；客服主管决定下月上线话术库并排班培训，质控专员下周五前出话术库初稿。请交付真实可下载文件（至少：月报+改进清单），末尾诚实说明无外发通道。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "2a1c1bc6169c8b7d977ccd008ebe75ad99a3c019",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/92c3d281-199a-49a5-a01a-a6ce5817e597",
+  "out_dir": "docs/evidence/pack-p1-reliable-land/s4-2",
+  "frames": {
+    "V0": "docs/evidence/pack-p1-reliable-land/s4-2/V0-send.png",
+    "V1": "docs/evidence/pack-p1-reliable-land/s4-2/V1-process-main.png",
+    "V2": "docs/evidence/pack-p1-reliable-land/s4-2/V2-final.png",
+    "V3": "docs/evidence/pack-p1-reliable-land/s4-2/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p1-reliable-land/s4-2/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": false,
+    "main_delivery_strip": true,
+    "note": "open clicked; iframe not detected"
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
