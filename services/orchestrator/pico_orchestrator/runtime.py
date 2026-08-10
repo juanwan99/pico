@@ -6,11 +6,53 @@ Transitional ``run_agent_loop`` remains removed (KA-4 HARD); do not revive it.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import Collection
 from typing import Any
 
 from pico_orchestrator.run_types import RunResult
 from pico_orchestrator.user_errors import enrich_fail_payload
+
+logger = logging.getLogger(__name__)
+
+
+def _maybe_schedule_true_pi_shadow(*, hosted_result: RunResult, **kwargs: Any) -> None:
+    """Fire-and-forget shadow when PICO_TRUE_PI_SHADOW=1. Hosted path unchanged."""
+    try:
+        from pico_orchestrator.true_pi.config import shadow_enabled
+        from pico_orchestrator.true_pi.shadow import maybe_shadow_after_hosted
+    except Exception:  # noqa: BLE001
+        return
+    if not shadow_enabled():
+        return
+    prompt = str(kwargs.get("prompt") or "")
+    principal = kwargs.get("principal")
+    if principal is None or not prompt:
+        return
+
+    async def _run() -> None:
+        try:
+            await maybe_shadow_after_hosted(
+                prompt=prompt,
+                principal=principal,
+                hosted_result=hosted_result,
+                caps=kwargs.get("caps"),
+                artifact_store=kwargs.get("artifact_store"),
+                is_cancelled=kwargs.get("is_cancelled"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "true_pi shadow schedule failed (hosted unaffected): %s",
+                type(exc).__name__,
+            )
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_run())
+    except RuntimeError:
+        # No running loop (sync tests) — skip shadow.
+        return
 
 _NO_RUNTIME = (
     "no multi-step runtime selected; enable PICO_PI_AGENT_RUNTIME=1 (default) "
@@ -166,10 +208,14 @@ async def run_agent_runtime(
     )
     if use_pi:
         if _PI_IMPL is not None:
-            return await _PI_IMPL(**kwargs)
-        from pico_orchestrator.pi_runtime import run_pi_agent
+            result = await _PI_IMPL(**kwargs)
+        else:
+            from pico_orchestrator.pi_runtime import run_pi_agent
 
-        return await run_pi_agent(**kwargs)
+            result = await run_pi_agent(**kwargs)
+        # Phase-1 true-Pi shadow: never blocks / never replaces hosted result.
+        _maybe_schedule_true_pi_shadow(hosted_result=result, **kwargs)
+        return result
 
     canary = (
         kimi_agent_canary_principals

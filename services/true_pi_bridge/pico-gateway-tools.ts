@@ -1,0 +1,180 @@
+/**
+ * Pico thin-bridge extension for true Pi RPC mode.
+ *
+ * Registers only the allowlisted gateway tools. Each tool POSTs to the
+ * per-run localhost tool server started by Python (PICO_TRUE_PI_TOOL_URL).
+ *
+ * Launch: pi --mode rpc --no-builtin-tools -e ./pico-gateway-tools.ts ...
+ *
+ * FORBIDDEN: bash, arbitrary FS, MCP, delivery_policy logic.
+ */
+
+import { Type } from "@mariozechner/pi-ai";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+
+const TOOL_URL = (process.env.PICO_TRUE_PI_TOOL_URL || "").replace(/\/$/, "");
+const TOOL_TOKEN = process.env.PICO_TRUE_PI_TOOL_TOKEN || "";
+const RUN_ID = process.env.PICO_TRUE_PI_RUN_ID || "";
+
+const ALLOWED = [
+  "workspace_list_files",
+  "workspace_read_file",
+  "workspace_write_file",
+  "generate_html_document",
+  "generate_docx_document",
+  "generate_pptx_document",
+  "verify_html_document",
+] as const;
+
+type ToolName = (typeof ALLOWED)[number];
+
+async function callGateway(
+  tool: ToolName,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<{ ok: boolean; result?: unknown; error?: string; code?: string }> {
+  if (!TOOL_URL || !TOOL_TOKEN) {
+    return {
+      ok: false,
+      code: "bridge.unconfigured",
+      error: "PICO_TRUE_PI_TOOL_URL / TOKEN not set",
+    };
+  }
+  const res = await fetch(`${TOOL_URL}/v1/tool`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${TOOL_TOKEN}`,
+      "X-Pico-Run-Id": RUN_ID,
+    },
+    body: JSON.stringify({ tool, arguments: args }),
+    signal,
+  });
+  let body: any = null;
+  try {
+    body = await res.json();
+  } catch {
+    return { ok: false, code: "bridge.bad_json", error: `HTTP ${res.status}` };
+  }
+  if (!res.ok || !body?.ok) {
+    return {
+      ok: false,
+      code: body?.code || `http.${res.status}`,
+      error: body?.error || `tool failed HTTP ${res.status}`,
+      result: body,
+    };
+  }
+  return { ok: true, result: body.result };
+}
+
+function textResult(payload: unknown) {
+  const text =
+    typeof payload === "string" ? payload : JSON.stringify(payload ?? {}, null, 0);
+  return {
+    content: [{ type: "text" as const, text }],
+    details: payload,
+  };
+}
+
+function registerTool(
+  pi: ExtensionAPI,
+  name: ToolName,
+  description: string,
+  parameters: ReturnType<typeof Type.Object>,
+) {
+  pi.registerTool({
+    name,
+    label: name,
+    description,
+    parameters,
+    async execute(_toolCallId, params, signal) {
+      const args = (params || {}) as Record<string, unknown>;
+      const out = await callGateway(name, args, signal);
+      if (!out.ok) {
+        return textResult({ error: out.error, code: out.code, tool: name });
+      }
+      return textResult(out.result ?? {});
+    },
+  });
+}
+
+export default function (pi: ExtensionAPI) {
+  // Free-form object args — Pico gateway validates per tool.
+  const AnyArgs = Type.Object({}, { additionalProperties: true });
+
+  registerTool(
+    pi,
+    "workspace_list_files",
+    "List Artifacts owned by the current membership (Pico ledger).",
+    Type.Object({ limit: Type.Optional(Type.Number()) }, { additionalProperties: true }),
+  );
+  registerTool(
+    pi,
+    "workspace_read_file",
+    "Read one Artifact by id or title from the Pico ledger.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "workspace_write_file",
+    "Write a real downloadable text Artifact into the Pico ledger.",
+    Type.Object(
+      {
+        title: Type.String(),
+        content: Type.String(),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "generate_html_document",
+    "Create a real .html Artifact (Pico gateway).",
+    Type.Object(
+      {
+        title: Type.String(),
+        marker: Type.Optional(Type.String()),
+        body: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "generate_docx_document",
+    "Create a real .docx Artifact (Pico gateway).",
+    Type.Object(
+      {
+        title: Type.String(),
+        marker: Type.Optional(Type.String()),
+        body: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "generate_pptx_document",
+    "Create a real .pptx Artifact (Pico gateway).",
+    Type.Object(
+      {
+        title: Type.String(),
+        marker: Type.Optional(Type.String()),
+        body: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "verify_html_document",
+    "Static HTML structure self-check via Pico gateway (not browser QA).",
+    AnyArgs,
+  );
+}
