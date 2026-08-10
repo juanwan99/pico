@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T01:21:13.303Z",
+  "base": "https://pico.aivia.asia",
+  "card": "hds-product-rca",
+  "scene": "verify",
+  "prompt": "请生成可下载的单页 HTML 互动小测「光合作用入门」：大标题、三个选择题（各含A/B/C选项）、一个「提交」按钮显示得分。工具落盘，聊天勿贴完整源码。完成后只用人话说明文件名和如何打开。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "1b08ec34d9d1d5606c6a8fdb61ce8e8d5d73c5a0",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/d82cfb2e-f396-4ac0-80b0-1bb25310446c",
+  "out_dir": "docs/evidence/hds-product-rca/verify",
+  "frames": {
+    "V0": "docs/evidence/hds-product-rca/verify/V0-send.png",
+    "V1": "docs/evidence/hds-product-rca/verify/V1-process-main.png",
+    "V2": "docs/evidence/hds-product-rca/verify/V2-final.png",
+    "V3": "docs/evidence/hds-product-rca/verify/V3-open-product.png",
+    "V2_390": "docs/evidence/hds-product-rca/verify/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "光合作用入门·互动小测",
+      "body_snippet": "标记：光合作用入门·互动小测\n\n🌿 光合作用入门 · 互动小测\n1. 光合作用主要在植物细胞的哪个结构中发生？\n A. 线粒体\n B. 叶绿体\n C. 细胞核\n2. 光合作用的主要产物是？\n A. 葡萄糖和氧气\n B. 二氧化碳和水\n C. 蛋白质和脂肪\n3. 下列哪项是光合作用所必需的条件？\n A. 黑暗环境\n B. 光照和叶绿素\n C. 高温干旱\n✏️ 提交\n每答对一题记 1 分，满分 3 分",
+      "button_count": 1,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
