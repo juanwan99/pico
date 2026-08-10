@@ -35,6 +35,15 @@ def test_single_html_multi_section_min_is_one() -> None:
             "请做一份可下载的 HTML 单页课件「太阳系行星介绍」：大标题、"
             "八颗行星各一节、两个交互按钮。"
         ),
+        # P3: the 的 particle (「可下载的 HTML …」) is natural Chinese; without
+        # a preceding 一个/一份 it used to fall through to structure enumeration
+        # and false-fail as under-delivery.
+        (
+            "请制作可下载的 HTML 互动页「珠峰登山准备清单」：大标题、"
+            "八项准备勾选、两个按钮「随机提示」「重置」。"
+        ),
+        "请生成可下载的 HTML 课件「质数入门」：大标题、三个小节、两个按钮。",
+        "请制作可下载的 HTML 页面「值班板」：大标题、三列表格、两个按钮。",
     ]
     for prompt in single_unit_prompts:
         plan = analyze_delivery(prompt)
