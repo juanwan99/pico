@@ -1,4 +1,6 @@
-# Lean Pico API image for Aliyun (CN PyPI mirror).
+# Lean Pico API image for Aliyun (CN PyPI mirror) — NO Node / pi binary.
+# Public host deploy (DEFAULT=1) MUST use Dockerfile.pico-api.true-pi
+# via docker-compose.host.yml (T-OPS-TRUE-PI-HYGIENE / #436).
 FROM python:3.12-slim
 
 WORKDIR /app

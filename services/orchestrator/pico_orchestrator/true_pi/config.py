@@ -194,6 +194,24 @@ def default_runtime_for_health() -> str:
     return HOSTED_RUNTIME_LABEL
 
 
+def true_pi_phase_label() -> str:
+    """Finite phase enum for health (name matches real mode).
+
+    hosted-rollback > p2-default > p2-bypass > p2-canary > p1-shadow > idle
+    """
+    if hosted_loop_forced():
+        return "hosted-rollback"
+    if true_pi_default_enabled():
+        return "p2-default"
+    if bypass_enabled():
+        return "p2-bypass"
+    if parse_canary_entries():
+        return "p2-canary"
+    if shadow_enabled():
+        return "p1-shadow"
+    return "idle"
+
+
 def health_fields() -> dict[str, object]:
     """Observability for true-Pi path."""
     canary = parse_canary_entries()
@@ -207,10 +225,6 @@ def health_fields() -> dict[str, object]:
         "true_pi_binary_available": true_pi_available(),
         "true_pi_package_pin": pinned_package(),
         "true_pi_runtime_label": RUNTIME_LABEL,
-        "true_pi_phase": (
-            "p2-default"
-            if true_pi_default_enabled() and not hosted_loop_forced()
-            else ("p2-canary" if canary else "p1-shadow")
-        ),
+        "true_pi_phase": true_pi_phase_label(),
         "true_pi_rollback_flag": HOSTED_LOOP_ENV,
     }

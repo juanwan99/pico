@@ -2,6 +2,8 @@
 
 ```text
 DOC: docs/PLAN-PI-TRUE-KERNEL-2PHASE.md
+STATUS: SUPERSEDED · 2026-08-10 · 阶段完成见 ADR Accepted / #435 CUTOVER / #436 HYGIENE
+NOTE: 勿再以本文为默认=hosted 的施工真源；默认=pi-true · 回滚=HOSTED_LOOP
 DATE: 2026-08-10
 STATUS: 计划 · 阶段1执行中（#431）
 基线 tip: 27954b2a59a5dcf8f5c57c1d51b176d205ff9e50

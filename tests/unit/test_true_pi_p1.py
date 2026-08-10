@@ -273,7 +273,8 @@ async def test_p1_t5_default_path_unchanged_when_shadow_off(
     assert calls == ["hosted"]
 
     hf = health_fields()
-    assert hf["true_pi_phase"] == "p1-shadow"
+    # No DEFAULT/CANARY/SHADOW/HOSTED → idle (not a fake p1-shadow label)
+    assert hf["true_pi_phase"] == "idle"
     assert hf["true_pi_shadow_enabled"] is False
 
 
@@ -420,6 +421,6 @@ def test_health_endpoint_includes_true_pi_fields() -> None:
 
     body = TestClient(app).get("/health").json()
     assert body["default_runtime"] == "pi-agent"
-    assert body["true_pi_phase"] == "p1-shadow"
+    assert body["true_pi_phase"] == "idle"
     assert "true_pi_shadow_enabled" in body
     assert body["true_pi_runtime_label"] == "pi-true"

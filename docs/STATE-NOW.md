@@ -1,7 +1,7 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-08-09
+DATE: 2026-08-10
 仓: juanwan99/pico ONLY
 CLAIM-WB-DEGREE-WEB: NO
 PRODUCT PASS: 未签
@@ -53,3 +53,15 @@ main tip（写卷）: 以 origin/main 实查为准
 ## 错误记忆
 
 见 MEMORY-RESET：禁止 edu 串仓；禁止用 HTML 课件单测代替复杂能力；禁止引用过期 GLOBAL PASS@38067b82；本阶段不做 MCP/Skill/连接器。
+
+## 真 Pi 核（#435/#436）
+
+| 项 | 值 |
+|----|-----|
+| multi-step 默认 | **pi-true**（`PICO_TRUE_PI_DEFAULT=1`） |
+| 事故回滚 | **仅** `PICO_HOSTED_LOOP=1` → pi-agent |
+| 镜像 | `Dockerfile.pico-api.true-pi`（prod host compose） |
+| 钉版 | `@mariozechner/pi-coding-agent@0.73.1` |
+| 文档 | ADR Accepted · OPS-TRUE-PI-ROLLBACK |
+| CLAIM-WB | **NO** |
+
