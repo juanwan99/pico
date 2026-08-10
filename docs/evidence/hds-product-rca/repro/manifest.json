@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T00:58:10.883Z",
+  "base": "https://pico.aivia.asia",
+  "card": "hds-product-rca",
+  "scene": "repro",
+  "prompt": "请做一个可下载的 HTML 课件：主题「孟德尔遗传定律」入门。页面要有大标题、三个小节（分离定律/自由组合/应用例）、一个「下一节」按钮。用工具落盘，不要在聊天贴完整源码。完成后用人话告诉我文件名和打开方式。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "77418ef4687080004b9168fcdccfc14ab47d540d",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/065302ea-e993-4376-a6ba-cec8d2fb415d",
+  "out_dir": "docs/evidence/hds-product-rca/repro",
+  "frames": {
+    "V0": "docs/evidence/hds-product-rca/repro/V0-send.png",
+    "V1": "docs/evidence/hds-product-rca/repro/V1-process-main.png",
+    "V2": "docs/evidence/hds-product-rca/repro/V2-final.png",
+    "V3": "docs/evidence/hds-product-rca/repro/V3-open-product.png",
+    "V2_390": "docs/evidence/hds-product-rca/repro/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "artifact-open-button",
+    "human_page": true,
+    "preview": {
+      "kind": "html-iframe",
+      "title": "孟德尔遗传定律·入门课件",
+      "body_snippet": "标记：孟德尔遗传定律·入门课件\n\n孟德尔遗传定律 · 入门课件\n\n豌豆实验 · 分离定律 · 自由组合定律 · 应用举例\n\n共 3 节 · 预计 15 分钟\n进度：第 1 / 3 节\n一、分离定律\n\nSECTION 1 · LAW OF SEGREGATION\n\n孟德尔用豌豆做实验，选取高茎与矮茎植株杂交，发现子一代（F1）全部表现为高茎，而子二代（F2）中约 3:1 的比例出现矮茎。\n\n核心表述：一对等位基因在形成配子时彼此分离，分别进入不同的配子。例如 A 与 a，F1（",
+      "button_count": 5,
+      "structure_count": 13,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
