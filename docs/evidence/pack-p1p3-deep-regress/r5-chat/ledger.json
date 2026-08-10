@@ -1,0 +1,54 @@
+{
+  "conversation_id": "9aa127e8-d58a-4ba2-85ee-d3ea6c23015b",
+  "task_id": "efe950de-0e6b-494e-9efb-fb79818e2bd3",
+  "run_id": "1cba1096-a742-46f0-b584-004cbe0bc4ce",
+  "run_status": "succeeded",
+  "artifact_count": 1,
+  "artifact_titles": [
+    "回复摘要"
+  ],
+  "delivery_summary": {
+    "status": "succeeded",
+    "artifact_count": 0,
+    "min_required": 0,
+    "titles": [],
+    "multi_deliverable": false,
+    "pipeline": false,
+    "revision": false,
+    "runnable_html": false,
+    "implicit_package": false,
+    "structure_item_count": 0,
+    "prior_artifact_count": 24,
+    "ok": true,
+    "human_titles": [],
+    "note": "Prefer run.status + delivery.summary + artifact list over client stream timeout alone. Scripts: scripts/wait_delivery_summary.py. Human lens: open files in app/browser; L0≠人类可用. G1: single-unit + ≥1 file is ok even if heuristic min was higher."
+  },
+  "event_types_tail": [
+    "artifact.created",
+    "delivery.summary"
+  ],
+  "event_type_set": [
+    "artifact.created",
+    "delivery.summary"
+  ],
+  "key_events": [
+    {
+      "type": "delivery.summary",
+      "payload_keys": [
+        "status",
+        "artifact_count",
+        "min_required",
+        "titles",
+        "multi_deliverable",
+        "pipeline",
+        "revision",
+        "runnable_html",
+        "implicit_package",
+        "structure_item_count",
+        "prior_artifact_count",
+        "ok"
+      ],
+      "snippet": "{\"status\": \"succeeded\", \"artifact_count\": 0, \"min_required\": 0, \"titles\": [], \"multi_deliverable\": false, \"pipeline\": false, \"revision\": false, \"runnable_html\": false, \"implicit_package\": false, \"structure_item_count\": 0"
+    }
+  ]
+}
