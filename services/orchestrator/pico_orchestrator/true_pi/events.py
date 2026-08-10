@@ -156,10 +156,35 @@ async def map_event(
         await emit(f"compaction.{phase}", {**tag, "source": "true-pi"})
         return
 
+    if kind == "agent_end":
+        # pi 0.73.x emits agent_end when one low-level run completes.
+        # willRetry=true means auto-retry follows — do not settle yet.
+        will_retry = bool(raw.get("willRetry"))
+        state.event_kinds.append("agent.end")
+        await emit("agent.end", {"will_retry": will_retry, **tag})
+        if not will_retry:
+            state.settled = True
+            state.event_kinds.append("agent.settled")
+            await emit("agent.settled", {"source": "agent_end", **tag})
+        return
+
     if kind == "agent_settled":
+        # Newer pi versions may emit agent_settled after retries/compactions.
         state.settled = True
         state.event_kinds.append("agent.settled")
-        await emit("agent.settled", {**tag})
+        await emit("agent.settled", {"source": "agent_settled", **tag})
+        return
+
+    if kind == "turn_end":
+        # Not terminal alone (multi-turn tools), but useful progress.
+        state.event_kinds.append("turn.end")
+        await emit("agent.step", {"phase": "turn_end", "step": state.step, **tag})
+        # If message on turn_end carries final assistant text, harvest it.
+        msg = raw.get("message") or {}
+        if isinstance(msg, dict) and msg.get("role") == "assistant":
+            text = _text_from_message(msg)
+            if text:
+                state.final_parts.append(text)
         return
 
     if kind == "extension_error":

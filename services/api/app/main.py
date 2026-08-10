@@ -148,6 +148,18 @@ def _resolve_git_sha() -> str:
         return "unknown"
 
 
+def _resolve_default_runtime(settings: Settings) -> str | None:
+    """Honest multi-step default label (true-Pi when enabled, else hosted)."""
+    if not settings.pico_pi_agent_runtime:
+        return "kimi-agent" if settings.legacy_kimi_enabled else None
+    try:
+        from pico_orchestrator.true_pi.config import default_runtime_for_health
+
+        return default_runtime_for_health()
+    except Exception:  # noqa: BLE001
+        return "pi-agent"
+
+
 
 @app.get("/")
 async def root_info() -> dict:
@@ -174,10 +186,8 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         "service": "pico-api",
         "git_sha": _resolve_git_sha(),
         "edu_mode": settings.pico_edu_mode,
-        # Product default multi-step kernel (HANDOFF-WB-PI)
-        "default_runtime": "pi-agent" if settings.pico_pi_agent_runtime else (
-            "kimi-agent" if settings.legacy_kimi_enabled else None
-        ),
+        # Product default multi-step kernel (HANDOFF-WB-PI / true-Pi phase-2)
+        "default_runtime": _resolve_default_runtime(settings),
         "pi_agent_runtime_enabled": settings.pico_pi_agent_runtime,
         "pi_agent_scope": settings.pi_agent_scope,
         "pi_agent_canary_configured": pi_canary > 0,
@@ -199,7 +209,7 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.mcp_bridge import mcp_health_fields
 
     body.update(mcp_health_fields(settings.pico_mcp_allowlist))
-    # True-Pi phase-1 shadow observability only — never changes default_runtime.
+    # True-Pi observability (shadow / canary / default / rollback flags).
     from pico_orchestrator.true_pi.config import health_fields as true_pi_health_fields
 
     body.update(true_pi_health_fields())

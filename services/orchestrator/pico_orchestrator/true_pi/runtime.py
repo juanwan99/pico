@@ -30,6 +30,7 @@ from pico_orchestrator.true_pi.client import (
 from pico_orchestrator.true_pi.config import (
     ALLOWED_GATEWAY_TOOLS,
     RUNTIME_LABEL,
+    history_n,
     session_root,
 )
 from pico_orchestrator.true_pi.events import EventMapState, map_event
@@ -56,7 +57,6 @@ async def run_true_pi_agent(
     session_dir: Path | None = None,
 ) -> RunResult:
     """Run one multi-step turn on true Pi (or fake transport)."""
-    del history  # phase-1: single-turn prompt only
     caps = caps or RunCaps()
     rid = run_id or f"tp-{uuid.uuid4().hex[:12]}"
     min_arts = max(0, int(getattr(caps, "min_artifacts", 0) or 0))
@@ -135,15 +135,13 @@ async def run_true_pi_agent(
         await client.start()
 
         skill = (caps.skill_instruction or "").strip()
-        full_prompt = prompt
-        if skill:
-            full_prompt = f"{prompt}\n\n【系统技能指令】\n{skill}"
-        if min_arts > 0:
-            full_prompt += (
-                f"\n\n【落盘要求】本轮至少写入 {min_arts} 个可下载文件："
-                "使用 workspace_write_file 或 generate_*_document；"
-                "禁止只聊天复述。"
-            )
+        full_prompt = _compose_prompt(
+            prompt=prompt,
+            skill=skill,
+            min_arts=min_arts,
+            history=history,
+            allowed_tools=allowed,
+        )
 
         await client.prompt(full_prompt)
 
@@ -304,6 +302,52 @@ async def run_true_pi_agent(
         if tool_server is not None:
             with suppress(Exception):
                 await tool_server.stop()
+
+
+def _compose_prompt(
+    *,
+    prompt: str,
+    skill: str,
+    min_arts: int,
+    history: list[dict[str, Any]] | None,
+    allowed_tools: list[str],
+) -> str:
+    """Build single prompt for true Pi: tools + skill + minimal history + user."""
+    parts: list[str] = []
+    parts.append(
+        "# Pico true-Pi harness\n"
+        "You are Pico. Use only the registered tools listed below. "
+        "No host shell. Deliver real files via write/generate tools when asked.\n"
+        f"Allowed tools: {', '.join(allowed_tools)}"
+    )
+    if skill:
+        parts.append(f"## Skill instruction\n{skill}")
+    n = history_n()
+    if history and n > 0:
+        # Minimal history: last N user/assistant text turns (not full session tree).
+        hist_lines: list[str] = []
+        selected = [
+            item
+            for item in history
+            if isinstance(item, dict)
+            and item.get("role") in {"user", "assistant"}
+            and item.get("content")
+        ][-n:]
+        for item in selected:
+            role = str(item.get("role"))
+            content = str(item.get("content"))[:2000]
+            hist_lines.append(f"{role}: {content}")
+        if hist_lines:
+            parts.append("## Recent conversation\n" + "\n".join(hist_lines))
+    parts.append(f"## User request\n{prompt}")
+    if min_arts > 0:
+        parts.append(
+            f"## Landing requirement\n"
+            f"Write at least {min_arts} downloadable file(s) using "
+            "workspace_write_file or generate_*_document. "
+            "Chat-only claims are not delivery."
+        )
+    return "\n\n".join(parts)
 
 
 async def _failed(
