@@ -59,6 +59,33 @@ def test_multi_deliverable_independent_files() -> None:
     assert plan.structure_item_count >= 3
 
 
+def test_multi_deliverable_n_files_with_format_qualifier() -> None:
+    """B1/LONGHAUL: bare N files with a format word between 可下载 and 文件.
+
+    「3 个独立可下载的 Markdown 文件」must be read as explicit multi-file
+    (min=3), not fall through to min=0 / fake-green on 1 artifact.
+    """
+    cases = [
+        "请一次交付 3 个独立可下载的 Markdown 文件：①培训日程表 ②培训内容大纲 ③考核清单，逐份用工具落盘。",
+        "请交付 3 个可下载的 PDF 文件，每份独立落盘。",
+        "请交付 3 份独立的 Markdown 文件。",
+        "3 个 Markdown 文件，分别用工具写入。",
+    ]
+    for prompt in cases:
+        plan = analyze_delivery(prompt)
+        assert plan.multi_deliverable is True, prompt
+        assert plan.min_artifacts >= 3, (prompt, plan.min_artifacts)
+        assert plan.force_agent is True, prompt
+
+
+def test_multi_deliverable_n_files_with_format_qualifier_en() -> None:
+    plan = analyze_delivery(
+        "Please deliver 3 separate Markdown files, one per topic, each written to disk."
+    )
+    assert plan.multi_deliverable is True
+    assert plan.min_artifacts >= 3
+
+
 def test_pipeline_stages_generic() -> None:
     prompt = (
         "做观察流水线，每阶段独立文件：\n"

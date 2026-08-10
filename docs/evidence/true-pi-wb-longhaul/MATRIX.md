@@ -5,6 +5,7 @@ DATE: 2026-08-10
 Issue: #438
 执行: DS
 tip（开工 A0）: add0ad8625b961eed56a040d992b6b1a836ec255
+tip（部署后）: 62e1454cf961eb98f0d75734fedb6555c4d93a7c（PR #439 合入后）
 default_runtime: pi-true
 true_pi_binary_available: true
 true_pi_hosted_loop_forced: false
@@ -15,10 +16,10 @@ CLAIM-WB: NO
 
 | ID | 场景 | 结果 | 证据路径 | EXCELLENT 锚 |
 |----|------|------|----------|--------------|
-| A0 | tip/运行时/二进制实查 | | | |
-| A1 | 部署不丢 pi | | | |
-| A2 | 健康字段一致 | | | |
-| B1 | 裸多文件 ×2 | | | |
+| A0 | tip/运行时/二进制实查 | PASS | 开工 add0ad8 → 部署后 62e1454 · pi-true · binary=true · HOSTED_LOOP=off | |
+| A1 | 部署不丢 pi | PASS | prod-update 全链跑通 · health true_pi_binary_available=true · PR #439 DEPLOYED | |
+| A2 | 健康字段一致 | PASS | default_runtime=pi-true · true_pi_default_enabled=true · phase=p2-default | |
+| B1 | 裸多文件 ×2 | **FAIL → 修复** | 复现：3 文件只落 1 仍 succeeded（min=0 假绿）· 修复 SHA 6049351 | 不得 0 文件 ok |
 | B2 | min 冲突 | | | |
 | B3 | 禁落盘诱导 | | | |
 | C-W1a | 习惯打卡小工具 | | | W1.1–W1.6 |

@@ -24,15 +24,15 @@ _SKIP_TITLES = frozenset({"回复摘要", "工具产物"})
 # Explicit multi-file / multi-deliverable phrasing (language-level, not scenario names).
 _MULTI_PHRASE = re.compile(
     r"(?:"
-    r"独立\s*(?:可下载\s*)?文件|"
+    r"独立\s*(?:可下载\s*(?:的\s*)?)?(?:[\w\u4e00-\u9fff-]{0,16}\s*)?文件|"
     r"分别\s*(?:交付|生成|写出|落盘|下载)|"
     r"分文件|"
-    r"多(?:个|份)?\s*(?:独立\s*)?(?:文件|产物|交付|文档)|"
-    r"(?:三|四|五|六|七|两|2|3|4|5|6|7)\s*个\s*(?:独立\s*)?(?:文件|产物|交付)|"
+    r"多(?:个|份)?\s*(?:独立\s*)?(?:可下载\s*(?:的\s*)?)?(?:[\w\u4e00-\u9fff-]{0,16}\s*)?(?:文件|产物|交付|文档)|"
+    r"(?:三|四|五|六|七|两|2|3|4|5|6|7)\s*个\s*(?:独立\s*)?(?:可下载\s*(?:的\s*)?)?(?:[\w\u4e00-\u9fff-]{0,16}\s*)?(?:文件|产物|交付)|"
     r"禁止\s*(?:合并|合成)\s*(?:成\s*)?(?:一|单)\s*(?:个|份)\s*文件|"
     r"not\s+a\s+single\s+file|"
-    r"separate\s+(?:files?|artifacts?)|"
-    r"(?:three|four|five|two|\d+)\s+separate\s+files?"
+    r"separate\s+(?:[\w\u4e00-\u9fff-]{0,16}\s*)?(?:files?|artifacts?)|"
+    r"(?:three|four|five|two|\d+)\s+separate\s+(?:[\w\u4e00-\u9fff-]{0,16}\s*)?files?"
     r")",
     re.IGNORECASE,
 )
@@ -163,11 +163,11 @@ _SINGLE_UNIT = re.compile(
 _EXPLICIT_MULTI_FILE = re.compile(
     r"(?:"
     r"分别\s*(?:交付|生成|写出|落盘|下载|写成)|"
-    r"独立\s*(?:可下载\s*)?文件|"
-    r"多(?:个|份)?\s*(?:独立\s*)?(?:文件|产物|交付|文档)|"
+    r"独立\s*(?:可下载\s*(?:的\s*)?)?(?:[\w\u4e00-\u9fff-]{0,16}\s*)?文件|"
+    r"多(?:个|份)?\s*(?:独立\s*)?(?:可下载\s*(?:的\s*)?)?(?:[\w\u4e00-\u9fff-]{0,16}\s*)?(?:文件|产物|交付|文档)|"
     r"分文件|"
     r"禁止\s*(?:合并|合成)\s*(?:成\s*)?(?:一|单)\s*(?:个|份)\s*文件|"
-    r"separate\s+(?:files?|artifacts?)|"
+    r"separate\s+(?:[\w\u4e00-\u9fff-]{0,16}\s*)?(?:files?|artifacts?)|"
     r"not\s+a\s+single\s+file"
     r")",
     re.IGNORECASE,
@@ -254,12 +254,18 @@ def _count_explicit_n_files(text: str) -> int:
     m = re.search(
         # Allow natural qualifiers between the count and the noun:
         # 「至少 3 个真文件」「3 个独立可下载文件」「3 个可下载文档」.
-        r"([2-9]|10|[两二三四五六七])\s*个\s*(?:独立\s*)?(?:真\s*)?(?:可下载\s*)?(?:文件|产物|交付|文档)",
+        # Also allow format qualifiers with 的: 「3 个独立可下载的 Markdown 文件」
+        # 「3 份独立的 PDF 文件」「3 个 Markdown 文件」(P0 B1).
+        r"([2-9]|10|[两二三四五六七])\s*(?:个|份)\s*"
+        r"(?:(?:独立|真|可下载)\s*(?:的\s*)?){0,3}"
+        r"(?:[\w\u4e00-\u9fff-]{0,16}\s*)?"
+        r"(?:文件|产物|交付|文档)",
         text,
     )
     if not m:
         m = re.search(
-            r"(?:three|four|five|two|six|seven|\d+)\s+separate\s+files?",
+            r"(?:three|four|five|two|six|seven|\d+)\s+separate\s+"
+            r"(?:[\w\u4e00-\u9fff-]{0,16}\s*)?files?",
             text,
             re.IGNORECASE,
         )

@@ -1,0 +1,41 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T15:56:56.129Z",
+  "base": "https://pico.aivia.asia",
+  "card": "true-pi-wb-longhaul/b1-fake-green-min0",
+  "scene": "b1-case2",
+  "prompt": "请交付 4 个独立可下载的 Markdown 文件，关于「公司年会筹备」：①年会方案 ②节目单 ③人员分工 ④物料清单。每份内容完整、可独立使用，逐份用工具落盘，缺一不可。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "62e1454cf961eb98f0d75734fedb6555c4d93a7c",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/da59fae6-f1af-47ec-a6a3-34b35bf98d5b",
+  "out_dir": "docs/evidence/true-pi-wb-longhaul/b1-fake-green-min0/b1-case2",
+  "frames": {
+    "V0": "docs/evidence/true-pi-wb-longhaul/b1-fake-green-min0/b1-case2/V0-send.png",
+    "V1": "docs/evidence/true-pi-wb-longhaul/b1-fake-green-min0/b1-case2/V1-process-main.png",
+    "V2": "docs/evidence/true-pi-wb-longhaul/b1-fake-green-min0/b1-case2/V2-final.png",
+    "V2_390": "docs/evidence/true-pi-wb-longhaul/b1-fake-green-min0/b1-case2/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [
+    "V3 skipped (--skip-v3)"
+  ],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
