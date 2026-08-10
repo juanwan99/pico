@@ -287,6 +287,41 @@ def test_no_exam_keyword_required_for_multi() -> None:
     assert plan.min_artifacts >= 2
 
 
+def test_bare_duowenjian_multi_phrase() -> None:
+    """P5-F5: bare「多文件交付」without 个/份 measure word is explicit multi intent.
+
+    Open-domain phrasing like「多文件交付、跨文件数字一致」must be fail-closed
+    (min≥2) instead of a 0-file false success.
+    """
+    plan = analyze_delivery(
+        '请帮我完成一条任务链（就"是否把公司周五下午设为自由工作时段"）：'
+        "①调研备忘 ②决策一页纸 ③待办表 ④给团队和领导的短消息各一条。"
+        "多文件交付、跨文件数字一致。"
+    )
+    assert plan.multi_deliverable is True
+    assert plan.min_artifacts >= 2
+    assert plan.force_agent is True
+
+
+def test_bare_duowenjian_variants() -> None:
+    """P5-F5: bare 多文件/多产物/多交付 all lift multi (measure word optional)."""
+    for s in [
+        "请把会议记录多文件交付。",
+        "这个报告请多文件落盘，逐项分开。",
+        "请按多产物形式交付：说明、清单、模板。",
+    ]:
+        plan = analyze_delivery(s)
+        assert plan.multi_deliverable is True, s
+        assert plan.min_artifacts >= 2, s
+
+
+def test_negated_bare_duowenjian_stays_single() -> None:
+    """P5-F5: negated「不要拆成多文件」must not flip to multi."""
+    plan = analyze_delivery("只要这一份文件，不要拆成多文件。")
+    assert plan.multi_deliverable is False
+    assert plan.min_artifacts <= 1
+
+
 def test_implicit_package_neutral_corpus_suite() -> None:
     samples = [
         "请交付完整方案包，含说明与清单。",
