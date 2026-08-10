@@ -1165,6 +1165,7 @@ async def _finalize_run(
                         {
                             "status": "failed",
                             "reason": "deliverable_missing_artifact",
+                            "user_message": run.error,
                             "runtime": "fail-closed",
                         },
                         commit=False,
@@ -1200,6 +1201,7 @@ async def _finalize_run(
                     "reason": "delivery_min_artifacts",
                     "min_required": plan.min_artifacts,
                     "artifact_count": user_art_count,
+                    "user_message": run.error,
                     "runtime": "fail-closed",
                 },
                 commit=False,
