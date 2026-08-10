@@ -720,6 +720,8 @@ def analyze_delivery(
         min_arts = 1
     # Single-unit file/page delivery: success needs one file, not N content sections.
     # Require clear file/surface language so bare「做一个…说明」chat stays force_agent=False.
+    # P4: creative single-piece prompts that say 「工具落盘/写入/用工具」 still
+    # require ≥1 real file (W2 正文等) — never let a chat-only reply pass.
     single_file_delivery = bool(
         single_unit
         and not multi
@@ -731,7 +733,8 @@ def analyze_delivery(
             r"markdown|Markdown|"
             r"html|HTML|网页|课件|"
             r"交付\s*(?:一份|一个|文件)|"
-            r"文件名"
+            r"文件名|"
+            r"落盘|写入|用工具|生成\s*文件"
             r")",
             text,
             re.IGNORECASE,
