@@ -106,15 +106,16 @@ _TOOL_MONOLOGUE_LINE = re.compile(
     r"function\.arguments|tool_calls?)\b.*|"
     r"(?:Let me|I'll|I will|I need to|First|Next|Then)\b.*"
     r"(?:tool|function|generate_|workspace_write|argument|parameter|JSON|escape|"
-    r"verification|system-side).*"
+    r"verification|system-side|HTML|quiz|document|interactive).*"
     r"|(?:我先|让我|我将|接下来|首先)\b.*(?:工具|参数|转义|落盘|写文件|构造|校验).*"
     r")$"
 )
 _TOOL_MONOLOGUE_BLOCK = re.compile(
     # Bound engineer planning clauses; stop before Chinese product copy when possible.
-    r"(?is)(?:(?:Now\s+)?Let me (?:build|construct|call|prepare|write|run)\b[^\n\u4e00-\u9fff]{0,160}"
-    r"|I'll (?:use|call|invoke|write|run)\b[^\n\u4e00-\u9fff]{0,120}"
-    r"|I need to (?:call|use|invoke|run)\b[^\n\u4e00-\u9fff]{0,120}"
+    r"(?is)(?:(?:Now\s+)?Let me (?:build|construct|call|prepare|write|run|create|make)\b[^\n\u4e00-\u9fff]{0,160}"
+    r"|I'll (?:use|call|invoke|write|run|create|build|make)\b[^\n\u4e00-\u9fff]{0,160}"
+    r"|I will (?:use|call|create|build|make|write)\b[^\n\u4e00-\u9fff]{0,160}"
+    r"|I need to (?:call|use|invoke|run|create|build)\b[^\n\u4e00-\u9fff]{0,120}"
     r"|我先(?:构造|准备|调用)[^\n]{0,80}"
     r"|让我(?:构造|调用|写)[^\n]{0,80})"
 )
