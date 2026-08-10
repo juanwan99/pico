@@ -208,11 +208,25 @@ async def apply_delivery_gate(
             else:
                 run.status = "failed"
                 if wants_office_binary:
-                    run.error = (
-                        "交件未生成可下载的真文件（HTML/Word/PPT）。"
-                        "请点「再跑一次」或重新描述「生成可下载 Word/HTML」；"
-                        "纯文字摘要不能当作文件交付。"
+                    # P2 truthfulness: if other-format files exist, say so —
+                    # never claim "no downloadable file" while files are present.
+                    has_any_file = any(
+                        not is_bookkeeping_title(str(title or ""))
+                        and (byte_size or 0) > 0
+                        for _kind, title, byte_size in art_list
                     )
+                    if has_any_file:
+                        run.error = (
+                            "未生成要求的 Word/HTML 文件（本轮产物为其他格式，可下载）。"
+                            "请用「生成可下载 Word/HTML」的专用工具重新生成；"
+                            "其他格式不能当作 Word/HTML 交付。"
+                        )
+                    else:
+                        run.error = (
+                            "交件未生成可下载的真文件（HTML/Word/PPT）。"
+                            "请点「再跑一次」或重新描述「生成可下载 Word/HTML」；"
+                            "纯文字摘要不能当作文件交付。"
+                        )
                 else:
                     run.error = (
                         "交件未写入可下载文件。请用工具落盘后再交；"

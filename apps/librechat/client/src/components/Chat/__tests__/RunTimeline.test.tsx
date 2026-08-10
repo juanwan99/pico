@@ -102,4 +102,28 @@ describe('RunTimeline', () => {
     expect(screen.getByText(/智能体步骤/)).toBeInTheDocument();
     expect(screen.getByText('调用工具 · calculator')).toBeInTheDocument();
   });
+
+  it('labels a recovered tool failure neutrally when the run succeeded (P2)', () => {
+    render(
+      <RunTimeline
+        run={run('succeeded')}
+        events={[
+          event('tool-failed', 1, 'tool.result', {
+            tool: 'workspace_write_file',
+            ok: false,
+          }),
+          event('tool-ok', 2, 'tool.result', {
+            tool: 'generate_html_document',
+            ok: true,
+          }),
+          event('run-ok', 3, 'run.status', { status: 'succeeded' }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('失败 · 已恢复')).toBeInTheDocument();
+    expect(screen.getByText('运行成功')).toBeInTheDocument();
+    // A bare 「失败」 badge must not contradict the terminal success.
+    expect(screen.queryByText(/^失败$/)).not.toBeInTheDocument();
+  });
 });
