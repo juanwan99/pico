@@ -184,6 +184,19 @@ def test_strips_system_side_verification_english() -> None:
     assert "下载" in out or "打开" in out
 
 
+def test_strips_ill_create_planning_prefix() -> None:
+    """#399 R3: I'll create… planning glued to Chinese product copy."""
+    raw = (
+        "I'll create an interactive HTML quiz about photosynthesis."
+        "小测已经做好了，文件是：光合作用入门-互动小测.html\n"
+        "怎么打开：点下载。"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=["光合作用入门-互动小测.html"])
+    assert "I'll create" not in out
+    assert "interactive HTML quiz" not in out
+    assert "光合作用入门-互动小测.html" in out
+
+
 def test_preserves_human_filename_and_clarification_not_l0() -> None:
     """Clarifications + human filenames survive; monologue/#375 posture unchanged."""
     clarify = "请问需要几个栏目？主色是蓝还是绿？"
