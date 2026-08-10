@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T07:03:56.750Z",
+  "base": "https://pico.aivia.asia",
+  "card": "p2-e4-badge-truth",
+  "scene": "e4-verify3",
+  "prompt": "【E4-VERIFY4】请做可下载 HTML 互动页「番茄钟计时器」：大标题、25 分钟倒计时、开始/暂停按钮、完成次数统计。请按顺序执行：第 1 步先用「文件写入工具」把 tomato-timer.html 落盘（务必真实调用一次，即使被拒也继续）；第 2 步再用 HTML 专用工具生成正式版并校验。工具落盘，勿贴源码。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "9428ba27d198c07c4b4b85f3719eb22a87ed3c46",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/246cf120-62a1-4fe0-97ae-24a2540b5e43",
+  "out_dir": "docs/evidence/p2-e4-badge-truth/e4-verify3",
+  "frames": {
+    "V0": "docs/evidence/p2-e4-badge-truth/e4-verify3/V0-send.png",
+    "V1": "docs/evidence/p2-e4-badge-truth/e4-verify3/V1-process-main.png",
+    "V2": "docs/evidence/p2-e4-badge-truth/e4-verify3/V2-final.png",
+    "V3": "docs/evidence/p2-e4-badge-truth/e4-verify3/V3-open-product.png",
+    "V2_390": "docs/evidence/p2-e4-badge-truth/e4-verify3/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "番茄钟计时器",
+      "body_snippet": "标记：🍅 番茄钟计时器 — 25 分钟倒计时\n\n🍅 番茄钟计时器\n\n25 分钟专注，收获你的每一粒番茄\n\n25:00\n开始\n暂停\n\n完成次数\n\n0",
+      "button_count": 2,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

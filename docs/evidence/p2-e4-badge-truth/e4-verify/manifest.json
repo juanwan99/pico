@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T06:53:53.267Z",
+  "base": "https://pico.aivia.asia",
+  "card": "p2-e4-badge-truth",
+  "scene": "e4-verify",
+  "prompt": "【E4-VERIFY2】请做可下载 HTML 互动页「睡眠质量自评卡」：大标题、7 项自评勾选、总分显示、按钮「重新评估」。请先用文件工具尝试把 .html 落盘，再用 HTML 专用工具生成正式版并校验。工具落盘，勿贴源码，完成后只用人话说明文件名与打开方式。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "9428ba27d198c07c4b4b85f3719eb22a87ed3c46",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/8ab70a00-4d11-4bff-a7c2-943952e7c993",
+  "out_dir": "docs/evidence/p2-e4-badge-truth/e4-verify",
+  "frames": {
+    "V0": "docs/evidence/p2-e4-badge-truth/e4-verify/V0-send.png",
+    "V1": "docs/evidence/p2-e4-badge-truth/e4-verify/V1-process-main.png",
+    "V2": "docs/evidence/p2-e4-badge-truth/e4-verify/V2-final.png",
+    "V3": "docs/evidence/p2-e4-badge-truth/e4-verify/V3-open-product.png",
+    "V2_390": "docs/evidence/p2-e4-badge-truth/e4-verify/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "睡眠质量自评卡",
+      "body_snippet": "标记：睡眠质量自评卡\n\n睡眠质量自评卡\n\n请根据您最近一周的实际情况，勾选符合的条目（可多选）\n\n1. 入睡时间超过 30 分钟\n2. 夜间易醒或醒后难以再次入睡\n3. 早醒且无法继续入睡\n4. 每晚睡眠总时长不足 6 小时\n5. 白天感到困倦或注意力下降\n6. 白天靠午睡或补觉维持精力\n7. 对睡眠状况感到担忧或不满\n自评总分\n0\n每勾选一项计 1 分，满分为 7 分\n—\n重新计算\n重新评估",
+      "button_count": 2,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
