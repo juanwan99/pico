@@ -63,8 +63,9 @@ const MONOLOGUE_RES = [
   /\bLet me (?:build|construct|call)\b/i,
   /我先构造\s*tool/i,
   /\btool\s*参数\b/i,
-  // #394 Y1 — L0 / structure self-check engineer wall in main bubble
+  // #394/#399 — L0 / structure self-check + EN system-side engineer wall
   /结构自检|静态自检|系统侧|二进制编码|未做浏览器真机|未经真机点击|未宣称\s*L1|L0_structure|interaction_status/i,
+  /system-side\s+verification|let me run the system-side/i,
 ];
 
 function parseArgs(argv) {
@@ -293,35 +294,62 @@ async function inspectHtmlHumanPage(page) {
 }
 
 async function tryOpenProduct(page, outDir) {
-  // #394 Y2: V3 must be the opened human page (title/buttons), not only result chips.
-  // Prefer result-panel 「打开」 which loads HTML into artifact-html-iframe.
-  const openBtn = page.getByTestId('artifact-open-button');
-  if (await openBtn.count()) {
+  // #394 Y2 / #399 R1: V3 = opened human page. Prefer main-column delivery strip, then side panel.
+  const openSelectors = [
+    { testId: 'main-delivery-open', iframe: 'main-delivery-html-iframe', via: 'main-delivery-open' },
+    { testId: 'artifact-open-button', iframe: 'artifact-html-iframe', via: 'artifact-open-button' },
+  ];
+  for (const sel of openSelectors) {
+    const openBtn = page.getByTestId(sel.testId);
+    if (!(await openBtn.count())) continue;
     await openBtn.first().click({ timeout: 8000 }).catch(() => null);
     await page.waitForTimeout(1500);
-    // Wait for HTML preview iframe or text preview
     await page
-      .locator('[data-testid="artifact-html-iframe"], [data-testid="artifact-inline-preview"]')
+      .locator(
+        `[data-testid="${sel.iframe}"], [data-testid="artifact-html-iframe"], [data-testid="main-delivery-html-iframe"], [data-testid="artifact-inline-preview"]`,
+      )
       .first()
       .waitFor({ state: 'visible', timeout: 12000 })
       .catch(() => {});
     await page.waitForTimeout(800);
     const human = await inspectHtmlHumanPage(page);
+    // Also accept main-column iframe
+    let human2 = human;
+    if (!human2) {
+      const mainIframe = page.locator('[data-testid="main-delivery-html-iframe"]');
+      if (await mainIframe.count()) {
+        const handle = await mainIframe.elementHandle().catch(() => null);
+        const frame = handle ? await handle.contentFrame().catch(() => null) : null;
+        if (frame) {
+          const bodyText = await frame.locator('body').innerText().catch(() => '');
+          const title = await frame.title().catch(() => '');
+          const buttons = await frame.locator('button').count().catch(() => 0);
+          human2 = {
+            kind: 'main-delivery-iframe',
+            title,
+            body_snippet: (bodyText || '').slice(0, 240),
+            button_count: buttons,
+            human_page: Boolean(title || (bodyText && bodyText.length > 8) || buttons > 0),
+          };
+        }
+      }
+    }
     await shot(page, path.join(outDir, 'V3-open-product.png'), { fullPage: true });
-    if (human) {
+    const mainStrip = await page.getByTestId('main-delivery-strip').count();
+    if (human2) {
       return {
         opened: true,
-        via: 'artifact-open-button',
-        human_page: !!human.human_page,
-        preview: human,
+        via: sel.via,
+        human_page: !!human2.human_page,
+        main_delivery_strip: mainStrip > 0,
+        preview: human2,
       };
     }
-    // Open clicked but preview missing — still better than chip-only if panel changed.
-    const panelText = await page.locator('.pico-result-panel, [data-testid="human-delivery-chips"]').innerText().catch(() => '');
     return {
       opened: true,
-      via: 'artifact-open-button',
-      human_page: /预览|HTML|关闭预览/i.test(panelText || ''),
+      via: sel.via,
+      human_page: false,
+      main_delivery_strip: mainStrip > 0,
       note: 'open clicked; iframe not detected',
     };
   }
