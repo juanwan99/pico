@@ -1,0 +1,44 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T06:00:33.199Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p2-status-truth",
+  "scene": "s4-p1reg",
+  "prompt": "【P2S4-P1REG】请把下面这段「季度客户成功复盘转写」一次做完一整条交付链：①150字要点；②正式客户成功复盘文档（可下载Markdown，含留存/健康度/行动三节）；③行动清单（责任人+截止日+勾选框）；④复盘通知文案（可复制）。材料：Q3 客户健康度 82 分；高价值客户流失 3 家；续费率 88%。请交付真实可下载文件（至少：复盘+行动清单）。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "54c0fb55aecfd2a2dfdcb3e0d49d3f79fb45c7c1",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/f63841b6-8ef5-4eaa-9abb-012d5ba06c0b",
+  "out_dir": "docs/evidence/pack-p2-status-truth/s4-p1reg",
+  "frames": {
+    "V0": "docs/evidence/pack-p2-status-truth/s4-p1reg/V0-send.png",
+    "V1": "docs/evidence/pack-p2-status-truth/s4-p1reg/V1-process-main.png",
+    "V2": "docs/evidence/pack-p2-status-truth/s4-p1reg/V2-final.png",
+    "V3": "docs/evidence/pack-p2-status-truth/s4-p1reg/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p2-status-truth/s4-p1reg/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": false,
+    "main_delivery_strip": true,
+    "note": "open clicked; iframe not detected"
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

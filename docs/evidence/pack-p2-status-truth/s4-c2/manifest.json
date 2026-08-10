@@ -1,0 +1,44 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T06:07:19.736Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p2-status-truth",
+  "scene": "s4-c2",
+  "prompt": "【P2S4-C2】请一次交付 12 个独立可下载文件：卷01.md 至 卷12.md，每卷至少 12 行关于「软件可靠性工程」的深度干货内容，逐卷用工具落盘，缺一不可。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "54c0fb55aecfd2a2dfdcb3e0d49d3f79fb45c7c1",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/72b99bd5-4c93-498d-9f5c-891caa827ea1",
+  "out_dir": "docs/evidence/pack-p2-status-truth/s4-c2",
+  "frames": {
+    "V0": "docs/evidence/pack-p2-status-truth/s4-c2/V0-send.png",
+    "V1": "docs/evidence/pack-p2-status-truth/s4-c2/V1-process-main.png",
+    "V2": "docs/evidence/pack-p2-status-truth/s4-c2/V2-final.png",
+    "V3": "docs/evidence/pack-p2-status-truth/s4-c2/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p2-status-truth/s4-c2/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": false,
+    "main_delivery_strip": true,
+    "note": "open clicked; iframe not detected"
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

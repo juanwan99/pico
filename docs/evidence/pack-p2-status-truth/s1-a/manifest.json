@@ -1,0 +1,44 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T04:58:02.517Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p2-status-truth",
+  "scene": "s1-a",
+  "prompt": "【P2S1-A】请生成一份可下载 Word 文档《项目周报》，内容包含本周三个进展与两个风险。用工具落盘，勿贴源码。完成后只用人话说明文件名与打开方式。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "2a1c1bc6169c8b7d977ccd008ebe75ad99a3c019",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/7968c5c3-8b22-4921-b84e-1538d387fc7c",
+  "out_dir": "docs/evidence/pack-p2-status-truth/s1-a",
+  "frames": {
+    "V0": "docs/evidence/pack-p2-status-truth/s1-a/V0-send.png",
+    "V1": "docs/evidence/pack-p2-status-truth/s1-a/V1-process-main.png",
+    "V2": "docs/evidence/pack-p2-status-truth/s1-a/V2-final.png",
+    "V3": "docs/evidence/pack-p2-status-truth/s1-a/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p2-status-truth/s1-a/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": false,
+    "main_delivery_strip": true,
+    "note": "open clicked; iframe not detected"
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
