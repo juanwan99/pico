@@ -1,0 +1,75 @@
+[
+  {
+    "scene": "r1-multi",
+    "run_id": "19337387-0f59-4e79-b81f-600b18aada3f",
+    "status": "succeeded",
+    "min": 3,
+    "art": 3,
+    "ok": true,
+    "titles": [
+      "midautumn-agenda.md",
+      "midautumn-staff-roles.md",
+      "midautumn-risk-checklist.md"
+    ],
+    "mono": true,
+    "v3_human": false,
+    "eligible": false,
+    "convo": "https://pico.aivia.asia/c/7313a701-ee5e-4ebb-9de7-641005fd28c9"
+  },
+  {
+    "scene": "r2-html-de",
+    "run_id": "f5991414-4a4b-47e5-b927-f8c43b0c0640",
+    "status": "succeeded",
+    "min": 1,
+    "art": 1,
+    "ok": true,
+    "titles": [
+      "交通安全小测验.html"
+    ],
+    "mono": true,
+    "v3_human": true,
+    "eligible": true,
+    "convo": "https://pico.aivia.asia/c/7ff06798-8193-4c97-b765-cdfc828b5cb9"
+  },
+  {
+    "scene": "r3-recover",
+    "run_id": "623424de-ca41-4693-a2a9-d290fca6cc7e",
+    "status": "succeeded",
+    "min": 1,
+    "art": 1,
+    "ok": true,
+    "titles": [
+      "eye-timer.html"
+    ],
+    "mono": true,
+    "v3_human": true,
+    "eligible": true,
+    "convo": "https://pico.aivia.asia/c/f6d97eaf-7f36-4371-a27e-f099e2fdce77"
+  },
+  {
+    "scene": "r4-under",
+    "run_id": "32115a16-9b9c-46e8-9ac9-4f569186c0ca",
+    "status": "succeeded",
+    "min": 1,
+    "art": 0,
+    "ok": false,
+    "titles": null,
+    "mono": true,
+    "v3_human": false,
+    "eligible": true,
+    "convo": "https://pico.aivia.asia/c/726e8942-e990-421a-ab0d-d0d6322a5117"
+  },
+  {
+    "scene": "r5-chat",
+    "run_id": "1cba1096-a742-46f0-b584-004cbe0bc4ce",
+    "status": "succeeded",
+    "min": 0,
+    "art": 0,
+    "ok": true,
+    "titles": [],
+    "mono": true,
+    "v3_human": false,
+    "eligible": true,
+    "convo": "https://pico.aivia.asia/c/9aa127e8-d58a-4ba2-85ee-d3ea6c23015b"
+  }
+]

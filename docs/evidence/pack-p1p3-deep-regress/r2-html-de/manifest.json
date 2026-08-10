@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T09:14:09.396Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p1p3-deep-regress",
+  "scene": "r2-html-de",
+  "prompt": "【R2-DEEP】请制作可下载的 HTML 互动页「交通安全小测验」：大标题、三道单选题（各 A/B/C）、一个「提交得分」按钮显示分数。工具落盘，聊天勿贴完整源码；完成后用人话说明文件名和如何打开。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/7ff06798-8193-4c97-b765-cdfc828b5cb9",
+  "out_dir": "docs/evidence/pack-p1p3-deep-regress/r2-html-de",
+  "frames": {
+    "V0": "docs/evidence/pack-p1p3-deep-regress/r2-html-de/V0-send.png",
+    "V1": "docs/evidence/pack-p1p3-deep-regress/r2-html-de/V1-process-main.png",
+    "V2": "docs/evidence/pack-p1p3-deep-regress/r2-html-de/V2-final.png",
+    "V3": "docs/evidence/pack-p1p3-deep-regress/r2-html-de/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p1p3-deep-regress/r2-html-de/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "交通安全小测验.html",
+      "body_snippet": "标记：交通安全小测验\n\n🚦 交通安全小测验\n\n请完成以下三道选择题，然后点击按钮查看得分。\n\n1. 过马路时，下列哪种行为最安全？\n\n A. 随意横穿马路\n\n\n B. 走斑马线并看信号灯\n\n\n C. 边看手机边过马路\n\n2. 骑自行车时，应该佩戴什么？\n\n A. 安全头盔\n\n\n B. 耳机\n\n\n C. 口罩\n\n3. 红灯亮起时，正确的做法是？\n\n A. 快速跑过去\n\n\n B. 等待绿灯再走\n\n\n C. 跟随他人一起走\n提交得分",
+      "button_count": 1,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T09:23:53.108Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p1p3-deep-regress",
+  "scene": "r4-under",
+  "prompt": "【R4-DEEP】请帮我写一份可下载的「消防疏散演练提纲」Markdown（必须交付文件）。这次不要写任何文件、不要调用写盘工具，只在聊天里用一两句话总结提纲即可。禁止落盘。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "b63c3d97416a9f1c5e15f329eaf9fd8931dc111a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/726e8942-e990-421a-ab0d-d0d6322a5117",
+  "out_dir": "docs/evidence/pack-p1p3-deep-regress/r4-under",
+  "frames": {
+    "V0": "docs/evidence/pack-p1p3-deep-regress/r4-under/V0-send.png",
+    "V1": "docs/evidence/pack-p1p3-deep-regress/r4-under/V1-process-main.png",
+    "V2": "docs/evidence/pack-p1p3-deep-regress/r4-under/V2-final.png",
+    "V2_390": "docs/evidence/pack-p1p3-deep-regress/r4-under/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [
+    "V3 skipped (--skip-v3)"
+  ],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

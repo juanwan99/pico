@@ -1,0 +1,171 @@
+{
+  "conversation_id": "f6d97eaf-7f36-4371-a27e-f099e2fdce77",
+  "task_id": "3f0a61a7-b1f0-4b08-9f25-f94122a7e937",
+  "run_id": "623424de-ca41-4693-a2a9-d290fca6cc7e",
+  "run_status": "succeeded",
+  "artifact_count": 2,
+  "artifact_titles": [
+    "回复摘要",
+    "eye-timer.html"
+  ],
+  "delivery_summary": {
+    "status": "succeeded",
+    "artifact_count": 1,
+    "min_required": 1,
+    "titles": [
+      "eye-timer.html"
+    ],
+    "multi_deliverable": false,
+    "pipeline": false,
+    "revision": false,
+    "runnable_html": true,
+    "implicit_package": false,
+    "structure_item_count": 4,
+    "prior_artifact_count": 25,
+    "ok": true,
+    "human_titles": [
+      "eye-timer.html"
+    ],
+    "note": "Prefer run.status + delivery.summary + artifact list over client stream timeout alone. Scripts: scripts/wait_delivery_summary.py. Human lens: open files in app/browser; L0≠人类可用. G1: single-unit + ≥1 file is ok even if heuristic min was higher."
+  },
+  "event_types_tail": [
+    "skill.snapshot",
+    "delivery.plan",
+    "run.durable",
+    "run.status",
+    "agent.step",
+    "run.usage",
+    "agent.step",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "run.usage",
+    "agent.step",
+    "tool.call",
+    "artifact.created",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "run.usage",
+    "message.delta",
+    "agent.step",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "run.usage",
+    "message.delta",
+    "run.status",
+    "artifact.created",
+    "delivery.summary"
+  ],
+  "event_type_set": [
+    "agent.step",
+    "artifact.created",
+    "delivery.plan",
+    "delivery.summary",
+    "message.delta",
+    "run.checkpoint",
+    "run.durable",
+    "run.status",
+    "run.usage",
+    "skill.snapshot",
+    "tool.call",
+    "tool.result"
+  ],
+  "key_events": [
+    {
+      "type": "delivery.plan",
+      "payload_keys": [
+        "multi_deliverable",
+        "pipeline",
+        "revision",
+        "runnable_html",
+        "min_artifacts",
+        "implicit_package",
+        "structure_item_count",
+        "prior_artifact_count"
+      ],
+      "snippet": "{\"multi_deliverable\": false, \"pipeline\": false, \"revision\": false, \"runnable_html\": true, \"min_artifacts\": 1, \"implicit_package\": false, \"structure_item_count\": 4, \"prior_artifact_count\": 25}"
+    },
+    {
+      "type": "tool.call",
+      "payload_keys": [
+        "tool",
+        "arguments",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"workspace_write_file\", \"arguments\": {\"title\": \"eye-timer.html\", \"kind\": \"file\", \"content\": \"<!DOCTYPE html>\\n<html lang=\\\"zh-CN\\\">\\n<head>\\n<meta charset=\\\"UTF-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=devi"
+    },
+    {
+      "type": "tool.result",
+      "payload_keys": [
+        "tool",
+        "ok",
+        "result",
+        "message",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"workspace_write_file\", \"ok\": false, \"result\": \"{\\\"code\\\": \\\"tool.invalid_arguments\\\", \\\"error\\\": \\\"禁止用 workspace_write_file 写入 .html（改后缀文本不算真文件）。请使用 generate_html_document / generate_docx_document / generate_pp"
+    },
+    {
+      "type": "tool.call",
+      "payload_keys": [
+        "tool",
+        "arguments",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"generate_html_document\", \"arguments\": {\"title\": \"eye-timer.html\", \"marker\": \"👁️ 课间眼保健操计时器\", \"body\": \"<!DOCTYPE html>\\n<html lang=\\\"zh-CN\\\">\\n<head>\\n<meta charset=\\\"UTF-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"w"
+    },
+    {
+      "type": "tool.result",
+      "payload_keys": [
+        "tool",
+        "ok",
+        "result",
+        "message",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"generate_html_document\", \"ok\": true, \"result\": \"{\\\"artifact_id\\\": \\\"a182e126-81df-4c37-8cd4-0fbcc0da4419\\\", \\\"task_id\\\": \\\"3f0a61a7-b1f0-4b08-9f25-f94122a7e937\\\", \\\"run_id\\\": \\\"623424de-ca41-4693-a2a9-d290fca6c"
+    },
+    {
+      "type": "tool.call",
+      "payload_keys": [
+        "tool",
+        "arguments",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"verify_html_document\", \"arguments\": {\"title\": \"eye-timer.html\"}, \"call_id\": \"call_00_hyOCbgO9Y5fcwbDrAfDx5983\"}"
+    },
+    {
+      "type": "tool.result",
+      "payload_keys": [
+        "tool",
+        "ok",
+        "result",
+        "message",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"verify_html_document\", \"ok\": true, \"result\": \"{\\\"ok\\\": true, \\\"overall\\\": \\\"partial\\\", \\\"source\\\": \\\"artifact\\\", \\\"checks\\\": [{\\\"name\\\": \\\"document_shell\\\", \\\"status\\\": \\\"pass\\\", \\\"detail\\\": \\\"has doctype/html/"
+    },
+    {
+      "type": "delivery.summary",
+      "payload_keys": [
+        "status",
+        "artifact_count",
+        "min_required",
+        "titles",
+        "multi_deliverable",
+        "pipeline",
+        "revision",
+        "runnable_html",
+        "implicit_package",
+        "structure_item_count",
+        "prior_artifact_count",
+        "ok"
+      ],
+      "snippet": "{\"status\": \"succeeded\", \"artifact_count\": 1, \"min_required\": 1, \"titles\": [\"eye-timer.html\"], \"multi_deliverable\": false, \"pipeline\": false, \"revision\": false, \"runnable_html\": true, \"implicit_package\": false, \"structure"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "conversation_id": "726e8942-e990-421a-ab0d-d0d6322a5117",
+  "task_id": "69791f8e-843c-4717-b705-1c0ebb59ef61",
+  "run_id": "32115a16-9b9c-46e8-9ac9-4f569186c0ca",
+  "run_status": "succeeded",
+  "artifact_count": 1,
+  "artifact_titles": [
+    "回复摘要"
+  ],
+  "delivery_summary": {
+    "status": "succeeded",
+    "artifact_count": 0,
+    "min_required": 1,
+    "ok": false,
+    "awaiting_user": true,
+    "reason": "clarification",
+    "note": "Model asked clarifying questions; not a delivery failure."
+  },
+  "event_types_tail": [
+    "skill.snapshot",
+    "delivery.plan",
+    "run.durable",
+    "run.status",
+    "agent.step",
+    "run.usage",
+    "message.delta",
+    "run.status",
+    "artifact.created",
+    "delivery.summary",
+    "delivery.summary"
+  ],
+  "event_type_set": [
+    "agent.step",
+    "artifact.created",
+    "delivery.plan",
+    "delivery.summary",
+    "message.delta",
+    "run.durable",
+    "run.status",
+    "run.usage",
+    "skill.snapshot"
+  ],
+  "key_events": [
+    {
+      "type": "delivery.plan",
+      "payload_keys": [
+        "multi_deliverable",
+        "pipeline",
+        "revision",
+        "runnable_html",
+        "min_artifacts",
+        "implicit_package",
+        "structure_item_count",
+        "prior_artifact_count"
+      ],
+      "snippet": "{\"multi_deliverable\": false, \"pipeline\": false, \"revision\": false, \"runnable_html\": false, \"min_artifacts\": 1, \"implicit_package\": false, \"structure_item_count\": 0, \"prior_artifact_count\": 25}"
+    },
+    {
+      "type": "delivery.summary",
+      "payload_keys": [
+        "status",
+        "artifact_count",
+        "min_required",
+        "titles",
+        "multi_deliverable",
+        "pipeline",
+        "revision",
+        "runnable_html",
+        "implicit_package",
+        "structure_item_count",
+        "prior_artifact_count",
+        "ok"
+      ],
+      "snippet": "{\"status\": \"succeeded\", \"artifact_count\": 0, \"min_required\": 1, \"titles\": [], \"multi_deliverable\": false, \"pipeline\": false, \"revision\": false, \"runnable_html\": false, \"implicit_package\": false, \"structure_item_count\": 0"
+    },
+    {
+      "type": "delivery.summary",
+      "payload_keys": [
+        "status",
+        "artifact_count",
+        "min_required",
+        "ok",
+        "awaiting_user",
+        "reason",
+        "note"
+      ],
+      "snippet": "{\"status\": \"succeeded\", \"artifact_count\": 0, \"min_required\": 1, \"ok\": false, \"awaiting_user\": true, \"reason\": \"clarification\", \"note\": \"Model asked clarifying questions; not a delivery failure.\"}"
+    }
+  ]
+}

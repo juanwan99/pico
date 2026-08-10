@@ -1,0 +1,144 @@
+{
+  "conversation_id": "7ff06798-8193-4c97-b765-cdfc828b5cb9",
+  "task_id": "8bbe171f-ca12-4ac9-9437-7aaf89c6a1c3",
+  "run_id": "f5991414-4a4b-47e5-b927-f8c43b0c0640",
+  "run_status": "succeeded",
+  "artifact_count": 2,
+  "artifact_titles": [
+    "回复摘要",
+    "交通安全小测验.html"
+  ],
+  "delivery_summary": {
+    "status": "succeeded",
+    "artifact_count": 1,
+    "min_required": 1,
+    "titles": [
+      "交通安全小测验.html"
+    ],
+    "multi_deliverable": false,
+    "pipeline": false,
+    "revision": false,
+    "runnable_html": true,
+    "implicit_package": false,
+    "structure_item_count": 3,
+    "prior_artifact_count": 26,
+    "ok": true,
+    "human_titles": [
+      "交通安全小测验.html"
+    ],
+    "note": "Prefer run.status + delivery.summary + artifact list over client stream timeout alone. Scripts: scripts/wait_delivery_summary.py. Human lens: open files in app/browser; L0≠人类可用. G1: single-unit + ≥1 file is ok even if heuristic min was higher."
+  },
+  "event_types_tail": [
+    "skill.snapshot",
+    "delivery.plan",
+    "run.durable",
+    "run.status",
+    "agent.step",
+    "run.usage",
+    "agent.step",
+    "tool.call",
+    "artifact.created",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "run.usage",
+    "agent.step",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "run.usage",
+    "message.delta",
+    "run.status",
+    "artifact.created",
+    "delivery.summary"
+  ],
+  "event_type_set": [
+    "agent.step",
+    "artifact.created",
+    "delivery.plan",
+    "delivery.summary",
+    "message.delta",
+    "run.checkpoint",
+    "run.durable",
+    "run.status",
+    "run.usage",
+    "skill.snapshot",
+    "tool.call",
+    "tool.result"
+  ],
+  "key_events": [
+    {
+      "type": "delivery.plan",
+      "payload_keys": [
+        "multi_deliverable",
+        "pipeline",
+        "revision",
+        "runnable_html",
+        "min_artifacts",
+        "implicit_package",
+        "structure_item_count",
+        "prior_artifact_count"
+      ],
+      "snippet": "{\"multi_deliverable\": false, \"pipeline\": false, \"revision\": false, \"runnable_html\": true, \"min_artifacts\": 1, \"implicit_package\": false, \"structure_item_count\": 3, \"prior_artifact_count\": 27}"
+    },
+    {
+      "type": "tool.call",
+      "payload_keys": [
+        "tool",
+        "arguments",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"generate_html_document\", \"arguments\": {\"title\": \"交通安全小测验.html\", \"marker\": \"交通安全小测验\", \"body\": \"<h1>🚦 交通安全小测验</h1>\\n<p>请完成以下三道选择题，然后点击按钮查看得分。</p>\\n\\n<div class=\\\"question\\\">\\n  <p><strong>1. 过马路时，下列哪种行为最安全？</stro"
+    },
+    {
+      "type": "tool.result",
+      "payload_keys": [
+        "tool",
+        "ok",
+        "result",
+        "message",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"generate_html_document\", \"ok\": true, \"result\": \"{\\\"artifact_id\\\": \\\"f3d971da-2cc6-4072-b889-cf7efa8fda17\\\", \\\"task_id\\\": \\\"8bbe171f-ca12-4ac9-9437-7aaf89c6a1c3\\\", \\\"run_id\\\": \\\"f5991414-4a4b-47e5-b927-f8c43b0c0"
+    },
+    {
+      "type": "tool.call",
+      "payload_keys": [
+        "tool",
+        "arguments",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"verify_html_document\", \"arguments\": {\"artifact_id\": \"f3d971da-2cc6-4072-b889-cf7efa8fda17\"}, \"call_id\": \"call_00_BGkZfvVaY5icDLpjv2Nz6488\"}"
+    },
+    {
+      "type": "tool.result",
+      "payload_keys": [
+        "tool",
+        "ok",
+        "result",
+        "message",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"verify_html_document\", \"ok\": true, \"result\": \"{\\\"ok\\\": true, \\\"overall\\\": \\\"partial\\\", \\\"source\\\": \\\"artifact\\\", \\\"checks\\\": [{\\\"name\\\": \\\"document_shell\\\", \\\"status\\\": \\\"pass\\\", \\\"detail\\\": \\\"has doctype/html/"
+    },
+    {
+      "type": "delivery.summary",
+      "payload_keys": [
+        "status",
+        "artifact_count",
+        "min_required",
+        "titles",
+        "multi_deliverable",
+        "pipeline",
+        "revision",
+        "runnable_html",
+        "implicit_package",
+        "structure_item_count",
+        "prior_artifact_count",
+        "ok"
+      ],
+      "snippet": "{\"status\": \"succeeded\", \"artifact_count\": 1, \"min_required\": 1, \"titles\": [\"交通安全小测验.html\"], \"multi_deliverable\": false, \"pipeline\": false, \"revision\": false, \"runnable_html\": true, \"implicit_package\": false, \"structure_i"
+    }
+  ]
+}

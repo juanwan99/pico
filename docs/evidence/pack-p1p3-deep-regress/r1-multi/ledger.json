@@ -1,0 +1,172 @@
+{
+  "conversation_id": "7313a701-ee5e-4ebb-9de7-641005fd28c9",
+  "task_id": "85f50e80-39c8-45b3-9a22-9bee93b43abb",
+  "run_id": "19337387-0f59-4e79-b81f-600b18aada3f",
+  "run_status": "succeeded",
+  "artifact_count": 4,
+  "artifact_titles": [
+    "回复摘要",
+    "midautumn-risk-checklist.md",
+    "midautumn-staff-roles.md",
+    "midautumn-agenda.md"
+  ],
+  "delivery_summary": {
+    "status": "succeeded",
+    "artifact_count": 3,
+    "min_required": 3,
+    "titles": [
+      "midautumn-agenda.md",
+      "midautumn-staff-roles.md",
+      "midautumn-risk-checklist.md"
+    ],
+    "multi_deliverable": true,
+    "pipeline": false,
+    "revision": false,
+    "runnable_html": false,
+    "implicit_package": false,
+    "structure_item_count": 0,
+    "prior_artifact_count": 33,
+    "ok": true,
+    "human_titles": [
+      "midautumn-agenda.md",
+      "midautumn-staff-roles.md",
+      "midautumn-risk-checklist.md"
+    ],
+    "note": "Prefer run.status + delivery.summary + artifact list over client stream timeout alone. Scripts: scripts/wait_delivery_summary.py. Human lens: open files in app/browser; L0≠人类可用. G1: single-unit + ≥1 file is ok even if heuristic min was higher."
+  },
+  "event_types_tail": [
+    "skill.snapshot",
+    "delivery.plan",
+    "run.durable",
+    "run.status",
+    "agent.step",
+    "run.usage",
+    "agent.step",
+    "tool.call",
+    "artifact.created",
+    "tool.result",
+    "run.checkpoint",
+    "tool.call",
+    "artifact.created",
+    "tool.result",
+    "run.checkpoint",
+    "tool.call",
+    "artifact.created",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "run.usage",
+    "message.delta",
+    "run.status",
+    "artifact.created",
+    "delivery.summary"
+  ],
+  "event_type_set": [
+    "agent.step",
+    "artifact.created",
+    "delivery.plan",
+    "delivery.summary",
+    "message.delta",
+    "run.checkpoint",
+    "run.durable",
+    "run.status",
+    "run.usage",
+    "skill.snapshot",
+    "tool.call",
+    "tool.result"
+  ],
+  "key_events": [
+    {
+      "type": "delivery.plan",
+      "payload_keys": [
+        "multi_deliverable",
+        "pipeline",
+        "revision",
+        "runnable_html",
+        "min_artifacts",
+        "implicit_package",
+        "structure_item_count",
+        "prior_artifact_count"
+      ],
+      "snippet": "{\"multi_deliverable\": true, \"pipeline\": false, \"revision\": false, \"runnable_html\": false, \"min_artifacts\": 3, \"implicit_package\": false, \"structure_item_count\": 0, \"prior_artifact_count\": 32}"
+    },
+    {
+      "type": "tool.call",
+      "payload_keys": [
+        "tool",
+        "arguments",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"workspace_write_file\", \"arguments\": {\"title\": \"midautumn-agenda.md\", \"content\": \"# 社区中秋游园会 · 90 分钟活动议程\\n\\n> 总时长：90 分钟 ｜ 建议开场时间：19:00 ｜ 如有调整，统一下发时间盒同步更新\\n\\n## 时间盒总览\\n\\n| 时间 | 时长 | 环节 | 负责角色 |\\n|------|------|---"
+    },
+    {
+      "type": "tool.result",
+      "payload_keys": [
+        "tool",
+        "ok",
+        "result",
+        "message",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"workspace_write_file\", \"ok\": true, \"result\": \"{\\\"artifact_id\\\": \\\"556a2b58-e7a4-41c1-978a-e1ce00cf4fc3\\\", \\\"task_id\\\": \\\"85f50e80-39c8-45b3-9a22-9bee93b43abb\\\", \\\"run_id\\\": \\\"19337387-0f59-4e79-b81f-600b18aada3"
+    },
+    {
+      "type": "tool.call",
+      "payload_keys": [
+        "tool",
+        "arguments",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"workspace_write_file\", \"arguments\": {\"title\": \"midautumn-staff-roles.md\", \"content\": \"# 社区中秋游园会 · 岗位分工与对讲频道\\n\\n> 所有岗位使用统一对讲（434.150 MHz，子频道见下），总控为最高调度。\\n\\n## 一、岗位总表\\n\\n| 岗位 | 人数参考 | 核心职责 | 对讲子频道 |\\n|------|----"
+    },
+    {
+      "type": "tool.result",
+      "payload_keys": [
+        "tool",
+        "ok",
+        "result",
+        "message",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"workspace_write_file\", \"ok\": true, \"result\": \"{\\\"artifact_id\\\": \\\"8a71c225-6637-45b9-b5a5-48a488465fbd\\\", \\\"task_id\\\": \\\"85f50e80-39c8-45b3-9a22-9bee93b43abb\\\", \\\"run_id\\\": \\\"19337387-0f59-4e79-b81f-600b18aada3"
+    },
+    {
+      "type": "tool.call",
+      "payload_keys": [
+        "tool",
+        "arguments",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"workspace_write_file\", \"arguments\": {\"title\": \"midautumn-risk-checklist.md\", \"content\": \"# 社区中秋游园会 · 风险勾选清单（会前 / 会中 / 会后）\\n\\n> 使用方式：每项完成后在 `☐` 内打 `✔`。任一项标黄为待办，红色为未闭环，禁止带红色项开场。\\n\\n## 一、会前（至少开场前 90 分钟完成）\\n\\n- [ ]"
+    },
+    {
+      "type": "tool.result",
+      "payload_keys": [
+        "tool",
+        "ok",
+        "result",
+        "message",
+        "call_id"
+      ],
+      "snippet": "{\"tool\": \"workspace_write_file\", \"ok\": true, \"result\": \"{\\\"artifact_id\\\": \\\"7d732ad3-3ec1-406c-9e5e-39520223e47f\\\", \\\"task_id\\\": \\\"85f50e80-39c8-45b3-9a22-9bee93b43abb\\\", \\\"run_id\\\": \\\"19337387-0f59-4e79-b81f-600b18aada3"
+    },
+    {
+      "type": "delivery.summary",
+      "payload_keys": [
+        "status",
+        "artifact_count",
+        "min_required",
+        "titles",
+        "multi_deliverable",
+        "pipeline",
+        "revision",
+        "runnable_html",
+        "implicit_package",
+        "structure_item_count",
+        "prior_artifact_count",
+        "ok"
+      ],
+      "snippet": "{\"status\": \"succeeded\", \"artifact_count\": 3, \"min_required\": 3, \"titles\": [\"midautumn-agenda.md\", \"midautumn-staff-roles.md\", \"midautumn-risk-checklist.md\"], \"multi_deliverable\": true, \"pipeline\": false, \"revision\": fals"
+    }
+  ]
+}
