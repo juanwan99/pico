@@ -47,13 +47,13 @@ MCP = 桥接非自研协议栈 · 无连接器市场
 
 ## 5. 已知缺口 / 黄债（诚实 · 无假绿）
 
-- F5（W5 类裸「多文件交付」）初测暴露 0 文件假绿 → 已 RCA 并提交修复 PR #427（量词可选化）→ 合并部署后复测（见 `RETEST.md`）。
+- ~~F5（W5 类裸「多文件交付」）初测 0 文件假绿~~ → **已修复 #427（tip `27954b2a`）· 复测 PASS（5 真文件 · `min_required=2` · `multi_deliverable=true`）**
 - 其余见 `README.md` §黄债。
 
 ## 6. 结论（供总管）
 
 - 不弱：**成立**（六项逐条公网证据）
 - 更强 A/B/C：**各有 ≥1 硬证据**
-- 复测 F1–F6 无 P0（F5 修复后复测待补）
-- `RECOMMENDATION: YES 候选`（待 F5 复测关闭）
+- 复测 F1–F6 **均无 P0**（F5 复测 tip `27954b2a` 已关闭）
+- `RECOMMENDATION: YES 候选`
 - `CLAIM-WB-DEGREE-WEB: PENDING`（仅业主）

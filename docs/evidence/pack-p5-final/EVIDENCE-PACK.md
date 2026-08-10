@@ -1,7 +1,8 @@
 # P5 · EVIDENCE PACK · 六条表 + C-T1–C-T10
 
 ```text
-tip: 6fd55ab80aa1575bdf49b68e6f3984a4e65f0dd4
+tip（取证/初测）: 6fd55ab80aa1575bdf49b68e6f3984a4e65f0dd4
+tip（F5 复测）: 27954b2a59a5dcf8f5c57c1d51b176d205ff9e50（含 #427）
 方案: 门脸 Pico · 核 Pi · 模型 DeepSeek
 执行: DS · ECS · SOLO · 开放域当场新题
 ```

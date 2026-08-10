@@ -3,7 +3,8 @@
 ```text
 BINDING: T-PACK-P5-FINAL-CLAIM-MATERIALS (#426) · 公网 tip 实查为准
 日期: 2026-08-10
-tip: 6fd55ab80aa1575bdf49b68e6f3984a4e65f0dd4（开工/取证时 curl 实查）
+tip（取证/初测）: 6fd55ab80aa1575bdf49b68e6f3984a4e65f0dd4
+tip（F5 复测）: 27954b2a59a5dcf8f5c57c1d51b176d205ff9e50（含 #427 修复）
 CLAIM-WB: NO · 本目录不蕴含产品 Ready · 仅业主可签
 ```
 
@@ -19,7 +20,8 @@ CLAIM-WB: NO · 本目录不蕴含产品 Ready · 仅业主可签
 | [s3-open-revise](./s3-open-revise/) | 六条#5：同会话修订 v1→v2 |
 | [s4-open-chat](./s4-open-chat/) | 六条#4 短答 + F4：无假文件 |
 | [f2-open-html-page](./f2-open-html-page/) | F2/F3/F6：单 HTML 人页 + 恢复链 + 徽章 |
-| [f5-open-w5-chain](./f5-open-w5-chain/) | F5：W5 脏活链（初测 P0 → 修复 #427 → 复测） |
+| [f5-open-w5-chain](./f5-open-w5-chain/) | F5：W5 脏活链（初测 P0 → 修复 #427 → 复测 PASS） |
+| [f5-open-w5-chain-r2](./f5-open-w5-chain-r2/) | F5 复测（tip 27954b2a · 5 真文件 · PASS） |
 | [skills-shelf](./skills-shelf/) | 六条#2：能力架 UI 帧 |
 
 ## 取证纪律
@@ -43,7 +45,7 @@ CLAIM-WB: NO · 本目录不蕴含产品 Ready · 仅业主可签
 
 ## 黄债 / 缺口（诚实）
 
-1. F5 裸「多文件交付」0 文件假绿 → **已修复 #427** → 合并部署后复测（见 RETEST.md）。
+1. ~~F5 裸「多文件交付」0 文件假绿~~ → **已修复 #427（tip 27954b2a）· 复测 PASS（5 真文件）**
 2. 能力架「前台逐 skill 手动点选」完整市场 UI 未在本 build 验证（目录可见 + 自动绑定有据）。
 3. 欠交付（高负载 token cap 类）live 难稳定触发 —— 承 P4 黄债，未复现为 P0。
 4. 桌面 workDir / 像素 1:1 / 真 MCP 协议栈 / 连接器市场：**明确不做**（诚实限制）。

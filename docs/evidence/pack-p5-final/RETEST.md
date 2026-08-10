@@ -1,23 +1,24 @@
 # P5 · 复测包 · F1–F6（当前公网 tip · 开放域新表述）
 
 ```text
-tip: 6fd55ab80aa1575bdf49b68e6f3984a4e65f0dd4
+初测 tip: 6fd55ab80aa1575bdf49b68e6f3984a4e65f0dd4
+F5 复测 tip: 27954b2a59a5dcf8f5c57c1d51b176d205ff9e50（含 #427 修复）
 方法: L1 帧（visual-gate）+ L2 账本（/api/pico/v1）+ L3（有异常必写）
 禁止题词 if · 有 P0 → RCA→FIX→复测
 ```
 
 ## 复测结果表
 
-| ID | 场景 | 现 tip 结果 | P0？ | 证据 |
-|----|------|-------------|------|------|
+| ID | 场景 | 结果 | P0？ | 证据 |
+|----|------|------|------|------|
 | **F1** | 多文件办公包 ≥3 | **PASS** · 4 真文件 · `artifact_count=4, ok=true` | 无 | `s2-open-office-multi`（ledger + 帧） |
 | **F2** | 单 HTML「可下载的」人页 | **PASS** · `main-delivery-open` → `main-delivery-iframe` 打开人页 · `runnable_html=true` · `scene_visual_pass_eligible=true` | 无 | `f2-open-html-page`（V3 + manifest） |
 | **F3** | 恢复链（工具失败→成功） | **PASS** · `workspace_write_file` 失败 → `generate_html_document` 成功 → `verify_html_document` 成功 → 运行成功 | 无 | `f2-open-html-page`（tool.result 事件 + timeline-dom.png） |
 | **F4** | 闲聊 | **PASS** · 短答 · `task_count=0` · 无假成品条 | 无 | `s4-open-chat`（ledger + 帧） |
-| **F5** | W5 脏活链 / W2 多件交付 | **FAIL（P0）→ 修复 #427 → 复测待部署** | **是（已修）** | `f5-open-w5-chain`（初测 0 文件假绿 · 见下） |
+| **F5** | W5 脏活链 / W2 多件交付 | **PASS（复测）** · 5 真文件 · `min_required=2` · `multi_deliverable=true` · `ok=true` | **无（初测 P0 已修复）** | `f5-open-w5-chain-r2`（ledger + 帧） |
 | **F6** | 徽章「失败 · 已恢复」 | **PASS** · DOM 时间线 `工具结果 · workspace_write_file` = **「失败 · 已恢复」**（非裸失败）→ 运行成功 | 无 | `f2-open-html-page/timeline-dom.png` |
 
-## F5 详情（P0 · 诚实记录）
+## F5 详情（P0 → 修复 → 复测关闭）
 
 ```text
 初测（tip 6fd55ab · 开放域新表述）:
@@ -32,11 +33,15 @@ RCA:
   - 行内 ①②③（非行首）不计入 structure_n → min_required=0 → 假绿
 
 FIX（通用 · 非题词）:
-  PR #427 · SHA 743aa22 · 量词 个/份 可选 → 裸「多文件/多产物/多交付」→ multi → min≥2 + fail-closed
+  PR #427 · SHA 743aa22 → merge 27954b2a · 量词 个/份 可选 → 裸「多文件/多产物/多交付」→ multi → min≥2 + fail-closed
   +3 单测 · tests/unit 260 passed · ruff clean · CI 绿
 
-复测（待合并部署后）:
-  - 同一提示词重跑 → 预期：fail-closed（0 文件诚实失败）或真文件交付
+复测（tip 27954b2a · 同一提示词）:
+  RUN cd966a20-f9b1-4563-aac8-505f2b2f872e · status=succeeded
+  skill.snapshot = skill.engineering_delivery · 事件流 5× tool.call/artifact.created/tool.result
+  delivery.summary = {artifact_count:5, min_required:2, multi_deliverable:true, ok:true}
+  5 真文件（调研备忘/决策一页纸/待办表/给团队短消息/给领导短消息 · 各 sha256）
+  → F5 P0 关闭 · PASS
 ```
 
 ## 附：P4 黄债承接
@@ -45,4 +50,4 @@ FIX（通用 · 非题词）:
 |---------|---------|
 | 成功旁裸「失败」徽标（d2/R3） | **F6 现 tip DOM 已为「失败 · 已恢复」** → 黄债关闭 |
 | 欠交付 live 难触发 | 未复现为 P0 · 承 P4 说明（高负载 token cap） |
-| F5 裸「多文件交付」缺口 | **新发现 P0 → 修复 #427 → 复测** |
+| F5 裸「多文件交付」缺口 | **初测 P0 → 修复 #427 → 复测 PASS（5 真文件）→ 关闭** |
