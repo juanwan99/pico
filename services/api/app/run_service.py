@@ -545,6 +545,16 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                 "change.proposed",
                 {"change_id": ch.id, "title": ch.title},
             )
+        # Fail-closed delivery gate — same gate as _finalize_run (interactive).
+        # Retry / REST / automation runs must not bypass #375 fail-closed semantics.
+        from app.delivery_gate import apply_delivery_gate
+
+        await apply_delivery_gate(
+            session,
+            run,
+            final_text=result.final_text,
+            user_prompt=run.prompt,
+        )
         await session.commit()
 
 
