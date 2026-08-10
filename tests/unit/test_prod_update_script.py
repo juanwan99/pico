@@ -73,7 +73,10 @@ def _fake_runtime(
     (bin_dir / "curl").write_text(
         "#!/usr/bin/env bash\n"
         "case \"${*: -1}\" in\n"
-        "  */health) printf '{\"ok\":true,\"git_sha\":\"%s\"}' \"$PICO_GIT_SHA\" ;;\n"
+        "  */health) printf '{\"ok\":true,\"git_sha\":\"%s\","
+        "\"true_pi_binary_available\":true,"
+        "\"true_pi_package_pin\":\"@mariozechner/pi-coding-agent@0.73.1\"}' "
+        "\"$PICO_GIT_SHA\" ;;\n"
         f"{login_body}"
         "esac\n"
     )
