@@ -1,0 +1,42 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T11:44:47.254Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p5-final",
+  "scene": "s4-open-chat",
+  "prompt": "请用两三句话简单解释一下「容器化」是什么，不需要文件，不用工具。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "6fd55ab80aa1575bdf49b68e6f3984a4e65f0dd4",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/f7df2329-965f-4388-be60-b15aa3c3c70e",
+  "out_dir": "docs/evidence/pack-p5-final/s4-open-chat",
+  "frames": {
+    "V0": "docs/evidence/pack-p5-final/s4-open-chat/V0-send.png",
+    "V1": "docs/evidence/pack-p5-final/s4-open-chat/V1-process-main.png",
+    "V2": "docs/evidence/pack-p5-final/s4-open-chat/V2-final.png",
+    "V3": "docs/evidence/pack-p5-final/s4-open-chat/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p5-final/s4-open-chat/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "same-tab",
+    "human_page": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

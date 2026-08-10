@@ -1,0 +1,28 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Custom same-conversation revision capture (P5 六条 #5).",
+  "at": "2026-08-10T11:43:00Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p5-final",
+  "scene": "s3-open-revise",
+  "tip": {"git_sha": "6fd55ab80aa1575bdf49b68e6f3984a4e65f0dd4", "service": "pico-api"},
+  "conversation_url": "https://pico.aivia.asia/c/030d9828-3243-4aa3-8bb7-84c77137143a",
+  "prompts": [
+    "请帮我写一份《社区读书会活动方案》Markdown 文件：包含主题、时间地点、流程安排、人员分工四节，内容真实可用，写完后给下载。",
+    "请把刚才的方案改一版：活动主题改为「亲子共读夜」，时间改为周六上午，并新增一节「物料清单」，其余内容保留。改完给出新的下载。"
+  ],
+  "frames": {
+    "R1_send_v1": "docs/evidence/pack-p5-final/s3-open-revise/R1-send-v1.png",
+    "R1_final_v1": "docs/evidence/pack-p5-final/s3-open-revise/R1-final-v1.png",
+    "R2_send_v2": "docs/evidence/pack-p5-final/s3-open-revise/R2-send-v2.png",
+    "R2_final_v2": "docs/evidence/pack-p5-final/s3-open-revise/R2-final-v2.png",
+    "R2_final_v2_390": "docs/evidence/pack-p5-final/s3-open-revise/R2-final-v2-390.png"
+  },
+  "runs": [
+    {"prompt": "v1 创建", "run_id": "9c853fbf-6385-428c-bb25-25fdabaef892", "status": "succeeded"},
+    {"prompt": "v2 同会话修订", "run_id": "d62eb33b-168b-420a-a397-45f80c86210f", "status": "succeeded", "revision": true}
+  ],
+  "delivery_summary_v2": {"status": "succeeded", "artifact_count": 1, "min_required": 1, "titles": ["社区读书会活动方案（亲子共读夜版）.md"], "revision": true, "ok": true}
+}
