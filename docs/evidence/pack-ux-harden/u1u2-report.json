@@ -1,0 +1,29 @@
+{
+  "tip": {
+    "ok": true,
+    "git_sha": "502e1f6fd5d3f5999b43303de91b16de1375f26a",
+    "service": "pico-api"
+  },
+  "u1": {
+    "owner_lost_on_home": false,
+    "clicked_label": "再改一版（v1.2）：①把冲刺周期再改为 09-01 ∼ 09-05；②把风险 R8（口径分歧）状态改为「已缓解」并补一条应对记录；③章程「成功标准」里新增一条",
+    "openedFail": true,
+    "has_human": false,
+    "has_owner_lost": false,
+    "human_lines": [],
+    "url": "https://pico.aivia.asia/c/3a4604a8-adda-441f-be3e-da0d78c4921b"
+  },
+  "u2": {
+    "stop_task": {
+      "text": "停止任务",
+      "title": "取消云端任务（真停止，与输入区「停止生成」不同）",
+      "aria": "停止云端任务"
+    },
+    "stop_gen": {
+      "aria": "停止生成（仅停屏幕输出，云端任务可能继续）",
+      "title": "停止生成（仅停屏幕输出，云端任务可能继续）"
+    },
+    "saw": true,
+    "url": "https://pico.aivia.asia/c/new"
+  }
+}

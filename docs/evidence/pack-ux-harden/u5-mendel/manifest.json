@@ -1,0 +1,52 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-11T03:26:31.105Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-ux-harden",
+  "scene": "u5-mendel",
+  "prompt": "做一个最小可运行 HTML 人页：标题「孟德尔遗传简释」，3 段中文科普 + 一个可点按钮「显示示例」切换示例表格。交付可打开的 HTML 文件，不要系统侧自检墙。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "502e1f6fd5d3f5999b43303de91b16de1375f26a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/4b18cfd6-0d23-4653-ab11-3e84011689f5",
+  "out_dir": "docs/evidence/pack-ux-harden/u5-mendel",
+  "frames": {
+    "V0": "docs/evidence/pack-ux-harden/u5-mendel/V0-send.png",
+    "V1": "docs/evidence/pack-ux-harden/u5-mendel/V1-process-main.png",
+    "V2": "docs/evidence/pack-ux-harden/u5-mendel/V2-final.png",
+    "V3": "docs/evidence/pack-ux-harden/u5-mendel/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-ux-harden/u5-mendel/V2-final-390.png"
+  },
+  "monologue_hits": [
+    "/结构自检|静态自检|系统侧|二进制编码|未做浏览器真机|未经真机点击|未宣称\\s*L1|L0_structure|interaction_status/i"
+  ],
+  "monologue_clean": false,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "孟德尔遗传简释",
+      "body_snippet": "标记：mendel-genetics-demo\n\n孟德尔遗传简释\n\n孟德尔是十九世纪奥地利的修道士，他通过豌豆杂交实验总结出遗传的基本规律，被后人称为「遗传学之父」。他最重要的贡献在于发现：遗传性状由成对的「因子」控制，亲本各提供一个给后代。\n\n他的第一定律叫「分离定律」：每一对遗传因子在形成生殖细胞时会彼此分开，只把其中一个传给后代。因此，两个杂交个体的后代在性状上会按固定的比例重新组合，例如高茎与矮茎豌豆杂交，第二代约为 3:1。\n\n第二定律叫「自由组合定律」：不同性状的",
+      "button_count": 1,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
