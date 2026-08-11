@@ -57,6 +57,9 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         or "owner was lost" in low
         or "api restart" in low
         or "greenlet" in low
+        # LibreChat stream death after process kill (main bubble often shows this)
+        or "terminated" in low
+        or "processing the request: terminated" in low
     ):
         return (
             "服务维护或重启导致本次任务中断。"

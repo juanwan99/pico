@@ -66,4 +66,12 @@ describe('humanizeRunError', () => {
     expect(msg).toMatch(/重启|维护/);
     expect(msg?.toLowerCase()).not.toContain('owner was lost');
   });
+
+  it('maps LibreChat stream terminated English', () => {
+    const msg = humanizeRunError(
+      'An error occurred while processing the request: terminated',
+    );
+    expect(msg).toMatch(/重启|维护/);
+    expect(msg?.toLowerCase()).not.toContain('terminated');
+  });
 });

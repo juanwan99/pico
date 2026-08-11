@@ -129,11 +129,48 @@ const errorMessages = {
   },
 };
 
+/** Pico: never show bare English stream death in the main bubble (owner-visible). */
+export function humanizeChatErrorText(raw: string): string {
+  const text = (raw || '').trim();
+  if (!text) {
+    return '出了点问题，请重试。可点「重新运行」或刷新后再试。';
+  }
+  const low = text.toLowerCase();
+  // LibreChat wraps agent failures as: "An error occurred while processing the request: terminated"
+  if (
+    low.includes('owner was lost') ||
+    low.includes('api restart') ||
+    low.includes('greenlet') ||
+    /(^|[^a-z])terminated([^a-z]|$)/i.test(text) ||
+    low.includes('processing the request: terminated')
+  ) {
+    return '服务维护或重启导致本次任务中断。请点「重新运行」继续；侧栏失败说明与主区应一致。';
+  }
+  if (low.includes('econnreset') || low.includes('socket hang up') || low.includes('network error')) {
+    return '网络中断，任务可能未跑完。请刷新查看侧栏状态，必要时点「重新运行」。';
+  }
+  if (low.includes('something went wrong') && low.includes('error message we encountered')) {
+    const m = text.match(/encountered:\s*(.+)$/i);
+    const inner = (m?.[1] || '').trim();
+    if (inner) {
+      return humanizeChatErrorText(inner);
+    }
+  }
+  if (low.includes('traceback') || text.length > 200) {
+    return '服务暂时出错，请点「重新运行」或稍后重试。';
+  }
+  // Already Chinese human copy — pass through
+  if (/[\u4e00-\u9fff]/.test(text) && !/something went wrong/i.test(text)) {
+    return text.length > 240 ? `${text.slice(0, 240)}…` : text;
+  }
+  return `未能完成：${text.length > 160 ? `${text.slice(0, 160)}…` : text}`;
+}
+
 const Error = ({ text }: { text: string }) => {
   const localize = useLocalize();
   const jsonString = extractJson(text);
   const errorMessage = text.length > 512 && !jsonString ? text.slice(0, 512) + '...' : text;
-  const defaultResponse = `Something went wrong. Here's the specific error message we encountered: ${errorMessage}`;
+  const defaultResponse = humanizeChatErrorText(errorMessage);
 
   if (!isJson(jsonString)) {
     return defaultResponse;
@@ -150,7 +187,9 @@ const Error = ({ text }: { text: string }) => {
   } else if (keyExists) {
     return errorMessages[errorKey];
   } else {
-    return defaultResponse;
+    // JSON without known code — still humanize message/info fields
+    const blob = [json.message, json.info, json.error, text].filter(Boolean).join(' ');
+    return humanizeChatErrorText(String(blob));
   }
 };
 
