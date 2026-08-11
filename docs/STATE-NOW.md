@@ -8,6 +8,10 @@ PRODUCT PASS: 未签
 main tip（写卷）: 以 origin/main 实查为准
 ```
 
+## 架构法律（BINDING）
+
+**禁止自研 · 只做薄适配：** [`LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)
+
 ## 业主方向（最新 BINDING）
 
 见 **[docs/DIRECTION-NOW.md](./DIRECTION-NOW.md)**

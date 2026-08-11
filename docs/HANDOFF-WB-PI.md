@@ -22,6 +22,19 @@ RELATED:
 
 ---
 
+
+---
+
+## 架构法律（2026-08-11 业主钉 · BINDING）
+
+**真源：** [`docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md) · 根目录 [`AGENTS.md`](../AGENTS.md)
+
+```text
+Pico 禁止自研，只做薄适配。
+编排核 = 上游真 Pi（薄桥）+ Pico 账本/门闩/人包/门脸。
+禁止：自研 agent OS、自研 MCP/向量内核、双核真源、桥膨胀。
+```
+
 ## 0. 一句话
 
 **做 Web 上达到 WorkBuddy 程度的通用 AI 工作台。**  

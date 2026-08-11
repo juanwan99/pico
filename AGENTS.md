@@ -18,6 +18,28 @@ OWNER_ORDER: 你只管 pico — permanent; not optional; not overridden by "Phas
 
 If work needs edu source changes → **stop and say so**; do not open edu.
 
+
+## LAW — NO SELF-BUILD · THIN ADAPTER ONLY（BINDING）
+
+**全文：** [`docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md)
+
+```text
+Pico 禁止自研内核/协议栈/Agent OS/第二编排真源。
+只允许对成熟上游做薄适配（接线·白名单·账本·门闩·人包·门脸）。
+桥变厚 = 违法。真核 = 上游 Pi harness，不是 Pi-inspired 自写 loop 冒充。
+```
+
+| Allowed | Forbidden |
+|---------|-----------|
+| 真 Pi RPC/SDK 薄客户端 + gateway 回调 | 自研 agent loop 当长期主核加厚 |
+| 事件映射进唯一 Pico 账本 | 第二套账本 / 第二默认核 |
+| 门闩·人包·假绿防护·租户 | 自研 MCP 协议栈 / 向量库内核 |
+| 白名单工具（无公网 bash） | 桥内再造 delivery 全家桶 / 私有 OS |
+
+PR 必须能回答：适配哪段？上游是谁？升级是否只改适配层？
+
+---
+
 ---
 
 ## Execution workflow (binding) — **OneFlow adapted from edu**

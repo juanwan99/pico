@@ -1,3 +1,5 @@
+**项目法律（禁止自研·薄适配）：** [LAW-NO-SELF-BUILD-THIN-ADAPTER.md](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)
+
 - **Context policy:** [`docs/CONTEXT-POLICY.md`](./CONTEXT-POLICY.md)（默认不清理上下文）
 - **Controller bot (7x24):** [`docs/CONTROLLER-BOT.md`](./CONTROLLER-BOT.md) — 机制文档；**现行派工仍以总管任务卡为准**
 - **Controller poll:** [`docs/CONTROLLER-POLL.md`](./CONTROLLER-POLL.md)

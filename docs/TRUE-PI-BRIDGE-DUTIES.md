@@ -1,3 +1,5 @@
+> **项目法律：** [`LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md) — 桥必须薄；加厚 = 违法。
+
 # 真 Pi 薄桥 · 职责清单与禁区
 
 ```text
