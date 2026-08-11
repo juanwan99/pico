@@ -1,0 +1,52 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-11T06:34:27.484Z",
+  "base": "https://pico.aivia.asia",
+  "card": "p0-terminated-main-bubble",
+  "scene": "v3-mendel",
+  "prompt": "做一个最小可运行 HTML 人页：标题「孟德尔遗传简释」，3 段中文科普 + 一个可点按钮「显示示例」切换示例表格。交付可打开的 HTML 文件，不要系统侧自检墙。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "bbe59f67ed507bfe126a44cb3e6a6c9ef4a0df20",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/8fa4e5ec-dd83-46fb-8ed7-b7009c4b9867",
+  "out_dir": "docs/evidence/p0-terminated-main-bubble/v3-mendel",
+  "frames": {
+    "V0": "docs/evidence/p0-terminated-main-bubble/v3-mendel/V0-send.png",
+    "V1": "docs/evidence/p0-terminated-main-bubble/v3-mendel/V1-process-main.png",
+    "V2": "docs/evidence/p0-terminated-main-bubble/v3-mendel/V2-final.png",
+    "V3": "docs/evidence/p0-terminated-main-bubble/v3-mendel/V3-open-product.png",
+    "V2_390": "docs/evidence/p0-terminated-main-bubble/v3-mendel/V2-final-390.png"
+  },
+  "monologue_hits": [
+    "/结构自检|静态自检|系统侧|二进制编码|未做浏览器真机|未经真机点击|未宣称\\s*L1|L0_structure|interaction_status/i"
+  ],
+  "monologue_clean": false,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "孟德尔遗传简释",
+      "body_snippet": "标记：mendel-intro\n\n孟德尔遗传简释\n\n孟德尔通过豌豆杂交实验，发现了遗传的两个基本规律。他提出，生物的性状由成对的「遗传因子」（今天我们称为基因）决定，每个个体从父母各继承一个拷贝。这对因子中，只要有一个是显性，显性性状就会表现出来；只有两个都是隐性时，隐性性状才会显现。\n\n第一个规律是分离定律：形成配子（生殖细胞）时，成对的遗传因子会彼此分离，各自进入不同的配子。因此杂合子（如 Rr）产生的配子中，R 与 r 各占一半。后代性状在数量上便呈现经典的 3:1 显",
+      "button_count": 1,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
