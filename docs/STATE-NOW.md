@@ -1,5 +1,8 @@
 # STATE-NOW · Pico（本窗真源）
 
+> **新窗交接（2026-08-11）：** [`HANDOFF-NEW-WINDOW-2026-08-11.md`](./HANDOFF-NEW-WINDOW-2026-08-11.md) · 主线 **#470**
+
+
 ```text
 DATE: 2026-08-11
 仓: juanwan99/pico ONLY
