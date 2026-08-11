@@ -111,7 +111,23 @@ def _optional_text(args: dict[str, Any], key: str, *, maximum: int) -> str | Non
 
 
 def _marker_arg(args: dict[str, Any]) -> str:
-    return _required_text(args, "marker", maximum=_MAX_MARKER)
+    # Marker is an internal traceability tag. Auto-generate one when the model
+    # omits it — hard-failing here made the true-Pi agent retry the same tool
+    # call forever (message_update flood → OOM). A unique tag keeps deliveries
+    # traceable without requiring the model to know the internal field.
+    value = args.get("marker")
+    if value is None:
+        value = ""
+    if not isinstance(value, str):
+        raise ToolError("tool.invalid_arguments", "marker must be a string")
+    value = value.strip()
+    if not value:
+        import uuid
+
+        value = f"pico-{uuid.uuid4().hex[:12]}"
+    if len(value) > _MAX_MARKER:
+        raise ToolError("tool.invalid_arguments", f"marker exceeds {_MAX_MARKER} characters")
+    return value
 
 
 def _ensure_extension(title: str, ext: str) -> str:

@@ -15,7 +15,14 @@ from xml.sax.saxutils import escape
 def _require_marker(marker: str) -> str:
     value = (marker or "").strip()
     if not value:
-        raise ValueError("marker is required")
+        # Marker is an internal traceability tag. Auto-generate one when the
+        # model omits it — hard-failing here made the true-Pi agent retry the
+        # same tool call forever (message_update flood → OOM). A unique tag
+        # keeps deliveries traceable without requiring the model to know the
+        # internal field.
+        import uuid
+
+        value = f"pico-{uuid.uuid4().hex[:12]}"
     if len(value) > 200:
         raise ValueError("marker exceeds 200 characters")
     if any(ord(ch) < 32 for ch in value):

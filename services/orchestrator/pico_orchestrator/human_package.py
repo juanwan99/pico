@@ -107,6 +107,7 @@ _TOOL_MONOLOGUE_LINE = re.compile(
     r"(?:Let me|I'll|I will|I need to|First|Next|Then)\b.*"
     r"(?:tool|function|generate_|workspace_write|argument|parameter|JSON|escape|"
     r"verification|system-side|HTML|quiz|document|interactive).*"
+    r"|The\s+(?:verify|generate|workspace)\w*(?:\s+(?:tool|function|schema))?\b.*"
     r"|(?:我先|让我|我将|接下来|首先)\b.*(?:工具|参数|转义|落盘|写文件|构造|校验).*"
     r")$"
 )
@@ -120,6 +121,7 @@ _TOOL_MONOLOGUE_BLOCK = re.compile(
     r"|All\s+files?\s+(?:are|were|have\s+been)?\s*delivered\b[^\n\u4e00-\u9fff]{0,200}"
     r"|Here['’]?s\s+the\s+(?:final\s+)?delivery\s+summary\b[^\n\u4e00-\u9fff]{0,160}"
     r"|Let\s+me\s+(?:confirm|finalize|verify|summarize)\b[^\n\u4e00-\u9fff]{0,160}"
+    r"|The\s+(?:verify|generate|workspace)\w*(?:\s+(?:tool|function|schema))?\b[^\n\u4e00-\u9fff]{0,240}"
     r"|我先(?:构造|准备|调用)[^\n]{0,80}"
     r"|让我(?:构造|调用|写)[^\n]{0,80})"
 )

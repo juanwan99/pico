@@ -165,6 +165,8 @@ class SubprocessTransport(TruePiTransport):
             self.provider,
             "--model",
             self.model,
+            "--thinking",
+            "off",
             "-e",
             str(self.ext),
         ]
@@ -209,6 +211,18 @@ class SubprocessTransport(TruePiTransport):
                         )
                         continue
                     if isinstance(obj, dict):
+                        t = str(obj.get("type") or "?")
+                        if t == "message_update":
+                            # Streaming deltas carry the FULL accumulated content
+                            # (up to ~40KB incl. the tool-call args while the
+                            # model streams a large HTML body token-by-token) and
+                            # arrive at ~100-400/sec (O(n²) over tokens).
+                            # Enqueueing them bloats the RPC queue + the
+                            # wait_response pending buffer, buries agent_end
+                            # behind the flood, and balloons memory. Nothing
+                            # consumes them (map_event + _consume skip them too),
+                            # so drop at the source.
+                            continue
                         await self._queue.put(RpcEvent(obj))
         finally:
             await self._queue.put(None)
