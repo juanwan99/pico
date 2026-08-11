@@ -1,0 +1,42 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-11T18:37:08.100Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-triple-100-night",
+  "scene": "p7-c3-edit",
+  "model": "pico-agent",
+  "prompt": "做一页周末市集摊位菜单（HTML或MD），4个品名与价格，可下载。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "c6186d2dcf5c5ec27a4589112a0cb0ff2cc3409c",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/b410cfde-6da5-4a75-9c1f-956e08eb4ac9",
+  "out_dir": "docs/evidence/pack-triple-100-night/p7-c3-edit",
+  "frames": {
+    "V0": "docs/evidence/pack-triple-100-night/p7-c3-edit/V0-send.png",
+    "V1": "docs/evidence/pack-triple-100-night/p7-c3-edit/V1-process-main.png",
+    "V2": "docs/evidence/pack-triple-100-night/p7-c3-edit/V2-final.png",
+    "V2_390": "docs/evidence/pack-triple-100-night/p7-c3-edit/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [
+    "V3 skipped (--skip-v3)"
+  ],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

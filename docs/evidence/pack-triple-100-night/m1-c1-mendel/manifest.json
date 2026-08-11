@@ -1,0 +1,51 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-11T15:43:03.747Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-triple-100-night",
+  "scene": "m1-c1-mendel",
+  "model": "auto",
+  "prompt": "请做一页「孟德尔遗传定律」互动 HTML 课件，精致一点，可下载可打开；要有清晰图示或交互，不要系统侧自检墙。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "bbe59f67ed507bfe126a44cb3e6a6c9ef4a0df20",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/92bf3b47-921c-442d-9ed3-c9b13b2d80f3",
+  "out_dir": "docs/evidence/pack-triple-100-night/m1-c1-mendel",
+  "frames": {
+    "V0": "docs/evidence/pack-triple-100-night/m1-c1-mendel/V0-send.png",
+    "V1": "docs/evidence/pack-triple-100-night/m1-c1-mendel/V1-process-main.png",
+    "V2": "docs/evidence/pack-triple-100-night/m1-c1-mendel/V2-final.png",
+    "V3": "docs/evidence/pack-triple-100-night/m1-c1-mendel/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-triple-100-night/m1-c1-mendel/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "孟德尔遗传定律·互动课件",
+      "body_snippet": "标记：pico-8274d37bc511\n\n🔬 孟德尔遗传定律 · 互动课件\n\n分离定律 与 自由组合定律 的可视化体验\n\n一、分离定律 — 豌豆高茎 × 矮茎\n\n高茎（DD）与矮茎（dd）杂交，F₁ 全为高茎（Dd）；F₁ 自交，F₂ 高茎:矮茎 ≈ 3:1。\n\n亲本（P）\nDD × dd\n\nF₁：全为 高茎（Dd）\n\n配子棋盘（F₂ 方格）\nF₂ 世代统计\n重置\n二、分离定律 — 配子棋盘\n\nF₁（Dd）产生的配子：D : d = 1:1。受精随机组合得到 F₂ 基因型",
+      "button_count": 6,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

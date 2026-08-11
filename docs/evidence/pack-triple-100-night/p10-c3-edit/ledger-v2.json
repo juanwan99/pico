@@ -1,0 +1,116 @@
+{
+  "conv": "5c9cb94c-7a70-4470-b340-5973dae9a896",
+  "run": {
+    "id": "9863f45f-289f-4f2a-9535-f03278ac4403",
+    "status": "succeeded",
+    "model": "pico-agent",
+    "error": null,
+    "cancel_requested": false
+  },
+  "delivery_summary": {
+    "status": "succeeded",
+    "artifact_count": 3,
+    "min_required": 1,
+    "titles": [
+      "周末市集·摊位菜单 v2.html",
+      "周末市集·摊位菜单 (Markdown版) v2.md",
+      "周末市集·摊位菜单 (Word版) v2.docx"
+    ],
+    "multi_deliverable": false,
+    "pipeline": false,
+    "revision": true,
+    "runnable_html": false,
+    "implicit_package": false,
+    "structure_item_count": 0,
+    "prior_artifact_count": 22,
+    "ok": true,
+    "human_titles": [
+      "周末市集·摊位菜单 v2.html",
+      "周末市集·摊位菜单 (Markdown版) v2.md",
+      "周末市集·摊位菜单 (Word版) v2.docx"
+    ],
+    "note": "Prefer run.status + delivery.summary + artifact list over client stream timeout alone. Scripts: scripts/wait_delivery_summary.py. Human lens: open files in app/browser; L0≠人类可用. G1: single-unit + ≥1 file is ok even if heuristic min was higher."
+  },
+  "terminal_events": [
+    "skill.snapshot",
+    "delivery.plan",
+    "run.durable",
+    "run.status",
+    "agent.step",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "agent.step",
+    "tool.call",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "agent.step",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "agent.step",
+    "artifact.created",
+    "artifact.created",
+    "tool.call",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "agent.step",
+    "artifact.created",
+    "tool.call",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "agent.step",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "agent.step",
+    "agent.step",
+    "agent.end",
+    "agent.settled",
+    "message.delta",
+    "run.status",
+    "artifact.created",
+    "delivery.summary"
+  ],
+  "assistant_text": "已为您交付「周末市集 · 摊位菜单」套装，4 款品名与价格齐全，共 3 个独立文件，可直接下载：\n\n周末市集·摊位菜单 (HTML).html — 交互菜单页，可随机点单、打印菜单，本地双击即可打开\n周末市集·摊位菜单 (Word版).docx — 便于编辑打印的 Word 菜单\n周末市集·摊位菜单 (Markdown版) — 清单式文本，可做笔记或贴到群里 请在右侧结果区 / 下载区点击对应文件名下载，用浏览器或 Word 本地打开即可。需要改品名、价格或加图的话，告诉我，我直接更新对应文件。\n\nAll v2 files are delivered and the HTML structure verified (has real button/script, no remote scripts).\n已按您的要求做出 v2 版本：原来 4 款价格全部上调 10%，并新增一款「季节限定」品项。共交付 3 个独立文件，可直接下载：\n\n周末市集·摊位菜单 v2.html — 交互菜单页，随机点单、打印菜单照常可用，新增「季节限定」橙色标签\n周末市集·摊位菜单 (Word版) v2.docx — 便于编辑打印的 Word 菜单\n周末市集·摊位菜单 (Markdown版) v2.md — 清单式文本，可做笔记或贴群 v2 价格变化：\n🥞 松软铜锣烧 ¥12 → ¥13.2\n🍓 草莓奶油卷 ¥18 → ¥19.8\n🧋 手打柠檬茶 ¥10 → ¥11\n🍰 巴斯克芝士 ¥22 → ¥24.2\n🆕 🍊 桂花酒酿圆子（季节限定） ¥16 请到右侧结果区 / 下载区点击对应文件名下载，用浏览器或 Word 打开即可。需要再调整价格、改季节限定品项，或加图，告诉我即可更新。",
+  "artifacts": [
+    {
+      "title": "周末市集·摊位菜单 v2.html",
+      "user_label": "周末市集·摊位菜单 v2.html",
+      "kind": "html",
+      "artifact_id": "dd312cb5-573e-4d3f-84a6-b84e3802bd40"
+    },
+    {
+      "title": "周末市集·摊位菜单 (Markdown版) v2.md",
+      "user_label": "周末市集·摊位菜单 (Markdown版) v2.md",
+      "kind": "file",
+      "artifact_id": "80491d09-71ca-441d-afe1-b8c104fc4a75"
+    },
+    {
+      "title": "周末市集·摊位菜单 (Word版) v2.docx",
+      "user_label": "周末市集·摊位菜单 (Word版) v2.docx",
+      "kind": "docx",
+      "artifact_id": "95ed0cae-86ba-4b6c-b981-2d9288f9f23e"
+    },
+    {
+      "title": "回复摘要",
+      "kind": "doc",
+      "artifact_id": "9b254d45-bd65-437b-8e3b-97d8aae88eff"
+    }
+  ]
+}
