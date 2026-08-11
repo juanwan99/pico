@@ -1,0 +1,44 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T04:20:43.941Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p1-reliable-land",
+  "scene": "s4-3",
+  "prompt": "【P1S4-3】请把下面这段「项目结项复盘转写」一次做完一整条交付链：①150字要点；②正式结项报告（可下载Markdown，含成果/教训/遗留三节）；③遗留问题清单（责任人+期限+勾选框）；④结项通知文案（可复制）。材料：数据中台项目按期上线，核心指标查询提速60%；过程中跨部门沟通成本高，需求变更频繁；测试阶段遗留3个低优先级缺陷；项目经理决定下月做一次复盘会并输出复用资产，架构师两周内交技术复盘文档。请交付真实可下载文件（至少：结项报告+遗留清单），末尾诚实说明无外发通道。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "2a1c1bc6169c8b7d977ccd008ebe75ad99a3c019",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/1ba0d40f-7409-44b6-b197-be7512b9e7fd",
+  "out_dir": "docs/evidence/pack-p1-reliable-land/s4-3",
+  "frames": {
+    "V0": "docs/evidence/pack-p1-reliable-land/s4-3/V0-send.png",
+    "V1": "docs/evidence/pack-p1-reliable-land/s4-3/V1-process-main.png",
+    "V2": "docs/evidence/pack-p1-reliable-land/s4-3/V2-final.png",
+    "V3": "docs/evidence/pack-p1-reliable-land/s4-3/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p1-reliable-land/s4-3/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": false,
+    "main_delivery_strip": true,
+    "note": "open clicked; iframe not detected"
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

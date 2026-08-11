@@ -1,0 +1,44 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T03:45:22.508Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p1-reliable-land",
+  "scene": "s1-1",
+  "prompt": "【P1S1-1】请把下面这段「项目周报口述转写」一次做完一整条交付链，不要只做一步：①先写150字要点摘要；②生成一份正式项目周报文档（可下载Markdown，含进展/风险/下周计划三节）；③从周报提取行动清单（责任人+时限+勾选框）；④把行动清单写成可复制的群通知文案。材料：后端组这周把订单接口延迟从800ms降到120ms；前端组完成新版结算页开发，待联调；测试组发现支付回调偶发502，已提单给第三方；项目经理定下周完成全链路压测，测试负责人周五前出压测方案。请交付真实可下载文件（至少：周报+行动清单），末尾诚实说明：本环境无真实外发通道，群文案以可复制文本交付。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "1c1b740e19271a42195444609b92a3322475888f",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/ef1de831-b58b-450e-8a98-a17647313c34",
+  "out_dir": "docs/evidence/pack-p1-reliable-land/s1-1",
+  "frames": {
+    "V0": "docs/evidence/pack-p1-reliable-land/s1-1/V0-send.png",
+    "V1": "docs/evidence/pack-p1-reliable-land/s1-1/V1-process-main.png",
+    "V2": "docs/evidence/pack-p1-reliable-land/s1-1/V2-final.png",
+    "V3": "docs/evidence/pack-p1-reliable-land/s1-1/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p1-reliable-land/s1-1/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": false,
+    "main_delivery_strip": true,
+    "note": "open clicked; iframe not detected"
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
