@@ -75,7 +75,13 @@ export function humanizeRunError(raw?: string | null, userMessage?: string | nul
     return null;
   }
   const low = text.toLowerCase();
-  if (low.includes('owner was lost') || low.includes('api restart') || low.includes('greenlet')) {
+  if (
+    low.includes('owner was lost') ||
+    low.includes('api restart') ||
+    low.includes('greenlet') ||
+    low.includes('terminated') ||
+    low.includes('processing the request: terminated')
+  ) {
     return '服务维护或重启导致任务中断，请打开后点「重新运行」。';
   }
   if (low.includes('traceback') || text.length > 120) {

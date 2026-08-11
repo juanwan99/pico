@@ -80,6 +80,20 @@ def test_api_restart_owner_lost_is_human_with_rerun_cta() -> None:
     assert "停止生成" not in cancelled  # not the input-bar screen-only copy
 
 
+def test_stream_terminated_english_is_human_with_rerun_cta() -> None:
+    """LibreChat main bubble often surfaces this after process kill — never leave raw English."""
+    for raw in (
+        "terminated",
+        "An error occurred while processing the request: terminated",
+        "Something went wrong. Here's the specific error message we encountered: terminated",
+    ):
+        msg = user_message_for_error(raw)
+        assert "维护" in msg or "重启" in msg
+        assert "重新运行" in msg
+        assert "terminated" not in msg.lower()
+        assert "something went wrong" not in msg.lower()
+
+
 def test_enrich_restart_payload_sets_user_message() -> None:
     p = enrich_fail_payload(
         {
