@@ -661,14 +661,18 @@ export function usePicoTaskLedger(
       return () => window.clearInterval(id);
     }
     // After the ledger reaches a terminal state, refresh a few times for artifacts.
+    // #461 PR-A2: trigger immediately + tighter poll so multi-file chips (e.g.
+    // C2 5 files) render in ~1s instead of lagging 4×1.5s after settle — avoids
+    // "ledger green but UI shows fewer files" on first paint after completion.
     let n = 0;
+    setTick((t) => t + 1);
     const id = window.setInterval(() => {
       n += 1;
       setTick((t) => t + 1);
-      if (n >= 4) {
+      if (n >= 6) {
         window.clearInterval(id);
       }
-    }, 1500);
+    }, 500);
     return () => window.clearInterval(id);
   }, [isSubmitting, conversationId, activeRun, recovering]);
 
