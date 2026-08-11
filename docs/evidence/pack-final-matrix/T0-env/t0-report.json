@@ -1,0 +1,42 @@
+{
+  "tip": {
+    "ok": true,
+    "git_sha": "502e1f6fd5d3f5999b43303de91b16de1375f26a",
+    "service": "pico-api"
+  },
+  "probes": {
+    "/api/pico/health": {
+      "status": 401,
+      "body": "{\"message\":\"No auth token\"}"
+    },
+    "/api/pico/runtime": {
+      "status": 401,
+      "body": "{\"message\":\"No auth token\"}"
+    },
+    "/api/health": {
+      "status": 404,
+      "body": "{\"message\":\"Endpoint not found\"}"
+    },
+    "/api/pico/status": {
+      "status": 401,
+      "body": "{\"message\":\"No auth token\"}"
+    },
+    "/api/pico/tip": {
+      "status": 200,
+      "body": "{\"ok\":true,\"git_sha\":\"502e1f6fd5d3f5999b43303de91b16de1375f26a\",\"service\":\"pico-api\"}"
+    }
+  },
+  "withAuth": {
+    "token_found": false,
+    "cookie_len": 12,
+    "/api/pico/health": {
+      "status": 401,
+      "body": "{\"message\":\"No auth token\"}"
+    },
+    "/api/pico/runtime": {
+      "status": 401,
+      "body": "{\"message\":\"No auth token\"}"
+    }
+  },
+  "url": "https://pico.aivia.asia/c/new"
+}
