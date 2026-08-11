@@ -56,7 +56,7 @@ def test_require_marker_still_rejects_control_chars() -> None:
 _tb = None
 try:  # edu_adapter needs datetime.UTC (py3.11+); CI runs 3.12 so this is fine
     from pico_orchestrator import tools_builtin as _tb
-except Exception:  # pragma: no cover - local py3.10 fallback
+except ImportError:  # pragma: no cover - local py3.10 fallback
     _tb = None
 
 
