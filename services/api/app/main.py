@@ -92,8 +92,8 @@ async def lifespan(_app: FastAPI):
         try:
             async with factory() as session:
                 recon = await run_service.reconcile_orphaned_runs(session)
-        except Exception:
-            recon = {"error": 1}
+        except Exception as exc:  # noqa: BLE001 — shutdown must not block process exit
+            recon = {"error": 1, "type": type(exc).__name__}
         # Structured one-liner for deploy logs (no secrets).
         print(
             f"[pico] shutdown drain waited={drain.get('waited')} "
