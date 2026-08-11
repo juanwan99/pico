@@ -1681,6 +1681,7 @@ async def chat_completions(
 
         _track_inflight(bg_task)
         saw_text = False
+        pending_status: list[str] = []
         detach = settings.pico_run_detach_on_disconnect
         try:
             while True:
@@ -1697,17 +1698,27 @@ async def chat_completions(
                         continue
                 if kind == "delta":
                     saw_text = True
+                    # Drop buffered system chrome (「正在准备…」/heartbeat) —
+                    # never leak it into the settled bubble (#461 L1).
+                    pending_status.clear()
                     yield chunk({"content": str(payload)})
                 elif kind == "status":
-                    # only show status if no answer yet (tool path UX)
+                    # Buffer status chrome; only flush on the failure path where
+                    # no product text ever arrives (user still sees progress).
                     if not saw_text:
-                        yield chunk({"content": str(payload)})
+                        pending_status.append(str(payload))
                 elif kind == "error":
+                    if not saw_text and pending_status:
+                        for p in pending_status:
+                            yield chunk({"content": p})
                     yield chunk({"content": f"【错误】{user_message_for_error(str(payload))}"})
                     break
                 elif kind == "done":
                     result = payload
                     if not saw_text:
+                        # final_text is already complete + human-package cleaned;
+                        # buffered chrome must NOT be prepended (would re-pollute
+                        # the bubble with「正在准备…」).
                         text = getattr(result, "final_text", None) or ""
                         if not text and getattr(result, "status", None) == "failed":
                             # Prefer Chinese user_message for timeout / max_steps / token_cap

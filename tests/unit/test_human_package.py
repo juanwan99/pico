@@ -274,3 +274,71 @@ def test_strips_preparing_prefix_on_settled_bubble() -> None:
     assert "正在准备" not in out
     assert "已完成 v2 更新" in out
     assert "周末市集摊位菜单-v2.html" in out
+
+
+def test_strips_all_three_deliverables_created_english() -> None:
+    """#461 L1: 'All three deliverables are created and the HTML structure
+    passed verification.' (C3 p4 production hit) must not linger."""
+    raw = (
+        "正在准备…\n"
+        "All three deliverables are created and the HTML structure passed "
+        "verification. \n"
+        "---\n"
+        "已为您做好一页周末市集摊位菜单，共 4 个品名与价格：\n"
+        "周末市集摊位菜单.html — 网页版\n"
+    )
+    out = sanitize_user_facing_text(
+        raw, artifact_titles=["周末市集摊位菜单.html"]
+    )
+    assert "deliverables are created" not in out
+    assert "passed verification" not in out
+    assert "HTML structure" not in out
+    assert "正在准备" not in out
+    assert "已为您做好一页周末市集摊位菜单" in out
+
+
+def test_strips_html_structure_passed_verification_english() -> None:
+    """#461 L1: 'The HTML structure passed verification.' is EN engineer
+    self-check monologue — strip whole clause, keep Chinese copy."""
+    raw = (
+        "The HTML structure passed verification. "
+        "文件已生成，请下载：\n周末市集菜单.html — 网页版\n"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=["周末市集菜单.html"])
+    assert "passed verification" not in out
+    assert "文件已生成" in out
+    assert "周末市集菜单.html" in out
+
+
+def test_strips_all_counted_files_delivered_english() -> None:
+    """#461 L1: 'All 3 files delivered' / 'All three files have been delivered'
+    are delivery confirmations, not product copy."""
+    raw = (
+        "All 3 files delivered successfully. "
+        "共交付 3 个可下载文件：\n说明文档.md — 使用说明\n"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=["说明文档.md"])
+    assert "All 3 files delivered" not in out
+    assert "共交付 3 个可下载文件" in out
+
+    raw2 = (
+        "All three files have been delivered. "
+        "文件已就绪：\n说明文档.md — 使用说明\n"
+    )
+    out2 = sanitize_user_facing_text(raw2, artifact_titles=["说明文档.md"])
+    assert "All three files" not in out2
+    assert "文件已就绪" in out2
+
+
+def test_strips_here_is_delivery_summary_english() -> None:
+    """#461 L1: 'Here is the delivery summary.' (non-contracted Here is) must
+    also be stripped like 'Here's the delivery summary'."""
+    raw = (
+        "Here is the delivery summary. "
+        "已完成交付：\n周末市集菜单.html — 网页版\n"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=["周末市集菜单.html"])
+    assert "Here is the delivery summary" not in out
+    assert "delivery summary" not in out
+    assert "已完成交付" in out
+
