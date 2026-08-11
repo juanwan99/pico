@@ -1,0 +1,106 @@
+{
+  "conv": "6bfe2a31-8f1b-4aa7-94ef-f6c1fe9897c3",
+  "run": {
+    "id": "a679cc7b-13ec-414e-aeb1-a4370ef3c598",
+    "status": "succeeded",
+    "model": "pico-agent",
+    "error": null,
+    "cancel_requested": false
+  },
+  "delivery_summary": {
+    "status": "succeeded",
+    "artifact_count": 3,
+    "min_required": 1,
+    "titles": [
+      "周末市集摊位菜单v2.html",
+      "周末市集菜单v2.docx",
+      "周末市集菜单v2.md"
+    ],
+    "multi_deliverable": false,
+    "pipeline": false,
+    "revision": true,
+    "runnable_html": false,
+    "implicit_package": false,
+    "structure_item_count": 0,
+    "prior_artifact_count": 18,
+    "ok": true,
+    "human_titles": [
+      "周末市集摊位菜单v2.html",
+      "周末市集菜单v2.docx",
+      "周末市集菜单v2.md"
+    ],
+    "note": "Prefer run.status + delivery.summary + artifact list over client stream timeout alone. Scripts: scripts/wait_delivery_summary.py. Human lens: open files in app/browser; L0≠人类可用. G1: single-unit + ≥1 file is ok even if heuristic min was higher."
+  },
+  "terminal_events": [
+    "skill.snapshot",
+    "delivery.plan",
+    "run.durable",
+    "run.status",
+    "agent.step",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "agent.step",
+    "tool.call",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "agent.step",
+    "artifact.created",
+    "artifact.created",
+    "artifact.created",
+    "tool.call",
+    "tool.call",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "tool.result",
+    "run.checkpoint",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "agent.step",
+    "tool.call",
+    "tool.result",
+    "run.checkpoint",
+    "agent.step",
+    "agent.step",
+    "agent.step",
+    "agent.end",
+    "agent.settled",
+    "message.delta",
+    "run.status",
+    "artifact.created",
+    "delivery.summary"
+  ],
+  "assistant_text": "三份周末市集摊位菜单已生成，均为 4 个品名 + 价格，可直接下载使用：\n\n周末市集摊位菜单.html — 交互网页版：点「＋」可累加数量并自动合计，支持一键「打印菜单」（可存为 PDF 张贴），双击用浏览器打开即可用。\n周末市集菜单.md — 纯文本清单版，方便手机查看或直接改价。\n周末市集菜单.docx — Word 文档版，适合打印、排版或发给档口协作。 在右侧结果区找到上面的文件名点击下载，本地打开即可；想改价格或品名，直接编辑对应文件里的数字和名称就行。\n\nv2 三份菜单已更新交付，全部包含价格上调约 10% 及新增的「季节限定」品项：\n\n周末市集摊位菜单v2.html — 交互网页版：5 个品项（含「花生麻糍杯·季节限定」），点「＋」累加数量、自动合计，支持「打印菜单」存成 PDF。双击浏览器打开即可。\n周末市集菜单v2.md — 纯文本清单版，方便手机查看或直接改价。\n周末市集菜单v2.docx — Word 打印排版版，适合发给档口或存挡。 新价格经四舍五入取整：手作刈包 ¥20、冬瓜茶 ¥17、炭烤玉米 ¥13、车轮饼 ¥18、季节限定花生麻糍杯 ¥15。 在右侧结果区点击对应文件名下载，本地打开即可；想改价格或品名，直接编辑文件里的数字和名称即可。",
+  "artifacts": [
+    {
+      "title": "周末市集摊位菜单v2.html",
+      "user_label": "周末市集摊位菜单v2.html",
+      "kind": "html",
+      "artifact_id": "f19fc003-2933-4aa5-8b7a-0378c6324825"
+    },
+    {
+      "title": "周末市集菜单v2.docx",
+      "user_label": "周末市集菜单v2.docx",
+      "kind": "docx",
+      "artifact_id": "ae87b39f-6198-4556-9027-99b084176d84"
+    },
+    {
+      "title": "周末市集菜单v2.md",
+      "user_label": "周末市集菜单v2.md",
+      "kind": "file",
+      "artifact_id": "0dd37e90-3ad2-4fc5-a614-5a513df9559b"
+    },
+    {
+      "title": "回复摘要",
+      "kind": "doc",
+      "artifact_id": "5b2e93e7-759d-461e-aafa-84e15dd2e702"
+    }
+  ]
+}

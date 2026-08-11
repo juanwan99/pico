@@ -1,0 +1,51 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-11T19:07:20.349Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-triple-100-night",
+  "scene": "p10-c1-mendel",
+  "model": "pico-agent",
+  "prompt": "请做一页「孟德尔遗传定律」互动 HTML 课件，精致一点，可下载可打开；要有清晰图示或交互，不要系统侧自检墙。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "c6186d2dcf5c5ec27a4589112a0cb0ff2cc3409c",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/100cc8c4-41eb-4b30-a386-286e7b94de7f",
+  "out_dir": "docs/evidence/pack-triple-100-night/p10-c1-mendel",
+  "frames": {
+    "V0": "docs/evidence/pack-triple-100-night/p10-c1-mendel/V0-send.png",
+    "V1": "docs/evidence/pack-triple-100-night/p10-c1-mendel/V1-process-main.png",
+    "V2": "docs/evidence/pack-triple-100-night/p10-c1-mendel/V2-final.png",
+    "V3": "docs/evidence/pack-triple-100-night/p10-c1-mendel/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-triple-100-night/p10-c1-mendel/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "孟德尔遗传定律 · 互动课件",
+      "body_snippet": "标记：pico-04ac1e57f35f\n\n🌱 孟德尔遗传定律 互动课件\n豌豆杂交实验 · 分离定律 · 自由组合定律 · 交互模拟\n① 选择实验\n单因子杂交（圆粒×皱粒）\n杂合×杂合（F₁ 自交）\n双因子杂交（黄圆×绿皱）\n亲本 P ▶ Y圆粒 × y皱粒\nYY\nYY 圆粒\n×\nyy\nyy 皱粒\n↓\nYy\nF₁ 全为 Yy 圆粒\n\nF₁ 自交产生配子 Y 与 y 各 ½，施肥尔顿 Punnett 方格得子二代表型 圆:皱 = 3 : 1。\n\n♀\\♂\tY (½)\ty (½)",
+      "button_count": 3,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

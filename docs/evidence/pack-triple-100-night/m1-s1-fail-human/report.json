@@ -1,0 +1,31 @@
+{
+  "tip": {
+    "ok": true,
+    "git_sha": "c6186d2dcf5c5ec27a4589112a0cb0ff2cc3409c",
+    "service": "pico-api"
+  },
+  "failUrl": "https://pico.aivia.asia/c/fa731e9b-5809-4a95-9664-8fe4ca0e3dd6",
+  "conversation": {
+    "hasSomething": false,
+    "hasOwnerLost": false,
+    "hasBareTerminated": false,
+    "hasChineseFail": true,
+    "snippets": [
+      "失败",
+      "失败：服务维护或重启导致本次任务中断。请点「重新运行」继续；刷新后侧栏与主区状态应一致。",
+      "重新运行",
+      "服务维护或重启导致本次任务中断。请点「重新运行」继续；侧栏失败说明与主区应一致。",
+      "失败：服务维护或重启导致本次任务中断。请点「重新运行」继续；刷新后侧栏与主区状态应一致。",
+      "步骤 1 · model · 终态 · 失败",
+      "重新运行",
+      "运行失败",
+      "服务维护或重启导致本次任务中断。请点「重新运行」继续；刷新后侧栏与主区状态应一致。 · 错误码：api.restart",
+      "可点击上方「重新运行」再试；过程步骤见上方时间线"
+    ],
+    "pass": true
+  },
+  "homeChinese": false,
+  "homeEnglish": false,
+  "pass_v1": true,
+  "claim_wb": "NO"
+}

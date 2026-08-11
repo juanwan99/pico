@@ -1,0 +1,51 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-11T18:57:17.023Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-triple-100-night",
+  "scene": "p9-c1-mendel",
+  "model": "pico-agent",
+  "prompt": "请做一页「孟德尔遗传定律」互动 HTML 课件，精致一点，可下载可打开；要有清晰图示或交互，不要系统侧自检墙。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "c6186d2dcf5c5ec27a4589112a0cb0ff2cc3409c",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/0a1884d0-c803-4838-b47c-4e5e06ec71c6",
+  "out_dir": "docs/evidence/pack-triple-100-night/p9-c1-mendel",
+  "frames": {
+    "V0": "docs/evidence/pack-triple-100-night/p9-c1-mendel/V0-send.png",
+    "V1": "docs/evidence/pack-triple-100-night/p9-c1-mendel/V1-process-main.png",
+    "V2": "docs/evidence/pack-triple-100-night/p9-c1-mendel/V2-final.png",
+    "V3": "docs/evidence/pack-triple-100-night/p9-c1-mendel/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-triple-100-night/p9-c1-mendel/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "孟德尔遗传定律 · 互动课件",
+      "body_snippet": "标记：pico-f6efdab93ef9\n\n🌱 孟德尔遗传定律\n分离定律 · 自由组合定律 · 孟德尔豌豆实验\n🧬 孟德尔豌豆实验（7 对相对性状）\n圆粒 vs 皱粒\n种子形状\n黄色 vs 绿色\n子叶颜色\n高茎 vs 矮茎\n茎高\n红花 vs 白花\n花色\n定律一 · 分离定律\n交互\n\n纯合高茎(DD) × 纯合矮茎(dd) → F₁ 全为高茎(Dd)；F₁ 自交 → F₂ 高茎:矮茎 ≈ 3:1\n\nD\td\nD\td\n\n配子结合（每格 = 一种 F₂ 基因型）\n\n▶ 模拟一次自",
+      "button_count": 2,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
