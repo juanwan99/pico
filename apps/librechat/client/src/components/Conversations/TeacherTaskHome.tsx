@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Clock3, ListTodo, MessageSquarePlus } from 'lucide-react';
-import { labelForLatestRun, type PicoTask } from '~/data-provider/pico/api';
+import { humanizeRunError, labelForLatestRun, type PicoTask } from '~/data-provider/pico/api';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -78,21 +78,11 @@ export function taskFailureHint(task: PicoTask): string | null {
   if (!run || run.status !== 'failed') {
     return null;
   }
-  const raw = (run.error || '').trim();
-  if (!raw) {
-    return '任务未完成，可打开后重试。';
+  const mapped = humanizeRunError(run.error, run.user_message ?? null);
+  if (mapped) {
+    return mapped.length > 80 ? `${mapped.slice(0, 80)}…` : mapped;
   }
-  const low = raw.toLowerCase();
-  if (low.includes('traceback') || raw.length > 120) {
-    return '任务失败，请打开查看详情后重试。';
-  }
-  if (low.includes('token') || raw.includes('长度')) {
-    return '可能因内容过长失败，请缩短后重试。';
-  }
-  if (low.includes('timeout') || raw.includes('超时')) {
-    return '处理超时，请重试或把问题拆短。';
-  }
-  return raw.length > 80 ? `${raw.slice(0, 80)}…` : raw;
+  return '任务未完成，可打开后重试。';
 }
 
 function TaskRow({ task, onOpen }: { task: PicoTask; onOpen: () => void }) {

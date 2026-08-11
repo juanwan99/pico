@@ -36,6 +36,8 @@ services:
       args:
         PICO_GIT_SHA: ${PICO_GIT_SHA:-unknown}
     restart: unless-stopped
+    # B1: allow uvicorn lifespan drain (~45s) before SIGKILL on deploy recreate.
+    stop_grace_period: 60s
     network_mode: host
     # CRITICAL: host network + public IP risk — always bind loopback only
     command:

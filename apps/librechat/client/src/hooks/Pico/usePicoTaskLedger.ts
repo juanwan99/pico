@@ -323,7 +323,36 @@ export function usePicoTaskLedger(
   const cancelRun = useCallback(async (runId?: string) => {
     const currentRun = runRef.current;
     const targetRunId = runId ?? (isActiveRun(currentRun) ? currentRun.id : undefined);
-    if (!targetRunId || (currentRun?.id === targetRunId && !isActiveRun(currentRun))) {
+    const taskId = taskRef.current?.id;
+    // Allow cancel by task when stream is live but run id not yet bound (V-D).
+    if (!targetRunId) {
+      if (!taskId) {
+        setCancelError('停止运行失败：未找到正在运行的任务');
+        return;
+      }
+      setCancelRequestInFlight(true);
+      setCancelError(null);
+      try {
+        const batch = await cancelPicoTaskActiveRuns(taskId);
+        const resultRun = batch.runs[0] ?? null;
+        if (resultRun) {
+          runRef.current = resultRun;
+          setRun(resultRun);
+        }
+        setTick((n) => n + 1);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        setCancelError(
+          message.includes('401')
+            ? '停止运行失败：登录已失效，请刷新页面后重新登录'
+            : '停止运行失败，请稍后重试',
+        );
+      } finally {
+        setCancelRequestInFlight(false);
+      }
+      return;
+    }
+    if (currentRun?.id === targetRunId && !isActiveRun(currentRun)) {
       setCancelError('停止运行失败：未找到正在运行的任务');
       return;
     }
@@ -345,7 +374,6 @@ export function usePicoTaskLedger(
         resultRun = result.run;
       } catch (firstError) {
         const message = firstError instanceof Error ? firstError.message : String(firstError);
-        const taskId = taskRef.current?.id;
         if (taskId && (message.includes('409') || message.includes('404'))) {
           const batch = await cancelPicoTaskActiveRuns(taskId);
           resultRun = batch.runs[0] ?? runRef.current;

@@ -117,6 +117,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const cancellableRunId = ['queued', 'running', 'preparing'].includes(ledger.run?.status || '')
     ? ledger.run?.id
     : undefined;
+  // Show task-bar「停止任务」whenever stream is live or ledger run is active.
+  // Distinct from input-bar「停止生成」(screen-only).
+  const canCancelTask = Boolean(cancellableRunId) || isSubmitting;
   const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '仍在处理…' : undefined);
   const showResultPanel = resultOpen && !isLandingPage && conversationId !== Constants.SEARCH;
 
@@ -191,7 +194,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                         ? ledger.statusLabel
                         : null
                     }
-                    canCancel={Boolean(cancellableRunId)}
+                    canCancel={canCancelTask}
                     cancelling={ledger.cancelling}
                     onCancel={() => void ledger.cancelRun(cancellableRunId)}
                     canRerun={['failed', 'succeeded', 'cancelled'].includes(

@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-11T02:49:47.404Z",
+  "base": "https://pico.aivia.asia",
+  "card": "T-CLOSE-P0P1",
+  "scene": "g1-playable",
+  "prompt": "做一个可玩单文件 HTML 小游戏（猜数字 1-20，可再玩），交付后打开人页。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "ed6f5de324699c690bac66ca6efcbb6be7b67e5d",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/abe076a2-2208-4b40-b4d2-7cd25a143203",
+  "out_dir": "docs/evidence/close-p0p1/y1/g1-playable",
+  "frames": {
+    "V0": "docs/evidence/close-p0p1/y1/g1-playable/V0-send.png",
+    "V1": "docs/evidence/close-p0p1/y1/g1-playable/V1-process-main.png",
+    "V2": "docs/evidence/close-p0p1/y1/g1-playable/V2-final.png",
+    "V3": "docs/evidence/close-p0p1/y1/g1-playable/V3-open-product.png",
+    "V2_390": "docs/evidence/close-p0p1/y1/g1-playable/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "猜数字 1-20 · 单文件小游戏",
+      "body_snippet": "标记：guess-game\n\n猜数字 1–20\n\n我在心里想了一个 1 到 20 之间的数字，来猜猜看？\n\n输入一个 1–20 的数字，开始吧！\n猜\n目标：1–20\n已猜：0 次\n记录\n还没有猜测",
+      "button_count": 2,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

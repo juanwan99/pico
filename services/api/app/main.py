@@ -86,6 +86,20 @@ async def lifespan(_app: FastAPI):
         yield
     finally:
         await automation_service.stop_scheduler()
+        # B1 soft drain: give in-process owners a short window before hard kill
+        # (docker stop_grace_period must be ≥ this). Then reconcile leftovers.
+        drain = await run_service.drain_inflight_runs(timeout_s=45.0)
+        try:
+            async with factory() as session:
+                recon = await run_service.reconcile_orphaned_runs(session)
+        except Exception as exc:  # noqa: BLE001 — shutdown must not block process exit
+            recon = {"error": 1, "type": type(exc).__name__}
+        # Structured one-liner for deploy logs (no secrets).
+        print(
+            f"[pico] shutdown drain waited={drain.get('waited')} "
+            f"remaining={drain.get('remaining')} recon={recon}",
+            flush=True,
+        )
 
 
 app = FastAPI(
@@ -741,12 +755,19 @@ async def tasks(
         run = latest.get(task.id)
         if run is not None:
             # Compact summary for list UIs — no prompt body.
+            # user_message: teacher list must not depend on client-side English mapping alone.
+            from pico_orchestrator.user_errors import user_message_for_error
+
+            user_msg = None
+            if run.status == "failed" and run.error:
+                user_msg = user_message_for_error(run.error)
             item["latest_run"] = {
                 "id": run.id,
                 "status": run.status,
                 "cancel_requested": bool(run.cancel_requested),
                 "model": run.model,
                 "error": run.error,
+                "user_message": user_msg,
                 "started_at": run.started_at.isoformat() if run.started_at else None,
                 "ended_at": run.ended_at.isoformat() if run.ended_at else None,
             }
