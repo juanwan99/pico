@@ -1,0 +1,42 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T03:10:42.232Z",
+  "base": "https://pico.aivia.asia",
+  "card": "ds-deep-w1-w5",
+  "scene": "w5",
+  "prompt": "【W5深测·脏活链】请把下面这段「周例会转写材料」一次做完一整条脏活链，不要只做其中一步：①摘要（200字内要点）；②生成正式会议纪要文档（可下载Markdown，含背景/决议/行动/风险）；③从纪要提取待办清单（责任人+截止日+勾选框）；④把待办写成一则可复制的群消息文案（含问候+3条待办+截止提醒+收尾）。材料：周例会，销售张伟汇报本周签了3单但回款慢；运营刘敏说用户增长停滞，建议做暑期活动；技术陈晨反馈支付接口第三方延迟，需对方配合；经理决定下周定暑期活动方案，张伟周五前出回款催收计划。请交付真实可下载文件（至少：纪要+待办清单），并在末尾诚实说明：本环境无真实外发通道，消息文案以可复制文本交付。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "1c1b740e19271a42195444609b92a3322475888f",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/8b343913-a5ca-477a-a923-5e532febf874",
+  "out_dir": "docs/evidence/ds-deep-w1-w5/w5",
+  "frames": {
+    "V0": "docs/evidence/ds-deep-w1-w5/w5/V0-send.png",
+    "V1": "docs/evidence/ds-deep-w1-w5/w5/V1-process-main.png",
+    "V2": "docs/evidence/ds-deep-w1-w5/w5/V2-final.png",
+    "V3": "docs/evidence/ds-deep-w1-w5/w5/V3-open-product.png",
+    "V2_390": "docs/evidence/ds-deep-w1-w5/w5/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "same-tab",
+    "human_page": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

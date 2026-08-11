@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T02:57:08.553Z",
+  "base": "https://pico.aivia.asia",
+  "card": "ds-deep-w1-w5",
+  "scene": "w1",
+  "prompt": "【W1深测】请做可下载的 HTML 习惯打卡单页教程：大标题、每日打卡按钮（点了+1天）、连续天数统计、积分累计。要浏览器打开就能用，离线可用。工具落盘，勿贴源码。完成后只用人话说明文件名与打开方式，并诚实说明：本环境无微信，以等价 Web 单页交付。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "1c1b740e19271a42195444609b92a3322475888f",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/d0d0b79a-a50a-497f-a123-ab1e960d203e",
+  "out_dir": "docs/evidence/ds-deep-w1-w5/w1",
+  "frames": {
+    "V0": "docs/evidence/ds-deep-w1-w5/w1/V0-send.png",
+    "V1": "docs/evidence/ds-deep-w1-w5/w1/V1-process-main.png",
+    "V2": "docs/evidence/ds-deep-w1-w5/w1/V2-final.png",
+    "V3": "docs/evidence/ds-deep-w1-w5/w1/V3-open-product.png",
+    "V2_390": "docs/evidence/ds-deep-w1-w5/w1/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "习惯打卡单页教程.html",
+      "body_snippet": "标记：习惯打卡 · 离线可用（W1深测版）\n\n✅ 每日习惯打卡\n离线单页 · 数据保存在本浏览器\n0\n连续天数\n0\n累计积分\n0\n总打卡次数\n🗓️ 今日打卡（+1 天 / +10 分） ↺ 重置今天的数据\n点击「今日打卡」自动累加连续天数与积分。数据仅存于你的浏览器，完全离线可用。",
+      "button_count": 2,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
