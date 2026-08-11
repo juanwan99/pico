@@ -1676,6 +1676,10 @@ async def chat_completions(
                     await q.put(("error", e))
 
         bg_task = asyncio.create_task(run())
+        # Share drain set with run_service so deploy SIGTERM can soft-wait.
+        from app.run_service import _track_inflight
+
+        _track_inflight(bg_task)
         saw_text = False
         detach = settings.pico_run_detach_on_disconnect
         try:

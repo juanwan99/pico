@@ -152,6 +152,9 @@ async def start_durable_job(
     )
     _ACTIVE[run_id] = bg
     bg.add_done_callback(lambda _t, rid=run_id: _ACTIVE.pop(rid, None))
+    from app.run_service import _track_inflight
+
+    _track_inflight(bg)
     return {
         "task_id": task_id,
         "run_id": run_id,

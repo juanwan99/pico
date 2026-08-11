@@ -31,6 +31,39 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+# In-process run owners (Phase-1 single-node). Tracked so SIGTERM can drain.
+_inflight_run_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _track_inflight(task: asyncio.Task[Any]) -> None:
+    _inflight_run_tasks.add(task)
+
+    def _done(t: asyncio.Task[Any]) -> None:
+        _inflight_run_tasks.discard(t)
+
+    task.add_done_callback(_done)
+
+
+async def drain_inflight_runs(*, timeout_s: float = 45.0) -> dict[str, int]:
+    """Wait for in-process run tasks before process exit (B1 soft drain).
+
+    Does not invent a second worker OS: only awaits tasks already scheduled
+    in this event loop, then callers should reconcile any still-open ledger rows.
+    """
+    pending = {t for t in _inflight_run_tasks if not t.done()}
+    if not pending:
+        return {"waited": 0, "remaining": 0, "timed_out": 0}
+    done, still = await asyncio.wait(pending, timeout=max(0.0, timeout_s))
+    # Best-effort: cancel leftovers so lifespan can finish; reconcile will mark ledger.
+    for t in still:
+        t.cancel()
+    return {
+        "waited": len(done),
+        "remaining": len(still),
+        "timed_out": 1 if still else 0,
+    }
+
+
 @dataclass(frozen=True)
 class CancelResult:
     run: RunRow
@@ -353,7 +386,8 @@ async def retry_failed_run(session: AsyncSession, source_run: RunRow) -> RunRow:
 
 async def start_run_background(run_id: str, principal: Principal) -> None:
     """Schedule agent loop in-process (Phase 1 single-node)."""
-    asyncio.create_task(_execute_run(run_id, principal))
+    task = asyncio.create_task(_execute_run(run_id, principal))
+    _track_inflight(task)
 
 
 async def _execute_run(run_id: str, principal: Principal) -> None:

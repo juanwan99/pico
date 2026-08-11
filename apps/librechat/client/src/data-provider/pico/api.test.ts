@@ -1,5 +1,5 @@
 import { getTokenHeader } from 'librechat-data-provider';
-import { getPicoArtifactContent, labelForLatestRun } from './api';
+import { getPicoArtifactContent, humanizeRunError, labelForLatestRun } from './api';
 
 jest.mock('librechat-data-provider', () => ({
   getTokenHeader: jest.fn(),
@@ -51,5 +51,19 @@ describe('labelForLatestRun', () => {
     expect(labelForLatestRun({ id: '1', status: 'cancelled' })).toBe('已停止');
     expect(labelForLatestRun({ id: '1', status: 'failed' })).toBe('失败');
     expect(labelForLatestRun({ id: '1', status: 'succeeded' })).toBe('已完成');
+  });
+});
+
+describe('humanizeRunError', () => {
+  it('prefers server user_message', () => {
+    expect(humanizeRunError('run owner was lost', '服务维护或重启导致任务中断')).toContain(
+      '维护',
+    );
+  });
+
+  it('maps bare owner-lost English', () => {
+    const msg = humanizeRunError('run owner was lost during API restart');
+    expect(msg).toMatch(/重启|维护/);
+    expect(msg?.toLowerCase()).not.toContain('owner was lost');
   });
 });

@@ -26,6 +26,8 @@ export type PicoTaskLatestRun = {
   cancel_requested?: boolean;
   model?: string | null;
   error?: string | null;
+  /** Server-mapped Chinese failure line when status=failed. */
+  user_message?: string | null;
   started_at?: string | null;
   ended_at?: string | null;
 };
@@ -61,6 +63,25 @@ export function labelForLatestRun(run?: PicoTaskLatestRun | null): string | null
     default:
       return run.status;
   }
+}
+
+/** Map raw ledger error → short Chinese for list UIs (client fallback). */
+export function humanizeRunError(raw?: string | null, userMessage?: string | null): string | null {
+  if (typeof userMessage === 'string' && userMessage.trim()) {
+    return userMessage.trim();
+  }
+  const text = (raw || '').trim();
+  if (!text) {
+    return null;
+  }
+  const low = text.toLowerCase();
+  if (low.includes('owner was lost') || low.includes('api restart') || low.includes('greenlet')) {
+    return '服务维护或重启导致任务中断，请打开后点「重新运行」。';
+  }
+  if (low.includes('traceback') || text.length > 120) {
+    return '任务失败，请打开查看详情后重试。';
+  }
+  return text.length > 80 ? `${text.slice(0, 80)}…` : text;
 }
 
 export type PicoRun = {
