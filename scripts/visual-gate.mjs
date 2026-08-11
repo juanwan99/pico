@@ -50,6 +50,35 @@ function loadPlaywright() {
 
 const { chromium } = loadPlaywright();
 
+// Transient browser-network errors (flaky VPS / proxy) should not kill the
+// whole human-gate run. Retry navigation a few times before giving up.
+async function gotoRetry(
+  page,
+  url,
+  { waitUntil = 'domcontentloaded', timeout = 60000, tries = 4 } = {},
+) {
+  let lastErr;
+  for (let i = 1; i <= tries; i++) {
+    try {
+      await page.goto(url, { waitUntil, timeout });
+      return;
+    } catch (err) {
+      lastErr = err;
+      const msg = String(err?.message || err);
+      const transient =
+        /ERR_NETWORK_CHANGED|ERR_CONNECTION_RESET|ERR_CONNECTION_REFUSED|ERR_ABORTED|net::ERR_|timeout|Timeout|net::ERR_EMPTY_RESPONSE/i.test(
+          msg,
+        );
+      if (!transient) throw err;
+      console.log(
+        `gotoRetry: attempt ${i}/${tries} ${url} -> ${msg.split('\n')[0]}; retrying…`,
+      );
+      await page.waitForTimeout(1500 * i);
+    }
+  }
+  throw lastErr;
+}
+
 // #384 / #394 main-bubble one-strike patterns (fail-soft heuristic; human still reads PNGs)
 const MONOLOGUE_RES = [
   /\bgenerate_(?:html|docx|pptx)_document\b/i,
@@ -90,6 +119,7 @@ function parseArgs(argv) {
     timeoutMs: Number(process.env.PICO_VISUAL_TIMEOUT_MS || 240000),
     headed: process.env.PICO_VISUAL_HEADED === '1',
     skipProduct: process.env.PICO_VISUAL_SKIP_V3 === '1',
+    model: process.env.PICO_VISUAL_MODEL || '',
     help: false,
   };
   for (let i = 2; i < argv.length; i++) {
@@ -104,6 +134,7 @@ function parseArgs(argv) {
     else if (a === '--timeout-ms') out.timeoutMs = Number(next());
     else if (a === '--headed') out.headed = true;
     else if (a === '--skip-v3') out.skipProduct = true;
+    else if (a === '--model') out.model = next();
     else throw new Error(`unknown arg: ${a}`);
   }
   return out;
@@ -144,7 +175,13 @@ async function shot(page, filePath, opts = {}) {
 async function mainBubbleText(page) {
   // Prefer assistant message bubbles only — NOT the right engineer sidebar
   // (tool names there are expected; #384 veto is main-bubble only).
+  // Bug fix (#459 tooling): scope to assistant bubbles (.agent-turn) so the
+  // user's own prompt (which may legitimately say 不要系统侧自检墙) is NOT
+  // scanned as a monologue strike.
   const prefer = [
+    '[data-testid="messages-view"] .agent-turn [data-testid="message-content"]',
+    '[data-testid="messages-view"] .agent-turn .markdown',
+    '[data-testid="messages-view"] .agent-turn',
     '[data-testid="message-content"]',
     '[data-testid="messages-view"] .markdown',
     '[data-testid="messages-view"]',
@@ -178,7 +215,7 @@ function scanMonologue(text) {
 
 async function login(page, base, email, password) {
   const loginUrl = new URL('/login', base).toString();
-  await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await gotoRetry(page, loginUrl);
   await page.waitForTimeout(800);
 
   // Already in app?
@@ -211,14 +248,53 @@ async function login(page, base, email, password) {
   return { already: false };
 }
 
-async function goNewChat(page, base) {
+async function selectComposerModel(page, model) {
+  // Human-like: click the composer model chip (shows current model) then the
+  // dropdown option. NOTE: composer is NOT a <form>; it is
+  // textarea -> DIV.container -> DIV.composer (rounded-[16px]) which holds both
+  // the textarea and the model chip. Filter chip by model text to avoid the
+  // landing-page feature chips (also rounded-full).
+  const ta = await messageInput(page);
+  await ta.waitFor({ state: 'visible', timeout: 30000 });
+  const composer = ta.locator('xpath=../..');
+  const chip = composer
+    .locator('button[class*="rounded-full"]', { hasText: /Auto|pico-agent|kimi|Kimi/i })
+    .first();
+  await chip.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+  if (!(await chip.count())) {
+    throw new Error(`model select: composer chip not found (${model})`);
+  }
+  await chip.click();
+  await page.waitForTimeout(500);
+  const dropdown = chip.locator('xpath=..');
+  let option = dropdown.locator('button[class*="w-full"]', { hasText: model });
+  if (!(await option.count())) {
+    option = page.locator('button[class*="w-full"]', { hasText: model }).first();
+  }
+  if (!(await option.count())) {
+    await page.keyboard.press('Escape').catch(() => {});
+    throw new Error(`model select: option not found (${model})`);
+  }
+  await option.first().click();
+  await page.waitForTimeout(500);
+  const chipText = (await chip.innerText().catch(() => '')).trim();
+  if (!chipText.includes(model)) {
+    throw new Error(`model select: chip shows "${chipText}" not "${model}"`);
+  }
+  return chipText;
+}
+
+async function goNewChat(page, base, model) {
   const newUrl = new URL('/c/new', base).toString();
-  await page.goto(newUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await gotoRetry(page, newUrl);
   await page.waitForTimeout(1200);
   // dismiss modals if any
   const close = page.getByRole('button', { name: /close|关闭|Got it|知道了/i });
   if (await close.count()) {
     await close.first().click().catch(() => {});
+  }
+  if (model) {
+    await selectComposerModel(page, model);
   }
 }
 
@@ -456,7 +532,7 @@ Env: DEMO_EMAIL DEMO_PASSWORD (or PICO_E2E_*) PICO_PUBLIC_BASE
     const page = await context.newPage();
 
     await login(page, args.base, email, password);
-    await goNewChat(page, args.base);
+    await goNewChat(page, args.base, args.model);
 
     const input = await messageInput(page);
     await input.waitFor({ state: 'visible', timeout: 30000 });
@@ -532,6 +608,7 @@ Env: DEMO_EMAIL DEMO_PASSWORD (or PICO_E2E_*) PICO_PUBLIC_BASE
     base: args.base,
     card: args.card,
     scene: args.scene,
+    model: args.model || 'auto',
     prompt: args.prompt,
     tip: { url: tip.url, git_sha: tip.git_sha, service: tip.service },
     conversation_url: conversationUrl,
