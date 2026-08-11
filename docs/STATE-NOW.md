@@ -1,11 +1,12 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-08-10
+DATE: 2026-08-11
 仓: juanwan99/pico ONLY
 CLAIM-WB-DEGREE-WEB: NO
-PRODUCT PASS: 未签
-main tip（写卷）: 以 origin/main 实查为准
+PRODUCT PASS: 未签 · 等业主 OWNER DECISION（#449）
+公网 tip（装订冻结 · 须实查）: 502e1f6fd5d3f5999b43303de91b16de1375f26a
+main 文档 HEAD 写卷时: 以 origin/main 实查为准
 ```
 
 ## 架构法律（BINDING）
@@ -34,12 +35,27 @@ main tip（写卷）: 以 origin/main 实查为准
 验收秤：阶段一底座全优 → 阶段二加压；基建是手段
 ```
 
+## 三包状态（2026-08-11）
+
+| 大包 | 卡 | 状态 | tip | 证据 |
+|------|-----|------|-----|------|
+| **1** UX-HARDEN | #447 | **PACKAGE READY · UX-HARDEN** | 502e1f6… | [`evidence/pack-ux-harden/`](./evidence/pack-ux-harden/) |
+| **2** TRUE-PI-FINAL-MATRIX | #448 | **PACKAGE READY · TRUE-PI-FINAL-MATRIX** | 502e1f6… | [`evidence/pack-final-matrix/`](./evidence/pack-final-matrix/) |
+| **3** CLAIM-MATERIALS | #449 | **装订中 → 等主管 L2 → 停等业主** | 冻结 502e1f6… | [`CLAIM-MATERIALS-2026-08/`](./CLAIM-MATERIALS-2026-08/) |
+
+```text
+CLAIM-WB: NO · 工程禁止代签
+材料: docs/CLAIM-MATERIALS-2026-08/
+纪律: docs/CLAIM-WB-PATH.md
+详规: docs/PLAN-PACK3-CLAIM-MATERIALS.md
+```
+
 ## 主线
 
 | 阶段 | 状态 |
 |------|------|
-| **一 ENABLE** | **当前** · T-PHASE1-FOUNDATION-AGENT-UX（#360）· Agent 稳 + 交付/人包/UI + 公网办公复杂题全优 |
-| **二 加压** | 阶段一全优后 · W 题/重办公链可选 · 仍不默认开 MCP/Skill |
+| **一 ENABLE** | 工程三包收口中 · 材料齐后等 **业主 CLAIM-WB** |
+| **二 加压** | 阶段一产品终签后 · W 题/重办公链可选 · 仍不默认开 MCP/Skill |
 
 规划骨架：[PLAN-TWO-PHASE-WB.md](./PLAN-TWO-PHASE-WB.md)（范围以 DIRECTION-NOW 收窄为准）
 
@@ -47,16 +63,15 @@ main tip（写卷）: 以 origin/main 实查为准
 
 | 项 | 值 |
 |----|-----|
-| main | 以 `git rev-parse origin/main` 为准；部署后写完整 40 位 |
-| #351 人包下载 | 已合 |
-| #356/#361 交付基础 | 成功语义 + 人包主通道 + 公网 tip；须 CI 绿 → 合 → prod-update |
-| F0 清源 | WHAT-IS §4.2–4.3/§7 = v1.1 Pi+DeepSeek；PRODUCT-PASS-CONTRACT 旧 CLAIMED@38067b82 **VOID** |
-| 公网 tip | 部署前 `/api/pico/tip` 可能 401；部署后须 40 位 = main |
+| 公网 tip | `GET /api/pico/tip` → 须 40 位；材料冻结 **502e1f6fd5d3f5999b43303de91b16de1375f26a** |
+| multi-step 默认 | **pi-true** |
+| 事故回滚 | **仅** `PICO_HOSTED_LOOP=1` |
+| drain | 45s inflight · grace 60s · **≠ 零中断**（见 RUN-DRAIN-AND-STOP） |
 | CLAIM-WB | **NO** |
 
 ## 错误记忆
 
-见 MEMORY-RESET：禁止 edu 串仓；禁止用 HTML 课件单测代替复杂能力；禁止引用过期 GLOBAL PASS@38067b82；本阶段不做 MCP/Skill/连接器。
+见 MEMORY-RESET：禁止 edu 串仓；禁止用 HTML 课件单测代替复杂能力；禁止引用过期 GLOBAL PASS@38067b82；本阶段不做 MCP/Skill/连接器；**禁止工程代签 CLAIM-WB YES**。
 
 ## 真 Pi 核（#435/#436）
 
@@ -68,4 +83,3 @@ main tip（写卷）: 以 origin/main 实查为准
 | 钉版 | `@mariozechner/pi-coding-agent@0.73.1` |
 | 文档 | ADR Accepted · OPS-TRUE-PI-ROLLBACK |
 | CLAIM-WB | **NO** |
-
