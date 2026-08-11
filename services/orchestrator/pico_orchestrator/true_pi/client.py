@@ -126,7 +126,8 @@ class SubprocessTransport(TruePiTransport):
         tool_token: str,
         run_id: str,
         provider: str = "deepseek",
-        model: str = "deepseek-chat",
+        model: str = "deepseek-v4-flash",
+        thinking: bool = False,
         env: Mapping[str, str] | None = None,
         binary: str | None = None,
         ext: Path | None = None,
@@ -137,6 +138,7 @@ class SubprocessTransport(TruePiTransport):
         self.run_id = run_id
         self.provider = provider
         self.model = model
+        self.thinking = thinking
         self._env_extra = dict(env or {})
         self.binary = binary or pi_bin()
         self.ext = ext or extension_path()
@@ -145,16 +147,13 @@ class SubprocessTransport(TruePiTransport):
         self._queue: asyncio.Queue[RpcEvent | None] = asyncio.Queue()
         self._stderr_tail: list[str] = []
 
-    async def start(self) -> None:
-        self.session_dir.mkdir(parents=True, exist_ok=True)
-        if not self.ext.is_file():
-            raise TruePiClientError(f"true-pi extension missing: {self.ext}")
-        env = os.environ.copy()
-        env.update(self._env_extra)
-        env["PICO_TRUE_PI_TOOL_URL"] = self.tool_url
-        env["PICO_TRUE_PI_TOOL_TOKEN"] = self.tool_token
-        env["PICO_TRUE_PI_RUN_ID"] = self.run_id
-        cmd = [
+    def spawn_command(self) -> list[str]:
+        """Build the pi spawn argv (exposed for unit tests / F1 lock).
+
+        Dual-mode contract: the true_pi kernel must receive the lane's
+        thinking flag and the policy model — never a global hardcoded off.
+        """
+        return [
             self.binary,
             "--mode",
             "rpc",
@@ -166,10 +165,21 @@ class SubprocessTransport(TruePiTransport):
             "--model",
             self.model,
             "--thinking",
-            "off",
+            "on" if self.thinking else "off",
             "-e",
             str(self.ext),
         ]
+
+    async def start(self) -> None:
+        self.session_dir.mkdir(parents=True, exist_ok=True)
+        if not self.ext.is_file():
+            raise TruePiClientError(f"true-pi extension missing: {self.ext}")
+        env = os.environ.copy()
+        env.update(self._env_extra)
+        env["PICO_TRUE_PI_TOOL_URL"] = self.tool_url
+        env["PICO_TRUE_PI_TOOL_TOKEN"] = self.tool_token
+        env["PICO_TRUE_PI_RUN_ID"] = self.run_id
+        cmd = self.spawn_command()
         logger.info(
             "true_pi spawn run_id=%s session_dir=%s bin=%s",
             self.run_id,

@@ -1172,7 +1172,11 @@ async def list_models(
         for mid in [default, *known, "pico-agent"]:
             if mid not in ids:
                 ids.append(mid)
-    # Pico UI only exposes the two product modes; underlying provider stays DeepSeek v4 flash.
+    # Pico UI exposes ONLY the two product modes (F4). Any legacy/raw SKU that
+    # leaked in (deepseek-chat / deepseek-reasoner / kimi-* / pico-agent) is
+    # filtered out — the product surface is exactly {pico-fast, pico-deep}.
+    # This also makes /v1/models deterministic regardless of allowlist breadth.
+    ids = [mid for mid in ids if _normalized_model(mid) in {"pico-fast", "pico-deep"}]
     if "pico-fast" not in ids:
         ids.insert(0, "pico-fast")
     if "pico-deep" not in ids:

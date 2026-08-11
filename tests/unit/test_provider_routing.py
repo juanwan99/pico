@@ -181,3 +181,58 @@ def test_coerce_legacy_kimi_pref_onto_deepseek_allowlist() -> None:
         pico_allowed_models="deepseek-v4-flash,kimi-k2.6,pico-fast",
     )
     assert _coerce_default_model("kimi-k2.6", dual) == "kimi-k2.6"
+
+
+def test_list_models_filters_to_dual_mode_only() -> None:
+    """F4: /v1/models exposes exactly pico-fast / pico-deep — old SKUs filtered."""
+    import asyncio
+
+    sys.path.insert(0, str(ROOT / "services" / "api"))
+    from app.auth import issue_test_token
+    from app.openai_compat import list_models
+    from app.settings import Settings
+
+    settings = Settings(
+        _env_file=None,
+        pico_env="production",
+        deepseek_api_key="sk-ds",
+        pico_model_provider="deepseek",
+        # Deliberately broad allowlist including legacy SKUs — must be filtered.
+        pico_allowed_models="deepseek-chat,deepseek-reasoner,kimi-k2.6,pico-agent,pico-fast,pico-deep",
+    )
+    token = issue_test_token(
+        school_id="school-a",
+        membership_id="member-a",
+        settings=settings,
+    )
+
+    async def _call() -> dict:
+        return await list_models(f"Bearer {token}", settings)
+
+    result = asyncio.run(_call())
+    ids = [m["id"] for m in result["data"]]
+    assert ids == ["pico-fast", "pico-deep"]
+    assert "deepseek-chat" not in ids
+    assert "deepseek-reasoner" not in ids
+    assert "kimi-k2.6" not in ids
+    assert "pico-agent" not in ids
+
+    # Even with no allowlist, the list stays the two product modes.
+    dev = Settings(
+        _env_file=None,
+        pico_env="development",
+        deepseek_api_key="sk-ds",
+        pico_model_provider="deepseek",
+    )
+    dev_token = issue_test_token(
+        school_id="school-a",
+        membership_id="member-a",
+        settings=dev,
+    )
+
+    async def _call_dev() -> dict:
+        return await list_models(f"Bearer {dev_token}", dev)
+
+    dev_result = asyncio.run(_call_dev())
+    dev_ids = [m["id"] for m in dev_result["data"]]
+    assert set(dev_ids) == {"pico-fast", "pico-deep"}
