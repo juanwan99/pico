@@ -133,3 +133,8 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | **v1.1** | 2026-08-06 | 对齐 HANDOFF-WB-PI：默认 Pi + DeepSeek；Kimi 遗产回滚；禁双核真源；**单窗 SOLO**（废多窗日常派） |
 
 升版规则：任何 P1–W5 / A1–A4 / O1–O7 / C1–C7 的修改 → **v1.x** 新 PR，标题含 `TRUTH-FREEZE`。
+
+### v1.2 · 2026-08-11
+
+- **项目法律：** [`docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md) — **禁止自研 · 只做薄适配**
+- 真核 = 上游 Pi harness + 薄桥；禁止桥膨胀；禁止自研 MCP/向量内核
