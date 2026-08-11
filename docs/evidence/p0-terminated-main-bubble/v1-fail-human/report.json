@@ -1,0 +1,27 @@
+{
+  "tip": {
+    "ok": true,
+    "git_sha": "bbe59f67ed507bfe126a44cb3e6a6c9ef4a0df20",
+    "service": "pico-api"
+  },
+  "failUrl": "https://pico.aivia.asia/c/3a4604a8-adda-441f-be3e-da0d78c4921b",
+  "conversation": {
+    "hasSomething": false,
+    "hasOwnerLost": false,
+    "hasBareTerminated": false,
+    "hasChineseFail": true,
+    "snippets": [
+      "服务维护或重启导致本次任务中断。请点「重新运行」继续；刷新后侧栏与主区状态应一致。",
+      "失败",
+      "服务维护或重启导致本次任务中断。请点「重新运行」继续；刷新后侧栏与主区状态应一致。",
+      "失败",
+      "服务维护或重启导致本次任务中断。请点「重新运行」继续；侧栏失败说明与主区应一致。"
+    ],
+    "pass": true
+  },
+  "homeChinese": false,
+  "homeEnglish": false,
+  "alt": null,
+  "pass_v1": true,
+  "claim_wb": "NO"
+}
