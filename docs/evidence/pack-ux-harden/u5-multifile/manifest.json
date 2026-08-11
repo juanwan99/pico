@@ -1,0 +1,43 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-11T03:32:07.341Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-ux-harden",
+  "scene": "u5-multifile",
+  "prompt": "请交付 4 个独立可下载文件：①决策一页纸.md ②待办.csv ③纪要.md ④给领导的短消息.txt。数字一致：团队 12 人、完成率 75%。不要系统侧自检墙。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "502e1f6fd5d3f5999b43303de91b16de1375f26a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/fb9846f1-b37b-4628-b59a-3a96ef60ab48",
+  "out_dir": "docs/evidence/pack-ux-harden/u5-multifile",
+  "frames": {
+    "V0": "docs/evidence/pack-ux-harden/u5-multifile/V0-send.png",
+    "V1": "docs/evidence/pack-ux-harden/u5-multifile/V1-process-main.png",
+    "V2": "docs/evidence/pack-ux-harden/u5-multifile/V2-final.png",
+    "V2_390": "docs/evidence/pack-ux-harden/u5-multifile/V2-final-390.png"
+  },
+  "monologue_hits": [
+    "/结构自检|静态自检|系统侧|二进制编码|未做浏览器真机|未经真机点击|未宣称\\s*L1|L0_structure|interaction_status/i"
+  ],
+  "monologue_clean": false,
+  "v3": {
+    "opened": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [
+    "V3 skipped (--skip-v3)"
+  ],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
