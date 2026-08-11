@@ -210,3 +210,67 @@ def test_preserves_human_filename_and_clarification_not_l0() -> None:
     )
     assert "失物招领板.html" in named
     assert "结构自检" not in named
+
+
+def test_strips_all_files_delivered_confirmation_english() -> None:
+    """#461 PR-A1: 'All files are delivered. Let me confirm…' must not linger."""
+    raw = (
+        "All files are delivered. Let me confirm the final delivery summary."
+        "已完成 4 个品名的周末市集摊位菜单，共交付 3 个可下载文件：\n"
+        "周末市集摊位菜单.html — 可交互网页版\n"
+        "周末市集摊位菜单-可打印版.docx — Word 打印版\n"
+    )
+    out = sanitize_user_facing_text(
+        raw, artifact_titles=["周末市集摊位菜单.html", "周末市集摊位菜单-可打印版.docx"]
+    )
+    assert "All files are delivered" not in out
+    assert "Let me confirm" not in out
+    assert "已完成 4 个品名的周末市集摊位菜单" in out
+
+
+def test_strips_ive_delivered_summary_english() -> None:
+    """#461 PR-A1: 'I've delivered … Here's the delivery summary.' must go."""
+    raw = (
+        "I've delivered the complete WeChat Mini Program engineering package as "
+        "7 separate files. Here's the delivery summary."
+        "已生成一套可直接导入微信开发者工具的原生小程序工程源码，共 7 份文件：\n"
+        "说明文档.md — 导入教程\n"
+    )
+    out = sanitize_user_facing_text(
+        raw, artifact_titles=["说明文档.md"]
+    )
+    assert "I've delivered" not in out
+    assert "delivery summary" not in out
+    assert "Here's the delivery" not in out
+    assert "说明文档.md" in out
+    assert "已生成一套" in out
+
+
+def test_strips_ive_delivered_unicode_apostrophe() -> None:
+    """#461 PR-A1: curly apostrophe (U+2019) in I've… must also be stripped."""
+    raw = (
+        "I\u2019ve delivered the complete package as 7 separate files. "
+        "Here\u2019s the delivery summary."
+        "已生成一套可直接导入的小程序工程源码：\n"
+        "说明文档.md — 导入教程\n"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=["说明文档.md"])
+    assert "delivered" not in out
+    assert "delivery summary" not in out
+    assert "说明文档.md" in out
+    assert "已生成一套" in out
+
+
+def test_strips_preparing_prefix_on_settled_bubble() -> None:
+    """#461 PR-A1: 「正在准备…」prefix must not linger on a settled bubble."""
+    raw = (
+        "正在准备… 已完成 v2 更新，全新 5 个品项、价格统一上调 10%，"
+        "并新增「季节限定」品项，共交付 3 个可下载文件：\n"
+        "周末市集摊位菜单-v2.html — 交互网页版\n"
+    )
+    out = sanitize_user_facing_text(
+        raw, artifact_titles=["周末市集摊位菜单-v2.html"]
+    )
+    assert "正在准备" not in out
+    assert "已完成 v2 更新" in out
+    assert "周末市集摊位菜单-v2.html" in out

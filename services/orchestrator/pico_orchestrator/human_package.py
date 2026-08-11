@@ -112,12 +112,20 @@ _TOOL_MONOLOGUE_LINE = re.compile(
 )
 _TOOL_MONOLOGUE_BLOCK = re.compile(
     # Bound engineer planning clauses; stop before Chinese product copy when possible.
-    r"(?is)(?:(?:Now\s+)?Let me (?:build|construct|call|prepare|write|run|create|make)\b[^\n\u4e00-\u9fff]{0,160}"
-    r"|I'll (?:use|call|invoke|write|run|create|build|make)\b[^\n\u4e00-\u9fff]{0,160}"
-    r"|I will (?:use|call|create|build|make|write)\b[^\n\u4e00-\u9fff]{0,160}"
-    r"|I need to (?:call|use|invoke|run|create|build)\b[^\n\u4e00-\u9fff]{0,120}"
+    r"(?is)(?:(?:Now\s+)?Let me (?:build|construct|call|prepare|write|run|create|make|confirm|finalize)\b[^\n\u4e00-\u9fff]{0,200}"
+    r"|I'll (?:use|call|invoke|write|run|create|build|make|confirm|finalize)\b[^\n\u4e00-\u9fff]{0,200}"
+    r"|I will (?:use|call|create|build|make|write|confirm|finalize)\b[^\n\u4e00-\u9fff]{0,200}"
+    r"|I need to (?:call|use|invoke|run|create|build)\b[^\n\u4e00-\u9fff]{0,160}"
+    r"|I['’]ve (?:delivered|generated|created|prepared|completed)\b[^\n\u4e00-\u9fff]{0,200}"
+    r"|All\s+files?\s+(?:are|were|have\s+been)?\s*delivered\b[^\n\u4e00-\u9fff]{0,200}"
+    r"|Here['’]?s\s+the\s+(?:final\s+)?delivery\s+summary\b[^\n\u4e00-\u9fff]{0,160}"
+    r"|Let\s+me\s+(?:confirm|finalize|verify|summarize)\b[^\n\u4e00-\u9fff]{0,160}"
     r"|我先(?:构造|准备|调用)[^\n]{0,80}"
     r"|让我(?:构造|调用|写)[^\n]{0,80})"
+)
+# 「正在准备…」mid-run chrome that must not linger once the bubble is settled.
+_PROCESS_PREFIX_INLINE = re.compile(
+    r"(?i)^[ \t]*(?:正在准备|preparing|generating)[.。…\s]*"
 )
 _TOOL_NAME_BARE = re.compile(
     r"(?i)\b(?:generate_(?:html|docx|pptx)_document|workspace_write_file|"
@@ -176,6 +184,9 @@ def _strip_jargon(text: str) -> str:
     text = _PROCESS_INLINE.sub("", text)
     # Self-check walls before monologue blocks so EN+中文 lines keep product copy.
     text = _L0_SELFCHECK_INLINE.sub("", text)
+    # 「正在准备…」prefix must not linger on a settled bubble (also trips
+    # client-side settled detection and reads as tool chrome in human view).
+    text = _PROCESS_PREFIX_INLINE.sub("", text)
     text = _TOOL_MONOLOGUE_BLOCK.sub("", text)
     lines: list[str] = []
     for line in text.splitlines():
