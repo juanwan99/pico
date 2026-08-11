@@ -147,12 +147,21 @@ async def run_true_pi_agent(
 
         async def _consume() -> None:
             async for event in client.events():
-                if stop.is_set() or timed_out.is_set() or await is_cancelled():
-                    break
                 # Responses are handled by wait_response on SubprocessTransport;
                 # ignore type=response in the event stream if any leak through.
                 if event.type == "response":
                     continue
+                # Streaming deltas (message_update) carry the FULL accumulated
+                # text and can arrive at hundreds/thousands per second while the
+                # model streams (O(n^2) over tokens). map_event drops them, so
+                # drop them HERE before the per-event cancellation DB check —
+                # otherwise a fast model stream backlogs the event queue with
+                # RpcEvents (each holding the growing text) and balloons memory.
+                # Cancellation is already enforced by the main loop + _watcher.
+                if event.type == "message_update":
+                    continue
+                if stop.is_set() or timed_out.is_set() or await is_cancelled():
+                    break
                 await map_event(event, emit=emit, state=state, shadow=shadow)
                 if state.settled:
                     break
@@ -345,7 +354,14 @@ def _compose_prompt(
             f"## Landing requirement\n"
             f"Write at least {min_arts} downloadable file(s) using "
             "workspace_write_file or generate_*_document. "
-            "Chat-only claims are not delivery."
+            "Chat-only claims are not delivery.\n"
+            "Keep HTML/DOCX/PPTX source compact (target under 10KB per file): "
+            "streaming a huge body token-by-token over the RPC pipe is slow and "
+            "memory-heavy. A focused, well-crafted page beats a bloated one.\n"
+            "Your FINAL reply is shown directly to the user in the chat. Output "
+            "it in the user's language (Chinese for zh requests) and ONLY a "
+            "clean delivery summary — no internal reasoning, no narration of "
+            "tool calls, no schema/argument/verify-process talk."
         )
     return "\n\n".join(parts)
 
