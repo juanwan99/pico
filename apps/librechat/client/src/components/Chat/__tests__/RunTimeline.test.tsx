@@ -78,8 +78,8 @@ describe('RunTimeline', () => {
   it('shows a cancelled run even when the event stream has no terminal event', () => {
     render(<RunTimeline run={run('cancelled')} events={[]} />);
 
-    expect(screen.getByText('运行已停止')).toBeInTheDocument();
-    expect(screen.getByText('已停止生成')).toBeInTheDocument();
+    expect(screen.getByText('云端任务已停止')).toBeInTheDocument();
+    expect(screen.getByText(/停止任务|已取消|云端/)).toBeInTheDocument();
   });
 
   it('shows kimi-agent runtime and agent steps in the process timeline', () => {

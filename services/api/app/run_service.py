@@ -248,7 +248,14 @@ async def cancel_active_runs_for_task(
 
 
 async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
-    """Finalize non-terminal runs whose in-process owner was lost on restart."""
+    """Finalize non-terminal runs whose in-process owner was lost on restart.
+
+    Thin adapter: in-process asyncio owners die with the API process. We cannot
+    resume mid-tool without a durable worker; we fail closed with a human
+    ``user_message`` so UI never depends on the raw English error alone.
+    """
+    from pico_orchestrator.user_errors import enrich_fail_payload, user_message_for_error
+
     active = (
         await session.execute(
             select(RunRow).where(
@@ -261,19 +268,32 @@ async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
         if run.cancel_requested:
             run.status = "cancelled"
             run.error = None
+            payload: dict = {
+                "status": "cancelled",
+                "reason": "api_restart_reconciliation",
+                "user_message": user_message_for_error(
+                    "cancelled", code="cancelled"
+                ),
+            }
         else:
             run.status = "failed"
+            # Technical detail for logs/API; UI prefers event user_message.
             run.error = "run owner was lost during API restart"
+            payload = enrich_fail_payload(
+                {
+                    "status": "failed",
+                    "reason": "api_restart_reconciliation",
+                    "error": run.error,
+                    "code": "api.restart",
+                }
+            )
         run.ended_at = _utcnow()
         counts[run.status] += 1
         await append_event(
             session,
             run.id,
             "run.status",
-            {
-                "status": run.status,
-                "reason": "api_restart_reconciliation",
-            },
+            payload,
             commit=False,
         )
     await session.commit()

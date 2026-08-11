@@ -722,10 +722,12 @@ export default function ResultPanel({
                 <p className="mb-2 text-[12px] font-medium tracking-normal text-[#8c8c8c]">
                   可下载文件
                 </p>
-                {runStatusLabel?.includes('等待') ? (
+                {runStatusLabel?.includes('等待') &&
+                !runStatusLabel?.startsWith('失败') &&
+                !runStatusLabel?.startsWith('已停止') ? (
                   <div className="flex flex-1 flex-col justify-center gap-3 rounded-xl border border-black/[0.06] bg-[#fafafa] px-5 py-10 dark:border-border-light dark:bg-surface-tertiary">
                     <RunLoadingIndicator
-                      label="执行中，正在准备产物"
+                      label="执行中，云端继续准备产物"
                       className="justify-center text-[13px] font-medium text-[#3d3d3d] dark:text-text-primary"
                     />
                     <div className="space-y-2" aria-hidden="true">

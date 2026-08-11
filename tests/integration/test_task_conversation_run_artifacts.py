@@ -132,6 +132,11 @@ async def test_startup_reconciliation_finalizes_ownerless_runs(tmp_path, monkeyp
             ).scalars()
         )
         assert {event.payload["status"] for event in events} == {"cancelled", "failed"}
+        failed_events = [e for e in events if e.payload.get("status") == "failed"]
+        assert failed_events, "restart reconciliation must emit failed run.status"
+        um = failed_events[0].payload.get("user_message") or ""
+        assert "重新运行" in um or "重启" in um or "维护" in um
+        assert "owner was lost" not in um.lower()
 
 
 @pytest.fixture()

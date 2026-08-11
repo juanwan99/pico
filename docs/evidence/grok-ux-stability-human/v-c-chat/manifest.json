@@ -1,0 +1,42 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-11T01:42:40.389Z",
+  "base": "https://pico.aivia.asia",
+  "card": "T-GROK-UX-STABILITY-HUMAN",
+  "scene": "v-c-chat",
+  "prompt": "闲聊：今天天气怎样？只回一句问候，不要生成文件，不要调用工具。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "577a8068f88af0044a7bdc969624d94b81644bc9",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/0c5655ab-863a-4e11-8edc-f7bbc682a802",
+  "out_dir": "../tmp/inv-ux-v-c-chat",
+  "frames": {
+    "V0": "../tmp/inv-ux-v-c-chat/V0-send.png",
+    "V1": "../tmp/inv-ux-v-c-chat/V1-process-main.png",
+    "V2": "../tmp/inv-ux-v-c-chat/V2-final.png",
+    "V3": "../tmp/inv-ux-v-c-chat/V3-open-product.png",
+    "V2_390": "../tmp/inv-ux-v-c-chat/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "same-tab",
+    "human_page": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": false,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

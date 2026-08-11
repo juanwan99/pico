@@ -23,7 +23,8 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
             "或把任务拆短；交付类任务默认预算约 15 分钟。"
         )
     if "cancelled" in low or c == "cancelled":
-        return "已停止生成。"
+        # Distinct from input-bar「停止生成」(screen-only): this is ledger cancel.
+        return "云端任务已停止。需要结果时可点「重新运行」。"
     if (
         "no kimi_api_key" in low or "尚未配置" in text or "kimi_api_key" in low
         or "no deepseek" in low
@@ -51,8 +52,16 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "多智能体运行时当前不可用。请确认 Pi 编排已开启，或联系管理员。"
     if "connect" in low or "connection" in low or "network" in low:
         return "无法连接模型服务。请检查网络或稍后重试。"
-    if "owner was lost" in low or "api restart" in low or "greenlet" in low:
-        return "服务刚完成维护或重启，请重新打开任务后重试。"
+    if (
+        c == "api.restart"
+        or "owner was lost" in low
+        or "api restart" in low
+        or "greenlet" in low
+    ):
+        return (
+            "服务维护或重启导致本次任务中断。"
+            "请点「重新运行」继续；刷新后侧栏与主区状态应一致。"
+        )
     if c in ("kb.miss", "kb.not_found") or "honest_miss" in low or "未在已挂载" in text:
         return "未在已挂载材料中找到依据。请先生成或上传材料后再问，或换关键词。"
     if c.startswith("mcp.") or "mcp allowlist" in low or "mcp_bridge" in low:

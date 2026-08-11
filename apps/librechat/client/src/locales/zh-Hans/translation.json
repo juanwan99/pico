@@ -590,7 +590,7 @@
   "com_nav_slash_command": "/-命令",
   "com_nav_slash_command_description": "切换至命令 “/” 以通过键盘选择提示词",
   "com_nav_speech_to_text": "语音转文本",
-  "com_nav_stop_generating": "停止生成",
+  "com_nav_stop_generating": "停止生成（仅停屏幕输出，云端任务可能继续）",
   "com_nav_text_to_speech": "文本转语音",
   "com_nav_theme": "主题",
   "com_nav_theme_dark": "深色",

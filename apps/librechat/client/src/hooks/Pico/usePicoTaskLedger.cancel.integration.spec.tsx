@@ -107,7 +107,7 @@ describe('Pico cancel button integration', () => {
 
     render(<CancelHarness />);
     expect(screen.getByTestId('task-run-bar')).toHaveClass('mt-[52px]', 'z-20');
-    fireEvent.click(await screen.findByRole('button', { name: '停止' }));
+    fireEvent.click(await screen.findByRole('button', { name: /停止(任务|云端任务|中)/ }));
 
     expect(screen.getByRole('button', { name: '停止中' })).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledWith(
@@ -126,7 +126,7 @@ describe('Pico cancel button integration', () => {
     act(() => refreshLedger());
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBeforeRefresh));
     expect(screen.getByText('已停止')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '停止' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /停止(任务|云端任务|中)/ })).not.toBeInTheDocument();
   });
 
   it('restores a pending stop request without offering a second active stop', async () => {
@@ -157,7 +157,7 @@ describe('Pico cancel button integration', () => {
     global.fetch = fetchMock as unknown as typeof fetch;
 
     render(<CancelHarness />);
-    await screen.findByRole('button', { name: '停止' });
+    await screen.findByRole('button', { name: /停止(任务|云端任务|中)/ });
 
     act(() => {
       void cancelLedgerRun('run-live');
@@ -185,7 +185,7 @@ describe('Pico cancel button integration', () => {
     global.fetch = fetchMock as unknown as typeof fetch;
 
     render(<CancelHarness />);
-    fireEvent.click(await screen.findByRole('button', { name: '停止' }));
+    fireEvent.click(await screen.findByRole('button', { name: /停止(任务|云端任务|中)/ }));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('停止运行失败：账本服务暂时不可用，请稍后重试');

@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-11T01:54:52.315Z",
+  "base": "https://pico.aivia.asia",
+  "card": "T-GROK-UX-STABILITY-HUMAN",
+  "scene": "v-a-mendel",
+  "prompt": "请做一个可运行的单文件 HTML「孟德尔遗传课件」：含豌豆花色/种子形状示例题 2 道选择题，提交后显示得分与简要解析。本地可打开，不要源码墙。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "577a8068f88af0044a7bdc969624d94b81644bc9",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/0736737a-db99-4d78-b86b-505b3bc0422c",
+  "out_dir": "../tmp/inv-ux-v-a-mendel",
+  "frames": {
+    "V0": "../tmp/inv-ux-v-a-mendel/V0-send.png",
+    "V1": "../tmp/inv-ux-v-a-mendel/V1-process-main.png",
+    "V2": "../tmp/inv-ux-v-a-mendel/V2-final.png",
+    "V3": "../tmp/inv-ux-v-a-mendel/V3-open-product.png",
+    "V2_390": "../tmp/inv-ux-v-a-mendel/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "孟德尔遗传课件 · 豌豆实验自测",
+      "body_snippet": "标记：mendel-quiz\n\n🌱 孟德尔遗传课件 · 豌豆杂交实验\n\n单文件 HTML 交互自测页 · 本地双击即可打开 · 无需联网\n\n📖 知识速览\n相对性状：同种生物同一性状的不同表现。孟德尔选用 7 对相对性状（如紫花/白花、圆粒/皱粒）。\n显性性状（用大写字母表示）：F1 中表现出来的性状，如紫花（P）、圆粒（R）。\n隐性性状（用小写字母表示）：F1 中未表现出来的性状，如白花（p）、皱粒（r）。\n基因型与表型：PP、Pp 均为紫花（显性表型）；pp 才表现为白",
+      "button_count": 2,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

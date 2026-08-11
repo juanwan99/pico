@@ -67,3 +67,28 @@ def test_capacity_and_emergency_messages_are_human() -> None:
     assert "Pi" in noop or "编排" in noop or "Kimi" in noop or "过渡" in noop
     assert "run_agent_loop" not in noop
 
+
+def test_api_restart_owner_lost_is_human_with_rerun_cta() -> None:
+    msg = user_message_for_error(
+        "run owner was lost during API restart", code="api.restart"
+    )
+    assert "重启" in msg or "维护" in msg
+    assert "重新运行" in msg
+    assert "owner was lost" not in msg.lower()
+    cancelled = user_message_for_error("cancelled", code="cancelled")
+    assert "云端" in cancelled or "停止" in cancelled
+    assert "停止生成" not in cancelled  # not the input-bar screen-only copy
+
+
+def test_enrich_restart_payload_sets_user_message() -> None:
+    p = enrich_fail_payload(
+        {
+            "status": "failed",
+            "error": "run owner was lost during API restart",
+            "code": "api.restart",
+        }
+    )
+    assert "user_message" in p
+    assert "重新运行" in p["user_message"]
+    assert "owner was lost" not in p["user_message"].lower()
+

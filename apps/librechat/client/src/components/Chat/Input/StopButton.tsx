@@ -12,17 +12,22 @@ export default memo(function StopButton({
 }) {
   const localize = useLocalize();
 
+  // Distinct from task-bar「停止任务」(ledger cancel). This only aborts the
+  // client stream / screen output; durable Pico runs may keep finishing.
+  const stopLabel = localize('com_nav_stop_generating');
+
   return (
     <TooltipAnchor
-      description={localize('com_nav_stop_generating')}
+      description={stopLabel}
       render={
         <button
           type="button"
           data-testid="stop-generation-button"
+          title={stopLabel}
           className={cn(
             'rounded-full bg-text-primary p-1.5 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10',
           )}
-          aria-label={localize('com_nav_stop_generating')}
+          aria-label={stopLabel}
           onClick={(e) => {
             setShowStopButton(false);
             stop(e);

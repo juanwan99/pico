@@ -115,9 +115,10 @@ export function describePicoRunEvent(
     }
     if (status === 'cancelled') {
       return {
-        title: '运行已停止',
+        title: '云端任务已停止',
         detail: [
-          code ? `已停止生成 · 错误码：${code}` : '已停止生成',
+          textValue(payload, 'user_message') ||
+            (code ? `任务已取消 · 错误码：${code}` : '任务栏「停止任务」已取消云端执行'),
           runtimeLabel ? `运行时 · ${runtimeLabel}` : null,
         ]
           .filter(Boolean)
