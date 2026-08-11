@@ -1,9 +1,10 @@
-# regress-u1u2 · pack-final-matrix
+# T6 · PACK-1 U1/U2 回潮抽检
 
 ```text
-STATUS: SKELETON · 待摸底/帧
-Issue: #448 · T-PACK-TRUE-PI-FINAL-MATRIX
+tip: 502e1f6fd5d3f5999b43303de91b16de1375f26a（与 #447 行为 tip 相同）
+判定: PASS
 CLAIM-WB: NO
 ```
 
-本目录待 Phase2 摸底与 Phase4 满配帧填充。**禁止**在无帧时写 EXCELLENT。
+- U1: 侧栏中文失败人话 · 无 owner was lost
+- U2: 停止任务 + 停止生成（仅停屏幕）

@@ -1,9 +1,29 @@
-# w5 · pack-final-matrix
+# Visual gate · pack-final-matrix / w5
 
 ```text
-STATUS: SKELETON · 待摸底/帧
-Issue: #448 · T-PACK-TRUE-PI-FINAL-MATRIX
-CLAIM-WB: NO
+BINDING #384 · 公网像人点完 · V0–V3 · 主气泡禁独白 · 无图不得 Ready
+CLAIM-WB: NO · 本目录不蕴含产品 Ready
 ```
 
-本目录待 Phase2 摸底与 Phase4 满配帧填充。**禁止**在无帧时写 EXCELLENT。
+| 项 | 值 |
+|----|-----|
+| tip | `502e1f6fd5d3f5999b43303de91b16de1375f26a` |
+| base | https://pico.aivia.asia |
+| conversation | https://pico.aivia.asia/c/a6d4360b-f0d3-4fd5-bfb2-31e22ac35a25 |
+| frames complete | Y |
+| monologue clean (heuristic) | N |
+| scene visual pass eligible | N |
+
+## Frames
+
+| Frame | File |
+|-------|------|
+| V0 题面 | [V0-send.png](./V0-send.png) |
+| V1 过程主气泡 | [V1-process-main.png](./V1-process-main.png) |
+| V2 终态 | [V2-final.png](./V2-final.png) |
+| V2 390 | [V2-final-390.png](./V2-final-390.png) |
+| V3 产物打开 | [V3-open-product.png](./V3-open-product.png) |
+
+审查必须 **读图**；只读本表 = 审查无效。
+
+机器摘要：[manifest.json](./manifest.json)
