@@ -14,6 +14,12 @@ STATUS: 演示说明（非 PASS 证书）
 
 ---
 
+> **SUPERSEDED 模型/编排叙述（卫生 #471 · 2026-08-11）**  
+> 正文中「默认 Kimi 聊天 / S1=Kimi」等句 **过期**。  
+> **真源：** [`TRUTH-FREEZE.md`](./TRUTH-FREEZE.md) v1.1 · [`HANDOFF-WB-PI.md`](./HANDOFF-WB-PI.md) · DeepSeek 主 · 默认 **pi-true**。  
+> 本页仅作本地启动/壳路径参考；**不得**当产品默认模型证明。
+
+
 ## 生产入口（业主）
 
 - **https://pico.aivia.asia/login**（HTTPS only）

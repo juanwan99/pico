@@ -1,5 +1,10 @@
 # Pico 目标校正（清除错误记忆）
 
+> **SUPERSEDED 编排/模型优先句（卫生 #471 · 2026-08-11）**  
+> 文中「Kimi 优先 / 编排目标=开源 Kimi Agent」等 **已被** [`HANDOFF-WB-PI.md`](./HANDOFF-WB-PI.md) + TRUTH-FREEZE **v1.1** 覆盖。  
+> 正确：默认 **Pi + DeepSeek**。本页保留为历史校正快照，**勿当当前目标**。
+
+
 ```
 DOC: docs/CORRECTED-GOALS.md
 SEE_ALSO: docs/WHAT-IS-PICO.md（2026-08-01 正本清源）
