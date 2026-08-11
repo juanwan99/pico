@@ -1,0 +1,50 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-10T05:11:39.175Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-p2-status-truth",
+  "scene": "s1-d",
+  "prompt": "【P2S1-D】请做一份可下载的 HTML 单页课件「太阳系行星介绍」：大标题、八颗行星各一节、两个交互按钮「随机高亮」「重置」。工具落盘，勿贴源码，只交付一个 HTML 文件即可。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "2a1c1bc6169c8b7d977ccd008ebe75ad99a3c019",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/d8ea9f23-94bc-432c-8f62-94df8323d502",
+  "out_dir": "docs/evidence/pack-p2-status-truth/s1-d",
+  "frames": {
+    "V0": "docs/evidence/pack-p2-status-truth/s1-d/V0-send.png",
+    "V1": "docs/evidence/pack-p2-status-truth/s1-d/V1-process-main.png",
+    "V2": "docs/evidence/pack-p2-status-truth/s1-d/V2-final.png",
+    "V3": "docs/evidence/pack-p2-status-truth/s1-d/V3-open-product.png",
+    "V2_390": "docs/evidence/pack-p2-status-truth/s1-d/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": true,
+    "via": "main-delivery-open",
+    "human_page": true,
+    "main_delivery_strip": true,
+    "preview": {
+      "kind": "main-delivery-iframe",
+      "title": "太阳系行星介绍",
+      "body_snippet": "标记：太阳系行星介绍 · 交互课件\n\n太阳系行星介绍\n\n八大行星 · 由近日到远日 —— 点「随机高亮」探索，点「重置」复原\n\n🎲 随机高亮\n↺ 重置\n☀️\n水星 Mercury\n\n离太阳最近、体积最小的行星，表面温差极大。没有大气层保护，昼夜温差可达数百摄氏度，公转周期约 88 天。\n\n距离最近 · 表温差最大\n🌕\n金星 Venus\n\n地球的「姊妹星」，大小相近，但表面覆盖浓厚二氧化碳大气，温室效应失控，是太阳系中最热的行星。自转方向与其他行星相反。\n\n最热 · 自转逆",
+      "button_count": 2,
+      "human_page": true
+    }
+  },
+  "v3_human_page": true,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
