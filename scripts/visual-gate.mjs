@@ -67,6 +67,15 @@ const MONOLOGUE_RES = [
   /结构自检|静态自检|系统侧|二进制编码|未做浏览器真机|未经真机点击|未宣称\s*L1|L0_structure|interaction_status/i,
   /system-side\s+verification|let me run the system-side/i,
   /\bI'll create\b.*\bHTML\b/i,
+  // #461 L1 — delivery-confirmation EN monologue + 中文 system chrome that
+  // must never linger on the main bubble (C3 production hit: "All three
+  // deliverables are created and the HTML structure passed verification.").
+  /\bdeliverables?\s+(?:are|were|have been|is)\s+created\b/i,
+  /\bpassed\s+(?:the\s+)?verification\b/i,
+  /\bAll\s+(?:\d+|[A-Za-z]+)\s+deliverables?\b/i,
+  /\bAll\s+(?:\d+|[A-Za-z]+)\s+files?\s+delivered\b/i,
+  /\bdelivery\s+summary\b/i,
+  /正在准备|正在生成|正在处理/i,
 ];
 
 function parseArgs(argv) {
