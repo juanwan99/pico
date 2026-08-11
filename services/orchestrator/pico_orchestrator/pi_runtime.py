@@ -128,6 +128,12 @@ async def run_pi_agent(
     }
     landing_retries = 0
     min_arts = max(0, int(getattr(caps, "min_artifacts", 0) or 0))
+    # Dual-mode circuit breaker (deep lane only): track whether the loop makes
+    # any useful tool progress; bail out with a human-readable message instead
+    # of spinning until OOM / max_steps on an empty runaway loop.
+    tool_exec_count = 0
+    repeated_no_progress = 0
+    thinking_on = bool(getattr(caps, "thinking_on", False))
     stop = asyncio.Event()
     timed_out = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -169,6 +175,38 @@ async def run_pi_agent(
                     tool_results=tool_context_results,
                     principal=principal,
                 )
+            # Dual-mode deep lane circuit breaker: no useful tool progress in an
+            # otherwise-live loop → stop with honest human text instead of OOM /
+            # full max_steps stall. Fast lane (thinking off) never trips.
+            from pico_orchestrator.provider import should_circuit_break
+
+            if should_circuit_break(
+                tool_exec_count=tool_exec_count,
+                repeated_no_progress=repeated_no_progress,
+                wall_seconds=loop.time() - started,
+                thinking_on=thinking_on,
+            ):
+                await emit(
+                    "circuit.breaker",
+                    {
+                        "tool_exec_count": tool_exec_count,
+                        "repeated_no_progress": repeated_no_progress,
+                        "wall_seconds": int(loop.time() - started),
+                        "runtime": RUNTIME_LABEL,
+                    },
+                )
+                return await _failed_result(
+                    emit,
+                    code="pi.no_progress",
+                    reason=(
+                        "深度模式检测到长时间无有效进展，已触发熔断以避免空转/OOM。"
+                        "可点「再跑一次」或将任务拆短后重试。"
+                    ),
+                    final_parts=final_parts,
+                    token_usage=token_usage,
+                    tool_results=tool_context_results,
+                    principal=principal,
+                )
 
             now = loop.time()
             if now - last_heartbeat >= _HEARTBEAT_SECONDS:
@@ -185,6 +223,10 @@ async def run_pi_agent(
 
             await emit("agent.step", {"step": step, "phase": "model"})
 
+            # Fallback / transient-retry: the model contract is pinned to
+            # deepseek-v4-flash for both lanes; a temporary upstream blip must
+            # not abort a real delivery turn. Retry (same model) up to
+            # caps.max_retries on non-timeout errors before failing honestly.
             create_kwargs: dict[str, Any] = {
                 "model": provider.model,
                 "messages": messages,
@@ -195,27 +237,57 @@ async def run_pi_agent(
                 create_kwargs["tool_choice"] = "auto"
 
             remaining = max(1.0, deadline - loop.time())
-            try:
-                response = await asyncio.wait_for(
-                    client.chat.completions.create(**create_kwargs),
-                    timeout=remaining,
-                )
-            except TimeoutError:
-                timed_out.set()
-                return await _failed_result(
-                    emit,
-                    code="timeout",
-                    reason=f"Pi agent timeout after {caps.max_seconds}s",
-                    final_parts=final_parts,
-                    token_usage=token_usage,
-                    tool_results=tool_context_results,
-                    principal=principal,
-                )
-            except Exception as exc:  # noqa: BLE001
+            max_retries = max(0, int(getattr(caps, "max_retries", 0) or 0))
+            response = None
+            last_exc: Exception | None = None
+            for attempt in range(max_retries + 1):
+                if stop.is_set() or await is_cancelled():
+                    await emit(
+                        "run.status",
+                        {"status": "cancelled", "runtime": RUNTIME_LABEL},
+                    )
+                    return _result(
+                        "cancelled",
+                        final_parts,
+                        token_usage=token_usage,
+                        tool_results=tool_context_results,
+                        principal=principal,
+                    )
+                try:
+                    response = await asyncio.wait_for(
+                        client.chat.completions.create(**create_kwargs),
+                        timeout=remaining,
+                    )
+                    break
+                except TimeoutError:
+                    timed_out.set()
+                    return await _failed_result(
+                        emit,
+                        code="timeout",
+                        reason=f"Pi agent timeout after {caps.max_seconds}s",
+                        final_parts=final_parts,
+                        token_usage=token_usage,
+                        tool_results=tool_context_results,
+                        principal=principal,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    last_exc = exc
+                    if attempt < max_retries:
+                        await emit(
+                            "model.retry",
+                            {
+                                "attempt": attempt + 1,
+                                "max_retries": max_retries,
+                                "error_type": type(exc).__name__,
+                                "runtime": RUNTIME_LABEL,
+                            },
+                        )
+                        continue
+            if response is None:
                 return await _failed_result(
                     emit,
                     code="pi.runtime_error",
-                    reason=f"Pi agent model error ({type(exc).__name__})",
+                    reason=f"Pi agent model error ({type(last_exc).__name__})",
                     final_parts=final_parts,
                     token_usage=token_usage,
                     tool_results=tool_context_results,
@@ -255,6 +327,11 @@ async def run_pi_agent(
             msg = choice.message
             content = (msg.content or "").strip()
             tool_calls = list(msg.tool_calls or [])
+
+            # Circuit-breaker bookkeeping for this turn. A "no-progress" turn is
+            # one with no user-visible content AND no successful tool execution:
+            # the model is looping without landing anything useful.
+            step_tool_ok = 0
 
             assistant_msg: dict[str, Any] = {"role": "assistant", "content": msg.content or ""}
             if tool_calls:
@@ -452,6 +529,7 @@ async def run_pi_agent(
                 try:
                     result = await gateway.invoke(principal, name, arguments)
                     tool_context_results.append((name, result))
+                    step_tool_ok += 1
                     out_text = json.dumps(result, ensure_ascii=False)
                     await emit(
                         "tool.result",
@@ -499,6 +577,15 @@ async def run_pi_agent(
                             "content": out_text,
                         }
                     )
+
+            # Bookkeeping for the deep-lane circuit breaker: any successful tool
+            # execution in this turn is real progress; otherwise it is another
+            # no-progress turn and the counter climbs toward the bailout.
+            if step_tool_ok > 0:
+                tool_exec_count += step_tool_ok
+                repeated_no_progress = 0
+            else:
+                repeated_no_progress += 1
 
         return await _failed_result(
             emit,

@@ -256,6 +256,188 @@ async def test_pi_path_tool_call_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     assert tool_calls[0]["tool"] == "calculator"
 
 
+@pytest.mark.asyncio
+async def test_pi_deep_lane_circuit_breaker_bails_on_no_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deep lane with no tool progress loops → circuit breaker bails honestly."""
+
+    calls = {"n": 0}
+
+    class _FakeCompletions:
+        async def create(self, **kwargs: Any) -> Any:
+            calls["n"] += 1
+            # Always request a tool call that fails (ToolError) → no progress.
+            tc = SimpleNamespace(
+                id=f"call-loop-{calls['n']}",
+                function=SimpleNamespace(
+                    name="calculator",
+                    arguments='{"expression": "1/0"}',
+                ),
+            )
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=None, tool_calls=[tc])
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=5, completion_tokens=5),
+            )
+
+    class _FakeClient:
+        def __init__(self, **_kwargs: Any) -> None:
+            self.chat = SimpleNamespace(completions=_FakeCompletions())
+
+    monkeypatch.setattr(
+        "pico_orchestrator.pi_runtime.resolve_provider",
+        lambda: ProviderConfig(
+            name="deepseek",
+            api_key="sk-test",
+            base_url="https://api.deepseek.com/v1",
+            model="deepseek-v4-flash",
+        ),
+    )
+    monkeypatch.setattr("pico_orchestrator.pi_runtime.AsyncOpenAI", _FakeClient)
+    # calculator tool exists in the default gateway; make it raise ToolError.
+    import pico_orchestrator.pi_runtime as pi_rt
+    from pico_orchestrator.gateway import ToolError
+
+    async def _boom(_principal, _name, _args):
+        raise ToolError("calculator.error", "division by zero")
+
+    class _FakeGateway:
+        def __init__(self, *_a, **_k) -> None:
+            self.tools = {
+                "calculator": SimpleNamespace(
+                    name="calculator", description="calc",
+                )
+            }
+
+        def restricted_to(self, allowed_tools):
+            return self
+
+        async def invoke(self, principal, name, arguments):
+            return await _boom(principal, name, arguments)
+
+    monkeypatch.setattr(pi_rt, "build_default_gateway", lambda _store: _FakeGateway())
+
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    from pico_orchestrator.pi_runtime import run_pi_agent
+
+    result = await run_pi_agent(
+        prompt="深度任务",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(
+            max_steps=24,
+            max_seconds=120,
+            max_tokens=32000,
+            thinking_on=True,
+        ),
+    )
+    # Breaker trips after ~2 no-progress turns, not the full 24-step budget.
+    assert result.status == "failed"
+    assert "熔断" in (result.error or "")
+    assert calls["n"] <= 6
+    kinds = [k for k, _ in events]
+    assert "circuit.breaker" in kinds
+    assert any(k == "run.status" and p.get("status") == "failed" for k, p in events)
+    failed_payloads = [p for k, p in events if k == "run.status" and p.get("status") == "failed"]
+    assert failed_payloads and failed_payloads[0].get("code") == "pi.no_progress"
+
+
+@pytest.mark.asyncio
+async def test_pi_fast_lane_never_trips_circuit_breaker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fast lane (thinking off) keeps its own budget; breaker stays disarmed."""
+
+    calls = {"n": 0}
+
+    class _FakeCompletions:
+        async def create(self, **kwargs: Any) -> Any:
+            calls["n"] += 1
+            tc = SimpleNamespace(
+                id=f"call-{calls['n']}",
+                function=SimpleNamespace(
+                    name="calculator",
+                    arguments='{"expression": "1/0"}',
+                ),
+            )
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=None, tool_calls=[tc])
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=5, completion_tokens=5),
+            )
+
+    class _FakeClient:
+        def __init__(self, **_kwargs: Any) -> None:
+            self.chat = SimpleNamespace(completions=_FakeCompletions())
+
+    monkeypatch.setattr(
+        "pico_orchestrator.pi_runtime.resolve_provider",
+        lambda: ProviderConfig(
+            name="deepseek",
+            api_key="sk-test",
+            base_url="https://api.deepseek.com/v1",
+            model="deepseek-v4-flash",
+        ),
+    )
+    monkeypatch.setattr("pico_orchestrator.pi_runtime.AsyncOpenAI", _FakeClient)
+
+    import pico_orchestrator.pi_runtime as pi_rt
+    from pico_orchestrator.gateway import ToolError
+
+    class _FakeGateway:
+        def __init__(self, *_a, **_k) -> None:
+            self.tools = {
+                "calculator": SimpleNamespace(
+                    name="calculator", description="calc",
+                )
+            }
+
+        def restricted_to(self, allowed_tools):
+            return self
+
+        async def invoke(self, principal, name, arguments):
+            raise ToolError("calculator.error", "division by zero")
+
+    monkeypatch.setattr(pi_rt, "build_default_gateway", lambda _store: _FakeGateway())
+
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    from pico_orchestrator.pi_runtime import run_pi_agent
+
+    result = await run_pi_agent(
+        prompt="快速任务",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(
+            max_steps=3,
+            max_seconds=60,
+            max_tokens=8000,
+            thinking_on=False,
+        ),
+    )
+    # No breaker in fast lane → run ends by max_steps, no circuit.breaker event.
+    assert result.status == "failed"
+    assert "no_progress" not in (result.error or "")
+    kinds = [k for k, _ in events]
+    assert "circuit.breaker" not in kinds
+
+
 def test_provider_prefers_deepseek(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-ds")
     monkeypatch.setenv("KIMI_API_KEY", "sk-kimi")

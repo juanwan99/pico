@@ -69,8 +69,12 @@ def _model_preference_from_prompt(prompt: str) -> str | None:
     aliases = {
         "pico": "pico-agent",
         "pico agent": "pico-agent",
+        "pico fast": "pico-fast",
+        "pico 快速": "pico-fast",
+        "pico deep": "pico-deep",
+        "pico 深度": "pico-deep",
         "kimi-k3": "kimi-k3",
-        "deepseek": "deepseek-chat",
+        "deepseek": "deepseek-v4-flash",
         "deepseek-chat": "deepseek-chat",
         "deepseek-reasoner": "deepseek-reasoner",
     }
@@ -80,7 +84,7 @@ def _model_preference_from_prompt(prompt: str) -> str | None:
 
     from pico_orchestrator.provider import KNOWN_DEEPSEEK_MODELS, KNOWN_KIMI_MODELS
 
-    allowed = {"pico-agent", *KNOWN_DEEPSEEK_MODELS, *KNOWN_KIMI_MODELS}
+    allowed = {"pico-agent", "pico-fast", "pico-deep", *KNOWN_DEEPSEEK_MODELS, *KNOWN_KIMI_MODELS}
     return normalized if normalized in allowed else None
 
 
@@ -152,9 +156,17 @@ def _normalized_model(model: str) -> str:
 def _assert_model_allowed(model: str, settings: Settings) -> None:
     if not settings.is_production:
         return
+    normalized = _normalized_model(model)
     allowed = {_normalized_model(item) for item in settings.allowed_model_list}
-    if _normalized_model(model) not in allowed:
-        raise HTTPException(status_code=400, detail="model is not allowed")
+    product_surface = {"pico-fast", "pico-deep", "pico-agent", "pico"}
+    deepseek_aliases = {"deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"}
+    if normalized in allowed:
+        return
+    if product_surface.intersection(allowed) and normalized in deepseek_aliases:
+        return
+    if normalized in {"pico-fast", "pico-deep"} and {"pico-fast", "pico-deep"}.intersection(allowed):
+        return
+    raise HTTPException(status_code=400, detail="model is not allowed")
 
 
 def _coerce_default_model(model: str, settings: Settings) -> str:
@@ -178,9 +190,11 @@ def _coerce_default_model(model: str, settings: Settings) -> str:
         and settings.pico_model_provider.strip().lower() != "kimi"
     )
     if prefer_deepseek or (settings.deepseek_api_key.strip() and not settings.kimi_api_key.strip()):
-        target = (settings.deepseek_model or "deepseek-chat").strip() or "deepseek-chat"
+        target = (settings.deepseek_model or "deepseek-v4-flash").strip() or "deepseek-v4-flash"
         if not allowed or _normalized_model(target) in allowed:
             return target
+        if {"pico-fast", "pico-deep"}.intersection(allowed):
+            return "deepseek-v4-flash"
     return model
 
 
@@ -701,6 +715,28 @@ def _caps_with_landing_min(caps: Any, delivery_plan: Any, skill_snapshot: dict |
     return caps
 
 
+def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
+    """Apply the dual-mode runtime policy onto RunCaps (Pico 快速 / Pico 深度).
+
+    - pico-fast: deepseek-v4-flash, thinking off, tighter steps/tokens.
+    - pico-deep: deepseek-v4-flash, thinking on + circuit breaker armed.
+    """
+    from dataclasses import replace as _dc_replace
+
+    from pico_orchestrator.provider import runtime_policy_for_model
+
+    low = (model or "").strip().lower()
+    if low not in {"pico-fast", "pico-deep"}:
+        return caps
+    policy = runtime_policy_for_model(low)
+    return _dc_replace(
+        caps,
+        max_steps=int(policy.get("max_steps", caps.max_steps)),
+        max_tokens=int(policy.get("max_tokens", caps.max_tokens)),
+        thinking_on=bool(policy.get("thinking", False)),
+    )
+
+
 def _instruction_with_delivery(
     skill_snapshot: dict[str, Any] | None,
     prompt: str,
@@ -1025,6 +1061,7 @@ async def _run_and_collect(
     settings: Settings,
     *,
     run_id: str,
+    model: str | None = None,
     history: list[dict[str, Any]] | None = None,
     skill_snapshot: dict[str, Any] | None = None,
     delivery_plan: Any | None = None,
@@ -1050,6 +1087,8 @@ async def _run_and_collect(
             skill_snapshot, prompt, delivery_plan
         ),
     )
+    # Dual-mode: Pico 快速 / Pico 深度 set their own steps/tokens/thinking.
+    caps = _caps_with_dual_mode(caps, model)
     # Landing gate: force min_artifacts into Pi so chat-only "done" cannot succeed.
     caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
     if skill_snapshot:
@@ -1133,6 +1172,11 @@ async def list_models(
         for mid in [default, *known, "pico-agent"]:
             if mid not in ids:
                 ids.append(mid)
+    # Pico UI only exposes the two product modes; underlying provider stays DeepSeek v4 flash.
+    if "pico-fast" not in ids:
+        ids.insert(0, "pico-fast")
+    if "pico-deep" not in ids:
+        ids.insert(1 if "pico-fast" in ids else 0, "pico-deep")
     return {
         "object": "list",
         "data": [
@@ -1254,17 +1298,23 @@ async def chat_completions(
         prior_artifact_titles=prior_titles,
         history=history,
     )
-    model = _model_preference_from_prompt(raw_prompt) or body.model or settings.deepseek_model or settings.kimi_model or "pico-agent"
+    model = (
+        _model_preference_from_prompt(raw_prompt)
+        or body.model
+        or settings.deepseek_model
+        or settings.kimi_model
+        or "pico-fast"
+    )
     if skill_snapshot and skill_snapshot.get("tools"):
-        model = "pico-agent"
+        model = "pico-deep"
     # Sticky delivery must not silent-route to deepseek-chat direct.
     if (
         delivery_plan is not None
         and getattr(delivery_plan, "force_agent", False)
-        and model not in {"pico-agent", "pico"}
+        and model not in {"pico-agent", "pico", "pico-fast", "pico-deep"}
         and not str(model).startswith("pico-")
     ):
-        model = "pico-agent"
+        model = "pico-deep"
     # Residual LibreChat prefs may still say kimi-k2.x after product default
     # moved to DeepSeek. Remount onto the product brain when Kimi is not in the
     # production allowlist so default-path chat does not 400.
@@ -1329,6 +1379,7 @@ async def chat_completions(
                 principal,
                 settings,
                 run_id=run_id,
+                model=model,
                 history=history,
                 skill_snapshot=skill_snapshot,
                 delivery_plan=delivery_plan,
@@ -1565,6 +1616,8 @@ async def chat_completions(
                         ),
                         skill_instruction=skill_instr,
                     )
+                # Stream path must apply the same dual-mode policy as non-stream.
+                caps = _caps_with_dual_mode(caps, model)
                 # Stream path must apply the same landing min as non-stream.
                 caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
                 if skill_snapshot:

@@ -16,13 +16,15 @@ from pico_orchestrator.provider import (
     resolve_model_id,
     resolve_provider,
     resolve_provider_for_model,
+    runtime_policy_for_model,
+    should_circuit_break,
 )
 
 
 @pytest.fixture
 def deepseek_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek-test")
-    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-chat")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
     monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
@@ -31,7 +33,7 @@ def deepseek_only(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def both_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek-test")
-    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-chat")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
     monkeypatch.setenv("KIMI_API_KEY", "sk-kimi-test")
     monkeypatch.setenv("KIMI_MODEL", "kimi-k2.6")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
@@ -41,7 +43,7 @@ def test_product_default_provider_is_deepseek(deepseek_only: None) -> None:
     cfg = resolve_provider()
     assert cfg is not None
     assert cfg.name == "deepseek"
-    assert cfg.model == "deepseek-chat"
+    assert cfg.model == "deepseek-v4-flash"
 
 
 def test_kimi_ui_default_remounts_to_deepseek_when_no_kimi_key(
@@ -68,7 +70,15 @@ def test_agent_model_uses_product_default(deepseek_only: None) -> None:
     cfg = resolve_provider_for_model("pico-agent")
     assert cfg is not None
     assert cfg.name == "deepseek"
-    assert resolve_model_id("pico-agent", cfg) == "deepseek-chat"
+    assert resolve_model_id("pico-agent", cfg) == "deepseek-v4-flash"
+
+
+def test_pico_fast_and_deep_use_deepseek_v4_flash(deepseek_only: None) -> None:
+    cfg = resolve_provider_for_model("pico-fast")
+    assert cfg is not None
+    assert cfg.name == "deepseek"
+    assert resolve_model_id("pico-fast", cfg) == "deepseek-v4-flash"
+    assert resolve_model_id("pico-deep", cfg) == "deepseek-v4-flash"
 
 
 def test_kimi_model_uses_kimi_when_key_present(both_keys: None) -> None:
@@ -92,6 +102,61 @@ def test_owned_by_is_honest() -> None:
     assert owned_by_for_model("deepseek-chat") != "pico-kimi"
 
 
+def test_runtime_policy_dual_mode_contract() -> None:
+    """Pico 快速 / Pico 深度 both pin deepseek-v4-flash; thinking differs."""
+    fast = runtime_policy_for_model("pico-fast")
+    deep = runtime_policy_for_model("pico-deep")
+    assert fast["ui_model"] == "pico-fast"
+    assert deep["ui_model"] == "pico-deep"
+    assert fast["backend_model"] == "deepseek-v4-flash"
+    assert deep["backend_model"] == "deepseek-v4-flash"
+    # fast: thinking off, tighter budget; deep: thinking on, breaker armed.
+    assert fast["thinking"] is False
+    assert deep["thinking"] is True
+    assert fast["max_steps"] < deep["max_steps"]
+    assert fast["max_tokens"] < deep["max_tokens"]
+    assert fast["fallback"] == "deepseek-v4-flash"
+    assert deep["fallback"] == "deepseek-v4-flash"
+
+
+def test_circuit_breaker_only_in_thinking_on_lane() -> None:
+    # Fast lane never trips regardless of repeated empties.
+    assert not should_circuit_break(
+        tool_exec_count=0,
+        repeated_no_progress=10,
+        wall_seconds=500.0,
+        thinking_on=False,
+    )
+    # Deep lane: no tool progress twice → trip.
+    assert should_circuit_break(
+        tool_exec_count=0,
+        repeated_no_progress=2,
+        wall_seconds=10.0,
+        thinking_on=True,
+    )
+    # Deep lane: long stall with zero tool exec → trip.
+    assert should_circuit_break(
+        tool_exec_count=0,
+        repeated_no_progress=0,
+        wall_seconds=200.0,
+        thinking_on=True,
+    )
+    # Deep lane: repeated_no_progress >= 4 → trip even with some tool exec.
+    assert should_circuit_break(
+        tool_exec_count=1,
+        repeated_no_progress=4,
+        wall_seconds=20.0,
+        thinking_on=True,
+    )
+    # Healthy deep lane: tool progress resets the counter → no trip.
+    assert not should_circuit_break(
+        tool_exec_count=3,
+        repeated_no_progress=1,
+        wall_seconds=60.0,
+        thinking_on=True,
+    )
+
+
 def test_coerce_legacy_kimi_pref_onto_deepseek_allowlist() -> None:
     sys.path.insert(0, str(ROOT / "services" / "api"))
     from app.openai_compat import _coerce_default_model
@@ -102,9 +167,9 @@ def test_coerce_legacy_kimi_pref_onto_deepseek_allowlist() -> None:
         pico_env="production",
         deepseek_api_key="sk-ds",
         pico_model_provider="deepseek",
-        pico_allowed_models="deepseek-chat,pico-agent",
+        pico_allowed_models="pico-fast,pico-deep",
     )
-    assert _coerce_default_model("kimi-k2.6", settings) == "deepseek-chat"
+    assert _coerce_default_model("kimi-k2.6", settings) == "deepseek-v4-flash"
     assert _coerce_default_model("deepseek-chat", settings) == "deepseek-chat"
     # When Kimi remains allowlisted, keep it
     dual = Settings(
@@ -113,6 +178,6 @@ def test_coerce_legacy_kimi_pref_onto_deepseek_allowlist() -> None:
         deepseek_api_key="sk-ds",
         kimi_api_key="sk-kimi",
         pico_model_provider="deepseek",
-        pico_allowed_models="deepseek-chat,kimi-k2.6,pico-agent",
+        pico_allowed_models="deepseek-v4-flash,kimi-k2.6,pico-fast",
     )
     assert _coerce_default_model("kimi-k2.6", dual) == "kimi-k2.6"

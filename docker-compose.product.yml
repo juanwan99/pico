@@ -51,8 +51,8 @@ services:
       OPENAI_REVERSE_PROXY: http://pico-api:18765/v1
       OPENAI_API_KEY: ${PICO_OPENAI_PROXY_KEY:?set a strong internal proxy key}
       ENDPOINTS: openAI
-      # First entry = default new-chat model (product brain = DeepSeek).
-      OPENAI_MODELS: deepseek-chat,pico-agent
+      # First entry = default new-chat model; UI exposes only Pico 快速 / Pico 深度.
+      OPENAI_MODELS: pico-fast,pico-deep
       APP_TITLE: Pico
       TITLE_CONVO: "false"
       ALLOW_REGISTRATION: "false"

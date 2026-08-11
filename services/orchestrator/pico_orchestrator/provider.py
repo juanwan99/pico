@@ -8,9 +8,10 @@ from dataclasses import dataclass
 
 from openai import AsyncOpenAI
 
-DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
 DEFAULT_DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 KNOWN_DEEPSEEK_MODELS = (
+    "deepseek-v4-flash",
     "deepseek-chat",
     "deepseek-reasoner",
 )
@@ -68,7 +69,7 @@ def is_kimi_model(model: str | None) -> bool:
 
 def is_agent_model(model: str | None) -> bool:
     bare = _bare_model(model)
-    return not bare or bare in {"pico-agent", "pico"} or bare.startswith("pico-")
+    return not bare or bare in {"pico-agent", "pico", "pico-fast", "pico-deep"} or bare.startswith("pico-")
 
 
 def _deepseek_config() -> ProviderConfig | None:
@@ -157,6 +158,8 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
     only available key (or remount fallback) is DeepSeek.
     """
     if is_agent_model(requested):
+        if str(requested).strip().lower() in {"pico-fast", "pico-deep"}:
+            return "deepseek-v4-flash"
         return cfg.model
 
     bare = _bare_model(requested)
@@ -166,6 +169,8 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
     if cfg.name == "deepseek":
         if is_deepseek_model(bare):
             return bare
+        if bare in {"pico-fast", "pico-deep"}:
+            return "deepseek-v4-flash"
         # Kimi / other labels remounted onto DeepSeek → use product default
         return cfg.model
 
@@ -175,6 +180,63 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
         return cfg.model
 
     return bare
+
+
+def runtime_policy_for_model(model: str | None) -> dict[str, object]:
+    """Return the Pico product policy for a selected model.
+
+    fast: deepseek-v4-flash with thinking off
+    deep: deepseek-v4-flash with thinking on and a guard against empty loop
+    """
+    requested = (model or "").strip()
+    low = requested.lower()
+    if low in {"pico-fast", "pico-deep"}:
+        return {
+            "ui_model": low,
+            "backend_model": "deepseek-v4-flash",
+            "thinking": low == "pico-deep",
+            "max_steps": 12 if low == "pico-fast" else 24,
+            "max_tokens": 8000 if low == "pico-fast" else 32000,
+            "fallback": "deepseek-v4-flash",
+        }
+    if low in {"pico-agent", "pico"}:
+        return {
+            "ui_model": "pico-agent",
+            "backend_model": "deepseek-v4-flash",
+            "thinking": True,
+            "max_steps": 24,
+            "max_tokens": 32000,
+            "fallback": "deepseek-v4-flash",
+        }
+    return {
+        "ui_model": requested or "pico-fast",
+        "backend_model": "deepseek-v4-flash",
+        "thinking": False,
+        "max_steps": 12,
+        "max_tokens": 8000,
+        "fallback": "deepseek-v4-flash",
+    }
+
+
+def should_circuit_break(
+    *,
+    tool_exec_count: int,
+    repeated_no_progress: int,
+    wall_seconds: float,
+    thinking_on: bool,
+) -> bool:
+    """Deep mode breaker: stop empty or runaway loops before OOM / infinite stall.
+
+    The guard is intentionally conservative: if the deep lane has no useful tool
+    progress and keeps looping, we bail out with a human-readable message.
+    """
+    if not thinking_on:
+        return False
+    if tool_exec_count <= 0 and repeated_no_progress >= 2:
+        return True
+    if wall_seconds >= 180 and tool_exec_count == 0:
+        return True
+    return repeated_no_progress >= 4
 
 
 def owned_by_for_model(model_id: str) -> str:
