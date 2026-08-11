@@ -1,13 +1,17 @@
 # STATE-NOW · Pico（本窗真源）
 
-```text
-DATE: 2026-08-11
-仓: juanwan99/pico ONLY
-CLAIM-WB-DEGREE-WEB: NO
-PRODUCT PASS: 未签 · 等业主 OWNER DECISION（#449）
-公网 tip（装订冻结 · 须实查）: 502e1f6fd5d3f5999b43303de91b16de1375f26a
-main 文档 HEAD 写卷时: 以 origin/main 实查为准
-```
+
+
+## 当前活动主线（卫生后 · 2026-08-11）
+
+| 优先级 | Issue | 说明 |
+|--------|-------|------|
+| **P0** | [#470](https://github.com/juanwan99/pico/issues/470) | 双档 true_pi 按档 thinking/熔断 + 列表两档 + 类人（收 #468 REVISE） |
+| P0 父 | [#468](https://github.com/juanwan99/pico/issues/468) | 双档大包 · PR #469 · L2 REVISE 中 |
+| 产品签 | [#449](https://github.com/juanwan99/pico/issues/449) · [#316](https://github.com/juanwan99/pico/issues/316) | CLAIM 材料等**业主** · 工程禁代签 |
+| HOLD | [#170](https://github.com/juanwan99/pico/issues/170) · [#159](https://github.com/juanwan99/pico/issues/159) | 须业主授权 · 未执行 |
+
+
 
 ## 架构法律（BINDING）
 
