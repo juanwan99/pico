@@ -119,7 +119,26 @@ export function failedRunUserMessage(events: PicoRunEvent[]): string | null {
   return null;
 }
 
-function friendlyFailureLabel(run: PicoRun, events: PicoRunEvent[]): string {
+/** Client fallback when ledger events lack user_message (older tips / raw error). */
+export function mapRawRunErrorToUserMessage(raw: string): string {
+  const text = raw.trim();
+  const low = text.toLowerCase();
+  if (!text) {
+    return '出了点问题，请重试';
+  }
+  if (low.includes('owner was lost') || low.includes('api restart') || low.includes('greenlet')) {
+    return '服务维护或重启导致本次任务中断。请点「重新运行」继续';
+  }
+  if (/traceback|filenotfound|sqlite|toolcall|event_contract/i.test(text)) {
+    return '智能体任务未正常完成，请重试';
+  }
+  if (text.length > 80) {
+    return '服务暂时出错，请点「重新运行」或稍后重试';
+  }
+  return text;
+}
+
+export function friendlyFailureLabel(run: PicoRun, events: PicoRunEvent[]): string {
   const userMessage = failedRunUserMessage(events);
   if (userMessage) {
     return `失败：${userMessage}`;
@@ -128,11 +147,7 @@ function friendlyFailureLabel(run: PicoRun, events: PicoRunEvent[]): string {
   if (!raw) {
     return '失败';
   }
-  // Keep technical stacks out of the task bar.
-  if (/traceback|filenotfound|sqlite|toolcall|event_contract/i.test(raw)) {
-    return '失败：智能体任务未正常完成，请重试';
-  }
-  return `失败：${raw.slice(0, 40)}`;
+  return `失败：${mapRawRunErrorToUserMessage(raw)}`;
 }
 
 function runtimeHint(events: PicoRunEvent[]): string | null {
@@ -208,7 +223,11 @@ function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null
   return bits.length ? bits.join(' · ') : null;
 }
 
-function statusLabel(
+/**
+ * Ledger terminal status always wins over client stream ``isSubmitting``.
+ * Prevents「侧栏失败 / 主区永久正在准备」when the API restarted mid-run.
+ */
+export function computeRunStatusLabel(
   run: PicoRun | null,
   isSubmitting: boolean,
   artifacts: PicoArtifact[],
@@ -217,24 +236,14 @@ function statusLabel(
   if (run?.cancel_requested && isActiveRun(run)) {
     return '正在停止';
   }
+  // Terminal first — never mask failure/cancel behind local stream flags.
   if (run?.status === 'cancelled') {
     return '已停止';
   }
-  if (isSubmitting) {
-    return '等待模型响应';
+  if (run?.status === 'failed') {
+    return friendlyFailureLabel(run, events);
   }
-  if (!run) {
-    if (artifacts.length) {
-      return '已完成';
-    }
-    return null;
-  }
-  if (isActiveRun(run)) {
-    const runtime = runtimeHint(events);
-    // Durable default: ledger is source of truth after reload / tab close.
-    return runtime ? `云端运行中 · ${runtime}` : '云端运行中（关闭页面不中断）';
-  }
-  if (run.status === 'succeeded') {
+  if (run?.status === 'succeeded') {
     const runtime = runtimeHint(events);
     let base = '已完成';
     if (run.started_at && run.ended_at) {
@@ -251,8 +260,19 @@ function statusLabel(
     }
     return runtime ? `${base} · ${runtime}` : base;
   }
-  if (run.status === 'failed') {
-    return friendlyFailureLabel(run, events);
+  if (isSubmitting) {
+    return '等待模型响应';
+  }
+  if (!run) {
+    if (artifacts.length) {
+      return '已完成';
+    }
+    return null;
+  }
+  if (isActiveRun(run)) {
+    const runtime = runtimeHint(events);
+    // Durable default: ledger is source of truth after reload / tab close.
+    return runtime ? `云端运行中 · ${runtime}` : '云端运行中（关闭页面不中断）';
   }
   return run.status;
 }
@@ -629,7 +649,7 @@ export function usePicoTaskLedger(
     run,
     events,
     artifacts,
-    statusLabel: statusLabel(run, isSubmitting, artifacts, events),
+    statusLabel: computeRunStatusLabel(run, isSubmitting, artifacts, events),
     processHint: processHint(run, events),
     loading,
     error: rerunError ?? cancelError ?? loadError,

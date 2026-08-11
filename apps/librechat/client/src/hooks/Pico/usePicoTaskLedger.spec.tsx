@@ -8,6 +8,9 @@ import {
   retryPicoRun,
 } from '~/data-provider/pico/api';
 import {
+  computeRunStatusLabel,
+  friendlyFailureLabel,
+  mapRawRunErrorToUserMessage,
   mergePolledRun,
   pickPreferredRun,
   pickPreferredTaskRuns,
@@ -31,6 +34,56 @@ const mockedListRuns = jest.mocked(listPicoTaskRuns);
 const mockedListEvents = jest.mocked(listPicoRunEvents);
 const mockedCancelRun = jest.mocked(cancelPicoRun);
 const mockedRetryRun = jest.mocked(retryPicoRun);
+
+describe('failure / restart status labels (#443)', () => {
+  it('maps raw owner-lost error to human Chinese with rerun CTA', () => {
+    const msg = mapRawRunErrorToUserMessage('run owner was lost during API restart');
+    expect(msg).toMatch(/重启|维护/);
+    expect(msg).toMatch(/重新运行/);
+    expect(msg.toLowerCase()).not.toContain('owner was lost');
+  });
+
+  it('prefers event user_message over raw English error', () => {
+    const label = friendlyFailureLabel(
+      { id: 'r1', task_id: 't1', status: 'failed', error: 'run owner was lost during API restart' },
+      [
+        {
+          id: 'e1',
+          run_id: 'r1',
+          type: 'run.status',
+          payload: {
+            status: 'failed',
+            user_message: '服务维护或重启导致本次任务中断。请点「重新运行」继续',
+          },
+        } as never,
+      ],
+    );
+    expect(label.startsWith('失败：')).toBe(true);
+    expect(label).toContain('重新运行');
+    expect(label.toLowerCase()).not.toContain('owner was lost');
+  });
+
+  it('terminal failed wins over isSubmitting (no permanent 等待/准备)', () => {
+    const label = computeRunStatusLabel(
+      { id: 'r1', task_id: 't1', status: 'failed', error: 'run owner was lost during API restart' },
+      true,
+      [],
+      [],
+    );
+    expect(label?.startsWith('失败：')).toBe(true);
+    expect(label).not.toContain('等待');
+  });
+
+  it('terminal cancelled wins over isSubmitting', () => {
+    const label = computeRunStatusLabel(
+      { id: 'r1', task_id: 't1', status: 'cancelled' },
+      true,
+      [],
+      [],
+    );
+    expect(label).toBe('已停止');
+  });
+});
 
 describe('pickPreferredRun / pickPreferredTaskRuns', () => {
   it('does not regress an acknowledged stop when an older poll arrives', () => {

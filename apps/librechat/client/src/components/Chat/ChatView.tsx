@@ -183,7 +183,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     model={ledger.run?.model}
                     statusLabel={ledger.statusLabel}
                     completedLabel={
-                      !isSubmitting &&
+                      // Terminal ledger labels always surface (even if stream isSubmitting).
                       ledger.statusLabel &&
                       (ledger.statusLabel.startsWith('已完成') ||
                         ledger.statusLabel.startsWith('失败') ||
