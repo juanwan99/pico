@@ -1,17 +1,17 @@
 import React, { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, Clock3, ListTodo, MessageSquarePlus } from 'lucide-react';
 import { humanizeRunError, labelForLatestRun, type PicoTask } from '~/data-provider/pico/api';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
 const STATUS_CLASS: Record<string, string> = {
-  进行中: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200',
-  '仍在处理…': 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200',
-  停止中: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100',
-  失败: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
-  已停止: 'bg-surface-tertiary text-text-secondary',
-  已完成: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+  进行中: 'bg-[color:var(--pico-violet-wash)] text-[color:var(--pico-violet-dark)]',
+  '仍在处理…': 'bg-[color:var(--pico-violet-wash)] text-[color:var(--pico-violet-dark)]',
+  停止中: 'bg-[color:var(--pico-amber-wash)] text-[color:var(--pico-amber)]',
+  失败: 'bg-[color:var(--pico-red-wash)] text-[color:var(--pico-red)]',
+  已停止: 'bg-[color:var(--pico-surface-2)] text-[color:var(--pico-ink-2)]',
+  已完成: 'bg-[color:var(--pico-mint-wash)] text-[color:var(--pico-mint-dark)]',
 };
 
 export function recoverableTasks(tasks: PicoTask[]): PicoTask[] {
@@ -102,22 +102,36 @@ function TaskRow({ task, onOpen }: { task: PicoTask; onOpen: () => void }) {
         onOpen();
         navigate(href);
       }}
-      className="group flex min-h-14 items-center gap-2 rounded-lg px-2 py-2 outline-none hover:bg-surface-active-alt focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-white"
+      className="group grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 rounded-xl px-2 py-2 outline-none hover:bg-[color:var(--pico-surface-2)] focus-visible:ring-2 focus-visible:ring-[color:var(--pico-violet)]"
       aria-label={`${title}，${status}，${time}`}
       data-testid="teacher-task-row"
     >
-      <ListTodo className="h-4 w-4 shrink-0 text-text-secondary" aria-hidden="true" />
+      <PicoIcon name="check" size="sm" className="mt-0.5 text-[color:var(--pico-violet)]" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-text-primary" title={title}>
+        <p
+          className="block min-w-0 truncate text-sm font-medium text-[color:var(--pico-ink)]"
+          title={title}
+          data-testid="teacher-task-title"
+        >
           {title}
         </p>
-        <p className="mt-0.5 flex items-center gap-1 text-[11px] text-text-secondary">
-          <Clock3 className="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span className="truncate">{time}</span>
-        </p>
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-[color:var(--pico-ink-3)]">
+          <PicoIcon name="clock" size="sm" className="h-3 w-3" />
+          <span className="min-w-0 flex-1 truncate">{time}</span>
+          <span
+            className={cn(
+              'max-w-[4.5rem] shrink-0 truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none',
+              STATUS_CLASS[status] ||
+                'bg-[color:var(--pico-surface-2)] text-[color:var(--pico-ink-2)]',
+            )}
+            data-testid="teacher-task-status"
+          >
+            {status}
+          </span>
+        </div>
         {failHint ? (
           <p
-            className="mt-0.5 truncate text-[11px] text-red-700 dark:text-red-300"
+            className="mt-1 block min-w-0 truncate text-[11px] text-[color:var(--pico-red)]"
             data-testid="teacher-task-fail-hint"
             title={failHint}
           >
@@ -125,15 +139,6 @@ function TaskRow({ task, onOpen }: { task: PicoTask; onOpen: () => void }) {
           </p>
         ) : null}
       </div>
-      <span
-        className={cn(
-          'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none',
-          STATUS_CLASS[status] || 'bg-surface-tertiary text-text-secondary',
-        )}
-        data-testid="teacher-task-status"
-      >
-        {status}
-      </span>
     </Link>
   );
 }
@@ -188,7 +193,7 @@ export default function TeacherTaskHome({
       <div className="space-y-3" data-testid="teacher-task-day-groups">
         {groups.map(({ day, tasks: dayTasks }) => (
           <section key={day} aria-label={day}>
-            <h3 className="sticky top-0 z-[1] bg-surface-primary/95 px-1 py-1 text-[11px] font-semibold uppercase tracking-wide text-text-secondary backdrop-blur-sm">
+            <h3 className="sticky top-0 z-[1] bg-[color:var(--pico-sidebar)] px-1 py-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--pico-ink-3)]">
               {day}
             </h3>
             <div className="space-y-1">
@@ -207,9 +212,7 @@ export default function TeacherTaskHome({
         role="status"
         data-testid="teacher-task-empty"
       >
-        <p className="text-sm text-text-secondary">
-          {localize('com_ui_pico_task_history_empty')}
-        </p>
+        <p className="text-sm text-text-secondary">{localize('com_ui_pico_task_history_empty')}</p>
         <p className="max-w-[16rem] text-xs text-text-secondary">
           在下方输入框描述任务并发送，即可开始；完成后可在此按时间找回。
         </p>
@@ -219,7 +222,7 @@ export default function TeacherTaskHome({
           className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-surface-submit px-3 py-2 text-sm font-medium text-white hover:opacity-90"
           data-testid="teacher-task-empty-start"
         >
-          <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+          <PicoIcon name="plus" size="sm" />
           开始新任务
         </Link>
       </div>
@@ -227,13 +230,16 @@ export default function TeacherTaskHome({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-2" data-testid="teacher-task-home">
+    <div
+      className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-2"
+      data-testid="teacher-task-home"
+    >
       {error ? (
         <div
-          className="mb-2 flex items-center gap-2 rounded-lg bg-red-50 px-2 py-2 text-xs text-red-800 dark:bg-red-950 dark:text-red-200"
+          className="mb-2 flex items-center gap-2 rounded-xl bg-[color:var(--pico-red-wash)] px-2 py-2 text-xs text-[color:var(--pico-red)]"
           role="alert"
         >
-          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <PicoIcon name="help" size="sm" />
           <span className="min-w-0 flex-1">{error}</span>
           <button
             type="button"

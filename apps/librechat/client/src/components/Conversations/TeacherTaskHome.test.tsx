@@ -118,6 +118,29 @@ describe('TeacherTaskHome', () => {
     expect(screen.getByTestId('teacher-task-day-groups')).toBeInTheDocument();
   });
 
+  it('keeps long title, status and failure hint in separate truncating rows', () => {
+    const longTitle = '请根据本学期全部课程数据生成一份非常详细的教学质量分析与改进方案';
+    renderHome({
+      tasks: [
+        {
+          id: 'task-long-failed',
+          title: longTitle,
+          conversation_id: 'conversation-long-failed',
+          latest_run: {
+            id: 'run-long-failed',
+            status: 'failed',
+            user_message: '服务维护或重启导致本次任务中断，请打开后重新运行继续。',
+          },
+        },
+      ],
+    });
+
+    expect(screen.getByTestId('teacher-task-title')).toHaveClass('min-w-0', 'truncate');
+    expect(screen.getByTestId('teacher-task-status')).toHaveClass('shrink-0', 'max-w-[4.5rem]');
+    expect(screen.getByTestId('teacher-task-fail-hint')).toHaveClass('min-w-0', 'truncate');
+    expect(screen.getByTestId('teacher-task-status')).toHaveTextContent('失败');
+  });
+
   it('uses the latest-run time and keeps only conversation-bound tasks', () => {
     expect(taskTimeValue(tasks[0])).toBe('2026-08-02T04:00:00Z');
     expect(recoverableTasks(tasks).map((task) => task.id)).toEqual(['task-failed']);
