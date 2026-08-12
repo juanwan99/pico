@@ -48,7 +48,7 @@ export default function AssistantPage() {
         setPicoModelMode(preferredModelForExpert(a.expert));
       } else {
         setActiveExpert(null);
-        setPicoModelMode(a.model?.includes('pico-agent') ? 'pico-agent' : 'kimi-k2.6');
+        setPicoModelMode(a.model?.includes('pico-deep') ? 'pico-deep' : 'pico-fast');
       }
     } catch {
       /* ignore */

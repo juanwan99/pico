@@ -23,7 +23,15 @@ import { useAuthContext } from '~/hooks';
 import useSubmitMessage from '~/hooks/Messages/useSubmitMessage';
 import WorkspaceSelector from '~/components/Chat/Input/WorkspaceSelector';
 import { cn } from '~/utils';
-import { consumePendingModel, getPicoModelMode, setPicoModelMode } from '~/utils/picoModelPref';
+import {
+  consumePendingModel,
+  getPicoModelMode,
+  labelForPicoModel,
+  normalizePicoModelMode,
+  PICO_DUAL_MODELS,
+  setPicoModelMode,
+} from '~/utils/picoModelPref';
+import { useOptionalChatContext } from '~/Providers';
 
 type SceneId = 'office' | 'code' | 'design';
 
@@ -99,11 +107,30 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
   const [modelOpen, setModelOpen] = useState(false);
   const [model, setModel] = useState(() => {
     try {
-      return getPicoModelMode() || 'Auto';
+      return normalizePicoModelMode(getPicoModelMode());
     } catch {
-      return 'Auto';
+      return 'pico-fast';
     }
   });
+  const chatCtx = useOptionalChatContext();
+  const applyModel = useCallback(
+    (raw: string) => {
+      const id = normalizePicoModelMode(raw);
+      setModel(id);
+      setPicoModelMode(id);
+      setModelOpen(false);
+      chatCtx?.setConversation?.((prev) =>
+        prev
+          ? {
+              ...prev,
+              endpoint: prev.endpoint ?? 'openAI',
+              model: id,
+            }
+          : prev,
+      );
+    },
+    [chatCtx],
+  );
   const [expertBadge, setExpertBadge] = useState<string | null>(null);
   const [connectorBadge, setConnectorBadge] = useState<string | null>(null);
   const [skillBadge, setSkillBadge] = useState<string | null>(null);
@@ -143,7 +170,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     try {
       const pendingModel = consumePendingModel();
       if (pendingModel) {
-        setModel(pendingModel);
+        applyModel(pendingModel);
       }
       const expert = sessionStorage.getItem('pico:pendingExpert');
       if (expert) {
@@ -172,7 +199,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     } catch {
       /* ignore */
     }
-  }, [fillPrompt]);
+  }, [applyModel, fillPrompt]);
 
   const name = user?.name?.split(/\s+/)[0] || '';
 
@@ -204,7 +231,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
               </span>
             ) : null}
             <span className="rounded-full bg-[#edf1f4] px-3 py-1 text-[12px] text-[#8c8c8c]">
-              模型 {model}
+              模型 {labelForPicoModel(model)}
             </span>
           </div>
         ) : null}
@@ -293,23 +320,19 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                       className="inline-flex h-8 items-center gap-1 rounded-full bg-[#f3f3f3] px-2.5 text-[12.5px] font-medium text-[#3d3d3d]"
                       onClick={() => setModelOpen((v) => !v)}
                     >
-                      {model}
+                      {labelForPicoModel(model)}
                       <ChevronDown className="h-3.5 w-3.5 opacity-60" />
                     </button>
                     {modelOpen && (
                       <div className="absolute bottom-full right-0 z-50 mb-2 w-52 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-lg">
-                        {['Auto', 'kimi-k2.6', 'Kimi-K3', 'pico-agent'].map((m) => (
+                        {PICO_DUAL_MODELS.map((m) => (
                           <button
-                            key={m}
+                            key={m.id}
                             type="button"
                             className="flex w-full px-3 py-2 text-left text-[13px] hover:bg-[#f5f5f5]"
-                            onClick={() => {
-                              setModel(m);
-                              setModelOpen(false);
-                              setPicoModelMode(m);
-                            }}
+                            onClick={() => applyModel(m.id)}
                           >
-                            {m}
+                            {m.label}
                           </button>
                         ))}
                       </div>
