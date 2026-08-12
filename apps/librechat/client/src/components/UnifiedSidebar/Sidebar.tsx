@@ -175,7 +175,7 @@ function Sidebar({
         <button
           type="button"
           onClick={onNewTask}
-          className="mt-2 flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--pico-ink)] text-white transition-colors hover:bg-black"
+          className="mt-2 flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--pico-ink)] text-white transition-colors hover:bg-[color:var(--pico-ink-2)]"
           aria-label="新建任务"
         >
           <PicoIcon name="plus" size="sm" />
@@ -196,8 +196,8 @@ function Sidebar({
                     className={cn(
                       'flex h-9 w-9 items-center justify-center rounded-lg transition-colors',
                       active
-                        ? 'bg-[#dedede] text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
-                        : 'text-[#555] hover:bg-[#e4e4e4] dark:text-text-secondary dark:hover:bg-surface-tertiary',
+                        ? 'bg-[color:var(--pico-line-2)] text-[color:var(--pico-ink)] dark:bg-surface-tertiary dark:text-text-primary'
+                        : 'text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-line)] dark:text-text-secondary dark:hover:bg-surface-tertiary',
                     )}
                     aria-label={item.label}
                     aria-current={active ? 'page' : undefined}
@@ -209,7 +209,7 @@ function Sidebar({
             );
           })}
         </nav>
-        <div className="my-2 h-px w-6 bg-black/[0.06] dark:bg-white/10" />
+        <div className="my-2 h-px w-6 bg-[color:var(--pico-line)] dark:bg-white/10" />
         <TooltipAnchor
           description="空间"
           render={
@@ -219,8 +219,8 @@ function Sidebar({
               className={cn(
                 'flex h-9 w-9 items-center justify-center rounded-lg transition-colors',
                 location.pathname.startsWith('/workspaces')
-                  ? 'bg-[#dedede] text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
-                  : 'text-[#555] hover:bg-[#e4e4e4] dark:text-text-secondary dark:hover:bg-surface-tertiary',
+                  ? 'bg-[color:var(--pico-line-2)] text-[color:var(--pico-ink)] dark:bg-surface-tertiary dark:text-text-primary'
+                  : 'text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-line)] dark:text-text-secondary dark:hover:bg-surface-tertiary',
               )}
               aria-label="空间"
               aria-current={location.pathname.startsWith('/workspaces') ? 'page' : undefined}
@@ -238,15 +238,17 @@ function Sidebar({
       <div className="flex items-start justify-between px-4 pb-1 pt-4">
         <div className="min-w-0">
           <div className="text-[15px] font-semibold leading-tight tracking-tight">Pico</div>
-          <div className="mt-0.5 text-[11px] leading-none text-[#8c8c8c]">v0.8.7</div>
+          <div className="mt-0.5 text-[11px] leading-none text-[color:var(--pico-ink-3)]">
+            v0.8.7
+          </div>
         </div>
-        <div className="flex items-center gap-0.5 text-[#6b6b6b]">
+        <div className="flex items-center gap-0.5 text-[color:var(--pico-ink-2)]">
           <TooltipAnchor
             description="任务历史"
             render={
               <button
                 type="button"
-                className="rounded-md p-1.5 hover:bg-black/[0.04]"
+                className="rounded-md p-1.5 hover:bg-[color:var(--pico-surface-2)]"
                 onClick={() => navigate('/search')}
                 aria-label="任务历史"
               >
@@ -256,7 +258,7 @@ function Sidebar({
           />
           <button
             type="button"
-            className="rounded-md p-1.5 hover:bg-black/[0.04]"
+            className="rounded-md p-1.5 hover:bg-[color:var(--pico-surface-2)]"
             onClick={() => navigate('/search')}
             aria-label="搜索"
           >
@@ -267,7 +269,7 @@ function Sidebar({
             render={
               <button
                 type="button"
-                className="rounded-md p-1.5 hover:bg-black/[0.04]"
+                className="rounded-md p-1.5 hover:bg-[color:var(--pico-surface-2)]"
                 onClick={() => navigate('/more')}
                 aria-label="活动与更多"
               >
@@ -277,7 +279,7 @@ function Sidebar({
           />
           <button
             type="button"
-            className="rounded-md p-1.5 hover:bg-black/[0.04]"
+            className="rounded-md p-1.5 hover:bg-[color:var(--pico-surface-2)]"
             onClick={onCollapse}
             aria-label={localize('com_nav_close_sidebar')}
           >
@@ -292,7 +294,7 @@ function Sidebar({
             type="button"
             data-testid="new-chat-button"
             onClick={onNewTask}
-            className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--pico-ink)] text-[13px] font-medium text-white shadow-sm transition hover:bg-black"
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--pico-ink)] text-[13px] font-medium text-white shadow-sm transition hover:bg-[color:var(--pico-ink-2)]"
           >
             <PicoIcon name="plus" size="sm" />
             新建任务
@@ -326,23 +328,25 @@ function Sidebar({
                   className={cn(
                     'group flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13.5px] transition-colors',
                     active
-                      ? 'bg-[#e4e4e4] font-medium text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary'
-                      : 'font-normal text-[#3d3d3d] hover:bg-[#e8e8e8] dark:text-text-secondary dark:hover:bg-surface-tertiary',
+                      ? 'bg-[color:var(--pico-line)] font-medium text-[color:var(--pico-ink)] dark:bg-surface-tertiary dark:text-text-primary'
+                      : 'font-normal text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)] dark:text-text-secondary dark:hover:bg-surface-tertiary',
                   )}
                   aria-current={active ? 'page' : undefined}
                   aria-expanded={item.action === 'more' ? Boolean(moreMenu) : undefined}
                 >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center text-[#4a4a4a]">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center text-[color:var(--pico-ink-2)]">
                     <PicoIcon name={item.icon} size="sm" />
                   </span>
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   {item.badge ? (
-                    <span className="shrink-0 text-[11px] text-[#9a9a9a]">{item.badge}</span>
+                    <span className="shrink-0 text-[11px] text-[color:var(--pico-ink-3)]">
+                      {item.badge}
+                    </span>
                   ) : null}
                 </button>
                 {item.action === 'more' && moreMenu ? (
                   <div
-                    className="fixed z-[160] w-40 rounded-lg border border-black/[0.08] bg-white p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.12)]"
+                    className="fixed z-[160] w-40 rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-1.5 shadow-[var(--pico-shadow-raised)]"
                     style={{ left: moreMenu.left, top: moreMenu.top }}
                     role="menu"
                     aria-label="更多 · 资料库·灵感"
@@ -351,18 +355,22 @@ function Sidebar({
                       return (
                         <div key={menuItem.label}>
                           {'divider' in menuItem && menuItem.divider ? (
-                            <div className="my-1 h-px bg-black/[0.06]" />
+                            <div className="my-1 h-px bg-[color:var(--pico-line)]" />
                           ) : null}
                           <button
                             type="button"
                             role="menuitem"
-                            className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-[#3d3d3d] hover:bg-[#f2f2f2]"
+                            className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
                             onClick={() => {
                               setMoreMenu(null);
                               navigate(menuItem.path);
                             }}
                           >
-                            <PicoIcon name={menuItem.icon} size="sm" className="text-[#5d5d5d]" />
+                            <PicoIcon
+                              name={menuItem.icon}
+                              size="sm"
+                              className="text-[color:var(--pico-ink-2)]"
+                            />
                             <span>{menuItem.label}</span>
                           </button>
                         </div>
@@ -420,14 +428,14 @@ function Sidebar({
         </div>
         <button
           type="button"
-          className="rounded-md p-1.5 text-[#6b6b6b] hover:bg-black/[0.04]"
+          className="rounded-md p-1.5 text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
           aria-label="通知"
         >
           <PicoIcon name="bell" size="sm" />
         </button>
         <button
           type="button"
-          className="rounded-md p-1.5 text-[#6b6b6b] hover:bg-black/[0.04]"
+          className="rounded-md p-1.5 text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
           aria-label="帮助"
         >
           <PicoIcon name="help" size="sm" />

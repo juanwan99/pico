@@ -2,7 +2,11 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { PicoTask } from '~/data-provider/pico/api';
-import TeacherTaskHome, { recoverableTasks, taskTimeValue } from './TeacherTaskHome';
+import TeacherTaskHome, {
+  iconForTaskStatus,
+  recoverableTasks,
+  taskTimeValue,
+} from './TeacherTaskHome';
 
 jest.mock('~/utils', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
@@ -144,5 +148,12 @@ describe('TeacherTaskHome', () => {
   it('uses the latest-run time and keeps only conversation-bound tasks', () => {
     expect(taskTimeValue(tasks[0])).toBe('2026-08-02T04:00:00Z');
     expect(recoverableTasks(tasks).map((task) => task.id)).toEqual(['task-failed']);
+  });
+
+  it('uses distinct Pico icons for completed, failed and active tasks', () => {
+    expect(iconForTaskStatus('已完成').name).toBe('check');
+    expect(iconForTaskStatus('失败').name).toBe('help');
+    expect(iconForTaskStatus('仍在处理…').name).toBe('clock');
+    expect(iconForTaskStatus('暂无运行').name).toBe('doc');
   });
 });

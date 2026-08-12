@@ -97,10 +97,13 @@ try {
     fullPage: true,
   });
   await sidebar.screenshot({ path: path.join(outDir, "footer.png") });
+  const completedRows = rows.filter({ hasText: "已完成" });
+  const completedRowCount = await completedRows.count();
   const firstTaskHref =
     rowCount > 0 ? await rows.first().getAttribute("href") : null;
-  if (rowCount > 0) {
-    await rows.first().screenshot({ path: path.join(outDir, "list-ok.png") });
+  if (completedRowCount > 0) {
+    await completedRows.first().scrollIntoViewIfNeeded();
+    await sidebar.screenshot({ path: path.join(outDir, "list-ok.png") });
   }
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -121,6 +124,8 @@ try {
   const report = {
     tip,
     row_count: rowCount,
+    completed_row_count: completedRowCount,
+    list_ok_size_bytes: fs.statSync(path.join(outDir, "list-ok.png")).size,
     row_checks: rowChecks,
     overlap_pass: rowChecks.every(
       (row) => row.title_status_no_overlap && row.hint_status_no_overlap,

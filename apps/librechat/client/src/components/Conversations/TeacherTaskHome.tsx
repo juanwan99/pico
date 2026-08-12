@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { humanizeRunError, labelForLatestRun, type PicoTask } from '~/data-provider/pico/api';
-import { PicoIcon } from '~/components/ui/pico-icons';
+import { PicoIcon, type PicoIconName } from '~/components/ui/pico-icons';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -85,6 +85,22 @@ export function taskFailureHint(task: PicoTask): string | null {
   return '任务未完成，可打开后重试。';
 }
 
+export function iconForTaskStatus(status: string): {
+  name: PicoIconName;
+  className: string;
+} {
+  if (status === '已完成') {
+    return { name: 'check', className: 'text-[color:var(--pico-mint-dark)]' };
+  }
+  if (status === '失败') {
+    return { name: 'help', className: 'text-[color:var(--pico-red)]' };
+  }
+  if (status === '进行中' || status === '仍在处理…' || status === '停止中') {
+    return { name: 'clock', className: 'text-[color:var(--pico-violet)]' };
+  }
+  return { name: 'doc', className: 'text-[color:var(--pico-ink-3)]' };
+}
+
 function TaskRow({ task, onOpen }: { task: PicoTask; onOpen: () => void }) {
   const navigate = useNavigate();
   const status = labelForLatestRun(task.latest_run) || '暂无运行';
@@ -93,6 +109,7 @@ function TaskRow({ task, onOpen }: { task: PicoTask; onOpen: () => void }) {
   const title = task.title?.trim() || '未命名任务';
   const href = `/c/${encodeURIComponent(conversationId)}`;
   const failHint = taskFailureHint(task);
+  const taskIcon = iconForTaskStatus(status);
 
   return (
     <Link
@@ -106,7 +123,12 @@ function TaskRow({ task, onOpen }: { task: PicoTask; onOpen: () => void }) {
       aria-label={`${title}，${status}，${time}`}
       data-testid="teacher-task-row"
     >
-      <PicoIcon name="check" size="sm" className="mt-0.5 text-[color:var(--pico-violet)]" />
+      <PicoIcon
+        name={taskIcon.name}
+        size="sm"
+        className={cn('mt-0.5', taskIcon.className)}
+        title={`${status}图标`}
+      />
       <div className="min-w-0 flex-1">
         <p
           className="block min-w-0 truncate text-sm font-medium text-[color:var(--pico-ink)]"
