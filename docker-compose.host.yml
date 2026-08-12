@@ -1,5 +1,6 @@
 # Production layout used on Aliyun light server (host network).
-# Public entry: Nginx 443 → 127.0.0.1:8080 only.
+# Public entry: Nginx 443 → 127.0.0.1:18088 only.
+# Shared ECS: LibreChat must bind 18088 — never 8080 (edu-core-bff on same host).
 #
 # Demo seeding is off by default. Enable only for an explicitly approved demo:
 #   PICO_DEMO_SEED=1 PICO_DEMO_EMAIL=... PICO_DEMO_PASSWORD=...
@@ -101,7 +102,7 @@ services:
       - ./apps/librechat/.env
     environment:
       HOST: "127.0.0.1"
-      PORT: "8080"
+      PORT: "18088"
       MONGO_URI: mongodb://127.0.0.1:27017/LibreChat
       OPENAI_REVERSE_PROXY: http://127.0.0.1:18765/v1
       OPENAI_API_KEY: ${PICO_OPENAI_PROXY_KEY:?set a strong internal proxy key}
