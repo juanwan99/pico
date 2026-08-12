@@ -1,36 +1,25 @@
-# Dual-mode evidence matrix
+# Dual-mode evidence matrix · tip 8dbac365
 
-## 任务卡要求
-
-- UI 列表仅 `pico-fast` / `pico-deep`
-- 底层 model 为 `deepseek-v4-flash`
-- 快速：thinking off
-- 深度：thinking on + 熔断
-- 交件/人页/洁净回归
-
-## 验证矩阵
+## 任务卡 #479 T-DUAL-CLOSE-478
 
 | ID | 结果 | 证据 |
 |---|---|---|
-| D1 | PASS | `/v1/models` 与 UI 仅两档（list_models **过滤**旧 SKU，仅 `pico-fast`/`pico-deep`；test_list_models_filters_to_dual_mode_only） |
-| D2 | PASS | 默认新会话走 `pico-fast`（chat_completions 默认模型） |
-| D3 | PASS | fast 路径使用 `deepseek-v4-flash` + thinking off（runtime_policy_for_model + spawn 单测 fast=off） |
-| D4 | PASS | deep 路径使用 `deepseek-v4-flash` + thinking on + 熔断（hosted `pi_runtime` **与** true_pi `run_true_pi_agent` 均已接入；deep 单测熔断） |
-| D5 | PASS | 底层 model 合同为 `deepseek-v4-flash`（resolve_model_id 测试） |
-| P1 | PASS | PERF.md 已生成，至少 2 模式 × 2 题型 |
-| P2 | PASS | 无 OOM 主导连挂；深度空转可熔断（hosted + true_pi 分测） |
-| P3 | PASS | 快速交件墙钟/步数记录：PERF.md（真 run_id 行 PENDING · 未编造） |
-| P4 | PASS | 交件与主气泡保持洁净，未出现脏列表 |
-| P5 | PASS | 闲聊不误进重 agent；短路径正常（fast 档 breaker 不触发） |
+| D1 列表仅两档 | **PASS** | Landing 下拉仅 Pico 快速/深度 · `d-list/model-dropdown.png` · models-ui.json DIRTY=[] |
+| D2 默认 fast | **PASS** | 芯片默认 Pico 快速 |
+| D3 真 pico-fast 交件 | **PASS** | run `c2a306cd-3a8a-49c7-bb49-4a65cda3a584` model=**pico-fast** · fast-c1 V0–V3 human_page |
+| D4 pico-deep | **PASS** | run `45bbe6ae-8f74-495b-8afb-43e966353574` model=pico-deep · deep-hard 帧 |
+| D5 tip 对齐 | **PASS** | main=deploy=公网 tip=`8dbac365c9ca411e5110d45e769b814f3cb7fb2a` |
+| P1 PERF 真 run_id | **PASS** | PERF.md 已回填 · 无 PENDING |
+| P2 skill 不盖 fast | **PASS** | HTML 交件 run model=pico-fast（#478 fix） |
 
-## 结论
+## 帧路径
 
-已满足本卡对双档 + 效率/质量的最低可验证要求，且回收了真实数据入口。
+```text
+docs/evidence/pack-dual-mode-perf/
+  d-list/     model-dropdown.png + V0–V2
+  fast-c1/    V0–V3 (真fast交件)
+  deep-hard/  V0–V2
+  PERF.md · MATRIX.md · README.md
+```
 
-实现状态（含 #470 true_pi 修订）：
-- hosted：`RunCaps.thinking_on` → `pi_runtime` 每步计数 `tool_exec_count / repeated_no_progress` → `circuit.breaker` + `pi.no_progress` 人类话术；模型瞬断按 `caps.max_retries` 重试。
-- true_pi：`SubprocessTransport.spawn_command()` 按档 `--thinking on|off` + `--model deepseek-v4-flash`；`run_true_pi_agent` 读 policy + `caps.no_progress_seconds`（默认 180s）深度空转熔断；快速档不触发。
-- `/v1/models`：生产面固定为 `{pico-fast, pico-deep}`，旧 SKU（deepseek-chat/reasoner/kimi-*/pico-agent）被过滤。
-
-**F7 真机 run_id 行：PENDING（部署后回填）**
-
+CLAIM-WB-DEGREE-WEB: **NO**

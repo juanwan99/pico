@@ -1,0 +1,42 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-12T01:15:42.905Z",
+  "base": "https://pico.aivia.asia",
+  "card": "pack-dual-mode-perf",
+  "scene": "d-list",
+  "model": "Pico 快速",
+  "prompt": "只回一句：双档列表OK，不要调用工具。",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "git_sha": "8dbac365c9ca411e5110d45e769b814f3cb7fb2a",
+    "service": "pico-api"
+  },
+  "conversation_url": "https://pico.aivia.asia/c/3a9ea349-de4b-481f-9913-e7e6b6bd7305",
+  "out_dir": "docs/evidence/pack-dual-mode-perf/d-list",
+  "frames": {
+    "V0": "docs/evidence/pack-dual-mode-perf/d-list/V0-send.png",
+    "V1": "docs/evidence/pack-dual-mode-perf/d-list/V1-process-main.png",
+    "V2": "docs/evidence/pack-dual-mode-perf/d-list/V2-final.png",
+    "V2_390": "docs/evidence/pack-dual-mode-perf/d-list/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [
+    "V3 skipped (--skip-v3)"
+  ],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}
