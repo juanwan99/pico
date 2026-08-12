@@ -13,7 +13,8 @@ EMAIL="${PICO_DEMO_EMAIL:-${DEMO_EMAIL:-}}"
 PASS="${PICO_DEMO_PASSWORD:-${DEMO_PASSWORD:-}}"
 NAME="${DEMO_NAME:-Pico Teacher}"
 USER="${DEMO_USERNAME:-teacher}"
-LC_URL="${LIBRECHAT_URL:-http://127.0.0.1:8080}"
+# Shared ECS: LibreChat loopback must be 18088 — never 8080 (edu-core-bff).
+LC_URL="${LIBRECHAT_URL:-http://127.0.0.1:18088}"
 if [ -z "$EMAIL" ] || [ "${#PASS}" -lt 12 ]; then
   echo "[pico] BLOCKED: PICO_DEMO_EMAIL and a 12+ character PICO_DEMO_PASSWORD are required" >&2
   exit 2
@@ -48,7 +49,7 @@ keys = {
     "DOMAIN_CLIENT": "https://pico.aivia.asia",
     "DOMAIN_SERVER": "https://pico.aivia.asia",
     "HOST": "127.0.0.1",
-    "PORT": "8080",
+    "PORT": "18088",
     "MONGO_URI": "mongodb://127.0.0.1:27017/LibreChat",
     "OPENAI_REVERSE_PROXY": "http://127.0.0.1:18765/v1",
 }
