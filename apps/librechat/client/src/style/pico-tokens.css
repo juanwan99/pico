@@ -80,17 +80,22 @@
 }
 .pico-icon {
   display: block;
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
   flex: 0 0 auto;
+  overflow: visible;
+  /* presentation attrs live on the SVG element + symbols; keep CSS as belt */
+  fill: none !important;
+  stroke: currentColor;
+  color: inherit;
 }
-.pico-icon-sm { width: 16px; height: 16px; stroke-width: 2; }
+.pico-icon-sm { width: 16px; height: 16px; }
 .pico-icon-lg { width: 23px; height: 23px; }
+.pico-icon-sprite {
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none;
+}
 .pico-icon-medallion {
   display: inline-flex;
   align-items: center;
