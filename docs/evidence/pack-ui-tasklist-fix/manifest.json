@@ -1,10 +1,12 @@
 {
   "tip": {
     "ok": true,
-    "git_sha": "e36d80ab2a94b7a7332c599911906426bf24bc1e",
+    "git_sha": "b321a415f3d841abc3fa8155c6705a2436575dc7",
     "service": "pico-api"
   },
   "row_count": 50,
+  "completed_row_count": 48,
+  "list_ok_size_bytes": 53603,
   "row_checks": [
     {
       "title_status_no_overlap": true,
