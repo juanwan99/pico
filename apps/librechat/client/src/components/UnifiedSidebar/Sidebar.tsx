@@ -4,27 +4,7 @@
 import { memo, useCallback, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
-import {
-  Plus,
-  Bot,
-  FolderKanban,
-  Blocks,
-  Zap,
-  MoreHorizontal,
-  History,
-  Search,
-  Gift,
-  ChevronDown,
-  CircleHelp,
-  Bell,
-  PanelLeft,
-  FolderOpen,
-  Mail,
-  FileText,
-  Library,
-  Lightbulb,
-  BookOpen,
-} from 'lucide-react';
+import { PicoIcon, type PicoIconName } from '~/components/ui/pico-icons';
 import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { Skeleton, Button, TooltipAnchor } from '@librechat/client';
@@ -41,27 +21,27 @@ const AccountSettings = lazy(() => import('~/components/Nav/AccountSettings'));
 type NavItem = {
   id: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: PicoIconName;
   path?: string;
   action?: 'new-task' | 'more';
   badge?: string;
 };
 
 const NAV: NavItem[] = [
-  { id: 'new', label: '新建任务', icon: Plus, action: 'new-task' },
-  { id: 'agents', label: '助理', icon: Bot, path: '/assistants' },
-  { id: 'projects', label: '项目', icon: FolderKanban, path: '/projects' },
+  { id: 'new', label: '新建任务', icon: 'plus', action: 'new-task' },
+  { id: 'agents', label: '助理', icon: 'bot', path: '/assistants' },
+  { id: 'projects', label: '项目', icon: 'folder', path: '/projects' },
   {
     id: 'skills',
     label: '专家·技能·连接器',
-    icon: Blocks,
+    icon: 'blocks',
     path: '/capability',
   },
-  { id: 'auto', label: '自动化', icon: Zap, path: '/automation' },
+  { id: 'auto', label: '自动化', icon: 'zap', path: '/automation' },
   {
     id: 'more',
     label: '更多',
-    icon: MoreHorizontal,
+    icon: 'more',
     path: '/more',
     action: 'more',
     badge: '资料库·灵感',
@@ -69,27 +49,27 @@ const NAV: NavItem[] = [
 ];
 
 const MORE_ITEMS = [
-  { label: '我的文件', icon: FolderOpen, path: '/more/files' },
-  { label: '我的邮箱', icon: Mail, path: '/capability/connectors/c3' },
+  { label: '我的文件', icon: 'folder-open' as PicoIconName, path: '/more/files' },
+  { label: '我的邮箱', icon: 'mail' as PicoIconName, path: '/capability/connectors/c3' },
   {
     label: '腾讯文档',
-    icon: FileText,
+    icon: 'doc' as PicoIconName,
     path: '/capability/connectors/c5',
     divider: true,
   },
   {
     label: 'ima知识库',
-    icon: Library,
+    icon: 'books' as PicoIconName,
     path: '/capability/connectors/c4?provider=ima',
   },
   {
     label: '乐享知识库',
-    icon: BookOpen,
+    icon: 'books' as PicoIconName,
     path: '/capability/connectors/c4?provider=lexiang',
   },
   {
     label: '灵感',
-    icon: Lightbulb,
+    icon: 'lightbulb' as PicoIconName,
     path: '/capability?tab=skills',
     divider: true,
   },
@@ -188,7 +168,7 @@ function Sidebar({
               onClick={onExpand}
               aria-label="展开侧栏"
             >
-              <PanelLeft className="h-5 w-5" />
+              <PicoIcon name="panel" />
             </Button>
           }
         />
@@ -198,11 +178,10 @@ function Sidebar({
           className="mt-2 flex h-9 w-9 items-center justify-center rounded-lg bg-[#1a1a1a] text-white transition-colors hover:bg-black"
           aria-label="新建任务"
         >
-          <Plus className="h-4 w-4" />
+          <PicoIcon name="plus" size="sm" />
         </button>
         <nav className="mt-2 flex flex-col items-center gap-1" aria-label="主导航">
           {NAV.filter((item) => item.action !== 'new-task').map((item) => {
-            const Icon = item.icon;
             const active = isNavItemActive(location.pathname, item);
 
             return (
@@ -223,7 +202,7 @@ function Sidebar({
                     aria-label={item.label}
                     aria-current={active ? 'page' : undefined}
                   >
-                    <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                    <PicoIcon name={item.icon} size="sm" />
                   </button>
                 }
               />
@@ -246,7 +225,7 @@ function Sidebar({
               aria-label="空间"
               aria-current={location.pathname.startsWith('/workspaces') ? 'page' : undefined}
             >
-              <FolderOpen className="h-[18px] w-[18px]" strokeWidth={1.75} />
+              <PicoIcon name="folder-open" size="sm" />
             </button>
           }
         />
@@ -271,7 +250,7 @@ function Sidebar({
                 onClick={() => navigate('/search')}
                 aria-label="任务历史"
               >
-                <History className="h-4 w-4" />
+                <PicoIcon name="clock" size="sm" />
               </button>
             }
           />
@@ -281,7 +260,7 @@ function Sidebar({
             onClick={() => navigate('/search')}
             aria-label="搜索"
           >
-            <Search className="h-4 w-4" />
+            <PicoIcon name="search" size="sm" />
           </button>
           <TooltipAnchor
             description="活动与更多"
@@ -292,7 +271,7 @@ function Sidebar({
                 onClick={() => navigate('/more')}
                 aria-label="活动与更多"
               >
-                <Gift className="h-4 w-4" />
+                <PicoIcon name="gift" size="sm" />
               </button>
             }
           />
@@ -302,7 +281,7 @@ function Sidebar({
             onClick={onCollapse}
             aria-label={localize('com_nav_close_sidebar')}
           >
-            <PanelLeft className="h-4 w-4" />
+            <PicoIcon name="panel" size="sm" />
           </button>
         </div>
       </div>
@@ -315,13 +294,12 @@ function Sidebar({
             onClick={onNewTask}
             className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[#1a1a1a] text-[13px] font-medium text-white shadow-sm transition hover:bg-black"
           >
-            <Plus className="h-4 w-4" strokeWidth={2.25} />
+            <PicoIcon name="plus" size="sm" />
             新建任务
           </button>
         </div>
         <nav className="mt-1 flex shrink-0 flex-col gap-0.5 px-2.5" aria-label="主导航">
           {NAV.filter((item) => item.action !== 'new-task').map((item) => {
-            const Icon = item.icon;
             const active = isNavItemActive(location.pathname, item);
 
             return (
@@ -355,7 +333,7 @@ function Sidebar({
                   aria-expanded={item.action === 'more' ? Boolean(moreMenu) : undefined}
                 >
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center text-[#4a4a4a]">
-                    <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                    <PicoIcon name={item.icon} size="sm" />
                   </span>
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   {item.badge ? (
@@ -370,7 +348,6 @@ function Sidebar({
                     aria-label="更多 · 资料库·灵感"
                   >
                     {MORE_ITEMS.map((menuItem) => {
-                      const MenuIcon = menuItem.icon;
                       return (
                         <div key={menuItem.label}>
                           {'divider' in menuItem && menuItem.divider ? (
@@ -385,7 +362,7 @@ function Sidebar({
                               navigate(menuItem.path);
                             }}
                           >
-                            <MenuIcon className="h-4 w-4 text-[#5d5d5d]" strokeWidth={1.75} />
+                            <PicoIcon name={menuItem.icon} size="sm" className="text-[#5d5d5d]" />
                             <span>{menuItem.label}</span>
                           </button>
                         </div>
@@ -418,14 +395,14 @@ function Sidebar({
             className="flex h-8 w-full items-center gap-1 rounded-md px-1.5 text-[12.5px] text-[#6b6b6b] hover:bg-[#e8e8e8]"
           >
             <span>空间</span>
-            <ChevronDown className="h-3.5 w-3.5" />
+            <PicoIcon name="chevron" size="sm" />
           </button>
           <button
             type="button"
             onClick={() => navigate('/workspaces')}
             className="mt-0.5 flex h-8 w-full items-center gap-2 rounded-md px-1.5 text-[12.5px] text-[#3d3d3d] hover:bg-[#e8e8e8]"
           >
-            <FolderKanban className="h-3.5 w-3.5 text-[#6b6b6b]" />
+            <PicoIcon name="folder" size="sm" className="text-[#6b6b6b]" />
             <span className="truncate">管理工作空间</span>
             <span className="ml-auto text-[#b0b0b0]">›</span>
           </button>
@@ -443,14 +420,14 @@ function Sidebar({
           className="rounded-md p-1.5 text-[#6b6b6b] hover:bg-black/[0.04]"
           aria-label="通知"
         >
-          <Bell className="h-4 w-4" />
+          <PicoIcon name="bell" size="sm" />
         </button>
         <button
           type="button"
           className="rounded-md p-1.5 text-[#6b6b6b] hover:bg-black/[0.04]"
           aria-label="帮助"
         >
-          <CircleHelp className="h-4 w-4" />
+          <PicoIcon name="help" size="sm" />
         </button>
       </div>
     </div>

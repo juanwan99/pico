@@ -27,7 +27,17 @@ export type PicoIconName =
   | 'plug'
   | 'bot'
   | 'calendar'
-  | 'books';
+  | 'books'
+  | 'more'
+  | 'mail'
+  | 'lightbulb'
+  | 'gift'
+  | 'panel'
+  | 'bell'
+  | 'help'
+  | 'zap'
+  | 'blocks'
+  | 'folder-open';
 
 type Size = 'sm' | 'md' | 'lg';
 

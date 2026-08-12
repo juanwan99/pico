@@ -116,6 +116,50 @@ export default function PicoIconSprite() {
       <symbol id="pico-i-books" viewBox="0 0 24 24">
         <path d="M4 3h4v18H4zM10 5h4v16h-4zM16 4l4-1 3 17-4 1z" />
       </symbol>
+      <symbol id="pico-i-more" viewBox="0 0 24 24">
+        <circle cx="5" cy="12" r="1.6" />
+        <circle cx="12" cy="12" r="1.6" />
+        <circle cx="19" cy="12" r="1.6" />
+      </symbol>
+      <symbol id="pico-i-mail" viewBox="0 0 24 24">
+        <rect x="3" y="5" width="18" height="14" rx="3" />
+        <path d="m4 7 8 6 8-6" />
+      </symbol>
+      <symbol id="pico-i-lightbulb" viewBox="0 0 24 24">
+        <path d="M9 18h6M10 21h4" />
+        <path d="M12 3a6 6 0 0 0-4 10.5c.8.7 1.2 1.5 1.2 2.5h5.6c0-1 .4-1.8 1.2-2.5A6 6 0 0 0 12 3Z" />
+      </symbol>
+      <symbol id="pico-i-gift" viewBox="0 0 24 24">
+        <rect x="3" y="8" width="18" height="4" />
+        <path d="M5 12v8h14v-8M12 8v12" />
+        <path d="M12 8s-1.5-5-4-5c-1.7 0-3 1.3-3 3s1.3 3 3 3h4ZM12 8s1.5-5 4-5c1.7 0 3 1.3 3 3s-1.3 3-3 3h-4Z" />
+      </symbol>
+      <symbol id="pico-i-panel" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="3" />
+        <path d="M9 4v16" />
+      </symbol>
+      <symbol id="pico-i-bell" viewBox="0 0 24 24">
+        <path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6" />
+        <path d="M10 20a2 2 0 0 0 4 0" />
+      </symbol>
+      <symbol id="pico-i-help" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 2-2.4 3.7" />
+        <path d="M12 17h.01" />
+      </symbol>
+      <symbol id="pico-i-zap" viewBox="0 0 24 24">
+        <path d="M13 2 4 14h6l-1 8 9-12h-6Z" />
+      </symbol>
+      <symbol id="pico-i-blocks" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="7" height="7" rx="2" />
+        <rect x="14" y="3" width="7" height="7" rx="2" />
+        <rect x="3" y="14" width="7" height="7" rx="2" />
+        <rect x="14" y="14" width="7" height="7" rx="2" />
+      </symbol>
+      <symbol id="pico-i-folder-open" viewBox="0 0 24 24">
+        <path d="M3 7h7l2 2h9v3" />
+        <path d="m4 9-1 10a2 2 0 0 0 2 2h13l2-10H7Z" />
+      </symbol>
     </svg>
   );
 }
