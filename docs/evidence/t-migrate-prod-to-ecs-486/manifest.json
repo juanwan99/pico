@@ -1,0 +1,26 @@
+{
+  "task": "T-MIGRATE-PROD-TO-ECS",
+  "issue": 486,
+  "tip": {
+    "ok": true,
+    "git_sha": "0b3bfa2a50dda498cb8a372c2f6d65d1956a4a56",
+    "service": "pico-api"
+  },
+  "loopback_health_git_sha": "0b3bfa2a50dda498cb8a372c2f6d65d1956a4a56",
+  "true_pi_binary_available": true,
+  "new_host": "iZf8z2piigunrk8ixto7hnZ",
+  "new_ip": "47.121.197.52",
+  "new_spec": {
+    "nproc": 8,
+    "mem": "30Gi"
+  },
+  "old_ip": "139.196.147.40",
+  "dns_A": [
+    "154.17.0.72"
+  ],
+  "edge_origin": "47.121.197.52:443",
+  "edge_host": "154.17.0.72",
+  "librechat_port_local": 18088,
+  "old_entry_stopped": true,
+  "rollback": "dmit: restore pico-edge-asyncova.conf.bak-before-ecs-migrate-*; nginx -s reload; old: re-enable vhost + docker compose up -d"
+}

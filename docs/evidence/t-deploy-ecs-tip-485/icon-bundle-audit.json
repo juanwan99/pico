@@ -1,0 +1,22 @@
+{
+  "tip": "0b3bfa2a50dda498cb8a372c2f6d65d1956a4a56",
+  "index_url": "https://pico.aivia.asia/assets/index.BPwchyUr.js",
+  "symbol_count": 37,
+  "has_fill_none_on_symbols": true,
+  "use_fill_none": true,
+  "icons_parsed": 37,
+  "sample": [
+    "home",
+    "grid",
+    "apps",
+    "message",
+    "file",
+    "doc",
+    "pen",
+    "chart",
+    "search",
+    "clock",
+    "check",
+    "plus"
+  ]
+}
