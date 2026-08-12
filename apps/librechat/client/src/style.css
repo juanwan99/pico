@@ -3167,3 +3167,6 @@ html:not(.dark) .pico-result-panel {
 .pico-wb-secondary header h1 {
   letter-spacing: 0;
 }
+
+/* Pico product chrome (edu-core family) */
+@import "./style/pico-tokens.css";

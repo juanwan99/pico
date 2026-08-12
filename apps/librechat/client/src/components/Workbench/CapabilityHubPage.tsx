@@ -3,7 +3,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Plug, Sparkles, UserRound, ChevronRight } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { listPicoSkillCatalog, type PicoSkillPolicy } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
 import WorkbenchShell from './WorkbenchShell';
@@ -297,7 +297,7 @@ export default function CapabilityHubPage() {
             onClick={() => navigate('/skills/new')}
             className="inline-flex items-center gap-1 rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-[12.5px] font-medium text-white"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <PicoIcon name="plus" size="sm" />
             添加技能
           </button>
         ) : null
@@ -313,8 +313,8 @@ export default function CapabilityHubPage() {
               className={cn(
                 'rounded-t-lg px-3.5 py-2.5 text-[13px] font-medium',
                 tab === t.id
-                  ? 'border-b-2 border-[#1a1a1a] text-[#1a1a1a]'
-                  : 'text-[#8c8c8c] hover:text-[#3d3d3d]',
+                  ? 'border-b-2 border-[#1a1a1a] text-[color:var(--pico-ink)]'
+                  : 'text-[color:var(--pico-ink-3)] hover:text-[color:var(--pico-ink)]',
               )}
             >
               {t.label}
@@ -324,8 +324,8 @@ export default function CapabilityHubPage() {
       </div>
 
       <div className="border-b border-black/[0.05] bg-white px-4 py-2">
-        <div className="flex items-center gap-2 rounded-lg bg-[#f5f5f5] px-2.5 py-1.5">
-          <Search className="h-3.5 w-3.5 text-[#9a9a9a]" />
+        <div className="flex items-center gap-2 rounded-lg bg-[color:var(--pico-surface-2)] px-2.5 py-1.5">
+          <PicoIcon name="search" size="sm" className="text-[color:var(--pico-ink-3)]" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -348,13 +348,13 @@ export default function CapabilityHubPage() {
                 className="rounded-lg border border-black/[0.06] bg-white p-4 text-left shadow-sm transition hover:border-black/12"
               >
                 <div className="mb-2 flex size-9 items-center justify-center rounded-xl bg-[#edf1f4]">
-                  <UserRound className="h-4 w-4" />
+                  <PicoIcon name="user" size="sm" />
                 </div>
                 <p className="text-[14px] font-medium">{e.name}</p>
                 <p className="mt-1 text-[12.5px] leading-relaxed text-[#6b6b6b]">{e.desc}</p>
-                <div className="mt-3 flex items-center text-[12px] font-medium text-[#1a1a1a]">
+                <div className="mt-3 flex items-center text-[12px] font-medium text-[color:var(--pico-ink)]">
                   查看详情
-                  <ChevronRight className="h-3.5 w-3.5" />
+                  <PicoIcon name="arrow" size="sm" className="h-3.5 w-3.5" />
                 </div>
               </button>
             ))}
@@ -373,8 +373,8 @@ export default function CapabilityHubPage() {
             <div className="rounded-lg border border-black/[0.06] bg-white p-5">
               <p className="text-[17px] font-semibold">{selectedExpert.name}</p>
               <p className="mt-1 text-[13px] text-[#6b6b6b]">{selectedExpert.desc}</p>
-              <p className="mt-4 text-[12px] font-medium text-[#8c8c8c]">工作方法</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-[#3d3d3d]">
+              <p className="mt-4 text-[12px] font-medium text-[color:var(--pico-ink-3)]">工作方法</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-[color:var(--pico-ink)]">
                 {selectedExpert.method}
               </p>
               <div className="mt-3 flex flex-wrap gap-1">
@@ -398,7 +398,7 @@ export default function CapabilityHubPage() {
         {tab === 'skills' && !selectedSkill && (
           <div className="mx-auto max-w-2xl space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-[12px] text-[#8c8c8c]">
+              <p className="text-[12px] text-[color:var(--pico-ink-3)]">
                 Pico 技能快路径 · 完整目录与自定义技能请前往 /skills
               </p>
               <button
@@ -432,17 +432,17 @@ export default function CapabilityHubPage() {
                   className="flex w-full items-start gap-3 rounded-lg border border-black/[0.06] bg-white p-4 text-left hover:border-black/12"
                 >
                   <div className="flex size-10 items-center justify-center rounded-xl bg-[#edf1f4]">
-                    <Sparkles className="h-5 w-5" />
+                    <PicoIcon name="spark" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-medium">{s.name}</p>
                     <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">{s.desc}</p>
-                    <p className="mt-1 truncate text-[11px] text-[#8c8c8c]">
+                    <p className="mt-1 truncate text-[11px] text-[color:var(--pico-ink-3)]">
                       工具：{s.tools.length ? s.tools.join(' · ') : '无工具'} · 风险：
                       {riskLabel(s)}
                     </p>
                   </div>
-                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[#b0b0b0]" />
+                  <PicoIcon name="arrow" size="sm" className="mt-1 h-4 w-4 shrink-0 text-[#b0b0b0]" />
                 </button>
               ))
             )}
@@ -451,7 +451,7 @@ export default function CapabilityHubPage() {
               onClick={() => navigate('/skills/new')}
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-black/[0.12] py-4 text-[13px] text-[#6b6b6b]"
             >
-              <Plus className="h-4 w-4" />
+              <PicoIcon name="plus" size="sm" />
               添加自定义技能
             </button>
           </div>
@@ -469,21 +469,21 @@ export default function CapabilityHubPage() {
             <div className="rounded-lg border border-black/[0.06] bg-white p-5">
               <div className="mb-4 flex items-start gap-3">
                 <div className="flex size-10 items-center justify-center rounded-lg bg-[#edf1f4]">
-                  <Sparkles className="h-5 w-5" />
+                  <PicoIcon name="spark" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[17px] font-semibold">{selectedSkill.name}</p>
                   <p className="mt-1 text-[13px] text-[#6b6b6b]">{selectedSkill.desc}</p>
                 </div>
               </div>
-              <p className="text-[12px] font-medium text-[#8c8c8c]">任务模板</p>
-              <p className="mt-1 rounded-lg bg-[#f5f5f5] p-3 text-[13px] leading-relaxed text-[#3d3d3d]">
+              <p className="text-[12px] font-medium text-[color:var(--pico-ink-3)]">任务模板</p>
+              <p className="mt-1 rounded-lg bg-[color:var(--pico-surface-2)] p-3 text-[13px] leading-relaxed text-[color:var(--pico-ink)]">
                 {selectedSkill.prompt}
               </p>
               <div className="mt-4 rounded-lg border border-black/[0.06] p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-[12px] font-medium text-[#6b6b6b]">工具权限（只读）</p>
-                  <span className="rounded-full bg-[#edf1f4] px-2 py-0.5 text-[11px] text-[#3d3d3d]">
+                  <span className="rounded-full bg-[#edf1f4] px-2 py-0.5 text-[11px] text-[color:var(--pico-ink)]">
                     {riskLabel(selectedSkill)}
                   </span>
                 </div>
@@ -492,14 +492,14 @@ export default function CapabilityHubPage() {
                     {selectedSkill.tools.map((tool) => (
                       <span
                         key={tool}
-                        className="rounded-md bg-[#f5f5f5] px-2 py-1 font-mono text-[11px] text-[#3d3d3d]"
+                        className="rounded-md bg-[color:var(--pico-surface-2)] px-2 py-1 font-mono text-[11px] text-[color:var(--pico-ink)]"
                       >
                         {tool}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-2 text-[12px] text-[#8c8c8c]">无工具 · 纯对话</p>
+                  <p className="mt-2 text-[12px] text-[color:var(--pico-ink-3)]">无工具 · 纯对话</p>
                 )}
                 {selectedSkill.requires_s7 ? (
                   <p className="mt-2 text-[12px] font-medium text-amber-700">
@@ -507,10 +507,10 @@ export default function CapabilityHubPage() {
                   </p>
                 ) : null}
               </div>
-              <p className="mt-3 text-[11.5px] text-[#8c8c8c]">
+              <p className="mt-3 text-[11.5px] text-[color:var(--pico-ink-3)]">
                 推荐模型：{preferredModelForSkill(selectedSkill.id)}
               </p>
-              <p className="mt-1 text-[11.5px] text-[#8c8c8c]">
+              <p className="mt-1 text-[11.5px] text-[color:var(--pico-ink-3)]">
                 发送时写入 Pico Run 快照：{selectedSkill.id} · 工具：
                 {selectedSkill.tools.length ? selectedSkill.tools.join(' · ') : '无工具'}
               </p>
@@ -535,7 +535,7 @@ export default function CapabilityHubPage() {
                 className="flex items-start gap-3 rounded-lg border border-black/[0.06] bg-white p-4 text-left hover:border-black/12"
               >
                 <div className="flex size-10 items-center justify-center rounded-xl bg-[#edf1f4]">
-                  <Plug className="h-5 w-5" />
+                  <PicoIcon name="plug" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -543,14 +543,14 @@ export default function CapabilityHubPage() {
                     {c.status === 'ready' ? (
                       <span className="size-2 rounded-full bg-emerald-500" title="已连接" />
                     ) : (
-                      <span className="rounded-full bg-[#edf1f4] px-1.5 text-[10px] text-[#8c8c8c]">
+                      <span className="rounded-full bg-[#edf1f4] px-1.5 text-[10px] text-[color:var(--pico-ink-3)]">
                         后置
                       </span>
                     )}
                   </div>
                   <p className="mt-1 text-[12.5px] text-[#6b6b6b]">{c.desc}</p>
                 </div>
-                <ChevronRight className="mt-1 h-4 w-4 text-[#b0b0b0]" />
+                <PicoIcon name="arrow" size="sm" className="mt-1 h-4 w-4 text-[#b0b0b0]" />
               </button>
             ))}
           </div>
