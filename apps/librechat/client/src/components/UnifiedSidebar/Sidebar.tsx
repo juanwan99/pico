@@ -157,7 +157,7 @@ function Sidebar({
 
   if (!expanded) {
     return (
-      <div className="pico-wb-sidebar flex h-full w-full flex-col items-center bg-[#f0f0f0] py-3 dark:bg-surface-primary-alt">
+      <div className="pico-wb-sidebar flex h-full w-full flex-col items-center bg-[color:var(--pico-sidebar)] py-3 dark:bg-surface-primary-alt">
         <TooltipAnchor
           description="展开侧栏"
           render={
@@ -175,7 +175,7 @@ function Sidebar({
         <button
           type="button"
           onClick={onNewTask}
-          className="mt-2 flex h-9 w-9 items-center justify-center rounded-lg bg-[#1a1a1a] text-white transition-colors hover:bg-black"
+          className="mt-2 flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--pico-ink)] text-white transition-colors hover:bg-black"
           aria-label="新建任务"
         >
           <PicoIcon name="plus" size="sm" />
@@ -234,7 +234,7 @@ function Sidebar({
   }
 
   return (
-    <div className="pico-wb-sidebar flex h-full w-full min-w-0 flex-col bg-[#f0f0f0] text-[#1a1a1a] dark:bg-surface-primary-alt dark:text-text-primary">
+    <div className="pico-wb-sidebar flex h-full w-full min-w-0 flex-col bg-[color:var(--pico-sidebar)] text-[color:var(--pico-ink)] dark:bg-surface-primary-alt dark:text-text-primary">
       <div className="flex items-start justify-between px-4 pb-1 pt-4">
         <div className="min-w-0">
           <div className="text-[15px] font-semibold leading-tight tracking-tight">Pico</div>
@@ -292,7 +292,7 @@ function Sidebar({
             type="button"
             data-testid="new-chat-button"
             onClick={onNewTask}
-            className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[#1a1a1a] text-[13px] font-medium text-white shadow-sm transition hover:bg-black"
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--pico-ink)] text-[13px] font-medium text-white shadow-sm transition hover:bg-black"
           >
             <PicoIcon name="plus" size="sm" />
             新建任务
@@ -375,9 +375,12 @@ function Sidebar({
           })}
         </nav>
 
-        <div className="mt-3 min-h-0 flex-1 border-t border-black/[0.05] pt-2" data-testid="sidebar-task-history">
+        <div
+          className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-[color:var(--pico-line)] pt-2"
+          data-testid="sidebar-task-history"
+        >
           <div className="mb-1 flex items-center justify-between px-2.5">
-            <span className="text-[12px] font-medium text-[#6b6b6b]">任务历史</span>
+            <span className="text-[12px] font-medium text-[color:var(--pico-ink-2)]">任务历史</span>
           </div>
           <TeacherTaskHome
             tasks={picoTasks}
@@ -388,11 +391,11 @@ function Sidebar({
           />
         </div>
 
-        <div className="mt-1 shrink-0 px-3.5 pb-2">
+        <div className="shrink-0 border-t border-[color:var(--pico-line)] px-3.5 py-2">
           <button
             type="button"
             onClick={() => navigate('/workspaces')}
-            className="flex h-8 w-full items-center gap-1 rounded-md px-1.5 text-[12.5px] text-[#6b6b6b] hover:bg-[#e8e8e8]"
+            className="flex h-8 w-full min-w-0 items-center gap-1 rounded-lg px-1.5 text-[12.5px] text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
           >
             <span>空间</span>
             <PicoIcon name="chevron" size="sm" />
@@ -400,17 +403,17 @@ function Sidebar({
           <button
             type="button"
             onClick={() => navigate('/workspaces')}
-            className="mt-0.5 flex h-8 w-full items-center gap-2 rounded-md px-1.5 text-[12.5px] text-[#3d3d3d] hover:bg-[#e8e8e8]"
+            className="mt-0.5 flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-1.5 text-[12.5px] text-[color:var(--pico-ink)] hover:bg-[color:var(--pico-surface-2)]"
           >
-            <PicoIcon name="folder" size="sm" className="text-[#6b6b6b]" />
-            <span className="truncate">管理工作空间</span>
-            <span className="ml-auto text-[#b0b0b0]">›</span>
+            <PicoIcon name="folder" size="sm" className="text-[color:var(--pico-ink-2)]" />
+            <span className="min-w-0 flex-1 truncate">管理工作空间</span>
+            <span className="shrink-0 text-[color:var(--pico-ink-3)]">›</span>
           </button>
         </div>
       </div>
 
-      <div className="mt-auto flex items-center gap-1 border-t border-black/[0.04] px-3 py-2.5">
-        <div className="min-w-0 flex-1">
+      <div className="mt-auto flex min-w-0 shrink-0 items-center gap-1 border-t border-[color:var(--pico-line)] px-3 py-2.5">
+        <div className="min-w-0 flex-1 overflow-hidden">
           <Suspense fallback={<Skeleton className="h-8 w-8 rounded-full" />}>
             <AccountSettings />
           </Suspense>

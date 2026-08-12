@@ -13,12 +13,12 @@ interface ConvoLinkProps {
 }
 
 const STATUS_CLASS: Record<string, string> = {
-  进行中: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200',
-  '仍在处理…': 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200',
-  停止中: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100',
-  失败: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
-  已停止: 'bg-surface-tertiary text-text-secondary',
-  已完成: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+  进行中: 'bg-[color:var(--pico-violet-wash)] text-[color:var(--pico-violet-dark)]',
+  '仍在处理…': 'bg-[color:var(--pico-violet-wash)] text-[color:var(--pico-violet-dark)]',
+  停止中: 'bg-[color:var(--pico-amber-wash)] text-[color:var(--pico-amber)]',
+  失败: 'bg-[color:var(--pico-red-wash)] text-[color:var(--pico-red)]',
+  已停止: 'bg-[color:var(--pico-surface-2)] text-[color:var(--pico-ink-2)]',
+  已完成: 'bg-[color:var(--pico-mint-wash)] text-[color:var(--pico-mint-dark)]',
 };
 
 const ConvoLink: React.FC<ConvoLinkProps> = ({
@@ -62,27 +62,16 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
             : title || localize('com_ui_untitled')
         }
       >
-        <span
-          className="relative min-w-0 flex-1 grow overflow-hidden whitespace-nowrap"
-          style={{ textOverflow: 'clip' }}
-        >
+        <span className="min-w-0 flex-1 truncate" data-testid="convo-title">
           {title || localize('com_ui_untitled')}
-          <span
-            className={cn(
-              'pointer-events-none absolute bottom-0 right-0 top-0 w-12 bg-gradient-to-l',
-              isActiveConvo || isPopoverActive
-                ? 'from-surface-active-alt'
-                : 'from-surface-primary-alt from-0% to-transparent group-hover:from-surface-active-alt group-hover:from-0%',
-            )}
-            aria-hidden="true"
-          />
         </span>
         {ledgerStatus ? (
           <span
             data-testid="convo-ledger-status"
             className={cn(
-              'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none',
-              STATUS_CLASS[ledgerStatus] || 'bg-surface-tertiary text-text-secondary',
+              'max-w-[4.5rem] shrink-0 truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none',
+              STATUS_CLASS[ledgerStatus] ||
+                'bg-[color:var(--pico-surface-2)] text-[color:var(--pico-ink-2)]',
             )}
           >
             {ledgerStatus}
