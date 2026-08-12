@@ -1,0 +1,103 @@
+/**
+ * Pico product chrome tokens — aligned to edu-core workbench-tokens v6
+ * (read-only visual family; no edu business modules).
+ * Scope: .pico-app only.
+ */
+.pico-app {
+  --pico-shell: #f7f7f6;
+  --pico-sidebar: #f1f2f0;
+  --pico-surface: #ffffff;
+  --pico-surface-2: #f6f6f5;
+  --pico-ink: #171817;
+  --pico-ink-2: #5f6461;
+  --pico-ink-3: #969b98;
+  --pico-line: #e6e7e4;
+  --pico-line-2: #d9dcd8;
+  --pico-mint: #28c99a;
+  --pico-mint-dark: #15966f;
+  --pico-mint-wash: #e9f9f3;
+  --pico-violet: #725af2;
+  --pico-violet-dark: #573bd6;
+  --pico-violet-wash: #f0edff;
+  --pico-violet-line: #cfc5ff;
+  --pico-red: #d84654;
+  --pico-red-wash: #fff0f2;
+  --pico-amber: #d98312;
+  --pico-amber-wash: #fff5e5;
+  --pico-blue: #3f73db;
+  --pico-blue-wash: #edf3ff;
+  --pico-shadow: 0 1px 2px rgba(23, 24, 23, 0.035), 0 12px 32px rgba(23, 24, 23, 0.045);
+  --pico-radius: 16px;
+  --pico-radius-sm: 12px;
+  --pico-radius-pill: 999px;
+  --pico-font: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  color: var(--pico-ink);
+  font-family: var(--pico-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.pico-app button:focus-visible,
+.pico-app input:focus-visible,
+.pico-app textarea:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(114, 90, 242, 0.22);
+}
+
+.pico-shell-bg { background: var(--pico-shell); }
+.pico-sidebar-bg { background: var(--pico-sidebar); }
+.pico-surface { background: var(--pico-surface); color: var(--pico-ink); }
+.pico-cta {
+  background: var(--pico-ink);
+  color: #fff;
+  border-radius: var(--pico-radius-pill);
+}
+.pico-cta:hover { background: #2a2b2a; }
+.pico-cta-accent {
+  background: var(--pico-violet);
+  color: #fff;
+  border-radius: var(--pico-radius-pill);
+}
+.pico-cta-accent:hover { background: var(--pico-violet-dark); }
+.pico-chip {
+  background: var(--pico-surface);
+  color: var(--pico-ink);
+  border: 1px solid var(--pico-line);
+  border-radius: var(--pico-radius-pill);
+}
+.pico-chip:hover { background: var(--pico-surface-2); }
+.pico-chip-active {
+  background: var(--pico-ink);
+  color: #fff;
+  border-color: var(--pico-ink);
+}
+.pico-muted { color: var(--pico-ink-2); }
+.pico-faint { color: var(--pico-ink-3); }
+.pico-card {
+  background: var(--pico-surface);
+  border: 1px solid var(--pico-line);
+  border-radius: var(--pico-radius);
+  box-shadow: var(--pico-shadow);
+}
+.pico-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+.pico-icon-sm { width: 16px; height: 16px; stroke-width: 2; }
+.pico-icon-lg { width: 23px; height: 23px; }
+.pico-icon-medallion {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--pico-violet-wash);
+  color: var(--pico-violet-dark);
+}

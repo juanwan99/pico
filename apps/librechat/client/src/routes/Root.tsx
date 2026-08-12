@@ -24,6 +24,7 @@ import { UnifiedSidebar } from '~/components/UnifiedSidebar';
 import { TermsAndConditionsModal } from '~/components/ui';
 import { useHealthCheck } from '~/data-provider';
 import { Banner } from '~/components/Banners';
+import { PicoIconSprite } from '~/components/ui/pico-icons';
 import store from '~/store';
 
 /** Isolates keyboard shortcut listeners so they only mount after auth. */
@@ -84,8 +85,9 @@ export default function Root() {
           <AgentsMapContext.Provider value={agentsMap}>
             <PromptGroupsProvider>
               <Banner onHeightChange={setBannerHeight} />
-              <div className="flex" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
-                <div className="relative z-0 flex h-full w-full overflow-hidden">
+              <div className="pico-app flex" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
+                <PicoIconSprite />
+                <div className="relative z-0 flex h-full w-full overflow-hidden pico-shell-bg">
                   <UnifiedSidebar />
                   <div
                     className="relative flex h-full max-w-full flex-1 flex-col overflow-hidden"

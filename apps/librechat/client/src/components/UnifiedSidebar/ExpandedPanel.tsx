@@ -1,6 +1,6 @@
 import { memo, useCallback, lazy, Suspense } from 'react';
 import { useRecoilValue } from 'recoil';
-import { SquarePen } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { Skeleton, Sidebar, Button, TooltipAnchor } from '@librechat/client';
@@ -56,7 +56,7 @@ const NewChatButton = memo(function NewChatButton({
           onClick={handleClick}
         >
           <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900">
-            <SquarePen className="h-3.5 w-3.5" />
+            <PicoIcon name="pen" size="sm" />
           </span>
           <span className="truncate">{localize('com_ui_new_chat')}</span>
         </a>

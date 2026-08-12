@@ -6,6 +6,7 @@ import SocialLoginRender from './SocialLoginRender';
 import { BlinkAnimation } from './BlinkAnimation';
 import { Banner } from '../Banners';
 import Footer from './Footer';
+import { PicoIconSprite } from '~/components/ui/pico-icons';
 
 function AuthLayout({
   children,
@@ -57,7 +58,8 @@ function AuthLayout({
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-white dark:bg-gray-900">
+    <div className="pico-app relative flex min-h-screen flex-col bg-[color:var(--pico-shell)] dark:bg-gray-900">
+      <PicoIconSprite />
       <Banner />
       <BlinkAnimation active={isFetching}>
         <div className="mt-6 h-10 w-full bg-cover">
