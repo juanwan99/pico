@@ -19,6 +19,7 @@
 - [ ] LibreChat 的 `CREDS_KEY`、`CREDS_IV`、`JWT_SECRET`、
       `JWT_REFRESH_SECRET` 均为相互独立的随机值
 - [ ] Pico API、Mongo 仅监听内网或 loopback；公网只开放 HTTPS
+- [ ] **共享 ECS 端口**：Pico UI（LibreChat）loopback 钉 **18088**（`docker-compose.host.yml` / Nginx upstream）；**8080 归 edu-core-bff**，禁止把 LibreChat `PORT` 打回 8080
 
 ## 部署后
 
