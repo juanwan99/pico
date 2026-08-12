@@ -10,3 +10,8 @@ export const useChatContext = () => {
   }
   return ctx;
 };
+
+/** Non-throwing variant for Landing/tests that may mount outside provider. */
+export const useOptionalChatContext = (): TChatContext | null => {
+  return useContext(ChatContext);
+};

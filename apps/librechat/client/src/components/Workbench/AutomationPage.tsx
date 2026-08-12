@@ -53,7 +53,7 @@ type AutomationUiMeta = {
   requested_enabled: boolean;
 };
 
-const MODELS = ['kimi-k2.6', 'Kimi-K3', 'moonshot-v1-8k', 'pico-agent'] as const;
+const MODELS = ['pico-fast', 'pico-deep'] as const;
 
 const BASE_WORKSPACES = [
   { id: 'account-default', label: '账号默认工作空间', supported: true },
@@ -247,7 +247,7 @@ export default function AutomationPage() {
 
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('kimi-k2.6');
+  const [model, setModel] = useState('pico-fast');
   const [scheduleKind, setScheduleKind] = useState<ScheduleKind>('periodic');
   const [time, setTime] = useState('09:00');
   const [intervalMin, setIntervalMin] = useState(60);
@@ -324,7 +324,7 @@ export default function AutomationPage() {
   const resetForm = () => {
     setName('');
     setPrompt('');
-    setModel('kimi-k2.6');
+    setModel('pico-fast');
     setScheduleKind('periodic');
     setTime('09:00');
     setIntervalMin(60);
