@@ -1,0 +1,14 @@
+{
+  "card": "T-UI-EDU-ALIGN",
+  "tip": "7896f96835548e48bb23538285cc3353daa22fdf",
+  "claim_wb": "NO",
+  "frames": {
+    "landing": "docs/evidence/pack-ui-edu-align/landing/V0-landing-1440.png",
+    "sidebar": "docs/evidence/pack-ui-edu-align/sidebar/V1-sidebar-expanded.png",
+    "hub": "docs/evidence/pack-ui-edu-align/hub/V2-hub.png",
+    "hub_capability": "docs/evidence/pack-ui-edu-align/hub/V2-hub-capability.png",
+    "v390_landing": "docs/evidence/pack-ui-edu-align/v390/V3-landing-390.png",
+    "v390_sidebar": "docs/evidence/pack-ui-edu-align/v390/V3-sidebar-390.png",
+    "v390_hub": "docs/evidence/pack-ui-edu-align/v390/V3-hub-390.png"
+  }
+}
