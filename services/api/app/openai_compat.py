@@ -1309,8 +1309,13 @@ async def chat_completions(
         or settings.kimi_model
         or "pico-fast"
     )
+    # Skill/tool path: preserve explicit dual-mode choice (pico-fast keeps thinking
+    # off + tight budget; pico-deep keeps thinking on + breaker). Only remap
+    # legacy agent SKUs / unknown ids onto pico-deep so delivery still works.
     if skill_snapshot and skill_snapshot.get("tools"):
-        model = "pico-deep"
+        low = str(model or "").strip().lower()
+        if low not in {"pico-fast", "pico-deep"}:
+            model = "pico-deep"
     # Sticky delivery must not silent-route to deepseek-chat direct.
     if (
         delivery_plan is not None
