@@ -8,6 +8,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_model_name(model: str) -> str:
+    value = (model or "").strip()
+    return value.split("/")[-1] if value else ""
+
+
 _INSECURE_JWT_SECRETS = {
     "",
     "pico-dev",
@@ -22,7 +28,7 @@ class Settings(BaseSettings):
     kimi_model: str = "kimi-k2.6"
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com/v1"
-    deepseek_model: str = "deepseek-chat"
+    deepseek_model: str = "deepseek-v4-flash"
     # Product default model provider when both keys present: deepseek | kimi
     pico_model_provider: str = "deepseek"
 
@@ -325,7 +331,14 @@ class Settings(BaseSettings):
                 provider_model = (
                     self.kimi_model if self.kimi_api_key.strip() else self.deepseek_model
                 ).strip()
-            if provider_model not in self.allowed_model_list:
+            normalized_allowed = {_normalize_model_name(item) for item in self.allowed_model_list}
+            if provider_model not in self.allowed_model_list and not (
+                _normalize_model_name(provider_model) in normalized_allowed
+                or (
+                    _normalize_model_name(provider_model) in {"deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"}
+                    and {"pico-fast", "pico-deep"}.intersection(normalized_allowed)
+                )
+            ):
                 errors.append(
                     "the configured provider model must appear in PICO_ALLOWED_MODELS"
                 )

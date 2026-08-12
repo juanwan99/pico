@@ -35,7 +35,7 @@ def _valid_production(**overrides: object) -> Settings:
         # Product default brain = DeepSeek (first allowlist entry = shell default).
         "deepseek_api_key": "model-key",
         "pico_model_provider": "deepseek",
-        "pico_allowed_models": "deepseek-chat,pico-agent",
+        "pico_allowed_models": "pico-fast,pico-deep",
         "pico_chat_rpm": 30,
         "pico_chat_max_concurrent": 2,
         "pico_run_max_tokens": 4096,
@@ -99,13 +99,13 @@ def test_production_model_allowlist_rejects_unknown() -> None:
 def test_production_template_defaults_to_deepseek_not_kimi() -> None:
     """E1/E2E-DEFAULT: shell default must not be broken kimi-k2.x."""
     example = (ROOT / ".env.production.example").read_text(encoding="utf-8")
-    assert "PICO_ALLOWED_MODELS=deepseek-chat,pico-agent" in example
+    assert "PICO_ALLOWED_MODELS=pico-fast,pico-deep" in example
     assert "PICO_ALLOWED_MODELS=kimi-k2.6" not in example
     compose = (ROOT / "docker-compose.host.yml").read_text(encoding="utf-8")
     assert "OPENAI_MODELS: ${PICO_ALLOWED_MODELS:?set PICO_ALLOWED_MODELS}" in compose
-    # Dev compose first entry = deepseek-chat
+    # Dev compose first entry = Pico dual-mode shell
     dev = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "OPENAI_MODELS: deepseek-chat,pico-agent" in dev
+    assert "OPENAI_MODELS: pico-fast,pico-deep" in dev
 
 
 def test_requested_tokens_are_clamped_to_global_cap() -> None:

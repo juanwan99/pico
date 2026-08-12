@@ -30,6 +30,13 @@ class RunCaps:
     # successes land — or it fails closed after one landing retry.
     # 0 = short chat / no file required.
     min_artifacts: int = 0
+    # Dual-mode (Pico 快速 / Pico 深度): deep lane runs thinking-on and arms the
+    # no-progress circuit breaker; fast lane keeps thinking off and no breaker.
+    thinking_on: bool = False
+    # Deep-lane breaker wall threshold (true_pi): bail out with pi.no_progress
+    # when the thinking-on lane has no successful tool execution for this many
+    # seconds. Injectable for unit tests; production default 180s.
+    no_progress_seconds: int = 180
 
 
 @dataclass

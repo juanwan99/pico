@@ -81,6 +81,13 @@ async def run_true_pi_agent(
     loop = asyncio.get_running_loop()
     started = loop.time()
     deadline = started + max(1, caps.max_seconds)
+    # Dual-mode deep-lane circuit breaker (F2): true_pi must not run away on an
+    # empty/no-tool-progress loop any more than the hosted kernel. Only the
+    # thinking-on lane (Pico 深度) arms it; fast lane never trips.
+    thinking_on = bool(getattr(caps, "thinking_on", False))
+    breaker_seconds = max(1, int(getattr(caps, "no_progress_seconds", 180) or 180))
+    last_tool_ok_wall: float | None = None
+    last_progress_wall = started
 
     async def _watcher() -> None:
         while not stop.is_set():
@@ -105,6 +112,15 @@ async def run_true_pi_agent(
                     reason="True Pi requires DEEPSEEK_API_KEY (preferred) or KIMI_API_KEY",
                     tag=tag,
                 )
+            # Dual-mode (F1/F3): lane policy flows into the true_pi kernel — the
+            # backend model is pinned to deepseek-v4-flash and the thinking flag
+            # follows caps.thinking_on (Pico 快速=off / Pico 深度=on). Never a
+            # global hardcoded off.
+            from pico_orchestrator.provider import runtime_policy_for_model
+
+            policy = runtime_policy_for_model(None)
+            backend_model = str(policy.get("backend_model") or provider.model)
+            thinking_on = bool(getattr(caps, "thinking_on", False))
             tool_server = ToolServer(principal=principal, gateway=gateway, run_id=rid)
             tool_url = await tool_server.start()
             sess = session_dir or (session_root() / rid)
@@ -114,7 +130,8 @@ async def run_true_pi_agent(
                 tool_token=tool_server.token,
                 run_id=rid,
                 provider="deepseek" if provider.name == "deepseek" else "openai",
-                model=provider.model,
+                model=backend_model,
+                thinking=thinking_on,
                 env={
                     "DEEPSEEK_API_KEY": provider.api_key
                     if provider.name == "deepseek"
@@ -146,6 +163,7 @@ async def run_true_pi_agent(
         await client.prompt(full_prompt)
 
         async def _consume() -> None:
+            nonlocal last_progress_wall, last_tool_ok_wall
             async for event in client.events():
                 # Responses are handled by wait_response on SubprocessTransport;
                 # ignore type=response in the event stream if any leak through.
@@ -162,7 +180,15 @@ async def run_true_pi_agent(
                     continue
                 if stop.is_set() or timed_out.is_set() or await is_cancelled():
                     break
+                prev_tool_oks = state.tool_oks
                 await map_event(event, emit=emit, state=state, shadow=shadow)
+                # Circuit-breaker progress bookkeeping (F2): any event that maps
+                # is real forward motion; a newly successful tool execution
+                # resets the no-tool-progress timer used by the deep-lane
+                # bailout.
+                last_progress_wall = loop.time()
+                if state.tool_oks > prev_tool_oks:
+                    last_tool_ok_wall = loop.time()
                 if state.settled:
                     break
 
@@ -183,6 +209,60 @@ async def run_true_pi_agent(
                         principal=principal,
                         tag=tag,
                     )
+                # Dual-mode deep-lane circuit breaker (F2): the true_pi kernel
+                # must not run away on an empty / no-tool-progress loop. Only
+                # the thinking-on lane (Pico 深度) arms it; fast lane never
+                # trips. Two triggers: no tool success for ≥180s, or the event
+                # stream stalls ≥180s with zero tool success.
+                if thinking_on and not state.settled:
+                    now = loop.time()
+                    tool_gap = (
+                        now - last_tool_ok_wall
+                        if last_tool_ok_wall is not None
+                        else now - started
+                    )
+                    if tool_gap >= breaker_seconds and state.tool_oks == 0:
+                        await client.abort()
+                        await emit(
+                            "circuit.breaker",
+                            {
+                                "tool_exec_count": state.tool_oks,
+                                "wall_seconds": int(now - started),
+                                "runtime": RUNTIME_LABEL,
+                            },
+                        )
+                        return await _failed(
+                            emit,
+                            code="pi.no_progress",
+                            reason=(
+                                "深度模式长时间无有效进展，已触发熔断以避免空转/OOM。"
+                                "可点「再跑一次」或将任务拆短后重试。"
+                            ),
+                            state=state,
+                            principal=principal,
+                            tag=tag,
+                        )
+                    if now - last_progress_wall >= breaker_seconds and state.tool_oks == 0:
+                        await client.abort()
+                        await emit(
+                            "circuit.breaker",
+                            {
+                                "tool_exec_count": state.tool_oks,
+                                "stalled_seconds": int(now - last_progress_wall),
+                                "runtime": RUNTIME_LABEL,
+                            },
+                        )
+                        return await _failed(
+                            emit,
+                            code="pi.no_progress",
+                            reason=(
+                                "深度模式长时间无有效进展，已触发熔断以避免空转。"
+                                "可点「再跑一次」，或改用 Pico 快速档重试。"
+                            ),
+                            state=state,
+                            principal=principal,
+                            tag=tag,
+                        )
                 if consumer.done():
                     break
                 await asyncio.sleep(0.05)

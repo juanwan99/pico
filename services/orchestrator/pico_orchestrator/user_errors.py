@@ -91,6 +91,11 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         or "reached the step limit" in low
     ):
         return "步骤过多已停止。可点「再跑一次」继续，或把任务拆成更小步骤。"
+    if c in ("pi.no_progress", "circuit_breaker", "circuit.breaker") or "熔断" in text:
+        return (
+            "深度模式长时间无有效进展，已自动熔断以避免空转。"
+            "可点「再跑一次」，或改用 Pico 快速档重试。"
+        )
     if "max_tokens" in low or "token cap" in low or c == "token_cap":
         return "本次回答超出长度上限。可点「再跑一次」，或缩短问题后重试。"
     if (
