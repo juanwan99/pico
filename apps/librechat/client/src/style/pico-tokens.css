@@ -27,56 +27,101 @@
   --pico-blue: #3f73db;
   --pico-blue-wash: #edf3ff;
   --pico-shadow: 0 1px 2px rgba(23, 24, 23, 0.035), 0 12px 32px rgba(23, 24, 23, 0.045);
+  --pico-shadow-raised: 0 2px 5px rgba(23, 24, 23, 0.045), 0 18px 44px rgba(23, 24, 23, 0.075);
   --pico-radius: 16px;
   --pico-radius-sm: 12px;
   --pico-radius-pill: 999px;
-  --pico-font: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --pico-font: Inter, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   color: var(--pico-ink);
   font-family: var(--pico-font);
   -webkit-font-smoothing: antialiased;
 }
 
+.pico-app a:focus-visible,
 .pico-app button:focus-visible,
 .pico-app input:focus-visible,
+.pico-app select:focus-visible,
 .pico-app textarea:focus-visible {
   outline: 0;
   box-shadow: 0 0 0 3px rgba(114, 90, 242, 0.22);
 }
 
-.pico-shell-bg { background: var(--pico-shell); }
-.pico-sidebar-bg { background: var(--pico-sidebar); }
-.pico-surface { background: var(--pico-surface); color: var(--pico-ink); }
+.pico-shell-bg {
+  background: var(--pico-shell);
+}
+.pico-sidebar-bg {
+  background: var(--pico-sidebar);
+}
+.pico-surface {
+  background: var(--pico-surface);
+  color: var(--pico-ink);
+}
 .pico-cta {
   background: var(--pico-ink);
   color: #fff;
   border-radius: var(--pico-radius-pill);
 }
-.pico-cta:hover { background: #2a2b2a; }
+.pico-cta:hover {
+  background: #2a2b2a;
+}
 .pico-cta-accent {
   background: var(--pico-violet);
   color: #fff;
   border-radius: var(--pico-radius-pill);
 }
-.pico-cta-accent:hover { background: var(--pico-violet-dark); }
+.pico-cta-accent:hover {
+  background: var(--pico-violet-dark);
+}
 .pico-chip {
   background: var(--pico-surface);
   color: var(--pico-ink);
   border: 1px solid var(--pico-line);
   border-radius: var(--pico-radius-pill);
 }
-.pico-chip:hover { background: var(--pico-surface-2); }
+.pico-chip:hover {
+  background: var(--pico-surface-2);
+}
 .pico-chip-active {
   background: var(--pico-ink);
   color: #fff;
   border-color: var(--pico-ink);
 }
-.pico-muted { color: var(--pico-ink-2); }
-.pico-faint { color: var(--pico-ink-3); }
+.pico-muted {
+  color: var(--pico-ink-2);
+}
+.pico-faint {
+  color: var(--pico-ink-3);
+}
 .pico-card {
   background: var(--pico-surface);
   border: 1px solid var(--pico-line);
   border-radius: var(--pico-radius);
   box-shadow: var(--pico-shadow);
+}
+.pico-card-interactive {
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+.pico-card-interactive:hover {
+  border-color: var(--pico-line-2);
+  box-shadow: var(--pico-shadow-raised);
+  transform: translateY(-1px);
+}
+.pico-panel {
+  background: var(--pico-surface);
+  border: 1px solid var(--pico-line);
+  border-radius: var(--pico-radius-sm);
+}
+.pico-field {
+  background: var(--pico-surface);
+  border: 1px solid var(--pico-line-2);
+  border-radius: 10px;
+  color: var(--pico-ink);
+}
+.pico-field:hover {
+  border-color: var(--pico-ink-3);
 }
 .pico-icon {
   display: block;
@@ -87,8 +132,14 @@
   stroke: currentColor;
   color: inherit;
 }
-.pico-icon-sm { width: 16px; height: 16px; }
-.pico-icon-lg { width: 23px; height: 23px; }
+.pico-icon-sm {
+  width: 16px;
+  height: 16px;
+}
+.pico-icon-lg {
+  width: 23px;
+  height: 23px;
+}
 .pico-icon-sprite {
   position: absolute !important;
   width: 0 !important;

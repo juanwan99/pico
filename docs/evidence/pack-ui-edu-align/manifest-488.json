@@ -1,0 +1,98 @@
+{
+  "task": "T-UI-POLISH-EDU",
+  "issue": 488,
+  "base_sha": "0b3bfa2a50dda498cb8a372c2f6d65d1956a4a56",
+  "captured_at": "2026-08-12T05:36:48.346Z",
+  "source": "local production build with same-origin proxy to production API",
+  "claim_wb_degree_web": false,
+  "frames": [
+    {
+      "route": "/c/new",
+      "file": "landing/V4-landing-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "overflowX": false
+    },
+    {
+      "route": "/capability",
+      "file": "hub/V5-hub-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "overflowX": false
+    },
+    {
+      "route": "/more",
+      "file": "inner/V6-more-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "overflowX": false
+    },
+    {
+      "route": "/assistants",
+      "file": "inner/V7-assistants-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "overflowX": false
+    },
+    {
+      "route": "/automation",
+      "file": "inner/V8-automation-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "overflowX": false
+    },
+    {
+      "route": "/c/new",
+      "file": "v390/V9-landing-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "overflowX": false
+    },
+    {
+      "route": "/more",
+      "file": "v390/V10-more-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "overflowX": false
+    },
+    {
+      "route": "/assistants",
+      "file": "v390/V11-assistants-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "overflowX": false
+    }
+  ]
+}

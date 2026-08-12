@@ -1,0 +1,42 @@
+{
+  "binding": "ACCEPT-VISUAL-HUMAN-GATE #384",
+  "claim_wb": "NO",
+  "product_ready": false,
+  "note": "Engineering evidence only. Missing frames or monologue hits ⇒ scene FAIL / 产品未过. CLAIM-WB only owner.",
+  "at": "2026-08-12T05:39:09.051Z",
+  "base": "http://127.0.0.1:14880",
+  "card": "pack-ui-edu-align",
+  "scene": "polish-488",
+  "model": "auto",
+  "prompt": "只回一句：UI 美化视觉门 OK，不要调用工具。",
+  "tip": {
+    "url": "http://127.0.0.1:14880/api/pico/tip",
+    "git_sha": "0b3bfa2a50dda498cb8a372c2f6d65d1956a4a56",
+    "service": "pico-api"
+  },
+  "conversation_url": "http://127.0.0.1:14880/c/de4f4e1f-c962-4cc7-8233-7a7f6f4e9e15",
+  "out_dir": "docs/evidence/pack-ui-edu-align/visual-gate",
+  "frames": {
+    "V0": "docs/evidence/pack-ui-edu-align/visual-gate/V0-send.png",
+    "V1": "docs/evidence/pack-ui-edu-align/visual-gate/V1-process-main.png",
+    "V2": "docs/evidence/pack-ui-edu-align/visual-gate/V2-final.png",
+    "V2_390": "docs/evidence/pack-ui-edu-align/visual-gate/V2-final-390.png"
+  },
+  "monologue_hits": [],
+  "monologue_clean": true,
+  "v3": {
+    "opened": false
+  },
+  "v3_human_page": false,
+  "missing_frames": [],
+  "frames_complete": true,
+  "scene_visual_pass_eligible": true,
+  "notes": [
+    "V3 skipped (--skip-v3)"
+  ],
+  "wording": {
+    "if_pass": "场景视觉过（仍≠卡 Ready / ≠ CLAIM-WB）",
+    "if_fail": "产品未过 · REVISE",
+    "forbid": "禁止「单测绿故 Ready」/「无图全优 Ready」"
+  }
+}

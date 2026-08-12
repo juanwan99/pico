@@ -34,24 +34,30 @@ export default function WorkbenchShell({
       )}
       data-testid="workbench-shell"
     >
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-3 dark:border-border-light dark:bg-surface-primary">
+      <header className="flex min-h-14 shrink-0 items-center gap-3 border-b border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-4 py-2 dark:border-border-light dark:bg-surface-primary sm:px-6">
         <button
           type="button"
           onClick={() => navigate(backTo ?? getTaskReturnRoute())}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--pico-ink)] hover:bg-black/[0.04]"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-[color:var(--pico-ink-2)] transition-colors hover:bg-[color:var(--pico-surface-2)] hover:text-[color:var(--pico-ink)]"
           aria-label="返回"
         >
           <PicoIcon name="back" size="sm" />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[15px] font-semibold text-[color:var(--pico-ink)] dark:text-text-primary">
+          <h1 className="truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-[color:var(--pico-ink)] dark:text-text-primary">
             {title}
           </h1>
-          {subtitle ? <p className="truncate text-[11px] text-[color:var(--pico-ink-3)]">{subtitle}</p> : null}
+          {subtitle ? (
+            <p className="truncate text-[11px] text-[color:var(--pico-ink-3)]">{subtitle}</p>
+          ) : null}
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
       </header>
-      <div className={cn('min-h-0 flex-1 overflow-y-auto', bare ? '' : '')}>{children}</div>
+      <div
+        className={cn('min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden', bare ? '' : '')}
+      >
+        {children}
+      </div>
     </div>
   );
 }

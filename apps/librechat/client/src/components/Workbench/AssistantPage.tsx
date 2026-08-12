@@ -3,7 +3,7 @@
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, Smartphone, Plus, MessageSquare, ChevronRight, Sparkles } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import WorkbenchShell from './WorkbenchShell';
 import { preferredModelForExpert, setActiveExpert, setPicoModelMode } from '~/utils/picoModelPref';
 import { appendPendingPrompt } from './workbenchSession';
@@ -12,8 +12,8 @@ const ASSISTANTS = [
   {
     id: 'pico-default',
     name: 'Pico 本地助理',
-    desc: '默认任务执行者。Kimi + Pico 编排，产物进账本与结果区。',
-    model: 'kimi-k2.6 / pico-agent',
+    desc: '默认任务执行者。Pi + Pico 编排，产物进账本与结果区。',
+    model: 'DeepSeek / Pi',
     ready: true,
   },
   {
@@ -64,14 +64,14 @@ export default function AssistantPage() {
         <button
           type="button"
           onClick={() => navigate('/agents')}
-          className="rounded-lg border border-black/[0.08] px-3 py-1.5 text-[12.5px] text-[#3d3d3d]"
+          className="pico-chip px-3 py-1.5 text-[12.5px]"
         >
           Agent 市场
         </button>
       }
     >
-      <div className="mx-auto grid w-full max-w-4xl gap-3 p-5 lg:grid-cols-[1fr_1.1fr]">
-        <div className="space-y-2">
+      <div className="mx-auto grid w-full min-w-0 max-w-4xl gap-3 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        <div className="min-w-0 space-y-2">
           {ASSISTANTS.map((a) => (
             <button
               key={a.id}
@@ -79,64 +79,68 @@ export default function AssistantPage() {
               onClick={() => setOpenId(a.id)}
               className={
                 openId === a.id
-                  ? 'flex w-full items-center gap-3 rounded-lg border border-[#1a1a1a] bg-white p-3.5 text-left shadow-sm'
-                  : 'hover:border-black/12 flex w-full items-center gap-3 rounded-lg border border-black/[0.06] bg-white p-3.5 text-left'
+                  ? 'pico-card flex w-full items-center gap-3 border-[color:var(--pico-violet-line)] p-4 text-left shadow-[0_0_0_2px_var(--pico-violet-wash)]'
+                  : 'pico-card pico-card-interactive flex w-full items-center gap-3 p-4 text-left'
               }
             >
-              <div className="flex size-10 items-center justify-center rounded-lg bg-[#1a1a1a] text-white">
-                <Bot className="h-5 w-5" />
+              <div className="pico-icon-medallion">
+                <PicoIcon name="bot" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[14px] font-medium">{a.name}</p>
-                <p className="truncate text-[12px] text-[#8c8c8c]">{a.desc}</p>
+                <p className="truncate text-[12px] text-[color:var(--pico-ink-2)]">{a.desc}</p>
               </div>
-              <ChevronRight className="h-4 w-4 text-[#b0b0b0]" />
+              <PicoIcon name="arrow" size="sm" className="text-[color:var(--pico-ink-3)]" />
             </button>
           ))}
 
           <button
             type="button"
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-black/[0.12] py-4 text-[13px] text-[#6b6b6b]"
+            className="flex w-full items-center justify-center gap-2 rounded-[var(--pico-radius-sm)] border border-dashed border-[color:var(--pico-line-2)] py-4 text-[13px] text-[color:var(--pico-ink-2)] transition-colors hover:bg-[color:var(--pico-surface-2)]"
             onClick={() => navigate('/agents')}
           >
-            <Plus className="h-4 w-4" />
+            <PicoIcon name="plus" size="sm" />
             添加助理（市场）
           </button>
 
-          <div className="rounded-lg border border-black/[0.06] bg-white p-4">
-            <p className="mb-2 text-[12px] font-medium uppercase tracking-normal text-[#9a9a9a]">
+          <div className="pico-panel p-4">
+            <p className="mb-2 text-[12px] font-medium uppercase tracking-[0.08em] text-[color:var(--pico-ink-3)]">
               已连接
             </p>
-            <div className="flex items-center gap-3 rounded-xl bg-[#fafafa] px-3 py-3">
-              <Smartphone className="h-5 w-5 text-[#6b6b6b]" />
+            <div className="flex items-center gap-3 rounded-xl bg-[color:var(--pico-surface-2)] px-3 py-3">
+              <PicoIcon name="link" className="text-[color:var(--pico-ink-2)]" />
               <div className="min-w-0 flex-1">
                 <p className="text-[13.5px] font-medium">微信小程序遥控</p>
-                <p className="text-[12px] text-[#8c8c8c]">桌面专属 · 浏览器版后置</p>
+                <p className="text-[12px] text-[color:var(--pico-ink-2)]">
+                  桌面专属 · 浏览器版后置
+                </p>
               </div>
-              <span className="rounded-full bg-[#edf1f4] px-2 py-0.5 text-[11px] text-[#6b6b6b]">
+              <span className="rounded-full bg-[color:var(--pico-violet-wash)] px-2 py-0.5 text-[11px] text-[color:var(--pico-violet-dark)]">
                 后置
               </span>
             </div>
           </div>
         </div>
 
-        <div className="rounded-lg border border-black/[0.06] bg-white p-5">
+        <div className="pico-card min-w-0 overflow-hidden p-5">
           {open ? (
             <>
               <div className="flex items-start gap-3">
-                <div className="flex size-12 items-center justify-center rounded-lg bg-[#1a1a1a] text-white">
-                  <Bot className="h-6 w-6" />
+                <div className="pico-icon-medallion size-12">
+                  <PicoIcon name="bot" size="lg" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-[16px] font-semibold">{open.name}</p>
-                  <p className="mt-1 text-[13px] leading-relaxed text-[#6b6b6b]">{open.desc}</p>
+                  <p className="mt-1 break-words text-[13px] leading-relaxed text-[color:var(--pico-ink-2)]">
+                    {open.desc}
+                  </p>
                 </div>
               </div>
-              <div className="mt-4 flex items-center gap-2 rounded-xl bg-[#f5f5f5] px-3 py-2 text-[12.5px] text-[#3d3d3d]">
-                <Sparkles className="h-3.5 w-3.5" />
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-[color:var(--pico-violet-wash)] px-3 py-2 text-[12.5px] text-[color:var(--pico-violet-dark)]">
+                <PicoIcon name="spark" size="sm" />
                 模型：{open.model}
               </div>
-              <ul className="mt-4 space-y-2 text-[12.5px] text-[#4a4a4a]">
+              <ul className="mt-4 space-y-2 text-[12.5px] text-[color:var(--pico-ink-2)]">
                 <li>· 对话与多步（选 pico-agent）走 Pico API</li>
                 <li>· 产物进入任务右栏「结果区」与「我的文件」</li>
                 <li>· 业务变更须 S7 人工确认，无静默写库</li>
@@ -144,14 +148,14 @@ export default function AssistantPage() {
               <button
                 type="button"
                 onClick={() => start(open)}
-                className="mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#1a1a1a] py-2.5 text-[13px] font-medium text-white"
+                className="pico-cta-accent mt-5 inline-flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-medium"
               >
-                <MessageSquare className="h-4 w-4" />
+                <PicoIcon name="message" size="sm" />
                 用此助理新建任务
               </button>
             </>
           ) : (
-            <p className="text-[13px] text-[#8c8c8c]">选择左侧助理查看详情</p>
+            <p className="text-[13px] text-[color:var(--pico-ink-3)]">选择左侧助理查看详情</p>
           )}
         </div>
       </div>

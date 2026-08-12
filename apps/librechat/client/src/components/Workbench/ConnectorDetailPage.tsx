@@ -3,7 +3,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Check, Plug, Save, Shield } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import WorkbenchShell from './WorkbenchShell';
 
 const CATALOG: Record<
@@ -54,25 +54,22 @@ export default function ConnectorDetailPage() {
   const provider = params.get('provider');
   const projectId = params.get('projectId');
   const returnTo = params.get('return');
-  const item = useMemo(
-    () => {
-      const base = CATALOG[connectorId || ''] || {
-        name: '未知连接器',
-        desc: '',
-        status: 'add' as const,
-        scope: '—',
-        note: '未在目录中。',
+  const item = useMemo(() => {
+    const base = CATALOG[connectorId || ''] || {
+      name: '未知连接器',
+      desc: '',
+      status: 'add' as const,
+      scope: '—',
+      note: '未在目录中。',
+    };
+    if (connectorId === 'c4' && provider) {
+      return {
+        ...base,
+        name: provider === 'lexiang' ? '乐享知识库' : 'ima知识库',
       };
-      if (connectorId === 'c4' && provider) {
-        return {
-          ...base,
-          name: provider === 'lexiang' ? '乐享知识库' : 'ima知识库',
-        };
-      }
-      return base;
-    },
-    [connectorId, provider],
-  );
+    }
+    return base;
+  }, [connectorId, provider]);
   const storageKey = `pico:connectorDraft:${connectorId || 'unknown'}:${provider || 'default'}`;
   const [label, setLabel] = useState('');
   const [endpoint, setEndpoint] = useState('');
@@ -132,19 +129,19 @@ export default function ConnectorDetailPage() {
   return (
     <WorkbenchShell title={item.name} subtitle="连接器" backTo="/capability?tab=connectors">
       <div className="mx-auto w-full max-w-2xl space-y-3 p-5">
-        <div className="rounded-lg border border-black/[0.06] bg-white p-4">
+        <div className="pico-card p-5">
           <div className="flex items-start gap-3">
-            <div className="flex size-11 items-center justify-center rounded-lg bg-[#edf1f4]">
-              <Plug className="h-6 w-6" />
+            <div className="pico-icon-medallion size-11">
+              <PicoIcon name="plug" size="lg" />
             </div>
             <div>
               <p className="text-[16px] font-semibold">{item.name}</p>
-              <p className="mt-1 text-[13px] text-[#6b6b6b]">{item.desc}</p>
+              <p className="mt-1 text-[13px] text-[color:var(--pico-ink-2)]">{item.desc}</p>
               <span
                 className={
                   item.status === 'ready'
                     ? 'mt-2 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800'
-                    : 'mt-2 inline-flex rounded-full bg-[#edf1f4] px-2 py-0.5 text-[11px] text-[#6b6b6b]'
+                    : 'mt-2 inline-flex rounded-full bg-[color:var(--pico-surface-2)] px-2 py-0.5 text-[11px] text-[color:var(--pico-ink-2)]'
                 }
               >
                 {item.status === 'ready' ? '可用（受限）' : '待服务端授权'}
@@ -153,57 +150,63 @@ export default function ConnectorDetailPage() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-black/[0.06] bg-white p-4">
+        <div className="pico-panel p-4">
           <div className="mb-2 flex items-center gap-2 text-[13px] font-medium">
-            <Shield className="h-4 w-4" />
+            <PicoIcon name="shield" size="sm" />
             权限与范围
           </div>
-          <p className="text-[13px] text-[#3d3d3d]">{scope}</p>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-[#8c8c8c]">{item.note}</p>
+          <p className="text-[13px] text-[color:var(--pico-ink)]">{scope}</p>
+          <p className="mt-2 text-[12.5px] leading-relaxed text-[color:var(--pico-ink-2)]">
+            {item.note}
+          </p>
         </div>
 
-        <div className="rounded-lg border border-black/[0.06] bg-white p-4">
+        <div className="pico-panel p-4">
           <div className="mb-3">
             <p className="text-[13px] font-medium">连接配置</p>
-            <p className="mt-0.5 text-[11.5px] text-[#8c8c8c]">
+            <p className="mt-0.5 text-[11.5px] text-[color:var(--pico-ink-2)]">
               这里只保存浏览器草稿，不保存密钥，也不会伪造服务端已连接状态。
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="mb-1 block text-[12px] text-[#6b6b6b]">配置名称</span>
+              <span className="mb-1 block text-[12px] text-[color:var(--pico-ink-2)]">
+                配置名称
+              </span>
               <input
                 value={label}
                 onChange={(event) => setLabel(event.target.value)}
                 placeholder={`例如：${item.name}默认配置`}
-                className="h-9 w-full rounded-lg border border-black/[0.08] px-3 text-[13px] outline-none focus:border-black/20"
+                className="pico-field h-9 w-full px-3 text-[13px] outline-none"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[12px] text-[#6b6b6b]">服务地址或资源标识</span>
+              <span className="mb-1 block text-[12px] text-[color:var(--pico-ink-2)]">
+                服务地址或资源标识
+              </span>
               <input
                 value={endpoint}
                 onChange={(event) => setEndpoint(event.target.value)}
                 placeholder={connectorId === 'c3' ? '邮箱账号标识' : 'https:// 或资源 ID'}
-                className="h-9 w-full rounded-lg border border-black/[0.08] px-3 text-[13px] outline-none focus:border-black/20"
+                className="pico-field h-9 w-full px-3 text-[13px] outline-none"
               />
             </label>
           </div>
           <label className="mt-3 block">
-            <span className="mb-1 block text-[12px] text-[#6b6b6b]">授权范围</span>
+            <span className="mb-1 block text-[12px] text-[color:var(--pico-ink-2)]">授权范围</span>
             <textarea
               value={scope}
               onChange={(event) => setScope(event.target.value)}
               rows={3}
-              className="w-full resize-none rounded-lg border border-black/[0.08] px-3 py-2 text-[13px] outline-none focus:border-black/20"
+              className="pico-field w-full resize-none px-3 py-2 text-[13px] outline-none"
             />
           </label>
           <button
             type="button"
             onClick={saveDraft}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-black/[0.08] px-3 py-2 text-[12.5px] font-medium"
+            className="pico-chip mt-3 inline-flex items-center gap-1.5 px-3 py-2 text-[12.5px] font-medium"
           >
-            {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+            <PicoIcon name={saved ? 'check' : 'file'} size="sm" />
             {saved ? '草稿已保存' : '保存配置草稿'}
           </button>
         </div>
@@ -213,14 +216,14 @@ export default function ConnectorDetailPage() {
             type="button"
             disabled={item.status !== 'ready'}
             onClick={useConnector}
-            className="rounded-lg bg-[#1a1a1a] px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-40"
+            className="pico-cta-accent px-4 py-2.5 text-[13px] font-medium disabled:opacity-40"
           >
             {projectId ? '绑定到项目' : '在任务中使用'}
           </button>
           <button
             type="button"
             onClick={() => navigate('/capability?tab=connectors')}
-            className="rounded-lg border border-black/[0.08] px-4 py-2.5 text-[13px]"
+            className="pico-chip px-4 py-2.5 text-[13px]"
           >
             返回能力中心
           </button>

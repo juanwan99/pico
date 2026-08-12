@@ -3,20 +3,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  AlertCircle,
-  Code2,
-  Download,
-  Eye,
-  File,
-  FileJson,
-  FileSpreadsheet,
-  FileText,
-  Loader2,
-  RefreshCw,
-  Search,
-  X,
-} from 'lucide-react';
+import { AlertCircle, Download, Eye, Loader2, RefreshCw, Search, X } from 'lucide-react';
 import {
   getPicoArtifactContent,
   getPicoTask,
@@ -24,6 +11,7 @@ import {
   type PicoArtifact,
 } from '~/data-provider/pico/api';
 import WorkbenchShell from './WorkbenchShell';
+import { PicoIcon, type PicoIconName } from '~/components/ui/pico-icons';
 import { cn } from '~/utils';
 
 type Row = PicoArtifact & {
@@ -119,17 +107,8 @@ function formatTime(value?: string | null) {
 }
 
 function FileTypeIcon({ group }: { group: Exclude<FileGroup, 'all'> }) {
-  const className = 'h-4 w-4';
-  if (group === 'document') {
-    return <FileText className={className} />;
-  }
-  if (group === 'code') {
-    return <Code2 className={className} />;
-  }
-  if (group === 'data') {
-    return <FileSpreadsheet className={className} />;
-  }
-  return <File className={className} />;
+  const icon: PicoIconName = group === 'code' ? 'blocks' : group === 'data' ? 'chart' : 'doc';
+  return <PicoIcon name={icon} size="sm" />;
 }
 
 export default function FilesHubPage() {
@@ -223,8 +202,7 @@ export default function FilesHubPage() {
       setWarning(null);
       blob = await getPicoArtifactContent(row.id, true);
     } catch (downloadError) {
-      const detail =
-        downloadError instanceof Error ? downloadError.message : String(downloadError);
+      const detail = downloadError instanceof Error ? downloadError.message : String(downloadError);
       setWarning(
         `下载失败：${detail}。请用本页「下载文件」或 GET /api/pico/v1/artifacts/{id}/content?download=true（勿用虚构 /download 尾缀）。`,
       );
@@ -324,23 +302,25 @@ export default function FilesHubPage() {
             加载文件
           </div>
         ) : rows.length === 0 && !error ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-1.5 text-[#999]">
-            <FileText className="h-8 w-8 opacity-40" strokeWidth={1.25} />
-            <p className="text-[13px] font-medium text-[#666]">暂无文件产物</p>
+          <div className="flex flex-1 flex-col items-center justify-center gap-1.5 text-[color:var(--pico-ink-3)]">
+            <div className="pico-icon-medallion mb-2 size-12">
+              <PicoIcon name="folder-open" size="lg" />
+            </div>
+            <p className="text-[13px] font-medium text-[color:var(--pico-ink)]">暂无文件产物</p>
             <p className="max-w-xs text-center text-[11.5px] leading-4">
               任务产生可记录的文件后，会同时出现在这里和任务结果区
             </p>
             <button
               type="button"
               onClick={() => navigate('/c/new')}
-              className="mt-3 rounded-md bg-[#1a1a1a] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-black"
+              className="pico-cta-accent mt-3 px-4 py-2 text-[12px] font-medium"
             >
               新建任务生成文件
             </button>
           </div>
         ) : (
           <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(320px,42%)_minmax(0,1fr)]">
-            <section className="min-h-0 overflow-y-auto border-r border-black/[0.06] bg-white">
+            <section className="min-h-0 overflow-y-auto border-r border-[color:var(--pico-line)] bg-[color:var(--pico-surface)]">
               {filteredRows.length === 0 ? (
                 <div className="flex h-full min-h-48 flex-col items-center justify-center text-center">
                   <Search className="mb-2 h-6 w-6 text-[#bbb]" />
@@ -365,25 +345,29 @@ export default function FilesHubPage() {
                     return (
                       <li
                         key={row.key}
-                        className={isSelected ? 'bg-[#f4f4f4]' : 'hover:bg-[#fafafa]'}
+                        className={
+                          isSelected
+                            ? 'bg-[color:var(--pico-violet-wash)]'
+                            : 'hover:bg-[color:var(--pico-surface-2)]'
+                        }
                       >
                         <button
                           type="button"
                           onClick={() => setSelectedKey(row.key)}
                           className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left"
                         >
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#edf1f4] text-[#52606d]">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[color:var(--pico-violet-wash)] text-[color:var(--pico-violet-dark)]">
                             <FileTypeIcon group={rowGroup} />
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[12.5px] font-medium text-[#222]">
+                            <span className="block truncate text-[12.5px] font-medium text-[color:var(--pico-ink)]">
                               {row.title || '未命名文件'}
                             </span>
-                            <span className="mt-0.5 block truncate text-[10.5px] text-[#8c8c8c]">
+                            <span className="mt-0.5 block truncate text-[10.5px] text-[color:var(--pico-ink-2)]">
                               {getTypeLabel(row)} · {formatBytes(getInlineBytes(row.inline))} ·{' '}
                               {formatTime(row.taskCreatedAt)}
                             </span>
-                            <span className="mt-0.5 block truncate text-[10.5px] text-[#aaa]">
+                            <span className="mt-0.5 block truncate text-[10.5px] text-[color:var(--pico-ink-3)]">
                               {row.taskTitle}
                             </span>
                           </span>
@@ -408,15 +392,15 @@ export default function FilesHubPage() {
               )}
             </section>
 
-            <section className="min-h-0 overflow-y-auto bg-[#fafafa]">
+            <section className="min-h-0 overflow-y-auto bg-[color:var(--pico-surface-2)]">
               {selected ? (
                 <div className="flex min-h-full flex-col">
-                  <div className="flex shrink-0 items-start gap-3 border-b border-black/[0.06] bg-white px-4 py-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#edf1f4] text-[#52606d]">
+                  <div className="flex shrink-0 items-start gap-3 border-b border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-4 py-3">
+                    <span className="pico-icon-medallion h-9 w-9 shrink-0">
                       <FileTypeIcon group={getFileGroup(selected)} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <h2 className="break-words text-[13px] font-semibold text-[#222]">
+                      <h2 className="break-words text-[13px] font-semibold text-[color:var(--pico-ink)]">
                         {selected.title || '未命名文件'}
                       </h2>
                       <p className="mt-0.5 text-[10.5px] text-[#8c8c8c]">
@@ -432,7 +416,7 @@ export default function FilesHubPage() {
                         type="button"
                         onClick={() => void downloadFile(selected)}
                         data-testid="files-hub-download-button"
-                        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-[#1a1a1a] px-3 text-[12px] font-semibold text-white hover:bg-black"
+                        className="pico-cta-accent inline-flex h-9 shrink-0 items-center gap-1.5 px-3 text-[12px] font-semibold"
                         title="下载到本地（/api/pico/v1/artifacts/{id}/content?download=true）"
                       >
                         <Download className="h-3.5 w-3.5" />
@@ -446,7 +430,7 @@ export default function FilesHubPage() {
                         <Eye className="h-3.5 w-3.5" />
                         正文预览
                       </div>
-                      <pre className="max-h-[calc(100vh-190px)] overflow-auto whitespace-pre-wrap break-words rounded-md border border-black/[0.06] bg-white p-3 font-mono text-[11.5px] leading-[1.65] text-[#333]">
+                      <pre className="pico-panel max-h-[calc(100vh-190px)] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11.5px] leading-[1.65] text-[color:var(--pico-ink)]">
                         {selected.inline ? selected.inline.slice(0, PREVIEW_LIMIT) : '（空文件）'}
                       </pre>
                       {selected.inline.length > PREVIEW_LIMIT ? (
@@ -458,7 +442,9 @@ export default function FilesHubPage() {
                     </div>
                   ) : (
                     <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-                      <FileJson className="mb-2 h-8 w-8 text-[#bbb]" strokeWidth={1.25} />
+                      <div className="pico-icon-medallion mb-2 size-12">
+                        <PicoIcon name="doc" size="lg" />
+                      </div>
                       <p className="text-[12.5px] font-medium text-[#666]">账本未保存文件正文</p>
                       <p className="mt-1 max-w-sm text-[11.5px] leading-4 text-[#999]">
                         当前数据只有文件记录，无法提供可靠预览或下载，因此未显示无效操作。
