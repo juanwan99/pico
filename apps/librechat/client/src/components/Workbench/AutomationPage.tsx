@@ -31,6 +31,7 @@ import {
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
 import RunTimeline from '../Chat/RunTimeline';
+import { PicoIcon } from '~/components/ui/pico-icons';
 
 type Mode = 'list' | 'create';
 type ScheduleKind = 'periodic' | 'interval' | 'once';
@@ -785,19 +786,19 @@ export default function AutomationPage() {
   const enabledCount = list.filter((item) => item.enabled).length;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#f5f5f5] dark:bg-presentation">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/[0.06] bg-white px-4 dark:border-border-light dark:bg-surface-primary">
+    <div className="pico-shell-bg flex h-full min-h-0 flex-col dark:bg-presentation">
+      <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-4 py-2 dark:border-border-light dark:bg-surface-primary sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
           {returnPath ? (
             <Link
               to={returnPath}
-              className="rounded-md p-1 text-[#6b6b6b] hover:bg-black/[0.04]"
+              className="rounded-xl p-2 text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
               aria-label="返回项目"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <PicoIcon name="back" size="sm" />
             </Link>
           ) : null}
-          <h1 className="text-[15px] font-semibold text-[#1a1a1a] dark:text-text-primary">
+          <h1 className="text-[15px] font-semibold text-[color:var(--pico-ink)] dark:text-text-primary">
             自动化
           </h1>
         </div>
@@ -807,9 +808,9 @@ export default function AutomationPage() {
             setActionError(null);
             setMode('create');
           }}
-          className="inline-flex items-center gap-1.5 rounded-md bg-[#1a1a1a] px-3 py-1.5 text-[13px] font-medium text-white"
+          className="pico-cta-accent inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <PicoIcon name="plus" size="sm" />
           添加任务
         </button>
       </header>
@@ -857,8 +858,8 @@ export default function AutomationPage() {
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-lg border border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-primary">
-            <div className="hidden grid-cols-[minmax(0,1fr)_150px_170px_150px] gap-3 border-b border-black/[0.05] bg-[#fafafa] px-4 py-2 text-[11px] text-[#8c8c8c] md:grid">
+          <div className="pico-card overflow-hidden dark:border-border-light dark:bg-surface-primary">
+            <div className="hidden grid-cols-[minmax(0,1fr)_150px_170px_150px] gap-3 border-b border-[color:var(--pico-line)] bg-[color:var(--pico-surface-2)] px-4 py-2 text-[11px] text-[color:var(--pico-ink-2)] md:grid">
               <span>任务</span>
               <span>执行频率</span>
               <span>运行记录</span>
@@ -874,19 +875,19 @@ export default function AutomationPage() {
 
             {!loading && list.length === 0 ? (
               <div className="flex flex-col items-center px-4 py-16 text-center">
-                <div className="flex size-10 items-center justify-center rounded-md bg-[#f2f2f2]">
-                  <Clock3 className="h-5 w-5 text-[#6b6b6b]" />
+                <div className="pico-icon-medallion size-12">
+                  <PicoIcon name="clock" size="lg" />
                 </div>
-                <p className="mt-3 text-[14px] font-medium text-[#1a1a1a] dark:text-text-primary">
+                <p className="mt-3 text-[14px] font-medium text-[color:var(--pico-ink)] dark:text-text-primary">
                   暂无自动化任务
                 </p>
-                <p className="mt-1 max-w-sm text-[12.5px] leading-5 text-[#8c8c8c]">
+                <p className="mt-1 max-w-sm text-[12.5px] leading-5 text-[color:var(--pico-ink-2)]">
                   配置提示词与频率后，Pico 会在服务端按时创建并执行任务。
                 </p>
                 <button
                   type="button"
                   onClick={() => setMode('create')}
-                  className="mt-4 rounded-md bg-[#1a1a1a] px-3 py-1.5 text-[12.5px] text-white"
+                  className="pico-cta-accent mt-4 px-4 py-2 text-[12.5px]"
                 >
                   添加任务
                 </button>

@@ -190,13 +190,15 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
   const name = user?.name?.split(/\s+/)[0] || '';
 
   return (
-    <div className="pico-wb-landing flex w-full flex-col items-center px-6 pb-6 pt-10 sm:pt-[156px]">
+    <div className="pico-wb-landing pico-shell-bg flex min-h-full w-full flex-col items-center px-4 pb-8 pt-10 sm:px-6 sm:pt-[132px]">
       <div className="flex w-full max-w-[797px] flex-col items-center">
         <h1 className="text-center text-[30px] font-semibold leading-none tracking-normal text-[color:var(--pico-ink)] dark:text-text-primary sm:text-[34px]">
           Pico，我帮你
         </h1>
         {name ? (
-          <p className="mt-2.5 text-[13px] text-[color:var(--pico-ink-3)]">{name}，描述任务即可开始</p>
+          <p className="mt-2.5 text-[13px] text-[color:var(--pico-ink-3)]">
+            {name}，描述任务即可开始
+          </p>
         ) : null}
         {expertBadge || connectorBadge || skillBadge ? (
           <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
@@ -223,7 +225,10 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
         ) : null}
 
         {/* Scene pills */}
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2" role="tablist">
+        <div
+          className="mt-7 flex max-w-full flex-wrap items-center justify-center gap-2"
+          role="tablist"
+        >
           {SCENES.map((s) => {
             const active = scene === s.id;
             return (
@@ -235,12 +240,12 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                 onClick={() => setScene(s.id)}
                 className={cn(
                   'inline-flex h-[32px] items-center gap-1.5 rounded-full px-3.5 text-[13px]',
-                  active
-                    ? 'pico-chip-active font-medium'
-                    : 'pico-chip',
+                  active ? 'pico-chip-active font-medium' : 'pico-chip',
                 )}
               >
-                {s.id === 'office' ? <PicoIcon name="spark" size="sm" className="opacity-90" /> : null}
+                {s.id === 'office' ? (
+                  <PicoIcon name="spark" size="sm" className="opacity-90" />
+                ) : null}
                 {s.label}
               </button>
             );
@@ -248,7 +253,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
         </div>
 
         {/* Capability chips */}
-        <div className="mt-4 flex w-full flex-wrap items-center justify-center gap-2">
+        <div className="mt-3.5 flex w-full flex-wrap items-center justify-center gap-2">
           {visibleChips.map((chip) => {
             return (
               <button
@@ -265,7 +270,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
         </div>
 
         {/* PIXEL composer card — matches reference input block */}
-        <div className="mt-5 w-full max-w-[797px]">
+        <div className="mt-6 w-full max-w-[797px]">
           <div
             className="rounded-[var(--pico-radius)] border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] shadow-[var(--pico-shadow)]"
             data-testid="pico-wb-home-composer"
@@ -309,7 +314,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                       <PicoIcon name="chevron" size="sm" className="opacity-60" />
                     </button>
                     {modelOpen && (
-                      <div className="absolute bottom-full right-0 z-50 mb-2 w-52 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-lg">
+                      <div className="pico-card absolute bottom-full right-0 z-50 mb-2 w-52 overflow-hidden py-1 shadow-[var(--pico-shadow-raised)]">
                         {PICO_DUAL_MODELS.map((m) => (
                           <button
                             key={m.id}
@@ -334,7 +339,9 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                     type="button"
                     className={cn(
                       'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      text.trim() ? 'pico-cta-accent' : 'bg-[color:var(--pico-line)] text-[color:var(--pico-ink-3)]',
+                      text.trim()
+                        ? 'pico-cta-accent'
+                        : 'bg-[color:var(--pico-line)] text-[color:var(--pico-ink-3)]',
                     )}
                     aria-label="发送"
                     disabled={!text.trim()}
@@ -360,7 +367,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                   {fullAccess ? '完全访问' : '默认权限'}
                 </button>
                 {permOpen && (
-                  <div className="absolute bottom-full left-0 z-50 mb-2 w-72 rounded-xl border border-black/[0.08] bg-white p-3 shadow-lg">
+                  <div className="pico-card absolute bottom-full left-0 z-50 mb-2 w-[min(18rem,calc(100vw-2rem))] p-3 shadow-[var(--pico-shadow-raised)]">
                     <p className="text-[12.5px] leading-relaxed text-[color:var(--pico-ink-2)]">
                       当前为默认权限，所有操作都会在安全沙箱约束内进行，超出范围会请求你的允许。
                     </p>
