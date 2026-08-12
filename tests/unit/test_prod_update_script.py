@@ -240,3 +240,32 @@ def test_prod_update_refuses_login_network_failure(tmp_path: Path) -> None:
     assert "UI /login did not become ready after 30 attempts" in result.stderr
     assert "last_status=000" in result.stderr
     assert "[pico] done" not in result.stdout
+
+
+def test_prod_update_ui_readiness_uses_librechat_url_default(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path)
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert "UI readiness: waiting for http://127.0.0.1:18088/login HTTP 200" in result.stdout
+    assert "8080/login" not in result.stdout
+
+
+def test_prod_update_ui_readiness_honors_librechat_url_override(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path)
+    result = subprocess.run(
+        ["bash", str(production / "scripts" / "prod-update.sh")],
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "PICO_ROOT": str(production),
+            "PICO_DEPLOY_SHA": sha,
+            "LIBRECHAT_URL": "http://127.0.0.1:19999",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "UI readiness: waiting for http://127.0.0.1:19999/login HTTP 200" in result.stdout

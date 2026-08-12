@@ -150,13 +150,16 @@ fi
 
 # Product UI must actually serve /login. Allow LibreChat up to about 60 seconds
 # after recreate to become ready; transport failures and non-200 responses fail closed.
+# Shared ECS: LibreChat loopback must be 18088 — never 8080 (edu-core-bff on same host).
+# docker-compose.host.yml PORT=18088; override via LIBRECHAT_URL when needed.
+LC_URL="${LIBRECHAT_URL:-http://127.0.0.1:18088}"
 UI_LOGIN_CODE="000"
 UI_READY_ATTEMPTS=30
-echo "[pico] UI readiness: waiting for /login HTTP 200 (${UI_READY_ATTEMPTS} attempts, 1s interval)"
+echo "[pico] UI readiness: waiting for ${LC_URL}/login HTTP 200 (${UI_READY_ATTEMPTS} attempts, 1s interval)"
 for attempt in $(seq 1 "$UI_READY_ATTEMPTS"); do
   if UI_LOGIN_CODE="$(
     curl -s -o /dev/null -w "%{http_code}" --max-time 1 \
-      http://127.0.0.1:8080/login
+      "${LC_URL}/login"
   )" && [ "$UI_LOGIN_CODE" = "200" ]; then
     echo "[pico] UI ready attempt=${attempt}/${UI_READY_ATTEMPTS}"
     break
