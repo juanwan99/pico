@@ -32,13 +32,15 @@ _MAX_QUERY = 500
 _MAX_FETCH_BYTES = 512_000
 _MAX_TEXT = 24_000
 _FETCH_TIMEOUT = 12.0
-_SEARCH_TIMEOUT = 35.0
+# DeepSeek multi-hop web_search (search + open_page) often exceeds 35s; ECS ~51s.
+_SEARCH_TIMEOUT = 90.0
 _MAX_REDIRECTS = 3
 _MAX_SOURCES = 8
 _USER_AGENT = "PicoBot/1.0 (+https://github.com/juanwan99/pico; allowlisted-fetch)"
 
 _MD_LINK = re.compile(r"\[([^\]]{1,200})\]\((https?://[^)\s]{1,500})\)")
-_BARE_URL = re.compile(r"https?://[^\s)\]>'\"<>]{8,500}")
+_BARE_URL = re.compile(r"https?://[^\s)\]>'\"<>`]{8,500}")
+_TRAILING_URL_JUNK = "`.,;:!?'\""
 
 # Ask DS to cite; parser must still work if the model writes prose only.
 _DS_CITE_INSTRUCTIONS = (
@@ -94,15 +96,27 @@ def _required_query(args: dict[str, Any]) -> str:
     return text
 
 
-def _source_item(*, title: str, url: str, snippet: str = "") -> dict[str, str] | None:
+def _sanitize_extracted_url(url: str) -> str:
+    """Strip wrapping/trailing backticks and prose punctuation. Do not invent URLs."""
     u = (url or "").strip()
+    if len(u) >= 2 and u[0] == u[-1] and u[0] in {"`", "'", '"'}:
+        u = u[1:-1].strip()
+    u = u.strip("`").rstrip(_TRAILING_URL_JUNK)
+    return u.strip()
+
+
+def _source_item(*, title: str, url: str, snippet: str = "") -> dict[str, str] | None:
+    raw = (url or "").strip()
+    u = _sanitize_extracted_url(raw)
     if not u:
         return None
     try:
         parse_public_http_url(u)
     except ToolError:
         return None
-    t = (title or "").strip() or u
+    t = (title or "").strip()
+    if not t or t == raw:
+        t = u
     s = (snippet or "").strip().replace("\n", " ")
     return {"title": t[:200], "url": u[:500], "snippet": s[:400]}
 
@@ -129,7 +143,7 @@ def _extract_markdown_sources(text: str) -> list[dict[str, str]]:
             found.append(item)
     if not found:
         for url in _BARE_URL.findall(text or ""):
-            item = _source_item(title=url, url=url.rstrip(".,;"))
+            item = _source_item(title=url, url=url)
             if item:
                 found.append(item)
     return found

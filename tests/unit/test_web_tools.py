@@ -19,7 +19,10 @@ from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_s
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 from pico_orchestrator.web_guard import assert_public_http_url, parse_public_http_url
 from pico_orchestrator.web_tools import (
+    _FETCH_TIMEOUT,
+    _SEARCH_TIMEOUT,
     _parse_ds_response,
+    _source_item,
     attach_teacher_sources,
     web_fetch_handler,
     web_search_handler,
@@ -340,6 +343,38 @@ def test_parse_ds_web_search_call_loopback_not_sourced() -> None:
     assert all("127.0.0.1" not in (s.get("url") or "") for s in parsed["sources"])
     assert "未检索" in parsed["teacher_sources_md"]
     assert parsed["excerpt"]  # facts may still be used; do not claim sources
+
+
+def test_search_timeout_allows_ds_multi_hop() -> None:
+    assert _SEARCH_TIMEOUT >= 90
+    assert _FETCH_TIMEOUT == 12.0
+
+
+def test_extracted_url_strips_trailing_backtick() -> None:
+    item = _source_item(title="Example", url="https://www.example.com`")
+    assert item is not None
+    assert "`" not in item["url"]
+    assert item["url"].startswith("https://www.example.com")
+    wrapped = _source_item(title="https://www.example.com`", url="`https://www.example.com`")
+    assert wrapped is not None
+    assert wrapped["url"].startswith("https://www.example.com")
+    assert "`" not in wrapped["url"]
+    parsed = _parse_ds_response(
+        {
+            "output_text": "See https://www.example.com` for the page.",
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "action": {"type": "open_page", "url": "https://www.example.com`"},
+                }
+            ],
+        },
+        query="example.com",
+    )
+    assert parsed["honest_miss"] is False
+    assert parsed["retrieved"] is True
+    assert all("`" not in (s.get("url") or "") for s in parsed["sources"])
+    assert any(s["url"].startswith("https://www.example.com") for s in parsed["sources"])
 
 
 @pytest.mark.asyncio
