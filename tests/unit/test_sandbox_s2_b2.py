@@ -104,14 +104,6 @@ class MemoryArtifactStore:
         ]
 
 
-PAGE = """<!DOCTYPE html>
-<html><head><title>教案首页</title></head>
-<body><h1>第一课</h1><p>hello</p></body></html>
-"""
-
-
-@pytest.mark.asyncio
-
 
 PUBLIC_HTML = (
     "<!DOCTYPE html><html><head><title>Example Domain</title></head>"
