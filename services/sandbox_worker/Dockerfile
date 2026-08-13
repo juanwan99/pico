@@ -1,6 +1,5 @@
 # pico-sandbox sidecar — process-separated from pico-api / LibreChat.
 # NOT privileged. Does not bind 8080 / 18088 / 18765.
-# Chromium/Playwright may be added later; userspace egress (web_guard) is required either way.
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -22,7 +21,7 @@ COPY services /app/services
 
 RUN useradd --create-home --uid 65532 --shell /usr/sbin/nologin sandbox \
     && mkdir -p /tmp/pico-sandbox \
-    && chown -R 65532:65532 /tmp/pico-sandbox
+    && chown -R 65532:65532 /app /tmp/pico-sandbox
 
 USER 65532:65532
 EXPOSE 18767
