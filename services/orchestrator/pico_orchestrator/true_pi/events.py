@@ -10,6 +10,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from pico_orchestrator.sandbox_session_event import (
+    SANDBOX_BROWSER_TOOLS,
+    public_tool_result,
+    sandbox_session_payload,
+)
 from pico_orchestrator.true_pi.client import RpcEvent
 from pico_orchestrator.true_pi.config import RUNTIME_LABEL
 
@@ -115,6 +120,8 @@ async def map_event(
         call_id = str(raw.get("toolCallId") or raw.get("callId") or "")
         is_error = bool(raw.get("isError") or raw.get("error"))
         result = _result_dict(raw.get("result") if "result" in raw else raw.get("details"))
+        if name in SANDBOX_BROWSER_TOOLS:
+            result = public_tool_result(result)
         if is_error and "error" not in result:
             result = {**result, "error": str(raw.get("error") or "tool error")}
         if not is_error:
@@ -157,6 +164,14 @@ async def map_event(
                     **tag,
                 },
             )
+        if name in SANDBOX_BROWSER_TOOLS:
+            session_ev = sandbox_session_payload(result)
+            if session_ev:
+                state.event_kinds.append("sandbox.session")
+                await emit(
+                    "sandbox.session",
+                    {**session_ev, "tool": name, **tag},
+                )
         return
 
     if kind == "message_end":

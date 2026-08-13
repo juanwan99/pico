@@ -7,6 +7,7 @@ const VISIBLE_EVENT_TYPES = new Set([
   'tool.call',
   'tool.result',
   'search.sources',
+  'sandbox.session',
   'artifact.created',
   'agent.step',
   'run.status',
@@ -67,6 +68,14 @@ export function describePicoRunEvent(
     return {
       title: `工具结果 · ${textValue(payload, 'tool', 'name') || '未命名工具'}`,
       detail,
+    };
+  }
+  if (event.type === 'sandbox.session') {
+    const url = textValue(payload, 'url');
+    const title = textValue(payload, 'title');
+    return {
+      title: '隔离网页已打开',
+      detail: [title, url].filter(Boolean).join(' · ') || '请在结果区「网页」里点、自己登录',
     };
   }
   if (event.type === 'search.sources') {

@@ -1,0 +1,13 @@
+card: T-PACK-RESULT-WEB-PANE
+issue: 533
+viewport: 390
+pane_in_result: Y
+click_in_pane: Y (example.com → iana.org)
+login_in_pane: Y (password field in result pane; masked in frame)
+password_not_in_chat: Y (secret only POST /input; public_tool_result strips Event)
+frames:
+  01-pane-example-com.png 32467 390x1180
+  02-pane-after-click-iana.png 72456 390x1180
+  03-pane-login-masked.png 28369 390x1180
+  v390.png 32467 390x1180
+CLAIM-WB-DEGREE-WEB: NO

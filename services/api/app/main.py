@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -612,6 +612,51 @@ async def invoke_tool(
 # ----- sandbox B2 human-in-the-loop view (sidecar; not LibreChat) -----
 
 
+def _sandbox_public_meta(session_id: str, meta: dict) -> dict:
+    from pico_orchestrator.sandbox_session_event import sandbox_session_payload
+
+    payload = sandbox_session_payload({**meta, "session_id": session_id}) or {
+        "session_id": session_id,
+        "url": str(meta.get("url") or ""),
+        "title": str(meta.get("title") or ""),
+        "view_path": f"/v1/sandbox/sessions/{session_id}/view",
+        "human_copy": str(meta.get("human_copy") or ""),
+        "engine": str(meta.get("engine") or ""),
+        "workspace_id": str(meta.get("workspace_id") or ""),
+    }
+    return {"ok": True, **payload}
+
+
+@app.get("/v1/sandbox/sessions/{session_id}")
+async def sandbox_session_meta(
+    session_id: str,
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> JSONResponse:
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+
+    try:
+        meta = await sidecar_json(
+            "GET",
+            f"/v1/internal/sessions/{session_id}",
+            params={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+            },
+        )
+    except ToolError as exc:
+        status = 404 if exc.code == "sandbox.session_not_found" else 400
+        raise HTTPException(
+            status_code=status, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    if not isinstance(meta, dict):
+        raise HTTPException(status_code=502, detail={"code": "sandbox.unavailable"})
+    return JSONResponse(
+        content=_sandbox_public_meta(session_id, meta),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/v1/sandbox/sessions/{session_id}/view")
 async def sandbox_session_view(
     session_id: str,
@@ -728,7 +773,7 @@ async def sandbox_session_input(
             detail={"code": "tool.invalid_arguments", "message": "无法读取画面输入"},
         ) from exc
     try:
-        await sidecar_json(
+        applied = await sidecar_json(
             "POST",
             f"/v1/internal/sessions/{session_id}/input",
             json_body={
@@ -746,6 +791,13 @@ async def sandbox_session_input(
         raise HTTPException(
             status_code=status, detail={"code": exc.code, "message": exc.message}
         ) from exc
+    accept = (request.headers.get("accept") or "").lower()
+    if "application/json" in ctype or "application/json" in accept:
+        meta = applied if isinstance(applied, dict) else {}
+        body = _sandbox_public_meta(session_id, meta)
+        body["clicked"] = bool(meta.get("clicked"))
+        body["typed"] = bool(meta.get("typed"))
+        return JSONResponse(content=body, headers={"Cache-Control": "no-store"})
     return HTMLResponse(
         status_code=303,
         headers={"Location": f"/v1/sandbox/sessions/{session_id}/view"},

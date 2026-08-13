@@ -149,13 +149,30 @@ def test_b2_view_and_cross_account_and_loopback(client) -> None:
         == 404
     )
 
+    meta = client.get(f"/v1/sandbox/sessions/{session_id}", headers=owner)
+    assert meta.status_code == 200, meta.text
+    body = meta.json()
+    assert body["session_id"] == session_id
+    assert "example.com" in body["url"]
+    assert "password" not in body
+    assert "secret" not in body
+
+    assert (
+        client.get(f"/v1/sandbox/sessions/{session_id}", headers=outsider).status_code
+        == 404
+    )
+
     typed = client.post(
         f"/v1/sandbox/sessions/{session_id}/input",
-        headers=owner,
+        headers={**owner, "Accept": "application/json"},
         json={"secret": "do-not-log-this-password", "click_x": 10, "click_y": 20},
     )
-    assert typed.status_code in {200, 303}
+    assert typed.status_code == 200, typed.text
     assert "do-not-log-this-password" not in typed.text
+    typed_body = typed.json()
+    assert "iana.org" in typed_body["url"]
+    assert "password" not in typed_body
+    assert "secret" not in typed_body
 
     sess = RUNTIME.get(session_id)
     assert sess is not None

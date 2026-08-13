@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
   getPicoArtifactContent,
+  getPicoSandboxScreenshot,
+  getPicoSandboxSession,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -11,6 +13,9 @@ import ResultPanel, { formatRunTokenUsage } from '../ResultPanel';
 
 jest.mock('~/data-provider/pico/api', () => ({
   getPicoArtifactContent: jest.fn(),
+  getPicoSandboxScreenshot: jest.fn(),
+  getPicoSandboxSession: jest.fn(),
+  postPicoSandboxInput: jest.fn(),
 }));
 jest.mock('~/utils', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -302,5 +307,53 @@ describe('ResultPanel search sources', () => {
     expect(screen.getByTestId('pico-search-sources-miss')).toHaveTextContent(
       '未检索到可用来源',
     );
+  });
+});
+
+describe('ResultPanel sandbox web pane', () => {
+  beforeEach(() => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: jest.fn(() => 'blob:sandbox-shot'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: jest.fn(),
+    });
+  });
+
+  it('auto-opens 网页 when a sandbox session is on the ledger', async () => {
+    const png = new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' });
+    (getPicoSandboxScreenshot as jest.Mock).mockResolvedValue(png);
+    (getPicoSandboxSession as jest.Mock).mockResolvedValue({
+      session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      url: 'https://example.com/',
+      title: 'Example Domain',
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          runEvents={[
+            {
+              id: 'sbox-1',
+              run_id: 'run-1',
+              seq: 1,
+              type: 'sandbox.session',
+              payload: {
+                session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+                url: 'https://example.com/',
+                title: 'Example Domain',
+                human_copy: '请在此画面自行登录，不要在聊天里发送密码',
+              },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    expect(screen.getByTestId('sandbox-web-copy')).toHaveTextContent('不要在聊天里发送密码');
+    expect(screen.getByTestId('sandbox-web-password')).toHaveAttribute('type', 'password');
   });
 });

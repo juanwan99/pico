@@ -20,6 +20,11 @@ from openai import AsyncOpenAI
 from pico_orchestrator.gateway import ArtifactStore, Principal, ToolError
 from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.run_types import EventEmitter, RunCaps, RunResult
+from pico_orchestrator.sandbox_session_event import (
+    SANDBOX_BROWSER_TOOLS,
+    public_tool_result,
+    sandbox_session_payload,
+)
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
 from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
 from pico_orchestrator.user_errors import enrich_fail_payload
@@ -541,6 +546,8 @@ async def run_pi_agent(
                 )
                 try:
                     result = await gateway.invoke(principal, name, arguments)
+                    if name in SANDBOX_BROWSER_TOOLS:
+                        result = public_tool_result(result)
                     tool_context_results.append((name, result))
                     step_tool_ok += 1
                     out_text = json.dumps(result, ensure_ascii=False)
@@ -566,6 +573,13 @@ async def run_pi_agent(
                                 "call_id": call_id,
                             },
                         )
+                    if name in SANDBOX_BROWSER_TOOLS:
+                        session_ev = sandbox_session_payload(result)
+                        if session_ev:
+                            await emit(
+                                "sandbox.session",
+                                {**session_ev, "tool": name, "call_id": call_id},
+                            )
                     messages.append(
                         {
                             "role": "tool",

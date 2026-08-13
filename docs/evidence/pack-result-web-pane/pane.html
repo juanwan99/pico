@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=390"/>
+  <title>结果区 · 网页</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #ececec; }
+    .panel { width: 390px; min-height: 844px; background: #fff; color: #1a1a1a; }
+    .hdr { height: 44px; display: flex; align-items: center; padding: 0 8px; background: #fafafa; border-bottom: 1px solid rgba(0,0,0,.06); font-size: 13px; font-weight: 600; }
+    .hdr span { color: #8c8c8c; font-weight: 400; margin-left: 8px; font-size: 12px; }
+    .meta { padding: 8px; border-bottom: 1px solid rgba(0,0,0,.05); }
+    .meta .url { font-size: 11px; color: #6b6b6b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meta .copy { font-size: 11px; margin-top: 4px; }
+    .meta .st { font-size: 10px; color: #9a9a9a; margin-top: 2px; }
+    img { display: block; width: 390px; background: #111; }
+    form { padding: 8px; border-top: 1px solid rgba(0,0,0,.06); font-size: 11px; color: #6b6b6b; }
+    input { width: 100%; margin: 4px 0 8px; padding: 8px; border: 1px solid rgba(0,0,0,.08); border-radius: 6px; }
+    button { padding: 6px 10px; border-radius: 6px; border: 0; background: #1a1a1a; color: #fff; font-size: 11.5px; }
+  </style>
+</head>
+<body>
+  <aside class="panel" data-testid="result-panel" aria-label="结果区">
+    <div class="hdr">网页 <span>概览 · 工作空间文件 · 浏览器</span></div>
+    <div class="meta">
+      <div class="url" id="url"></div>
+      <div class="copy">请在此画面自行登录，不要在聊天里发送密码</div>
+      <div class="st" id="st">请在此画面操作</div>
+    </div>
+    <img id="shot" alt="隔离浏览器画面" width="390"/>
+    <form autocomplete="off">
+      <label>可见输入<input value="" autocomplete="off"/></label>
+      <label>密码（只进隔离会话）<input type="password" value="" autocomplete="new-password" id="pw"/></label>
+      <button type="button">送密码</button>
+    </form>
+  </aside>
+  <script>
+    const q = new URLSearchParams(location.search);
+    const shot = q.get("shot") || "../pack-b2-real-browser/viewport-example-com.png";
+    const url = q.get("url") || "https://example.com/";
+    const title = q.get("title") || "Example Domain";
+    document.getElementById("shot").src = shot;
+    document.getElementById("url").textContent = title + " · " + url;
+    if (q.get("login") === "1") {
+      document.getElementById("pw").value = "••••••••";
+      document.getElementById("st").textContent = "密码只进隔离会话，不会进聊天";
+    }
+  </script>
+</body>
+</html>
