@@ -94,6 +94,8 @@ HTML 产物返回：
 - 文本回给模型，证明「看见了这页」
 - 非法 URL 走 `web_guard` 拒绝，不抓取
 
+**S2 升档**（[#513](https://github.com/juanwan99/pico/issues/513)）：同工具对本次 HTML 另产 PNG 光栅。合同见 [`SANDBOX-S2.md`](./SANDBOX-S2.md)。S1 行为保持。
+
 ---
 
 ## 6. 用量

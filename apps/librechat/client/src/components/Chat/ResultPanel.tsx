@@ -34,6 +34,7 @@ import {
 import { cn } from '~/utils';
 import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
+import PicoSearchSources from './PicoSearchSources';
 
 type TopView = 'overview' | 'files' | 'browser';
 
@@ -106,6 +107,14 @@ function isHtmlArtifact(artifact: ArtifactItem): boolean {
     artifact.kind === 'html' ||
     /\.html?$/i.test(artifact.name || '') ||
     /html/i.test(artifact.kindLabel || '')
+  );
+}
+
+function isImageArtifact(artifact: ArtifactItem, blobType?: string): boolean {
+  return (
+    /\.(png|jpe?g|gif|webp)$/i.test(artifact.name || '') ||
+    /image/i.test(artifact.kindLabel || '') ||
+    /image\//i.test(blobType || '')
   );
 }
 
@@ -256,6 +265,7 @@ export default function ResultPanel({
   const [artifactError, setArtifactError] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
   const navigate = useNavigate();
   const tokenUsageLabel = formatRunTokenUsage(run);
@@ -367,6 +377,7 @@ export default function ResultPanel({
     setArtifactError(null);
     setPreviewText(null);
     setPreviewHtml(null);
+    setPreviewImage(null);
     setPreviewTitle(null);
     try {
       if (artifact.url) {
@@ -386,6 +397,13 @@ export default function ResultPanel({
         const text = await blob.text();
         setPreviewTitle(artifact.name || 'HTML 预览');
         setPreviewHtml(text);
+        return;
+      }
+      if (isImageArtifact(artifact, blob.type)) {
+        const objectUrl = URL.createObjectURL(blob);
+        setPreviewTitle(artifact.name || '截图');
+        setPreviewImage(objectUrl);
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
         return;
       }
       // In-panel preview for text — no popup dependency (W4: open must show content).
@@ -590,6 +608,7 @@ export default function ResultPanel({
                 className="text-[11px] text-[#6b6b6b] underline"
                 onClick={() => {
                   setPreviewHtml(null);
+                  setPreviewImage(null);
                   setPreviewTitle(null);
                 }}
               >
@@ -607,6 +626,32 @@ export default function ResultPanel({
               srcDoc={previewHtml}
               className="h-64 w-full rounded border border-black/[0.06] bg-white"
               data-testid="artifact-html-iframe"
+            />
+          </div>
+        ) : null}
+        {previewImage !== null ? (
+          <div
+            className="mb-2 rounded-lg border border-black/[0.08] bg-white p-2 dark:border-border-light dark:bg-surface-secondary"
+            data-testid="artifact-image-preview"
+          >
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="truncate text-[12px] font-medium text-[#3d3d3d]">{previewTitle}</p>
+              <button
+                type="button"
+                className="text-[11px] text-[#6b6b6b] underline"
+                onClick={() => {
+                  setPreviewImage(null);
+                  setPreviewTitle(null);
+                }}
+              >
+                关闭预览
+              </button>
+            </div>
+            <img
+              src={previewImage}
+              alt={previewTitle || 'inspect raster'}
+              className="max-h-64 w-full rounded border border-black/[0.06] object-contain bg-white"
+              data-testid="artifact-image"
             />
           </div>
         ) : null}
@@ -715,6 +760,7 @@ export default function ResultPanel({
               </div>
             ) : null}
 
+            <PicoSearchSources events={runEvents} />
             <RunTimeline events={runEvents} run={run} />
 
             {artifacts.length === 0 ? (

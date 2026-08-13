@@ -87,10 +87,37 @@ def safe_segment(value: str | None, *, fallback: str = "_") -> str:
     text = (value or "").strip()
     if not text or text in {".", ".."} or "/" in text or "\\" in text:
         return fallback
-    if any(ord(ch) < 32 for ch in text):
+    if "\x00" in text or any(ord(ch) < 32 for ch in text):
         return fallback
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", text)[:128]
     return cleaned or fallback
+
+
+def assert_relpath_safe(rel: str) -> str:
+    """Reject absolute paths, NUL, and ``..`` after normalization. No host FS yet."""
+    text = rel if isinstance(rel, str) else str(rel or "")
+    if not text or "\x00" in text:
+        raise ToolError("sandbox.path_denied", "路径非法")
+    if any(ord(ch) < 32 for ch in text):
+        raise ToolError("sandbox.path_denied", "路径含控制字符")
+    unix = text.replace("\\", "/")
+    if unix.startswith(("/", "//")):
+        raise ToolError("sandbox.path_denied", "禁止绝对路径")
+    if len(unix) >= 2 and unix[1] == ":":
+        raise ToolError("sandbox.path_denied", "禁止绝对路径")
+    normalized = os.path.normpath(unix)
+    if normalized.startswith(("/", "..")):
+        raise ToolError("sandbox.path_denied", "路径超出隔离工作区")
+    parts = Path(normalized).parts
+    if any(part in {".", ".."} for part in parts):
+        raise ToolError("sandbox.path_denied", "路径超出隔离工作区")
+    return normalized
+
+
+def join_workspace_path(root: Path, rel: str) -> Path:
+    """Join a relative name onto the isolation root; deny escapes including symlinks."""
+    safe = assert_relpath_safe(rel)
+    return assert_inside_workspace(root, root / safe)
 
 
 def isolation_key(
@@ -348,10 +375,13 @@ def materialize_workspace_html(
         deny_secret_filename(title)
         root = isolation_dir(principal.school_id, principal.membership_id, run_id)
         root.mkdir(parents=True, exist_ok=True)
-        name = safe_segment(Path(title).name or "page.html", fallback="page.html")
+        raw_name = Path(title).name or "page.html"
+        if title and ("/" in title or "\\" in title or "\x00" in title):
+            assert_relpath_safe(title)
+        name = safe_segment(raw_name, fallback="page.html")
         if not name.lower().endswith((".html", ".htm")):
             name = f"{name}.html"
-        dest = assert_inside_workspace(root, root / name)
+        dest = join_workspace_path(root, name)
         dest.write_text(content[:MAX_CONTENT_CHARS], encoding="utf-8")
         return str(dest)
     except Exception:

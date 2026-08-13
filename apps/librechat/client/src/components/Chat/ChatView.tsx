@@ -245,6 +245,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                         {/* #399 R1: finished deliverables in primary column, above composer */}
                         <MainDeliveryStrip
                           artifacts={ledger.artifacts}
+                          runEvents={ledger.events}
                           onOpenResultPanel={() => setResultOpen(true)}
                         />
                         <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">

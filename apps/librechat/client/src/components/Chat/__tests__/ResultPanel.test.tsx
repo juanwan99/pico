@@ -252,3 +252,55 @@ describe('ResultPanel artifact actions', () => {
     expect(screen.queryByText(/internal object key/)).not.toBeInTheDocument();
   });
 });
+
+describe('ResultPanel search sources', () => {
+  it('shows a clickable source from gateway search.sources', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          runEvents={[
+            {
+              id: 'search-1',
+              run_id: 'run-1',
+              seq: 1,
+              type: 'search.sources',
+              payload: {
+                tool: 'web_search',
+                honest_miss: false,
+                sources: [{ title: 'Gov', url: 'https://www.gov.cn/a' }],
+              },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    const link = screen.getByTestId('pico-search-source-link');
+    expect(link).toHaveAttribute('href', 'https://www.gov.cn/a');
+    expect(link).toHaveTextContent('Gov');
+  });
+
+  it('shows honest miss copy when search returned no sources', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          runEvents={[
+            {
+              id: 'search-miss',
+              run_id: 'run-1',
+              seq: 1,
+              type: 'search.sources',
+              payload: { tool: 'web_search', honest_miss: true, sources: [] },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('pico-search-sources-miss')).toHaveTextContent(
+      '未检索到可用来源',
+    );
+  });
+});

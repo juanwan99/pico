@@ -20,6 +20,9 @@ aiosqlite>=0.20,<1
 openai>=1.50,<3
 python-dotenv>=1.0,<2
 
+# Sandbox S2 HTML→PNG raster (true image bytes; no host Chrome)
+pillow>=10.4,<12
+
 # Legacy Kimi Agent path (optional rollback; requires Python >= 3.12)
 # kimi-agent-sdk==0.0.5
 # kimi-cli==1.12.0

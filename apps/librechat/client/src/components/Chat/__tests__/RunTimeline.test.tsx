@@ -170,4 +170,35 @@ describe('RunTimeline', () => {
     expect(screen.getByText('失败')).toBeInTheDocument();
     expect(screen.queryByText('失败 · 已恢复')).not.toBeInTheDocument();
   });
+
+  it('renders clickable search sources and honest miss copy', () => {
+    const { rerender } = render(
+      <RunTimeline
+        events={[
+          event('search-ok', 1, 'search.sources', {
+            tool: 'web_search',
+            honest_miss: false,
+            sources: [{ title: 'Gov', url: 'https://www.gov.cn/a' }],
+          }),
+        ]}
+      />,
+    );
+    const link = screen.getByTestId('pico-timeline-source-link');
+    expect(link).toHaveAttribute('href', 'https://www.gov.cn/a');
+    expect(link).toHaveTextContent('Gov');
+
+    rerender(
+      <RunTimeline
+        events={[
+          event('search-miss', 1, 'search.sources', {
+            tool: 'web_search',
+            honest_miss: true,
+            sources: [],
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('未检索到可用来源')).toBeInTheDocument();
+    expect(screen.queryByTestId('pico-timeline-source-link')).not.toBeInTheDocument();
+  });
 });
