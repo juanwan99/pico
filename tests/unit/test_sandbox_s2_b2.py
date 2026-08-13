@@ -6,7 +6,9 @@ import inspect
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -26,7 +28,90 @@ from pico_orchestrator.web_guard import parse_public_http_url
 from sandbox_worker.ports import SANDBOX_DEFAULT_PORT, assert_listen_port
 from sandbox_worker.runtime import HUMAN_LOGIN_COPY, RUNTIME, automation_hostile_reason
 
-from tests.unit.test_sandbox_s1 import MemoryArtifactStore, P
+@dataclass
+class P:
+    school_id: str
+    membership_id: str
+    scopes: list[str]
+
+
+class MemoryArtifactStore:
+    def __init__(self, *, run_id: str | None = None) -> None:
+        self.rows: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        self._run_id = run_id
+        self._task_id = "task-s1"
+
+    def _rows(self, principal: P) -> list[dict[str, Any]]:
+        return self.rows.setdefault((principal.school_id, principal.membership_id), [])
+
+    async def write(
+        self,
+        principal: P,
+        *,
+        title: str,
+        content: str | bytes,
+        kind: str,
+    ) -> dict[str, Any]:
+        import base64
+
+        if isinstance(content, bytes):
+            row = {
+                "artifact_id": f"art-{sum(map(len, self.rows.values())) + 1}",
+                "title": title,
+                "content": None,
+                "content_base64": base64.b64encode(content).decode("ascii"),
+                "kind": kind,
+                "run_id": self._run_id,
+                "task_id": self._task_id,
+                "size": len(content),
+                "byte_size": len(content),
+                "content_encoding": "base64",
+            }
+        else:
+            body = content
+            row = {
+                "artifact_id": f"art-{sum(map(len, self.rows.values())) + 1}",
+                "title": title,
+                "content": body,
+                "kind": kind,
+                "run_id": self._run_id,
+                "task_id": self._task_id,
+                "size": len(body.encode("utf-8")),
+                "byte_size": len(body.encode("utf-8")),
+                "content_encoding": "utf8",
+            }
+        self._rows(principal).append(row)
+        return {k: v for k, v in row.items() if k not in {"content", "content_base64"}}
+
+    async def read(
+        self,
+        principal: P,
+        *,
+        artifact_id: str | None,
+        title: str | None,
+    ) -> dict[str, Any] | None:
+        for row in reversed(self._rows(principal)):
+            if artifact_id and row["artifact_id"] == artifact_id:
+                return row
+            if not artifact_id and title and row["title"] == title:
+                return row
+        return None
+
+    async def list(self, principal: P, *, limit: int) -> list[dict[str, Any]]:
+        return [
+            {k: v for k, v in row.items() if k != "content"}
+            for row in list(reversed(self._rows(principal)))[:limit]
+        ]
+
+
+PAGE = """<!DOCTYPE html>
+<html><head><title>教案首页</title></head>
+<body><h1>第一课</h1><p>hello</p></body></html>
+"""
+
+
+@pytest.mark.asyncio
+
 
 PUBLIC_HTML = (
     "<!DOCTYPE html><html><head><title>Example Domain</title></head>"
