@@ -204,7 +204,10 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     )}
                     rerunning={ledger.rerunning}
                     onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
-                    processHint={ledger.processHint}
+                    processHint={
+                      ledger.processHint ||
+                      (isSubmitting ? '正在检索或作答' : null)
+                    }
                   />
                   {ledger.error ? (
                     <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900">
@@ -248,6 +251,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                         <MainDeliveryStrip
                           artifacts={ledger.artifacts}
                           runEvents={ledger.events}
+                          messages={flatMessages}
                           onOpenResultPanel={() => setResultOpen(true)}
                         />
                         <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">
@@ -262,7 +266,10 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     messages={flatMessages}
                     taskTitle={taskTitle || ledger.task?.title}
                     runStatusLabel={runStatusLabel}
-                    processHint={ledger.processHint}
+                    processHint={
+                      ledger.processHint ||
+                      (isSubmitting ? '正在检索或作答' : null)
+                    }
                     picoArtifacts={ledger.artifacts}
                     runEvents={ledger.events}
                     run={ledger.run}

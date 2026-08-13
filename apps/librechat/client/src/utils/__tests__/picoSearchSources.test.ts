@@ -56,4 +56,36 @@ describe('collectPicoSearchSources', () => {
     expect(view.honestMiss).toBe(false);
     expect(view.sources).toEqual([]);
   });
+
+  it('falls back to assistant markdown links when ledger events are empty', () => {
+    const view = collectPicoSearchSources([], [
+      { isCreatedByUser: true, text: '搜一下 https://evil.example/nope' },
+      {
+        isCreatedByUser: false,
+        text: '见 [义务教育法](https://www.gov.cn/a) 与 https://www.gov.cn/b',
+      },
+    ]);
+    expect(view.searched).toBe(true);
+    expect(view.honestMiss).toBe(false);
+    expect(view.sources).toEqual([
+      { title: '义务教育法', url: 'https://www.gov.cn/a' },
+      { title: 'https://www.gov.cn/b', url: 'https://www.gov.cn/b' },
+    ]);
+  });
+
+  it('keeps honest miss when ledger searched and ignores invented bubble links', () => {
+    const view = collectPicoSearchSources(
+      [
+        event('search.sources', {
+          tool: 'web_search',
+          honest_miss: true,
+          sources: [],
+        }),
+      ],
+      [{ isCreatedByUser: false, text: '见 [假](https://example.com/invented)' }],
+    );
+    expect(view.searched).toBe(true);
+    expect(view.honestMiss).toBe(true);
+    expect(view.sources).toEqual([]);
+  });
 });

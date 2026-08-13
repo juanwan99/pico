@@ -698,6 +698,10 @@ export default function ResultPanel({
             {artifactError}
           </p>
         ) : null}
+        {/* Sources sit above 概览/网页 so search + sandbox coexist. */}
+        <div className="empty:hidden px-2.5 pt-2.5">
+          <PicoSearchSources events={runEvents} messages={messages} />
+        </div>
         {view === 'overview' && (
           <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
             {taskTitle || runStatusLabel || processHint || tokenUsageLabel ? (
@@ -771,7 +775,6 @@ export default function ResultPanel({
               </div>
             ) : null}
 
-            <PicoSearchSources events={runEvents} />
             <RunTimeline events={runEvents} run={run} />
 
             {artifacts.length === 0 ? (

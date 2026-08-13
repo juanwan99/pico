@@ -10,6 +10,7 @@ import {
 import {
   computeRunStatusLabel,
   friendlyFailureLabel,
+  lastProcessStep,
   mapRawRunErrorToUserMessage,
   mergePolledRun,
   pickPreferredRun,
@@ -34,6 +35,47 @@ const mockedListRuns = jest.mocked(listPicoTaskRuns);
 const mockedListEvents = jest.mocked(listPicoRunEvents);
 const mockedCancelRun = jest.mocked(cancelPicoRun);
 const mockedRetryRun = jest.mocked(retryPicoRun);
+
+describe('search process copy (#537)', () => {
+  it('labels an in-flight web_search as 正在检索', () => {
+    expect(
+      lastProcessStep([
+        {
+          id: 'e1',
+          run_id: 'r1',
+          seq: 1,
+          type: 'tool.call',
+          payload: { tool: 'web_search' },
+        },
+      ]),
+    ).toBe('正在检索');
+  });
+
+  it('labels search.sources with a count even after later agent.step', () => {
+    expect(
+      lastProcessStep([
+        {
+          id: 'e2',
+          run_id: 'r1',
+          seq: 2,
+          type: 'search.sources',
+          payload: {
+            tool: 'web_search',
+            honest_miss: false,
+            sources: [{ url: 'https://www.gov.cn/a' }],
+          },
+        },
+        {
+          id: 'e3',
+          run_id: 'r1',
+          seq: 3,
+          type: 'agent.step',
+          payload: { step: 2, phase: 'turn_end' },
+        },
+      ]),
+    ).toBe('已检索 1 条来源');
+  });
+});
 
 describe('failure / restart status labels (#443)', () => {
   it('maps raw owner-lost error to human Chinese with rerun CTA', () => {

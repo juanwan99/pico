@@ -3,14 +3,19 @@
  * Clickable links only — never invent URLs. Honest miss: 未检索到可用来源.
  */
 import type { PicoRunEvent } from '~/data-provider/pico/api';
-import { collectPicoSearchSources } from '~/utils/picoSearchSources';
+import {
+  collectPicoSearchSources,
+  type PicoSourceMessage,
+} from '~/utils/picoSearchSources';
 
 export default function PicoSearchSources({
   events,
+  messages,
 }: {
   events?: PicoRunEvent[] | null;
+  messages?: PicoSourceMessage[] | null;
 }) {
-  const view = collectPicoSearchSources(events);
+  const view = collectPicoSearchSources(events, messages);
   if (!view.searched) {
     return null;
   }
