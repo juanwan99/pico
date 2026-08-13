@@ -24,7 +24,11 @@ import httpx
 from pico_orchestrator.gateway import Principal, ToolError
 from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.usage_hook import emit_search_usage
-from pico_orchestrator.web_guard import assert_public_http_url, parse_public_http_url
+from pico_orchestrator.web_guard import (
+    assert_public_http_url,
+    parse_public_http_url,
+    public_dns_only,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +45,8 @@ _USER_AGENT = "PicoBot/1.0 (+https://github.com/juanwan99/pico; allowlisted-fetc
 _MD_LINK = re.compile(r"\[([^\]]{1,200})\]\((https?://[^)\s]{1,500})\)")
 _BARE_URL = re.compile(r"https?://[^\s)\]>'\"<>`]{8,500}")
 _TRAILING_URL_JUNK = "`.,;:!?'\""
+_WS_CALL_FRAG = re.compile(r"#ws_call_id=[^#\s]*", re.IGNORECASE)
+_TITLE_RE = re.compile(r"(?is)<title[^>]*>(.*?)</title>")
 
 # Ask DS to cite; parser must still work if the model writes prose only.
 _DS_CITE_INSTRUCTIONS = (
@@ -63,13 +69,38 @@ class _HTMLText(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in {"script", "style", "noscript", "iframe"}:
             self._skip += 1
-        elif tag in {"p", "div", "br", "li", "h1", "h2", "h3", "tr", "section"}:
+        elif tag in {
+            "p",
+            "div",
+            "br",
+            "li",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "tr",
+            "section",
+            "article",
+            "main",
+        }:
             self._chunks.append("\n")
 
     def handle_endtag(self, tag: str) -> None:
         if tag in {"script", "style", "noscript", "iframe"} and self._skip:
             self._skip -= 1
-        elif tag in {"p", "div", "li", "h1", "h2", "h3", "tr", "section"}:
+        elif tag in {
+            "p",
+            "div",
+            "li",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "tr",
+            "section",
+            "article",
+            "main",
+        }:
             self._chunks.append("\n")
 
     def handle_data(self, data: str) -> None:
@@ -97,11 +128,20 @@ def _required_query(args: dict[str, Any]) -> str:
 
 
 def _sanitize_extracted_url(url: str) -> str:
-    """Strip wrapping/trailing backticks and prose punctuation. Do not invent URLs."""
+    """Strip wrapping/trailing backticks, DS ``#ws_call_id`` junk, punctuation.
+
+    Do not invent URLs.
+    """
     u = (url or "").strip()
     if len(u) >= 2 and u[0] == u[-1] and u[0] in {"`", "'", '"'}:
         u = u[1:-1].strip()
-    u = u.strip("`").rstrip(_TRAILING_URL_JUNK)
+    u = u.strip("`")
+    u = _WS_CALL_FRAG.sub("", u)
+    if "#" in u:
+        base, frag = u.split("#", 1)
+        if frag.lower().startswith("ws_call_id"):
+            u = base
+    u = u.rstrip(_TRAILING_URL_JUNK)
     return u.strip()
 
 
@@ -115,7 +155,7 @@ def _source_item(*, title: str, url: str, snippet: str = "") -> dict[str, str] |
     except ToolError:
         return None
     t = (title or "").strip()
-    if not t or t == raw:
+    if not t or t == raw or t == url or _WS_CALL_FRAG.search(t):
         t = u
     s = (snippet or "").strip().replace("\n", " ")
     return {"title": t[:200], "url": u[:500], "snippet": s[:400]}
@@ -412,6 +452,16 @@ async def web_search_handler(principal: Principal, args: dict[str, Any]) -> dict
     return result
 
 
+def _html_title(raw: str) -> str:
+    match = _TITLE_RE.search(raw or "")
+    if not match:
+        return ""
+    title = html_lib.unescape(_TAG_RE.sub(" ", match.group(1)))
+    title = _MULTI_NL.sub(" ", title)
+    title = re.sub(r"\s+", " ", title).strip()
+    return title[:200]
+
+
 def _html_to_text(raw: str) -> str:
     parser = _HTMLText()
     try:
@@ -459,7 +509,8 @@ async def web_fetch_handler(principal: Principal, args: dict[str, Any]) -> dict[
             for _hop in range(_MAX_REDIRECTS + 1):
                 target = await assert_public_http_url(current)
                 try:
-                    resp = await _fetch_once(client, target.url)
+                    with public_dns_only():
+                        resp = await _fetch_once(client, target.url)
                 except httpx.TimeoutException as exc:
                     raise ToolError("web.fetch_failed", "页面读取超时") from exc
                 except httpx.HTTPError as exc:
@@ -492,15 +543,18 @@ async def web_fetch_handler(principal: Principal, args: dict[str, Any]) -> dict[
                 except LookupError:
                     decoded = raw.decode("utf-8", errors="replace")
                 ctype = (resp.headers.get("content-type") or "").lower()
+                page_title = ""
                 if "html" in ctype or decoded.lstrip()[:15].lower().startswith(
                     ("<!doctype", "<html")
                 ):
+                    page_title = _html_title(decoded)
                     text = _html_to_text(decoded)
                 else:
                     text = decoded
                 truncated = truncated_raw or len(text) > _MAX_TEXT
                 text = text[:_MAX_TEXT]
                 host = target.host
+                cite_title = page_title or host
                 result = {
                     "url": target.url,
                     "host": host,
@@ -513,15 +567,15 @@ async def web_fetch_handler(principal: Principal, args: dict[str, Any]) -> dict[
                         if not text.strip()
                         else ("已读取页面（已截断）" if truncated else "已读取页面")
                     ),
-                    "title": host,
+                    "title": cite_title,
                     "text": text,
                     "sources": (
-                        [{"title": host, "url": target.url, "snippet": text[:180]}]
+                        [{"title": cite_title, "url": target.url, "snippet": text[:180]}]
                         if text.strip()
                         else []
                     ),
                     "teacher_sources_md": (
-                        f"来源：\n- [{host}]({target.url})"
+                        f"来源：\n- [{cite_title}]({target.url})"
                         if text.strip()
                         else "未检索到可用来源"
                     ),
