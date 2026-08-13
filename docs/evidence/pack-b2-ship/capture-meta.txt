@@ -1,0 +1,15 @@
+tip_sha: 2400db340edc38bc105eac3b4e8e1a02c6ba6499
+engine: playwright-chromium
+before_url: https://example.com/
+after_url: https://www.iana.org/help/example-domains
+before_title: Example Domain
+after_title: Example Domains
+click_xy: 121,290
+before_png_inflated: 20194
+after_png_inflated: 63956
+viewport: 390x844
+cross_view: 404
+cross_shot: 404
+loopback_18765: web.denied
+pico_aivia_asia: web.denied
+CLAIM-WB-DEGREE-WEB: NO
