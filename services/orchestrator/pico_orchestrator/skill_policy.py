@@ -39,6 +39,8 @@ _POLICIES: dict[str, SkillPolicy] = {
             "workspace_read_file",
             "verify_html_document",
             "sandbox_preview_inspect",
+            "sandbox_browser_open",
+            "sandbox_browser_screenshot",
         ),
         risk="low",
         instruction=(
@@ -49,6 +51,9 @@ _POLICIES: dict[str, SkillPolicy] = {
             "多交付时禁止单文件多标题冒充；HTML 可运行页生成后应 verify_html_document"
             "（校验供系统；勿向用户复读 verification_level 等字段）；"
             "生成 HTML 后调用 sandbox_preview_inspect 抽取 title/h1，证明系统看见了本次预览；"
+            "若老师要在公开站自行登录：sandbox_browser_open 打开公网页，指引去 view 画面"
+            "（请在此画面自行登录，不要在聊天里发送密码）。微信/教务不是过关条件；"
+            "站点禁自动化时用人话说明失败。禁止 B3 代登或在聊天收集密码。"
             "用户回复只给文件名与下载/打开指引，禁止贴全量源码或 Artifact ID。"
         ),
     ),
@@ -65,6 +70,8 @@ _POLICIES: dict[str, SkillPolicy] = {
             "verify_html_document",
             "structured_outline",
             "sandbox_preview_inspect",
+            "sandbox_browser_open",
+            "sandbox_browser_screenshot",
         ),
         risk="low",
         instruction=(
@@ -76,6 +83,8 @@ _POLICIES: dict[str, SkillPolicy] = {
             "HTML 交互页：generate_html_document 的 body 必须是**完整可运行 HTML 文档**"
             "（含真实 <button>/<script>，禁止把源码当正文转义交差）；"
             "生成后 verify_html_document（系统侧）并 sandbox_preview_inspect 抽取 title/h1；"
+            "公开站登录走隔离 sidecar 的 sandbox_browser_open + 人在环画面，禁止聊天贴密码；"
+            "微信/教务不作为必须过关。"
             "用户侧只报文件名并指引结果区下载；"
             "扩展名与类型一致；禁止聊天长文/全量 HTML 源码墙冒充交付。"
         ),

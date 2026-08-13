@@ -46,7 +46,9 @@ from pico_orchestrator.sandbox_s1 import (
     workspace_id_for,
 )
 from pico_orchestrator.sandbox_s2 import PNG_MAGIC, raster_html_isolated, raster_meta_from_write
+from pico_orchestrator.sandbox_sidecar import sidecar_json
 from pico_orchestrator.usage_hook import emit_sandbox_usage
+from pico_orchestrator.web_guard import parse_public_http_url
 from pico_orchestrator.web_tools import web_fetch_handler, web_search_handler
 
 _MAX_ARTIFACT_CONTENT = 200_000
@@ -262,7 +264,7 @@ def _static_html_checks(content: str) -> list[dict[str, Any]]:
 
 def _workspace_handlers(
     store: ArtifactStore,
-) -> tuple[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]:
+) -> tuple[Any, ...]:
     async def write_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         from pico_orchestrator.delivery_policy import normalize_artifact_title
 
@@ -779,6 +781,93 @@ def _workspace_handlers(
             )
             raise
 
+    async def browser_open(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        """B2: open a public page in the isolated sidecar. Human-in-the-loop login."""
+        started = time.perf_counter()
+        url = args.get("url")
+        if not isinstance(url, str) or not url.strip():
+            raise ToolError("tool.invalid_arguments", "url 必须是非空字符串")
+        url = url.strip()
+        run_id = current_run_id(principal, store)
+        ws = workspace_id_for(principal.school_id, principal.membership_id, run_id)
+        extra_base: dict[str, Any] = {
+            "tool": "sandbox_browser_open",
+            "phase": "browser_open",
+            "workspace_id": ws,
+        }
+
+        async def _emit(ok: bool, extra: dict[str, Any]) -> None:
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            await emit_sandbox_usage(
+                principal,
+                extra={**extra_base, **extra, "duration_ms": duration_ms},
+                ok=ok,
+            )
+
+        try:
+            parse_public_http_url(url)
+            out = await sidecar_json(
+                "POST",
+                "/v1/internal/sessions/open",
+                json_body={
+                    "school_id": principal.school_id,
+                    "membership_id": principal.membership_id,
+                    "run_id": run_id,
+                    "url": url,
+                },
+            )
+            if not isinstance(out, dict):
+                raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
+            extra_ok = {
+                "workspace_id": out.get("workspace_id") or ws,
+                "session_id": out.get("session_id"),
+            }
+            await _emit(True, extra_ok)
+            return out
+        except ToolError as exc:
+            await _emit(False, {"error_code": exc.code, "workspace_id": ws})
+            raise
+
+    async def browser_screenshot(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        started = time.perf_counter()
+        session_id = str(args.get("session_id") or "").strip()
+        if not session_id:
+            raise ToolError("tool.invalid_arguments", "session_id 必须是非空字符串")
+        run_id = current_run_id(principal, store)
+        ws = workspace_id_for(principal.school_id, principal.membership_id, run_id)
+
+        async def _emit(ok: bool, extra: dict[str, Any]) -> None:
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            await emit_sandbox_usage(
+                principal,
+                extra={
+                    "tool": "sandbox_browser_screenshot",
+                    "phase": "browser_screenshot",
+                    "workspace_id": ws,
+                    "session_id": session_id,
+                    "duration_ms": duration_ms,
+                    **extra,
+                },
+                ok=ok,
+            )
+
+        try:
+            out = await sidecar_json(
+                "GET",
+                f"/v1/internal/sessions/{session_id}",
+                params={
+                    "school_id": principal.school_id,
+                    "membership_id": principal.membership_id,
+                },
+            )
+            if not isinstance(out, dict):
+                raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
+            await _emit(True, {"workspace_id": out.get("workspace_id") or ws})
+            return out
+        except ToolError as exc:
+            await _emit(False, {"error_code": exc.code})
+            raise
+
     return (
         write_file,
         read_file,
@@ -790,6 +879,8 @@ def _workspace_handlers(
         verify_html,
         inspect_preview,
         workspace_exec,
+        browser_open,
+        browser_screenshot,
     )
 
 
@@ -907,6 +998,8 @@ def build_default_gateway(
         verify_html,
         inspect_preview,
         workspace_exec,
+        browser_open,
+        browser_screenshot,
     ) = _workspace_handlers(store)
     gw.register(
         ToolSpec(
@@ -1007,6 +1100,31 @@ def build_default_gateway(
                 "Args: html? | source?"
             ),
             handler=workspace_exec,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="sandbox_browser_open",
+            description=(
+                "Open a PUBLIC http(s) page in the isolated sandbox sidecar (not LibreChat). "
+                "Teacher completes login on the view screen; never send passwords in chat. "
+                "Denies intranet, loopback, metadata, and pico-api 18765. "
+                "WeChat/教务 are not required to succeed — if they block automation, the tool "
+                "fails in human language. Args: url."
+            ),
+            handler=browser_open,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="sandbox_browser_screenshot",
+            description=(
+                "Return metadata for the current isolated browser screen (PNG on the view path). "
+                "Args: session_id."
+            ),
+            handler=browser_screenshot,
             school_scoped=False,
         )
     )
@@ -1229,6 +1347,26 @@ def openai_tool_schemas(
                 },
                 "title": {"type": "string", "description": "Optional workspace filename"},
             },
+        },
+        "sandbox_browser_open": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Public http(s) URL (example.com demo). Not intranet or 18765.",
+                },
+            },
+            "required": ["url"],
+        },
+        "sandbox_browser_screenshot": {
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "Isolated sandbox session id from sandbox_browser_open",
+                },
+            },
+            "required": ["session_id"],
         },
         "generate_docx_document": {
             "type": "object",

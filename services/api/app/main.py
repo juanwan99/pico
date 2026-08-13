@@ -65,6 +65,8 @@ def _sync_settings_to_environ() -> None:
         "PICO_EDU_SERVICE_TOKEN": s.pico_edu_service_token,
         "PICO_EDU_TIMEOUT_SECONDS": str(s.pico_edu_timeout_seconds),
         "PICO_EDU_HANDOFF_ENABLED": "true" if s.pico_edu_handoff_enabled else "false",
+        "PICO_SANDBOX_URL": s.pico_sandbox_url,
+        "PICO_SANDBOX_TOKEN": s.pico_sandbox_token,
     }
     for k, v in mapping.items():
         if v and not os.environ.get(k):
@@ -607,6 +609,148 @@ async def invoke_tool(
     return {"ok": True, "result": result}
 
 
+# ----- sandbox B2 human-in-the-loop view (sidecar; not LibreChat) -----
+
+
+@app.get("/v1/sandbox/sessions/{session_id}/view")
+async def sandbox_session_view(
+    session_id: str,
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> HTMLResponse:
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+    from pico_orchestrator.sandbox_view import render_session_view_html
+
+    try:
+        meta = await sidecar_json(
+            "GET",
+            f"/v1/internal/sessions/{session_id}",
+            params={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+            },
+        )
+    except ToolError as exc:
+        status = 404 if exc.code == "sandbox.session_not_found" else 400
+        raise HTTPException(
+            status_code=status, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    if not isinstance(meta, dict):
+        raise HTTPException(status_code=502, detail={"code": "sandbox.unavailable"})
+    html = render_session_view_html(
+        session_id=session_id,
+        screenshot_path=f"/v1/sandbox/sessions/{session_id}/screenshot",
+        page_url=str(meta.get("url") or ""),
+        workspace_id=str(meta.get("workspace_id") or ""),
+        input_path=f"/v1/sandbox/sessions/{session_id}/input",
+    )
+    return HTMLResponse(
+        content=html,
+        headers={"Cache-Control": "no-store", "X-Pico-Sandbox-Human": "b2"},
+    )
+
+
+@app.get("/v1/sandbox/sessions/{session_id}/screenshot")
+async def sandbox_session_screenshot(
+    session_id: str,
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> Response:
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+
+    try:
+        png = await sidecar_json(
+            "GET",
+            f"/v1/internal/sessions/{session_id}/png",
+            params={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+            },
+        )
+    except ToolError as exc:
+        status = 404 if exc.code == "sandbox.session_not_found" else 400
+        raise HTTPException(
+            status_code=status, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    if not isinstance(png, (bytes, bytearray)) or not bytes(png).startswith(b"\x89PNG"):
+        raise HTTPException(status_code=502, detail={"code": "sandbox.unavailable"})
+    return Response(
+        content=bytes(png),
+        media_type="image/png",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/v1/sandbox/sessions/{session_id}/input")
+async def sandbox_session_input(
+    session_id: str,
+    request: Request,
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> Response:
+    """Forward click/type into the isolated browser. Never log the body."""
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+
+    ctype = (request.headers.get("content-type") or "").lower()
+    click_x = click_y = None
+    text = None
+    password = False
+    try:
+        if "application/json" in ctype:
+            body = await request.json()
+            if not isinstance(body, dict):
+                body = {}
+            click_x = body.get("click_x")
+            click_y = body.get("click_y")
+            secret = body.get("secret") or body.get("password")
+            visible = body.get("text")
+            if secret:
+                text = str(secret)
+                password = True
+            elif visible:
+                text = str(visible)
+        else:
+            form = await request.form()
+            cx = form.get("click_x")
+            cy = form.get("click_y")
+            click_x = int(str(cx)) if cx not in {None, ""} else None
+            click_y = int(str(cy)) if cy not in {None, ""} else None
+            secret = form.get("secret")
+            visible = form.get("text")
+            if secret:
+                text = str(secret)
+                password = True
+            elif visible:
+                text = str(visible)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "tool.invalid_arguments", "message": "无法读取画面输入"},
+        ) from exc
+    try:
+        await sidecar_json(
+            "POST",
+            f"/v1/internal/sessions/{session_id}/input",
+            json_body={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+                "click_x": click_x,
+                "click_y": click_y,
+                "text": text,
+                "password": password,
+                "field": "password" if password else "input",
+            },
+        )
+    except ToolError as exc:
+        status = 404 if exc.code == "sandbox.session_not_found" else 400
+        raise HTTPException(
+            status_code=status, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    return HTMLResponse(
+        status_code=303,
+        headers={"Location": f"/v1/sandbox/sessions/{session_id}/view"},
+        content="",
+    )
 
 
 # ----- workspaces (managed boundary) -----

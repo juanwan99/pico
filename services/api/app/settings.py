@@ -97,6 +97,9 @@ class Settings(BaseSettings):
     # P2 MCP allowlist bridge (comma-separated known safe tool names).
     # Default pilot: mcp_time,mcp_workspace_stat. Empty string disables MCP tools.
     pico_mcp_allowlist: str = "mcp_time,mcp_workspace_stat"
+    # Isolated sandbox sidecar (B2). Empty token allowed in dev; compose may set one.
+    pico_sandbox_url: str = "http://127.0.0.1:18767"
+    pico_sandbox_token: str = ""
     pico_env: str = "development"
     pico_allow_test_issuer_break_glass: bool = False
 

@@ -28,6 +28,8 @@ const ALLOWED = [
   "web_fetch",
   "sandbox_preview_inspect",
   "sandbox_workspace_exec",
+  "sandbox_browser_open",
+  "sandbox_browser_screenshot",
 ] as const;
 
 type ToolName = (typeof ALLOWED)[number];
@@ -223,6 +225,28 @@ export default function (pi: ExtensionAPI) {
       {
         html: Type.Optional(Type.String()),
         source: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "sandbox_browser_open",
+    "Open a PUBLIC page in the isolated sandbox browser (human-in-the-loop login). Denies intranet/metadata/18765. WeChat/教务 are not required to succeed. Never send passwords in chat.",
+    Type.Object(
+      {
+        url: Type.String(),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "sandbox_browser_screenshot",
+    "Capture the current isolated sandbox browser screen. Teacher logs in on the view page; do not ask for passwords in chat.",
+    Type.Object(
+      {
+        session_id: Type.String(),
       },
       { additionalProperties: true },
     ),

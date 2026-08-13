@@ -34,7 +34,7 @@ PINNED_PI_PACKAGE = "@mariozechner/pi-coding-agent@0.73.1"
 RUNTIME_LABEL = "pi-true"
 HOSTED_RUNTIME_LABEL = "pi-agent"
 
-# Thin bridge allowlist — #508 added sandbox preview inspect (still no shell).
+# Thin bridge allowlist — #516 added B2 browser tools (still no shell).
 ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
     {
         "workspace_list_files",
@@ -48,6 +48,8 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "web_fetch",
         "sandbox_preview_inspect",
         "sandbox_workspace_exec",
+        "sandbox_browser_open",
+        "sandbox_browser_screenshot",
     }
 )
 
