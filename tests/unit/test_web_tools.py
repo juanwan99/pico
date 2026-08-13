@@ -17,7 +17,11 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
-from pico_orchestrator.web_guard import assert_public_http_url, parse_public_http_url
+from pico_orchestrator.web_guard import (
+    assert_public_http_url,
+    assert_resolved_public,
+    parse_public_http_url,
+)
 from pico_orchestrator.web_tools import (
     _FETCH_TIMEOUT,
     _SEARCH_TIMEOUT,
@@ -127,7 +131,7 @@ async def test_web_fetch_public_page_truncated_text(monkeypatch: pytest.MonkeyPa
             {
                 "status_code": 200,
                 "headers": {"content-type": "text/html; charset=utf-8"},
-                "content": b"<html><body><h1>Lesson</h1><p>Visible fact 42</p></body></html>",
+                "content": b"<html><head><title>Lesson</title></head><body><h1>Lesson</h1><p>Visible fact 42</p></body></html>",
             },
         )()
 
@@ -144,6 +148,7 @@ async def test_web_fetch_public_page_truncated_text(monkeypatch: pytest.MonkeyPa
     assert out["retrieved"] is True
     assert "Visible fact 42" in out["text"]
     assert out["sources"][0]["url"].startswith("https://example.com")
+    assert out["title"] == "Lesson"
     assert captured and captured[0]["kind"] == "search"
     assert captured[0]["source"] == "web_fetch"
     assert captured[0]["extra"]["host"] == "example.com"
@@ -348,6 +353,59 @@ def test_parse_ds_web_search_call_loopback_not_sourced() -> None:
 def test_search_timeout_allows_ds_multi_hop() -> None:
     assert _SEARCH_TIMEOUT >= 90
     assert _FETCH_TIMEOUT == 12.0
+
+
+def test_source_item_strips_ds_ws_call_id_fragment() -> None:
+    dirty = (
+        "http://www.moe.gov.cn/fbh/live/2022/54382/mtbd/202204/t20220422_620485.html"
+        "#ws_call_id=call_01_RirHwWpDhHZJHxExk87Q6361"
+    )
+    item = _source_item(title=dirty, url=dirty)
+    assert item is not None
+    assert item["url"] == (
+        "http://www.moe.gov.cn/fbh/live/2022/54382/mtbd/202204/t20220422_620485.html"
+    )
+    assert "#ws_call_id" not in item["url"]
+    assert "#ws_call_id" not in item["title"]
+    parsed = _parse_ds_response(
+        {
+            "output_text": "课标已发布",
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "action": {"type": "open_page", "url": dirty},
+                }
+            ],
+        },
+        query="课标",
+    )
+    assert parsed["honest_miss"] is False
+    assert all("#ws_call_id" not in (s.get("url") or "") for s in parsed["sources"])
+    assert any("moe.gov.cn" in s["url"] for s in parsed["sources"])
+
+
+@pytest.mark.asyncio
+async def test_mixed_public_and_poison_aaaa_is_allowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "pico_orchestrator.web_guard._resolve_ips",
+        lambda host: [
+            ipaddress.ip_address("93.184.216.34"),
+            ipaddress.ip_address("127.0.0.1"),
+        ],
+    )
+    target = await assert_public_http_url("https://zh.wikipedia.org/wiki/x")
+    assert target.host == "zh.wikipedia.org"
+
+
+def test_all_private_resolved_ips_still_denied() -> None:
+    with pytest.raises(ToolError) as ei:
+        assert_resolved_public(
+            "internal.example",
+            [ipaddress.ip_address("10.1.2.3"), ipaddress.ip_address("127.0.0.1")],
+        )
+    assert ei.value.code == "web.denied"
 
 
 def test_extracted_url_strips_trailing_backtick() -> None:

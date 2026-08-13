@@ -11,6 +11,9 @@ import asyncio
 import ipaddress
 import os
 import socket
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from urllib.parse import urlparse, urlunparse
 
@@ -234,10 +237,55 @@ def _resolve_ips(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Addres
     return found
 
 
+def public_ips(
+    ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address],
+) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    return [ip for ip in ips if not _is_private_ip(ip)]
+
+
 def assert_resolved_public(host: str, ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address]) -> None:
-    for ip in ips:
-        if _is_private_ip(ip):
-            raise _human("web.denied", "拒绝访问内网或链路本地地址")
+    """Allow the host when at least one address is public.
+
+    Mixed answers (public A + poisoned AAAA like ``2001::1`` / ``127.0.0.1``)
+    used to fail closed and look like 「读不了维基」。Only deny when every
+    resolved address is private.
+    """
+    _ = host
+    if not public_ips(ips):
+        raise _human("web.denied", "拒绝访问内网或链路本地地址")
+
+
+_GAI_TLS = threading.local()
+_ORIG_GETADDRINFO = socket.getaddrinfo
+
+
+def _public_only_getaddrinfo(host, port, *args, **kwargs):  # type: ignore[no-untyped-def]
+    results = _ORIG_GETADDRINFO(host, port, *args, **kwargs)
+    if not getattr(_GAI_TLS, "public_only", False):
+        return results
+    kept = []
+    for item in results:
+        sockaddr = item[4] if len(item) > 4 else None
+        addr = sockaddr[0] if sockaddr else ""
+        ip = _host_as_ip(str(addr).split("%")[0])
+        if ip is None or not _is_private_ip(ip):
+            kept.append(item)
+    return kept or results
+
+
+if socket.getaddrinfo is _ORIG_GETADDRINFO:
+    socket.getaddrinfo = _public_only_getaddrinfo  # type: ignore[assignment]
+
+
+@contextmanager
+def public_dns_only() -> Iterator[None]:
+    """During a fetch, ignore poisoned/private A/AAAA so httpx does not connect there."""
+    prev = getattr(_GAI_TLS, "public_only", False)
+    _GAI_TLS.public_only = True
+    try:
+        yield
+    finally:
+        _GAI_TLS.public_only = prev
 
 
 async def assert_public_http_url(url: str) -> PublicHttpTarget:
