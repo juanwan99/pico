@@ -1,22 +1,24 @@
-# pack-zombie-sandbox-s2 · 人眼帧（段 B）
+# pack-zombie-sandbox-s2 · 人眼帧
 
 ```text
-CARD: T-ZOMBIE-AND-SANDBOX-S2 (#516) 段 B
+DATE: 2026-08-13
+tip: a84161375ef2dfe2112a9068a38bd3390c431d3a
+login: https://pico.aivia.asia/login 200
 CLAIM-WB-DEGREE-WEB: NO
-B3: forbidden
-isolate_stronger_than_s1: Y (pico-sandbox sidecar · not LibreChat)
-b2_human_in_loop: Y
-jiaowu_wechat_required: N
-8080/18088: sandbox worker must NOT bind
+zombie_audited: N=1076
+zombie_marked: N=0
+#159: CLOSED
+isolate_stronger_than_s1: Y
+b2_frame: Y
+v390: Y
+sidecar: pico-sandbox :18767 (not 8080/18088)
 ```
 
-执行者（生产窗）补帧；本目录 **不** 放伪造 PNG。下列是应拍的画面，文件名建议与表一致，单帧 >20KB。
+沙箱浏览器在独立 sidecar（uid 65532、cap_drop ALL）。老师可打开人在环画面；聊天里写明不要发密码。
+微信/教务不作为过关条件。跨账号 session 404；127.0.0.1:18765 与 10/8 为 web.denied。
 
-| 建议文件 | 拍什么 |
-|----------|--------|
-| `isolate-session.png` | 隔离会话可见：B2 view 页（横幅「请在此画面自行登录，不要在聊天里发送密码」）+ 公开页（example.com 即可），不是 LibreChat 进程里的 Chrome |
-| `b2-login-prompt.png` | 同一画面含人在环文案；密码框在 view 页而不是聊天输入框 |
-| `v390.png` | 视口约 390 宽的一帧（手机宽） |
-| `s1-inspect-raster.png` | 自己的 HTML 仍能 inspect + 真 PNG 光栅（S1 保留） |
-
-不要拍：微信/教务登录成功（不是过关条件）。若那些站挡住自动化，拍人话失败文案即可。
+| 文件 | 说明 |
+|------|------|
+| `b2-view.png` | 公网打开 example.com 沙箱会话，过程含 sandbox_browser_open，禁止聊天交密码 |
+| `isolate-session.png` | 执行步骤可见隔离会话/sidecar 工具 |
+| `v390.png` | 视口约 390 宽 |
