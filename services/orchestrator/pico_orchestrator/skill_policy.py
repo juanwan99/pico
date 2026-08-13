@@ -38,6 +38,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "workspace_list_files",
             "workspace_read_file",
             "verify_html_document",
+            "sandbox_preview_inspect",
         ),
         risk="low",
         instruction=(
@@ -47,6 +48,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "禁止代码块改后缀冒充 .html/.docx/.pptx；"
             "多交付时禁止单文件多标题冒充；HTML 可运行页生成后应 verify_html_document"
             "（校验供系统；勿向用户复读 verification_level 等字段）；"
+            "生成 HTML 后调用 sandbox_preview_inspect 抽取 title/h1，证明系统看见了本次预览；"
             "用户回复只给文件名与下载/打开指引，禁止贴全量源码或 Artifact ID。"
         ),
     ),
@@ -62,6 +64,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_pptx_document",
             "verify_html_document",
             "structured_outline",
+            "sandbox_preview_inspect",
         ),
         risk="low",
         instruction=(
@@ -72,7 +75,8 @@ _POLICIES: dict[str, SkillPolicy] = {
             "会话改口（推翻/收窄/改成保守等）时先 list/read 已交付产物再写更新或版本号新文件；"
             "HTML 交互页：generate_html_document 的 body 必须是**完整可运行 HTML 文档**"
             "（含真实 <button>/<script>，禁止把源码当正文转义交差）；"
-            "生成后 verify_html_document（系统侧）；用户侧只报文件名并指引结果区下载；"
+            "生成后 verify_html_document（系统侧）并 sandbox_preview_inspect 抽取 title/h1；"
+            "用户侧只报文件名并指引结果区下载；"
             "扩展名与类型一致；禁止聊天长文/全量 HTML 源码墙冒充交付。"
         ),
     ),

@@ -959,6 +959,9 @@ async def get_task(
 async def get_artifact_content(
     artifact_id: str,
     download: bool = False,
+    preview: bool = False,
+    exp: int | None = None,
+    sig: str | None = None,
     principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
@@ -1040,11 +1043,36 @@ async def get_artifact_content(
             detail="产物不是合法 HTML（疑似二进制改后缀）。请使用 generate_html_document。",
         )
 
-    # Security: non-download HTML must not be navigable as active content via API.
-    # UI sandboxed preview still uses the body bytes; filename drives preview mode.
-    # Shell still applies iframe sandbox; do not rely on payload CSP alone.
+    # Security: non-download HTML must not be navigable as active content via API
+    # unless this is an owner preview (?preview=1) with CSP sandbox.
+    # Owner isolation already applied by get_artifact_for_principal (other accounts 404).
+    extra_headers: dict[str, str] = {}
     if ext in {".html", ".htm"} and not download:
-        media_type = "text/plain; charset=utf-8"
+        if preview:
+            if sig:
+                from pico_orchestrator.sandbox_s1 import verify_preview_sig
+
+                err = verify_preview_sig(
+                    artifact_id=artifact.id,
+                    school_id=principal.school_id,
+                    membership_id=principal.membership_id,
+                    run_id=getattr(artifact, "run_id", None),
+                    exp=int(exp or 0),
+                    sig=sig,
+                )
+                if err:
+                    raise HTTPException(
+                        status_code=404,
+                        detail={"code": err, "message": "预览无效或已过期"},
+                    )
+            media_type = "text/html; charset=utf-8"
+            extra_headers["Content-Security-Policy"] = (
+                "default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
+                "script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; "
+                "frame-ancestors 'none'; sandbox allow-scripts"
+            )
+        else:
+            media_type = "text/plain; charset=utf-8"
     elif download or guessed_media_type in safe_inline_media_types:
         media_type = guessed_media_type
     else:
@@ -1063,6 +1091,7 @@ async def get_artifact_content(
             "X-Pico-Content-Encoding": encoding,
             "X-Pico-Content-SHA256": digest,
             "X-Pico-Byte-Size": str(len(raw)),
+            **extra_headers,
         },
     )
 

@@ -25,8 +25,10 @@ NOTE: "Orchestration" below is TARGET; implementation as of freeze may still be 
 
 ## Teacher sandbox
 
-- **Not in scope** for default teacher workbench (no Codex-style exec sandbox).
-- School isolation = **data tenancy / RLS-style boundaries** (with edu-core), not per-school exec VMs.
+- **S1 (#508):** process-level isolation keyed by `school_id + membership_id + run_id`;
+  HTML preview + `sandbox_preview_inspect` (title/h1). See [SANDBOX-S1.md](./SANDBOX-S1.md).
+- **Not** a per-school VM / cloud PC / host Chrome on 8080. School isolation remains
+  data tenancy; exec stays inside the workspace with timeout/size caps.
 
 ## Integration contract (sketch)
 

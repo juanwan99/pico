@@ -65,7 +65,7 @@ Token 规则：有则记整数；无则三字段 null 且 `tokens_unknown=1`。�
 |------|------|---------|
 | `llm` | **必须打点** | pico-api：`openai_compat` 终态 + `run_service` 终态 |
 | `search` | **#507 打点** | gateway `web_search` / `web_fetch` 成功或明确失败 |
-| `sandbox` | 预留 | #508 沙箱卡 |
+| `sandbox` | **#508 打点** | gateway `sandbox_preview_inspect` / HTML 写入 / 可选轻 exec |
 | `api` | 预留 | 其它出站 API |
 | `other` | 预留 | 未分类 |
 
@@ -106,7 +106,7 @@ await record_usage_event(
     idempotency_key=f"search:{run_id}:{tool_call_id}",
 )
 
-# --- #508 沙箱：一次隔离会话结束（或可计时长的预览）---
+# --- #508 沙箱：看页 / 隔离写入（可计时长的预览）---
 await record_usage_event(
     school_id=principal.school_id,
     membership_id=principal.membership_id,
@@ -114,7 +114,7 @@ await record_usage_event(
     task_id=task_id,
     run_id=run_id,
     source="sandbox",
-    extra={"duration_ms": 1234, "workspace_id": workspace_id},
+    extra={"duration_ms": 1234, "workspace_id": workspace_id, "artifact_id": artifact_id},
     idempotency_key=f"sandbox:{run_id}:{session_id}",
 )
 ```
@@ -125,6 +125,7 @@ await record_usage_event(
 - search/sandbox **不必**填 token 字段（保持 null + `tokens_unknown=1` 即可）。
 - `extra` 只放工具/时长/次数；禁止单价与币种。
 - 幂等键必须含 run 或 tool_call / session，便于重试。
+- **#508：** `sandbox` 已 emit（不再是预留）。写入点：`sandbox_preview_inspect`、`generate_html_document` 预览落盘、可选 `sandbox_workspace_exec`。合同见 [`docs/SANDBOX-S1.md`](./SANDBOX-S1.md)。
 
 ---
 
