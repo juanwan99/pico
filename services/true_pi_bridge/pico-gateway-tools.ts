@@ -26,6 +26,8 @@ const ALLOWED = [
   "verify_html_document",
   "web_search",
   "web_fetch",
+  "sandbox_preview_inspect",
+  "sandbox_workspace_exec",
 ] as const;
 
 type ToolName = (typeof ALLOWED)[number];
@@ -197,6 +199,30 @@ export default function (pi: ExtensionAPI) {
     Type.Object(
       {
         url: Type.String(),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "sandbox_preview_inspect",
+    "See THIS run's HTML preview (title/h1). Not public crawl. Not intranet.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        preview_url: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "sandbox_workspace_exec",
+    "Parse HTML or Python inside this run's isolated workspace. Timeout-killed. No bash.",
+    Type.Object(
+      {
+        html: Type.Optional(Type.String()),
+        source: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),

@@ -473,8 +473,9 @@ def test_gateway_allowlist_includes_web_pair() -> None:
     assert "web_fetch" in schemas
     assert "web_search" in ALLOWED_GATEWAY_TOOLS
     assert "web_fetch" in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_preview_inspect" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 9
+    assert len(ALLOWED_GATEWAY_TOOLS) == 11
 
 
 def test_attach_teacher_sources_footer() -> None:

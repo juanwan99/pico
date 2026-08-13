@@ -6,6 +6,7 @@ import ast
 import math
 import operator
 import re
+import time
 from typing import Any
 
 from pico_orchestrator.artifact_types import (
@@ -26,6 +27,24 @@ from pico_orchestrator.gateway import (
     ToolSpec,
 )
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
+from pico_orchestrator.sandbox_s1 import (
+    MAX_CONTENT_CHARS,
+    assert_content_caps,
+    assert_same_run,
+    attach_preview_meta,
+    current_run_id,
+    deny_non_preview_url,
+    deny_secret_filename,
+    extract_title_h1,
+    html_from_artifact_row,
+    light_exec_with_timeout,
+    materialize_workspace_html,
+    try_parse_artifact_preview_url,
+    verify_preview_sig,
+    with_io_timeout,
+    workspace_id_for,
+)
+from pico_orchestrator.usage_hook import emit_sandbox_usage
 from pico_orchestrator.web_tools import web_fetch_handler, web_search_handler
 
 _MAX_ARTIFACT_CONTENT = 200_000
@@ -241,7 +260,7 @@ def _static_html_checks(content: str) -> list[dict[str, Any]]:
 
 def _workspace_handlers(
     store: ArtifactStore,
-) -> tuple[Any, Any, Any, Any, Any, Any, Any, Any]:
+) -> tuple[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]:
     async def write_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         from pico_orchestrator.delivery_policy import normalize_artifact_title
 
@@ -254,14 +273,19 @@ def _workspace_handlers(
                 reject_fake_protected_write_message(protected),
             )
         content = _required_text(args, "content", maximum=_MAX_ARTIFACT_CONTENT)
+        assert_content_caps(content)
+        deny_secret_filename(title)
         kind = str(args.get("kind") or "file").strip().lower()
         if kind not in {"doc", "file", "json", "outline", "text"}:
             raise ToolError("tool.invalid_arguments", "unsupported artifact kind")
-        result = await store.write(
-            principal,
-            title=title,
-            content=content,
-            kind=kind,
+        result = await with_io_timeout(
+            store.write(
+                principal,
+                title=title,
+                content=content,
+                kind=kind,
+            ),
+            what="workspace_write_file",
         )
         if ext_fix:
             result = dict(result)
@@ -277,13 +301,21 @@ def _workspace_handlers(
             raise ToolError(
                 "tool.invalid_arguments", "artifact_id or title is required"
             )
-        result = await store.read(
-            principal,
-            artifact_id=artifact_id or None,
-            title=title or None,
+        result = await with_io_timeout(
+            store.read(
+                principal,
+                artifact_id=artifact_id or None,
+                title=title or None,
+            ),
+            what="workspace_read_file",
         )
         if result is None:
             raise ToolError("artifact.not_found", "Artifact not found")
+        body = result.get("content")
+        if isinstance(body, str) and len(body) > MAX_CONTENT_CHARS:
+            result = dict(result)
+            result["content"] = body[:MAX_CONTENT_CHARS]
+            result["truncated"] = True
         return {"artifact": result}
 
     async def list_files(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -293,7 +325,10 @@ def _workspace_handlers(
             raise ToolError("tool.invalid_arguments", "limit must be an integer") from exc
         if not 1 <= limit <= 100:
             raise ToolError("tool.invalid_arguments", "limit must be between 1 and 100")
-        artifacts = await store.list(principal, limit=limit)
+        artifacts = await with_io_timeout(
+            store.list(principal, limit=limit),
+            what="workspace_list_files",
+        )
         return {"artifacts": artifacts, "count": len(artifacts)}
 
     async def kb_search(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -381,14 +416,37 @@ def _workspace_handlers(
         content: str | bytes = raw
         if isinstance(raw, bytes):
             content = raw.decode("utf-8")
-        result = await store.write(
-            principal,
-            title=title,
-            content=content,
-            kind="html",
+        result = await with_io_timeout(
+            store.write(
+                principal,
+                title=title,
+                content=content,
+                kind="html",
+            ),
+            what="generate_html_document",
         )
         result["format"] = "html"
         result["marker"] = marker
+        result = attach_preview_meta(result, principal, store=store)
+        run_id = current_run_id(principal, store) or result.get("run_id")
+        if isinstance(content, str):
+            materialize_workspace_html(
+                principal,
+                run_id=str(run_id) if run_id else None,
+                title=title,
+                content=content,
+            )
+        await emit_sandbox_usage(
+            principal,
+            extra={
+                "duration_ms": 0,
+                "artifact_id": result.get("artifact_id"),
+                "workspace_id": result.get("workspace_id"),
+                "phase": "write",
+                "tool": "generate_html_document",
+            },
+            ok=True,
+        )
         return result
 
     async def generate_docx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -534,6 +592,167 @@ def _workspace_handlers(
             **art_meta,
         }
 
+    async def inspect_preview(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        """B0 see-page: title/h1 of THIS run's HTML. Never fetches public/intranet URLs."""
+        started = time.perf_counter()
+        artifact_id = args.get("artifact_id")
+        artifact_id = str(artifact_id).strip() if artifact_id is not None else None
+        preview_url = args.get("preview_url") or args.get("url")
+        preview_url = str(preview_url).strip() if preview_url is not None else None
+        run_id = current_run_id(principal, store)
+        phase_extra: dict[str, Any] = {
+            "tool": "sandbox_preview_inspect",
+            "phase": "inspect",
+            "workspace_id": workspace_id_for(
+                principal.school_id, principal.membership_id, run_id
+            ),
+        }
+
+        async def _emit(ok: bool, extra: dict[str, Any]) -> None:
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            payload = {**phase_extra, **extra, "duration_ms": duration_ms}
+            await emit_sandbox_usage(principal, extra=payload, ok=ok)
+
+        try:
+            if not artifact_id and preview_url:
+                parsed = try_parse_artifact_preview_url(preview_url)
+                from urllib.parse import urlparse as _urlparse
+
+                host_present = bool(
+                    _urlparse(preview_url).scheme in {"http", "https"}
+                    and _urlparse(preview_url).hostname
+                )
+                if parsed and parsed.get("has_sig"):
+                    err = verify_preview_sig(
+                        artifact_id=str(parsed["artifact_id"]),
+                        school_id=principal.school_id,
+                        membership_id=principal.membership_id,
+                        run_id=run_id,
+                        exp=int(parsed.get("exp") or 0),
+                        sig=str(parsed.get("sig") or ""),
+                    )
+                    if err:
+                        if host_present:
+                            deny_non_preview_url(preview_url)
+                        raise ToolError(err, "预览签名无效或已过期")
+                    artifact_id = str(parsed["artifact_id"])
+                elif parsed and not host_present:
+                    artifact_id = str(parsed["artifact_id"])
+                else:
+                    deny_non_preview_url(preview_url)
+            if not artifact_id:
+                raise ToolError(
+                    "tool.invalid_arguments",
+                    "artifact_id or preview_url is required",
+                )
+            row = await with_io_timeout(
+                store.read(principal, artifact_id=artifact_id, title=None),
+                what="sandbox_preview_inspect",
+            )
+            if row is None:
+                raise ToolError("artifact.not_found", "Artifact not found")
+            assert_same_run(row, run_id)
+            html = html_from_artifact_row(row)
+            title_text, h1_text = extract_title_h1(html)
+            seen = bool(title_text or h1_text)
+            meta = attach_preview_meta(
+                {
+                    "artifact_id": row.get("artifact_id") or artifact_id,
+                    "run_id": row.get("run_id") or run_id,
+                    "title": row.get("title"),
+                    "kind": row.get("kind"),
+                },
+                principal,
+                store=store,
+            )
+            out = {
+                "ok": True,
+                "seen": seen,
+                "title": title_text,
+                "h1": h1_text,
+                "artifact_id": meta.get("artifact_id"),
+                "preview_path": meta.get("preview_path"),
+                "preview_url": meta.get("preview_url"),
+                "workspace_id": meta.get("workspace_id"),
+                "message": (
+                    f"已看见页面 title={title_text or '（无）'} h1={h1_text or '（无）'}"
+                    if seen
+                    else "已打开本次预览，但文档没有 title/h1"
+                ),
+            }
+            await _emit(
+                True,
+                {
+                    "artifact_id": out["artifact_id"],
+                    "workspace_id": out["workspace_id"],
+                    "seen": seen,
+                },
+            )
+            return out
+        except ToolError as exc:
+            await _emit(False, {"error_code": exc.code, "artifact_id": artifact_id})
+            raise
+
+    async def workspace_exec(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        """Optional light exec: parse HTML/Python inside the isolation dir. No bash."""
+        started = time.perf_counter()
+        source = args.get("source") or args.get("code")
+        html = args.get("html")
+        run_id = current_run_id(principal, store)
+        ws = workspace_id_for(principal.school_id, principal.membership_id, run_id)
+        try:
+            if isinstance(html, str) and html.strip():
+                assert_content_caps(html)
+                title_text, h1_text = extract_title_h1(html)
+                materialize_workspace_html(
+                    principal,
+                    run_id=run_id,
+                    title=str(args.get("title") or "exec.html"),
+                    content=html,
+                )
+                out = {
+                    "ok": True,
+                    "parsed": True,
+                    "executed": False,
+                    "title": title_text,
+                    "h1": h1_text,
+                    "workspace_id": ws,
+                }
+            elif isinstance(source, str) and source.strip():
+                parsed = await light_exec_with_timeout(source)
+                out = {**parsed, "workspace_id": ws}
+            else:
+                raise ToolError(
+                    "tool.invalid_arguments",
+                    "source or html is required",
+                )
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            await emit_sandbox_usage(
+                principal,
+                extra={
+                    "duration_ms": duration_ms,
+                    "workspace_id": ws,
+                    "phase": "exec",
+                    "tool": "sandbox_workspace_exec",
+                },
+                ok=True,
+            )
+            return out
+        except ToolError as exc:
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            await emit_sandbox_usage(
+                principal,
+                extra={
+                    "duration_ms": duration_ms,
+                    "workspace_id": ws,
+                    "phase": "exec",
+                    "tool": "sandbox_workspace_exec",
+                    "error_code": exc.code,
+                },
+                ok=False,
+            )
+            raise
+
     return (
         write_file,
         read_file,
@@ -543,6 +762,8 @@ def _workspace_handlers(
         generate_docx,
         generate_pptx,
         verify_html,
+        inspect_preview,
+        workspace_exec,
     )
 
 
@@ -658,6 +879,8 @@ def build_default_gateway(
         generate_docx,
         generate_pptx,
         verify_html,
+        inspect_preview,
+        workspace_exec,
     ) = _workspace_handlers(store)
     gw.register(
         ToolSpec(
@@ -733,6 +956,31 @@ def build_default_gateway(
                 "Safe for sandbox preview (no external scripts). Args: title, marker, body?"
             ),
             handler=generate_html,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="sandbox_preview_inspect",
+            description=(
+                "See THIS run's HTML preview: given artifact_id or this-run preview_url, "
+                "return title and h1 so the model can prove it saw the page. "
+                "Does not fetch public sites or intranet (127.0.0.1 / pico.aivia.asia admin denied). "
+                "Args: artifact_id? | preview_url?"
+            ),
+            handler=inspect_preview,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="sandbox_workspace_exec",
+            description=(
+                "Optional light exec inside the isolated workspace: parse HTML or Python "
+                "(ast only, timeout-killed). Cannot run bash, host shell, or leave the workspace. "
+                "Args: html? | source?"
+            ),
+            handler=workspace_exec,
             school_scoped=False,
         )
     )
@@ -928,6 +1176,33 @@ def openai_tool_schemas(
                 "body": {"type": "string", "description": "Optional extra body text"},
             },
             "required": ["title", "marker"],
+        },
+        "sandbox_preview_inspect": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {
+                    "type": "string",
+                    "description": "This-run HTML artifact id (or preview_url)",
+                },
+                "preview_url": {
+                    "type": "string",
+                    "description": "Signed this-run preview path/URL, not a public site",
+                },
+            },
+        },
+        "sandbox_workspace_exec": {
+            "type": "object",
+            "properties": {
+                "html": {
+                    "type": "string",
+                    "description": "HTML to parse inside the isolated workspace",
+                },
+                "source": {
+                    "type": "string",
+                    "description": "Python source to parse only (no bash, no imports of os/subprocess)",
+                },
+                "title": {"type": "string", "description": "Optional workspace filename"},
+            },
         },
         "generate_docx_document": {
             "type": "object",

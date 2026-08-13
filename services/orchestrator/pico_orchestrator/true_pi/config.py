@@ -34,7 +34,7 @@ PINNED_PI_PACKAGE = "@mariozechner/pi-coding-agent@0.73.1"
 RUNTIME_LABEL = "pi-true"
 HOSTED_RUNTIME_LABEL = "pi-agent"
 
-# Thin bridge allowlist — #507 added web_search / web_fetch (still no shell).
+# Thin bridge allowlist — #508 added sandbox preview inspect (still no shell).
 ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
     {
         "workspace_list_files",
@@ -46,6 +46,8 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "verify_html_document",
         "web_search",
         "web_fetch",
+        "sandbox_preview_inspect",
+        "sandbox_workspace_exec",
     }
 )
 

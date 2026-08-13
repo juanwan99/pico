@@ -124,6 +124,53 @@ async def test_workspace_tools_use_membership_scoped_artifacts() -> None:
 
 
 @pytest.mark.asyncio
+async def test_workspace_tools_deny_cross_school_read() -> None:
+    store = MemoryArtifactStore()
+    gateway = build_default_gateway(store)
+    owner = P("school-a", "member-a", ["ai:run"])
+    other_school = P("school-b", "member-a", ["ai:run"])
+
+    created = await gateway.invoke(
+        owner,
+        "workspace_write_file",
+        {"title": "secret.md", "content": "tenant-a-only", "kind": "file"},
+    )
+    with pytest.raises(ToolError) as denied:
+        await gateway.invoke(
+            other_school,
+            "workspace_read_file",
+            {"artifact_id": created["artifact_id"]},
+        )
+    assert denied.value.code == "artifact.not_found"
+
+
+@pytest.mark.asyncio
+async def test_workspace_write_rejects_oversized_content() -> None:
+    gateway = build_default_gateway(MemoryArtifactStore())
+    owner = P("school-a", "member-a", ["ai:run"])
+    with pytest.raises(ToolError) as oversized:
+        await gateway.invoke(
+            owner,
+            "workspace_write_file",
+            {"title": "big.md", "content": "x" * 200_001, "kind": "file"},
+        )
+    assert oversized.value.code == "tool.invalid_arguments"
+
+
+@pytest.mark.asyncio
+async def test_workspace_write_rejects_secret_filename() -> None:
+    gateway = build_default_gateway(MemoryArtifactStore())
+    owner = P("school-a", "member-a", ["ai:run"])
+    with pytest.raises(ToolError) as denied:
+        await gateway.invoke(
+            owner,
+            "workspace_write_file",
+            {"title": ".env", "content": "K=1", "kind": "file"},
+        )
+    assert denied.value.code == "sandbox.path_denied"
+
+
+@pytest.mark.asyncio
 async def test_structured_outline_and_safe_calculator() -> None:
     gateway = build_default_gateway()
     principal = P("school-a", "member-a", ["ai:run"])

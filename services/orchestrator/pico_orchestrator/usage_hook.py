@@ -15,6 +15,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _SEARCH_TOOLS = frozenset({"web_search", "web_fetch"})
+_SANDBOX_TOOLS = frozenset(
+    {"sandbox_preview_inspect", "sandbox_workspace_exec", "generate_html_document"}
+)
 
 
 @dataclass(frozen=True)
@@ -64,6 +67,10 @@ def is_search_tool(name: str) -> bool:
     return (name or "").strip() in _SEARCH_TOOLS
 
 
+def is_sandbox_tool(name: str) -> bool:
+    return (name or "").strip() in _SANDBOX_TOOLS
+
+
 async def emit_search_usage(
     principal: Any,
     *,
@@ -109,6 +116,64 @@ async def emit_search_usage(
         task_id=str(task_id) if task_id else None,
         run_id=str(run_id) if run_id else None,
         source=name[:64],
+        extra=payload,
+        idempotency_key=key[:160],
+    )
+
+
+async def emit_sandbox_usage(
+    principal: Any,
+    *,
+    extra: dict[str, Any] | None = None,
+    tool_call_id: str | None = None,
+    ok: bool = True,
+    source: str = "sandbox",
+) -> None:
+    """Record kind=sandbox. Swallows all errors (Run path stays up)."""
+    bind = _BIND.get()
+    school = getattr(principal, "school_id", None) or (bind.school_id if bind else "")
+    member = getattr(principal, "membership_id", None) or (
+        bind.membership_id if bind else ""
+    )
+    if not school or not member:
+        return
+    run_id = (bind.run_id if bind else None) or None
+    task_id = (bind.task_id if bind else None) or None
+    store = getattr(principal, "_pico_artifact_store", None)
+    if run_id is None and store is not None:
+        run_id = getattr(store, "_run_id", None)
+        task_id = task_id or getattr(store, "_task_id", None)
+    payload = dict(extra or {})
+    if store is not None and "workspace_id" not in payload:
+        rid = run_id or getattr(store, "_run_id", None)
+        try:
+            from pico_orchestrator.sandbox_s1 import workspace_id_for
+
+            payload["workspace_id"] = workspace_id_for(str(school), str(member), rid)
+        except Exception:
+            logger.debug("sandbox workspace_id hash skipped", exc_info=True)
+    payload["ok"] = bool(ok)
+    call_id = (
+        (tool_call_id or "").strip()
+        or (bind.tool_call_id if bind else "")
+        or uuid.uuid4().hex[:12]
+    )
+    phase = str(payload.get("phase") or "inspect")
+    art = str(payload.get("artifact_id") or payload.get("workspace_id") or call_id)
+    key = f"sandbox:{run_id or 'norun'}:{phase}:{art}:{call_id}"
+    try:
+        from app.usage_ledger import record_usage_event
+    except Exception:  # noqa: BLE001
+        logger.debug("usage_ledger not importable; sandbox emit skipped")
+        return
+    await record_usage_event(
+        school_id=str(school),
+        membership_id=str(member),
+        kind="sandbox",
+        tokens_unknown=True,
+        task_id=str(task_id) if task_id else None,
+        run_id=str(run_id) if run_id else None,
+        source=(source or "sandbox")[:64],
         extra=payload,
         idempotency_key=key[:160],
     )
