@@ -15,16 +15,53 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.sandbox_view import LOGIN_COPY
 from pico_orchestrator.web_guard import parse_public_http_url
+from sandbox_worker.browser import VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 from sandbox_worker.runtime import RUNTIME
 
 PAGE = """<!DOCTYPE html>
 <html><head><title>教案首页</title></head>
 <body><h1>第一课</h1></body></html>
 """
-PUBLIC_HTML = (
-    "<!DOCTYPE html><html><head><title>Example Domain</title></head>"
-    "<body><h1>Example Domain</h1></body></html>"
-)
+
+
+class _FakePage:
+    def __init__(self, url: str) -> None:
+        parse_public_http_url(url)
+        self._url = url
+        self._title = "Example Domain"
+        self._h1 = "Example Domain"
+        self._n = 1
+
+    @property
+    def url(self) -> str:
+        return self._url
+
+    async def title(self) -> str:
+        return self._title
+
+    async def h1(self) -> str:
+        return self._h1
+
+    async def screenshot_png(self) -> bytes:
+        from pico_orchestrator.sandbox_s2 import encode_rgb_png
+
+        rgb = bytes((20 + self._n, 40, 80)) * (VIEWPORT_WIDTH * VIEWPORT_HEIGHT)
+        return encode_rgb_png(VIEWPORT_WIDTH, VIEWPORT_HEIGHT, rgb)
+
+    async def click(self, x: int, y: int) -> None:
+        _ = (x, y)
+        if "example.com" in self._url:
+            self._url = "https://www.iana.org/help/example-domains"
+            self._title = "Example Domains"
+            self._h1 = "Example domains"
+            self._n += 1
+
+    async def type_text(self, text: str, *, password: bool) -> None:
+        _ = (text, password)
+        self._n += 1
+
+    async def close(self) -> None:
+        return None
 
 
 @pytest.fixture()
@@ -36,11 +73,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("PICO_SANDBOX_ROOT", str(tmp_path / "sandbox-root"))
     monkeypatch.setenv("PICO_SANDBOX_URL", "embedded")
 
-    async def fake_fetch(url: str) -> tuple[str, str]:
-        parse_public_http_url(url)
-        return url, PUBLIC_HTML
+    async def fake_open(url: str):
+        return _FakePage(url)
 
-    monkeypatch.setattr(RUNTIME, "_fetch_html", fake_fetch)
+    monkeypatch.setattr(RUNTIME, "_open_browser", fake_open)
     RUNTIME._sessions.clear()
 
     from app import db as dbmod
@@ -83,6 +119,7 @@ def test_b2_view_and_cross_account_and_loopback(client) -> None:
     result = opened.json()["result"]
     session_id = result["session_id"]
     assert LOGIN_COPY in result["human_copy"]
+    assert result["engine"] == "playwright-chromium"
     assert result["view_path"] == f"/v1/sandbox/sessions/{session_id}/view"
 
     view = client.get(f"/v1/sandbox/sessions/{session_id}/view", headers=owner)
@@ -90,10 +127,16 @@ def test_b2_view_and_cross_account_and_loopback(client) -> None:
     assert "text/html" in view.headers.get("content-type", "")
     assert LOGIN_COPY in view.text
     assert "不要在聊天里发送密码" in view.text
+    assert "Chromium" in view.text
 
     png = client.get(f"/v1/sandbox/sessions/{session_id}/screenshot", headers=owner)
     assert png.status_code == 200
     assert png.content[:8] == b"\x89PNG\r\n\x1a\n"
+    import struct
+
+    width, height = struct.unpack(">II", png.content[16:24])
+    assert (width, height) == (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+    assert (width, height) != (720, 400)
 
     assert (
         client.get(f"/v1/sandbox/sessions/{session_id}/view", headers=outsider).status_code
@@ -114,6 +157,10 @@ def test_b2_view_and_cross_account_and_loopback(client) -> None:
     assert typed.status_code in {200, 303}
     assert "do-not-log-this-password" not in typed.text
 
+    sess = RUNTIME.get(session_id)
+    assert sess is not None
+    assert "iana.org" in sess.url
+
     loopback = _invoke(
         client,
         owner,
@@ -122,6 +169,15 @@ def test_b2_view_and_cross_account_and_loopback(client) -> None:
     )
     assert loopback.status_code == 400
     assert loopback.json()["detail"]["code"] == "web.denied"
+
+    admin = _invoke(
+        client,
+        owner,
+        "sandbox_browser_open",
+        {"url": "https://pico.aivia.asia/login"},
+    )
+    assert admin.status_code == 400
+    assert admin.json()["detail"]["code"] == "web.denied"
 
     usage = client.get("/v1/usage/events", headers=owner, params={"kind": "sandbox"})
     assert usage.status_code == 200, usage.text

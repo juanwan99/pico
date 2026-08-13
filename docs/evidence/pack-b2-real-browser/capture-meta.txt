@@ -1,0 +1,10 @@
+engine: playwright-chromium
+viewport: 390x844
+before_url: https://example.com/
+after_url: https://www.iana.org/help/example-domains
+before_title: Example Domain
+after_title: Example Domains
+click_xy: 121,290
+typed_ok: True
+CLAIM-WB-DEGREE-WEB: NO
+chromium_args: --no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu

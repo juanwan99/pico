@@ -13,7 +13,7 @@ import httpx
 
 from pico_orchestrator.gateway import ToolError
 
-_TIMEOUT_S = 12.0
+_TIMEOUT_S = 30.0
 
 
 def sandbox_url() -> str:
@@ -73,10 +73,11 @@ async def _embedded_call(
         member = str((json_body or params or {}).get("membership_id") or "")
         sess = RUNTIME.require_owner(session_id, school_id=school, membership_id=member)
         if method == "GET" and path.endswith("/png"):
+            await RUNTIME._sync(sess)
             return sess.screenshot_png
         if method == "POST" and path.endswith("/input"):
             body = json_body or {}
-            return RUNTIME.apply_input(
+            return await RUNTIME.apply_input(
                 sess,
                 click_x=body.get("click_x"),
                 click_y=body.get("click_y"),
@@ -85,10 +86,10 @@ async def _embedded_call(
                 field=str(body.get("field") or "input"),
             )
         if method == "POST" and path.endswith("/destroy"):
-            RUNTIME.destroy(session_id)
+            await RUNTIME.destroy(session_id)
             return {"ok": True, "destroyed": True, "session_id": session_id}
         if method == "GET":
-            return RUNTIME.screenshot(sess)
+            return await RUNTIME.screenshot(sess)
     raise ToolError("sandbox.unavailable", "隔离沙箱内部路径未知")
 
 

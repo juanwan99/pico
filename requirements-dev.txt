@@ -3,3 +3,5 @@ pytest>=8.3,<9
 pytest-asyncio>=0.24,<1
 # Exact pin — CI must print this version; same SHA → same lint (E1).
 ruff==0.16.1
+# Sidecar B2 (#522): unit tests may launch headless Chromium when browsers are installed.
+playwright==1.52.0

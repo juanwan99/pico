@@ -107,14 +107,20 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /dev/shm:size=64m
     ports:
       - "127.0.0.1:18767:18767"
     environment:
       PICO_SANDBOX_HOST: "0.0.0.0"
       PICO_SANDBOX_PORT: "18767"
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
-    mem_limit: 256m
-    pids_limit: 128
+      HOME: /tmp/pico-sandbox-home
+      XDG_CONFIG_HOME: /tmp/pico-sandbox-home/.config
+      XDG_CACHE_HOME: /tmp/pico-sandbox-home/.cache
+      PLAYWRIGHT_BROWSERS_PATH: /opt/ms-playwright
+      PICO_SANDBOX_PROFILE_ROOT: /tmp/pico-sandbox-profiles
+    mem_limit: 512m
+    pids_limit: 256
 
   librechat:
     image: pico-librechat:v13
