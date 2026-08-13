@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -377,6 +377,137 @@ async def me(principal: Principal = Depends(require_scoped_principal)) -> dict:
         "aud": principal.aud,
         "exp": principal.exp,
     }
+
+
+# ----- usage ledger (statistics only — no billing) -----
+
+
+def _usage_html(principal: Principal, summary: dict, events: list[dict]) -> str:
+    import html as html_lib
+
+    rows = []
+    for ev in events:
+        tok = (
+            "unknown"
+            if ev.get("tokens_unknown")
+            else str(ev.get("total_tokens") if ev.get("total_tokens") is not None else "—")
+        )
+        if ev.get("estimated") and tok != "unknown":
+            tok = f"{tok} (est.)"
+        rows.append(
+            "<tr>"
+            f"<td>{html_lib.escape(str(ev.get('created_at') or ''))}</td>"
+            f"<td>{html_lib.escape(str(ev.get('kind') or ''))}</td>"
+            f"<td>{html_lib.escape(str(ev.get('model') or '—'))}</td>"
+            f"<td>{html_lib.escape(tok)}</td>"
+            f"<td>{html_lib.escape(str(ev.get('run_id') or '—'))}</td>"
+            "</tr>"
+        )
+    body_rows = "\n".join(rows) or (
+        "<tr><td colspan='5'>暂无用量记录（空态诚实）</td></tr>"
+    )
+    day_bits = []
+    for d in summary.get("days") or []:
+        day_bits.append(
+            f"<li>{html_lib.escape(str(d.get('day')))} · {html_lib.escape(str(d.get('kind')))} · "
+            f"{int(d.get('event_count') or 0)} 次 · tokens="
+            f"{html_lib.escape(str(d.get('total_tokens') if d.get('total_tokens') is not None else 'unknown'))}"
+            f"</li>"
+        )
+    days_html = "\n".join(day_bits) or "<li>暂无汇总</li>"
+    school = html_lib.escape(principal.school_id)
+    member = html_lib.escape(principal.membership_id)
+    return f"""<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>我的用量</title>
+<style>
+body {{ font-family: sans-serif; margin: 1.5rem; color: #111; }}
+table {{ border-collapse: collapse; width: 100%; }}
+th, td {{ border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; }}
+.note {{ color: #555; }}
+</style></head><body>
+<h1>我的用量</h1>
+<p class="note">统计/管理 · <strong>不做钱</strong>（无价格、无扣款）。账号 {school} / {member}</p>
+<h2>按日汇总</h2>
+<ul>{days_html}</ul>
+<h2>明细</h2>
+<table>
+<thead><tr><th>时间</th><th>kind</th><th>模型</th><th>tokens</th><th>run</th></tr></thead>
+<tbody>
+{body_rows}
+</tbody>
+</table>
+</body></html>
+"""
+
+
+@app.get("/v1/usage/summary")
+async def usage_summary(
+    kind: str | None = None,
+    day: str | None = None,
+    membership_id: str | None = None,
+    principal: Principal = Depends(require_scope("ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app.usage_ledger import summarize_usage
+
+    return await summarize_usage(
+        session, principal, kind=kind, day=day, membership_id=membership_id
+    )
+
+
+@app.get("/v1/usage/events")
+async def usage_events(
+    kind: str | None = None,
+    day: str | None = None,
+    membership_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    principal: Principal = Depends(require_scope("ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app.usage_ledger import list_usage_events, usage_event_dict
+
+    rows = await list_usage_events(
+        session,
+        principal,
+        kind=kind,
+        day=day,
+        membership_id=membership_id,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "billing": False,
+        "school_id": principal.school_id,
+        "events": [usage_event_dict(r) for r in rows],
+    }
+
+
+@app.get("/v1/usage/events/{event_id}")
+async def usage_event_detail(
+    event_id: str,
+    principal: Principal = Depends(require_scope("ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app.usage_ledger import get_usage_event_for_principal, usage_event_dict
+
+    row = await get_usage_event_for_principal(session, event_id, principal)
+    if row is None:
+        raise HTTPException(status_code=404, detail="usage event not found")
+    return {"billing": False, "event": usage_event_dict(row)}
+
+
+@app.get("/v1/usage")
+async def my_usage_page(
+    principal: Principal = Depends(require_scope("ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    from app.usage_ledger import list_usage_events, summarize_usage, usage_event_dict
+
+    summary = await summarize_usage(session, principal)
+    rows = await list_usage_events(session, principal, limit=50, offset=0)
+    html = _usage_html(principal, summary, [usage_event_dict(r) for r in rows])
+    return HTMLResponse(html)
 
 
 class HelloRequest(BaseModel):

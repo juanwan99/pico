@@ -807,6 +807,7 @@ async def _finalize_run(
     task_id: str | None = None,
     user_prompt: str | None = None,
     change_proposal: dict | None = None,
+    token_usage: dict[str, Any] | None = None,
 ) -> None:
     from sqlalchemy import case, select, update
 
@@ -1053,6 +1054,17 @@ async def _finalize_run(
         )
 
         await session.commit()
+
+    # Usage meter is best-effort and must never roll back the Run path.
+    from app.usage_ledger import emit_llm_usage_after_run
+
+    await emit_llm_usage_after_run(
+        run_id,
+        token_usage=token_usage,
+        prompt=user_prompt,
+        completion=final_text,
+        source="openai_compat",
+    )
 
 
 async def _run_and_collect(
@@ -1402,6 +1414,7 @@ async def chat_completions(
                 task_id=task_id,
                 user_prompt=prompt,
                 change_proposal=getattr(result, "change_proposal", None),
+                token_usage=getattr(result, "token_usage", None),
             )
         return {
             "id": completion_id,
@@ -1691,6 +1704,7 @@ async def chat_completions(
                     task_id=task_id,
                     user_prompt=prompt,
                     change_proposal=getattr(result, "change_proposal", None),
+                    token_usage=getattr(result, "token_usage", None),
                 )
                 await q.put(("done", result))
             except asyncio.CancelledError:
