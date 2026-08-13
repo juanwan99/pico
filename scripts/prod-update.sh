@@ -98,8 +98,8 @@ else
   echo "[pico] WARN KIMI_API_KEY empty — chat will fail"
 fi
 
-docker compose -f "$COMPOSE_FILE" build pico-api librechat
-docker compose -f "$COMPOSE_FILE" up -d --force-recreate pico-api librechat
+docker compose -f "$COMPOSE_FILE" build pico-api librechat pico-sandbox
+docker compose -f "$COMPOSE_FILE" up -d --force-recreate pico-api librechat pico-sandbox
 
 echo "[pico] ps:"
 docker compose -f "$COMPOSE_FILE" ps
