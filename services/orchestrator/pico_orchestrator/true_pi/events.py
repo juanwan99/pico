@@ -136,6 +136,27 @@ async def map_event(
                 **tag,
             },
         )
+        if name in {"web_search", "web_fetch"}:
+            sources = result.get("sources") if isinstance(result, dict) else None
+            state.event_kinds.append("search.sources")
+            await emit(
+                "search.sources",
+                {
+                    "tool": name,
+                    "retrieved": bool(isinstance(result, dict) and result.get("retrieved")),
+                    "honest_miss": bool(
+                        isinstance(result, dict) and result.get("honest_miss")
+                    )
+                    or (not sources),
+                    "sources": sources if isinstance(sources, list) else [],
+                    "message": (
+                        str(result.get("message") or "")
+                        if isinstance(result, dict)
+                        else ""
+                    ),
+                    **tag,
+                },
+            )
         return
 
     if kind == "message_end":

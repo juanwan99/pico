@@ -5,7 +5,7 @@ Thin Node extension for **phase-1 true Pi RPC** (`#431`).
 ## Role
 
 - Loaded by `pi --mode rpc --no-builtin-tools -e pico-gateway-tools.ts`
-- Registers **only** the 7 Pico gateway tools
+- Registers Pico gateway tools (workspace/generate/verify + `web_search` / `web_fetch`)
 - Each tool calls `PICO_TRUE_PI_TOOL_URL/v1/tool` with `PICO_TRUE_PI_TOOL_TOKEN`
 
 ## Not in this package

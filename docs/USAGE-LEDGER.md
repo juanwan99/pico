@@ -64,7 +64,7 @@ Token 规则：有则记整数；无则三字段 null 且 `tokens_unknown=1`。�
 | kind | 本卡 | 谁 emit |
 |------|------|---------|
 | `llm` | **必须打点** | pico-api：`openai_compat` 终态 + `run_service` 终态 |
-| `search` | 预留 | #507 搜索卡 |
+| `search` | **#507 打点** | gateway `web_search` / `web_fetch` 成功或明确失败 |
 | `sandbox` | 预留 | #508 沙箱卡 |
 | `api` | 预留 | 其它出站 API |
 | `other` | 预留 | 未分类 |

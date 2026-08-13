@@ -24,6 +24,8 @@ const ALLOWED = [
   "generate_docx_document",
   "generate_pptx_document",
   "verify_html_document",
+  "web_search",
+  "web_fetch",
 ] as const;
 
 type ToolName = (typeof ALLOWED)[number];
@@ -176,5 +178,27 @@ export default function (pi: ExtensionAPI) {
     "verify_html_document",
     "Static HTML structure self-check via Pico gateway (not browser QA).",
     AnyArgs,
+  );
+  registerTool(
+    pi,
+    "web_search",
+    "Search the public web via DeepSeek official web_search (Pico gateway). Returns sources or honest 未检索.",
+    Type.Object(
+      {
+        query: Type.String(),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "web_fetch",
+    "Read one public http(s) page into text via Pico gateway. Denies intranet/metadata/admin hosts.",
+    Type.Object(
+      {
+        url: Type.String(),
+      },
+      { additionalProperties: true },
+    ),
   );
 }

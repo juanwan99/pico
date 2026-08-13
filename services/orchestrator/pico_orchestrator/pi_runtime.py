@@ -21,6 +21,7 @@ from pico_orchestrator.gateway import ArtifactStore, Principal, ToolError
 from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.run_types import EventEmitter, RunCaps, RunResult
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
+from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
 from pico_orchestrator.user_errors import enrich_fail_payload
 
 RUNTIME_LABEL = "pi-agent"
@@ -65,7 +66,9 @@ You are **Pico**, a task-oriented AI workbench agent (Pi-style minimal harness).
 - Use tools when they help deliver real work (files, documents, lists).
 - Prefer structured, professional Chinese or English matching the user.
 - Tenant identity comes from the verified token — never invent school_id / membership_id.
-- No host shell, no unrestricted web, no MCP unless the control plane allows it.
+- No host shell, no unrestricted web crawl, no MCP unless the control plane allows it.
+- Public retrieval: call web_search for current/public facts; call web_fetch for a user-pasted http(s) URL.
+- Cite clickable markdown sources in the final reply. If the tool returns honest_miss / 未检索, say 「未检索」 — never invent citations.
 - When creating files/documents, call the generate_* or workspace_write tools.
 - Short answers: do not force a file. Delivery tasks: produce real artifact(s).
 - Multi-deliverable / pipeline stages: one tool write per independent file — never a single long chat dump with fake multi-H1 sections.
@@ -526,6 +529,16 @@ async def run_pi_agent(
                     "tool.call",
                     {"tool": name, "arguments": arguments, "call_id": call_id},
                 )
+                store = artifact_store
+                run_id = getattr(store, "_run_id", None) if store is not None else None
+                task_id = getattr(store, "_task_id", None) if store is not None else None
+                token = bind_usage_context(
+                    school_id=getattr(principal, "school_id", "") or "",
+                    membership_id=getattr(principal, "membership_id", "") or "",
+                    run_id=run_id,
+                    task_id=task_id,
+                    tool_call_id=call_id,
+                )
                 try:
                     result = await gateway.invoke(principal, name, arguments)
                     tool_context_results.append((name, result))
@@ -541,6 +554,18 @@ async def run_pi_agent(
                             "call_id": call_id,
                         },
                     )
+                    if name in {"web_search", "web_fetch"}:
+                        await emit(
+                            "search.sources",
+                            {
+                                "tool": name,
+                                "retrieved": bool(result.get("retrieved")),
+                                "honest_miss": bool(result.get("honest_miss")),
+                                "sources": result.get("sources") or [],
+                                "message": str(result.get("message") or ""),
+                                "call_id": call_id,
+                            },
+                        )
                     messages.append(
                         {
                             "role": "tool",
@@ -577,6 +602,8 @@ async def run_pi_agent(
                             "content": out_text,
                         }
                     )
+                finally:
+                    reset_usage_context(token)
 
             # Bookkeeping for the deep-lane circuit breaker: any successful tool
             # execution in this turn is real progress; otherwise it is another
@@ -713,6 +740,9 @@ def _result(
     # Prefer the last assistant turn as the human package base when multi-step.
     base = (final_parts[-1] if final_parts else raw) or raw
     human = sanitize_user_facing_text(base, artifact_titles=titles)
+    from pico_orchestrator.web_tools import attach_teacher_sources
+
+    human = attach_teacher_sources(human, tool_results)
     final_text = redact_tenant_text(
         human,
         school_id=getattr(principal, "school_id", None),

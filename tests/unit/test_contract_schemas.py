@@ -19,7 +19,11 @@ def test_frozen_docs_exist_and_marked():
     ):
         text = (DOCS / name).read_text(encoding="utf-8")
         assert "STATUS: FROZEN" in text, name
-        assert "VERSION: 1.0" in text, name
+        if name == "tools.md":
+            # #507: allowlisted web_search / web_fetch (no blanket Web ban)
+            assert "VERSION: 1.1" in text, name
+        else:
+            assert "VERSION: 1.0" in text, name
 
 
 def test_json_schemas_parse():

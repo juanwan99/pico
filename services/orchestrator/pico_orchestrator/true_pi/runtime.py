@@ -351,6 +351,9 @@ async def run_true_pi_agent(
         titles = titles_from_tool_results(state.tool_results)
         base = (state.final_parts[-1] if state.final_parts else "") or ""
         human = sanitize_user_facing_text(base, artifact_titles=titles)
+        from pico_orchestrator.web_tools import attach_teacher_sources
+
+        human = attach_teacher_sources(human, state.tool_results)
         final_text = redact_tenant_text(
             human,
             school_id=getattr(principal, "school_id", None),
@@ -407,7 +410,12 @@ def _compose_prompt(
         "# Pico true-Pi harness\n"
         "You are Pico. Use only the registered tools listed below. "
         "No host shell. Deliver real files via write/generate tools when asked.\n"
-        f"Allowed tools: {', '.join(allowed_tools)}"
+        f"Allowed tools: {', '.join(allowed_tools)}\n"
+        "When the question needs current/public facts, call web_search and "
+        "put clickable markdown sources in the final reply. "
+        "When the user pastes a specific http(s) URL, call web_fetch. "
+        "If retrieval returns honest_miss / 未检索, say so — never invent citations. "
+        "Do not fetch intranet, localhost, or cloud metadata."
     )
     if skill:
         parts.append(f"## Skill instruction\n{skill}")
@@ -482,6 +490,9 @@ def _result(
     titles = titles_from_tool_results(state.tool_results)
     base = (state.final_parts[-1] if state.final_parts else "") or ""
     human = sanitize_user_facing_text(base, artifact_titles=titles)
+    from pico_orchestrator.web_tools import attach_teacher_sources
+
+    human = attach_teacher_sources(human, state.tool_results)
     final_text = redact_tenant_text(
         human,
         school_id=getattr(principal, "school_id", None) if principal else None,
