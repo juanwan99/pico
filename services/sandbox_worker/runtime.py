@@ -1,7 +1,8 @@
-"""In-memory B2 browser sessions + userspace egress filter.
+"""In-memory B2 Chromium sessions.
 
-Sessions die with this process (no durable cookies on the host).
-Passwords are never written to logs, tool payloads, or screenshot text.
+Sessions die with this process / TTL. Cookies stay in the Chromium context
+and a tmpfs profile directory — never the host home directory.
+Passwords are never written to logs, tool payloads, or screenshot text overlays.
 """
 
 from __future__ import annotations
@@ -16,17 +17,24 @@ from typing import Any
 from urllib.parse import urlparse
 
 from pico_orchestrator.gateway import ToolError
-from pico_orchestrator.sandbox_s1 import extract_title_h1, workspace_id_for
-from pico_orchestrator.sandbox_s2 import PNG_MAGIC, raster_html_to_png
-from pico_orchestrator.web_guard import assert_public_http_url, parse_public_http_url
+from pico_orchestrator.sandbox_s1 import workspace_id_for
+from pico_orchestrator.web_guard import parse_public_http_url
+
+from sandbox_worker.browser import (
+    ENGINE_NAME,
+    PNG_MAGIC,
+    BrowserPage,
+    open_chromium,
+)
 
 logger = logging.getLogger(__name__)
 
 HUMAN_LOGIN_COPY = "请在此画面自行登录，不要在聊天里发送密码"
 SESSION_TTL_S = 30 * 60
-FETCH_TIMEOUT_S = 8.0
-MAX_HTML_CHARS = 120_000
-MAX_REDIRECTS = 5
+APPLIED_COPY = (
+    "已把操作送进 sidecar Chromium。"
+    "Cookie 只在会话内存/临时 profile，随销毁消失。"
+)
 
 _WECHAT_HOST_MARKERS = (
     "wx.qq.com",
@@ -44,8 +52,7 @@ _JIAOWU_HOST_MARKERS = (
     "eas.admin",
 )
 
-
-FetchHtml = Callable[[str], Awaitable[tuple[str, str]]]
+OpenBrowser = Callable[[str], Awaitable[BrowserPage]]
 
 
 @dataclass
@@ -56,10 +63,11 @@ class SandboxSession:
     run_id: str
     workspace_id: str
     url: str
-    html: str
+    title: str
+    h1: str
     screenshot_png: bytes
     created_at: float
-    form_values: dict[str, str] = field(default_factory=dict)
+    browser: BrowserPage
     secret_fields: set[str] = field(default_factory=set)
 
 
@@ -109,77 +117,14 @@ def redact_secrets(payload: dict[str, Any], secret_fields: set[str] | None = Non
     return out
 
 
-def _screen_html(url: str, page_html: str, *, typed_masked: str = "") -> str:
-    title, h1 = extract_title_h1(page_html)
-    extra = f"<p>typed: {typed_masked}</p>" if typed_masked else ""
-    return (
-        "<!DOCTYPE html><html><head>"
-        f"<title>{title or 'sandbox'}</title></head><body>"
-        f"<div id='pico-b2-banner'>{HUMAN_LOGIN_COPY}</div>"
-        f"<p>url: {url}</p>"
-        f"<h1>{h1 or title or 'public page'}</h1>"
-        f"{extra}"
-        "<p>Session cookies stay inside this sandbox and die with the box.</p>"
-        "</body></html>"
-    )
-
-
-def render_screen_png(url: str, page_html: str, *, typed_masked: str = "") -> bytes:
-    png = raster_html_to_png(_screen_html(url, page_html, typed_masked=typed_masked))
-    if not png.startswith(PNG_MAGIC):
-        raise ToolError("sandbox.raster_failed", "隔离画面未能生成截图")
-    return png
-
-
-async def default_fetch_html(url: str) -> tuple[str, str]:
-    """Fetch a public page through web_guard. Never follows intranet redirects."""
-    import httpx
-
-    current = url
-    async with httpx.AsyncClient(timeout=FETCH_TIMEOUT_S, trust_env=False) as client:
-        for _hop in range(MAX_REDIRECTS + 1):
-            target = await assert_public_http_url(current)
-            try:
-                resp = await client.get(
-                    target.url,
-                    headers={
-                        "User-Agent": "PicoSandbox/1.0",
-                        "Accept": "text/html,application/xhtml+xml,text/plain",
-                    },
-                    follow_redirects=False,
-                )
-            except httpx.TimeoutException as exc:
-                raise ToolError("sandbox.fetch_failed", "公开页读取超时") from exc
-            except httpx.HTTPError as exc:
-                raise ToolError("sandbox.fetch_failed", "无法打开该公开页") from exc
-            if resp.status_code in {301, 302, 303, 307, 308}:
-                loc = resp.headers.get("location") or ""
-                if not loc:
-                    raise ToolError("sandbox.fetch_failed", "重定向缺少目标地址")
-                if loc.startswith("/"):
-                    parsed = urlparse(target.url)
-                    loc = f"{parsed.scheme}://{parsed.netloc}{loc}"
-                parse_public_http_url(loc)
-                current = loc
-                continue
-            if resp.status_code >= 400:
-                raise ToolError(
-                    "sandbox.fetch_failed",
-                    f"公开页返回 HTTP {resp.status_code}，无法打开登录画面。",
-                )
-            raw = resp.content[: MAX_HTML_CHARS + 1].decode("utf-8", errors="replace")
-            return target.url, raw[:MAX_HTML_CHARS]
-    raise ToolError("sandbox.fetch_failed", "重定向次数过多")
-
-
 class SandboxRuntime:
-    """Process-local session table. Not LibreChat. Not pico-api."""
+    """Process-local Chromium session table. Not LibreChat. Not pico-api."""
 
-    def __init__(self, fetch_html: FetchHtml | None = None) -> None:
+    def __init__(self, open_browser: OpenBrowser | None = None) -> None:
         self._sessions: dict[str, SandboxSession] = {}
-        self._fetch_html = fetch_html or default_fetch_html
+        self._open_browser = open_browser or open_chromium
 
-    def _purge(self) -> None:
+    async def _purge(self) -> None:
         now = time.time()
         dead = [
             sid
@@ -187,10 +132,9 @@ class SandboxRuntime:
             if now - sess.created_at > SESSION_TTL_S
         ]
         for sid in dead:
-            self._sessions.pop(sid, None)
+            await self.destroy(sid)
 
     def get(self, session_id: str) -> SandboxSession | None:
-        self._purge()
         return self._sessions.get(session_id)
 
     def require_owner(
@@ -208,6 +152,15 @@ class SandboxRuntime:
             raise ToolError("sandbox.session_not_found", "找不到该隔离会话")
         return sess
 
+    async def _sync(self, sess: SandboxSession) -> None:
+        sess.url = sess.browser.url
+        sess.title = await sess.browser.title()
+        sess.h1 = await sess.browser.h1()
+        png = await sess.browser.screenshot_png()
+        if not png.startswith(PNG_MAGIC):
+            raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能截取 viewport")
+        sess.screenshot_png = png
+
     async def open_session(
         self,
         *,
@@ -216,58 +169,72 @@ class SandboxRuntime:
         run_id: str | None,
         url: str,
     ) -> dict[str, Any]:
+        await self._purge()
         parse_public_http_url(url)
         hostile = automation_hostile_reason(url)
         if hostile:
             raise ToolError("sandbox.site_blocks_automation", hostile)
-        final_url, html = await self._fetch_html(url)
-        parse_public_http_url(final_url)
-        hostile = automation_hostile_reason(final_url)
-        if hostile:
-            raise ToolError("sandbox.site_blocks_automation", hostile)
-        png = render_screen_png(final_url, html)
-        school, member, run = isolation_tuple(school_id, membership_id, run_id)
-        session_id = "sbox_" + secrets.token_hex(12)
-        ws = workspace_id_for(school, member, run)
-        sess = SandboxSession(
-            session_id=session_id,
-            school_id=school,
-            membership_id=member,
-            run_id=run,
-            workspace_id=ws,
-            url=final_url,
-            html=html,
-            screenshot_png=png,
-            created_at=time.time(),
-        )
-        self._sessions[session_id] = sess
-        title, h1 = extract_title_h1(html)
+        page = await self._open_browser(url)
+        stored = False
+        try:
+            parse_public_http_url(page.url)
+            hostile = automation_hostile_reason(page.url)
+            if hostile:
+                raise ToolError("sandbox.site_blocks_automation", hostile)
+            school, member, run = isolation_tuple(school_id, membership_id, run_id)
+            session_id = "sbox_" + secrets.token_hex(12)
+            ws = workspace_id_for(school, member, run)
+            sess = SandboxSession(
+                session_id=session_id,
+                school_id=school,
+                membership_id=member,
+                run_id=run,
+                workspace_id=ws,
+                url=page.url,
+                title="",
+                h1="",
+                screenshot_png=b"",
+                created_at=time.time(),
+                browser=page,
+            )
+            await self._sync(sess)
+            self._sessions[session_id] = sess
+            stored = True
+        except Exception:
+            if not stored:
+                await page.close()
+            raise
         return redact_secrets(
             {
                 "ok": True,
                 "session_id": session_id,
-                "workspace_id": ws,
-                "url": final_url,
-                "title": title,
-                "h1": h1,
+                "workspace_id": sess.workspace_id,
+                "url": sess.url,
+                "title": sess.title,
+                "h1": sess.h1,
+                "engine": ENGINE_NAME,
                 "view_path": f"/v1/sandbox/sessions/{session_id}/view",
                 "human_copy": HUMAN_LOGIN_COPY,
                 "message": (
-                    f"已在隔离沙箱打开公开页。{HUMAN_LOGIN_COPY}"
+                    f"已在 sidecar Chromium 打开公开页。{HUMAN_LOGIN_COPY}"
                     "会话随沙箱销毁，不会把 Cookie 写回宿主机。"
                 ),
-                "byte_size": len(png),
+                "byte_size": len(sess.screenshot_png),
                 "mime": "image/png",
             }
         )
 
-    def screenshot(self, session: SandboxSession) -> dict[str, Any]:
+    async def screenshot(self, session: SandboxSession) -> dict[str, Any]:
+        await self._purge()
+        await self._sync(session)
         return redact_secrets(
             {
                 "ok": True,
                 "session_id": session.session_id,
                 "workspace_id": session.workspace_id,
                 "url": session.url,
+                "title": session.title,
+                "engine": ENGINE_NAME,
                 "view_path": f"/v1/sandbox/sessions/{session.session_id}/view",
                 "human_copy": HUMAN_LOGIN_COPY,
                 "byte_size": len(session.screenshot_png),
@@ -276,7 +243,7 @@ class SandboxRuntime:
             }
         )
 
-    def apply_input(
+    async def apply_input(
         self,
         session: SandboxSession,
         *,
@@ -286,44 +253,41 @@ class SandboxRuntime:
         password: bool = False,
         field: str = "input",
     ) -> dict[str, Any]:
+        await self._purge()
+        clicked = click_x is not None and click_y is not None
+        if clicked:
+            await session.browser.click(int(click_x), int(click_y))
         if text is not None:
             if password:
                 session.secret_fields.add(field)
-                session.form_values[field] = text
-            else:
-                session.form_values[field] = text[:200]
-        masked = ""
-        if session.form_values:
-            bits = []
-            for key, value in session.form_values.items():
-                if key in session.secret_fields:
-                    bits.append(f"{key}=••••")
-                else:
-                    bits.append(f"{key}={value[:40]}")
-            masked = "; ".join(bits)
-        session.screenshot_png = render_screen_png(
-            session.url, session.html, typed_masked=masked
-        )
-        # Never echo the typed secret.
+            # Type into the live DOM. Do not overlay secrets onto a synthetic PNG.
+            await session.browser.type_text(text, password=password)
+        await self._sync(session)
         return redact_secrets(
             {
                 "ok": True,
                 "session_id": session.session_id,
                 "workspace_id": session.workspace_id,
-                "clicked": click_x is not None and click_y is not None,
+                "url": session.url,
+                "title": session.title,
+                "engine": ENGINE_NAME,
+                "clicked": clicked,
                 "typed": bool(text),
                 "password_typed": bool(password and text),
                 "human_copy": HUMAN_LOGIN_COPY,
-                "message": (
-                    "已把点击/输入送进隔离浏览器。"
-                    f"{HUMAN_LOGIN_COPY}"
-                ),
+                "message": APPLIED_COPY,
             },
             session.secret_fields,
         )
 
-    def destroy(self, session_id: str) -> None:
-        self._sessions.pop(session_id, None)
+    async def destroy(self, session_id: str) -> None:
+        sess = self._sessions.pop(session_id, None)
+        if sess is None:
+            return
+        try:
+            await sess.browser.close()
+        except Exception:
+            logger.debug("sandbox session close failed", exc_info=True)
 
 
 RUNTIME = SandboxRuntime()

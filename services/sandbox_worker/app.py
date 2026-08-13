@@ -10,6 +10,7 @@ from fastapi.responses import Response
 from pico_orchestrator.gateway import ToolError
 from pydantic import BaseModel, Field
 
+from sandbox_worker.browser import ENGINE_NAME, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 from sandbox_worker.ports import SANDBOX_DEFAULT_PORT, assert_listen_port
 from sandbox_worker.runtime import HUMAN_LOGIN_COPY, RUNTIME, redact_secrets
 
@@ -58,6 +59,9 @@ async def health() -> dict[str, Any]:
         "service": "pico-sandbox",
         "listen_port": port,
         "binds_product_ui": False,
+        "engine": ENGINE_NAME,
+        "real_browser": True,
+        "viewport": {"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
         "human_copy": HUMAN_LOGIN_COPY,
         "claim_wb": "NO",
     }
@@ -92,7 +96,7 @@ async def get_session(
         sess = RUNTIME.require_owner(
             session_id, school_id=school_id, membership_id=membership_id
         )
-        return RUNTIME.screenshot(sess)
+        return await RUNTIME.screenshot(sess)
     except ToolError as exc:
         raise _tool_http(exc) from exc
 
@@ -109,6 +113,7 @@ async def get_png(
         sess = RUNTIME.require_owner(
             session_id, school_id=school_id, membership_id=membership_id
         )
+        await RUNTIME._sync(sess)
     except ToolError as exc:
         raise _tool_http(exc) from exc
     return Response(content=sess.screenshot_png, media_type="image/png")
@@ -128,7 +133,7 @@ async def post_input(
         sess = RUNTIME.require_owner(
             session_id, school_id=body.school_id, membership_id=body.membership_id
         )
-        return RUNTIME.apply_input(
+        return await RUNTIME.apply_input(
             sess,
             click_x=body.click_x,
             click_y=body.click_y,
@@ -152,5 +157,5 @@ async def destroy_session(
         RUNTIME.require_owner(session_id, school_id=school_id, membership_id=membership_id)
     except ToolError as exc:
         raise _tool_http(exc) from exc
-    RUNTIME.destroy(session_id)
+    await RUNTIME.destroy(session_id)
     return redact_secrets({"ok": True, "destroyed": True, "session_id": session_id})

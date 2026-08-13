@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import os
 import re
+import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,10 +22,11 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 os.environ.setdefault("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
 
 from pico_orchestrator.gateway import ToolError
-from pico_orchestrator.sandbox_s2 import PNG_MAGIC
+from pico_orchestrator.sandbox_s2 import PNG_MAGIC, RASTER_HEIGHT, RASTER_WIDTH, encode_rgb_png
 from pico_orchestrator.sandbox_view import LOGIN_COPY, render_session_view_html
 from pico_orchestrator.tools_builtin import build_default_gateway
 from pico_orchestrator.web_guard import parse_public_http_url
+from sandbox_worker.browser import ENGINE_NAME, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 from sandbox_worker.ports import SANDBOX_DEFAULT_PORT, assert_listen_port
 from sandbox_worker.runtime import HUMAN_LOGIN_COPY, RUNTIME, automation_hostile_reason
 
@@ -106,23 +108,81 @@ class MemoryArtifactStore:
 
 
 
-PUBLIC_HTML = (
-    "<!DOCTYPE html><html><head><title>Example Domain</title></head>"
-    "<body><h1>Example Domain</h1><p>public demo</p></body></html>"
-)
+def _png_wh(png: bytes) -> tuple[int, int]:
+    return struct.unpack(">II", png[16:24])
+
+
+def _viewport_png(tag: int) -> bytes:
+    """Contract stand-in: 390×844 viewport, NOT the S2 720×400 HTML raster."""
+    r = (40 + tag * 17) % 200
+    g = (80 + tag * 9) % 200
+    b = (120 + tag * 3) % 200
+    rgb = bytes((r, g, b)) * (VIEWPORT_WIDTH * VIEWPORT_HEIGHT)
+    return encode_rgb_png(
+        VIEWPORT_WIDTH, VIEWPORT_HEIGHT, rgb, text_chunks={"b2": f"viewport-{tag}"}
+    )
+
+
+class FakeChromiumPage:
+    """In-process DOM stand-in for gateway/isolation tests.
+
+    Production open uses Playwright Chromium (see sandbox_worker.browser).
+    Click on example.com navigates — the old banner raster never changed URL.
+    """
+
+    def __init__(self, url: str) -> None:
+        parse_public_http_url(url)
+        self._url = url
+        self._title = "Example Domain"
+        self._h1 = "Example Domain"
+        self._tag = 1
+        self._typed = ""
+        self.closed = False
+
+    @property
+    def url(self) -> str:
+        return self._url
+
+    async def title(self) -> str:
+        return self._title
+
+    async def h1(self) -> str:
+        return self._h1
+
+    async def screenshot_png(self) -> bytes:
+        return _viewport_png(self._tag)
+
+    async def click(self, x: int, y: int) -> None:
+        _ = (x, y)
+        if "example.com" in self._url:
+            self._url = "https://www.iana.org/help/example-domains"
+            self._title = "Example Domains"
+            self._h1 = "Example domains"
+            self._tag += 1
+
+    async def type_text(self, text: str, *, password: bool) -> None:
+        if not password:
+            self._typed = text
+            self._tag += 1
+        else:
+            self._tag += 1
+
+    async def close(self) -> None:
+        self.closed = True
 
 
 @pytest.fixture
-def embedded_runtime(monkeypatch: pytest.MonkeyPatch):
+async def embedded_runtime(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PICO_SANDBOX_URL", "embedded")
 
-    async def fake_fetch(url: str) -> tuple[str, str]:
-        parse_public_http_url(url)
-        return url, PUBLIC_HTML
+    async def fake_open(url: str) -> FakeChromiumPage:
+        return FakeChromiumPage(url)
 
-    monkeypatch.setattr(RUNTIME, "_fetch_html", fake_fetch)
+    monkeypatch.setattr(RUNTIME, "_open_browser", fake_open)
     RUNTIME._sessions.clear()
     yield RUNTIME
+    for sid in list(RUNTIME._sessions):
+        await RUNTIME.destroy(sid)
     RUNTIME._sessions.clear()
 
 
@@ -136,6 +196,7 @@ async def test_browser_open_public_page_and_view_copy(embedded_runtime) -> None:
     assert opened["ok"] is True
     assert opened["session_id"].startswith("sbox_")
     assert opened["title"] == "Example Domain"
+    assert opened["engine"] == ENGINE_NAME
     assert HUMAN_LOGIN_COPY in opened["human_copy"]
     assert "不要在聊天里发送密码" in opened["message"]
     assert opened["view_path"].startswith("/v1/sandbox/sessions/")
@@ -146,6 +207,9 @@ async def test_browser_open_public_page_and_view_copy(embedded_runtime) -> None:
     sess = embedded_runtime.get(opened["session_id"])
     assert sess is not None
     assert sess.screenshot_png.startswith(PNG_MAGIC)
+    width, height = _png_wh(sess.screenshot_png)
+    assert (width, height) == (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+    assert (width, height) != (RASTER_WIDTH, RASTER_HEIGHT)
     html = render_session_view_html(
         session_id=opened["session_id"],
         screenshot_path="/shot",
@@ -178,6 +242,7 @@ async def test_browser_open_denies_intranet_and_metadata(embedded_runtime) -> No
         "http://10.1.2.3/",
         "http://169.254.169.254/latest/meta-data/",
         "http://127.0.0.1/",
+        "https://pico.aivia.asia/login",
     ):
         with pytest.raises(ToolError) as denied:
             await gw.invoke(owner, "sandbox_browser_open", {"url": url})
@@ -237,7 +302,7 @@ async def test_password_input_not_echoed(embedded_runtime) -> None:
     sess = embedded_runtime.require_owner(
         owner_sess["session_id"], school_id="school-a", membership_id="member-a"
     )
-    out = embedded_runtime.apply_input(
+    out = await embedded_runtime.apply_input(
         sess, text="super-secret-pass", password=True, field="password"
     )
     blob = str(out)
@@ -310,6 +375,9 @@ def test_compose_sidecar_is_unprivileged_and_not_on_product_ports() -> None:
         assert not re.search(r'["\']18088:', block)
         assert "18767" in block
         assert "network_mode: host" not in block
+        assert "/dev/shm" in block
+        assert "PICO_SANDBOX_PROFILE_ROOT" in block
+        assert "/tmp/pico-sandbox" in block
     host = (ROOT / "docker-compose.host.yml").read_text(encoding="utf-8")
     assert "PICO_SANDBOX_URL: http://127.0.0.1:18767" in host
     libre = _service_block(host, "librechat")
@@ -338,3 +406,146 @@ def _service_block(text: str, name: str) -> str:
             end = j
             break
     return "\n".join(lines[start:end])
+
+
+@pytest.mark.asyncio
+async def test_click_navigates_changes_url_and_screenshot(embedded_runtime) -> None:
+    opened = await embedded_runtime.open_session(
+        school_id="school-a",
+        membership_id="member-a",
+        run_id="run-b2",
+        url="https://example.com/",
+    )
+    sess = embedded_runtime.require_owner(
+        opened["session_id"], school_id="school-a", membership_id="member-a"
+    )
+    before_url = sess.url
+    before_png = sess.screenshot_png
+    before_wh = _png_wh(before_png)
+    out = await embedded_runtime.apply_input(sess, click_x=24, click_y=24)
+    assert out["clicked"] is True
+    assert "iana.org" in sess.url
+    assert sess.url != before_url
+    assert sess.title != "Example Domain"
+    assert sess.screenshot_png != before_png
+    assert _png_wh(sess.screenshot_png) == before_wh
+    assert "已把点击/输入送进隔离浏览器" not in str(out.get("message") or "")
+    assert "Chromium" in str(out.get("message") or "")
+
+
+@pytest.mark.asyncio
+async def test_visible_type_changes_screenshot_password_does_not_echo(
+    embedded_runtime,
+) -> None:
+    opened = await embedded_runtime.open_session(
+        school_id="school-a",
+        membership_id="member-a",
+        run_id="run-b2",
+        url="https://example.com/",
+    )
+    sess = embedded_runtime.require_owner(
+        opened["session_id"], school_id="school-a", membership_id="member-a"
+    )
+    before = sess.screenshot_png
+    out = await embedded_runtime.apply_input(sess, text="hello-box")
+    assert out["typed"] is True
+    assert "hello-box" not in str(out.get("message") or "")
+    assert sess.screenshot_png != before
+
+
+def test_synthetic_banner_path_gone() -> None:
+    """Old httpx + _screen_html + raster_html_to_png B2 path must not exist."""
+    worker = ROOT / "services" / "sandbox_worker"
+    blob = ""
+    for path in worker.rglob("*.py"):
+        blob += path.read_text(encoding="utf-8") + "\n"
+    assert "pico-b2-banner" not in blob
+    assert "_screen_html" not in blob
+    assert "raster_html_to_png" not in blob
+    assert "已把点击/输入送进隔离浏览器" not in blob
+    assert "playwright" in blob.lower()
+    assert "chromium" in blob.lower()
+    runtime_src = (worker / "runtime.py").read_text(encoding="utf-8")
+    assert "open_chromium" in runtime_src
+    docs = (ROOT / "docs" / "SANDBOX-S2.md").read_text(encoding="utf-8")
+    assert "当前默认用用户态抓取" not in docs
+    assert "Playwright" in docs or "Chromium" in docs
+
+
+def test_dockerfile_installs_chromium_not_host_chrome() -> None:
+    df = (ROOT / "services" / "sandbox_worker" / "Dockerfile").read_text(encoding="utf-8")
+    assert "playwright" in df.lower()
+    assert "chromium" in df.lower()
+    assert "8080" not in df
+    assert "18088" not in df
+    assert "PLAYWRIGHT_BROWSERS_PATH" in df
+    assert "/tmp/pico-sandbox-profiles" in df
+    assert "playwright install" in df.lower() or "chromium" in df.lower()
+
+
+def test_s2_raster_of_banner_is_not_b2_viewport() -> None:
+    """If B2 still re-rastered a subtitle banner, IHDR would be 720×400 — must fail."""
+    from pico_orchestrator.sandbox_s2 import raster_html_to_png
+
+    fake = raster_html_to_png(
+        "<!DOCTYPE html><html><body>"
+        "<div id='pico-b2-banner'>请在此画面自行登录，不要在聊天里发送密码</div>"
+        "<p>url: https://example.com/</p><h1>Example Domain</h1></body></html>"
+    )
+    assert fake.startswith(PNG_MAGIC)
+    assert _png_wh(fake) == (RASTER_WIDTH, RASTER_HEIGHT)
+    assert _png_wh(fake) != (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+
+
+@pytest.mark.asyncio
+async def test_chromium_click_and_type_act_on_dom() -> None:
+    """Real Playwright page: click changes URL/title; type fills an input."""
+    pytest.importorskip("playwright.async_api")
+    from playwright.async_api import async_playwright
+    from sandbox_worker.browser import CHROMIUM_ARGS
+
+    try:
+        pw = await async_playwright().start()
+        browser = await pw.chromium.launch(headless=True, args=list(CHROMIUM_ARGS))
+    except Exception as exc:  # noqa: BLE001 — environment may lack browser bits
+        pytest.skip(f"Chromium unavailable: {exc}")
+    page = await browser.new_page(
+        viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
+    )
+    try:
+        await page.set_content(
+            """<!DOCTYPE html>
+            <html><head><title>Before</title></head>
+            <body style="margin:0;font-family:sans-serif">
+              <a id="go" href="#after"
+                 style="display:block;width:160px;height:48px;line-height:48px">Go</a>
+              <h1>Before</h1>
+              <input id="box" style="width:200px;height:32px"/>
+              <script>
+                window.addEventListener('hashchange', () => {
+                  document.title = 'After';
+                  document.querySelector('h1').textContent = 'After';
+                });
+              </script>
+            </body></html>"""
+        )
+        before = await page.screenshot(type="png")
+        assert bytes(before).startswith(PNG_MAGIC)
+        assert _png_wh(bytes(before)) == (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+        box = await page.locator("#go").bounding_box()
+        assert box is not None
+        await page.mouse.click(box["x"] + 8, box["y"] + 8)
+        await page.wait_for_function("document.title === 'After'")
+        assert await page.title() == "After"
+        assert "#after" in page.url
+        after_click = await page.screenshot(type="png")
+        assert bytes(after_click) != bytes(before)
+        await page.locator("#box").click()
+        await page.keyboard.type("visible-token")
+        assert await page.locator("#box").input_value() == "visible-token"
+        after_type = await page.screenshot(type="png")
+        assert bytes(after_type) != bytes(after_click)
+        assert "visible-token" not in str(after_type[:80])
+    finally:
+        await browser.close()
+        await pw.stop()

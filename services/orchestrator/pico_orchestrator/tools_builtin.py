@@ -1107,9 +1107,9 @@ def build_default_gateway(
         ToolSpec(
             name="sandbox_browser_open",
             description=(
-                "Open a PUBLIC http(s) page in the isolated sandbox sidecar (not LibreChat). "
-                "Teacher completes login on the view screen; never send passwords in chat. "
-                "Denies intranet, loopback, metadata, and pico-api 18765. "
+                "Open a PUBLIC http(s) page in sidecar Chromium (Playwright; not LibreChat). "
+                "Teacher completes login on the viewport; never send passwords in chat. "
+                "Denies intranet, loopback, metadata, pico-api 18765, and pico.aivia.asia. "
                 "WeChat/教务 are not required to succeed — if they block automation, the tool "
                 "fails in human language. Args: url."
             ),

@@ -31,7 +31,7 @@ def render_session_view_html(
     body {{ font-family: sans-serif; margin: 0; background: #111; color: #eee; }}
     .banner {{ background: #1f4e3d; color: #fff; padding: 12px 16px; font-size: 16px; }}
     .meta {{ padding: 8px 16px; color: #bbb; font-size: 13px; }}
-    img {{ display: block; width: min(100%, 720px); background: #fff; }}
+    img {{ display: block; width: min(100%, 390px); background: #fff; cursor: crosshair; }}
     form {{ padding: 12px 16px 24px; }}
     input[type=text], input[type=password] {{ padding: 8px; width: min(100%, 320px); }}
     button {{ margin-top: 8px; padding: 8px 12px; }}
@@ -40,22 +40,42 @@ def render_session_view_html(
 <body>
   <div class="banner">{copy}</div>
   <div class="meta">session={sid} · workspace={ws} · url={url}<br/>
-  会话随沙箱销毁，Cookie 不会写回宿主机。微信/教务不是过关条件。</div>
-  <img src="{shot}" alt="isolated sandbox screen"/>
-  <form method="post" action="{action}" autocomplete="off">
+  画面来自 sidecar Chromium viewport。点图即点击页面。会话随沙箱销毁，Cookie 不会写回宿主机。微信/教务不是过关条件。</div>
+  <img id="viewport" src="{shot}" alt="isolated chromium viewport" width="390"/>
+  <form id="input-form" method="post" action="{action}" autocomplete="off">
     <p>在此画面自行点击/输入。不要把密码发到聊天。</p>
     <div>
-      <label>点击 x <input type="number" name="click_x" /></label>
-      <label>y <input type="number" name="click_y" /></label>
+      <label>点击 x <input type="number" name="click_x" id="click_x" /></label>
+      <label>y <input type="number" name="click_y" id="click_y" /></label>
     </div>
     <div>
       <label>可见输入 <input type="text" name="text" autocomplete="off"/></label>
     </div>
     <div>
-      <label>密码（仅进隔离会话） <input type="password" name="secret" autocomplete="off"/></label>
+      <label>密码（仅进隔离会话） <input type="password" name="secret" autocomplete="new-password"/></label>
     </div>
-    <button type="submit">送到隔离浏览器</button>
+    <button type="submit">送到 sidecar Chromium</button>
   </form>
+  <script>
+    (function () {{
+      var img = document.getElementById("viewport");
+      var form = document.getElementById("input-form");
+      if (!img || !form) return;
+      img.addEventListener("click", function (ev) {{
+        var rect = img.getBoundingClientRect();
+        var nw = img.naturalWidth || 390;
+        var nh = img.naturalHeight || 844;
+        var x = Math.round((ev.clientX - rect.left) * (nw / rect.width));
+        var y = Math.round((ev.clientY - rect.top) * (nh / rect.height));
+        var fd = new FormData();
+        fd.set("click_x", String(x));
+        fd.set("click_y", String(y));
+        fetch(form.action, {{ method: "POST", body: fd, credentials: "same-origin", redirect: "follow" }})
+          .then(function () {{ window.location.reload(); }})
+          .catch(function () {{ window.location.reload(); }});
+      }});
+    }})();
+  </script>
 </body>
 </html>
 """
