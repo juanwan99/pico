@@ -481,6 +481,14 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                     "run.status",
                     {"status": "cancelled"},
                 )
+                from app.usage_ledger import emit_llm_usage_after_run
+
+                await emit_llm_usage_after_run(
+                    run_id,
+                    source="run_service",
+                    school_id=principal.school_id,
+                    membership_id=principal.membership_id,
+                )
                 return
             run.status = "failed"
             run.ended_at = _utcnow()
@@ -502,6 +510,14 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                     "kind": "error",
                 },
             )
+        from app.usage_ledger import emit_llm_usage_after_run
+
+        await emit_llm_usage_after_run(
+            run_id,
+            source="run_service",
+            school_id=principal.school_id,
+            membership_id=principal.membership_id,
+        )
         return
 
     async with factory() as session:
@@ -610,6 +626,20 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             user_prompt=run.prompt,
         )
         await session.commit()
+
+    from app.usage_ledger import emit_llm_usage_after_run
+
+    await emit_llm_usage_after_run(
+        run_id,
+        token_usage=result.token_usage,
+        prompt=run.prompt,
+        completion=result.final_text,
+        source="run_service",
+        school_id=principal.school_id,
+        membership_id=principal.membership_id,
+        model=run.model,
+        task_id=run.task_id,
+    )
 
 
 async def create_change(

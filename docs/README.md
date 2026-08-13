@@ -45,6 +45,7 @@ GOALS: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · WHAT-IS-PICO；STATE-NOW（快照�
 | **0d** | **[POLLUTION-SWEEP.md](./POLLUTION-SWEEP.md)** | **污染清理执行记录** |
 | **0e** | **[VELOCITY-CLEAN.md](./VELOCITY-CLEAN.md)** | **速度阻碍清理（部署主链）** |
 | **0f** | **[FAST-PATH.md](./FAST-PATH.md)** | **日常快路径（改合装测 · 禁重体系）** |
+| **0g** | **[USAGE-LEDGER.md](./USAGE-LEDGER.md)** | **用量账本（统计/管理 · 不做钱 · #506）** |
 | 0 | GitHub PR/Issue/Actions | **Task state & evidence** |
 | 1 | [AGENTS.md](../AGENTS.md) | Machine + human HARD scope |
 | 2 | [ONEFLOW.md](./ONEFLOW.md) | Delivery OS + closed loops |

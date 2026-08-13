@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import (
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -185,6 +186,33 @@ class AuditRow(Base):
     subject_id: Mapped[str] = mapped_column(String(64), default="")
     detail_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class UsageEventRow(Base):
+    """Product usage meter — statistics/management only. No price/currency/billing."""
+
+    __tablename__ = "usage_events"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_usage_events_idempotency"),
+        Index("ix_usage_events_tenant_created", "school_id", "membership_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    school_id: Mapped[str] = mapped_column(String(128), index=True)
+    membership_id: Mapped[str] = mapped_column(String(128), index=True)
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tokens_unknown: Mapped[int] = mapped_column(Integer, default=0)
+    estimated: Mapped[int] = mapped_column(Integer, default=0)
+    task_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(64), default="")
+    extra_json: Mapped[str] = mapped_column(Text, default="{}")
+    idempotency_key: Mapped[str] = mapped_column(String(160))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
 
 
 _engine = None
