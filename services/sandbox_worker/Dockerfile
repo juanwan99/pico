@@ -9,7 +9,7 @@ ENV PICO_GIT_SHA=${PICO_GIT_SHA} \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONPATH=/app/services:/app/services/orchestrator
+    PYTHONPATH=/app/services:/app/services/orchestrator \
     PICO_SANDBOX_HOST=0.0.0.0 \
     PICO_SANDBOX_PORT=18767
 
