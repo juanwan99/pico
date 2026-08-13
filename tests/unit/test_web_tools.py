@@ -19,7 +19,10 @@ from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_s
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 from pico_orchestrator.web_guard import assert_public_http_url, parse_public_http_url
 from pico_orchestrator.web_tools import (
+    _FETCH_TIMEOUT,
+    _SEARCH_TIMEOUT,
     _parse_ds_response,
+    _source_item,
     attach_teacher_sources,
     web_fetch_handler,
     web_search_handler,
@@ -215,6 +218,165 @@ def test_parse_ds_empty_is_honest_miss() -> None:
     assert "未检索" in parsed["message"]
 
 
+def test_parse_ds_web_search_call_open_page_becomes_source() -> None:
+    """Live #507 shape: DS web_search_call.action.open_page has the URL;
+    the message is prose without annotations. Must not lie with 未检索.
+    """
+    page = "https://www.jiemian.com/article/1234567.html"
+    body = {
+        "id": "resp_live_shape",
+        "object": "response",
+        "status": "completed",
+        "output_text": (
+            "UTC 日期 2026-08-13。界面新闻报道 DeepSeek-V4-Pro-0813 发布，"
+            "模型未在正文里放 markdown 链接。"
+        ),
+        "output": [
+            {
+                "id": "ws_search",
+                "type": "web_search_call",
+                "status": "completed",
+                "action": {"type": "search", "query": "DeepSeek-V4-Pro-0813 界面新闻"},
+            },
+            {
+                "id": "ws_open",
+                "type": "web_search_call",
+                "status": "completed",
+                "action": {"type": "open_page", "url": page},
+            },
+            {
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": (
+                            "UTC 日期 2026-08-13。界面新闻报道 DeepSeek-V4-Pro-0813 发布，"
+                            "模型未在正文里放 markdown 链接。"
+                        ),
+                    }
+                ],
+            },
+        ],
+    }
+    parsed = _parse_ds_response(body, query="今日 DeepSeek 新闻")
+    assert parsed["honest_miss"] is False
+    assert parsed["retrieved"] is True
+    assert any(s["url"].startswith("https://www.jiemian.com/") for s in parsed["sources"])
+    assert page in parsed["teacher_sources_md"]
+    assert "来源" in parsed["teacher_sources_md"]
+    assert "未检索" not in parsed["message"]
+    assert "界面新闻" in parsed["excerpt"]
+
+
+def test_parse_ds_excerpt_markdown_link_becomes_source() -> None:
+    body = {
+        "output_text": "据 [界面新闻](https://www.jiemian.com/article/abc.html) 报道。",
+        "output": [
+            {
+                "type": "message",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "据 [界面新闻](https://www.jiemian.com/article/abc.html) 报道。",
+                    }
+                ],
+            }
+        ],
+    }
+    parsed = _parse_ds_response(body, query="新闻")
+    assert parsed["honest_miss"] is False
+    assert parsed["retrieved"] is True
+    assert any("jiemian.com" in s["url"] for s in parsed["sources"])
+    assert "https://www.jiemian.com/article/abc.html" in parsed["teacher_sources_md"]
+
+
+def test_parse_ds_excerpt_without_urls_is_honest_miss() -> None:
+    long_text = (
+        "今日 UTC 日期为 2026-08-13。"
+        "界面新闻报道 DeepSeek-V4-Pro-0813 发布，但正文没有给出网址。"
+    ) * 8
+    assert len(long_text) > 200
+    body = {
+        "output_text": long_text,
+        "output": [
+            {
+                "type": "web_search_call",
+                "status": "completed",
+                "action": {"type": "search", "query": "今日新闻"},
+            },
+            {
+                "type": "message",
+                "content": [{"type": "output_text", "text": long_text}],
+            },
+        ],
+    }
+    parsed = _parse_ds_response(body, query="今日新闻")
+    assert parsed["honest_miss"] is True
+    assert parsed["retrieved"] is False
+    assert parsed["sources"] == []
+    assert "未检索" in parsed["message"]
+    assert parsed["teacher_sources_md"] == "未检索到可用来源"
+    assert len(parsed["excerpt"]) > 100
+
+
+def test_parse_ds_web_search_call_loopback_not_sourced() -> None:
+    body = {
+        "output_text": "检索跑过了，但唯一打开的地址是内网。",
+        "output": [
+            {
+                "type": "web_search_call",
+                "status": "completed",
+                "action": {"type": "open_page", "url": "http://127.0.0.1/"},
+            },
+            {
+                "type": "message",
+                "content": [{"type": "output_text", "text": "检索跑过了，但唯一打开的地址是内网。"}],
+            },
+        ],
+    }
+    parsed = _parse_ds_response(body, query="x")
+    assert parsed["sources"] == []
+    assert parsed["honest_miss"] is True
+    assert parsed["retrieved"] is False
+    assert all("127.0.0.1" not in (s.get("url") or "") for s in parsed["sources"])
+    assert "未检索" in parsed["teacher_sources_md"]
+    assert parsed["excerpt"]  # facts may still be used; do not claim sources
+
+
+def test_search_timeout_allows_ds_multi_hop() -> None:
+    assert _SEARCH_TIMEOUT >= 90
+    assert _FETCH_TIMEOUT == 12.0
+
+
+def test_extracted_url_strips_trailing_backtick() -> None:
+    item = _source_item(title="Example", url="https://www.example.com`")
+    assert item is not None
+    assert "`" not in item["url"]
+    assert item["url"].startswith("https://www.example.com")
+    wrapped = _source_item(title="https://www.example.com`", url="`https://www.example.com`")
+    assert wrapped is not None
+    assert wrapped["url"].startswith("https://www.example.com")
+    assert "`" not in wrapped["url"]
+    parsed = _parse_ds_response(
+        {
+            "output_text": "See https://www.example.com` for the page.",
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "action": {"type": "open_page", "url": "https://www.example.com`"},
+                }
+            ],
+        },
+        query="example.com",
+    )
+    assert parsed["honest_miss"] is False
+    assert parsed["retrieved"] is True
+    assert all("`" not in (s.get("url") or "") for s in parsed["sources"])
+    assert any(s["url"].startswith("https://www.example.com") for s in parsed["sources"])
+
+
 @pytest.mark.asyncio
 async def test_web_search_uses_deepseek_not_tavily(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
@@ -229,6 +391,9 @@ async def test_web_search_uses_deepseek_not_tavily(monkeypatch: pytest.MonkeyPat
         payload = (kwargs or {}).get("json") if isinstance(kwargs, dict) else None
         tools = (payload or {}).get("tools")
         assert tools == [{"type": "web_search"}]
+        assert (payload or {}).get("input") == "今日公开新闻"
+        instructions = str((payload or {}).get("instructions") or "")
+        assert "[title](https://...)" in instructions or "markdown" in instructions.lower()
 
         class FakeResp:
             status_code = 200

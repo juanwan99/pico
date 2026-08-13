@@ -32,13 +32,21 @@ _MAX_QUERY = 500
 _MAX_FETCH_BYTES = 512_000
 _MAX_TEXT = 24_000
 _FETCH_TIMEOUT = 12.0
-_SEARCH_TIMEOUT = 35.0
+# DeepSeek multi-hop web_search (search + open_page) often exceeds 35s; ECS ~51s.
+_SEARCH_TIMEOUT = 90.0
 _MAX_REDIRECTS = 3
 _MAX_SOURCES = 8
 _USER_AGENT = "PicoBot/1.0 (+https://github.com/juanwan99/pico; allowlisted-fetch)"
 
 _MD_LINK = re.compile(r"\[([^\]]{1,200})\]\((https?://[^)\s]{1,500})\)")
-_BARE_URL = re.compile(r"https?://[^\s)\]>'\"<>]{8,500}")
+_BARE_URL = re.compile(r"https?://[^\s)\]>'\"<>`]{8,500}")
+_TRAILING_URL_JUNK = "`.,;:!?'\""
+
+# Ask DS to cite; parser must still work if the model writes prose only.
+_DS_CITE_INSTRUCTIONS = (
+    "Cite every used web source as markdown [title](https://...) with the real URL "
+    "from search/open_page results. Never invent URLs."
+)
 
 _SCRIPT_RE = re.compile(r"(?is)<(script|style|noscript|iframe)[^>]*>.*?</\1>")
 _TAG_RE = re.compile(r"(?is)<[^>]+>")
@@ -88,15 +96,27 @@ def _required_query(args: dict[str, Any]) -> str:
     return text
 
 
-def _source_item(*, title: str, url: str, snippet: str = "") -> dict[str, str] | None:
+def _sanitize_extracted_url(url: str) -> str:
+    """Strip wrapping/trailing backticks and prose punctuation. Do not invent URLs."""
     u = (url or "").strip()
+    if len(u) >= 2 and u[0] == u[-1] and u[0] in {"`", "'", '"'}:
+        u = u[1:-1].strip()
+    u = u.strip("`").rstrip(_TRAILING_URL_JUNK)
+    return u.strip()
+
+
+def _source_item(*, title: str, url: str, snippet: str = "") -> dict[str, str] | None:
+    raw = (url or "").strip()
+    u = _sanitize_extracted_url(raw)
     if not u:
         return None
     try:
         parse_public_http_url(u)
     except ToolError:
         return None
-    t = (title or "").strip() or u
+    t = (title or "").strip()
+    if not t or t == raw:
+        t = u
     s = (snippet or "").strip().replace("\n", " ")
     return {"title": t[:200], "url": u[:500], "snippet": s[:400]}
 
@@ -123,10 +143,43 @@ def _extract_markdown_sources(text: str) -> list[dict[str, str]]:
             found.append(item)
     if not found:
         for url in _BARE_URL.findall(text or ""):
-            item = _source_item(title=url, url=url.rstrip(".,;"))
+            item = _source_item(title=url, url=url)
             if item:
                 found.append(item)
     return found
+
+
+def _str_field(obj: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        val = obj.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
+
+
+def _source_from_mapping(obj: dict[str, Any]) -> dict[str, str] | None:
+    """Lift a public http(s) URL from any mapping that carries url/href.
+
+    Covers url_citation annotations, web_search_result rows, and DeepSeek
+    Responses ``web_search_call.action`` (``open_page`` / ``find_in_page`` /
+    any action with ``url``). Intranet/admin hosts are dropped by
+    ``_source_item`` → ``parse_public_http_url``. Never invents URLs.
+    """
+    url = _str_field(obj, "url", "href")
+    if not url:
+        return None
+    title = _str_field(obj, "title", "name")
+    snippet = _str_field(obj, "snippet", "description", "summary")
+    otype = str(obj.get("type") or "")
+    # Do not treat the model message body as a citation snippet.
+    if not snippet and otype not in {"output_text", "text", "message"}:
+        text = obj.get("text")
+        content = obj.get("content")
+        if isinstance(text, str) and text.strip():
+            snippet = text.strip()
+        elif isinstance(content, str) and content.strip():
+            snippet = content.strip()
+    return _source_item(title=title, url=url, snippet=snippet)
 
 
 def _parse_ds_response(body: dict[str, Any], *, query: str) -> dict[str, Any]:
@@ -137,19 +190,10 @@ def _parse_ds_response(body: dict[str, Any], *, query: str) -> dict[str, Any]:
         if depth > 12:
             return
         if isinstance(obj, dict):
+            item = _source_from_mapping(obj)
+            if item:
+                sources.append(item)
             otype = str(obj.get("type") or "")
-            if otype in {"url_citation", "citation", "source", "web_search_result"} or (
-                obj.get("url") and otype in {"", "url_citation"}
-            ):
-                item = _source_item(
-                    title=str(obj.get("title") or obj.get("url") or ""),
-                    url=str(obj.get("url") or obj.get("href") or ""),
-                    snippet=str(
-                        obj.get("snippet") or obj.get("text") or obj.get("content") or ""
-                    ),
-                )
-                if item:
-                    sources.append(item)
             if isinstance(obj.get("text"), str) and otype in {"", "output_text", "text"}:
                 texts.append(str(obj.get("text")))
             for val in obj.values():
@@ -175,7 +219,7 @@ def _parse_ds_response(body: dict[str, Any], *, query: str) -> dict[str, Any]:
     )
     return {
         "query": query,
-        "retrieved": retrieved and not honest_miss,
+        "retrieved": retrieved,
         "honest_miss": honest_miss,
         "message": message,
         "sources": sources,
@@ -235,6 +279,7 @@ async def _deepseek_web_search(query: str) -> dict[str, Any]:
     payload = {
         "model": provider.model or "deepseek-v4-flash",
         "input": query,
+        "instructions": _DS_CITE_INSTRUCTIONS,
         "tools": [{"type": "web_search"}],
         "tool_choice": {"type": "web_search"},
     }
