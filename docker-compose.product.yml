@@ -27,10 +27,34 @@ services:
       PICO_ACCEPT_TEST_ISSUER: "false"
       PICO_ALLOWED_MODELS: ${PICO_ALLOWED_MODELS:?set PICO_ALLOWED_MODELS}
       PICO_OPENAI_PROXY_KEY: ${PICO_OPENAI_PROXY_KEY:?set a strong internal proxy key}
+      PICO_SANDBOX_URL: http://pico-sandbox:18767
+      PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
     # not published
     mem_limit: 512m
     depends_on:
       - mongo
+      - pico-sandbox
+
+  pico-sandbox:
+    build:
+      context: .
+      dockerfile: services/sandbox_worker/Dockerfile
+    restart: unless-stopped
+    privileged: false
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      PICO_SANDBOX_HOST: "0.0.0.0"
+      PICO_SANDBOX_PORT: "18767"
+      PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
+    mem_limit: 256m
+    pids_limit: 128
 
   librechat:
     build:

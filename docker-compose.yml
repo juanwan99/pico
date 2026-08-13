@@ -22,8 +22,30 @@ services:
       - .env
     environment:
       PICO_DATABASE_URL: sqlite+aiosqlite:///./data/pico.db
+      PICO_SANDBOX_URL: http://pico-sandbox:18767
+      PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
     depends_on:
       - mongo
+      - pico-sandbox
+
+  pico-sandbox:
+    build:
+      context: .
+      dockerfile: services/sandbox_worker/Dockerfile
+    privileged: false
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      PICO_SANDBOX_HOST: "0.0.0.0"
+      PICO_SANDBOX_PORT: "18767"
+      PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
+    # Internal only — do not publish 8080/18088.
 
   librechat:
     build:

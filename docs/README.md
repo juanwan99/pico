@@ -47,7 +47,7 @@ GOALS: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · WHAT-IS-PICO；STATE-NOW（快照�
 | **0f** | **[FAST-PATH.md](./FAST-PATH.md)** | **日常快路径（改合装测 · 禁重体系）** |
 | **0g** | **[USAGE-LEDGER.md](./USAGE-LEDGER.md)** | **用量账本（统计/管理 · 不做钱 · #506）** |
 | **0g′** | **[SANDBOX-S1.md](./SANDBOX-S1.md)** | **隔离工作区 + 看见自己的页（#508）** |
-| **0g″** | **[SANDBOX-S2.md](./SANDBOX-S2.md)** | **同页光栅 PNG + 隔离加固（#513）· B2 人在环 · 教务默认拒绝** |
+| **0g″** | **[SANDBOX-S2.md](./SANDBOX-S2.md)** | **强于 S1 的 sidecar 隔离 + 同页光栅 + 人在环 B2（#516）· 教务/微信非必须过关** |
 | 0 | GitHub PR/Issue/Actions | **Task state & evidence** |
 | 1 | [AGENTS.md](../AGENTS.md) | Machine + human HARD scope |
 | 2 | [ONEFLOW.md](./ONEFLOW.md) | Delivery OS + closed loops |

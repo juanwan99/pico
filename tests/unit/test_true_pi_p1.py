@@ -284,7 +284,8 @@ def test_bridge_allowlist_is_thin() -> None:
     assert "web_search" in ALLOWED_GATEWAY_TOOLS
     assert "web_fetch" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_preview_inspect" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 11
+    assert "sandbox_browser_open" in ALLOWED_GATEWAY_TOOLS
+    assert len(ALLOWED_GATEWAY_TOOLS) == 13
 
 
 def test_shadow_diff_flags_false_green() -> None:

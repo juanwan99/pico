@@ -38,7 +38,7 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
-pythonpath = ["services/api", "services/orchestrator"]
+pythonpath = ["services/api", "services/orchestrator", "services"]
 
 [tool.ruff]
 line-length = 100

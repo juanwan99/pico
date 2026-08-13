@@ -83,11 +83,38 @@ services:
       PICO_TRUE_PI_BYPASS: ${PICO_TRUE_PI_BYPASS:-}
       PICO_TRUE_PI_SHADOW: ${PICO_TRUE_PI_SHADOW:-}
       PICO_TRUE_PI_BIN: ${PICO_TRUE_PI_BIN:-}
+      PICO_SANDBOX_URL: http://127.0.0.1:18767
+      PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
     volumes:
       - pico_data:/app/data
       - ./.env:/app/.env:ro
     depends_on:
       - mongo
+
+  pico-sandbox:
+    image: pico-sandbox:v13
+    build:
+      context: .
+      dockerfile: services/sandbox_worker/Dockerfile
+    restart: unless-stopped
+    # Stronger than S1 app-layer: own pid/user/net ns. Not privileged. Not host Chrome.
+    privileged: false
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      - "127.0.0.1:18767:18767"
+    environment:
+      PICO_SANDBOX_HOST: "0.0.0.0"
+      PICO_SANDBOX_PORT: "18767"
+      PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
+    mem_limit: 256m
+    pids_limit: 128
 
   librechat:
     image: pico-librechat:v13
