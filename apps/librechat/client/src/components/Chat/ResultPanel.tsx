@@ -32,11 +32,13 @@ import {
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
+import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
 import PicoSearchSources from './PicoSearchSources';
+import SandboxWebPane from './SandboxWebPane';
 
-type TopView = 'overview' | 'files' | 'browser';
+type TopView = 'overview' | 'files' | 'browser' | 'web';
 
 type ArtifactItem = {
   id: string;
@@ -207,6 +209,7 @@ function collectArtifacts(messages: TMessage[] | null | undefined): ArtifactItem
 const VIEW_LABEL: Record<TopView, string> = {
   overview: '概览',
   files: '工作空间文件',
+  web: '网页',
   browser: '浏览器',
 };
 
@@ -269,6 +272,7 @@ export default function ResultPanel({
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
   const navigate = useNavigate();
   const tokenUsageLabel = formatRunTokenUsage(run);
+  const sandboxSession = useMemo(() => collectPicoSandboxSession(runEvents), [runEvents]);
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
     if (picoArtifacts?.length) {
@@ -320,6 +324,12 @@ export default function ResultPanel({
     }
     return messageArts;
   }, [picoArtifacts, messageArts]);
+
+  useEffect(() => {
+    if (sandboxSession) {
+      setView('web');
+    }
+  }, [sandboxSession?.sessionId]);
 
   // Prefer https links in artifact inline as browser targets
   useEffect(() => {
@@ -513,7 +523,8 @@ export default function ResultPanel({
   return (
     <aside
       className={cn(
-        'pico-result-panel flex h-full w-[340px] shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary',
+        'pico-result-panel flex h-full shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary',
+        view === 'web' ? 'w-[400px]' : 'w-[340px]',
         expanded && 'pico-result-panel--expanded fixed inset-0 z-[200]',
       )}
       data-testid="result-panel"
@@ -950,6 +961,27 @@ export default function ResultPanel({
                 </ul>
               )}
             </div>
+          </div>
+        )}
+
+        {view === 'web' && (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {sandboxSession ? (
+              <SandboxWebPane
+                sessionId={sandboxSession.sessionId}
+                initialUrl={sandboxSession.url}
+                initialTitle={sandboxSession.title}
+                humanCopy={sandboxSession.humanCopy}
+              />
+            ) : (
+              <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-[#9a9a9a]">
+                <Globe className="h-8 w-8 opacity-35" strokeWidth={1.25} />
+                <p className="text-[13px]">还没有隔离网页</p>
+                <p className="max-w-[16rem] text-[11px] leading-relaxed">
+                  对 Pico 说「打开某某公开页」后，画面会自动出现在这里，无需手拼地址。
+                </p>
+              </div>
+            )}
           </div>
         )}
 

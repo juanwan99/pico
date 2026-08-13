@@ -307,6 +307,34 @@ router.post('/v1/changes/:id/reject', (req, res) => {
   }
 });
 
+router.get('/v1/sandbox/sessions/:sessionId', (req, res) => {
+  try {
+    assertId(req.params.sessionId, 'sessionId');
+    return proxy(req, res, `/v1/sandbox/sessions/${req.params.sessionId}`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+router.get('/v1/sandbox/sessions/:sessionId/screenshot', (req, res) => {
+  try {
+    assertId(req.params.sessionId, 'sessionId');
+    return proxy(req, res, `/v1/sandbox/sessions/${req.params.sessionId}/screenshot`, {
+      binary: true,
+    });
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+router.post('/v1/sandbox/sessions/:sessionId/input', (req, res) => {
+  try {
+    assertId(req.params.sessionId, 'sessionId');
+    // Do not log req.body — may contain a password typed in the result pane.
+    return proxy(req, res, `/v1/sandbox/sessions/${req.params.sessionId}/input`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+
 // R5: teacher self-read wrong paths → human 404 (not opaque Express default).
 router.use((req, res) => {
   res.status(404).json({

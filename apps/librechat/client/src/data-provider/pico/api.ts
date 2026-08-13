@@ -336,3 +336,46 @@ export async function confirmPicoChange(id: string) {
 export async function rejectPicoChange(id: string) {
   return picoFetch<{ change: PicoChange }>(`/v1/changes/${id}/reject`, { method: 'POST' });
 }
+
+export type PicoSandboxSessionMeta = {
+  ok?: boolean;
+  session_id: string;
+  url?: string;
+  title?: string;
+  human_copy?: string;
+  engine?: string;
+  clicked?: boolean;
+  typed?: boolean;
+};
+
+export async function getPicoSandboxSession(sessionId: string) {
+  return picoFetch<PicoSandboxSessionMeta>(
+    `/v1/sandbox/sessions/${encodeURIComponent(sessionId)}`,
+  );
+}
+
+export async function getPicoSandboxScreenshot(sessionId: string): Promise<Blob> {
+  const res = await fetch(
+    `/api/pico/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/screenshot`,
+    { credentials: 'include', headers: authHeaders(), cache: 'no-store' },
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`pico ${res.status}: ${text.slice(0, 200)}`);
+  }
+  return res.blob();
+}
+
+export async function postPicoSandboxInput(
+  sessionId: string,
+  body: { click_x?: number; click_y?: number; text?: string; secret?: string },
+) {
+  return picoFetch<PicoSandboxSessionMeta>(
+    `/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/input`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: { Accept: 'application/json' },
+    },
+  );
+}

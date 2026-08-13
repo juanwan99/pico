@@ -265,6 +265,56 @@ describe('Pico proxy routes', () => {
     },
   );
 
+  it('proxies sandbox session meta for the result pane', async () => {
+    const response = await request(app).get(
+      '/api/pico/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          'X-Pico-Membership-Id': 'member-123',
+        }),
+      }),
+    );
+  });
+
+  it('proxies sandbox screenshot bytes', async () => {
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    global.fetch.mockResolvedValueOnce({
+      status: 200,
+      headers: { get: (name) => (name === 'content-type' ? 'image/png' : null) },
+      arrayBuffer: async () => bytes,
+    });
+    const response = await request(app).get(
+      '/api/pico/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa/screenshot',
+    );
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(bytes);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa/screenshot',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('forwards pane input JSON without inventing a second path', async () => {
+    const response = await request(app)
+      .post('/api/pico/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa/input')
+      .send({ click_x: 12, click_y: 40 });
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa/input',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ click_x: 12, click_y: 40 }),
+      }),
+    );
+  });
+
   it('returns human 404 for unknown teacher self-read paths', async () => {
     const response = await request(app).get('/api/pico/v1/artifacts/artifact-1/download');
 

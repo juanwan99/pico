@@ -32,6 +32,7 @@ import Footer from './Footer';
 import { cn } from '~/utils';
 import store from '~/store';
 import { usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
+import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 
 function LoadingSpinner() {
   return (
@@ -148,11 +149,12 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     }
     if (
       (ledger.artifacts?.length ?? 0) > 0 ||
-      ['succeeded', 'failed', 'cancelled'].includes(ledger.run?.status || '')
+      ['succeeded', 'failed', 'cancelled'].includes(ledger.run?.status || '') ||
+      collectPicoSandboxSession(ledger.events)
     ) {
       setResultOpen(true);
     }
-  }, [compactResult, conversationId, ledger.artifacts, ledger.run?.status]);
+  }, [compactResult, conversationId, ledger.artifacts, ledger.run?.status, ledger.events]);
 
   if (isLoading && conversationId !== Constants.NEW_CONVO) {
     content = <LoadingSpinner />;
