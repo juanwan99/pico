@@ -1,0 +1,6 @@
+tip_sha: f014cd483f76cb41bb4e0ca046afb6b1dec547f1
+cn_search: retrieved=true sources=5 dirty_ws_call_id=0
+fetch_govcn: retrieved=true truncated=false title=教育部关于印发义务教育课程方案和课程标准（2022年版）的通知_国务院部门文件_中国政府网 quote=课程标准
+wiki: fetch_failed timeout (no longer web.denied intranet)
+loopback_18765: web.denied
+CLAIM-WB-DEGREE-WEB: NO
