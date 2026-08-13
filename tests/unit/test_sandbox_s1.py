@@ -22,12 +22,14 @@ from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.sandbox_s1 import (
     extract_title_h1,
     isolation_dir,
+    join_workspace_path,
     light_exec_source,
     mint_preview_query,
     try_parse_artifact_preview_url,
     verify_preview_sig,
     workspace_id_for,
 )
+from pico_orchestrator.sandbox_s2 import PNG_MAGIC, raster_html_to_png
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
 
 
@@ -55,18 +57,36 @@ class MemoryArtifactStore:
         content: str | bytes,
         kind: str,
     ) -> dict[str, Any]:
-        body = content if isinstance(content, str) else content.decode("utf-8")
-        row = {
-            "artifact_id": f"art-{sum(map(len, self.rows.values())) + 1}",
-            "title": title,
-            "content": body,
-            "kind": kind,
-            "run_id": self._run_id,
-            "task_id": self._task_id,
-            "size": len(body.encode("utf-8")),
-        }
+        import base64
+
+        if isinstance(content, bytes):
+            row = {
+                "artifact_id": f"art-{sum(map(len, self.rows.values())) + 1}",
+                "title": title,
+                "content": None,
+                "content_base64": base64.b64encode(content).decode("ascii"),
+                "kind": kind,
+                "run_id": self._run_id,
+                "task_id": self._task_id,
+                "size": len(content),
+                "byte_size": len(content),
+                "content_encoding": "base64",
+            }
+        else:
+            body = content
+            row = {
+                "artifact_id": f"art-{sum(map(len, self.rows.values())) + 1}",
+                "title": title,
+                "content": body,
+                "kind": kind,
+                "run_id": self._run_id,
+                "task_id": self._task_id,
+                "size": len(body.encode("utf-8")),
+                "byte_size": len(body.encode("utf-8")),
+                "content_encoding": "utf8",
+            }
         self._rows(principal).append(row)
-        return {k: v for k, v in row.items() if k != "content"}
+        return {k: v for k, v in row.items() if k not in {"content", "content_base64"}}
 
     async def read(
         self,
@@ -119,6 +139,19 @@ async def test_inspect_same_run_html_returns_title_h1() -> None:
     assert seen["seen"] is True
     assert seen["title"] == "教案首页"
     assert seen["h1"] == "第一课"
+    shot = seen.get("screenshot") or seen.get("raster")
+    assert isinstance(shot, dict)
+    assert shot.get("mime") == "image/png"
+    assert int(shot.get("byte_size") or 0) > 64
+    assert shot.get("artifact_id")
+    assert str(shot.get("download_path") or "").startswith("/v1/artifacts/")
+    png_row = await store.read(owner, artifact_id=str(shot["artifact_id"]), title=None)
+    assert png_row is not None
+    raw = png_row.get("content_base64")
+    import base64
+
+    png_bytes = base64.b64decode(raw) if raw else b""
+    assert png_bytes.startswith(PNG_MAGIC)
 
     via_url = await gw.invoke(
         owner,
@@ -259,14 +292,22 @@ async def test_workspace_read_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_sandbox_module_does_not_use_8080_or_chrome() -> None:
     import pico_orchestrator.sandbox_s1 as s1
+    import pico_orchestrator.sandbox_s2 as s2
 
-    src = inspect.getsource(s1)
-    assert "8080" not in src
-    assert "18088" not in src
-    assert "playwright" not in src.lower()
-    assert "puppeteer" not in src.lower()
-    assert "chromium" not in src.lower()
-    assert "webdriver" not in src.lower()
+    for mod in (s1, s2):
+        src = inspect.getsource(mod)
+        assert "8080" not in src
+        assert "18088" not in src
+    src1 = inspect.getsource(s1)
+    assert "playwright" not in src1.lower()
+    assert "puppeteer" not in src1.lower()
+    assert "chromium" not in src1.lower()
+    assert "webdriver" not in src1.lower()
+    src2 = inspect.getsource(s2)
+    assert "playwright" not in src2.lower()
+    assert "puppeteer" not in src2.lower()
+    assert "chromium" not in src2.lower()
+    assert "webdriver" not in src2.lower()
 
 
 def test_isolation_dirs_do_not_overlap_accounts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -349,3 +390,62 @@ def test_tool_schemas_include_inspect() -> None:
     assert "sandbox_preview_inspect" in names
     assert "sandbox_workspace_exec" in names
     assert "web_search" in names
+
+
+def test_workspace_rejects_absolute_nul_and_dotdot(tmp_path: Path) -> None:
+    root = tmp_path / "ws"
+    root.mkdir()
+    with pytest.raises(ToolError) as abs_denied:
+        join_workspace_path(root, "/etc/passwd")
+    assert abs_denied.value.code == "sandbox.path_denied"
+    with pytest.raises(ToolError) as nul_denied:
+        join_workspace_path(root, "foo\x00bar.html")
+    assert nul_denied.value.code == "sandbox.path_denied"
+    with pytest.raises(ToolError) as dot_denied:
+        join_workspace_path(root, "a/../../etc/passwd")
+    assert dot_denied.value.code == "sandbox.path_denied"
+
+
+def test_workspace_rejects_symlink_escape(tmp_path: Path) -> None:
+    root = tmp_path / "ws"
+    root.mkdir()
+    outside = tmp_path / "secret.txt"
+    outside.write_text("nope", encoding="utf-8")
+    link = root / "escape.html"
+    link.symlink_to(outside)
+    with pytest.raises(ToolError) as denied:
+        join_workspace_path(root, "escape.html")
+    assert denied.value.code == "sandbox.path_denied"
+
+
+def test_raster_html_is_real_png() -> None:
+    png = raster_html_to_png(PAGE)
+    assert png.startswith(PNG_MAGIC)
+    assert len(png) > 128
+    other = raster_html_to_png("<html><title>other</title><h1>B</h1></html>")
+    assert other.startswith(PNG_MAGIC)
+    assert png != other
+
+
+@pytest.mark.asyncio
+async def test_inspect_keeps_title_when_raster_fails() -> None:
+    store = MemoryArtifactStore(run_id="run-s1")
+    gw = build_default_gateway(store)
+    owner = P("school-a", "member-a", ["ai:run"])
+    created = await gw.invoke(
+        owner,
+        "generate_html_document",
+        {"title": "lesson.html", "marker": "mk-s1", "body": PAGE},
+    )
+    with patch(
+        "pico_orchestrator.tools_builtin.raster_html_isolated",
+        side_effect=RuntimeError("raster boom"),
+    ):
+        seen = await gw.invoke(
+            owner,
+            "sandbox_preview_inspect",
+            {"artifact_id": created["artifact_id"]},
+        )
+    assert seen["title"] == "教案首页"
+    assert seen["h1"] == "第一课"
+    assert "screenshot" not in seen

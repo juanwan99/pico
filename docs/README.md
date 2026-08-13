@@ -47,6 +47,7 @@ GOALS: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · WHAT-IS-PICO；STATE-NOW（快照�
 | **0f** | **[FAST-PATH.md](./FAST-PATH.md)** | **日常快路径（改合装测 · 禁重体系）** |
 | **0g** | **[USAGE-LEDGER.md](./USAGE-LEDGER.md)** | **用量账本（统计/管理 · 不做钱 · #506）** |
 | **0g′** | **[SANDBOX-S1.md](./SANDBOX-S1.md)** | **隔离工作区 + 看见自己的页（#508）** |
+| **0g″** | **[SANDBOX-S2.md](./SANDBOX-S2.md)** | **同页光栅 PNG + 隔离加固（#513）· B2 人在环 · 教务默认拒绝** |
 | 0 | GitHub PR/Issue/Actions | **Task state & evidence** |
 | 1 | [AGENTS.md](../AGENTS.md) | Machine + human HARD scope |
 | 2 | [ONEFLOW.md](./ONEFLOW.md) | Delivery OS + closed loops |
@@ -87,4 +88,4 @@ New long plans: **one ACTIVE plan** at a time. Previous plan → COMPLETED heade
 **Binding product direction:** [HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md) — Pico full stack + Pi + DeepSeek · Web WorkBuddy-degree six bars.  
 **Memory reset:** [MEMORY-RESET.md](./MEMORY-RESET.md) · **SOLO:** [STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md).  
 **Task card standard:** [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（CLAIM/BASE/PRODUCT）。  
-**Current day card:** **T-P0-PI-CUTOVER** · [DAY-TASK-P0-PI-CUTOVER.md](./DAY-TASK-P0-PI-CUTOVER.md) · issue #310.
+**Current day card:** **T-HYGIENE-SEARCH-UX-SANDBOX-S2** · issue [#513](https://github.com/juanwan99/pico/issues/513)（主线：计量+搜索+沙箱）。历史日卡 [DAY-TASK-P0-PI-CUTOVER.md](./DAY-TASK-P0-PI-CUTOVER.md) · #310 勿当现行派工。

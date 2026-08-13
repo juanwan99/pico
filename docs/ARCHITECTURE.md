@@ -27,8 +27,15 @@ NOTE: "Orchestration" below is TARGET; implementation as of freeze may still be 
 
 - **S1 (#508):** process-level isolation keyed by `school_id + membership_id + run_id`;
   HTML preview + `sandbox_preview_inspect` (title/h1). See [SANDBOX-S1.md](./SANDBOX-S1.md).
-- **Not** a per-school VM / cloud PC / host Chrome on 8080. School isolation remains
+- **S2 (#513):** same inspect tool also stores a real PNG raster of **this run's** HTML
+  (`screenshot` / `raster` artifact). Isolation tests cover absolute / NUL / `..` /
+  symlink escape. See [SANDBOX-S2.md](./SANDBOX-S2.md). B2 login stays human-in-the-loop;
+  教务/微信扫码 default deny; B3 delegated login is out.
+- **Not** a per-school VM / cloud PC / host Chrome on 8080/18088. School isolation remains
   data tenancy; exec stays inside the workspace with timeout/size caps.
+- **Search UX (#507/#513):** gateway `web_search` / `web_fetch` return `sources[]` and
+  `teacher_sources_md`; the LibreChat shell shows clickable 来源 (or honest 未检索).
+  Do not invent URLs.
 
 ## Integration contract (sketch)
 

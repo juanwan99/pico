@@ -39,11 +39,13 @@ from pico_orchestrator.sandbox_s1 import (
     html_from_artifact_row,
     light_exec_with_timeout,
     materialize_workspace_html,
+    safe_segment,
     try_parse_artifact_preview_url,
     verify_preview_sig,
     with_io_timeout,
     workspace_id_for,
 )
+from pico_orchestrator.sandbox_s2 import PNG_MAGIC, raster_html_isolated, raster_meta_from_write
 from pico_orchestrator.usage_hook import emit_sandbox_usage
 from pico_orchestrator.web_tools import web_fetch_handler, web_search_handler
 
@@ -593,7 +595,7 @@ def _workspace_handlers(
         }
 
     async def inspect_preview(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        """B0 see-page: title/h1 of THIS run's HTML. Never fetches public/intranet URLs."""
+        """S2 see-page: title/h1 plus PNG raster of THIS run's HTML. Never fetches URLs."""
         started = time.perf_counter()
         artifact_id = args.get("artifact_id")
         artifact_id = str(artifact_id).strip() if artifact_id is not None else None
@@ -665,6 +667,29 @@ def _workspace_handlers(
                 principal,
                 store=store,
             )
+            raster_fields: dict[str, Any] = {}
+            screenshot_id = None
+            try:
+                png = await raster_html_isolated(html)
+                if png and png.startswith(PNG_MAGIC):
+                    shot_title = (
+                        f"inspect-{safe_segment(str(meta.get('artifact_id') or 'page'), fallback='page')}.png"
+                    )
+                    deny_secret_filename(shot_title)
+                    shot = await with_io_timeout(
+                        store.write(
+                            principal,
+                            title=shot_title,
+                            content=png,
+                            kind="image",
+                        ),
+                        what="sandbox_preview_inspect_raster",
+                    )
+                    raster_fields = raster_meta_from_write(shot, byte_size=len(png))
+                    screenshot_id = raster_fields.get("screenshot", {}).get("artifact_id")
+                    seen = True
+            except Exception:  # noqa: BLE001 — raster must not drop title/h1
+                raster_fields = {}
             out = {
                 "ok": True,
                 "seen": seen,
@@ -676,18 +701,19 @@ def _workspace_handlers(
                 "workspace_id": meta.get("workspace_id"),
                 "message": (
                     f"已看见页面 title={title_text or '（无）'} h1={h1_text or '（无）'}"
-                    if seen
+                    if (title_text or h1_text)
                     else "已打开本次预览，但文档没有 title/h1"
                 ),
+                **raster_fields,
             }
-            await _emit(
-                True,
-                {
-                    "artifact_id": out["artifact_id"],
-                    "workspace_id": out["workspace_id"],
-                    "seen": seen,
-                },
-            )
+            extra_ok: dict[str, Any] = {
+                "artifact_id": out["artifact_id"],
+                "workspace_id": out["workspace_id"],
+                "seen": seen,
+            }
+            if screenshot_id:
+                extra_ok["screenshot_artifact_id"] = screenshot_id
+            await _emit(True, extra_ok)
             return out
         except ToolError as exc:
             await _emit(False, {"error_code": exc.code, "artifact_id": artifact_id})
@@ -964,7 +990,7 @@ def build_default_gateway(
             name="sandbox_preview_inspect",
             description=(
                 "See THIS run's HTML preview: given artifact_id or this-run preview_url, "
-                "return title and h1 so the model can prove it saw the page. "
+                "return title, h1, and a PNG screenshot artifact of the same-run HTML. "
                 "Does not fetch public sites or intranet (127.0.0.1 / pico.aivia.asia admin denied). "
                 "Args: artifact_id? | preview_url?"
             ),

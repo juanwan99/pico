@@ -125,7 +125,7 @@ await record_usage_event(
 - search/sandbox **不必**填 token 字段（保持 null + `tokens_unknown=1` 即可）。
 - `extra` 只放工具/时长/次数；禁止单价与币种。
 - 幂等键必须含 run 或 tool_call / session，便于重试。
-- **#508：** `sandbox` 已 emit（不再是预留）。写入点：`sandbox_preview_inspect`、`generate_html_document` 预览落盘、可选 `sandbox_workspace_exec`。合同见 [`docs/SANDBOX-S1.md`](./SANDBOX-S1.md)。
+- **#508 / #513：** `sandbox` 已 emit（不再是预留）。写入点：`sandbox_preview_inspect`（含 S2 光栅）、`generate_html_document` 预览落盘、可选 `sandbox_workspace_exec`。合同见 [`docs/SANDBOX-S1.md`](./SANDBOX-S1.md) · [`docs/SANDBOX-S2.md`](./SANDBOX-S2.md)。截图 `artifact_id` 可放进 extra；仍禁止钱字段。
 
 ---
 

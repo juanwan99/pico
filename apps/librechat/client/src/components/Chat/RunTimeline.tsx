@@ -6,6 +6,7 @@ const VISIBLE_EVENT_TYPES = new Set([
   'skill.unknown',
   'tool.call',
   'tool.result',
+  'search.sources',
   'artifact.created',
   'agent.step',
   'run.status',
@@ -66,6 +67,30 @@ export function describePicoRunEvent(
     return {
       title: `工具结果 · ${textValue(payload, 'tool', 'name') || '未命名工具'}`,
       detail,
+    };
+  }
+  if (event.type === 'search.sources') {
+    const sources = Array.isArray(payload.sources) ? payload.sources : [];
+    const links = sources
+      .map((item) => {
+        if (!item || typeof item !== 'object') {
+          return null;
+        }
+        const row = item as { title?: unknown; url?: unknown };
+        const url = typeof row.url === 'string' ? row.url.trim() : '';
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          return null;
+        }
+        const title = typeof row.title === 'string' && row.title.trim() ? row.title.trim() : url;
+        return { title, url };
+      })
+      .filter((item): item is { title: string; url: string } => Boolean(item));
+    if (links.length === 0 || payload.honest_miss === true) {
+      return { title: '来源', detail: '未检索到可用来源' };
+    }
+    return {
+      title: `来源 · ${links.length} 条`,
+      detail: links.map((item) => item.title).join(' · '),
     };
   }
   if (event.type === 'agent.step') {
@@ -133,6 +158,27 @@ export function describePicoRunEvent(
     };
   }
   return { title: event.type, detail: null };
+}
+
+function searchSourceLinks(event: PicoRunEvent): { title: string; url: string }[] {
+  if (event.type !== 'search.sources') {
+    return [];
+  }
+  const sources = Array.isArray(event.payload?.sources) ? event.payload.sources : [];
+  const links: { title: string; url: string }[] = [];
+  for (const item of sources) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const row = item as { title?: unknown; url?: unknown };
+    const url = typeof row.url === 'string' ? row.url.trim() : '';
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      continue;
+    }
+    const title = typeof row.title === 'string' && row.title.trim() ? row.title.trim() : url;
+    links.push({ title, url });
+  }
+  return links;
 }
 
 function EventIcon({ type }: { type: string }) {
@@ -212,6 +258,7 @@ export default function RunTimeline({
         <ol className="space-y-1.5">
           {visible.map((event) => {
             const description = describePicoRunEvent(event, runSucceeded);
+            const links = searchSourceLinks(event);
             return (
               <li
                 key={event.id}
@@ -222,7 +269,23 @@ export default function RunTimeline({
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-[12px] font-medium">{description.title}</p>
-                  {description.detail ? (
+                  {links.length > 0 ? (
+                    <ul className="mt-0.5 space-y-0.5">
+                      {links.map((link) => (
+                        <li key={link.url}>
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block truncate text-[11px] text-[#3b6fd9] underline-offset-2 hover:underline"
+                            data-testid="pico-timeline-source-link"
+                          >
+                            {link.title}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : description.detail ? (
                     <p className="mt-0.5 truncate text-[11px] text-[#8c8c8c]">
                       {description.detail}
                     </p>

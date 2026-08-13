@@ -19,6 +19,7 @@ dependencies = [
   "aiosqlite>=0.20,<1",
   # Orchestrator — DeepSeek/OpenAI tools (Pi default kernel)
   "openai>=1.50,<3",
+  "pillow>=10.4,<12",
 ]
 
 [project.optional-dependencies]

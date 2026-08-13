@@ -105,6 +105,16 @@ def test_html_preview_is_404_for_other_account_and_inspect_sees_page(client) -> 
     assert payload["title"] == "教案首页"
     assert payload["h1"] == "第一课"
     assert payload["seen"] is True
+    shot = payload.get("screenshot") or payload.get("raster")
+    assert isinstance(shot, dict)
+    assert shot.get("mime") == "image/png"
+    assert int(shot.get("byte_size") or 0) > 64
+    shot_id = shot.get("artifact_id")
+    assert shot_id
+    png_get = client.get(f"/v1/artifacts/{shot_id}/content", headers=owner)
+    assert png_get.status_code == 200, png_get.text
+    assert png_get.content[:8] == b"\x89PNG\r\n\x1a\n"
+    assert client.get(f"/v1/artifacts/{shot_id}/content", headers=outsider).status_code == 404
 
     denied = _invoke(
         client,

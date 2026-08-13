@@ -135,6 +135,17 @@ Body truncated. Failures are human-readable (`web.denied` / `web.fetch_failed`).
 
 **Usage:** `kind=search`, `source="web_fetch"`, extra may include `host` (never price).
 
+**Teacher display (#513):** gateway `sources[]` / `teacher_sources_md` must be shown as clickable links in the result panel or main process. Honest miss copy is **未检索到可用来源**. Never invent URLs.
+
+### 4.6 `sandbox_preview_inspect`  ★ #508 S1 · #513 S2
+
+**Arguments:** `{ "artifact_id"?: string, "preview_url"?: string }` — this-run HTML only.
+
+**Result:** `{ "title", "h1", "seen", "screenshot"?: { "artifact_id", "download_path", "mime", "byte_size" }, "raster"?: … }`  
+S2 adds a real PNG raster of the same-run HTML (open via `GET /v1/artifacts/{id}/content`). Raster failure must not drop title/h1. Loopback / admin hosts still `web.denied`. Cross-account → `artifact.not_found`.
+
+**Usage:** `kind=sandbox`, `source="sandbox"`. See [`docs/SANDBOX-S2.md`](../SANDBOX-S2.md).
+
 ## 5. Cross-school semantics
 
 | Step | Behavior |

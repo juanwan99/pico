@@ -7,13 +7,16 @@ import { Download, FileText, Loader2 } from 'lucide-react';
 import {
   getPicoArtifactContent,
   type PicoArtifact,
+  type PicoRunEvent,
 } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
+import PicoSearchSources from './PicoSearchSources';
 
 const BOOKKEEPING = new Set(['回复摘要', 'summary', 'run summary']);
 
 type Props = {
   artifacts?: PicoArtifact[] | null;
+  runEvents?: PicoRunEvent[] | null;
   onOpenResultPanel?: () => void;
 };
 
@@ -36,7 +39,7 @@ function isHtml(a: PicoArtifact): boolean {
   return /\.html?$/i.test(name) || /html/i.test(a.kind || '');
 }
 
-export default function MainDeliveryStrip({ artifacts, onOpenResultPanel }: Props) {
+export default function MainDeliveryStrip({ artifacts, runEvents, onOpenResultPanel }: Props) {
   const items = useMemo(
     () => (artifacts ?? []).filter((a) => a?.id && !isBookkeeping(a)),
     [artifacts],
@@ -46,8 +49,10 @@ export default function MainDeliveryStrip({ artifacts, onOpenResultPanel }: Prop
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
 
+  const sourcesBlock = <PicoSearchSources events={runEvents} />;
+
   if (items.length === 0) {
-    return null;
+    return sourcesBlock;
   }
 
   const openArtifact = async (a: PicoArtifact) => {
@@ -106,6 +111,7 @@ export default function MainDeliveryStrip({ artifacts, onOpenResultPanel }: Prop
       className="mx-auto w-full max-w-[797px] px-2 pb-2 sm:px-0"
       data-testid="main-delivery-strip"
     >
+      {sourcesBlock}
       <div className="rounded-xl border border-[#cfe0ff] bg-[#f5f9ff] px-3 py-2.5 shadow-[0_1px_2px_rgba(59,111,217,0.08)] dark:border-border-light dark:bg-surface-secondary">
         <div className="mb-1.5 flex items-center justify-between gap-2">
           <p className="text-[12px] font-semibold text-[#1a3a7a] dark:text-text-primary">
