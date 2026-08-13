@@ -1,7 +1,10 @@
 # pico-sandbox sidecar — process-separated from pico-api / LibreChat.
 # Headless Playwright Chromium. Unprivileged container. Does not bind product UI or pico-api ports.
 # Session profiles live under /tmp (tmpfs at runtime), never the host home dir.
-FROM python:3.12-slim
+# Pin bookworm: floating python:3.12-slim is Debian trixie, where
+# `playwright install --with-deps` still asks for ttf-unifont /
+# ttf-ubuntu-font-family (removed). Bookworm still has those packages.
+FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 ARG PICO_GIT_SHA=unknown
@@ -25,8 +28,17 @@ RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ -r /app/requirements.
     && pip install -i https://mirrors.aliyun.com/pypi/simple/ playwright==1.52.0
 
 # Chromium + OS deps baked into the sidecar image (not host Chrome).
-RUN playwright install --with-deps chromium \
-    && chmod -R a+rX /opt/ms-playwright
+# Rewrite Debian apt to Aliyun so China ECS can install --with-deps.
+RUN set -eux; \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+      sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+      sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+    elif [ -f /etc/apt/sources.list ]; then \
+      sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+      sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+    fi; \
+    playwright install --with-deps chromium; \
+    chmod -R a+rX /opt/ms-playwright
 
 COPY services /app/services
 
