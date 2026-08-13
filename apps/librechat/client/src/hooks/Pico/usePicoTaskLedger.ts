@@ -164,33 +164,73 @@ function runtimeHint(events: PicoRunEvent[]): string | null {
   return null;
 }
 
-function lastProcessStep(events: PicoRunEvent[]): string | null {
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const event = events[i];
-    if (event.type === 'tool.call') {
-      const tool = event.payload?.tool ?? event.payload?.name;
-      if (typeof tool === 'string' && tool.trim()) {
-        return `调用 · ${tool.trim()}`;
-      }
+function toolName(event: PicoRunEvent): string | null {
+  const value = event.payload?.tool ?? event.payload?.name;
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function describeSearchOrTool(event: PicoRunEvent): string | null {
+  if (event.type === 'search.sources') {
+    const sources = Array.isArray(event.payload?.sources) ? event.payload.sources : [];
+    if (event.payload?.honest_miss === true || sources.length === 0) {
+      return '未检索到可用来源';
     }
-    if (event.type === 'tool.result') {
-      const tool = event.payload?.tool ?? event.payload?.name;
-      if (typeof tool === 'string' && tool.trim()) {
-        const ok = event.payload?.ok !== false;
-        return ok ? `工具完成 · ${tool.trim()}` : `工具失败 · ${tool.trim()}`;
-      }
+    return `已检索 ${sources.length} 条来源`;
+  }
+  if (event.type === 'tool.call') {
+    const tool = toolName(event);
+    if (!tool) {
+      return null;
     }
-    if (event.type === 'agent.step') {
-      const n = event.payload?.n ?? event.payload?.step;
-      const phase = event.payload?.phase;
-      const bits = [
-        typeof n === 'number' || typeof n === 'string' ? `步骤 ${n}` : '智能体步骤',
-        typeof phase === 'string' && phase.trim() ? phase.trim() : null,
-      ].filter(Boolean);
-      return bits.join(' · ');
+    if (tool === 'web_search') {
+      return '正在检索';
     }
+    if (tool === 'web_fetch') {
+      return '正在阅读网页';
+    }
+    return `调用 · ${tool}`;
+  }
+  if (event.type === 'tool.result') {
+    const tool = toolName(event);
+    if (!tool) {
+      return null;
+    }
+    const ok = event.payload?.ok !== false;
+    if (tool === 'web_search') {
+      return ok ? '已检索到来源' : '检索未完成';
+    }
+    if (tool === 'web_fetch') {
+      return ok ? '已读页' : '读页未完成';
+    }
+    return ok ? `工具完成 · ${tool}` : `工具失败 · ${tool}`;
   }
   return null;
+}
+
+export function lastProcessStep(events: PicoRunEvent[]): string | null {
+  let latestTool: string | null = null;
+  let latestAgent: string | null = null;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (!latestTool) {
+      latestTool = describeSearchOrTool(event);
+    }
+    if (!latestAgent && event.type === 'agent.step') {
+      const n = event.payload?.n ?? event.payload?.step;
+      const phase = event.payload?.phase;
+      latestAgent = [
+        typeof n === 'number' || typeof n === 'string' ? `步骤 ${n}` : '智能体步骤',
+        typeof phase === 'string' && phase.trim() ? phase.trim() : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    }
+    if (latestTool && latestAgent) {
+      break;
+    }
+  }
+  // Search/tool copy wins over later bookkeeping agent.step so「正在检索」stays.
+  return latestTool || latestAgent;
 }
 
 function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null {
@@ -206,7 +246,9 @@ function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null
     if (step) {
       return [cloud, runtime, step].filter(Boolean).join(' · ');
     }
-    return runtime ? `${cloud} · ${runtime}` : `${cloud} · 关闭页面任务仍会继续`;
+    return runtime
+      ? `${cloud} · ${runtime} · 正在检索或作答`
+      : `${cloud} · 正在检索或作答`;
   }
   if (!run && !runtime && !step) {
     return null;
@@ -613,18 +655,20 @@ export function usePicoTaskLedger(
         recoveryDeadlineRef.current = 0;
         setRecovering(false);
         if (!nextRun) {
-          setEvents([]);
+          if (!cancelled) {
+            setEvents([]);
+          }
           return;
         }
         try {
           const eventsRes = await listPicoRunEvents(nextRun.id);
-          if (!cancelled) {
+          // Apply even if this effect was superseded: a 500ms terminal poll
+          // must not drop search.sources that already landed for this run.
+          if (runRef.current?.id === nextRun.id) {
             setEvents(eventsRes.events || []);
           }
         } catch {
-          if (!cancelled) {
-            setEvents([]);
-          }
+          // Keep whatever we already have — empty wipe hid 来源条 (#537).
         }
       } catch (e) {
         if (!cancelled) {

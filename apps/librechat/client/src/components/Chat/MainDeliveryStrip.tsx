@@ -11,12 +11,14 @@ import {
 } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
 import PicoSearchSources from './PicoSearchSources';
+import type { PicoSourceMessage } from '~/utils/picoSearchSources';
 
 const BOOKKEEPING = new Set(['回复摘要', 'summary', 'run summary']);
 
 type Props = {
   artifacts?: PicoArtifact[] | null;
   runEvents?: PicoRunEvent[] | null;
+  messages?: PicoSourceMessage[] | null;
   onOpenResultPanel?: () => void;
 };
 
@@ -39,7 +41,12 @@ function isHtml(a: PicoArtifact): boolean {
   return /\.html?$/i.test(name) || /html/i.test(a.kind || '');
 }
 
-export default function MainDeliveryStrip({ artifacts, runEvents, onOpenResultPanel }: Props) {
+export default function MainDeliveryStrip({
+  artifacts,
+  runEvents,
+  messages,
+  onOpenResultPanel,
+}: Props) {
   const items = useMemo(
     () => (artifacts ?? []).filter((a) => a?.id && !isBookkeeping(a)),
     [artifacts],
@@ -49,7 +56,7 @@ export default function MainDeliveryStrip({ artifacts, runEvents, onOpenResultPa
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
 
-  const sourcesBlock = <PicoSearchSources events={runEvents} />;
+  const sourcesBlock = <PicoSearchSources events={runEvents} messages={messages} />;
 
   if (items.length === 0) {
     return sourcesBlock;

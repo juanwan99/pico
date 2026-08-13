@@ -286,6 +286,36 @@ describe('ResultPanel search sources', () => {
     expect(link).toHaveTextContent('Gov');
   });
 
+  it('falls back to assistant bubble links when runEvents are empty', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '搜义务教育',
+              isCreatedByUser: true,
+            },
+            {
+              messageId: 'a1',
+              conversationId: 'c1',
+              parentMessageId: 'u1',
+              text: '见 [义务教育专题](https://www.gov.cn/jyjy)',
+              isCreatedByUser: false,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    const link = screen.getByTestId('pico-search-source-link');
+    expect(link).toHaveAttribute('href', 'https://www.gov.cn/jyjy');
+    expect(link).toHaveTextContent('义务教育专题');
+  });
+
   it('shows honest miss copy when search returned no sources', () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
