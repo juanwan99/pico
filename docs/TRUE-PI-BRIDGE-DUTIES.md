@@ -20,10 +20,10 @@ CLAIM-WB: NO
 | `pico_orchestrator/true_pi/events.py` | Pi 事件 → Pico ledger（含 compaction.*） |
 | `pico_orchestrator/true_pi/runtime.py` | `run_true_pi_agent` + 门闩 + 最小 history |
 | `pico_orchestrator/true_pi/shadow.py` | 双跑 + diff 报告 |
-| `services/true_pi_bridge/pico-gateway-tools.ts` | Pi extension：注册 7 工具 |
+| `services/true_pi_bridge/pico-gateway-tools.ts` | Pi extension：注册 gateway 工具（含 #507 web_search/web_fetch） |
 | `docs/OPS-TRUE-PI-ROLLBACK.md` | 部署 / 回滚一页 |
 
-## 允许的工具（v0/v1 · 不可放大）
+## 允许的工具（v2 · #507 web_search/web_fetch）
 
 ```text
 workspace_list_files
@@ -33,9 +33,12 @@ generate_html_document
 generate_docx_document
 generate_pptx_document
 verify_html_document
+web_search
+web_fetch
 ```
 
-v1 仅增加：skill_instruction 注入、近 N 条 user/assistant history 文本、skill_snapshot 工具交并集。
+v1 仅增加：skill_instruction 注入、近 N 条 user/assistant history 文本、skill_snapshot 工具交并集。  
+v2（#507）：DeepSeek 官方 `web_search` 转发 + 网关 `web_fetch`（SSRF 拒绝内网/metadata/管理域）。仍禁 bash / 任意 FS / 浏览器代登。
 
 ## 禁止在桥内做
 

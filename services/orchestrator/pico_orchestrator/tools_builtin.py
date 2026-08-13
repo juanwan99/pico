@@ -26,6 +26,7 @@ from pico_orchestrator.gateway import (
     ToolSpec,
 )
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
+from pico_orchestrator.web_tools import web_fetch_handler, web_search_handler
 
 _MAX_ARTIFACT_CONTENT = 200_000
 _MAX_CALC_ABS = 1e100
@@ -788,6 +789,31 @@ def build_default_gateway(
             school_scoped=False,
         )
     )
+    gw.register(
+        ToolSpec(
+            name="web_search",
+            description=(
+                "Search the public web via DeepSeek official server-side web_search. "
+                "Use for current events, public facts, curriculum names, or anything "
+                "that needs retrieval. Returns sources (title+url+snippet) or honest "
+                "未检索. Args: query. Never invent citations."
+            ),
+            handler=web_search_handler,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="web_fetch",
+            description=(
+                "Read one public http(s) page into truncated text. "
+                "Use when the user pasted a specific URL. Denies intranet, loopback, "
+                "link-local, cloud metadata, and Pico/edu admin hosts. Args: url."
+            ),
+            handler=web_fetch_handler,
+            school_scoped=False,
+        )
+    )
     # P2 MCP allowlist bridge (safe tools only; empty allowlist → none registered)
     for spec in mcp_tool_specs(store):
         gw.register(spec)
@@ -942,6 +968,26 @@ def openai_tool_schemas(
             "type": "object",
             "properties": {"expression": {"type": "string"}},
             "required": ["expression"],
+        },
+        "web_search": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query for DeepSeek official web_search",
+                }
+            },
+            "required": ["query"],
+        },
+        "web_fetch": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Public http(s) URL to read (no intranet)",
+                }
+            },
+            "required": ["url"],
         },
         **mcp_openai_parameters(),
     }

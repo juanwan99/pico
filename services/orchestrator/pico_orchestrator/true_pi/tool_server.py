@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 from pico_orchestrator.gateway import AllowlistGateway, Principal, ToolError
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
+from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,11 @@ class ToolServer:
                 },
             )
             return
+        token = bind_usage_context(
+            school_id=self.principal.school_id,
+            membership_id=self.principal.membership_id,
+            run_id=self.run_id,
+        )
         try:
             result = await self.gateway.invoke(self.principal, name, args)
             self.invocations.append((name, args, True))
@@ -179,6 +185,8 @@ class ToolServer:
                     "tool": name,
                 },
             )
+        finally:
+            reset_usage_context(token)
 
     async def _write(
         self, writer: asyncio.StreamWriter, status: int, payload: dict[str, Any]

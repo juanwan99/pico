@@ -27,6 +27,8 @@ async def test_schemas_and_propose():
     names = {s["function"]["name"] for s in schemas}
     assert "fake_edu_list_classes" in names
     assert "pico_propose_change" in names
+    assert "web_search" in names
+    assert "web_fetch" in names
     p = P("school-a", "m", ["ai:run"])
     out = await gw.invoke(
         p,

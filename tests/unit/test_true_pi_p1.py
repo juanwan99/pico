@@ -281,7 +281,9 @@ async def test_p1_t5_default_path_unchanged_when_shadow_off(
 def test_bridge_allowlist_is_thin() -> None:
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
     assert "workspace_write_file" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 7
+    assert "web_search" in ALLOWED_GATEWAY_TOOLS
+    assert "web_fetch" in ALLOWED_GATEWAY_TOOLS
+    assert len(ALLOWED_GATEWAY_TOOLS) == 9
 
 
 def test_shadow_diff_flags_false_green() -> None:
@@ -368,6 +370,15 @@ async def test_tool_server_denies_bash() -> None:
         assert status == 403
         assert payload.get("ok") is False
         assert payload.get("code") == "tool.not_allowlisted"
+
+        search_status, search_payload = await post("web_search")
+        assert search_status == 400
+        assert search_payload.get("code") == "tool.invalid_arguments"
+        assert search_payload.get("code") != "tool.not_allowlisted"
+
+        fetch_body_status, fetch_payload = await post("web_fetch")
+        assert fetch_body_status == 400
+        assert fetch_payload.get("code") == "tool.invalid_arguments"
     finally:
         await server.stop()
 

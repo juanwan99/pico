@@ -296,7 +296,7 @@ async def freeze_meta(settings: Settings = Depends(get_settings)) -> dict:
 async def agent_safety(settings: Settings = Depends(get_settings)) -> dict:
     """Prove dangerous tools are off for default agent file (and legacy Kimi yaml if present).
 
-    Pi default path uses Pico allowlist tools only (no host shell/web).
+    Pi default path uses Pico allowlist tools only (no host shell / unrestricted crawl).
     Legacy Kimi yaml is still checked when the file exists.
     """
     from pico_orchestrator.safety import assert_dangerous_tools_off
@@ -589,6 +589,12 @@ async def invoke_tool(
     from app.db import session_factory
 
     gw = build_default_gateway(LedgerArtifactStore(session_factory()))
+    from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
+
+    token = bind_usage_context(
+        school_id=principal.school_id,
+        membership_id=principal.membership_id,
+    )
     try:
         result = await gw.invoke(principal, body.name, dict(body.arguments))
     except ToolError as e:
@@ -596,6 +602,8 @@ async def invoke_tool(
         raise HTTPException(
             status_code=code, detail={"code": e.code, "message": e.message}
         ) from e
+    finally:
+        reset_usage_context(token)
     return {"ok": True, "result": result}
 
 

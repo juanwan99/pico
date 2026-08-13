@@ -13,7 +13,7 @@ NOTE: "Orchestration" below is TARGET; implementation as of freeze may still be 
    **FORBIDDEN:** pre-commit alternate runtimes (Pi/OpenCode/…) in truth docs; if Kimi Agent cannot embed, stop and re-discuss with owner.
 3. **Control plane API** — create task, stream run, cancel, retry, list artifacts; principal server-side only.
 4. **Providers** — Kimi (Moonshot) first; DeepSeek/other OpenAI-compatible optional.
-5. **Tools** — allowlisted; dangerous host Shell/File/Web off by default; edu tools later via controlled integration.
+5. **Tools** — allowlisted; host Shell/File off; unrestricted crawl off; gateway `web_search` + `web_fetch` only (#507).
 
 ## Tenancy
 
