@@ -9,7 +9,7 @@ export type ResultPaneView = (typeof RESULT_PANE_VIEWS)[number];
 export const RESULT_PANE_VIEW_LABEL: Record<ResultPaneView, string> = {
   overview: '概览',
   files: '工作空间文件',
-  web: '网页',
+  web: '沙箱',
 };
 
 export const OFFICE_NO_PREVIEW_COPY =
@@ -77,6 +77,62 @@ export function detectOpenWebsiteIntent(text: string): string | null {
   } catch {
     return null;
   }
+}
+
+export type OfficeOpenIntent = {
+  kind: 'writer' | 'calc' | 'impress';
+  filename?: string;
+};
+
+export function detectOpenOfficeIntent(text: string): OfficeOpenIntent | null {
+  const raw = (text || '').trim();
+  if (!raw) {
+    return null;
+  }
+  if (detectOpenWebsiteIntent(raw)) {
+    return null;
+  }
+  const named = raw.match(
+    /(?:打开|open)\s+(?:一下|下)?\s*([^\s]+\.(?:docx?|xlsx?|pptx?|odt|ods|odp))\b/i,
+  );
+  if (named?.[1]) {
+    const filename = named[1];
+    const kind: OfficeOpenIntent['kind'] = /\.(xlsx?|ods|csv)$/i.test(filename)
+      ? 'calc'
+      : /\.(pptx?|odp)$/i.test(filename)
+        ? 'impress'
+        : 'writer';
+    return { kind, filename };
+  }
+  if (/(?:打开|open).{0,12}(?:表格|excel|xlsx|spreadsheet)/i.test(raw)) {
+    return { kind: 'calc' };
+  }
+  if (/(?:打开|open).{0,12}(?:ppt|pptx|幻灯|演示)/i.test(raw)) {
+    return { kind: 'impress' };
+  }
+  if (/(?:打开|open).{0,16}(?:word|Word|WORD|docx|doc\b|文档|字处理)/i.test(raw)) {
+    return { kind: 'writer' };
+  }
+  return null;
+}
+
+export function latestUserOpenOfficeIntent(
+  messages:
+    | Array<{ text?: unknown; isCreatedByUser?: boolean } | null | undefined>
+    | null
+    | undefined,
+): OfficeOpenIntent | null {
+  if (!messages?.length) {
+    return null;
+  }
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!message?.isCreatedByUser) {
+      continue;
+    }
+    return detectOpenOfficeIntent(String(message.text || ''));
+  }
+  return null;
 }
 
 export function latestUserOpenWebsiteIntent(

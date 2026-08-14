@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-SANDBOX_BROWSER_TOOLS = frozenset({"sandbox_browser_open", "sandbox_browser_screenshot"})
+SANDBOX_BROWSER_TOOLS = frozenset(
+    {"sandbox_browser_open", "sandbox_browser_screenshot", "sandbox_document_open"}
+)
 HUMAN_COPY = "请在此画面自行登录，不要在聊天里发送密码"
 _SECRET_KEYS = frozenset({"password", "passwd", "secret", "credential", "cookie", "cookies"})
 
@@ -41,5 +43,6 @@ def sandbox_session_payload(result: Any) -> dict[str, Any] | None:
         "view_path": view_path,
         "human_copy": str(result.get("human_copy") or HUMAN_COPY),
         "engine": str(result.get("engine") or ""),
+        "kind": str(result.get("kind") or ""),
         "workspace_id": str(result.get("workspace_id") or ""),
     }

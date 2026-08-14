@@ -5,10 +5,15 @@ export type PicoSandboxSession = {
   url: string;
   title: string;
   humanCopy: string;
+  kind?: string;
 };
 
 const SESSION_RE = /^sbox_[A-Za-z0-9_-]{8,120}$/;
-const BROWSER_TOOLS = new Set(['sandbox_browser_open', 'sandbox_browser_screenshot']);
+const BROWSER_TOOLS = new Set([
+  'sandbox_browser_open',
+  'sandbox_browser_screenshot',
+  'sandbox_document_open',
+]);
 
 function asSessionId(raw: unknown): string | null {
   const value = String(raw || '').trim();
@@ -44,7 +49,8 @@ function fromBody(body: Record<string, unknown> | null): PicoSandboxSession | nu
   const url = String(body.url || '').trim();
   const title = String(body.title || '').trim();
   const humanCopy = String(body.human_copy || '请在此画面自行登录，不要在聊天里发送密码').trim();
-  return { sessionId, url, title, humanCopy };
+  const kind = String(body.kind || '').trim();
+  return { sessionId, url, title, humanCopy, kind };
 }
 
 /** Latest isolated browser session from ledger events. Password fields are ignored. */

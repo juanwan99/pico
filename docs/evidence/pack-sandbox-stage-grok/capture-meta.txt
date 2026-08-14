@@ -1,0 +1,10 @@
+CARD T-SANDBOX-STAGE-GROK #543
+BASE 9beeba6e1589562ad6a7ea8a5d5c6e597668dd72
+PRODUCT_AT_CLAIM e8c0ad7757e65f98c351dc7182d3c1ae1b2c6e82
+01-f1-site.png 53534
+02-f2-word.png 44041
+03-f3-chat-clean.png 22524
+04-f4-390.png 23164
+writer-raw.png 60399 LibreOffice Writer 25.2 GUI, not PDF
+CLAIM-WB-DEGREE-WEB NO
+word_is_word Y

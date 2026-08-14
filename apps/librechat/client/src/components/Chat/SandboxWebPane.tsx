@@ -22,15 +22,18 @@ export default function SandboxWebPane({
   humanCopy,
   zoom = 1,
   onWheelZoom,
+  kind,
 }: {
   sessionId: string;
   initialUrl?: string;
   initialTitle?: string;
   humanCopy?: string;
+  kind?: string;
   /** 1 = fit the pane width (fullscreen fills the stage, not a 390 strip). */
   zoom?: number;
   onWheelZoom?: (event: React.WheelEvent) => void;
 }) {
+  const isOffice = Boolean(kind && kind !== 'browser');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pageUrl, setPageUrl] = useState(initialUrl || '');
   const [pageTitle, setPageTitle] = useState(initialTitle || '');
@@ -174,7 +177,10 @@ export default function SandboxWebPane({
           {pageUrl ? ` · ${pageUrl}` : ''}
         </p>
         <p className="mt-0.5 text-[11px] leading-snug text-[#3d3d3d]" data-testid="sandbox-web-copy">
-          {humanCopy || '请在此画面自行登录，不要在聊天里发送密码'}
+          {humanCopy ||
+            (isOffice
+              ? '沙箱已用 LibreOffice 打开这份文档。这是字处理窗口，不是 PDF。'
+              : '请在此画面自行登录，不要在聊天里发送密码')}
         </p>
         <p className="mt-0.5 text-[10px] text-[#9a9a9a]" data-testid="sandbox-web-status">
           {status}
@@ -221,6 +227,7 @@ export default function SandboxWebPane({
             autoComplete="off"
           />
         </label>
+        {isOffice ? null : (
         <label className="block text-[11px] text-[#6b6b6b]">
           密码（只进隔离会话）
           <input
@@ -231,6 +238,7 @@ export default function SandboxWebPane({
             autoComplete="new-password"
           />
         </label>
+        )}
         <div className="flex gap-1">
           <button
             type="submit"

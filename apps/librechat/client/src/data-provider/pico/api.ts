@@ -344,15 +344,35 @@ export type PicoSandboxSessionMeta = {
   title?: string;
   human_copy?: string;
   engine?: string;
+  kind?: string;
   clicked?: boolean;
   typed?: boolean;
 };
 
-export async function openPicoSandboxBrowser(url: string) {
+export async function openPicoSandboxSession(body: {
+  url?: string;
+  artifact_id?: string;
+  filename?: string;
+  kind?: string;
+  body?: string;
+}) {
   return picoFetch<PicoSandboxSessionMeta>(`/v1/sandbox/sessions`, {
     method: 'POST',
-    body: JSON.stringify({ url }),
+    body: JSON.stringify(body),
   });
+}
+
+export async function openPicoSandboxBrowser(url: string) {
+  return openPicoSandboxSession({ url });
+}
+
+export async function openPicoSandboxDocument(body: {
+  artifact_id?: string;
+  filename?: string;
+  kind?: string;
+  body?: string;
+}) {
+  return openPicoSandboxSession({ kind: body.kind || 'writer', ...body });
 }
 
 export async function getPicoSandboxSession(sessionId: string) {

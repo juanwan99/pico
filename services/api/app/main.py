@@ -610,7 +610,11 @@ async def invoke_tool(
 
 
 class OpenSandboxSessionRequest(BaseModel):
-    url: str = Field(..., min_length=1, max_length=2048)
+    url: str | None = Field(default=None, max_length=2048)
+    artifact_id: str | None = Field(default=None, max_length=128)
+    filename: str | None = Field(default=None, max_length=512)
+    kind: str | None = Field(default=None, max_length=32)
+    body: str | None = Field(default=None, max_length=50_000)
 
 
 @app.post("/v1/sandbox/sessions")
@@ -618,7 +622,7 @@ async def open_sandbox_session(
     body: OpenSandboxSessionRequest,
     principal: Principal = Depends(require_scope("ai:run")),
 ) -> dict:
-    """Teacher/result-pane open: same handler as sandbox_browser_open. No new browser."""
+    """Teacher/result-pane open: browser URL or LibreOffice document. Same sidecar."""
     from pico_orchestrator.gateway import ToolError
     from pico_orchestrator.tools_builtin import build_default_gateway
     from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
@@ -631,8 +635,24 @@ async def open_sandbox_session(
         school_id=principal.school_id,
         membership_id=principal.membership_id,
     )
+    url = (body.url or "").strip()
+    kind = (body.kind or "").strip().lower()
+    artifact_id = (body.artifact_id or "").strip()
+    filename = (body.filename or "").strip()
     try:
-        result = await gw.invoke(principal, "sandbox_browser_open", {"url": body.url})
+        if url and not artifact_id and kind in {"", "browser"}:
+            result = await gw.invoke(principal, "sandbox_browser_open", {"url": url})
+        else:
+            result = await gw.invoke(
+                principal,
+                "sandbox_document_open",
+                {
+                    "artifact_id": artifact_id or None,
+                    "filename": filename or None,
+                    "kind": kind or "writer",
+                    "body": body.body,
+                },
+            )
     except ToolError as e:
         code = 403 if e.code == "tenant.cross_school" else 400
         raise HTTPException(

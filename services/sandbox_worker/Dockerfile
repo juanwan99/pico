@@ -38,6 +38,12 @@ RUN set -eux; \
       sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
     fi; \
     playwright install --with-deps chromium; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      xvfb scrot xdotool \
+      libreoffice-writer libreoffice-calc libreoffice-impress \
+      fonts-wqy-zenhei fonts-liberation; \
+    rm -rf /var/lib/apt/lists/*; \
     chmod -R a+rX /opt/ms-playwright
 
 COPY services /app/services

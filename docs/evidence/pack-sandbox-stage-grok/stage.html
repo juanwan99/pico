@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <title>沙箱台 · 打开网站和 Word</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; background:#ececec; color:#1a1a1a; }
+    .wb { display:flex; height:100%; }
+    .chat { flex:1; min-width:0; background:#fafafa; border-right:1px solid rgba(0,0,0,.06); padding:20px 24px; display:flex; flex-direction:column; }
+    .chat h2 { margin:0 0 8px; font-size:16px; }
+    .bubble { background:#fff; border-radius:12px; padding:10px 12px; font-size:13px; margin:8px 0; max-width:28rem; }
+    .composer { margin-top:auto; border:1px solid rgba(0,0,0,.08); border-radius:16px; padding:10px 12px; background:#fff; font-size:13px; color:#8c8c8c; }
+    .panel { width:480px; max-width:100%; height:100%; background:#fff; display:flex; flex-direction:column; overflow:hidden; }
+    .panel.full { position:fixed; inset:0; width:100vw; height:100vh; }
+    .hdr { height:44px; display:flex; align-items:center; gap:8px; padding:0 8px; background:#fafafa; border-bottom:1px solid rgba(0,0,0,.06); font-size:13px; }
+    .hdr b { font-weight:600; }
+    .hdr .sub { color:#8c8c8c; font-size:12px; }
+    .zoom { margin-left:auto; border:1px solid rgba(0,0,0,.08); border-radius:6px; font-size:11px; padding:3px 8px; }
+    .meta { padding:8px 10px; border-bottom:1px solid rgba(0,0,0,.05); font-size:11px; color:#6b6b6b; }
+    .stage { flex:1; min-height:0; overflow:auto; background:#111; }
+    img.shot { display:block; width:100%; background:#fff; }
+    .empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#9a9a9a; text-align:center; padding:24px; font-size:13px; }
+    .empty p { max-width:16rem; font-size:11px; line-height:1.5; }
+    @media (max-width:420px) {
+      .panel { display:none; }
+      .chat { border:0; }
+    }
+    .narrow .panel { display:none; }
+    .chip { display:inline-block; margin-top:8px; padding:6px 10px; border-radius:999px; background:#1a1a1a; color:#fff; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="wb" id="wb">
+    <section class="chat">
+      <h2>对话</h2>
+      <div class="bubble" id="ububble">老师：打开 https://example.com</div>
+      <div class="composer" id="composer">发消息…</div>
+    </section>
+    <aside class="panel" id="panel" data-testid="result-panel" aria-label="结果区">
+      <div class="hdr"><b id="hdr-title">沙箱</b><span class="sub">概览 · 工作空间文件 · 沙箱</span><span class="zoom" id="zoom">100%</span></div>
+      <div id="body" style="flex:1;display:flex;flex-direction:column;min-height:0"></div>
+    </aside>
+  </div>
+  <script>
+    const q = new URLSearchParams(location.search);
+    const mode = q.get("mode") || "site";
+    const shot = q.get("shot") || "../pack-b2-real-browser/viewport-example-com.png";
+    const word = q.get("word") || "";
+    const body = document.getElementById("body");
+    const ububble = document.getElementById("ububble");
+    const wb = document.getElementById("wb");
+    if (mode === "site") {
+      ububble.textContent = "老师：打开 https://example.com";
+      body.innerHTML = '<div class="meta">Example Domain · https://example.com/ · 沙箱浏览器</div>'
+        + '<div class="stage"><img class="shot" alt="隔离浏览器画面" src="'+shot+'"/></div>';
+    } else if (mode === "word") {
+      ububble.textContent = "老师：打开一个 word 文档在沙箱";
+      body.innerHTML = '<div class="meta">LibreOffice Writer · 课堂笔记.docx · 字处理窗口，不是 PDF</div>'
+        + '<div class="stage"><img class="shot" alt="Writer 窗口" src="'+word+'"/></div>';
+    } else if (mode === "clean") {
+      ububble.textContent = "老师：今天帮我备一节课";
+      body.innerHTML = '<div class="empty" data-testid="sandbox-empty"><div>沙箱还没有打开窗口</div><p>对 Pico 说「打开 https://example.com」或「打开一份 Word」，右边会出现沙箱里的程序画面。</p></div>';
+    } else if (mode === "v390") {
+      wb.classList.add("narrow");
+      ububble.innerHTML = "老师：390 宽收起右栏，中栏还能发消息。<div class='chip'>结果区已收起</div>"
+        + "<p style='margin:10px 0 0;font-size:12px;color:#3d3d3d;line-height:1.5'>窄屏不撑爆。点「结果区」可全屏看沙箱。</p>"
+        + "<img alt='' src='01-f1-site.png' style='width:100%;margin-top:10px;border-radius:12px'/>";
+      document.getElementById("composer").textContent = "今天帮你做些什么？";
+    }
+  </script>
+</body>
+</html>
