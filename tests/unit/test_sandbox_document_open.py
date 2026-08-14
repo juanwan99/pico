@@ -2,7 +2,6 @@ import base64
 from dataclasses import dataclass
 
 import pytest
-
 from pico_orchestrator.document_generators import build_docx_document
 from pico_orchestrator.tools_builtin import build_default_gateway
 from sandbox_worker.office import resolve_kind

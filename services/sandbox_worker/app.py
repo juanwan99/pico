@@ -83,7 +83,7 @@ async def open_session(
 
             try:
                 document = base64.b64decode(body.document_base64, validate=False)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 raise HTTPException(
                     status_code=400,
                     detail={"code": "tool.invalid_arguments", "message": "document_base64 无效"},
