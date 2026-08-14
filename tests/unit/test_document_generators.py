@@ -20,6 +20,8 @@ _SPEC.loader.exec_module(_mod)
 build_docx_document = _mod.build_docx_document
 build_html_document = _mod.build_html_document
 build_pptx_document = _mod.build_pptx_document
+build_xlsx_document = _mod.build_xlsx_document
+KNOWN_CALC_CELL = _mod.KNOWN_CALC_CELL
 
 
 def test_html_contains_marker_and_csp() -> None:
@@ -99,6 +101,20 @@ def test_docx_is_real_ooxml_zip() -> None:
         assert "word/document.xml" in names
         doc = zf.read("word/document.xml").decode("utf-8")
         assert marker in doc
+
+
+def test_xlsx_is_real_ooxml_with_known_cell() -> None:
+    marker = "P270_XLSX_MARK"
+    raw = build_xlsx_document(title="scores.xlsx", marker=marker, body=KNOWN_CALC_CELL)
+    assert raw[:2] == b"PK"
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        names = set(zf.namelist())
+        assert "[Content_Types].xml" in names
+        assert "xl/workbook.xml" in names
+        assert "xl/worksheets/sheet1.xml" in names
+        sheet = zf.read("xl/worksheets/sheet1.xml").decode("utf-8")
+        assert KNOWN_CALC_CELL in sheet
+        assert marker in sheet
 
 
 def test_pptx_is_real_ooxml_with_slide() -> None:

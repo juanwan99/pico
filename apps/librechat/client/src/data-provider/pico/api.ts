@@ -382,7 +382,13 @@ export async function openPicoSandboxDocument(body: {
   kind?: string;
   body?: string;
 }) {
-  return openPicoSandboxSession({ kind: body.kind || 'writer', ...body });
+  const filename = body.filename || '';
+  const inferred = /\.(xlsx?|ods|csv)$/i.test(filename)
+    ? 'calc'
+    : /\.(pptx?|odp)$/i.test(filename)
+      ? 'impress'
+      : 'writer';
+  return openPicoSandboxSession({ kind: body.kind || inferred, ...body });
 }
 
 export async function getPicoSandboxSession(sessionId: string) {

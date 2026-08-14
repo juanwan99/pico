@@ -14,9 +14,11 @@ from pico_orchestrator.artifact_types import (
     title_protected_extension,
 )
 from pico_orchestrator.document_generators import (
+    KNOWN_CALC_CELL,
     build_docx_document,
     build_html_document,
     build_pptx_document,
+    build_xlsx_document,
 )
 from pico_orchestrator.edu_adapter import EduAdapterError, list_classes
 from pico_orchestrator.gateway import (
@@ -912,18 +914,33 @@ def _workspace_handlers(
                         "该产物不是二进制 Office 包，拒绝当 Word 打开",
                     )
             if raw is None:
-                if kind in {"", "writer"}:
+                name = (filename or "").lower()
+                if kind in {"calc"} or name.endswith((".xlsx", ".xls", ".ods", ".csv")):
+                    title = filename or "课堂成绩.xlsx"
+                    filename = _ensure_extension(title, ".xlsx")
+                    kind = "calc"
+                    raw = build_xlsx_document(
+                        title=title,
+                        marker=_marker_arg({"marker": args.get("marker")}),
+                        body=body_text or KNOWN_CALC_CELL,
+                    )
+                elif kind in {"impress"} or name.endswith((".pptx", ".ppt", ".odp")):
+                    title = filename or "课堂演示.pptx"
+                    filename = _ensure_extension(title, ".pptx")
+                    kind = "impress"
+                    raw = build_pptx_document(
+                        title=title,
+                        marker=_marker_arg({"marker": args.get("marker")}),
+                        body=body_text or "NIGHT-P4-SLIDE-ALPHA",
+                    )
+                else:
                     title = filename or "课堂笔记.docx"
                     filename = _ensure_extension(title, ".docx")
+                    kind = "writer"
                     raw = build_docx_document(
                         title=title,
                         marker=_marker_arg({"marker": args.get("marker")}),
                         body=body_text or "沙箱里的这份 Word 正文。打开 = Writer 窗口，不是 PDF。",
-                    )
-                else:
-                    raise ToolError(
-                        "tool.invalid_arguments",
-                        "打开表格/演示需要已有产物。请先生成 xlsx/pptx，或改开 Word。",
                     )
             out = await sidecar_json(
                 "POST",

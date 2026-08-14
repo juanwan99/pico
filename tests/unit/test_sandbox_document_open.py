@@ -56,3 +56,38 @@ async def test_document_open_sends_ooxml_not_pdf(monkeypatch):
     assert raw[:2] == b"PK"
     assert captured["body"]["kind"] == "writer"
     assert b"%PDF" not in raw
+
+
+@pytest.mark.asyncio
+async def test_document_open_calc_sends_xlsx_with_known_cell(monkeypatch):
+    captured: dict = {}
+
+    async def fake_sidecar(method, path, **kwargs):
+        captured["body"] = kwargs.get("json_body") or {}
+        return {
+            "ok": True,
+            "session_id": "sbox_dddddddddddddddddddddddd",
+            "kind": "calc",
+            "title": "LibreOffice Calc · 课堂成绩.xlsx",
+            "engine": "libreoffice-writer",
+        }
+
+    monkeypatch.setattr("pico_orchestrator.tools_builtin.sidecar_json", fake_sidecar)
+    gw = build_default_gateway()
+    owner = P(school_id="sch", membership_id="mem")
+    out = await gw.invoke(
+        owner,
+        "sandbox_document_open",
+        {"kind": "calc", "filename": "课堂成绩.xlsx", "body": "NIGHT-P4-CELL-ALPHA"},
+    )
+    assert out["session_id"].startswith("sbox_")
+    raw = base64.b64decode(captured["body"]["document_base64"])
+    assert raw[:2] == b"PK"
+    assert captured["body"]["kind"] == "calc"
+    import zipfile
+    import io
+
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        sheet = zf.read("xl/worksheets/sheet1.xml")
+        assert b"NIGHT-P4-CELL-ALPHA" in sheet
+    assert b"%PDF" not in raw

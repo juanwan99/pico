@@ -1,0 +1,20 @@
+{
+  "card": "T-NIGHT-SANDBOX-COMPUTER",
+  "phase": "P3",
+  "base": "https://pico.aivia.asia",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "ok": true,
+    "git_sha": "4247ae329c04e22ccc33d9f7c5faf93ea4e81cf9",
+    "service": "pico-api"
+  },
+  "unique": "night-p3-1786750939439.docx",
+  "s7": "Y",
+  "s8": "Y",
+  "s9": "Y",
+  "claim_wb": "NO",
+  "s7_bytes": 114221,
+  "s8_bytes": 94741,
+  "s9_bytes": 94741,
+  "verdict": "PASS"
+}
