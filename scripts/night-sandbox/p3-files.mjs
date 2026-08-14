@@ -86,21 +86,22 @@ async function main() {
     await goNewChat(page, args.base);
     await sendPrompt(page, `打开 ${unique}`);
     await waitText(page, /Writer|LibreOffice|课堂笔记|Word 正文/i, args.timeoutMs);
-    const filesBtn = page.getByTestId('sandbox-open-files');
-    if (await filesBtn.count()) {
-      await filesBtn.click();
+    const filesTab = page.getByTestId('sandbox-window-files');
+    if (await filesTab.count()) {
+      await filesTab.click();
     } else {
-      await page.getByTestId('sandbox-window-files').click();
+      await page.getByTestId('sandbox-open-files').click();
     }
-    await waitText(page, new RegExp(unique.replace('.', '\\.')), args.timeoutMs);
+    const fileBtn = page.getByTestId(`sandbox-file-${unique}`);
+    await fileBtn.waitFor({ state: 'visible', timeout: args.timeoutMs });
+    await waitText(page, /工作区文件|Workspace files|sandbox:\/\/files/i, 15000).catch(
+      () => {},
+    );
     const s7 = await shot(page, path.join(args.out, 'S7-files.png'));
     report.s7 = 'Y';
     report.s7_bytes = s7.size;
 
-    const fileBtn = page.getByTestId(`sandbox-file-${unique}`);
-    if (await fileBtn.count()) {
-      await fileBtn.click();
-    }
+    await fileBtn.click();
     await waitText(page, /Writer|LibreOffice|Word 正文/i, args.timeoutMs);
     await page.waitForTimeout(800);
     const s8 = await shot(page, path.join(args.out, 'S8-open.png'));

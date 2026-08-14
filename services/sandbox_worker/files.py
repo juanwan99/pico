@@ -1,22 +1,64 @@
-"""Sandbox file-manager window. Lists isolation-dir files on the sandbox screen."""
+"""Sandbox file-manager window. Lists isolation-dir names on the sandbox screen.
+
+Raster is in-process (no second Chromium). Unique ASCII filenames stay readable
+on the screenshot. React also overlays the same names when this window is focused.
+"""
 
 from __future__ import annotations
 
-import html
-import logging
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
-from sandbox_worker.browser import PNG_MAGIC, open_html_page
+from pico_orchestrator.gateway import ToolError
+from pico_orchestrator.sandbox_s2 import (
+    PNG_MAGIC,
+    RASTER_HEIGHT,
+    RASTER_WIDTH,
+    _draw_text,
+    _fill_rect,
+    encode_rgb_png,
+)
 
 FILES_ENGINE = "sandbox-files"
 
 
+def listing_png(names: list[str]) -> bytes:
+    width, height = RASTER_WIDTH, RASTER_HEIGHT
+    buf = bytearray([250, 250, 250] * width * height)
+    _fill_rect(buf, width, 0, 0, width, 44, (26, 26, 26))
+    _draw_text(buf, width, 16, 14, "Workspace files", (255, 255, 255), scale=2)
+    y = 60
+    if not names:
+        _draw_text(buf, width, 16, y, "(empty)", (136, 136, 136), scale=2)
+    else:
+        for name in names[:18]:
+            _draw_text(
+                buf,
+                width,
+                16,
+                y,
+                name,
+                (17, 17, 17),
+                scale=2,
+                max_width=width - 32,
+            )
+            y += 18
+            if y > height - 20:
+                break
+    png = encode_rgb_png(
+        width,
+        height,
+        bytes(buf),
+        text_chunks={"files": ",".join(names)[:200]},
+    )
+    if not png.startswith(PNG_MAGIC):
+        raise ToolError("sandbox.raster_failed", "文件窗口截图失败")
+    return png
+
+
 class FilesSurface:
-    def __init__(self, page, names: list[str]) -> None:
-        self._page = page
-        self.names = names
+    def __init__(self, names: list[str]) -> None:
+        self.names = list(names)
+        self._png = listing_png(self.names)
 
     @property
     def url(self) -> str:
@@ -29,49 +71,24 @@ class FilesSurface:
         return "工作区文件"
 
     async def render(self, names: list[str]) -> None:
-        self.names = names
-        await self._page.set_content(_listing_html(names), wait_until="domcontentloaded")
+        self.names = list(names)
+        self._png = listing_png(self.names)
 
     async def screenshot_png(self) -> bytes:
-        raw = await self._page.screenshot(type="png", full_page=False)
-        png = bytes(raw)
-        if not png.startswith(PNG_MAGIC):
-            from pico_orchestrator.gateway import ToolError
-
-            raise ToolError("sandbox.raster_failed", "文件窗口截图失败")
-        return png
+        return self._png
 
     async def click(self, x: int, y: int) -> None:
-        await self._page.mouse.click(float(x), float(y))
+        _ = (x, y)
 
     async def type_text(self, text: str, *, password: bool) -> None:
         _ = (text, password)
 
     async def close(self) -> None:
-        try:
-            await self._page.context.close()
-        except Exception:
-            logger.debug("files window close failed", exc_info=True)
-
-
-def _listing_html(names: list[str]) -> str:
-    if names:
-        items = "".join(
-            f"<li data-file=\"{html.escape(name)}\" style=\"padding:10px 12px;border-bottom:1px solid #eee;font:14px/1.4 sans-serif\">{html.escape(name)}</li>"
-            for name in names
-        )
-    else:
-        items = "<li style=\"padding:16px;color:#888;font:14px sans-serif\">工作区还没有文件</li>"
-    return f"""<!doctype html><html><head><meta charset="utf-8"><title>文件</title></head>
-<body style="margin:0;background:#fafafa;color:#111">
-<header style="padding:10px 12px;background:#1a1a1a;color:#fff;font:15px sans-serif">工作区文件</header>
-<ul style="list-style:none;margin:0;padding:0">{items}</ul>
-</body></html>"""
+        return None
 
 
 async def open_files_surface(names: list[str]) -> FilesSurface:
-    page = await open_html_page(_listing_html(names))
-    return FilesSurface(page, names)
+    return FilesSurface(names)
 
 
 def list_workspace_files(root: Path) -> list[str]:
