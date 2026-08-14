@@ -88,7 +88,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "（含真实 <button>/<script>，禁止把源码当正文转义交差）；"
             "生成后 verify_html_document（系统侧）并 sandbox_preview_inspect 抽取 title/h1；"
             "公开站打开/登录走隔离 sidecar 的 sandbox_browser_open + 结果区沙箱态，禁止聊天贴密码；"
-            "打开 Word 走 sandbox_document_open（LibreOffice，禁止转 PDF/HTML）；"
+            "打开 Word/表格/PPT 走 sandbox_document_open（LibreOffice Writer/Calc/Impress，禁止转 PDF/HTML）；"
             "微信/教务不作为必须过关。"
             "用户侧只报文件名并指引结果区下载；"
             "扩展名与类型一致；禁止聊天长文/全量 HTML 源码墙冒充交付。"
