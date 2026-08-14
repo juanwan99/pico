@@ -227,10 +227,12 @@ async def open_office(*, kind: str, filename: str, document: bytes) -> OfficeDes
     doc_path = work / safe_name
     doc_path.write_bytes(document)
 
+    profile = work / "lo-profile"
+    profile.mkdir(parents=True, exist_ok=True)
     env = {
         **os.environ,
         "DISPLAY": display,
-        "HOME": os.environ.get("HOME") or "/tmp/pico-sandbox-home",
+        "HOME": str(work),
         "LANG": os.environ.get("LANG") or "C.UTF-8",
         "SAL_USE_VCLPLUGIN": "gen",
     }
@@ -245,6 +247,7 @@ async def open_office(*, kind: str, filename: str, document: bytes) -> OfficeDes
     office_proc = await _spawn(
         [
             soffice,
+            f"-env:UserInstallation=file://{profile}",
             "--nologo",
             "--norestore",
             "--nolockcheck",

@@ -596,15 +596,16 @@ const ChatForm = memo(function ChatForm({
                       tabIndex={0}
                       data-testid="text-input"
                       rows={1}
+                      minRows={3}
                       onFocus={handleTextareaFocus}
                       onBlur={handleTextareaBlur}
                       aria-label={localize('com_ui_message_input')}
                       onClick={handleFocusOrClick}
-                      style={{ height: 72, minHeight: 72, overflowY: 'auto' }}
+                      style={{ overflowY: 'auto' }}
                       className={cn(
                         baseClasses,
                         removeFocusRings,
-                        'scrollbar-hover transition-[max-height] duration-200 disabled:cursor-not-allowed',
+                        'min-h-[72px] scrollbar-hover transition-[max-height] duration-200 disabled:cursor-not-allowed',
                       )}
                     />
                   </div>

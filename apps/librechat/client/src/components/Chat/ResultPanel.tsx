@@ -766,6 +766,7 @@ export default function ResultPanel({
               type="button"
               className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-black/[0.04]"
               aria-label="收起结果区"
+              data-testid="result-panel-close"
               onClick={onClose}
             >
               <PanelRightClose className="h-3.5 w-3.5" />
