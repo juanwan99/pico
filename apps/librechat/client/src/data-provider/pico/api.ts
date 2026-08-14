@@ -354,6 +354,7 @@ export type PicoSandboxSessionMeta = {
   kind?: string;
   windows?: PicoSandboxWindow[];
   focused_window_id?: string;
+  files?: Array<{ name: string }>;
   clicked?: boolean;
   typed?: boolean;
 };

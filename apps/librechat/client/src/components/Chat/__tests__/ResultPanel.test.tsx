@@ -7,6 +7,7 @@ import {
   getPicoSandboxSession,
   openPicoSandboxBrowser,
   openPicoSandboxDocument,
+  focusPicoSandboxWindow,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -20,6 +21,7 @@ jest.mock('~/data-provider/pico/api', () => ({
   postPicoSandboxInput: jest.fn(),
   openPicoSandboxBrowser: jest.fn(),
   openPicoSandboxDocument: jest.fn(),
+  focusPicoSandboxWindow: jest.fn(),
 }));
 jest.mock('~/utils', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),

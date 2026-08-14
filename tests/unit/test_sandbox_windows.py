@@ -28,6 +28,9 @@ class FakeSurface:
     async def close(self) -> None:
         self.closed = True
 
+    async def render(self, names) -> None:
+        self.names = names
+
 
 @pytest.mark.asyncio
 async def test_same_desk_keeps_browser_when_opening_writer():
@@ -45,7 +48,13 @@ async def test_same_desk_keeps_browser_when_opening_writer():
     runtime = SandboxRuntime(open_browser=open_browser)
     import sandbox_worker.runtime as runtime_mod
 
+    async def open_files(names):
+        surface = FakeSurface("sandbox://files", "文件")
+        surface.names = names
+        return surface
+
     runtime_mod.open_office = open_office  # type: ignore[attr-defined]
+    runtime_mod.open_files_surface = open_files  # type: ignore[attr-defined]
 
     first = await runtime.open_session(
         school_id="sch",
@@ -73,3 +82,19 @@ async def test_same_desk_keeps_browser_when_opening_writer():
     assert back["kind"] == "browser"
     assert back["title"] == "Example Domain"
     assert browser.closed is False
+    assert "files" in [w["kind"] for w in second["windows"]]
+    assert any(f["name"] == "notes.docx" for f in second.get("files") or [])
+
+
+@pytest.mark.asyncio
+async def test_files_surface_raster_shows_unique_name():
+    from sandbox_worker.files import listing_png, open_files_surface
+
+    unique = "night-p3-unique.docx"
+    png = listing_png([unique])
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    assert unique.encode("ascii") in png
+    surface = await open_files_surface([unique])
+    shot = await surface.screenshot_png()
+    assert unique.encode("ascii") in shot
+    assert await surface.h1() == "工作区文件"
