@@ -707,7 +707,12 @@ async def sandbox_session_meta(
             },
         )
     except ToolError as exc:
-        status = 404 if exc.code == "sandbox.session_not_found" else 400
+        if exc.code == "sandbox.forbidden":
+            status = 403
+        elif exc.code == "sandbox.session_not_found":
+            status = 404
+        else:
+            status = 400
         raise HTTPException(
             status_code=status, detail={"code": exc.code, "message": exc.message}
         ) from exc
