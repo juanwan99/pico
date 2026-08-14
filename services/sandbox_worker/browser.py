@@ -266,3 +266,15 @@ async def open_chromium(url: str) -> PlaywrightPage:
     except Exception as exc:
         shutil.rmtree(profile_dir, ignore_errors=True)
         raise ToolError("sandbox.fetch_failed", "无法在隔离 Chromium 打开该公开页") from exc
+
+
+async def open_html_page(html: str):
+    """Local HTML surface (file manager). Not a public site; no host Chrome."""
+    browser = await _ensure_browser()
+    context = await browser.new_context(
+        viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+        java_script_enabled=True,
+    )
+    page = context.pages[0] if context.pages else await context.new_page()
+    await page.set_content(html, wait_until="domcontentloaded")
+    return page

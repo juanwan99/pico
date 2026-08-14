@@ -28,6 +28,9 @@ class FakeSurface:
     async def close(self) -> None:
         self.closed = True
 
+    async def render(self, names) -> None:
+        self.names = names
+
 
 @pytest.mark.asyncio
 async def test_same_desk_keeps_browser_when_opening_writer():
@@ -45,7 +48,13 @@ async def test_same_desk_keeps_browser_when_opening_writer():
     runtime = SandboxRuntime(open_browser=open_browser)
     import sandbox_worker.runtime as runtime_mod
 
+    async def open_files(names):
+        surface = FakeSurface("sandbox://files", "文件")
+        surface.names = names
+        return surface
+
     runtime_mod.open_office = open_office  # type: ignore[attr-defined]
+    runtime_mod.open_files_surface = open_files  # type: ignore[attr-defined]
 
     first = await runtime.open_session(
         school_id="sch",

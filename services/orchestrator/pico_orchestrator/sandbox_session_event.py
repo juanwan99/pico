@@ -52,4 +52,7 @@ def sandbox_session_payload(result: Any) -> dict[str, Any] | None:
     focused = str(result.get("focused_window_id") or "").strip()
     if focused:
         payload["focused_window_id"] = focused
+    files = result.get("files")
+    if isinstance(files, list):
+        payload["files"] = files
     return payload

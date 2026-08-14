@@ -9,6 +9,7 @@ import {
   focusPicoSandboxWindow,
   getPicoSandboxScreenshot,
   getPicoSandboxSession,
+  openPicoSandboxDocument,
   postPicoSandboxInput,
   type PicoSandboxWindow,
 } from '~/data-provider/pico/api';
@@ -36,6 +37,7 @@ export default function SandboxWebPane({
   onWheelZoom?: (event: React.WheelEvent) => void;
 }) {
   const [windows, setWindows] = useState<PicoSandboxWindow[]>([]);
+  const [files, setFiles] = useState<Array<{ name: string }>>([]);
   const [focusedKind, setFocusedKind] = useState(kind || 'browser');
   const isOffice = Boolean(focusedKind && focusedKind !== 'browser');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -73,6 +75,9 @@ export default function SandboxWebPane({
       }
       if (meta.kind) {
         setFocusedKind(meta.kind);
+      }
+      if (Array.isArray(meta.files)) {
+        setFiles(meta.files);
       }
     } catch {
       /* shot poll is the source of liveness */
@@ -198,6 +203,9 @@ export default function SandboxWebPane({
       if (Array.isArray(meta.windows)) {
         setWindows(meta.windows);
       }
+      if (Array.isArray(meta.files)) {
+        setFiles(meta.files);
+      }
       await refreshShot();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -252,6 +260,23 @@ export default function SandboxWebPane({
         data-zoom={`${Math.round(zoom * 100)}%`}
         onWheel={onWheelZoom}
       >
+        {focusedKind === 'files' && files.length > 0 ? (
+          <div className="space-y-1 bg-white p-2" data-testid="sandbox-file-list">
+            {files.map((file) => (
+              <button
+                key={file.name}
+                type="button"
+                data-testid={`sandbox-file-${file.name}`}
+                className="block w-full rounded px-2 py-1.5 text-left text-[12px] hover:bg-[#f0f0f0]"
+                onClick={() => {
+                  void openPicoSandboxDocument({ filename: file.name });
+                }}
+              >
+                {file.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {imageUrl ? (
           <img
             ref={imgRef}

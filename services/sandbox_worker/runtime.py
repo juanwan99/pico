@@ -18,7 +18,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from pico_orchestrator.gateway import ToolError
-from pico_orchestrator.sandbox_s1 import workspace_id_for
+from pico_orchestrator.sandbox_s1 import isolation_dir, workspace_id_for
 from pico_orchestrator.web_guard import parse_public_http_url
 
 from sandbox_worker.browser import (
@@ -27,6 +27,7 @@ from sandbox_worker.browser import (
     BrowserPage,
     open_chromium,
 )
+from sandbox_worker.files import FilesSurface, list_workspace_files, open_files_surface
 from sandbox_worker.office import (
     KIND_LABEL,
     OFFICE_ENGINE,
@@ -118,15 +119,25 @@ class SandboxSession:
         return None
 
     def engine_name(self) -> str:
+        if self.kind == "files":
+            return "sandbox-files"
         return OFFICE_ENGINE if self.kind != "browser" else ENGINE_NAME
 
     def human_copy(self) -> str:
+        if self.kind == "files":
+            return "沙箱工作区文件。双击或点文件名即可打开，不必靠公网 URL。"
         return HUMAN_OFFICE_COPY if self.kind != "browser" else HUMAN_LOGIN_COPY
 
     def window_meta(self) -> list[dict[str, str]]:
         out: list[dict[str, str]] = []
         for item in self.windows:
-            label = "浏览器" if item.kind == "browser" else KIND_LABEL.get(item.kind, item.kind)
+            label = (
+                "浏览器"
+                if item.kind == "browser"
+                else "文件"
+                if item.kind == "files"
+                else KIND_LABEL.get(item.kind, item.kind)
+            )
             out.append(
                 {
                     "window_id": item.window_id,
@@ -225,6 +236,30 @@ class SandboxRuntime:
                 return sess
         return None
 
+    def _workspace(self, sess: SandboxSession) -> Path:
+        root = isolation_dir(sess.school_id, sess.membership_id, sess.run_id)
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+
+    def _file_names(self, sess: SandboxSession) -> list[str]:
+        return list_workspace_files(self._workspace(sess))
+
+    def _write_workspace_file(self, sess: SandboxSession, filename: str, document: bytes) -> None:
+        dest = self._workspace(sess) / Path(filename).name
+        dest.write_bytes(document)
+
+    async def _ensure_files_window(self, sess: SandboxSession) -> None:
+        names = self._file_names(sess)
+        for item in sess.windows:
+            if item.kind == "files":
+                surface = item.surface
+                if isinstance(surface, FilesSurface):
+                    await surface.render(names)
+                return
+        surface = await open_files_surface(names)
+        win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind="files", surface=surface)
+        sess.windows.append(win)
+
     async def _sync(self, sess: SandboxSession) -> None:
         win = sess.focused()
         surface = win.surface
@@ -252,6 +287,7 @@ class SandboxRuntime:
                 "human_copy": sess.human_copy(),
                 "windows": sess.window_meta(),
                 "focused_window_id": sess.focused_id,
+                "files": [{"name": name} for name in self._file_names(sess)],
                 "byte_size": len(sess.screenshot_png),
                 "mime": "image/png",
                 **extra,
@@ -313,6 +349,7 @@ class SandboxRuntime:
                 focused_id=win.window_id,
                 kind="browser",
             )
+            await self._ensure_files_window(sess)
             await self._sync(sess)
             self._sessions[session_id] = sess
             stored = True
@@ -367,6 +404,8 @@ class SandboxRuntime:
             kind=resolved,
         )
         try:
+            self._write_workspace_file(sess, safe_name, document)
+            await self._ensure_files_window(sess)
             await self._sync(sess)
         except Exception:
             await desktop.close()
@@ -393,6 +432,7 @@ class SandboxRuntime:
             win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind="browser", surface=page)
             sess.windows.append(win)
             sess.focused_id = win.window_id
+            await self._ensure_files_window(sess)
             await self._sync(sess)
         except Exception:
             await page.close()
@@ -418,11 +458,13 @@ class SandboxRuntime:
                     sess,
                     message=f"已切到沙箱 {KIND_LABEL.get(kind, kind)}。{HUMAN_OFFICE_COPY}",
                 )
+        self._write_workspace_file(sess, filename, document)
         desktop = await open_office(kind=kind, filename=filename, document=document)
         try:
             win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind=kind, surface=desktop)
             sess.windows.append(win)
             sess.focused_id = win.window_id
+            await self._ensure_files_window(sess)
             await self._sync(sess)
         except Exception:
             await desktop.close()
