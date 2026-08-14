@@ -1,4 +1,6 @@
 import base64
+import io
+import zipfile
 from dataclasses import dataclass
 
 import pytest
@@ -84,9 +86,6 @@ async def test_document_open_calc_sends_xlsx_with_known_cell(monkeypatch):
     raw = base64.b64decode(captured["body"]["document_base64"])
     assert raw[:2] == b"PK"
     assert captured["body"]["kind"] == "calc"
-    import zipfile
-    import io
-
     with zipfile.ZipFile(io.BytesIO(raw)) as zf:
         sheet = zf.read("xl/worksheets/sheet1.xml")
         assert b"NIGHT-P4-CELL-ALPHA" in sheet
