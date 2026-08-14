@@ -254,6 +254,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                 {showResultPanel ? (
                   <ResultPanel
                     messages={flatMessages}
+                    conversationId={conversationId}
                     taskTitle={taskTitle || ledger.task?.title}
                     runStatusLabel={runStatusLabel}
                     processHint={
