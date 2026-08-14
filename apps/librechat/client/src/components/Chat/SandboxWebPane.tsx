@@ -6,9 +6,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
+  focusPicoSandboxWindow,
   getPicoSandboxScreenshot,
   getPicoSandboxSession,
   postPicoSandboxInput,
+  type PicoSandboxWindow,
 } from '~/data-provider/pico/api';
 
 const POLL_MS = 1500;
@@ -33,7 +35,9 @@ export default function SandboxWebPane({
   zoom?: number;
   onWheelZoom?: (event: React.WheelEvent) => void;
 }) {
-  const isOffice = Boolean(kind && kind !== 'browser');
+  const [windows, setWindows] = useState<PicoSandboxWindow[]>([]);
+  const [focusedKind, setFocusedKind] = useState(kind || 'browser');
+  const isOffice = Boolean(focusedKind && focusedKind !== 'browser');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pageUrl, setPageUrl] = useState(initialUrl || '');
   const [pageTitle, setPageTitle] = useState(initialTitle || '');
@@ -63,6 +67,12 @@ export default function SandboxWebPane({
       }
       if (meta.title) {
         setPageTitle(meta.title);
+      }
+      if (Array.isArray(meta.windows)) {
+        setWindows(meta.windows);
+      }
+      if (meta.kind) {
+        setFocusedKind(meta.kind);
       }
     } catch {
       /* shot poll is the source of liveness */
@@ -169,8 +179,58 @@ export default function SandboxWebPane({
     await sendInput({ secret: value });
   };
 
+  const switchWindow = async (next: PicoSandboxWindow) => {
+    setBusy(true);
+    try {
+      const meta = await focusPicoSandboxWindow(sessionId, {
+        window_id: next.window_id,
+        kind: next.kind,
+      });
+      if (meta.kind) {
+        setFocusedKind(meta.kind);
+      }
+      if (meta.title) {
+        setPageTitle(meta.title);
+      }
+      if (meta.url) {
+        setPageUrl(meta.url);
+      }
+      if (Array.isArray(meta.windows)) {
+        setWindows(meta.windows);
+      }
+      await refreshShot();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message.includes('session_not_found') ? '窗口已关闭' : '切窗失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="sandbox-web-pane">
+      {windows.length > 1 ? (
+        <div
+          className="flex flex-wrap gap-1 border-b border-black/[0.05] bg-[#f4f4f4] px-2 py-1"
+          data-testid="sandbox-window-bar"
+        >
+          {windows.map((item) => (
+            <button
+              key={item.window_id}
+              type="button"
+              data-testid={`sandbox-window-${item.kind}`}
+              data-focused={item.focused === '1' ? 'true' : 'false'}
+              className={`rounded px-2 py-0.5 text-[11px] ${
+                item.focused === '1' ? 'bg-white font-medium shadow-sm' : 'text-[#6b6b6b]'
+              }`}
+              onClick={() => void switchWindow(item)}
+              disabled={busy}
+            >
+              {item.title || item.kind}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className="border-b border-black/[0.05] px-2 py-1.5">
         <p className="truncate text-[11px] text-[#6b6b6b]" title={pageUrl || undefined}>
           {pageTitle || '隔离网页'}

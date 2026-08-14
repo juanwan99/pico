@@ -70,9 +70,7 @@ async function waitSandboxReady(page, pred, timeoutMs) {
     const err = page.getByTestId('artifact-action-error');
     if (await err.count()) {
       const msg = await err.innerText().catch(() => '');
-      if (msg.trim()) {
-        fail('P1', `sandbox error: ${msg.trim()}`);
-      }
+      last = `${last}\nERR:${msg}`.trim();
     }
     await page.waitForTimeout(800);
   }

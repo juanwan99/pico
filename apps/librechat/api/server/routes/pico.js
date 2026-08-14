@@ -339,6 +339,14 @@ router.get('/v1/sandbox/sessions/:sessionId/screenshot', (req, res) => {
     return res.status(400).json({ error: 'bad_request', message: e.message });
   }
 });
+router.post('/v1/sandbox/sessions/:sessionId/focus', (req, res) => {
+  try {
+    assertId(req.params.sessionId, 'sessionId');
+    return proxy(req, res, `/v1/sandbox/sessions/${req.params.sessionId}/focus`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
 router.post('/v1/sandbox/sessions/:sessionId/input', (req, res) => {
   try {
     assertId(req.params.sessionId, 'sessionId');

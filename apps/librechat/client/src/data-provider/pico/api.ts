@@ -337,6 +337,13 @@ export async function rejectPicoChange(id: string) {
   return picoFetch<{ change: PicoChange }>(`/v1/changes/${id}/reject`, { method: 'POST' });
 }
 
+export type PicoSandboxWindow = {
+  window_id: string;
+  kind: string;
+  title?: string;
+  focused?: string;
+};
+
 export type PicoSandboxSessionMeta = {
   ok?: boolean;
   session_id: string;
@@ -345,6 +352,8 @@ export type PicoSandboxSessionMeta = {
   human_copy?: string;
   engine?: string;
   kind?: string;
+  windows?: PicoSandboxWindow[];
+  focused_window_id?: string;
   clicked?: boolean;
   typed?: boolean;
 };
@@ -391,6 +400,19 @@ export async function getPicoSandboxScreenshot(sessionId: string): Promise<Blob>
     throw new Error(`pico ${res.status}: ${text.slice(0, 200)}`);
   }
   return res.blob();
+}
+
+export async function focusPicoSandboxWindow(
+  sessionId: string,
+  body: { window_id?: string; kind?: string },
+) {
+  return picoFetch<PicoSandboxSessionMeta>(
+    `/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/focus`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 export async function postPicoSandboxInput(
