@@ -36,7 +36,7 @@ def sandbox_session_payload(result: Any) -> dict[str, Any] | None:
     view_path = str(result.get("view_path") or "").strip()
     if not view_path:
         view_path = f"/v1/sandbox/sessions/{session_id}/view"
-    return {
+    payload = {
         "session_id": session_id,
         "url": url,
         "title": title,
@@ -46,3 +46,10 @@ def sandbox_session_payload(result: Any) -> dict[str, Any] | None:
         "kind": str(result.get("kind") or ""),
         "workspace_id": str(result.get("workspace_id") or ""),
     }
+    windows = result.get("windows")
+    if isinstance(windows, list):
+        payload["windows"] = windows
+    focused = str(result.get("focused_window_id") or "").strip()
+    if focused:
+        payload["focused_window_id"] = focused
+    return payload

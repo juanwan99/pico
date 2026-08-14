@@ -783,6 +783,48 @@ async def sandbox_session_screenshot(
     )
 
 
+@app.post("/v1/sandbox/sessions/{session_id}/focus")
+async def sandbox_session_focus(
+    session_id: str,
+    request: Request,
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> JSONResponse:
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+
+    window_id = ""
+    kind = ""
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    if isinstance(body, dict):
+        window_id = str(body.get("window_id") or "")
+        kind = str(body.get("kind") or "")
+    try:
+        meta = await sidecar_json(
+            "POST",
+            f"/v1/internal/sessions/{session_id}/focus",
+            json_body={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+                "window_id": window_id,
+                "kind": kind,
+            },
+        )
+    except ToolError as exc:
+        status = 404 if exc.code == "sandbox.session_not_found" else 400
+        raise HTTPException(
+            status_code=status, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    if not isinstance(meta, dict):
+        raise HTTPException(status_code=502, detail={"code": "sandbox.unavailable"})
+    return JSONResponse(
+        content=_sandbox_public_meta(session_id, meta),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.post("/v1/sandbox/sessions/{session_id}/input")
 async def sandbox_session_input(
     session_id: str,

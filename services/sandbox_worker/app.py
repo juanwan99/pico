@@ -49,6 +49,13 @@ class InputBody(BaseModel):
     field: str = Field(default="input", max_length=64)
 
 
+class FocusBody(BaseModel):
+    school_id: str
+    membership_id: str
+    window_id: str = ""
+    kind: str = ""
+
+
 def _tool_http(exc: ToolError) -> HTTPException:
     status = 404 if exc.code in {"sandbox.session_not_found", "artifact.not_found"} else 400
     return HTTPException(status_code=status, detail={"code": exc.code, "message": exc.message})
@@ -158,6 +165,22 @@ async def post_input(
             password=body.password,
             field=body.field,
         )
+    except ToolError as exc:
+        raise _tool_http(exc) from exc
+
+
+@app.post("/v1/internal/sessions/{session_id}/focus")
+async def focus_window(
+    session_id: str,
+    body: FocusBody,
+    x_pico_sandbox_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_token(x_pico_sandbox_token)
+    try:
+        sess = RUNTIME.require_owner(
+            session_id, school_id=body.school_id, membership_id=body.membership_id
+        )
+        return await RUNTIME.focus(sess, window_id=body.window_id, kind=body.kind)
     except ToolError as exc:
         raise _tool_http(exc) from exc
 

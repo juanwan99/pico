@@ -94,6 +94,13 @@ async def _embedded_call(
                 password=bool(body.get("password")),
                 field=str(body.get("field") or "input"),
             )
+        if method == "POST" and path.endswith("/focus"):
+            body = json_body or {}
+            return await RUNTIME.focus(
+                sess,
+                window_id=str(body.get("window_id") or ""),
+                kind=str(body.get("kind") or ""),
+            )
         if method == "POST" and path.endswith("/destroy"):
             await RUNTIME.destroy(session_id)
             return {"ok": True, "destroyed": True, "session_id": session_id}

@@ -1,0 +1,16 @@
+{
+  "card": "T-NIGHT-SANDBOX-COMPUTER",
+  "phase": "P2",
+  "base": "http://localhost:3090",
+  "tip": {
+    "error": "tip invalid: {\"ok\":false,\"git_sha\":null,\"service\":\"pico-api\"}"
+  },
+  "s5": "Y",
+  "s6": "Y",
+  "claim_wb": "NO",
+  "s5_bytes": 97672,
+  "s5_viewport": 23689,
+  "s6_bytes": 100499,
+  "s6_viewport": 35514,
+  "verdict": "PASS"
+}

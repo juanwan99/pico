@@ -65,6 +65,13 @@ OpenBrowser = Callable[[str], Awaitable[BrowserPage]]
 
 
 @dataclass
+class SandboxWindow:
+    window_id: str
+    kind: str
+    surface: BrowserPage | OfficeDesktop
+
+
+@dataclass
 class SandboxSession:
     session_id: str
     school_id: str
@@ -76,16 +83,59 @@ class SandboxSession:
     h1: str
     screenshot_png: bytes
     created_at: float
-    browser: BrowserPage | None = None
-    desktop: OfficeDesktop | None = None
+    windows: list[SandboxWindow] = field(default_factory=list)
+    focused_id: str = ""
     kind: str = "browser"
     secret_fields: set[str] = field(default_factory=set)
+
+    def focused(self) -> SandboxWindow:
+        for item in self.windows:
+            if item.window_id == self.focused_id:
+                return item
+        if self.windows:
+            return self.windows[-1]
+        raise ToolError("sandbox.session_not_found", "隔离会话没有可截取的窗口")
+
+    @property
+    def browser(self) -> BrowserPage | None:
+        for item in self.windows:
+            if item.kind == "browser":
+                return item.surface  # type: ignore[return-value]
+        return None
+
+    @property
+    def desktop(self) -> OfficeDesktop | None:
+        focused = None
+        try:
+            focused = self.focused()
+        except ToolError:
+            focused = None
+        if focused is not None and focused.kind != "browser":
+            return focused.surface  # type: ignore[return-value]
+        for item in self.windows:
+            if item.kind != "browser":
+                return item.surface  # type: ignore[return-value]
+        return None
 
     def engine_name(self) -> str:
         return OFFICE_ENGINE if self.kind != "browser" else ENGINE_NAME
 
     def human_copy(self) -> str:
         return HUMAN_OFFICE_COPY if self.kind != "browser" else HUMAN_LOGIN_COPY
+
+    def window_meta(self) -> list[dict[str, str]]:
+        out: list[dict[str, str]] = []
+        for item in self.windows:
+            label = "浏览器" if item.kind == "browser" else KIND_LABEL.get(item.kind, item.kind)
+            out.append(
+                {
+                    "window_id": item.window_id,
+                    "kind": item.kind,
+                    "title": label,
+                    "focused": "1" if item.window_id == self.focused_id else "0",
+                }
+            )
+        return out
 
 
 def isolation_tuple(school_id: str, membership_id: str, run_id: str | None) -> tuple[str, str, str]:
@@ -169,10 +219,16 @@ class SandboxRuntime:
             raise ToolError("sandbox.session_not_found", "找不到该隔离会话")
         return sess
 
+    def _find_desk(self, school_id: str, membership_id: str) -> SandboxSession | None:
+        for sess in self._sessions.values():
+            if sess.school_id == school_id and sess.membership_id == membership_id:
+                return sess
+        return None
+
     async def _sync(self, sess: SandboxSession) -> None:
-        surface = sess.desktop or sess.browser
-        if surface is None:
-            raise ToolError("sandbox.session_not_found", "隔离会话没有可截取的窗口")
+        win = sess.focused()
+        surface = win.surface
+        sess.kind = win.kind
         sess.url = surface.url
         sess.title = await surface.title()
         sess.h1 = await surface.h1()
@@ -194,6 +250,8 @@ class SandboxRuntime:
                 "engine": sess.engine_name(),
                 "view_path": f"/v1/sandbox/sessions/{sess.session_id}/view",
                 "human_copy": sess.human_copy(),
+                "windows": sess.window_meta(),
+                "focused_window_id": sess.focused_id,
                 "byte_size": len(sess.screenshot_png),
                 "mime": "image/png",
                 **extra,
@@ -226,6 +284,10 @@ class SandboxRuntime:
         hostile = automation_hostile_reason(url)
         if hostile:
             raise ToolError("sandbox.site_blocks_automation", hostile)
+        school, member, run = isolation_tuple(school_id, membership_id, run_id)
+        existing = self._find_desk(school, member)
+        if existing is not None:
+            return await self._attach_browser(existing, url)
         page = await self._open_browser(url)
         stored = False
         try:
@@ -233,9 +295,9 @@ class SandboxRuntime:
             hostile = automation_hostile_reason(page.url)
             if hostile:
                 raise ToolError("sandbox.site_blocks_automation", hostile)
-            school, member, run = isolation_tuple(school_id, membership_id, run_id)
             session_id = "sbox_" + secrets.token_hex(12)
             ws = workspace_id_for(school, member, run)
+            win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind="browser", surface=page)
             sess = SandboxSession(
                 session_id=session_id,
                 school_id=school,
@@ -247,7 +309,8 @@ class SandboxRuntime:
                 h1="",
                 screenshot_png=b"",
                 created_at=time.time(),
-                browser=page,
+                windows=[win],
+                focused_id=win.window_id,
                 kind="browser",
             )
             await self._sync(sess)
@@ -278,10 +341,16 @@ class SandboxRuntime:
         await self._purge()
         resolved = resolve_kind(filename, kind)
         safe_name = Path(filename or "document.docx").name or "document.docx"
-        desktop = await open_office(kind=resolved, filename=safe_name, document=document)
         school, member, run = isolation_tuple(school_id, membership_id, run_id)
+        existing = self._find_desk(school, member)
+        if existing is not None:
+            return await self._attach_office(
+                existing, kind=resolved, filename=safe_name, document=document
+            )
+        desktop = await open_office(kind=resolved, filename=safe_name, document=document)
         session_id = "sbox_" + secrets.token_hex(12)
         ws = workspace_id_for(school, member, run)
+        win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind=resolved, surface=desktop)
         sess = SandboxSession(
             session_id=session_id,
             school_id=school,
@@ -293,7 +362,8 @@ class SandboxRuntime:
             h1="",
             screenshot_png=b"",
             created_at=time.time(),
-            desktop=desktop,
+            windows=[win],
+            focused_id=win.window_id,
             kind=resolved,
         )
         try:
@@ -307,6 +377,76 @@ class SandboxRuntime:
             sess,
             message=f"已在沙箱 {label} 打开 {safe_name}。{HUMAN_OFFICE_COPY}",
         )
+
+    async def _attach_browser(self, sess: SandboxSession, url: str) -> dict[str, Any]:
+        for item in sess.windows:
+            if item.kind == "browser":
+                sess.focused_id = item.window_id
+                await self._sync(sess)
+                return self._public_meta(
+                    sess,
+                    message=f"已切回 sidecar Chromium。{HUMAN_LOGIN_COPY}",
+                )
+        page = await self._open_browser(url)
+        try:
+            parse_public_http_url(page.url)
+            win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind="browser", surface=page)
+            sess.windows.append(win)
+            sess.focused_id = win.window_id
+            await self._sync(sess)
+        except Exception:
+            await page.close()
+            raise
+        return self._public_meta(
+            sess,
+            message=f"已在 sidecar Chromium 打开公开页。{HUMAN_LOGIN_COPY}",
+        )
+
+    async def _attach_office(
+        self,
+        sess: SandboxSession,
+        *,
+        kind: str,
+        filename: str,
+        document: bytes,
+    ) -> dict[str, Any]:
+        for item in sess.windows:
+            if item.kind == kind:
+                sess.focused_id = item.window_id
+                await self._sync(sess)
+                return self._public_meta(
+                    sess,
+                    message=f"已切到沙箱 {KIND_LABEL.get(kind, kind)}。{HUMAN_OFFICE_COPY}",
+                )
+        desktop = await open_office(kind=kind, filename=filename, document=document)
+        try:
+            win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind=kind, surface=desktop)
+            sess.windows.append(win)
+            sess.focused_id = win.window_id
+            await self._sync(sess)
+        except Exception:
+            await desktop.close()
+            raise
+        return self._public_meta(
+            sess,
+            message=f"已在沙箱 {KIND_LABEL.get(kind, kind)} 打开 {filename}。{HUMAN_OFFICE_COPY}",
+        )
+
+    async def focus(self, session: SandboxSession, *, window_id: str = "", kind: str = "") -> dict[str, Any]:
+        target = (window_id or "").strip()
+        want_kind = (kind or "").strip().lower()
+        chosen: SandboxWindow | None = None
+        for item in session.windows:
+            if target and item.window_id == target:
+                chosen = item
+                break
+            if want_kind and item.kind == want_kind:
+                chosen = item
+        if chosen is None:
+            raise ToolError("sandbox.session_not_found", "找不到要切换的窗口")
+        session.focused_id = chosen.window_id
+        await self._sync(session)
+        return self._public_meta(session, message=f"已切到{chosen.kind}窗口")
 
     async def screenshot(self, session: SandboxSession) -> dict[str, Any]:
         await self._purge()
@@ -327,9 +467,7 @@ class SandboxRuntime:
         field: str = "input",
     ) -> dict[str, Any]:
         await self._purge()
-        surface = session.desktop or session.browser
-        if surface is None:
-            raise ToolError("sandbox.session_not_found", "隔离会话没有可操作的窗口")
+        surface = session.focused().surface
         clicked = click_x is not None and click_y is not None
         if clicked:
             await surface.click(int(click_x), int(click_y))
@@ -350,11 +488,9 @@ class SandboxRuntime:
         sess = self._sessions.pop(session_id, None)
         if sess is None:
             return
-        for closer in (sess.desktop, sess.browser):
-            if closer is None:
-                continue
+        for item in sess.windows:
             try:
-                await closer.close()
+                await item.surface.close()
             except Exception:
                 logger.debug("sandbox session close failed", exc_info=True)
 
