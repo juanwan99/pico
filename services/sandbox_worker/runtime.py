@@ -450,15 +450,25 @@ class SandboxRuntime:
         filename: str,
         document: bytes,
     ) -> dict[str, Any]:
-        for item in sess.windows:
-            if item.kind == kind:
+        self._write_workspace_file(sess, filename, document)
+        for item in list(sess.windows):
+            if item.kind != kind:
+                continue
+            existing_name = str(getattr(item.surface, "filename", "") or "")
+            if existing_name == filename:
                 sess.focused_id = item.window_id
+                await self._ensure_files_window(sess)
                 await self._sync(sess)
                 return self._public_meta(
                     sess,
                     message=f"已切到沙箱 {KIND_LABEL.get(kind, kind)}。{HUMAN_OFFICE_COPY}",
                 )
-        self._write_workspace_file(sess, filename, document)
+            try:
+                await item.surface.close()
+            except Exception:
+                logger.debug("replace office window close failed", exc_info=True)
+            sess.windows = [w for w in sess.windows if w.window_id != item.window_id]
+            break
         desktop = await open_office(kind=kind, filename=filename, document=document)
         try:
             win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind=kind, surface=desktop)

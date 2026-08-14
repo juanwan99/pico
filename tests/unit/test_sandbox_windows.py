@@ -87,6 +87,58 @@ async def test_same_desk_keeps_browser_when_opening_writer():
 
 
 @pytest.mark.asyncio
+async def test_opening_new_docx_replaces_writer_and_keeps_tree():
+    first_doc = FakeSurface("sandbox://writer/old.docx", "LibreOffice Writer · old.docx")
+    first_doc.filename = "old.docx"
+    second_doc = FakeSurface("sandbox://writer/new.docx", "LibreOffice Writer · new.docx")
+    second_doc.filename = "new.docx"
+    docs = [first_doc, second_doc]
+
+    async def open_browser(url: str):
+        raise AssertionError(url)
+
+    async def open_office(*, kind: str, filename: str, document: bytes):
+        _ = (kind, document)
+        surface = docs.pop(0)
+        surface.filename = filename
+        return surface
+
+    runtime = SandboxRuntime(open_browser=open_browser)
+    import sandbox_worker.runtime as runtime_mod
+
+    async def open_files(names):
+        surface = FakeSurface("sandbox://files", "文件")
+        surface.names = names
+        return surface
+
+    runtime_mod.open_office = open_office  # type: ignore[attr-defined]
+    runtime_mod.open_files_surface = open_files  # type: ignore[attr-defined]
+
+    first = await runtime.open_session(
+        school_id="sch",
+        membership_id="mem",
+        run_id="r2",
+        kind="writer",
+        filename="old.docx",
+        document=b"PK-old",
+    )
+    second = await runtime.open_session(
+        school_id="sch",
+        membership_id="mem",
+        run_id="r2",
+        kind="writer",
+        filename="new.docx",
+        document=b"PK-new",
+    )
+    assert second["session_id"] == first["session_id"]
+    assert second["title"] == "LibreOffice Writer · new.docx"
+    names = [f["name"] for f in second.get("files") or []]
+    assert "old.docx" in names
+    assert "new.docx" in names
+    assert first_doc.closed is True
+
+
+@pytest.mark.asyncio
 async def test_files_surface_raster_shows_unique_name():
     from sandbox_worker.files import listing_png, open_files_surface
 

@@ -239,6 +239,7 @@ function FileGlyph({ kind }: { kind: ArtifactItem['kind'] }) {
 
 export default function ResultPanel({
   messages,
+  conversationId,
   taskTitle,
   runStatusLabel,
   processHint,
@@ -251,6 +252,7 @@ export default function ResultPanel({
   onRerun,
 }: {
   messages?: TMessage[] | null;
+  conversationId?: string | null;
   taskTitle?: string;
   runStatusLabel?: string;
   processHint?: string | null;
@@ -296,6 +298,11 @@ export default function ResultPanel({
   const tokenUsageLabel = formatRunTokenUsage(run);
   const ledgerSandbox = useMemo(() => collectPicoSandboxSession(runEvents), [runEvents]);
   const sandboxSession = localSandbox || ledgerSandbox;
+
+  useEffect(() => {
+    setLocalSandbox(null);
+    openedWebsiteRef.current = null;
+  }, [conversationId]);
   const previewActive = Boolean(previewHtml || previewImage || previewText || previewOffice);
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
@@ -498,7 +505,12 @@ export default function ResultPanel({
 
   useEffect(() => {
     if (ledgerSandbox) {
-      return;
+      const office = latestUserOpenOfficeIntent(messages);
+      const want = (office?.filename || '').toLowerCase();
+      const have = `${ledgerSandbox.title || ''} ${ledgerSandbox.url || ''}`.toLowerCase();
+      if (!want || have.includes(want.replace(/^.*\//, ''))) {
+        return;
+      }
     }
     const office = latestUserOpenOfficeIntent(messages);
     if (office) {
@@ -1180,6 +1192,7 @@ export default function ResultPanel({
           <div className="flex min-h-0 flex-1 flex-col">
             {sandboxSession ? (
               <SandboxWebPane
+                key={sandboxSession.sessionId}
                 sessionId={sandboxSession.sessionId}
                 initialUrl={sandboxSession.url}
                 initialTitle={sandboxSession.title}

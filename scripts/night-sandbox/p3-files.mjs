@@ -50,6 +50,22 @@ async function waitText(page, re, timeoutMs) {
   throw new Error(`did not see ${re}: ${last.slice(0, 200)}`);
 }
 
+async function waitPane(page, re, timeoutMs) {
+  const start = Date.now();
+  let last = '';
+  while (Date.now() - start < timeoutMs) {
+    const pane = page.getByTestId('sandbox-web-pane');
+    if (await pane.count()) {
+      last = await pane.innerText().catch(() => '');
+      if (re.test(last) && (await page.getByTestId('sandbox-web-viewport').count())) {
+        return last;
+      }
+    }
+    await page.waitForTimeout(700);
+  }
+  throw new Error(`pane did not match ${re}: ${last.slice(0, 200)}`);
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const { email, password } = emailPass();
@@ -85,7 +101,12 @@ async function main() {
     await login(page, args.base, email, password);
     await goNewChat(page, args.base);
     await sendPrompt(page, `打开 ${unique}`);
-    await waitText(page, /Writer|LibreOffice|课堂笔记|Word 正文/i, args.timeoutMs);
+    const uniqueRe = new RegExp(unique.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    await waitPane(page, uniqueRe, args.timeoutMs);
+    await waitPane(page, /Writer|LibreOffice/i, args.timeoutMs);
+    await shot(page, path.join(args.out, 'S7-before-files.png'), { allowSmall: true }).catch(
+      () => {},
+    );
     const filesTab = page.getByTestId('sandbox-window-files');
     if (await filesTab.count()) {
       await filesTab.click();
@@ -94,9 +115,6 @@ async function main() {
     }
     const fileBtn = page.getByTestId(`sandbox-file-${unique}`);
     await fileBtn.waitFor({ state: 'visible', timeout: args.timeoutMs });
-    await waitText(page, /工作区文件|Workspace files|sandbox:\/\/files/i, 15000).catch(
-      () => {},
-    );
     const s7 = await shot(page, path.join(args.out, 'S7-files.png'));
     report.s7 = 'Y';
     report.s7_bytes = s7.size;
