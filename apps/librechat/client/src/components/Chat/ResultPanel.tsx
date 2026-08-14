@@ -1,11 +1,10 @@
 /**
- * Task result panel — clean-room layout from WorkBuddy nonempty screenshots.
- * Top: view dropdown 概览 | 工作空间文件 | 浏览器
- * 概览: file cards (icon / name / size / 打开); 产物 nested concept = cards list
- * 工作空间文件: search + checkbox rows
- * 浏览器: nav chrome + URL + security footer
+ * Task result panel — right-hand stage for files and public pages.
+ * Top: 概览 | 工作空间文件 | 网页
+ * Open html/image/text fills this pane. Open a site / click a source uses
+ * sandbox_browser_open (网页). iframe「浏览器」is not the open-website entry.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown,
@@ -15,10 +14,6 @@ import {
   Maximize2,
   Minimize2,
   PanelRightClose,
-  ArrowLeft,
-  ArrowRight,
-  RotateCw,
-  ExternalLink,
   Download,
   Loader2,
   Search,
@@ -27,18 +22,28 @@ import {
 import type { TMessage } from 'librechat-data-provider';
 import {
   getPicoArtifactContent,
+  openPicoSandboxBrowser,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
+import {
+  classifyArtifactPreview,
+  latestUserOpenWebsiteIntent,
+  OFFICE_NO_PREVIEW_COPY,
+  readBlobText,
+  RESULT_PANE_VIEW_LABEL,
+  RESULT_PANE_VIEWS,
+  type ResultPaneView,
+} from '~/utils/picoOpenInPane';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
 import PicoSearchSources from './PicoSearchSources';
 import SandboxWebPane from './SandboxWebPane';
 
-type TopView = 'overview' | 'files' | 'browser' | 'web';
+type TopView = ResultPaneView;
 
 type ArtifactItem = {
   id: string;
@@ -206,12 +211,7 @@ function collectArtifacts(messages: TMessage[] | null | undefined): ArtifactItem
   return out;
 }
 
-const VIEW_LABEL: Record<TopView, string> = {
-  overview: '概览',
-  files: '工作空间文件',
-  web: '网页',
-  browser: '浏览器',
-};
+const VIEW_LABEL = RESULT_PANE_VIEW_LABEL;
 
 function FileGlyph({ kind }: { kind: ArtifactItem['kind'] }) {
   const label = kind === 'txt' ? 'TXT' : kind === 'html' ? 'HTML' : null;
@@ -258,21 +258,28 @@ export default function ResultPanel({
   const [view, setView] = useState<TopView>('overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [fileQuery, setFileQuery] = useState('');
-  const [browserUrl, setBrowserUrl] = useState('');
-  const [browserLoaded, setBrowserLoaded] = useState('');
-  const [browserKey, setBrowserKey] = useState(0);
-  const [browserHistory, setBrowserHistory] = useState<string[]>([]);
-  const [browserIndex, setBrowserIndex] = useState(-1);
   const [expanded, setExpanded] = useState(false);
   const [artifactAction, setArtifactAction] = useState<ArtifactAction | null>(null);
   const [artifactError, setArtifactError] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewOffice, setPreviewOffice] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
+  const [previewArtifactId, setPreviewArtifactId] = useState<string | null>(null);
+  const [localSandbox, setLocalSandbox] = useState<{
+    sessionId: string;
+    url: string;
+    title: string;
+    humanCopy: string;
+  } | null>(null);
+  const [websiteError, setWebsiteError] = useState<string | null>(null);
+  const openedWebsiteRef = useRef<string | null>(null);
   const navigate = useNavigate();
   const tokenUsageLabel = formatRunTokenUsage(run);
-  const sandboxSession = useMemo(() => collectPicoSandboxSession(runEvents), [runEvents]);
+  const ledgerSandbox = useMemo(() => collectPicoSandboxSession(runEvents), [runEvents]);
+  const sandboxSession = localSandbox || ledgerSandbox;
+  const previewActive = Boolean(previewHtml || previewImage || previewText || previewOffice);
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
     if (picoArtifacts?.length) {
@@ -331,20 +338,61 @@ export default function ResultPanel({
     }
   }, [sandboxSession?.sessionId]);
 
-  // Prefer https links in artifact inline as browser targets
-  useEffect(() => {
-    const fromArts = (picoArtifacts || []).find((a) => {
-      const s = (a.inline || a.title || '').trim();
-      return /^https?:\/\//i.test(s);
-    });
-    if (fromArts) {
-      const u = (fromArts.inline || fromArts.title || '').trim();
-      setBrowserUrl(u);
-      setBrowserLoaded(u);
-      setBrowserHistory([u]);
-      setBrowserIndex(0);
+  const clearFilePreview = () => {
+    setPreviewText(null);
+    setPreviewHtml(null);
+    setPreviewImage(null);
+    setPreviewOffice(null);
+    setPreviewTitle(null);
+    setPreviewArtifactId(null);
+  };
+
+  const openWebsiteInPane = async (rawUrl: string) => {
+    const url = rawUrl.trim();
+    if (!url || openedWebsiteRef.current === url) {
+      if (url && sandboxSession) {
+        setView('web');
+      }
+      return;
     }
-  }, [picoArtifacts]);
+    openedWebsiteRef.current = url;
+    setWebsiteError(null);
+    clearFilePreview();
+    setView('web');
+    try {
+      const meta = await openPicoSandboxBrowser(url);
+      const sessionId = String(meta.session_id || '').trim();
+      if (!sessionId.startsWith('sbox_')) {
+        throw new Error('sandbox session missing');
+      }
+      setLocalSandbox({
+        sessionId,
+        url: String(meta.url || url),
+        title: String(meta.title || ''),
+        humanCopy: String(meta.human_copy || '请在此画面自行登录，不要在聊天里发送密码'),
+      });
+    } catch (err) {
+      openedWebsiteRef.current = null;
+      const message = err instanceof Error ? err.message : String(err);
+      setWebsiteError(
+        message.includes('web.denied') || message.includes('denied')
+          ? '该地址不能在隔离网页打开'
+          : '打开网页失败，请稍后重试',
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (ledgerSandbox) {
+      return;
+    }
+    const intent = latestUserOpenWebsiteIntent(messages);
+    if (intent) {
+      void openWebsiteInPane(intent);
+    }
+    // Intent is derived from the latest user turn; skip if ledger already opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, ledgerSandbox]);
 
   const filteredFiles = useMemo(() => {
     const q = fileQuery.trim().toLowerCase();
@@ -381,55 +429,23 @@ export default function ResultPanel({
     }
   };
 
-  const openArtifact = async (artifact: ArtifactItem) => {
-    dismissOverlayMenus();
-    setArtifactAction({ id: artifact.id, type: 'open' });
-    setArtifactError(null);
-    setPreviewText(null);
-    setPreviewHtml(null);
-    setPreviewImage(null);
-    setPreviewTitle(null);
-    try {
-      if (artifact.url) {
-        const url = safeArtifactUrl(artifact.url);
-        if (!url) {
-          throw new Error('invalid artifact URL');
-        }
-        const opened = window.open(url, '_blank', 'noopener,noreferrer');
-        if (!opened) {
-          throw new Error('artifact preview blocked');
-        }
-        return;
-      }
-      const blob = await readArtifactBlob(artifact, false);
-      // HTML: sandboxed iframe preview (no scripts / no same-origin / no forms).
-      if (isHtmlArtifact(artifact) || /text\/html/i.test(blob.type || '')) {
-        const text = await blob.text();
-        setPreviewTitle(artifact.name || 'HTML 预览');
-        setPreviewHtml(text);
-        return;
-      }
-      if (isImageArtifact(artifact, blob.type)) {
-        const objectUrl = URL.createObjectURL(blob);
-        setPreviewTitle(artifact.name || '截图');
-        setPreviewImage(objectUrl);
-        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-        return;
-      }
-      // In-panel preview for text — no popup dependency (W4: open must show content).
-      const looksText =
-        artifact.kind === 'txt' ||
-        /text|json|markdown|plain/i.test(blob.type || '') ||
-        /\.(txt|md|json|csv|log)$/i.test(artifact.name || '');
-      // Binary Office packages: do not force as UTF-8 text preview.
-      const looksBinaryOffice = /\.(docx|pptx|xlsx)$/i.test(artifact.name || '');
-      if ((looksText || (blob.size <= 512_000 && !looksBinaryOffice)) && !looksBinaryOffice) {
-        const text = await blob.text();
-        setPreviewTitle(artifact.name || '产物预览');
-        setPreviewText(text);
-        return;
-      }
-      // Office / large binary: download-friendly open fallback with clear message.
+  const applyBlobPreview = async (artifact: ArtifactItem, blob: Blob) => {
+    const kind = classifyArtifactPreview(artifact.name, artifact.kindLabel, blob.type);
+    setPreviewTitle(artifact.name || '产物预览');
+    setPreviewArtifactId(artifact.id);
+    if (kind === 'html' || isHtmlArtifact(artifact) || /text\/html/i.test(blob.type || '')) {
+      setPreviewHtml(await readBlobText(blob, artifact.body));
+      setView('overview');
+      return;
+    }
+    if (kind === 'image' || isImageArtifact(artifact, blob.type)) {
+      const objectUrl = URL.createObjectURL(blob);
+      setPreviewImage(objectUrl);
+      setView('overview');
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      return;
+    }
+    if (kind === 'office') {
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = objectUrl;
@@ -437,12 +453,52 @@ export default function ResultPanel({
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      setArtifactError(
-        looksBinaryOffice
-          ? '该 Office 产物已触发下载；请用 Word/PowerPoint/LibreOffice 打开验证'
-          : '无法在线预览该类型产物，已改为下载',
-      );
+      setPreviewOffice(OFFICE_NO_PREVIEW_COPY);
+      setView('overview');
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      return;
+    }
+    if (kind === 'text' || (blob.size <= 512_000 && kind !== 'download')) {
+      setPreviewText(await readBlobText(blob, artifact.body));
+      setView('overview');
+      return;
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = artifact.name || 'artifact.bin';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setArtifactError('无法在线预览该类型产物，已改为下载');
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  };
+
+  const openArtifact = async (artifact: ArtifactItem) => {
+    dismissOverlayMenus();
+    setArtifactAction({ id: artifact.id, type: 'open' });
+    setArtifactError(null);
+    clearFilePreview();
+    try {
+      if (artifact.url) {
+        const url = safeArtifactUrl(artifact.url);
+        if (!url) {
+          throw new Error('invalid artifact URL');
+        }
+        const parsed = new URL(url);
+        if (parsed.origin !== window.location.origin) {
+          await openWebsiteInPane(url);
+          return;
+        }
+        const response = await fetch(url, { credentials: 'include' });
+        if (!response.ok) {
+          throw new Error(`pico ${response.status}: artifact preview`);
+        }
+        await applyBlobPreview(artifact, await response.blob());
+        return;
+      }
+      const blob = await readArtifactBlob(artifact, false);
+      await applyBlobPreview(artifact, blob);
     } catch (openError) {
       setArtifactError(artifactActionError('open', openError));
     } finally {
@@ -488,43 +544,15 @@ export default function ResultPanel({
     }
   };
 
-  const loadBrowserUrl = (raw: string) => {
-    const value = raw.trim();
-    if (!value) {
-      return;
-    }
-    const next = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-    try {
-      const parsed = new URL(next);
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        return;
-      }
-    } catch {
-      return;
-    }
-    const history = [...browserHistory.slice(0, browserIndex + 1), next];
-    setBrowserUrl(next);
-    setBrowserLoaded(next);
-    setBrowserHistory(history);
-    setBrowserIndex(history.length - 1);
-  };
-
-  const moveBrowserHistory = (delta: number) => {
-    const nextIndex = browserIndex + delta;
-    const next = browserHistory[nextIndex];
-    if (!next || nextIndex < 0 || nextIndex >= browserHistory.length) {
-      return;
-    }
-    setBrowserIndex(nextIndex);
-    setBrowserUrl(next);
-    setBrowserLoaded(next);
-  };
+  const previewArtifact = previewArtifactId
+    ? artifacts.find((item) => item.id === previewArtifactId)
+    : undefined;
 
   return (
-    <aside
+    <aside>
       className={cn(
         'pico-result-panel flex h-full shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary',
-        view === 'web' ? 'w-[400px]' : 'w-[340px]',
+        view === 'web' || previewActive ? 'w-[390px]' : 'w-[340px]',
         expanded && 'pico-result-panel--expanded fixed inset-0 z-[200]',
       )}
       data-testid="result-panel"
@@ -539,6 +567,7 @@ export default function ResultPanel({
             onClick={() => setMenuOpen((v) => !v)}
             aria-expanded={menuOpen}
             aria-haspopup="listbox"
+            data-testid="result-view-menu"
           >
             {VIEW_LABEL[view]}
             <ChevronDown className="h-3.5 w-3.5 text-[#8c8c8c]" />
@@ -554,13 +583,15 @@ export default function ResultPanel({
               <ul
                 className="absolute left-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-lg dark:border-border-light dark:bg-surface-secondary"
                 role="listbox"
+                data-testid="result-view-options"
               >
-                {(Object.keys(VIEW_LABEL) as TopView[]).map((id) => (
+                {RESULT_PANE_VIEWS.map((id) => (
                   <li key={id}>
                     <button
                       type="button"
                       role="option"
                       aria-selected={view === id}
+                      data-testid={`result-view-${id}`}
                       className={cn(
                         'flex w-full px-3 py-2 text-left text-[13px]',
                         view === id ? 'bg-[#edf1f4] font-medium' : 'hover:bg-black/[0.03]',
@@ -607,100 +638,111 @@ export default function ResultPanel({
 
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col">
-        {previewHtml !== null ? (
-          <div
-            className="mb-2 rounded-lg border border-black/[0.08] bg-white p-2 dark:border-border-light dark:bg-surface-secondary"
-            data-testid="artifact-html-preview"
-          >
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="truncate text-[12px] font-medium text-[#3d3d3d]">{previewTitle}</p>
-              <button
-                type="button"
-                className="text-[11px] text-[#6b6b6b] underline"
-                onClick={() => {
-                  setPreviewHtml(null);
-                  setPreviewImage(null);
-                  setPreviewTitle(null);
-                }}
-              >
-                关闭预览
-              </button>
-            </div>
-            <p className="mb-1 text-[10px] text-[#8c8c8c]">
-              安全预览：sandbox 禁用脚本与同源；CSP 禁止外联
-            </p>
-            {/* empty sandbox = max restriction (no scripts, same-origin, forms, popups) */}
-            <iframe
-              title={previewTitle || 'HTML 安全预览'}
-              sandbox=""
-              referrerPolicy="no-referrer"
-              srcDoc={previewHtml}
-              className="h-64 w-full rounded border border-black/[0.06] bg-white"
-              data-testid="artifact-html-iframe"
-            />
-          </div>
-        ) : null}
-        {previewImage !== null ? (
-          <div
-            className="mb-2 rounded-lg border border-black/[0.08] bg-white p-2 dark:border-border-light dark:bg-surface-secondary"
-            data-testid="artifact-image-preview"
-          >
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="truncate text-[12px] font-medium text-[#3d3d3d]">{previewTitle}</p>
-              <button
-                type="button"
-                className="text-[11px] text-[#6b6b6b] underline"
-                onClick={() => {
-                  setPreviewImage(null);
-                  setPreviewTitle(null);
-                }}
-              >
-                关闭预览
-              </button>
-            </div>
-            <img
-              src={previewImage}
-              alt={previewTitle || 'inspect raster'}
-              className="max-h-64 w-full rounded border border-black/[0.06] object-contain bg-white"
-              data-testid="artifact-image"
-            />
-          </div>
-        ) : null}
-        {previewText !== null ? (
-          <div
-            className="mb-2 rounded-lg border border-black/[0.08] bg-white p-2 dark:border-border-light dark:bg-surface-secondary"
-            data-testid="artifact-inline-preview"
-          >
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="truncate text-[12px] font-medium text-[#3d3d3d]">{previewTitle}</p>
-              <button
-                type="button"
-                className="text-[11px] text-[#6b6b6b] underline"
-                onClick={() => {
-                  setPreviewText(null);
-                  setPreviewTitle(null);
-                }}
-              >
-                关闭预览
-              </button>
-            </div>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-[#fafafa] p-2 text-[12px] leading-relaxed text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary">
-              {previewText}
-            </pre>
-          </div>
-        ) : null}
-        {artifactError ? (
+        {artifactError || websiteError ? (
           <p
             className="border-b border-red-100 bg-red-50 px-3 py-2 text-[11.5px] text-red-700"
             role="alert"
             data-testid="artifact-action-error"
           >
-            {artifactError}
+            {artifactError || websiteError}
           </p>
         ) : null}
+        {previewActive && view !== 'web' ? (
+          <div
+            className="flex min-h-0 flex-1 flex-col"
+            data-testid="artifact-pane-preview"
+            data-kind={
+              previewHtml !== null
+                ? 'html'
+                : previewImage !== null
+                  ? 'image'
+                  : previewOffice !== null
+                    ? 'office'
+                    : 'text'
+            }
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-black/[0.06] px-2.5 py-1.5">
+              <p className="truncate text-[12px] font-medium text-[#3d3d3d]">{previewTitle}</p>
+              <div className="flex shrink-0 items-center gap-2">
+                {previewArtifact &&
+                (previewArtifact.url ||
+                  previewArtifact.picoArtifact ||
+                  previewArtifact.body !== undefined) ? (
+                  <button
+                    type="button"
+                    data-testid="artifact-download-button"
+                    className="text-[11px] font-medium text-[#3d3d3d] underline"
+                    aria-label={`下载${previewArtifact.name}`}
+                    onClick={() => void downloadArtifact(previewArtifact)}
+                    disabled={artifactAction !== null}
+                  >
+                    下载
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="text-[11px] text-[#6b6b6b] underline"
+                  onClick={clearFilePreview}
+                >
+                  关闭预览
+                </button>
+              </div>
+            </div>
+            {previewHtml !== null ? (
+              <>
+                <p className="border-b border-black/[0.04] px-2.5 py-1 text-[10px] text-[#8c8c8c]">
+                  安全预览：sandbox 禁用脚本与同源；铺满结果区
+                </p>
+                <iframe
+                  title={previewTitle || 'HTML 安全预览'}
+                  sandbox=""
+                  referrerPolicy="no-referrer"
+                  srcDoc={previewHtml}
+                  className="min-h-0 w-full flex-1 border-0 bg-white"
+                  data-testid="artifact-html-iframe"
+                />
+              </>
+            ) : null}
+            {previewImage !== null ? (
+              <div className="min-h-0 flex-1 overflow-auto bg-[#111]">
+                <img
+                  src={previewImage}
+                  alt={previewTitle || 'inspect raster'}
+                  className="mx-auto block w-full object-contain bg-white"
+                  data-testid="artifact-image"
+                />
+              </div>
+            ) : null}
+            {previewText !== null ? (
+              <pre
+                className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words bg-[#fafafa] p-3 text-[12px] leading-relaxed text-[#1a1a1a] dark:bg-surface-tertiary dark:text-text-primary"
+                data-testid="artifact-inline-preview"
+              >
+                {previewText}
+              </pre>
+            ) : null}
+            {previewOffice !== null ? (
+              <div
+                className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center"
+                data-testid="artifact-office-download"
+              >
+                <FileText className="h-8 w-8 text-[#9a9a9a]" strokeWidth={1.25} />
+                <p className="text-[13px] font-medium text-[#3d3d3d]">{previewTitle}</p>
+                <p className="max-w-[16rem] text-[12px] leading-relaxed text-[#6b6b6b]">
+                  {previewOffice}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+        <>
         {/* Sources sit above 概览/网页 so search + sandbox coexist. */}
         <div className="empty:hidden px-2.5 pt-2.5">
-          <PicoSearchSources events={runEvents} messages={messages} />
+          <PicoSearchSources
+            events={runEvents}
+            messages={messages}
+            onOpenSource={(url) => void openWebsiteInPane(url)}
+          />
         </div>
         {view === 'overview' && (
           <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
@@ -821,7 +863,7 @@ export default function ResultPanel({
                     可下载文件（{artifacts.length}）
                   </p>
                   <p className="text-[11px] leading-relaxed text-[#8c8c8c]">
-                    文件名可点「下载」到本机；HTML 用浏览器打开。不以 ID 为主标签。
+                    文件名点「打开」铺满本区；Office 只下载，不承诺区内翻页。
                   </p>
                 </li>
                 {artifacts.map((a) => (
@@ -981,110 +1023,14 @@ export default function ResultPanel({
                 <Globe className="h-8 w-8 opacity-35" strokeWidth={1.25} />
                 <p className="text-[13px]">还没有隔离网页</p>
                 <p className="max-w-[16rem] text-[11px] leading-relaxed">
-                  对 Pico 说「打开某某公开页」后，画面会自动出现在这里，无需手拼地址。
+                  对 Pico 说「打开 example.com」或点一条来源，隔离网页会出现在这里，不是空白 iframe。
                 </p>
               </div>
             )}
           </div>
         )}
 
-        {view === 'browser' && (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex items-center gap-1 border-b border-black/[0.05] px-2 py-1.5">
-              <button
-                type="button"
-                className="rounded p-1 text-[#8c8c8c] disabled:opacity-35"
-                aria-label="后退"
-                disabled={browserIndex <= 0}
-                onClick={() => moveBrowserHistory(-1)}
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                className="rounded p-1 text-[#8c8c8c] disabled:opacity-35"
-                aria-label="前进"
-                disabled={browserIndex < 0 || browserIndex >= browserHistory.length - 1}
-                onClick={() => moveBrowserHistory(1)}
-              >
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                className="rounded p-1 text-[#8c8c8c]"
-                aria-label="刷新"
-                onClick={() => setBrowserKey((k) => k + 1)}
-              >
-                <RotateCw className="h-3.5 w-3.5" />
-              </button>
-              <form
-                className="mx-1 flex min-w-0 flex-1 items-center rounded-full bg-[#f3f3f3] px-3 py-1 dark:bg-surface-tertiary"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const raw = browserUrl.trim();
-                  if (!raw) {
-                    return;
-                  }
-                  loadBrowserUrl(raw);
-                }}
-              >
-                <input
-                  value={browserUrl}
-                  onChange={(e) => setBrowserUrl(e.target.value)}
-                  placeholder="输入网址后回车预览"
-                  className="w-full bg-transparent text-[12px] outline-none placeholder:text-[#b0b0b0]"
-                />
-              </form>
-              <button
-                type="button"
-                className="rounded p-1 text-[#8c8c8c]"
-                aria-label="在新窗口打开"
-                onClick={() => {
-                  const raw = (browserLoaded || browserUrl).trim();
-                  if (raw) {
-                    const u = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-                    window.open(u, '_blank', 'noopener,noreferrer');
-                  }
-                }}
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            {browserLoaded ? (
-              <iframe
-                key={browserKey}
-                title="browser-preview"
-                src={browserLoaded}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                className="min-h-0 w-full flex-1 border-0 bg-white"
-              />
-            ) : (
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 bg-[#fafafa] px-4 text-center text-[#9a9a9a] dark:bg-presentation">
-                <Globe className="h-8 w-8 opacity-35" strokeWidth={1.25} />
-                <p className="text-[13px]">输入网址并回车可内嵌预览</p>
-                <p className="max-w-[14rem] text-[11px] leading-relaxed">
-                  部分站点禁止嵌入；若空白请用右上角新窗口打开
-                </p>
-                <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-                  {['example.com', 'www.wikipedia.org'].map((host) => (
-                    <button
-                      key={host}
-                      type="button"
-                      className="rounded-full bg-white px-2.5 py-1 text-[11px] ring-1 ring-black/[0.06]"
-                      onClick={() => {
-                        loadBrowserUrl(host);
-                      }}
-                    >
-                      {host}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="border-t border-black/[0.05] px-3 py-2 text-center text-[11px] leading-snug text-[#9a9a9a]">
-              预览仅供参考，注意信息安全；敏感操作请在受信浏览器中完成
-            </div>
-          </div>
+        </>
         )}
       </div>
       <div className="shrink-0 border-t border-black/[0.06] px-3 py-2 dark:border-border-light">

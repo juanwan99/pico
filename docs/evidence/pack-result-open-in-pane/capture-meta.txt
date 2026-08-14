@@ -1,0 +1,10 @@
+CARD T-RESULT-OPEN-IN-PANE #540
+BASE b1e2ca8766d199f7a74f7f375e3102eeba7d5b71
+PRODUCT_AT_CLAIM fa16db524a751d0da44a492cf874f4869bbfa6e4
+WIDTH 390
+01-open-html.png 33497
+02-open-site.png 24900
+03-open-source.png 27060
+v390.png 24900
+A_CHOICE hide iframe browser; merge into 网页
+CLAIM-WB-DEGREE-WEB NO

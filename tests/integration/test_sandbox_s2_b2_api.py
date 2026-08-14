@@ -211,6 +211,31 @@ def test_b2_view_and_cross_account_and_loopback(client) -> None:
         )
 
 
+def test_teacher_post_opens_same_sandbox_browser_handler(client) -> None:
+    owner = _headers(client, "member-a")
+    opened = client.post(
+        "/v1/sandbox/sessions",
+        headers=owner,
+        json={"url": "https://example.com/"},
+    )
+    assert opened.status_code == 200, opened.text
+    body = opened.json()
+    assert str(body["session_id"]).startswith("sbox_")
+    assert "example.com" in body["url"]
+    assert "password" not in body
+    png = client.get(f"/v1/sandbox/sessions/{body['session_id']}/screenshot", headers=owner)
+    assert png.status_code == 200
+    assert png.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    denied = client.post(
+        "/v1/sandbox/sessions",
+        headers=owner,
+        json={"url": "http://127.0.0.1:18765/health"},
+    )
+    assert denied.status_code == 400
+    assert denied.json()["detail"]["code"] == "web.denied"
+
+
 def test_s1_inspect_still_works_on_own_html(client) -> None:
     owner = _headers(client, "member-a")
     created = _invoke(

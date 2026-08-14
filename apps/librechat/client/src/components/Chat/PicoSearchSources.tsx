@@ -11,9 +11,11 @@ import {
 export default function PicoSearchSources({
   events,
   messages,
+  onOpenSource,
 }: {
   events?: PicoRunEvent[] | null;
   messages?: PicoSourceMessage[] | null;
+  onOpenSource?: (url: string) => void;
 }) {
   const view = collectPicoSearchSources(events, messages);
   if (!view.searched) {
@@ -37,11 +39,16 @@ export default function PicoSearchSources({
             <li key={source.url} className="min-w-0">
               <a
                 href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="block truncate text-[12px] font-medium text-[#3b6fd9] underline-offset-2 hover:underline"
                 data-testid="pico-search-source-link"
                 title={source.title}
+                onClick={(event) => {
+                  if (!onOpenSource) {
+                    return;
+                  }
+                  event.preventDefault();
+                  onOpenSource(source.url);
+                }}
               >
                 {source.title}
               </a>
