@@ -265,6 +265,27 @@ describe('Pico proxy routes', () => {
     },
   );
 
+  it('proxies POST /v1/sandbox/sessions for result-pane open', async () => {
+    const response = await request(app)
+      .post('/api/pico/v1/sandbox/sessions')
+      .send({ url: 'https://example.com/' });
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/sandbox/sessions',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ url: 'https://example.com/' }),
+      }),
+    );
+  });
+
+  it('rejects empty sandbox open url without calling Pico API', async () => {
+    const response = await request(app).post('/api/pico/v1/sandbox/sessions').send({ url: '  ' });
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('proxies sandbox session meta for the result pane', async () => {
     const response = await request(app).get(
       '/api/pico/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa',

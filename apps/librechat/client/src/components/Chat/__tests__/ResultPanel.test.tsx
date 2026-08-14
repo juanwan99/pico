@@ -5,6 +5,7 @@ import {
   getPicoArtifactContent,
   getPicoSandboxScreenshot,
   getPicoSandboxSession,
+  openPicoSandboxBrowser,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -16,6 +17,7 @@ jest.mock('~/data-provider/pico/api', () => ({
   getPicoSandboxScreenshot: jest.fn(),
   getPicoSandboxSession: jest.fn(),
   postPicoSandboxInput: jest.fn(),
+  openPicoSandboxBrowser: jest.fn(),
 }));
 jest.mock('~/utils', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -147,6 +149,7 @@ describe('ResultPanel artifact actions', () => {
     revokeObjectURL = jest.fn();
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    mockGetPicoArtifactContent.mockReset();
   });
 
   afterEach(() => {
@@ -169,15 +172,18 @@ describe('ResultPanel artifact actions', () => {
     expect(screen.getByText('markdown · 18B')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '打开' }));
-    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+    const pane = await screen.findByTestId('artifact-pane-preview');
+    expect(pane).toHaveAttribute('data-kind', 'text');
+    expect(screen.getByTestId('artifact-inline-preview')).toHaveTextContent('课程总结内容');
     expect(mockGetPicoArtifactContent).not.toHaveBeenCalled();
-    expect(preview.location.href).toBe('blob:artifact-1');
+    expect(openSpy).not.toHaveBeenCalled();
 
+    await user.click(screen.getByRole('button', { name: '关闭预览' }));
     await user.click(screen.getByRole('button', { name: '下载课程总结.md' }));
     await waitFor(() => expect(anchorClickSpy).toHaveBeenCalledTimes(1));
-    expect(createObjectURL).toHaveBeenCalledTimes(2);
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(mockGetPicoArtifactContent).not.toHaveBeenCalled();
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:artifact-2');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:artifact-1');
   });
 
   it('uses the content API for both open and download when inline content is absent', async () => {
@@ -237,7 +243,7 @@ describe('ResultPanel artifact actions', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('打开产物失败，请稍后重试');
     expect(screen.queryByText(/storage password|stack trace/)).not.toBeInTheDocument();
-    expect(preview.close).toHaveBeenCalledTimes(1);
+    expect(openSpy).not.toHaveBeenCalled();
   });
 
   it('shows a permission-safe error when downloading fails', async () => {
@@ -337,6 +343,247 @@ describe('ResultPanel search sources', () => {
     expect(screen.getByTestId('pico-search-sources-miss')).toHaveTextContent(
       '未检索到可用来源',
     );
+  });
+});
+
+describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
+  const mockOpenBrowser = openPicoSandboxBrowser as jest.MockedFunction<
+    typeof openPicoSandboxBrowser
+  >;
+
+  beforeEach(() => {
+    window.localStorage.removeItem('pico.resultPaneWidth');
+    mockOpenBrowser.mockReset();
+    (getPicoSandboxScreenshot as jest.Mock).mockResolvedValue(
+      new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }),
+    );
+    (getPicoSandboxSession as jest.Mock).mockResolvedValue({
+      session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      url: 'https://example.com/',
+      title: 'Example Domain',
+    });
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: jest.fn(() => 'blob:pane'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: jest.fn() });
+  });
+
+  it('T1: opening html fills the result pane and does not need window.open', async () => {
+    const user = userEvent.setup();
+    const openSpy = jest.spyOn(window, 'open');
+    renderPanel([
+      {
+        id: 'art-html',
+        title: 'page.html',
+        kind: 'html',
+        inline: '<html><body><h1>Hello pane</h1></body></html>',
+      },
+    ]);
+    await user.click(screen.getByRole('button', { name: '打开' }));
+    const pane = await screen.findByTestId('artifact-pane-preview');
+    expect(pane).toHaveAttribute('data-kind', 'html');
+    expect(screen.getByTestId('artifact-html-iframe')).toBeInTheDocument();
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
+  });
+
+  it('T2: opening png shows the image in the pane', async () => {
+    const user = userEvent.setup();
+    mockGetPicoArtifactContent.mockResolvedValue(
+      new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }),
+    );
+    renderPanel([{ id: 'art-png', title: 'shot.png', kind: 'image' }]);
+    await user.click(screen.getByRole('button', { name: '打开' }));
+    const pane = await screen.findByTestId('artifact-pane-preview');
+    expect(pane).toHaveAttribute('data-kind', 'image');
+    expect(screen.getByTestId('artifact-image')).toBeInTheDocument();
+  });
+
+  it('T3: opening txt/md shows body text in the pane', async () => {
+    const user = userEvent.setup();
+    renderPanel([{ id: 'art-txt', title: 'notes.txt', kind: 'text', inline: '正文可见' }]);
+    await user.click(screen.getByRole('button', { name: '打开' }));
+    const pane = await screen.findByTestId('artifact-pane-preview');
+    expect(pane).toHaveAttribute('data-kind', 'text');
+    expect(screen.getByTestId('artifact-inline-preview')).toHaveTextContent('正文可见');
+  });
+
+  it('T4: opening docx is an honest in-pane download, not a fake preview', async () => {
+    const user = userEvent.setup();
+    const clickSpy = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    mockGetPicoArtifactContent.mockResolvedValue(
+      new Blob([new Uint8Array([80, 75, 3, 4])], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      }),
+    );
+    renderPanel([{ id: 'art-docx', title: '报告.docx', kind: 'docx' }]);
+    await user.click(screen.getByRole('button', { name: '打开' }));
+    expect(await screen.findByTestId('artifact-office-download')).toHaveTextContent(
+      '不支持区内预览或翻页',
+    );
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it('T5: saying 打开 https://example.com opens 网页 via sandbox_browser_open', async () => {
+    mockOpenBrowser.mockResolvedValue({
+      session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      url: 'https://example.com/',
+      title: 'Example Domain',
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开 https://example.com',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockOpenBrowser).toHaveBeenCalledWith('https://example.com/'),
+    );
+    expect(screen.queryByTitle('browser-preview')).not.toBeInTheDocument();
+  });
+
+  it('T6: clicking a search source opens the same 网页 pane', async () => {
+    const user = userEvent.setup();
+    mockOpenBrowser.mockResolvedValue({
+      session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      url: 'https://www.gov.cn/a',
+      title: 'Gov',
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          runEvents={[
+            {
+              id: 'search-1',
+              run_id: 'run-1',
+              seq: 1,
+              type: 'search.sources',
+              payload: {
+                tool: 'web_search',
+                honest_miss: false,
+                sources: [{ title: 'Gov', url: 'https://www.gov.cn/a' }],
+              },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByTestId('pico-search-source-link'));
+    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    expect(mockOpenBrowser).toHaveBeenCalledWith('https://www.gov.cn/a');
+  });
+
+  it('R1a: desktop result pane defaults to ≥480 and exposes a drag resizer', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel run={run()} runStatusLabel="已完成" />
+      </MemoryRouter>,
+    );
+    const panel = screen.getByTestId('result-panel');
+    expect(Number(panel.getAttribute('data-pane-width'))).toBeGreaterThanOrEqual(480);
+    expect(panel.style.getPropertyValue('--pico-result-w')).toBe('480px');
+    expect(screen.getByTestId('result-panel-resizer')).toBeInTheDocument();
+  });
+
+  it('R1c: fullscreen expands the pane, not just the chrome label', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel run={run()} runStatusLabel="已完成" />
+      </MemoryRouter>,
+    );
+    const panel = screen.getByTestId('result-panel');
+    expect(panel).toHaveAttribute('data-expanded', 'false');
+    await user.click(screen.getByTestId('result-panel-fullscreen'));
+    expect(panel).toHaveAttribute('data-expanded', 'true');
+    expect(panel.className).toMatch(/pico-result-panel--expanded/);
+    expect(screen.queryByTestId('result-panel-resizer')).not.toBeInTheDocument();
+  });
+
+  it('R1b: html preview zoom buttons change the visible ratio', async () => {
+    const user = userEvent.setup();
+    renderPanel([
+      {
+        id: 'art-html-zoom',
+        title: 'page.html',
+        kind: 'html',
+        inline: '<html><body><h1>Hello pane</h1></body></html>',
+      },
+    ]);
+    await user.click(screen.getByRole('button', { name: '打开' }));
+    expect(await screen.findByTestId('artifact-html-stage')).toHaveAttribute('data-zoom', '100%');
+    expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('100%');
+    await user.click(screen.getByTestId('pane-zoom-in'));
+    expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('125%');
+    expect(screen.getByTestId('artifact-html-stage')).toHaveAttribute('data-zoom', '125%');
+    await user.click(screen.getByTestId('pane-zoom-out'));
+    expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('100%');
+  });
+
+  it('R1b: webpage screenshot zoom is the same control, not a 390 cap', async () => {
+    const user = userEvent.setup();
+    mockOpenBrowser.mockResolvedValue({
+      sessionId: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      url: 'https://example.com/',
+      title: 'Example Domain',
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开 https://example.com',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    await user.click(screen.getByTestId('pane-zoom-in'));
+    expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('125%');
+    expect(screen.getByTestId('sandbox-web-stage')).toHaveAttribute('data-zoom', '125%');
+    expect(screen.getByTestId('sandbox-web-viewport').getAttribute('class') || '').not.toMatch(
+      /max-w-\[390px\]/,
+    );
+  });
+
+  it('T7: result menu no longer offers iframe 浏览器 as the open-site entry', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel run={run()} runStatusLabel="已完成" />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByTestId('result-view-menu'));
+    const options = screen.getByTestId('result-view-options');
+    expect(options).toHaveTextContent('概览');
+    expect(options).toHaveTextContent('工作空间文件');
+    expect(options).toHaveTextContent('网页');
+    expect(options).not.toHaveTextContent('浏览器');
+    expect(screen.queryByTestId('result-view-browser')).not.toBeInTheDocument();
   });
 });
 

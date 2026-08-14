@@ -609,6 +609,43 @@ async def invoke_tool(
     return {"ok": True, "result": result}
 
 
+class OpenSandboxSessionRequest(BaseModel):
+    url: str = Field(..., min_length=1, max_length=2048)
+
+
+@app.post("/v1/sandbox/sessions")
+async def open_sandbox_session(
+    body: OpenSandboxSessionRequest,
+    principal: Principal = Depends(require_scope("ai:run")),
+) -> dict:
+    """Teacher/result-pane open: same handler as sandbox_browser_open. No new browser."""
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.tools_builtin import build_default_gateway
+    from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
+
+    from app.artifact_store import LedgerArtifactStore
+    from app.db import session_factory
+
+    gw = build_default_gateway(LedgerArtifactStore(session_factory()))
+    token = bind_usage_context(
+        school_id=principal.school_id,
+        membership_id=principal.membership_id,
+    )
+    try:
+        result = await gw.invoke(principal, "sandbox_browser_open", {"url": body.url})
+    except ToolError as e:
+        code = 403 if e.code == "tenant.cross_school" else 400
+        raise HTTPException(
+            status_code=code, detail={"code": e.code, "message": e.message}
+        ) from e
+    finally:
+        reset_usage_context(token)
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=502, detail={"code": "sandbox.unavailable"})
+    session_id = str(result.get("session_id") or "")
+    return _sandbox_public_meta(session_id, result)
+
+
 # ----- sandbox B2 human-in-the-loop view (sidecar; not LibreChat) -----
 
 

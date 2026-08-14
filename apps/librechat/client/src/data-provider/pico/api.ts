@@ -348,6 +348,13 @@ export type PicoSandboxSessionMeta = {
   typed?: boolean;
 };
 
+export async function openPicoSandboxBrowser(url: string) {
+  return picoFetch<PicoSandboxSessionMeta>(`/v1/sandbox/sessions`, {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
 export async function getPicoSandboxSession(sessionId: string) {
   return picoFetch<PicoSandboxSessionMeta>(
     `/v1/sandbox/sessions/${encodeURIComponent(sessionId)}`,

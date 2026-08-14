@@ -1108,6 +1108,7 @@ def build_default_gateway(
             name="sandbox_browser_open",
             description=(
                 "Open a PUBLIC http(s) page in sidecar Chromium (Playwright; not LibreChat). "
+                "The page appears in the result-area 网页 pane (not an iframe browser). "
                 "Teacher completes login on the viewport; never send passwords in chat. "
                 "Denies intranet, loopback, metadata, pico-api 18765, and pico.aivia.asia. "
                 "WeChat/教务 are not required to succeed — if they block automation, the tool "

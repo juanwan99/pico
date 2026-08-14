@@ -3116,17 +3116,27 @@ html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
   --pico-wb-muted: #8c8c8c;
   --pico-wb-line: rgba(0, 0, 0, 0.06);
   --pico-wb-rail-w: 264px;
-  --pico-wb-result-w: 316px;
+  --pico-wb-result-w: 480px;
   --pico-wb-composer-r: 16px;
   --pico-wb-font: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
 }
 .pico-result-panel {
   font-family: var(--pico-wb-font);
-  width: var(--pico-wb-result-w) !important;
+  /* Inline --pico-result-w from drag-resize; fallback is the 480 token. */
+  width: var(--pico-result-w, var(--pico-wb-result-w)) !important;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 .pico-result-panel.pico-result-panel--expanded {
   display: flex !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 200;
   width: 100vw !important;
+  max-width: none;
+  height: 100vh !important;
+  overflow: hidden;
 }
 @media (max-width: 1024px) {
   /*
@@ -3135,6 +3145,7 @@ html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
    * elementFromPoint hit result-status-banner instead of the control strip
    * (390×844 failed-rerun hit-test regression, #270 HIT).
    * top clears absolute Header (52px) + TaskRunBar min strip (~44px).
+   * R1d: stay 100vw so a 480 desktop default cannot overflow 390.
    */
   .pico-result-panel:not(.pico-result-panel--expanded) {
     position: fixed;
@@ -3145,6 +3156,7 @@ html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
     z-index: 200;
     display: flex !important;
     width: 100vw !important;
+    max-width: 100vw;
   }
 }
 html:not(.dark) .pico-wb-sidebar {

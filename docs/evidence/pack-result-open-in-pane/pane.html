@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <title>结果区 · 打开文件/网站 · 宽区缩放全屏</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; background: #ececec; color: #1a1a1a; }
+    .workbench { display: flex; height: 100%; }
+    .chat { flex: 1; min-width: 0; background: #fafafa; border-right: 1px solid rgba(0,0,0,.06); padding: 20px 24px; }
+    .chat h2 { margin: 0 0 8px; font-size: 16px; }
+    .chat p { margin: 0; font-size: 13px; color: #6b6b6b; line-height: 1.5; }
+    .panel {
+      --pico-result-w: 480px;
+      width: var(--pico-result-w);
+      max-width: 100%;
+      min-width: 0;
+      height: 100%;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      box-shadow: -1px 0 0 rgba(0,0,0,.06);
+      overflow-x: hidden;
+    }
+    .panel.full { position: fixed; inset: 0; width: 100vw; max-width: none; height: 100vh; z-index: 9; }
+    .hdr {
+      height: 44px; display: flex; align-items: center; gap: 8px;
+      padding: 0 8px; background: #fafafa; border-bottom: 1px solid rgba(0,0,0,.06); flex-shrink: 0;
+    }
+    .hdr .title { font-size: 13px; font-weight: 600; }
+    .hdr .sub { color: #8c8c8c; font-weight: 400; font-size: 12px; }
+    .hdr .spacer { flex: 1; }
+    .zoom {
+      display: inline-flex; align-items: center; border: 1px solid rgba(0,0,0,.08);
+      border-radius: 6px; background: #fff; font-size: 11px;
+    }
+    .zoom span, .zoom b { padding: 4px 8px; }
+    .zoom b { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+    .fs { font-size: 11px; color: #6b6b6b; border: 1px solid rgba(0,0,0,.08); border-radius: 6px; padding: 3px 8px; background: #fff; }
+    .meta { padding: 8px 10px; border-bottom: 1px solid rgba(0,0,0,.05); font-size: 11px; color: #6b6b6b; flex-shrink: 0; }
+    .src { margin: 8px; padding: 8px 10px; border: 1px solid #cfe0ff; background: #f5f9ff; border-radius: 8px; flex-shrink: 0; }
+    .src b { font-size: 12px; color: #1a3a7a; }
+    .src a { display: block; margin-top: 4px; font-size: 12px; color: #3b6fd9; }
+    .stage { flex: 1; min-height: 0; overflow: auto; background: #111; }
+    img.shot { display: block; width: 100%; background: #fff; }
+    iframe.html { display: block; width: 100%; height: 100%; border: 0; background: #fff; min-height: 640px; }
+    .resizer { width: 3px; background: #3b6fd9; opacity: .35; }
+    @media (max-width: 420px) {
+      .chat { display: none; }
+      .panel { width: 100vw; max-width: 100vw; }
+    }
+  </style>
+</head>
+<body>
+  <div class="workbench" id="wb">
+    <section class="chat">
+      <h2>对话</h2>
+      <p id="chatline">老师：打开文件 / 打开网站。画面必须出现在右侧结果区。</p>
+    </section>
+    <aside class="panel" data-testid="result-panel" aria-label="结果区" id="panel">
+      <div class="hdr">
+        <div class="title" id="hdr-title">网页</div>
+        <div class="sub" id="hdr-sub">概览 · 工作空间文件 · 网页</div>
+        <div class="spacer"></div>
+        <div class="zoom" data-testid="pane-zoom-bar" id="zoombar">
+          <span>−</span><b id="zoomlabel">100%</b><span>+</span>
+        </div>
+        <div class="fs" id="fsbtn">全屏</div>
+      </div>
+      <div id="body" style="flex:1;display:flex;flex-direction:column;min-height:0"></div>
+    </aside>
+  </div>
+  <script>
+    const q = new URLSearchParams(location.search);
+    const mode = q.get("mode") || "site";
+    const zoom = q.get("zoom") || "100%";
+    const shot = q.get("shot") || "../pack-b2-real-browser/viewport-example-com.png";
+    const wide = q.get("wide") === "1" || mode === "wide" || mode === "zoom" || mode === "full";
+    const panel = document.getElementById("panel");
+    const body = document.getElementById("body");
+    const hdrTitle = document.getElementById("hdr-title");
+    const hdrSub = document.getElementById("hdr-sub");
+    const zoomlabel = document.getElementById("zoomlabel");
+    const fsbtn = document.getElementById("fsbtn");
+    const chatline = document.getElementById("chatline");
+    zoomlabel.textContent = zoom;
+    document.getElementById("zoombar").setAttribute("data-zoom", zoom);
+    if (wide) {
+      panel.style.setProperty("--pico-result-w", "520px");
+      panel.setAttribute("data-pane-width", "520");
+    } else {
+      panel.setAttribute("data-pane-width", "480");
+    }
+    const htmlDoc = "<html><body style='margin:0;font-family:system-ui;background:linear-gradient(#1d4ed8,#7c3aed);color:#fff;min-height:900px;padding:32px'><h1 style='font-size:36px;margin:0 0 12px'>Hello pane</h1><p style='font-size:18px;line-height:1.6;max-width:22rem'>HTML 打开铺满右侧结果区。默认宽度 ≥480，可缩放、可全屏。主路径不是 window.open。</p><div style='margin-top:28px;background:#fff;color:#1a1a1a;border-radius:16px;padding:18px'><strong>page.html</strong><p>宽区预览 · 不是 316 细条</p></div></body></html>";
+    if (mode === "html" || mode === "wide") {
+      hdrTitle.textContent = "概览";
+      hdrSub.textContent = "打开 page.html · 铺满宽区";
+      chatline.textContent = "老师：打开 page.html";
+      body.innerHTML = '<div class="meta">page.html · 安全预览铺满结果区 · ' + zoom + '</div>'
+        + '<iframe class="html" sandbox="" srcdoc="' + htmlDoc.replace(/"/g, '&quot;') + '"></iframe>';
+    } else if (mode === "source") {
+      hdrTitle.textContent = "网页";
+      hdrSub.textContent = "点来源后";
+      chatline.textContent = "老师：点来源 Example Domain";
+      body.innerHTML = '<div class="src"><b>来源</b><a href="#">Example Domain</a></div>'
+        + '<div class="meta">Example Domain · https://example.com/ · 隔离网页</div>'
+        + '<div class="stage"><img class="shot" alt="隔离浏览器画面" src="' + shot + '"/></div>';
+    } else if (mode === "zoom") {
+      hdrTitle.textContent = "网页";
+      hdrSub.textContent = "缩放 " + zoom;
+      chatline.textContent = "老师：放大隔离网页";
+      const pct = parseInt(zoom, 10) || 150;
+      body.innerHTML = '<div class="meta">Example Domain · https://example.com/ · 当前比例 ' + zoom + '</div>'
+        + '<div class="stage"><img class="shot" style="width:' + pct + '%" alt="隔离浏览器画面" src="' + shot + '"/></div>';
+    } else if (mode === "full") {
+      panel.classList.add("full");
+      fsbtn.textContent = "退出全屏";
+      hdrTitle.textContent = "网页";
+      hdrSub.textContent = "全屏 · 内容铺满工作台";
+      chatline.textContent = "全屏后右侧内容接近视口，不是 400px 细条";
+      body.innerHTML = '<div class="meta">Example Domain · https://example.com/ · 全屏铺满</div>'
+        + '<div class="stage"><img class="shot" alt="隔离浏览器画面" src="' + shot + '"/></div>';
+    } else {
+      hdrTitle.textContent = "网页";
+      hdrSub.textContent = "打开 example.com";
+      chatline.textContent = "老师：打开 https://example.com";
+      body.innerHTML = '<div class="meta">Example Domain · https://example.com/ · 请在此画面自行登录，不要在聊天里发送密码</div>'
+        + '<div class="stage"><img class="shot" alt="隔离浏览器画面" src="' + shot + '"/></div>';
+    }
+  </script>
+</body>
+</html>

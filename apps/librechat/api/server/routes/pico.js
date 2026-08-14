@@ -307,6 +307,13 @@ router.post('/v1/changes/:id/reject', (req, res) => {
   }
 });
 
+router.post('/v1/sandbox/sessions', (req, res) => {
+  const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+  if (!url || url.length > 2048) {
+    return res.status(400).json({ error: 'bad_request', message: 'url required' });
+  }
+  return proxy(req, res, '/v1/sandbox/sessions');
+});
 router.get('/v1/sandbox/sessions/:sessionId', (req, res) => {
   try {
     assertId(req.params.sessionId, 'sessionId');

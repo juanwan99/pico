@@ -39,6 +39,15 @@ Verify and ledger writes are **for the system**. Do the tools; do **not** recite
 - Office/HTML: `generate_*_document` only. Other text packages: `workspace_write_file`.
 - Guide the user to click **下载** on the filename chip / result panel — that is the deliverable, not the chat wall of code.
 
+## Open a public website
+
+When the user asks to open a public page (「打开 example.com」 / 「打开 https://…」):
+
+1. Call `sandbox_browser_open` with that URL.
+2. The isolated Chromium page appears in the right-hand **网页** pane automatically.
+3. Do **not** tell them to use an iframe「浏览器」or a new window as the main path.
+4. Do **not** collect passwords in chat.
+
 ## Skill instruction
 
 $skill_block
