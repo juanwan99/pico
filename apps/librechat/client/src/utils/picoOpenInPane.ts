@@ -112,3 +112,51 @@ export async function readBlobText(blob: Blob, inline?: string): Promise<string>
     reader.readAsText(blob);
   });
 }
+
+/** Desktop default; CSS --pico-wb-result-w must match or !important wins. */
+export const RESULT_PANE_DEFAULT_WIDTH = 480;
+/** Drag floor — not smaller than the pre-R1 Tailwind widths (340/390). */
+export const RESULT_PANE_MIN_WIDTH = 340;
+export const RESULT_PANE_MAX_WIDTH = 880;
+export const RESULT_PANE_NARROW_BREAKPOINT = 640;
+export const RESULT_PANE_WIDTH_STORAGE_KEY = 'pico.resultPaneWidth';
+export const RESULT_PANE_ZOOM_MIN = 0.5;
+export const RESULT_PANE_ZOOM_MAX = 2;
+export const RESULT_PANE_ZOOM_STEP = 0.25;
+
+export function clampResultPaneWidth(width: number, viewportWidth = 1280): number {
+  const numeric = Number.isFinite(width) ? width : RESULT_PANE_DEFAULT_WIDTH;
+  const vp = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 1280;
+  const narrow = vp <= RESULT_PANE_NARROW_BREAKPOINT;
+  const max = narrow
+    ? vp
+    : Math.min(RESULT_PANE_MAX_WIDTH, Math.max(RESULT_PANE_MIN_WIDTH, vp - 280));
+  const min = narrow ? Math.min(RESULT_PANE_MIN_WIDTH, vp) : RESULT_PANE_MIN_WIDTH;
+  return Math.round(Math.min(max, Math.max(min, numeric)));
+}
+
+export function readStoredResultPaneWidth(
+  storage?: Pick<Storage, 'getItem'> | null,
+  viewportWidth = 1280,
+): number {
+  try {
+    const raw = storage?.getItem(RESULT_PANE_WIDTH_STORAGE_KEY);
+    const parsed = raw == null || raw === '' ? NaN : Number(raw);
+    return clampResultPaneWidth(
+      Number.isFinite(parsed) ? parsed : RESULT_PANE_DEFAULT_WIDTH,
+      viewportWidth,
+    );
+  } catch {
+    return clampResultPaneWidth(RESULT_PANE_DEFAULT_WIDTH, viewportWidth);
+  }
+}
+
+export function clampResultPaneZoom(zoom: number): number {
+  const numeric = Number.isFinite(zoom) ? zoom : 1;
+  const stepped = Math.round(numeric / RESULT_PANE_ZOOM_STEP) * RESULT_PANE_ZOOM_STEP;
+  return Math.min(RESULT_PANE_ZOOM_MAX, Math.max(RESULT_PANE_ZOOM_MIN, Number(stepped.toFixed(2))));
+}
+
+export function formatResultPaneZoom(zoom: number): string {
+  return `${Math.round(clampResultPaneZoom(zoom) * 100)}%`;
+}

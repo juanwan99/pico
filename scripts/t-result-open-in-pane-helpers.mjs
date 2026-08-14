@@ -2,16 +2,26 @@
 /** Run T1/T5 helper locks without the full LibreChat Jest graph. */
 import {
   classifyArtifactPreview,
+  clampResultPaneWidth,
+  clampResultPaneZoom,
   detectOpenWebsiteIntent,
+  formatResultPaneZoom,
   latestUserOpenWebsiteIntent,
+  RESULT_PANE_DEFAULT_WIDTH,
+  RESULT_PANE_MIN_WIDTH,
   RESULT_PANE_VIEWS,
   RESULT_PANE_VIEW_LABEL,
 } from '../apps/librechat/client/src/utils/picoOpenInPane.ts';
 
 const m = {
   classifyArtifactPreview,
+  clampResultPaneWidth,
+  clampResultPaneZoom,
   detectOpenWebsiteIntent,
+  formatResultPaneZoom,
   latestUserOpenWebsiteIntent,
+  RESULT_PANE_DEFAULT_WIDTH,
+  RESULT_PANE_MIN_WIDTH,
   RESULT_PANE_VIEWS,
   RESULT_PANE_VIEW_LABEL,
 };
@@ -39,4 +49,11 @@ assert(
   'T5 latest user',
 );
 
-console.log('t-result-open-in-pane-helpers: T1 T2 T3 T4 T5 T7 OK');
+assert(m.RESULT_PANE_DEFAULT_WIDTH >= 480, 'R1a default');
+assert(m.RESULT_PANE_MIN_WIDTH >= 340, 'R1a min');
+assert(m.clampResultPaneWidth(480, 1280) === 480, 'R1a 480 desktop');
+assert(m.clampResultPaneWidth(480, 390) === 390, 'R1d 390 clamp');
+assert(m.formatResultPaneZoom(1.25) === '125%', 'R1b label');
+assert(m.clampResultPaneZoom(9) === 2, 'R1b max');
+
+console.log('t-result-open-in-pane-helpers: T1 T2 T3 T4 T5 T7 R1a R1b R1d OK');

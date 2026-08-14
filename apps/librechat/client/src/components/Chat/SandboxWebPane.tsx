@@ -20,11 +20,16 @@ export default function SandboxWebPane({
   initialUrl,
   initialTitle,
   humanCopy,
+  zoom = 1,
+  onWheelZoom,
 }: {
   sessionId: string;
   initialUrl?: string;
   initialTitle?: string;
   humanCopy?: string;
+  /** 1 = fit the pane width (fullscreen fills the stage, not a 390 strip). */
+  zoom?: number;
+  onWheelZoom?: (event: React.WheelEvent) => void;
 }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pageUrl, setPageUrl] = useState(initialUrl || '');
@@ -175,7 +180,12 @@ export default function SandboxWebPane({
           {status}
         </p>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto bg-[#111]">
+      <div
+        className="min-h-0 flex-1 overflow-auto bg-[#111]"
+        data-testid="sandbox-web-stage"
+        data-zoom={`${Math.round(zoom * 100)}%`}
+        onWheel={onWheelZoom}
+      >
         {imageUrl ? (
           <img
             ref={imgRef}
@@ -183,7 +193,8 @@ export default function SandboxWebPane({
             alt="隔离浏览器画面"
             width={VIEWPORT_W}
             onClick={(ev) => void onViewportClick(ev)}
-            className="mx-auto block w-full max-w-[390px] cursor-crosshair bg-white"
+            style={{ width: `${Math.round(zoom * 100)}%` }}
+            className="mx-auto block h-auto max-w-none cursor-crosshair bg-white"
             data-testid="sandbox-web-viewport"
           />
         ) : (

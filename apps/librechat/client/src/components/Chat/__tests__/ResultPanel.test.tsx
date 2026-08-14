@@ -352,6 +352,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
   >;
 
   beforeEach(() => {
+    window.localStorage.removeItem('pico.resultPaneWidth');
     mockOpenBrowser.mockReset();
     (getPicoSandboxScreenshot as jest.Mock).mockResolvedValue(
       new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }),
@@ -486,6 +487,87 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     await user.click(screen.getByTestId('pico-search-source-link'));
     expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
     expect(mockOpenBrowser).toHaveBeenCalledWith('https://www.gov.cn/a');
+  });
+
+  it('R1a: desktop result pane defaults to ≥480 and exposes a drag resizer', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel run={run()} runStatusLabel="已完成" />
+      </MemoryRouter>,
+    );
+    const panel = screen.getByTestId('result-panel');
+    expect(Number(panel.getAttribute('data-pane-width'))).toBeGreaterThanOrEqual(480);
+    expect(panel.style.getPropertyValue('--pico-result-w')).toBe('480px');
+    expect(screen.getByTestId('result-panel-resizer')).toBeInTheDocument();
+  });
+
+  it('R1c: fullscreen expands the pane, not just the chrome label', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel run={run()} runStatusLabel="已完成" />
+      </MemoryRouter>,
+    );
+    const panel = screen.getByTestId('result-panel');
+    expect(panel).toHaveAttribute('data-expanded', 'false');
+    await user.click(screen.getByTestId('result-panel-fullscreen'));
+    expect(panel).toHaveAttribute('data-expanded', 'true');
+    expect(panel.className).toMatch(/pico-result-panel--expanded/);
+    expect(screen.queryByTestId('result-panel-resizer')).not.toBeInTheDocument();
+  });
+
+  it('R1b: html preview zoom buttons change the visible ratio', async () => {
+    const user = userEvent.setup();
+    renderPanel([
+      {
+        id: 'art-html-zoom',
+        title: 'page.html',
+        kind: 'html',
+        inline: '<html><body><h1>Hello pane</h1></body></html>',
+      },
+    ]);
+    await user.click(screen.getByRole('button', { name: '打开' }));
+    expect(await screen.findByTestId('artifact-html-stage')).toHaveAttribute('data-zoom', '100%');
+    expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('100%');
+    await user.click(screen.getByTestId('pane-zoom-in'));
+    expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('125%');
+    expect(screen.getByTestId('artifact-html-stage')).toHaveAttribute('data-zoom', '125%');
+    await user.click(screen.getByTestId('pane-zoom-out'));
+    expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('100%');
+  });
+
+  it('R1b: webpage screenshot zoom is the same control, not a 390 cap', async () => {
+    const user = userEvent.setup();
+    mockOpenBrowser.mockResolvedValue({
+      sessionId: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      url: 'https://example.com/',
+      title: 'Example Domain',
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开 https://example.com',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    await user.click(screen.getByTestId('pane-zoom-in'));
+    expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('125%');
+    expect(screen.getByTestId('sandbox-web-stage')).toHaveAttribute('data-zoom', '125%');
+    expect(screen.getByTestId('sandbox-web-viewport').getAttribute('class') || '').not.toMatch(
+      /max-w-\[390px\]/,
+    );
   });
 
   it('T7: result menu no longer offers iframe 浏览器 as the open-site entry', async () => {

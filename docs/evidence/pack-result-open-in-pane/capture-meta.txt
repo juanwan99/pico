@@ -1,10 +1,13 @@
 CARD T-RESULT-OPEN-IN-PANE #540
 BASE b1e2ca8766d199f7a74f7f375e3102eeba7d5b71
 PRODUCT_AT_CLAIM fa16db524a751d0da44a492cf874f4869bbfa6e4
-WIDTH 390
-01-open-html.png 33497
-02-open-site.png 24900
-03-open-source.png 27060
-v390.png 24900
+DEFAULT_WIDTH 480
+01-open-html.png 52419 1280x800
+02-open-site.png 53233 1280x800
+03-open-source.png 53808 1280x800
+04-zoom.png 86632 1280x800 150%
+05-fullscreen.png 104589 1280x800
+v390.png 35943 390x844
 A_CHOICE hide iframe browser; merge into 网页
+R1 default 480 + drag; zoom 50-200%; fullscreen fills content
 CLAIM-WB-DEGREE-WEB NO

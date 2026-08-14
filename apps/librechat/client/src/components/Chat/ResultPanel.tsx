@@ -30,11 +30,14 @@ import {
 import { cn } from '~/utils';
 import {
   classifyArtifactPreview,
+  clampResultPaneWidth,
   latestUserOpenWebsiteIntent,
   OFFICE_NO_PREVIEW_COPY,
   readBlobText,
+  readStoredResultPaneWidth,
   RESULT_PANE_VIEW_LABEL,
   RESULT_PANE_VIEWS,
+  RESULT_PANE_WIDTH_STORAGE_KEY,
   type ResultPaneView,
 } from '~/utils/picoOpenInPane';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
@@ -42,6 +45,7 @@ import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
 import PicoSearchSources from './PicoSearchSources';
 import SandboxWebPane from './SandboxWebPane';
+import PaneZoomBar, { usePaneZoom } from './PaneZoomBar';
 
 type TopView = ResultPaneView;
 
@@ -275,6 +279,15 @@ export default function ResultPanel({
   } | null>(null);
   const [websiteError, setWebsiteError] = useState<string | null>(null);
   const openedWebsiteRef = useRef<string | null>(null);
+  const [paneWidth, setPaneWidth] = useState(() =>
+    readStoredResultPaneWidth(
+      typeof window === 'undefined' ? null : window.localStorage,
+      typeof window === 'undefined' ? 1280 : window.innerWidth,
+    ),
+  );
+  const paneWidthRef = useRef(paneWidth);
+  paneWidthRef.current = paneWidth;
+  const paneZoom = usePaneZoom();
   const navigate = useNavigate();
   const tokenUsageLabel = formatRunTokenUsage(run);
   const ledgerSandbox = useMemo(() => collectPicoSandboxSession(runEvents), [runEvents]);
@@ -337,6 +350,49 @@ export default function ResultPanel({
       setView('web');
     }
   }, [sandboxSession?.sessionId]);
+
+  useEffect(() => {
+    paneZoom.reset();
+    // Reset scale when the teacher opens a different file or site.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewArtifactId, sandboxSession?.sessionId]);
+
+  useEffect(() => {
+    const onViewportResize = () => {
+      setPaneWidth((current) => clampResultPaneWidth(current, window.innerWidth));
+    };
+    window.addEventListener('resize', onViewportResize);
+    return () => window.removeEventListener('resize', onViewportResize);
+  }, []);
+
+  const onResizePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (expanded) {
+      return;
+    }
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = paneWidthRef.current;
+    const onMove = (ev: PointerEvent) => {
+      const next = clampResultPaneWidth(startW + (startX - ev.clientX), window.innerWidth);
+      paneWidthRef.current = next;
+      setPaneWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      try {
+        window.localStorage.setItem(RESULT_PANE_WIDTH_STORAGE_KEY, String(paneWidthRef.current));
+      } catch {
+        /* ignore quota / private mode */
+      }
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
 
   const clearFilePreview = () => {
     setPreviewText(null);
@@ -548,16 +604,31 @@ export default function ResultPanel({
     ? artifacts.find((item) => item.id === previewArtifactId)
     : undefined;
 
+  const showZoom = Boolean(previewHtml || previewImage || view === 'web');
+
   return (
-    <aside>
+    <aside
       className={cn(
-        'pico-result-panel flex h-full shrink-0 flex-col border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary',
-        view === 'web' || previewActive ? 'w-[390px]' : 'w-[340px]',
+        'pico-result-panel relative flex h-full min-w-0 shrink-0 flex-col overflow-x-hidden border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary',
         expanded && 'pico-result-panel--expanded fixed inset-0 z-[200]',
       )}
+      style={{ ['--pico-result-w' as string]: `${paneWidth}px` }}
       data-testid="result-panel"
+      data-pane-width={paneWidth}
+      data-expanded={expanded ? 'true' : 'false'}
       aria-label="结果区"
     >
+      {!expanded ? (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整结果区宽度"
+          title="拖动调整宽度"
+          data-testid="result-panel-resizer"
+          className="absolute inset-y-0 left-0 z-10 hidden w-1.5 cursor-col-resize hover:bg-[#3b6fd9]/25 lg:block"
+          onPointerDown={onResizePointerDown}
+        />
+      ) : null}
       {/* Header — dropdown view switcher (matches nonempty shots) */}
       <div className="flex h-11 items-center gap-1 border-b border-black/[0.06] bg-[#fafafa] px-2 dark:border-border-light">
         <div className="relative">
@@ -609,12 +680,21 @@ export default function ResultPanel({
             </>
           )}
         </div>
-        <div className="ml-auto flex items-center gap-0.5">
+        <div className="ml-auto flex items-center gap-1">
+          {showZoom ? (
+            <PaneZoomBar
+              label={paneZoom.label}
+              zoomIn={paneZoom.zoomIn}
+              zoomOut={paneZoom.zoomOut}
+              reset={paneZoom.reset}
+            />
+          ) : null}
           <button
             type="button"
             className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-black/[0.04]"
             aria-label={expanded ? '退出全屏' : '进入全屏'}
             title={expanded ? '退出全屏' : '进入全屏'}
+            data-testid="result-panel-fullscreen"
             onClick={() => setExpanded((value) => !value)}
           >
             {expanded ? (
@@ -691,24 +771,51 @@ export default function ResultPanel({
             {previewHtml !== null ? (
               <>
                 <p className="border-b border-black/[0.04] px-2.5 py-1 text-[10px] text-[#8c8c8c]">
-                  安全预览：sandbox 禁用脚本与同源；铺满结果区
+                  安全预览：sandbox 禁用脚本与同源；铺满结果区 · {paneZoom.label}
                 </p>
-                <iframe
-                  title={previewTitle || 'HTML 安全预览'}
-                  sandbox=""
-                  referrerPolicy="no-referrer"
-                  srcDoc={previewHtml}
-                  className="min-h-0 w-full flex-1 border-0 bg-white"
-                  data-testid="artifact-html-iframe"
-                />
+                <div
+                  className="relative min-h-0 flex-1 overflow-auto bg-white"
+                  data-testid="artifact-html-stage"
+                  data-zoom={paneZoom.label}
+                  onWheel={paneZoom.onWheel}
+                >
+                  <div
+                    style={{
+                      width: `${paneZoom.zoom * 100}%`,
+                      height: `${paneZoom.zoom * 100}%`,
+                      minHeight: '100%',
+                    }}
+                  >
+                    <iframe
+                      title={previewTitle || 'HTML 安全预览'}
+                      sandbox=""
+                      referrerPolicy="no-referrer"
+                      srcDoc={previewHtml}
+                      style={{
+                        width: `${100 / paneZoom.zoom}%`,
+                        height: `${100 / paneZoom.zoom}%`,
+                        transform: `scale(${paneZoom.zoom})`,
+                        transformOrigin: 'top left',
+                      }}
+                      className="min-h-full border-0 bg-white"
+                      data-testid="artifact-html-iframe"
+                    />
+                  </div>
+                </div>
               </>
             ) : null}
             {previewImage !== null ? (
-              <div className="min-h-0 flex-1 overflow-auto bg-[#111]">
+              <div
+                className="min-h-0 flex-1 overflow-auto bg-[#111]"
+                data-testid="artifact-image-stage"
+                data-zoom={paneZoom.label}
+                onWheel={paneZoom.onWheel}
+              >
                 <img
                   src={previewImage}
                   alt={previewTitle || 'inspect raster'}
-                  className="mx-auto block w-full object-contain bg-white"
+                  style={{ width: `${paneZoom.zoom * 100}%` }}
+                  className="mx-auto block h-auto max-w-none bg-white object-contain"
                   data-testid="artifact-image"
                 />
               </div>
@@ -1017,6 +1124,8 @@ export default function ResultPanel({
                 initialUrl={sandboxSession.url}
                 initialTitle={sandboxSession.title}
                 humanCopy={sandboxSession.humanCopy}
+                zoom={paneZoom.zoom}
+                onWheelZoom={paneZoom.onWheel}
               />
             ) : (
               <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-[#9a9a9a]">
