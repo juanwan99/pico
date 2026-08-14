@@ -6,6 +6,7 @@ import {
   getPicoSandboxScreenshot,
   getPicoSandboxSession,
   openPicoSandboxBrowser,
+  openPicoSandboxDocument,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -18,6 +19,7 @@ jest.mock('~/data-provider/pico/api', () => ({
   getPicoSandboxSession: jest.fn(),
   postPicoSandboxInput: jest.fn(),
   openPicoSandboxBrowser: jest.fn(),
+  openPicoSandboxDocument: jest.fn(),
 }));
 jest.mock('~/utils', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -409,9 +411,23 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(screen.getByTestId('artifact-inline-preview')).toHaveTextContent('正文可见');
   });
 
-  it('T4: opening docx is an honest in-pane download, not a fake preview', async () => {
+  it('T4/F2: opening docx goes to sandbox Writer, not a download or PDF', async () => {
     const user = userEvent.setup();
-    const clickSpy = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const mockOpenDoc = openPicoSandboxDocument as jest.MockedFunction<
+      typeof openPicoSandboxDocument
+    >;
+    mockOpenDoc.mockResolvedValue({
+      session_id: 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb',
+      url: 'sandbox://writer/报告.docx',
+      title: 'LibreOffice Writer · 报告.docx',
+      kind: 'writer',
+      human_copy: '沙箱已用 LibreOffice 打开这份文档。',
+    });
+    (getPicoSandboxSession as jest.Mock).mockResolvedValue({
+      session_id: 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb',
+      title: 'LibreOffice Writer · 报告.docx',
+      kind: 'writer',
+    });
     mockGetPicoArtifactContent.mockResolvedValue(
       new Blob([new Uint8Array([80, 75, 3, 4])], {
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -419,11 +435,9 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     );
     renderPanel([{ id: 'art-docx', title: '报告.docx', kind: 'docx' }]);
     await user.click(screen.getByRole('button', { name: '打开' }));
-    expect(await screen.findByTestId('artifact-office-download')).toHaveTextContent(
-      '不支持区内预览或翻页',
-    );
-    expect(clickSpy).toHaveBeenCalled();
-    clickSpy.mockRestore();
+    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    expect(mockOpenDoc).toHaveBeenCalled();
+    expect(screen.queryByTestId('artifact-office-download')).not.toBeInTheDocument();
   });
 
   it('T5: saying 打开 https://example.com opens 网页 via sandbox_browser_open', async () => {
@@ -570,6 +584,20 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     );
   });
 
+  it('F3: empty sandbox copy is honest and does not hang a fake webpage', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel run={run()} runStatusLabel="已完成" />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByTestId('result-view-menu'));
+    await user.click(screen.getByTestId('result-view-web'));
+    expect(screen.getByTestId('sandbox-empty')).toHaveTextContent('沙箱还没有打开窗口');
+    expect(screen.queryByText('还没有隔离网页')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('main-delivery-strip')).not.toBeInTheDocument();
+  });
+
   it('T7: result menu no longer offers iframe 浏览器 as the open-site entry', async () => {
     const user = userEvent.setup();
     render(
@@ -581,7 +609,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     const options = screen.getByTestId('result-view-options');
     expect(options).toHaveTextContent('概览');
     expect(options).toHaveTextContent('工作空间文件');
-    expect(options).toHaveTextContent('网页');
+    expect(options).toHaveTextContent('沙箱');
     expect(options).not.toHaveTextContent('浏览器');
     expect(screen.queryByTestId('result-view-browser')).not.toBeInTheDocument();
   });

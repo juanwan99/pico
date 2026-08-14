@@ -309,10 +309,17 @@ router.post('/v1/changes/:id/reject', (req, res) => {
 
 router.post('/v1/sandbox/sessions', (req, res) => {
   const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
-  if (!url || url.length > 2048) {
-    return res.status(400).json({ error: 'bad_request', message: 'url required' });
+  const artifactId =
+    typeof req.body?.artifact_id === 'string' ? req.body.artifact_id.trim() : '';
+  const kind = typeof req.body?.kind === 'string' ? req.body.kind.trim().toLowerCase() : '';
+  const office = artifactId || ['writer', 'calc', 'impress'].includes(kind);
+  if (url && url.length <= 2048 && !office) {
+    return proxy(req, res, '/v1/sandbox/sessions');
   }
-  return proxy(req, res, '/v1/sandbox/sessions');
+  if (office) {
+    return proxy(req, res, '/v1/sandbox/sessions');
+  }
+  return res.status(400).json({ error: 'bad_request', message: 'url or document required' });
 });
 router.get('/v1/sandbox/sessions/:sessionId', (req, res) => {
   try {

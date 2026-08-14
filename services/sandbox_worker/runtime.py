@@ -13,6 +13,7 @@ import secrets
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -26,10 +27,18 @@ from sandbox_worker.browser import (
     BrowserPage,
     open_chromium,
 )
+from sandbox_worker.office import (
+    KIND_LABEL,
+    OFFICE_ENGINE,
+    OfficeDesktop,
+    open_office,
+    resolve_kind,
+)
 
 logger = logging.getLogger(__name__)
 
 HUMAN_LOGIN_COPY = "请在此画面自行登录，不要在聊天里发送密码"
+HUMAN_OFFICE_COPY = "沙箱已用 LibreOffice 打开这份文档。这是字处理窗口，不是 PDF，也不是下载。"
 SESSION_TTL_S = 30 * 60
 APPLIED_COPY = (
     "已把操作送进 sidecar Chromium。"
@@ -67,8 +76,16 @@ class SandboxSession:
     h1: str
     screenshot_png: bytes
     created_at: float
-    browser: BrowserPage
+    browser: BrowserPage | None = None
+    desktop: OfficeDesktop | None = None
+    kind: str = "browser"
     secret_fields: set[str] = field(default_factory=set)
+
+    def engine_name(self) -> str:
+        return OFFICE_ENGINE if self.kind != "browser" else ENGINE_NAME
+
+    def human_copy(self) -> str:
+        return HUMAN_OFFICE_COPY if self.kind != "browser" else HUMAN_LOGIN_COPY
 
 
 def isolation_tuple(school_id: str, membership_id: str, run_id: str | None) -> tuple[str, str, str]:
@@ -153,13 +170,36 @@ class SandboxRuntime:
         return sess
 
     async def _sync(self, sess: SandboxSession) -> None:
-        sess.url = sess.browser.url
-        sess.title = await sess.browser.title()
-        sess.h1 = await sess.browser.h1()
-        png = await sess.browser.screenshot_png()
+        surface = sess.desktop or sess.browser
+        if surface is None:
+            raise ToolError("sandbox.session_not_found", "隔离会话没有可截取的窗口")
+        sess.url = surface.url
+        sess.title = await surface.title()
+        sess.h1 = await surface.h1()
+        png = await surface.screenshot_png()
         if not png.startswith(PNG_MAGIC):
-            raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能截取 viewport")
+            raise ToolError("sandbox.raster_failed", "隔离窗口未能截取画面")
         sess.screenshot_png = png
+
+    def _public_meta(self, sess: SandboxSession, **extra: Any) -> dict[str, Any]:
+        return redact_secrets(
+            {
+                "ok": True,
+                "session_id": sess.session_id,
+                "workspace_id": sess.workspace_id,
+                "url": sess.url,
+                "title": sess.title,
+                "h1": sess.h1,
+                "kind": sess.kind,
+                "engine": sess.engine_name(),
+                "view_path": f"/v1/sandbox/sessions/{sess.session_id}/view",
+                "human_copy": sess.human_copy(),
+                "byte_size": len(sess.screenshot_png),
+                "mime": "image/png",
+                **extra,
+            },
+            sess.secret_fields,
+        )
 
     async def open_session(
         self,
@@ -167,8 +207,20 @@ class SandboxRuntime:
         school_id: str,
         membership_id: str,
         run_id: str | None,
-        url: str,
+        url: str = "",
+        kind: str = "",
+        filename: str = "",
+        document: bytes | None = None,
     ) -> dict[str, Any]:
+        if document or (kind and kind != "browser"):
+            return await self.open_document(
+                school_id=school_id,
+                membership_id=membership_id,
+                run_id=run_id,
+                kind=kind,
+                filename=filename,
+                document=document or b"",
+            )
         await self._purge()
         parse_public_http_url(url)
         hostile = automation_hostile_reason(url)
@@ -196,6 +248,7 @@ class SandboxRuntime:
                 screenshot_png=b"",
                 created_at=time.time(),
                 browser=page,
+                kind="browser",
             )
             await self._sync(sess)
             self._sessions[session_id] = sess
@@ -204,43 +257,63 @@ class SandboxRuntime:
             if not stored:
                 await page.close()
             raise
-        return redact_secrets(
-            {
-                "ok": True,
-                "session_id": session_id,
-                "workspace_id": sess.workspace_id,
-                "url": sess.url,
-                "title": sess.title,
-                "h1": sess.h1,
-                "engine": ENGINE_NAME,
-                "view_path": f"/v1/sandbox/sessions/{session_id}/view",
-                "human_copy": HUMAN_LOGIN_COPY,
-                "message": (
-                    f"已在 sidecar Chromium 打开公开页。{HUMAN_LOGIN_COPY}"
-                    "会话随沙箱销毁，不会把 Cookie 写回宿主机。"
-                ),
-                "byte_size": len(sess.screenshot_png),
-                "mime": "image/png",
-            }
+        return self._public_meta(
+            sess,
+            message=(
+                f"已在 sidecar Chromium 打开公开页。{HUMAN_LOGIN_COPY}"
+                "会话随沙箱销毁，不会把 Cookie 写回宿主机。"
+            ),
+        )
+
+    async def open_document(
+        self,
+        *,
+        school_id: str,
+        membership_id: str,
+        run_id: str | None,
+        kind: str,
+        filename: str,
+        document: bytes,
+    ) -> dict[str, Any]:
+        await self._purge()
+        resolved = resolve_kind(filename, kind)
+        safe_name = Path(filename or "document.docx").name or "document.docx"
+        desktop = await open_office(kind=resolved, filename=safe_name, document=document)
+        school, member, run = isolation_tuple(school_id, membership_id, run_id)
+        session_id = "sbox_" + secrets.token_hex(12)
+        ws = workspace_id_for(school, member, run)
+        sess = SandboxSession(
+            session_id=session_id,
+            school_id=school,
+            membership_id=member,
+            run_id=run,
+            workspace_id=ws,
+            url=desktop.url,
+            title="",
+            h1="",
+            screenshot_png=b"",
+            created_at=time.time(),
+            desktop=desktop,
+            kind=resolved,
+        )
+        try:
+            await self._sync(sess)
+        except Exception:
+            await desktop.close()
+            raise
+        self._sessions[session_id] = sess
+        label = KIND_LABEL.get(resolved, resolved)
+        return self._public_meta(
+            sess,
+            message=f"已在沙箱 {label} 打开 {safe_name}。{HUMAN_OFFICE_COPY}",
         )
 
     async def screenshot(self, session: SandboxSession) -> dict[str, Any]:
         await self._purge()
         await self._sync(session)
-        return redact_secrets(
-            {
-                "ok": True,
-                "session_id": session.session_id,
-                "workspace_id": session.workspace_id,
-                "url": session.url,
-                "title": session.title,
-                "engine": ENGINE_NAME,
-                "view_path": f"/v1/sandbox/sessions/{session.session_id}/view",
-                "human_copy": HUMAN_LOGIN_COPY,
-                "byte_size": len(session.screenshot_png),
-                "mime": "image/png",
-                "png_sha256": hashlib.sha256(session.screenshot_png).hexdigest()[:16],
-            }
+        return self._public_meta(
+            session,
+            png_sha256=hashlib.sha256(session.screenshot_png).hexdigest()[:16],
         )
 
     async def apply_input(
@@ -254,40 +327,36 @@ class SandboxRuntime:
         field: str = "input",
     ) -> dict[str, Any]:
         await self._purge()
+        surface = session.desktop or session.browser
+        if surface is None:
+            raise ToolError("sandbox.session_not_found", "隔离会话没有可操作的窗口")
         clicked = click_x is not None and click_y is not None
         if clicked:
-            await session.browser.click(int(click_x), int(click_y))
+            await surface.click(int(click_x), int(click_y))
         if text is not None:
             if password:
                 session.secret_fields.add(field)
-            # Type into the live DOM. Do not overlay secrets onto a synthetic PNG.
-            await session.browser.type_text(text, password=password)
+            await surface.type_text(text, password=password)
         await self._sync(session)
-        return redact_secrets(
-            {
-                "ok": True,
-                "session_id": session.session_id,
-                "workspace_id": session.workspace_id,
-                "url": session.url,
-                "title": session.title,
-                "engine": ENGINE_NAME,
-                "clicked": clicked,
-                "typed": bool(text),
-                "password_typed": bool(password and text),
-                "human_copy": HUMAN_LOGIN_COPY,
-                "message": APPLIED_COPY,
-            },
-            session.secret_fields,
+        return self._public_meta(
+            session,
+            clicked=clicked,
+            typed=bool(text),
+            password_typed=bool(password and text),
+            message=APPLIED_COPY if session.kind == "browser" else HUMAN_OFFICE_COPY,
         )
 
     async def destroy(self, session_id: str) -> None:
         sess = self._sessions.pop(session_id, None)
         if sess is None:
             return
-        try:
-            await sess.browser.close()
-        except Exception:
-            logger.debug("sandbox session close failed", exc_info=True)
+        for closer in (sess.desktop, sess.browser):
+            if closer is None:
+                continue
+            try:
+                await closer.close()
+            except Exception:
+                logger.debug("sandbox session close failed", exc_info=True)
 
 
 RUNTIME = SandboxRuntime()

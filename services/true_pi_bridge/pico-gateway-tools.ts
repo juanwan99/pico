@@ -30,6 +30,7 @@ const ALLOWED = [
   "sandbox_workspace_exec",
   "sandbox_browser_open",
   "sandbox_browser_screenshot",
+  "sandbox_document_open",
 ] as const;
 
 type ToolName = (typeof ALLOWED)[number];
@@ -247,6 +248,20 @@ export default function (pi: ExtensionAPI) {
     Type.Object(
       {
         session_id: Type.String(),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "sandbox_document_open",
+    "Open a Word/Calc/Impress file in sidecar LibreOffice. Word is Word — do not convert to PDF or HTML.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        filename: Type.Optional(Type.String()),
+        kind: Type.Optional(Type.String()),
+        body: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),

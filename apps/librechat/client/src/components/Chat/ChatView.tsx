@@ -24,7 +24,6 @@ import Presentation from './Presentation';
 import ChatForm from './Input/ChatForm';
 import Landing from './Landing';
 import ResultPanel from './ResultPanel';
-import MainDeliveryStrip from './MainDeliveryStrip';
 import TaskRunBar from './TaskRunBar';
 import ChangeConfirmBanner from './ChangeConfirmBanner';
 import Header from './Header';
@@ -246,18 +245,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     {isProjectLandingPage && project && <ProjectLandingChip project={project} />}
                     {/* Single submit path: Landing uses useSubmitMessage; ChatForm only when chatting */}
                     {!isLandingPage ? (
-                      <>
-                        {/* #399 R1: finished deliverables in primary column, above composer */}
-                        <MainDeliveryStrip
-                          artifacts={ledger.artifacts}
-                          runEvents={ledger.events}
-                          messages={flatMessages}
-                          onOpenResultPanel={() => setResultOpen(true)}
-                        />
-                        <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">
-                          <ChatForm index={index} placeholder={chatFormPlaceholder} />
-                        </div>
-                      </>
+                      <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">
+                        <ChatForm index={index} placeholder={chatFormPlaceholder} />
+                      </div>
                     ) : null}
                   </div>
                 </div>

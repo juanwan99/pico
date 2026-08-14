@@ -33,7 +33,10 @@ class OpenBody(BaseModel):
     school_id: str
     membership_id: str
     run_id: str | None = None
-    url: str
+    url: str = ""
+    kind: str = ""
+    filename: str = ""
+    document_base64: str = ""
 
 
 class InputBody(BaseModel):
@@ -74,11 +77,25 @@ async def open_session(
 ) -> dict[str, Any]:
     _require_token(x_pico_sandbox_token)
     try:
+        document = None
+        if body.document_base64.strip():
+            import base64
+
+            try:
+                document = base64.b64decode(body.document_base64, validate=False)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "tool.invalid_arguments", "message": "document_base64 无效"},
+                ) from exc
         return await RUNTIME.open_session(
             school_id=body.school_id,
             membership_id=body.membership_id,
             run_id=body.run_id,
             url=body.url,
+            kind=body.kind,
+            filename=body.filename,
+            document=document,
         )
     except ToolError as exc:
         raise _tool_http(exc) from exc

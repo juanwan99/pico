@@ -391,6 +391,7 @@ def test_tool_schemas_include_inspect() -> None:
     assert "sandbox_workspace_exec" in names
     assert "sandbox_browser_open" in names
     assert "sandbox_browser_screenshot" in names
+    assert "sandbox_document_open" in names
     assert "web_search" in names
 
 

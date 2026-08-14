@@ -13,7 +13,7 @@ import httpx
 
 from pico_orchestrator.gateway import ToolError
 
-_TIMEOUT_S = 30.0
+_TIMEOUT_S = 90.0
 
 
 def sandbox_url() -> str:
@@ -61,11 +61,20 @@ async def _embedded_call(
     # /v1/internal/sessions/...
     if method == "POST" and path.endswith("/sessions/open"):
         body = json_body or {}
+        document = None
+        raw_b64 = str(body.get("document_base64") or "").strip()
+        if raw_b64:
+            import base64
+
+            document = base64.b64decode(raw_b64, validate=False)
         return await RUNTIME.open_session(
             school_id=str(body.get("school_id") or ""),
             membership_id=str(body.get("membership_id") or ""),
             run_id=body.get("run_id"),
             url=str(body.get("url") or ""),
+            kind=str(body.get("kind") or ""),
+            filename=str(body.get("filename") or ""),
+            document=document,
         )
     if len(parts) >= 4 and parts[0] == "v1" and parts[2] == "sessions":
         session_id = parts[3]

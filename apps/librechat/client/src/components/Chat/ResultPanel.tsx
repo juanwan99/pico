@@ -1,8 +1,8 @@
 /**
  * Task result panel — right-hand stage for files and public pages.
- * Top: 概览 | 工作空间文件 | 网页
- * Open html/image/text fills this pane. Open a site / click a source uses
- * sandbox_browser_open (网页). iframe「浏览器」is not the open-website entry.
+ * Top: 概览 | 工作空间文件 | 沙箱
+ * Right column is the sandbox screen. Sites open in Chromium; .docx opens
+ * in LibreOffice Writer. Chat column has no delivery strip.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +23,7 @@ import type { TMessage } from 'librechat-data-provider';
 import {
   getPicoArtifactContent,
   openPicoSandboxBrowser,
+  openPicoSandboxDocument,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -31,13 +32,14 @@ import { cn } from '~/utils';
 import {
   classifyArtifactPreview,
   clampResultPaneWidth,
+  latestUserOpenOfficeIntent,
   latestUserOpenWebsiteIntent,
-  OFFICE_NO_PREVIEW_COPY,
   readBlobText,
   readStoredResultPaneWidth,
   RESULT_PANE_VIEW_LABEL,
   RESULT_PANE_VIEWS,
   RESULT_PANE_WIDTH_STORAGE_KEY,
+  type OfficeOpenIntent,
   type ResultPaneView,
 } from '~/utils/picoOpenInPane';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
@@ -276,6 +278,7 @@ export default function ResultPanel({
     url: string;
     title: string;
     humanCopy: string;
+    kind?: string;
   } | null>(null);
   const [websiteError, setWebsiteError] = useState<string | null>(null);
   const openedWebsiteRef = useRef<string | null>(null);
@@ -426,6 +429,7 @@ export default function ResultPanel({
         url: String(meta.url || url),
         title: String(meta.title || ''),
         humanCopy: String(meta.human_copy || '请在此画面自行登录，不要在聊天里发送密码'),
+        kind: String(meta.kind || 'browser'),
       });
     } catch (err) {
       openedWebsiteRef.current = null;
@@ -438,8 +442,66 @@ export default function ResultPanel({
     }
   };
 
+  const openOfficeInPane = async (intent: OfficeOpenIntent, artifactId?: string) => {
+    const key = `${intent.kind}:${artifactId || intent.filename || 'new'}`;
+    if (openedWebsiteRef.current === key && sandboxSession) {
+      setView('web');
+      return;
+    }
+    openedWebsiteRef.current = key;
+    setWebsiteError(null);
+    clearFilePreview();
+    setView('web');
+    try {
+      const match = artifactId
+        ? artifacts.find((item) => item.id === artifactId)
+        : artifacts.find((item) => {
+            const name = item.name || '';
+            if (intent.filename && name === intent.filename) {
+              return true;
+            }
+            if (intent.kind === 'writer') {
+              return /\.(docx?|odt)$/i.test(name);
+            }
+            if (intent.kind === 'calc') {
+              return /\.(xlsx?|ods)$/i.test(name);
+            }
+            return /\.(pptx?|odp)$/i.test(name);
+          });
+      const meta = await openPicoSandboxDocument({
+        kind: intent.kind,
+        artifact_id: match?.id,
+        filename: intent.filename || match?.name || (intent.kind === 'writer' ? '课堂笔记.docx' : undefined),
+        body:
+          intent.kind === 'writer'
+            ? '沙箱里的这份 Word 正文。打开 = Writer 窗口，不是 PDF。'
+            : undefined,
+      });
+      const sessionId = String(meta.session_id || '').trim();
+      if (!sessionId.startsWith('sbox_')) {
+        throw new Error('sandbox session missing');
+      }
+      setLocalSandbox({
+        sessionId,
+        url: String(meta.url || ''),
+        title: String(meta.title || ''),
+        humanCopy: String(meta.human_copy || '沙箱已用 LibreOffice 打开这份文档。'),
+        kind: String(meta.kind || intent.kind),
+      });
+    } catch (err) {
+      openedWebsiteRef.current = null;
+      const message = err instanceof Error ? err.message : String(err);
+      setWebsiteError(message.includes('office_unavailable') ? '沙箱还没有装字处理软件' : '打开文档失败，请稍后重试');
+    }
+  };
+
   useEffect(() => {
     if (ledgerSandbox) {
+      return;
+    }
+    const office = latestUserOpenOfficeIntent(messages);
+    if (office) {
+      void openOfficeInPane(office);
       return;
     }
     const intent = latestUserOpenWebsiteIntent(messages);
@@ -502,16 +564,12 @@ export default function ResultPanel({
       return;
     }
     if (kind === 'office') {
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = artifact.name || 'artifact.bin';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      setPreviewOffice(OFFICE_NO_PREVIEW_COPY);
-      setView('overview');
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      const officeKind = /\.(pptx?|odp)$/i.test(artifact.name)
+        ? 'impress'
+        : /\.(xlsx?|ods)$/i.test(artifact.name)
+          ? 'calc'
+          : 'writer';
+      await openOfficeInPane({ kind: officeKind, filename: artifact.name }, artifact.id);
       return;
     }
     if (kind === 'text' || (blob.size <= 512_000 && kind !== 'download')) {
@@ -708,6 +766,7 @@ export default function ResultPanel({
               type="button"
               className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-black/[0.04]"
               aria-label="收起结果区"
+              data-testid="result-panel-close"
               onClick={onClose}
             >
               <PanelRightClose className="h-3.5 w-3.5" />
@@ -1124,15 +1183,19 @@ export default function ResultPanel({
                 initialUrl={sandboxSession.url}
                 initialTitle={sandboxSession.title}
                 humanCopy={sandboxSession.humanCopy}
+                kind={sandboxSession.kind}
                 zoom={paneZoom.zoom}
                 onWheelZoom={paneZoom.onWheel}
               />
             ) : (
-              <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-[#9a9a9a]">
+              <div
+                className="flex min-h-[240px] flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-[#9a9a9a]"
+                data-testid="sandbox-empty"
+              >
                 <Globe className="h-8 w-8 opacity-35" strokeWidth={1.25} />
-                <p className="text-[13px]">还没有隔离网页</p>
+                <p className="text-[13px]">沙箱还没有打开窗口</p>
                 <p className="max-w-[16rem] text-[11px] leading-relaxed">
-                  对 Pico 说「打开 example.com」或点一条来源，隔离网页会出现在这里，不是空白 iframe。
+                  对 Pico 说「打开 https://example.com」或「打开一份 Word」，右边会出现沙箱里的程序画面。
                 </p>
               </div>
             )}

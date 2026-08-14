@@ -2,6 +2,7 @@ import {
   classifyArtifactPreview,
   clampResultPaneWidth,
   clampResultPaneZoom,
+  detectOpenOfficeIntent,
   detectOpenWebsiteIntent,
   formatResultPaneZoom,
   latestUserOpenWebsiteIntent,
@@ -21,8 +22,17 @@ describe('picoOpenInPane', () => {
     expect(classifyArtifactPreview('notes.txt', 'text')).toBe('text');
     expect(classifyArtifactPreview('报告.docx', 'docx')).toBe('office');
     expect(RESULT_PANE_VIEWS).toEqual(['overview', 'files', 'web']);
-    expect(RESULT_PANE_VIEW_LABEL.web).toBe('网页');
+    expect(RESULT_PANE_VIEW_LABEL.web).toBe('沙箱');
     expect(RESULT_PANE_VIEW_LABEL).not.toHaveProperty('browser');
+  });
+
+  it('F2: 打开 word/docx is office intent, not a website', () => {
+    expect(detectOpenOfficeIntent('打开一个 word 文档在沙箱')).toEqual({ kind: 'writer' });
+    expect(detectOpenOfficeIntent('打开 课堂笔记.docx')).toEqual({
+      kind: 'writer',
+      filename: '课堂笔记.docx',
+    });
+    expect(detectOpenOfficeIntent('打开 https://example.com')).toBeNull();
   });
 
   it('T5/T9: 打开 example.com is a website intent; 打开 file.md is not', () => {

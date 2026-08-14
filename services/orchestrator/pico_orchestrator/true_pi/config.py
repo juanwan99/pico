@@ -50,6 +50,7 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "sandbox_workspace_exec",
         "sandbox_browser_open",
         "sandbox_browser_screenshot",
+        "sandbox_document_open",
     }
 )
 

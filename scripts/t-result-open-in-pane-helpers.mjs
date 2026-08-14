@@ -10,6 +10,7 @@ import {
   RESULT_PANE_DEFAULT_WIDTH,
   RESULT_PANE_MIN_WIDTH,
   RESULT_PANE_VIEWS,
+  detectOpenOfficeIntent,
   RESULT_PANE_VIEW_LABEL,
 } from '../apps/librechat/client/src/utils/picoOpenInPane.ts';
 
@@ -17,6 +18,7 @@ const m = {
   classifyArtifactPreview,
   clampResultPaneWidth,
   clampResultPaneZoom,
+  detectOpenOfficeIntent,
   detectOpenWebsiteIntent,
   formatResultPaneZoom,
   latestUserOpenWebsiteIntent,
@@ -37,7 +39,10 @@ assert(m.classifyArtifactPreview('shot.png', 'image') === 'image', 'T2 image');
 assert(m.classifyArtifactPreview('课程总结.md', 'markdown') === 'text', 'T3 text');
 assert(m.classifyArtifactPreview('报告.docx', 'docx') === 'office', 'T4 office');
 assert(JSON.stringify(m.RESULT_PANE_VIEWS) === JSON.stringify(['overview', 'files', 'web']), 'T7 views');
+assert(m.RESULT_PANE_VIEW_LABEL.web === '沙箱', 'sandbox label');
 assert(!('browser' in m.RESULT_PANE_VIEW_LABEL), 'T7 no iframe menu');
+assert(m.detectOpenOfficeIntent('打开一个 word 文档在沙箱')?.kind === 'writer', 'F2 word');
+assert(m.detectOpenOfficeIntent('打开 https://example.com') === null, 'F2 not url');
 assert(m.detectOpenWebsiteIntent('打开 https://example.com') === 'https://example.com/', 'T5 url');
 assert(m.detectOpenWebsiteIntent('打开 example.com') === 'https://example.com/', 'T5 host');
 assert(m.detectOpenWebsiteIntent('打开 课程总结.md') === null, 'T5 not file');
