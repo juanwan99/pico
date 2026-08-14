@@ -8,6 +8,9 @@ DEFAULT_WIDTH 480
 04-zoom.png 86632 1280x800 150%
 05-fullscreen.png 104589 1280x800
 v390.png 35943 390x844
+06-live-tip.png 40757 live tip e8c0ad7757e65f98c351dc7182d3c1ae1b2c6e82
+06-live-tip-workbench.png 81387
 A_CHOICE hide iframe browser; merge into 网页
 R1 default 480 + drag; zoom 50-200%; fullscreen fills content
 CLAIM-WB-DEGREE-WEB NO
+G-LIVE e8c0ad7757e65f98c351dc7182d3c1ae1b2c6e82

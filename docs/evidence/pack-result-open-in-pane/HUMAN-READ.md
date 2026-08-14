@@ -21,5 +21,9 @@ R1 调查：桌面真宽被 CSS `--pico-wb-result-w: 316px !important` 钉死；
 | `04-zoom.png` | 缩放 150%，比例可见 |
 | `05-fullscreen.png` | 全屏后画面铺满工作台，不是 400 细条 |
 | `v390.png` | 390 宽可用，无横向撑爆 |
+| `06-live-tip.png` | 公网 tip 真页：打开 example.com → 结果区网页态 |
+| `06-live-tip-workbench.png` | 同上整台（对话「打开 https://example.com」+ 右侧网页） |
 
-Office：区内诚实下载，不承诺翻页。未自签 PASS。公网真页等合装后补。
+Office：区内诚实下载，不承诺翻页。未自签 PASS。
+G-live：公网 `git_sha=e8c0ad7757e65f98c351dc7182d3c1ae1b2c6e82`（合装 SHA）。
+
