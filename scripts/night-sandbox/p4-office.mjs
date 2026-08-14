@@ -108,7 +108,15 @@ async function main() {
 
     await sendPrompt(page, `打开 ${pptx}`);
     try {
-      const s11Text = await waitPane(page, /Impress|LibreOffice|NIGHT-P4-SLIDE-ALPHA/i, args.timeoutMs);
+      const impressTab = page.getByTestId('sandbox-window-impress');
+      const impressDeadline = Date.now() + Math.min(args.timeoutMs, 90000);
+      while (Date.now() < impressDeadline && !(await impressTab.count())) {
+        await page.waitForTimeout(700);
+      }
+      if (await impressTab.count()) {
+        await impressTab.click();
+      }
+      const s11Text = await waitPane(page, /Impress/i, args.timeoutMs);
       await page.waitForTimeout(1200);
       const s11 = await shot(page, path.join(args.out, 'S11-impress.png'));
       await saveViewportPng(page, path.join(args.out, 'S11-viewport.png')).catch(() => {});

@@ -139,6 +139,39 @@ async def test_opening_new_docx_replaces_writer_and_keeps_tree():
 
 
 @pytest.mark.asyncio
+async def test_ninth_desk_is_refused():
+    import sandbox_worker.runtime as runtime_mod
+    from pico_orchestrator.gateway import ToolError
+
+    async def open_browser(url: str):
+        return FakeSurface(url, "Example Domain", "Example Domain")
+
+    async def open_files(names):
+        surface = FakeSurface("sandbox://files", "文件")
+        surface.names = names
+        return surface
+
+    runtime = SandboxRuntime(open_browser=open_browser)
+    runtime_mod.open_files_surface = open_files  # type: ignore[attr-defined]
+
+    for i in range(8):
+        await runtime.open_session(
+            school_id="sch",
+            membership_id=f"mem-{i}",
+            run_id="r",
+            url="https://example.com/",
+        )
+    with pytest.raises(ToolError) as denied:
+        await runtime.open_session(
+            school_id="sch",
+            membership_id="mem-8",
+            run_id="r",
+            url="https://example.com/",
+        )
+    assert denied.value.code == "sandbox.quota"
+
+
+@pytest.mark.asyncio
 async def test_files_surface_raster_shows_unique_name():
     from sandbox_worker.files import listing_png, open_files_surface
 

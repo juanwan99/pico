@@ -654,7 +654,12 @@ async def open_sandbox_session(
                 },
             )
     except ToolError as e:
-        code = 403 if e.code == "tenant.cross_school" else 400
+        if e.code == "tenant.cross_school" or e.code == "sandbox.forbidden":
+            code = 403
+        elif e.code == "sandbox.quota":
+            code = 429
+        else:
+            code = 400
         raise HTTPException(
             status_code=code, detail={"code": e.code, "message": e.message}
         ) from e
@@ -733,7 +738,12 @@ async def sandbox_session_view(
             },
         )
     except ToolError as exc:
-        status = 404 if exc.code == "sandbox.session_not_found" else 400
+        if exc.code == "sandbox.forbidden":
+            status = 403
+        elif exc.code == "sandbox.session_not_found":
+            status = 404
+        else:
+            status = 400
         raise HTTPException(
             status_code=status, detail={"code": exc.code, "message": exc.message}
         ) from exc
@@ -770,7 +780,12 @@ async def sandbox_session_screenshot(
             },
         )
     except ToolError as exc:
-        status = 404 if exc.code == "sandbox.session_not_found" else 400
+        if exc.code == "sandbox.forbidden":
+            status = 403
+        elif exc.code == "sandbox.session_not_found":
+            status = 404
+        else:
+            status = 400
         raise HTTPException(
             status_code=status, detail={"code": exc.code, "message": exc.message}
         ) from exc

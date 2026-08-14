@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import secrets
 import time
 from collections.abc import Awaitable, Callable
@@ -40,7 +41,8 @@ logger = logging.getLogger(__name__)
 
 HUMAN_LOGIN_COPY = "请在此画面自行登录，不要在聊天里发送密码"
 HUMAN_OFFICE_COPY = "沙箱已用 LibreOffice 打开这份文档。这是字处理窗口，不是 PDF，也不是下载。"
-SESSION_TTL_S = 30 * 60
+SESSION_TTL_S = int(os.environ.get("PICO_SANDBOX_TTL_S") or str(30 * 60))
+MAX_SESSIONS = int(os.environ.get("PICO_SANDBOX_MAX_SESSIONS") or "8")
 APPLIED_COPY = (
     "已把操作送进 sidecar Chromium。"
     "Cookie 只在会话内存/临时 profile，随销毁消失。"
@@ -84,6 +86,7 @@ class SandboxSession:
     h1: str
     screenshot_png: bytes
     created_at: float
+    last_used: float = 0.0
     windows: list[SandboxWindow] = field(default_factory=list)
     focused_id: str = ""
     kind: str = "browser"
@@ -207,7 +210,7 @@ class SandboxRuntime:
         dead = [
             sid
             for sid, sess in self._sessions.items()
-            if now - sess.created_at > SESSION_TTL_S
+            if now - (sess.last_used or sess.created_at) > SESSION_TTL_S
         ]
         for sid in dead:
             await self.destroy(sid)
@@ -226,8 +229,7 @@ class SandboxRuntime:
         if sess is None:
             raise ToolError("sandbox.session_not_found", "找不到该隔离会话")
         if sess.school_id != school_id or sess.membership_id != membership_id:
-            # Same 404-shaped miss as artifacts — do not leak the other account.
-            raise ToolError("sandbox.session_not_found", "找不到该隔离会话")
+            raise ToolError("sandbox.forbidden", "无权查看该隔离会话")
         return sess
 
     def _find_desk(self, school_id: str, membership_id: str) -> SandboxSession | None:
@@ -271,6 +273,7 @@ class SandboxRuntime:
         if not png.startswith(PNG_MAGIC):
             raise ToolError("sandbox.raster_failed", "隔离窗口未能截取画面")
         sess.screenshot_png = png
+        sess.last_used = time.time()
 
     def _public_meta(self, sess: SandboxSession, **extra: Any) -> dict[str, Any]:
         return redact_secrets(
@@ -324,6 +327,8 @@ class SandboxRuntime:
         existing = self._find_desk(school, member)
         if existing is not None:
             return await self._attach_browser(existing, url)
+        if len(self._sessions) >= MAX_SESSIONS:
+            raise ToolError("sandbox.quota", "沙箱已满（最多 8 路），请关掉一路再开。机器未继续扩进程。")
         page = await self._open_browser(url)
         stored = False
         try:
@@ -384,6 +389,8 @@ class SandboxRuntime:
             return await self._attach_office(
                 existing, kind=resolved, filename=safe_name, document=document
             )
+        if len(self._sessions) >= MAX_SESSIONS:
+            raise ToolError("sandbox.quota", "沙箱已满（最多 8 路），请关掉一路再开。机器未继续扩进程。")
         desktop = await open_office(kind=resolved, filename=safe_name, document=document)
         session_id = "sbox_" + secrets.token_hex(12)
         ws = workspace_id_for(school, member, run)
