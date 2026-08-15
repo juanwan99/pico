@@ -1,0 +1,9 @@
+{
+  "card": "T-NIGHT-SANDBOX-COMPUTER",
+  "phase": "P6",
+  "s16": "N",
+  "s17": "DEGRADED",
+  "reason": "no /dev/kvm; vmx/svm count 0; systemd-detect-virt=kvm; hypervisor vendor KVM",
+  "claim_wb": "NO",
+  "verdict": "DEGRADED"
+}

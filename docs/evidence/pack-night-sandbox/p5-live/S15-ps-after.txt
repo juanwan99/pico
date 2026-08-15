@@ -1,0 +1,6 @@
+COUNT=17
+---
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi       6.9Gi       4.0Gi       151Mi        19Gi        22Gi
+---
+17
