@@ -75,6 +75,7 @@ async function main() {
     const context = await browser.newContext({
       viewport: { width: 1440, height: 900 },
       ignoreHTTPSErrors: true,
+      serviceWorkers: 'block',
     });
     const page = await context.newPage();
     await login(page, base, email, password);
@@ -110,42 +111,13 @@ async function main() {
     report.u2_size = s2.size;
     report.u2_sha = sha256(u2);
 
+    const menu = page.getByTestId('sandbox-screen-menu');
+    await menu.waitFor({ state: 'visible', timeout: 10000 });
+    await menu.click();
     const closeKeep = page.getByTestId('sandbox-close-keep-disk');
-    if (await closeKeep.count()) {
-      await page.getByTestId('sandbox-screen-menu').click();
-      await closeKeep.click();
-    } else {
-      await page.evaluate(async () => {
-        const pane = document.querySelector('[data-testid="sandbox-web-pane"]');
-        const sid = pane?.getAttribute('data-session') || '';
-        if (!sid) {
-          const res = await fetch('/api/pico/v1/sandbox/sessions', { credentials: 'include' });
-          return res.status;
-        }
-        return sid;
-      });
-    }
+    await closeKeep.waitFor({ state: 'visible', timeout: 8000 });
+    await closeKeep.click();
     const dead = page.getByTestId('sandbox-dead');
-    if (await closeKeep.count()) {
-      await page.getByTestId('sandbox-screen-menu').click().catch(() => {});
-      await page.getByTestId('sandbox-close-keep-disk').click().catch(() => {});
-    }
-    // destroy via API if UI menu already closed the window
-    await page.waitForTimeout(1500);
-    if (!(await dead.count())) {
-      await page.evaluate(async () => {
-        const matches = document.body.innerHTML.match(/sbox_[A-Za-z0-9_-]{8,}/);
-        const sid = matches?.[0];
-        if (!sid) {
-          return;
-        }
-        await fetch(`/api/pico/v1/sandbox/sessions/${sid}`, {
-          method: 'DELETE',
-          credentials: 'include',
-        });
-      });
-      await page.waitForTimeout(2000);
-    }
     await dead.waitFor({ state: 'visible', timeout: 20000 });
     if (await page.getByTestId('sandbox-login-form').count()) {
       throw new Error('U3: login form on dead session');
