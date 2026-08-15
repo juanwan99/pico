@@ -493,22 +493,40 @@ export default function ResultPanel({
   };
 
   useEffect(() => {
+    const office = latestUserOpenOfficeIntent(messages);
+    const site = latestUserOpenWebsiteIntent(messages);
     if (ledgerSandbox) {
-      const office = latestUserOpenOfficeIntent(messages);
-      const want = (office?.filename || '').toLowerCase();
-      const have = `${ledgerSandbox.title || ''} ${ledgerSandbox.url || ''}`.toLowerCase();
-      if (!want || have.includes(want.replace(/^.*\//, ''))) {
+      if (office) {
+        const want = (office.filename || '').toLowerCase();
+        const have = `${ledgerSandbox.title || ''} ${ledgerSandbox.url || ''}`.toLowerCase();
+        if (!want || have.includes(want.replace(/^.*\//, ''))) {
+          return;
+        }
+        void openOfficeInPane(office);
         return;
       }
+      if (site) {
+        let already = false;
+        try {
+          const host = new URL(site).hostname.replace(/^www\./i, '').toLowerCase();
+          already = String(ledgerSandbox.url || '').toLowerCase().includes(host);
+        } catch {
+          already = false;
+        }
+        if (already) {
+          return;
+        }
+        void openWebsiteInPane(site);
+        return;
+      }
+      return;
     }
-    const office = latestUserOpenOfficeIntent(messages);
     if (office) {
       void openOfficeInPane(office);
       return;
     }
-    const intent = latestUserOpenWebsiteIntent(messages);
-    if (intent) {
-      void openWebsiteInPane(intent);
+    if (site) {
+      void openWebsiteInPane(site);
     }
     // Intent is derived from the latest user turn; skip if ledger already opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps

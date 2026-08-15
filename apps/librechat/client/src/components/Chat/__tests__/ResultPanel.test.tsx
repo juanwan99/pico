@@ -468,6 +468,45 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     await waitFor(() => expect(mockOpenBrowser).toHaveBeenCalledWith('https://example.com/'));
   });
 
+  it('S1c: persisted example.com session still navigates to 腾讯官网', async () => {
+    mockOpenBrowser.mockResolvedValue({
+      session_id: 'sbox_cccccccccccccccccccccccc',
+      url: 'https://www.qq.com/',
+      title: '腾讯网',
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          runEvents={[
+            {
+              id: 'sbox-old',
+              run_id: 'run-1',
+              seq: 1,
+              type: 'sandbox.session',
+              payload: {
+                session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+                url: 'https://example.com/',
+                title: 'Example Domain',
+              },
+            },
+          ]}
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开腾讯官网',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(mockOpenBrowser).toHaveBeenCalledWith('https://www.qq.com/'));
+  });
+
   it('S1b: 打开腾讯官网 resolves qq.com, not silence', async () => {
     mockOpenBrowser.mockResolvedValue({
       session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',

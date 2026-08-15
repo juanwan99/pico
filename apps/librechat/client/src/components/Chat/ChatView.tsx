@@ -159,10 +159,10 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     if (compactResult || !conversationId || conversationId === Constants.NEW_CONVO) {
       return;
     }
-    if (
-      (ledger.artifacts?.length ?? 0) > 0 ||
-      collectPicoSandboxSession(ledger.events)
-    ) {
+    const realArtifacts = (ledger.artifacts ?? []).filter(
+      (item) => !(item.kind === 'doc' && (item.title || '').trim() === '回复摘要'),
+    );
+    if (realArtifacts.length > 0 || collectPicoSandboxSession(ledger.events)) {
       setResultOpen(true);
     }
   }, [compactResult, conversationId, ledger.artifacts, ledger.events, openPaneIntent]);
