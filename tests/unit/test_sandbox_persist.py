@@ -58,7 +58,8 @@ def test_owner_disks_do_not_overlap(disk) -> None:
     b = owner_disk_dir("school-a", "member-b")
     c = owner_disk_dir("school-b", "member-a")
     assert a != b != c
-    assert "run" not in str(a)
+    assert a.parts[-2:] == ("school-a", "member-a")
+    assert len(a.relative_to(disk).parts) == 2
     write_owner_disk_file("school-a", "member-a", "notes.docx", b"AAA")
     write_owner_disk_file("school-a", "member-b", "notes.docx", b"BBB")
     assert read_owner_disk_file("school-a", "member-a", "notes.docx") == b"AAA"
