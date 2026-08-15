@@ -15,6 +15,7 @@ def test_open_browser_intent_resolves_default_and_tencent() -> None:
     assert "looksLikeOfficeOpen" in pane
     assert "latestUserOpenWebsiteIntent" in view
     assert "websiteIntent" in view
+    assert "回复摘要" in view
     # Writer path is not rewritten into a webpage.
     office = pane
     assert "detectOpenOfficeIntent" in office
