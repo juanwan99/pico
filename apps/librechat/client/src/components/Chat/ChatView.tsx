@@ -102,9 +102,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const [compactResult, setCompactResult] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches,
   );
-  const [resultOpen, setResultOpen] = useState(
-    () => typeof window === 'undefined' || !window.matchMedia('(max-width: 1024px)').matches,
-  );
+  const [resultOpen, setResultOpen] = useState(false);
   const flatMessages = useMemo(
     () => chatHelpers.getMessages?.() ?? null,
     [chatHelpers, messagesTree, isSubmitting],
@@ -127,21 +125,15 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     const media = window.matchMedia('(max-width: 1024px)');
     const syncResultLayout = (event: MediaQueryListEvent) => {
       setCompactResult(event.matches);
-      setResultOpen(!event.matches);
+      if (event.matches) {
+        setResultOpen(false);
+      }
     };
     media.addEventListener('change', syncResultLayout);
     return () => media.removeEventListener('change', syncResultLayout);
   }, []);
 
-  // WorkBuddy chrome: task pages always show right rail by default
-  useEffect(() => {
-    if (compactResult || !conversationId || conversationId === Constants.NEW_CONVO) {
-      return;
-    }
-    setResultOpen(true);
-  }, [compactResult, conversationId]);
-
-  // Ensure result panel opens when artifacts arrive or a run reaches a terminal state
+  // Open the right rail only when there is something to show.
   useEffect(() => {
     if (compactResult || !conversationId || conversationId === Constants.NEW_CONVO) {
       return;
@@ -201,10 +193,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     )}
                     rerunning={ledger.rerunning}
                     onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
-                    processHint={
-                      ledger.processHint ||
-                      (isSubmitting ? '正在检索或作答' : null)
-                    }
+                    processHint={ledger.processHint || (isSubmitting ? '正在检索或作答' : null)}
                   />
                   {ledger.error ? (
                     <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900">
@@ -236,8 +225,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                       'w-full shrink-0',
                       isLandingPage &&
                         'relative z-10 w-full max-w-[797px] px-4 transition-all duration-200',
-                      !isLandingPage &&
-                        'border-t border-black/[0.04] bg-white dark:border-border-light dark:bg-surface-primary',
+                      !isLandingPage && 'bg-transparent',
                     )}
                   >
                     {isProjectLandingPage && project && <ProjectLandingChip project={project} />}
@@ -255,10 +243,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     conversationId={conversationId}
                     taskTitle={taskTitle || ledger.task?.title}
                     runStatusLabel={runStatusLabel}
-                    processHint={
-                      ledger.processHint ||
-                      (isSubmitting ? '正在检索或作答' : null)
-                    }
+                    processHint={ledger.processHint || (isSubmitting ? '正在检索或作答' : null)}
                     picoArtifacts={ledger.artifacts}
                     runEvents={ledger.events}
                     run={ledger.run}
@@ -289,8 +274,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                       >
                         {
                           ledger.artifacts.filter(
-                            (a) =>
-                              !(a.kind === 'doc' && (a.title || '').trim() === '回复摘要'),
+                            (a) => !(a.kind === 'doc' && (a.title || '').trim() === '回复摘要'),
                           ).length
                         }
                       </span>

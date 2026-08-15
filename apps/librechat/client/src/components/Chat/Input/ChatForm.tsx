@@ -2,7 +2,7 @@ import { memo, useRef, useMemo, useEffect, useState, useCallback } from 'react';
 import { useWatch } from 'react-hook-form';
 import { TextareaAutosize } from '@librechat/client';
 import { useRecoilState, useRecoilValue, useRecoilCallback } from 'recoil';
-import { Constants, isAssistantsEndpoint, isAgentsEndpoint } from 'librechat-data-provider';
+import { Constants, isAssistantsEndpoint } from 'librechat-data-provider';
 import type { TMessage, TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter, ConvoGenerator } from '~/common';
 import type { QueuedMessageContext } from '~/hooks/Chat/useSteering';
@@ -25,31 +25,32 @@ import {
 import PendingManualSkillsChips from './PendingManualSkillsChips';
 import useAskAnswerMode from '~/hooks/Input/useAskAnswerMode';
 import AskUserQuestionPopover from './AskUserQuestionPopover';
+import {
+  ComposerPlusAttach,
+  ComposerPlusItem,
+  ComposerPlusMenu,
+  PLUS_MODE_ITEMS,
+} from './ComposerPlusMenu';
 import { PicoIcon } from '~/components/ui/pico-icons';
-import { cn, getModelSpec, removeFocusRings } from '~/utils';
+import { cn, removeFocusRings } from '~/utils';
 import DuringRunSendButton from './DuringRunSendButton';
-import { useGetStartupConfig } from '~/data-provider';
 import { mainTextareaId, BadgeItem } from '~/common';
 import PendingSteerChips from './PendingSteerChips';
 import PendingQuoteChips from './PendingQuoteChips';
-import AttachFileChat from './Files/AttachFileChat';
-import WorkspaceSelector from './WorkspaceSelector';
 import useSteering from '~/hooks/Chat/useSteering';
 import FileFormChat from './Files/FileFormChat';
 import InFlightSteers from './InFlightSteers';
 import TextareaHeader from './TextareaHeader';
 import PromptsCommand from './PromptsCommand';
 import SkillsCommand from './SkillsCommand';
-import AudioRecorder from './AudioRecorder';
 import CollapseChat from './CollapseChat';
 import QuoteButton from './QuoteButton';
 import StreamAudio from './StreamAudio';
-import TokenUsage from './TokenUsage';
 import StopButton from './StopButton';
 import SendButton from './SendButton';
 import EditBadges from './EditBadges';
-import BadgeRow from './BadgeRow';
 import Mention from './Mention';
+import { getPicoModelMode, normalizePicoModelMode, setPicoModelMode } from '~/utils/picoModelPref';
 import store from '~/store';
 
 interface ChatFormProps {
@@ -65,6 +66,7 @@ interface ChatFormProps {
   newConversation: ConvoGenerator;
   handleStopGenerating: (e: React.MouseEvent<HTMLButtonElement>) => void;
   stopGenerating: () => void;
+  setConversation?: (updater: (prev: TConversation | null) => TConversation | null) => void;
 }
 
 const ChatForm = memo(function ChatForm({
@@ -79,6 +81,7 @@ const ChatForm = memo(function ChatForm({
   newConversation,
   handleStopGenerating,
   stopGenerating,
+  setConversation,
 }: ChatFormProps) {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -92,7 +95,6 @@ const ChatForm = memo(function ChatForm({
   const [isTextAreaFocused, setIsTextAreaFocused] = useState(false);
   const [backupBadges, setBackupBadges] = useState<Pick<BadgeItem, 'id'>[]>([]);
 
-  const SpeechToText = useRecoilValue(store.speechToText);
   const TextToSpeech = useRecoilValue(store.textToSpeech);
   const chatDirection = useRecoilValue(store.chatDirection);
   const automaticPlayback = useRecoilValue(store.automaticPlayback);
@@ -114,17 +116,10 @@ const ChatForm = memo(function ChatForm({
     setConversation: setAddedConvo,
   } = useAddedChatContext();
   const assistantMap = useAssistantsMapContext();
-  const { data: startupConfig } = useGetStartupConfig();
-
   const endpoint = useMemo(
     () => conversation?.endpointType ?? conversation?.endpoint,
     [conversation?.endpointType, conversation?.endpoint],
   );
-  const modelSpec = useMemo(
-    () => getModelSpec({ specName: conversation?.spec, startupConfig }),
-    [conversation?.spec, startupConfig],
-  );
-  const hideBadgeRow = modelSpec?.hideBadgeRow === true;
   const conversationId = useMemo(
     () => conversation?.conversationId ?? Constants.NEW_CONVO,
     [conversation?.conversationId],
@@ -135,6 +130,24 @@ const ChatForm = memo(function ChatForm({
    * letting users queue quotes the assistant never receives.
    */
   const quotesEnabled = useMemo(() => !isAssistantsEndpoint(endpoint), [endpoint]);
+  const picoMode = normalizePicoModelMode(conversation?.model || getPicoModelMode());
+  const applyPicoMode = useCallback(
+    (raw: string) => {
+      const id = normalizePicoModelMode(raw);
+      setPicoModelMode(id);
+      setPlusOpen(false);
+      setConversation?.((prev) =>
+        prev
+          ? {
+              ...prev,
+              endpoint: prev.endpoint ?? 'openAI',
+              model: id,
+            }
+          : prev,
+      );
+    },
+    [setConversation],
+  );
 
   const isRTL = useMemo(
     () => (chatDirection != null ? chatDirection?.toLowerCase() === 'rtl' : false),
@@ -528,7 +541,9 @@ const ChatForm = memo(function ChatForm({
               onClick={handleContainerClick}
               className={cn(
                 'pico-wb-composer relative flex w-full flex-col overflow-hidden rounded-[20px] border text-text-primary transition-all duration-200',
-                isTextAreaFocused ? 'shadow-[0_8px_30px_rgba(0,0,0,0.08)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.04)]',
+                isTextAreaFocused
+                  ? 'shadow-[0_8px_30px_rgba(0,0,0,0.08)]'
+                  : 'shadow-[0_2px_12px_rgba(0,0,0,0.04)]',
                 isTemporary
                   ? 'border-violet-800/60 bg-violet-950/10'
                   : 'border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-chat',
@@ -577,47 +592,26 @@ const ChatForm = memo(function ChatForm({
                     <PicoIcon name="plus" />
                   </button>
                   {plusOpen ? (
-                    <div
-                      data-testid="composer-plus-menu"
-                      className="absolute bottom-full left-0 z-30 mb-2 flex min-w-[220px] flex-col gap-2 rounded-xl border border-black/[0.08] bg-white p-2 shadow-lg dark:border-border-light dark:bg-surface-secondary"
-                    >
-                      <AttachFileChat
+                    <ComposerPlusMenu>
+                      {PLUS_MODE_ITEMS.map((item) => (
+                        <ComposerPlusItem
+                          key={item.id}
+                          testId={`composer-plus-mode-${item.id}`}
+                          active={picoMode === item.id}
+                          onClick={() => applyPicoMode(item.id)}
+                        >
+                          {item.label}
+                        </ComposerPlusItem>
+                      ))}
+                      <ComposerPlusAttach
                         conversation={conversation}
-                        disableInputs={disableInputs}
                         files={files}
                         setFiles={setFiles}
                         setFilesLoading={setFilesLoading}
+                        disabled={disableInputs || isNotAppendable}
+                        onPicked={() => setPlusOpen(false)}
                       />
-                      <BadgeRow
-                        showEphemeralBadges={
-                          !!endpoint &&
-                          !hideBadgeRow &&
-                          !isAgentsEndpoint(endpoint) &&
-                          !isAssistantsEndpoint(endpoint)
-                        }
-                        isSubmitting={isSubmitting}
-                        conversationId={conversationId}
-                        specName={conversation?.spec}
-                        onChange={setBadges}
-                        isInChat={
-                          Array.isArray(conversation?.messages) && conversation.messages.length >= 1
-                        }
-                      />
-                      <TokenUsage
-                        index={index}
-                        conversation={conversation}
-                        isSubmitting={isSubmitting}
-                      />
-                      {SpeechToText ? (
-                        <AudioRecorder
-                          methods={methods}
-                          ask={submitMessage}
-                          disabled={disableInputs || isNotAppendable}
-                          isSubmitting={isSubmitting}
-                        />
-                      ) : null}
-                      <WorkspaceSelector disabled={disableInputs} />
-                    </div>
+                    </ComposerPlusMenu>
                   ) : null}
                 </div>
                 <div
@@ -625,8 +619,7 @@ const ChatForm = memo(function ChatForm({
                   style={
                     isCollapsed
                       ? {
-                          WebkitMaskImage:
-                            'linear-gradient(to bottom, black 60%, transparent 90%)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 90%)',
                           maskImage: 'linear-gradient(to bottom, black 60%, transparent 90%)',
                         }
                       : undefined
@@ -636,9 +629,8 @@ const ChatForm = memo(function ChatForm({
                     {...registerProps}
                     ref={(e) => {
                       ref(e);
-                      (
-                        textAreaRef as React.MutableRefObject<HTMLTextAreaElement | null>
-                      ).current = e;
+                      (textAreaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current =
+                        e;
                     }}
                     disabled={disableInputs || isNotAppendable}
                     onPaste={handlePaste}
@@ -666,7 +658,7 @@ const ChatForm = memo(function ChatForm({
                     className={cn(
                       baseClasses,
                       removeFocusRings,
-                      'min-h-8 scrollbar-hover transition-[max-height] duration-200 disabled:cursor-not-allowed',
+                      'scrollbar-hover min-h-8 transition-[max-height] duration-200 disabled:cursor-not-allowed',
                     )}
                   />
                   <div className="absolute right-0 top-0">
@@ -678,20 +670,20 @@ const ChatForm = memo(function ChatForm({
                   </div>
                 </div>
                 <div className="shrink-0 self-end">
-                  {isSubmitting && showStopButton && !answerMode.active
-                    ? duringRunSlot
-                    : (
-                        <SendButton
-                          ref={submitButtonRef}
-                          control={methods.control}
-                          disabled={
-                            filesLoading ||
-                            disableInputs ||
-                            isNotAppendable ||
-                            (isSubmitting && !answerMode.active)
-                          }
-                        />
-                      )}
+                  {isSubmitting && showStopButton && !answerMode.active ? (
+                    duringRunSlot
+                  ) : (
+                    <SendButton
+                      ref={submitButtonRef}
+                      control={methods.control}
+                      disabled={
+                        filesLoading ||
+                        disableInputs ||
+                        isNotAppendable ||
+                        (isSubmitting && !answerMode.active)
+                      }
+                    />
+                  )}
                 </div>
               </div>
               {TextToSpeech && automaticPlayback && <StreamAudio index={index} />}
@@ -720,6 +712,7 @@ function ChatFormWrapper({ index = 0, placeholder }: { index?: number; placehold
     newConversation,
     handleStopGenerating,
     stopGenerating,
+    setConversation,
   } = useChatContext();
 
   /**
@@ -766,6 +759,15 @@ function ChatFormWrapper({ index = 0, placeholder }: { index?: number; placehold
     void stopRef.current();
   }, []);
 
+  const setConvoRef = useRef(setConversation);
+  setConvoRef.current = setConversation;
+  const stableSetConversation = useCallback(
+    (updater: (prev: TConversation | null) => TConversation | null) => {
+      setConvoRef.current?.(updater);
+    },
+    [],
+  );
+
   return (
     <ChatForm
       index={index}
@@ -779,6 +781,7 @@ function ChatFormWrapper({ index = 0, placeholder }: { index?: number; placehold
       newConversation={stableNewConversation}
       handleStopGenerating={stableHandleStop}
       stopGenerating={stableStop}
+      setConversation={stableSetConversation}
     />
   );
 }

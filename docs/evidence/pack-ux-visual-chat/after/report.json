@@ -1,0 +1,27 @@
+{
+  "card": "T-UX-VISUAL-CHAT",
+  "mode": "local-built-css",
+  "css": "/assets/index.DD9tyQiC.css",
+  "claim_wb": "NO",
+  "v1": {
+    "size": 22504,
+    "sha": "b2fea633946a5cebcf9ca5fd4438b56e8d68162274960635ea7cd95199547dec"
+  },
+  "v2": {
+    "size": 27273,
+    "sha": "b050d669de0ae908baaf38f9c9b98c6d8b23ca4da8adab77f79e9501598bb117",
+    "menuText": "快速\n深度\n上传附件"
+  },
+  "v3": {
+    "size": 19619,
+    "sha": "9fc64fad0bac08e92ce2d6c7bb898f3ab44f8fa05c53e58962cd51c23e211b77"
+  },
+  "v4": {
+    "size": 28473,
+    "sha": "f9828dcdb2156002fa66c8966da8d25316fb8f8bb4fbf3c161b7a47849d241c6"
+  },
+  "v5": {
+    "size": 11795,
+    "sha": "6842cd351106e745b873ed88204b9f208868fb85830de3330a2e47a8bac9a983"
+  }
+}
