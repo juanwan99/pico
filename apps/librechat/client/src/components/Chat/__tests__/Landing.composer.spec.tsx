@@ -61,4 +61,13 @@ describe('Landing composer chrome', () => {
     expect(screen.queryByText('默认权限')).not.toBeInTheDocument();
     expect(screen.queryByTestId('composer-plus-menu')).not.toBeInTheDocument();
   });
+
+  it('C1: plus, input, and send sit on one row', () => {
+    render(<Landing centerFormOnLanding />);
+    const row = screen.getByTestId('composer-one-row');
+    expect(row).toContainElement(screen.getByTestId('composer-plus'));
+    expect(row).toContainElement(screen.getByTestId('text-input'));
+    expect(row).toContainElement(screen.getByTestId('send-button'));
+    expect(screen.getByTestId('composer-plus').textContent?.trim()).not.toBe('+');
+  });
 });

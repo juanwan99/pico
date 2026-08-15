@@ -2,7 +2,7 @@
  * Center column run status strip: 等待模型响应 / 已完成 + model/duration.
  */
 import { memo } from 'react';
-import { AlertCircle, CheckCircle2, RotateCcw, Square } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { cn } from '~/utils';
 import RunLoadingIndicator from './RunLoadingIndicator';
 
@@ -77,14 +77,14 @@ function TaskRunBar({
             disabled={cancelling}
             aria-busy={cancelling || undefined}
           >
-            <Square className="h-3 w-3 fill-current" />
+            <PicoIcon name="stop" size="sm" />
             {cancelling ? '停止中' : '停止任务'}
           </button>
         </>
       ) : showFailed ? (
         <div className="flex min-w-0 items-center gap-2">
           <span className="inline-flex min-w-0 max-w-[240px] items-center gap-1.5 rounded-full bg-[#fdeeee] px-2.5 py-1 text-[12px] font-medium text-[#9a3b3b]">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <PicoIcon name="help" size="sm" className="shrink-0" />
             <span className="truncate">{completedLabel || statusLabel || '失败'}</span>
           </span>
           {canRerun && (
@@ -96,14 +96,14 @@ function TaskRunBar({
               disabled={rerunning}
               aria-busy={rerunning || undefined}
             >
-              <RotateCcw className="h-3 w-3" />
+              <PicoIcon name="refresh" size="sm" />
               {rerunLabel}
             </button>
           )}
         </div>
       ) : showCancelled ? (
         <span className="inline-flex max-w-[50%] items-center gap-1.5 rounded-full bg-[#f3f3f3] px-2.5 py-1 text-[12px] font-medium text-[#6b6b6b]">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          <PicoIcon name="help" size="sm" className="shrink-0" />
           <span className="truncate">{completedLabel || statusLabel || '已停止'}</span>
         </span>
       ) : showSubmitting ? (
@@ -111,7 +111,7 @@ function TaskRunBar({
       ) : completedLabel ? (
         <div className="flex min-w-0 items-center gap-2">
           <span className="inline-flex min-w-0 max-w-[240px] items-center gap-1.5 rounded-full bg-[#eef7ee] px-2.5 py-1 text-[12px] font-medium text-[#2d6a3e]">
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            <PicoIcon name="check" size="sm" className="shrink-0" />
             <span className="truncate">{completedLabel}</span>
           </span>
           {canRerun ? (
@@ -123,7 +123,7 @@ function TaskRunBar({
               disabled={rerunning}
               aria-busy={rerunning || undefined}
             >
-              <RotateCcw className="h-3 w-3" />
+              <PicoIcon name="refresh" size="sm" />
               {rerunning ? '重新运行中' : '再跑一次'}
             </button>
           ) : null}

@@ -559,7 +559,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
-    await user.click(screen.getByTestId('result-panel-chrome-menu'));
+    await user.click(screen.getByTestId('sandbox-screen-menu'));
     await user.click(screen.getByTestId('pane-zoom-in'));
     expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('125%');
     expect(screen.getByTestId('sandbox-web-stage')).toHaveAttribute('data-zoom', '125%');
@@ -646,6 +646,7 @@ describe('ResultPanel sandbox web pane', () => {
   });
 
   it('U3: a dead session is honest copy + reopen, not spinner + login', async () => {
+    const user = userEvent.setup();
     (getPicoSandboxScreenshot as jest.Mock).mockRejectedValue(new Error('pico 404: gone'));
     (getPicoSandboxSession as jest.Mock).mockRejectedValue(new Error('pico 404: gone'));
     render(
@@ -679,6 +680,10 @@ describe('ResultPanel sandbox web pane', () => {
     expect(screen.queryByTestId('sandbox-web-viewport')).not.toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.queryByText('打开我的文件')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-screen-menu')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('result-panel-chrome-menu'));
+    expect(screen.queryByTestId('pane-zoom-in')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-zoom-menu')).not.toBeInTheDocument();
   });
 
   it('shows login chrome only when the live page reports input fields', async () => {

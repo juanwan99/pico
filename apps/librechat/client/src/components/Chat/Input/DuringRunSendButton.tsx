@@ -1,8 +1,7 @@
 import React, { forwardRef } from 'react';
 import * as Ariakit from '@ariakit/react';
 import { useWatch } from 'react-hook-form';
-import { SendIcon } from '@librechat/client';
-import { Zap, Clock, OctagonPause } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import type { Control } from 'react-hook-form';
 import type { SteeringControls } from '~/hooks/Chat/useSteering';
 import { isMacPlatform } from '~/utils/shortcuts';
@@ -70,7 +69,7 @@ const DuringRunSendButton = React.memo(
       key: 'steer',
       label: localize('com_ui_steer'),
       kbd: primary === 'steer' ? '⏎' : modEnter,
-      icon: <Zap className="h-4 w-4 text-amber-500" aria-hidden="true" />,
+      icon: <PicoIcon name="spark" size="sm" className="text-amber-500" />,
       // Gate on availability, not the default action — the row exists to
       // override a queue-preferring default with an explicit steer.
       disabled: !steering.canSteer,
@@ -80,14 +79,14 @@ const DuringRunSendButton = React.memo(
       key: 'queue',
       label: localize('com_ui_queue'),
       kbd: primary === 'queue' ? '⏎' : modEnter,
-      icon: <Clock className="h-4 w-4 text-cyan-500" aria-hidden="true" />,
+      icon: <PicoIcon name="clock" size="sm" className="text-cyan-500" />,
       onClick: () => runAction((text) => steering.queueFromComposer(text)),
     };
     const interruptRow: ActionRow = {
       key: 'interrupt',
       label: localize('com_ui_interrupt_send'),
       kbd: altEnter,
-      icon: <OctagonPause className="h-4 w-4 text-red-500" aria-hidden="true" />,
+      icon: <PicoIcon name="stop" size="sm" className="text-red-500" />,
       onClick: () => runAction((text) => steering.interruptAndSend(text)),
     };
     const rows = primary === 'steer' ? [steerRow, queueRow] : [queueRow, steerRow];
@@ -106,15 +105,13 @@ const DuringRunSendButton = React.memo(
               id="during-run-send-button"
               disabled={!content || props.disabled === true}
               className={cn(
-                'rounded-full bg-text-primary p-1.5 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10',
+                'inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-ink)] outline-offset-4 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:text-[color:var(--pico-ink-3)] disabled:opacity-40',
               )}
               data-testid="during-run-send-button"
               data-during-run-action={primary}
               type="submit"
             >
-              <span data-state="closed">
-                <SendIcon size={24} />
-              </span>
+              <PicoIcon name="arrow-up" />
             </button>
           }
         />

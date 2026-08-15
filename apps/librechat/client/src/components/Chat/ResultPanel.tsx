@@ -4,17 +4,7 @@
  * Chat column has no delivery strip.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  FileText,
-  Globe,
-  Maximize2,
-  Minimize2,
-  MoreHorizontal,
-  PanelRightClose,
-  Download,
-  Loader2,
-  RotateCcw,
-} from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import type { TMessage } from 'librechat-data-provider';
 import {
   getPicoArtifactContent,
@@ -222,7 +212,7 @@ function FileGlyph({ kind }: { kind: ArtifactItem['kind'] }) {
       )}
       aria-hidden
     >
-      {label ? label : <FileText className="h-4 w-4" />}
+      {label ? label : <PicoIcon name="file" size="sm" />}
     </span>
   );
 }
@@ -666,7 +656,7 @@ export default function ResultPanel({
     ? artifacts.find((item) => item.id === previewArtifactId)
     : undefined;
 
-  const showZoom = Boolean(previewHtml || previewImage || view === 'web');
+  const showZoom = Boolean(previewHtml || previewImage);
 
   return (
     <aside
@@ -705,7 +695,7 @@ export default function ResultPanel({
             data-testid="result-panel-chrome-menu"
             onClick={() => setChromeOpen((value) => !value)}
           >
-            <MoreHorizontal className="h-3.5 w-3.5" />
+            <PicoIcon name="more" size="sm" />
           </button>
           {chromeOpen ? (
             <div
@@ -732,11 +722,7 @@ export default function ResultPanel({
                   setChromeOpen(false);
                 }}
               >
-                {expanded ? (
-                  <Minimize2 className="h-3.5 w-3.5" />
-                ) : (
-                  <Maximize2 className="h-3.5 w-3.5" />
-                )}
+                <PicoIcon name={expanded ? 'minimize' : 'maximize'} size="sm" />
                 {expanded ? '退出全屏' : '进入全屏'}
               </button>
             </div>
@@ -749,7 +735,7 @@ export default function ResultPanel({
               data-testid="result-panel-close"
               onClick={onClose}
             >
-              <PanelRightClose className="h-3.5 w-3.5" />
+              <PicoIcon name="panel" size="sm" />
             </button>
           ) : null}
         </div>
@@ -872,7 +858,7 @@ export default function ResultPanel({
                 className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center"
                 data-testid="artifact-office-download"
               >
-                <FileText className="h-8 w-8 text-[#9a9a9a]" strokeWidth={1.25} />
+                <PicoIcon name="file" className="text-[#9a9a9a]" />
                 <p className="text-[13px] font-medium text-[#3d3d3d]">{previewTitle}</p>
                 <p className="max-w-[16rem] text-[12px] leading-relaxed text-[#6b6b6b]">
                   {previewOffice}
@@ -943,7 +929,7 @@ export default function ResultPanel({
                       aria-busy={rerunning || undefined}
                       data-testid="result-panel-rerun"
                     >
-                      <RotateCcw className="h-3 w-3" />
+                      <PicoIcon name="refresh" size="sm" />
                       {rerunning
                         ? '重新运行中'
                         : run?.status === 'failed'
@@ -978,7 +964,7 @@ export default function ResultPanel({
                   </div>
                 ) : (
                   <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa] px-4 py-10 text-[#9a9a9a]">
-                    <FileText className="h-9 w-9 opacity-30" strokeWidth={1.25} />
+                    <PicoIcon name="file" className="opacity-30" />
                     <p className="text-[13px] font-medium text-[#6b6b6b]">
                       {runStatusLabel?.startsWith('失败') || runStatusLabel?.startsWith('已停止')
                         ? '本次未产出文件'
@@ -1055,9 +1041,9 @@ export default function ResultPanel({
                           }
                         >
                           {artifactAction?.id === a.id && artifactAction.type === 'download' ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <PicoIcon name="refresh" size="sm" className="animate-spin" />
                           ) : (
-                            <Download className="h-3.5 w-3.5" />
+                            <PicoIcon name="file" size="sm" />
                           )}
                           下载
                         </button>
@@ -1082,6 +1068,9 @@ export default function ResultPanel({
                 kind={sandboxSession.kind}
                 zoom={paneZoom.zoom}
                 onWheelZoom={paneZoom.onWheel}
+                onZoomIn={paneZoom.zoomIn}
+                onZoomOut={paneZoom.zoomOut}
+                onZoomReset={paneZoom.reset}
                 onDestroyed={() => {
                   openedWebsiteRef.current = null;
                 }}
@@ -1108,7 +1097,7 @@ export default function ResultPanel({
                 className="flex min-h-[240px] flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-[#9a9a9a]"
                 data-testid="sandbox-empty"
               >
-                <Globe className="h-8 w-8 opacity-35" strokeWidth={1.25} />
+                <PicoIcon name="link" className="opacity-35" />
                 <p className="text-[13px]">沙箱还没有打开窗口</p>
                 <p className="max-w-[16rem] text-[11px] leading-relaxed">
                   对 Pico 说「打开 https://example.com」或「打开一份 Word」，右边会出现沙箱里的程序画面。

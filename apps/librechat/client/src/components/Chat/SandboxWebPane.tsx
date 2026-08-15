@@ -4,7 +4,7 @@
  * actually has a text/password field. Password never leaves this pane.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import {
   destroyPicoSandboxSession,
   focusPicoSandboxWindow,
@@ -26,6 +26,9 @@ export default function SandboxWebPane({
   humanCopy,
   zoom = 1,
   onWheelZoom,
+  onZoomIn,
+  onZoomOut,
+  onZoomReset,
   kind,
   onDestroyed,
   onReopen,
@@ -38,6 +41,9 @@ export default function SandboxWebPane({
   /** 1 = fit the pane width (fullscreen fills the stage, not a 390 strip). */
   zoom?: number;
   onWheelZoom?: (event: React.WheelEvent) => void;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onZoomReset?: () => void;
   onDestroyed?: () => void;
   onReopen?: (args: { url: string; kind?: string }) => void;
 }) {
@@ -333,7 +339,7 @@ export default function SandboxWebPane({
             className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[#3d3d3d] shadow-sm hover:bg-white"
             onClick={() => setChromeOpen((value) => !value)}
           >
-            <MoreHorizontal className="h-4 w-4" />
+            <PicoIcon name="more" />
           </button>
           {chromeOpen ? (
             <div
@@ -353,6 +359,38 @@ export default function SandboxWebPane({
               <p className="mt-0.5 px-1 text-[10px] text-[#9a9a9a]" data-testid="sandbox-web-status">
                 {status}
               </p>
+              {onZoomIn || onZoomOut ? (
+                <div className="mt-2 flex items-center gap-1 px-1" data-testid="sandbox-zoom-menu">
+                  <button
+                    type="button"
+                    className="rounded-md p-1 hover:bg-black/[0.04]"
+                    aria-label="缩小"
+                    data-testid="pane-zoom-out"
+                    onClick={onZoomOut}
+                  >
+                    <PicoIcon name="zoom-out" size="sm" />
+                  </button>
+                  <button
+                    type="button"
+                    className="pico-type-aux min-w-[2.5rem] rounded-md px-1 py-0.5 hover:bg-black/[0.04]"
+                    aria-label="重置缩放"
+                    data-testid="pane-zoom-label"
+                    data-zoom={`${Math.round(zoom * 100)}%`}
+                    onClick={onZoomReset}
+                  >
+                    {Math.round(zoom * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md p-1 hover:bg-black/[0.04]"
+                    aria-label="放大"
+                    data-testid="pane-zoom-in"
+                    onClick={onZoomIn}
+                  >
+                    <PicoIcon name="zoom-in" size="sm" />
+                  </button>
+                </div>
+              ) : null}
               <button
                 type="button"
                 disabled={busy}

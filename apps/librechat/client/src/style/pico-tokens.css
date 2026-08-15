@@ -1,8 +1,19 @@
 /**
  * Pico product chrome tokens — aligned to edu-core workbench-tokens v6
  * (read-only visual family; no edu business modules).
- * Scope: .pico-app only.
+ * Type tokens live on :root so .pico-wb-* rules can read them;
+ * .pico-app re-applies the same face on the product shell.
  */
+:root {
+  --pico-font: 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans SC', 'Noto Sans SC',
+    'Microsoft YaHei', 'Heiti SC', system-ui, sans-serif;
+  --pico-fs-sidebar: 13px;
+  --pico-fs-body: 15px;
+  --pico-fs-aux: 12px;
+  --pico-fw: 400;
+  --pico-fw-medium: 560;
+}
+
 .pico-app {
   --pico-shell: #f7f7f6;
   --pico-sidebar: #f1f2f0;
@@ -31,10 +42,49 @@
   --pico-radius: 16px;
   --pico-radius-sm: 12px;
   --pico-radius-pill: 999px;
-  --pico-font: Inter, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  /* CJK first — Inter must not be the Chinese primary face */
+  --pico-font: 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans SC', 'Noto Sans SC',
+    'Microsoft YaHei', 'Heiti SC', system-ui, sans-serif;
+  --pico-fs-sidebar: 13px;
+  --pico-fs-body: 15px;
+  --pico-fs-aux: 12px;
+  --pico-fw: 400;
+  --pico-fw-medium: 560;
+  --font-size-base: 15px;
+  --markdown-font-size: 15px;
   color: var(--pico-ink);
   font-family: var(--pico-font);
+  font-size: var(--pico-fs-body);
+  font-weight: var(--pico-fw);
   -webkit-font-smoothing: antialiased;
+}
+
+.pico-app .pico-type-sidebar,
+.pico-app .pico-wb-sidebar {
+  font-size: var(--pico-fs-sidebar);
+  font-weight: var(--pico-fw);
+  font-family: var(--pico-font);
+}
+.pico-app .pico-type-body,
+.pico-app .pico-wb-composer textarea,
+.pico-app .pico-wb-composer [data-testid='text-input'],
+.pico-app #pico-wb-home-input,
+.pico-app .markdown {
+  font-size: var(--pico-fs-body);
+  font-weight: var(--pico-fw);
+  font-family: var(--pico-font);
+}
+.pico-app .pico-type-aux,
+.pico-app .pico-result-panel,
+.pico-app [data-testid='task-run-bar'] {
+  font-family: var(--pico-font);
+}
+.pico-app .pico-type-aux {
+  font-size: var(--pico-fs-aux);
+  font-weight: var(--pico-fw);
+}
+.pico-app .pico-type-medium {
+  font-weight: var(--pico-fw-medium);
 }
 
 .pico-app a:focus-visible,

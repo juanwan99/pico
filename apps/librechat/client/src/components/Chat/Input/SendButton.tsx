@@ -1,7 +1,8 @@
 import React, { forwardRef } from 'react';
 import { useWatch } from 'react-hook-form';
 import type { Control } from 'react-hook-form';
-import { SendIcon, TooltipAnchor } from '@librechat/client';
+import { TooltipAnchor } from '@librechat/client';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -23,14 +24,12 @@ const SubmitButton = React.memo(
             id="send-button"
             disabled={props.disabled}
             className={cn(
-              'rounded-full bg-text-primary p-1.5 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10',
+              'inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-ink)] outline-offset-4 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:text-[color:var(--pico-ink-3)] disabled:opacity-40',
             )}
             data-testid="send-button"
             type="submit"
           >
-            <span className="" data-state="closed">
-              <SendIcon size={24} />
-            </span>
+            <PicoIcon name="arrow-up" />
           </button>
         }
       />
