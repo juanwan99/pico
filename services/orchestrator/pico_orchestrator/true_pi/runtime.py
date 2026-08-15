@@ -26,6 +26,7 @@ from pico_orchestrator.true_pi.client import (
     TruePiClientError,
     TruePiRpcClient,
     TruePiTransport,
+    true_pi_windows_from_caps,
 )
 from pico_orchestrator.true_pi.config import (
     ALLOWED_GATEWAY_TOOLS,
@@ -121,6 +122,7 @@ async def run_true_pi_agent(
             policy = runtime_policy_for_model(None)
             backend_model = str(policy.get("backend_model") or provider.model)
             thinking_on = bool(getattr(caps, "thinking_on", False))
+            max_context, max_out = true_pi_windows_from_caps(caps)
             tool_server = ToolServer(principal=principal, gateway=gateway, run_id=rid)
             tool_url = await tool_server.start()
             sess = session_dir or (session_root() / rid)
@@ -132,6 +134,8 @@ async def run_true_pi_agent(
                 provider="deepseek" if provider.name == "deepseek" else "openai",
                 model=backend_model,
                 thinking=thinking_on,
+                max_context=max_context,
+                max_tokens=max_out,
                 env={
                     "DEEPSEEK_API_KEY": provider.api_key
                     if provider.name == "deepseek"
