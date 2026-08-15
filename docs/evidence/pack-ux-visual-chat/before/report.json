@@ -1,0 +1,367 @@
+{
+  "card": "T-UX-VISUAL-CHAT",
+  "phase": "before",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "ok": true,
+    "git_sha": "5a057419b589a9a84768ad895453ba490c2919eb",
+    "service": "pico-api"
+  },
+  "claim_wb": "NO",
+  "frames": {
+    "B1": {
+      "size": 34357,
+      "sha": "e5b8a17244ae3b112548453bbbd15c35821fd2685411b7be82549e64303679af",
+      "inspect": {
+        "title": "Pico",
+        "url": "https://pico.aivia.asia/c/new",
+        "hasPicoFast": false,
+        "hasWorkspace": false,
+        "hasPerm": false,
+        "hasSources": false,
+        "hasOpenFile": false,
+        "hasLogin": false,
+        "hasHero": true,
+        "boxes": {
+          "composer": {
+            "sel": "[data-testid=\"composer-one-row\"]",
+            "text": "",
+            "x": 349,
+            "y": 351,
+            "w": 795,
+            "h": 47
+          },
+          "plus": {
+            "sel": "[data-testid=\"composer-plus\"]",
+            "text": "",
+            "x": 353,
+            "y": 361,
+            "w": 32,
+            "h": 32
+          },
+          "plusMenu": null,
+          "homeComposer": {
+            "sel": "[data-testid=\"pico-wb-home-composer\"]",
+            "text": "",
+            "x": 348,
+            "y": 350,
+            "w": 797,
+            "h": 49
+          },
+          "input": {
+            "sel": "#pico-wb-home-input, [data-testid=\"text-input\"]",
+            "text": "",
+            "x": 387,
+            "y": 355,
+            "w": 719,
+            "h": 39
+          },
+          "send": {
+            "sel": "[data-testid=\"send-button\"]",
+            "text": "",
+            "x": 1108,
+            "y": 362,
+            "w": 32,
+            "h": 32
+          },
+          "model": null,
+          "bookmark": null,
+          "sandbox": null,
+          "sources": null,
+          "result": null
+        },
+        "plusMenuText": "",
+        "headerText": ""
+      }
+    },
+    "B2": {
+      "size": 39859,
+      "sha": "c1011cd9d873779f1e094b9a3ec5ab4c5c0b9f9475d7f8a753230d6b0fd57e37",
+      "inspect": {
+        "title": "Pico",
+        "url": "https://pico.aivia.asia/c/new",
+        "hasPicoFast": true,
+        "hasWorkspace": true,
+        "hasPerm": true,
+        "hasSources": false,
+        "hasOpenFile": false,
+        "hasLogin": false,
+        "hasHero": true,
+        "boxes": {
+          "composer": {
+            "sel": "[data-testid=\"composer-one-row\"]",
+            "text": "Pico 快速\nPico 深度\n选择工作空间\n默认权限",
+            "x": 349,
+            "y": 351,
+            "w": 795,
+            "h": 47
+          },
+          "plus": {
+            "sel": "[data-testid=\"composer-plus\"]",
+            "text": "",
+            "x": 353,
+            "y": 361,
+            "w": 32,
+            "h": 32
+          },
+          "plusMenu": {
+            "sel": "[data-testid=\"composer-plus-menu\"]",
+            "text": "Pico 快速\nPico 深度\n选择工作空间\n默认权限",
+            "x": 353,
+            "y": 188,
+            "w": 224,
+            "h": 166
+          },
+          "homeComposer": {
+            "sel": "[data-testid=\"pico-wb-home-composer\"]",
+            "text": "Pico 快速\nPico 深度\n选择工作空间\n默认权限",
+            "x": 348,
+            "y": 350,
+            "w": 797,
+            "h": 49
+          },
+          "input": {
+            "sel": "#pico-wb-home-input, [data-testid=\"text-input\"]",
+            "text": "",
+            "x": 387,
+            "y": 355,
+            "w": 719,
+            "h": 39
+          },
+          "send": {
+            "sel": "[data-testid=\"send-button\"]",
+            "text": "",
+            "x": 1108,
+            "y": 362,
+            "w": 32,
+            "h": 32
+          },
+          "model": null,
+          "bookmark": null,
+          "sandbox": null,
+          "sources": null,
+          "result": null
+        },
+        "plusMenuText": "Pico 快速\nPico 深度\n选择工作空间\n默认权限",
+        "headerText": ""
+      }
+    },
+    "B3": {
+      "size": 54490,
+      "sha": "831cfd45f209a8f57998267f75466f08f730b3df136551ce70d25f9cbccb9f43",
+      "inspect": {
+        "title": "Pico",
+        "url": "https://pico.aivia.asia/c/593b8826-eb16-4f84-9235-ead641af008c?endpoint=openAI&model=pico-fast",
+        "hasPicoFast": true,
+        "hasWorkspace": false,
+        "hasPerm": false,
+        "hasSources": false,
+        "hasOpenFile": false,
+        "hasLogin": false,
+        "hasHero": false,
+        "boxes": {
+          "composer": {
+            "sel": "[data-testid=\"composer-one-row\"]",
+            "text": "",
+            "x": 117,
+            "y": 830,
+            "w": 779,
+            "h": 54
+          },
+          "plus": {
+            "sel": "[data-testid=\"composer-plus\"]",
+            "text": "",
+            "x": 121,
+            "y": 847,
+            "w": 32,
+            "h": 32
+          },
+          "plusMenu": null,
+          "homeComposer": null,
+          "input": {
+            "sel": "#pico-wb-home-input, [data-testid=\"text-input\"]",
+            "text": "",
+            "x": 155,
+            "y": 834,
+            "w": 703,
+            "h": 39
+          },
+          "send": null,
+          "model": {
+            "sel": "[data-testid=\"model-selector-button\"]",
+            "text": "pico-fast",
+            "x": 72,
+            "y": 8,
+            "w": 121,
+            "h": 36
+          },
+          "bookmark": {
+            "sel": "[data-testid=\"bookmark-menu\"]",
+            "text": "",
+            "x": 245,
+            "y": 8,
+            "w": 36,
+            "h": 36
+          },
+          "sandbox": null,
+          "sources": null,
+          "result": {
+            "sel": "[data-testid=\"result-panel\"]",
+            "text": "沙箱\n\n等待模型响应\n\n正在检索或作答\n\n执行步骤\n\n暂无步骤\n\n可下载文件\n\n执行中，云端继续准备产物\n\n沙箱还没有打开窗口\n\n对 Pico 说「打开 https://example.com」或「打开一份 Word」，右边会出现沙箱里的程序画面。",
+            "x": 960,
+            "y": 97,
+            "w": 480,
+            "h": 803
+          }
+        },
+        "plusMenuText": "",
+        "headerText": "pico-fast"
+      }
+    },
+    "B4": {
+      "size": 40998,
+      "sha": "285916bc3a9b8524cc01ef87ac1518f1039edde5a7c8ecac168357b58660c918",
+      "inspect": {
+        "title": "Pico",
+        "url": "https://pico.aivia.asia/c/466d8e2c-62bb-44f6-b2de-fd259ec9f802?endpoint=openAI&model=pico-fast",
+        "hasPicoFast": true,
+        "hasWorkspace": false,
+        "hasPerm": false,
+        "hasSources": false,
+        "hasOpenFile": false,
+        "hasLogin": false,
+        "hasHero": false,
+        "boxes": {
+          "composer": {
+            "sel": "[data-testid=\"composer-one-row\"]",
+            "text": "",
+            "x": 117,
+            "y": 830,
+            "w": 779,
+            "h": 54
+          },
+          "plus": {
+            "sel": "[data-testid=\"composer-plus\"]",
+            "text": "",
+            "x": 121,
+            "y": 847,
+            "w": 32,
+            "h": 32
+          },
+          "plusMenu": null,
+          "homeComposer": null,
+          "input": {
+            "sel": "#pico-wb-home-input, [data-testid=\"text-input\"]",
+            "text": "",
+            "x": 155,
+            "y": 834,
+            "w": 703,
+            "h": 39
+          },
+          "send": null,
+          "model": {
+            "sel": "[data-testid=\"model-selector-button\"]",
+            "text": "pico-fast",
+            "x": 72,
+            "y": 8,
+            "w": 121,
+            "h": 36
+          },
+          "bookmark": {
+            "sel": "[data-testid=\"bookmark-menu\"]",
+            "text": "",
+            "x": 245,
+            "y": 8,
+            "w": 36,
+            "h": 36
+          },
+          "sandbox": {
+            "sel": "[data-testid=\"sandbox-web-pane\"]",
+            "text": "浏览器\n文件",
+            "x": 961,
+            "y": 137,
+            "w": 479,
+            "h": 763
+          },
+          "sources": null,
+          "result": {
+            "sel": "[data-testid=\"result-panel\"]",
+            "text": "沙箱\n浏览器\n文件",
+            "x": 960,
+            "y": 97,
+            "w": 480,
+            "h": 803
+          }
+        },
+        "plusMenuText": "",
+        "headerText": "pico-fast"
+      },
+      "sandboxText": "浏览器\n文件\n打开中"
+    },
+    "B5": {
+      "size": 26341,
+      "sha": "4fb5fdd8626b8893f8e7deb0436a9e58eb0985e451fcc4c96cb5a479e9f67657",
+      "inspect": {
+        "title": "Pico",
+        "url": "https://pico.aivia.asia/c/466d8e2c-62bb-44f6-b2de-fd259ec9f802?endpoint=openAI&model=pico-fast",
+        "hasPicoFast": true,
+        "hasWorkspace": false,
+        "hasPerm": false,
+        "hasSources": false,
+        "hasOpenFile": false,
+        "hasLogin": false,
+        "hasHero": false,
+        "boxes": {
+          "composer": {
+            "sel": "[data-testid=\"composer-one-row\"]",
+            "text": "",
+            "x": 9,
+            "y": 782,
+            "w": 372,
+            "h": 54
+          },
+          "plus": {
+            "sel": "[data-testid=\"composer-plus\"]",
+            "text": "",
+            "x": 13,
+            "y": 799,
+            "w": 32,
+            "h": 32
+          },
+          "plusMenu": null,
+          "homeComposer": null,
+          "input": {
+            "sel": "#pico-wb-home-input, [data-testid=\"text-input\"]",
+            "text": "",
+            "x": 47,
+            "y": 786,
+            "w": 296,
+            "h": 39
+          },
+          "send": null,
+          "model": {
+            "sel": "[data-testid=\"model-selector-button\"]",
+            "text": "pico-fast",
+            "x": 60,
+            "y": 8,
+            "w": 121,
+            "h": 36
+          },
+          "bookmark": {
+            "sel": "[data-testid=\"bookmark-menu\"]",
+            "text": "",
+            "x": -319,
+            "y": 169,
+            "w": 36,
+            "h": 36
+          },
+          "sandbox": null,
+          "sources": null,
+          "result": null
+        },
+        "plusMenuText": "",
+        "headerText": "pico-fast"
+      }
+    }
+  }
+}

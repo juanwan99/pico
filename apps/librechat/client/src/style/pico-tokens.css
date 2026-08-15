@@ -96,6 +96,18 @@
   box-shadow: 0 0 0 3px rgba(114, 90, 242, 0.22);
 }
 
+.pico-app .pico-wb-composer textarea:focus-visible,
+.pico-app .pico-wb-composer [data-testid='text-input']:focus-visible,
+.pico-app #pico-wb-home-input:focus-visible {
+  outline: 0;
+  box-shadow: none;
+}
+
+.pico-app .message-render,
+.pico-app .markdown {
+  line-height: 1.55;
+}
+
 .pico-shell-bg {
   background: var(--pico-shell);
 }

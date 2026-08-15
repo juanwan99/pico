@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import Landing from '../Landing';
 
 jest.mock(
@@ -22,6 +22,7 @@ jest.mock('~/hooks/Messages/useSubmitMessage', () => ({
 
 jest.mock('~/hooks', () => ({
   useAuthContext: () => ({ user: { name: '老师' } }),
+  useFileHandlingNoChatContext: () => ({ handleFileChange: jest.fn() }),
 }));
 
 jest.mock('~/Providers', () => ({
@@ -55,10 +56,12 @@ describe('Landing composer chrome', () => {
   it('U1: idle composer is one input + plus, no 调用技能与指令 second layer', () => {
     render(<Landing centerFormOnLanding />);
     const input = screen.getByTestId('text-input');
-    expect(input).toHaveAttribute('placeholder', '今天帮你做些什么？');
+    expect(input).toHaveAttribute('placeholder', '发消息');
     expect(screen.getByTestId('composer-plus')).toBeInTheDocument();
     expect(screen.queryByText(/调用技能与指令/)).not.toBeInTheDocument();
     expect(screen.queryByText('默认权限')).not.toBeInTheDocument();
+    expect(screen.queryByText('工作空间')).not.toBeInTheDocument();
+    expect(screen.queryByText('日常办公')).not.toBeInTheDocument();
     expect(screen.queryByTestId('composer-plus-menu')).not.toBeInTheDocument();
   });
 
@@ -69,5 +72,16 @@ describe('Landing composer chrome', () => {
     expect(row).toContainElement(screen.getByTestId('text-input'));
     expect(row).toContainElement(screen.getByTestId('send-button'));
     expect(screen.getByTestId('composer-plus').textContent?.trim()).not.toBe('+');
+  });
+
+  it('plus menu is 快速 / 深度 / 上传附件 only', () => {
+    render(<Landing centerFormOnLanding />);
+    fireEvent.click(screen.getByTestId('composer-plus'));
+    expect(screen.getByTestId('composer-plus-menu')).toBeInTheDocument();
+    expect(screen.getByTestId('composer-plus-mode-pico-fast')).toHaveTextContent('快速');
+    expect(screen.getByTestId('composer-plus-mode-pico-deep')).toHaveTextContent('深度');
+    expect(screen.getByTestId('composer-plus-attach')).toHaveTextContent('上传附件');
+    expect(screen.queryByText('默认权限')).not.toBeInTheDocument();
+    expect(screen.queryByText(/工作空间/)).not.toBeInTheDocument();
   });
 });
