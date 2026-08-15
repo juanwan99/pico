@@ -1,0 +1,38 @@
+{
+  "card": "T-SANDBOX-PERSIST-SHIP",
+  "base": "https://pico.aivia.asia",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "ok": true,
+    "git_sha": "fe93334259efc9e389d471d9378e9cca9ce66bff",
+    "service": "pico-api"
+  },
+  "unique": "persist-1786756371951.docx",
+  "marker": "PERSIST-1786756371951",
+  "t1": "Y",
+  "t2": "Y",
+  "t3": "N",
+  "t4": "Y",
+  "claim_wb": "NO",
+  "t1_before": {
+    "filePath": "/home/box/pico-pack/docs/evidence/pack-sandbox-persist/live/t1-before-destroy.png",
+    "size": 31516,
+    "sha": "da7fc64d2e73220e320a14eb71973fdf87f4d5d8a822b4396af76c7a782f7ac8"
+  },
+  "t1_after": {
+    "filePath": "/home/box/pico-pack/docs/evidence/pack-sandbox-persist/live/t1-after-destroy.png",
+    "size": 27740,
+    "sha": "71cdddc445546f729bb75cf3d497b3cbd7ceebfa8d50a724c5ac5cfbdfd59236"
+  },
+  "t2_frame": {
+    "filePath": "/home/box/pico-pack/docs/evidence/pack-sandbox-persist/live/t2-writer.png",
+    "size": 67752,
+    "sha": "e978000d27fcd86e0ffab90e7c3e1443b06c9d977a840eb397ed1efd5b9d2049"
+  },
+  "hashes": {
+    "t1_before": "da7fc64d2e73220e320a14eb71973fdf87f4d5d8a822b4396af76c7a782f7ac8",
+    "t1_after": "71cdddc445546f729bb75cf3d497b3cbd7ceebfa8d50a724c5ac5cfbdfd59236",
+    "t2": "e978000d27fcd86e0ffab90e7c3e1443b06c9d977a840eb397ed1efd5b9d2049"
+  },
+  "verdict": "PASS"
+}

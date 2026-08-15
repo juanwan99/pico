@@ -1,0 +1,11 @@
+{
+  "card": "T-SANDBOX-PERSIST-SHIP",
+  "tip": "fe93334259efc9e389d471d9378e9cca9ce66bff",
+  "owner_file": "persist-1786756371951.docx",
+  "host_disk": "/opt/pico/data/teacher-disks/school-a/6a7288292914888fa4aeb92e/",
+  "outsider_disk_files": [],
+  "steal_session": "sbox_126be6fbc7410a7335a9e71a",
+  "steal_status": 403,
+  "steal_code": "sandbox.forbidden",
+  "note": "B disk empty; B GET owner session 403. Not a reuse of T1 frames."
+}
