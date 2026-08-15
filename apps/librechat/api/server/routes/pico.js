@@ -312,7 +312,7 @@ router.post('/v1/sandbox/sessions', (req, res) => {
   const artifactId =
     typeof req.body?.artifact_id === 'string' ? req.body.artifact_id.trim() : '';
   const kind = typeof req.body?.kind === 'string' ? req.body.kind.trim().toLowerCase() : '';
-  const office = artifactId || ['writer', 'calc', 'impress'].includes(kind);
+  const office = artifactId || ['writer', 'calc', 'impress', 'files'].includes(kind);
   if (url && url.length <= 2048 && !office) {
     return proxy(req, res, '/v1/sandbox/sessions');
   }
@@ -321,6 +321,16 @@ router.post('/v1/sandbox/sessions', (req, res) => {
   }
   return res.status(400).json({ error: 'bad_request', message: 'url or document required' });
 });
+router.delete('/v1/sandbox/sessions/:sessionId', (req, res) => {
+  try {
+    assertId(req.params.sessionId, 'sessionId');
+    return proxy(req, res, `/v1/sandbox/sessions/${req.params.sessionId}`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+router.get('/v1/sandbox/disk', (req, res) => proxy(req, res, '/v1/sandbox/disk'));
+router.post('/v1/sandbox/disk/clear', (req, res) => proxy(req, res, '/v1/sandbox/disk/clear'));
 router.get('/v1/sandbox/sessions/:sessionId', (req, res) => {
   try {
     assertId(req.params.sessionId, 'sessionId');
