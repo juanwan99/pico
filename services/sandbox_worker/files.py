@@ -11,18 +11,18 @@ from pathlib import Path
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.sandbox_s2 import (
     PNG_MAGIC,
-    RASTER_HEIGHT,
-    RASTER_WIDTH,
     _draw_text,
     _fill_rect,
     encode_rgb_png,
 )
 
+from sandbox_worker.browser import VIEWPORT_HEIGHT, VIEWPORT_WIDTH
+
 FILES_ENGINE = "sandbox-files"
 
 
 def listing_png(names: list[str]) -> bytes:
-    width, height = RASTER_WIDTH, RASTER_HEIGHT
+    width, height = VIEWPORT_WIDTH, VIEWPORT_HEIGHT
     buf = bytearray([250, 250, 250] * width * height)
     _fill_rect(buf, width, 0, 0, width, 44, (26, 26, 26))
     _draw_text(buf, width, 16, 14, "Workspace files", (255, 255, 255), scale=2)

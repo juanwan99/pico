@@ -3,8 +3,9 @@
  * iframe「浏览器」is not the open-website entry.
  */
 
-export const RESULT_PANE_VIEWS = ['overview', 'files', 'web'] as const;
-export type ResultPaneView = (typeof RESULT_PANE_VIEWS)[number];
+/** Public chrome is sandbox-only. overview/files stay as internal preview states. */
+export const RESULT_PANE_VIEWS = ['web'] as const;
+export type ResultPaneView = 'overview' | 'files' | 'web';
 
 export const RESULT_PANE_VIEW_LABEL: Record<ResultPaneView, string> = {
   overview: '概览',

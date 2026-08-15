@@ -106,7 +106,12 @@ export function DeleteConversationDialog({
             {localize('com_ui_cancel')}
           </Button>
         </OGDialogClose>
-        <Button variant="destructive" onClick={confirmDelete} disabled={deleteMutation.isLoading}>
+        <Button
+          variant="destructive"
+          data-testid="convo-delete-confirm"
+          onClick={confirmDelete}
+          disabled={deleteMutation.isLoading}
+        >
           {deleteMutation.isLoading ? <Spinner /> : localize('com_ui_delete')}
         </Button>
       </div>

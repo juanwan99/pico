@@ -38,7 +38,7 @@ assert(m.classifyArtifactPreview('page.html', 'html') === 'html', 'T1 html');
 assert(m.classifyArtifactPreview('shot.png', 'image') === 'image', 'T2 image');
 assert(m.classifyArtifactPreview('课程总结.md', 'markdown') === 'text', 'T3 text');
 assert(m.classifyArtifactPreview('报告.docx', 'docx') === 'office', 'T4 office');
-assert(JSON.stringify(m.RESULT_PANE_VIEWS) === JSON.stringify(['overview', 'files', 'web']), 'T7 views');
+assert(JSON.stringify(m.RESULT_PANE_VIEWS) === JSON.stringify(['web']), 'T7 views sandbox-only');
 assert(m.RESULT_PANE_VIEW_LABEL.web === '沙箱', 'sandbox label');
 assert(!('browser' in m.RESULT_PANE_VIEW_LABEL), 'T7 no iframe menu');
 assert(m.detectOpenOfficeIntent('打开一个 word 文档在沙箱')?.kind === 'writer', 'F2 word');

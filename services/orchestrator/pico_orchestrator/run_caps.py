@@ -17,16 +17,19 @@ RunTier = Literal["short", "delivery", "durable"]
 # Code defaults (env overrides via Settings; keep in sync with .env.example).
 DELIVERY_MAX_SECONDS = 900
 DELIVERY_MAX_TOKENS = 32_000
+DELIVERY_MAX_CONTEXT = 256_000
 DELIVERY_MAX_STEPS = 24
 DELIVERY_MAX_RETRIES = 2
 
 SHORT_MAX_SECONDS = 120
 SHORT_MAX_TOKENS = 8_000
+SHORT_MAX_CONTEXT = 128_000
 SHORT_MAX_STEPS = 8
 SHORT_MAX_RETRIES = 2
 
 DURABLE_MAX_SECONDS = 3600
 DURABLE_MAX_TOKENS = 64_000
+DURABLE_MAX_CONTEXT = 256_000
 DURABLE_MAX_STEPS = 48
 DURABLE_MAX_RETRIES = 2
 
@@ -49,6 +52,7 @@ def caps_for_tier(
         base = RunCaps(
             max_seconds=SHORT_MAX_SECONDS,
             max_tokens=SHORT_MAX_TOKENS,
+            max_context=SHORT_MAX_CONTEXT,
             max_steps=SHORT_MAX_STEPS,
             max_retries=SHORT_MAX_RETRIES,
         )
@@ -56,6 +60,7 @@ def caps_for_tier(
         base = RunCaps(
             max_seconds=DURABLE_MAX_SECONDS,
             max_tokens=DURABLE_MAX_TOKENS,
+            max_context=DURABLE_MAX_CONTEXT,
             max_steps=DURABLE_MAX_STEPS,
             max_retries=DURABLE_MAX_RETRIES,
         )
@@ -63,6 +68,7 @@ def caps_for_tier(
         base = RunCaps(
             max_seconds=DELIVERY_MAX_SECONDS,
             max_tokens=DELIVERY_MAX_TOKENS,
+            max_context=DELIVERY_MAX_CONTEXT,
             max_steps=DELIVERY_MAX_STEPS,
             max_retries=DELIVERY_MAX_RETRIES,
         )
@@ -103,6 +109,15 @@ def spend_caps_public(
         "short": {
             "max_seconds": short_seconds,
             "max_tokens": short_tokens,
+            "max_context": SHORT_MAX_CONTEXT,
+        },
+        "fast": {
+            "max_context": SHORT_MAX_CONTEXT,
+            "max_tokens": SHORT_MAX_TOKENS,
+        },
+        "deep": {
+            "max_context": DELIVERY_MAX_CONTEXT,
+            "max_tokens": DELIVERY_MAX_TOKENS,
         },
         "durable": {
             "max_seconds": durable_seconds,

@@ -21,7 +21,7 @@ from sandbox_worker.browser import PNG_MAGIC
 logger = logging.getLogger(__name__)
 
 OFFICE_ENGINE = "libreoffice-writer"
-DESKTOP_W = 1180
+DESKTOP_W = 1280
 DESKTOP_H = 800
 _DOC_ROOT = Path(os.environ.get("PICO_SANDBOX_DOC_ROOT") or "/tmp/pico-sandbox-docs")
 

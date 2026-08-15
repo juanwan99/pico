@@ -729,12 +729,14 @@ def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
     if low not in {"pico-fast", "pico-deep"}:
         return caps
     policy = runtime_policy_for_model(low)
-    return _dc_replace(
-        caps,
-        max_steps=int(policy.get("max_steps", caps.max_steps)),
-        max_tokens=int(policy.get("max_tokens", caps.max_tokens)),
-        thinking_on=bool(policy.get("thinking", False)),
-    )
+    fields: dict[str, Any] = {
+        "max_steps": int(policy.get("max_steps", caps.max_steps)),
+        "max_tokens": int(policy.get("max_tokens", caps.max_tokens)),
+        "thinking_on": bool(policy.get("thinking", False)),
+    }
+    if hasattr(caps, "max_context"):
+        fields["max_context"] = int(policy.get("max_context", caps.max_context))
+    return _dc_replace(caps, **fields)
 
 
 def _instruction_with_delivery(

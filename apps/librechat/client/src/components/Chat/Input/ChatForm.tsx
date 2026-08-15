@@ -85,6 +85,7 @@ const ChatForm = memo(function ChatForm({
   const localize = useLocalize();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
   const [, setIsScrollable] = useState(false);
   const [visualRowCount, setVisualRowCount] = useState(1);
   const [isTextAreaFocused, setIsTextAreaFocused] = useState(false);
@@ -620,44 +621,66 @@ const ChatForm = memo(function ChatForm({
               )}
               <div
                 className={cn(
-                  '@container items-between flex gap-2 pb-2',
+                  '@container relative items-between flex gap-2 pb-2',
                   isRTL ? 'flex-row-reverse' : 'flex-row',
                 )}
               >
                 <div className={`${isRTL ? 'mr-2' : 'ml-2'} flex items-center gap-0.5`}>
-                  <AttachFileChat
-                    conversation={conversation}
-                    disableInputs={disableInputs}
-                    files={files}
-                    setFiles={setFiles}
-                    setFilesLoading={setFilesLoading}
-                  />
+                  <button
+                    type="button"
+                    data-testid="composer-plus"
+                    aria-label="更多输入选项"
+                    aria-expanded={plusOpen}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-lg font-medium text-[#6b6b6b] hover:bg-black/[0.04] hover:text-[#1a1a1a]"
+                    onClick={() => setPlusOpen((value) => !value)}
+                  >
+                    +
+                  </button>
+                  {plusOpen ? (
+                    <div
+                      data-testid="composer-plus-menu"
+                      className="absolute bottom-12 left-2 z-30 flex min-w-[220px] flex-col gap-2 rounded-xl border border-black/[0.08] bg-white p-2 shadow-lg dark:border-border-light dark:bg-surface-secondary"
+                    >
+                      <AttachFileChat
+                        conversation={conversation}
+                        disableInputs={disableInputs}
+                        files={files}
+                        setFiles={setFiles}
+                        setFilesLoading={setFilesLoading}
+                      />
+                      <BadgeRow
+                        showEphemeralBadges={
+                          !!endpoint &&
+                          !hideBadgeRow &&
+                          !isAgentsEndpoint(endpoint) &&
+                          !isAssistantsEndpoint(endpoint)
+                        }
+                        isSubmitting={isSubmitting}
+                        conversationId={conversationId}
+                        specName={conversation?.spec}
+                        onChange={setBadges}
+                        isInChat={
+                          Array.isArray(conversation?.messages) && conversation.messages.length >= 1
+                        }
+                      />
+                      <TokenUsage
+                        index={index}
+                        conversation={conversation}
+                        isSubmitting={isSubmitting}
+                      />
+                      {SpeechToText ? (
+                        <AudioRecorder
+                          methods={methods}
+                          ask={submitMessage}
+                          disabled={disableInputs || isNotAppendable}
+                          isSubmitting={isSubmitting}
+                        />
+                      ) : null}
+                      <WorkspaceSelector disabled={disableInputs} />
+                    </div>
+                  ) : null}
                 </div>
-                <BadgeRow
-                  showEphemeralBadges={
-                    !!endpoint &&
-                    !hideBadgeRow &&
-                    !isAgentsEndpoint(endpoint) &&
-                    !isAssistantsEndpoint(endpoint)
-                  }
-                  isSubmitting={isSubmitting}
-                  conversationId={conversationId}
-                  specName={conversation?.spec}
-                  onChange={setBadges}
-                  isInChat={
-                    Array.isArray(conversation?.messages) && conversation.messages.length >= 1
-                  }
-                />
                 <div className="mx-auto flex" />
-                <TokenUsage index={index} conversation={conversation} isSubmitting={isSubmitting} />
-                {SpeechToText && (
-                  <AudioRecorder
-                    methods={methods}
-                    ask={submitMessage}
-                    disabled={disableInputs || isNotAppendable}
-                    isSubmitting={isSubmitting}
-                  />
-                )}
                 <div className={`${isRTL ? 'ml-2' : 'mr-2'}`}>
                   {isSubmitting && showStopButton && !answerMode.active
                     ? duringRunSlot
@@ -676,18 +699,6 @@ const ChatForm = memo(function ChatForm({
                 </div>
               </div>
               {TextToSpeech && automaticPlayback && <StreamAudio index={index} />}
-            </div>
-            {/* WorkBuddy-class: workspace + permission UNDER the card */}
-            <div className="mt-2 flex flex-wrap items-center gap-1 px-1">
-              <WorkspaceSelector disabled={disableInputs} />
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[#6b6b6b] hover:bg-black/[0.04] hover:text-[#1a1a1a]"
-                aria-label="默认权限"
-              >
-                <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[9px] opacity-70">✓</span>
-                默认权限
-              </button>
             </div>
           </div>
         </div>

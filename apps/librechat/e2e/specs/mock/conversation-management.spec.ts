@@ -121,4 +121,24 @@ test.describe('conversation management', () => {
     await expect(messagesView(page).getByText(turn.prompt)).toHaveCount(0);
     await expect(messagesView(page).getByText(turn.reply)).toHaveCount(0);
   });
+
+  test('H1-H3 pin archive delete stay reachable from the conversation menu', async ({
+    page,
+  }) => {
+    const label = uniqueLabel('sidebar-organize');
+    await openMockChat(page);
+    await sendAndExpectReply(page, label);
+    const conversation = firstConversation(page);
+    await expect(conversation.getByTestId('convo-menu-trigger')).toBeVisible();
+    await conversation.getByTestId('convo-menu-trigger').click();
+    await expect(page.getByTestId('convo-menu-pin')).toBeVisible();
+    await expect(page.getByTestId('convo-menu-archive')).toBeVisible();
+    await expect(page.getByTestId('convo-menu-delete')).toBeVisible();
+    await expect(page.getByTestId('convo-menu-folder')).toBeVisible();
+    await page.getByTestId('convo-menu-pin').click();
+    await expect(conversation).toBeVisible();
+    await conversation.getByTestId('convo-menu-trigger').click();
+    await page.getByTestId('convo-menu-archive').click();
+    await expect(page.getByTestId('convo-item').filter({ hasText: label })).toHaveCount(0);
+  });
 });

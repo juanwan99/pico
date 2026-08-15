@@ -96,7 +96,7 @@ async def run_kimi_agent(
                 "pico-runtime": {
                     "provider": "pico-kimi",
                     "model": provider.model,
-                    "max_context_size": 128_000,
+                    "max_context_size": int(getattr(caps, "max_context", 128_000) or 128_000),
                 }
             },
             "providers": {

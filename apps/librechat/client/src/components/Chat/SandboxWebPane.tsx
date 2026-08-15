@@ -16,8 +16,8 @@ import {
 } from '~/data-provider/pico/api';
 
 const POLL_MS = 1500;
-const VIEWPORT_W = 390;
-const VIEWPORT_H = 844;
+const VIEWPORT_W = 1280;
+const VIEWPORT_H = 800;
 
 export default function SandboxWebPane({
   sessionId,

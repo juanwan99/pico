@@ -20,8 +20,9 @@ from pico_orchestrator.web_guard import parse_public_http_url
 logger = logging.getLogger(__name__)
 
 ENGINE_NAME = "playwright-chromium"
-VIEWPORT_WIDTH = 390
-VIEWPORT_HEIGHT = 844
+# Sandbox desktop (teacher's computer), not the phone shell.
+VIEWPORT_WIDTH = 1280
+VIEWPORT_HEIGHT = 800
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 GOTO_TIMEOUT_MS = 20_000
 PROFILE_ROOT = Path(

@@ -31,6 +31,7 @@ export function ArchivedChatsModal({
         tabIndex={-1}
         onOpenAutoFocus={handleOpenAutoFocus}
         title={localize('com_nav_archived_chats')}
+        data-testid="sidebar-archive-dialog"
         className="w-11/12 max-w-[1000px] bg-background text-text-primary shadow-2xl focus:outline-none"
       >
         <OGDialogHeader>

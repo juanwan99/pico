@@ -21,6 +21,8 @@ class RunCaps:
     # See pico_orchestrator.run_caps and PICO_RUN_* / PICO_RUN_SHORT_* env keys.
     max_seconds: int = 900
     max_tokens: int = 32_000
+    # Model context window (history+system+tools). Not the output cap.
+    max_context: int = 256_000
     max_retries: int = 2
     max_steps: int = 24
     allowed_tools: list[str] | None = None

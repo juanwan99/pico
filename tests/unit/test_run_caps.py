@@ -130,3 +130,39 @@ def test_spend_caps_public_shape() -> None:
     )
     assert snap["delivery"]["max_seconds"] == 900
     assert snap["short"]["max_seconds"] == 120
+
+
+def test_c1_fast_context_is_128k_not_output() -> None:
+    short = caps_for_tier("short")
+    fast = spend_caps_public(
+        delivery_seconds=900,
+        delivery_tokens=32000,
+        delivery_steps=24,
+        delivery_retries=2,
+        short_seconds=120,
+        short_tokens=8000,
+    )["fast"]
+    assert short.max_context == 128_000
+    assert fast["max_context"] == 128_000
+    assert short.max_tokens == 8_000
+    assert fast["max_tokens"] == 8_000
+    assert short.max_tokens != 128_000
+    assert short.max_context != short.max_tokens
+
+
+def test_c2_deep_context_is_256k_not_output() -> None:
+    delivery = caps_for_tier("delivery")
+    deep = spend_caps_public(
+        delivery_seconds=900,
+        delivery_tokens=32000,
+        delivery_steps=24,
+        delivery_retries=2,
+        short_seconds=120,
+        short_tokens=8000,
+    )["deep"]
+    assert delivery.max_context == 256_000
+    assert deep["max_context"] == 256_000
+    assert delivery.max_tokens == 32_000
+    assert deep["max_tokens"] == 32_000
+    assert delivery.max_tokens != 256_000
+    assert delivery.max_context != delivery.max_tokens
