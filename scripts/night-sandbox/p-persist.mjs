@@ -99,7 +99,18 @@ async function main() {
     await login(page, args.base, email, password);
     await goNewChat(page, args.base);
     await sendPrompt(page, `打开 ${unique} ，正文写 ${marker}`);
-    await waitPane(page, new RegExp(unique.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), args.timeoutMs);
+    const uniqueRe = new RegExp(unique.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    await waitPane(page, uniqueRe, args.timeoutMs);
+    const filesTab = page.getByTestId('sandbox-window-files');
+    if (await filesTab.count()) {
+      await filesTab.click();
+    } else {
+      await page.getByTestId('sandbox-open-files').click();
+    }
+    const fileBtnBefore = page.getByTestId(`sandbox-file-${unique}`);
+    await fileBtnBefore.waitFor({ state: 'visible', timeout: args.timeoutMs });
+    const t1Before = await shot(page, path.join(args.out, 't1-before-destroy.png'));
+    report.t1_before_bytes = t1Before.size;
 
     const closeBtn = page.getByTestId('sandbox-close-keep-disk');
     if (await closeBtn.count()) {
@@ -110,14 +121,14 @@ async function main() {
     await openFiles.click();
     const fileBtn = page.getByTestId(`sandbox-file-${unique}`);
     await fileBtn.waitFor({ state: 'visible', timeout: args.timeoutMs });
-    const t1 = await shot(page, path.join(args.out, 't1-tree.png'));
+    const t1After = await shot(page, path.join(args.out, 't1-after-destroy.png'));
     report.t1 = 'Y';
-    report.t1_bytes = t1.size;
+    report.t1_bytes = t1After.size;
 
     await fileBtn.click();
     await waitPane(page, /Writer|LibreOffice|Word/i, args.timeoutMs);
     await page.waitForTimeout(800);
-    const t2 = await shot(page, path.join(args.out, 't2-reopen.png'));
+    const t2 = await shot(page, path.join(args.out, 't2-writer.png'));
     await saveViewportPng(page, path.join(args.out, 't2-viewport.png')).catch(() => {});
     report.t2 = 'Y';
     report.t2_bytes = t2.size;

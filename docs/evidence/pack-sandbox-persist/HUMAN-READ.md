@@ -1,10 +1,18 @@
 # T-SANDBOX-PERSIST 人读
 
 ```text
-卡: #553
+卡: #553 / #556
 CLAIM-WB-DEGREE-WEB: NO
 ```
 
-关掉沙箱窗口 / 杀会话之后，同一老师的 docx 还在老师盘上，再开能看见并打开原文。用户 B 看不见 A 的文件。
+杀会话前后必须是两张不同的图。Writer 再开必须能读到写入时的那句字。用户 B 必须是另一张（空列表 / 403），禁止复用 T1。
 
-帧由 Playwright 测试写入本目录（`t1-tree.png` / `t2-reopen.png` / `t3-acl.png`）。公网 T4 等 tip 对齐后再跑 `scripts/night-sandbox/p-persist.mjs`。
+| 帧 | 含义 |
+|----|------|
+| t1-before-destroy.png | 写入 unique.docx 后、destroy 前的文件树 |
+| t1-after-destroy.png | 新会话文件树仍见该名 |
+| t2-writer.png | 再开 Writer，正文是盘上那句已知字 |
+| t3-acl.png | 用户 B 空列表 + 403 |
+| HASHES.txt | 四帧 sha256，必须两两不同 |
+
+公网帧进 `live/`，hash 不得等于本目录夹具。
