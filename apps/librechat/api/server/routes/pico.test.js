@@ -301,6 +301,41 @@ describe('Pico proxy routes', () => {
     );
   });
 
+  it('proxies POST /v1/sandbox/sessions for files desk', async () => {
+    const response = await request(app)
+      .post('/api/pico/v1/sandbox/sessions')
+      .send({ kind: 'files' });
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/sandbox/sessions',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ kind: 'files' }),
+      }),
+    );
+  });
+
+  it('proxies DELETE sandbox session without wiping owner disk', async () => {
+    const response = await request(app).delete(
+      '/api/pico/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('proxies owner disk list', async () => {
+    const response = await request(app).get('/api/pico/v1/sandbox/disk');
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/sandbox/disk',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('proxies sandbox session meta for the result pane', async () => {
     const response = await request(app).get(
       '/api/pico/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
