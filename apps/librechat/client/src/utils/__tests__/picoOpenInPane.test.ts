@@ -21,7 +21,7 @@ describe('picoOpenInPane', () => {
     expect(classifyArtifactPreview('课程总结.md', 'markdown')).toBe('text');
     expect(classifyArtifactPreview('notes.txt', 'text')).toBe('text');
     expect(classifyArtifactPreview('报告.docx', 'docx')).toBe('office');
-    expect(RESULT_PANE_VIEWS).toEqual(['overview', 'files', 'web']);
+    expect(RESULT_PANE_VIEWS).toEqual(['web']);
     expect(RESULT_PANE_VIEW_LABEL.web).toBe('沙箱');
     expect(RESULT_PANE_VIEW_LABEL).not.toHaveProperty('browser');
   });

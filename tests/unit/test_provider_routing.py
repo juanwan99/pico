@@ -115,6 +115,10 @@ def test_runtime_policy_dual_mode_contract() -> None:
     assert deep["thinking"] is True
     assert fast["max_steps"] < deep["max_steps"]
     assert fast["max_tokens"] < deep["max_tokens"]
+    assert fast["max_context"] == 128000
+    assert deep["max_context"] == 256000
+    assert fast["max_tokens"] != 128000
+    assert deep["max_tokens"] != 256000
     assert fast["fallback"] == "deepseek-v4-flash"
     assert deep["fallback"] == "deepseek-v4-flash"
 

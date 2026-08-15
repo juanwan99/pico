@@ -587,33 +587,28 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
   });
 
   it('F3: empty sandbox copy is honest and does not hang a fake webpage', async () => {
-    const user = userEvent.setup();
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel run={run()} runStatusLabel="已完成" />
       </MemoryRouter>,
     );
-    await user.click(screen.getByTestId('result-view-menu'));
-    await user.click(screen.getByTestId('result-view-web'));
     expect(screen.getByTestId('sandbox-empty')).toHaveTextContent('沙箱还没有打开窗口');
     expect(screen.queryByText('还没有隔离网页')).not.toBeInTheDocument();
     expect(screen.queryByTestId('main-delivery-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('result-view-menu')).not.toBeInTheDocument();
   });
 
-  it('T7: result menu no longer offers iframe 浏览器 as the open-site entry', async () => {
-    const user = userEvent.setup();
+  it('T7: result chrome has no 概览/文件/沙箱 tab stack and no iframe 浏览器', () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel run={run()} runStatusLabel="已完成" />
       </MemoryRouter>,
     );
-    await user.click(screen.getByTestId('result-view-menu'));
-    const options = screen.getByTestId('result-view-options');
-    expect(options).toHaveTextContent('概览');
-    expect(options).toHaveTextContent('工作空间文件');
-    expect(options).toHaveTextContent('沙箱');
-    expect(options).not.toHaveTextContent('浏览器');
+    expect(screen.queryByTestId('result-view-menu')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('result-view-options')).not.toBeInTheDocument();
     expect(screen.queryByTestId('result-view-browser')).not.toBeInTheDocument();
+    expect(screen.queryByText('工作空间文件')).not.toBeInTheDocument();
+    expect(screen.getByTestId('sandbox-empty')).toBeInTheDocument();
   });
 });
 

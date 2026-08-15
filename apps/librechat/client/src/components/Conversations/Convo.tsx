@@ -45,8 +45,8 @@ function Conversation({
   const [titleInput, setTitleInput] = useState(title || '');
   const [renaming, setRenaming] = useState(false);
   const [isPopoverActive, setIsPopoverActive] = useState(false);
-  // Lazy-load ConvoOptions to avoid running heavy hooks for all conversations
-  const [hasInteracted, setHasInteracted] = useState(false);
+  // Always mount so pin/archive/delete/folder stay one click away (not hover-only).
+  const [hasInteracted, setHasInteracted] = useState(true);
 
   const previousTitle = useRef(title);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -196,12 +196,9 @@ function Conversation({
     </svg>
   );
 
-  let actionVisibilityClassName =
-    'pointer-events-none max-w-0 scale-x-0 opacity-0 group-focus-within:pointer-events-auto group-focus-within:max-w-[60px] group-focus-within:scale-x-100 group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:max-w-[60px] group-hover:scale-x-100 group-hover:opacity-100';
+  let actionVisibilityClassName = 'pointer-events-auto max-w-[28px] scale-x-100 opacity-100';
   if (isGenerating) {
     actionVisibilityClassName = 'pointer-events-none w-5 scale-x-100 opacity-100';
-  } else if (isPopoverActive || isActiveConvo) {
-    actionVisibilityClassName = 'pointer-events-auto scale-x-100 opacity-100';
   }
 
   let actionWidthClassName = '';
@@ -211,7 +208,7 @@ function Conversation({
     actionWidthClassName = 'max-w-[28px]';
   }
 
-  const showConvoOptions = !renaming && (hasInteracted || isActiveConvo);
+  const showConvoOptions = !renaming;
   const actionContent = isGenerating
     ? generatingSpinner
     : showConvoOptions && <ConvoOptions {...convoOptionsProps} />;

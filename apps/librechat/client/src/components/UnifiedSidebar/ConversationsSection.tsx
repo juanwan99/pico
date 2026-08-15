@@ -15,6 +15,7 @@ import {
 import { useConversationsInfiniteQuery, useTitleGeneration } from '~/data-provider';
 import { Conversations } from '~/components/Conversations';
 import ProjectsSection from '~/components/Conversations/ProjectsSection';
+import { ArchivedChatsModal } from '~/components/Nav/SettingsTabs/General/ArchivedChatsModal';
 import FavoritesList from '~/components/Nav/Favorites/FavoritesList';
 import SearchBar from '~/components/Nav/SearchBar';
 import store from '~/store';
@@ -31,6 +32,7 @@ const ConversationsSection = memo(() => {
   const [isChatsExpanded, setIsChatsExpanded] = useLocalStorage('chatsExpanded', true);
   const [showLoading, setShowLoading] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
 
   const hasAccessToBookmarks = useHasAccess({
     permissionType: PermissionTypes.BOOKMARKS,
@@ -117,7 +119,18 @@ const ConversationsSection = memo(() => {
           </Suspense>
         )}
         {search.enabled && <SearchBar isSmallScreen={isSmallScreen} />}
+        <button
+          type="button"
+          data-testid="sidebar-archive-open"
+          className="ml-auto shrink-0 rounded-md px-2 py-1 text-[12px] text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
+          onClick={() => setShowArchived(true)}
+        >
+          {localize('com_nav_archived_chats')}
+        </button>
       </div>
+      {showArchived ? (
+        <ArchivedChatsModal open={showArchived} onOpenChange={setShowArchived} />
+      ) : null}
       {!search.query && (
         <div className="px-3">
           <FavoritesList isSmallScreen={isSmallScreen} toggleNav={toggleNav} />

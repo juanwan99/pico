@@ -22,6 +22,54 @@ from pico_orchestrator.true_pi.config import extension_path, pi_bin
 
 logger = logging.getLogger(__name__)
 
+# Isolated PI_CODING_AGENT_DIR filename. Pi 0.73.1 has no --context CLI flag;
+# the window is models.json contextWindow (see packages/coding-agent/docs/models.md).
+PI_MODELS_JSON = "models.json"
+PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
+
+
+def true_pi_windows_from_caps(caps: Any | None) -> tuple[int, int]:
+    """Lane windows: context window, output cap. Never treat them as the same."""
+    thinking = bool(getattr(caps, "thinking_on", False)) if caps is not None else False
+    context = int(getattr(caps, "max_context", 0) or 0) if caps is not None else 0
+    output = int(getattr(caps, "max_tokens", 0) or 0) if caps is not None else 0
+    if context <= 0:
+        context = 256_000 if thinking else 128_000
+    if output <= 0:
+        output = 32_000 if thinking else 8_000
+    return context, output
+
+
+def true_pi_models_document(
+    *,
+    provider: str,
+    model: str,
+    max_context: int,
+    max_tokens: int,
+) -> dict[str, Any]:
+    """Pi 0.73.1 models.json overlay. Official path, not a invented CLI flag."""
+    name = (provider or "deepseek").strip() or "deepseek"
+    mid = (model or "deepseek-v4-flash").strip() or "deepseek-v4-flash"
+    overlay = {
+        "contextWindow": int(max_context),
+        "maxTokens": int(max_tokens),
+    }
+    return {
+        "providers": {
+            name: {
+                "modelOverrides": {mid: dict(overlay)},
+                "models": [
+                    {
+                        "id": mid,
+                        "reasoning": True,
+                        "input": ["text"],
+                        **overlay,
+                    }
+                ],
+            }
+        }
+    }
+
 
 class TruePiClientError(RuntimeError):
     """RPC / process failure (never silent success)."""
@@ -128,6 +176,8 @@ class SubprocessTransport(TruePiTransport):
         provider: str = "deepseek",
         model: str = "deepseek-v4-flash",
         thinking: bool = False,
+        max_context: int | None = None,
+        max_tokens: int | None = None,
         env: Mapping[str, str] | None = None,
         binary: str | None = None,
         ext: Path | None = None,
@@ -139,6 +189,13 @@ class SubprocessTransport(TruePiTransport):
         self.provider = provider
         self.model = model
         self.thinking = thinking
+        if max_context is None:
+            max_context = 256_000 if thinking else 128_000
+        if max_tokens is None:
+            max_tokens = 32_000 if thinking else 8_000
+        self.max_context = int(max_context)
+        self.max_tokens = int(max_tokens)
+        self.agent_home: Path | None = None
         self._env_extra = dict(env or {})
         self.binary = binary or pi_bin()
         self.ext = ext or extension_path()
@@ -147,11 +204,32 @@ class SubprocessTransport(TruePiTransport):
         self._queue: asyncio.Queue[RpcEvent | None] = asyncio.Queue()
         self._stderr_tail: list[str] = []
 
+    def models_document(self) -> dict[str, Any]:
+        return true_pi_models_document(
+            provider=self.provider,
+            model=self.model,
+            max_context=self.max_context,
+            max_tokens=self.max_tokens,
+        )
+
+    def prepare_agent_home(self, home: Path | None = None) -> Path:
+        """Write isolated models.json so Pi compaction/requests see the lane window."""
+        dest = home or (self.session_dir / "pi-agent")
+        dest.mkdir(parents=True, exist_ok=True)
+        payload = self.models_document()
+        (dest / PI_MODELS_JSON).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        self.agent_home = dest
+        return dest
+
     def spawn_command(self) -> list[str]:
         """Build the pi spawn argv (exposed for unit tests / F1 lock).
 
         Dual-mode contract: the true_pi kernel must receive the lane's
         thinking flag and the policy model — never a global hardcoded off.
+        Context window is not a CLI flag in pi 0.73.1; see prepare_agent_home.
         """
         return [
             self.binary,
@@ -179,12 +257,16 @@ class SubprocessTransport(TruePiTransport):
         env["PICO_TRUE_PI_TOOL_URL"] = self.tool_url
         env["PICO_TRUE_PI_TOOL_TOKEN"] = self.tool_token
         env["PICO_TRUE_PI_RUN_ID"] = self.run_id
+        agent_home = self.prepare_agent_home()
+        env[PI_AGENT_HOME_ENV] = str(agent_home)
         cmd = self.spawn_command()
         logger.info(
-            "true_pi spawn run_id=%s session_dir=%s bin=%s",
+            "true_pi spawn run_id=%s session_dir=%s bin=%s max_context=%s max_tokens=%s",
             self.run_id,
             self.session_dir,
             self.binary,
+            self.max_context,
+            self.max_tokens,
         )
         self._proc = await asyncio.create_subprocess_exec(
             *cmd,

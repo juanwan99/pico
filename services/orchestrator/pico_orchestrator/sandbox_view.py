@@ -31,7 +31,7 @@ def render_session_view_html(
     body {{ font-family: sans-serif; margin: 0; background: #111; color: #eee; }}
     .banner {{ background: #1f4e3d; color: #fff; padding: 12px 16px; font-size: 16px; }}
     .meta {{ padding: 8px 16px; color: #bbb; font-size: 13px; }}
-    img {{ display: block; width: min(100%, 390px); background: #fff; cursor: crosshair; }}
+    img {{ display: block; width: min(100%, 1280px); background: #fff; cursor: crosshair; }}
     form {{ padding: 12px 16px 24px; }}
     input[type=text], input[type=password] {{ padding: 8px; width: min(100%, 320px); }}
     button {{ margin-top: 8px; padding: 8px 12px; }}
@@ -41,7 +41,7 @@ def render_session_view_html(
   <div class="banner">{copy}</div>
   <div class="meta">session={sid} · workspace={ws} · url={url}<br/>
   画面来自 sidecar Chromium viewport。点图即点击页面。会话随沙箱销毁，Cookie 不会写回宿主机。微信/教务不是过关条件。</div>
-  <img id="viewport" src="{shot}" alt="isolated chromium viewport" width="390"/>
+  <img id="viewport" src="{shot}" alt="isolated chromium viewport" width="1280"/>
   <form id="input-form" method="post" action="{action}" autocomplete="off">
     <p>在此画面自行点击/输入。不要把密码发到聊天。</p>
     <div>
@@ -63,8 +63,8 @@ def render_session_view_html(
       if (!img || !form) return;
       img.addEventListener("click", function (ev) {{
         var rect = img.getBoundingClientRect();
-        var nw = img.naturalWidth || 390;
-        var nh = img.naturalHeight || 844;
+        var nw = img.naturalWidth || 1280;
+        var nh = img.naturalHeight || 800;
         var x = Math.round((ev.clientX - rect.left) * (nw / rect.width));
         var y = Math.round((ev.clientY - rect.top) * (nh / rect.height));
         var fd = new FormData();

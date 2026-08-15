@@ -276,6 +276,7 @@ function ConvoOptions({
         render: (props) => <button {...props} />,
       },
       {
+        id: 'convo-menu-pin',
         label: localize(isPinned ? 'com_ui_unpin' : 'com_ui_pin'),
         onClick: handlePinClick,
         hideOnClick: false,
@@ -301,6 +302,7 @@ function ConvoOptions({
         ),
       },
       {
+        id: 'convo-menu-folder',
         label: localize('com_ui_change_project'),
         onClick: projectHandler,
         icon: <FolderInput className="icon-sm mr-2 text-text-primary" aria-hidden="true" />,
@@ -322,6 +324,7 @@ function ConvoOptions({
         ),
       },
       {
+        id: 'convo-menu-archive',
         label: localize('com_ui_archive'),
         onClick: handleArchiveClick,
         hideOnClick: false,
@@ -332,6 +335,7 @@ function ConvoOptions({
         ),
       },
       {
+        id: 'convo-menu-delete',
         label: localize('com_ui_delete'),
         onClick: deleteHandler,
         icon: <Trash className="icon-sm mr-2 text-text-primary" aria-hidden="true" />,
@@ -365,10 +369,7 @@ function ConvoOptions({
   );
 
   const buttonClassName = cn(
-    'inline-flex h-7 w-7 items-center justify-center rounded-md border-none p-0 text-sm font-medium ring-ring-primary transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50',
-    isActiveConvo === true || isPopoverActive
-      ? 'opacity-100'
-      : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[open]:opacity-100',
+    'inline-flex h-7 w-7 items-center justify-center rounded-md border-none p-0 text-sm font-medium ring-ring-primary transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 opacity-100',
   );
 
   if (isShiftHeld && isActiveConvo && !isPopoverActive && !showShareDialog && !showDeleteDialog) {
@@ -418,14 +419,10 @@ function ConvoOptions({
         trigger={
           <Ariakit.MenuButton
             id={`conversation-menu-${conversationId}`}
+            data-testid="convo-menu-trigger"
             aria-label={localize('com_nav_convo_menu_options')}
             aria-expanded={isPopoverActive}
-            className={cn(
-              'inline-flex h-7 w-7 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium ring-ring-primary transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50',
-              isActiveConvo === true || isPopoverActive
-                ? 'opacity-100'
-                : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[open]:opacity-100',
-            )}
+            className="inline-flex h-7 w-7 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium opacity-100 ring-ring-primary transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50"
             onClick={(e: MouseEvent<HTMLButtonElement>) => {
               e.stopPropagation();
             }}

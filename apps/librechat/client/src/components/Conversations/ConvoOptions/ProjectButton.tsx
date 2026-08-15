@@ -92,6 +92,7 @@ function ProjectConversationDialog({
       <label className="flex flex-col gap-2 text-sm text-text-primary">
         {localize('com_ui_select_project')}
         <select
+          data-testid="convo-folder-select"
           value={selectedProjectId}
           onChange={(event) => setSelectedProjectId(event.target.value)}
           className="h-10 rounded-lg border border-border-light bg-surface-primary px-3 text-sm outline-none focus:ring-2 focus:ring-ring-primary"
@@ -120,7 +121,11 @@ function ProjectConversationDialog({
             {localize('com_ui_cancel')}
           </Button>
         </OGDialogClose>
-        <Button onClick={saveProject} disabled={assignConversation.isLoading}>
+        <Button
+          data-testid="convo-folder-save"
+          onClick={saveProject}
+          disabled={assignConversation.isLoading}
+        >
           {assignConversation.isLoading ? <Spinner /> : localize('com_ui_save')}
         </Button>
       </div>

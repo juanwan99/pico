@@ -113,7 +113,7 @@ def _png_wh(png: bytes) -> tuple[int, int]:
 
 
 def _viewport_png(tag: int) -> bytes:
-    """Contract stand-in: 390×844 viewport, NOT the S2 720×400 HTML raster."""
+    """Contract stand-in: desktop viewport, NOT the S2 720×400 HTML raster."""
     r = (40 + tag * 17) % 200
     g = (80 + tag * 9) % 200
     b = (120 + tag * 3) % 200

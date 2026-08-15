@@ -299,7 +299,7 @@ export default function ArchivedChatsTable({
     <>
       {/* Fixed height keeps the loading (skeleton) and loaded states the same
           size, so the virtualized table can't reflow the dialog on load. */}
-      <div className="h-[60vh]">
+      <div className="h-[60vh]" data-testid="sidebar-archive-list">
         <DataTable
           columns={columns}
           data={allConversations}

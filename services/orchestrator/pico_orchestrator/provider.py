@@ -197,6 +197,7 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
             "thinking": low == "pico-deep",
             "max_steps": 12 if low == "pico-fast" else 24,
             "max_tokens": 8000 if low == "pico-fast" else 32000,
+            "max_context": 128000 if low == "pico-fast" else 256000,
             "fallback": "deepseek-v4-flash",
         }
     if low in {"pico-agent", "pico"}:
@@ -206,6 +207,7 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
             "thinking": True,
             "max_steps": 24,
             "max_tokens": 32000,
+            "max_context": 256000,
             "fallback": "deepseek-v4-flash",
         }
     return {
@@ -214,6 +216,7 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
         "thinking": False,
         "max_steps": 12,
         "max_tokens": 8000,
+        "max_context": 128000,
         "fallback": "deepseek-v4-flash",
     }
 
