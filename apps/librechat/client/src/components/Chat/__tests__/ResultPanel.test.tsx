@@ -441,6 +441,119 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(screen.queryByTitle('browser-preview')).not.toBeInTheDocument();
   });
 
+  it('S1b: 打开浏览器 resolves a default page and opens Chromium', async () => {
+    mockOpenBrowser.mockResolvedValue({
+      session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      url: 'https://example.com/',
+      title: 'Example Domain',
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开浏览器',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    await waitFor(() => expect(mockOpenBrowser).toHaveBeenCalledWith('https://example.com/'));
+  });
+
+  it('S1b: 打开腾讯官网 resolves qq.com, not silence', async () => {
+    mockOpenBrowser.mockResolvedValue({
+      session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      url: 'https://www.qq.com/',
+      title: '腾讯网',
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开腾讯官网',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    await waitFor(() => expect(mockOpenBrowser).toHaveBeenCalledWith('https://www.qq.com/'));
+  });
+
+  it('S2: 打开一份 Word still opens Writer, not a webpage', async () => {
+    const mockOpenDoc = openPicoSandboxDocument as jest.MockedFunction<
+      typeof openPicoSandboxDocument
+    >;
+    mockOpenDoc.mockResolvedValue({
+      session_id: 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb',
+      url: 'sandbox://writer/课堂笔记.docx',
+      title: 'LibreOffice Writer · 课堂笔记.docx',
+      kind: 'writer',
+    });
+    (getPicoSandboxSession as jest.Mock).mockResolvedValue({
+      session_id: 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb',
+      title: 'LibreOffice Writer · 课堂笔记.docx',
+      kind: 'writer',
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开一份 Word',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    await waitFor(() => expect(mockOpenDoc).toHaveBeenCalled());
+    expect(mockOpenBrowser).not.toHaveBeenCalled();
+  });
+
+  it('S3: 你好 does not open a sandbox session', async () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '你好',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(mockOpenBrowser).not.toHaveBeenCalled());
+    expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
+  });
+
   it('T6: 来源 is not a right-rail strip even when search ran', async () => {
     mockOpenBrowser.mockResolvedValue({
       session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',

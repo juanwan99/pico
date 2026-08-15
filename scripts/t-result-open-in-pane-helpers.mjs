@@ -46,6 +46,10 @@ assert(m.detectOpenOfficeIntent('打开 https://example.com') === null, 'F2 not 
 assert(m.detectOpenWebsiteIntent('打开 https://example.com') === 'https://example.com/', 'T5 url');
 assert(m.detectOpenWebsiteIntent('打开 example.com') === 'https://example.com/', 'T5 host');
 assert(m.detectOpenWebsiteIntent('打开 课程总结.md') === null, 'T5 not file');
+assert(m.detectOpenWebsiteIntent('打开浏览器') === 'https://example.com/', 'S1b browser');
+assert(m.detectOpenWebsiteIntent('打开腾讯官网') === 'https://www.qq.com/', 'S1b tencent');
+assert(m.detectOpenWebsiteIntent('打开一份 Word') === null, 'S1b not word');
+assert(m.detectOpenWebsiteIntent('你好') === null, 'S3 idle');
 assert(
   m.latestUserOpenWebsiteIntent([
     { isCreatedByUser: true, text: '打开 https://example.com' },

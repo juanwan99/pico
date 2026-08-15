@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';
 import { Spinner } from '@librechat/client';
@@ -32,6 +32,10 @@ import { cn } from '~/utils';
 import store from '~/store';
 import { usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
+import {
+  latestUserOpenOfficeIntent,
+  latestUserOpenWebsiteIntent,
+} from '~/utils/picoOpenInPane';
 
 function LoadingSpinner() {
   return (
@@ -107,6 +111,17 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     () => chatHelpers.getMessages?.() ?? null,
     [chatHelpers, messagesTree, isSubmitting],
   );
+  const websiteIntent = useMemo(
+    () => latestUserOpenWebsiteIntent(flatMessages),
+    [flatMessages],
+  );
+  const officeIntent = useMemo(
+    () => latestUserOpenOfficeIntent(flatMessages),
+    [flatMessages],
+  );
+  const openPaneIntent = Boolean(websiteIntent || officeIntent);
+  const openPaneIntentRef = useRef(openPaneIntent);
+  openPaneIntentRef.current = openPaneIntent;
   const taskTitle =
     chatHelpers.conversation?.title && chatHelpers.conversation.title !== 'New Chat'
       ? chatHelpers.conversation.title
@@ -125,7 +140,8 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     const media = window.matchMedia('(max-width: 1024px)');
     const syncResultLayout = (event: MediaQueryListEvent) => {
       setCompactResult(event.matches);
-      if (event.matches) {
+      // Keep the rail if the teacher just asked to open a site/browser.
+      if (event.matches && !openPaneIntentRef.current) {
         setResultOpen(false);
       }
     };
@@ -133,19 +149,23 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     return () => media.removeEventListener('change', syncResultLayout);
   }, []);
 
-  // Open the right rail only when there is something to show.
+  // Open the right rail when the teacher asked to open a site/browser, or
+  // when the ledger already has something to show. Idle chat stays closed.
   useEffect(() => {
+    if (openPaneIntent) {
+      setResultOpen(true);
+      return;
+    }
     if (compactResult || !conversationId || conversationId === Constants.NEW_CONVO) {
       return;
     }
     if (
       (ledger.artifacts?.length ?? 0) > 0 ||
-      ['succeeded', 'failed', 'cancelled'].includes(ledger.run?.status || '') ||
       collectPicoSandboxSession(ledger.events)
     ) {
       setResultOpen(true);
     }
-  }, [compactResult, conversationId, ledger.artifacts, ledger.run?.status, ledger.events]);
+  }, [compactResult, conversationId, ledger.artifacts, ledger.events, openPaneIntent]);
 
   if (isLoading && conversationId !== Constants.NEW_CONVO) {
     content = <LoadingSpinner />;

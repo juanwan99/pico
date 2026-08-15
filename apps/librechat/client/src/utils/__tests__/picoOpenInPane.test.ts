@@ -42,6 +42,11 @@ describe('picoOpenInPane', () => {
     expect(detectOpenWebsiteIntent('https://example.com')).toBe('https://example.com/');
     expect(detectOpenWebsiteIntent('打开 课程总结.md')).toBeNull();
     expect(detectOpenWebsiteIntent('打开 报告.docx')).toBeNull();
+    expect(detectOpenWebsiteIntent('打开浏览器')).toBe('https://example.com/');
+    expect(detectOpenWebsiteIntent('打开一下浏览器')).toBe('https://example.com/');
+    expect(detectOpenWebsiteIntent('打开腾讯官网')).toBe('https://www.qq.com/');
+    expect(detectOpenWebsiteIntent('你好')).toBeNull();
+    expect(detectOpenWebsiteIntent('打开一份 Word')).toBeNull();
   });
 
   it('R1a/R1d: default 480, drag floor 340, 390 viewport cannot overflow', () => {

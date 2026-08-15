@@ -47,24 +47,18 @@ export function classifyArtifactPreview(
   return 'download';
 }
 
-/** Public URL the teacher asked to open in the right-hand 网页 pane. */
-export function detectOpenWebsiteIntent(text: string): string | null {
-  const raw = (text || '').trim();
-  if (!raw) {
-    return null;
-  }
-  const bare = raw.match(/^(https?:\/\/[^\s]+)$/i);
-  const spoken = raw.match(
-    /(?:打开|open)\s+(?:一下|下)?\s*(https?:\/\/[^\s]+|(?:www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+[^\s]*)/i,
+const BROWSER_DEFAULT_URL = 'https://example.com/';
+const SITE_ALIASES: Array<{ test: RegExp; url: string }> = [
+  { test: /腾讯官网|腾讯网/i, url: 'https://www.qq.com/' },
+];
+
+function looksLikeOfficeOpen(text: string): boolean {
+  return /(?:打开|open).{0,16}(?:word|Word|WORD|docx|doc\b|文档|字处理|表格|excel|xlsx|ppt|pptx|幻灯|演示)/i.test(
+    text,
   );
-  const candidate = (bare?.[1] || spoken?.[1] || '').replace(/[.,;:!?）)]+$/, '');
-  if (!candidate) {
-    return null;
-  }
-  // Do not treat "打开 课程总结.md" as a website.
-  if (/\.(docx?|pptx?|xlsx?|pdf|md|txt|html?|csv|json|png|jpe?g|gif|webp)$/i.test(candidate)) {
-    return null;
-  }
+}
+
+function canonicalizeHttpUrl(candidate: string): string | null {
   const href = /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
   try {
     const parsed = new URL(href);
@@ -78,6 +72,42 @@ export function detectOpenWebsiteIntent(text: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Public URL the teacher asked to open in the right-hand 网页 pane. */
+export function detectOpenWebsiteIntent(text: string): string | null {
+  const raw = (text || '').trim();
+  if (!raw) {
+    return null;
+  }
+  const bare = raw.match(/^(https?:\/\/[^\s]+)$/i);
+  const spoken = raw.match(
+    /(?:打开|open)\s+(?:一下|下)?\s*(https?:\/\/[^\s]+|(?:www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+[^\s]*)/i,
+  );
+  const candidate = (bare?.[1] || spoken?.[1] || '').replace(/[.,;:!?）)]+$/, '');
+  if (candidate) {
+    // Do not treat "打开 课程总结.md" as a website.
+    if (/\.(docx?|pptx?|xlsx?|pdf|md|txt|html?|csv|json|png|jpe?g|gif|webp)$/i.test(candidate)) {
+      return null;
+    }
+    return canonicalizeHttpUrl(candidate);
+  }
+  // Word/Excel stay on the Writer path — never alias them to a webpage.
+  if (looksLikeOfficeOpen(raw) && !/(?:https?:\/\/|www\.)/i.test(raw)) {
+    return null;
+  }
+  if (
+    /(?:打开|open).{0,10}(?:浏览器|chrome\b|chromium\b|browser\b)/i.test(raw) ||
+    /^(?:打开|open)\s*(?:一下|下)?\s*(?:网站|网页)$/i.test(raw)
+  ) {
+    return BROWSER_DEFAULT_URL;
+  }
+  for (const alias of SITE_ALIASES) {
+    if (/(?:打开|open)/i.test(raw) && alias.test.test(raw)) {
+      return alias.url;
+    }
+  }
+  return null;
 }
 
 export type OfficeOpenIntent = {
