@@ -75,9 +75,11 @@ async function showStage(page, title, color, lines, imgB64) {
 
 async function pngB64(page, sessionId) {
   return page.evaluate(async (sessionId) => {
+    const bearer = window.__PICO_BEARER;
     const res = await fetch(`/api/pico/v1/sandbox/sessions/${sessionId}/screenshot`, {
       credentials: 'include',
       cache: 'no-store',
+      headers: bearer ? { Authorization: bearer } : {},
     });
     if (!res.ok) throw new Error(`shot ${res.status}`);
     const buf = await res.arrayBuffer();
