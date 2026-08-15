@@ -1,0 +1,22 @@
+{
+  "card": "T-UX-SANDBOX-CHROME",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "ok": true,
+    "git_sha": "7aba5010fd5c46fad908b355dc0edc3d14ad29dd",
+    "service": "pico-api"
+  },
+  "u1": "Y",
+  "u2": "Y",
+  "u3": "Y",
+  "u4": "Y",
+  "claim_wb": "NO",
+  "u1_size": 35305,
+  "u1_sha": "5f0ee01079199a2ab9a5fcb128798772c44cec1c1aa05bb5826e73114abb66ac",
+  "u2_size": 39533,
+  "u2_sha": "9687e9371d47b79c2ba981ea8d7a4535299111a58a8082b26688bf556e1e1bed",
+  "u3_size": 40936,
+  "u3_sha": "310b996d42adaab83a01c59814eeae571cd1df28d55ac0b0321ed50accdabe51",
+  "u4_size": 24987,
+  "u4_sha": "d64cfcbc4d4579de39c8ed33cbe06d586855174e3f142ecc55e4eb051d655b76"
+}
