@@ -1,0 +1,61 @@
+{
+  "card": "T-UX-VISUAL-CHAT",
+  "phase": "g-live",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "ok": true,
+    "git_sha": "de6cbe01ce05d270df46760578ef9838b5f7f649",
+    "service": "pico-api"
+  },
+  "prompt": "请用三条短句说明周五周报怎么写。不要搜索，不要打开网页，不要调用工具。",
+  "claim_wb": "NO",
+  "v1": {
+    "size": 17397,
+    "sha": "a16eb75b2558d3cc4a18ed906d8c2dc622d30422115534c2eda5f34326cacab0",
+    "inspect": {
+      "url": "https://pico.aivia.asia/c/new",
+      "hasPicoFastChip": false,
+      "hasSecondPlus": false,
+      "hasBookmark": false,
+      "hasWorkspace": false,
+      "hasPerm": false,
+      "hasOfficeChip": false,
+      "hasOldPlaceholder": false,
+      "plusMenu": "",
+      "resultPanel": false
+    }
+  },
+  "v2": {
+    "size": 22293,
+    "sha": "1f2130bdb839f7b657cd9c8ec6bfcff6ba5f57ddd0db13a6bfd6cee01c342dce",
+    "inspect": {
+      "url": "https://pico.aivia.asia/c/new",
+      "hasPicoFastChip": false,
+      "hasSecondPlus": false,
+      "hasBookmark": false,
+      "hasWorkspace": false,
+      "hasPerm": false,
+      "hasOfficeChip": false,
+      "hasOldPlaceholder": false,
+      "plusMenu": "快速\n深度\n上传附件",
+      "resultPanel": false
+    }
+  },
+  "v3": {
+    "size": 90798,
+    "sha": "c5e9349682c758f2a62d22fe2b863cdd23431d827a417b27d91ad439b5e74715",
+    "inspect": {
+      "url": "https://pico.aivia.asia/c/34ac321f-a8e9-4f89-8823-715707d8301a",
+      "hasPicoFastChip": false,
+      "hasSecondPlus": false,
+      "hasBookmark": false,
+      "hasWorkspace": false,
+      "hasPerm": false,
+      "hasOfficeChip": false,
+      "hasOldPlaceholder": false,
+      "plusMenu": "",
+      "resultPanel": true
+    },
+    "reply_excerpt": "当前任务 就绪 提示词 1: R4R6 Evidence3秒钟前 请用三条短句说明周五周报怎么写。不要搜索，不要打开网页，不要调用工具。 响应 2: OpenAI现在 好的，三条短句说明周五周报怎么写： 围绕本周实际做的事，先列成果，再写进展，用数据或结果说话。 问题与风险单独写一块，说明当前卡点和需要的支持。 结尾给下周计划，简短、具体、可执行。 结果区 AI 已完成回复。 好的，三条短句说明周五周报怎么写： 1. 围绕本周实际做的事，先列成果，再写进展，用数据或结果说话。 2. 问题与风险单独写一块，说明当前卡点和需要的支持。 3. 结尾给下周计划，"
+  }
+}
