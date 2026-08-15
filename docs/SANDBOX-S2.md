@@ -32,6 +32,9 @@ isolation_key = school_id + membership_id + run_id
 工作区目录、`safe_segment`、耐久产物按账号过滤：跨账号读仍 **404 / `artifact.not_found`**。  
 B2 会话同键：跨账号 `GET /v1/sandbox/sessions/{id}/view` → **404 / `sandbox.session_not_found`**。
 
+老师盘（#553 persist）：`$PICO_SANDBOX_DISK/{school}/{member}/`，**不含 run_id**。  
+关掉会话 / 回收进程 **不删** 这棵盘。单师上限 2GB。跨账号看不见。清空必须显式 `POST /v1/sandbox/disk/clear`。
+
 S1 路径单测仍有效：绝对路径、NUL、规范化后的 `..`、符号链接逃出隔离根 → `sandbox.path_denied`。
 
 ---

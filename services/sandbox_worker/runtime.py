@@ -19,7 +19,15 @@ from typing import Any
 from urllib.parse import urlparse
 
 from pico_orchestrator.gateway import ToolError
-from pico_orchestrator.sandbox_s1 import isolation_dir, workspace_id_for
+from pico_orchestrator.sandbox_persist import (
+    PERSIST_COPY,
+    list_owner_disk_names,
+    owner_disk_dir,
+    owner_disk_meta,
+    read_owner_disk_file,
+    write_owner_disk_file,
+)
+from pico_orchestrator.sandbox_s1 import workspace_id_for
 from pico_orchestrator.web_guard import parse_public_http_url
 
 from sandbox_worker.browser import (
@@ -128,7 +136,7 @@ class SandboxSession:
 
     def human_copy(self) -> str:
         if self.kind == "files":
-            return "沙箱工作区文件。双击或点文件名即可打开，不必靠公网 URL。"
+            return PERSIST_COPY
         return HUMAN_OFFICE_COPY if self.kind != "browser" else HUMAN_LOGIN_COPY
 
     def window_meta(self) -> list[dict[str, str]]:
@@ -239,16 +247,21 @@ class SandboxRuntime:
         return None
 
     def _workspace(self, sess: SandboxSession) -> Path:
-        root = isolation_dir(sess.school_id, sess.membership_id, sess.run_id)
+        root = owner_disk_dir(sess.school_id, sess.membership_id)
         root.mkdir(parents=True, exist_ok=True)
         return root
 
     def _file_names(self, sess: SandboxSession) -> list[str]:
+        names = list_owner_disk_names(sess.school_id, sess.membership_id)
+        if names:
+            return names
         return list_workspace_files(self._workspace(sess))
 
     def _write_workspace_file(self, sess: SandboxSession, filename: str, document: bytes) -> None:
-        dest = self._workspace(sess) / Path(filename).name
-        dest.write_bytes(document)
+        write_owner_disk_file(sess.school_id, sess.membership_id, filename, document)
+
+    def _read_workspace_file(self, sess: SandboxSession, filename: str) -> bytes:
+        return read_owner_disk_file(sess.school_id, sess.membership_id, filename)
 
     async def _ensure_files_window(self, sess: SandboxSession) -> None:
         names = self._file_names(sess)
@@ -276,6 +289,8 @@ class SandboxRuntime:
         sess.last_used = time.time()
 
     def _public_meta(self, sess: SandboxSession, **extra: Any) -> dict[str, Any]:
+        disk = owner_disk_meta(sess.school_id, sess.membership_id)
+        persist_note = PERSIST_COPY if sess.kind == "files" else sess.human_copy()
         return redact_secrets(
             {
                 "ok": True,
@@ -287,10 +302,13 @@ class SandboxRuntime:
                 "kind": sess.kind,
                 "engine": sess.engine_name(),
                 "view_path": f"/v1/sandbox/sessions/{sess.session_id}/view",
-                "human_copy": sess.human_copy(),
+                "human_copy": persist_note,
                 "windows": sess.window_meta(),
                 "focused_window_id": sess.focused_id,
-                "files": [{"name": name} for name in self._file_names(sess)],
+                "files": disk.get("files") or [{"name": name} for name in self._file_names(sess)],
+                "persist": True,
+                "disk_bytes": disk.get("disk_bytes"),
+                "disk_quota_bytes": disk.get("disk_quota_bytes"),
                 "byte_size": len(sess.screenshot_png),
                 "mime": "image/png",
                 **extra,
@@ -309,12 +327,19 @@ class SandboxRuntime:
         filename: str = "",
         document: bytes | None = None,
     ) -> dict[str, Any]:
-        if document or (kind and kind != "browser"):
+        kind_l = (kind or "").strip().lower()
+        if kind_l == "files":
+            return await self.open_files_desk(
+                school_id=school_id,
+                membership_id=membership_id,
+                run_id=run_id,
+            )
+        if document or (kind_l and kind_l != "browser"):
             return await self.open_document(
                 school_id=school_id,
                 membership_id=membership_id,
                 run_id=run_id,
-                kind=kind,
+                kind=kind_l,
                 filename=filename,
                 document=document or b"",
             )
@@ -370,6 +395,51 @@ class SandboxRuntime:
             ),
         )
 
+    async def open_files_desk(
+        self,
+        *,
+        school_id: str,
+        membership_id: str,
+        run_id: str | None,
+    ) -> dict[str, Any]:
+        await self._purge()
+        school, member, run = isolation_tuple(school_id, membership_id, run_id)
+        existing = self._find_desk(school, member)
+        if existing is not None:
+            await self._ensure_files_window(existing)
+            for item in existing.windows:
+                if item.kind == "files":
+                    existing.focused_id = item.window_id
+                    break
+            await self._sync(existing)
+            return self._public_meta(existing, message=PERSIST_COPY)
+        if len(self._sessions) >= MAX_SESSIONS:
+            raise ToolError("sandbox.quota", "沙箱已满（最多 8 路），请关掉一路再开。机器未继续扩进程。")
+        session_id = "sbox_" + secrets.token_hex(12)
+        ws = workspace_id_for(school, member, run)
+        sess = SandboxSession(
+            session_id=session_id,
+            school_id=school,
+            membership_id=member,
+            run_id=run,
+            workspace_id=ws,
+            url="sandbox://files",
+            title="",
+            h1="",
+            screenshot_png=b"",
+            created_at=time.time(),
+            windows=[],
+            focused_id="",
+            kind="files",
+        )
+        await self._ensure_files_window(sess)
+        if not sess.windows:
+            raise ToolError("sandbox.session_not_found", "老师盘未能打开")
+        sess.focused_id = sess.windows[-1].window_id
+        await self._sync(sess)
+        self._sessions[session_id] = sess
+        return self._public_meta(sess, message=PERSIST_COPY)
+
     async def open_document(
         self,
         *,
@@ -384,14 +454,17 @@ class SandboxRuntime:
         resolved = resolve_kind(filename, kind)
         safe_name = Path(filename or "document.docx").name or "document.docx"
         school, member, run = isolation_tuple(school_id, membership_id, run_id)
+        payload = document or b""
+        if not payload:
+            payload = read_owner_disk_file(school, member, safe_name)
         existing = self._find_desk(school, member)
         if existing is not None:
             return await self._attach_office(
-                existing, kind=resolved, filename=safe_name, document=document
+                existing, kind=resolved, filename=safe_name, document=payload
             )
         if len(self._sessions) >= MAX_SESSIONS:
             raise ToolError("sandbox.quota", "沙箱已满（最多 8 路），请关掉一路再开。机器未继续扩进程。")
-        desktop = await open_office(kind=resolved, filename=safe_name, document=document)
+        desktop = await open_office(kind=resolved, filename=safe_name, document=payload)
         session_id = "sbox_" + secrets.token_hex(12)
         ws = workspace_id_for(school, member, run)
         win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind=resolved, surface=desktop)
@@ -411,7 +484,7 @@ class SandboxRuntime:
             kind=resolved,
         )
         try:
-            self._write_workspace_file(sess, safe_name, document)
+            self._write_workspace_file(sess, safe_name, payload)
             await self._ensure_files_window(sess)
             await self._sync(sess)
         except Exception:
@@ -544,6 +617,7 @@ class SandboxRuntime:
         )
 
     async def destroy(self, session_id: str) -> None:
+        # Close Chromium / LibreOffice only. Owner disk stays on the host bind.
         sess = self._sessions.pop(session_id, None)
         if sess is None:
             return

@@ -49,8 +49,8 @@ RUN set -eux; \
 COPY services /app/services
 
 RUN useradd --create-home --uid 65532 --shell /usr/sbin/nologin sandbox \
-    && mkdir -p /tmp/pico-sandbox-home /tmp/pico-sandbox-profiles \
-    && chown -R 65532:65532 /app /tmp/pico-sandbox-home /tmp/pico-sandbox-profiles /opt/ms-playwright
+    && mkdir -p /tmp/pico-sandbox-home /tmp/pico-sandbox-profiles /var/lib/pico/teacher-disks \
+    && chown -R 65532:65532 /app /tmp/pico-sandbox-home /tmp/pico-sandbox-profiles /opt/ms-playwright /var/lib/pico/teacher-disks
 
 USER 65532:65532
 EXPOSE 18767

@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
+  destroyPicoSandboxSession,
   focusPicoSandboxWindow,
   getPicoSandboxScreenshot,
   getPicoSandboxSession,
@@ -26,6 +27,7 @@ export default function SandboxWebPane({
   zoom = 1,
   onWheelZoom,
   kind,
+  onDestroyed,
 }: {
   sessionId: string;
   initialUrl?: string;
@@ -35,6 +37,7 @@ export default function SandboxWebPane({
   /** 1 = fit the pane width (fullscreen fills the stage, not a 390 strip). */
   zoom?: number;
   onWheelZoom?: (event: React.WheelEvent) => void;
+  onDestroyed?: () => void;
 }) {
   const [windows, setWindows] = useState<PicoSandboxWindow[]>([]);
   const [files, setFiles] = useState<Array<{ name: string }>>([]);
@@ -325,6 +328,27 @@ export default function SandboxWebPane({
         </label>
         )}
         <div className="flex gap-1">
+          <button
+            type="button"
+            disabled={busy}
+            className="rounded-md border border-black/[0.08] px-2.5 py-1 text-[11.5px] disabled:opacity-50"
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                try {
+                  await destroyPicoSandboxSession(sessionId);
+                  onDestroyed?.();
+                } catch {
+                  setError('关闭失败，请重试');
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+            data-testid="sandbox-close-keep-disk"
+          >
+            关闭窗口（文件保留）
+          </button>
           <button
             type="submit"
             disabled={busy}

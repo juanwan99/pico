@@ -25,6 +25,7 @@ import {
   getPicoArtifactContent,
   openPicoSandboxBrowser,
   openPicoSandboxDocument,
+  openPicoSandboxSession,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -1211,6 +1212,10 @@ export default function ResultPanel({
                 kind={sandboxSession.kind}
                 zoom={paneZoom.zoom}
                 onWheelZoom={paneZoom.onWheel}
+                onDestroyed={() => {
+                  setLocalSandbox(null);
+                  openedWebsiteRef.current = null;
+                }}
               />
             ) : (
               <div
@@ -1240,7 +1245,25 @@ export default function ResultPanel({
               setView('web');
               return;
             }
-            navigate('/more/files');
+            void (async () => {
+              try {
+                const meta = await openPicoSandboxSession({ kind: 'files' });
+                const sessionId = String(meta.session_id || '').trim();
+                if (!sessionId.startsWith('sbox_')) {
+                  throw new Error('sandbox session missing');
+                }
+                setLocalSandbox({
+                  sessionId,
+                  url: String(meta.url || 'sandbox://files'),
+                  title: String(meta.title || '文件'),
+                  humanCopy: String(meta.human_copy || '文件在这台老师盘上。关掉窗口或会话不会删文件。'),
+                  kind: 'files',
+                });
+                setView('web');
+              } catch {
+                navigate('/more/files');
+              }
+            })();
           }}
           className="w-full rounded-lg bg-[#f5f5f5] py-1.5 text-center text-[12px] font-medium text-[#3d3d3d] hover:bg-[#ebebeb] dark:bg-surface-tertiary dark:text-text-primary"
         >

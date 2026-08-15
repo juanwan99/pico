@@ -55,4 +55,10 @@ def sandbox_session_payload(result: Any) -> dict[str, Any] | None:
     files = result.get("files")
     if isinstance(files, list):
         payload["files"] = files
+    if result.get("persist"):
+        payload["persist"] = True
+    if result.get("disk_bytes") is not None:
+        payload["disk_bytes"] = result.get("disk_bytes")
+    if result.get("disk_quota_bytes") is not None:
+        payload["disk_quota_bytes"] = result.get("disk_quota_bytes")
     return payload

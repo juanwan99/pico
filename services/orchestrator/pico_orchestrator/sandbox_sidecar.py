@@ -59,6 +59,26 @@ async def _embedded_call(
 
     parts = [p for p in path.strip("/").split("/") if p]
     # /v1/internal/sessions/...
+    if method == "GET" and path.rstrip("/").endswith("/disk"):
+        params = params or {}
+        from pico_orchestrator.sandbox_persist import owner_disk_meta
+
+        return owner_disk_meta(
+            str(params.get("school_id") or ""),
+            str(params.get("membership_id") or ""),
+        )
+    if method == "POST" and path.rstrip("/").endswith("/disk/clear"):
+        body = json_body or {}
+        if not body.get("confirm"):
+            raise ToolError("tool.invalid_arguments", "清空老师盘需要 confirm=true")
+        from pico_orchestrator.sandbox_persist import clear_owner_disk
+
+        out = clear_owner_disk(
+            str(body.get("school_id") or ""),
+            str(body.get("membership_id") or ""),
+        )
+        out["human_copy"] = "已按你的要求清空这台老师盘。"
+        return out
     if method == "POST" and path.endswith("/sessions/open"):
         body = json_body or {}
         document = None

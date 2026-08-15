@@ -658,6 +658,8 @@ async def open_sandbox_session(
             code = 403
         elif e.code == "sandbox.quota":
             code = 429
+        elif e.code in {"sandbox.session_not_found", "sandbox.file_not_found"}:
+            code = 404
         else:
             code = 400
         raise HTTPException(
@@ -922,6 +924,106 @@ async def sandbox_session_input(
         headers={"Location": f"/v1/sandbox/sessions/{session_id}/view"},
         content="",
     )
+
+
+@app.delete("/v1/sandbox/sessions/{session_id}")
+async def destroy_sandbox_session(
+    session_id: str,
+    principal: Principal = Depends(require_scope("ai:run")),
+) -> dict:
+    """Close Chromium/LibreOffice. Owner disk stays."""
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_persist import PERSIST_COPY
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+
+    try:
+        out = await sidecar_json(
+            "POST",
+            f"/v1/internal/sessions/{session_id}/destroy",
+            json_body={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+            },
+            params={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+            },
+        )
+    except ToolError as exc:
+        if exc.code == "sandbox.forbidden":
+            status = 403
+        elif exc.code == "sandbox.session_not_found":
+            status = 404
+        else:
+            status = 400
+        raise HTTPException(
+            status_code=status, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    if not isinstance(out, dict):
+        out = {}
+    return {
+        "ok": True,
+        "destroyed": True,
+        "session_id": session_id,
+        "persist": True,
+        "human_copy": str(out.get("human_copy") or PERSIST_COPY),
+    }
+
+
+@app.get("/v1/sandbox/disk")
+async def get_sandbox_disk(
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> dict:
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+
+    try:
+        out = await sidecar_json(
+            "GET",
+            "/v1/internal/disk",
+            params={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+            },
+        )
+    except ToolError as exc:
+        raise HTTPException(
+            status_code=400, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    if not isinstance(out, dict):
+        raise HTTPException(status_code=502, detail={"code": "sandbox.unavailable"})
+    return out
+
+
+class ClearSandboxDiskRequest(BaseModel):
+    confirm: bool = False
+
+
+@app.post("/v1/sandbox/disk/clear")
+async def clear_sandbox_disk(
+    body: ClearSandboxDiskRequest,
+    principal: Principal = Depends(require_scope("ai:run")),
+) -> dict:
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+
+    try:
+        out = await sidecar_json(
+            "POST",
+            "/v1/internal/disk/clear",
+            json_body={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+                "confirm": bool(body.confirm),
+            },
+        )
+    except ToolError as exc:
+        raise HTTPException(
+            status_code=400, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    if not isinstance(out, dict):
+        raise HTTPException(status_code=502, detail={"code": "sandbox.unavailable"})
+    return out
 
 
 # ----- workspaces (managed boundary) -----
