@@ -1,0 +1,30 @@
+{
+  "card": "T-UX-PLUS-ATTACH",
+  "phase": "after",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "ok": true,
+    "git_sha": "de6cbe01ce05d270df46760578ef9838b5f7f649",
+    "service": "pico-api"
+  },
+  "claim_wb": "NO",
+  "note": "conversation ChatForm + #571 overflow:visible CSS; not deployed tip",
+  "p1": "Y",
+  "p2": "Y",
+  "p3": "N",
+  "p4": "Y",
+  "p1_painted": true,
+  "p1_frame": {
+    "size": 56728,
+    "sha": "886075a8e77733b823af09c333692e7a32abe71feb85c09adaae4c899e11e640"
+  },
+  "p3_frame": {
+    "size": 55319,
+    "sha": "725f19af2b759519add6052d5c0eaa0c409e23f2531140a18fc6cd373df84558"
+  },
+  "p4_painted": true,
+  "p4_frame": {
+    "size": 25533,
+    "sha": "c552aa219a6ad90f3936a110d54577f3c2f3fd43d77bb08e6e3b3b98448f9ea9"
+  }
+}
