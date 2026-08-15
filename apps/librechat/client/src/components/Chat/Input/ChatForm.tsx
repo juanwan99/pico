@@ -26,10 +26,10 @@ import PendingManualSkillsChips from './PendingManualSkillsChips';
 import useAskAnswerMode from '~/hooks/Input/useAskAnswerMode';
 import AskUserQuestionPopover from './AskUserQuestionPopover';
 import {
-  ComposerPlusAttach,
   ComposerPlusItem,
   ComposerPlusMenu,
   PLUS_MODE_ITEMS,
+  useComposerAttachInput,
 } from './ComposerPlusMenu';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import { cn, removeFocusRings } from '~/utils';
@@ -403,6 +403,15 @@ const ChatForm = memo(function ChatForm({
     onDuringRunModifier: steering.duringRunActive ? handleDuringRunModifier : undefined,
   });
 
+  const attach = useComposerAttachInput({
+    conversation,
+    files,
+    setFiles,
+    setFilesLoading,
+    disabled: disableInputs || isNotAppendable,
+    onPicked: () => setPlusOpen(false),
+  });
+
   useQueryParams({ textAreaRef });
 
   const { ref, ...registerProps } = methods.register('text', {
@@ -540,7 +549,7 @@ const ChatForm = memo(function ChatForm({
             <div
               onClick={handleContainerClick}
               className={cn(
-                'pico-wb-composer relative flex w-full flex-col overflow-hidden rounded-[20px] border text-text-primary transition-all duration-200',
+                'pico-wb-composer relative flex w-full flex-col overflow-visible rounded-[20px] border text-text-primary transition-all duration-200',
                 isTextAreaFocused
                   ? 'shadow-[0_8px_30px_rgba(0,0,0,0.08)]'
                   : 'shadow-[0_2px_12px_rgba(0,0,0,0.04)]',
@@ -580,7 +589,8 @@ const ChatForm = memo(function ChatForm({
                 )}
                 data-testid="composer-one-row"
               >
-                <div className="relative shrink-0 self-end">
+                <div className="relative z-50 shrink-0 self-end">
+                  {attach.input}
                   <button
                     type="button"
                     data-testid="composer-plus"
@@ -603,14 +613,9 @@ const ChatForm = memo(function ChatForm({
                           {item.label}
                         </ComposerPlusItem>
                       ))}
-                      <ComposerPlusAttach
-                        conversation={conversation}
-                        files={files}
-                        setFiles={setFiles}
-                        setFilesLoading={setFilesLoading}
-                        disabled={disableInputs || isNotAppendable}
-                        onPicked={() => setPlusOpen(false)}
-                      />
+                      <ComposerPlusItem testId="composer-plus-attach" onClick={attach.openPicker}>
+                        上传附件
+                      </ComposerPlusItem>
                     </ComposerPlusMenu>
                   ) : null}
                 </div>

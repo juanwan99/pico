@@ -41,8 +41,14 @@ jest.mock('~/data-provider', () => ({
   useGetEndpointsQuery: () => ({ data: {} }),
 }));
 
+jest.mock('~/components/Chat/Input/Files/FileFormChat', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 jest.mock('~/hooks', () => ({
   useAuthContext: () => ({ user: undefined }),
+  useFileHandlingNoChatContext: () => ({ handleFileChange: jest.fn() }),
   useLocalize: () => (key: string) => {
     const translations: Record<string, string> = {
       com_agents_contact: 'Contact',

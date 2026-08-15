@@ -3053,6 +3053,7 @@ html:not(.dark) .bg-surface-primary {
 }
 .pico-wb-composer {
   min-height: 0;
+  overflow: visible;
   background: #fff !important;
 }
 html:not(.dark) .pico-wb-composer textarea {

@@ -25,6 +25,11 @@ jest.mock('~/hooks', () => ({
   useFileHandlingNoChatContext: () => ({ handleFileChange: jest.fn() }),
 }));
 
+jest.mock('~/components/Chat/Input/Files/FileFormChat', () => ({
+  __esModule: true,
+  default: () => <div data-testid="file-form-chat" />,
+}));
+
 jest.mock('~/Providers', () => ({
   useOptionalChatFormContext: () => ({
     setValue: jest.fn(),
@@ -83,5 +88,15 @@ describe('Landing composer chrome', () => {
     expect(screen.getByTestId('composer-plus-attach')).toHaveTextContent('上传附件');
     expect(screen.queryByText('默认权限')).not.toBeInTheDocument();
     expect(screen.queryByText(/工作空间/)).not.toBeInTheDocument();
+  });
+
+  it('上传附件 opens the file picker even without chatCtx.setFiles', () => {
+    render(<Landing centerFormOnLanding />);
+    fireEvent.click(screen.getByTestId('composer-plus'));
+    const input = screen.getByTestId('composer-plus-file-input') as HTMLInputElement;
+    const click = jest.spyOn(input, 'click');
+    fireEvent.click(screen.getByTestId('composer-plus-attach'));
+    expect(click).toHaveBeenCalled();
+    expect(screen.getByTestId('composer-plus-file-input')).toBeInTheDocument();
   });
 });
