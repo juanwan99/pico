@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';
 import { Spinner } from '@librechat/client';
-import { PanelRightOpen } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { useParams } from 'react-router-dom';
 import { Constants, buildTree } from 'librechat-data-provider';
 import type { TChatProject, TMessage } from 'librechat-data-provider';
@@ -273,11 +273,11 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                 {!resultOpen && !isLandingPage ? (
                   <button
                     type="button"
-                    className="absolute right-3 top-14 z-[220] inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-[12px] font-medium shadow-sm dark:bg-surface-secondary"
+                    className="pico-type-aux pico-type-medium absolute right-3 top-14 z-[220] inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 shadow-sm dark:bg-surface-secondary"
                     onClick={() => setResultOpen(true)}
                     data-testid="result-panel-toggle"
                   >
-                    <PanelRightOpen className="h-3.5 w-3.5" />
+                    <PicoIcon name="panel" size="sm" />
                     结果区
                     {(ledger.artifacts ?? []).filter(
                       (a) => !(a.kind === 'doc' && (a.title || '').trim() === '回复摘要'),

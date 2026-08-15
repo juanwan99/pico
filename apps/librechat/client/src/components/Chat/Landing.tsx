@@ -191,11 +191,11 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
   return (
     <div className="pico-wb-landing pico-shell-bg flex min-h-full w-full flex-col items-center px-4 pb-8 pt-10 sm:px-6 sm:pt-[132px]">
       <div className="flex w-full max-w-[797px] flex-col items-center">
-        <h1 className="text-center text-[30px] font-semibold leading-none tracking-normal text-[color:var(--pico-ink)] dark:text-text-primary sm:text-[34px]">
+        <h1 className="pico-type-medium text-center text-[30px] leading-none tracking-normal text-[color:var(--pico-ink)] dark:text-text-primary sm:text-[34px]">
           Pico，我帮你
         </h1>
         {name ? (
-          <p className="mt-2.5 text-[13px] text-[color:var(--pico-ink-3)]">
+          <p className="pico-type-sidebar mt-2.5 text-[color:var(--pico-ink-3)]">
             {name}，描述任务即可开始
           </p>
         ) : null}
@@ -268,33 +268,21 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
           })}
         </div>
 
-        {/* PIXEL composer card — matches reference input block */}
+        {/* One-row composer: + · input · send arrow */}
         <div className="mt-6 w-full max-w-[797px]">
           <div
-            className="rounded-[var(--pico-radius)] border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] shadow-[var(--pico-shadow)]"
+            className="pico-wb-composer rounded-[var(--pico-radius)] border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] shadow-[var(--pico-shadow)]"
             data-testid="pico-wb-home-composer"
           >
-            <div className="px-4 pb-2.5 pt-3.5">
-              <textarea
-                id="pico-wb-home-input"
-                data-testid="text-input"
-                value={text}
-                onChange={(e) => syncForm(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendTask();
-                  }
-                }}
-                placeholder={PLACEHOLDER}
-                rows={1}
-                className="min-h-[44px] w-full resize-none border-0 bg-transparent text-[14px] leading-[1.55] text-[color:var(--pico-ink)] outline-none placeholder:text-[color:var(--pico-ink-3)]"
-              />
-              <div className="relative mt-1 flex items-center justify-between gap-2">
+            <div
+              className="pico-wb-composer-row relative flex items-end gap-0.5 px-1 py-1"
+              data-testid="composer-one-row"
+            >
+              <div className="relative shrink-0 self-end">
                 <button
                   type="button"
                   data-testid="composer-plus"
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--pico-ink-2)] hover:bg-black/[0.04]"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-ink-2)] hover:bg-black/[0.04]"
                   aria-label="更多输入选项"
                   aria-expanded={modelOpen}
                   onClick={() => {
@@ -306,13 +294,13 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                 {modelOpen ? (
                   <div
                     data-testid="composer-plus-menu"
-                    className="pico-card absolute bottom-10 left-0 z-50 mb-1 w-56 overflow-hidden py-1 shadow-[var(--pico-shadow-raised)]"
+                    className="pico-card absolute bottom-full left-0 z-50 mb-2 w-56 overflow-hidden py-1 shadow-[var(--pico-shadow-raised)]"
                   >
                     {PICO_DUAL_MODELS.map((m) => (
                       <button
                         key={m.id}
                         type="button"
-                        className="flex w-full px-3 py-2 text-left text-[13px] hover:bg-[color:var(--pico-surface-2)]"
+                        className="pico-type-sidebar flex w-full px-3 py-2 text-left hover:bg-[color:var(--pico-surface-2)]"
                         onClick={() => applyModel(m.id)}
                       >
                         {m.label}
@@ -323,7 +311,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                     </div>
                     <button
                       type="button"
-                      className="flex w-full px-3 py-2 text-left text-[13px] hover:bg-[color:var(--pico-surface-2)]"
+                      className="pico-type-sidebar flex w-full px-3 py-2 text-left hover:bg-[color:var(--pico-surface-2)]"
                       onClick={() => {
                         setFullAccess((v) => !v);
                         try {
@@ -340,21 +328,37 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                     </button>
                   </div>
                 ) : null}
-                <button
-                  type="button"
-                  className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                    text.trim()
-                      ? 'pico-cta-accent'
-                      : 'bg-[color:var(--pico-line)] text-[color:var(--pico-ink-3)]',
-                  )}
-                  aria-label="发送"
-                  disabled={!text.trim()}
-                  onClick={() => sendTask()}
-                >
-                  <PicoIcon name="arrow" size="sm" />
-                </button>
               </div>
+              <textarea
+                id="pico-wb-home-input"
+                data-testid="text-input"
+                value={text}
+                onChange={(e) => syncForm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendTask();
+                  }
+                }}
+                placeholder={PLACEHOLDER}
+                rows={1}
+                className="pico-type-body min-h-8 min-w-0 flex-1 resize-none border-0 bg-transparent py-2 leading-[1.55] text-[color:var(--pico-ink)] outline-none placeholder:text-[color:var(--pico-ink-3)]"
+              />
+              <button
+                type="button"
+                data-testid="send-button"
+                className={cn(
+                  'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md self-end transition-colors',
+                  text.trim()
+                    ? 'text-[color:var(--pico-ink)] hover:bg-black/[0.04]'
+                    : 'text-[color:var(--pico-ink-3)]',
+                )}
+                aria-label="发送"
+                disabled={!text.trim()}
+                onClick={() => sendTask()}
+              >
+                <PicoIcon name="arrow-up" />
+              </button>
             </div>
           </div>
         </div>

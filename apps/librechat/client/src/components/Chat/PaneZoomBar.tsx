@@ -3,7 +3,7 @@
  * Buttons and ctrl/⌘+wheel; current ratio is always visible.
  */
 import { useCallback, useState } from 'react';
-import { ZoomIn, ZoomOut } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import {
   clampResultPaneZoom,
   formatResultPaneZoom,
@@ -64,11 +64,11 @@ export default function PaneZoomBar({
         data-testid="pane-zoom-out"
         onClick={zoomOut}
       >
-        <ZoomOut className="h-3.5 w-3.5" />
+        <PicoIcon name="zoom-out" size="sm" />
       </button>
       <button
         type="button"
-        className="min-w-[2.75rem] px-1 text-center text-[11px] font-medium tabular-nums text-[#3d3d3d] hover:bg-black/[0.04] dark:text-text-primary"
+        className="pico-type-aux pico-type-medium min-w-[2.75rem] px-1 text-center tabular-nums text-[#3d3d3d] hover:bg-black/[0.04] dark:text-text-primary"
         aria-label="重置缩放"
         title="重置为 100%"
         data-testid="pane-zoom-label"
@@ -84,7 +84,7 @@ export default function PaneZoomBar({
         data-testid="pane-zoom-in"
         onClick={zoomIn}
       >
-        <ZoomIn className="h-3.5 w-3.5" />
+        <PicoIcon name="zoom-in" size="sm" />
       </button>
     </div>
   );

@@ -37,7 +37,15 @@ export type PicoIconName =
   | 'help'
   | 'zap'
   | 'blocks'
-  | 'folder-open';
+  | 'folder-open'
+  | 'arrow-up'
+  | 'close'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'maximize'
+  | 'minimize'
+  | 'refresh'
+  | 'stop';
 
 type Size = 'sm' | 'md' | 'lg';
 

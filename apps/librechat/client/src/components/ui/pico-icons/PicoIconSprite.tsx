@@ -167,6 +167,33 @@ export default function PicoIconSprite() {
               <path d="M3 7h7l2 2h9v3"  fill="none" />
               <path d="m4 9-1 10a2 2 0 0 0 2 2h13l2-10H7Z"  fill="none" />
             </symbol>
+      <symbol id="pico-i-arrow-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19V5M6 11l6-6 6 6" fill="none" />
+            </symbol>
+      <symbol id="pico-i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 6l12 12M18 6 6 18" fill="none" />
+            </symbol>
+      <symbol id="pico-i-zoom-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7" fill="none" />
+              <path d="m20 20-4-4M11 8v6M8 11h6" fill="none" />
+            </symbol>
+      <symbol id="pico-i-zoom-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7" fill="none" />
+              <path d="m20 20-4-4M8 11h6" fill="none" />
+            </symbol>
+      <symbol id="pico-i-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5" fill="none" />
+            </symbol>
+      <symbol id="pico-i-minimize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5" fill="none" />
+              <path d="M8 8h8v8H8z" fill="none" />
+            </symbol>
+      <symbol id="pico-i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 12a8 8 0 1 1-2.3-5.6M20 5v5h-5" fill="none" />
+            </symbol>
+      <symbol id="pico-i-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="7" y="7" width="10" height="10" rx="1.5" fill="none" />
+            </symbol>
     </svg>
   );
 }

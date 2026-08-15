@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { TooltipAnchor } from '@librechat/client';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -25,7 +26,7 @@ export default memo(function StopButton({
           data-testid="stop-generation-button"
           title={stopLabel}
           className={cn(
-            'rounded-full bg-text-primary p-1.5 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10',
+            'inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-ink)] outline-offset-4 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-40',
           )}
           aria-label={stopLabel}
           onClick={(e) => {
@@ -33,16 +34,7 @@ export default memo(function StopButton({
             stop(e);
           }}
         >
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="icon-lg text-surface-primary"
-          >
-            <rect x="7" y="7" width="10" height="10" rx="1.25" fill="currentColor"></rect>
-          </svg>
+          <PicoIcon name="stop" />
         </button>
       }
     ></TooltipAnchor>

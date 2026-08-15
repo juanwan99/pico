@@ -25,6 +25,7 @@ import {
 import PendingManualSkillsChips from './PendingManualSkillsChips';
 import useAskAnswerMode from '~/hooks/Input/useAskAnswerMode';
 import AskUserQuestionPopover from './AskUserQuestionPopover';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { cn, getModelSpec, removeFocusRings } from '~/utils';
 import DuringRunSendButton from './DuringRunSendButton';
 import { useGetStartupConfig } from '~/data-provider';
@@ -451,11 +452,10 @@ const ChatForm = memo(function ChatForm({
   const baseClasses = useMemo(
     () =>
       cn(
-        'md:py-3.5 m-0 w-full resize-none py-[13px] placeholder-black/60 bg-transparent dark:placeholder-white/60 [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.05)]',
+        'pico-type-body m-0 w-full resize-none bg-transparent py-2 px-1 placeholder-[color:var(--pico-ink-3)]',
         isCollapsed ? 'max-h-[52px]' : 'max-h-[45vh] md:max-h-[55vh]',
-        isMoreThanThreeRows ? 'pl-5' : 'px-5',
       ),
-    [isCollapsed, isMoreThanThreeRows],
+    [isCollapsed],
   );
 
   return (
@@ -527,7 +527,7 @@ const ChatForm = memo(function ChatForm({
             <div
               onClick={handleContainerClick}
               className={cn(
-                'pico-wb-composer relative flex w-full flex-grow flex-col overflow-hidden rounded-[20px] border pb-3 text-text-primary transition-all duration-200 sm:pb-0',
+                'pico-wb-composer relative flex w-full flex-col overflow-hidden rounded-[20px] border text-text-primary transition-all duration-200',
                 isTextAreaFocused ? 'shadow-[0_8px_30px_rgba(0,0,0,0.08)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.04)]',
                 isTemporary
                   ? 'border-violet-800/60 bg-violet-950/10'
@@ -558,88 +558,28 @@ const ChatForm = memo(function ChatForm({
                 setFiles={setFiles}
                 setFilesLoading={setFilesLoading}
               />
-              {(endpoint || true) && (
-                <div className={cn('flex min-h-[44px]', isRTL ? 'flex-row-reverse' : 'flex-row')}>
-                  <div
-                    className="relative flex-1"
-                    style={
-                      isCollapsed
-                        ? {
-                            WebkitMaskImage:
-                              'linear-gradient(to bottom, black 60%, transparent 90%)',
-                            maskImage: 'linear-gradient(to bottom, black 60%, transparent 90%)',
-                          }
-                        : undefined
-                    }
-                  >
-                    <TextareaAutosize
-                      {...registerProps}
-                      ref={(e) => {
-                        ref(e);
-                        (
-                          textAreaRef as React.MutableRefObject<HTMLTextAreaElement | null>
-                        ).current = e;
-                      }}
-                      disabled={disableInputs || isNotAppendable}
-                      onPaste={handlePaste}
-                      onKeyDown={(e) => {
-                        // Answer mode consumes option-navigation keys from the
-                        // empty composer; everything else follows the normal path.
-                        if (answerMode.handleComposerKeyDown(e)) {
-                          return;
-                        }
-                        handleKeyDown(e);
-                      }}
-                      onKeyUp={handleKeyUp}
-                      onCompositionStart={handleCompositionStart}
-                      onCompositionEnd={handleCompositionEnd}
-                      id={mainTextareaId}
-                      tabIndex={0}
-                      data-testid="text-input"
-                      rows={1}
-                      minRows={1}
-                      onFocus={handleTextareaFocus}
-                      onBlur={handleTextareaBlur}
-                      aria-label={localize('com_ui_message_input')}
-                      onClick={handleFocusOrClick}
-                      style={{ overflowY: 'auto' }}
-                      className={cn(
-                        baseClasses,
-                        removeFocusRings,
-                        'min-h-[44px] scrollbar-hover transition-[max-height] duration-200 disabled:cursor-not-allowed',
-                      )}
-                    />
-                  </div>
-                  <div className="flex flex-col items-start justify-start pr-2.5 pt-1.5">
-                    <CollapseChat
-                      isCollapsed={isCollapsed}
-                      isScrollable={isMoreThanThreeRows}
-                      setIsCollapsed={setIsCollapsed}
-                    />
-                  </div>
-                </div>
-              )}
               <div
                 className={cn(
-                  '@container relative items-between flex gap-2 pb-2',
+                  'pico-wb-composer-row relative flex w-full items-end gap-0.5 px-1 py-1',
                   isRTL ? 'flex-row-reverse' : 'flex-row',
                 )}
+                data-testid="composer-one-row"
               >
-                <div className={`${isRTL ? 'mr-2' : 'ml-2'} flex items-center gap-0.5`}>
+                <div className="relative shrink-0 self-end">
                   <button
                     type="button"
                     data-testid="composer-plus"
                     aria-label="更多输入选项"
                     aria-expanded={plusOpen}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-lg font-medium text-[#6b6b6b] hover:bg-black/[0.04] hover:text-[#1a1a1a]"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-ink-2)] hover:bg-black/[0.04] hover:text-[color:var(--pico-ink)]"
                     onClick={() => setPlusOpen((value) => !value)}
                   >
-                    +
+                    <PicoIcon name="plus" />
                   </button>
                   {plusOpen ? (
                     <div
                       data-testid="composer-plus-menu"
-                      className="absolute bottom-12 left-2 z-30 flex min-w-[220px] flex-col gap-2 rounded-xl border border-black/[0.08] bg-white p-2 shadow-lg dark:border-border-light dark:bg-surface-secondary"
+                      className="absolute bottom-full left-0 z-30 mb-2 flex min-w-[220px] flex-col gap-2 rounded-xl border border-black/[0.08] bg-white p-2 shadow-lg dark:border-border-light dark:bg-surface-secondary"
                     >
                       <AttachFileChat
                         conversation={conversation}
@@ -680,11 +620,67 @@ const ChatForm = memo(function ChatForm({
                     </div>
                   ) : null}
                 </div>
-                <div className="mx-auto flex" />
-                <div className={`${isRTL ? 'ml-2' : 'mr-2'}`}>
+                <div
+                  className="relative min-w-0 flex-1"
+                  style={
+                    isCollapsed
+                      ? {
+                          WebkitMaskImage:
+                            'linear-gradient(to bottom, black 60%, transparent 90%)',
+                          maskImage: 'linear-gradient(to bottom, black 60%, transparent 90%)',
+                        }
+                      : undefined
+                  }
+                >
+                  <TextareaAutosize
+                    {...registerProps}
+                    ref={(e) => {
+                      ref(e);
+                      (
+                        textAreaRef as React.MutableRefObject<HTMLTextAreaElement | null>
+                      ).current = e;
+                    }}
+                    disabled={disableInputs || isNotAppendable}
+                    onPaste={handlePaste}
+                    onKeyDown={(e) => {
+                      // Answer mode consumes option-navigation keys from the
+                      // empty composer; everything else follows the normal path.
+                      if (answerMode.handleComposerKeyDown(e)) {
+                        return;
+                      }
+                      handleKeyDown(e);
+                    }}
+                    onKeyUp={handleKeyUp}
+                    onCompositionStart={handleCompositionStart}
+                    onCompositionEnd={handleCompositionEnd}
+                    id={mainTextareaId}
+                    tabIndex={0}
+                    data-testid="text-input"
+                    rows={1}
+                    minRows={1}
+                    onFocus={handleTextareaFocus}
+                    onBlur={handleTextareaBlur}
+                    aria-label={localize('com_ui_message_input')}
+                    onClick={handleFocusOrClick}
+                    style={{ overflowY: 'auto' }}
+                    className={cn(
+                      baseClasses,
+                      removeFocusRings,
+                      'min-h-8 scrollbar-hover transition-[max-height] duration-200 disabled:cursor-not-allowed',
+                    )}
+                  />
+                  <div className="absolute right-0 top-0">
+                    <CollapseChat
+                      isCollapsed={isCollapsed}
+                      isScrollable={isMoreThanThreeRows}
+                      setIsCollapsed={setIsCollapsed}
+                    />
+                  </div>
+                </div>
+                <div className="shrink-0 self-end">
                   {isSubmitting && showStopButton && !answerMode.active
                     ? duringRunSlot
-                    : endpoint && (
+                    : (
                         <SendButton
                           ref={submitButtonRef}
                           control={methods.control}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { TooltipAnchor } from '@librechat/client';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -40,11 +40,11 @@ const CollapseChat = ({
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-opacity-50',
             )}
           >
-            {isCollapsed ? (
-              <ChevronUp className="h-full w-full" aria-hidden="true" />
-            ) : (
-              <ChevronDown className="h-full w-full" aria-hidden="true" />
-            )}
+            <PicoIcon
+              name="chevron"
+              size="sm"
+              className={isCollapsed ? 'rotate-180' : undefined}
+            />
           </button>
         }
       />

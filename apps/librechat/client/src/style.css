@@ -3043,20 +3043,24 @@ html:not(.dark) .bg-surface-primary {
 }
 /* Main stage next to sidebar */
 .pico-wb-sidebar {
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--pico-font);
+  font-size: var(--pico-fs-sidebar);
+  font-weight: var(--pico-fw);
   border-right: 1px solid rgba(0, 0, 0, 0.04);
 }
 .pico-wb-landing {
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--pico-font);
 }
 .pico-wb-composer {
-  min-height: 120px;
+  min-height: 0;
   background: #fff !important;
 }
 html:not(.dark) .pico-wb-composer textarea {
-  font-size: 14px !important;
+  font-size: var(--pico-fs-body) !important;
+  font-weight: var(--pico-fw) !important;
   line-height: 1.55 !important;
   color: #1a1a1a !important;
+  min-height: 0 !important;
 }
 html:not(.dark) .pico-wb-composer textarea::placeholder {
   color: #b0b0b0 !important;
@@ -3067,9 +3071,6 @@ html:not(.dark) .pico-wb-composer textarea::placeholder {
   /* keep functional */
 }
 
-.pico-wb-composer {
-  min-height: 132px !important;
-}
 .pico-wb-stage {
   min-height: 0;
 }
@@ -3078,18 +3079,13 @@ html:not(.dark) .pico-wb-composer textarea::placeholder {
   flex-shrink: 0;
 }
 
-/* Force visible workbench composer (pixel home) */
+/* One-row composer — do not force a second empty toolbar band */
 html:not(.dark) .pico-wb-composer {
   background: #ffffff !important;
   border: 1px solid rgba(0, 0, 0, 0.08) !important;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
-  min-height: 126px !important;
+  min-height: 0 !important;
   border-radius: 16px !important;
-}
-html:not(.dark) .pico-wb-composer textarea {
-  min-height: 60px !important;
-  font-size: 14px !important;
-  color: #1a1a1a !important;
 }
 html:not(.dark) .pico-wb-composer textarea::placeholder {
   color: #9a9a9a !important;
@@ -3118,7 +3114,7 @@ html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
   --pico-wb-rail-w: 264px;
   --pico-wb-result-w: 480px;
   --pico-wb-composer-r: 16px;
-  --pico-wb-font: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+  --pico-wb-font: var(--pico-font);
 }
 .pico-result-panel {
   font-family: var(--pico-wb-font);

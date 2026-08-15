@@ -1,7 +1,7 @@
 import React, { forwardRef, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import debounce from 'lodash/debounce';
 import { useRecoilState } from 'recoil';
-import { Search, X } from 'lucide-react';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -113,9 +113,10 @@ const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivEleme
       ref={ref}
       className="group relative flex h-9 min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg border-2 border-transparent px-3 py-1.5 text-text-primary focus-within:border-ring-primary focus-within:bg-surface-active-alt hover:bg-surface-active-alt"
     >
-      <Search
-        aria-hidden="true"
-        className="absolute left-3 h-4 w-4 text-text-secondary group-focus-within:text-text-primary group-hover:text-text-primary"
+      <PicoIcon
+        name="search"
+        size="sm"
+        className="absolute left-3 text-text-secondary group-focus-within:text-text-primary group-hover:text-text-primary"
       />
       <input
         type="text"
@@ -148,7 +149,7 @@ const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivEleme
         tabIndex={showClearIcon ? 0 : -1}
         disabled={!showClearIcon}
       >
-        <X className="h-5 w-5 cursor-pointer" aria-hidden="true" />
+        <PicoIcon name="close" className="cursor-pointer" />
       </button>
     </div>
   );

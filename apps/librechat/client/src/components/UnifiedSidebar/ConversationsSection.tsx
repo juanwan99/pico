@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useMemo, memo, lazy, Suspense, useRef } from 'react';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
+import { useLocation } from 'react-router-dom';
 import { useMediaQuery } from '@librechat/client';
 import { PermissionTypes, Permissions } from 'librechat-data-provider';
 import type { InfiniteQueryObserverResult } from '@tanstack/react-query';
@@ -24,6 +25,7 @@ const BookmarkNav = lazy(() => import('~/components/Nav/Bookmarks/BookmarkNav'))
 
 const ConversationsSection = memo(() => {
   const localize = useLocalize();
+  const location = useLocation();
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const setSidebarExpanded = useSetRecoilState(store.sidebarExpanded);
   const { isAuthenticated } = useAuthContext();
@@ -118,7 +120,10 @@ const ConversationsSection = memo(() => {
             <BookmarkNav tags={tags} setTags={setTags} />
           </Suspense>
         )}
-        {search.enabled && <SearchBar isSmallScreen={isSmallScreen} />}
+        {search.enabled &&
+        (Boolean(search.query) || location.pathname.startsWith('/search')) ? (
+          <SearchBar isSmallScreen={isSmallScreen} />
+        ) : null}
         <button
           type="button"
           data-testid="sidebar-archive-open"

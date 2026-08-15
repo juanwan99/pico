@@ -1,0 +1,25 @@
+{
+  "card": "T-UX-COMPOSER-TYPE-ICON",
+  "mode": "local-built-css",
+  "css": "/assets/index.Du8FiaDo.css",
+  "c1": "Y",
+  "c2": "Y",
+  "c3": "Y",
+  "c4": "Y",
+  "c5": "Y",
+  "claim_wb": "NO",
+  "composer_one_row": "Y",
+  "c1_size": 33042,
+  "c1_sha": "ced35f7fa407e90c1bf960660c97ab7c1d9791449181e0f0e9082a48d287615b",
+  "row_height": 47.25,
+  "c2_size": 35360,
+  "c2_sha": "440d801f4e3650dd8c5c5e3f29126247304313ec7432508d51acdbdb72de057c",
+  "type_scale": "Y",
+  "font": {
+    "fontSize": "15px",
+    "fontFamily": "\"PingFang SC\", \"Hiragino Sans GB\", \"Source Han Sans SC\", \"Noto Sans SC\", \"Microsoft YaHei\", \"Heiti SC\", system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif"
+  },
+  "icons_one_set": "Y",
+  "c5_size": 19499,
+  "c5_sha": "a75d7f718de68c1866c65bf90ff5e7f7db1fa0a004e327579ccd9a0200e2f6c1"
+}

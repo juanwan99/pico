@@ -32,6 +32,7 @@ const NAV: NavItem[] = [
 ];
 
 const MORE_ITEMS = [
+  { label: '搜索会话', icon: 'search' as PicoIconName, path: '/search' },
   { label: '助理', icon: 'bot' as PicoIconName, path: '/assistants' },
   { label: '项目', icon: 'folder' as PicoIconName, path: '/projects' },
   { label: '专家·技能·连接器', icon: 'blocks' as PicoIconName, path: '/capability' },
@@ -51,7 +52,8 @@ function isNavItemActive(pathname: string, item: NavItem) {
       pathname.startsWith('/capability') ||
       pathname.startsWith('/automation') ||
       pathname.startsWith('/more') ||
-      pathname.startsWith('/workspaces')
+      pathname.startsWith('/workspaces') ||
+      pathname.startsWith('/search')
     );
   }
   return Boolean(item.path && pathname.startsWith(item.path));
@@ -215,7 +217,7 @@ function Sidebar({
     <div className="pico-wb-sidebar flex h-full w-full min-w-0 flex-col bg-[color:var(--pico-sidebar)] text-[color:var(--pico-ink)] dark:bg-surface-primary-alt dark:text-text-primary">
       <div className="flex items-start justify-between px-4 pb-1 pt-4">
         <div className="min-w-0">
-          <div className="text-[15px] font-semibold leading-tight tracking-tight">Pico</div>
+          <div className="pico-type-body pico-type-medium leading-tight tracking-tight">Pico</div>
         </div>
         <button
           type="button"
@@ -233,7 +235,7 @@ function Sidebar({
             type="button"
             data-testid="new-chat-button"
             onClick={onNewTask}
-            className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--pico-ink)] text-[13px] font-medium text-white shadow-sm transition hover:bg-[color:var(--pico-ink-2)]"
+            className="pico-type-sidebar pico-type-medium flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--pico-ink)] text-white shadow-sm transition hover:bg-[color:var(--pico-ink-2)]"
           >
             <PicoIcon name="plus" size="sm" />
             新对话
@@ -264,7 +266,7 @@ function Sidebar({
                     }
                   }}
                   className={cn(
-                    'group flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13.5px] transition-colors',
+                    'pico-type-sidebar group flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors',
                     active
                       ? 'bg-[color:var(--pico-line)] font-medium text-[color:var(--pico-ink)] dark:bg-surface-tertiary dark:text-text-primary'
                       : 'font-normal text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)] dark:text-text-secondary dark:hover:bg-surface-tertiary',
