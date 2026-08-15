@@ -168,9 +168,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const chatFormPlaceholder =
     isProjectLandingPage && project
       ? localize('com_ui_new_chat_in_project', { name: project.name })
-      : isLandingPage
-        ? localize('com_ui_task_input_placeholder')
-        : undefined;
+      : localize('com_ui_task_input_placeholder');
 
   return (
     <ChatFormProvider {...methods}>

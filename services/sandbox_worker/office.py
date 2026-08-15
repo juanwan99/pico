@@ -98,6 +98,10 @@ class OfficeDesktop:
     async def h1(self) -> str:
         return self.filename
 
+    async def describe_inputs(self) -> dict[str, bool]:
+        # Xvfb desktop — not a DOM login form.
+        return {"has_text_input": False, "has_password_input": False}
+
     async def screenshot_png(self) -> bytes:
         scrot = shutil.which("scrot")
         if not scrot:

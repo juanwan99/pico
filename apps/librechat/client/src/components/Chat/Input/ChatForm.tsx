@@ -559,7 +559,7 @@ const ChatForm = memo(function ChatForm({
                 setFilesLoading={setFilesLoading}
               />
               {(endpoint || true) && (
-                <div className={cn('flex min-h-[72px]', isRTL ? 'flex-row-reverse' : 'flex-row')}>
+                <div className={cn('flex min-h-[44px]', isRTL ? 'flex-row-reverse' : 'flex-row')}>
                   <div
                     className="relative flex-1"
                     style={
@@ -597,7 +597,7 @@ const ChatForm = memo(function ChatForm({
                       tabIndex={0}
                       data-testid="text-input"
                       rows={1}
-                      minRows={3}
+                      minRows={1}
                       onFocus={handleTextareaFocus}
                       onBlur={handleTextareaBlur}
                       aria-label={localize('com_ui_message_input')}
@@ -606,7 +606,7 @@ const ChatForm = memo(function ChatForm({
                       className={cn(
                         baseClasses,
                         removeFocusRings,
-                        'min-h-[72px] scrollbar-hover transition-[max-height] duration-200 disabled:cursor-not-allowed',
+                        'min-h-[44px] scrollbar-hover transition-[max-height] duration-200 disabled:cursor-not-allowed',
                       )}
                     />
                   </div>

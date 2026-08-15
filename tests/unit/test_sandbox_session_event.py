@@ -22,6 +22,24 @@ def test_sandbox_session_payload_drops_secrets_and_requires_sbox_id() -> None:
     assert "password" not in out
     assert "secret" not in out
     assert "不要在聊天里发送密码" in out["human_copy"]
+    assert out["has_text_input"] is False
+    assert out["has_password_input"] is False
+
+
+def test_sandbox_session_payload_keeps_input_flags() -> None:
+    out = sandbox_session_payload(
+        {
+            "session_id": "sbox_aaaaaaaaaaaaaaaaaaaaaaaa",
+            "url": "https://example.com/login",
+            "has_text_input": True,
+            "has_password_input": True,
+            "password": "must-not-appear",
+        }
+    )
+    assert out is not None
+    assert out["has_text_input"] is True
+    assert out["has_password_input"] is True
+    assert "password" not in out
 
 
 @pytest.mark.asyncio

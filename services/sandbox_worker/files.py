@@ -70,6 +70,9 @@ class FilesSurface:
     async def h1(self) -> str:
         return "工作区文件"
 
+    async def describe_inputs(self) -> dict[str, bool]:
+        return {"has_text_input": False, "has_password_input": False}
+
     async def render(self, names: list[str]) -> None:
         self.names = list(names)
         self._png = listing_png(self.names)

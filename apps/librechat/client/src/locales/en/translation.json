@@ -2095,7 +2095,7 @@
   "com_ui_zoom_level": "Zoom level",
   "com_ui_zoom_out": "Zoom out",
   "com_user_message": "You",
-  "com_ui_task_input_placeholder": "What can I help you with today? @ files, / skills",
+  "com_ui_task_input_placeholder": "What can I help you with today?",
   "com_ui_task_chip_hint": "Tap a capability to draft a task, or type below",
   "com_ui_select_workspace": "Select workspace",
   "com_ui_workspace_hint": "Scope files and outputs for this task (in-browser)",

@@ -73,7 +73,8 @@ def test_history_and_chrome_source_locks() -> None:
     assert "composer-plus" in chat_form
     assert "默认权限" not in chat_form
     assert "result-view-menu" not in result
-    assert "sandbox-open-files" in result
+    assert "sandbox-open-files" not in result
+    assert "打开我的文件" not in result
 
 
 @pytest.mark.asyncio

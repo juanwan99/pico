@@ -7,7 +7,6 @@ import {
   getPicoSandboxSession,
   openPicoSandboxBrowser,
   openPicoSandboxDocument,
-  focusPicoSandboxWindow,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -19,6 +18,7 @@ jest.mock('~/data-provider/pico/api', () => ({
   getPicoSandboxScreenshot: jest.fn(),
   getPicoSandboxSession: jest.fn(),
   postPicoSandboxInput: jest.fn(),
+  destroyPicoSandboxSession: jest.fn(),
   openPicoSandboxBrowser: jest.fn(),
   openPicoSandboxDocument: jest.fn(),
   focusPicoSandboxWindow: jest.fn(),
@@ -269,7 +269,7 @@ describe('ResultPanel artifact actions', () => {
 });
 
 describe('ResultPanel search sources', () => {
-  it('shows a clickable source from gateway search.sources', () => {
+  it('does not park 来源 on top of the sandbox screen', () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
@@ -291,42 +291,12 @@ describe('ResultPanel search sources', () => {
         />
       </MemoryRouter>,
     );
-    const link = screen.getByTestId('pico-search-source-link');
-    expect(link).toHaveAttribute('href', 'https://www.gov.cn/a');
-    expect(link).toHaveTextContent('Gov');
+    expect(screen.queryByTestId('pico-search-sources')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pico-search-source-link')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-open-files')).not.toBeInTheDocument();
   });
 
-  it('falls back to assistant bubble links when runEvents are empty', () => {
-    render(
-      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ResultPanel
-          run={run()}
-          runStatusLabel="已完成"
-          messages={[
-            {
-              messageId: 'u1',
-              conversationId: 'c1',
-              parentMessageId: null,
-              text: '搜义务教育',
-              isCreatedByUser: true,
-            },
-            {
-              messageId: 'a1',
-              conversationId: 'c1',
-              parentMessageId: 'u1',
-              text: '见 [义务教育专题](https://www.gov.cn/jyjy)',
-              isCreatedByUser: false,
-            },
-          ]}
-        />
-      </MemoryRouter>,
-    );
-    const link = screen.getByTestId('pico-search-source-link');
-    expect(link).toHaveAttribute('href', 'https://www.gov.cn/jyjy');
-    expect(link).toHaveTextContent('义务教育专题');
-  });
-
-  it('shows honest miss copy when search returned no sources', () => {
+  it('does not show honest-miss 来源 in the right rail either', () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
@@ -344,9 +314,8 @@ describe('ResultPanel search sources', () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByTestId('pico-search-sources-miss')).toHaveTextContent(
-      '未检索到可用来源',
-    );
+    expect(screen.queryByTestId('pico-search-sources-miss')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pico-search-sources')).not.toBeInTheDocument();
   });
 });
 
@@ -472,12 +441,11 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(screen.queryByTitle('browser-preview')).not.toBeInTheDocument();
   });
 
-  it('T6: clicking a search source opens the same 网页 pane', async () => {
-    const user = userEvent.setup();
+  it('T6: 来源 is not a right-rail strip even when search ran', async () => {
     mockOpenBrowser.mockResolvedValue({
       session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
-      url: 'https://www.gov.cn/a',
-      title: 'Gov',
+      url: 'https://example.com/',
+      title: 'Example Domain',
     });
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -496,13 +464,24 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
                 sources: [{ title: 'Gov', url: 'https://www.gov.cn/a' }],
               },
             },
+            {
+              id: 'sbox-1',
+              run_id: 'run-1',
+              seq: 2,
+              type: 'sandbox.session',
+              payload: {
+                session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+                url: 'https://example.com/',
+                title: 'Example Domain',
+              },
+            },
           ]}
         />
       </MemoryRouter>,
     );
-    await user.click(screen.getByTestId('pico-search-source-link'));
     expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
-    expect(mockOpenBrowser).toHaveBeenCalledWith('https://www.gov.cn/a');
+    expect(screen.queryByTestId('pico-search-sources')).not.toBeInTheDocument();
+    expect(screen.queryByText('来源')).not.toBeInTheDocument();
   });
 
   it('R1a: desktop result pane defaults to ≥480 and exposes a drag resizer', () => {
@@ -526,6 +505,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     );
     const panel = screen.getByTestId('result-panel');
     expect(panel).toHaveAttribute('data-expanded', 'false');
+    await user.click(screen.getByTestId('result-panel-chrome-menu'));
     await user.click(screen.getByTestId('result-panel-fullscreen'));
     expect(panel).toHaveAttribute('data-expanded', 'true');
     expect(panel.className).toMatch(/pico-result-panel--expanded/);
@@ -544,6 +524,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     ]);
     await user.click(screen.getByRole('button', { name: '打开' }));
     expect(await screen.findByTestId('artifact-html-stage')).toHaveAttribute('data-zoom', '100%');
+    await user.click(screen.getByTestId('result-panel-chrome-menu'));
     expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('100%');
     await user.click(screen.getByTestId('pane-zoom-in'));
     expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('125%');
@@ -578,6 +559,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    await user.click(screen.getByTestId('result-panel-chrome-menu'));
     await user.click(screen.getByTestId('pane-zoom-in'));
     expect(screen.getByTestId('pane-zoom-label')).toHaveTextContent('125%');
     expect(screen.getByTestId('sandbox-web-stage')).toHaveAttribute('data-zoom', '125%');
@@ -655,7 +637,84 @@ describe('ResultPanel sandbox web pane', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
-    expect(screen.getByTestId('sandbox-web-copy')).toHaveTextContent('不要在聊天里发送密码');
+    expect(await screen.findByTestId('sandbox-web-viewport')).toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-login-form')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-web-password')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-open-files')).not.toBeInTheDocument();
+    expect(screen.queryByText('打开我的文件')).not.toBeInTheDocument();
+    expect(screen.queryByText('来源')).not.toBeInTheDocument();
+  });
+
+  it('U3: a dead session is honest copy + reopen, not spinner + login', async () => {
+    (getPicoSandboxScreenshot as jest.Mock).mockRejectedValue(new Error('pico 404: gone'));
+    (getPicoSandboxSession as jest.Mock).mockRejectedValue(new Error('pico 404: gone'));
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          runEvents={[
+            {
+              id: 'sbox-1',
+              run_id: 'run-1',
+              seq: 1,
+              type: 'sandbox.session',
+              payload: {
+                session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+                url: 'https://example.com/',
+                title: 'Example Domain',
+                human_copy: '请在此画面自行登录，不要在聊天里发送密码',
+              },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('sandbox-dead')).toBeInTheDocument();
+    expect(screen.getByTestId('sandbox-dead-copy')).toHaveTextContent('沙箱已关闭');
+    expect(screen.getByTestId('sandbox-reopen')).toBeEnabled();
+    expect(screen.queryByTestId('sandbox-login-form')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-web-password')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-web-text')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-web-viewport')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText('打开我的文件')).not.toBeInTheDocument();
+  });
+
+  it('shows login chrome only when the live page reports input fields', async () => {
+    (getPicoSandboxScreenshot as jest.Mock).mockResolvedValue(
+      new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }),
+    );
+    (getPicoSandboxSession as jest.Mock).mockResolvedValue({
+      session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      url: 'https://httpbin.org/forms/post',
+      title: 'Forms',
+      has_text_input: true,
+      has_password_input: true,
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          runEvents={[
+            {
+              id: 'sbox-1',
+              run_id: 'run-1',
+              seq: 1,
+              type: 'sandbox.session',
+              payload: {
+                session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+                url: 'https://httpbin.org/forms/post',
+                title: 'Forms',
+              },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('sandbox-login-form')).toBeInTheDocument();
     expect(screen.getByTestId('sandbox-web-password')).toHaveAttribute('type', 'password');
+    expect(screen.getByTestId('sandbox-web-text')).toBeInTheDocument();
   });
 });

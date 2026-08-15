@@ -1,0 +1,64 @@
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import Landing from '../Landing';
+
+jest.mock(
+  'librechat-data-provider',
+  () => ({
+    apiBaseUrl: () => '',
+    EModelEndpoint: { azureOpenAI: 'azureOpenAI', openAI: 'openAI' },
+  }),
+  { virtual: true },
+);
+
+jest.mock('~/utils', () => ({
+  cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
+}));
+
+jest.mock('~/hooks/Messages/useSubmitMessage', () => ({
+  __esModule: true,
+  default: () => ({ submitMessage: jest.fn() }),
+}));
+
+jest.mock('~/hooks', () => ({
+  useAuthContext: () => ({ user: { name: '老师' } }),
+}));
+
+jest.mock('~/Providers', () => ({
+  useOptionalChatFormContext: () => ({
+    setValue: jest.fn(),
+  }),
+  useOptionalChatContext: () => ({
+    setConversation: jest.fn(),
+  }),
+}));
+
+jest.mock('~/components/Chat/Input/WorkspaceSelector', () => ({
+  __esModule: true,
+  default: () => <div data-testid="workspace-selector">工作空间</div>,
+}));
+
+jest.mock('~/components/ui/pico-icons', () => ({
+  PicoIcon: () => <span data-testid="pico-icon" />,
+}));
+
+jest.mock('~/utils/picoModelPref', () => ({
+  consumePendingModel: () => null,
+  getPicoModelMode: () => 'pico-fast',
+  labelForPicoModel: (id: string) => id,
+  normalizePicoModelMode: (id: string) => id,
+  PICO_DUAL_MODELS: [{ id: 'pico-fast', label: '快速' }],
+  setPicoModelMode: jest.fn(),
+}));
+
+describe('Landing composer chrome', () => {
+  it('U1: idle composer is one input + plus, no 调用技能与指令 second layer', () => {
+    render(<Landing centerFormOnLanding />);
+    const input = screen.getByTestId('text-input');
+    expect(input).toHaveAttribute('placeholder', '今天帮你做些什么？');
+    expect(screen.getByTestId('composer-plus')).toBeInTheDocument();
+    expect(screen.queryByText(/调用技能与指令/)).not.toBeInTheDocument();
+    expect(screen.queryByText('默认权限')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('composer-plus-menu')).not.toBeInTheDocument();
+  });
+});

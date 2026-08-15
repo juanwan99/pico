@@ -80,7 +80,7 @@ const CHIPS: Chip[] = [
   },
 ];
 
-const PLACEHOLDER = '今天帮你做些什么？ @ 引用对话文件，/ 调用技能与指令';
+const PLACEHOLDER = '今天帮你做些什么？';
 
 export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLanding: boolean }) {
   const { user } = useAuthContext();
@@ -88,7 +88,6 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
   const { submitMessage } = useSubmitMessage();
   const [scene, setScene] = useState<SceneId>('office');
   const [text, setText] = useState('');
-  const [permOpen, setPermOpen] = useState(false);
   const [fullAccess, setFullAccess] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [model, setModel] = useState(() => {
@@ -275,9 +274,10 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
             className="rounded-[var(--pico-radius)] border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] shadow-[var(--pico-shadow)]"
             data-testid="pico-wb-home-composer"
           >
-            <div className="min-h-[138px] px-4 pb-3 pt-3.5">
+            <div className="px-4 pb-2.5 pt-3.5">
               <textarea
                 id="pico-wb-home-input"
+                data-testid="text-input"
                 value={text}
                 onChange={(e) => syncForm(e.target.value)}
                 onKeyDown={(e) => {
@@ -287,108 +287,73 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                   }
                 }}
                 placeholder={PLACEHOLDER}
-                rows={3}
-                className="w-full resize-none border-0 bg-transparent text-[14px] leading-[1.55] text-[color:var(--pico-ink)] outline-none placeholder:text-[color:var(--pico-ink-3)]"
+                rows={1}
+                className="min-h-[44px] w-full resize-none border-0 bg-transparent text-[14px] leading-[1.55] text-[color:var(--pico-ink)] outline-none placeholder:text-[color:var(--pico-ink-3)]"
               />
-              <div className="mt-1 flex items-center justify-between gap-2">
+              <div className="relative mt-1 flex items-center justify-between gap-2">
                 <button
                   type="button"
+                  data-testid="composer-plus"
                   className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--pico-ink-2)] hover:bg-black/[0.04]"
-                  aria-label="添加"
-                  onClick={() =>
-                    document
-                      .querySelector<HTMLButtonElement>('[data-testid="attach-file"]')
-                      ?.click()
-                  }
+                  aria-label="更多输入选项"
+                  aria-expanded={modelOpen}
+                  onClick={() => {
+                    setModelOpen((v) => !v);
+                  }}
                 >
                   <PicoIcon name="plus" className="text-[color:var(--pico-ink-2)]" />
                 </button>
-                <div className="flex items-center gap-1.5">
-                  <div className="relative">
+                {modelOpen ? (
+                  <div
+                    data-testid="composer-plus-menu"
+                    className="pico-card absolute bottom-10 left-0 z-50 mb-1 w-56 overflow-hidden py-1 shadow-[var(--pico-shadow-raised)]"
+                  >
+                    {PICO_DUAL_MODELS.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        className="flex w-full px-3 py-2 text-left text-[13px] hover:bg-[color:var(--pico-surface-2)]"
+                        onClick={() => applyModel(m.id)}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                    <div className="border-t border-[color:var(--pico-line)] px-3 py-2">
+                      <WorkspaceSelector />
+                    </div>
                     <button
                       type="button"
-                      className="inline-flex h-8 items-center gap-1 rounded-full bg-[color:var(--pico-surface-2)] px-2.5 text-[12.5px] font-medium text-[color:var(--pico-ink)]"
-                      onClick={() => setModelOpen((v) => !v)}
+                      className="flex w-full px-3 py-2 text-left text-[13px] hover:bg-[color:var(--pico-surface-2)]"
+                      onClick={() => {
+                        setFullAccess((v) => !v);
+                        try {
+                          localStorage.setItem(
+                            'pico:permissionMode',
+                            !fullAccess ? 'full' : 'default',
+                          );
+                        } catch {
+                          /* ignore */
+                        }
+                      }}
                     >
-                      {labelForPicoModel(model)}
-                      <PicoIcon name="chevron" size="sm" className="opacity-60" />
+                      {fullAccess ? '完全访问' : '默认权限'}
                     </button>
-                    {modelOpen && (
-                      <div className="pico-card absolute bottom-full right-0 z-50 mb-2 w-52 overflow-hidden py-1 shadow-[var(--pico-shadow-raised)]">
-                        {PICO_DUAL_MODELS.map((m) => (
-                          <button
-                            key={m.id}
-                            type="button"
-                            className="flex w-full px-3 py-2 text-left text-[13px] hover:bg-[color:var(--pico-surface-2)]"
-                            onClick={() => applyModel(m.id)}
-                          >
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
-                  <button
-                    type="button"
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--pico-ink-2)] hover:bg-black/[0.04]"
-                    aria-label="语音"
-                  >
-                    <PicoIcon name="mic" size="sm" />
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      text.trim()
-                        ? 'pico-cta-accent'
-                        : 'bg-[color:var(--pico-line)] text-[color:var(--pico-ink-3)]',
-                    )}
-                    aria-label="发送"
-                    disabled={!text.trim()}
-                    onClick={() => sendTask()}
-                  >
-                    <PicoIcon name="arrow" size="sm" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex min-h-10 flex-wrap items-center gap-1 border-t border-[color:var(--pico-line)] px-3">
-              <WorkspaceSelector />
-              <div className="relative">
+                ) : null}
                 <button
                   type="button"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-[color:var(--pico-ink-2)] hover:bg-black/[0.04]"
-                  onClick={() => setPermOpen((v) => !v)}
+                  className={cn(
+                    'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
+                    text.trim()
+                      ? 'pico-cta-accent'
+                      : 'bg-[color:var(--pico-line)] text-[color:var(--pico-ink-3)]',
+                  )}
+                  aria-label="发送"
+                  disabled={!text.trim()}
+                  onClick={() => sendTask()}
                 >
-                  <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[9px] opacity-70">
-                    ✓
-                  </span>
-                  {fullAccess ? '完全访问' : '默认权限'}
+                  <PicoIcon name="arrow" size="sm" />
                 </button>
-                {permOpen && (
-                  <div className="pico-card absolute bottom-full left-0 z-50 mb-2 w-[min(18rem,calc(100vw-2rem))] p-3 shadow-[var(--pico-shadow-raised)]">
-                    <p className="text-[12.5px] leading-relaxed text-[color:var(--pico-ink-2)]">
-                      当前为默认权限，所有操作都会在安全沙箱约束内进行，超出范围会请求你的允许。
-                    </p>
-                    <label className="mt-3 flex items-center justify-between gap-2 text-[13px]">
-                      <span>允许完全访问</span>
-                      <input
-                        type="checkbox"
-                        checked={fullAccess}
-                        onChange={(e) => {
-                          setFullAccess(e.target.checked);
-                          try {
-                            localStorage.setItem(
-                              'pico:permissionMode',
-                              e.target.checked ? 'full' : 'default',
-                            );
-                          } catch {}
-                        }}
-                      />
-                    </label>
-                  </div>
-                )}
               </div>
             </div>
           </div>
