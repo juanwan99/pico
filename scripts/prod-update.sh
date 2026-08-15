@@ -92,6 +92,12 @@ if [ -f .env ]; then
 fi
 export PICO_GIT_SHA="$CURRENT_SHA"
 
+# One-teacher-one-disk host bind. Destroying a session must not wipe this tree.
+TEACHER_DISK="${PICO_SANDBOX_DISK_HOST:-$ROOT/data/teacher-disks}"
+mkdir -p "$TEACHER_DISK"
+chmod 1777 "$TEACHER_DISK" 2>/dev/null || true
+chown 65532:65532 "$TEACHER_DISK" 2>/dev/null || true
+
 if [ -f .env ] && grep -q '^KIMI_API_KEY=.\+' .env; then
   echo "[pico] KIMI_API_KEY=SET"
 else

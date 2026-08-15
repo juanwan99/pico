@@ -7,6 +7,7 @@ import math
 import operator
 import re
 import time
+from pathlib import Path
 from typing import Any
 
 from pico_orchestrator.artifact_types import (
@@ -896,6 +897,21 @@ def _workspace_handlers(
             )
 
         try:
+            if kind == "files":
+                out = await sidecar_json(
+                    "POST",
+                    "/v1/internal/sessions/open",
+                    json_body={
+                        "school_id": principal.school_id,
+                        "membership_id": principal.membership_id,
+                        "run_id": run_id,
+                        "kind": "files",
+                    },
+                )
+                if not isinstance(out, dict):
+                    raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
+                await _emit(True, {"session_id": out.get("session_id"), "workspace_id": out.get("workspace_id") or ws})
+                return out
             raw: bytes | None = None
             if artifact_id:
                 row = await store.read(principal, artifact_id=artifact_id, title=None)
@@ -913,6 +929,40 @@ def _workspace_handlers(
                         "tool.invalid_arguments",
                         "该产物不是二进制 Office 包，拒绝当 Word 打开",
                     )
+            if raw is None and filename and not body_text:
+                listing = await sidecar_json(
+                    "GET",
+                    "/v1/internal/disk",
+                    params={
+                        "school_id": principal.school_id,
+                        "membership_id": principal.membership_id,
+                    },
+                )
+                names: list[str] = []
+                if isinstance(listing, dict):
+                    for item in listing.get("files") or []:
+                        if isinstance(item, dict) and item.get("name"):
+                            names.append(str(item["name"]))
+                want = Path(filename).name
+                if want and want in names:
+                    out = await sidecar_json(
+                        "POST",
+                        "/v1/internal/sessions/open",
+                        json_body={
+                            "school_id": principal.school_id,
+                            "membership_id": principal.membership_id,
+                            "run_id": run_id,
+                            "kind": kind or "writer",
+                            "filename": want,
+                        },
+                    )
+                    if not isinstance(out, dict):
+                        raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
+                    await _emit(
+                        True,
+                        {"session_id": out.get("session_id"), "workspace_id": out.get("workspace_id") or ws},
+                    )
+                    return out
             if raw is None:
                 name = (filename or "").lower()
                 if kind in {"calc"} or name.endswith((".xlsx", ".xls", ".ods", ".csv")):

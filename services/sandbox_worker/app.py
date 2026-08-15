@@ -8,6 +8,11 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
 from pico_orchestrator.gateway import ToolError
+from pico_orchestrator.sandbox_persist import (
+    PERSIST_COPY,
+    clear_owner_disk,
+    owner_disk_meta,
+)
 from pydantic import BaseModel, Field
 
 from sandbox_worker.browser import ENGINE_NAME, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
@@ -61,7 +66,7 @@ def _tool_http(exc: ToolError) -> HTTPException:
         status = 403
     elif exc.code == "sandbox.quota":
         status = 429
-    elif exc.code in {"sandbox.session_not_found", "artifact.not_found"}:
+    elif exc.code in {"sandbox.session_not_found", "artifact.not_found", "sandbox.file_not_found"}:
         status = 404
     else:
         status = 400
@@ -205,4 +210,44 @@ async def destroy_session(
     except ToolError as exc:
         raise _tool_http(exc) from exc
     await RUNTIME.destroy(session_id)
-    return redact_secrets({"ok": True, "destroyed": True, "session_id": session_id})
+    return redact_secrets(
+        {
+            "ok": True,
+            "destroyed": True,
+            "session_id": session_id,
+            "persist": True,
+            "human_copy": PERSIST_COPY,
+        }
+    )
+
+
+@app.get("/v1/internal/disk")
+async def get_owner_disk(
+    school_id: str,
+    membership_id: str,
+    x_pico_sandbox_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_token(x_pico_sandbox_token)
+    return redact_secrets(owner_disk_meta(school_id, membership_id))
+
+
+class ClearDiskBody(BaseModel):
+    school_id: str
+    membership_id: str
+    confirm: bool = False
+
+
+@app.post("/v1/internal/disk/clear")
+async def clear_disk(
+    body: ClearDiskBody,
+    x_pico_sandbox_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_token(x_pico_sandbox_token)
+    if not body.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "tool.invalid_arguments", "message": "清空老师盘需要 confirm=true"},
+        )
+    out = clear_owner_disk(body.school_id, body.membership_id)
+    out["human_copy"] = "已按你的要求清空这台老师盘。"
+    return redact_secrets(out)

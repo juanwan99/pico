@@ -422,6 +422,31 @@ export async function focusPicoSandboxWindow(
   );
 }
 
+export async function destroyPicoSandboxSession(sessionId: string) {
+  return picoFetch<{ ok?: boolean; destroyed?: boolean; persist?: boolean; human_copy?: string }>(
+    `/v1/sandbox/sessions/${encodeURIComponent(sessionId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function getPicoSandboxDisk() {
+  return picoFetch<{
+    ok?: boolean;
+    persist?: boolean;
+    files?: Array<{ name: string }>;
+    disk_bytes?: number;
+    disk_quota_bytes?: number;
+    human_copy?: string;
+  }>(`/v1/sandbox/disk`);
+}
+
+export async function clearPicoSandboxDisk() {
+  return picoFetch<{ ok?: boolean; cleared?: boolean; removed?: number }>(`/v1/sandbox/disk/clear`, {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true }),
+  });
+}
+
 export async function postPicoSandboxInput(
   sessionId: string,
   body: { click_x?: number; click_y?: number; text?: string; secret?: string },

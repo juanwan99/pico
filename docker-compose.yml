@@ -15,6 +15,7 @@ services:
     volumes:
       - ./:/app
       - pico_data:/app/data
+      - ${PICO_SANDBOX_DISK_HOST:-./data/teacher-disks}:/var/lib/pico/teacher-disks
     command: >-
       bash -lc "pip install -q -r requirements.txt &&
       uvicorn app.main:app --app-dir services/api --host 0.0.0.0 --port 18765"
@@ -24,6 +25,7 @@ services:
       PICO_DATABASE_URL: sqlite+aiosqlite:///./data/pico.db
       PICO_SANDBOX_URL: http://pico-sandbox:18767
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
+      PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
     depends_on:
       - mongo
       - pico-sandbox
@@ -51,6 +53,9 @@ services:
       XDG_CACHE_HOME: /tmp/pico-sandbox-home/.cache
       PLAYWRIGHT_BROWSERS_PATH: /opt/ms-playwright
       PICO_SANDBOX_PROFILE_ROOT: /tmp/pico-sandbox-profiles
+      PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
+    volumes:
+      - ${PICO_SANDBOX_DISK_HOST:-./data/teacher-disks}:/var/lib/pico/teacher-disks
     # Internal only — do not publish 8080/18088.
 
   librechat:

@@ -32,6 +32,11 @@ class FakeSurface:
         self.names = names
 
 
+@pytest.fixture(autouse=True)
+def _owner_disk(tmp_path, monkeypatch):
+    monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disks"))
+
+
 @pytest.mark.asyncio
 async def test_same_desk_keeps_browser_when_opening_writer():
     browser = FakeSurface("https://example.com/", "Example Domain", "Example Domain")

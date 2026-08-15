@@ -85,8 +85,10 @@ services:
       PICO_TRUE_PI_BIN: ${PICO_TRUE_PI_BIN:-}
       PICO_SANDBOX_URL: http://127.0.0.1:18767
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
+      PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
     volumes:
       - pico_data:/app/data
+      - ${PICO_SANDBOX_DISK_HOST:-./data/teacher-disks}:/var/lib/pico/teacher-disks
       - ./.env:/app/.env:ro
     depends_on:
       - mongo
@@ -119,6 +121,9 @@ services:
       XDG_CACHE_HOME: /tmp/pico-sandbox-home/.cache
       PLAYWRIGHT_BROWSERS_PATH: /opt/ms-playwright
       PICO_SANDBOX_PROFILE_ROOT: /tmp/pico-sandbox-profiles
+      PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
+    volumes:
+      - ${PICO_SANDBOX_DISK_HOST:-./data/teacher-disks}:/var/lib/pico/teacher-disks
     mem_limit: 512m
     pids_limit: 256
 
