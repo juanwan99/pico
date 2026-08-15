@@ -1,0 +1,57 @@
+{
+  "card": "T-SANDBOX-OPEN-REGRESS",
+  "phase": "before",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "ok": true,
+    "git_sha": "de6cbe01ce05d270df46760578ef9838b5f7f649",
+    "service": "pico-api"
+  },
+  "claim_wb": "NO",
+  "frames": {
+    "s1_example": {
+      "name": "S1-example-before.png",
+      "size": 85731,
+      "sha": "d7c08eb58a6f78ce800e5d57d66cf9e2bcc76353d4facdf17bf6646f41006664",
+      "result_panel": true,
+      "viewport": true,
+      "empty": false,
+      "toggle": false,
+      "view_text": "",
+      "body_head": "打开 https://example.com 模型 pico-fast 已检索 1 条来源 · 终态 · 成功 已完成 5s 再跑一次 提示词 1: R4R6 Evidence1分钟前 打开 https://example.com 响应 2: OpenAI1分钟前 I fetched https://example.com successfully (HTTP 200, not truncated). What's on the pag"
+    },
+    "s1b_browser": {
+      "name": "S1b-open-browser-before.png",
+      "size": 83343,
+      "sha": "4b36ff9cecec88925ee3fb14b95213f260845246643533d022548e42de0b1952",
+      "result_panel": true,
+      "viewport": true,
+      "empty": false,
+      "toggle": false,
+      "view_text": "",
+      "body_head": "打开浏览器 模型 pico-fast 工具完成 · sandbox_browser_open · 终态 · 成功 已完成 4s 再跑一次 提示词 1: R4R6 Evidence1分钟前 打开浏览器 响应 2: OpenAI1分钟前 浏览器已在隔离沙箱中打开。 当前状态： 打开了 https://example.com/（Example Domain） 会话 ID：sbox_fbb1dc81826958e907af736d 视图路径：/"
+    },
+    "s1c_tencent": {
+      "name": "S1c-tencent-before.png",
+      "size": 178721,
+      "sha": "4e4f471ffd1ab93b2627712baec6a4f5420b2ed1e0c2a20dd4621bb04a4826d5",
+      "result_panel": true,
+      "viewport": false,
+      "empty": true,
+      "toggle": false,
+      "view_text": "",
+      "body_head": "打开腾讯官网 模型 pico-fast 已检索 1 条来源 · 终态 · 成功 已完成 6s 再跑一次 提示词 1: R4R6 Evidence1分钟前 打开腾讯官网 响应 2: OpenAI1分钟前 我已经成功打开了腾讯官网（www.tencent.com），页面内容可以正常获取。 腾讯官网页面概览 官网的主要栏目和内容如下： 主要栏目 Who we are（关于我们） — 团队、管理层、愿景与使命 What we create（业务"
+    },
+    "s2_word": {
+      "name": "S2-word-before.png",
+      "size": 153986,
+      "sha": "2eb8038f4319e045f0919c5dae24dd669d06f4568caab172e6fb13184122baa3",
+      "result_panel": true,
+      "viewport": true,
+      "empty": false,
+      "toggle": false,
+      "view_text": "",
+      "body_head": "打开一份 Word 模型 pico-fast 工具完成 · sandbox_browser_screenshot · 终态 · 成功 已完成 45s · 1 个可下载文件 再跑一次 提示词 1: R4R6 Evidence45秒钟前 打开一份 Word 响应 2: OpenAI现在 The Word document is now open and visible in the LibreOffice Writer window. ✅ "
+    }
+  }
+}
