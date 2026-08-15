@@ -4,12 +4,12 @@
  * Chat column has no delivery strip.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   FileText,
   Globe,
   Maximize2,
   Minimize2,
+  MoreHorizontal,
   PanelRightClose,
   Download,
   Loader2,
@@ -17,11 +17,9 @@ import {
 } from 'lucide-react';
 import type { TMessage } from 'librechat-data-provider';
 import {
-  focusPicoSandboxWindow,
   getPicoArtifactContent,
   openPicoSandboxBrowser,
   openPicoSandboxDocument,
-  openPicoSandboxSession,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -41,7 +39,6 @@ import {
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
-import PicoSearchSources from './PicoSearchSources';
 import SandboxWebPane from './SandboxWebPane';
 import PaneZoomBar, { usePaneZoom } from './PaneZoomBar';
 
@@ -275,6 +272,7 @@ export default function ResultPanel({
     kind?: string;
   } | null>(null);
   const [websiteError, setWebsiteError] = useState<string | null>(null);
+  const [chromeOpen, setChromeOpen] = useState(false);
   const openedWebsiteRef = useRef<string | null>(null);
   const [paneWidth, setPaneWidth] = useState(() =>
     readStoredResultPaneWidth(
@@ -285,7 +283,6 @@ export default function ResultPanel({
   const paneWidthRef = useRef(paneWidth);
   paneWidthRef.current = paneWidth;
   const paneZoom = usePaneZoom();
-  const navigate = useNavigate();
   const tokenUsageLabel = formatRunTokenUsage(run);
   const ledgerSandbox = useMemo(() => collectPicoSandboxSession(runEvents), [runEvents]);
   const sandboxSession = localSandbox || ledgerSandbox;
@@ -694,34 +691,56 @@ export default function ResultPanel({
           onPointerDown={onResizePointerDown}
         />
       ) : null}
-      {/* Header — sandbox only; no 概览/文件/沙箱 tab stack */}
-      <div className="flex h-11 items-center gap-1 border-b border-black/[0.06] bg-[#fafafa] px-2 dark:border-border-light">
+      {/* Header — sandbox only. Zoom/fullscreen live in the ⋯ menu. */}
+      <div className="flex h-10 items-center gap-1 border-b border-black/[0.06] bg-[#fafafa] px-2 dark:border-border-light">
         <div className="px-2 text-[13px] font-medium text-[#1a1a1a] dark:text-text-primary">
           沙箱
         </div>
-        <div className="ml-auto flex items-center gap-1">
-          {showZoom ? (
-            <PaneZoomBar
-              label={paneZoom.label}
-              zoomIn={paneZoom.zoomIn}
-              zoomOut={paneZoom.zoomOut}
-              reset={paneZoom.reset}
-            />
-          ) : null}
+        <div className="relative ml-auto flex items-center gap-0.5">
           <button
             type="button"
             className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-black/[0.04]"
-            aria-label={expanded ? '退出全屏' : '进入全屏'}
-            title={expanded ? '退出全屏' : '进入全屏'}
-            data-testid="result-panel-fullscreen"
-            onClick={() => setExpanded((value) => !value)}
+            aria-label="沙箱控件"
+            aria-expanded={chromeOpen}
+            data-testid="result-panel-chrome-menu"
+            onClick={() => setChromeOpen((value) => !value)}
           >
-            {expanded ? (
-              <Minimize2 className="h-3.5 w-3.5" />
-            ) : (
-              <Maximize2 className="h-3.5 w-3.5" />
-            )}
+            <MoreHorizontal className="h-3.5 w-3.5" />
           </button>
+          {chromeOpen ? (
+            <div
+              data-testid="result-panel-chrome-pop"
+              className="absolute right-0 top-9 z-20 w-56 rounded-lg border border-black/[0.08] bg-white p-2 shadow-lg dark:border-border-light dark:bg-surface-secondary"
+            >
+              {showZoom ? (
+                <div className="mb-1">
+                  <PaneZoomBar
+                    label={paneZoom.label}
+                    zoomIn={paneZoom.zoomIn}
+                    zoomOut={paneZoom.zoomOut}
+                    reset={paneZoom.reset}
+                  />
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-black/[0.04]"
+                aria-label={expanded ? '退出全屏' : '进入全屏'}
+                data-testid="result-panel-fullscreen"
+                onClick={() => {
+                  setExpanded((value) => !value);
+                  setChromeOpen(false);
+                }}
+              >
+                {expanded ? (
+                  <Minimize2 className="h-3.5 w-3.5" />
+                ) : (
+                  <Maximize2 className="h-3.5 w-3.5" />
+                )}
+                {expanded ? '退出全屏' : '进入全屏'}
+              </button>
+            </div>
+          ) : null}
           {onClose ? (
             <button
               type="button"
@@ -863,14 +882,6 @@ export default function ResultPanel({
           </div>
         ) : (
         <>
-        {/* Sources sit above 概览/网页 so search + sandbox coexist. */}
-        <div className="empty:hidden px-2.5 pt-2.5">
-          <PicoSearchSources
-            events={runEvents}
-            messages={messages}
-            onOpenSource={(url) => void openWebsiteInPane(url)}
-          />
-        </div>
         {!sandboxSession && (
           <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
             {taskTitle || runStatusLabel || processHint || tokenUsageLabel ? (
@@ -1072,8 +1083,24 @@ export default function ResultPanel({
                 zoom={paneZoom.zoom}
                 onWheelZoom={paneZoom.onWheel}
                 onDestroyed={() => {
-                  setLocalSandbox(null);
                   openedWebsiteRef.current = null;
+                }}
+                onReopen={({ url, kind }) => {
+                  openedWebsiteRef.current = null;
+                  if (url && /^https?:\/\//i.test(url)) {
+                    void openWebsiteInPane(url);
+                    return;
+                  }
+                  if (kind && kind !== 'browser' && kind !== 'files') {
+                    void openOfficeInPane({
+                      kind: kind as OfficeOpenIntent['kind'],
+                      filename: sandboxSession.title,
+                    });
+                    return;
+                  }
+                  if (url) {
+                    void openWebsiteInPane(url);
+                  }
                 }}
               />
             ) : (
@@ -1093,41 +1120,6 @@ export default function ResultPanel({
 
         </>
         )}
-      </div>
-      <div className="shrink-0 border-t border-black/[0.06] px-3 py-2 dark:border-border-light">
-        <button
-          type="button"
-          data-testid="sandbox-open-files"
-          onClick={() => {
-            if (sandboxSession?.sessionId) {
-              void focusPicoSandboxWindow(sandboxSession.sessionId, { kind: 'files' });
-              setView('web');
-              return;
-            }
-            void (async () => {
-              try {
-                const meta = await openPicoSandboxSession({ kind: 'files' });
-                const sessionId = String(meta.session_id || '').trim();
-                if (!sessionId.startsWith('sbox_')) {
-                  throw new Error('sandbox session missing');
-                }
-                setLocalSandbox({
-                  sessionId,
-                  url: String(meta.url || 'sandbox://files'),
-                  title: String(meta.title || '文件'),
-                  humanCopy: String(meta.human_copy || '文件在这台老师盘上。关掉窗口或会话不会删文件。'),
-                  kind: 'files',
-                });
-                setView('web');
-              } catch {
-                navigate('/more/files');
-              }
-            })();
-          }}
-          className="w-full rounded-lg bg-[#f5f5f5] py-1.5 text-center text-[12px] font-medium text-[#3d3d3d] hover:bg-[#ebebeb] dark:bg-surface-tertiary dark:text-text-primary"
-        >
-          打开我的文件
-        </button>
       </div>
     </aside>
   );

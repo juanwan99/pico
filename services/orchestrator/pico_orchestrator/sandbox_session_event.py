@@ -45,6 +45,8 @@ def sandbox_session_payload(result: Any) -> dict[str, Any] | None:
         "engine": str(result.get("engine") or ""),
         "kind": str(result.get("kind") or ""),
         "workspace_id": str(result.get("workspace_id") or ""),
+        "has_text_input": bool(result.get("has_text_input")),
+        "has_password_input": bool(result.get("has_password_input")),
     }
     windows = result.get("windows")
     if isinstance(windows, list):

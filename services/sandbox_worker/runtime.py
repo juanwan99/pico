@@ -99,6 +99,8 @@ class SandboxSession:
     focused_id: str = ""
     kind: str = "browser"
     secret_fields: set[str] = field(default_factory=set)
+    has_text_input: bool = False
+    has_password_input: bool = False
 
     def focused(self) -> SandboxWindow:
         for item in self.windows:
@@ -286,6 +288,17 @@ class SandboxRuntime:
         if not png.startswith(PNG_MAGIC):
             raise ToolError("sandbox.raster_failed", "隔离窗口未能截取画面")
         sess.screenshot_png = png
+        describe = getattr(surface, "describe_inputs", None)
+        if callable(describe):
+            try:
+                flags = await describe()
+            except Exception:
+                logger.debug("describe_inputs failed", exc_info=True)
+                flags = {}
+        else:
+            flags = {}
+        sess.has_text_input = bool((flags or {}).get("has_text_input"))
+        sess.has_password_input = bool((flags or {}).get("has_password_input"))
         sess.last_used = time.time()
 
     def _public_meta(self, sess: SandboxSession, **extra: Any) -> dict[str, Any]:
@@ -311,6 +324,8 @@ class SandboxRuntime:
                 "disk_quota_bytes": disk.get("disk_quota_bytes"),
                 "byte_size": len(sess.screenshot_png),
                 "mime": "image/png",
+                "has_text_input": sess.has_text_input,
+                "has_password_input": sess.has_password_input,
                 **extra,
             },
             sess.secret_fields,

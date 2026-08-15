@@ -357,6 +357,8 @@ export type PicoSandboxSessionMeta = {
   files?: Array<{ name: string }>;
   clicked?: boolean;
   typed?: boolean;
+  has_text_input?: boolean;
+  has_password_input?: boolean;
 };
 
 export async function openPicoSandboxSession(body: {

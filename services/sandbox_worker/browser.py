@@ -53,6 +53,8 @@ class BrowserPage(Protocol):
 
     async def h1(self) -> str: ...
 
+    async def describe_inputs(self) -> dict[str, bool]: ...
+
     async def screenshot_png(self) -> bytes: ...
 
     async def click(self, x: int, y: int) -> None: ...
@@ -173,6 +175,59 @@ class PlaywrightPage:
             return str(text or "")[:200]
         except Exception:  # noqa: BLE001
             return ""
+
+    async def describe_inputs(self) -> dict[str, bool]:
+        """Visible text/password fields on the live page. Login chrome uses this."""
+        try:
+            raw = await self._page.evaluate(
+                """() => {
+                    const visible = (el) => {
+                        const s = window.getComputedStyle(el);
+                        const r = el.getBoundingClientRect();
+                        return (
+                            s.display !== 'none' &&
+                            s.visibility !== 'hidden' &&
+                            r.width > 1 &&
+                            r.height > 1
+                        );
+                    };
+                    const nodes = Array.from(
+                        document.querySelectorAll('input, textarea, [contenteditable="true"]')
+                    ).filter(visible);
+                    const skip = new Set([
+                        'hidden', 'submit', 'button', 'checkbox', 'radio',
+                        'file', 'image', 'reset', 'range', 'color',
+                    ]);
+                    let hasText = false;
+                    let hasPassword = false;
+                    for (const el of nodes) {
+                        const tag = String(el.tagName || '').toUpperCase();
+                        if (tag === 'TEXTAREA' || el.isContentEditable) {
+                            hasText = true;
+                            continue;
+                        }
+                        if (tag !== 'INPUT') {
+                            continue;
+                        }
+                        const t = String(el.type || 'text').toLowerCase();
+                        if (t === 'password') {
+                            hasPassword = true;
+                            hasText = true;
+                        } else if (!skip.has(t)) {
+                            hasText = true;
+                        }
+                    }
+                    return { has_text_input: hasText, has_password_input: hasPassword };
+                }"""
+            )
+            if isinstance(raw, dict):
+                return {
+                    "has_text_input": bool(raw.get("has_text_input")),
+                    "has_password_input": bool(raw.get("has_password_input")),
+                }
+        except Exception:
+            logger.debug("describe_inputs failed", exc_info=True)
+        return {"has_text_input": False, "has_password_input": False}
 
     async def screenshot_png(self) -> bytes:
         raw = await self._page.screenshot(type="png", full_page=False)
