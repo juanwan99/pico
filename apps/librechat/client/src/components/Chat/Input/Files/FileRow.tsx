@@ -128,6 +128,8 @@ export default function FileRow({
             return (
               <div
                 key={index}
+                data-testid="composer-attached-file"
+                data-filename={file.filename || file.file?.name || ''}
                 style={{
                   flexBasis: '70px',
                   flexGrow: 0,

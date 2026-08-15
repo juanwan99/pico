@@ -46,7 +46,7 @@ export function ComposerPlusItem({
   );
 }
 
-export function ComposerPlusAttach({
+export function useComposerAttachInput({
   conversation,
   files,
   setFiles,
@@ -69,30 +69,60 @@ export function ComposerPlusAttach({
     conversation,
   });
 
+  const openPicker = () => {
+    if (!inputRef.current || disabled) {
+      return;
+    }
+    inputRef.current.value = '';
+    inputRef.current.click();
+  };
+
+  const input = (
+    <input
+      ref={inputRef}
+      type="file"
+      multiple
+      className="hidden"
+      data-testid="composer-plus-file-input"
+      disabled={disabled}
+      onChange={(event) => {
+        handleFileChange(event);
+        onPicked?.();
+      }}
+    />
+  );
+
+  return { input, openPicker };
+}
+
+export function ComposerPlusAttach({
+  conversation,
+  files,
+  setFiles,
+  setFilesLoading,
+  disabled,
+  onPicked,
+}: {
+  conversation: TConversation | null;
+  files: Map<string, ExtendedFile>;
+  setFiles: FileSetter;
+  setFilesLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  disabled?: boolean;
+  onPicked?: () => void;
+}) {
+  const { input, openPicker } = useComposerAttachInput({
+    conversation,
+    files,
+    setFiles,
+    setFilesLoading,
+    disabled,
+    onPicked,
+  });
+
   return (
     <>
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        className="hidden"
-        data-testid="composer-plus-file-input"
-        disabled={disabled}
-        onChange={(event) => {
-          handleFileChange(event);
-          onPicked?.();
-        }}
-      />
-      <ComposerPlusItem
-        testId="composer-plus-attach"
-        onClick={() => {
-          if (!inputRef.current || disabled) {
-            return;
-          }
-          inputRef.current.value = '';
-          inputRef.current.click();
-        }}
-      >
+      {input}
+      <ComposerPlusItem testId="composer-plus-attach" onClick={openPicker}>
         上传附件
       </ComposerPlusItem>
     </>

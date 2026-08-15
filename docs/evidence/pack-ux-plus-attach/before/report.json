@@ -1,0 +1,46 @@
+{
+  "card": "T-UX-PLUS-ATTACH",
+  "phase": "before",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "ok": true,
+    "git_sha": "de6cbe01ce05d270df46760578ef9838b5f7f649",
+    "service": "pico-api"
+  },
+  "p1": "Y",
+  "p2": "Y",
+  "p3": "N",
+  "p4": "Y",
+  "claim_wb": "NO",
+  "p1_menu_count": 1,
+  "p1_menu_box": {
+    "x": 272.5,
+    "y": 138.75,
+    "width": 208,
+    "height": 116.5
+  },
+  "p1_frame": {
+    "size": 20860,
+    "sha": "c340972c712f75ed4b49aeb3937aa7489f038a30d616580d39a9f57a6bf0b78a"
+  },
+  "p3_frame": {
+    "size": 16050,
+    "sha": "acf71aa60e0a4684e8e4c3786ef78c3df3f04d7e68cfa0edaa111888dd622569"
+  },
+  "p4_menu_box": {
+    "x": 21,
+    "y": 42.75,
+    "width": 208,
+    "height": 116.5
+  },
+  "p4_frame": {
+    "size": 12276,
+    "sha": "93430216a70aaea5ce990c0ff1812edd6188ce34deaa7fd5d9913720a44d49c5"
+  },
+  "p1_chat": "N",
+  "p1_chat_note": "menu in DOM (208x116.5) but clipped by overflow-hidden; not painted",
+  "p1_chat_frame": {
+    "size": 53298,
+    "sha": "a98c1466052bdb8bc58722305b180610f650091dd5623cb93cbd685f97f495df"
+  }
+}

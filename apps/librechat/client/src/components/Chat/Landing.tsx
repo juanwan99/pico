@@ -2,15 +2,17 @@
  * Pico home — one title, one composer row. Model + attach live in +.
  */
 import { useCallback, useEffect, useState } from 'react';
+import type { ExtendedFile } from '~/common';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import { useOptionalChatContext, useOptionalChatFormContext } from '~/Providers';
 import { useAuthContext } from '~/hooks';
 import useSubmitMessage from '~/hooks/Messages/useSubmitMessage';
+import FileFormChat from '~/components/Chat/Input/Files/FileFormChat';
 import {
-  ComposerPlusAttach,
   ComposerPlusItem,
   ComposerPlusMenu,
   PLUS_MODE_ITEMS,
+  useComposerAttachInput,
 } from '~/components/Chat/Input/ComposerPlusMenu';
 import { cn } from '~/utils';
 import {
@@ -36,6 +38,18 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     }
   });
   const chatCtx = useOptionalChatContext();
+  const [localFiles, setLocalFiles] = useState(() => new Map<string, ExtendedFile>());
+  const [localFilesLoading, setLocalFilesLoading] = useState(false);
+  const files = chatCtx?.files ?? localFiles;
+  const setFiles = chatCtx?.setFiles ?? setLocalFiles;
+  const setFilesLoading = chatCtx?.setFilesLoading ?? setLocalFilesLoading;
+  const attach = useComposerAttachInput({
+    conversation: chatCtx?.conversation ?? null,
+    files,
+    setFiles,
+    setFilesLoading,
+    onPicked: () => setPlusOpen(false),
+  });
   const applyModel = useCallback(
     (raw: string) => {
       const id = normalizePicoModelMode(raw);
@@ -110,14 +124,21 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
         {/* One-row composer: + · input · send arrow */}
         <div className="mt-8 w-full max-w-[797px]">
           <div
-            className="pico-wb-composer rounded-[var(--pico-radius)] border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] shadow-[var(--pico-shadow)]"
+            className="pico-wb-composer overflow-visible rounded-[var(--pico-radius)] border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] shadow-[var(--pico-shadow)]"
             data-testid="pico-wb-home-composer"
           >
+            <FileFormChat
+              conversation={chatCtx?.conversation ?? null}
+              files={files}
+              setFiles={setFiles}
+              setFilesLoading={setFilesLoading}
+            />
             <div
               className="pico-wb-composer-row relative flex items-end gap-0.5 px-1 py-1"
               data-testid="composer-one-row"
             >
-              <div className="relative shrink-0 self-end">
+              <div className="relative z-50 shrink-0 self-end">
+                {attach.input}
                 <button
                   type="button"
                   data-testid="composer-plus"
@@ -142,22 +163,9 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                         {item.label}
                       </ComposerPlusItem>
                     ))}
-                    {chatCtx?.setFiles && chatCtx.setFilesLoading ? (
-                      <ComposerPlusAttach
-                        conversation={chatCtx.conversation ?? null}
-                        files={chatCtx.files ?? new Map()}
-                        setFiles={chatCtx.setFiles}
-                        setFilesLoading={chatCtx.setFilesLoading}
-                        onPicked={() => setPlusOpen(false)}
-                      />
-                    ) : (
-                      <ComposerPlusItem
-                        testId="composer-plus-attach"
-                        onClick={() => setPlusOpen(false)}
-                      >
-                        上传附件
-                      </ComposerPlusItem>
-                    )}
+                    <ComposerPlusItem testId="composer-plus-attach" onClick={attach.openPicker}>
+                      上传附件
+                    </ComposerPlusItem>
                   </ComposerPlusMenu>
                 ) : null}
               </div>
