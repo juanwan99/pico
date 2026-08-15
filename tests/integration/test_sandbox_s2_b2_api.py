@@ -140,13 +140,13 @@ def test_b2_view_and_cross_account_and_loopback(client) -> None:
 
     assert (
         client.get(f"/v1/sandbox/sessions/{session_id}/view", headers=outsider).status_code
-        == 404
+        == 403
     )
     assert (
         client.get(
             f"/v1/sandbox/sessions/{session_id}/screenshot", headers=outsider
         ).status_code
-        == 404
+        == 403
     )
 
     meta = client.get(f"/v1/sandbox/sessions/{session_id}", headers=owner)
@@ -159,7 +159,7 @@ def test_b2_view_and_cross_account_and_loopback(client) -> None:
 
     assert (
         client.get(f"/v1/sandbox/sessions/{session_id}", headers=outsider).status_code
-        == 404
+        == 403
     )
 
     typed = client.post(

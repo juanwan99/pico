@@ -264,7 +264,7 @@ async def test_browser_cross_account_denied(embedded_runtime) -> None:
             "sandbox_browser_screenshot",
             {"session_id": opened["session_id"]},
         )
-    assert denied.value.code == "sandbox.session_not_found"
+    assert denied.value.code == "sandbox.forbidden"
 
 
 @pytest.mark.asyncio

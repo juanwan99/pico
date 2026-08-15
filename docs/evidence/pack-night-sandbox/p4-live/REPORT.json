@@ -1,0 +1,22 @@
+{
+  "card": "T-NIGHT-SANDBOX-COMPUTER",
+  "phase": "P4",
+  "base": "https://pico.aivia.asia",
+  "tip": {
+    "url": "https://pico.aivia.asia/api/pico/tip",
+    "ok": true,
+    "git_sha": "6af95aa7bfb7719963912f273f723e0634171cb8",
+    "service": "pico-api"
+  },
+  "xlsx": "night-p4-1786751505865.xlsx",
+  "pptx": "night-p4-1786751505865.pptx",
+  "cell": "NIGHT-P4-CELL-ALPHA",
+  "s10": "Y",
+  "s11": "Y",
+  "s11_note": "Impress viewport shows NIGHT-P4-SLIDE-ALPHA; page frame taken while shot still loading",
+  "claim_wb": "NO",
+  "s10_bytes": 144871,
+  "s10_viewport": 27403,
+  "s11_bytes": 121585,
+  "verdict": "PASS"
+}

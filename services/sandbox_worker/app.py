@@ -57,7 +57,14 @@ class FocusBody(BaseModel):
 
 
 def _tool_http(exc: ToolError) -> HTTPException:
-    status = 404 if exc.code in {"sandbox.session_not_found", "artifact.not_found"} else 400
+    if exc.code == "sandbox.forbidden":
+        status = 403
+    elif exc.code == "sandbox.quota":
+        status = 429
+    elif exc.code in {"sandbox.session_not_found", "artifact.not_found"}:
+        status = 404
+    else:
+        status = 400
     return HTTPException(status_code=status, detail={"code": exc.code, "message": exc.message})
 
 
