@@ -22,6 +22,7 @@ LEGACY_PROXY_MEMBERSHIP_ID = "nextchat-user"
 
 @dataclass(frozen=True)
 class Principal:
+    # edu-core: school_membership.school_id + school_membership.id (not user_id).
     school_id: str
     membership_id: str
     scopes: list[str]
