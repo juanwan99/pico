@@ -12,6 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
+from pico_orchestrator.edu_sidebar import is_json_only_propose
 from pico_orchestrator.user_errors import user_message_for_error
 from pydantic import BaseModel
 
@@ -1215,6 +1216,7 @@ async def chat_completions(
     x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
     x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
     x_pico_membership_id: str | None = Header(default=None, alias="X-Pico-Membership-Id"),
+    x_pico_output: str | None = Header(default=None, alias="X-Pico-Output"),
     settings: Settings = Depends(get_settings),
 ):
     import re
@@ -1244,8 +1246,13 @@ async def chat_completions(
             or body.metadata.get("skill_id")
             or body.metadata.get("skillId")
         )
+    json_only = is_json_only_propose(raw_prompt_with_skill, output_header=x_pico_output)
     # D2: bind revision to session artifact graph (prior deliverables).
-    prior_titles = await _prior_artifact_titles_for_principal(principal)
+    prior_titles = (
+        []
+        if json_only
+        else await _prior_artifact_titles_for_principal(principal)
+    )
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
     # strip ledger markers from model-visible prompt; project instruction → system
@@ -1255,14 +1262,27 @@ async def chat_completions(
     project_instruction = m_proj.group(1).strip() if m_proj else ""
     prompt = _strip_pico_markers(raw_prompt).strip() or raw_prompt
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 12000) or 12000)
-    if len(prompt) > max_chars:
+    # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
+    # marker is explicit so this must not 400 a legal affordance table.
+    length_basis = prompt
+    if json_only:
+        try:
+            parsed_ask = json.loads(prompt)
+            if isinstance(parsed_ask, dict) and parsed_ask.get("asked") is not None:
+                length_basis = str(parsed_ask.get("asked") or "")
+        except json.JSONDecodeError:
+            length_basis = prompt
+    if len(length_basis) > max_chars:
         # Explicit reject — never silent-truncate then execute (stage #260 A1).
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"输入过长（{len(prompt)} 字，上限 {max_chars} 字）。"
-                "请缩短问题后重试；系统不会静默截断后继续执行。"
-            ),
+            detail={
+                "code": "pico_too_long",
+                "message": (
+                    f"输入过长（{len(length_basis)} 字，上限 {max_chars} 字）。"
+                    "请缩短问题后重试；系统不会静默截断后继续执行。"
+                ),
+            },
         )
 
     # LibreChat auto-title / auxiliary requests: answer without durable Task/Run.
@@ -1310,12 +1330,27 @@ async def chat_completions(
     # Engineering multi/pipeline/runnable OR classic Office/HTML → force agent tool path.
     # Sticky: same-session delivery continuation (after clarify) stays on pico-agent.
     # Use the marker-stripped prompt so delivery intent is not masked (P1).
-    skill_snapshot, delivery_plan = _resolve_skill_for_prompt(
-        prompt,
-        skill_snapshot,
-        prior_artifact_titles=prior_titles,
-        history=history,
-    )
+    # edu sidebar JSON propose is a different contract — never land files.
+    sidebar_system = None
+    if json_only:
+        skill_snapshot = None
+        delivery_plan = None
+        for msg in body.messages or []:
+            if msg.role == "system":
+                sidebar_system = _content_text(msg.content).strip()
+                break
+        if not sidebar_system:
+            sidebar_system = (
+                "只输出一个 JSON 对象，不要文件或 Markdown 解释："
+                '{"summary":"一句话","mutations":[{"affordanceId":"id","params":{},"label":"短标签"}]}'
+            )
+    else:
+        skill_snapshot, delivery_plan = _resolve_skill_for_prompt(
+            prompt,
+            skill_snapshot,
+            prior_artifact_titles=prior_titles,
+            history=history,
+        )
     model = (
         _model_preference_from_prompt(raw_prompt)
         or body.model
@@ -1344,7 +1379,10 @@ async def chat_completions(
     model = _coerce_default_model(model, settings)
     _assert_model_allowed(model, settings)
     # Direct model = short tier; pico-agent = delivery tier for token ceiling.
-    use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+    # json_only must not enter pi-agent even when the SKU is pico-fast.
+    use_direct = json_only or (
+        model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+    )
     token_ceiling = (
         settings.pico_run_short_max_tokens if use_direct else settings.pico_run_max_tokens
     )
@@ -1366,12 +1404,16 @@ async def chat_completions(
             from pico_orchestrator.provider import stream_chat
 
             system = (
-                "你是 Pico，面向学校场景的 AI 助手。"
-                "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
-                "不要编造不存在的学校数据。"
-                "若用户要求创建或生成纯文本文件（如 hello.txt），请在回复中用代码块输出完整内容，"
-                "格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
-                "禁止用代码块或改后缀冒充 .html / .docx / .pptx；此类交付须走专用生成工具路径。"
+                sidebar_system
+                if json_only and sidebar_system
+                else (
+                    "你是 Pico，面向学校场景的 AI 助手。"
+                    "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
+                    "不要编造不存在的学校数据。"
+                    "若用户要求创建或生成纯文本文件（如 hello.txt），请在回复中用代码块输出完整内容，"
+                    "格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
+                    "禁止用代码块或改后缀冒充 .html / .docx / .pptx；此类交付须走专用生成工具路径。"
+                )
             )
             if project_instruction:
                 system = system + "\n【项目约束】" + project_instruction
@@ -1454,7 +1496,9 @@ async def chat_completions(
         yield chunk({"role": "assistant"})
 
         # Direct model (moonshot/deepseek/*) → real token stream (GPT-like handfeel)
-        use_direct = model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+        use_direct = json_only or (
+            model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+        )
         if use_direct:
             from pico_orchestrator.provider import stream_chat
 
@@ -1467,12 +1511,16 @@ async def chat_completions(
                 skill_snapshot=skill_snapshot,
             )
             system = (
-                "你是 Pico，面向学校场景的 AI 助手。"
-                "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
-                "不要编造不存在的学校数据。"
-                "若用户要求创建或生成纯文本文件（如 hello.txt），请在回复中用代码块输出完整内容，"
-                "格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
-                "禁止用代码块或改后缀冒充 .html / .docx / .pptx；此类交付须走专用生成工具路径。"
+                sidebar_system
+                if json_only and sidebar_system
+                else (
+                    "你是 Pico，面向学校场景的 AI 助手。"
+                    "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
+                    "不要编造不存在的学校数据。"
+                    "若用户要求创建或生成纯文本文件（如 hello.txt），请在回复中用代码块输出完整内容，"
+                    "格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
+                    "禁止用代码块或改后缀冒充 .html / .docx / .pptx；此类交付须走专用生成工具路径。"
+                )
             )
             if project_instruction:
                 system = system + "\n【项目约束】" + project_instruction
