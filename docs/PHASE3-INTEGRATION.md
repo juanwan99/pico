@@ -54,11 +54,32 @@ of this milestone.
 - [ ] Disable Pico test issuer in production (`PICO_ACCEPT_TEST_ISSUER=false`)
 - [ ] Do **not** leave edu AI workbench creating parallel Run ledgers
 
+## edu-core ticket (T-SHELL-AI-EDU-ID)
+
+edu signs; Pico verifies. Same claim shape as `issue_test_token`.
+
+| Pico claim | Required | edu-core field |
+|------------|----------|----------------|
+| `iss` | yes | `PICO_EDU_ISS` (same value on both hosts) |
+| `aud` | yes | `PICO_JWT_AUD` (default `pico-api`) |
+| `iat` / `exp` | yes | short TTL (Pico default 900s) |
+| `school_id` | yes | `public.school_membership.school_id` (= `public.school.id`) |
+| `membership_id` | yes | `public.school_membership.id` |
+| `scopes` | yes | `["ai:run","ai:read","ai:confirm"]` (chat needs `ai:run`) |
+| `sub` | no | `{school_id}:{membership_id}` |
+
+HS256 shared secret: `PICO_EDU_JWT_SECRET` on both. Empty on Pico = `edu_issuer_configured=false`, JWT path closed.
+
+Usage ledger keys are those two claims. `PICO_OPENAI_PROXY_KEY` still maps to `nextchat-user` — that is **not** the edu login person.
+
+edu BFF must call Pico **API** (`/v1/chat/completions`), not LibreChat `/api/pico/*` (that door wants a LibreChat session JWT).
+
 ## Security
 
 - Service tokens never in frontend
 - User Pico JWT still short-TTL; school_id only from claims
 - Cross-school still fail-closed in Pico gateway
+- Shared proxy key is not an edu identity
 
 ## Rollback
 
