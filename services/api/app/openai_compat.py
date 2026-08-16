@@ -1276,13 +1276,10 @@ async def chat_completions(
         # Explicit reject — never silent-truncate then execute (stage #260 A1).
         raise HTTPException(
             status_code=400,
-            detail={
-                "code": "pico_too_long",
-                "message": (
-                    f"输入过长（{len(length_basis)} 字，上限 {max_chars} 字）。"
-                    "请缩短问题后重试；系统不会静默截断后继续执行。"
-                ),
-            },
+            detail=(
+                f"输入过长（{len(length_basis)} 字，上限 {max_chars} 字）。"
+                "请缩短问题后重试；系统不会静默截断后继续执行。"
+            ),
         )
 
     # LibreChat auto-title / auxiliary requests: answer without durable Task/Run.
