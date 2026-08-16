@@ -221,6 +221,22 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
     }
 
 
+def thinking_extra_body(
+    model: str | None,
+    *,
+    thinking: bool | None = None,
+) -> dict[str, object]:
+    """DeepSeek v4 thinking is on by default. Honor Pico fast/deep policy.
+
+    Direct HTTPS (sidebar json_only) must send this or reasoning tokens eat
+    max_tokens and the stream finishes HTTP 200 with empty content.
+    Not a global off: pico-deep stays enabled unless the caller overrides.
+    """
+    if thinking is None:
+        thinking = bool(runtime_policy_for_model(model).get("thinking", False))
+    return {"thinking": {"type": "enabled" if thinking else "disabled"}}
+
+
 def should_circuit_break(
     *,
     tool_exec_count: int,
@@ -290,6 +306,7 @@ async def stream_chat(
     history: list[dict] | None = None,
     system: str | None = None,
     model: str | None = None,
+    thinking: bool | None = None,
 ) -> AsyncIterator[str]:
     """Stream assistant text deltas from the real model API (token-level).
 
@@ -317,6 +334,7 @@ async def stream_chat(
 
     messages = _messages_for_chat(prompt, history=history, system=system)
     model_id = resolve_model_id(model, cfg)
+    extra_body = thinking_extra_body(model, thinking=thinking)
 
     async def _open_stream(provider: ProviderConfig, mid: str):
         client = AsyncOpenAI(api_key=provider.api_key, base_url=provider.base_url)
@@ -325,6 +343,7 @@ async def stream_chat(
             messages=messages,
             stream=True,
             max_tokens=max_tokens,
+            extra_body=extra_body,
         )
 
     try:

@@ -18,6 +18,7 @@ from pico_orchestrator.provider import (
     resolve_provider_for_model,
     runtime_policy_for_model,
     should_circuit_break,
+    thinking_extra_body,
 )
 
 
@@ -121,6 +122,12 @@ def test_runtime_policy_dual_mode_contract() -> None:
     assert deep["max_tokens"] != 256000
     assert fast["fallback"] == "deepseek-v4-flash"
     assert deep["fallback"] == "deepseek-v4-flash"
+    # Direct HTTPS must send this: v4-flash thinks by default and can return 200 empty.
+    assert thinking_extra_body("pico-fast") == {"thinking": {"type": "disabled"}}
+    assert thinking_extra_body("pico-deep") == {"thinking": {"type": "enabled"}}
+    assert thinking_extra_body("pico-deep", thinking=False) == {
+        "thinking": {"type": "disabled"}
+    }
 
 
 def test_circuit_breaker_only_in_thinking_on_lane() -> None:
