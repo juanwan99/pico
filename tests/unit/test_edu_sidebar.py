@@ -24,6 +24,7 @@ def test_marker_in_json_body_only() -> None:
     assert is_json_only_propose("请写一份方案包") is False
     assert is_json_only_propose("hello", output_header=JSON_ONLY_OUTPUT) is True
     assert is_json_only_propose("hello", output_header="json") is False
+    assert is_json_only_propose("hello", output_header=object()) is False
 
 
 def test_json_only_does_not_use_fuzzy_chinese() -> None:

@@ -13,7 +13,8 @@ def is_json_only_propose(
     output_header: str | None = None,
 ) -> bool:
     """True only for the edu sidebar contract. Workbench chat stays false."""
-    header = (output_header or "").strip()
+    header = output_header if isinstance(output_header, str) else ""
+    header = header.strip()
     if header == JSON_ONLY_OUTPUT:
         return True
     text = prompt or ""
