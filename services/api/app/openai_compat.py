@@ -1427,6 +1427,7 @@ async def chat_completions(
                     history=history,
                     system=system,
                     model=model,
+                    thinking=False if json_only else None,
                 ):
                     if piece:
                         parts.append(piece)
@@ -1535,6 +1536,7 @@ async def chat_completions(
                     history=history,
                     system=system,
                     model=model,
+                    thinking=False if json_only else None,
                 ):
                     if piece:
                         parts.append(piece)
