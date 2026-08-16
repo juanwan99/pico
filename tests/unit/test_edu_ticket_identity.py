@@ -23,16 +23,16 @@ MEMBER = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 
 
 def _settings(**kwargs) -> Settings:
-    base = dict(
-        pico_jwt_secret="test-secret-at-least-32-bytes-long!!",
-        pico_jwt_iss="pico-test-issuer",
-        pico_jwt_aud="pico-api",
-        pico_edu_iss=EDU_ISS,
-        pico_edu_jwt_secret=EDU_SECRET,
-        pico_accept_test_issuer=False,
-        pico_env="production",
-        pico_openai_proxy_key="x" * 64,
-    )
+    base = {
+        "pico_jwt_secret": "test-secret-at-least-32-bytes-long!!",
+        "pico_jwt_iss": "pico-test-issuer",
+        "pico_jwt_aud": "pico-api",
+        "pico_edu_iss": EDU_ISS,
+        "pico_edu_jwt_secret": EDU_SECRET,
+        "pico_accept_test_issuer": False,
+        "pico_env": "production",
+        "pico_openai_proxy_key": "x" * 64,
+    }
     base.update(kwargs)
     return Settings(**base)
 
