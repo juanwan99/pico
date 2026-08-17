@@ -13,3 +13,11 @@ def test_slices_headers_and_paragraphs():
 def test_empty_falls_back_to_title():
     rows = slices_from_markdown("  ", "只有名")
     assert rows[0]["excerpt"] == "只有名"
+
+
+def test_ingest_bytes_unread_without_docling_or_empty():
+    from ingest import ingest_bytes
+
+    out = ingest_bytes(filename="x.bin", data=b"not-a-document", title="x.bin")
+    assert out["ok"] is False
+    assert out.get("unread") is True

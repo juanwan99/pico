@@ -65,15 +65,31 @@ def _convert_path(path: Path) -> str:
 
 def ingest_bytes(*, filename: str, data: bytes, title: str) -> dict:
     suffix = Path(filename or "file.bin").suffix or ".bin"
-    with tempfile.TemporaryDirectory() as tmp:
-        dest = Path(tmp) / f"src{suffix}"
-        dest.write_bytes(data or b"")
-        md = _convert_path(dest)
-    return {
-        "ok": True,
-        "engine": ENGINE,
-        "slices": slices_from_markdown(md, title or filename or "文件"),
-    }
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / f"src{suffix}"
+            dest.write_bytes(data or b"")
+            md = _convert_path(dest)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "engine": ENGINE,
+            "unread": True,
+            "error": str(exc),
+            "slices": [],
+        }
+    slices = slices_from_markdown(md, title or filename or "文件")
+    body = " ".join(s.get("excerpt") or "" for s in slices).strip()
+    heading = (title or filename or "").strip()
+    if not md.strip() or not body or body == heading:
+        return {
+            "ok": False,
+            "engine": ENGINE,
+            "unread": True,
+            "error": "empty",
+            "slices": [],
+        }
+    return {"ok": True, "engine": ENGINE, "slices": slices}
 
 
 def ingest_text(*, text: str, title: str) -> dict:
