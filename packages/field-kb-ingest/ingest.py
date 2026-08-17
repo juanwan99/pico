@@ -77,10 +77,14 @@ def ingest_bytes(*, filename: str, data: bytes, title: str) -> dict:
 
 
 def ingest_text(*, text: str, title: str) -> dict:
-    with tempfile.TemporaryDirectory() as tmp:
-        dest = Path(tmp) / "src.md"
-        dest.write_text(text or "", encoding="utf-8")
-        md = _convert_path(dest)
+    md = text or ""
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "src.md"
+            dest.write_text(md, encoding="utf-8")
+            md = _convert_path(dest) or md
+    except Exception:
+        pass
     return {
         "ok": True,
         "engine": ENGINE,
