@@ -51,6 +51,9 @@ COPY services /app/services
 COPY packages /app/packages
 COPY pyproject.toml /app/pyproject.toml
 
+# T-PICO-KB-SEARCH: IBM Docling for field-kb-ingest. Thin adapt, not a vector kernel.
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ "docling>=2.14,<3"
+
 RUN mkdir -p /app/data /tmp/pico-true-pi-sessions
 
 EXPOSE 18765
