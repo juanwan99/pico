@@ -10,7 +10,15 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.delivery_policy import analyze_delivery
-from pico_orchestrator.edu_sidebar import JSON_ONLY_OUTPUT, is_json_only_propose
+from pico_orchestrator.edu_sidebar import (
+    HONEST_MISS_SUMMARY,
+    JSON_ONLY_OUTPUT,
+    asked_from_sidebar_prompt,
+    honest_miss_json,
+    inject_web_hits,
+    is_json_only_propose,
+    shape_web_hits,
+)
 
 
 def test_marker_in_json_body_only() -> None:
@@ -59,3 +67,27 @@ def test_sidebar_json_without_bypass_still_false_positive() -> None:
     leaked = analyze_delivery(body)
     assert leaked.force_agent is True
     assert is_json_only_propose(body) is True
+
+
+def test_sidebar_web_hits_inject_and_honest_miss() -> None:
+    asked = json.dumps({"asked": "今天几号", "output": JSON_ONLY_OUTPUT}, ensure_ascii=False)
+    assert asked_from_sidebar_prompt(asked) == "今天几号"
+    miss = shape_web_hits({"retrieved": False, "honest_miss": True, "sources": [], "message": "未检索到可用来源"})
+    assert miss["retrieved"] is False
+    assert miss["honest_miss"] is True
+    injected = json.loads(inject_web_hits(asked, miss))
+    assert injected["webHits"]["honest_miss"] is True
+    dumped = json.loads(honest_miss_json(miss))
+    assert dumped["mutations"] == []
+    assert "没查到" in dumped["summary"] or "未检索" in dumped["summary"]
+    assert HONEST_MISS_SUMMARY
+    hit = shape_web_hits(
+        {
+            "retrieved": True,
+            "sources": [{"title": "日历", "url": "https://example.com/d", "snippet": "2026年8月17日"}],
+        }
+    )
+    assert hit["retrieved"] is True
+    assert hit["sources"][0]["url"].startswith("https://")
+    empty_src = shape_web_hits({"retrieved": True, "sources": []})
+    assert empty_src["honest_miss"] is True
