@@ -14,10 +14,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pico_orchestrator.edu_sidebar import (
     SIDEBAR_WEB_SYSTEM,
+    asked_from_sidebar_prompt,
     honest_miss_json,
     inject_web_hits,
     is_json_only_propose,
-    asked_from_sidebar_prompt,
     shape_web_hits,
 )
 from pico_orchestrator.user_errors import user_message_for_error
