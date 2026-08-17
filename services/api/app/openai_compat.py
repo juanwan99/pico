@@ -12,7 +12,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
-from pico_orchestrator.edu_sidebar import is_json_only_propose
+from pico_orchestrator.edu_sidebar import (
+    SIDEBAR_WEB_SYSTEM,
+    honest_miss_json,
+    inject_web_hits,
+    is_json_only_propose,
+    asked_from_sidebar_prompt,
+    shape_web_hits,
+)
 from pico_orchestrator.user_errors import user_message_for_error
 from pydantic import BaseModel
 
@@ -42,6 +49,8 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: int | None = None
     user: str | None = None  # LibreChat may pass conversation id
     metadata: dict[str, Any] | None = None
+    web_search: bool = False
+    tools: list[Any] | None = None
 
 
 def _content_text(content: str | list[Any] | None) -> str:
@@ -1329,6 +1338,7 @@ async def chat_completions(
     # Use the marker-stripped prompt so delivery intent is not masked (P1).
     # edu sidebar JSON propose is a different contract — never land files.
     sidebar_system = None
+    sidebar_web_hits: dict[str, Any] | None = None
     if json_only:
         skill_snapshot = None
         delivery_plan = None
@@ -1341,6 +1351,30 @@ async def chat_completions(
                 "只输出一个 JSON 对象，不要文件或 Markdown 解释："
                 '{"summary":"一句话","mutations":[{"affordanceId":"id","params":{},"label":"短标签"}]}'
             )
+        if body.web_search is True:
+            from pico_orchestrator.web_tools import web_search_handler
+
+            query = asked_from_sidebar_prompt(prompt)
+            if not query:
+                raw_hits = {
+                    "retrieved": False,
+                    "honest_miss": True,
+                    "message": "未检索：没有可搜的问句",
+                    "sources": [],
+                }
+            else:
+                try:
+                    raw_hits = await web_search_handler(principal, {"query": query})
+                except Exception as exc:  # noqa: BLE001
+                    raw_hits = {
+                        "retrieved": False,
+                        "honest_miss": True,
+                        "message": f"未检索：网搜引擎不可用（{exc}）",
+                        "sources": [],
+                    }
+            sidebar_web_hits = shape_web_hits(raw_hits)
+            prompt = inject_web_hits(prompt, sidebar_web_hits)
+            sidebar_system = sidebar_system + "\n" + SIDEBAR_WEB_SYSTEM
     else:
         skill_snapshot, delivery_plan = _resolve_skill_for_prompt(
             prompt,
@@ -1421,17 +1455,20 @@ async def chat_completions(
                 system = system + "\n" + delivery_instr
             parts: list[str] = []
             try:
-                async for piece in stream_chat(
-                    prompt,
-                    max_tokens=effective_max_tokens,
-                    history=history,
-                    system=system,
-                    model=model,
-                    thinking=False if json_only else None,
-                ):
-                    if piece:
-                        parts.append(piece)
-                text = "".join(parts) or "(empty)"
+                if json_only and sidebar_web_hits and sidebar_web_hits.get("honest_miss"):
+                    text = honest_miss_json(sidebar_web_hits)
+                else:
+                    async for piece in stream_chat(
+                        prompt,
+                        max_tokens=effective_max_tokens,
+                        history=history,
+                        system=system,
+                        model=model,
+                        thinking=False if json_only else None,
+                    ):
+                        if piece:
+                            parts.append(piece)
+                    text = "".join(parts) or "(empty)"
                 await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id, user_prompt=prompt)
             except Exception as e:  # noqa: BLE001
                 text = f"【错误】{user_message_for_error(str(e))}"
@@ -1458,7 +1495,7 @@ async def chat_completions(
                 change_proposal=getattr(result, "change_proposal", None),
                 token_usage=getattr(result, "token_usage", None),
             )
-        return {
+        payload = {
             "id": completion_id,
             "object": "chat.completion",
             "created": created,
@@ -1472,6 +1509,9 @@ async def chat_completions(
             ],
             "usage": _estimated_usage(prompt, text),
         }
+        if sidebar_web_hits is not None:
+            payload["pico_web_search"] = sidebar_web_hits
+        return payload
 
     async def event_stream() -> AsyncIterator[bytes]:
         def chunk(delta: dict, *, finish: str | None = None) -> bytes:
