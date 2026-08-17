@@ -43,6 +43,7 @@ from app.auth import (
 )
 from app.db import EventRow, RunRow, WorkspaceRow, get_session, init_db, new_id
 from app.edu_files import router as edu_files_router
+from app.edu_kb_ingest import router as edu_kb_ingest_router
 from app.openai_compat import router as openai_compat_router
 from app.rate_limit import ChatRateLimitMiddleware
 from app.settings import Settings, get_settings
@@ -123,6 +124,7 @@ app.add_middleware(
 )
 app.include_router(openai_compat_router)
 app.include_router(edu_files_router)
+app.include_router(edu_kb_ingest_router)
 
 
 # ----- meta / auth -----
