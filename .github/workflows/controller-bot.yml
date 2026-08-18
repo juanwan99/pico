@@ -1,10 +1,9 @@
 name: controller-bot
 
-# 7x24 总管轻量轮询：不依赖 Grok 对话在线。
+# 空转也按 1 分钟计费。2 小时一轮；紧急用 workflow_dispatch。
 on:
   schedule:
-    # 每 15 分钟（GitHub 可能有漂移）
-    - cron: "*/15 * * * *"
+    - cron: "7 */2 * * *"
   workflow_dispatch:
     inputs:
       auto_merge:
