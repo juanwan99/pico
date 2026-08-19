@@ -14,7 +14,6 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 from app.auth import decode_token, issue_test_token
 from app.settings import Settings
 
-
 GROK_ISS = "https://auth.grok.me"
 GROK_SECRET = "grok-bridge-secret-at-least-32-bytes!!"
 TEST_SECRET = "test-secret-at-least-32-bytes-long!!"
