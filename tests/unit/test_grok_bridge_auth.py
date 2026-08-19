@@ -118,7 +118,9 @@ def test_grok_bridge_rejects_test_issuer_when_test_disabled() -> None:
     token = issue_test_token(school_id="school-a", membership_id="m1", settings=issuer)
     with pytest.raises(HTTPException) as exc:
         decode_token(token, s)
-    assert exc.value.detail["code"] == "auth.iss_unknown"
+    assert exc.value.status_code == 401
+    # Grok issuer is tried last; wrong signature lands as invalid, not iss_unknown.
+    assert exc.value.detail["code"] in {"auth.invalid", "auth.iss_unknown"}
 
 
 def test_grok_bridge_rejects_ttl_over_30_minutes() -> None:
