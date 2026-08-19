@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     pico_edu_jwt_public_key_pem: str = ""  # optional RS256 public key PEM
     pico_accept_test_issuer: bool = True  # set false in production after edu issuer live
 
+    # Grok identity bridge (HS256). Empty secret = disabled.
+    # Same claim shape as test/edu. Identity only — not xAI model access.
+    pico_grok_iss: str = "https://auth.grok.me"
+    pico_grok_jwt_secret: str = ""
+
     # --- Tiered run budgets (P-COMPLEX-DONE package A) ---
     # Delivery / pico-agent multi-step (HTML 课件等): default 900s, not 120s freeze.
     pico_run_max_seconds: int = 900
@@ -128,6 +133,10 @@ class Settings(BaseSettings):
     @property
     def auth_issuer_mode(self) -> str:
         return "test_and_edu" if self.pico_accept_test_issuer else "edu_only"
+
+    @property
+    def grok_bridge_enabled(self) -> bool:
+        return bool(self.pico_grok_iss.strip() and self.pico_grok_jwt_secret.strip())
 
     @property
     def is_production(self) -> bool:
@@ -303,6 +312,17 @@ class Settings(BaseSettings):
         jwt_secret = self.pico_jwt_secret.strip()
         if jwt_secret in _INSECURE_JWT_SECRETS or len(jwt_secret) < 32:
             errors.append("PICO_JWT_SECRET must be a non-default secret of at least 32 characters")
+
+        grok_secret = self.pico_grok_jwt_secret.strip()
+        if grok_secret:
+            if grok_secret in _INSECURE_JWT_SECRETS or len(grok_secret) < 32:
+                errors.append(
+                    "PICO_GROK_JWT_SECRET must be a non-default secret of at least 32 characters"
+                )
+            if grok_secret == jwt_secret:
+                errors.append("PICO_GROK_JWT_SECRET must not reuse PICO_JWT_SECRET")
+            if not self.pico_grok_iss.strip():
+                errors.append("PICO_GROK_ISS must be set when PICO_GROK_JWT_SECRET is set")
 
         proxy_key = self.pico_openai_proxy_key.strip()
         if proxy_key in {"pico-dev", "sk-pico-dev"}:

@@ -60,6 +60,7 @@ GOALS: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · WHAT-IS-PICO；STATE-NOW（快照�
 | 7 | [WORKFLOW.md](./WORKFLOW.md) · [VERSIONING.md](./VERSIONING.md) | Windows / risk / SHA |
 | 8 | [M5-INTEGRATION-RUNBOOK.md](./M5-INTEGRATION-RUNBOOK.md) · [M5-API-CHECKLIST.md](./M5-API-CHECKLIST.md) | M5 筹备（未授权不真连） |
 | 8b | [PHASE2-CONTRACTS.md](./PHASE2-CONTRACTS.md) · [PHASE3-INTEGRATION.md](./PHASE3-INTEGRATION.md) · [contracts/](./contracts/) | Integration contracts |
+| 8c | [GROK-AUTH-BRIDGE.md](./GROK-AUTH-BRIDGE.md) | Grok identity bridge (HS256) · not xAI model access |
 | 9 | [MASTER-PLAN.md](./MASTER-PLAN.md) | Phase map M0–M5 (nav only) |
 | 10 | [NIGHT-CARD-POLICY.md](./NIGHT-CARD-POLICY.md) | Night execution policy |
 | 11 | [DEMO.md](./DEMO.md) · [DEPLOY-TWO-HOST.md](./DEPLOY-TWO-HOST.md) · [DEPLOY-PUBLIC.md](./DEPLOY-PUBLIC.md) | Demo & public deploy notes |

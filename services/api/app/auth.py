@@ -1,4 +1,4 @@
-"""Short-lived token validation: Phase 1 test issuer + Phase 3 edu issuer."""
+"""Short-lived token validation: test issuer + grok-bridge + edu issuer."""
 
 from __future__ import annotations
 
@@ -187,6 +187,25 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
         except jwt.InvalidTokenError as e:
             last_err = e
 
+    # 1b) Grok identity bridge (HS256). Empty secret = disabled.
+    # Same claim shape as test/edu. Identity only — not xAI model access.
+    if data is None and s.pico_grok_iss.strip() and s.pico_grok_jwt_secret.strip():
+        try:
+            data = _decode_with_key(
+                token,
+                key=s.pico_grok_jwt_secret,
+                algorithms=["HS256"],
+                audience=aud,
+                issuer=s.pico_grok_iss.strip(),
+            )
+        except jwt.ExpiredSignatureError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"code": "auth.expired", "message": "token expired"},
+            ) from e
+        except jwt.InvalidTokenError as e:
+            last_err = e
+
     # 2) Phase 3 edu HS256 shared secret
     if data is None and s.pico_edu_iss and s.pico_edu_jwt_secret:
         try:
@@ -237,6 +256,22 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
                 "message": str(last_err) if last_err else "no trusted issuer matched",
             },
         )
+
+    # Grok-bridge tickets are short-lived by contract (workbench mints 15 min).
+    if str(data.get("iss", "")).rstrip("/") == s.pico_grok_iss.strip().rstrip("/"):
+        try:
+            iat = int(data.get("iat", 0))
+            exp = int(data.get("exp", 0))
+        except (TypeError, ValueError):
+            iat, exp = 0, 0
+        if iat <= 0 or exp - iat > 1800:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "auth.invalid",
+                    "message": "grok-bridge token ttl exceeds 30 minutes",
+                },
+            )
 
     return _principal_from_claims(data)
 
