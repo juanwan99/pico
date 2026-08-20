@@ -8,6 +8,8 @@ from pathlib import Path
 
 
 def main() -> int:
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+    os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
     dest = Path(os.environ.get("DOCLING_ARTIFACTS_PATH") or "/opt/docling-models")
     dest.mkdir(parents=True, exist_ok=True)
     from docling.utils.model_downloader import download_models
