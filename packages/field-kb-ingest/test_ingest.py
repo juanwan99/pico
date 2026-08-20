@@ -1,4 +1,9 @@
-from ingest import classify_convert_error, pdf_ocr_settings, slices_from_markdown
+from ingest import (
+    classify_convert_error,
+    pdf_ocr_settings,
+    rapidocr_onnx_paths,
+    slices_from_markdown,
+)
 
 
 def test_slices_headers_and_paragraphs():
@@ -31,6 +36,11 @@ def test_pdf_ocr_settings_full_page():
     assert flags["force_full_page_ocr"] is True
     assert flags["engine"] == "rapidocr"
     assert flags["artifacts_path"]
+
+
+def test_rapidocr_onnx_paths_absent(tmp_path, monkeypatch):
+    monkeypatch.setenv("DOCLING_ARTIFACTS_PATH", str(tmp_path))
+    assert rapidocr_onnx_paths() == {}
 
 
 def test_classify_ocr_and_hf():
