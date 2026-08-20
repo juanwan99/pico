@@ -15,7 +15,7 @@ from app.auth import Principal, require_any_scope
 
 router = APIRouter(tags=["edu-kb-ingest"])
 
-MAX_BYTES = 8 * 1024 * 1024
+MAX_BYTES = 20 * 1024 * 1024
 PKG = Path("/app/packages/field-kb-ingest")
 if not PKG.exists():
     PKG = Path(__file__).resolve().parents[3] / "packages" / "field-kb-ingest"
@@ -44,7 +44,7 @@ def _decode(raw: str) -> bytes:
     except (binascii.Error, ValueError) as exc:
         raise _bad("file.invalid", "文件内容不是合法的 base64") from exc
     if len(data) > MAX_BYTES:
-        raise _bad("file.too_large", "文件太大（上限 8MB）", 413)
+        raise _bad("file.too_large", "文件太大（上限 20MB）", 413)
     return data
 
 
@@ -71,8 +71,11 @@ async def post_kb_ingest(
     except Exception as exc:
         raise _bad("ingest.failed", f"Docling 没抽出内容：{exc}", 422) from exc
     slices = result.get("slices") or []
-    if not slices:
-        raise _bad("ingest.empty", "抽出来是空的")
+    if not result.get("ok") or not slices:
+        code = str(result.get("code") or "empty")
+        message = str(result.get("error") or "抽出来是空的")
+        status = 503 if code in {"ocr_missing", "hf_offline"} else 400
+        raise _bad(code, message, status)
     return {
         "ok": True,
         "engine": result.get("engine") or "docling",
