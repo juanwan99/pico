@@ -63,13 +63,24 @@ def test_classify_convert_error_codes():
 def test_empty_convert_does_not_use_filename(monkeypatch):
     import ingest as mod
 
-    monkeypatch.setattr(mod, "_convert_path", lambda path: "")
+    monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: "")
     title = "关于组织开展株洲市中小学教师人工智能素养市级培训的通知(1).pdf"
     out = ingest_bytes(filename=title, data=make_image_only_pdf(), title=title)
     assert out["ok"] is False
     assert out["unread"] is True
     assert out["code"] == "empty"
     assert out["slices"] == []
+
+
+def test_scan_pdf_route_is_page_ocr(monkeypatch):
+    import ingest as mod
+
+    monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: "生成式AI赋能的教学设计")
+    monkeypatch.setattr(mod, "_convert_path", lambda path: "SHOULD_NOT")
+    out = ingest_bytes(filename="scan.pdf", data=make_image_only_pdf(), title="通知")
+    assert out["ok"] is True
+    assert out["engine"] == "rapidocr"
+    assert "生成式AI" in out["slices"][0]["excerpt"]
 
 
 def test_slices_headers_and_paragraphs():

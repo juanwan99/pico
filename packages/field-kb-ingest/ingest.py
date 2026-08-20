@@ -1,4 +1,4 @@
-"""field-kb-ingest · Docling engine. Pointers stay in edu."""
+"""field-kb-ingest · Office: Docling. Scan PDF: pypdfium2 + RapidOCR ONNX."""
 
 from __future__ import annotations
 
@@ -8,11 +8,14 @@ import tempfile
 from pathlib import Path
 
 ENGINE = "docling"
+ENGINE_PDF = "rapidocr"
 MAX_EXCERPT = 800
 MAX_SLICES = 8
 DEFAULT_ARTIFACTS = "/opt/docling-models"
+PDF_RENDER_SCALE = 2.5
 
 _CONVERTER = None
+_OCR = None
 
 
 def artifacts_path() -> Path:
@@ -34,11 +37,12 @@ def rapidocr_onnx_paths() -> dict[str, str]:
 
 
 def pdf_ocr_settings() -> dict:
-    """Flags for the PDF pipeline. Unit-tested without importing Docling."""
+    """Flags for the scan-PDF path. Unit-tested without importing RapidOCR."""
     return {
         "do_ocr": True,
         "force_full_page_ocr": True,
         "engine": "rapidocr",
+        "renderer": "pypdfium2",
         "artifacts_path": str(artifacts_path()),
     }
 
@@ -46,7 +50,15 @@ def pdf_ocr_settings() -> dict:
 def classify_convert_error(exc: BaseException) -> str:
     msg = f"{type(exc).__name__} {exc}".lower()
     ocr_hit = any(
-        s in msg for s in ("no ocr engine", "ocr engine found", "libxcb", "cannot open shared object")
+        s in msg
+        for s in (
+            "no ocr engine",
+            "ocr engine found",
+            "libxcb",
+            "cannot open shared object",
+            "rapidocr onnx",
+            "onnx missing",
+        )
     )
     hf_hit = any(
         s in msg
@@ -66,9 +78,10 @@ def classify_convert_error(exc: BaseException) -> str:
     return "ingest.failed"
 
 
-def slices_from_markdown(md: str, title: str) -> list[dict]:
+def slices_from_markdown(md: str, title: str, tags: list[str] | None = None) -> list[dict]:
     text = (md or "").replace("\r\n", "\n").strip()
     heading = (title or "").strip() or "未命名"
+    tag_list = list(tags) if tags else ["docling"]
     if not text:
         return [{"title": heading, "excerpt": heading, "tags": ["empty"]}]
     blocks: list[str] = []
@@ -96,56 +109,21 @@ def slices_from_markdown(md: str, title: str) -> list[dict]:
             {
                 "title": heading[:200],
                 "excerpt": chunk[:MAX_EXCERPT],
-                "tags": ["docling"],
+                "tags": tag_list,
             }
         )
         if len(out) >= MAX_SLICES:
             break
     if not out:
-        out.append({"title": heading[:200], "excerpt": text[:MAX_EXCERPT], "tags": ["docling"]})
+        out.append({"title": heading[:200], "excerpt": text[:MAX_EXCERPT], "tags": tag_list})
     return out
 
 
 def _make_converter():
-    from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
-    from docling.document_converter import DocumentConverter, PdfFormatOption
+    """Office (docx/xlsx). Scan PDF does not use this path."""
+    from docling.document_converter import DocumentConverter
 
-    flags = pdf_ocr_settings()
-    onnx = rapidocr_onnx_paths()
-    kwargs = {
-        "force_full_page_ocr": True,
-        "lang": ["chinese", "english"],
-        "backend": "onnxruntime",
-    }
-    if onnx.get("det"):
-        kwargs["det_model_path"] = onnx["det"]
-    if onnx.get("rec"):
-        kwargs["rec_model_path"] = onnx["rec"]
-    if onnx.get("cls"):
-        kwargs["cls_model_path"] = onnx["cls"]
-    try:
-        from docling.datamodel.pipeline_options import OcrMode
-
-        ocr = RapidOcrOptions(mode=OcrMode.FULL_PAGE, **kwargs)
-    except TypeError:
-        kwargs.pop("backend", None)
-        try:
-            ocr = RapidOcrOptions(**kwargs)
-        except TypeError:
-            ocr = RapidOcrOptions(force_full_page_ocr=True)
-    art = Path(flags["artifacts_path"])
-    opts = PdfPipelineOptions(
-        do_ocr=True,
-        do_table_structure=True,
-        ocr_options=ocr,
-        artifacts_path=str(art) if art.exists() else None,
-    )
-    if hasattr(opts, "enable_remote_services"):
-        opts.enable_remote_services = False
-    return DocumentConverter(
-        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
-    )
+    return DocumentConverter()
 
 
 def _converter():
@@ -166,36 +144,107 @@ def _convert_path(path: Path) -> str:
     return str(document)
 
 
+def _rapidocr_text(out) -> str:
+    if out is None:
+        return ""
+    txts = getattr(out, "txts", None)
+    if txts:
+        return "\n".join(str(t) for t in txts if t)
+    to_md = getattr(out, "to_markdown", None)
+    if callable(to_md):
+        return str(to_md() or "")
+    return str(out or "")
+
+
+def _rapidocr_engine():
+    global _OCR
+    if _OCR is not None:
+        return _OCR
+    onnx = rapidocr_onnx_paths()
+    missing = [k for k in ("det", "rec", "cls") if not onnx.get(k) or not Path(onnx[k]).is_file()]
+    if missing:
+        raise RuntimeError(f"No OCR engine found: rapidocr onnx missing {missing}")
+    from rapidocr import RapidOCR
+
+    _OCR = RapidOCR(
+        params={
+            "Det.model_path": onnx["det"],
+            "Rec.model_path": onnx["rec"],
+            "Cls.model_path": onnx["cls"],
+        }
+    )
+    return _OCR
+
+
+def _ocr_pdf_pages(path: Path) -> str:
+    """Render each PDF page to an image and OCR. No Docling layout / torch."""
+    import numpy as np
+    import pypdfium2 as pdfium
+
+    engine = _rapidocr_engine()
+    doc = pdfium.PdfDocument(str(path))
+    parts: list[str] = []
+    try:
+        for i in range(len(doc)):
+            page = doc[i]
+            bitmap = page.render(scale=PDF_RENDER_SCALE)
+            try:
+                pil = bitmap.to_pil()
+            finally:
+                close = getattr(bitmap, "close", None)
+                if callable(close):
+                    close()
+            arr = np.asarray(pil.convert("RGB"))
+            text = _rapidocr_text(engine(arr)).strip()
+            if text:
+                parts.append(text)
+            close_page = getattr(page, "close", None)
+            if callable(close_page):
+                close_page()
+    finally:
+        close_doc = getattr(doc, "close", None)
+        if callable(close_doc):
+            close_doc()
+    return "\n\n".join(parts)
+
+
+def _extract(path: Path, suffix: str) -> tuple[str, str, list[str]]:
+    if suffix.lower() == ".pdf":
+        return _ocr_pdf_pages(path), ENGINE_PDF, ["rapidocr"]
+    return _convert_path(path), ENGINE, ["docling"]
+
+
 def ingest_bytes(*, filename: str, data: bytes, title: str) -> dict:
     suffix = Path(filename or "file.bin").suffix or ".bin"
+    engine = ENGINE_PDF if suffix.lower() == ".pdf" else ENGINE
     try:
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / f"src{suffix}"
             dest.write_bytes(data or b"")
-            md = _convert_path(dest)
+            md, engine, tags = _extract(dest, suffix)
     except Exception as exc:
         code = classify_convert_error(exc)
         return {
             "ok": False,
-            "engine": ENGINE,
+            "engine": engine,
             "unread": True,
             "code": code,
             "error": str(exc),
             "slices": [],
         }
-    slices = slices_from_markdown(md, title or filename or "文件")
+    slices = slices_from_markdown(md, title or filename or "文件", tags=tags)
     body = " ".join(s.get("excerpt") or "" for s in slices).strip()
     heading = (title or filename or "").strip()
     if not md.strip() or not body or body == heading:
         return {
             "ok": False,
-            "engine": ENGINE,
+            "engine": engine,
             "unread": True,
             "code": "empty",
             "error": "empty",
             "slices": [],
         }
-    return {"ok": True, "engine": ENGINE, "slices": slices}
+    return {"ok": True, "engine": engine, "slices": slices}
 
 
 def ingest_text(*, text: str, title: str) -> dict:
