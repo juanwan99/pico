@@ -35,9 +35,11 @@ RUN set -eux; \
       libglib2.0-0 libgomp1 libgl1 libxcb1 libsm6 libxext6 libxrender1; \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install -i https://download.pytorch.org/whl/cpu torch \
- && pip install -i https://mirrors.aliyun.com/pypi/simple/ \
-      "docling>=2.14,<3" opencv-python-headless rapidocr onnxruntime
+# T-PICO-NO-TORCH: do not hit pytorch.org. Office Docling does not need torch.
+# PIP_DEFAULT_TIMEOUT=120 bounds the install. Uninstall if a transitive dep pulled it.
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
+      "docling>=2.14,<3" opencv-python-headless rapidocr onnxruntime pypdfium2 \
+ && pip uninstall -y torch torchvision || true
 
 ENV DOCLING_ARTIFACTS_PATH=/opt/docling-models \
     HF_HOME=/opt/docling-models/hf \
