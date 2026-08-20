@@ -64,14 +64,14 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
-      opencv-python-headless rapidocr onnxruntime \
- && pip uninstall -y opencv-python || true \
- && pip install -i https://mirrors.aliyun.com/pypi/simple/ --force-reinstall opencv-python-headless
+      opencv-python-headless rapidocr onnxruntime
 
 ENV DOCLING_ARTIFACTS_PATH=/opt/docling-models \
     HF_HOME=/opt/docling-models/hf \
     HUGGINGFACE_HUB_CACHE=/opt/docling-models/hf \
     HF_ENDPOINT=https://hf-mirror.com \
+    HF_HUB_DISABLE_XET=1 \
+    HF_HUB_ENABLE_HF_TRANSFER=0 \
     HF_HUB_DISABLE_TELEMETRY=1
 
 RUN python /app/packages/field-kb-ingest/prefetch_models.py
