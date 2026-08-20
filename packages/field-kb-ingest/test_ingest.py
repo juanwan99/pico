@@ -35,6 +35,7 @@ def test_pdf_ocr_settings_full_page():
     assert flags["do_ocr"] is True
     assert flags["force_full_page_ocr"] is True
     assert flags["engine"] == "rapidocr"
+    assert flags["renderer"] == "pypdfium2"
     assert flags["artifacts_path"]
 
 
@@ -58,7 +59,7 @@ def test_classify_ocr_and_hf():
 def test_ingest_bytes_empty_md_does_not_use_filename(monkeypatch):
     import ingest as mod
 
-    monkeypatch.setattr(mod, "_convert_path", lambda path: "")
+    monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: "")
     out = mod.ingest_bytes(
         filename="通知.pdf",
         data=b"%PDF-1.3 fake",
@@ -76,8 +77,45 @@ def test_ingest_bytes_title_only_markdown_is_unread(monkeypatch):
     import ingest as mod
 
     title = "通知.pdf"
-    monkeypatch.setattr(mod, "_convert_path", lambda path: title)
+    monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: title)
     out = mod.ingest_bytes(filename=title, data=b"%PDF-1.3 x", title=title)
     assert out["ok"] is False
     assert out["code"] == "empty"
     assert out["slices"] == []
+
+
+def test_pdf_uses_page_ocr_not_docling(monkeypatch):
+    import ingest as mod
+
+    called = {"ocr": 0, "docling": 0}
+
+    def fake_ocr(path):
+        called["ocr"] += 1
+        return "人工智能素养\n\n送教培训"
+
+    def fake_docling(path):
+        called["docling"] += 1
+        return "SHOULD_NOT"
+
+    monkeypatch.setattr(mod, "_ocr_pdf_pages", fake_ocr)
+    monkeypatch.setattr(mod, "_convert_path", fake_docling)
+    out = mod.ingest_bytes(filename="scan.pdf", data=b"%PDF-1.3 x", title="通知")
+    assert called == {"ocr": 1, "docling": 0}
+    assert out["ok"] is True
+    assert out["engine"] == "rapidocr"
+    blob = " ".join(s["excerpt"] for s in out["slices"])
+    assert "人工智能素养" in blob
+    assert all("rapidocr" in (s.get("tags") or []) for s in out["slices"])
+
+
+def test_office_still_docling(monkeypatch):
+    import ingest as mod
+
+    called = {"ocr": 0, "docling": 0}
+    monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: called.__setitem__("ocr", 1) or "SHOULD_NOT")
+    monkeypatch.setattr(mod, "_convert_path", lambda path: called.__setitem__("docling", 1) or "课时 语文")
+    out = mod.ingest_bytes(filename="课时表.docx", data=b"PK\x03\x04", title="课时表")
+    assert called == {"ocr": 0, "docling": 1}
+    assert out["ok"] is True
+    assert out["engine"] == "docling"
+    assert "语文" in out["slices"][0]["excerpt"]

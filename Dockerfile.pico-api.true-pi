@@ -47,10 +47,10 @@ RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --upgrade pip
 COPY requirements.txt /app/requirements.txt
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ -r /app/requirements.txt
 
-# Heavy deps before COPY packages so ingest.py edits do not reinstall torch.
-RUN pip install -i https://download.pytorch.org/whl/cpu torch \
- && pip install -i https://mirrors.aliyun.com/pypi/simple/ "docling>=2.14,<3" \
-      opencv-python-headless rapidocr onnxruntime
+# Scan PDF = pypdfium2 + RapidOCR ONNX. Do not pip install torch (#823).
+# Word/Excel still use Docling (no layout/tableformer).
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ "docling>=2.14,<3" \
+      opencv-python-headless rapidocr onnxruntime pypdfium2
 
 RUN set -eux; \
     apt-get update; \
@@ -70,7 +70,7 @@ ENV DOCLING_ARTIFACTS_PATH=/opt/docling-models \
     HF_HUB_ENABLE_HF_TRANSFER=0 \
     HF_HUB_DISABLE_TELEMETRY=1
 
-# T-PICO-KB-PDF: layout via HF mirror; RapidOCR ONNX (not ModelScope).
+# RapidOCR ONNX paths only. No HF layout / TableFormer / torch.
 RUN python /app/packages/field-kb-ingest/prefetch_models.py
 
 ENV HF_HUB_OFFLINE=1 \
