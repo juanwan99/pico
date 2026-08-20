@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -17,6 +18,19 @@ _CONVERTER = None
 def artifacts_path() -> Path:
     raw = (os.environ.get("DOCLING_ARTIFACTS_PATH") or DEFAULT_ARTIFACTS).strip()
     return Path(raw)
+
+
+def rapidocr_onnx_paths() -> dict[str, str]:
+    marker = artifacts_path() / "rapidocr-onnx.json"
+    if not marker.is_file():
+        return {}
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: str(v) for k, v in data.items() if k in {"det", "rec", "cls"} and v}
 
 
 def pdf_ocr_settings() -> dict:
@@ -98,16 +112,28 @@ def _make_converter():
     from docling.document_converter import DocumentConverter, PdfFormatOption
 
     flags = pdf_ocr_settings()
+    onnx = rapidocr_onnx_paths()
+    kwargs = {
+        "force_full_page_ocr": True,
+        "lang": ["chinese", "english"],
+        "backend": "onnxruntime",
+    }
+    if onnx.get("det"):
+        kwargs["det_model_path"] = onnx["det"]
+    if onnx.get("rec"):
+        kwargs["rec_model_path"] = onnx["rec"]
+    if onnx.get("cls"):
+        kwargs["cls_model_path"] = onnx["cls"]
     try:
         from docling.datamodel.pipeline_options import OcrMode
 
-        ocr = RapidOcrOptions(
-            force_full_page_ocr=True,
-            lang=["chinese", "english"],
-            mode=OcrMode.FULL_PAGE,
-        )
-    except Exception:
-        ocr = RapidOcrOptions(force_full_page_ocr=True, lang=["chinese", "english"])
+        ocr = RapidOcrOptions(mode=OcrMode.FULL_PAGE, **kwargs)
+    except TypeError:
+        kwargs.pop("backend", None)
+        try:
+            ocr = RapidOcrOptions(**kwargs)
+        except TypeError:
+            ocr = RapidOcrOptions(force_full_page_ocr=True)
     art = Path(flags["artifacts_path"])
     opts = PdfPipelineOptions(
         do_ocr=True,
