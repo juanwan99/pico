@@ -55,6 +55,30 @@ COPY pyproject.toml /app/pyproject.toml
 RUN pip install -i https://download.pytorch.org/whl/cpu torch \
  && pip install -i https://mirrors.aliyun.com/pypi/simple/ "docling>=2.14,<3"
 
+# T-PICO-KB-PDF: RapidOCR + OpenCV runtime (libxcb) + offline layout/OCR models.
+# Host cannot reach huggingface.co; bake artifacts via hf-mirror at build.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      libglib2.0-0 libgomp1 libgl1 libxcb1 libsm6 libxext6 libxrender1; \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
+      opencv-python-headless rapidocr onnxruntime \
+ && pip uninstall -y opencv-python || true \
+ && pip install -i https://mirrors.aliyun.com/pypi/simple/ --force-reinstall opencv-python-headless
+
+ENV DOCLING_ARTIFACTS_PATH=/opt/docling-models \
+    HF_HOME=/opt/docling-models/hf \
+    HUGGINGFACE_HUB_CACHE=/opt/docling-models/hf \
+    HF_ENDPOINT=https://hf-mirror.com \
+    HF_HUB_DISABLE_TELEMETRY=1
+
+RUN python /app/packages/field-kb-ingest/prefetch_models.py
+
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
 RUN mkdir -p /app/data /tmp/pico-true-pi-sessions
 
 EXPOSE 18765

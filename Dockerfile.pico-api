@@ -21,6 +21,37 @@ COPY services /app/services
 COPY packages /app/packages
 COPY pyproject.toml /app/pyproject.toml
 
+# Lean image is not the host path (true-pi is). Keep Docling OCR stack aligned anyway.
+RUN set -eux; \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+      sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+      sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+    elif [ -f /etc/apt/sources.list ]; then \
+      sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+      sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+    fi; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      libglib2.0-0 libgomp1 libgl1 libxcb1 libsm6 libxext6 libxrender1; \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install -i https://download.pytorch.org/whl/cpu torch \
+ && pip install -i https://mirrors.aliyun.com/pypi/simple/ \
+      "docling>=2.14,<3" opencv-python-headless rapidocr onnxruntime \
+ && pip uninstall -y opencv-python || true \
+ && pip install -i https://mirrors.aliyun.com/pypi/simple/ --force-reinstall opencv-python-headless
+
+ENV DOCLING_ARTIFACTS_PATH=/opt/docling-models \
+    HF_HOME=/opt/docling-models/hf \
+    HUGGINGFACE_HUB_CACHE=/opt/docling-models/hf \
+    HF_ENDPOINT=https://hf-mirror.com \
+    HF_HUB_DISABLE_TELEMETRY=1
+
+RUN python /app/packages/field-kb-ingest/prefetch_models.py
+
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
 RUN mkdir -p /app/data
 
 EXPOSE 18765

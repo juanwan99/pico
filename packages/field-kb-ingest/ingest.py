@@ -2,12 +2,54 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
 ENGINE = "docling"
 MAX_EXCERPT = 800
 MAX_SLICES = 8
+DEFAULT_ARTIFACTS = "/opt/docling-models"
+
+_CONVERTER = None
+
+
+def artifacts_path() -> Path:
+    raw = (os.environ.get("DOCLING_ARTIFACTS_PATH") or DEFAULT_ARTIFACTS).strip()
+    return Path(raw)
+
+
+def pdf_ocr_settings() -> dict:
+    """Flags for the PDF pipeline. Unit-tested without importing Docling."""
+    return {
+        "do_ocr": True,
+        "force_full_page_ocr": True,
+        "engine": "rapidocr",
+        "artifacts_path": str(artifacts_path()),
+    }
+
+
+def classify_convert_error(exc: BaseException) -> str:
+    msg = f"{type(exc).__name__} {exc}".lower()
+    ocr_hit = any(
+        s in msg for s in ("no ocr engine", "ocr engine found", "libxcb", "cannot open shared object")
+    )
+    hf_hit = any(
+        s in msg
+        for s in (
+            "huggingface",
+            "hf_hub",
+            "localentrynotfound",
+            "network is unreachable",
+            "snapshot_download",
+            "connecterror",
+        )
+    )
+    if ocr_hit and not hf_hit:
+        return "ocr_missing"
+    if hf_hit or "offline" in msg:
+        return "hf_offline"
+    return "ingest.failed"
 
 
 def slices_from_markdown(md: str, title: str) -> list[dict]:
@@ -50,10 +92,45 @@ def slices_from_markdown(md: str, title: str) -> list[dict]:
     return out
 
 
-def _convert_path(path: Path) -> str:
-    from docling.document_converter import DocumentConverter
+def _make_converter():
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
 
-    result = DocumentConverter().convert(str(path))
+    flags = pdf_ocr_settings()
+    try:
+        from docling.datamodel.pipeline_options import OcrMode
+
+        ocr = RapidOcrOptions(
+            force_full_page_ocr=True,
+            lang=["chinese", "english"],
+            mode=OcrMode.FULL_PAGE,
+        )
+    except Exception:
+        ocr = RapidOcrOptions(force_full_page_ocr=True, lang=["chinese", "english"])
+    art = Path(flags["artifacts_path"])
+    opts = PdfPipelineOptions(
+        do_ocr=True,
+        do_table_structure=True,
+        ocr_options=ocr,
+        artifacts_path=str(art) if art.exists() else None,
+    )
+    if hasattr(opts, "enable_remote_services"):
+        opts.enable_remote_services = False
+    return DocumentConverter(
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
+    )
+
+
+def _converter():
+    global _CONVERTER
+    if _CONVERTER is None:
+        _CONVERTER = _make_converter()
+    return _CONVERTER
+
+
+def _convert_path(path: Path) -> str:
+    result = _converter().convert(str(path))
     document = getattr(result, "document", None)
     if document is None:
         return ""
@@ -71,10 +148,12 @@ def ingest_bytes(*, filename: str, data: bytes, title: str) -> dict:
             dest.write_bytes(data or b"")
             md = _convert_path(dest)
     except Exception as exc:
+        code = classify_convert_error(exc)
         return {
             "ok": False,
             "engine": ENGINE,
             "unread": True,
+            "code": code,
             "error": str(exc),
             "slices": [],
         }
@@ -86,6 +165,7 @@ def ingest_bytes(*, filename: str, data: bytes, title: str) -> dict:
             "ok": False,
             "engine": ENGINE,
             "unread": True,
+            "code": "empty",
             "error": "empty",
             "slices": [],
         }
