@@ -47,10 +47,12 @@ RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --upgrade pip
 COPY requirements.txt /app/requirements.txt
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ -r /app/requirements.txt
 
-# Scan PDF = pypdfium2 + RapidOCR ONNX. Do not pip install torch (#823).
-# Word/Excel still use Docling (no layout/tableformer).
+# T-PICO-NO-TORCH: do not pip install torch / pytorch.org.
+# Word/Excel Docling does not need it; scan PDF is pypdfium2 + RapidOCR ONNX.
+# PIP_DEFAULT_TIMEOUT=120 bounds the install. Drop torch if a transitive dep pulled it.
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ "docling>=2.14,<3" \
-      opencv-python-headless rapidocr onnxruntime pypdfium2
+      opencv-python-headless rapidocr onnxruntime pypdfium2 \
+ && pip uninstall -y torch torchvision || true
 
 RUN set -eux; \
     apt-get update; \
