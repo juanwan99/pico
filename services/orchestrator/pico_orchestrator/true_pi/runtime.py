@@ -162,6 +162,7 @@ async def run_true_pi_agent(
             min_arts=min_arts,
             history=history,
             allowed_tools=allowed,
+            system_prompt=str(getattr(caps, "system_prompt", "") or ""),
         )
 
         await client.prompt(full_prompt)
@@ -407,20 +408,30 @@ def _compose_prompt(
     min_arts: int,
     history: list[dict[str, Any]] | None,
     allowed_tools: list[str],
+    system_prompt: str = "",
 ) -> str:
     """Build single prompt for true Pi: tools + skill + minimal history + user."""
     parts: list[str] = []
-    parts.append(
-        "# Pico true-Pi harness\n"
-        "You are Pico. Use only the registered tools listed below. "
-        "No host shell. Deliver real files via write/generate tools when asked.\n"
-        f"Allowed tools: {', '.join(allowed_tools)}\n"
-        "When the question needs current/public facts, call web_search and "
-        "put clickable markdown sources in the final reply. "
-        "When the user pastes a specific http(s) URL, call web_fetch. "
-        "If retrieval returns honest_miss / 未检索, say so — never invent citations. "
-        "Do not fetch intranet, localhost, or cloud metadata."
-    )
+    override = str(system_prompt or "").strip()
+    if override:
+        parts.append(override)
+        parts.append(
+            "Use only the registered tools listed below. "
+            "This chat's files belong to this conversation, not a long-term cabinet.\n"
+            f"Allowed tools: {', '.join(allowed_tools)}"
+        )
+    else:
+        parts.append(
+            "# Pico true-Pi harness\n"
+            "You are Pico. Use only the registered tools listed below. "
+            "No host shell. Deliver real files via write/generate tools when asked.\n"
+            f"Allowed tools: {', '.join(allowed_tools)}\n"
+            "When the question needs current/public facts, call web_search and "
+            "put clickable markdown sources in the final reply. "
+            "When the user pastes a specific http(s) URL, call web_fetch. "
+            "If retrieval returns honest_miss / 未检索, say so — never invent citations. "
+            "Do not fetch intranet, localhost, or cloud metadata."
+        )
     if skill:
         parts.append(f"## Skill instruction\n{skill}")
     n = history_n()

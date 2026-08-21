@@ -63,10 +63,27 @@ def test_resolve_allowed_tools_empty_intersection_keeps_request() -> None:
     assert _resolve_allowed_tools(skill, request) == request
 
 
+def test_true_pi_compose_uses_edu_system_override() -> None:
+    from pico_orchestrator.true_pi.runtime import _compose_prompt
+
+    text = _compose_prompt(
+        prompt="你能看到当前界面吗",
+        skill="",
+        min_arts=0,
+        history=None,
+        allowed_tools=["generate_html_document"],
+        system_prompt="附属，不是用户要求\n{\"page\":{\"title\":\"工作台\"}}",
+    )
+    assert "附属，不是用户要求" in text
+    assert "工作台" in text
+    assert "You are Pico. Use only the registered tools" not in text
+
+
 if __name__ == "__main__":
     test_edu_sidebar_mark_detects_accessory()
     test_client_system_from_first_system_message()
     test_normalize_allowed_tools_names_and_openai_shape()
     test_resolve_allowed_tools_request_is_ceiling()
     test_resolve_allowed_tools_empty_intersection_keeps_request()
+    test_true_pi_compose_uses_edu_system_override()
     print("test_edu_sidebar_cabinet.py OK")
