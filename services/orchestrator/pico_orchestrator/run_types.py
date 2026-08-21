@@ -27,6 +27,9 @@ class RunCaps:
     max_steps: int = 24
     allowed_tools: list[str] | None = None
     skill_instruction: str = ""
+    # Edu sidebar (and similar clients) may replace the default Pico workbench
+    # system so the model reads the page short-profile instead of the file cabinet.
+    system_prompt: str = ""
     # Delivery landing gate (T-AGENT-LANDING-RELIABLE): when >0, Pi will not
     # report runtime success until at least this many write/generate tool
     # successes land — or it fails closed after one landing retry.

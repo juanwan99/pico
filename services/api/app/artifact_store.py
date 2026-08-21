@@ -53,10 +53,12 @@ class LedgerArtifactStore:
         *,
         task_id: str | None = None,
         run_id: str | None = None,
+        conversation_id: str | None = None,
     ) -> None:
         self._factory = factory
         self._task_id = task_id
         self._run_id = run_id
+        self._conversation_id = str(conversation_id or "").strip() or None
 
     async def _task_for_write(
         self,
@@ -154,7 +156,7 @@ class LedgerArtifactStore:
             }
 
     def _owned_artifacts(self, principal: Principal):
-        return (
+        stmt = (
             select(ArtifactRow)
             .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
             .where(
@@ -162,6 +164,9 @@ class LedgerArtifactStore:
                 TaskRow.membership_id == principal.membership_id,
             )
         )
+        if self._conversation_id:
+            stmt = stmt.where(TaskRow.conversation_id == self._conversation_id)
+        return stmt
 
     @staticmethod
     def _artifact_dict(artifact: ArtifactRow, *, content: bool) -> dict[str, Any]:

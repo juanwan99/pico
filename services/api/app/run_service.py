@@ -883,6 +883,47 @@ async def list_artifacts_for_task(
     return list(result.scalars().all())
 
 
+async def list_artifacts_for_conversation(
+    session: AsyncSession,
+    principal: Principal,
+    conversation_id: str,
+    *,
+    limit: int = 80,
+) -> list[ArtifactRow]:
+    cid = str(conversation_id or "").strip()
+    if not cid:
+        return []
+    result = await session.execute(
+        select(ArtifactRow)
+        .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+        .where(
+            TaskRow.school_id == principal.school_id,
+            TaskRow.membership_id == principal.membership_id,
+            TaskRow.conversation_id == cid,
+        )
+        .order_by(ArtifactRow.created_at.desc())
+        .limit(max(1, min(int(limit or 80), 200)))
+    )
+    return list(result.scalars().all())
+
+
+async def delete_artifacts_for_conversation(
+    session: AsyncSession,
+    principal: Principal,
+    conversation_id: str,
+) -> int:
+    rows = await list_artifacts_for_conversation(
+        session, principal, conversation_id, limit=200
+    )
+    n = 0
+    for row in rows:
+        await session.delete(row)
+        n += 1
+    if n:
+        await session.commit()
+    return n
+
+
 async def get_artifact_for_principal(
     session: AsyncSession,
     artifact_id: str,

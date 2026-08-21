@@ -51,6 +51,10 @@ class ChatCompletionRequest(BaseModel):
     metadata: dict[str, Any] | None = None
     web_search: bool = False
     tools: list[Any] | None = None
+    allowed_tools: list[str] | None = None
+
+
+EDU_SIDEBAR_MARK = "附属，不是用户要求"
 
 
 def _content_text(content: str | list[Any] | None) -> str:
@@ -66,6 +70,51 @@ def _content_text(content: str | list[Any] | None) -> str:
         elif isinstance(p, str):
             parts.append(p)
     return "\n".join(parts)
+
+
+def _client_system_from_messages(messages: list[ChatMessage] | None) -> str:
+    for msg in messages or []:
+        if getattr(msg, "role", None) == "system":
+            return _content_text(getattr(msg, "content", "")).strip()
+    return ""
+
+
+def _is_edu_sidebar_system(text: str | None) -> bool:
+    return EDU_SIDEBAR_MARK in str(text or "")
+
+
+def _normalize_allowed_tools(raw: list[Any] | None) -> list[str] | None:
+    if raw is None:
+        return None
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        name = ""
+        if isinstance(item, str):
+            name = item.strip()
+        elif isinstance(item, dict):
+            fn = item.get("function") if isinstance(item.get("function"), dict) else {}
+            name = str(item.get("name") or fn.get("name") or "").strip()
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
+def _resolve_allowed_tools(
+    skill_snapshot: dict[str, Any] | None,
+    request_tools: list[str] | None,
+) -> list[str] | None:
+    """Request list is a ceiling. Empty intersection falls back to the request list."""
+    skill_tools: list[str] | None = None
+    if skill_snapshot and skill_snapshot.get("tools"):
+        skill_tools = [str(t) for t in skill_snapshot.get("tools") or [] if t]
+    if request_tools is None:
+        return skill_tools
+    if not skill_tools:
+        return request_tools
+    inter = [t for t in skill_tools if t in set(request_tools)]
+    return inter or request_tools
 
 
 def _model_preference_from_prompt(prompt: str) -> str | None:
@@ -774,7 +823,11 @@ def _instruction_with_delivery(
     return extra
 
 
-async def _prior_artifact_titles_for_principal(principal: Any) -> list[str]:
+async def _prior_artifact_titles_for_principal(
+    principal: Any,
+    *,
+    conversation_id: str | None = None,
+) -> list[str]:
     """Session artifact graph for revision binding (D2). Best-effort, never raises."""
     try:
         from pico_orchestrator.delivery_policy import is_bookkeeping_title
@@ -784,13 +837,16 @@ async def _prior_artifact_titles_for_principal(principal: Any) -> list[str]:
 
         factory = session_factory()
         async with factory() as session:
+            cond = [
+                TaskRow.school_id == principal.school_id,
+                TaskRow.membership_id == principal.membership_id,
+            ]
+            if conversation_id:
+                cond.append(TaskRow.conversation_id == conversation_id)
             rows = await session.execute(
                 select(ArtifactRow.title)
                 .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
-                .where(
-                    TaskRow.school_id == principal.school_id,
-                    TaskRow.membership_id == principal.membership_id,
-                )
+                .where(*cond)
                 .order_by(ArtifactRow.created_at.desc())
                 .limit(40)
             )
@@ -1089,6 +1145,9 @@ async def _run_and_collect(
     history: list[dict[str, Any]] | None = None,
     skill_snapshot: dict[str, Any] | None = None,
     delivery_plan: Any | None = None,
+    allowed_tools: list[str] | None = None,
+    system_prompt: str = "",
+    conversation_id: str | None = None,
 ) -> Any:
     from pico_orchestrator.runtime import run_agent_runtime
 
@@ -1106,7 +1165,7 @@ async def _run_and_collect(
             return bool(run and (run.cancel_requested or run.status == "cancelled"))
 
     caps = settings.delivery_run_caps(
-        allowed_tools=list(skill_snapshot.get("tools") or []) if skill_snapshot else None,
+        allowed_tools=_resolve_allowed_tools(skill_snapshot, allowed_tools),
         skill_instruction=_instruction_with_delivery(
             skill_snapshot, prompt, delivery_plan
         ),
@@ -1115,6 +1174,10 @@ async def _run_and_collect(
     caps = _caps_with_dual_mode(caps, model)
     # Landing gate: force min_artifacts into Pi so chat-only "done" cannot succeed.
     caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
+    if system_prompt:
+        from dataclasses import replace as _dc_replace_sys
+
+        caps = _dc_replace_sys(caps, system_prompt=system_prompt)
     if skill_snapshot:
         await emit("skill.snapshot", skill_snapshot)
     if delivery_plan is not None and getattr(delivery_plan, "engineering", False):
@@ -1153,7 +1216,9 @@ async def _run_and_collect(
         is_cancelled=is_cancelled,
         caps=caps,
         history=history,
-        artifact_store=LedgerArtifactStore(factory, run_id=run_id),
+        artifact_store=LedgerArtifactStore(
+            factory, run_id=run_id, conversation_id=conversation_id
+        ),
     )
     return result
 
@@ -1256,14 +1321,22 @@ async def chat_completions(
             or body.metadata.get("skillId")
         )
     json_only = is_json_only_propose(raw_prompt_with_skill, output_header=x_pico_output)
-    # D2: bind revision to session artifact graph (prior deliverables).
-    prior_titles = (
-        []
-        if json_only
-        else await _prior_artifact_titles_for_principal(principal)
-    )
+    client_system = _client_system_from_messages(body.messages)
+    edu_sidebar = _is_edu_sidebar_system(client_system)
+    request_tools = _normalize_allowed_tools(body.allowed_tools)
+    if request_tools is None:
+        request_tools = _normalize_allowed_tools(body.tools)
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
+    # D2: bind revision to session artifact graph (prior deliverables).
+    # Edu sidebar + conversation: only this cabinet. Do not dump membership pile.
+    if json_only or (edu_sidebar and not conversation_id):
+        prior_titles = []
+    else:
+        prior_titles = await _prior_artifact_titles_for_principal(
+            principal,
+            conversation_id=conversation_id if conversation_id else None,
+        )
     # strip ledger markers from model-visible prompt; project instruction → system
     # P1: marker-strip BEFORE delivery analysis too — the markers mask force_agent
     # intent and misroute multi-deliverable chains to direct deepseek-chat.
@@ -1337,15 +1410,11 @@ async def chat_completions(
     # Sticky: same-session delivery continuation (after clarify) stays on pico-agent.
     # Use the marker-stripped prompt so delivery intent is not masked (P1).
     # edu sidebar JSON propose is a different contract — never land files.
-    sidebar_system = None
+    sidebar_system = client_system or None
     sidebar_web_hits: dict[str, Any] | None = None
     if json_only:
         skill_snapshot = None
         delivery_plan = None
-        for msg in body.messages or []:
-            if msg.role == "system":
-                sidebar_system = _content_text(msg.content).strip()
-                break
         if not sidebar_system:
             sidebar_system = (
                 "只输出一个 JSON 对象，不要文件或 Markdown 解释："
@@ -1436,7 +1505,7 @@ async def chat_completions(
 
             system = (
                 sidebar_system
-                if json_only and sidebar_system
+                if (json_only or edu_sidebar) and sidebar_system
                 else (
                     "你是 Pico，面向学校场景的 AI 助手。"
                     "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
@@ -1483,6 +1552,9 @@ async def chat_completions(
                 history=history,
                 skill_snapshot=skill_snapshot,
                 delivery_plan=delivery_plan,
+                allowed_tools=request_tools,
+                system_prompt=client_system if edu_sidebar else "",
+                conversation_id=conversation_id,
             )
             text = result.final_text or result.error or "(empty)"
             await _finalize_run(
@@ -1550,7 +1622,7 @@ async def chat_completions(
             )
             system = (
                 sidebar_system
-                if json_only and sidebar_system
+                if (json_only or edu_sidebar) and sidebar_system
                 else (
                     "你是 Pico，面向学校场景的 AI 助手。"
                     "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
@@ -1715,22 +1787,22 @@ async def chat_completions(
                 )
                 if settings.pico_run_detach_on_disconnect:
                     caps = settings.durable_run_caps(
-                        allowed_tools=(
-                            list(skill_snapshot.get("tools") or []) if skill_snapshot else None
-                        ),
+                        allowed_tools=_resolve_allowed_tools(skill_snapshot, request_tools),
                         skill_instruction=skill_instr,
                     )
                 else:
                     caps = settings.delivery_run_caps(
-                        allowed_tools=(
-                            list(skill_snapshot.get("tools") or []) if skill_snapshot else None
-                        ),
+                        allowed_tools=_resolve_allowed_tools(skill_snapshot, request_tools),
                         skill_instruction=skill_instr,
                     )
                 # Stream path must apply the same dual-mode policy as non-stream.
                 caps = _caps_with_dual_mode(caps, model)
                 # Stream path must apply the same landing min as non-stream.
                 caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
+                if edu_sidebar and client_system:
+                    from dataclasses import replace as _dc_replace_sys_stream
+
+                    caps = _dc_replace_sys_stream(caps, system_prompt=client_system)
                 if skill_snapshot:
                     await emit("skill.snapshot", skill_snapshot)
                 if delivery_plan is not None and getattr(
@@ -1783,6 +1855,7 @@ async def chat_completions(
                         factory,
                         task_id=task_id,
                         run_id=run_id,
+                        conversation_id=conversation_id,
                     ),
                 )
                 await _finalize_run(
