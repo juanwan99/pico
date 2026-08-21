@@ -16,12 +16,25 @@ from app.openai_compat import (
     _is_edu_sidebar_system,
     _normalize_allowed_tools,
     _resolve_allowed_tools,
+    _sidebar_chat_only,
 )
 
 
 def test_edu_sidebar_mark_detects_accessory() -> None:
     assert _is_edu_sidebar_system(f"你是当前屏幕的助手。\n{EDU_SIDEBAR_MARK}。\n{{}}")
     assert _is_edu_sidebar_system("你是 Pico，面向学校场景的 AI 助手。") is False
+
+
+def test_sidebar_chat_only_skips_agent() -> None:
+    assert _sidebar_chat_only(edu_sidebar=True, json_only=False) is True
+    assert _sidebar_chat_only(edu_sidebar=False, json_only=True) is True
+    assert _sidebar_chat_only(edu_sidebar=False, json_only=False) is False
+
+
+def test_empty_allowed_tools_is_ceiling() -> None:
+    assert _normalize_allowed_tools([]) == []
+    skill = {"tools": ["generate_html_document", "workspace_list_files"]}
+    assert _resolve_allowed_tools(skill, []) == []
 
 
 def test_client_system_from_first_system_message() -> None:
@@ -81,6 +94,8 @@ def test_true_pi_compose_uses_edu_system_override() -> None:
 
 if __name__ == "__main__":
     test_edu_sidebar_mark_detects_accessory()
+    test_sidebar_chat_only_skips_agent()
+    test_empty_allowed_tools_is_ceiling()
     test_client_system_from_first_system_message()
     test_normalize_allowed_tools_names_and_openai_shape()
     test_resolve_allowed_tools_request_is_ceiling()
