@@ -83,6 +83,11 @@ def _is_edu_sidebar_system(text: str | None) -> bool:
     return EDU_SIDEBAR_MARK in str(text or "")
 
 
+def _sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
+    """Edu sidebar is Cherry-style chat: never force_agent, never land artifacts."""
+    return bool(json_only or edu_sidebar)
+
+
 def _normalize_allowed_tools(raw: list[Any] | None) -> list[str] | None:
     if raw is None:
         return None
@@ -1409,13 +1414,14 @@ async def chat_completions(
     # Engineering multi/pipeline/runnable OR classic Office/HTML → force agent tool path.
     # Sticky: same-session delivery continuation (after clarify) stays on pico-agent.
     # Use the marker-stripped prompt so delivery intent is not masked (P1).
-    # edu sidebar JSON propose is a different contract — never land files.
+    # edu sidebar (附属标记) is chat, not delivery — never land files / force_agent.
+    chat_only = _sidebar_chat_only(edu_sidebar=edu_sidebar, json_only=json_only)
     sidebar_system = client_system or None
     sidebar_web_hits: dict[str, Any] | None = None
-    if json_only:
+    if chat_only:
         skill_snapshot = None
         delivery_plan = None
-        if not sidebar_system:
+        if json_only and not sidebar_system:
             sidebar_system = (
                 "只输出一个 JSON 对象，不要文件或 Markdown 解释："
                 '{"summary":"一句话","mutations":[{"affordanceId":"id","params":{},"label":"短标签"}]}'
@@ -1479,8 +1485,8 @@ async def chat_completions(
     model = _coerce_default_model(model, settings)
     _assert_model_allowed(model, settings)
     # Direct model = short tier; pico-agent = delivery tier for token ceiling.
-    # json_only must not enter pi-agent even when the SKU is pico-fast.
-    use_direct = json_only or (
+    # json_only / edu sidebar must not enter pi-agent even when the SKU is pico-fast.
+    use_direct = chat_only or (
         model not in {"pico-agent", "pico"} and not model.startswith("pico-")
     )
     token_ceiling = (
@@ -1606,7 +1612,7 @@ async def chat_completions(
         yield chunk({"role": "assistant"})
 
         # Direct model (moonshot/deepseek/*) → real token stream (GPT-like handfeel)
-        use_direct = json_only or (
+        use_direct = chat_only or (
             model not in {"pico-agent", "pico"} and not model.startswith("pico-")
         )
         if use_direct:
