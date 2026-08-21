@@ -116,7 +116,13 @@ async def run_pi_agent(
     client = AsyncOpenAI(api_key=provider.api_key, base_url=provider.base_url)
 
     skill_block = caps.skill_instruction.strip() if caps.skill_instruction else "(none)"
-    system = _load_system_prompt(skill_block)
+    override = str(getattr(caps, "system_prompt", "") or "").strip()
+    if override:
+        system = override
+        if caps.skill_instruction.strip():
+            system = f"{override}\n\n{caps.skill_instruction.strip()}"
+    else:
+        system = _load_system_prompt(skill_block)
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
     for item in (history or [])[-20:]:
         role = item.get("role")

@@ -1376,6 +1376,43 @@ async def get_task(
     }
 
 
+@app.get("/v1/artifacts")
+async def list_conversation_artifacts(
+    conversation_id: str = "",
+    principal: Principal = Depends(require_scope("ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    cid = str(conversation_id or "").strip()
+    if not cid:
+        raise HTTPException(status_code=400, detail={"code": "conversation_required", "message": "conversation_id required"})
+    arts = await run_service.list_artifacts_for_conversation(session, principal, cid)
+    return {
+        "count": len(arts),
+        "artifacts": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "kind": a.kind,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in arts
+        ],
+    }
+
+
+@app.delete("/v1/artifacts")
+async def clear_conversation_artifacts(
+    conversation_id: str = "",
+    principal: Principal = Depends(require_scope("ai:run")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    cid = str(conversation_id or "").strip()
+    if not cid:
+        raise HTTPException(status_code=400, detail={"code": "conversation_required", "message": "conversation_id required"})
+    deleted = await run_service.delete_artifacts_for_conversation(session, principal, cid)
+    return {"ok": True, "deleted": deleted}
+
+
 @app.get("/v1/artifacts/{artifact_id}/content")
 async def get_artifact_content(
     artifact_id: str,
