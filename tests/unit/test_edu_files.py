@@ -109,6 +109,31 @@ def test_post_and_get_xlsx_excerpt(client: TestClient) -> None:
     assert got.json()["headline"] == "读到 2 行 / 2 列"
 
 
+def test_post_pptx_persists_original_bytes(client: TestClient) -> None:
+    from pptx import Presentation
+
+    deck = Presentation()
+    slide = deck.slides.add_slide(deck.slide_layouts[0])
+    slide.shapes.title.text = "封面"
+    buf = io.BytesIO()
+    deck.save(buf)
+    raw = buf.getvalue()
+    token = _token()
+    res = client.post(
+        "/v1/files",
+        headers={"authorization": f"Bearer {token}"},
+        json={
+            "filename": "封面.pptx",
+            "content_b64": base64.b64encode(raw).decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["status"] == "ok"
+    assert body["id"]
+    assert "页" in body["headline"]
+
+
 def test_foreign_membership_cannot_read(client: TestClient) -> None:
     raw = _xlsx_bytes([["a", "b"]])
     owner = _token()

@@ -128,6 +128,8 @@ def test_sidebar_chat_only_unchanged() -> None:
     assert _sidebar_chat_only(edu_sidebar=True, json_only=False) is True
     assert _sidebar_chat_only(edu_sidebar=False, json_only=False) is False
     assert _workbench_tool_step_line("generate_docx_document") == "正在写 Word"
+    assert _workbench_tool_step_line("edit_docx_document") == "正在改 Word"
+    assert _workbench_tool_step_line("generate_image") == "正在出图"
     assert _workbench_tool_step_line("workspace_list_files") == ""
 
 

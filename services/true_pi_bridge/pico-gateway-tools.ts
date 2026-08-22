@@ -23,6 +23,9 @@ const ALLOWED = [
   "generate_html_document",
   "generate_docx_document",
   "generate_pptx_document",
+  "edit_docx_document",
+  "edit_pptx_document",
+  "generate_image",
   "verify_html_document",
   "web_search",
   "web_fetch",
@@ -174,6 +177,48 @@ export default function (pi: ExtensionAPI) {
         title: Type.String(),
         marker: Type.Optional(Type.String()),
         body: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "edit_docx_document",
+    "Edit an already uploaded .docx in the Pico ledger (python-docx). Other paragraphs stay.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
+        paragraph_index: Type.Optional(Type.Number()),
+        text: Type.Optional(Type.String()),
+        output_title: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "edit_pptx_document",
+    "Edit an already uploaded .pptx in the Pico ledger (python-pptx). Other slides stay.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
+        slide_index: Type.Optional(Type.Number()),
+        new_title: Type.Optional(Type.String()),
+        output_title: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "generate_image",
+    "Create one downloadable png/jpg via SiliconFlow HTTPS. Never invent an image on failure.",
+    Type.Object(
+      {
+        prompt: Type.String(),
+        title: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),

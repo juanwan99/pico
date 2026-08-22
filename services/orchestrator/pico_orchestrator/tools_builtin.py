@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import asyncio
+import base64
 import math
 import operator
 import re
@@ -11,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from pico_orchestrator.artifact_types import (
+    is_valid_ooxml_package,
     reject_fake_protected_write_message,
     title_protected_extension,
 )
@@ -29,7 +32,9 @@ from pico_orchestrator.gateway import (
     ToolError,
     ToolSpec,
 )
+from pico_orchestrator.image_generate import generate_image_bytes
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
+from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
 from pico_orchestrator.sandbox_s1 import (
     MAX_CONTENT_CHARS,
     assert_content_caps,
@@ -63,6 +68,8 @@ _MAX_MARKER = 200
 _MAX_KB_QUERY = 500
 _MAX_KB_EXCERPT = 280
 _SKIP_KB_TITLES = frozenset({"回复摘要"})
+_EDIT_TIMEOUT_S = 20.0
+_IMAGE_TIMEOUT_S = 45.0
 
 
 class _UnavailableArtifactStore:
@@ -164,6 +171,36 @@ def _ensure_extension(title: str, ext: str) -> str:
     # Strip a wrong extension then append the real one — never rename text to OOXML.
     base = title.rsplit(".", 1)[0] if "." in title.split("/")[-1] else title
     return f"{base}{ext}"
+
+
+def _optional_int(args: dict[str, Any], key: str, *, default: int | None = None) -> int | None:
+    value = args.get(key)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ToolError("tool.invalid_arguments", f"{key} 必须是整数") from exc
+
+
+def _artifact_bytes(row: dict[str, Any]) -> bytes:
+    b64 = row.get("content_base64")
+    if isinstance(b64, str) and b64.strip():
+        try:
+            return base64.b64decode(b64.encode("ascii"), validate=False)
+        except Exception as exc:
+            raise ToolError("artifact.corrupt", "文件内容损坏，打不开。") from exc
+    body = row.get("content")
+    if isinstance(body, bytes) and body:
+        return body
+    raise ToolError("artifact.not_binary", "这份不是可改的 Word/PPT 原件。请先在工作台上传原件。")
+
+
+async def _run_bounded(awaitable: Any, *, seconds: float, code: str, message: str) -> Any:
+    try:
+        return await asyncio.wait_for(awaitable, timeout=seconds)
+    except TimeoutError as exc:
+        raise ToolError(code, message) from exc
 
 
 def _excerpt_around(text: str, query: str, *, width: int = _MAX_KB_EXCERPT) -> str:
@@ -490,6 +527,125 @@ def _workspace_handlers(
         )
         result["format"] = "pptx"
         result["marker"] = marker
+        return result
+
+    async def _load_office(
+        principal: Principal,
+        args: dict[str, Any],
+        *,
+        ext: str,
+    ) -> tuple[dict[str, Any], bytes]:
+        artifact_id = args.get("artifact_id")
+        title = args.get("title")
+        artifact_id = str(artifact_id).strip() if artifact_id is not None else None
+        title = str(title).strip() if title is not None else None
+        if not artifact_id and not title:
+            raise ToolError(
+                "tool.invalid_arguments",
+                "请提供已上传文件的 artifact_id 或 title。",
+            )
+        row = await store.read(
+            principal,
+            artifact_id=artifact_id or None,
+            title=title or None,
+        )
+        if row is None:
+            raise ToolError(
+                "artifact.not_found",
+                "找不到这份文件。请先在工作台上传原件再改。",
+            )
+        raw = _artifact_bytes(row)
+        if not is_valid_ooxml_package(raw, ext):
+            raise ToolError(
+                "artifact.not_ooxml",
+                f"这份不是真 {ext} 原件，不能当改稿保存。",
+            )
+        return row, raw
+
+    async def edit_docx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        row, raw = await _load_office(principal, args, ext=".docx")
+        index = _optional_int(args, "paragraph_index")
+        if index is None:
+            raise ToolError("tool.invalid_arguments", "请指定 paragraph_index（从 1 起）。")
+        text = _required_text(args, "text", maximum=_MAX_DOC_BODY)
+        try:
+            edited = await _run_bounded(
+                asyncio.to_thread(
+                    edit_docx_bytes, raw, paragraph_index=index, text=text
+                ),
+                seconds=_EDIT_TIMEOUT_S,
+                code="office.timeout",
+                message="改文档超时（20 秒）。请换更小的文件或稍后再试。",
+            )
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        out_title = _ensure_extension(
+            str(args.get("output_title") or row.get("title") or "已改.docx"),
+            ".docx",
+        )
+        result = await store.write(
+            principal,
+            title=out_title,
+            content=edited,
+            kind="docx",
+        )
+        result["format"] = "docx"
+        result["edited"] = True
+        result["paragraph_index"] = index
+        result["source_artifact_id"] = row.get("artifact_id")
+        return result
+
+    async def edit_pptx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        row, raw = await _load_office(principal, args, ext=".pptx")
+        index = _optional_int(args, "slide_index", default=1) or 1
+        new_title = _required_text(args, "new_title", maximum=500)
+        try:
+            edited = await _run_bounded(
+                asyncio.to_thread(
+                    edit_pptx_title_bytes, raw, slide_index=index, new_title=new_title
+                ),
+                seconds=_EDIT_TIMEOUT_S,
+                code="office.timeout",
+                message="改文档超时（20 秒）。请换更小的文件或稍后再试。",
+            )
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        out_title = _ensure_extension(
+            str(args.get("output_title") or row.get("title") or "已改.pptx"),
+            ".pptx",
+        )
+        result = await store.write(
+            principal,
+            title=out_title,
+            content=edited,
+            kind="pptx",
+        )
+        result["format"] = "pptx"
+        result["edited"] = True
+        result["slide_index"] = index
+        result["source_artifact_id"] = row.get("artifact_id")
+        return result
+
+    async def generate_image(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        prompt = _required_text(args, "prompt", maximum=2000)
+        title_raw = args.get("title")
+        title_hint = str(title_raw).strip() if isinstance(title_raw, str) else ""
+        raw, ext = await _run_bounded(
+            generate_image_bytes(prompt),
+            seconds=_IMAGE_TIMEOUT_S,
+            code="image.timeout",
+            message="出图超时（45 秒）。请稍后重试，不能编造图片。",
+        )
+        title = _ensure_extension(title_hint or "课堂示意图", f".{ext}")
+        kind = "png" if ext == "png" else "jpg"
+        result = await store.write(
+            principal,
+            title=title,
+            content=raw,
+            kind=kind,
+        )
+        result["format"] = ext
+        result["user_message"] = "图已生成，可在结果区下载。"
         return result
 
     async def verify_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1020,6 +1176,9 @@ def _workspace_handlers(
         generate_html,
         generate_docx,
         generate_pptx,
+        edit_docx,
+        edit_pptx,
+        generate_image,
         verify_html,
         inspect_preview,
         workspace_exec,
@@ -1140,6 +1299,9 @@ def build_default_gateway(
         generate_html,
         generate_docx,
         generate_pptx,
+        edit_docx,
+        edit_pptx,
+        generate_image,
         verify_html,
         inspect_preview,
         workspace_exec,
@@ -1306,6 +1468,42 @@ def build_default_gateway(
                 "containing a unique marker. Args: title, marker, body?"
             ),
             handler=generate_pptx,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="edit_docx_document",
+            description=(
+                "Edit an already uploaded .docx in the Pico ledger with python-docx. "
+                "Original other paragraphs stay. Never create a blank template. "
+                "Args: artifact_id|title, paragraph_index (1-based), text, output_title?"
+            ),
+            handler=edit_docx,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="edit_pptx_document",
+            description=(
+                "Edit an already uploaded .pptx in the Pico ledger with python-pptx. "
+                "Change one slide title; other slides stay. Never create a blank deck. "
+                "Args: artifact_id|title, slide_index? (default 1), new_title, output_title?"
+            ),
+            handler=edit_pptx,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="generate_image",
+            description=(
+                "Create one downloadable png/jpg via SiliconFlow HTTPS images API. "
+                "On missing key, timeout, or 4xx: honest Chinese failure; never invent pixels. "
+                "Args: prompt, title?"
+            ),
+            handler=generate_image,
             school_scoped=False,
         )
     )
@@ -1577,6 +1775,66 @@ def openai_tool_schemas(
                 "body": {"type": "string", "description": "Optional extra slide text"},
             },
             "required": ["title", "marker"],
+        },
+        "edit_docx_document": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Uploaded .docx artifact id (or title)",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Uploaded .docx title (or artifact_id)",
+                },
+                "paragraph_index": {
+                    "type": "integer",
+                    "description": "1-based nonempty paragraph to replace",
+                },
+                "text": {"type": "string", "description": "New paragraph text"},
+                "output_title": {
+                    "type": "string",
+                    "description": "Optional download filename",
+                },
+            },
+            "required": ["paragraph_index", "text"],
+        },
+        "edit_pptx_document": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Uploaded .pptx artifact id (or title)",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Uploaded .pptx title (or artifact_id)",
+                },
+                "slide_index": {
+                    "type": "integer",
+                    "description": "1-based slide to edit (default 1)",
+                },
+                "new_title": {"type": "string", "description": "New title for that slide"},
+                "output_title": {
+                    "type": "string",
+                    "description": "Optional download filename",
+                },
+            },
+            "required": ["new_title"],
+        },
+        "generate_image": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "What to draw (Chinese or English)",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional download filename ending .png/.jpg",
+                },
+            },
+            "required": ["prompt"],
         },
         "structured_outline": {
             "type": "object",

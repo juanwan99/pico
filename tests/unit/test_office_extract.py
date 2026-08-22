@@ -90,6 +90,26 @@ def test_docx_paragraphs() -> None:
     assert "语文每周 5 节" in got["text"]
 
 
+def test_pptx_slides_ok() -> None:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("ppt/presentation.xml", "<p/>")
+        zf.writestr(
+            "ppt/slides/slide1.xml",
+            '<s xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+            "<a:t>课堂导入</a:t></s>",
+        )
+        zf.writestr(
+            "ppt/slides/slide2.xml",
+            '<s xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+            "<a:t>第二页</a:t></s>",
+        )
+    got = extract_office("两页.pptx", buf.getvalue())
+    assert got["status"] == "ok"
+    assert got["headline"] == "读到 2 页"
+    assert "课堂导入" in got["text"]
+
+
 def test_csv() -> None:
     got = extract_office("a.csv", "班,科\n一班,语\n".encode())
     assert got["headline"] == "读到 2 行 / 2 列"

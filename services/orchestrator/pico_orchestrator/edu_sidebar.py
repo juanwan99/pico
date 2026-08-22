@@ -16,6 +16,10 @@ SIDEBAR_WEB_SYSTEM = (
     "禁止写「我在网上查的」，禁止自报训练截止日期或瞎日期。"
     "有来源：标明来自网。"
 )
+SIDEBAR_WORKBENCH_HINT = (
+    "侧栏只填当前页。改已有 Word/PPT 或出图，请去 Pico 工作台。"
+    "本侧栏不得调用 generate_* / edit_* / 出图，不得落 Artifact。"
+)
 
 
 def is_json_only_propose(

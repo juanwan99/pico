@@ -36,6 +36,12 @@ def test_explicit_suffix_still_hits() -> None:
     assert wants_deliverable_document("please generate output.pptx") is True
 
 
+def test_edit_existing_and_image_hit() -> None:
+    assert wants_deliverable_document("把第三段改短") is True
+    assert wants_deliverable_document("把第 1 页标题改成课堂导入") is True
+    assert wants_deliverable_document("画一张分数的初步认识课堂示意图") is True
+
+
 def test_short_answer_and_chat_do_not_hit() -> None:
     assert wants_deliverable_document("17+25，只回答数字，不要生成任何文件。") is False
     assert wants_deliverable_document("你好") is False

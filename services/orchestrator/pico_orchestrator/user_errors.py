@@ -69,6 +69,16 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "未在已挂载材料中找到依据。请先生成或上传材料后再问，或换关键词。"
     if c.startswith("mcp.") or "mcp allowlist" in low or "mcp_bridge" in low:
         return "MCP 工具当前不可用或不在白名单。请联系管理员检查 PICO_MCP_ALLOWLIST。"
+    if c in ("image.unconfigured", "image.timeout", "image.provider", "image.invalid"):
+        if c == "image.unconfigured" or "silic" in low or "未配置" in text:
+            return "出图服务未配置。请管理员在主机写入密钥后重试，不能编造图片。"
+        if c == "image.timeout":
+            return "出图超时。请稍后重试，不能编造图片。"
+        return "这次没能出图。请稍后重试，不能编造图片。"
+    if c in ("office.timeout", "artifact.not_ooxml", "artifact.not_binary"):
+        if c == "office.timeout":
+            return "改文档超时。请换更小的文件或稍后再试。"
+        return "找不到可改的 Word/PPT 原件。请先在工作台上传后再改。"
     if "not found" in low:
         return "找不到对应的会话或运行记录。"
     if (

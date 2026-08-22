@@ -32,6 +32,9 @@ workspace_write_file
 generate_html_document
 generate_docx_document
 generate_pptx_document
+edit_docx_document
+edit_pptx_document
+generate_image
 verify_html_document
 web_search
 web_fetch
@@ -39,6 +42,8 @@ web_fetch
 
 v1 仅增加：skill_instruction 注入、近 N 条 user/assistant history 文本、skill_snapshot 工具交并集。  
 v2（#507）：DeepSeek 官方 `web_search` 转发 + 网关 `web_fetch`（SSRF 拒绝内网/metadata/管理域）。仍禁 bash / 任意 FS / 浏览器代登。
+
+v3（#608）：改已有 `.docx`/`.pptx` 走 PyPI `python-docx` / `python-pptx` 薄适配（禁止 `generate_*` 另造冒充改原件）。出图走 SiliconFlow HTTPS `images/generations`（禁自研扩散）。侧栏仍空工具。
 
 ## 禁止在桥内做
 

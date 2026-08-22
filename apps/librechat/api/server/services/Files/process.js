@@ -44,6 +44,7 @@ const { getRetentionExpiry, getAgentFileRetentionExpiry } = require('./retention
 const { getStrategyFunctions } = require('./strategies');
 const { determineFileType } = require('~/server/utils');
 const { STTService } = require('./Audio/STTService');
+const { ingestOfficeToPico } = require('./picoOfficeIngest');
 const db = require('~/models');
 
 /**
@@ -652,6 +653,17 @@ const processFileUpload = async ({ req, res, metadata, sseStream }) => {
     },
     true,
   );
+  try {
+    await ingestOfficeToPico({
+      req,
+      filename: filename ?? file.originalname,
+      filepath,
+      filePath: file.path,
+      buffer: file.buffer,
+    });
+  } catch (err) {
+    logger.warn('[pico office ingest]', err);
+  }
   sendUploadSuccess(res, sseStream, 'File uploaded and processed successfully', result);
 };
 

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pico_orchestrator.edu_sidebar import (
     SIDEBAR_WEB_SYSTEM,
+    SIDEBAR_WORKBENCH_HINT,
     asked_from_sidebar_prompt,
     honest_miss_json,
     inject_web_hits,
@@ -94,6 +95,9 @@ def _workbench_tool_step_line(tool: str) -> str:
         "generate_html_document": "正在写网页",
         "generate_docx_document": "正在写 Word",
         "generate_pptx_document": "正在写课件",
+        "edit_docx_document": "正在改 Word",
+        "edit_pptx_document": "正在改课件",
+        "generate_image": "正在出图",
         "workspace_write_file": "正在落盘",
         "verify_html_document": "正在核对网页",
     }
@@ -615,6 +619,15 @@ def _wants_deliverable_document(prompt: str) -> bool:
     if re.search(rf"{intent}.{{0,40}}{office}", text, re.IGNORECASE):
         return True
     if re.search(rf"{office}.{{0,16}}(?:文件|文档|下载|file)", text, re.IGNORECASE):
+        return True
+    if re.search(
+        r"(?:把第.{0,8}(?:段|页|张).{0,12}(?:改|标题)|改短|改已有|"
+        r"改.{0,12}(?:word|docx|ppt|pptx|幻灯))",
+        text,
+        re.IGNORECASE,
+    ):
+        return True
+    if re.search(r"(?:画|生成|出)\s*(?:一\s*张).{0,40}图", text):
         return True
     if re.search(r"\.(?:html?|docx|pptx)\b", text, re.IGNORECASE) and re.search(
         intent, text, re.IGNORECASE
@@ -1452,6 +1465,12 @@ async def chat_completions(
             sidebar_system = (
                 "只输出一个 JSON 对象，不要文件或 Markdown 解释："
                 '{"summary":"一句话","mutations":[{"affordanceId":"id","params":{},"label":"短标签"}]}'
+            )
+        if edu_sidebar:
+            sidebar_system = (
+                f"{sidebar_system}\n{SIDEBAR_WORKBENCH_HINT}"
+                if sidebar_system
+                else SIDEBAR_WORKBENCH_HINT
             )
         if body.web_search is True:
             from pico_orchestrator.web_tools import web_search_handler
