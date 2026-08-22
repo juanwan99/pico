@@ -7,7 +7,7 @@ import hashlib
 from typing import Any
 
 from pico_orchestrator.gateway import Principal, ToolError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import ArtifactRow, RunRow, TaskRow, append_event, new_id
@@ -165,7 +165,14 @@ class LedgerArtifactStore:
             )
         )
         if self._conversation_id:
-            stmt = stmt.where(TaskRow.conversation_id == self._conversation_id)
+            # This conversation + uploads that arrived before the first message
+            # (task.conversation_id is null). Never dump other cabinets.
+            stmt = stmt.where(
+                or_(
+                    TaskRow.conversation_id == self._conversation_id,
+                    TaskRow.conversation_id.is_(None),
+                )
+            )
         return stmt
 
     @staticmethod
@@ -217,12 +224,21 @@ class LedgerArtifactStore:
         artifact_id: str | None,
         title: str | None,
     ) -> dict[str, Any] | None:
-        statement = self._owned_artifacts(principal)
         if artifact_id:
-            statement = statement.where(ArtifactRow.id == artifact_id)
+            statement = (
+                select(ArtifactRow)
+                .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+                .where(
+                    TaskRow.school_id == principal.school_id,
+                    TaskRow.membership_id == principal.membership_id,
+                    ArtifactRow.id == artifact_id,
+                )
+            )
         else:
-            statement = statement.where(ArtifactRow.title == title).order_by(
-                ArtifactRow.created_at.desc()
+            statement = (
+                self._owned_artifacts(principal)
+                .where(ArtifactRow.title == title)
+                .order_by(ArtifactRow.created_at.desc())
             )
         async with self._factory() as session:
             result = await session.execute(statement.limit(1))

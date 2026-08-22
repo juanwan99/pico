@@ -18,6 +18,7 @@ from app.openai_compat import (
     _resolve_allowed_tools,
     _sidebar_chat_only,
 )
+from pico_orchestrator.edu_sidebar import SIDEBAR_WORKBENCH_HINT
 
 
 def test_edu_sidebar_mark_detects_accessory() -> None:
@@ -35,6 +36,9 @@ def test_empty_allowed_tools_is_ceiling() -> None:
     assert _normalize_allowed_tools([]) == []
     skill = {"tools": ["generate_html_document", "workspace_list_files"]}
     assert _resolve_allowed_tools(skill, []) == []
+    assert "工作台" in SIDEBAR_WORKBENCH_HINT
+    assert "generate_*" in SIDEBAR_WORKBENCH_HINT
+    assert "edit_*" in SIDEBAR_WORKBENCH_HINT
 
 
 def test_client_system_from_first_system_message() -> None:

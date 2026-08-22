@@ -86,6 +86,9 @@ services:
       PICO_SANDBOX_URL: http://127.0.0.1:18767
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
       PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
+      # Image vendor (host .env only; never commit the value)
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
+      SILICONFLOW_IMAGE_MODEL: ${SILICONFLOW_IMAGE_MODEL:-}
     volumes:
       - pico_data:/app/data
       - ${PICO_SANDBOX_DISK_HOST:-./data/teacher-disks}:/var/lib/pico/teacher-disks

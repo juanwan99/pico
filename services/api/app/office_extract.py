@@ -9,6 +9,7 @@ from xml.etree import ElementTree as ET
 
 NS_SS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 MAX_TEXT = 8000
 MAX_ROWS = 200
 MAX_SHEETS = 3
@@ -56,6 +57,8 @@ def extract_office(filename: str, data: bytes) -> dict:
         return _extract_xlsx(name, data)
     if ext == "docx":
         return _extract_docx(name, data)
+    if ext == "pptx":
+        return _extract_pptx(name, data)
     if ext in {"xls", "doc", "pdf"}:
         return _fail(name, ext, "unsupported", "这种格式抽不出正文，请另存 xlsx 或 docx")
     return _fail(name, ext or "bin", "unsupported", "不支持这种文件")
@@ -273,3 +276,47 @@ def _extract_docx(name: str, data: bytes) -> dict:
         return _fail(name, "docx", "bad_file", "文档是空的")
     headline = f"读到 {len(paras)} 段"
     return _ok(name, "docx", headline=headline, text="\n".join(paras), rows=len(paras), cols=1)
+
+
+def _extract_pptx(name: str, data: bytes) -> dict:
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        return _fail(name, "pptx", "bad_file", "坏文件，抽不出幻灯")
+    with zf:
+        names = zf.namelist()
+        if "ppt/presentation.xml" not in names:
+            return _fail(name, "pptx", "bad_file", "坏文件，抽不出幻灯")
+        slides = sorted(
+            n
+            for n in names
+            if n.startswith("ppt/slides/slide") and n.endswith(".xml")
+        )
+        if not slides:
+            return _fail(name, "pptx", "bad_file", "这份 PPT 没有页")
+        titles: list[str] = []
+        for path in slides[:20]:
+            try:
+                raw = zf.read(path)
+            except KeyError:
+                continue
+            try:
+                root = ET.fromstring(raw)
+            except ET.ParseError:
+                continue
+            texts = [
+                (node.text or "").strip()
+                for node in root.iter(_tag(NS_A, "t"))
+                if (node.text or "").strip()
+            ]
+            if texts:
+                titles.append(texts[0])
+    headline = f"读到 {len(slides)} 页"
+    return _ok(
+        name,
+        "pptx",
+        headline=headline,
+        text="\n".join(titles),
+        rows=len(slides),
+        cols=1,
+    )

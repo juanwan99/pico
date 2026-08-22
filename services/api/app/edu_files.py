@@ -7,7 +7,7 @@ import binascii
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.auth import Principal, require_any_scope
@@ -96,10 +96,12 @@ async def persist_edu_file(
     filename: str,
     data: bytes,
     extract: dict[str, Any],
+    conversation_id: str | None = None,
 ) -> str:
     from app.artifact_store import encode_artifact_payload
 
     stored, encoding, byte_size, digest = encode_artifact_payload(data)
+    convo = (conversation_id or "").strip() or None
     factory = session_factory()
     async with factory() as session:
         task = TaskRow(
@@ -107,6 +109,7 @@ async def persist_edu_file(
             school_id=principal.school_id,
             membership_id=principal.membership_id,
             title=f"edu-read · {filename}"[:512],
+            conversation_id=convo,
         )
         session.add(task)
         await session.flush()
@@ -173,13 +176,18 @@ async def load_edu_file(principal: Principal, file_id: str) -> dict[str, Any] | 
 async def post_edu_file(
     request: Request,
     principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
+    x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
 ) -> dict[str, Any]:
     filename, data = await _read_upload(request)
     extract = extract_office(filename, data)
     file_id = None
     if extract.get("status") == "ok":
         file_id = await persist_edu_file(
-            principal, filename=filename, data=data, extract=extract
+            principal,
+            filename=filename,
+            data=data,
+            extract=extract,
+            conversation_id=x_conversation_id,
         )
     return _payload(file_id, extract)
 
