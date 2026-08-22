@@ -132,6 +132,10 @@ jest.mock('~/server/services/Files/Audio/STTService', () => ({
   STTService: { getInstance: jest.fn() },
 }));
 
+jest.mock('./picoOfficeIngest', () => ({
+  ingestOfficeToPico: jest.fn().mockResolvedValue(null),
+}));
+
 const {
   getRetentionExpiry,
   getAgentFileRetentionExpiry,
@@ -150,6 +154,7 @@ const { checkCapability } = require('~/server/services/Config');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { uploadVectors } = require('./VectorDB/crud');
 const db = require('~/models');
+const { ingestOfficeToPico } = require('./picoOfficeIngest');
 const {
   processAgentFileUpload,
   processDeleteRequest,
@@ -226,6 +231,25 @@ describe('processAgentFileUpload', () => {
         .mockResolvedValue({ text: 'extracted text', bytes: 42, filepath: 'doc://result' }),
     });
     mergeFileConfig.mockReturnValue(makeFileConfig());
+  });
+
+  test('copies composer attachments into the pico ledger (T-AGENT-PLAIN-V1 F2)', async () => {
+    setupStoredFileUpload();
+    const req = makeReq({ mimetype: 'text/markdown' });
+    req.file.originalname = '%E7%8F%AD%E6%83%85.md';
+    req.file.path = '/tmp/banqing.md';
+    await processAgentFileUpload({
+      req,
+      res: mockRes,
+      metadata: { file_id: 'file-uuid-123', message_file: true },
+    });
+    expect(ingestOfficeToPico).toHaveBeenCalledWith(
+      expect.objectContaining({
+        req,
+        filename: '%E7%8F%AD%E6%83%85.md',
+        filePath: '/tmp/banqing.md',
+      }),
+    );
   });
 
   describe('OCR strategy selection', () => {
