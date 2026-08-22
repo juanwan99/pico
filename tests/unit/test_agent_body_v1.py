@@ -87,6 +87,23 @@ def test_spawn_workbench_tree_flags() -> None:
     assert str(extra) in cmd
 
 
+def test_spawn_workbench_tree_does_not_force_plan() -> None:
+    extra = Path("/tmp/plan-mode/index.ts")
+    t = SubprocessTransport(
+        session_dir=Path("/tmp/tp-sess"),
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r1",
+        continue_session=True,
+        plan_flag=False,
+        extra_extensions=[extra],
+    )
+    cmd = t.spawn_command()
+    assert "--continue" in cmd
+    assert "--plan" not in cmd
+    assert str(extra) in cmd
+
+
 def test_spawn_ephemeral_run_does_not_continue() -> None:
     t = SubprocessTransport(
         session_dir=Path("/tmp/tp-sess"),

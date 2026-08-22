@@ -1797,7 +1797,9 @@ async def chat_completions(
                 if text:
                     await q.put(("delta", text))
             elif event_type == "plan.progress":
-                text = str(payload.get("text") or "").strip()
+                from pico_orchestrator.human_package import public_progress_delta
+
+                text = public_progress_delta(payload)
                 if text:
                     await q.put(("delta", f"{text}\n"))
             elif event_type == "agent.step" and payload.get("phase") == "model":

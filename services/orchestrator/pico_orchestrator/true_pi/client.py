@@ -22,6 +22,32 @@ from pico_orchestrator.true_pi.config import extension_path, pi_bin
 
 logger = logging.getLogger(__name__)
 
+
+def choose_plan_select(options: list[Any] | None) -> tuple[str, bool]:
+    """Thin adapter of official plan-mode select labels.
+
+    Auto-Execute only when there are real todos (``Execute the plan (track
+    progress)``). Bare ``Execute the plan`` is an empty-plan passphrase —
+    Stay so the first turn can land. Not a greeting whitelist.
+    """
+    opts = [str(item) for item in (options or []) if str(item).strip()]
+    tracked = next(
+        (
+            item
+            for item in opts
+            if item.lower().startswith("execute") and "track progress" in item.lower()
+        ),
+        None,
+    )
+    if tracked:
+        return tracked, True
+    stay = next((item for item in opts if item.lower().startswith("stay")), None)
+    if stay:
+        return stay, False
+    if opts:
+        return opts[0], False
+    return "", False
+
 # Isolated PI_CODING_AGENT_DIR filename. Pi 0.73.1 has no --context CLI flag;
 # the window is models.json contextWindow (see packages/coding-agent/docs/models.md).
 PI_MODELS_JSON = "models.json"
@@ -209,6 +235,7 @@ class SubprocessTransport(TruePiTransport):
         self.spawn_cwd = spawn_cwd or session_dir
         self.plan_execute_pending = False
         self.plan_agent_ends = 0
+        self.plan_stayed = False
         self._proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task[None] | None = None
         self._queue: asyncio.Queue[RpcEvent | None] = asyncio.Queue()
@@ -305,16 +332,9 @@ class SubprocessTransport(TruePiTransport):
         if method not in {"select", "confirm", "input", "editor"}:
             return
         if method == "select":
-            options = raw.get("options") or []
-            value = ""
-            for opt in options:
-                if str(opt).startswith("Execute"):
-                    value = str(opt)
-                    break
-            if not value and options:
-                value = str(options[0])
-            if value.startswith("Execute"):
-                self.plan_execute_pending = True
+            value, execute_pending = choose_plan_select(raw.get("options") or [])
+            self.plan_execute_pending = bool(execute_pending)
+            self.plan_stayed = not execute_pending
             await self.send(
                 {"type": "extension_ui_response", "id": req_id, "value": value}
             )

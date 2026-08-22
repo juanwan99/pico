@@ -26,6 +26,9 @@ from pico_orchestrator.workbench_progress import (
 EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 COMPACTION_HUMAN = "对话太长，已收束早段。"
+_PLAN_INTERNAL_CUSTOM = frozenset(
+    {"plan-todo-list", "plan-complete", "plan-mode-execute", "plan-execution-context"}
+)
 
 
 @dataclass
@@ -207,8 +210,16 @@ async def map_event(
             if custom in {"plan-todo-list", "plan-complete", "plan-mode-execute"} and text:
                 state.event_kinds.append("plan.progress")
                 await emit("plan.progress", {"text": text, "customType": custom, **tag})
-            if msg.get("role") == "assistant" and text:
-                state.final_parts.append(text)
+            if (
+                msg.get("role") == "assistant"
+                and text
+                and custom not in _PLAN_INTERNAL_CUSTOM
+            ):
+                from pico_orchestrator.human_package import is_plan_passphrase, strip_ansi
+
+                cleaned = strip_ansi(text).strip()
+                if cleaned and not is_plan_passphrase(cleaned):
+                    state.final_parts.append(cleaned)
         return
 
     if kind == "message_update":
@@ -240,10 +251,12 @@ async def map_event(
             if isinstance(lines, list):
                 text = "\n".join(str(x) for x in lines[:8])[:400]
         if text.strip():
+            from pico_orchestrator.human_package import strip_ansi
+
             state.event_kinds.append("plan.progress")
             await emit(
                 "plan.progress",
-                {"text": text.strip(), "method": method, **tag},
+                {"text": strip_ansi(text.strip()), "method": method, **tag},
             )
         return
 
@@ -274,8 +287,13 @@ async def map_event(
         msg = raw.get("message") or {}
         if isinstance(msg, dict) and msg.get("role") == "assistant":
             text = _text_from_message(msg)
-            if text:
-                state.final_parts.append(text)
+            custom = str(msg.get("customType") or raw.get("customType") or "")
+            if text and custom not in _PLAN_INTERNAL_CUSTOM:
+                from pico_orchestrator.human_package import is_plan_passphrase, strip_ansi
+
+                cleaned = strip_ansi(text).strip()
+                if cleaned and not is_plan_passphrase(cleaned):
+                    state.final_parts.append(cleaned)
         return
 
     if kind == "extension_error":

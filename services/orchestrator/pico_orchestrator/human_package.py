@@ -10,6 +10,11 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
+# Official plan-mode TUI chrome that must not enter the teacher bubble.
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_EXECUTE_PLAN_LINE = re.compile(r"(?im)^[ \t]*execute the plan\b.*$")
+_PLAN_STATUS_CHROME = re.compile(r"(?i)(?:⏸\s*plan|📋\s*\d+/\d+|plan mode)")
+
 # Titles that are bookkeeping, not user downloads.
 _BOOKKEEPING = frozenset({"回复摘要", "summary", "run summary"})
 
@@ -287,6 +292,44 @@ def _mentions_titles(text: str, titles: list[str]) -> bool:
     return hits >= need
 
 
+def strip_ansi(text: str | None) -> str:
+    """Drop VT/ANSI color codes leaked by official plan-mode TUI paint()."""
+    if not text:
+        return ""
+    return _ANSI_RE.sub("", str(text))
+
+
+def is_plan_passphrase(text: str | None) -> bool:
+    """True for official 'Execute the plan*' / plan-mode status chrome."""
+    raw = strip_ansi(text).strip()
+    if not raw:
+        return False
+    if _EXECUTE_PLAN_LINE.search(raw):
+        return True
+    if raw.lower().startswith("execute the plan"):
+        return True
+    return bool(_PLAN_STATUS_CHROME.search(raw) and len(raw) < 80)
+
+
+def public_progress_delta(payload: dict[str, Any] | None) -> str:
+    """User-bubble line for plan.progress. Empty = do not stream chrome/passphrase."""
+    data = payload or {}
+    raw = strip_ansi(str(data.get("text") or "")).strip()
+    custom = str(data.get("customType") or "")
+    method = str(data.get("method") or "")
+    if not raw:
+        return ""
+    if is_plan_passphrase(raw) or custom == "plan-mode-execute":
+        return ""
+    if method == "setStatus":
+        return ""
+    if custom == "plan-todo-list":
+        return "正在整理步骤"
+    if method == "setWidget":
+        return "正在按步骤办理"
+    return ""
+
+
 def sanitize_user_facing_text(
     text: str,
     *,
@@ -294,7 +337,8 @@ def sanitize_user_facing_text(
     force_card_if_artifacts: bool = True,
 ) -> str:
     """Return chat-safe text: human package, no full HTML dump, no machine self-check."""
-    raw = (text or "").strip()
+    raw = strip_ansi(text or "").strip()
+    raw = _EXECUTE_PLAN_LINE.sub("", raw).strip()
     titles = [t.strip() for t in (artifact_titles or []) if t and not is_bookkeeping_title(t)]
     # Preserve unique order.
     seen: set[str] = set()
