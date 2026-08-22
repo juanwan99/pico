@@ -63,6 +63,14 @@ function picoKey() {
 }
 
 function membershipFromReq(req) {
+  const eduId = String(req.user?.eduId || '').trim();
+  const schoolId = String(req.user?.eduSchoolId || '').trim();
+  if (ID_RE.test(eduId) && ID_RE.test(schoolId)) {
+    return `${schoolId}:${eduId}`;
+  }
+  if (ID_RE.test(eduId)) {
+    return eduId;
+  }
   const id = req.user?.id?.toString?.() || req.user?._id?.toString?.() || '';
   // sanitize for header
   return id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 128) || 'anonymous';

@@ -215,6 +215,18 @@ class UsageEventRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
 
 
+class EduSsoJtiRow(Base):
+    """One-time edu web SSO tickets. jti is consumed on first successful use."""
+
+    __tablename__ = "edu_sso_jti"
+
+    jti: Mapped[str] = mapped_column(String(64), primary_key=True)
+    school_id: Mapped[str] = mapped_column(String(128), default="")
+    membership_id: Mapped[str] = mapped_column(String(128), default="")
+    exp: Mapped[int] = mapped_column(Integer, default=0)
+    consumed_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 _engine = None
 _Session: async_sessionmaker[AsyncSession] | None = None
 

@@ -28,6 +28,8 @@ export interface IUser extends Document {
   githubId?: string;
   discordId?: string;
   appleId?: string;
+  eduId?: string;
+  eduSchoolId?: string;
   plugins?: string[];
   openidIssuer?: string;
   twoFactorEnabled?: boolean;
