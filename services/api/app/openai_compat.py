@@ -90,18 +90,10 @@ def _sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
 
 
 def _workbench_tool_step_line(tool: str) -> str:
-    """One human step for workbench delivery tools. Empty = stay off the bubble."""
-    names = {
-        "generate_html_document": "正在写网页",
-        "generate_docx_document": "正在写 Word",
-        "generate_pptx_document": "正在写课件",
-        "edit_docx_document": "正在改 Word",
-        "edit_pptx_document": "正在改课件",
-        "generate_image": "正在出图",
-        "workspace_write_file": "正在落盘",
-        "verify_html_document": "正在核对网页",
-    }
-    return names.get(tool, "")
+    """One human step for workbench tools. Empty only when the tool name is empty."""
+    from pico_orchestrator.workbench_progress import workbench_tool_step_line
+
+    return workbench_tool_step_line(tool)
 
 
 def _normalize_allowed_tools(raw: list[Any] | None) -> list[str] | None:
@@ -1814,7 +1806,9 @@ async def chat_completions(
                 if payload.get("step") == 1:
                     await q.put(("status", "正在准备…\n"))
             elif event_type == "tool.call":
-                step = _workbench_tool_step_line(str(payload.get("tool") or ""))
+                step = str(payload.get("step_line") or "").strip() or _workbench_tool_step_line(
+                    str(payload.get("tool") or "")
+                )
                 if step:
                     await q.put(("delta", f"{step}\n"))
             elif event_type == "tool.result":

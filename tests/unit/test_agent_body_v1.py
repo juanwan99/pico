@@ -130,7 +130,8 @@ def test_sidebar_chat_only_unchanged() -> None:
     assert _workbench_tool_step_line("generate_docx_document") == "正在写 Word"
     assert _workbench_tool_step_line("edit_docx_document") == "正在改 Word"
     assert _workbench_tool_step_line("generate_image") == "正在出图"
-    assert _workbench_tool_step_line("workspace_list_files") == ""
+    assert _workbench_tool_step_line("workspace_list_files") == "正在列文件"
+    assert _workbench_tool_step_line("unknown_tool") == "正在调工具"
 
 
 @pytest.mark.asyncio

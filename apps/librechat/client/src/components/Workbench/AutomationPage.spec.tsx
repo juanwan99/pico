@@ -196,7 +196,7 @@ describe('AutomationPage', () => {
 
     await waitFor(() => expect(runPicoAutomation).toHaveBeenCalledWith('auto-1'));
     expect(await screen.findByRole('status')).toHaveTextContent('已创建运行 · queued');
-    expect(await screen.findByText('调用工具 · calculator')).toBeInTheDocument();
+    expect(await screen.findByText('正在调工具')).toBeInTheDocument();
   });
 
   it('keeps run-once failures visible and recoverable', async () => {

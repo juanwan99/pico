@@ -13,6 +13,7 @@ import {
   type PicoRunEvent,
   type PicoTask,
 } from '~/data-provider/pico/api';
+import { workbenchToolResultLine, workbenchToolStepLine } from '~/utils/picoWorkbenchProgress';
 
 export type PicoLedgerState = {
   task: PicoTask | null;
@@ -182,13 +183,11 @@ function describeSearchOrTool(event: PicoRunEvent): string | null {
     if (!tool) {
       return null;
     }
-    if (tool === 'web_search') {
-      return '正在检索';
+    const fromEvent = event.payload?.step_line;
+    if (typeof fromEvent === 'string' && fromEvent.trim()) {
+      return fromEvent.trim();
     }
-    if (tool === 'web_fetch') {
-      return '正在阅读网页';
-    }
-    return `调用 · ${tool}`;
+    return workbenchToolStepLine(tool);
   }
   if (event.type === 'tool.result') {
     const tool = toolName(event);
@@ -196,13 +195,11 @@ function describeSearchOrTool(event: PicoRunEvent): string | null {
       return null;
     }
     const ok = event.payload?.ok !== false;
-    if (tool === 'web_search') {
-      return ok ? '已检索到来源' : '检索未完成';
+    const userMessage = event.payload?.user_message;
+    if (!ok && typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage.trim();
     }
-    if (tool === 'web_fetch') {
-      return ok ? '已读页' : '读页未完成';
-    }
-    return ok ? `工具完成 · ${tool}` : `工具失败 · ${tool}`;
+    return workbenchToolResultLine(tool, ok);
   }
   return null;
 }
@@ -233,7 +230,7 @@ export function lastProcessStep(events: PicoRunEvent[]): string | null {
   return latestTool || latestAgent;
 }
 
-function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null {
+export function composeProcessHint(run: PicoRun | null, events: PicoRunEvent[]): string | null {
   // Teachers need a fixed process strip: runtime · step/tool · terminal when known.
   const runtime = runtimeHint(events);
   const step = lastProcessStep(events);
@@ -261,7 +258,8 @@ function processHint(run: PicoRun | null, events: PicoRunEvent[]): string | null
         : run?.status === 'cancelled'
           ? '终态 · 已停止'
           : null;
-  const bits = [runtime ? `运行时 · ${runtime}` : null, step, terminal].filter(Boolean);
+  const settledStep = step && step.includes('正在') ? null : step;
+  const bits = [runtime ? `运行时 · ${runtime}` : null, settledStep, terminal].filter(Boolean);
   return bits.length ? bits.join(' · ') : null;
 }
 
@@ -726,7 +724,7 @@ export function usePicoTaskLedger(
     events,
     artifacts,
     statusLabel: computeRunStatusLabel(run, isSubmitting, artifacts, events),
-    processHint: processHint(run, events),
+    processHint: composeProcessHint(run, events),
     loading,
     error: rerunError ?? cancelError ?? loadError,
     refresh,
