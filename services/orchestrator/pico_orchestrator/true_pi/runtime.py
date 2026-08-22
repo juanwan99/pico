@@ -32,6 +32,8 @@ from pico_orchestrator.true_pi.config import (
     ALLOWED_GATEWAY_TOOLS,
     RUNTIME_LABEL,
     history_n,
+    persist_session_dir,
+    plan_mode_extension_path,
     session_root,
 )
 from pico_orchestrator.true_pi.events import EventMapState, map_event
@@ -56,6 +58,8 @@ async def run_true_pi_agent(
     shadow: bool = False,
     run_id: str | None = None,
     session_dir: Path | None = None,
+    conversation_id: str | None = None,
+    persist_pi_session: bool = False,
 ) -> RunResult:
     """Run one multi-step turn on true Pi (or fake transport)."""
     caps = caps or RunCaps()
@@ -125,7 +129,20 @@ async def run_true_pi_agent(
             max_context, max_out = true_pi_windows_from_caps(caps)
             tool_server = ToolServer(principal=principal, gateway=gateway, run_id=rid)
             tool_url = await tool_server.start()
-            sess = session_dir or (session_root() / rid)
+            persist_dir = (
+                persist_session_dir(
+                    school_id=str(getattr(principal, "school_id", "") or ""),
+                    conversation_id=conversation_id,
+                )
+                if persist_pi_session
+                else None
+            )
+            sess = session_dir or persist_dir or (session_root() / rid)
+            use_tree = persist_dir is not None and session_dir is None
+            extra_ext: list[Path] = []
+            plan_path = plan_mode_extension_path()
+            if use_tree and plan_path.is_file():
+                extra_ext.append(plan_path)
             transport = SubprocessTransport(
                 session_dir=sess,
                 tool_url=tool_url,
@@ -136,6 +153,10 @@ async def run_true_pi_agent(
                 thinking=thinking_on,
                 max_context=max_context,
                 max_tokens=max_out,
+                extra_extensions=extra_ext,
+                continue_session=use_tree,
+                plan_flag=use_tree and bool(extra_ext),
+                spawn_cwd=sess,
                 env={
                     "DEEPSEEK_API_KEY": provider.api_key
                     if provider.name == "deepseek"
@@ -156,11 +177,18 @@ async def run_true_pi_agent(
         await client.start()
 
         skill = (caps.skill_instruction or "").strip()
+        # Workbench Pi session tree holds history. Do not paste N turns as text.
+        tree_history = history
+        if persist_pi_session and persist_session_dir(
+            school_id=str(getattr(principal, "school_id", "") or ""),
+            conversation_id=conversation_id,
+        ):
+            tree_history = None
         full_prompt = _compose_prompt(
             prompt=prompt,
             skill=skill,
             min_arts=min_arts,
-            history=history,
+            history=tree_history,
             allowed_tools=allowed,
             system_prompt=str(getattr(caps, "system_prompt", "") or ""),
         )
@@ -187,6 +215,14 @@ async def run_true_pi_agent(
                     break
                 prev_tool_oks = state.tool_oks
                 await map_event(event, emit=emit, state=state, shadow=shadow)
+                # Official plan-mode auto-Execute starts a second turn in-process.
+                if (
+                    state.settled
+                    and isinstance(transport, SubprocessTransport)
+                    and transport.plan_execute_pending
+                ):
+                    state.settled = False
+                    transport.plan_execute_pending = False
                 # Circuit-breaker progress bookkeeping (F2): any event that maps
                 # is real forward motion; a newly successful tool execution
                 # resets the no-tool-progress timer used by the deep-lane

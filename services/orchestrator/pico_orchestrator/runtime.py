@@ -198,6 +198,9 @@ async def run_agent_runtime(
     school_id = str(getattr(principal, "school_id", "") or "")
     membership_id = str(getattr(principal, "membership_id", "") or "")
     emit = kwargs.get("emit")
+    # Hosted pi_runtime / kimi do not take these; true-pi session tree does.
+    persist_pi_session = bool(kwargs.pop("persist_pi_session", False))
+    conversation_id = kwargs.pop("conversation_id", None)
 
     use_pi = should_use_pi_agent(
         use_pi_agent=use_pi_agent,
@@ -234,7 +237,11 @@ async def run_agent_runtime(
                 )
             from pico_orchestrator.true_pi.runtime import run_true_pi_agent
 
-            return await run_true_pi_agent(**kwargs)
+            return await run_true_pi_agent(
+                **kwargs,
+                persist_pi_session=persist_pi_session,
+                conversation_id=conversation_id,
+            )
 
         if _PI_IMPL is not None:
             result = await _PI_IMPL(**kwargs)

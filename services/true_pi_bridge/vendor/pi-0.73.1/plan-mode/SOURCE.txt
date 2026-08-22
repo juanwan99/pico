@@ -1,0 +1,10 @@
+SOURCE: @mariozechner/pi-coding-agent@0.73.1
+PATH: examples/extensions/plan-mode/
+LICENSE: MIT (upstream)
+
+Pico thin adapter (LAW-NO-SELF-BUILD):
+- Do not rewrite the plan engine.
+- Tool name lists are remapped onto the Pico gateway allowlist
+  (upstream lists coding-agent builtins read/bash/edit/write).
+- RPC has no TUI theme; updateStatus falls back to plain text.
+- Extraction, [DONE:n], persistence, --plan flag, /plan remain upstream.

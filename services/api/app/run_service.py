@@ -425,6 +425,8 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             assert run is not None
             prompt = run.prompt
             skill_snapshot = _run_skill_snapshot(run)
+            task = await session.get(TaskRow, run.task_id)
+            conversation_id = getattr(task, "conversation_id", None) if task else None
 
         allowed_tools = None
         skill_instruction = ""
@@ -460,7 +462,10 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                 factory,
                 task_id=run.task_id,
                 run_id=run_id,
+                conversation_id=conversation_id,
             ),
+            conversation_id=conversation_id,
+            persist_pi_session=True,
         )
     except Exception as exc:  # noqa: BLE001 — persist failure on any crash
         async with factory() as session:

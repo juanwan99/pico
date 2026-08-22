@@ -88,6 +88,18 @@ def _sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
     return bool(json_only or edu_sidebar)
 
 
+def _workbench_tool_step_line(tool: str) -> str:
+    """One human step for workbench delivery tools. Empty = stay off the bubble."""
+    names = {
+        "generate_html_document": "正在写网页",
+        "generate_docx_document": "正在写 Word",
+        "generate_pptx_document": "正在写课件",
+        "workspace_write_file": "正在落盘",
+        "verify_html_document": "正在核对网页",
+    }
+    return names.get(tool, "")
+
+
 def _normalize_allowed_tools(raw: list[Any] | None) -> list[str] | None:
     if raw is None:
         return None
@@ -1224,6 +1236,8 @@ async def _run_and_collect(
         artifact_store=LedgerArtifactStore(
             factory, run_id=run_id, conversation_id=conversation_id
         ),
+        conversation_id=conversation_id,
+        persist_pi_session=True,
     )
     return result
 
@@ -1758,14 +1772,19 @@ async def chat_completions(
                 text = str(payload.get("text") or "")
                 if text:
                     await q.put(("delta", text))
+            elif event_type == "plan.progress":
+                text = str(payload.get("text") or "").strip()
+                if text:
+                    await q.put(("delta", f"{text}\n"))
             elif event_type == "agent.step" and payload.get("phase") == "model":
                 # G2: user main channel stays human-package only.
                 # Tool/step process lives in ledger + ResultPanel timeline, not bubble.
                 if payload.get("step") == 1:
                     await q.put(("status", "正在准备…\n"))
             elif event_type == "tool.call":
-                # Engineer trail only (already appended to ledger above).
-                pass
+                step = _workbench_tool_step_line(str(payload.get("tool") or ""))
+                if step:
+                    await q.put(("delta", f"{step}\n"))
             elif event_type == "tool.result":
                 pass
             elif event_type == "run.heartbeat":
@@ -1863,6 +1882,8 @@ async def chat_completions(
                         run_id=run_id,
                         conversation_id=conversation_id,
                     ),
+                    conversation_id=conversation_id,
+                    persist_pi_session=True,
                 )
                 await _finalize_run(
                     run_id,
