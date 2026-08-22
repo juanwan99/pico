@@ -1373,7 +1373,7 @@ async def chat_completions(
                     principal, conversation_id or "", named_session, settings
                 )
             prompt = inject_named_school_materials(prompt, named_items)
-        except Exception:  # noqa: BLE001 — unnamed school files must not leak; missing named is ok
+        except Exception:  # noqa: BLE001,S110 — unnamed school files must not leak; missing named is ok
             pass
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 12000) or 12000)
     # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
