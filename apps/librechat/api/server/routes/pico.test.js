@@ -3,7 +3,7 @@ const request = require('supertest');
 
 jest.mock('~/server/middleware', () => ({
   requireJwtAuth: (req, _res, next) => {
-    req.user = { id: 'member-123' };
+    req.user = global.__PICO_USER || { id: 'member-123' };
     next();
   },
 }));
@@ -26,6 +26,25 @@ describe('Pico proxy routes', () => {
 
   afterEach(() => {
     delete global.fetch;
+    delete global.__PICO_USER;
+  });
+
+  it('sends edu membership as joint school:member header', async () => {
+    global.__PICO_USER = {
+      id: 'mongo-user',
+      eduId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      eduSchoolId: '627bcf3a-a9a8-4047-afcc-3d4878e2a7af',
+    };
+    await request(app).get('/api/pico/v1/tasks');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/tasks',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-Pico-Membership-Id':
+            '627bcf3a-a9a8-4047-afcc-3d4878e2a7af:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        }),
+      }),
+    );
   });
 
   it('exposes public tip probe with minimal fields only', async () => {

@@ -92,6 +92,13 @@ const userSchema: Schema<IUser> = new Schema<IUser>(
     appleId: {
       type: String,
     },
+    /** edu-core school_membership.id — workbench identity matches sidebar Pico ticket */
+    eduId: {
+      type: String,
+    },
+    eduSchoolId: {
+      type: String,
+    },
     plugins: {
       type: Array,
     },
@@ -173,6 +180,10 @@ const userSchema: Schema<IUser> = new Schema<IUser>(
 userSchema.index({ email: 1, tenantId: 1 }, { unique: true });
 userSchema.index({ role: 1, tenantId: 1 });
 userSchema.index({ idOnTheSource: 1, openidIssuer: 1, tenantId: 1 });
+userSchema.index(
+  { eduId: 1 },
+  { unique: true, partialFilterExpression: { eduId: { $exists: true } } },
+);
 
 const oAuthIdFields = [
   'googleId',
