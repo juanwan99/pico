@@ -208,6 +208,7 @@ class SubprocessTransport(TruePiTransport):
         self.plan_flag = bool(plan_flag)
         self.spawn_cwd = spawn_cwd or session_dir
         self.plan_execute_pending = False
+        self.plan_agent_ends = 0
         self._proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task[None] | None = None
         self._queue: asyncio.Queue[RpcEvent | None] = asyncio.Queue()
