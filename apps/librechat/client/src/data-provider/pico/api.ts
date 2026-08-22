@@ -470,6 +470,14 @@ export type EduSchoolMaterial = {
   title?: string;
   excerpt?: string;
   unread?: boolean;
+  publishState?: string | null;
+};
+
+export type EduSchoolField = {
+  id: string;
+  name?: string;
+  type?: string | null;
+  followed?: boolean;
 };
 
 export async function searchEduSchoolMaterials(q = '', fieldId = '') {
@@ -488,12 +496,47 @@ export async function getEduSchoolMaterial(itemId: string) {
 
 export async function getEduNamedIds(conversationId = '') {
   const qs = conversationId ? `?conversation_id=${encodeURIComponent(conversationId)}` : '';
-  return picoFetch<{ ids?: string[]; dumped?: boolean }>(`/v1/edu/named${qs}`);
+  return picoFetch<{ ids?: string[]; field_id?: string; dumped?: boolean }>(`/v1/edu/named${qs}`);
 }
 
-export async function putEduNamedIds(conversationId: string, ids: string[]) {
-  return picoFetch<{ ids?: string[]; dumped?: boolean }>(`/v1/edu/named`, {
+export async function putEduNamedIds(conversationId: string, ids: string[], fieldId = '') {
+  return picoFetch<{ ids?: string[]; field_id?: string; dumped?: boolean }>(`/v1/edu/named`, {
     method: 'PUT',
-    body: JSON.stringify({ conversation_id: conversationId || '', ids }),
+    body: JSON.stringify({
+      conversation_id: conversationId || '',
+      ids,
+      field_id: fieldId || '',
+    }),
+  });
+}
+
+export async function listEduFields() {
+  return picoFetch<{ fields?: EduSchoolField[]; dumped?: boolean; configured?: boolean }>(
+    `/v1/edu/fields`,
+  );
+}
+
+export async function landEduProduct(body: {
+  conversation_id?: string;
+  field_id?: string;
+  item_id?: string;
+  title?: string;
+  filename?: string;
+  kind?: string;
+  body_html?: string;
+  content_b64?: string;
+}) {
+  return picoFetch<{
+    ok?: boolean;
+    landed?: boolean;
+    green?: boolean;
+    kind?: string;
+    id?: string;
+    fieldId?: string;
+    title?: string;
+    error?: string;
+  }>(`/v1/edu/land`, {
+    method: 'POST',
+    body: JSON.stringify(body),
   });
 }

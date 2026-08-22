@@ -450,4 +450,18 @@ describe('Pico proxy routes', () => {
       }),
     );
   });
+
+  it('proxies school land writes', async () => {
+    const response = await request(app)
+      .post('/api/pico/v1/edu/land')
+      .send({ filename: '页.html', body_html: '<p>灰</p>' });
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/edu/land',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ filename: '页.html', body_html: '<p>灰</p>' }),
+      }),
+    );
+  });
 });

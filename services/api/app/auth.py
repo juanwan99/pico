@@ -58,6 +58,26 @@ def issue_test_token(
 
 def issue_edu_read_token(principal: Principal, settings: Settings | None = None) -> str | None:
     """Short pico-api JWT for this membership so edu RLS runs as that person."""
+    return _issue_edu_membership_token(principal, purpose="edu-read", scopes=["ai:read"], settings=settings)
+
+
+def issue_edu_write_token(principal: Principal, settings: Settings | None = None) -> str | None:
+    """Same person, write land. Not a school-wide service account."""
+    return _issue_edu_membership_token(
+        principal,
+        purpose="edu-write",
+        scopes=["ai:read", "ai:run"],
+        settings=settings,
+    )
+
+
+def _issue_edu_membership_token(
+    principal: Principal,
+    *,
+    purpose: str,
+    scopes: list[str],
+    settings: Settings | None = None,
+) -> str | None:
     s = settings or get_settings()
     iss = (s.pico_edu_iss or "").strip()
     secret = (s.pico_edu_jwt_secret or "").strip()
@@ -71,9 +91,9 @@ def issue_edu_read_token(principal: Principal, settings: Settings | None = None)
         "exp": int((now + timedelta(seconds=90)).timestamp()),
         "school_id": principal.school_id,
         "membership_id": principal.membership_id,
-        "scopes": ["ai:read"],
+        "scopes": scopes,
         "sub": f"{principal.school_id}:{principal.membership_id}",
-        "purpose": "edu-read",
+        "purpose": purpose,
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 

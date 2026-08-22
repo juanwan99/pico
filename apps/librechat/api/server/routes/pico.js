@@ -395,6 +395,7 @@ router.get('/v1/edu/materials/:itemId', (req, res) => {
 });
 router.get('/v1/edu/named', (req, res) => proxy(req, res, '/v1/edu/named'));
 router.put('/v1/edu/named', (req, res) => proxy(req, res, '/v1/edu/named'));
+router.post('/v1/edu/land', (req, res) => proxy(req, res, '/v1/edu/land'));
 
 // R5: teacher self-read wrong paths → human 404 (not opaque Express default).
 router.use((req, res) => {

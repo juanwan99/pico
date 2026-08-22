@@ -141,7 +141,7 @@ class LedgerArtifactStore:
                     commit=False,
                 )
             await session.commit()
-            return {
+            out = {
                 "artifact_id": artifact.id,
                 "task_id": task.id,
                 "run_id": artifact.run_id,
@@ -154,6 +154,27 @@ class LedgerArtifactStore:
                 "content_sha256": digest,
                 "download_path": f"/v1/artifacts/{artifact.id}/content?download=true",
             }
+        convo = self._conversation_id or getattr(task, "conversation_id", None)
+        try:
+            from app.edu_school import land_generated_artifact
+
+            school = await land_generated_artifact(
+                principal,
+                title=title,
+                content=content,
+                conversation_id=str(convo or ""),
+            )
+        except Exception as exc:  # noqa: BLE001 — land miss must not swallow the file
+            school = {
+                "ok": False,
+                "landed": False,
+                "code": "edu.land_failed",
+                "error": str(exc)[:200],
+                "user_message": "学校这次没写成。这份只留在对话草稿纸，刷新学校看不见。",
+            }
+        if school and school.get("code") != "kind_skip":
+            out["school"] = school
+        return out
 
     def _owned_artifacts(self, principal: Principal):
         stmt = (

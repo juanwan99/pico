@@ -5,8 +5,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   getEduNamedIds,
+  listEduFields,
   putEduNamedIds,
   searchEduSchoolMaterials,
+  type EduSchoolField,
   type EduSchoolMaterial,
 } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
@@ -17,6 +19,8 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   const [q, setQ] = useState('');
   const [items, setItems] = useState<EduSchoolMaterial[]>([]);
   const [named, setNamed] = useState<string[]>([]);
+  const [fieldId, setFieldId] = useState('');
+  const [fields, setFields] = useState<EduSchoolField[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,14 +28,19 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
     try {
       const row = await getEduNamedIds(convo);
       setNamed(Array.isArray(row.ids) ? row.ids : []);
+      setFieldId(typeof row.field_id === 'string' ? row.field_id : '');
     } catch {
       setNamed([]);
+      setFieldId('');
     }
   }, [convo]);
 
   useEffect(() => {
     if (!open) return;
     void refreshNamed();
+    void listEduFields()
+      .then((row) => setFields(Array.isArray(row.fields) ? row.fields : []))
+      .catch(() => setFields([]));
   }, [open, refreshNamed]);
 
   const search = useCallback(async () => {
@@ -61,10 +70,24 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
       const next = named.includes(id) ? named.filter((x) => x !== id) : [...named, id].slice(0, 12);
       setNamed(next);
       try {
-        const row = await putEduNamedIds(convo, next);
+        const row = await putEduNamedIds(convo, next, fieldId);
         setNamed(Array.isArray(row.ids) ? row.ids : next);
+        if (typeof row.field_id === 'string') setFieldId(row.field_id);
       } catch {
         setError('勾选没写上');
+      }
+    },
+    [convo, named, fieldId],
+  );
+
+  const pickField = useCallback(
+    async (nextField: string) => {
+      setFieldId(nextField);
+      try {
+        const row = await putEduNamedIds(convo, named, nextField);
+        if (typeof row.field_id === 'string') setFieldId(row.field_id);
+      } catch {
+        setError('落点场没写上');
       }
     },
     [convo, named],
@@ -96,6 +119,24 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
       </button>
       {open ? (
         <div className="mt-1 rounded-lg border border-black/[0.08] bg-white p-2 text-[12px]">
+          <label className="mb-1 block text-[11px] text-[#666]">
+            落到哪一场
+            <select
+              className="mt-0.5 h-8 w-full rounded-md border border-black/[0.08] px-2 outline-none"
+              value={fieldId}
+              data-testid="school-land-field"
+              onChange={(e) => void pickField(e.target.value)}
+            >
+              <option value="">请点名一场（没点名学校看不见）</option>
+              {fields.map((field) =>
+                field.id ? (
+                  <option key={field.id} value={field.id}>
+                    {field.name || field.id}
+                  </option>
+                ) : null,
+              )}
+            </select>
+          </label>
           <div className="flex gap-1">
             <input
               value={q}

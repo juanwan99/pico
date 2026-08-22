@@ -5,6 +5,8 @@ import {
   labelForLatestRun,
   searchEduSchoolMaterials,
   putEduNamedIds,
+  listEduFields,
+  landEduProduct,
 } from './api';
 
 jest.mock('librechat-data-provider', () => ({
@@ -124,6 +126,45 @@ describe('edu school materials client', () => {
         body: JSON.stringify({
           conversation_id: 'c1',
           ids: ['aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'],
+          field_id: '',
+        }),
+      }),
+    );
+  });
+
+  it('lists school fields', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ fields: [{ id: 'f1', name: '本学期排课' }], dumped: false }),
+    });
+    await expect(listEduFields()).resolves.toEqual({
+      fields: [{ id: 'f1', name: '本学期排课' }],
+      dumped: false,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/pico/v1/edu/fields',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('posts land to school field', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, landed: true, green: false, kind: 'page' }),
+    });
+    await landEduProduct({
+      field_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      filename: '页.html',
+      body_html: '<p>灰</p>',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/pico/v1/edu/land',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          field_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+          filename: '页.html',
+          body_html: '<p>灰</p>',
         }),
       }),
     );
