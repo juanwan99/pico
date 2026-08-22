@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 
 from app.auth import issue_test_token
-from app.edu_school import inject_named_school_materials
+from app.edu_school import classify_land_kind, inject_named_school_materials, sanitize_field_id
 from app.edu_sso import sanitize_display_name
 from app.settings import get_settings
 
@@ -97,6 +97,46 @@ def test_named_bind_roundtrip_does_not_store_bodies(client) -> None:
     )
     assert got.status_code == 200
     assert got.json()["ids"] == [item]
+
+
+def test_named_bind_stores_field_id(client) -> None:
+    field = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    put = client.put(
+        "/v1/edu/named",
+        json={"conversation_id": "c1", "ids": [], "field_id": field},
+        headers={"Authorization": f"Bearer {_token()}", "X-Pico-Membership-Id": "school-a:m-edu"},
+    )
+    assert put.status_code == 200, put.text
+    assert put.json()["field_id"] == field
+    got = client.get(
+        "/v1/edu/named",
+        params={"conversation_id": "c1"},
+        headers={"Authorization": f"Bearer {_token()}", "X-Pico-Membership-Id": "school-a:m-edu"},
+    )
+    assert got.json()["field_id"] == field
+
+
+def test_classify_land_kind_routes_html_and_office() -> None:
+    assert classify_land_kind("页.html") == "page"
+    assert classify_land_kind("报告.docx") == "material"
+    assert classify_land_kind("表.xlsx") == "material"
+    assert classify_land_kind("图.png") == "skip"
+    assert classify_land_kind("笔记.txt") is None
+    assert sanitize_field_id("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")
+    assert sanitize_field_id("nope") == ""
+
+
+def test_land_without_edu_base_does_not_pretend(client) -> None:
+    res = client.post(
+        "/v1/edu/land",
+        json={"filename": "页.html", "body_html": "<p>灰</p>"},
+        headers={"Authorization": f"Bearer {_token()}", "X-Pico-Membership-Id": "school-a:m-edu"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body.get("configured") is False
+    assert body.get("landed") is False
+    assert body.get("dumped") is False
 
 
 def test_materials_without_edu_base_does_not_dump(client) -> None:

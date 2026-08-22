@@ -245,6 +245,7 @@ class EduNamedBindRow(Base):
     membership_id: Mapped[str] = mapped_column(String(128), index=True)
     conversation_id: Mapped[str] = mapped_column(String(128), default="")
     item_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    field_id: Mapped[str] = mapped_column(String(36), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
@@ -328,6 +329,14 @@ def _migrate_sqlite_sync(conn) -> None:
             )
         if "byte_size" not in acols:
             conn.execute(text("ALTER TABLE artifacts ADD COLUMN byte_size INTEGER DEFAULT 0"))
+
+    try:
+        named_rows = conn.execute(text("PRAGMA table_info(edu_named_bind)")).fetchall()
+    except Exception:  # noqa: BLE001
+        named_rows = []
+    ncols = {r[1] for r in named_rows}
+    if ncols and "field_id" not in ncols:
+        conn.execute(text("ALTER TABLE edu_named_bind ADD COLUMN field_id VARCHAR(36) DEFAULT ''"))
 
     duplicate_runs = conn.execute(
         text("SELECT run_id FROM events GROUP BY run_id, seq HAVING COUNT(*) > 1")
