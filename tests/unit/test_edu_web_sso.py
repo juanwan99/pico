@@ -81,6 +81,23 @@ def test_web_ticket_is_membership_not_field_context() -> None:
     assert t.membership_id == MEMBER
     assert t.jti == "jti-web-1"
     assert t.iss == EDU_ISS
+    assert t.display_name == ""
+    assert t.named_ids == ()
+
+
+def test_web_ticket_carries_display_name_and_named_ids_not_bodies() -> None:
+    item = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    t = decode_web_ticket(
+        _web_token(
+            extra={
+                "display_name": "孙骏博",
+                "named_ids": [item, "not-a-uuid", item],
+            }
+        ),
+        _settings(),
+    )
+    assert t.display_name == "孙骏博"
+    assert t.named_ids == (item,)
 
 
 def test_api_ticket_cannot_open_web_session() -> None:

@@ -109,6 +109,14 @@ async function proxy(req, res, path, options = {}) {
     if (['proposed', 'confirmed', 'rejected'].includes(sp.get('status'))) {
       out.set('status', sp.get('status'));
     }
+    if (sp.has('q')) {
+      const q = (sp.get('q') || '').slice(0, 200);
+      if (q) out.set('q', q);
+    }
+    if (sp.has('field_id')) {
+      const fieldId = sp.get('field_id') || '';
+      if (ID_RE.test(fieldId)) out.set('field_id', fieldId);
+    }
     if (allowDownload && ['1', 'true'].includes(sp.get('download'))) {
       out.set('download', 'true');
     }
@@ -374,6 +382,19 @@ router.post('/v1/sandbox/sessions/:sessionId/input', (req, res) => {
     return res.status(400).json({ error: 'bad_request', message: e.message });
   }
 });
+
+router.get('/v1/edu/materials', (req, res) => proxy(req, res, '/v1/edu/materials'));
+router.get('/v1/edu/fields', (req, res) => proxy(req, res, '/v1/edu/fields'));
+router.get('/v1/edu/materials/:itemId', (req, res) => {
+  try {
+    assertId(req.params.itemId, 'itemId');
+    return proxy(req, res, `/v1/edu/materials/${req.params.itemId}`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+router.get('/v1/edu/named', (req, res) => proxy(req, res, '/v1/edu/named'));
+router.put('/v1/edu/named', (req, res) => proxy(req, res, '/v1/edu/named'));
 
 // R5: teacher self-read wrong paths → human 404 (not opaque Express default).
 router.use((req, res) => {

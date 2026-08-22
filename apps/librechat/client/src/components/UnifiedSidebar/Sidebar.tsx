@@ -39,6 +39,7 @@ const MORE_ITEMS = [
   { label: '自动化', icon: 'zap' as PicoIconName, path: '/automation' },
   { label: '空间', icon: 'folder-open' as PicoIconName, path: '/workspaces', divider: true },
   { label: '我的文件', icon: 'folder-open' as PicoIconName, path: '/more/files' },
+  { label: '学校材料', icon: 'folder-open' as PicoIconName, path: '/more/files#school' },
   { label: '灵感', icon: 'lightbulb' as PicoIconName, path: '/capability?tab=skills' },
 ] as const;
 

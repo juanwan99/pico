@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, NoReturn
 
@@ -23,6 +24,37 @@ FORBIDDEN_CLAIMS = frozenset(
 router = APIRouter()
 
 
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.I,
+)
+NAMED_IDS_MAX = 12
+
+
+def sanitize_display_name(raw: Any) -> str:
+    name = " ".join(str(raw or "").replace("\r", " ").replace("\n", " ").replace("\t", " ").split())
+    name = name.strip()[:80]
+    if not name or name == "学校账号":
+        return ""
+    return name
+
+
+def sanitize_named_ids(raw: Any) -> tuple[str, ...]:
+    if not isinstance(raw, list):
+        return ()
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in raw:
+        item = str(value or "").strip()
+        if not _UUID_RE.match(item) or item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+        if len(out) >= NAMED_IDS_MAX:
+            break
+    return tuple(out)
+
+
 @dataclass(frozen=True)
 class WebTicket:
     school_id: str
@@ -30,6 +62,8 @@ class WebTicket:
     jti: str
     exp: int
     iss: str
+    display_name: str = ""
+    named_ids: tuple[str, ...] = ()
 
 
 class ConsumeBody(BaseModel):
@@ -102,6 +136,8 @@ def decode_web_ticket(token: str, settings: Settings | None = None) -> WebTicket
         jti=jti.strip(),
         exp=exp,
         iss=str(data.get("iss") or ""),
+        display_name=sanitize_display_name(data.get("display_name")),
+        named_ids=sanitize_named_ids(data.get("named_ids")),
     )
 
 
@@ -134,8 +170,20 @@ async def consume_edu_sso(
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     ticket = await consume_web_ticket(body.ticket, session, settings)
+    if ticket.named_ids:
+        from app.edu_school import remember_named_ids
+
+        await remember_named_ids(
+            session,
+            ticket.school_id,
+            ticket.membership_id,
+            "",
+            list(ticket.named_ids),
+        )
     return {
         "ok": True,
         "school_id": ticket.school_id,
         "membership_id": ticket.membership_id,
+        "display_name": ticket.display_name,
+        "named_ids": list(ticket.named_ids),
     }

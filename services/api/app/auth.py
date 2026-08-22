@@ -56,6 +56,28 @@ def issue_test_token(
     return jwt.encode(payload, s.pico_jwt_secret, algorithm="HS256")
 
 
+def issue_edu_read_token(principal: Principal, settings: Settings | None = None) -> str | None:
+    """Short pico-api JWT for this membership so edu RLS runs as that person."""
+    s = settings or get_settings()
+    iss = (s.pico_edu_iss or "").strip()
+    secret = (s.pico_edu_jwt_secret or "").strip()
+    if not iss or not secret:
+        return None
+    now = datetime.now(UTC)
+    payload = {
+        "iss": iss,
+        "aud": "pico-api",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=90)).timestamp()),
+        "school_id": principal.school_id,
+        "membership_id": principal.membership_id,
+        "scopes": ["ai:read"],
+        "sub": f"{principal.school_id}:{principal.membership_id}",
+        "purpose": "edu-read",
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
 def _dev_proxy_keys(settings: Settings) -> set[str]:
     """Match openai_compat: explicit proxy keys only (never model API keys)."""
     keys = {"pico-dev", "sk-pico-dev"}

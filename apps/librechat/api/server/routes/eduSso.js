@@ -3,7 +3,7 @@
  * New window lands here, not an edu iframe / subpage.
  */
 const { logger } = require('@librechat/data-schemas');
-const { findUser, createUser, getUserById } = require('~/models');
+const { findUser, createUser, getUserById, updateUser } = require('~/models');
 const { setAuthTokens } = require('~/server/services/AuthService');
 
 const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
@@ -72,12 +72,42 @@ async function consumeTicket(ticket, fetchImpl = fetch) {
     err.code = 'auth.invalid';
     throw err;
   }
-  return { schoolId, membershipId };
+  const displayName = String(json.display_name || '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+  const namedIds = Array.isArray(json.named_ids) ? json.named_ids : [];
+  return {
+    schoolId,
+    membershipId,
+    displayName: displayName && displayName !== '学校账号' ? displayName : '',
+    namedIds,
+  };
 }
 
-async function findOrCreateEduUser({ schoolId, membershipId }) {
+function eduDisplayName(displayName, membershipId) {
+  const name = String(displayName || '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+  if (name && name !== '学校账号') return name;
+  return `edu-${String(membershipId || '').replace(/-/g, '').slice(0, 12)}`;
+}
+
+async function findOrCreateEduUser({ schoolId, membershipId, displayName }) {
+  const name = eduDisplayName(displayName, membershipId);
   const existing = await findUser({ provider: 'edu', eduId: membershipId });
   if (existing) {
+    const id = existing._id || existing.id;
+    const patch = {};
+    if (name && existing.name !== name) patch.name = name;
+    if (schoolId && existing.eduSchoolId !== schoolId) patch.eduSchoolId = schoolId;
+    if (Object.keys(patch).length && id) {
+      await updateUser(id, patch);
+      return { ...existing, ...patch };
+    }
     return existing;
   }
   const createdId = await createUser(
@@ -85,7 +115,7 @@ async function findOrCreateEduUser({ schoolId, membershipId }) {
       email: `${membershipId}@edu.pico.sso`,
       emailVerified: true,
       username: `edu-${membershipId.replace(/-/g, '').slice(0, 12)}`,
-      name: '学校账号',
+      name,
       provider: 'edu',
       eduId: membershipId,
       eduSchoolId: schoolId,
@@ -110,8 +140,8 @@ async function eduSsoController(req, res) {
       }
     }
     const ticket = typeof query.ticket === 'string' ? query.ticket : '';
-    const { schoolId, membershipId } = await consumeTicket(ticket);
-    const user = await findOrCreateEduUser({ schoolId, membershipId });
+    const { schoolId, membershipId, displayName } = await consumeTicket(ticket);
+    const user = await findOrCreateEduUser({ schoolId, membershipId, displayName });
     const userId = user._id || user.id;
     await setAuthTokens(userId, res, null, req);
     return res.redirect(302, '/c/new');
@@ -125,6 +155,7 @@ module.exports = {
   eduSsoController,
   consumeTicket,
   findOrCreateEduUser,
+  eduDisplayName,
   eduMembershipHeader,
   picoApiBase,
   parentDomainCookie,

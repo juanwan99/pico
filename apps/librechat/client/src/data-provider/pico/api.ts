@@ -462,3 +462,38 @@ export async function postPicoSandboxInput(
     },
   );
 }
+
+export type EduSchoolMaterial = {
+  id: string;
+  fieldId?: string | null;
+  kind?: string | null;
+  title?: string;
+  excerpt?: string;
+  unread?: boolean;
+};
+
+export async function searchEduSchoolMaterials(q = '', fieldId = '') {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (fieldId) params.set('field_id', fieldId);
+  const qs = params.toString();
+  return picoFetch<{ items?: EduSchoolMaterial[]; dumped?: boolean; configured?: boolean }>(
+    `/v1/edu/materials${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export async function getEduSchoolMaterial(itemId: string) {
+  return picoFetch<EduSchoolMaterial>(`/v1/edu/materials/${encodeURIComponent(itemId)}`);
+}
+
+export async function getEduNamedIds(conversationId = '') {
+  const qs = conversationId ? `?conversation_id=${encodeURIComponent(conversationId)}` : '';
+  return picoFetch<{ ids?: string[]; dumped?: boolean }>(`/v1/edu/named${qs}`);
+}
+
+export async function putEduNamedIds(conversationId: string, ids: string[]) {
+  return picoFetch<{ ids?: string[]; dumped?: boolean }>(`/v1/edu/named`, {
+    method: 'PUT',
+    body: JSON.stringify({ conversation_id: conversationId || '', ids }),
+  });
+}

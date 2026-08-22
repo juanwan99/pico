@@ -413,4 +413,41 @@ describe('Pico proxy routes', () => {
     expect(response.body.user_message).toBeTruthy();
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it('proxies school material search with membership header', async () => {
+    global.__PICO_USER = {
+      id: 'mongo-user',
+      eduId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      eduSchoolId: '627bcf3a-a9a8-4047-afcc-3d4878e2a7af',
+    };
+    const response = await request(app).get('/api/pico/v1/edu/materials').query({ q: '课时' });
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/edu/materials?q=%E8%AF%BE%E6%97%B6',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          'X-Pico-Membership-Id':
+            '627bcf3a-a9a8-4047-afcc-3d4878e2a7af:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        }),
+      }),
+    );
+  });
+
+  it('proxies named school material ids for this conversation', async () => {
+    const response = await request(app)
+      .put('/api/pico/v1/edu/named')
+      .send({ conversation_id: 'c1', ids: ['aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'] });
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/edu/named',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          conversation_id: 'c1',
+          ids: ['aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'],
+        }),
+      }),
+    );
+  });
 });
