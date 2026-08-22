@@ -1,6 +1,7 @@
 /**
- * Thin workbench ingest: copy uploaded .docx/.pptx bytes into Pico ledger.
- * LibreChat keeps its own file record; Pico needs OOXML for edit_* tools.
+ * Thin workbench ingest: copy composer uploads into the Pico ledger.
+ * LibreChat keeps its own file record. Agent workspace_read_file reads Pico.
+ * Text (.md/.txt/…) plus OOXML — T-AGENT-PLAIN-V1 F2, not a second cabinet.
  */
 const fs = require('fs').promises;
 const path = require('path');
@@ -20,6 +21,31 @@ function picoBase() {
 
 function picoKey() {
   return process.env.PICO_OPENAI_PROXY_KEY || process.env.OPENAI_API_KEY || 'sk-pico-dev';
+}
+
+const INGEST_EXT = new Set([
+  '.docx',
+  '.pptx',
+  '.xlsx',
+  '.md',
+  '.txt',
+  '.csv',
+  '.tsv',
+  '.json',
+  '.html',
+  '.htm',
+]);
+const RESERVED_CONVO = new Set(['new', 'search']);
+
+function conversationHeader(raw) {
+  const id = String(raw || '').trim();
+  if (!id || RESERVED_CONVO.has(id)) {
+    return '';
+  }
+  if (!/^[A-Za-z0-9._:-]{1,128}$/.test(id)) {
+    return '';
+  }
+  return id;
 }
 
 function membershipFromReq(req) {
@@ -60,22 +86,23 @@ async function readOfficeBytes({ buffer, filepath, filePath }) {
 async function ingestOfficeToPico({ req, filename, filepath, buffer, filePath }) {
   const name = path.basename(String(filename || ''));
   const ext = path.extname(name).toLowerCase();
-  if (ext !== '.docx' && ext !== '.pptx') {
+  if (!INGEST_EXT.has(ext)) {
     return null;
   }
   const data = await readOfficeBytes({ buffer, filepath, filePath });
   if (!data || !data.length) {
     return null;
   }
-  const conversationId =
-    req.body?.conversationId || req.body?.conversation_id || req.headers['x-conversation-id'];
+  const conversationId = conversationHeader(
+    req.body?.conversationId || req.body?.conversation_id || req.headers['x-conversation-id'],
+  );
   const headers = {
     Authorization: `Bearer ${picoKey()}`,
     'Content-Type': 'application/json',
     'X-Pico-Membership-Id': membershipFromReq(req),
   };
-  if (conversationId && /^[A-Za-z0-9._:-]{1,128}$/.test(String(conversationId))) {
-    headers['X-Conversation-Id'] = String(conversationId);
+  if (conversationId) {
+    headers['X-Conversation-Id'] = conversationId;
   }
   try {
     const res = await fetch(`${picoBase()}/v1/files`, {
@@ -97,4 +124,9 @@ async function ingestOfficeToPico({ req, filename, filepath, buffer, filePath })
   }
 }
 
-module.exports = { ingestOfficeToPico, membershipFromReq };
+module.exports = {
+  ingestOfficeToPico,
+  membershipFromReq,
+  conversationHeader,
+  INGEST_EXT,
+};

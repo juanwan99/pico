@@ -19,6 +19,8 @@ router = APIRouter(tags=["edu-files"])
 MAX_BYTES = 8 * 1024 * 1024
 KIND_SRC = "edu_office"
 KIND_EXCERPT = "edu_excerpt"
+TEXT_KINDS = frozenset({"md", "txt", "json", "csv", "tsv", "html", "htm"})
+RESERVED_CONVO = frozenset({"new", "search"})
 
 
 class FileJsonIn(BaseModel):
@@ -100,8 +102,17 @@ async def persist_edu_file(
 ) -> str:
     from app.artifact_store import encode_artifact_payload
 
-    stored, encoding, byte_size, digest = encode_artifact_payload(data)
     convo = (conversation_id or "").strip() or None
+    if convo in RESERVED_CONVO:
+        convo = None
+    kind = str(extract.get("kind") or "").strip().lower()
+    text_body = str(extract.get("text") or "")
+    if kind in TEXT_KINDS and text_body:
+        stored, encoding, byte_size, digest = encode_artifact_payload(text_body)
+        artifact_kind = "file"
+    else:
+        stored, encoding, byte_size, digest = encode_artifact_payload(data)
+        artifact_kind = KIND_SRC
     factory = session_factory()
     async with factory() as session:
         task = TaskRow(
@@ -116,7 +127,7 @@ async def persist_edu_file(
         src = ArtifactRow(
             id=new_id(),
             task_id=task.id,
-            kind=KIND_SRC,
+            kind=artifact_kind,
             title=filename[:512],
             inline=stored,
             content_encoding=encoding,
@@ -124,17 +135,18 @@ async def persist_edu_file(
             byte_size=byte_size,
         )
         session.add(src)
-        excerpt = ArtifactRow(
-            id=new_id(),
-            task_id=task.id,
-            kind=KIND_EXCERPT,
-            title=filename[:512],
-            inline=json.dumps(extract, ensure_ascii=False),
-            content_encoding="utf8",
-            content_sha256="",
-            byte_size=len(json.dumps(extract, ensure_ascii=False).encode("utf-8")),
-        )
-        session.add(excerpt)
+        if artifact_kind == KIND_SRC:
+            excerpt = ArtifactRow(
+                id=new_id(),
+                task_id=task.id,
+                kind=KIND_EXCERPT,
+                title=filename[:512],
+                inline=json.dumps(extract, ensure_ascii=False),
+                content_encoding="utf8",
+                content_sha256="",
+                byte_size=len(json.dumps(extract, ensure_ascii=False).encode("utf-8")),
+            )
+            session.add(excerpt)
         await session.commit()
         return src.id
 

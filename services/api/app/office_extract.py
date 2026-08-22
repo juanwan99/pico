@@ -51,7 +51,7 @@ def extract_office(filename: str, data: bytes) -> dict:
     ext = extension_of(name)
     if not data:
         return _fail(name, ext, "empty", "空文件，抽不出内容")
-    if ext in {"csv", "tsv", "txt", "md", "json"}:
+    if ext in {"csv", "tsv", "txt", "md", "json", "html", "htm"}:
         return _extract_text_table(name, ext, data, delimiter="\t" if ext == "tsv" else ",")
     if ext == "xlsx":
         return _extract_xlsx(name, data)
@@ -104,7 +104,7 @@ def _fail(name: str, ext: str, status: str, error: str) -> dict:
 
 def _extract_text_table(name: str, ext: str, data: bytes, *, delimiter: str) -> dict:
     text = _decode_text(data)
-    if ext in {"txt", "md", "json"}:
+    if ext in {"txt", "md", "json", "html", "htm"}:
         lines = [ln for ln in text.splitlines() if ln.strip()]
         headline = f"读到 {len(lines)} 行"
         return _ok(name, ext, headline=headline, text=text, rows=len(lines), cols=1)

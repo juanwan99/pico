@@ -115,6 +115,16 @@ def test_csv() -> None:
     assert got["headline"] == "读到 2 行 / 2 列"
 
 
+def test_markdown_text() -> None:
+    got = extract_office(
+        "班情.md",
+        "年级：三年级二班。人数：42。学情：识字两极分化。\n".encode(),
+    )
+    assert got["status"] == "ok"
+    assert "三年级二班" in got["text"]
+    assert got["kind"] == "md"
+
+
 def test_bad_xlsx() -> None:
     got = extract_office("坏.xlsx", b"not-a-zip")
     assert got["status"] == "bad_file"
