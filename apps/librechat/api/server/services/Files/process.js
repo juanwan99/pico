@@ -47,6 +47,20 @@ const { STTService } = require('./Audio/STTService');
 const { ingestOfficeToPico } = require('./picoOfficeIngest');
 const db = require('~/models');
 
+async function ingestComposerUpload(req, file, filename, extraPath) {
+  try {
+    await ingestOfficeToPico({
+      req,
+      filename: filename ?? file?.originalname,
+      filepath: extraPath || file?.path,
+      filePath: file?.path,
+      buffer: file?.buffer,
+    });
+  } catch (err) {
+    logger.warn('[pico office ingest]', err);
+  }
+}
+
 /**
  * Creates a modular file upload wrapper that ensures filename sanitization
  * across all storage strategies. This prevents storage-specific implementations
@@ -653,17 +667,7 @@ const processFileUpload = async ({ req, res, metadata, sseStream }) => {
     },
     true,
   );
-  try {
-    await ingestOfficeToPico({
-      req,
-      filename: filename ?? file.originalname,
-      filepath,
-      filePath: file.path,
-      buffer: file.buffer,
-    });
-  } catch (err) {
-    logger.warn('[pico office ingest]', err);
-  }
+  await ingestComposerUpload(req, file, filename ?? file.originalname, filepath);
   sendUploadSuccess(res, sseStream, 'File uploaded and processed successfully', result);
 };
 
@@ -683,6 +687,9 @@ const processAgentFileUpload = async ({ req, res, metadata, sseStream }) => {
   const { file } = req;
   const appConfig = req.config;
   const { agent_id, tool_resource, file_id, temp_file_id = null } = metadata;
+  // Workbench composer POSTs here (not processFileUpload). Copy bytes
+  // while multer still has the temp file; T-AGENT-PLAIN-V1 F2.
+  await ingestComposerUpload(req, file, file?.originalname);
 
   let messageAttachment = !!metadata.message_file;
 

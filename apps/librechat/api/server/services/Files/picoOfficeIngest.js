@@ -48,16 +48,22 @@ function conversationHeader(raw) {
   return id;
 }
 
+function decodeUploadName(name) {
+  const base = path.basename(String(name || ''));
+  if (!base) {
+    return '';
+  }
+  try {
+    return decodeURIComponent(base).replace(/\0/g, '') || base;
+  } catch {
+    return base;
+  }
+}
+
 function membershipFromReq(req) {
-  const eduId = String(req.user?.eduId || '').trim();
-  const schoolId = String(req.user?.eduSchoolId || '').trim();
-  const idRe = /^[A-Za-z0-9_-]{1,128}$/;
-  if (idRe.test(eduId) && idRe.test(schoolId)) {
-    return `${schoolId}:${eduId}`;
-  }
-  if (idRe.test(eduId)) {
-    return eduId;
-  }
+  // Chat completions bind the ledger with {{LIBRECHAT_USER_ID}}.
+  // workspace_list_files reads that same key. Preferring eduId here
+  // would land composer files in a cabinet the agent never lists.
   const id = req.user?.id?.toString?.() || req.user?._id?.toString?.() || '';
   return id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 128) || 'anonymous';
 }
@@ -84,7 +90,7 @@ async function readOfficeBytes({ buffer, filepath, filePath }) {
 }
 
 async function ingestOfficeToPico({ req, filename, filepath, buffer, filePath }) {
-  const name = path.basename(String(filename || ''));
+  const name = decodeUploadName(filename);
   const ext = path.extname(name).toLowerCase();
   if (!INGEST_EXT.has(ext)) {
     return null;
@@ -128,5 +134,6 @@ module.exports = {
   ingestOfficeToPico,
   membershipFromReq,
   conversationHeader,
+  decodeUploadName,
   INGEST_EXT,
 };
