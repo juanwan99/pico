@@ -215,11 +215,16 @@ async def run_true_pi_agent(
                     break
                 prev_tool_oks = state.tool_oks
                 await map_event(event, emit=emit, state=state, shadow=shadow)
-                # Official plan-mode: first agent_end is the plan turn; auto-Execute
-                # starts a second in-process turn. Do not land/kill on the first end.
-                if event.type == "agent_end" and getattr(transport, "plan_flag", False):
-                    transport.plan_agent_ends = int(getattr(transport, "plan_agent_ends", 0)) + 1
-                    if transport.plan_agent_ends < 2:
+                # Official plan-mode: first agent_end/agent_settled is the plan turn.
+                # Auto-Execute starts a second in-process turn. Do not land/kill yet.
+                if event.type in {"agent_end", "agent_settled"} and getattr(
+                    transport, "plan_flag", False
+                ):
+                    if event.type == "agent_end":
+                        transport.plan_agent_ends = int(
+                            getattr(transport, "plan_agent_ends", 0)
+                        ) + 1
+                    if int(getattr(transport, "plan_agent_ends", 0)) < 2:
                         state.settled = False
                 if state.settled and getattr(transport, "plan_execute_pending", False):
                     state.settled = False

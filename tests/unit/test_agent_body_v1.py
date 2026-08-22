@@ -205,6 +205,7 @@ async def test_plan_flag_waits_second_agent_end_before_landing() -> None:
                 },
             },
             {"type": "agent_end", "willRetry": False},
+            {"type": "agent_settled"},
             {
                 "type": "tool_execution_start",
                 "toolName": "workspace_write_file",
