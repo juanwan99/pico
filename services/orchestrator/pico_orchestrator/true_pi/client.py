@@ -181,6 +181,10 @@ class SubprocessTransport(TruePiTransport):
         env: Mapping[str, str] | None = None,
         binary: str | None = None,
         ext: Path | None = None,
+        extra_extensions: list[Path] | None = None,
+        continue_session: bool = False,
+        plan_flag: bool = False,
+        spawn_cwd: Path | None = None,
     ) -> None:
         self.session_dir = session_dir
         self.tool_url = tool_url
@@ -199,6 +203,11 @@ class SubprocessTransport(TruePiTransport):
         self._env_extra = dict(env or {})
         self.binary = binary or pi_bin()
         self.ext = ext or extension_path()
+        self.extra_extensions = list(extra_extensions or [])
+        self.continue_session = bool(continue_session)
+        self.plan_flag = bool(plan_flag)
+        self.spawn_cwd = spawn_cwd or session_dir
+        self.plan_execute_pending = False
         self._proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task[None] | None = None
         self._queue: asyncio.Queue[RpcEvent | None] = asyncio.Queue()
@@ -231,11 +240,13 @@ class SubprocessTransport(TruePiTransport):
         thinking flag and the policy model — never a global hardcoded off.
         Context window is not a CLI flag in pi 0.73.1; see prepare_agent_home.
         """
-        return [
+        cmd = [
             self.binary,
             "--mode",
             "rpc",
             "--no-builtin-tools",
+            "--no-context-files",
+            "--no-extensions",
             "--session-dir",
             str(self.session_dir),
             "--provider",
@@ -244,9 +255,15 @@ class SubprocessTransport(TruePiTransport):
             self.model,
             "--thinking",
             "on" if self.thinking else "off",
-            "-e",
-            str(self.ext),
         ]
+        if self.continue_session:
+            cmd.append("--continue")
+        if self.plan_flag:
+            cmd.append("--plan")
+        cmd.extend(["-e", str(self.ext)])
+        for extra in self.extra_extensions:
+            cmd.extend(["-e", str(extra)])
+        return cmd
 
     async def start(self) -> None:
         self.session_dir.mkdir(parents=True, exist_ok=True)
@@ -274,10 +291,45 @@ class SubprocessTransport(TruePiTransport):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            cwd=str(self.spawn_cwd),
             start_new_session=True,
         )
         self._reader_task = asyncio.create_task(self._read_stdout())
         asyncio.create_task(self._read_stderr())
+
+    async def _reply_extension_ui(self, raw: dict[str, Any]) -> None:
+        """RPC dialogs: auto-execute official plan-mode; never hang the agent."""
+        method = str(raw.get("method") or "")
+        req_id = raw.get("id")
+        if method not in {"select", "confirm", "input", "editor"}:
+            return
+        if method == "select":
+            options = raw.get("options") or []
+            value = ""
+            for opt in options:
+                if str(opt).startswith("Execute"):
+                    value = str(opt)
+                    break
+            if not value and options:
+                value = str(options[0])
+            if value.startswith("Execute"):
+                self.plan_execute_pending = True
+            await self.send(
+                {"type": "extension_ui_response", "id": req_id, "value": value}
+            )
+            return
+        if method == "confirm":
+            await self.send(
+                {
+                    "type": "extension_ui_response",
+                    "id": req_id,
+                    "confirmed": True,
+                }
+            )
+            return
+        await self.send(
+            {"type": "extension_ui_response", "id": req_id, "cancelled": True}
+        )
 
     async def _read_stdout(self) -> None:
         assert self._proc and self._proc.stdout
@@ -304,6 +356,8 @@ class SubprocessTransport(TruePiTransport):
                         continue
                     if isinstance(obj, dict):
                         t = str(obj.get("type") or "?")
+                        if t == "extension_ui_request":
+                            await self._reply_extension_ui(obj)
                         if t == "message_update":
                             # Streaming deltas carry the FULL accumulated content
                             # (up to ~40KB incl. the tool-call args while the

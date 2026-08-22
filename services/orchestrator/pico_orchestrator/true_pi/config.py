@@ -14,7 +14,9 @@ Environment (documented · no secrets):
 
 from __future__ import annotations
 
+import hashlib
 import os
+import re
 import shutil
 from collections.abc import Collection
 from pathlib import Path
@@ -97,6 +99,33 @@ def session_root() -> Path:
     return Path(os.environ.get("TMPDIR", "/tmp")) / "pico-true-pi-sessions"
 
 
+_SAFE_SEG = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def session_segment(raw: str, *, max_len: int = 80) -> str:
+    """Path-safe school/convo segment. Never '..' or empty."""
+    text = (raw or "").strip()
+    if not text:
+        return "unknown"
+    safe = _SAFE_SEG.sub("_", text).strip("._")[:max_len]
+    if not safe or safe in {".", ".."}:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
+    return safe
+
+
+def persist_session_dir(*, school_id: str, conversation_id: str | None) -> Path | None:
+    """Workbench Pi session tree: school_id / conversation_id.
+
+    Missing either side → None (caller must use a per-run dir). Cross-tenant
+    reuse is a REVISE.
+    """
+    school = (school_id or "").strip()
+    convo = (conversation_id or "").strip()
+    if not school or not convo:
+        return None
+    return session_root() / session_segment(school) / session_segment(convo)
+
+
 def history_n() -> int:
     raw = os.environ.get(TRUE_PI_HISTORY_N_ENV, "10").strip() or "10"
     try:
@@ -109,6 +138,22 @@ def extension_path() -> Path:
     """Path to the Node extension that registers Pico gateway tools."""
     here = Path(__file__).resolve()
     return here.parents[3] / "true_pi_bridge" / "pico-gateway-tools.ts"
+
+
+def plan_mode_extension_path() -> Path:
+    """Official 0.73.1 plan-mode (vendored). Override with PICO_TRUE_PI_PLAN_MODE_EXT."""
+    override = os.environ.get("PICO_TRUE_PI_PLAN_MODE_EXT", "").strip()
+    if override:
+        return Path(override)
+    here = Path(__file__).resolve()
+    return (
+        here.parents[3]
+        / "true_pi_bridge"
+        / "vendor"
+        / "pi-0.73.1"
+        / "plan-mode"
+        / "index.ts"
+    )
 
 
 def true_pi_available() -> bool:

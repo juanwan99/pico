@@ -20,6 +20,8 @@ from pico_orchestrator.true_pi.config import RUNTIME_LABEL
 
 EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
+COMPACTION_HUMAN = "对话太长，已收束早段。"
+
 
 @dataclass
 class EventMapState:
@@ -176,9 +178,14 @@ async def map_event(
 
     if kind == "message_end":
         msg = raw.get("message") or {}
-        if isinstance(msg, dict) and msg.get("role") == "assistant":
+        custom = ""
+        if isinstance(msg, dict):
+            custom = str(msg.get("customType") or raw.get("customType") or "")
             text = _text_from_message(msg)
-            if text:
+            if custom in {"plan-todo-list", "plan-complete", "plan-mode-execute"} and text:
+                state.event_kinds.append("plan.progress")
+                await emit("plan.progress", {"text": text, "customType": custom, **tag})
+            if msg.get("role") == "assistant" and text:
                 state.final_parts.append(text)
         return
 
@@ -189,7 +196,33 @@ async def map_event(
     if kind in {"compaction_start", "compaction_end"}:
         phase = "begin" if kind.endswith("start") else "end"
         state.event_kinds.append(f"compaction.{phase}")
-        await emit(f"compaction.{phase}", {**tag, "source": "true-pi"})
+        payload = {**tag, "source": "true-pi"}
+        if kind == "compaction_end":
+            payload["text"] = COMPACTION_HUMAN
+            if raw.get("reason"):
+                payload["reason"] = raw.get("reason")
+        await emit(f"compaction.{phase}", payload)
+        if kind == "compaction_end":
+            await emit("message.delta", {"text": COMPACTION_HUMAN, **tag})
+        return
+
+    if kind == "extension_ui_request":
+        method = str(raw.get("method") or "")
+        text = ""
+        if method == "notify":
+            text = str(raw.get("message") or "")[:400]
+        elif method == "setStatus":
+            text = str(raw.get("statusText") or "")[:200]
+        elif method == "setWidget":
+            lines = raw.get("widgetLines") or []
+            if isinstance(lines, list):
+                text = "\n".join(str(x) for x in lines[:8])[:400]
+        if text.strip():
+            state.event_kinds.append("plan.progress")
+            await emit(
+                "plan.progress",
+                {"text": text.strip(), "method": method, **tag},
+            )
         return
 
     if kind == "agent_end":
