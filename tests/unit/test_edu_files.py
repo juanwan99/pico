@@ -134,6 +134,59 @@ def test_post_pptx_persists_original_bytes(client: TestClient) -> None:
     assert "页" in body["headline"]
 
 
+def test_post_markdown_is_workspace_readable(client: TestClient, tmp_path, monkeypatch) -> None:
+    """T-AGENT-PLAIN-V1 F2: composer .md must land as utf8 Artifact the agent can read."""
+    import asyncio
+
+    from app.artifact_store import LedgerArtifactStore
+    from app.auth import Principal
+
+    token = _token()
+    body_text = "年级：三年级二班。人数：42。学情：识字两极分化。\n"
+    res = client.post(
+        "/v1/files",
+        headers={
+            "authorization": f"Bearer {token}",
+            "X-Conversation-Id": "convo-lesson",
+        },
+        json={
+            "filename": "班情.md",
+            "content_b64": base64.b64encode(body_text.encode("utf-8")).decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    posted = res.json()
+    assert posted["status"] == "ok"
+    assert posted["id"]
+    assert "三年级二班" in (posted.get("text") or "")
+
+    store = LedgerArtifactStore(
+        __import__("app.db", fromlist=["session_factory"]).session_factory(),
+        conversation_id="convo-lesson",
+    )
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="test",
+        aud="test",
+        exp=0,
+        raw={},
+    )
+
+    async def _check() -> None:
+        listed = await store.list(principal, limit=20)
+        titles = [str(row.get("title") or "") for row in listed]
+        assert "班情.md" in titles
+        got = await store.read(principal, artifact_id=None, title="班情.md")
+        assert got is not None
+        assert got.get("content_encoding") == "utf8"
+        assert "三年级二班" in str(got.get("content") or "")
+        assert "42" in str(got.get("content") or "")
+
+    asyncio.run(_check())
+
+
 def test_foreign_membership_cannot_read(client: TestClient) -> None:
     raw = _xlsx_bytes([["a", "b"]])
     owner = _token()
