@@ -33,8 +33,8 @@ describe('RunTimeline', () => {
     expect(items).toHaveLength(4);
     expect(items[0]).toHaveTextContent('Skill · analysis');
     expect(items[0]).toHaveTextContent('工具：calculator');
-    expect(items[1]).toHaveTextContent('调用工具 · calculator');
-    expect(items[2]).toHaveTextContent('工具结果 · calculator');
+    expect(items[1]).toHaveTextContent('正在调工具');
+    expect(items[2]).toHaveTextContent('工具已完成');
     expect(items[3]).toHaveTextContent('生成产物 · report.csv');
     expect(screen.queryByText('secret output')).not.toBeInTheDocument();
   });
@@ -69,7 +69,7 @@ describe('RunTimeline', () => {
       />,
     );
 
-    expect(screen.getByText('工具结果 · workspace_write_file')).toBeInTheDocument();
+    expect(screen.getByText('没落成盘')).toBeInTheDocument();
     expect(screen.getByText('失败 · 错误码：tool.denied')).toBeInTheDocument();
     expect(screen.getByText('运行失败')).toBeInTheDocument();
     expect(screen.getByText('处理超时，请重试。 · 错误码：timeout')).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe('RunTimeline', () => {
     render(<RunTimeline run={run('cancelled')} events={[]} />);
 
     expect(screen.getByText('云端任务已停止')).toBeInTheDocument();
-    expect(screen.getByText(/停止任务|已取消|云端/)).toBeInTheDocument();
+    expect(screen.getByText(/任务栏「停止任务」已取消云端执行/)).toBeInTheDocument();
   });
 
   it('shows kimi-agent runtime and agent steps in the process timeline', () => {
@@ -100,7 +100,7 @@ describe('RunTimeline', () => {
     expect(screen.getByText('正在运行')).toBeInTheDocument();
     expect(screen.getByText('运行时 · Kimi Agent')).toBeInTheDocument();
     expect(screen.getByText(/智能体步骤/)).toBeInTheDocument();
-    expect(screen.getByText('调用工具 · calculator')).toBeInTheDocument();
+    expect(screen.getByText('正在调工具')).toBeInTheDocument();
   });
 
   it('labels a recovered tool failure neutrally when the run succeeded (P2)', () => {
@@ -169,6 +169,17 @@ describe('RunTimeline', () => {
     expect(screen.getByText('正在运行')).toBeInTheDocument();
     expect(screen.getByText('失败')).toBeInTheDocument();
     expect(screen.queryByText('失败 · 已恢复')).not.toBeInTheDocument();
+  });
+
+  it('labels a live Word write as 正在写 Word (T-AGENT-FACE-V1)', () => {
+    render(
+      <RunTimeline
+        run={run('running')}
+        events={[event('call', 1, 'tool.call', { tool: 'generate_docx_document' })]}
+      />,
+    );
+    expect(screen.getByText('正在写 Word')).toBeInTheDocument();
+    expect(screen.queryByText(/generate_docx_document/)).not.toBeInTheDocument();
   });
 
   it('renders clickable search sources and honest miss copy', () => {

@@ -8,6 +8,7 @@ import {
   retryPicoRun,
 } from '~/data-provider/pico/api';
 import {
+  composeProcessHint,
   computeRunStatusLabel,
   friendlyFailureLabel,
   lastProcessStep,
@@ -35,6 +36,68 @@ const mockedListRuns = jest.mocked(listPicoTaskRuns);
 const mockedListEvents = jest.mocked(listPicoRunEvents);
 const mockedCancelRun = jest.mocked(cancelPicoRun);
 const mockedRetryRun = jest.mocked(retryPicoRun);
+
+describe('workbench Chinese progress (T-AGENT-FACE-V1)', () => {
+  it('labels generate_docx_document as 正在写 Word', () => {
+    expect(
+      lastProcessStep([
+        {
+          id: 'e1',
+          run_id: 'r1',
+          seq: 1,
+          type: 'tool.call',
+          payload: { tool: 'generate_docx_document' },
+        },
+      ]),
+    ).toBe('正在写 Word');
+  });
+
+  it('falls back to 正在调工具 for unknown tools', () => {
+    expect(
+      lastProcessStep([
+        {
+          id: 'e1',
+          run_id: 'r1',
+          seq: 1,
+          type: 'tool.call',
+          payload: { tool: 'calculator' },
+        },
+      ]),
+    ).toBe('正在调工具');
+  });
+
+  it('does not keep 正在 on a succeeded run', () => {
+    const hint = composeProcessHint({ id: 'r1', task_id: 't1', status: 'succeeded' }, [
+      {
+        id: 'e1',
+        run_id: 'r1',
+        seq: 1,
+        type: 'tool.call',
+        payload: { tool: 'generate_docx_document' },
+      },
+    ]);
+    expect(hint).not.toMatch(/正在/);
+    expect(hint).toMatch(/成功/);
+  });
+
+  it('shows Chinese image failure on the process strip while running', () => {
+    expect(
+      lastProcessStep([
+        {
+          id: 'e1',
+          run_id: 'r1',
+          seq: 1,
+          type: 'tool.result',
+          payload: {
+            tool: 'generate_image',
+            ok: false,
+            user_message: '出图服务未配置。请管理员在主机写入密钥后重试，不能编造图片。',
+          },
+        },
+      ]),
+    ).toMatch(/不能编造/);
+  });
+});
 
 describe('search process copy (#537)', () => {
   it('labels an in-flight web_search as 正在检索', () => {

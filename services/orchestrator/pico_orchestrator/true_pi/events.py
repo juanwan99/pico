@@ -17,6 +17,11 @@ from pico_orchestrator.sandbox_session_event import (
 )
 from pico_orchestrator.true_pi.client import RpcEvent
 from pico_orchestrator.true_pi.config import RUNTIME_LABEL
+from pico_orchestrator.user_errors import user_message_for_error
+from pico_orchestrator.workbench_progress import (
+    tool_result_failed,
+    workbench_tool_step_line,
+)
 
 EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
@@ -111,9 +116,16 @@ async def map_event(
         if not isinstance(args, dict):
             args = {}
         state.event_kinds.append("tool.call")
+        step = workbench_tool_step_line(name)
         await emit(
             "tool.call",
-            {"tool": name, "arguments": args, "call_id": call_id, **tag},
+            {
+                "tool": name,
+                "arguments": args,
+                "call_id": call_id,
+                "step_line": step,
+                **tag,
+            },
         )
         return
 
@@ -126,25 +138,35 @@ async def map_event(
             result = public_tool_result(result)
         if is_error and "error" not in result:
             result = {**result, "error": str(raw.get("error") or "tool error")}
-        if not is_error:
+        failed = is_error or tool_result_failed(result)
+        if not failed:
             state.tool_oks += 1
+        else:
+            result = dict(result)
+            result.setdefault(
+                "error",
+                str(raw.get("error") or result.get("message") or "tool failed"),
+            )
+            if raw.get("code") and "code" not in result:
+                result["code"] = raw.get("code")
         state.tool_results.append((name, result))
         state.event_kinds.append("tool.result")
-        await emit(
-            "tool.result",
-            {
-                "tool": name,
-                "ok": not is_error,
-                "result": json.dumps(result, ensure_ascii=False),
-                "message": (
-                    f"{name} completed through Pico allowlist gateway"
-                    if not is_error
-                    else str(result.get("error") or "tool failed")
-                ),
-                "call_id": call_id,
-                **tag,
-            },
-        )
+        err_text = str(result.get("error") or "") if failed else ""
+        err_code = result.get("code") if isinstance(result.get("code"), str) else None
+        user_message = user_message_for_error(err_text, code=err_code) if failed else None
+        payload = {
+            "tool": name,
+            "ok": not failed,
+            "result": json.dumps(result, ensure_ascii=False),
+            "message": user_message or ("" if failed else "ok"),
+            "call_id": call_id,
+            **tag,
+        }
+        if failed:
+            payload["user_message"] = user_message
+            if err_code:
+                payload["code"] = err_code
+        await emit("tool.result", payload)
         if name in {"web_search", "web_fetch"}:
             sources = result.get("sources") if isinstance(result, dict) else None
             state.event_kinds.append("search.sources")
@@ -258,11 +280,15 @@ async def map_event(
 
     if kind == "extension_error":
         state.event_kinds.append("run.error")
+        raw_err = str(raw.get("error") or raw.get("message") or "extension error")
         await emit(
             "run.error",
             {
                 "code": "true_pi.extension_error",
-                "error": str(raw.get("error") or raw.get("message") or "extension error"),
+                "error": raw_err,
+                "user_message": user_message_for_error(
+                    raw_err, code="true_pi.extension_error"
+                ),
                 **tag,
             },
         )

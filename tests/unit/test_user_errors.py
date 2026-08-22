@@ -94,6 +94,15 @@ def test_stream_terminated_english_is_human_with_rerun_cta() -> None:
         assert "something went wrong" not in msg.lower()
 
 
+def test_image_unconfigured_not_model_key() -> None:
+    msg = user_message_for_error(
+        "出图服务未配置。请管理员在主机写入 SILICONFLOW_API_KEY 后重试，不能编造图片。",
+        code="image.unconfigured",
+    )
+    assert "不能编造" in msg
+    assert "DEEPSEEK" not in msg
+
+
 def test_enrich_restart_payload_sets_user_message() -> None:
     p = enrich_fail_payload(
         {

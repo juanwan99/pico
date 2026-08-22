@@ -39,6 +39,7 @@ from pico_orchestrator.true_pi.config import (
 from pico_orchestrator.true_pi.events import EventMapState, map_event
 from pico_orchestrator.true_pi.tool_server import ToolServer
 from pico_orchestrator.user_errors import enrich_fail_payload
+from pico_orchestrator.workbench_progress import failed_write_user_message
 
 logger = logging.getLogger(__name__)
 
@@ -374,6 +375,16 @@ async def run_true_pi_agent(
             state.final_parts.append(transport.assistant_text)
 
         writes = count_write_tool_successes(state.tool_results)
+        write_fail = failed_write_user_message(state.tool_results)
+        if write_fail:
+            return await _failed(
+                emit,
+                code="tool.write_failed",
+                reason=write_fail,
+                state=state,
+                principal=principal,
+                tag=tag,
+            )
         landing_ok = min_arts <= 0 or writes >= min_arts
         if not landing_ok:
             return await _failed(

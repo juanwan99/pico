@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle2, Circle, FileText, Wrench } from 'lucide-react';
 import type { PicoRun, PicoRunEvent } from '~/data-provider/pico/api';
+import { workbenchToolResultLine, workbenchToolStepLine } from '~/utils/picoWorkbenchProgress';
 
 const VISIBLE_EVENT_TYPES = new Set([
   'skill.snapshot',
@@ -49,14 +50,18 @@ export function describePicoRunEvent(
     };
   }
   if (event.type === 'tool.call') {
+    const tool = textValue(payload, 'tool', 'name') || '';
+    const step = textValue(payload, 'step_line') || workbenchToolStepLine(tool);
     return {
-      title: `调用工具 · ${textValue(payload, 'tool', 'name') || '未命名工具'}`,
+      title: step || '正在调工具',
       detail: null,
     };
   }
   if (event.type === 'tool.result') {
     const ok = payload.ok !== false;
+    const tool = textValue(payload, 'tool', 'name') || '';
     const code = textValue(payload, 'code', 'error_code');
+    const userMessage = textValue(payload, 'user_message');
     // P2 status-truth: a tool step that failed but the run still succeeded was
     // recovered — label it as such instead of a bare red-ish「失败」that
     // contradicts the terminal success.
@@ -64,9 +69,11 @@ export function describePicoRunEvent(
       ? '成功'
       : runSucceeded
         ? '失败 · 已恢复'
-        : ['失败', code ? `错误码：${code}` : null].filter(Boolean).join(' · ');
+        : [userMessage || '失败', code && !userMessage ? `错误码：${code}` : null]
+            .filter(Boolean)
+            .join(' · ');
     return {
-      title: `工具结果 · ${textValue(payload, 'tool', 'name') || '未命名工具'}`,
+      title: workbenchToolResultLine(tool, ok),
       detail,
     };
   }

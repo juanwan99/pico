@@ -58,7 +58,7 @@ function TaskRunBar({
           {displayTitle}
         </p>
         {model ? <p className="truncate text-[11px] text-[#8c8c8c]">模型 {model}</p> : null}
-        {processHint && !showFailed && !showCancelled ? (
+        {processHint && !showFailed && !showCancelled && !completedLabel?.startsWith('已完成') ? (
           <p className="truncate text-[11px] text-[#3b6fd9]" data-testid="task-process-hint">
             {processHint}
           </p>
