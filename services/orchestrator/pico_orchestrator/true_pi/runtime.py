@@ -215,12 +215,13 @@ async def run_true_pi_agent(
                     break
                 prev_tool_oks = state.tool_oks
                 await map_event(event, emit=emit, state=state, shadow=shadow)
-                # Official plan-mode auto-Execute starts a second turn in-process.
-                if (
-                    state.settled
-                    and isinstance(transport, SubprocessTransport)
-                    and transport.plan_execute_pending
-                ):
+                # Official plan-mode: first agent_end is the plan turn; auto-Execute
+                # starts a second in-process turn. Do not land/kill on the first end.
+                if event.type == "agent_end" and getattr(transport, "plan_flag", False):
+                    transport.plan_agent_ends = int(getattr(transport, "plan_agent_ends", 0)) + 1
+                    if transport.plan_agent_ends < 2:
+                        state.settled = False
+                if state.settled and getattr(transport, "plan_execute_pending", False):
                     state.settled = False
                     transport.plan_execute_pending = False
                 # Circuit-breaker progress bookkeeping (F2): any event that maps

@@ -188,6 +188,59 @@ async def test_compaction_end_emits_human_line() -> None:
 
 
 @pytest.mark.asyncio
+async def test_plan_flag_waits_second_agent_end_before_landing() -> None:
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        events.append((k, p))
+
+    transport = FakeTransport(
+        scripted=[
+            {"type": "agent_start"},
+            {
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "content": "Plan:\n1. Write outline\n2. Save file",
+                },
+            },
+            {"type": "agent_end", "willRetry": False},
+            {
+                "type": "tool_execution_start",
+                "toolName": "workspace_write_file",
+                "toolCallId": "c1",
+                "args": {"title": "教案.md", "content": "ok"},
+            },
+            {
+                "type": "tool_execution_end",
+                "toolName": "workspace_write_file",
+                "toolCallId": "c1",
+                "isError": False,
+                "result": {"content": [{"type": "text", "text": '{"title":"教案.md"}'}]},
+            },
+            {
+                "type": "message_end",
+                "message": {"role": "assistant", "content": "已写入教案.md"},
+            },
+            {"type": "agent_end", "willRetry": False},
+        ],
+        assistant_text="已写入教案.md",
+    )
+    transport.plan_flag = True
+    transport.plan_agent_ends = 0
+    result = await run_true_pi_agent(
+        prompt="教案并落盘",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=1, max_seconds=20),
+        transport=transport,
+    )
+    assert result.status == "succeeded"
+    assert transport.plan_agent_ends >= 2
+
+
+@pytest.mark.asyncio
 async def test_plan_widget_maps_to_progress() -> None:
     events: list[tuple[str, dict[str, Any]]] = []
 
