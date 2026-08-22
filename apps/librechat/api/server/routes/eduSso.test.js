@@ -6,12 +6,14 @@ const { join } = require('path');
 const mockFindUser = jest.fn();
 const mockCreateUser = jest.fn();
 const mockGetUserById = jest.fn();
+const mockUpdateUser = jest.fn();
 const mockSetAuthTokens = jest.fn().mockResolvedValue('access-token');
 
 jest.mock('~/models', () => ({
   findUser: (...args) => mockFindUser(...args),
   createUser: (...args) => mockCreateUser(...args),
   getUserById: (...args) => mockGetUserById(...args),
+  updateUser: (...args) => mockUpdateUser(...args),
 }));
 
 jest.mock('~/server/services/AuthService', () => ({
@@ -26,7 +28,7 @@ jest.mock(
   { virtual: true },
 );
 
-const { eduSsoController, parentDomainCookie, eduMembershipHeader } = require('./eduSso');
+const { eduSsoController, parentDomainCookie, eduMembershipHeader, eduDisplayName } = require('./eduSso');
 
 const SCHOOL = '627bcf3a-a9a8-4047-afcc-3d4878e2a7af';
 const MEMBER = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
@@ -38,6 +40,7 @@ describe('edu SSO', () => {
     mockFindUser.mockReset();
     mockCreateUser.mockReset();
     mockGetUserById.mockReset();
+    mockUpdateUser.mockReset();
     mockSetAuthTokens.mockClear();
     app = express();
     app.get('/api/auth/edu-sso', eduSsoController);
@@ -52,11 +55,16 @@ describe('edu SSO', () => {
   it('sets workbench session and leaves login wall', async () => {
     global.fetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, school_id: SCHOOL, membership_id: MEMBER }),
+      json: async () => ({
+        ok: true,
+        school_id: SCHOOL,
+        membership_id: MEMBER,
+        display_name: '孙骏博',
+      }),
     });
     mockFindUser.mockResolvedValue(null);
     mockCreateUser.mockResolvedValue('user-1');
-    mockGetUserById.mockResolvedValue({ _id: 'user-1', eduId: MEMBER, eduSchoolId: SCHOOL });
+    mockGetUserById.mockResolvedValue({ _id: 'user-1', eduId: MEMBER, eduSchoolId: SCHOOL, name: '孙骏博' });
 
     const res = await request(app).get('/api/auth/edu-sso').query({ ticket: 'web-ticket' });
     expect(res.status).toBe(302);
@@ -68,11 +76,13 @@ describe('edu SSO', () => {
         provider: 'edu',
         eduId: MEMBER,
         eduSchoolId: SCHOOL,
+        name: '孙骏博',
       }),
       undefined,
       true,
       false,
     );
+    expect(mockCreateUser.mock.calls[0][0].name).not.toBe('学校账号');
     const consumeUrl = global.fetch.mock.calls[0][0];
     expect(consumeUrl).toMatch(/\/v1\/edu-sso\/consume$/);
   });
@@ -80,13 +90,25 @@ describe('edu SSO', () => {
   it('reuses the same membership user (no serial mix-up)', async () => {
     global.fetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, school_id: SCHOOL, membership_id: MEMBER }),
+      json: async () => ({
+        ok: true,
+        school_id: SCHOOL,
+        membership_id: MEMBER,
+        display_name: '孙骏博',
+      }),
     });
-    mockFindUser.mockResolvedValue({ _id: 'existing', eduId: MEMBER, eduSchoolId: SCHOOL });
+    mockFindUser.mockResolvedValue({
+      _id: 'existing',
+      eduId: MEMBER,
+      eduSchoolId: SCHOOL,
+      name: '学校账号',
+    });
+    mockUpdateUser.mockResolvedValue({ _id: 'existing', name: '孙骏博' });
 
     const res = await request(app).get('/api/auth/edu-sso').query({ ticket: 'web-ticket' });
     expect(res.headers.location).toBe('/c/new');
     expect(mockCreateUser).not.toHaveBeenCalled();
+    expect(mockUpdateUser).toHaveBeenCalledWith('existing', expect.objectContaining({ name: '孙骏博' }));
     expect(mockSetAuthTokens).toHaveBeenCalledWith('existing', expect.anything(), null, expect.anything());
   });
 
@@ -137,5 +159,12 @@ describe('edu SSO', () => {
     expect(src).not.toMatch(/<iframe/i);
     expect(src).toMatch(/\/c\/new/);
     expect(src).toMatch(/\/login/);
+    expect(src).not.toMatch(/name:\s*['"]学校账号['"]/);
+  });
+
+  it('never uses 学校账号 as the workbench name', () => {
+    expect(eduDisplayName('孙骏博', MEMBER)).toBe('孙骏博');
+    expect(eduDisplayName('学校账号', MEMBER)).toBe(`edu-${MEMBER.replace(/-/g, '').slice(0, 12)}`);
+    expect(eduDisplayName('', MEMBER)).not.toBe('学校账号');
   });
 });

@@ -11,6 +11,7 @@ import {
   type PicoArtifact,
 } from '~/data-provider/pico/api';
 import WorkbenchShell from './WorkbenchShell';
+import SchoolMaterialsBar from '~/components/Chat/SchoolMaterialsBar';
 import { PicoIcon, type PicoIconName } from '~/components/ui/pico-icons';
 import { cn } from '~/utils';
 
@@ -236,6 +237,10 @@ export default function FilesHubPage() {
       }
     >
       <div className="flex h-full min-h-[420px] flex-col">
+        <div className="border-b border-black/[0.06] bg-white px-3 py-2">
+          <p className="mb-1 text-[12px] font-medium text-[#333]">学校材料</p>
+          <SchoolMaterialsBar />
+        </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-black/[0.06] bg-white px-3 py-2">
           <label className="relative min-w-[220px] flex-1" htmlFor="artifact-search">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#999]" />

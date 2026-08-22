@@ -227,6 +227,27 @@ class EduSsoJtiRow(Base):
     consumed_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+class EduNamedBindRow(Base):
+    """Named school item ids for this membership / conversation. Ids only, no bodies."""
+
+    __tablename__ = "edu_named_bind"
+    __table_args__ = (
+        UniqueConstraint(
+            "school_id",
+            "membership_id",
+            "conversation_id",
+            name="edu_named_bind_convo_uniq",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    school_id: Mapped[str] = mapped_column(String(128), index=True)
+    membership_id: Mapped[str] = mapped_column(String(128), index=True)
+    conversation_id: Mapped[str] = mapped_column(String(128), default="")
+    item_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 _engine = None
 _Session: async_sessionmaker[AsyncSession] | None = None
 

@@ -1362,6 +1362,19 @@ async def chat_completions(
     m_proj = re.search(r"【项目指令：([^】]+)】", raw_prompt)
     project_instruction = m_proj.group(1).strip() if m_proj else ""
     prompt = _strip_pico_markers(raw_prompt).strip() or raw_prompt
+    if not edu_sidebar:
+        try:
+            from app.db import session_factory
+            from app.edu_school import excerpts_for_conversation, inject_named_school_materials
+
+            factory = session_factory()
+            async with factory() as named_session:
+                named_items = await excerpts_for_conversation(
+                    principal, conversation_id or "", named_session, settings
+                )
+            prompt = inject_named_school_materials(prompt, named_items)
+        except Exception:  # noqa: BLE001,S110 — unnamed school files must not leak; missing named is ok
+            pass
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 12000) or 12000)
     # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
     # marker is explicit so this must not 400 a legal affordance table.
