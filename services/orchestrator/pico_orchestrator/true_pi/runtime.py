@@ -44,6 +44,31 @@ from pico_orchestrator.workbench_progress import failed_write_user_message
 logger = logging.getLogger(__name__)
 
 _CANCEL_POLL = 0.05
+# First plan-turn select arrives on the same stdout pipe; 1s is enough.
+_PLAN_FIRST_END_GRACE = 1.0
+
+
+def plan_settle_hold(
+    *,
+    event_type: str,
+    plan_flag: bool,
+    plan_agent_ends: int,
+    plan_execute_pending: bool,
+) -> tuple[bool, int, bool]:
+    """Whether to un-settle this event.
+
+    Returns (hold, new_ends, pending). Hold only while Execute is pending and
+    we have not seen the execute-turn ``agent_end``. Empty-plan / no Execute
+    does not hold. A 2nd end always lands (never wait for a 3rd).
+    """
+    if not plan_flag or event_type not in {"agent_end", "agent_settled"}:
+        return False, plan_agent_ends, plan_execute_pending
+    ends = plan_agent_ends + (1 if event_type == "agent_end" else 0)
+    if ends < 2:
+        # First plan-turn. Execute UI may still be in the pipe — hold.
+        # Main loop grace / stream-end lands if Execute never starts.
+        return True, ends, plan_execute_pending
+    return False, ends, plan_execute_pending
 
 
 async def run_true_pi_agent(
@@ -156,7 +181,10 @@ async def run_true_pi_agent(
                 max_tokens=max_out,
                 extra_extensions=extra_ext,
                 continue_session=use_tree,
-                plan_flag=use_tree and bool(extra_ext),
+                # Official plan-mode stays loaded. Do not force --plan on every
+                # workbench turn: that waits a second agent_end that may never
+                # land (T-AGENT-PLAIN-V1 live hang).
+                plan_flag=False,
                 spawn_cwd=sess,
                 env={
                     "DEEPSEEK_API_KEY": provider.api_key
@@ -216,19 +244,21 @@ async def run_true_pi_agent(
                     break
                 prev_tool_oks = state.tool_oks
                 await map_event(event, emit=emit, state=state, shadow=shadow)
-                # Official plan-mode: first agent_end/agent_settled is the plan turn.
-                # Auto-Execute starts a second in-process turn. Do not land/kill yet.
-                if event.type in {"agent_end", "agent_settled"} and getattr(
-                    transport, "plan_flag", False
-                ):
-                    if event.type == "agent_end":
-                        transport.plan_agent_ends = int(
-                            getattr(transport, "plan_agent_ends", 0)
-                        ) + 1
-                    if int(getattr(transport, "plan_agent_ends", 0)) < 2:
-                        state.settled = False
-                if state.settled and getattr(transport, "plan_execute_pending", False):
+                # Official plan-mode: hold the first end only while auto-Execute
+                # actually started a second turn. Never wait for a 3rd end
+                # (live hang: pending stayed True and unset the 2nd settle).
+                hold, ends, pending = plan_settle_hold(
+                    event_type=event.type,
+                    plan_flag=bool(getattr(transport, "plan_flag", False)),
+                    plan_agent_ends=int(getattr(transport, "plan_agent_ends", 0) or 0),
+                    plan_execute_pending=bool(
+                        getattr(transport, "plan_execute_pending", False)
+                    ),
+                )
+                transport.plan_agent_ends = ends
+                if hold:
                     state.settled = False
+                elif pending and ends >= 2:
                     transport.plan_execute_pending = False
                 # Circuit-breaker progress bookkeeping (F2): any event that maps
                 # is real forward motion; a newly successful tool execution
@@ -313,6 +343,19 @@ async def run_true_pi_agent(
                         )
                 if consumer.done():
                     break
+                # Empty-plan Stay / no UI: first end already happened, Execute
+                # never started, Pi is idle. Land instead of waiting 3600s.
+                if (
+                    not state.settled
+                    and int(getattr(transport, "plan_agent_ends", 0) or 0) >= 1
+                    and not bool(getattr(transport, "plan_execute_pending", False))
+                ):
+                    held_at = getattr(transport, "plan_first_held_at", None)
+                    if held_at is None:
+                        transport.plan_first_held_at = loop.time()
+                    elif loop.time() - float(transport.plan_first_held_at) >= _PLAN_FIRST_END_GRACE:
+                        state.settled = True
+                        break
                 await asyncio.sleep(0.05)
         finally:
             if not consumer.done():
@@ -351,15 +394,22 @@ async def run_true_pi_agent(
             )
 
         if not state.settled:
-            # Stream ended without agent_settled — treat as incomplete / timeout-class.
-            return await _failed(
-                emit,
-                code="timeout",
-                reason=f"True Pi did not settle within {caps.max_seconds}s",
-                state=state,
-                principal=principal,
-                tag=tag,
-            )
+            # Stream ended. If the first plan-turn already finished and Execute
+            # never started, the first answer is the product — land it.
+            if (
+                int(getattr(transport, "plan_agent_ends", 0) or 0) >= 1
+                and not bool(getattr(transport, "plan_execute_pending", False))
+            ):
+                state.settled = True
+            else:
+                return await _failed(
+                    emit,
+                    code="timeout",
+                    reason=f"True Pi did not settle within {caps.max_seconds}s",
+                    state=state,
+                    principal=principal,
+                    tag=tag,
+                )
 
         # Pull assistant text if event map did not capture it.
         if not state.final_parts and not isinstance(transport, FakeTransport):
