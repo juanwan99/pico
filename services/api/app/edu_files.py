@@ -99,6 +99,9 @@ def extract_for_kb(filename: str, data: bytes) -> dict[str, Any]:
                 "text": text[:20000],
                 "error": None,
             }
+        office = extract_office(filename, data)
+        if office.get("status") == "ok" and str(office.get("text") or "").strip():
+            return office
         return {
             "filename": (filename or "file")[:180],
             "kind": ext,
@@ -147,9 +150,6 @@ async def persist_edu_file(
     if kind in TEXT_KINDS and text_body:
         stored, encoding, byte_size, digest = encode_artifact_payload(text_body)
         artifact_kind = "file"
-    elif text_body and kind in {"pdf", "docx"}:
-        stored, encoding, byte_size, digest = encode_artifact_payload(text_body)
-        artifact_kind = "kb_text"
     else:
         stored, encoding, byte_size, digest = encode_artifact_payload(data)
         artifact_kind = KIND_SRC
@@ -175,6 +175,29 @@ async def persist_edu_file(
             byte_size=byte_size,
         )
         session.add(src)
+        if artifact_kind == KIND_SRC and text_body:
+            text_stored, text_enc, text_size, text_digest = encode_artifact_payload(text_body)
+            kb_row = ArtifactRow(
+                id=new_id(),
+                task_id=task.id,
+                kind="kb_text",
+                title=filename[:512],
+                inline=text_stored,
+                content_encoding=text_enc,
+                content_sha256=text_digest,
+                byte_size=text_size,
+            )
+            session.add(kb_row)
+            try:
+                project_material_artifact(
+                    principal,
+                    artifact_id=kb_row.id,
+                    title=filename[:512],
+                    kind="kb_text",
+                    content=text_body,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("meili project kb_text failed: %s", type(exc).__name__)
         if artifact_kind == KIND_SRC:
             excerpt = ArtifactRow(
                 id=new_id(),
