@@ -9,6 +9,7 @@ import { PicoIcon } from '~/components/ui/pico-icons';
 import type { TMessage } from 'librechat-data-provider';
 import {
   getPicoArtifactContent,
+  picoAuthedGet,
   openPicoSandboxBrowser,
   openPicoSandboxDocument,
   type PicoArtifact,
@@ -649,7 +650,7 @@ export default function ResultPanel({
           await openWebsiteInPane(url);
           return;
         }
-        const response = await fetch(url, { credentials: 'include' });
+        const response = await picoAuthedGet(url);
         if (!response.ok) {
           throw new Error(`pico ${response.status}: artifact preview`);
         }
@@ -679,9 +680,19 @@ export default function ResultPanel({
         if (!url) {
           throw new Error('invalid artifact URL');
         }
-        anchor.href = url;
-        anchor.rel = 'noopener noreferrer';
-        anchor.target = '_blank';
+        const parsed = new URL(url);
+        if (parsed.origin === window.location.origin) {
+          const response = await picoAuthedGet(url);
+          if (!response.ok) {
+            throw new Error(`pico ${response.status}: artifact download`);
+          }
+          objectUrl = URL.createObjectURL(await response.blob());
+          anchor.href = objectUrl;
+        } else {
+          anchor.href = url;
+          anchor.rel = 'noopener noreferrer';
+          anchor.target = '_blank';
+        }
       } else {
         const blob = await readArtifactBlob(artifact, true);
         objectUrl = URL.createObjectURL(blob);

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
   getPicoArtifactContent,
+  picoAuthedGet,
   getPicoSandboxScreenshot,
   getPicoSandboxSession,
   openPicoSandboxBrowser,
@@ -15,6 +16,7 @@ import ResultPanel, { formatRunTokenUsage } from '../ResultPanel';
 
 jest.mock('~/data-provider/pico/api', () => ({
   getPicoArtifactContent: jest.fn(),
+  picoAuthedGet: jest.fn(),
   getPicoSandboxScreenshot: jest.fn(),
   getPicoSandboxSession: jest.fn(),
   postPicoSandboxInput: jest.fn(),
@@ -30,6 +32,7 @@ jest.mock('~/utils', () => ({
 const mockGetPicoArtifactContent = getPicoArtifactContent as jest.MockedFunction<
   typeof getPicoArtifactContent
 >;
+const mockPicoAuthedGet = picoAuthedGet as jest.MockedFunction<typeof picoAuthedGet>;
 
 function renderPanel(picoArtifacts: PicoArtifact[]) {
   return render(
@@ -414,11 +417,10 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
   it('T8: opening a PDF attachment previews in-pane and never mistakes it for HTML', async () => {
     const user = userEvent.setup();
     const pdfBytes = new Uint8Array([37, 80, 68, 70]); // %PDF
-    const fetchSpy = jest.fn().mockResolvedValue({
+    mockPicoAuthedGet.mockResolvedValue({
       ok: true,
       blob: async () => new Blob([pdfBytes], { type: 'application/octet-stream' }),
-    });
-    (global as unknown as { fetch: unknown }).fetch = fetchSpy;
+    } as Response);
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
@@ -447,13 +449,11 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     );
     await user.click(screen.getByTestId('artifact-open-button'));
     expect(await screen.findByTestId('artifact-pdf-embed')).toBeInTheDocument();
-    expect(fetchSpy).toHaveBeenCalledWith(
+    expect(mockPicoAuthedGet).toHaveBeenCalledWith(
       expect.stringContaining('/api/files/download/user-1/fid-pdf-1'),
-      expect.objectContaining({ credentials: 'include' }),
     );
     // The old bug: SPA fallback index.html was previewed as「HTML 安全预览」forever.
     expect(screen.queryByText(/安全预览：sandbox 禁用脚本与同源/)).not.toBeInTheDocument();
-    delete (global as unknown as { fetch?: unknown }).fetch;
   });
 
   it('keeps an uploaded PDF chip when the ledger already has generated HTML', () => {

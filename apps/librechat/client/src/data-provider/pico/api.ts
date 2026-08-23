@@ -142,6 +142,14 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
+/** Same-origin LibreChat file bytes. JWT is in axios, not a cookie — do not bare-fetch. */
+export async function picoAuthedGet(url: string): Promise<Response> {
+  return fetch(url, {
+    credentials: 'include',
+    headers: authHeaders(),
+  });
+}
+
 async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api/pico${path}`, {
     credentials: 'include',
