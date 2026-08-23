@@ -38,6 +38,10 @@ class RunCaps:
     # Dual-mode (Pico 快速 / Pico 深度): deep lane runs thinking-on and arms the
     # no-progress circuit breaker; fast lane keeps thinking off and no breaker.
     thinking_on: bool = False
+    # Lane labels for receipts. ui_model is pico-fast/pico-deep; backend_model
+    # is the DeepSeek id actually spawned (flash vs reasoner).
+    ui_model: str = ""
+    backend_model: str = ""
     # Deep-lane breaker wall threshold (true_pi): bail out with pi.no_progress
     # when the thinking-on lane has no successful tool execution for this many
     # seconds. Injectable for unit tests; production default 180s.

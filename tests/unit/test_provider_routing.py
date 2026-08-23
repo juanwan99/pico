@@ -74,12 +74,12 @@ def test_agent_model_uses_product_default(deepseek_only: None) -> None:
     assert resolve_model_id("pico-agent", cfg) == "deepseek-v4-flash"
 
 
-def test_pico_fast_and_deep_use_deepseek_v4_flash(deepseek_only: None) -> None:
+def test_pico_fast_flash_deep_reasoner(deepseek_only: None) -> None:
     cfg = resolve_provider_for_model("pico-fast")
     assert cfg is not None
     assert cfg.name == "deepseek"
     assert resolve_model_id("pico-fast", cfg) == "deepseek-v4-flash"
-    assert resolve_model_id("pico-deep", cfg) == "deepseek-v4-flash"
+    assert resolve_model_id("pico-deep", cfg) == "deepseek-reasoner"
 
 
 def test_kimi_model_uses_kimi_when_key_present(both_keys: None) -> None:
@@ -104,13 +104,13 @@ def test_owned_by_is_honest() -> None:
 
 
 def test_runtime_policy_dual_mode_contract() -> None:
-    """Pico 快速 / Pico 深度 both pin deepseek-v4-flash; thinking differs."""
+    """Pico 快速 = flash; Pico 深度 = reasoner; thinking differs."""
     fast = runtime_policy_for_model("pico-fast")
     deep = runtime_policy_for_model("pico-deep")
     assert fast["ui_model"] == "pico-fast"
     assert deep["ui_model"] == "pico-deep"
     assert fast["backend_model"] == "deepseek-v4-flash"
-    assert deep["backend_model"] == "deepseek-v4-flash"
+    assert deep["backend_model"] == "deepseek-reasoner"
     # fast: thinking off, tighter budget; deep: thinking on, breaker armed.
     assert fast["thinking"] is False
     assert deep["thinking"] is True
@@ -121,7 +121,7 @@ def test_runtime_policy_dual_mode_contract() -> None:
     assert fast["max_tokens"] != 128000
     assert deep["max_tokens"] != 256000
     assert fast["fallback"] == "deepseek-v4-flash"
-    assert deep["fallback"] == "deepseek-v4-flash"
+    assert deep["fallback"] == "deepseek-reasoner"
     # Direct HTTPS must send this: v4-flash thinks by default and can return 200 empty.
     assert thinking_extra_body("pico-fast") == {"thinking": {"type": "disabled"}}
     assert thinking_extra_body("pico-deep") == {"thinking": {"type": "enabled"}}

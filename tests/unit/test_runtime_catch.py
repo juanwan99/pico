@@ -1,0 +1,125 @@
+"""T-RUNTIME-CATCH: Pi compact mapping, lane models, office-10 delivery gate."""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "services" / "api"))
+sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
+
+from pico_orchestrator.delivery_policy import analyze_delivery
+from pico_orchestrator.provider import resolve_model_id, runtime_policy_for_model
+from pico_orchestrator.true_pi.client import RpcEvent, SubprocessTransport
+from pico_orchestrator.true_pi.events import COMPACTION_HUMAN, EventMapState, map_event
+
+# 10 office prompts: 改稿 / 纪要 / 多文件套件 / 可改一版. Empty success forbidden.
+OFFICE_BENCH_10: list[tuple[str, int]] = [
+    ("请把下面这段家长通知改成 Word 文档并下载。", 1),
+    ("根据今天班主任会写一份会议纪要，交付可下载 docx。", 1),
+    ("请分别交付 3 个独立可下载文件：通知.md、名单.csv、议程.docx。", 3),
+    ("请把刚才的会议纪要改成 Word 文档并下载。", 1),
+    ("生成一份教师培训课件 pptx，含三页提纲。", 1),
+    ("请把课件第三页改成 Word 文档并下载。", 1),
+    ("写一封可下载的家长会通知 HTML 网页。", 1),
+    ("请把通知再改成 Word 文档并下载，不要只在对话里贴正文。", 1),
+    ("交付全套材料包：课表.md 与说明.docx 两个独立文件。", 2),
+    ("请把课表改成 Markdown 文件并下载。", 1),
+]
+
+
+def test_compaction_human_is_process_line() -> None:
+    assert COMPACTION_HUMAN == "在整理上文"
+
+
+@pytest.mark.asyncio
+async def test_compaction_events_keep_search_sources() -> None:
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        events.append((k, p))
+
+    state = EventMapState()
+    await map_event(
+        RpcEvent(
+            {
+                "type": "tool_execution_end",
+                "toolName": "kb_search",
+                "toolCallId": "c1",
+                "result": {
+                    "retrieved": True,
+                    "honest_miss": False,
+                    "sources": [{"title": "校历.md", "artifact_id": "art-1", "url": ""}],
+                },
+            }
+        ),
+        emit=emit,
+        state=state,
+    )
+    await map_event(RpcEvent({"type": "compaction_start", "reason": "threshold"}), emit=emit, state=state)
+    await map_event(RpcEvent({"type": "compaction_end", "reason": "threshold"}), emit=emit, state=state)
+    kinds = [k for k, _ in events]
+    assert "search.sources" in kinds
+    assert "compaction.begin" in kinds
+    assert "compaction.end" in kinds
+    sources = next(p for k, p in events if k == "search.sources")
+    assert sources["sources"][0]["artifact_id"] == "art-1"
+    assert any(COMPACTION_HUMAN in str(p.get("text")) for k, p in events if k == "message.delta")
+
+
+def test_prepare_agent_home_writes_official_compaction_settings(tmp_path: Path) -> None:
+    t = SubprocessTransport(
+        session_dir=tmp_path / "sess",
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r-compact",
+        model="deepseek-reasoner",
+        thinking=True,
+        spawn_cwd=tmp_path / "sess",
+    )
+    home = t.prepare_agent_home()
+    agent_settings = json.loads((home / "settings.json").read_text(encoding="utf-8"))
+    project_settings = json.loads(
+        (tmp_path / "sess" / ".pi" / "settings.json").read_text(encoding="utf-8")
+    )
+    for blob in (agent_settings, project_settings):
+        compact = blob["compaction"]
+        assert compact["enabled"] is True
+        assert compact["keepRecentTokens"] == 20000
+        assert compact["reserveTokens"] == 16384
+
+
+def test_lane_models_flash_vs_reasoner(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-deepseek-key-32chars-long")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    from pico_orchestrator.provider import ProviderConfig
+
+    cfg = ProviderConfig(
+        name="deepseek",
+        api_key="sk-test",
+        base_url="https://api.deepseek.com/v1",
+        model="deepseek-v4-flash",
+    )
+    assert resolve_model_id("pico-fast", cfg) == "deepseek-v4-flash"
+    assert resolve_model_id("pico-deep", cfg) == "deepseek-reasoner"
+    assert runtime_policy_for_model("pico-fast")["backend_model"] == "deepseek-v4-flash"
+    assert runtime_policy_for_model("pico-deep")["backend_model"] == "deepseek-reasoner"
+
+
+def test_office_bench_10_never_empty_success() -> None:
+    assert len(OFFICE_BENCH_10) == 10
+    for prompt, need in OFFICE_BENCH_10:
+        plan = analyze_delivery(prompt)
+        assert plan.force_agent is True, prompt
+        assert plan.min_artifacts >= need, (prompt, plan.min_artifacts, need)
+        assert plan.min_artifacts >= 1, prompt
+
+
+def test_casual_chat_still_zero_artifacts() -> None:
+    plan = analyze_delivery("你好，今天天气怎么样？")
+    assert plan.min_artifacts == 0

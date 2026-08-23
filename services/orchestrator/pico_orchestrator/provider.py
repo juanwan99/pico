@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from openai import AsyncOpenAI
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
+DEFAULT_DEEPSEEK_REASONER = "deepseek-reasoner"
 DEFAULT_DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 KNOWN_DEEPSEEK_MODELS = (
     "deepseek-v4-flash",
@@ -158,8 +159,11 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
     only available key (or remount fallback) is DeepSeek.
     """
     if is_agent_model(requested):
-        if str(requested).strip().lower() in {"pico-fast", "pico-deep"}:
-            return "deepseek-v4-flash"
+        low = str(requested).strip().lower()
+        if low == "pico-fast":
+            return DEFAULT_DEEPSEEK_MODEL
+        if low == "pico-deep":
+            return DEFAULT_DEEPSEEK_REASONER
         return cfg.model
 
     bare = _bare_model(requested)
@@ -169,8 +173,10 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
     if cfg.name == "deepseek":
         if is_deepseek_model(bare):
             return bare
-        if bare in {"pico-fast", "pico-deep"}:
-            return "deepseek-v4-flash"
+        if bare == "pico-fast":
+            return DEFAULT_DEEPSEEK_MODEL
+        if bare == "pico-deep":
+            return DEFAULT_DEEPSEEK_REASONER
         # Kimi / other labels remounted onto DeepSeek → use product default
         return cfg.model
 
@@ -185,39 +191,49 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
 def runtime_policy_for_model(model: str | None) -> dict[str, object]:
     """Return the Pico product policy for a selected model.
 
-    fast: deepseek-v4-flash with thinking off
-    deep: deepseek-v4-flash with thinking on and a guard against empty loop
+    fast: deepseek-v4-flash with thinking off (easy / short)
+    deep: deepseek-reasoner with thinking on (hard / multi-step office)
     """
     requested = (model or "").strip()
     low = requested.lower()
-    if low in {"pico-fast", "pico-deep"}:
+    if low == "pico-fast":
         return {
             "ui_model": low,
-            "backend_model": "deepseek-v4-flash",
-            "thinking": low == "pico-deep",
-            "max_steps": 12 if low == "pico-fast" else 24,
-            "max_tokens": 8000 if low == "pico-fast" else 32000,
-            "max_context": 128000 if low == "pico-fast" else 256000,
-            "fallback": "deepseek-v4-flash",
+            "backend_model": DEFAULT_DEEPSEEK_MODEL,
+            "thinking": False,
+            "max_steps": 12,
+            "max_tokens": 8000,
+            "max_context": 128000,
+            "fallback": DEFAULT_DEEPSEEK_MODEL,
         }
-    if low in {"pico-agent", "pico"}:
+    if low == "pico-deep":
         return {
-            "ui_model": "pico-agent",
-            "backend_model": "deepseek-v4-flash",
+            "ui_model": low,
+            "backend_model": DEFAULT_DEEPSEEK_REASONER,
             "thinking": True,
             "max_steps": 24,
             "max_tokens": 32000,
             "max_context": 256000,
-            "fallback": "deepseek-v4-flash",
+            "fallback": DEFAULT_DEEPSEEK_REASONER,
+        }
+    if low in {"pico-agent", "pico"}:
+        return {
+            "ui_model": "pico-agent",
+            "backend_model": DEFAULT_DEEPSEEK_REASONER,
+            "thinking": True,
+            "max_steps": 24,
+            "max_tokens": 32000,
+            "max_context": 256000,
+            "fallback": DEFAULT_DEEPSEEK_REASONER,
         }
     return {
         "ui_model": requested or "pico-fast",
-        "backend_model": "deepseek-v4-flash",
+        "backend_model": DEFAULT_DEEPSEEK_MODEL,
         "thinking": False,
         "max_steps": 12,
         "max_tokens": 8000,
         "max_context": 128000,
-        "fallback": "deepseek-v4-flash",
+        "fallback": DEFAULT_DEEPSEEK_MODEL,
     }
 
 

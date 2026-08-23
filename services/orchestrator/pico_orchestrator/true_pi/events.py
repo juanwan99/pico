@@ -25,7 +25,7 @@ from pico_orchestrator.workbench_progress import (
 
 EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
-COMPACTION_HUMAN = "对话太长，已收束早段。"
+COMPACTION_HUMAN = "在整理上文"
 _PLAN_INTERNAL_CUSTOM = frozenset(
     {"plan-todo-list", "plan-complete", "plan-mode-execute", "plan-execution-context"}
 )
@@ -229,14 +229,13 @@ async def map_event(
     if kind in {"compaction_start", "compaction_end"}:
         phase = "begin" if kind.endswith("start") else "end"
         state.event_kinds.append(f"compaction.{phase}")
-        payload = {**tag, "source": "true-pi"}
-        if kind == "compaction_end":
-            payload["text"] = COMPACTION_HUMAN
-            if raw.get("reason"):
-                payload["reason"] = raw.get("reason")
+        payload = {**tag, "source": "true-pi", "text": COMPACTION_HUMAN}
+        if raw.get("reason"):
+            payload["reason"] = raw.get("reason")
         await emit(f"compaction.{phase}", payload)
-        if kind == "compaction_end":
-            await emit("message.delta", {"text": COMPACTION_HUMAN, **tag})
+        # Process line on start so the teacher sees 在整理上文 while Pi works.
+        # End keeps the same line so a late join still has human text.
+        await emit("message.delta", {"text": COMPACTION_HUMAN, **tag})
         return
 
     if kind == "extension_ui_request":

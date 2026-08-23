@@ -46,7 +46,9 @@ def test_c1_c2_source_caps() -> None:
     assert "DELIVERY_MAX_CONTEXT = 256_000" in run_caps
     assert "SHORT_MAX_TOKENS = 8_000" in run_caps
     assert "DELIVERY_MAX_TOKENS = 32_000" in run_caps
-    assert "128000 if low == \"pico-fast\" else 256000" in provider
+    assert '"max_context": 128000' in provider
+    assert '"max_context": 256000' in provider
+    assert "deepseek-reasoner" in provider
 
 
 def test_history_and_chrome_source_locks() -> None:
