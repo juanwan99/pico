@@ -21,7 +21,13 @@ export function normalizePicoModelMode(raw: string | null | undefined): PicoMode
     return 'pico-fast';
   }
   const low = s.toLowerCase();
-  if (low === 'pico-deep' || s === 'Pico 深度' || s.includes('深度')) {
+  // Reasoner / 深度 first — `deepseek-reasoner` also contains "deepseek".
+  if (
+    low === 'pico-deep' ||
+    s === 'Pico 深度' ||
+    s.includes('深度') ||
+    low.includes('reasoner')
+  ) {
     return 'pico-deep';
   }
   if (
@@ -43,7 +49,18 @@ export function labelForPicoModel(mode: PicoModelMode): string {
   return hit?.label ?? mode;
 }
 
+/** Persist the lane. Must NOT write PENDING — that re-arms Landing's mount
+ *  consume and, with an unstable chatCtx, loops into React #185. */
 export function setPicoModelMode(mode: PicoModelMode): void {
+  try {
+    localStorage.setItem(STORAGE, normalizePicoModelMode(mode));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Hub/assistant → /c/new handoff only. Landing consumePendingModel reads this once. */
+export function queuePendingModel(mode: PicoModelMode): void {
   try {
     const id = normalizePicoModelMode(mode);
     localStorage.setItem(STORAGE, id);
@@ -51,6 +68,21 @@ export function setPicoModelMode(mode: PicoModelMode): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Keep Recoil identity when the lane is already set (avoids a new convo object). */
+export function patchConversationModel<
+  T extends { endpoint?: string | null; model?: string | null },
+>(prev: T | null | undefined, raw: string): T | null | undefined {
+  if (!prev) {
+    return prev;
+  }
+  const id = normalizePicoModelMode(raw);
+  const endpoint = prev.endpoint ?? 'openAI';
+  if (prev.model === id && (prev.endpoint ?? 'openAI') === endpoint) {
+    return prev;
+  }
+  return { ...prev, endpoint, model: id };
 }
 
 export function getPicoModelMode(): PicoModelMode {

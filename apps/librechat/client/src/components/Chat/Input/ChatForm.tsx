@@ -50,7 +50,12 @@ import StopButton from './StopButton';
 import SendButton from './SendButton';
 import EditBadges from './EditBadges';
 import Mention from './Mention';
-import { getPicoModelMode, normalizePicoModelMode, setPicoModelMode } from '~/utils/picoModelPref';
+import {
+  getPicoModelMode,
+  normalizePicoModelMode,
+  patchConversationModel,
+  setPicoModelMode,
+} from '~/utils/picoModelPref';
 import store from '~/store';
 
 interface ChatFormProps {
@@ -136,15 +141,7 @@ const ChatForm = memo(function ChatForm({
       const id = normalizePicoModelMode(raw);
       setPicoModelMode(id);
       setPlusOpen(false);
-      setConversation?.((prev) =>
-        prev
-          ? {
-              ...prev,
-              endpoint: prev.endpoint ?? 'openAI',
-              model: id,
-            }
-          : prev,
-      );
+      setConversation?.((prev) => patchConversationModel(prev, id) ?? prev);
     },
     [setConversation],
   );
