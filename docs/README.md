@@ -37,7 +37,8 @@ GOALS: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · WHAT-IS-PICO；STATE-NOW（快照�
 | **0b·窗** | **[HANDOFF-NEW-WINDOW-2026-08-23.md](./HANDOFF-NEW-WINDOW-2026-08-23.md)** | **本窗总管交接（[#634](https://github.com/juanwan99/pico/issues/634) · #573 作废）** |
 | **0b′** | **[MEMORY-RESET.md](./MEMORY-RESET.md)** | **错误记忆黑名单（开场必清）** |
 | **0b″** | **[STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md)** | **单窗阶段包（废多窗碎派）** |
-| **0b‴** | **[TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)** | **任务卡四行指针（ONEFLOW v2 · 禁 315 长表）** |
+| **0b‴** | **[TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)** | **任务卡指针（标准任务卡 + 派发条 · 禁 315）** |
+| **0b·派** | **[templates/dispatch-slip.md](./templates/dispatch-slip.md)** | **派发条：对执行窗只贴这一段** |
 | **0b·tool** | **[TOOLING-CATALOG.md](./TOOLING-CATALOG.md)** | **批准/禁止工具合同 · `scripts/tool-status.sh`（#386/#387）** |
 | **0b·V** | **[VISUAL-GATE.md](./VISUAL-GATE.md)** | **#384 视觉门 · `scripts/visual-gate.mjs`（无图不得 Ready；见 #385）** |
 | **0b·tip** | **[TIP-PROBE.md](./TIP-PROBE.md)** | **公网 tip 40 位探针** |
