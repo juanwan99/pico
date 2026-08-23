@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     # Change handoff push Pico → edu (optional until edu ready)
     pico_edu_handoff_enabled: bool = False
 
+    # T-KB-CATCH · Meilisearch projection (loopback only). Key stays in host .env.
+    pico_meili_url: str = "http://127.0.0.1:7700"
+    meili_master_key: str = ""
+    siliconflow_api_key: str = ""
+
     # edu → Pico service hooks
     pico_hook_service_token: str = ""  # shared secret for /v1/hooks/edu/*
 

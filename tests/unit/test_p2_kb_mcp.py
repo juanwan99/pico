@@ -122,6 +122,8 @@ def test_kb_search_hit_and_miss() -> None:
         assert hit["count"] >= 1
         assert hit["hits"][0]["artifact_id"]
         assert "3 月" in hit["hits"][0]["excerpt"] or "开学" in hit["hits"][0]["excerpt"]
+        assert hit["retrieved"] is True
+        assert hit["sources"][0]["artifact_id"] == hit["hits"][0]["artifact_id"]
 
         miss = await gw.invoke(principal, "kb_search", {"query": "量子隧穿"})
         assert miss["honest_miss"] is True

@@ -51,6 +51,7 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "verify_html_document",
         "web_search",
         "web_fetch",
+        "kb_search",
         "sandbox_preview_inspect",
         "sandbox_workspace_exec",
         "sandbox_browser_open",

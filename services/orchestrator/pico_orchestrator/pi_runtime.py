@@ -570,7 +570,7 @@ async def run_pi_agent(
                             "call_id": call_id,
                         },
                     )
-                    if name in {"web_search", "web_fetch"}:
+                    if name in {"web_search", "web_fetch", "kb_search"}:
                         await emit(
                             "search.sources",
                             {

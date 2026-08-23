@@ -170,7 +170,7 @@ async def map_event(
             if err_code:
                 payload["code"] = err_code
         await emit("tool.result", payload)
-        if name in {"web_search", "web_fetch"}:
+        if name in {"web_search", "web_fetch", "kb_search"}:
             sources = result.get("sources") if isinstance(result, dict) else None
             state.event_kinds.append("search.sources")
             await emit(

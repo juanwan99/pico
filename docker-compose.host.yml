@@ -89,12 +89,27 @@ services:
       # Image vendor (host .env only; never commit the value)
       SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
       SILICONFLOW_IMAGE_MODEL: ${SILICONFLOW_IMAGE_MODEL:-}
+      PICO_MEILI_URL: ${PICO_MEILI_URL:-http://127.0.0.1:7700}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
     volumes:
       - pico_data:/app/data
       - ${PICO_SANDBOX_DISK_HOST:-./data/teacher-disks}:/var/lib/pico/teacher-disks
       - ./.env:/app/.env:ro
     depends_on:
       - mongo
+      - meilisearch
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.13.3
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      MEILI_HTTP_ADDR: 127.0.0.1:7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_ENV: production
+    volumes:
+      - pico_meili:/meili_data
 
   pico-sandbox:
     image: pico-sandbox:v13
@@ -191,6 +206,7 @@ services:
 volumes:
   pico_mongo:
   pico_data:
+  pico_meili:
   librechat_images:
   librechat_uploads:
   librechat_logs:

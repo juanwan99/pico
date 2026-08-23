@@ -5,9 +5,11 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from pico_orchestrator.meili_kb import PARSE_EXT, parse_office_bytes, project_material_artifact
 from pydantic import BaseModel, Field
 
 from app.auth import Principal, require_any_scope
@@ -15,6 +17,7 @@ from app.db import ArtifactRow, TaskRow, new_id, session_factory
 from app.office_extract import extract_office
 
 router = APIRouter(tags=["edu-files"])
+logger = logging.getLogger(__name__)
 
 MAX_BYTES = 8 * 1024 * 1024
 KIND_SRC = "edu_office"
@@ -76,6 +79,40 @@ async def _read_upload(request: Request) -> tuple[str, bytes]:
     return parsed.filename, decode_b64(parsed.content_b64)
 
 
+def extract_for_kb(filename: str, data: bytes) -> dict[str, Any]:
+    """PDF/DOCX via field-kb-ingest; other office via stdlib extract_office."""
+    from pathlib import Path
+
+    suffix = Path(filename or "file").suffix.lower()
+    if suffix in PARSE_EXT:
+        text = parse_office_bytes(filename=filename or "file", data=data)
+        ext = suffix.lstrip(".")
+        if text:
+            return {
+                "filename": (filename or "file")[:180],
+                "kind": ext,
+                "status": "ok",
+                "headline": text[:80],
+                "rows": None,
+                "cols": None,
+                "sheets": [],
+                "text": text[:20000],
+                "error": None,
+            }
+        return {
+            "filename": (filename or "file")[:180],
+            "kind": ext,
+            "status": "unread",
+            "headline": "没抽出正文",
+            "rows": None,
+            "cols": None,
+            "sheets": [],
+            "text": "",
+            "error": "没抽出正文",
+        }
+    return extract_office(filename, data)
+
+
 def _payload(file_id: str | None, extract: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": extract.get("status") == "ok",
@@ -110,6 +147,9 @@ async def persist_edu_file(
     if kind in TEXT_KINDS and text_body:
         stored, encoding, byte_size, digest = encode_artifact_payload(text_body)
         artifact_kind = "file"
+    elif text_body and kind in {"pdf", "docx"}:
+        stored, encoding, byte_size, digest = encode_artifact_payload(text_body)
+        artifact_kind = "kb_text"
     else:
         stored, encoding, byte_size, digest = encode_artifact_payload(data)
         artifact_kind = KIND_SRC
@@ -148,6 +188,21 @@ async def persist_edu_file(
             )
             session.add(excerpt)
         await session.commit()
+        index_body: str | bytes
+        if artifact_kind == KIND_SRC:
+            index_body = data
+        else:
+            index_body = stored
+        try:
+            project_material_artifact(
+                principal,
+                artifact_id=src.id,
+                title=filename[:512],
+                kind=artifact_kind,
+                content=index_body,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("meili project after file persist failed: %s", type(exc).__name__)
         return src.id
 
 
@@ -191,7 +246,7 @@ async def post_edu_file(
     x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
 ) -> dict[str, Any]:
     filename, data = await _read_upload(request)
-    extract = extract_office(filename, data)
+    extract = extract_for_kb(filename, data)
     file_id = None
     if extract.get("status") == "ok":
         file_id = await persist_edu_file(

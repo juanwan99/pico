@@ -37,21 +37,31 @@ export default function PicoSearchSources({
         <ul className="space-y-1">
           {view.sources.map((source) => (
             <li key={source.url} className="min-w-0">
-              <a
-                href={source.url}
-                className="block truncate text-[12px] font-medium text-[#3b6fd9] underline-offset-2 hover:underline"
-                data-testid="pico-search-source-link"
-                title={source.title}
-                onClick={(event) => {
-                  if (!onOpenSource) {
-                    return;
-                  }
-                  event.preventDefault();
-                  onOpenSource(source.url);
-                }}
-              >
-                {source.title}
-              </a>
+              {source.artifactId || source.url.startsWith('pico-artifact:') ? (
+                <span
+                  className="block truncate text-[12px] font-medium text-[#1a3a7a] dark:text-text-primary"
+                  data-testid="pico-search-source-kb"
+                  title={source.snippet || source.title}
+                >
+                  {source.title}
+                </span>
+              ) : (
+                <a
+                  href={source.url}
+                  className="block truncate text-[12px] font-medium text-[#3b6fd9] underline-offset-2 hover:underline"
+                  data-testid="pico-search-source-link"
+                  title={source.title}
+                  onClick={(event) => {
+                    if (!onOpenSource) {
+                      return;
+                    }
+                    event.preventDefault();
+                    onOpenSource(source.url);
+                  }}
+                >
+                  {source.title}
+                </a>
+              )}
             </li>
           ))}
         </ul>

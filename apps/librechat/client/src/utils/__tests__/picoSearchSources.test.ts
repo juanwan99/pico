@@ -73,6 +73,26 @@ describe('collectPicoSearchSources', () => {
     ]);
   });
 
+  it('surfaces kb_search artifact sources without requiring http urls', () => {
+    const view = collectPicoSearchSources([
+      event('search.sources', {
+        tool: 'kb_search',
+        honest_miss: false,
+        sources: [{ title: '校历.md', artifact_id: 'art-1', snippet: '三月开学' }],
+      }),
+    ]);
+    expect(view.searched).toBe(true);
+    expect(view.honestMiss).toBe(false);
+    expect(view.sources).toEqual([
+      {
+        title: '校历.md',
+        url: 'pico-artifact:art-1',
+        snippet: '三月开学',
+        artifactId: 'art-1',
+      },
+    ]);
+  });
+
   it('keeps honest miss when ledger searched and ignores invented bubble links', () => {
     const view = collectPicoSearchSources(
       [

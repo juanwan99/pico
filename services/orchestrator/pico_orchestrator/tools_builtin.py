@@ -35,6 +35,7 @@ from pico_orchestrator.gateway import (
 )
 from pico_orchestrator.image_generate import generate_image_bytes
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
+from pico_orchestrator.meili_kb import extract_index_text, meili_configured, search_materials
 from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
 from pico_orchestrator.sandbox_s1 import (
     MAX_CONTENT_CHARS,
@@ -378,15 +379,9 @@ def _workspace_handlers(
         )
         return {"artifacts": artifacts, "count": len(artifacts)}
 
-    async def kb_search(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        """P2 KB pilot: full-text scan of membership Artifact materials (no vector DB)."""
-        query = _required_text(args, "query", maximum=_MAX_KB_QUERY)
-        try:
-            limit = int(args.get("limit") or 20)
-        except (TypeError, ValueError) as exc:
-            raise ToolError("tool.invalid_arguments", "limit must be an integer") from exc
-        if not 1 <= limit <= 50:
-            raise ToolError("tool.invalid_arguments", "limit must be between 1 and 50")
+    async def _scan_kb_hits(
+        principal: Principal, query: str, limit: int
+    ) -> list[dict[str, Any]]:
         listed = await store.list(principal, limit=min(100, max(limit * 3, 20)))
         hits: list[dict[str, Any]] = []
         q_low = query.lower()
@@ -401,8 +396,20 @@ def _workspace_handlers(
             if not full:
                 continue
             content = full.get("content")
-            if not isinstance(content, str):
-                # Binary materials: title-only match
+            raw = None
+            b64 = full.get("content_base64")
+            if isinstance(b64, str) and b64:
+                try:
+                    raw = base64.b64decode(b64)
+                except Exception:  # noqa: BLE001
+                    raw = None
+            text = extract_index_text(
+                title=title,
+                kind=str(full.get("kind") or ""),
+                content=content if isinstance(content, str) else None,
+                raw=raw,
+            )
+            if not text:
                 if q_low not in title.lower():
                     continue
                 hits.append(
@@ -410,13 +417,13 @@ def _workspace_handlers(
                         "artifact_id": art_id,
                         "title": title,
                         "kind": full.get("kind"),
-                        "excerpt": f"（二进制材料，标题命中：{title}）",
+                        "excerpt": f"（材料未能抽出正文，标题命中：{title}）",
                         "match": "title",
                     }
                 )
                 continue
             title_hit = q_low in title.lower()
-            body_hit = q_low in content.lower()
+            body_hit = q_low in text.lower()
             if not title_hit and not body_hit:
                 continue
             hits.append(
@@ -424,7 +431,7 @@ def _workspace_handlers(
                     "artifact_id": art_id,
                     "title": title,
                     "kind": full.get("kind"),
-                    "excerpt": _excerpt_around(content if body_hit else title, query),
+                    "excerpt": _excerpt_around(text if body_hit else title, query),
                     "match": "title+body" if title_hit and body_hit else (
                         "title" if title_hit else "body"
                     ),
@@ -432,21 +439,94 @@ def _workspace_handlers(
             )
             if len(hits) >= limit:
                 break
+        return hits
+
+    async def kb_search(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        """Search membership materials (Meili projection; scan fallback if Meili is down)."""
+        query = _required_text(args, "query", maximum=_MAX_KB_QUERY)
+        try:
+            limit = int(args.get("limit") or 20)
+        except (TypeError, ValueError) as exc:
+            raise ToolError("tool.invalid_arguments", "limit must be an integer") from exc
+        if not 1 <= limit <= 50:
+            raise ToolError("tool.invalid_arguments", "limit must be between 1 and 50")
+
+        degraded = False
+        mode = "scan"
+        hits: list[dict[str, Any]] = []
+        if meili_configured():
+            try:
+                result = search_materials(
+                    query,
+                    school_id=principal.school_id,
+                    membership_id=principal.membership_id,
+                    limit=limit,
+                )
+                mode = "hybrid" if result.get("hybrid") else "keyword"
+                for row in result.get("hits") or []:
+                    if not isinstance(row, dict):
+                        continue
+                    art_id = str(row.get("artifact_id") or "")
+                    title = str(row.get("title") or "")
+                    text = str(row.get("text") or "")
+                    if not art_id or title in _SKIP_KB_TITLES:
+                        continue
+                    hits.append(
+                        {
+                            "artifact_id": art_id,
+                            "title": title,
+                            "kind": row.get("kind"),
+                            "excerpt": _excerpt_around(text or title, query),
+                            "match": "index",
+                        }
+                    )
+            except Exception:  # noqa: BLE001 — Meili down: honest scan fallback
+                degraded = True
+                mode = "scan"
+                hits = await _scan_kb_hits(principal, query, limit)
+        else:
+            hits = await _scan_kb_hits(principal, query, limit)
+
+        sources = [
+            {
+                "title": str(h.get("title") or "材料"),
+                "artifact_id": str(h.get("artifact_id") or ""),
+                "snippet": str(h.get("excerpt") or ""),
+                "url": "",
+            }
+            for h in hits
+            if h.get("artifact_id")
+        ]
         if not hits:
             return {
                 "hits": [],
                 "count": 0,
                 "honest_miss": True,
+                "degraded": degraded,
+                "mode": mode,
+                "retrieved": False,
+                "sources": [],
                 "user_message": (
                     "未在已挂载的工作区材料中命中该问题。"
                     "请先生成或上传材料到产物账本后再问，或换关键词。"
                 ),
             }
+        engine = (
+            "语义检索"
+            if mode == "hybrid"
+            else "关键词检索" if mode == "keyword" else "账本扫描"
+        )
+        if degraded:
+            engine = "检索降级为账本扫描"
         return {
             "hits": hits,
             "count": len(hits),
             "honest_miss": False,
-            "user_message": f"命中 {len(hits)} 条材料依据（Artifact 账本全文检索试点，非向量库）。",
+            "degraded": degraded,
+            "mode": mode,
+            "retrieved": True,
+            "sources": sources,
+            "user_message": f"命中 {len(hits)} 条材料依据（{engine}）。",
         }
 
     async def generate_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1378,9 +1458,10 @@ def build_default_gateway(
         ToolSpec(
             name="kb_search",
             description=(
-                "P2 knowledge pilot: search membership Artifact materials by keyword "
-                "(full-text on ledger text, no vector DB). Returns excerpts + artifact_id "
-                "citations, or honest_miss when nothing matches. Args: query, limit?"
+                "Search this teacher's uploaded/generated materials (md/pdf/docx and "
+                "ledger text). Call this when the user asks about documents, 材料, 这份, "
+                "or school files — do not wait for them to say 去搜库. Returns excerpts "
+                "+ artifact_id, or honest_miss. Never invent content. Args: query, limit?"
             ),
             handler=kb_search,
             school_scoped=False,
