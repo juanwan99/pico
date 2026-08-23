@@ -8,6 +8,9 @@
 
 # 执行卡 · T-改这里-ID
 
+开工先读（只读，禁止把正文贴进卡）：
+docs/ONEFLOW.md · docs/MEMORY-RESET.md · docs/TOOLING-CATALOG.md
+
 ## 合同
 
 - **结果：** 改这里（一句人话，老师在 pico.aivia.asia 能看见什么）

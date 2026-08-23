@@ -9,7 +9,7 @@ SUPERSEDES: 本文件旧长表（CLAIM/BASE/PRODUCT 头 + IN/OUT 填表）
 经验: docs/MEMORY-RESET.md（不进卡面）
 ```
 
-点 **New Issue** 选「执行卡」或「调查卡」。不要从聊天里发明第三套格式。
+点 **New Issue** 选「执行卡」或「调查卡」。卡顶有「开工先读」三份链接。没读手册就填卡 = 拒领。不要从聊天里发明第三套格式。
 
 ## 卡面只四行
 
