@@ -11,6 +11,7 @@ from pico_orchestrator.meili_kb import (
     document_from_artifact,
     extract_index_text,
     is_material,
+    parse_office_bytes,
     quote_filter_value,
     search_materials,
     tenant_filter,
@@ -139,6 +140,42 @@ def test_extract_index_text_utf8_not_title_only() -> None:
     )
     assert "1 月 20 日" in body
     assert body != "通知.md"
+
+
+def test_parse_to_index_uses_field_kb_ingest_not_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    fake = types.ModuleType("ingest")
+
+    def ingest_bytes(*, filename: str, data: bytes, title: str):
+        assert filename.endswith((".pdf", ".docx"))
+        assert data.startswith(b"%PDF") or data[:2] == b"PK"
+        return {"ok": True, "slices": [{"excerpt": "抽出的正文：寒假从一月二十日开始。"}]}
+
+    fake.ingest_bytes = ingest_bytes  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ingest", fake)
+    text = parse_office_bytes(filename="家长通知.pdf", data=b"%PDF-1.4 body")
+    assert "一月二十日" in text
+    indexed = extract_index_text(
+        title="家长通知.pdf",
+        kind="edu_office",
+        content=None,
+        raw=b"%PDF-1.4 body",
+    )
+    assert "一月二十日" in indexed
+    assert indexed != "家长通知.pdf"
+    doc = document_from_artifact(
+        artifact_id="art-pdf",
+        title="家长通知.pdf",
+        text=indexed,
+        school_id="school-a",
+        membership_id="m1",
+    )
+    assert "一月二十日" in doc["text"]
+    assert doc["text"] != doc["title"]
 
 
 def test_upsert_posts_to_index(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -469,6 +469,12 @@ def _workspace_handlers(
                     art_id = str(row.get("artifact_id") or "")
                     title = str(row.get("title") or "")
                     text = str(row.get("text") or "")
+                    row_school = str(row.get("school_id") or "").strip()
+                    row_member = str(row.get("membership_id") or "").strip()
+                    if row_school and row_school != principal.school_id:
+                        continue
+                    if row_member and row_member != principal.membership_id:
+                        continue
                     if not art_id or title in _SKIP_KB_TITLES:
                         continue
                     hits.append(
