@@ -92,3 +92,47 @@ jobs:
           test -f apps/README.md
           grep -q 'librechat' apps/README.md
           echo "OK: product UI = apps/librechat"
+
+  product-ui-tests:
+    name: product-ui-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/librechat
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/librechat/package-lock.json
+
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Build data-provider + data-schemas
+        run: |
+          if ! npm run build:data-provider; then
+            echo "data-provider build failed; retry after unrun"
+            npm install --no-save --legacy-peer-deps unrun
+            npm run build:data-provider
+          fi
+          npm run build:data-schemas
+
+      - name: Client jest
+        working-directory: apps/librechat/client
+        env:
+          NODE_ENV: development
+        run: npx jest --ci
+
+      - name: packages/api jest
+        working-directory: apps/librechat/packages/api
+        env:
+          NODE_ENV: test
+        run: >
+          npx jest --ci
+          --testPathIgnorePatterns='.*integration.*|.*helper.*|__tests__/helpers/|.*manual\.spec\.'
+
