@@ -258,6 +258,20 @@ class SubprocessTransport(TruePiTransport):
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+        # Official Pi compaction settings (docs/compaction.md). Not a self-built
+        # compressor: keepRecentTokens / reserveTokens are Pi's own knobs.
+        settings = {
+            "compaction": {
+                "enabled": True,
+                "reserveTokens": 16384,
+                "keepRecentTokens": 20000,
+            }
+        }
+        settings_text = json.dumps(settings, ensure_ascii=False, indent=2) + "\n"
+        (dest / "settings.json").write_text(settings_text, encoding="utf-8")
+        project_pi = (self.spawn_cwd or self.session_dir) / ".pi"
+        project_pi.mkdir(parents=True, exist_ok=True)
+        (project_pi / "settings.json").write_text(settings_text, encoding="utf-8")
         self.agent_home = dest
         return dest
 

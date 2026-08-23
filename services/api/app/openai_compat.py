@@ -801,7 +801,7 @@ def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
     """Apply the dual-mode runtime policy onto RunCaps (Pico 快速 / Pico 深度).
 
     - pico-fast: deepseek-v4-flash, thinking off, tighter steps/tokens.
-    - pico-deep: deepseek-v4-flash, thinking on + circuit breaker armed.
+    - pico-deep: deepseek-reasoner, thinking on + circuit breaker armed.
     """
     from dataclasses import replace as _dc_replace
 
@@ -815,6 +815,8 @@ def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
         "max_steps": int(policy.get("max_steps", caps.max_steps)),
         "max_tokens": int(policy.get("max_tokens", caps.max_tokens)),
         "thinking_on": bool(policy.get("thinking", False)),
+        "ui_model": low,
+        "backend_model": str(policy.get("backend_model") or ""),
     }
     if hasattr(caps, "max_context"):
         fields["max_context"] = int(policy.get("max_context", caps.max_context))

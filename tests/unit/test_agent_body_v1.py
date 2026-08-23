@@ -199,12 +199,15 @@ async def test_compaction_end_emits_human_line() -> None:
         events.append((k, p))
 
     state = EventMapState()
+    await map_event(RpcEvent({"type": "compaction_start", "reason": "threshold"}), emit=emit, state=state)
     await map_event(RpcEvent({"type": "compaction_end", "reason": "threshold"}), emit=emit, state=state)
     kinds = [k for k, _ in events]
+    assert "compaction.begin" in kinds
     assert "compaction.end" in kinds
     deltas = [p for k, p in events if k == "message.delta"]
     assert deltas
-    assert COMPACTION_HUMAN in str(deltas[0].get("text"))
+    assert COMPACTION_HUMAN == "在整理上文"
+    assert all(COMPACTION_HUMAN in str(p.get("text")) for p in deltas)
 
 
 @pytest.mark.asyncio

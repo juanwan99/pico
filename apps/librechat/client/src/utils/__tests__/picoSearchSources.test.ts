@@ -73,6 +73,19 @@ describe('collectPicoSearchSources', () => {
     ]);
   });
 
+  it('keeps clickable sources after a later compaction event', () => {
+    const view = collectPicoSearchSources([
+      event('search.sources', {
+        tool: 'web_search',
+        honest_miss: false,
+        sources: [{ title: '义务教育法', url: 'https://www.gov.cn/a' }],
+      }),
+      event('compaction.end', { text: '在整理上文', source: 'true-pi' }),
+    ]);
+    expect(view.searched).toBe(true);
+    expect(view.sources).toEqual([{ title: '义务教育法', url: 'https://www.gov.cn/a' }]);
+  });
+
   it('surfaces kb_search artifact sources without requiring http urls', () => {
     const view = collectPicoSearchSources([
       event('search.sources', {

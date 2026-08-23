@@ -57,18 +57,18 @@ def test_spawn_command_fast_lane_thinking_off() -> None:
 
 
 def test_spawn_command_deep_lane_thinking_on() -> None:
-    """F1: pico-deep → --thinking on · model deepseek-v4-flash."""
+    """F1: pico-deep → --thinking on · model deepseek-reasoner."""
     t = SubprocessTransport(
         session_dir=Path("/tmp/tp-sess"),
         tool_url="http://127.0.0.1:1",
         tool_token="tok",
         run_id="r1",
-        model="deepseek-v4-flash",
+        model="deepseek-reasoner",
         thinking=True,
     )
     cmd = t.spawn_command()
     assert "--model" in cmd
-    assert cmd[cmd.index("--model") + 1] == "deepseek-v4-flash"
+    assert cmd[cmd.index("--model") + 1] == "deepseek-reasoner"
     assert "--thinking" in cmd
     assert cmd[cmd.index("--thinking") + 1] == "on"
 

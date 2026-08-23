@@ -143,14 +143,16 @@ async def run_true_pi_agent(
                     reason="True Pi requires DEEPSEEK_API_KEY (preferred) or KIMI_API_KEY",
                     tag=tag,
                 )
-            # Dual-mode (F1/F3): lane policy flows into the true_pi kernel — the
-            # backend model is pinned to deepseek-v4-flash and the thinking flag
-            # follows caps.thinking_on (Pico 快速=off / Pico 深度=on). Never a
-            # global hardcoded off.
+            # Dual-mode (F1/F3): lane policy flows into the true_pi kernel —
+            # pico-fast → deepseek-v4-flash; pico-deep → deepseek-reasoner.
+            # thinking flag follows caps.thinking_on. Never a global hardcoded off.
             from pico_orchestrator.provider import runtime_policy_for_model
 
-            policy = runtime_policy_for_model(None)
-            backend_model = str(policy.get("backend_model") or provider.model)
+            ui_model = str(getattr(caps, "ui_model", "") or "")
+            policy = runtime_policy_for_model(ui_model or None)
+            backend_model = str(getattr(caps, "backend_model", "") or "") or str(
+                policy.get("backend_model") or provider.model
+            )
             thinking_on = bool(getattr(caps, "thinking_on", False))
             max_context, max_out = true_pi_windows_from_caps(caps)
             tool_server = ToolServer(principal=principal, gateway=gateway, run_id=rid)
@@ -204,6 +206,16 @@ async def run_true_pi_agent(
 
         client = TruePiRpcClient(transport)
         await client.start()
+        await emit(
+            "run.model",
+            {
+                "ui_model": str(getattr(caps, "ui_model", "") or "") or None,
+                "backend_model": str(getattr(caps, "backend_model", "") or "")
+                or str(getattr(transport, "model", "") or "")
+                or None,
+                **tag,
+            },
+        )
 
         skill = (caps.skill_instruction or "").strip()
         # Workbench Pi session tree holds history. Do not paste N turns as text.
