@@ -1,0 +1,43 @@
+name: 执行卡
+description: 四行合同。总管先填两问。无 stamp-ok 拒领。
+labels: []
+body:
+  - type: textarea
+    id: stamp
+    attributes:
+      label: 总管戳
+      description: 禁止留「改这里」。总管打 stamp-ok 后执行才能领。
+      value: |
+        总管戳：
+        同域在飞？ 改这里
+        残债新卡？ 否
+    validations:
+      required: true
+  - type: textarea
+    id: card
+    attributes:
+      label: 合同（四行）
+      description: 从 315 留下的纪律在 docs/TASK-CARD-STANDARD.md，不要把 S/G/E 表贴回来。
+      value: |
+        # 执行卡 · T-改这里-ID
+
+        ## 合同
+
+        - **结果：** 改这里（老师在 pico.aivia.asia 能看见什么）
+        - **不准：** 自签 PASS · 直推 main · ship-bff-web · 改这里
+        - **过门：**
+          - T1 改这里
+        - **部署：** 有差才 `PICO_DEPLOY_SHA=<40位> bash /opt/pico/scripts/prod-update.sh`；对 `curl -fsS https://pico.aivia.asia/api/pico/tip`。没差写不部
+
+        ## 回执
+
+        ```text
+        CLAIM T-改这里-ID · 窗名 · DONE
+        PR：#
+        SHA：live = origin/main =
+        过门：T1 过/不过 · 证据
+        剩下：无
+        PASS：未签
+        ```
+    validations:
+      required: true

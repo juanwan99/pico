@@ -36,7 +36,7 @@ GOALS: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · WHAT-IS-PICO；STATE-NOW（快照�
 | **0b** | **[STATE-NOW.md](./STATE-NOW.md)** | **当前 tip、门禁、单窗 SOLO** |
 | **0b′** | **[MEMORY-RESET.md](./MEMORY-RESET.md)** | **错误记忆黑名单（开场必清）** |
 | **0b″** | **[STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md)** | **单窗阶段包（废多窗碎派）** |
-| **0b‴** | **[TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)** | **任务卡格式真源（CLAIM/BASE/PRODUCT）** |
+| **0b‴** | **[TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)** | **任务卡四行指针（ONEFLOW v2 · 禁 315 长表）** |
 | **0b·tool** | **[TOOLING-CATALOG.md](./TOOLING-CATALOG.md)** | **批准/禁止工具合同 · `scripts/tool-status.sh`（#386/#387）** |
 | **0b·V** | **[VISUAL-GATE.md](./VISUAL-GATE.md)** | **#384 视觉门 · `scripts/visual-gate.mjs`（无图不得 Ready；见 #385）** |
 | **0b·tip** | **[TIP-PROBE.md](./TIP-PROBE.md)** | **公网 tip 40 位探针** |
@@ -87,5 +87,5 @@ New long plans: **one ACTIVE plan** at a time. Previous plan → COMPLETED heade
 
 **Binding product direction:** [HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md) — Pico full stack + Pi + DeepSeek · Web WorkBuddy-degree six bars.  
 **Memory reset:** [MEMORY-RESET.md](./MEMORY-RESET.md) · **SOLO:** [STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md).  
-**Task card standard:** [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（CLAIM/BASE/PRODUCT）。  
+**Task card standard:** [ONEFLOW.md](./ONEFLOW.md) · [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（四行。禁 315）。  
 **Current day card:** **T-HYGIENE-SEARCH-UX-SANDBOX-S2** · issue [#513](https://github.com/juanwan99/pico/issues/513)（主线：计量+搜索+沙箱）。历史日卡 [DAY-TASK-P0-PI-CUTOVER.md](./DAY-TASK-P0-PI-CUTOVER.md) · #310 勿当现行派工。
