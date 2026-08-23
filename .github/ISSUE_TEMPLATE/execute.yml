@@ -17,7 +17,7 @@ body:
     id: card
     attributes:
       label: 合同（四行）
-      description: 从 315 留下的纪律在 docs/TASK-CARD-STANDARD.md，不要把 S/G/E 表贴回来。
+      description: 从 315 留下的纪律在 docs/TASK-CARD-STANDARD.md。派给执行窗时对话只贴 docs/templates/dispatch-slip.md，禁止把本卡全文粘进聊天。
       value: |
         # 执行卡 · T-改这里-ID
 

@@ -75,10 +75,12 @@ Pico = AI **过程**真源（会话、工具、产物、双档）。不是第二
 ## 3. 你当总管要守的
 
 - 一张结果一张卡。残债同卡续，禁 `T-*-DEBT`。
-- 卡面四行：结果 / 不准 / 过门 / 部署。模板在 `main`，不是某张开着的 PR：`.github/ISSUE_TEMPLATE/execute.yml`、`docs/templates/card-build.md`、`docs/TASK-CARD-STANDARD.md`（#632+#633 已合）。
-- 经验、工具写在手册，卡顶只写「开工先读」：`ONEFLOW.md` · `MEMORY-RESET.md` · `TOOLING-CATALOG.md`。
+- **执行窗零记忆。** 调查写入 Issue 标准任务卡（已锁事实/IN），不要留在总管聊天。
+- **派 = Issue 已开 + stamp-ok + 对话只贴** [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)（合同链接 · 必读点名 · ≤3 坑名）。缺一条没派。
+- 卡面体例对齐 #627 标准任务卡。四行是骨架，禁止用四行短卡替代合同。
+- 经验、工具写在手册。条上点名：`ONEFLOW.md` · `MEMORY-RESET.md` · `TOOLING-CATALOG.md`。
 - 无 `stamp-ok` 拒领。写入不自签 PASS。CI 红不合。合了没装 = 老师没看见。
-- 不信回执里的 SHA，自己 curl tip。
+- 总管默认不写业务码。不信回执里的 SHA，自己 curl tip。
 
 ---
 
@@ -130,7 +132,7 @@ Pico = AI **过程**真源（会话、工具、产物、双档）。不是第二
 | 角色 | 职责 |
 |------|------|
 | 业主 | 方向 · CLAIM-WB · HOLD 授权 · 给 #627 打 stamp-ok |
-| 总管 Grok | 出卡 · L2 核 SHA · 禁自签产品 PASS |
+| 总管 Grok | 调查写入 Issue · 打章 · 对话只贴派发条 · L2 核 SHA · 禁自签 · 禁自己当执行窗 |
 | DS | 主执行 · L1 自审 · 边测边修 |
 
 ---

@@ -11,6 +11,8 @@
 开工先读（只读，禁止把正文贴进卡）：
 docs/ONEFLOW.md · docs/MEMORY-RESET.md · docs/TOOLING-CATALOG.md
 
+派给执行窗时：对话只贴 docs/templates/dispatch-slip.md。禁止把本卡全文粘进聊天。
+
 ## 合同
 
 - **结果：** 改这里（一句人话，老师在 pico.aivia.asia 能看见什么）
