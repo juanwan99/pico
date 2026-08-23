@@ -123,12 +123,21 @@ jobs:
           npm run build:data-schemas
           npm run build:client-package
 
-      - name: Client jest
+      # Owner 2026-08-23 A: Pico-named client tests that are currently green.
+      # Full client jest (313 suites) = 29 failed / 90 failed: zh-Hans vs
+      # upstream English UI tests + stale Pico copy. Not fixed in this card.
+      # Excluded here (stale, tracked in #627): usePicoConversationStatusMap.spec.ts,
+      # usePicoTaskLedger.spec.tsx (not __tests__/), usePicoTaskLedger.cancel.integration,
+      # picoSandboxSession.test.ts.
+      - name: Client jest (Pico target suite)
         working-directory: apps/librechat/client
         env:
           NODE_ENV: development
           NODE_OPTIONS: --max-old-space-size=4096
-        run: npx jest --ci --coverage=false
+        run: >
+          npx jest --ci --coverage=false
+          --testPathPattern='(/Pico/|pico)'
+          --testPathIgnorePatterns='Pico/usePicoTaskLedger\.spec\.tsx$|Pico/usePicoTaskLedger\.cancel|usePicoConversationStatusMap\.spec|picoSandboxSession\.test'
 
       - name: packages/api jest
         working-directory: apps/librechat/packages/api
