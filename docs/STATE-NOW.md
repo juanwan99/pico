@@ -1,15 +1,15 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-08-23（交接刷新 · #634）
+DATE: 2026-08-23（v1.2 两卡压缩）
 仓: juanwan99/pico ONLY
 CLAIM-WB-DEGREE-WEB: NO
 PRODUCT PASS: 未签 · 等业主 OWNER DECISION（#449）
 公网 tip（本次刷新 curl）: b713464ca05cb54fc2c30309cf05dc8f3710a825（#629 SSO 聊天 403）
-origin/main: ff2c6bca407d8be8549bd43c761d77885cfb2d1c（只多文档 #632/#633，故意不部）
+origin/main: 6e2adda6e47d7b932ca35f38b90ff0f3acee3773（#627 CI 门已合 · 不部）
   · 开工必 curl 实查：curl -fsS https://pico.aivia.asia/api/pico/tip
-活动主线: ① #623 已关 · 差业主侧人路径复验（总管未亲自登录复点）② 下一张工程 #627 T-CI-UI-GATE（无 stamp-ok）③ 阶段 1.5 两包排队
-  · 方向真源 DIRECTION-NOW §0b · 卡序：T-CI-UI-GATE → A1 → A2 → B1 → A3 → B2 → B3
+活动主线: ① #627 已关 ② 下一张 #628 T-KB-CATCH（无 stamp-ok）③ 排队 #637 T-RUNTIME-CATCH（须 628 关卡）
+  · 方向真源 DIRECTION-NOW §0b v1.2 · 卡序：#628 → #637
 工作流: OneFlow v2（#619 已合）— 四行卡 · 禁 315 填表
 本窗交接: docs/HANDOFF-NEW-WINDOW-2026-08-23.md · Issue #634（#573 作废）
 ```
@@ -18,21 +18,22 @@ origin/main: ff2c6bca407d8be8549bd43c761d77885cfb2d1c（只多文档 #632/#633�
 
 **禁止自研 · 只做薄适配：** [`LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)
 
-## 当前活动主线（阶段 1.5 · 2026-08-23 交接刷新）
+## 当前活动主线（阶段 1.5 · v1.2 两卡）
 
 | 优先级 | Issue / PR | 说明 |
 |--------|-------|------|
-| **下一张** | [#627](https://github.com/juanwan99/pico/issues/627) | T-CI-UI-GATE：CI 装前端 jest（无 `stamp-ok` · 业主点头再打再派） |
-| 排队 | [#628](https://github.com/juanwan99/pico/issues/628) | 包 A1 Meili · 须 627 关卡 · **误章已摘** |
+| **下一张** | [#628](https://github.com/juanwan99/pico/issues/628) | T-KB-CATCH 知识库整包（原 A1+A2+A3）· **无 stamp-ok** |
+| 排队 | [#637](https://github.com/juanwan99/pico/issues/637) | T-RUNTIME-CATCH 运行质量+效率（原 B1+B2+B3）· 须 628 关卡 · 无章 |
+| 已关前置 | [#627](https://github.com/juanwan99/pico/issues/627) | T-CI-UI-GATE 已合 `6e2adda…` · 不部 |
 | 收口差人眼 | [#623](https://github.com/juanwan99/pico/issues/623) 已关 | 三波+#629 已部 tip `b713464…`；老师侧 PDF/HTML 为**执行回执**，总管未亲自登录复点 |
-| 等业主配钥 | `SILICONFLOW_API_KEY` | ECS `.env`（compose 已留位）；有钥 A1 上 hybrid，无钥先纯全文诚实降级 |
+| 等业主配钥 | `SILICONFLOW_API_KEY` | ECS `.env`（compose 已留位）；有钥 #628 hybrid，无钥先纯全文诚实降级 |
 | 产品签 | [#449](https://github.com/juanwan99/pico/issues/449) · [#316](https://github.com/juanwan99/pico/issues/316) | CLAIM 材料等**业主** · 工程禁代签 · **勿关** |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | KA-3 默认切流须业主书面授权 · 未执行 · **勿关** |
-| 规划/讨论 | [#505](https://github.com/juanwan99/pico/issues/505) · [#530](https://github.com/juanwan99/pico/issues/530)（序1/序2 已激活） · [#498](https://github.com/juanwan99/pico/issues/498) · [#600](https://github.com/juanwan99/pico/issues/600) | 规划稿/指针 · **勿关 · 勿当本周执行** |
+| 规划/讨论 | [#505](https://github.com/juanwan99/pico/issues/505) · [#530](https://github.com/juanwan99/pico/issues/530)（序1/序2 已并入 628/637） · [#498](https://github.com/juanwan99/pico/issues/498) · [#600](https://github.com/juanwan99/pico/issues/600) | 规划稿/指针 · **勿关 · 勿当本周执行** |
 | 运行线程 | [#475](https://github.com/juanwan99/pico/issues/475) · [#634](https://github.com/juanwan99/pico/issues/634) | controller-bot poll log · **现行总管交接** · 长期开（#573 作废仍勿关） |
 
 ```text
-2026-08-23 已收口：#615 #613 #619 #620 #621 #622 #623 #624 #625 #629 #630 #631 #632 #633 · #586 关闭不合（业主决定 · 分支保留）
+2026-08-23 已收口：#615 #613 #619 #620 #621 #622 #623 #624 #625 #627 #629 #630 #631 #632 #633 · #586 关闭不合（业主决定 · 分支保留）
 现网 tip b713464… 已含：#623 三波 + #629 SSO 聊天 403
 禁止误关：#316 #449 #498 #505 #530 #170 #475 #573 #600 #634
 禁止把已 close 卡当活动主线

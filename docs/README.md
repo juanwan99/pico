@@ -90,4 +90,4 @@ New long plans: **one ACTIVE plan** at a time. Previous plan → COMPLETED heade
 **本窗交接:** [HANDOFF-NEW-WINDOW-2026-08-23.md](./HANDOFF-NEW-WINDOW-2026-08-23.md) · issue [#634](https://github.com/juanwan99/pico/issues/634)（[#573](https://github.com/juanwan99/pico/issues/573) 作废）。  
 **Memory reset:** [MEMORY-RESET.md](./MEMORY-RESET.md) · **SOLO:** [STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md).  
 **Task card standard:** [ONEFLOW.md](./ONEFLOW.md) · [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（四行。禁 315）。  
-**Current day card:** **T-CI-UI-GATE** · issue [#627](https://github.com/juanwan99/pico/issues/627)（无 stamp-ok · 业主点头再派）。排队 [#628](https://github.com/juanwan99/pico/issues/628) 须 627 关卡。
+**Current day card:** **T-KB-CATCH** · issue [#628](https://github.com/juanwan99/pico/issues/628)（无 stamp-ok · 业主打章再派）。排队 [#637](https://github.com/juanwan99/pico/issues/637) T-RUNTIME-CATCH 须 628 关卡。

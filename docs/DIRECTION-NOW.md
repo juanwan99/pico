@@ -1,9 +1,9 @@
-# DIRECTION-NOW · 业主方向锁定（2026-08-09 · v1.1 加线 2026-08-23）
+# DIRECTION-NOW · 业主方向锁定（2026-08-09 · v1.2 两卡压缩 2026-08-23）
 
 ```text
 STATUS: BINDING · 业主书面四条 + 阶段 1.5 加线
 DATE: 2026-08-09
-UPDATED: 2026-08-23 · 业主拍板「AI 本体 + 知识库」两包（§0b）
+UPDATED: 2026-08-23 · v1.2 长任务压成两张卡（#628 + #637）
 仓: juanwan99/pico ONLY
 SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · PLAN-TWO-PHASE-WB · STATE-NOW
 CLAIM-WB-DEGREE-WEB: NO
@@ -23,17 +23,18 @@ CLAIM-WB-DEGREE-WEB: NO
 | **3** | 产品要的是 **通用能力** + **复杂问题处理能力**（**尤其办公场景**） |
 | **4** | **对标产品：WorkBuddy**；**本阶段核心 = 基础能力打扎实**；**不铺大摊子** |
 
-## 0b. 阶段 1.5 加线（业主 2026-08-23 书面 · BINDING）
+## 0b. 阶段 1.5 加线（业主 2026-08-23 书面 · BINDING · v1.2）
 
-> 依据：2026-08-23 Cherry Studio 差距量化分析（业主点名「AI 本体能力 + 知识库能力」为下阶段重点）。
-> 本节把 [#530](https://github.com/juanwan99/pico/issues/530) 规划稿中「知识库 = 后期」**激活为当前主线**；#530 的压缩（序 1）一并激活。
+> 依据：2026-08-23 Cherry Studio 差距调查（业主点名「运行质量/效率 + 知识库」靠齐）。
+> #530 序 1 压缩、序 2 知识库仍激活；**执行面压成两张卡**（业主「最多两张完成这个长任务」）。
+> 前置 T-CI-UI-GATE [#627](https://github.com/juanwan99/pico/issues/627) 已关。
 
 ```text
-两包主线（#623 收口后开工 · SOLO 一张在飞）：
-  包 A 知识库：A1 T-KB-ENGINE-ON → A2 T-KB-AGENT-USE → A3 T-KB-DOC-PARSE
-  包 B AI 本体：B1 T-PI-COMPACT-VERIFY → B2 T-DEEP-TIER-ROUTE → B3 T-OFFICE-BENCH-10
-  前置小卡：T-CI-UI-GATE（CI 补前端 jest/tsc 门，先装门再开工）
-建议穿插序：CI门 → A1 → A2 → B1 → A3 → B2 → B3
+长任务两张（SOLO 一张在飞 · 无 stamp-ok 拒领）：
+  #628 T-KB-CATCH     知识库整包（原 A1+A2+A3）
+  #637 T-RUNTIME-CATCH 运行质量+效率（原 B1+B2+B3）
+卡序：#628 → #637
+旧六卡序 A1→A2→B1→A3→B2→B3 作废，以本页为准。
 ```
 
 红线不变（LAW）：知识库引擎 = 成熟上游 Meilisearch 薄适配（**不自研向量内核**）；

@@ -8,7 +8,7 @@ DATE: 2026-08-23
 公网: https://pico.aivia.asia
 生产: SSH pico-prod / ecs · /opt/pico
 现网 tip（写窗 curl）: b713464ca05cb54fc2c30309cf05dc8f3710a825
-origin/main（写窗）: ff2c6bca407d8be8549bd43c761d77885cfb2d1c（只多文档 #632/#633，故意不部）
+origin/main（写窗）: 6e2adda6e47d7b932ca35f38b90ff0f3acee3773（#627 CI 门已合，故意不部）
 CLAIM-WB-DEGREE-WEB: NO · 工程禁止代签
 ```
 
@@ -24,7 +24,7 @@ CLAIM-WB-DEGREE-WEB: NO · 工程禁止代签
 ## 0. 三句话
 
 1. **做谁：** 公网 AI 工作台 **Pico**（LibreChat + 账本 + **真 Pi 薄桥** + **DeepSeek**），对标 **WorkBuddy 级能办事**。
-2. **做到哪：** 阶段 1.5「AI 本体 + 知识库」两包未开；#623 已合已部，差业主侧人路径复验；**CLAIM-WB 未签**。
+2. **做到哪：** 阶段 1.5 压成两张卡：#628 知识库整包 → #637 运行质量/效率；#627 已关；#623 已合已部，差业主侧人路径复验；**CLAIM-WB 未签**。
 3. **怎么干：** 单窗 SOLO · 先测/RCA 再修 · OneFlow v2 四行卡 · DS 主执行 · 总管 L2 · 禁自签 PASS · 禁 315。
 
 ---
@@ -87,21 +87,21 @@ Pico = AI **过程**真源（会话、工具、产物、双档）。不是第二
 | | |
 |--|--|
 | 现网 tip | `b713464ca05cb54fc2c30309cf05dc8f3710a825`（#629 SSO 聊天 403 那刀） |
-| origin/main | `ff2c6bca407d8be8549bd43c761d77885cfb2d1c`（只多文档 #632/#633，**故意不部**） |
+| origin/main | `6e2adda6e47d7b932ca35f38b90ff0f3acee3773`（#627 CI 门已合，**故意不部**） |
 | 老师侧 | 学校登录能聊、PDF 能开、能生成 HTML（**执行回执**；总管未亲自登录复点） |
 
-刚收口：#623 产物/登录（已关）；#615 多轮对话；#613 跑时人话；#631 任务卡瘦身（已关 · #632+#633 已合）。
+刚收口：#623 产物/登录（已关）；#627 CI 前端门（已合 `6e2adda…` · 不部）；#615 多轮对话；#613 跑时人话；#631 任务卡瘦身。
 
-**下一张：** [#627](https://github.com/juanwan99/pico/issues/627) 给 CI 装前端 jest。现无 `stamp-ok`，业主点头再打再派。（#627 上「下一张是 #631」旧注已过期 — #631 已关。）
+**下一张：** [#628](https://github.com/juanwan99/pico/issues/628) T-KB-CATCH 知识库整包。现无 `stamp-ok`，业主打章再派执行窗。
 
-**再下一张：** [#628](https://github.com/juanwan99/pico/issues/628) 材料检索上 Meili。必须 627 关了再开。**写窗已摘掉误挂的 `stamp-ok`。**
+**再下一张：** [#637](https://github.com/juanwan99/pico/issues/637) T-RUNTIME-CATCH 运行质量+效率。必须 628 关了再开。无章。
 
 出图（P4）HOLD。不要把旧规划 #530/#505/#498/#316 当本周执行。
 
-卡序（DIRECTION-NOW §0b）：`T-CI-UI-GATE` → A1 → A2 → B1 → A3 → B2 → B3。SOLO 一张在飞。
+卡序（DIRECTION-NOW §0b v1.2）：`#628 T-KB-CATCH` → `#637 T-RUNTIME-CATCH`。SOLO 一张在飞。旧六卡序作废。
 
 ```text
-主线唯一: 等业主点头 → #627 → #628
+主线唯一: 等业主打章 → #628 → #637
 并行勿抢: CLAIM 只等业主 · HOLD 不动
 禁卫生大扫除
 ```
@@ -113,9 +113,9 @@ Pico = AI **过程**真源（会话、工具、产物、双档）。不是第二
 ```text
 1) curl -fsS https://pico.aivia.asia/api/pico/tip
 2) 读 docs/ONEFLOW.md、本交接、docs/DIRECTION-NOW.md、docs/STATE-NOW.md
-3) 对业主只报：现网 b713464…；下一张是不是 627
-4) 确认 #628 已无 stamp-ok（写窗已摘；若还在就再摘）
-5) 不写业务代码，除非业主点头给 #627 打 stamp-ok
+3) 对业主只报：现网 b713464…；下一张是不是 628
+4) 确认 #628 / #637 均无 stamp-ok
+5) 不写业务代码，除非业主给 #628 打 stamp-ok
 6) #623 不开第四波，除非业主侧人路径复验失败
 7) Ready 不暗示 CLAIM-WB-DEGREE-WEB: YES
 8) 勿卫生大扫除、勿动 HOLD（#170）
@@ -129,7 +129,7 @@ Pico = AI **过程**真源（会话、工具、产物、双档）。不是第二
 
 | 角色 | 职责 |
 |------|------|
-| 业主 | 方向 · CLAIM-WB · HOLD 授权 · 给 #627 打 stamp-ok |
+| 业主 | 方向 · CLAIM-WB · HOLD 授权 · 给 #628 打 stamp-ok |
 | 总管 Grok | 出卡 · L2 核 SHA · 禁自签产品 PASS |
 | DS | 主执行 · L1 自审 · 边测边修 |
 
@@ -139,8 +139,8 @@ Pico = AI **过程**真源（会话、工具、产物、双档）。不是第二
 
 ```text
 Pico = 真 Pi + DeepSeek；CLAIM-WB 未签。
-下一张工程主线 = #627 给 CI 装前端 jest 门（无章，业主点头再派）。
-#628 误章已摘，须 627 关卡。#623 已部差人眼。
+下一张工程主线 = #628 T-KB-CATCH 知识库整包（无章，业主打章再派）。
+#637 T-RUNTIME-CATCH 排队，须 628 关卡。#627 已关。#623 已部差人眼。
 禁自研厚桥 · 禁 edu 混线 · 禁代签 · 禁 315 · 禁无章开工。
 ```
 
