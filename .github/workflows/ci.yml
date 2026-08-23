@@ -92,3 +92,52 @@ jobs:
           test -f apps/README.md
           grep -q 'librechat' apps/README.md
           echo "OK: product UI = apps/librechat"
+
+  product-ui-tests:
+    name: product-ui-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/librechat
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/librechat/package-lock.json
+
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Build workspace packages
+        run: |
+          if ! npm run build:data-provider; then
+            echo "data-provider build failed; retry after unrun"
+            npm install --no-save --legacy-peer-deps unrun
+            npm run build:data-provider
+          fi
+          npm run build:data-schemas
+          npm run build:client-package
+
+      # Owner 2026-08-23 A: Pico-named client tests that are currently green.
+      # Full client jest (313 suites) = 29 failed / 90 failed: zh-Hans vs
+      # upstream English UI tests + stale Pico copy. Not fixed in this card.
+      # Excluded here (stale, tracked in #627): usePicoConversationStatusMap.spec.ts,
+      # usePicoTaskLedger.spec.tsx (not __tests__/), usePicoTaskLedger.cancel.integration,
+      # picoSandboxSession.test.ts.
+      # packages/api jest dropped: 312 files hung past 15min (run 32644669520 cancelled).
+      # This card is a UI door, not an api-package door.
+      - name: Client jest (Pico target suite)
+        working-directory: apps/librechat/client
+        env:
+          NODE_ENV: development
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: >
+          npx jest --ci --coverage=false
+          --testPathPatterns='src/hooks/Pico/|src/utils/__tests__/pico'
+          --testPathIgnorePatterns='Pico/usePicoTaskLedger\.spec\.tsx$|Pico/usePicoTaskLedger\.cancel|usePicoConversationStatusMap\.spec|picoSandboxSession\.test'
+
