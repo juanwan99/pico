@@ -5,10 +5,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Eye, Loader2, RefreshCw, Search, X } from 'lucide-react';
 import {
+  getPicoArtifactContent,
   listEduFields,
+  listMyPicoArtifacts,
   searchEduSchoolMaterials,
   type EduSchoolField,
   type EduSchoolMaterial,
+  type PicoArtifact,
 } from '~/data-provider/pico/api';
 import WorkbenchShell from './WorkbenchShell';
 import SchoolMaterialsBar from '~/components/Chat/SchoolMaterialsBar';
@@ -42,8 +45,13 @@ export default function FilesHubPage() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<EduSchoolMaterial[]>([]);
   const [fields, setFields] = useState<EduSchoolField[]>([]);
+  const [mine, setMine] = useState<PicoArtifact[]>([]);
+  const [mineBusy, setMineBusy] = useState<string | null>(null);
+  const [mineError, setMineError] = useState<string | null>(null);
+  const [minePreview, setMinePreview] = useState<{ title: string; html: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [schoolHint, setSchoolHint] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState<FileGroup>('all');
@@ -52,16 +60,25 @@ export default function FilesHubPage() {
     setLoading(true);
     setError(null);
     try {
-      const [listed, fieldRow] = await Promise.all([
-        searchEduSchoolMaterials(q.trim()),
+      const [listed, fieldRow, mineRow] = await Promise.all([
+        searchEduSchoolMaterials(q.trim()).catch(() => ({
+          configured: false,
+          items: [] as EduSchoolMaterial[],
+        })),
         listEduFields().catch(() => ({ fields: [] as EduSchoolField[] })),
+        listMyPicoArtifacts().catch(() => ({ artifacts: [] as PicoArtifact[] })),
       ]);
+      const mineNext = Array.isArray(mineRow.artifacts) ? mineRow.artifacts : [];
+      setMine(mineNext);
       if (listed.configured === false) {
-        setError('学校材料口还没接通');
+        setSchoolHint('学校材料口还没接通。对话里生成的文件在下面「我的生成物」。');
+        setError(null);
         setRows([]);
+        setFields(Array.isArray(fieldRow.fields) ? fieldRow.fields : []);
         setSelectedId(null);
         return;
       }
+      setSchoolHint(null);
       const next = Array.isArray(listed.items) ? listed.items : [];
       setRows(next);
       setFields(Array.isArray(fieldRow.fields) ? fieldRow.fields : []);
@@ -116,6 +133,131 @@ export default function FilesHubPage() {
     () => rows.find((row) => row.id === selectedId) ?? null,
     [rows, selectedId],
   );
+
+  const openMine = async (row: PicoArtifact) => {
+    setMineBusy(row.id);
+    setMineError(null);
+    try {
+      const blob = await getPicoArtifactContent(row.id, false);
+      const name = row.user_label || row.title || '生成物';
+      if (/\.html?$/i.test(name) || /html/i.test(row.kind || '')) {
+        // Same-origin blob tabs would run document scripts with site credentials;
+        // preview stays in a scriptless sandboxed iframe (ResultPanel discipline).
+        const html = await blob.text();
+        setMinePreview({ title: name, html });
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = name;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (openError) {
+      setMineError(openError instanceof Error ? openError.message : '打开失败');
+    } finally {
+      setMineBusy(null);
+    }
+  };
+
+  const downloadMine = async (row: PicoArtifact) => {
+    setMineBusy(row.id);
+    setMineError(null);
+    try {
+      const blob = await getPicoArtifactContent(row.id, true);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = row.user_label || row.title || 'artifact.bin';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setMineError(downloadError instanceof Error ? downloadError.message : '下载失败');
+    } finally {
+      setMineBusy(null);
+    }
+  };
+
+  const mineBlock =
+    mine.length === 0 ? null : (
+      <section
+        className="border-t border-black/[0.06] bg-[#fafafa] px-3 py-3"
+        data-testid="my-generated-files"
+      >
+        <p className="mb-1 text-[12px] font-medium text-[#333]">我的生成物</p>
+        <p className="mb-2 text-[11px] leading-4 text-[#8c8c8c]">
+          Pico 账本里本人刚做成的文件。落到学校那场的仍在上面；没点名场的只在这里。
+        </p>
+        {mineError ? (
+          <p className="mb-2 text-[11px] text-red-700" role="alert">
+            {mineError}
+          </p>
+        ) : null}
+        <ul className="space-y-1.5">
+          {mine.map((row) => {
+            const name = row.user_label || row.title || '未命名';
+            return (
+              <li
+                key={row.id}
+                className="flex items-center gap-2 rounded-lg border border-black/[0.06] bg-white px-2.5 py-1.5"
+                data-testid={`my-generated-${row.id}`}
+              >
+                <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{name}</span>
+                <button
+                  type="button"
+                  className="h-8 rounded-md border border-black/[0.08] px-2.5 text-[12px] disabled:opacity-50"
+                  disabled={mineBusy !== null}
+                  onClick={() => void openMine(row)}
+                >
+                  {mineBusy === row.id ? '打开中' : '打开'}
+                </button>
+                <button
+                  type="button"
+                  className="h-8 rounded-md bg-[#1a1a1a] px-2.5 text-[12px] font-semibold text-white disabled:opacity-50"
+                  disabled={mineBusy !== null}
+                  onClick={() => void downloadMine(row)}
+                  data-testid={`my-generated-download-${row.id}`}
+                >
+                  下载
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {minePreview ? (
+          <div
+            className="mt-2 overflow-hidden rounded-lg border border-black/[0.08] bg-white"
+            data-testid="my-generated-preview"
+          >
+            <div className="flex items-center gap-2 border-b border-black/[0.04] px-2.5 py-1">
+              <p className="min-w-0 flex-1 truncate text-[11px] text-[#8c8c8c]">
+                安全预览：{minePreview.title} · sandbox 禁用脚本与同源
+              </p>
+              <button
+                type="button"
+                className="h-7 rounded-md border border-black/[0.08] px-2 text-[11.5px]"
+                onClick={() => setMinePreview(null)}
+                data-testid="my-generated-preview-close"
+              >
+                关闭
+              </button>
+            </div>
+            <iframe
+              title={minePreview.title}
+              sandbox=""
+              referrerPolicy="no-referrer"
+              srcDoc={minePreview.html}
+              className="h-[420px] w-full border-0 bg-white"
+              data-testid="my-generated-preview-iframe"
+            />
+          </div>
+        ) : null}
+      </section>
+    );
 
   return (
     <WorkbenchShell
@@ -177,6 +319,14 @@ export default function FilesHubPage() {
           </span>
         </div>
 
+        {schoolHint ? (
+          <div
+            role="status"
+            className="m-3 rounded-lg border border-black/[0.08] bg-[#f7f7f7] px-3 py-2 text-[11.5px] text-[#555]"
+          >
+            {schoolHint}
+          </div>
+        ) : null}
         {error ? (
           <div
             role="alert"
@@ -187,7 +337,7 @@ export default function FilesHubPage() {
           </div>
         ) : null}
 
-        {loading && rows.length === 0 ? (
+        {loading && rows.length === 0 && mine.length === 0 ? (
           <div className="flex flex-1 items-center justify-center gap-2 text-[12px] text-[#8c8c8c]">
             <Loader2 className="h-4 w-4 animate-spin" />
             加载学校材料
@@ -199,7 +349,7 @@ export default function FilesHubPage() {
             </div>
             <p className="text-[13px] font-medium text-[color:var(--pico-ink)]">还没有学校材料</p>
             <p className="max-w-xs text-center text-[11.5px] leading-4">
-              在对话里做网页或 Word，先点名一场。做成了刷新学校那场能看见。账本不是工作区。
+              在对话里做网页或 Word，先点名一场。做成了刷新学校那场能看见。没点名的在下面「我的生成物」。
             </p>
             <button
               type="button"
@@ -294,6 +444,7 @@ export default function FilesHubPage() {
             </section>
           </div>
         )}
+        {mineBlock}
       </div>
     </WorkbenchShell>
   );

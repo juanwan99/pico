@@ -455,12 +455,8 @@ async def test_inspect_keeps_title_when_raster_fails() -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_html_lands_on_owner_disk(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Generated HTML must appear on the teacher disk (sandbox 文件 list source)."""
-    disk = tmp_path / "teacher-disks"
-    monkeypatch.setenv("PICO_SANDBOX_DISK", str(disk))
+async def test_generate_html_does_not_false_report_disk_landed() -> None:
+    """FilesHub does not read teacher disk; disk_landed must not claim success."""
     store = MemoryArtifactStore(run_id="run-s1")
     gw = build_default_gateway(store)
     owner = P("school-a", "member-a", ["ai:run"])
@@ -469,33 +465,34 @@ async def test_generate_html_lands_on_owner_disk(
         "generate_html_document",
         {"title": "lesson.html", "marker": "mk-disk", "body": PAGE},
     )
-    assert created.get("disk_landed") is True
-    landed = disk / "school-a" / "member-a" / "lesson.html"
-    assert landed.is_file()
-    assert "第一课" in landed.read_text(encoding="utf-8")
+    assert created.get("disk_landed") is not True
+    assert created.get("artifact_id")
 
 
 @pytest.mark.asyncio
-async def test_generate_html_disk_quota_is_honest_not_fatal() -> None:
-    """Quota-full disk keeps the ledger artifact but reports the miss."""
-    from pico_orchestrator import tools_builtin
-
+async def test_generate_html_school_miss_is_honest() -> None:
+    """School land miss must surface in user_message; never disk_landed=True."""
     store = MemoryArtifactStore(run_id="run-s1")
+
+    async def write_with_school(principal, **kwargs):  # type: ignore[no-untyped-def]
+        out = await MemoryArtifactStore.write(store, principal, **kwargs)
+        out = dict(out)
+        out["school"] = {
+            "ok": False,
+            "landed": False,
+            "user_message": "学校没写上：请点名要落到哪一场。这份只留在对话草稿纸，刷新学校看不见。",
+        }
+        return out
+
+    store.write = write_with_school  # type: ignore[method-assign]
     gw = build_default_gateway(store)
     owner = P("school-a", "member-a", ["ai:run"])
-
-    def boom(*_a: Any, **_k: Any) -> None:
-        raise ToolError(
-            "sandbox.quota",
-            "这台老师盘已满（上限 2GB）。关掉窗口不会删文件；请先清空不用的文件。",
-        )
-
-    with patch.object(tools_builtin, "write_owner_disk_file", side_effect=boom):
-        created = await gw.invoke(
-            owner,
-            "generate_html_document",
-            {"title": "quota.html", "marker": "mk-q", "body": PAGE},
-        )
-    assert created.get("disk_landed") is False
-    assert "老师盘已满" in (created.get("user_message") or "")
+    created = await gw.invoke(
+        owner,
+        "generate_html_document",
+        {"title": "quota.html", "marker": "mk-q", "body": PAGE},
+    )
+    assert created.get("disk_landed") is not True
+    assert created.get("school_landed") is False
+    assert "只留在对话草稿纸" in (created.get("user_message") or "")
     assert created.get("artifact_id")

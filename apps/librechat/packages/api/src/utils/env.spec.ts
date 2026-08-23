@@ -173,6 +173,29 @@ describe('resolveHeaders', () => {
     });
   });
 
+  it('resolves PICO_MEMBERSHIP_ID to school:edu for SSO users', () => {
+    const user = {
+      id: 'mongo-user',
+      eduId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      eduSchoolId: '627bcf3a-a9a8-4047-afcc-3d4878e2a7af',
+    };
+    const result = resolveHeaders({
+      headers: { 'X-Pico-Membership-Id': '{{PICO_MEMBERSHIP_ID}}' },
+      user,
+    });
+    expect(result['X-Pico-Membership-Id']).toBe(
+      '627bcf3a-a9a8-4047-afcc-3d4878e2a7af:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    );
+  });
+
+  it('resolves PICO_MEMBERSHIP_ID to LibreChat id when edu SSO is absent', () => {
+    const result = resolveHeaders({
+      headers: { 'X-Pico-Membership-Id': '{{PICO_MEMBERSHIP_ID}}' },
+      user: { id: 'lc-user-1' },
+    });
+    expect(result['X-Pico-Membership-Id']).toBe('lc-user-1');
+  });
+
   it('should not process user ID placeholder when user is undefined', () => {
     const headers = {
       'User-Id': '{{LIBRECHAT_USER_ID}}',

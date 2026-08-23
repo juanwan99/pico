@@ -39,12 +39,16 @@ describe('pico composer ingest (T-AGENT-PLAIN-V1 F2)', () => {
     expect(decodeUploadName('/tmp/%E5%AD%A6%E6%9C%9F%E8%A6%81%E7%82%B9.md')).toBe('学期要点.md');
   });
 
-  it('binds membership to LibreChat user id (same as chat completions)', () => {
+  it('binds membership to school:edu when SSO ids are present', () => {
     expect(
       membershipFromReq({
-        user: { id: 'mongoUser1', eduId: 'edu-99', eduSchoolId: 'school-a' },
+        user: {
+          id: 'mongoUser1',
+          eduId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+          eduSchoolId: '627bcf3a-a9a8-4047-afcc-3d4878e2a7af',
+        },
       }),
-    ).toBe('mongoUser1');
+    ).toBe('627bcf3a-a9a8-4047-afcc-3d4878e2a7af:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
     expect(membershipFromReq({ user: { _id: { toString: () => 'oid-ab' } } })).toBe('oid-ab');
   });
 

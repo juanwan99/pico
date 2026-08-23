@@ -19,5 +19,7 @@ endpoints:
     # any residual title prompts (stage #260 P0).
     titleConvo: false
     headers:
-      X-Pico-Membership-Id: "{{LIBRECHAT_USER_ID}}"
+      # Joint school:membership when edu SSO is present; else LibreChat user id.
+      # Must match /api/pico membershipFromReq so school land + 文件页读同一账本。
+      X-Pico-Membership-Id: "{{PICO_MEMBERSHIP_ID}}"
       X-Conversation-Id: "{{LIBRECHAT_BODY_CONVERSATIONID}}"

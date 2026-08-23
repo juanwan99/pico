@@ -516,27 +516,6 @@ export async function listEduFields() {
   );
 }
 
-export async function landEduProduct(body: {
-  conversation_id?: string;
-  field_id?: string;
-  item_id?: string;
-  title?: string;
-  filename?: string;
-  kind?: string;
-  body_html?: string;
-  content_b64?: string;
-}) {
-  return picoFetch<{
-    ok?: boolean;
-    landed?: boolean;
-    green?: boolean;
-    kind?: string;
-    id?: string;
-    fieldId?: string;
-    title?: string;
-    error?: string;
-  }>(`/v1/edu/land`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+export async function listMyPicoArtifacts() {
+  return picoFetch<{ count?: number; artifacts?: PicoArtifact[] }>(`/v1/artifacts?mine=true`);
 }

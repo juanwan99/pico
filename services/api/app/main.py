@@ -1383,13 +1383,17 @@ async def get_task(
 @app.get("/v1/artifacts")
 async def list_conversation_artifacts(
     conversation_id: str = "",
+    mine: bool = False,
     principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    cid = str(conversation_id or "").strip()
-    if not cid:
-        raise HTTPException(status_code=400, detail={"code": "conversation_required", "message": "conversation_id required"})
-    arts = await run_service.list_artifacts_for_conversation(session, principal, cid)
+    if mine:
+        arts = await run_service.list_artifacts_for_principal(session, principal)
+    else:
+        cid = str(conversation_id or "").strip()
+        if not cid:
+            raise HTTPException(status_code=400, detail={"code": "conversation_required", "message": "conversation_id required"})
+        arts = await run_service.list_artifacts_for_conversation(session, principal, cid)
     return {
         "count": len(arts),
         "artifacts": [
@@ -1398,6 +1402,7 @@ async def list_conversation_artifacts(
                 "title": a.title,
                 "kind": a.kind,
                 "created_at": a.created_at.isoformat() if a.created_at else None,
+                "download_path": f"/v1/artifacts/{a.id}/content?download=true",
             }
             for a in arts
         ],

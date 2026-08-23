@@ -888,6 +888,28 @@ async def list_artifacts_for_task(
     return list(result.scalars().all())
 
 
+async def list_artifacts_for_principal(
+    session: AsyncSession,
+    principal: Principal,
+    *,
+    limit: int = 80,
+) -> list[ArtifactRow]:
+    """Membership-scoped recent artifacts (FilesHub「我的生成物」). Not a second ledger."""
+    skip_titles = {"回复摘要", "summary", "run summary"}
+    result = await session.execute(
+        select(ArtifactRow)
+        .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+        .where(
+            TaskRow.school_id == principal.school_id,
+            TaskRow.membership_id == principal.membership_id,
+        )
+        .order_by(ArtifactRow.created_at.desc())
+        .limit(max(1, min(int(limit or 80), 200)))
+    )
+    rows = list(result.scalars().all())
+    return [row for row in rows if (row.title or "").strip() not in skip_titles]
+
+
 async def list_artifacts_for_conversation(
     session: AsyncSession,
     principal: Principal,

@@ -55,13 +55,42 @@ export function classifyArtifactPreview(
  * serving route (SPA fallback would answer index.html). Real bytes live behind
  * the owner-checked download API.
  */
-export function picoUploadDownloadUrl(filepath: string, fileId?: string): string {
-  if (!/^\/uploads\//i.test(filepath)) {
+export function picoUploadDownloadUrl(
+  filepath: string,
+  fileId?: string,
+  ownerUserId?: string,
+): string {
+  if (filepath && !/^\/uploads\//i.test(filepath)) {
     return filepath;
   }
-  const userId = /^\/uploads\/([^/]+)\//i.exec(filepath)?.[1];
+  const userId = /^\/uploads\/([^/]+)\//i.exec(filepath || '')?.[1] || ownerUserId?.trim() || '';
   const id = fileId?.trim() || '';
   return userId && id ? `/api/files/download/${userId}/${id}` : filepath;
+}
+
+/** Honest open/download copy. Do not treat a missing file as「产物服务暂时不可用」. */
+export function humanArtifactActionError(
+  action: 'open' | 'download',
+  error: unknown,
+): string {
+  const verb = action === 'open' ? '打开' : '下载';
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('401')) {
+    return `${verb}产物失败：登录已失效，请刷新页面后重新登录。`;
+  }
+  if (/\b403\b/.test(message) || /\b404\b/.test(message)) {
+    return `${verb}产物失败：产物不存在或无权限。`;
+  }
+  if (/\bpico_upstream_unavailable\b/.test(message) || /\bECONNREFUSED\b/.test(message)) {
+    return `${verb}产物失败：产物服务暂时连不上，请稍后重试。`;
+  }
+  if (/artifact content unavailable/i.test(message)) {
+    return `${verb}产物失败：这份还没有可打开的内容。上传的 PDF 请点结果区该文件的「打开」；生成件从结果区下载。`;
+  }
+  if (/\b502\b/.test(message)) {
+    return `${verb}产物失败：网关返回 502，请稍后重试；若一直这样，请让管理员看产物服务日志。`;
+  }
+  return `${verb}产物失败，请稍后重试。`;
 }
 
 const BROWSER_DEFAULT_URL = 'https://example.com/';

@@ -32,6 +32,33 @@ const ALLOWED_USER_FIELDS = [
 type AllowedUserField = (typeof ALLOWED_USER_FIELDS)[number];
 type SafeUser = Pick<IUser, AllowedUserField>;
 
+const PICO_MEMBER_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+/** Chat completions and /api/pico must share one tenant key. */
+export function picoMembershipFromUser(
+  user?: Partial<IUser> | { id?: string; _id?: { toString?: () => string } | string },
+): string {
+  const record = user as {
+    eduId?: unknown;
+    eduSchoolId?: unknown;
+    id?: unknown;
+    _id?: { toString?: () => string } | string;
+  } | undefined;
+  const eduId = String(record?.eduId || '').trim();
+  const schoolId = String(record?.eduSchoolId || '').trim();
+  if (PICO_MEMBER_RE.test(eduId) && PICO_MEMBER_RE.test(schoolId)) {
+    return `${schoolId}:${eduId}`;
+  }
+  if (PICO_MEMBER_RE.test(eduId)) {
+    return eduId;
+  }
+  const rawId =
+    (typeof record?.id === 'string' && record.id) ||
+    (typeof record?._id === 'string' ? record._id : record?._id?.toString?.()) ||
+    '';
+  return String(rawId).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 128) || 'anonymous';
+}
+
 /**
  * Encodes a string value to be safe for HTTP headers.
  * HTTP headers are restricted to ASCII characters (0-255) per the Fetch API standard.
@@ -266,6 +293,9 @@ function processSingleValue({
   }
 
   value = processUserPlaceholders(value, user, isHeader);
+  if (user && value.includes('{{PICO_MEMBERSHIP_ID}}')) {
+    value = value.replace(/\{\{PICO_MEMBERSHIP_ID\}\}/g, picoMembershipFromUser(user));
+  }
 
   const openidTokenInfo = extractOpenIDTokenInfo(user);
   if (openidTokenInfo && isOpenIDTokenValid(openidTokenInfo)) {

@@ -235,6 +235,14 @@ describe('Pico proxy routes', () => {
     );
   });
 
+  it('forwards mine=true when listing my artifacts', async () => {
+    await request(app).get('/api/pico/v1/artifacts?mine=true&unsafe=drop');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/artifacts?mine=true',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('rejects invalid artifact ids without calling Pico API', async () => {
     const response = await request(app).get('/api/pico/v1/artifacts/bad.id/content');
 

@@ -456,6 +456,63 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     delete (global as unknown as { fetch?: unknown }).fetch;
   });
 
+  it('keeps an uploaded PDF chip when the ledger already has generated HTML', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          picoArtifacts={[{ id: 'art-html', title: '家长会通知.html', kind: 'html', inline: '<p>ok</p>' }]}
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '帮我看看这份通知',
+              isCreatedByUser: true,
+              files: [
+                {
+                  file_id: 'fid-pdf-1',
+                  filename: '培训通知.pdf',
+                  filepath: '/uploads/user-1/fid-pdf-1__培训通知.pdf',
+                  type: 'application/pdf',
+                  size: 4,
+                },
+              ],
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('培训通知.pdf')).toBeInTheDocument();
+    expect(screen.getByText('家长会通知.html')).toBeInTheDocument();
+  });
+
+  it('does not call a missing PDF「产物服务暂时不可用」', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开',
+              isCreatedByUser: true,
+              files: [{ file_id: 'orphan', filename: '通知.pdf', type: 'application/pdf' }],
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByTestId('artifact-open-button'));
+    expect(await screen.findByText(/还没有可打开的内容/)).toBeInTheDocument();
+    expect(screen.queryByText(/产物服务暂时不可用/)).not.toBeInTheDocument();
+  });
+
   it('T5: saying 打开 https://example.com opens 网页 via sandbox_browser_open', async () => {
     mockOpenBrowser.mockResolvedValue({
       session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
