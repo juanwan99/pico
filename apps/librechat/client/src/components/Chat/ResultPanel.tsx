@@ -1,7 +1,8 @@
 /**
  * Task result panel — right-hand sandbox screen.
  * No 概览/文件/沙箱 tab stack. Files open as the sandbox folder.
- * Chat column has no delivery strip.
+ * Chat column carries MainDeliveryStrip (open/download first); this panel
+ * keeps the engineer timeline + full chips.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PicoIcon } from '~/components/ui/pico-icons';
@@ -20,6 +21,7 @@ import {
   clampResultPaneWidth,
   latestUserOpenOfficeIntent,
   latestUserOpenWebsiteIntent,
+  picoUploadDownloadUrl,
   readBlobText,
   readStoredResultPaneWidth,
   RESULT_PANE_WIDTH_STORAGE_KEY,
@@ -168,12 +170,13 @@ function collectArtifacts(messages: TMessage[] | null | undefined): ArtifactItem
     const files = m.files;
     if (Array.isArray(files)) {
       for (const f of files) {
-        const id = String(
+        const fileId = String(
           (f as { file_id?: string }).file_id ??
             (f as { _id?: string })._id ??
-            (f as { filepath?: string }).filepath ??
-            Math.random(),
+            '',
         );
+        const filepath = (f as { filepath?: string }).filepath;
+        const id = fileId || (typeof filepath === 'string' ? filepath : '') || String(Math.random());
         if (seen.has(id)) {
           continue;
         }
@@ -191,7 +194,10 @@ function collectArtifacts(messages: TMessage[] | null | undefined): ArtifactItem
           kindLabel,
           sizeLabel: formatSize(typeof bytes === 'number' ? bytes : undefined) || '—',
           kind: artifactGlyphKind(name, kindLabel),
-          url: (f as { filepath?: string; preview?: string }).filepath,
+          url:
+            typeof filepath === 'string' && filepath
+              ? picoUploadDownloadUrl(filepath, fileId || undefined)
+              : undefined,
           body: typeof body === 'string' ? body : undefined,
         });
       }
@@ -251,6 +257,7 @@ export default function ResultPanel({
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewPdf, setPreviewPdf] = useState<string | null>(null);
   const [previewOffice, setPreviewOffice] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
   const [previewArtifactId, setPreviewArtifactId] = useState<string | null>(null);
@@ -281,7 +288,9 @@ export default function ResultPanel({
     setLocalSandbox(null);
     openedWebsiteRef.current = null;
   }, [conversationId]);
-  const previewActive = Boolean(previewHtml || previewImage || previewText || previewOffice);
+  const previewActive = Boolean(
+    previewHtml || previewImage || previewPdf || previewText || previewOffice,
+  );
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
     if (picoArtifacts?.length) {
@@ -387,6 +396,7 @@ export default function ResultPanel({
     setPreviewText(null);
     setPreviewHtml(null);
     setPreviewImage(null);
+    setPreviewPdf(null);
     setPreviewOffice(null);
     setPreviewTitle(null);
     setPreviewArtifactId(null);
@@ -566,6 +576,16 @@ export default function ResultPanel({
     if (kind === 'html' || isHtmlArtifact(artifact) || /text\/html/i.test(blob.type || '')) {
       setPreviewHtml(await readBlobText(blob, artifact.body));
       setView('overview');
+      return;
+    }
+    if (kind === 'pdf') {
+      // Download route answers octet-stream; re-type so the viewer renders it.
+      const bytes =
+        blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+      const objectUrl = URL.createObjectURL(bytes);
+      setPreviewPdf(objectUrl);
+      setView('overview');
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
       return;
     }
     if (kind === 'image' || isImageArtifact(artifact, blob.type)) {
@@ -844,6 +864,22 @@ export default function ResultPanel({
                       data-testid="artifact-html-iframe"
                     />
                   </div>
+                </div>
+              </>
+            ) : null}
+            {previewPdf !== null ? (
+              <>
+                <p className="border-b border-black/[0.04] px-2.5 py-1 text-[10px] text-[#8c8c8c]">
+                  安全预览：内建阅读器 · 不执行文档脚本；铺满结果区
+                </p>
+                <div className="min-h-0 flex-1 bg-white" data-testid="artifact-pdf-stage">
+                  <embed
+                    src={previewPdf}
+                    type="application/pdf"
+                    title={previewTitle || 'PDF 安全预览'}
+                    className="h-full w-full border-0"
+                    data-testid="artifact-pdf-embed"
+                  />
                 </div>
               </>
             ) : null}

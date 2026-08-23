@@ -29,7 +29,8 @@ def test_source_locks_composer_and_dead_chrome() -> None:
     assert "调用技能与指令" not in zh
     assert "composer-plus" in landing
     assert "composer-plus" in chat_form
-    assert "MainDeliveryStrip" not in chat_view
+    # 2026-08 业主指示：主栏要有成品打开/下载入口（旧锁「主栏无成品条」解除）。
+    assert "MainDeliveryStrip" in chat_view
     assert "PicoSearchSources" not in result
     assert "打开我的文件" not in result
     assert "sandbox-open-files" not in result

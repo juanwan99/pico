@@ -68,8 +68,8 @@ def test_history_and_chrome_source_locks() -> None:
     assert "convo-menu-archive" in convo
     assert "convo-menu-delete" in convo
     assert "convo-menu-folder" in convo
-    assert "MainDeliveryStrip" not in chat_view
-    assert "成品 · 可下载文件" not in chat_view
+    # 2026-08 业主指示：主栏要有成品打开/下载入口（旧锁解除，成品条挂回 ChatView）。
+    assert "MainDeliveryStrip" in chat_view
     assert "composer-plus" in chat_form
     assert "默认权限" not in chat_form
     assert "result-view-menu" not in result

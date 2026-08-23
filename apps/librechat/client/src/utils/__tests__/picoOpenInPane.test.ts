@@ -6,6 +6,7 @@ import {
   detectOpenWebsiteIntent,
   formatResultPaneZoom,
   latestUserOpenWebsiteIntent,
+  picoUploadDownloadUrl,
   readStoredResultPaneWidth,
   RESULT_PANE_DEFAULT_WIDTH,
   RESULT_PANE_MIN_WIDTH,
@@ -21,6 +22,18 @@ describe('picoOpenInPane', () => {
     expect(classifyArtifactPreview('课程总结.md', 'markdown')).toBe('text');
     expect(classifyArtifactPreview('notes.txt', 'text')).toBe('text');
     expect(classifyArtifactPreview('报告.docx', 'docx')).toBe('office');
+    expect(classifyArtifactPreview('通知.pdf', 'application/pdf')).toBe('pdf');
+    expect(classifyArtifactPreview('通知.pdf', '', 'application/pdf')).toBe('pdf');
+    expect(classifyArtifactPreview('通知.pdf', '', 'application/octet-stream')).toBe('pdf');
+    expect(picoUploadDownloadUrl('/uploads/u1/fid__通知.pdf', 'fid')).toBe(
+      '/api/files/download/u1/fid',
+    );
+    expect(picoUploadDownloadUrl('/uploads/u1/fid__通知.pdf')).toBe(
+      '/uploads/u1/fid__通知.pdf',
+    );
+    expect(picoUploadDownloadUrl('https://example.com/a.pdf', 'fid')).toBe(
+      'https://example.com/a.pdf',
+    );
     expect(RESULT_PANE_VIEWS).toEqual(['web']);
     expect(RESULT_PANE_VIEW_LABEL.web).toBe('沙箱');
     expect(RESULT_PANE_VIEW_LABEL).not.toHaveProperty('browser');

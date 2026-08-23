@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import base64
+import logging
 import math
 import operator
 import re
@@ -35,6 +36,7 @@ from pico_orchestrator.gateway import (
 from pico_orchestrator.image_generate import generate_image_bytes
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
 from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
+from pico_orchestrator.sandbox_persist import write_owner_disk_file
 from pico_orchestrator.sandbox_s1 import (
     MAX_CONTENT_CHARS,
     assert_content_caps,
@@ -70,6 +72,31 @@ _MAX_KB_EXCERPT = 280
 _SKIP_KB_TITLES = frozenset({"回复摘要"})
 _EDIT_TIMEOUT_S = 20.0
 _IMAGE_TIMEOUT_S = 45.0
+
+logger = logging.getLogger(__name__)
+
+
+def land_owner_disk_file(principal: Principal, title: str, data: bytes) -> str | None:
+    """Best-effort copy of a generated deliverable onto the owner teacher disk.
+
+    The sandbox「文件」window lists the teacher disk only; without this a
+    generated file exists in the ledger yet is invisible in the sandbox
+    (owner bug 2026-08: generated HTML nowhere to find). The ledger stays the
+    source of truth; the disk is a projection. Returns None on success, else a
+    short human note (quota only; other failures stay silent best-effort).
+    """
+    try:
+        write_owner_disk_file(principal.school_id, principal.membership_id, title, data)
+        return None
+    except ToolError as exc:
+        message = str(exc)
+        if "已满" in message or "quota" in message:
+            return "文件已生成；老师盘已满，暂未同步到沙箱文件列表。"
+        logger.debug("owner disk land denied", exc_info=True)
+        return None
+    except Exception:
+        logger.debug("owner disk land skipped", exc_info=True)
+        return None
 
 
 class _UnavailableArtifactStore:
@@ -480,6 +507,13 @@ def _workspace_handlers(
                 title=title,
                 content=content,
             )
+            disk_note = land_owner_disk_file(principal, title, content.encode("utf-8"))
+            if disk_note:
+                result = dict(result)
+                result["disk_landed"] = False
+                result["user_message"] = disk_note
+            else:
+                result["disk_landed"] = True
         await emit_sandbox_usage(
             principal,
             extra={
