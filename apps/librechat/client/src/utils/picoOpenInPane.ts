@@ -16,7 +16,7 @@ export const RESULT_PANE_VIEW_LABEL: Record<ResultPaneView, string> = {
 export const OFFICE_NO_PREVIEW_COPY =
   '该 Office 文件不支持区内预览或翻页，已开始下载。请用 Word / WPS / LibreOffice 打开。';
 
-export type ArtifactPreviewKind = 'html' | 'image' | 'text' | 'office' | 'download';
+export type ArtifactPreviewKind = 'html' | 'image' | 'text' | 'office' | 'pdf' | 'download';
 
 export function isOfficeFilename(name: string, kindLabel = ''): boolean {
   const value = `${name} ${kindLabel}`.toLowerCase();
@@ -32,6 +32,9 @@ export function classifyArtifactPreview(
   if (isOfficeFilename(name, kindLabel)) {
     return 'office';
   }
+  if (/\.pdf(?:\s|$)/i.test(value) || /\bpdf\b/i.test(kindLabel) || /application\/pdf/i.test(blobType)) {
+    return 'pdf';
+  }
   if (/(?:\.html?|html)/.test(value) || /text\/html/i.test(blobType)) {
     return 'html';
   }
@@ -45,6 +48,20 @@ export function classifyArtifactPreview(
     return 'text';
   }
   return 'download';
+}
+
+/**
+ * Message attachments store `/uploads/{userId}/{file_id}__{name}` which has no
+ * serving route (SPA fallback would answer index.html). Real bytes live behind
+ * the owner-checked download API.
+ */
+export function picoUploadDownloadUrl(filepath: string, fileId?: string): string {
+  if (!/^\/uploads\//i.test(filepath)) {
+    return filepath;
+  }
+  const userId = /^\/uploads\/([^/]+)\//i.exec(filepath)?.[1];
+  const id = fileId?.trim() || '';
+  return userId && id ? `/api/files/download/${userId}/${id}` : filepath;
 }
 
 const BROWSER_DEFAULT_URL = 'https://example.com/';

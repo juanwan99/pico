@@ -24,6 +24,7 @@ import Presentation from './Presentation';
 import ChatForm from './Input/ChatForm';
 import SchoolMaterialsBar from './SchoolMaterialsBar';
 import Landing from './Landing';
+import MainDeliveryStrip from './MainDeliveryStrip';
 import ResultPanel from './ResultPanel';
 import TaskRunBar from './TaskRunBar';
 import ChangeConfirmBanner from './ChangeConfirmBanner';
@@ -240,6 +241,16 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     )}
                   >
                     {content}
+                    {!isLandingPage &&
+                    conversationId &&
+                    conversationId !== Constants.SEARCH ? (
+                      <MainDeliveryStrip
+                        artifacts={ledger.artifacts}
+                        runEvents={ledger.events}
+                        messages={flatMessages}
+                        onOpenResultPanel={() => setResultOpen(true)}
+                      />
+                    ) : null}
                   </div>
                   <div
                     className={cn(

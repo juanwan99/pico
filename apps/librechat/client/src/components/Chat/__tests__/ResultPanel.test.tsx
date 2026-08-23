@@ -411,6 +411,51 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(screen.queryByTestId('artifact-office-download')).not.toBeInTheDocument();
   });
 
+  it('T8: opening a PDF attachment previews in-pane and never mistakes it for HTML', async () => {
+    const user = userEvent.setup();
+    const pdfBytes = new Uint8Array([37, 80, 68, 70]); // %PDF
+    const fetchSpy = jest.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob([pdfBytes], { type: 'application/octet-stream' }),
+    });
+    (global as unknown as { fetch: unknown }).fetch = fetchSpy;
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '帮我看看这份通知',
+              isCreatedByUser: true,
+              files: [
+                {
+                  file_id: 'fid-pdf-1',
+                  filename: '培训通知.pdf',
+                  filepath: '/uploads/user-1/fid-pdf-1__培训通知.pdf',
+                  type: 'application/pdf',
+                  size: 4,
+                },
+              ],
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByTestId('artifact-open-button'));
+    expect(await screen.findByTestId('artifact-pdf-embed')).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/api/files/download/user-1/fid-pdf-1'),
+      expect.objectContaining({ credentials: 'include' }),
+    );
+    // The old bug: SPA fallback index.html was previewed as「HTML 安全预览」forever.
+    expect(screen.queryByText(/安全预览：sandbox 禁用脚本与同源/)).not.toBeInTheDocument();
+    delete (global as unknown as { fetch?: unknown }).fetch;
+  });
+
   it('T5: saying 打开 https://example.com opens 网页 via sandbox_browser_open', async () => {
     mockOpenBrowser.mockResolvedValue({
       session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
