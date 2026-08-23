@@ -11,7 +11,7 @@ import {
   preferredModelForExpert,
   preferredModelForSkill,
   setActiveExpert,
-  setPicoModelMode,
+  queuePendingModel,
 } from '~/utils/picoModelPref';
 
 type HubTab = 'experts' | 'skills' | 'connectors';
@@ -251,7 +251,7 @@ export default function CapabilityHubPage() {
       sessionStorage.setItem('pico:pendingExpert', name);
       sessionStorage.setItem('pico:pendingPrompt', `请以「${name}」专家身份协助：${desc}`);
       setActiveExpert(name);
-      setPicoModelMode(preferredModelForExpert(name));
+      queuePendingModel(preferredModelForExpert(name));
     } catch {
       /* ignore */
     }
@@ -266,7 +266,7 @@ export default function CapabilityHubPage() {
       sessionStorage.setItem('pico:pendingSkillLabel', skill.name);
       sessionStorage.setItem('pico:pendingPrompt', `【Pico-Skill:${skill.id}】\n${skill.prompt}`);
       setActiveExpert(null);
-      setPicoModelMode(preferredModelForSkill(skill.id));
+      queuePendingModel(preferredModelForSkill(skill.id));
     } catch {
       /* ignore */
     }

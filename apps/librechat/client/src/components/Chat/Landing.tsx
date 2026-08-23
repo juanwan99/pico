@@ -1,7 +1,7 @@
 /**
  * Pico home — one title, one composer row. Model + attach live in +.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ExtendedFile } from '~/common';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import { useOptionalChatContext, useOptionalChatFormContext } from '~/Providers';
@@ -20,6 +20,7 @@ import {
   consumePendingModel,
   getPicoModelMode,
   normalizePicoModelMode,
+  patchConversationModel,
   setPicoModelMode,
 } from '~/utils/picoModelPref';
 
@@ -39,6 +40,8 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     }
   });
   const chatCtx = useOptionalChatContext();
+  const setConversationRef = useRef(chatCtx?.setConversation);
+  setConversationRef.current = chatCtx?.setConversation;
   const [localFiles, setLocalFiles] = useState(() => new Map<string, ExtendedFile>());
   const [localFilesLoading, setLocalFilesLoading] = useState(false);
   const files = chatCtx?.files ?? localFiles;
@@ -51,24 +54,13 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     setFilesLoading,
     onPicked: () => setPlusOpen(false),
   });
-  const applyModel = useCallback(
-    (raw: string) => {
-      const id = normalizePicoModelMode(raw);
-      setModel(id);
-      setPicoModelMode(id);
-      setPlusOpen(false);
-      chatCtx?.setConversation?.((prev) =>
-        prev
-          ? {
-              ...prev,
-              endpoint: prev.endpoint ?? 'openAI',
-              model: id,
-            }
-          : prev,
-      );
-    },
-    [chatCtx],
-  );
+  const applyModel = useCallback((raw: string) => {
+    const id = normalizePicoModelMode(raw);
+    setModel((prev) => (prev === id ? prev : id));
+    setPicoModelMode(id);
+    setPlusOpen(false);
+    setConversationRef.current?.((prev) => patchConversationModel(prev, id) ?? prev);
+  }, []);
 
   const syncForm = useCallback(
     (value: string) => {
@@ -77,6 +69,10 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     },
     [form],
   );
+  const syncFormRef = useRef(syncForm);
+  syncFormRef.current = syncForm;
+  const applyModelRef = useRef(applyModel);
+  applyModelRef.current = applyModel;
 
   const sendTask = useCallback(() => {
     const value = text.trim();
@@ -88,17 +84,18 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     syncForm('');
   }, [text, submitMessage, syncForm]);
 
-  // Expert / skill "summon" prefill from capability hub
+  // Expert / skill "summon" prefill from capability hub. Mount-only: applyModel
+  // used to write PENDING and depend on chatCtx, which retriggered consume → #185.
   useEffect(() => {
     try {
       const pendingModel = consumePendingModel();
       if (pendingModel) {
-        applyModel(pendingModel);
+        applyModelRef.current(pendingModel);
       }
       const pre = sessionStorage.getItem('pico:pendingPrompt');
       if (pre) {
         sessionStorage.removeItem('pico:pendingPrompt');
-        syncForm(pre);
+        syncFormRef.current(pre);
         requestAnimationFrame(() => {
           document.getElementById('pico-wb-home-input')?.focus();
         });
@@ -106,7 +103,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     } catch {
       /* ignore */
     }
-  }, [applyModel, syncForm]);
+  }, []);
 
   const name = user?.name?.split(/\s+/)[0] || '';
 

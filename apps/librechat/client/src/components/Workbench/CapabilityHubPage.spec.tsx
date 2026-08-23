@@ -16,6 +16,7 @@ jest.mock('~/utils/picoModelPref', () => ({
   preferredModelForSkill: jest.fn(() => 'pico-agent'),
   setActiveExpert: jest.fn(),
   setPicoModelMode: jest.fn(),
+  queuePendingModel: jest.fn(),
 }));
 
 jest.mock('~/data-provider/pico/api', () => ({

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import WorkbenchShell from './WorkbenchShell';
-import { preferredModelForExpert, setActiveExpert, setPicoModelMode } from '~/utils/picoModelPref';
+import { preferredModelForExpert, queuePendingModel, setActiveExpert } from '~/utils/picoModelPref';
 import { appendPendingPrompt } from './workbenchSession';
 
 const ASSISTANTS = [
@@ -45,10 +45,10 @@ export default function AssistantPage() {
         sessionStorage.setItem('pico:pendingExpert', a.expert);
         appendPendingPrompt(`请以「${a.expert}」的角色协助完成任务：`);
         setActiveExpert(a.expert);
-        setPicoModelMode(preferredModelForExpert(a.expert));
+        queuePendingModel(preferredModelForExpert(a.expert));
       } else {
         setActiveExpert(null);
-        setPicoModelMode(a.model?.includes('pico-deep') ? 'pico-deep' : 'pico-fast');
+        queuePendingModel(a.model?.includes('pico-deep') ? 'pico-deep' : 'pico-fast');
       }
     } catch {
       /* ignore */
