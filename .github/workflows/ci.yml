@@ -113,7 +113,7 @@ jobs:
       - name: Install
         run: npm ci --legacy-peer-deps
 
-      - name: Build data-provider + data-schemas
+      - name: Build workspace packages
         run: |
           if ! npm run build:data-provider; then
             echo "data-provider build failed; retry after unrun"
@@ -121,18 +121,21 @@ jobs:
             npm run build:data-provider
           fi
           npm run build:data-schemas
+          npm run build:client-package
 
       - name: Client jest
         working-directory: apps/librechat/client
         env:
           NODE_ENV: development
-        run: npx jest --ci
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npx jest --ci --coverage=false
 
       - name: packages/api jest
         working-directory: apps/librechat/packages/api
         env:
           NODE_ENV: test
+          NODE_OPTIONS: --max-old-space-size=4096
         run: >
-          npx jest --ci
+          npx jest --ci --coverage=false
           --testPathIgnorePatterns='.*integration.*|.*helper.*|__tests__/helpers/|.*manual\.spec\.'
 
