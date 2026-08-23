@@ -21,7 +21,7 @@ GOALS: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · WHAT-IS-PICO；STATE-NOW（快照�
 
 ## Do not
 
-- Create new **handoff / wave / status diary** Markdown for cross-window state.
+- Create extra **handoff / wave / status diary** Markdown. 本窗交接只有一份：[HANDOFF-NEW-WINDOW-2026-08-23.md](./HANDOFF-NEW-WINDOW-2026-08-23.md)（[#634](https://github.com/juanwan99/pico/issues/634)）。更早的 `HANDOFF-NEW-WINDOW-2026-08-11.md` 与 Issue #573 作废。
 - Treat anything under `docs/archive/` as current.
 - Claim progress only in a doc checkbox without a PR.
 - Treat **#121 harness / multi-runtime** drafts as accepted architecture.
@@ -34,6 +34,7 @@ GOALS: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · WHAT-IS-PICO；STATE-NOW（快照�
 | **0** | **[TRUTH-FREEZE.md](./TRUTH-FREEZE.md)** | **真源冻结 v1.1（防丢失 · 权威决策集）** |
 | **0a** | **[WHAT-IS-PICO.md](./WHAT-IS-PICO.md)** | **Pico 是什么 / 编排目标 vs 现状** |
 | **0b** | **[STATE-NOW.md](./STATE-NOW.md)** | **当前 tip、门禁、单窗 SOLO** |
+| **0b·窗** | **[HANDOFF-NEW-WINDOW-2026-08-23.md](./HANDOFF-NEW-WINDOW-2026-08-23.md)** | **本窗总管交接（[#634](https://github.com/juanwan99/pico/issues/634) · #573 作废）** |
 | **0b′** | **[MEMORY-RESET.md](./MEMORY-RESET.md)** | **错误记忆黑名单（开场必清）** |
 | **0b″** | **[STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md)** | **单窗阶段包（废多窗碎派）** |
 | **0b‴** | **[TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)** | **任务卡四行指针（ONEFLOW v2 · 禁 315 长表）** |
@@ -83,9 +84,10 @@ GOALS: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · WHAT-IS-PICO；STATE-NOW（快照�
 
 New long plans: **one ACTIVE plan** at a time. Previous plan → COMPLETED header or `docs/archive/`.
 
-## Owner handoff (2026-08-06)
+## Owner handoff (2026-08-23)
 
 **Binding product direction:** [HANDOFF-WB-PI.md](./HANDOFF-WB-PI.md) — Pico full stack + Pi + DeepSeek · Web WorkBuddy-degree six bars.  
+**本窗交接:** [HANDOFF-NEW-WINDOW-2026-08-23.md](./HANDOFF-NEW-WINDOW-2026-08-23.md) · issue [#634](https://github.com/juanwan99/pico/issues/634)（[#573](https://github.com/juanwan99/pico/issues/573) 作废）。  
 **Memory reset:** [MEMORY-RESET.md](./MEMORY-RESET.md) · **SOLO:** [STAGE-PACKAGE-MODE.md](./STAGE-PACKAGE-MODE.md).  
 **Task card standard:** [ONEFLOW.md](./ONEFLOW.md) · [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md)（四行。禁 315）。  
-**Current day card:** **T-HYGIENE-SEARCH-UX-SANDBOX-S2** · issue [#513](https://github.com/juanwan99/pico/issues/513)（主线：计量+搜索+沙箱）。历史日卡 [DAY-TASK-P0-PI-CUTOVER.md](./DAY-TASK-P0-PI-CUTOVER.md) · #310 勿当现行派工。
+**Current day card:** **T-CI-UI-GATE** · issue [#627](https://github.com/juanwan99/pico/issues/627)（无 stamp-ok · 业主点头再派）。排队 [#628](https://github.com/juanwan99/pico/issues/628) 须 627 关卡。
