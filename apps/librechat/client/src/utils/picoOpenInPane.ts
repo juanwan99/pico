@@ -88,7 +88,7 @@ export function humanArtifactActionError(
     return `${verb}产物失败：这份还没有可打开的内容。上传的 PDF 请点结果区该文件的「打开」；生成件从结果区下载。`;
   }
   if (/\b502\b/.test(message)) {
-    return `${verb}产物失败：网关返回 502。上传件请走 /api/files/download，不要打开 /uploads 直链（会落到网页壳）。`;
+    return `${verb}产物失败：网关返回 502，请稍后重试；若一直这样，请让管理员看产物服务日志。`;
   }
   return `${verb}产物失败，请稍后重试。`;
 }

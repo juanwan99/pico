@@ -48,6 +48,7 @@ export default function FilesHubPage() {
   const [mine, setMine] = useState<PicoArtifact[]>([]);
   const [mineBusy, setMineBusy] = useState<string | null>(null);
   const [mineError, setMineError] = useState<string | null>(null);
+  const [minePreview, setMinePreview] = useState<{ title: string; html: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [schoolHint, setSchoolHint] = useState<string | null>(null);
@@ -140,10 +141,10 @@ export default function FilesHubPage() {
       const blob = await getPicoArtifactContent(row.id, false);
       const name = row.user_label || row.title || '生成物';
       if (/\.html?$/i.test(name) || /html/i.test(row.kind || '')) {
+        // Same-origin blob tabs would run document scripts with site credentials;
+        // preview stays in a scriptless sandboxed iframe (ResultPanel discipline).
         const html = await blob.text();
-        const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
-        window.open(url, '_blank', 'noopener,noreferrer');
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        setMinePreview({ title: name, html });
         return;
       }
       const url = URL.createObjectURL(blob);
@@ -227,6 +228,34 @@ export default function FilesHubPage() {
             );
           })}
         </ul>
+        {minePreview ? (
+          <div
+            className="mt-2 overflow-hidden rounded-lg border border-black/[0.08] bg-white"
+            data-testid="my-generated-preview"
+          >
+            <div className="flex items-center gap-2 border-b border-black/[0.04] px-2.5 py-1">
+              <p className="min-w-0 flex-1 truncate text-[11px] text-[#8c8c8c]">
+                安全预览：{minePreview.title} · sandbox 禁用脚本与同源
+              </p>
+              <button
+                type="button"
+                className="h-7 rounded-md border border-black/[0.08] px-2 text-[11.5px]"
+                onClick={() => setMinePreview(null)}
+                data-testid="my-generated-preview-close"
+              >
+                关闭
+              </button>
+            </div>
+            <iframe
+              title={minePreview.title}
+              sandbox=""
+              referrerPolicy="no-referrer"
+              srcDoc={minePreview.html}
+              className="h-[420px] w-full border-0 bg-white"
+              data-testid="my-generated-preview-iframe"
+            />
+          </div>
+        ) : null}
       </section>
     );
 
