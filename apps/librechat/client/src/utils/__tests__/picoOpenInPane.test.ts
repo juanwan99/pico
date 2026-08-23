@@ -6,6 +6,7 @@ import {
   detectOpenWebsiteIntent,
   formatResultPaneZoom,
   latestUserOpenWebsiteIntent,
+  humanArtifactActionError,
   picoUploadDownloadUrl,
   readStoredResultPaneWidth,
   RESULT_PANE_DEFAULT_WIDTH,
@@ -31,9 +32,19 @@ describe('picoOpenInPane', () => {
     expect(picoUploadDownloadUrl('/uploads/u1/fid__通知.pdf')).toBe(
       '/uploads/u1/fid__通知.pdf',
     );
+    expect(picoUploadDownloadUrl('', 'fid', 'u1')).toBe('/api/files/download/u1/fid');
     expect(picoUploadDownloadUrl('https://example.com/a.pdf', 'fid')).toBe(
       'https://example.com/a.pdf',
     );
+    expect(humanArtifactActionError('open', new Error('artifact content unavailable'))).toMatch(
+      /打开产物失败：这份还没有可打开的内容/,
+    );
+    expect(humanArtifactActionError('open', new Error('pico 502: artifact preview'))).not.toMatch(
+      /产物服务暂时不可用/,
+    );
+    expect(
+      humanArtifactActionError('open', new Error('pico 502: pico_upstream_unavailable')),
+    ).toMatch(/产物服务暂时连不上/);
     expect(RESULT_PANE_VIEWS).toEqual(['web']);
     expect(RESULT_PANE_VIEW_LABEL.web).toBe('沙箱');
     expect(RESULT_PANE_VIEW_LABEL).not.toHaveProperty('browser');

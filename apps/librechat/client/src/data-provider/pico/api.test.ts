@@ -6,7 +6,7 @@ import {
   searchEduSchoolMaterials,
   putEduNamedIds,
   listEduFields,
-  landEduProduct,
+  listMyPicoArtifacts,
 } from './api';
 
 jest.mock('librechat-data-provider', () => ({
@@ -147,26 +147,21 @@ describe('edu school materials client', () => {
     );
   });
 
-  it('posts land to school field', async () => {
+  it('lists my ledger artifacts for 文件页次级区', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, landed: true, green: false, kind: 'page' }),
+      json: async () => ({
+        count: 1,
+        artifacts: [{ id: 'art-1', title: '家长会通知.html', kind: 'html' }],
+      }),
     });
-    await landEduProduct({
-      field_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
-      filename: '页.html',
-      body_html: '<p>灰</p>',
+    await expect(listMyPicoArtifacts()).resolves.toEqual({
+      count: 1,
+      artifacts: [{ id: 'art-1', title: '家长会通知.html', kind: 'html' }],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/pico/v1/edu/land',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({
-          field_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
-          filename: '页.html',
-          body_html: '<p>灰</p>',
-        }),
-      }),
+      '/api/pico/v1/artifacts?mine=true',
+      expect.objectContaining({ credentials: 'include' }),
     );
   });
 });

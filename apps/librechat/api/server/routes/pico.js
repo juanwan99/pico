@@ -120,6 +120,9 @@ async function proxy(req, res, path, options = {}) {
     if (allowDownload && ['1', 'true'].includes(sp.get('download'))) {
       out.set('download', 'true');
     }
+    if (['1', 'true'].includes(sp.get('mine'))) {
+      out.set('mine', 'true');
+    }
     const s = out.toString();
     safeQs = s ? `?${s}` : '';
   }
@@ -234,6 +237,7 @@ router.post('/v1/runs/:runId/retry', (req, res) => {
     return res.status(400).json({ error: 'bad_request', message: e.message });
   }
 });
+router.get('/v1/artifacts', (req, res) => proxy(req, res, '/v1/artifacts'));
 router.get('/v1/artifacts/:artifactId/content', (req, res) => {
   try {
     assertId(req.params.artifactId, 'artifactId');

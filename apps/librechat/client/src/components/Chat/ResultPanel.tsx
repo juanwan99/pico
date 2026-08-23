@@ -19,6 +19,7 @@ import { cn } from '~/utils';
 import {
   classifyArtifactPreview,
   clampResultPaneWidth,
+  humanArtifactActionError,
   latestUserOpenOfficeIntent,
   latestUserOpenWebsiteIntent,
   picoUploadDownloadUrl,
@@ -60,20 +61,25 @@ const UNNAMED_ATTACHMENT = '未命名附件';
 const UNKNOWN_KIND = '类型未知';
 
 function artifactActionError(action: ArtifactAction['type'], error: unknown): string {
-  const verb = action === 'open' ? '打开' : '下载';
-  const message = error instanceof Error ? error.message : String(error);
-  const pathHint =
-    '正确路径：结果区「下载」按钮，或 GET /api/pico/v1/artifacts/{id}/content?download=true（勿用虚构 /download 尾缀）';
-  if (message.includes('401')) {
-    return `${verb}产物失败：登录已失效，请刷新页面后重新登录。${pathHint}`;
+  return humanArtifactActionError(action, error);
+}
+
+function fileOwnerUserId(file: {
+  user?: unknown;
+  user_id?: unknown;
+}): string {
+  const raw = file.user ?? file.user_id;
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim();
   }
-  if (message.includes('403') || message.includes('404')) {
-    return `${verb}产物失败：产物不存在或无权限。${pathHint}`;
+  if (raw && typeof raw === 'object') {
+    const rec = raw as { $oid?: unknown; _id?: unknown; id?: unknown };
+    const id = rec.$oid ?? rec._id ?? rec.id;
+    if (typeof id === 'string' && id.trim()) {
+      return id.trim();
+    }
   }
-  if (message.includes('502') || message.includes('unavailable')) {
-    return `${verb}产物失败：产物服务暂时不可用，请稍后重试。${pathHint}`;
-  }
-  return `${verb}产物失败，请稍后重试。${pathHint}`;
+  return '';
 }
 
 function safeArtifactUrl(raw: string): string | null {
@@ -194,10 +200,14 @@ function collectArtifacts(messages: TMessage[] | null | undefined): ArtifactItem
           kindLabel,
           sizeLabel: formatSize(typeof bytes === 'number' ? bytes : undefined) || '—',
           kind: artifactGlyphKind(name, kindLabel),
-          url:
-            typeof filepath === 'string' && filepath
-              ? picoUploadDownloadUrl(filepath, fileId || undefined)
-              : undefined,
+          url: (() => {
+            const mapped = picoUploadDownloadUrl(
+              typeof filepath === 'string' ? filepath : '',
+              fileId || undefined,
+              fileOwnerUserId(f),
+            );
+            return mapped || undefined;
+          })(),
           body: typeof body === 'string' ? body : undefined,
         });
       }
@@ -333,8 +343,11 @@ export default function ResultPanel({
             contentSha256: artifact.content_sha256,
           };
         });
-      // Filename-first: real files before misc.
-      return mapped.sort((a, b) => {
+      // Filename-first: real files before misc. Keep composer uploads even when
+      // the ledger already has generated HTML — otherwise PDF「打开」disappears.
+      const seen = new Set(mapped.map((item) => item.id));
+      const extras = messageArts.filter((item) => !seen.has(item.id));
+      return [...mapped, ...extras].sort((a, b) => {
         const rank = (x: ArtifactItem) =>
           x.kind === 'html' ? 0 : x.kind === 'txt' ? 1 : x.kind === 'file' ? 2 : 3;
         return rank(a) - rank(b) || a.name.localeCompare(b.name, 'zh');
