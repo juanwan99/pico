@@ -1,8 +1,9 @@
-# DIRECTION-NOW · 业主方向锁定（2026-08-09）
+# DIRECTION-NOW · 业主方向锁定（2026-08-09 · v1.1 加线 2026-08-23）
 
 ```text
-STATUS: BINDING · 业主书面四条
+STATUS: BINDING · 业主书面四条 + 阶段 1.5 加线
 DATE: 2026-08-09
+UPDATED: 2026-08-23 · 业主拍板「AI 本体 + 知识库」两包（§0b）
 仓: juanwan99/pico ONLY
 SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · PLAN-TWO-PHASE-WB · STATE-NOW
 CLAIM-WB-DEGREE-WEB: NO
@@ -21,6 +22,25 @@ CLAIM-WB-DEGREE-WEB: NO
 | **2** | 默认 **Pi + DeepSeek**（已确认正确） |
 | **3** | 产品要的是 **通用能力** + **复杂问题处理能力**（**尤其办公场景**） |
 | **4** | **对标产品：WorkBuddy**；**本阶段核心 = 基础能力打扎实**；**不铺大摊子** |
+
+## 0b. 阶段 1.5 加线（业主 2026-08-23 书面 · BINDING）
+
+> 依据：2026-08-23 Cherry Studio 差距量化分析（业主点名「AI 本体能力 + 知识库能力」为下阶段重点）。
+> 本节把 [#530](https://github.com/juanwan99/pico/issues/530) 规划稿中「知识库 = 后期」**激活为当前主线**；#530 的压缩（序 1）一并激活。
+
+```text
+两包主线（#623 收口后开工 · SOLO 一张在飞）：
+  包 A 知识库：A1 T-KB-ENGINE-ON → A2 T-KB-AGENT-USE → A3 T-KB-DOC-PARSE
+  包 B AI 本体：B1 T-PI-COMPACT-VERIFY → B2 T-DEEP-TIER-ROUTE → B3 T-OFFICE-BENCH-10
+  前置小卡：T-CI-UI-GATE（CI 补前端 jest/tsc 门，先装门再开工）
+建议穿插序：CI门 → A1 → A2 → B1 → A3 → B2 → B3
+```
+
+红线不变（LAW）：知识库引擎 = 成熟上游 Meilisearch 薄适配（**不自研向量内核**）；
+压缩 = Pi 自带 compaction（**不自研压缩器**）；embedding = 外部 API（bge-m3 一类），
+密钥进密码器不进仓；索引是账本**投影**（可全量重建，账本仍唯一真源）；
+租户过滤服务端强制。仍不做：MCP/Skill 市场 · 连接器摊子 · 多供应商 BYOK。
+「知识库薄适配」≠「连接器摊子」——前者是本阶段主线，后者仍禁。
 
 ### 4 的展开（本阶段做 / 不做）
 

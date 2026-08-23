@@ -1,14 +1,14 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-08-23
+DATE: 2026-08-23（晚）
 仓: juanwan99/pico ONLY
 CLAIM-WB-DEGREE-WEB: NO
 PRODUCT PASS: 未签 · 等业主 OWNER DECISION（#449）
-公网 tip（派卡时）: 78441483720f4e82de1c48a71838a3a49b07daec
-main tip（派卡时 · 待部）: 5e2de87a086b931ce568373273d12c5ee95952e6
+公网 tip（本次刷新时）: 735dd363a67681900f5364a2a06353a2ef3eaa51（= main）
   · 开工必 curl 实查：curl -fsS https://pico.aivia.asia/api/pico/tip
-活动主线: 收口（#621 部一次 + 复验 #620/#615/#613 后关卡）
+活动主线: ① #623 尾段复验中（关卡后）② 阶段 1.5「AI 本体 + 知识库」两包
+  · 方向真源 DIRECTION-NOW §0b · 卡序：T-CI-UI-GATE → A1 → A2 → B1 → A3 → B2 → B3
 工作流: OneFlow v2（#619 已合）— 四行卡 · 禁 315 填表
 ```
 
@@ -16,26 +16,24 @@ main tip（派卡时 · 待部）: 5e2de87a086b931ce568373273d12c5ee95952e6
 
 **禁止自研 · 只做薄适配：** [`LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)
 
-## 当前活动主线（收口 · 2026-08-23）
+## 当前活动主线（阶段 1.5 · 2026-08-23 晚）
 
 | 优先级 | Issue / PR | 说明 |
 |--------|-------|------|
-| **P0 进行中** | [#621](https://github.com/juanwan99/pico/issues/621) | T-CLOSEOUT-VERIFY-0823：部一次 tip `5e2de87a…` + 人路径复验三卡后关 #615/#613 |
-| 已合待部 | [#620](https://github.com/juanwan99/pico/pull/620) | T-ARTIFACT-VISIBILITY：PDF 预览 + 生成 HTML 落老师盘 + 主栏下载条（独立审查 PASS） |
-| 码在现网 · 等复验关卡 | [#615](https://github.com/juanwan99/pico/issues/615) | T-AGENT-PLAIN-V1 十轮复杂任务（审查「倾向过」·差独立复验） |
-| 码在现网 · 等复验关卡 | [#613](https://github.com/juanwan99/pico/issues/613) | T-AGENT-FACE-V1 跑时中文进度（审查「半过」·差 UI 复验） |
-| 等业主二选一 | [#586](https://github.com/juanwan99/pico/pull/586) | Grok identity bridge（红档 auth · 技术审查 PASS · 合/关归业主） |
+| **收尾中** | [#623](https://github.com/juanwan99/pico/issues/623) | T-ARTIFACT-FIX-V2：三波已合已部（#624/#625 · tip `735dd363…`），差最后人路径复验回执后关卡 |
+| **下一张** | T-CI-UI-GATE | `ci.yml` 补前端 jest/tsc + 工作区包构建门（红路径 `.github/workflows` · 业主 2026-08-23 已授权） |
+| 排队 | 包 A 知识库 A1→A2→A3 · 包 B AI 本体 B1→B2→B3 | 见 [DIRECTION-NOW §0b](./DIRECTION-NOW.md)；SOLO 一张在飞，禁并行抢仓 |
+| 等业主配钥 | `SILICONFLOW_API_KEY` | ECS `.env`（compose 已留位）；有钥 A1 上 hybrid，无钥先纯全文诚实降级 |
 | 产品签 | [#449](https://github.com/juanwan99/pico/issues/449) · [#316](https://github.com/juanwan99/pico/issues/316) | CLAIM 材料等**业主** · 工程禁代签 · **勿关** |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | KA-3 默认切流须业主书面授权 · 未执行 · **勿关** |
-| 规划/讨论 | [#505](https://github.com/juanwan99/pico/issues/505) · [#530](https://github.com/juanwan99/pico/issues/530) · [#498](https://github.com/juanwan99/pico/issues/498) · [#600](https://github.com/juanwan99/pico/issues/600) | 规划稿/讨论稿/指针 · **勿关 · 非执行主线** |
+| 规划/讨论 | [#505](https://github.com/juanwan99/pico/issues/505) · [#530](https://github.com/juanwan99/pico/issues/530)（序1/序2 已激活） · [#498](https://github.com/juanwan99/pico/issues/498) · [#600](https://github.com/juanwan99/pico/issues/600) | 规划稿/指针 · **勿关** |
 | 运行线程 | [#475](https://github.com/juanwan99/pico/issues/475) · [#573](https://github.com/juanwan99/pico/issues/573) | controller-bot poll log · 总管交接 · 长期开 |
 
 ```text
-已装功能到现网 tip 78441483… ：
-  #613 跑时中文进度 · #615 十轮收尾+藏口令+上传进 Agent 可读盘（#616/#617/#618）
-已合未部（在 main tip 5e2de87a…）：#620 三修 + OneFlow v2 文档
+2026-08-23 已收口：#615 #613 #619 #620 #621 #622 #624 #625 · #586 关闭不合（业主决定 · 分支保留）
+现网 tip 735dd363… 已含：十轮收尾 · 中文进度 · 三修 + 租户钥同柜 + PDF Authorization
 禁止误关：#316 #449 #498 #505 #530 #170 #475 #573 #600
-禁止把已 close 卡当活动主线（#468 #470 #476 #479 #474 #513 等）
+禁止把已 close 卡当活动主线
 ```
 
 ## 业主方向（最新 BINDING）
