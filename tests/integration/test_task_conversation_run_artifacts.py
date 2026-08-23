@@ -444,7 +444,7 @@ def test_conversation_filter_applies_before_account_task_limit(client) -> None:
     assert hidden.json()["tasks"] == []
 
 
-def test_proxy_membership_header_is_required_and_cannot_conflict(client) -> None:
+def test_proxy_membership_header_is_required_and_cannot_conflict(client, monkeypatch) -> None:
     body = {
         "model": "test-direct-model",
         "stream": False,
@@ -466,6 +466,29 @@ def test_proxy_membership_header_is_required_and_cannot_conflict(client) -> None
         json=body,
     )
     assert conflict.status_code == 403
+
+    _stub_agent(
+        monkeypatch,
+        RunResult(status="succeeded", final_text="ok", error=""),
+    )
+    legacy = client.post(
+        "/v1/chat/completions",
+        headers={
+            "Authorization": "Bearer pico-dev",
+            "X-Pico-Membership-Id": "627bcf3a-a9a8-4047-afcc-3d4878e2a7af:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        },
+        json={
+            "model": "test-direct-model",
+            "stream": False,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "【Pico-User:6a89177627f74adf4b5487b4】hello",
+                }
+            ],
+        },
+    )
+    assert legacy.status_code != 403, legacy.text
 
 
 def test_non_stream_agent_reuses_one_run_and_preserves_failure(client, monkeypatch) -> None:
