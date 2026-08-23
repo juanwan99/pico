@@ -9,6 +9,7 @@ import { mainTextareaId } from '~/common';
 import store from '~/store';
 import { workspaceContextPrefix } from '~/components/Chat/Input/WorkspaceSelector';
 import { expertSystemLine } from '~/utils/picoModelPref';
+import { picoPromptUserMarker } from '~/utils/picoMembership';
 
 type ProjectConversation = {
   conversationId?: string | null;
@@ -163,13 +164,15 @@ export default function useSubmitMessage() {
           /* ignore */
         }
       }
-      const userId = user?.id ?? (user as { _id?: string } | undefined)?._id;
+      const picoUser = picoPromptUserMarker(
+        user as { id?: string; _id?: string; eduId?: string; eduSchoolId?: string } | undefined,
+      );
       let wsPrefix = workspaceContextPrefix(convoId);
       const projPrefix = projectContextPrefix(conversation);
-      if (userId && wsPrefix && !wsPrefix.includes('【Pico-User:')) {
-        wsPrefix = `【Pico-User:${String(userId)}】 ${wsPrefix}`;
-      } else if (userId && !wsPrefix) {
-        wsPrefix = `【Pico-User:${String(userId)}】\n`;
+      if (picoUser && wsPrefix && !wsPrefix.includes('【Pico-User:')) {
+        wsPrefix = `【Pico-User:${picoUser}】 ${wsPrefix}`;
+      } else if (picoUser && !wsPrefix) {
+        wsPrefix = `【Pico-User:${picoUser}】\n`;
       }
       const expertPrefix = expertSystemLine();
       const metaPrefix = `${wsPrefix || ''}${projPrefix || ''}${expertPrefix || ''}`;

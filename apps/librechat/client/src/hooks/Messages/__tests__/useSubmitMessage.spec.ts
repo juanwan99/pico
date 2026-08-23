@@ -239,6 +239,39 @@ describe('useSubmitMessage', () => {
     expect(submittedText).toMatch(/普通会话$/);
   });
 
+  it('does not stamp LibreChat user id as Pico-User (header is school:edu)', () => {
+    ask.mockReturnValue(true);
+
+    const { result } = renderHook(() => useSubmitMessage());
+    act(() => {
+      result.current.submitMessage({ text: '普通会话' });
+    });
+
+    const submittedText = ask.mock.calls[0][0].text as string;
+    expect(submittedText).not.toContain('【Pico-User:user-1】');
+  });
+
+  it('stamps school:edu Pico-User when edu tenant keys are on the user', () => {
+    mockUseAuthContext.mockReturnValue({
+      user: {
+        id: 'user-1',
+        eduId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        eduSchoolId: '627bcf3a-a9a8-4047-afcc-3d4878e2a7af',
+      },
+    });
+    ask.mockReturnValue(true);
+
+    const { result } = renderHook(() => useSubmitMessage());
+    act(() => {
+      result.current.submitMessage({ text: '普通会话' });
+    });
+
+    const submittedText = ask.mock.calls[0][0].text as string;
+    expect(submittedText).toContain(
+      '【Pico-User:627bcf3a-a9a8-4047-afcc-3d4878e2a7af:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee】',
+    );
+  });
+
   it('uses matching URL and active-project context for a newly opened project task', () => {
     sessionStorage.setItem('pico:activeProjectId', 'project-1');
     window.history.replaceState({}, '', '/c/new?projectId=project-1');

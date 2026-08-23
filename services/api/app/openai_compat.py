@@ -29,6 +29,7 @@ from app.auth import (
     Principal,
     decode_token,
     enforce_scope,
+    prompt_membership_conflicts_header,
     scope_proxy_principal,
 )
 from app.db import RunRow, TaskRow, append_event, new_id, session_factory
@@ -1323,10 +1324,8 @@ async def chat_completions(
     raw_for_user = _last_user_prompt(body.messages)
     m_user = re.search(r"【Pico-User:([^】]+)】", raw_for_user)
     marker_membership = m_user.group(1).strip() if m_user else None
-    if (
-        principal.raw.get("proxy")
-        and marker_membership
-        and marker_membership != (x_pico_membership_id or "").strip()
+    if principal.raw.get("proxy") and prompt_membership_conflicts_header(
+        marker_membership, x_pico_membership_id
     ):
         raise HTTPException(status_code=403, detail="proxy membership mismatch")
     principal = scope_proxy_principal(principal, x_pico_membership_id)

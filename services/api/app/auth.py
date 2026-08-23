@@ -345,6 +345,21 @@ def scope_proxy_principal(
     )
 
 
+def prompt_membership_conflicts_header(marker: str | None, header: str | None) -> bool:
+    """True when 【Pico-User】 is a competing tenant key.
+
+    After chat headers switched to ``school:edu``, the browser still stamps the
+    LibreChat user id. Header is authoritative; a bare leftover must not 403.
+    A different joint key, or two different bare ids, still conflict.
+    """
+    marker_s = (marker or "").strip()
+    header_s = (header or "").strip()
+    if not marker_s or marker_s == header_s:
+        return False
+    legacy_lc_stamp = ":" in header_s and ":" not in marker_s
+    return not legacy_lc_stamp
+
+
 async def require_principal(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),
