@@ -1,6 +1,7 @@
 import { getTokenHeader } from 'librechat-data-provider';
 import {
   getPicoArtifactContent,
+  picoAuthedGet,
   humanizeRunError,
   labelForLatestRun,
   searchEduSchoolMaterials,
@@ -41,6 +42,17 @@ describe('getPicoArtifactContent', () => {
 
     await expect(getPicoArtifactContent('artifact-1', download)).resolves.toBe(blob);
     expect(fetchMock).toHaveBeenCalledWith(`/api/pico/v1/artifacts/artifact-1/content${query}`, {
+      credentials: 'include',
+      headers: expect.objectContaining({
+        Authorization: 'Bearer browser-jwt',
+      }),
+    });
+  });
+
+  it('sends Authorization on same-origin LibreChat file download', async () => {
+    fetchMock.mockResolvedValue({ ok: true, blob: async () => new Blob(['%PDF']) });
+    await picoAuthedGet('/api/files/download/u1/fid');
+    expect(fetchMock).toHaveBeenCalledWith('/api/files/download/u1/fid', {
       credentials: 'include',
       headers: expect.objectContaining({
         Authorization: 'Bearer browser-jwt',

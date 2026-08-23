@@ -103,21 +103,27 @@ export function encodeHeaderValue(value: string): string {
   return `b64:${base64}`;
 }
 
+type PicoSafeUser = Partial<SafeUser> & {
+  federatedTokens?: IUser['federatedTokens'];
+  eduId?: string;
+  eduSchoolId?: string;
+};
+
 /**
  * Creates a safe user object containing only allowed fields.
  * Preserves federatedTokens for OpenID token template variable resolution.
+ * Keeps eduId/eduSchoolId so chat `{{PICO_MEMBERSHIP_ID}}` matches /api/pico
+ * (same school_id+membership_id). These are tenant keys, not secrets.
  *
  * @param user - The user object to extract safe fields from
  * @returns A new object containing only allowed fields plus federatedTokens if present
  */
-export function createSafeUser(
-  user: IUser | null | undefined,
-): Partial<SafeUser> & { federatedTokens?: IUser['federatedTokens'] } {
+export function createSafeUser(user: IUser | null | undefined): PicoSafeUser {
   if (!user) {
     return {};
   }
 
-  const safeUser: Partial<SafeUser> & { federatedTokens?: IUser['federatedTokens'] } = {};
+  const safeUser: PicoSafeUser = {};
   for (const field of ALLOWED_USER_FIELDS) {
     if (field in user) {
       /**
@@ -140,6 +146,15 @@ export function createSafeUser(
 
   if ('federatedTokens' in user) {
     safeUser.federatedTokens = user.federatedTokens;
+  }
+
+  const eduId = String(user.eduId || '').trim();
+  const eduSchoolId = String(user.eduSchoolId || '').trim();
+  if (PICO_MEMBER_RE.test(eduId)) {
+    safeUser.eduId = eduId;
+  }
+  if (PICO_MEMBER_RE.test(eduSchoolId)) {
+    safeUser.eduSchoolId = eduSchoolId;
   }
 
   return safeUser;
