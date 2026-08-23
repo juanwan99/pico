@@ -356,9 +356,8 @@ def prompt_membership_conflicts_header(marker: str | None, header: str | None) -
     header_s = (header or "").strip()
     if not marker_s or marker_s == header_s:
         return False
-    if ":" in header_s and ":" not in marker_s:
-        return False
-    return True
+    legacy_lc_stamp = ":" in header_s and ":" not in marker_s
+    return not legacy_lc_stamp
 
 
 async def require_principal(
