@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 卡面说明
+    url: https://github.com/juanwan99/pico/blob/main/docs/TASK-CARD-STANDARD.md
+    about: 四行合同。315 长表已作废。

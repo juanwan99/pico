@@ -43,7 +43,7 @@ ALIGN: edu-core TASK-DISPATCH v2（四行合同）
 部署：PICO_DEPLOY_SHA=<40位> bash /opt/pico/scripts/prod-update.sh
 ```
 
-禁止再贴 S/G/E 表、工具注册表、经验全文。残债同卡续，禁 `T-*-DEBT`。
+模板：`.github/ISSUE_TEMPLATE/` · `docs/templates/card-build.md`。指针：`docs/TASK-CARD-STANDARD.md`（从 315 留下的纪律在指针页，不填表）。
 
 ## 3. 角色（最小）
 

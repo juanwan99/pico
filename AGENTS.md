@@ -92,7 +92,7 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 **Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — tip、门禁。  
 **Memory reset:** [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md) — 错误记忆黑名单 · **单窗 SOLO**。  
 **Stage package:** [`docs/STAGE-PACKAGE-MODE.md`](docs/STAGE-PACKAGE-MODE.md) — 单窗阶段包（废默认多窗碎卡）。  
-**Task card format:** [`docs/TASK-CARD-STANDARD.md`](docs/TASK-CARD-STANDARD.md) — CLAIM/BASE/PRODUCT · 锁定句 · Issue 正文为准。  
+**Task card format:** [`docs/ONEFLOW.md`](docs/ONEFLOW.md) + [`docs/TASK-CARD-STANDARD.md`](docs/TASK-CARD-STANDARD.md) — 四行合同。禁止再贴 315 长表。经验在 [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md)。  
 **Doc index (truth order):** [`docs/README.md`](docs/README.md) — prefer GitHub over prose.
 
 **Context policy:** [`docs/CONTEXT-POLICY.md`](docs/CONTEXT-POLICY.md)（默认不清理上下文）  
