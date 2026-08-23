@@ -46,6 +46,7 @@ from app.edu_files import router as edu_files_router
 from app.edu_kb_ingest import router as edu_kb_ingest_router
 from app.edu_school import router as edu_school_router
 from app.edu_sso import router as edu_sso_router
+from app.kb_rebuild import rebuild_materials
 from app.openai_compat import router as openai_compat_router
 from app.rate_limit import ChatRateLimitMiddleware
 from app.settings import Settings, get_settings
@@ -71,6 +72,9 @@ def _sync_settings_to_environ() -> None:
         "PICO_EDU_HANDOFF_ENABLED": "true" if s.pico_edu_handoff_enabled else "false",
         "PICO_SANDBOX_URL": s.pico_sandbox_url,
         "PICO_SANDBOX_TOKEN": s.pico_sandbox_token,
+        "PICO_MEILI_URL": s.pico_meili_url,
+        "MEILI_MASTER_KEY": s.meili_master_key,
+        "SILICONFLOW_API_KEY": s.siliconflow_api_key,
     }
     for k, v in mapping.items():
         if v and not os.environ.get(k):
@@ -237,6 +241,9 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.true_pi.config import health_fields as true_pi_health_fields
 
     body.update(true_pi_health_fields())
+    from pico_orchestrator.meili_kb import health_fields as meili_health_fields
+
+    body.update(meili_health_fields())
     if pi_batch:
         body["pi_agent_canary_batch"] = pi_batch
     if kimi_batch:
@@ -282,6 +289,23 @@ async def meta_tip() -> dict:
         "service": "pico-api",
         "git_sha": _resolve_git_sha(),
     }
+
+
+@app.post("/v1/kb/reindex")
+async def kb_reindex(
+    principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
+) -> dict:
+    """Rebuild this membership's Meili projection from the ledger."""
+    return await rebuild_materials(principal)
+
+
+@app.post("/v1/kb/reindex-all")
+async def kb_reindex_all(request: Request) -> dict:
+    """Ops rebuild. Loopback only — pico-api is not published."""
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1"}:
+        raise HTTPException(status_code=403, detail={"code": "forbidden", "message": "loopback only"})
+    return await rebuild_materials(None)
 
 
 @app.get("/v1/meta/freeze")

@@ -104,8 +104,21 @@ else
   echo "[pico] WARN KIMI_API_KEY empty — chat will fail"
 fi
 
+if [ -f .env ]; then
+  if grep -q '^MEILI_MASTER_KEY=.\+' .env; then
+    echo "[pico] MEILI_MASTER_KEY=SET"
+  else
+    MEILI_GEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+    echo "MEILI_MASTER_KEY=${MEILI_GEN}" >> .env
+    echo "[pico] MEILI_MASTER_KEY generated"
+  fi
+  if ! grep -q '^PICO_MEILI_URL=' .env; then
+    echo "PICO_MEILI_URL=http://127.0.0.1:7700" >> .env
+  fi
+fi
+
 docker compose -f "$COMPOSE_FILE" build pico-api librechat pico-sandbox
-docker compose -f "$COMPOSE_FILE" up -d --force-recreate pico-api librechat pico-sandbox
+docker compose -f "$COMPOSE_FILE" up -d --force-recreate pico-api librechat pico-sandbox meilisearch
 
 echo "[pico] ps:"
 docker compose -f "$COMPOSE_FILE" ps
@@ -134,6 +147,30 @@ if [ "$HEALTH_SHA" != "$CURRENT_SHA" ]; then
   exit 5
 fi
 echo "[pico] health.git_sha exact match: $HEALTH_SHA"
+
+echo "[pico] meili:"
+meili_ready=0
+for _ in $(seq 1 30); do
+  if curl -sf --max-time 2 http://127.0.0.1:7700/health >/dev/null; then
+    meili_ready=1
+    break
+  fi
+  sleep 1
+done
+if [ "$meili_ready" -ne 1 ]; then
+  echo "[pico] FATAL: meilisearch 127.0.0.1:7700 did not become ready" >&2
+  exit 9
+fi
+echo "[pico] meili health ok"
+REINDEX_OUT="$(curl -fsS --max-time 60 -X POST http://127.0.0.1:18765/v1/kb/reindex-all || true)"
+echo "[pico] kb reindex: ${REINDEX_OUT:-failed}"
+if command -v ss >/dev/null 2>&1; then
+  if ss -lntp 2>/dev/null | grep -E '0\.0\.0\.0:7700|\*:7700' >/dev/null; then
+    echo "[pico] FATAL: meilisearch listening on 0.0.0.0:7700" >&2
+    exit 6
+  fi
+  echo "[pico] listen check: 7700 not on 0.0.0.0 (ok)"
+fi
 
 # True-Pi binary must ship with the production API image (D1 / T-OPS-TRUE-PI-HYGIENE).
 # docker-compose.host.yml builds Dockerfile.pico-api.true-pi — lean rebuilds must not

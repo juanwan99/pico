@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 from typing import Any
 
 from pico_orchestrator.gateway import Principal, ToolError
@@ -14,6 +15,7 @@ from app.db import ArtifactRow, RunRow, TaskRow, append_event, new_id
 
 ENCODING_UTF8 = "utf8"
 ENCODING_BASE64 = "base64"
+logger = logging.getLogger(__name__)
 
 
 def encode_artifact_payload(content: str | bytes) -> tuple[str, str, int, str]:
@@ -155,6 +157,18 @@ class LedgerArtifactStore:
                 "download_path": f"/v1/artifacts/{artifact.id}/content?download=true",
             }
         convo = self._conversation_id or getattr(task, "conversation_id", None)
+        try:
+            from pico_orchestrator.meili_kb import project_material_artifact
+
+            project_material_artifact(
+                principal,
+                artifact_id=str(out["artifact_id"]),
+                title=title,
+                kind=kind,
+                content=content,
+            )
+        except Exception as exc:  # noqa: BLE001 — projection must not block the ledger
+            logger.warning("meili project after write failed: %s", type(exc).__name__)
         try:
             from app.edu_school import land_generated_artifact
 

@@ -1,0 +1,204 @@
+"""T-KB-CATCH: projection keys, tenant filter, degraded honesty, ingest-to-index."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+import pytest
+from pico_orchestrator.meili_kb import (
+    MeiliIndex,
+    document_from_artifact,
+    extract_index_text,
+    is_material,
+    parse_office_bytes,
+    quote_filter_value,
+    search_materials,
+    tenant_filter,
+    upsert_material,
+)
+
+
+class FakeHttp:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, Any]] = []
+        self.search_hits: list[dict[str, Any]] = []
+        self.search_status = 200
+        self.fail_search = False
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        json: Any | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float = 8.0,
+    ) -> tuple[int, Any]:
+        self.calls.append((method, url, json))
+        if url.endswith("/health"):
+            return 200, {"status": "available"}
+        if method == "GET" and url.endswith("/indexes/pico_materials"):
+            return 200, {"uid": "pico_materials"}
+        if method == "POST" and url.endswith("/search"):
+            if self.fail_search:
+                return 503, {"message": "down"}
+            return self.search_status, {"hits": list(self.search_hits)}
+        return 202, {"taskUid": 1}
+
+
+def test_tenant_filter_is_server_side_and_quoted() -> None:
+    clause = tenant_filter("school-a", "member-1")
+    assert 'school_id = "school-a"' in clause
+    assert 'membership_id = "member-1"' in clause
+    assert "OR" not in clause
+    sneaky = quote_filter_value('x" OR school_id = "other')
+    assert "OR" in sneaky
+    # Quotes inside the value are escaped, so it stays one string token.
+    assert sneaky.startswith('"') and sneaky.endswith('"')
+    with pytest.raises(ValueError):
+        tenant_filter("school a", "m1")
+    with pytest.raises(ValueError):
+        tenant_filter("school-a", "")
+
+
+def test_search_injects_principal_filter_not_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    http = FakeHttp()
+    http.search_hits = [
+        {"artifact_id": "a1", "title": "校历.md", "text": "三月开学", "school_id": "school-a"}
+    ]
+    out = search_materials(
+        "开学",
+        school_id="school-a",
+        membership_id="m1",
+        limit=8,
+        client=http,
+    )
+    search_calls = [c for c in http.calls if c[0] == "POST" and str(c[1]).endswith("/search")]
+    assert len(search_calls) == 1
+    body = search_calls[0][2]
+    assert body["filter"] == tenant_filter("school-a", "m1")
+    assert "m-other" not in json.dumps(body)
+    assert "hybrid" not in body
+    assert out["hits"][0]["artifact_id"] == "a1"
+
+
+def test_search_hybrid_only_when_embed_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "sk-sf")
+    http = FakeHttp()
+    search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)
+    body = next(c[2] for c in http.calls if str(c[1]).endswith("/search"))
+    assert body["hybrid"]["semanticRatio"] == 0.5
+    assert body["hybrid"]["embedder"] == "default"
+
+
+def test_search_raises_when_meili_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    http = FakeHttp()
+    http.fail_search = True
+    with pytest.raises(RuntimeError):
+        search_materials("x", school_id="s1", membership_id="m1", limit=3, client=http)
+
+
+def test_projection_document_keys() -> None:
+    doc = document_from_artifact(
+        artifact_id="art-9",
+        title="通知.md",
+        text="家长会周五",
+        school_id="school-a",
+        membership_id="m1",
+        created_at="2026-08-23T00:00:00",
+    )
+    assert set(doc) >= {
+        "artifact_id",
+        "title",
+        "text",
+        "school_id",
+        "membership_id",
+        "created_at",
+    }
+    assert doc["artifact_id"] == "art-9"
+
+
+def test_is_material_skips_html_keeps_docs() -> None:
+    assert is_material(kind="html", title="页.html") is False
+    assert is_material(kind="file", title="校历.md") is True
+    assert is_material(kind="png", title="图.png") is False
+    assert is_material(kind="bin", title="通知.pdf") is True
+
+
+def test_extract_index_text_utf8_not_title_only() -> None:
+    body = extract_index_text(
+        title="通知.md",
+        kind="file",
+        content="正文：寒假从 1 月 20 日开始。",
+        raw=None,
+    )
+    assert "1 月 20 日" in body
+    assert body != "通知.md"
+
+
+def test_parse_to_index_uses_field_kb_ingest_not_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    fake = types.ModuleType("ingest")
+
+    def ingest_bytes(*, filename: str, data: bytes, title: str):
+        assert filename.endswith((".pdf", ".docx"))
+        assert data.startswith(b"%PDF") or data[:2] == b"PK"
+        return {"ok": True, "slices": [{"excerpt": "抽出的正文：寒假从一月二十日开始。"}]}
+
+    fake.ingest_bytes = ingest_bytes  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ingest", fake)
+    text = parse_office_bytes(filename="家长通知.pdf", data=b"%PDF-1.4 body")
+    assert "一月二十日" in text
+    indexed = extract_index_text(
+        title="家长通知.pdf",
+        kind="edu_office",
+        content=None,
+        raw=b"%PDF-1.4 body",
+    )
+    assert "一月二十日" in indexed
+    assert indexed != "家长通知.pdf"
+    doc = document_from_artifact(
+        artifact_id="art-pdf",
+        title="家长通知.pdf",
+        text=indexed,
+        school_id="school-a",
+        membership_id="m1",
+    )
+    assert "一月二十日" in doc["text"]
+    assert doc["text"] != doc["title"]
+
+
+def test_upsert_posts_to_index(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    http = FakeHttp()
+    doc = document_from_artifact(
+        artifact_id="a",
+        title="t.md",
+        text="hello",
+        school_id="s",
+        membership_id="m",
+    )
+    assert upsert_material(doc, client=http) is True
+    posted = [c for c in http.calls if c[0] == "POST" and str(c[1]).endswith("/documents")]
+    assert posted
+    assert posted[0][2][0]["artifact_id"] == "a"
+
+
+def test_ensure_sets_filterable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    http = FakeHttp()
+    MeiliIndex(http).ensure()
+    patches = [c for c in http.calls if c[0] == "PATCH"]
+    assert patches
+    attrs = patches[0][2]["filterableAttributes"]
+    assert "school_id" in attrs and "membership_id" in attrs

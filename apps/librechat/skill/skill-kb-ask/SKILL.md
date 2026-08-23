@@ -1,6 +1,6 @@
 ---
 name: skill-kb-ask
-description: Ask questions against mounted workspace materials (P2 KB pilot, no vector DB).
+description: Ask questions against uploaded school materials. Always search first.
 allowed-tools:
   - kb_search
   - workspace_list_files

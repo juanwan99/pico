@@ -4,6 +4,7 @@ export type PicoSearchSource = {
   title: string;
   url: string;
   snippet?: string;
+  artifactId?: string;
 };
 
 export type PicoSearchSourceView = {
@@ -12,7 +13,7 @@ export type PicoSearchSourceView = {
   sources: PicoSearchSource[];
 };
 
-const SEARCH_TOOLS = new Set(['web_search', 'web_fetch']);
+const SEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'kb_search']);
 
 function isHttpUrl(value: string): boolean {
   try {
@@ -27,14 +28,30 @@ function asSource(raw: unknown): PicoSearchSource | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
-  const item = raw as { title?: unknown; url?: unknown; link?: unknown; snippet?: unknown };
+  const item = raw as {
+    title?: unknown;
+    url?: unknown;
+    link?: unknown;
+    snippet?: unknown;
+    artifact_id?: unknown;
+    artifactId?: unknown;
+  };
+  const artifactId = String(item.artifact_id || item.artifactId || '').trim();
   const url = String(item.url || item.link || '').trim();
+  const title = String(item.title || artifactId || url).trim();
+  const snippet = String(item.snippet || '').trim();
+  if (artifactId) {
+    return {
+      title: title || artifactId,
+      url: isHttpUrl(url) ? url : `pico-artifact:${artifactId}`,
+      snippet: snippet || undefined,
+      artifactId,
+    };
+  }
   if (!url || !isHttpUrl(url)) {
     return null;
   }
-  const title = String(item.title || url).trim() || url;
-  const snippet = String(item.snippet || '').trim();
-  return { title, url, snippet: snippet || undefined };
+  return { title: title || url, url, snippet: snippet || undefined };
 }
 
 function parseToolResultPayload(payload: Record<string, unknown>): Record<string, unknown> | null {

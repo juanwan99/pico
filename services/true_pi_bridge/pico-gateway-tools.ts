@@ -29,6 +29,7 @@ const ALLOWED = [
   "verify_html_document",
   "web_search",
   "web_fetch",
+  "kb_search",
   "sandbox_preview_inspect",
   "sandbox_workspace_exec",
   "sandbox_browser_open",
@@ -236,6 +237,18 @@ export default function (pi: ExtensionAPI) {
     Type.Object(
       {
         query: Type.String(),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "kb_search",
+    "Search this teacher's uploaded/generated materials. Call when they ask about 材料/文档; do not wait for 去搜库. Returns excerpts + artifact_id or honest_miss.",
+    Type.Object(
+      {
+        query: Type.String(),
+        limit: Type.Optional(Type.Number()),
       },
       { additionalProperties: true },
     ),

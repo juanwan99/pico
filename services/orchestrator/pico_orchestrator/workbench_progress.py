@@ -35,6 +35,7 @@ _DOING: dict[str, str] = {
     "verify_html_document": "正在核对网页",
     "web_search": "正在检索",
     "web_fetch": "正在阅读网页",
+    "kb_search": "正在查材料",
 }
 
 _DONE: dict[str, str] = {
@@ -50,6 +51,7 @@ _DONE: dict[str, str] = {
     "verify_html_document": "已核对网页",
     "web_search": "已检索到来源",
     "web_fetch": "已读页",
+    "kb_search": "已查到材料",
 }
 
 _FAIL: dict[str, str] = {
@@ -65,6 +67,7 @@ _FAIL: dict[str, str] = {
     "verify_html_document": "网页核对未完成",
     "web_search": "检索未完成",
     "web_fetch": "读页未完成",
+    "kb_search": "没查到材料",
 }
 
 FALLBACK_DOING = "正在调工具"

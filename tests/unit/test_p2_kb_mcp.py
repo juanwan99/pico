@@ -122,11 +122,92 @@ def test_kb_search_hit_and_miss() -> None:
         assert hit["count"] >= 1
         assert hit["hits"][0]["artifact_id"]
         assert "3 月" in hit["hits"][0]["excerpt"] or "开学" in hit["hits"][0]["excerpt"]
+        assert hit["retrieved"] is True
+        assert hit["sources"][0]["artifact_id"] == hit["hits"][0]["artifact_id"]
 
         miss = await gw.invoke(principal, "kb_search", {"query": "量子隧穿"})
         assert miss["honest_miss"] is True
         assert miss["count"] == 0
         assert "未在已挂载" in miss["user_message"]
+
+    asyncio.run(_run())
+
+
+def test_kb_search_meili_down_degraded_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "unit-key")
+    monkeypatch.setattr(
+        "pico_orchestrator.tools_builtin.search_materials",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("meili down")),
+    )
+    store = _MemStore()
+    principal = _P()
+
+    async def _run() -> None:
+        await store.write(
+            principal,
+            title="校历要点.md",
+            content="春季学期于 3 月 1 日开学。",
+            kind="text",
+        )
+        gw = build_default_gateway(store)
+        hit = await gw.invoke(principal, "kb_search", {"query": "开学"})
+        assert hit["degraded"] is True
+        assert hit["honest_miss"] is False
+        assert hit["hits"][0]["artifact_id"]
+        miss = await gw.invoke(principal, "kb_search", {"query": "量子隧穿"})
+        assert miss["degraded"] is True
+        assert miss["honest_miss"] is True
+        assert miss["hits"] == []
+        assert miss["sources"] == []
+
+    asyncio.run(_run())
+
+
+def test_kb_search_drops_foreign_tenant_and_ignores_args_filter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "unit-key")
+    captured: dict[str, str] = {}
+
+    def fake_search(query, *, school_id, membership_id, limit, client=None):
+        captured["school_id"] = school_id
+        captured["membership_id"] = membership_id
+        captured["query"] = query
+        return {
+            "hybrid": False,
+            "hits": [
+                {
+                    "artifact_id": "good",
+                    "title": "本校.md",
+                    "text": "开学典礼",
+                    "school_id": school_id,
+                    "membership_id": membership_id,
+                },
+                {
+                    "artifact_id": "bad",
+                    "title": "外校.md",
+                    "text": "开学典礼",
+                    "school_id": "other-school",
+                    "membership_id": "other-m",
+                },
+            ],
+        }
+
+    monkeypatch.setattr("pico_orchestrator.tools_builtin.search_materials", fake_search)
+    gw = build_default_gateway(_MemStore())
+    principal = _P()
+
+    async def _run() -> None:
+        out = await gw.invoke(
+            principal,
+            "kb_search",
+            {"query": "开学", "filter": 'school_id = "other-school"'},
+        )
+        assert captured["school_id"] == principal.school_id
+        assert captured["membership_id"] == principal.membership_id
+        ids = [h["artifact_id"] for h in out["hits"]]
+        assert ids == ["good"]
+        assert out["honest_miss"] is False
 
     asyncio.run(_run())
 

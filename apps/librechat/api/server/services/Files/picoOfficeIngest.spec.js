@@ -19,6 +19,7 @@ describe('pico composer ingest (T-AGENT-PLAIN-V1 F2)', () => {
     expect(INGEST_EXT.has('.md')).toBe(true);
     expect(INGEST_EXT.has('.txt')).toBe(true);
     expect(INGEST_EXT.has('.docx')).toBe(true);
+    expect(INGEST_EXT.has('.pdf')).toBe(true);
     expect(INGEST_EXT.has('.pptx')).toBe(true);
     expect(INGEST_EXT.has('.png')).toBe(false);
   });
