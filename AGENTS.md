@@ -1,5 +1,17 @@
 # Pico agent rules (binding)
 
+> **FROZEN until 2026-09-07。现况只认下面框，其余当索引不当现况。**
+
+```text
+现况: docs/STATE-NOW.md
+冻结令: https://github.com/juanwan99/pico/issues/634
+在飞: https://github.com/juanwan99/pico/issues/646
+禁止: 过程 PR · 新交接长文 · 第二张 stamp-ok · oneflow 仓当真源
+新窗: STATE-NOW → curl tip → #646
+不要从本文件旧「Current dispatch」 / DAY-TASK / #310 / 4xx 文档开干。
+```
+
+
 ## HARD SCOPE — READ FIRST
 
 ```
@@ -13,7 +25,7 @@ OWNER_ORDER: 你只管 pico — permanent; not optional; not overridden by "Phas
 | Read/write **this** repo (`pico`) | Write/PR/CI/merge on **edu-cloud** |
 | Docs, API, UI, orchestrator, tests **in pico** | Implementing edu issuer/modules/frontend |
 | Phase 2/3 **Pico-side** adapters/hooks/docs | Dual AI ledger / dual-run with edu AI |
-| **Read-only** reference to edu AGENTS/OneFlow for workflow patterns | Copying edu ECS/1908x/mcu.asia as if pico owned them |
+| **Read-only** reference to edu AGENTS for product patterns | Copying edu ECS/1908x/mcu.asia as if pico owned them; **`juanwan99/oneflow` archived · not BINDING** |
 | Pico **OneFlow 适配版** (`docs/ONEFLOW.md`) | Pretending full GHCR→UAT auto-prod exists before stage B |
 
 If work needs edu source changes → **stop and say so**; do not open edu.
@@ -89,8 +101,8 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 
 **Truth freeze:** [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md)  
 **What is Pico:** [`docs/WHAT-IS-PICO.md`](docs/WHAT-IS-PICO.md)  
-**Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — tip、门禁。  
-**Memory reset:** [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md) — 错误记忆黑名单 · **单窗 SOLO**。  
+**Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — **唯一现况**（在飞 #646 · 冻结令 #634）。下面目录不当现况。  
+**Memory reset:** [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md) — **本周 ≤3 坑**，禁止加长。  
 **Stage package:** [`docs/STAGE-PACKAGE-MODE.md`](docs/STAGE-PACKAGE-MODE.md) — 单窗阶段包（废默认多窗碎卡）。  
 **Task card format:** [`docs/ONEFLOW.md`](docs/ONEFLOW.md) + [`docs/TASK-CARD-STANDARD.md`](docs/TASK-CARD-STANDARD.md) — Issue 用标准任务卡；对执行窗只贴 [`docs/templates/dispatch-slip.md`](docs/templates/dispatch-slip.md)。禁止 315。禁止用四行短卡当已派。  
 **开工先读：** [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md)（别记错的）· [`docs/TOOLING-CATALOG.md`](docs/TOOLING-CATALOG.md)（工具）。派发条点名手册和坑，不抄全文。执行窗零记忆，调查必须写进 Issue。  
@@ -105,19 +117,19 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 **P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
 **Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
 **24h Standalone AI:** [`docs/STANDALONE-AI-24H.md`](docs/STANDALONE-AI-24H.md) (historical baseline)  
-**Current dispatch:** **单窗 SOLO** · 日卡 [`docs/DAY-TASK-P0-PI-CUTOVER.md`](docs/DAY-TASK-P0-PI-CUTOVER.md) · [#310](https://github.com/juanwan99/pico/issues/310)  
+**Current dispatch:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) · [#646](https://github.com/juanwan99/pico/issues/646)。`DAY-TASK-*` / #310 / #627 **不当现况**。  
 **Kimi legacy:** [`docs/KIMI-AGENT-GAP.md`](docs/KIMI-AGENT-GAP.md) 仅考古/回滚；**产品默认 = Pi**  
 **KA-4:** soft historical [`docs/KA4-SOFT.md`](docs/KA4-SOFT.md) **superseded** · ops: [`docs/OPS-RUNBOOK-STABILIZE.md`](docs/OPS-RUNBOOK-STABILIZE.md)  
 **Skill ADR:** [`docs/ADR-SKILL-CATALOG.md`](docs/ADR-SKILL-CATALOG.md).  
 **Completed foundation sprint:** [`docs/SPRINT-3DAY-PUSH.md`](docs/SPRINT-3DAY-PUSH.md) (COMPLETED).  
 **Completed day task (do not re-open):** [`docs/DAY-TASK-2026-07-30-SKILL-UX.md`](docs/DAY-TASK-2026-07-30-SKILL-UX.md)
 
-Do **not** use `docs/archive/**`, new HANDOFF markdown, or open PR **#121 harness multi-runtime** as task truth.
+Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 `HANDOFF-NEW-WINDOW-2026-08-23.md` 当现况。
 
 ## Product rules
 - **Org:** default **single-window SOLO** — [docs/STAGE-PACKAGE-MODE.md](docs/STAGE-PACKAGE-MODE.md). Old windows 1/2/4 are **duty aliases**, not parallel staffing. See [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md).
 - **Ship steps:** [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. **One window** runs the chain; no multi-issue process OS.
-- **Product goal:** Web WorkBuddy degree (six bars) — [docs/HANDOFF-WB-PI.md](docs/HANDOFF-WB-PI.md).
+- **Product goal:** Web WorkBuddy degree — [docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star。用法 = Grok。
 - **Default runtime:** **Pi** + **DeepSeek**. Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted** (never the goal).
 - **Prod flags:** `PICO_PI_AGENT_RUNTIME=1` default; legacy Kimi only if emergency. Do **not** claim `CLAIM-WB-DEGREE-WEB` until six bars + GitHub evidence.
 - **KA-4 HARD:** `run_agent_loop` / `runner.py` **removed**. Rollback multi-step = redeploy prior tip or legacy flag — not revive loop.
