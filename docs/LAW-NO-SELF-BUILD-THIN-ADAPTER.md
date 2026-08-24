@@ -41,6 +41,7 @@ Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 5. 公网默认 Host Shell / 任意 bash 当能力卖点
 6. 用自研补丁冒充「已经是上游生态」（名实造假）
 7. 复制 edu-core 栈进 Pico 当第二产品
+8. **定向工作流冒充用户**：读正文猜任务、force_agent 自动挂交付 Skill、把 skill/Landing requirement/「必须交 N 个文件」焊进 user prompt（北极星 DIRECTION-NOW §0-star；用法 = Grok）
 
 ---
 

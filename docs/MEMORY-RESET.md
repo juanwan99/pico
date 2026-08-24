@@ -22,13 +22,17 @@ STATUS: BINDING
 | Artifact ID / L0 表给人看 | **否** · 机审退后台 |
 | 双核 Kimi+Pi 真源 | **否** · 默认 Pi + DeepSeek |
 | Dify 门脸终局 | **否** · 不做 |
+| Pico 是办公交件机器人，读「通知/课件」就该写 Word | **否** · **用法 = Grok**：通用 LLM；挂载才办事；没点名不交件。DIRECTION-NOW §0-star |
+| 把 skill / Landing requirement / force_agent 焊进 user prompt | **否** · 系统纪律进 system，老师原文进 user |
+| 「禁定向」只等于禁考题词 | **否** · 也包括禁猜任务、禁自动挂交付 Skill |
 
 ## 有效真源顺序
 
 ```text
 1) 业主当轮书面指令
-2) docs/STATE-NOW.md · 本文件
-3) docs/RCA|PLAN|ACCEPT-HUMAN-DELIVERY-*
-4) 当前活动 Issue（#353 审查）
-5) 聊天（易串仓，不优先）
+2) docs/DIRECTION-NOW.md §0-star（北极星 · 用法 = Grok）
+3) docs/STATE-NOW.md · 本文件
+4) docs/RCA|PLAN|ACCEPT-HUMAN-DELIVERY-*
+5) 当前活动 Issue
+6) 聊天（易串仓，不优先）
 ```
