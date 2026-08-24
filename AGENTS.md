@@ -101,7 +101,7 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 
 **Truth freeze:** [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md)  
 **What is Pico:** [`docs/WHAT-IS-PICO.md`](docs/WHAT-IS-PICO.md)  
-**Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — **唯一现况**（在飞 #646 · 冻结令 #634）。下面目录不当现况。  
+**Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — **唯一现况**（在飞 无 · 执行三刀 · #634）。下面目录不当现况。  
 **Memory reset:** [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md) — **本周 ≤3 坑**，禁止加长。  
 **Stage package:** [`docs/STAGE-PACKAGE-MODE.md`](docs/STAGE-PACKAGE-MODE.md) — 单窗阶段包（废默认多窗碎卡）。  
 **Task card format:** [`docs/ONEFLOW.md`](docs/ONEFLOW.md) + [`docs/TASK-CARD-STANDARD.md`](docs/TASK-CARD-STANDARD.md) — Issue 用标准任务卡；对执行窗只贴 [`docs/templates/dispatch-slip.md`](docs/templates/dispatch-slip.md)。禁止 315。禁止用四行短卡当已派。  
@@ -117,7 +117,7 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 **P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
 **Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
 **24h Standalone AI:** [`docs/STANDALONE-AI-24H.md`](docs/STANDALONE-AI-24H.md) (historical baseline)  
-**Current dispatch:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) · [#646](https://github.com/juanwan99/pico/issues/646)。`DAY-TASK-*` / #310 / #627 **不当现况**。  
+**Current dispatch:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) · 在飞 无。`DAY-TASK-*` / #310 / #627 / 已关 #646 **不当现况**。   
 **Kimi legacy:** [`docs/KIMI-AGENT-GAP.md`](docs/KIMI-AGENT-GAP.md) 仅考古/回滚；**产品默认 = Pi**  
 **KA-4:** soft historical [`docs/KA4-SOFT.md`](docs/KA4-SOFT.md) **superseded** · ops: [`docs/OPS-RUNBOOK-STABILIZE.md`](docs/OPS-RUNBOOK-STABILIZE.md)  
 **Skill ADR:** [`docs/ADR-SKILL-CATALOG.md`](docs/ADR-SKILL-CATALOG.md).  
