@@ -12,8 +12,6 @@ Used by:
 
 from __future__ import annotations
 
-import json
-import re
 from typing import Any
 
 from pico_orchestrator.delivery_policy import (
@@ -21,6 +19,7 @@ from pico_orchestrator.delivery_policy import (
     count_user_artifacts,
     is_bookkeeping_title,
     looks_like_clarification,
+    looks_like_delivery_claim,
 )
 from pico_orchestrator.document_generators import office_shell_reason
 
@@ -72,10 +71,7 @@ async def apply_delivery_gate(
     from app.db import ArtifactRow, TaskRow, append_event
 
     # Lazy imports keep this module out of the openai_compat <-> run_service cycle.
-    from app.openai_compat import (
-        _prior_artifact_titles_for_principal,
-        _wants_deliverable_document,
-    )
+    from app.openai_compat import _prior_artifact_titles_for_principal
 
     run_id = run.id
 
@@ -95,6 +91,10 @@ async def apply_delivery_gate(
 
     prompt_for_plan = user_prompt or run.prompt or ""
     plan = analyze_delivery(prompt_for_plan, prior_artifact_titles=prior_titles)
+    from dataclasses import replace as _dc_replace_plan
+
+    # Never fail-closed from a user-prompt word list. Observability only.
+    plan = _dc_replace_plan(plan, min_artifacts=0, force_agent=False)
 
     art_rows = await session.execute(
         select(
@@ -161,144 +161,18 @@ async def apply_delivery_gate(
             commit=False,
         )
 
-    # S2.2 / landing: deliverable skill without a real user-visible file.
-    # Office/HTML binary required only when the user asked for those types;
-    # Markdown / .txt / generic workspace files are valid office deliverables
-    # (O1 long-material notes must not fail solely because materials mention docx).
-    # When min_artifacts>=1 (incl. multi), zero real files must never stay succeeded.
-    skill_snapshot = None
-    try:
-        usage = json.loads(run.token_usage_json or "{}")
-        skill_snapshot = usage.get("skill_snapshot")
-    except (TypeError, ValueError):
-        skill_snapshot = None
-    skill_name = (
-        skill_snapshot.get("name") if isinstance(skill_snapshot, dict) else None
-    )
+    # Fail-closed only when the assistant claimed a file landed and none did.
+    # Do not read 课件/通知/Word tables out of the user prompt.
     if (
-        skill_name in {"skill.deliverable", "skill.engineering_delivery"}
-        and status == "succeeded"
-        and (
-            _wants_deliverable_document(prompt_for_plan)
-            or plan.runnable_html
-            or plan.min_artifacts >= 1
-            or plan.force_agent
-        )
-        and (
-            plan.min_artifacts <= 1
-            or user_art_count == 0
-        )
-        and not (
-            plan.multi_deliverable
-            and user_art_count > 0
-            and user_art_count < plan.min_artifacts
-        )
-    ):
-        # multi short-delivery (1 of N) is handled by delivery_min_artifacts below;
-        # this block catches chat-only / zero-byte "success".
-        wants_office_binary = bool(
-            re.search(
-                r"(?:生成|重新生成|下载|可下载|导出|交付|做成|输出).{0,40}"
-                r"(?:Word|word|docx|PPT|pptx|html|幻灯片|课件|网页)",
-                prompt_for_plan,
-                re.IGNORECASE,
-            )
-        ) or bool(plan.runnable_html)
-        has_real_file = False
-        for kind, title, byte_size, _inline, _enc in art_list:
-            title_s = str(title or "")
-            kind_s = str(kind or "").lower()
-            if is_bookkeeping_title(title_s):
-                continue
-            lower = title_s.lower()
-            size_ok = (byte_size or 0) > 0
-            if wants_office_binary:
-                if kind_s in {"docx", "html", "htm", "pptx"} and size_ok:
-                    has_real_file = True
-                    break
-                if lower.endswith((".docx", ".html", ".htm", ".pptx")) and size_ok:
-                    has_real_file = True
-                    break
-            else:
-                # Any non-bookkeeping titled artifact with bytes (md/txt/file/doc…).
-                if size_ok and title_s.strip():
-                    has_real_file = True
-                    break
-        if not has_real_file:
-            # Clarification / awaiting-user: honest non-failure (not chat-only claim).
-            if looks_like_clarification(final_text or ""):
-                await append_event(
-                    session,
-                    run_id,
-                    "delivery.summary",
-                    {
-                        "status": "succeeded",
-                        "artifact_count": user_art_count,
-                        "min_required": plan.min_artifacts,
-                        "ok": False,
-                        "awaiting_user": True,
-                        "reason": "clarification",
-                        "note": "Model asked clarifying questions; not a delivery failure.",
-                    },
-                    commit=False,
-                )
-            else:
-                run.status = "failed"
-                if wants_office_binary:
-                    # P2 truthfulness: if other-format files exist, say so —
-                    # never claim "no downloadable file" while files are present.
-                    has_any_file = any(
-                        not is_bookkeeping_title(str(title or ""))
-                        and (byte_size or 0) > 0
-                        for _kind, title, byte_size, _inline, _enc in art_list
-                    )
-                    if has_any_file:
-                        run.error = (
-                            "未生成要求的 Word/HTML 文件（本轮产物为其他格式，可下载）。"
-                            "请用「生成可下载 Word/HTML」的专用工具重新生成；"
-                            "其他格式不能当作 Word/HTML 交付。"
-                        )
-                    else:
-                        run.error = (
-                            "交件未生成可下载的真文件（HTML/Word/PPT）。"
-                            "请点「再跑一次」或重新描述「生成可下载 Word/HTML」；"
-                            "纯文字摘要不能当作文件交付。"
-                        )
-                else:
-                    run.error = (
-                        "交件未写入可下载文件。请用工具落盘后再交；"
-                        "纯聊天复述不能当作文件交付。"
-                    )
-                await append_event(
-                    session,
-                    run_id,
-                    "run.status",
-                    {
-                        "status": "failed",
-                        "reason": "deliverable_missing_artifact",
-                        "user_message": run.error,
-                        "runtime": "fail-closed",
-                    },
-                    commit=False,
-                )
-
-    # G1: fail-closed min count only for true multi/pipeline intent.
-    # Single-unit delivery with ≥1 user-visible file must not fail solely
-    # because a heuristic expected more content-sections-as-files.
-    # Clarification turns (awaiting user) must not fail on min either.
-    fail_closed_min = (
-        run.status == "succeeded"
-        and plan.min_artifacts > 0
-        and user_art_count < plan.min_artifacts
-        and (multi_or_pipeline or user_art_count == 0)
+        status == "succeeded"
+        and user_art_count == 0
+        and looks_like_delivery_claim(final_text or "")
         and not looks_like_clarification(final_text or "")
-    )
-    if fail_closed_min:
+    ):
         run.status = "failed"
         run.error = (
-            f"工程交付未满足多产物要求：需要至少 {plan.min_artifacts} 个独立文件，"
-            f"本轮仅 {user_art_count} 个。"
-            "请分文件写入（禁止单长文多标题冒充），再跑一次。"
+            "本轮声称已交文件，但没有可下载的真文件。"
+            "请用工具落盘后再交；纯聊天复述不能当作文件交付。"
         )
         await append_event(
             session,
@@ -306,15 +180,12 @@ async def apply_delivery_gate(
             "run.status",
             {
                 "status": "failed",
-                "reason": "delivery_min_artifacts",
-                "min_required": plan.min_artifacts,
-                "artifact_count": user_art_count,
+                "reason": "deliverable_missing_artifact",
                 "user_message": run.error,
                 "runtime": "fail-closed",
             },
             commit=False,
         )
-        # else path: keep succeeded; delivery.summary.ok already True for single-unit ≥1
 
     # Word/PPT must open with real body (not a three-line XML zip).
     if run.status == "succeeded" and not looks_like_clarification(final_text or ""):

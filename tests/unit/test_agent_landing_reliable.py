@@ -59,7 +59,7 @@ async def test_finalize_markdown_delivery_chat_only_fails(tmp_path, monkeypatch)
     task_id = new_id()
     run_id = new_id()
     prompt = (
-        "请整理成一份可下载的 Markdown 文件（建议 landing-notes.md），"
+        "请做成可下载 Word（建议 landing-notes.docx），"
         "本地打开能用。不要只聊天复述。"
     )
     async with factory() as session:
@@ -93,7 +93,7 @@ async def test_finalize_markdown_delivery_chat_only_fails(tmp_path, monkeypatch)
     await _finalize_run(
         run_id,
         status="succeeded",
-        final_text="文件 landing-notes.md 已生成，请下载。",  # chat-only claim
+        final_text="文件 landing-notes.docx 已生成，请下载。",  # chat-only claim
         task_id=task_id,
         user_prompt=prompt,
     )

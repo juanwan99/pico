@@ -110,18 +110,18 @@ async def test_finalize_single_unit_one_file_not_fail_closed(tmp_path, monkeypat
 
 @pytest.mark.asyncio
 async def test_finalize_true_multi_short_delivery_fail_closed(tmp_path, monkeypatch) -> None:
-    """True multi intent + fewer files than min → fail-closed (delivery_min_artifacts)."""
-    from app.db import ArtifactRow, EventRow, RunRow, TaskRow, new_id
+    """Chat-only file claim with zero artifacts → fail-closed."""
+    from app.db import EventRow, RunRow, TaskRow, new_id
     from app.openai_compat import _finalize_run
 
     factory = await _boot_db(tmp_path, monkeypatch, "finalize-multi.db")
     task_id = new_id()
     run_id = new_id()
     prompt = (
-        "请分别交付三个独立可下载文件：\n"
-        "1) 活动规则说明\n"
-        "2) 志愿者排班表\n"
-        "3) 居民通知短讯合集\n"
+        "请分别交付 3 个独立 HTML 文件：\n"
+        "1) 活动规则说明.html\n"
+        "2) 志愿者排班表.html\n"
+        "3) 居民通知短讯合集.html\n"
         "禁止合并成一个文件。"
     )
     async with factory() as session:
@@ -142,26 +142,12 @@ async def test_finalize_true_multi_short_delivery_fail_closed(tmp_path, monkeypa
                 model="test-model",
             )
         )
-        # Only one user file — short of min ≥3.
-        body = b"# rules only\n"
-        session.add(
-            ArtifactRow(
-                id=new_id(),
-                task_id=task_id,
-                run_id=run_id,
-                kind="file",
-                title="rules.md",
-                inline=body.decode(),
-                content_encoding="utf8",
-                byte_size=len(body),
-            )
-        )
         await session.commit()
 
     await _finalize_run(
         run_id,
         status="succeeded",
-        final_text="先交了规则说明。",
+        final_text="文件 rules.md 已生成，请下载。",
         task_id=task_id,
         user_prompt=prompt,
     )
@@ -171,7 +157,7 @@ async def test_finalize_true_multi_short_delivery_fail_closed(tmp_path, monkeypa
         assert run is not None
         assert run.status == "failed"
         assert run.error is not None
-        assert "独立文件" in run.error or "多产物" in run.error
+        assert "声称已交文件" in run.error or "落盘" in run.error
         status_events = list(
             (
                 await session.execute(
@@ -185,7 +171,7 @@ async def test_finalize_true_multi_short_delivery_fail_closed(tmp_path, monkeypa
             .all()
         )
         reasons = [e.payload.get("reason") for e in status_events if e.payload]
-        assert "delivery_min_artifacts" in reasons
+        assert "deliverable_missing_artifact" in reasons
 
 
 @pytest.mark.asyncio
@@ -260,10 +246,10 @@ async def test_finalize_true_multi_full_delivery_succeeds(tmp_path, monkeypatch)
     task_id = new_id()
     run_id = new_id()
     prompt = (
-        "请分别交付三个独立可下载文件：\n"
-        "1) 活动规则说明\n"
-        "2) 志愿者排班表\n"
-        "3) 居民通知短讯合集\n"
+        "请分别交付 3 个独立 HTML 文件：\n"
+        "1) 活动规则说明.html\n"
+        "2) 志愿者排班表.html\n"
+        "3) 居民通知短讯合集.html\n"
         "禁止合并成一个文件。"
     )
     titles = ["rules.md", "schedule.md", "notices.md"]

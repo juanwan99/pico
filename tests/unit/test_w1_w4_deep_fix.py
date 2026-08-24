@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 
 def test_sticky_delivery_continuation_forces_agent() -> None:
-    """A2: same-session short answer after delivery ask stays force_agent + min≥1."""
+    """T-GROK-PATH: prior-turn HTML ask must not stick onto a short reply."""
     from app.openai_compat import _resolve_skill_for_prompt, _sticky_delivery_plan
 
     history = [
@@ -36,17 +36,15 @@ def test_sticky_delivery_continuation_forces_agent() -> None:
             ),
         },
     ]
-    # Short clarification answer — alone would look like chat.
     reply = "Web 单页就好，积分用连续天数，开始做吧。"
     plan = _sticky_delivery_plan(reply, history)
-    assert plan.force_agent is True
-    assert plan.min_artifacts >= 1
+    assert plan.force_agent is False
+    assert plan.min_artifacts == 0
 
     skill, plan2 = _resolve_skill_for_prompt(reply, None, history=history)
-    assert plan2.force_agent is True
-    assert plan2.min_artifacts >= 1
-    assert skill is not None
-    assert skill.get("tools")  # pico-agent path
+    assert plan2.force_agent is False
+    assert plan2.min_artifacts == 0
+    assert skill is None
 
 
 def test_sticky_does_not_force_pure_casual() -> None:
@@ -174,7 +172,7 @@ async def test_finalize_chat_only_claim_still_fails(tmp_path, monkeypatch) -> No
 
     task_id = new_id()
     run_id = new_id()
-    prompt = "请整理成一份可下载的 Markdown 文件 notes.md，本地打开能用。"
+    prompt = "请做成可下载 Word，notes.docx，本地打开能用。"
     async with factory() as session:
         session.add(
             TaskRow(
@@ -251,7 +249,7 @@ async def test_fail_closed_status_event_carries_user_message(
 
     task_id = new_id()
     run_id = new_id()
-    prompt = "请整理成一份可下载的 Markdown 文件 notes.md，本地打开能用。"
+    prompt = "请做成可下载 Word，notes.docx，本地打开能用。"
     async with factory() as session:
         session.add(
             TaskRow(
@@ -314,9 +312,9 @@ async def test_fail_closed_status_event_carries_user_message(
 async def test_apply_delivery_gate_min_artifacts_fail_closed(
     tmp_path, monkeypatch
 ) -> None:
-    """#405: shared gate fails closed on multi-deliverable under-delivery (1 of 3)."""
+    """Gate fails closed on a chat-only file claim with zero artifacts."""
     from app import db as db_mod
-    from app.db import ArtifactRow, EventRow, RunRow, TaskRow, new_id
+    from app.db import EventRow, RunRow, TaskRow, new_id
     from app.delivery_gate import apply_delivery_gate
     from app.settings import get_settings
 
@@ -329,11 +327,8 @@ async def test_apply_delivery_gate_min_artifacts_fail_closed(
     factory = db_mod.session_factory()
 
     prompt = (
-        "【复盘链】请把下面这段「季度复盘会议转写」一次做完一整条交付链："
-        "①先写150字要点；②生成正式复盘文档（可下载Markdown，含成绩/不足/改进措施三节）；"
-        "③提取整改清单（责任人+截止日+勾选框）；④写成可复制的执行通知文案。"
+        "请分别交付 3 个独立 HTML 文件：复盘.html 整改清单.html 执行通知.html。"
         "材料：本季度新签客户18家但续费率降到71%。"
-        "请交付真实可下载文件（至少：复盘+整改清单）。"
     )
     task_id = new_id()
     run_id = new_id()
@@ -363,20 +358,6 @@ async def test_apply_delivery_gate_min_artifacts_fail_closed(
                 ),
             )
         )
-        # Only ONE real html artifact — plan requires 3 → must fail closed.
-        session.add(
-            ArtifactRow(
-                id=new_id(),
-                task_id=task_id,
-                run_id=run_id,
-                kind="html",
-                title="动物细胞结构标认.html",
-                inline="<h1>动物细胞</h1>",
-                content_encoding="utf8",
-                content_sha256="a" * 64,
-                byte_size=3453,
-            )
-        )
         await session.commit()
 
     async with factory() as session:
@@ -385,7 +366,7 @@ async def test_apply_delivery_gate_min_artifacts_fail_closed(
         await apply_delivery_gate(
             session,
             run,
-            final_text="完成。文件：动物细胞结构标认.html，可下载。",
+            final_text="文件已生成，请下载。",
             user_prompt=prompt,
         )
         await session.commit()
@@ -394,7 +375,7 @@ async def test_apply_delivery_gate_min_artifacts_fail_closed(
         run = await session.get(RunRow, run_id)
         assert run is not None
         assert run.status == "failed"
-        assert run.error and "需要至少 4 个独立文件" in run.error
+        assert run.error and "声称已交文件" in run.error
         failed_events = [
             e
             for e in (
@@ -409,9 +390,7 @@ async def test_apply_delivery_gate_min_artifacts_fail_closed(
         ]
         assert failed_events
         event = failed_events[-1]
-        assert event.payload.get("reason") == "delivery_min_artifacts"
-        assert event.payload.get("min_required") == 4
-        assert event.payload.get("artifact_count") == 1
+        assert event.payload.get("reason") == "deliverable_missing_artifact"
         assert event.payload.get("user_message") == run.error
         summary = [
             e
@@ -429,12 +408,11 @@ async def test_apply_delivery_gate_min_artifacts_fail_closed(
 
 @pytest.mark.asyncio
 async def test_execute_run_applies_delivery_gate(tmp_path, monkeypatch) -> None:
-    """#405: retry / REST / automation path (_execute_run) must not bypass the
-    fail-closed delivery gate — under-delivery flips succeeded to failed."""
+    """Retry / REST path must apply the same chat-only-claim fail-closed gate."""
     from types import SimpleNamespace
 
     from app import db as db_mod
-    from app.db import ArtifactRow, EventRow, RunRow, TaskRow, new_id
+    from app.db import EventRow, RunRow, TaskRow, new_id
     from app.run_service import _execute_run
     from app.settings import get_settings
     from pico_orchestrator import runtime as pico_runtime
@@ -449,11 +427,8 @@ async def test_execute_run_applies_delivery_gate(tmp_path, monkeypatch) -> None:
     factory = db_mod.session_factory()
 
     prompt = (
-        "【复盘链】请把下面这段「季度复盘会议转写」一次做完一整条交付链："
-        "①先写150字要点；②生成正式复盘文档（可下载Markdown，含成绩/不足/改进措施三节）；"
-        "③提取整改清单（责任人+截止日+勾选框）；④写成可复制的执行通知文案。"
-        "材料：本季度新签客户18家但续费率降到71%。"
-        "请交付真实可下载文件（至少：复盘+整改清单）。完成后只用人话说明。"
+        "请分别交付 3 个独立 HTML 文件：复盘.html 整改清单.html 执行通知.html。"
+        "材料：本季度新签客户18家但续费率降到71%。完成后只用人话说明。"
     )
     task_id = new_id()
     run_id = new_id()
@@ -483,26 +458,12 @@ async def test_execute_run_applies_delivery_gate(tmp_path, monkeypatch) -> None:
                 ),
             )
         )
-        # One real artifact pre-inserted as the "agent output" — needs 3.
-        session.add(
-            ArtifactRow(
-                id=new_id(),
-                task_id=task_id,
-                run_id=run_id,
-                kind="html",
-                title="动物细胞结构标认.html",
-                inline="<h1>动物细胞</h1>",
-                content_encoding="utf8",
-                content_sha256="b" * 64,
-                byte_size=3453,
-            )
-        )
         await session.commit()
 
     async def fake_runtime(**kwargs):
         return RunResult(
             status="succeeded",
-            final_text="完成。文件：动物细胞结构标认.html，在结果区下载/打开即可。",
+            final_text="文件已生成，请下载。",
         )
 
     monkeypatch.setattr(pico_runtime, "run_agent_runtime", fake_runtime)
@@ -513,8 +474,8 @@ async def test_execute_run_applies_delivery_gate(tmp_path, monkeypatch) -> None:
     async with factory() as session:
         run = await session.get(RunRow, run_id)
         assert run is not None
-        assert run.status == "failed", "retry path must fail closed on under-delivery"
-        assert run.error and "需要至少 4 个独立文件" in run.error
+        assert run.status == "failed", "retry path must fail closed on a file claim with no file"
+        assert run.error and "声称已交文件" in run.error
         failed_events = [
             e
             for e in (
@@ -528,7 +489,7 @@ async def test_execute_run_applies_delivery_gate(tmp_path, monkeypatch) -> None:
             if e.payload and e.payload.get("status") == "failed"
         ]
         assert any(
-            e.payload.get("reason") == "delivery_min_artifacts"
+            e.payload.get("reason") == "deliverable_missing_artifact"
             and e.payload.get("user_message") == run.error
             for e in failed_events
         )

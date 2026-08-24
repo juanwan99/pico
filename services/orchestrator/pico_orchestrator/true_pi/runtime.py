@@ -31,7 +31,6 @@ from pico_orchestrator.true_pi.client import (
 from pico_orchestrator.true_pi.config import (
     ALLOWED_GATEWAY_TOOLS,
     RUNTIME_LABEL,
-    history_n,
     persist_session_dir,
     plan_mode_extension_path,
     session_root,
@@ -103,6 +102,10 @@ async def run_true_pi_agent(
     if caps.allowed_tools is not None:
         allowed = [t for t in allowed if t in set(caps.allowed_tools)]
     gateway = gateway.restricted_to(allowed)
+    system_text = pico_system_text(
+        skill=str(getattr(caps, "skill_instruction", "") or ""),
+        system_override=str(getattr(caps, "system_prompt", "") or ""),
+    )
 
     tool_server: ToolServer | None = None
     client: TruePiRpcClient | None = None
@@ -188,6 +191,7 @@ async def run_true_pi_agent(
                 # land (T-AGENT-PLAIN-V1 live hang).
                 plan_flag=False,
                 spawn_cwd=sess,
+                system_prompt_text=system_text,
                 env={
                     "DEEPSEEK_API_KEY": provider.api_key
                     if provider.name == "deepseek"
@@ -219,6 +223,7 @@ async def run_true_pi_agent(
 
         skill = (caps.skill_instruction or "").strip()
         # Workbench Pi session tree holds history. Do not paste N turns as text.
+        # T-GROK-PATH: prompt() is the teacher original only. System lives in SYSTEM.md.
         tree_history = history
         if persist_pi_session and persist_session_dir(
             school_id=str(getattr(principal, "school_id", "") or ""),
@@ -516,6 +521,19 @@ async def run_true_pi_agent(
                 await tool_server.stop()
 
 
+def pico_system_text(*, skill: str = "", system_override: str = "") -> str:
+    """Pi SYSTEM.md body. Never the teacher turn; never a Landing-requirement weld."""
+    override = str(system_override or "").strip()
+    skill_block = str(skill or "").strip() or "(none)"
+    if override:
+        if skill_block and skill_block != "(none)":
+            return f"{override}\n\n{skill_block}"
+        return override
+    from pico_orchestrator.pi_runtime import _load_system_prompt
+
+    return _load_system_prompt(skill_block)
+
+
 def _compose_prompt(
     *,
     prompt: str,
@@ -525,63 +543,13 @@ def _compose_prompt(
     allowed_tools: list[str],
     system_prompt: str = "",
 ) -> str:
-    """Build single prompt for true Pi: tools + skill + minimal history + user."""
-    parts: list[str] = []
-    override = str(system_prompt or "").strip()
-    if override:
-        parts.append(override)
-        parts.append(
-            "Use only the registered tools listed below. "
-            "This chat's files belong to this conversation, not a long-term cabinet.\n"
-            f"Allowed tools: {', '.join(allowed_tools)}"
-        )
-    else:
-        parts.append(
-            "# Pico true-Pi harness\n"
-            "You are Pico. Use only the registered tools listed below. "
-            "No host shell. Deliver real files via write/generate tools when asked.\n"
-            f"Allowed tools: {', '.join(allowed_tools)}\n"
-            "When the question needs current/public facts, call web_search and "
-            "put clickable markdown sources in the final reply. "
-            "When the user pastes a specific http(s) URL, call web_fetch. "
-            "If retrieval returns honest_miss / 未检索, say so — never invent citations. "
-            "Do not fetch intranet, localhost, or cloud metadata."
-        )
-    if skill:
-        parts.append(f"## Skill instruction\n{skill}")
-    n = history_n()
-    if history and n > 0:
-        # Minimal history: last N user/assistant text turns (not full session tree).
-        hist_lines: list[str] = []
-        selected = [
-            item
-            for item in history
-            if isinstance(item, dict)
-            and item.get("role") in {"user", "assistant"}
-            and item.get("content")
-        ][-n:]
-        for item in selected:
-            role = str(item.get("role"))
-            content = str(item.get("content"))[:2000]
-            hist_lines.append(f"{role}: {content}")
-        if hist_lines:
-            parts.append("## Recent conversation\n" + "\n".join(hist_lines))
-    parts.append(f"## User request\n{prompt}")
-    if min_arts > 0:
-        parts.append(
-            f"## Landing requirement\n"
-            f"Write at least {min_arts} downloadable file(s) using "
-            "workspace_write_file or generate_*_document. "
-            "Chat-only claims are not delivery.\n"
-            "Keep HTML/DOCX/PPTX source compact (target under 10KB per file): "
-            "streaming a huge body token-by-token over the RPC pipe is slow and "
-            "memory-heavy. A focused, well-crafted page beats a bloated one.\n"
-            "Your FINAL reply is shown directly to the user in the chat. Output "
-            "it in the user's language (Chinese for zh requests) and ONLY a "
-            "clean delivery summary — no internal reasoning, no narration of "
-            "tool calls, no schema/argument/verify-process talk."
-        )
-    return "\n\n".join(parts)
+    """User message for true Pi ``prompt()``: teacher original only.
+
+    Skill / landing / history / tool lists are system or session-tree, not user.
+    Signature kept so existing callers/tests still pass kwargs.
+    """
+    del skill, min_arts, history, allowed_tools, system_prompt
+    return str(prompt or "")
 
 
 async def _failed(

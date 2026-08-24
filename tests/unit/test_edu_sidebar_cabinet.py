@@ -81,7 +81,7 @@ def test_resolve_allowed_tools_empty_intersection_keeps_request() -> None:
 
 
 def test_true_pi_compose_uses_edu_system_override() -> None:
-    from pico_orchestrator.true_pi.runtime import _compose_prompt
+    from pico_orchestrator.true_pi.runtime import _compose_prompt, pico_system_text
 
     text = _compose_prompt(
         prompt="你能看到当前界面吗",
@@ -91,9 +91,13 @@ def test_true_pi_compose_uses_edu_system_override() -> None:
         allowed_tools=["generate_html_document"],
         system_prompt="附属，不是用户要求\n{\"page\":{\"title\":\"工作台\"}}",
     )
-    assert "附属，不是用户要求" in text
-    assert "工作台" in text
-    assert "You are Pico. Use only the registered tools" not in text
+    assert text == "你能看到当前界面吗"
+    assert "附属，不是用户要求" not in text
+    system = pico_system_text(
+        system_override="附属，不是用户要求\n{\"page\":{\"title\":\"工作台\"}}"
+    )
+    assert "附属，不是用户要求" in system
+    assert "工作台" in system
 
 
 if __name__ == "__main__":

@@ -935,7 +935,6 @@ async def test_finalize_is_idempotent_and_terminal_status_is_sticky(
         )
         assert {(row.kind, row.title) for row in artifacts} == {
             ("file", "stable.txt"),
-            ("doc", "回复摘要"),
         }
 
         artifact_events = list(
@@ -950,7 +949,7 @@ async def test_finalize_is_idempotent_and_terminal_status_is_sticky(
             .scalars()
             .all()
         )
-        assert len(artifact_events) == 2
+        assert len(artifact_events) == 1
         assert {event.payload["artifact_id"] for event in artifact_events} == {
             artifact.id for artifact in artifacts
         }
@@ -1131,7 +1130,6 @@ def test_finalize_paths_expose_identical_run_and_artifact_contract(
     artifacts = detail.json()["artifacts"]
     assert {(item["kind"], item["title"]) for item in artifacts} == {
         ("file", "report.csv"),
-        ("doc", "回复摘要"),
     }
 
     file_artifact = next(item for item in artifacts if item["kind"] == "file")
@@ -1170,7 +1168,6 @@ def test_finalize_paths_expose_identical_run_and_artifact_contract(
     ]
     assert {(event["payload"]["kind"], event["payload"]["title"]) for event in artifact_events} == {
         ("file", "report.csv"),
-        ("doc", "回复摘要"),
     }
 
     outsider = _headers(client, f"outsider-{stream}")
