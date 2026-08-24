@@ -22,6 +22,37 @@ from pico_orchestrator.delivery_policy import (
     is_bookkeeping_title,
     looks_like_clarification,
 )
+from pico_orchestrator.document_generators import office_shell_reason
+
+
+def _office_shell_failure(art_list: list[tuple[Any, ...]]) -> str | None:
+    """If every docx or every pptx on this run is an empty shell, fail closed."""
+    from app.artifact_store import decode_artifact_payload
+
+    by_ext: dict[str, list[str | None]] = {".docx": [], ".pptx": []}
+    for kind, title, _byte_size, inline, encoding in art_list:
+        title_s = str(title or "")
+        if is_bookkeeping_title(title_s):
+            continue
+        kind_s = str(kind or "").lower()
+        lower = title_s.lower()
+        ext = ""
+        if kind_s == "docx" or lower.endswith(".docx"):
+            ext = ".docx"
+        elif kind_s == "pptx" or lower.endswith(".pptx"):
+            ext = ".pptx"
+        else:
+            continue
+        try:
+            raw = decode_artifact_payload(inline, encoding)
+        except Exception:  # noqa: BLE001 — treat corrupt as a shell
+            by_ext[ext].append("交件损坏，打不开。")
+            continue
+        by_ext[ext].append(office_shell_reason(raw, ext))
+    for ext, reasons in by_ext.items():
+        if reasons and all(reasons):
+            return next(r for r in reasons if r)
+    return None
 
 
 async def apply_delivery_gate(
@@ -66,17 +97,23 @@ async def apply_delivery_gate(
     plan = analyze_delivery(prompt_for_plan, prior_artifact_titles=prior_titles)
 
     art_rows = await session.execute(
-        select(ArtifactRow.kind, ArtifactRow.title, ArtifactRow.byte_size).where(
-            ArtifactRow.run_id == run_id
-        )
+        select(
+            ArtifactRow.kind,
+            ArtifactRow.title,
+            ArtifactRow.byte_size,
+            ArtifactRow.inline,
+            ArtifactRow.content_encoding,
+        ).where(ArtifactRow.run_id == run_id)
     )
     art_list = list(art_rows.all())
     titles = [
         str(title or "")
-        for _kind, title, _bs in art_list
+        for _kind, title, _bs, _inline, _enc in art_list
         if title and not is_bookkeeping_title(str(title))
     ]
-    user_art_count = count_user_artifacts(art_list)
+    user_art_count = count_user_artifacts(
+        [(kind, title, byte_size) for kind, title, byte_size, _inline, _enc in art_list]
+    )
 
     status = run.status
     # G5 observability: machine-readable delivery summary (always, when we have a plan).
@@ -168,7 +205,7 @@ async def apply_delivery_gate(
             )
         ) or bool(plan.runnable_html)
         has_real_file = False
-        for kind, title, byte_size in art_list:
+        for kind, title, byte_size, _inline, _enc in art_list:
             title_s = str(title or "")
             kind_s = str(kind or "").lower()
             if is_bookkeeping_title(title_s):
@@ -213,7 +250,7 @@ async def apply_delivery_gate(
                     has_any_file = any(
                         not is_bookkeeping_title(str(title or ""))
                         and (byte_size or 0) > 0
-                        for _kind, title, byte_size in art_list
+                        for _kind, title, byte_size, _inline, _enc in art_list
                     )
                     if has_any_file:
                         run.error = (
@@ -278,3 +315,22 @@ async def apply_delivery_gate(
             commit=False,
         )
         # else path: keep succeeded; delivery.summary.ok already True for single-unit ≥1
+
+    # Word/PPT must open with real body (not a three-line XML zip).
+    if run.status == "succeeded" and not looks_like_clarification(final_text or ""):
+        shell_reason = _office_shell_failure(art_list)
+        if shell_reason:
+            run.status = "failed"
+            run.error = shell_reason
+            await append_event(
+                session,
+                run_id,
+                "run.status",
+                {
+                    "status": "failed",
+                    "reason": "office_body_too_thin",
+                    "user_message": run.error,
+                    "runtime": "fail-closed",
+                },
+                commit=False,
+            )

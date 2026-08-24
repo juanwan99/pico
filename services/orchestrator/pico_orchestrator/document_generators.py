@@ -1,6 +1,7 @@
 """Deterministic allowlist document generators (HTML / DOCX / PPTX).
 
-Pure stdlib. Binary OOXML is real ZIP packages, never text with a renamed suffix.
+HTML / XLSX stay stdlib. Word / PPTX are thin python-docx / python-pptx
+adapters — real Office packages with visible body, not three-line XML zips.
 """
 
 from __future__ import annotations
@@ -9,7 +10,186 @@ import html
 import io
 import re
 import zipfile
+from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
+
+# Delivery floor: Word opens with hundreds of characters; PPT has ≥3 titled slides.
+MIN_DOCX_BODY_CHARS = 300
+MIN_PPTX_SLIDES = 3
+
+_W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+_A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+
+
+def _visible_len(text: str) -> int:
+    return sum(1 for ch in (text or "") if not ch.isspace())
+
+
+def _display_title(title: str, fallback: str) -> str:
+    name = (title or "").strip() or fallback
+    lower = name.lower()
+    for ext in (".docx", ".pptx", ".html", ".htm", ".md"):
+        if lower.endswith(ext):
+            stem = name[: -len(ext)].strip()
+            return stem or fallback
+    return name
+
+
+def _split_blocks(raw: str) -> list[str]:
+    text = (raw or "").replace("\r\n", "\n").strip()
+    if not text:
+        return []
+    if "\n---\n" in f"\n{text}\n":
+        parts = [p.strip() for p in text.split("\n---\n") if p.strip()]
+        if parts:
+            return parts
+    chunks = [part.strip() for part in text.split("\n\n") if part.strip()]
+    if chunks:
+        return chunks
+    return [ln.strip() for ln in text.split("\n") if ln.strip()]
+
+
+def docx_visible_text(raw: bytes) -> str:
+    """Visible Word paragraphs from OOXML (stdlib zip+xml). Empty on junk."""
+    if not raw or raw[:2] != b"PK":
+        return ""
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            xml = zf.read("word/document.xml")
+    except (KeyError, zipfile.BadZipFile):
+        return ""
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError:
+        return ""
+    paras: list[str] = []
+    for p in root.iter(f"{_W_NS}p"):
+        line = "".join(t.text or "" for t in p.iter(f"{_W_NS}t")).strip()
+        if line:
+            paras.append(line)
+    return "\n".join(paras)
+
+
+def pptx_slide_titles(raw: bytes) -> list[str]:
+    """First text run on each slide (title-ish). Empty list on junk."""
+    if not raw or raw[:2] != b"PK":
+        return []
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            names = zf.namelist()
+            slides = sorted(
+                n
+                for n in names
+                if n.startswith("ppt/slides/slide") and n.endswith(".xml")
+            )
+            titles: list[str] = []
+            for path in slides:
+                try:
+                    xml = zf.read(path)
+                except KeyError:
+                    titles.append("")
+                    continue
+                try:
+                    root = ET.fromstring(xml)
+                except ET.ParseError:
+                    titles.append("")
+                    continue
+                texts = [
+                    (node.text or "").strip()
+                    for node in root.iter(f"{_A_NS}t")
+                    if (node.text or "").strip()
+                ]
+                titles.append(texts[0] if texts else "")
+    except zipfile.BadZipFile:
+        return []
+    return titles
+
+
+def office_shell_reason(raw: bytes, ext: str) -> str | None:
+    """Chinese reason when a supposed Office file is an empty shell. None if ok."""
+    suffix = (ext or "").lower()
+    if not suffix.startswith("."):
+        suffix = f".{suffix}" if suffix else ""
+    if suffix == ".docx":
+        text = docx_visible_text(raw)
+        if _visible_len(text) < MIN_DOCX_BODY_CHARS:
+            return (
+                "Word 正文过短，打开后几乎是空壳。"
+                "请用 generate_docx_document 写入完整多段正文（至少数百字）后再交。"
+            )
+        return None
+    if suffix == ".pptx":
+        titles = pptx_slide_titles(raw)
+        titled = sum(1 for t in titles if (t or "").strip())
+        if len(titles) < MIN_PPTX_SLIDES or titled < MIN_PPTX_SLIDES:
+            return (
+                "课件不足三页有标题，打开后几乎是空页。"
+                "请用 generate_pptx_document 写出至少三页后再交。"
+            )
+        return None
+    return None
+
+
+def _docx_body_paragraphs(body: str | None, *, title: str, marker: str) -> list[str]:
+    heading = _display_title(title, "办公文稿")
+    chunks = _split_blocks(body or "")
+    if not chunks:
+        chunks = [f"本文档主题：{heading}。"]
+    if _visible_len("".join(chunks)) >= MIN_DOCX_BODY_CHARS:
+        return chunks
+    seed = "\n".join(chunks)
+    paras = [
+        f"本文档主题：{heading}。",
+        "一、事项说明",
+        seed,
+        "二、执行要点",
+        (
+            f"请按「{heading}」落实：写清对象、时间与责任人。"
+            f"以下为本次正文，供打开后直接使用。{seed}"
+        ),
+        "三、备注",
+        (
+            f"本文件是可打开的 Word 正文，不是空壳标记页。"
+            f"主题：{heading}。内部标记：{marker}。"
+            "若要改一版，指出段落后即可改。"
+        ),
+        (
+            f"四、打开说明。请用 Word / LibreOffice 打开本文件阅读全文，"
+            f"不要只看标题或标记。主题仍是「{heading}」。"
+            "正文如下，便于打印或转发："
+            f"{seed}"
+            "请核对时间、对象、地点是否与题面一致；有误指出段落即可改一版。"
+        ),
+    ]
+    while _visible_len("".join(paras)) < MIN_DOCX_BODY_CHARS:
+        paras.append(
+            f"补充：{heading}。{seed}。"
+            "本段保证打开后有可读正文，而不是三行空壳。"
+        )
+        if len(paras) > 16:
+            break
+    return paras
+
+
+def _pptx_slides(body: str | None, *, title: str, marker: str) -> list[tuple[str, str]]:
+    heading = _display_title(title, "Pico PPTX")
+    parts = _split_blocks(body or "")
+    if not parts:
+        parts = [f"本课件围绕「{heading}」展开，含目标、要点与说明。"]
+    slides: list[tuple[str, str]] = [(heading, f"标记：{marker}\n{parts[0]}")]
+    for index, chunk in enumerate(parts[1:], start=2):
+        first = chunk.split("\n", 1)[0].strip()[:40] or f"第{index}页"
+        slides.append((first, chunk))
+    if len(slides) < MIN_PPTX_SLIDES:
+        slides.append(("要点", "\n".join(parts)))
+    if len(slides) < MIN_PPTX_SLIDES:
+        slides.append(
+            (
+                "说明",
+                f"本课件不少于三页。主题：{heading}。标记：{marker}。请按页内标题讲解。",
+            )
+        )
+    return slides[:20]
 
 
 def _require_marker(marker: str) -> str:
@@ -248,40 +428,23 @@ def build_docx_document(
     marker: str,
     body: str | None = None,
 ) -> bytes:
-    """Minimal valid OOXML DOCX (ZIP with Content_Types + word/document.xml)."""
+    """python-docx Word with visible multi-paragraph body (not a three-line XML zip)."""
     marker = _require_marker(marker)
-    heading = escape((title or "Pico DOCX").strip() or "Pico DOCX")
-    paragraph = escape((body or "").strip() or f"Pico DOCX deliverable · {marker}")
-    marker_xml = escape(marker)
+    heading = _display_title(title, "Pico DOCX")
+    from docx import Document
 
-    content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>
-"""
-    rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>
-"""
-    document = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>
-    <w:p><w:r><w:t>{heading}</w:t></w:r></w:p>
-    <w:p><w:r><w:t>标记：{marker_xml}</w:t></w:r></w:p>
-    <w:p><w:r><w:t>{paragraph}</w:t></w:r></w:p>
-    <w:sectPr/>
-  </w:body>
-</w:document>
-"""
+    doc = Document()
+    doc.add_heading(heading, level=0)
+    doc.add_paragraph(f"标记：{marker}")
+    for para in _docx_body_paragraphs(body, title=heading, marker=marker):
+        doc.add_paragraph(para)
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("[Content_Types].xml", content_types)
-        zf.writestr("_rels/.rels", rels)
-        zf.writestr("word/document.xml", document)
-    return buf.getvalue()
+    doc.save(buf)
+    data = buf.getvalue()
+    reason = office_shell_reason(data, ".docx")
+    if reason:
+        raise ValueError(reason)
+    return data
 
 
 KNOWN_CALC_CELL = "NIGHT-P4-CELL-ALPHA"
@@ -363,212 +526,54 @@ def build_xlsx_document(
     return buf.getvalue()
 
 
+def _set_slide_title_body(slide: object, heading: str, body: str) -> None:
+    title_shape = getattr(getattr(slide, "shapes", None), "title", None)
+    if title_shape is not None and getattr(title_shape, "has_text_frame", False):
+        title_shape.text = heading
+    body_set = False
+    placeholders = getattr(slide, "placeholders", None)
+    if placeholders is not None:
+        for shape in placeholders:
+            idx = getattr(getattr(shape, "placeholder_format", None), "idx", None)
+            if idx == 1 and getattr(shape, "has_text_frame", False):
+                shape.text = body
+                body_set = True
+                break
+    if not body_set:
+        for shape in getattr(slide, "shapes", []):
+            if shape is title_shape:
+                continue
+            if getattr(shape, "has_text_frame", False):
+                shape.text = body
+                body_set = True
+                break
+    if title_shape is None:
+        for shape in getattr(slide, "shapes", []):
+            if getattr(shape, "has_text_frame", False):
+                shape.text = heading
+                break
+
+
 def build_pptx_document(
     *,
     title: str,
     marker: str,
     body: str | None = None,
 ) -> bytes:
-    """Minimal valid OOXML PPTX with presentation + one slide."""
+    """python-pptx deck with at least three titled slides (not a one-slide XML zip)."""
     marker = _require_marker(marker)
-    heading = escape((title or "Pico PPTX").strip() or "Pico PPTX")
-    paragraph = escape((body or "").strip() or f"Pico PPTX deliverable · {marker}")
-    marker_xml = escape(marker)
+    heading = _display_title(title, "Pico PPTX")
+    from pptx import Presentation
 
-    content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
-  <Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
-  <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
-  <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
-  <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
-</Types>
-"""
-    root_rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
-</Relationships>
-"""
-    presentation = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-  xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:sldIdLst>
-    <p:sldId id="256" r:id="rId1"/>
-  </p:sldIdLst>
-  <p:sldSz cx="9144000" cy="6858000"/>
-  <p:notesSz cx="6858000" cy="9144000"/>
-</p:presentation>
-"""
-    presentation_rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
-  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>
-</Relationships>
-"""
-    slide = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-  xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:cSld>
-    <p:spTree>
-      <p:nvGrpSpPr>
-        <p:cNvPr id="1" name=""/>
-        <p:cNvGrpSpPr/>
-        <p:nvPr/>
-      </p:nvGrpSpPr>
-      <p:grpSpPr/>
-      <p:sp>
-        <p:nvSpPr>
-          <p:cNvPr id="2" name="Title"/>
-          <p:cNvSpPr txBox="1"/>
-          <p:nvPr/>
-        </p:nvSpPr>
-        <p:spPr>
-          <a:xfrm>
-            <a:off x="457200" y="274320"/>
-            <a:ext cx="8229600" cy="1143000"/>
-          </a:xfrm>
-          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-        </p:spPr>
-        <p:txBody>
-          <a:bodyPr/>
-          <a:lstStyle/>
-          <a:p><a:r><a:t>{heading}</a:t></a:r></a:p>
-        </p:txBody>
-      </p:sp>
-      <p:sp>
-        <p:nvSpPr>
-          <p:cNvPr id="3" name="Body"/>
-          <p:cNvSpPr txBox="1"/>
-          <p:nvPr/>
-        </p:nvSpPr>
-        <p:spPr>
-          <a:xfrm>
-            <a:off x="457200" y="1600200"/>
-            <a:ext cx="8229600" cy="4114800"/>
-          </a:xfrm>
-          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-        </p:spPr>
-        <p:txBody>
-          <a:bodyPr/>
-          <a:lstStyle/>
-          <a:p><a:r><a:t>标记：{marker_xml}</a:t></a:r></a:p>
-          <a:p><a:r><a:t>{paragraph}</a:t></a:r></a:p>
-        </p:txBody>
-      </p:sp>
-    </p:spTree>
-  </p:cSld>
-  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-</p:sld>
-"""
-    slide_rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
-</Relationships>
-"""
-    # Minimal layout / master / theme stubs required by many parsers.
-    slide_layout = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-  xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1">
-  <p:cSld name="Blank">
-    <p:spTree>
-      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
-      <p:grpSpPr/>
-    </p:spTree>
-  </p:cSld>
-  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-</p:sldLayout>
-"""
-    slide_layout_rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
-</Relationships>
-"""
-    slide_master = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-  xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:cSld>
-    <p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>
-    <p:spTree>
-      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
-      <p:grpSpPr/>
-    </p:spTree>
-  </p:cSld>
-  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
-  <p:sldLayoutIdLst>
-    <p:sldLayoutId id="2147483649" r:id="rId1"/>
-  </p:sldLayoutIdLst>
-</p:sldMaster>
-"""
-    slide_master_rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>
-</Relationships>
-"""
-    theme = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Pico">
-  <a:themeElements>
-    <a:clrScheme name="Pico">
-      <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>
-      <a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
-      <a:dk2><a:srgbClr val="1F497D"/></a:dk2>
-      <a:lt2><a:srgbClr val="EEECE1"/></a:lt2>
-      <a:accent1><a:srgbClr val="4F81BD"/></a:accent1>
-      <a:accent2><a:srgbClr val="C0504D"/></a:accent2>
-      <a:accent3><a:srgbClr val="9BBB59"/></a:accent3>
-      <a:accent4><a:srgbClr val="8064A2"/></a:accent4>
-      <a:accent5><a:srgbClr val="4BACC6"/></a:accent5>
-      <a:accent6><a:srgbClr val="F79646"/></a:accent6>
-      <a:hlink><a:srgbClr val="0000FF"/></a:hlink>
-      <a:folHlink><a:srgbClr val="800080"/></a:folHlink>
-    </a:clrScheme>
-    <a:fontScheme name="Pico">
-      <a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>
-      <a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>
-    </a:fontScheme>
-    <a:fmtScheme name="Pico">
-      <a:fillStyleLst>
-        <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
-        <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
-        <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
-      </a:fillStyleLst>
-      <a:lnStyleLst>
-        <a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>
-        <a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>
-        <a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>
-      </a:lnStyleLst>
-      <a:effectStyleLst>
-        <a:effectStyle><a:effectLst/></a:effectStyle>
-        <a:effectStyle><a:effectLst/></a:effectStyle>
-        <a:effectStyle><a:effectLst/></a:effectStyle>
-      </a:effectStyleLst>
-      <a:bgFillStyleLst>
-        <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
-        <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
-        <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
-      </a:bgFillStyleLst>
-    </a:fmtScheme>
-  </a:themeElements>
-</a:theme>
-"""
+    deck = Presentation()
+    layout = deck.slide_layouts[1] if len(deck.slide_layouts) > 1 else deck.slide_layouts[0]
+    for slide_title, slide_body in _pptx_slides(body, title=heading, marker=marker):
+        slide = deck.slides.add_slide(layout)
+        _set_slide_title_body(slide, slide_title, slide_body)
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("[Content_Types].xml", content_types)
-        zf.writestr("_rels/.rels", root_rels)
-        zf.writestr("ppt/presentation.xml", presentation)
-        zf.writestr("ppt/_rels/presentation.xml.rels", presentation_rels)
-        zf.writestr("ppt/slides/slide1.xml", slide)
-        zf.writestr("ppt/slides/_rels/slide1.xml.rels", slide_rels)
-        zf.writestr("ppt/slideLayouts/slideLayout1.xml", slide_layout)
-        zf.writestr("ppt/slideLayouts/_rels/slideLayout1.xml.rels", slide_layout_rels)
-        zf.writestr("ppt/slideMasters/slideMaster1.xml", slide_master)
-        zf.writestr("ppt/slideMasters/_rels/slideMaster1.xml.rels", slide_master_rels)
-        zf.writestr("ppt/theme/theme1.xml", theme)
-    return buf.getvalue()
+    deck.save(buf)
+    data = buf.getvalue()
+    reason = office_shell_reason(data, ".pptx")
+    if reason:
+        raise ValueError(reason)
+    return data

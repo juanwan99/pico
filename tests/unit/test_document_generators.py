@@ -22,6 +22,11 @@ build_html_document = _mod.build_html_document
 build_pptx_document = _mod.build_pptx_document
 build_xlsx_document = _mod.build_xlsx_document
 KNOWN_CALC_CELL = _mod.KNOWN_CALC_CELL
+MIN_DOCX_BODY_CHARS = _mod.MIN_DOCX_BODY_CHARS
+MIN_PPTX_SLIDES = _mod.MIN_PPTX_SLIDES
+docx_visible_text = _mod.docx_visible_text
+office_shell_reason = _mod.office_shell_reason
+pptx_slide_titles = _mod.pptx_slide_titles
 
 
 def test_html_contains_marker_and_csp() -> None:
@@ -99,8 +104,15 @@ def test_docx_is_real_ooxml_zip() -> None:
         names = set(zf.namelist())
         assert "[Content_Types].xml" in names
         assert "word/document.xml" in names
+        assert "word/styles.xml" in names
         doc = zf.read("word/document.xml").decode("utf-8")
         assert marker in doc
+    text = docx_visible_text(raw)
+    assert marker in text
+    assert "lesson" in text.lower() or "本文档主题" in text
+    assert len([p for p in text.split("\n") if p.strip()]) >= 3
+    assert _mod._visible_len(text) >= MIN_DOCX_BODY_CHARS
+    assert office_shell_reason(raw, ".docx") is None
 
 
 def test_xlsx_is_real_ooxml_with_known_cell() -> None:
@@ -126,5 +138,81 @@ def test_pptx_is_real_ooxml_with_slide() -> None:
         assert "[Content_Types].xml" in names
         assert "ppt/presentation.xml" in names
         assert "ppt/slides/slide1.xml" in names
+        assert "ppt/slides/slide2.xml" in names
+        assert "ppt/slides/slide3.xml" in names
         slide = zf.read("ppt/slides/slide1.xml").decode("utf-8")
         assert marker in slide
+    titles = pptx_slide_titles(raw)
+    assert len(titles) >= MIN_PPTX_SLIDES
+    assert sum(1 for t in titles if t.strip()) >= MIN_PPTX_SLIDES
+    assert office_shell_reason(raw, ".pptx") is None
+
+
+def test_docx_keeps_prompt_body_and_rejects_thin_zip() -> None:
+    marker = "PARENT_MEETING"
+    body = (
+        "各位家长：本周五下午两点在三年级二班教室召开家长会。"
+        "请准时到场，带好期末成绩单。会议内容包括班级情况、作业习惯与下学期安排。"
+        "\n\n"
+        "请提前十分钟入场。如有事不能参加，请向班主任请假。"
+        "\n\n"
+        "三年级二班班主任。联系电话见班级群置顶。"
+    )
+    raw = build_docx_document(title="家长会通知.docx", marker=marker, body=body)
+    text = docx_visible_text(raw)
+    assert "本周五下午两点" in text
+    assert "期末成绩单" in text
+    assert marker in text
+    assert office_shell_reason(raw, ".docx") is None
+
+    thin = _thin_docx_zip("空壳", "MARK", "一行")
+    assert office_shell_reason(thin, ".docx")
+
+
+def test_pptx_three_titled_slides_from_sections() -> None:
+    body = "开场：培训目标\n\n---\n\n中段：三项课堂常规\n\n---\n\n收尾：下周跟进"
+    raw = build_pptx_document(title="教师培训.pptx", marker="TRAIN3", body=body)
+    titles = pptx_slide_titles(raw)
+    assert len(titles) >= 3
+    blob = " ".join(titles)
+    assert "培训" in blob or "开场" in blob or "教师" in blob
+
+
+def _thin_docx_zip(title: str, marker: str, body: str) -> bytes:
+    from xml.sax.saxutils import escape
+
+    heading = escape(title)
+    paragraph = escape(body)
+    marker_xml = escape(marker)
+    document = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>{heading}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>标记：{marker_xml}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>{paragraph}</w:t></w:r></w:p>
+    <w:sectPr/>
+  </w:body>
+</w:document>
+"""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "[Content_Types].xml",
+            """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>
+""",
+        )
+        zf.writestr(
+            "_rels/.rels",
+            """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>
+""",
+        )
+        zf.writestr("word/document.xml", document)
+    return buf.getvalue()

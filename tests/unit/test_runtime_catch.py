@@ -15,7 +15,11 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.delivery_policy import analyze_delivery
 from pico_orchestrator.provider import resolve_model_id, runtime_policy_for_model
-from pico_orchestrator.true_pi.client import RpcEvent, SubprocessTransport
+from pico_orchestrator.true_pi.client import (
+    RpcEvent,
+    SubprocessTransport,
+    official_compaction_settings,
+)
 from pico_orchestrator.true_pi.events import COMPACTION_HUMAN, EventMapState, map_event
 
 # 10 office prompts: 改稿 / 纪要 / 多文件套件 / 可改一版. Empty success forbidden.
@@ -78,8 +82,8 @@ def test_prepare_agent_home_writes_official_compaction_settings(tmp_path: Path) 
         tool_url="http://127.0.0.1:1",
         tool_token="tok",
         run_id="r-compact",
-        model="deepseek-reasoner",
-        thinking=True,
+        model="deepseek-v4-flash",
+        thinking=False,
         spawn_cwd=tmp_path / "sess",
     )
     home = t.prepare_agent_home()
@@ -90,8 +94,35 @@ def test_prepare_agent_home_writes_official_compaction_settings(tmp_path: Path) 
     for blob in (agent_settings, project_settings):
         compact = blob["compaction"]
         assert compact["enabled"] is True
-        assert compact["keepRecentTokens"] == 20000
-        assert compact["reserveTokens"] == 16384
+        # Fast 128k lane: trigger at 56k used (128k - 72k). Short one-shot stays under.
+        assert compact["keepRecentTokens"] == 16000
+        assert compact["reserveTokens"] == 72000
+        assert 128_000 - compact["reserveTokens"] == 56_000
+
+
+def test_prepare_agent_home_deep_lane_compaction_fires_on_long_office(tmp_path: Path) -> None:
+    t = SubprocessTransport(
+        session_dir=tmp_path / "sess-deep",
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r-compact-deep",
+        model="deepseek-reasoner",
+        thinking=True,
+        max_context=256_000,
+        spawn_cwd=tmp_path / "sess-deep",
+    )
+    home = t.prepare_agent_home()
+    compact = json.loads((home / "settings.json").read_text(encoding="utf-8"))["compaction"]
+    assert compact["enabled"] is True
+    assert compact["keepRecentTokens"] == 20000
+    assert compact["reserveTokens"] == 192000
+    trigger_at = 256_000 - compact["reserveTokens"]
+    assert trigger_at == 64_000
+    # One-shot office (~20k) stays quiet; multi-turn long run crosses 64k.
+    assert trigger_at > 30_000
+    # After compact, last turn + current files stay (not a collapsed window).
+    assert compact["keepRecentTokens"] >= 16_000
+    assert official_compaction_settings(256_000)["compaction"] == compact
 
 
 def test_lane_models_flash_vs_reasoner(monkeypatch: pytest.MonkeyPatch) -> None:

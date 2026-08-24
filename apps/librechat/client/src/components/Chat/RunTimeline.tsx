@@ -10,6 +10,8 @@ const VISIBLE_EVENT_TYPES = new Set([
   'search.sources',
   'sandbox.session',
   'artifact.created',
+  'compaction.begin',
+  'compaction.end',
   'agent.step',
   'run.status',
   'run.error',
@@ -107,6 +109,12 @@ export function describePicoRunEvent(
     return {
       title: `来源 · ${links.length} 条`,
       detail: links.map((item) => item.title).join(' · '),
+    };
+  }
+  if (event.type === 'compaction.begin' || event.type === 'compaction.end') {
+    return {
+      title: textValue(payload, 'text') || '在整理上文',
+      detail: null,
     };
   }
   if (event.type === 'agent.step') {

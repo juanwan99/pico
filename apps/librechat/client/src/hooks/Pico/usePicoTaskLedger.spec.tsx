@@ -80,6 +80,20 @@ describe('workbench Chinese progress (T-AGENT-FACE-V1)', () => {
     expect(hint).toMatch(/成功/);
   });
 
+  it('labels compaction.begin as 在整理上文', () => {
+    expect(
+      lastProcessStep([
+        {
+          id: 'e1',
+          run_id: 'r1',
+          seq: 1,
+          type: 'compaction.begin',
+          payload: { text: '在整理上文', source: 'true-pi' },
+        },
+      ]),
+    ).toBe('在整理上文');
+  });
+
   it('shows Chinese image failure on the process strip while running', () => {
     expect(
       lastProcessStep([

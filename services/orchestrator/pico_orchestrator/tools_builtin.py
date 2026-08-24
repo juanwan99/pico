@@ -1855,7 +1855,14 @@ def openai_tool_schemas(
                     "type": "string",
                     "description": "Unique visible marker string required in the document",
                 },
-                "body": {"type": "string", "description": "Optional extra paragraph text"},
+                "body": {
+                    "type": "string",
+                    "description": (
+                        "Full Word body. Blank lines separate paragraphs. "
+                        "Must be real multi-paragraph content (hundreds of characters), "
+                        "not a one-line stub."
+                    ),
+                },
             },
             "required": ["title", "marker"],
         },
@@ -1870,7 +1877,13 @@ def openai_tool_schemas(
                     "type": "string",
                     "description": "Unique visible marker string required on the slide",
                 },
-                "body": {"type": "string", "description": "Optional extra slide text"},
+                "body": {
+                    "type": "string",
+                    "description": (
+                        "Full slide text. Separate slides with a blank line or ---. "
+                        "Must yield at least three titled slides, not a single empty page."
+                    ),
+                },
             },
             "required": ["title", "marker"],
         },
