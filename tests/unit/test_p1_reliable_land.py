@@ -49,7 +49,6 @@ def test_pico_markers_mask_delivery_intent_until_stripped() -> None:
 
     skill, routed_plan = _resolve_skill_for_prompt(clean, None, history=None)
     assert skill is None
-    # Markdown 复盘链 is not 做成 Word; post-run min stays 0 unless named Office/HTML.
     assert routed_plan.min_artifacts == 0
     assert routed_plan.force_agent is False
 

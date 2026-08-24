@@ -592,11 +592,10 @@ def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
 
 
 def _wants_deliverable_document(prompt: str) -> bool:
-    """Detect NL asking for HTML / Word / PPT *as the deliverable*.
+    """NL Office/HTML phrasing helper. NOT a run gate (T-GROK-PATH).
 
-    Must catch plain Chinese phrasing (S1.5 / S2.2: 「重新生成可下载 Word」).
-    Must **not** fire on format names that only appear inside pasted source
-    material (e.g. 「历史文档格式杂（pdf/docx/截图）」 while user wants Markdown).
+    Do not wire this into routing, caps, or fail-closed. The live gate only
+    checks assistant file-claims vs landed artifacts.
     """
     import re
 
@@ -641,10 +640,9 @@ def _this_round_delivery_plan(
     *,
     prior_artifact_titles: list[str] | None = None,
 ) -> Any:
-    """Post-run min_artifacts only when this turn named a file (做成 Word/PPT/HTML).
+    """Never set min_artifacts / force_agent from a user-prompt word list.
 
-    Does not walk history. Does not invent a new guess-task regex: reuses
-    ``_wants_deliverable_document``. analyze_delivery stays for counts when named.
+    Tools stay mounted. The post-run gate only fails a chat-only *claim*.
     """
     from dataclasses import replace
 
@@ -653,11 +651,7 @@ def _this_round_delivery_plan(
     plan = analyze_delivery(
         raw_prompt, prior_artifact_titles=prior_artifact_titles
     )
-    if not _wants_deliverable_document(raw_prompt):
-        return replace(plan, min_artifacts=0, force_agent=False)
-    if int(plan.min_artifacts or 0) < 1:
-        return replace(plan, min_artifacts=1)
-    return plan
+    return replace(plan, min_artifacts=0, force_agent=False)
 
 
 def _sticky_delivery_plan(
@@ -666,11 +660,7 @@ def _sticky_delivery_plan(
     *,
     prior_artifact_titles: list[str] | None = None,
 ) -> Any:
-    """T-GROK-PATH: no longer inherits prior-turn force_agent.
-
-    History lives in the Pi session tree. Insults / 「这是什么」 must not
-    keep a previous Word landing gate.
-    """
+    """T-GROK-PATH: no prior-turn force_agent; no prompt word table."""
     del history
     return _this_round_delivery_plan(
         raw_prompt, prior_artifact_titles=prior_artifact_titles

@@ -67,7 +67,7 @@ def test_single_html_multi_section_min_is_one() -> None:
 async def test_gate_message_truthful_when_other_format_files_exist(
     tmp_path, monkeypatch
 ) -> None:
-    """RC-A: office request with an other-format file must not claim「无文件」."""
+    """A landed file is a landed file. Do not fail-closed from a user-prompt Office list."""
     from app import db as db_mod
     from app.db import ArtifactRow, EventRow, RunRow, TaskRow, new_id
     from app.delivery_gate import apply_delivery_gate
@@ -140,20 +140,5 @@ async def test_gate_message_truthful_when_other_format_files_exist(
     async with factory() as session:
         run = await session.get(RunRow, run_id)
         assert run is not None
-        assert run.status == "failed"
-        assert "未生成要求的 Word/HTML 文件" in run.error
-        assert "未生成可下载的真文件" not in run.error
-        failed_events = [
-            e
-            for e in (
-                await session.execute(
-                    select(EventRow).where(
-                        EventRow.run_id == run_id,
-                        EventRow.type == "run.status",
-                    )
-                )
-            ).scalars()
-            if e.payload and e.payload.get("status") == "failed"
-        ]
-        assert failed_events
-        assert failed_events[-1].payload.get("user_message") == run.error
+        assert run.status == "succeeded"
+        assert not run.error

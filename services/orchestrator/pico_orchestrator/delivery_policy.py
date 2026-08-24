@@ -499,6 +499,26 @@ def _count_pipeline_stages(text: str) -> int:
     return 0
 
 
+_ASSISTANT_FILE_CLAIM = re.compile(
+    r"(?:"
+    r"已(?:生成|写入|落盘|交付|创建|导出)|"
+    r"文件已|"
+    r"请(?:在结果区)?下载|"
+    r"(?:artifact|产物).{0,8}(?:已|生成)"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def looks_like_delivery_claim(text: str) -> bool:
+    """True when the *assistant* claimed a file landed.
+
+    This is not a user-prompt classifier and must not read 课件/通知/Word tables
+    out of the teacher's message.
+    """
+    return bool(_ASSISTANT_FILE_CLAIM.search((text or "").strip()))
+
+
 def looks_like_clarification(text: str) -> bool:
     """True when the assistant is asking the user to clarify — not claiming delivery.
 
