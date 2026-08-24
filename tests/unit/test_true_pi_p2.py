@@ -69,6 +69,7 @@ def test_canary_and_default_gates(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_compose_prompt_includes_history_and_tools() -> None:
+    """T-GROK-PATH: prompt() is teacher original; no Skill/Landing/history weld."""
     text = _compose_prompt(
         prompt="写文件",
         skill="use workspace_write_file",
@@ -80,11 +81,11 @@ def test_compose_prompt_includes_history_and_tools() -> None:
         ],
         allowed_tools=["workspace_write_file", "generate_html_document"],
     )
-    assert "workspace_write_file" in text
-    assert "use workspace_write_file" in text
-    assert "Recent conversation" in text
-    assert "你好" in text
-    assert "Landing requirement" in text
+    assert text == "写文件"
+    assert "Landing requirement" not in text
+    assert "Skill instruction" not in text
+    assert "Recent conversation" not in text
+    assert "你好" not in text
 
 
 @pytest.mark.asyncio

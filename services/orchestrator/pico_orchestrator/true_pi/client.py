@@ -235,6 +235,7 @@ class SubprocessTransport(TruePiTransport):
         continue_session: bool = False,
         plan_flag: bool = False,
         spawn_cwd: Path | None = None,
+        system_prompt_text: str = "",
     ) -> None:
         self.session_dir = session_dir
         self.tool_url = tool_url
@@ -257,6 +258,7 @@ class SubprocessTransport(TruePiTransport):
         self.continue_session = bool(continue_session)
         self.plan_flag = bool(plan_flag)
         self.spawn_cwd = spawn_cwd or session_dir
+        self.system_prompt_text = str(system_prompt_text or "")
         self.plan_execute_pending = False
         self.plan_agent_ends = 0
         self.plan_stayed = False
@@ -290,6 +292,13 @@ class SubprocessTransport(TruePiTransport):
         project_pi = (self.spawn_cwd or self.session_dir) / ".pi"
         project_pi.mkdir(parents=True, exist_ok=True)
         (project_pi / "settings.json").write_text(settings_text, encoding="utf-8")
+        system_text = (self.system_prompt_text or "").strip()
+        if system_text:
+            # Pi-native SYSTEM.md (not a user prompt weld). Agent home = global;
+            # .pi/SYSTEM.md = project replace. --no-context-files still skips AGENTS.md.
+            system_body = system_text + "\n"
+            (dest / "SYSTEM.md").write_text(system_body, encoding="utf-8")
+            (project_pi / "SYSTEM.md").write_text(system_body, encoding="utf-8")
         self.agent_home = dest
         return dest
 

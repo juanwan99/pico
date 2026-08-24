@@ -126,10 +126,11 @@ def test_compose_prompt_skips_history_when_none() -> None:
         allowed_tools=["workspace_write_file"],
     )
     assert "Recent conversation" not in text
-    assert "把第三段改短" in text
+    assert text == "把第三段改短"
 
 
 def test_compose_prompt_history_still_available_without_tree() -> None:
+    """History stays in the Pi session tree, not the user prompt()."""
     text = _compose_prompt(
         prompt="写文件",
         skill="",
@@ -137,8 +138,9 @@ def test_compose_prompt_history_still_available_without_tree() -> None:
         history=[{"role": "user", "content": "你好"}, {"role": "assistant", "content": "您好"}],
         allowed_tools=["workspace_write_file"],
     )
-    assert "Recent conversation" in text
-    assert "你好" in text
+    assert text == "写文件"
+    assert "Recent conversation" not in text
+    assert "你好" not in text
 
 
 def test_sidebar_chat_only_unchanged() -> None:

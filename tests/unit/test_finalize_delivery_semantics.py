@@ -118,10 +118,10 @@ async def test_finalize_true_multi_short_delivery_fail_closed(tmp_path, monkeypa
     task_id = new_id()
     run_id = new_id()
     prompt = (
-        "请分别交付三个独立可下载文件：\n"
-        "1) 活动规则说明\n"
-        "2) 志愿者排班表\n"
-        "3) 居民通知短讯合集\n"
+        "请分别交付 3 个独立 HTML 文件：\n"
+        "1) 活动规则说明.html\n"
+        "2) 志愿者排班表.html\n"
+        "3) 居民通知短讯合集.html\n"
         "禁止合并成一个文件。"
     )
     async with factory() as session:
@@ -260,10 +260,10 @@ async def test_finalize_true_multi_full_delivery_succeeds(tmp_path, monkeypatch)
     task_id = new_id()
     run_id = new_id()
     prompt = (
-        "请分别交付三个独立可下载文件：\n"
-        "1) 活动规则说明\n"
-        "2) 志愿者排班表\n"
-        "3) 居民通知短讯合集\n"
+        "请分别交付 3 个独立 HTML 文件：\n"
+        "1) 活动规则说明.html\n"
+        "2) 志愿者排班表.html\n"
+        "3) 居民通知短讯合集.html\n"
         "禁止合并成一个文件。"
     )
     titles = ["rules.md", "schedule.md", "notices.md"]

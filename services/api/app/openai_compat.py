@@ -636,40 +636,15 @@ def _wants_deliverable_document(prompt: str) -> bool:
     )
 
 
-def _is_clear_non_delivery_turn(text: str) -> bool:
-    """User clearly left the delivery thread (thanks / model-id / cancel)."""
-    import re
-
-    t = (text or "").strip()
-    if not t:
-        return True
-    if re.search(
-        r"(?:"
-        r"你是什么模型|你是谁|谢谢|没事了|算了|不用了|取消|"
-        r"just\s+chatting|what\s+model\s+are\s+you"
-        r")",
-        t,
-        re.IGNORECASE,
-    ) and len(t) < 80:
-        return True
-    # Very short pure ack without delivery verbs.
-    return len(t) <= 12 and not re.search(
-        r"文件|html|交付|生成|写|做|改|继续|要|用|按|Web|网页|下载",
-        t,
-        re.IGNORECASE,
-    )
-
-
-def _sticky_delivery_plan(
+def _this_round_delivery_plan(
     raw_prompt: str,
-    history: list[dict[str, Any]] | None,
     *,
     prior_artifact_titles: list[str] | None = None,
 ) -> Any:
-    """Keep force_agent/min_artifacts when the user continues a delivery thread.
+    """Post-run min_artifacts only when this turn named a file (做成 Word/PPT/HTML).
 
-    Same-session clarify → answer must return to pi-agent + landing gate, not
-    silent deepseek-chat code-block delivery. No topic-word tables.
+    Does not walk history. Does not invent a new guess-task regex: reuses
+    ``_wants_deliverable_document``. analyze_delivery stays for counts when named.
     """
     from dataclasses import replace
 
@@ -678,70 +653,27 @@ def _sticky_delivery_plan(
     plan = analyze_delivery(
         raw_prompt, prior_artifact_titles=prior_artifact_titles
     )
-    if plan.force_agent:
-        return plan
-    if _is_clear_non_delivery_turn(raw_prompt):
-        return plan
-    # Walk prior user turns for engineering / delivery intent.
-    prior_delivery = None
-    for item in reversed(history or []):
-        if item.get("role") != "user":
-            continue
-        content = str(item.get("content") or "").strip()
-        if not content:
-            continue
-        prior = analyze_delivery(
-            content, prior_artifact_titles=prior_artifact_titles
-        )
-        if prior.force_agent or prior.engineering:
-            prior_delivery = prior
-            break
-    if prior_delivery is None:
-        # Assistant just asked clarification after a delivery ask: still stick
-        # if any earlier user turn forced agent (already handled) OR last
-        # assistant looks like clarification and prior titles / history exists.
-        last_asst = None
-        for item in reversed(history or []):
-            if item.get("role") == "assistant":
-                last_asst = str(item.get("content") or "")
-                break
-        if last_asst:
-            from pico_orchestrator.delivery_policy import looks_like_clarification
+    if not _wants_deliverable_document(raw_prompt):
+        return replace(plan, min_artifacts=0, force_agent=False)
+    if int(plan.min_artifacts or 0) < 1:
+        return replace(plan, min_artifacts=1)
+    return plan
 
-            if looks_like_clarification(last_asst):
-                # Re-scan user turns without requiring force (weaker stick).
-                for item in reversed(history or []):
-                    if item.get("role") != "user":
-                        continue
-                    content = str(item.get("content") or "").strip()
-                    if not content:
-                        continue
-                    prior = analyze_delivery(
-                        content, prior_artifact_titles=prior_artifact_titles
-                    )
-                    if prior.engineering or prior.min_artifacts > 0 or prior.runnable_html:
-                        prior_delivery = prior
-                        break
-    if prior_delivery is None:
-        return plan
-    # Inherit delivery force; min at least 1 so landing gate stays on.
-    need = max(
-        1,
-        int(prior_delivery.min_artifacts or 0),
-        int(plan.min_artifacts or 0),
-    )
-    # If prior was multi and current message is a short answer, keep prior multi min.
-    if prior_delivery.multi_deliverable or prior_delivery.pipeline:
-        need = max(need, int(prior_delivery.min_artifacts or 2))
-    return replace(
-        prior_delivery,
-        min_artifacts=need,
-        force_agent=True,
-        revision=prior_delivery.revision or bool(prior_artifact_titles),
-        prior_artifact_count=max(
-            int(getattr(prior_delivery, "prior_artifact_count", 0) or 0),
-            len(prior_artifact_titles or []),
-        ),
+
+def _sticky_delivery_plan(
+    raw_prompt: str,
+    history: list[dict[str, Any]] | None,
+    *,
+    prior_artifact_titles: list[str] | None = None,
+) -> Any:
+    """T-GROK-PATH: no longer inherits prior-turn force_agent.
+
+    History lives in the Pi session tree. Insults / 「这是什么」 must not
+    keep a previous Word landing gate.
+    """
+    del history
+    return _this_round_delivery_plan(
+        raw_prompt, prior_artifact_titles=prior_artifact_titles
     )
 
 
@@ -752,46 +684,26 @@ def _resolve_skill_for_prompt(
     prior_artifact_titles: list[str] | None = None,
     history: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any] | None, Any]:
-    """Attach auto skill for engineering delivery without overriding explicit skills.
+    """Keep an explicit hung skill. Do not guess-and-attach deliverable/engineering.
 
-    Returns (skill_snapshot, DeliveryPlan).
+    Returns (skill_snapshot, DeliveryPlan). Tools stay on the allowlist either way.
     """
-    from pico_orchestrator.delivery_policy import (
-        ENGINEERING_SKILL_ID,
-    )
-    from pico_orchestrator.skill_policy import snapshot_for_skill
-
     plan = _sticky_delivery_plan(
         raw_prompt,
         history,
         prior_artifact_titles=prior_artifact_titles,
     )
-    if skill_snapshot is not None:
-        # Explicit skill still inherits sticky force/min via plan.
-        return skill_snapshot, plan
-    # Multi-file / pipeline / runnable → engineering package (includes workspace_write).
-    if plan.force_agent:
-        return snapshot_for_skill(ENGINEERING_SKILL_ID), plan
-    # Single Office/HTML deliverable → classic deliverable skill.
-    if _wants_deliverable_document(raw_prompt):
-        return snapshot_for_skill("skill-deliverable"), plan
-    return None, plan
+    return skill_snapshot, plan
 
 
 def _caps_with_landing_min(caps: Any, delivery_plan: Any, skill_snapshot: dict | None) -> Any:
-    """Apply min_artifacts landing gate onto RunCaps (stream + non-stream)."""
+    """Post-run min_artifacts only. Do not floor because a skill name was guessed."""
     from dataclasses import replace as _dc_replace
 
+    del skill_snapshot
     need = 0
     if delivery_plan is not None:
         need = int(getattr(delivery_plan, "min_artifacts", 0) or 0)
-        if bool(getattr(delivery_plan, "force_agent", False)) and need < 1:
-            need = 1
-    skill_name = (
-        skill_snapshot.get("name") if isinstance(skill_snapshot, dict) else None
-    )
-    if skill_name in {"skill.deliverable", "skill.engineering_delivery"} and need < 1:
-        need = 1
     if need > 0:
         return _dc_replace(caps, min_artifacts=need)
     return caps
@@ -830,22 +742,11 @@ def _instruction_with_delivery(
     *,
     prior_artifact_titles: list[str] | None = None,
 ) -> str:
-    """Merge skill catalog instruction with generic engineering-delivery discipline."""
-    from pico_orchestrator.delivery_policy import analyze_delivery
+    """Explicit hung-skill catalog text only. Do not weld per-turn Landing N into it."""
     from pico_orchestrator.skill_policy import instruction_for_snapshot
 
-    base = instruction_for_snapshot(skill_snapshot)
-    plan = (
-        plan
-        if plan is not None
-        else analyze_delivery(prompt, prior_artifact_titles=prior_artifact_titles)
-    )
-    extra = getattr(plan, "instruction", "") or ""
-    if not extra or not getattr(plan, "engineering", False):
-        return base
-    if base:
-        return f"{base}\n{extra}"
-    return extra
+    del prompt, plan, prior_artifact_titles
+    return instruction_for_snapshot(skill_snapshot)
 
 
 async def _prior_artifact_titles_for_principal(
@@ -1042,28 +943,8 @@ async def _finalize_run(
                     commit=False,
                 )
 
-            summary_key = ("doc", "回复摘要")
-            if summary_key not in existing_keys:
-                artifact = ArtifactRow(
-                    id=new_id(),
-                    task_id=run.task_id,
-                    run_id=run_id,
-                    kind="doc",
-                    title="回复摘要",
-                    inline=final_text[:8000],
-                )
-                session.add(artifact)
-                await append_event(
-                    session,
-                    run_id,
-                    "artifact.created",
-                    {
-                        "artifact_id": artifact.id,
-                        "title": "回复摘要",
-                        "kind": "doc",
-                    },
-                    commit=False,
-                )
+            # T-GROK-PATH: 回复摘要 stays in run.final_text (bookkeeping), not
+            # a result-area Artifact. Do not mint a downloadable 回复摘要 chip.
         if (
             isinstance(skill_snapshot, dict)
             and skill_snapshot.get("requires_s7")
@@ -1505,19 +1386,11 @@ async def chat_completions(
     )
     # Skill/tool path: preserve explicit dual-mode choice (pico-fast keeps thinking
     # off + tight budget; pico-deep keeps thinking on + breaker). Only remap
-    # legacy agent SKUs / unknown ids onto pico-deep so delivery still works.
+    # legacy agent SKUs / unknown ids onto pico-deep when a skill was hung.
     if skill_snapshot and skill_snapshot.get("tools"):
         low = str(model or "").strip().lower()
         if low not in {"pico-fast", "pico-deep"}:
             model = "pico-deep"
-    # Sticky delivery must not silent-route to deepseek-chat direct.
-    if (
-        delivery_plan is not None
-        and getattr(delivery_plan, "force_agent", False)
-        and model not in {"pico-agent", "pico", "pico-fast", "pico-deep"}
-        and not str(model).startswith("pico-")
-    ):
-        model = "pico-deep"
     # Residual LibreChat prefs may still say kimi-k2.x after product default
     # moved to DeepSeek. Remount onto the product brain when Kimi is not in the
     # production allowlist so default-path chat does not 400.

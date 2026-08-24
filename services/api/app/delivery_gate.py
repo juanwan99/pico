@@ -12,7 +12,6 @@ Used by:
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
@@ -95,6 +94,15 @@ async def apply_delivery_gate(
 
     prompt_for_plan = user_prompt or run.prompt or ""
     plan = analyze_delivery(prompt_for_plan, prior_artifact_titles=prior_titles)
+    named = _wants_deliverable_document(prompt_for_plan)
+    if not named:
+        from dataclasses import replace as _dc_replace_plan
+
+        plan = _dc_replace_plan(plan, min_artifacts=0, force_agent=False)
+    elif int(plan.min_artifacts or 0) < 1:
+        from dataclasses import replace as _dc_replace_plan
+
+        plan = _dc_replace_plan(plan, min_artifacts=1)
 
     art_rows = await session.execute(
         select(
@@ -161,29 +169,13 @@ async def apply_delivery_gate(
             commit=False,
         )
 
-    # S2.2 / landing: deliverable skill without a real user-visible file.
-    # Office/HTML binary required only when the user asked for those types;
-    # Markdown / .txt / generic workspace files are valid office deliverables
-    # (O1 long-material notes must not fail solely because materials mention docx).
-    # When min_artifacts>=1 (incl. multi), zero real files must never stay succeeded.
-    skill_snapshot = None
-    try:
-        usage = json.loads(run.token_usage_json or "{}")
-        skill_snapshot = usage.get("skill_snapshot")
-    except (TypeError, ValueError):
-        skill_snapshot = None
-    skill_name = (
-        skill_snapshot.get("name") if isinstance(skill_snapshot, dict) else None
-    )
+    # S2.2 / landing: this-round named Word/PPT/HTML without a real user-visible file.
+    # Markdown / .txt / generic workspace files are valid when the turn did not
+    # name Office/HTML. When min_artifacts>=1 (incl. multi), zero real files must
+    # never stay succeeded.
     if (
-        skill_name in {"skill.deliverable", "skill.engineering_delivery"}
+        named
         and status == "succeeded"
-        and (
-            _wants_deliverable_document(prompt_for_plan)
-            or plan.runnable_html
-            or plan.min_artifacts >= 1
-            or plan.force_agent
-        )
         and (
             plan.min_artifacts <= 1
             or user_art_count == 0

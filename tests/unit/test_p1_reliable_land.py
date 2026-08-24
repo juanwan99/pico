@@ -32,7 +32,7 @@ PROMPT = (
 
 
 def test_pico_markers_mask_delivery_intent_until_stripped() -> None:
-    """RC-1: markers flip force_agent False; stripping restores True + skill bind."""
+    """RC-1: markers still stripped. T-GROK-PATH: no auto skill bind."""
     from app.openai_compat import _resolve_skill_for_prompt, _strip_pico_markers
     from pico_orchestrator.delivery_policy import analyze_delivery
 
@@ -48,8 +48,10 @@ def test_pico_markers_mask_delivery_intent_until_stripped() -> None:
     assert plan.min_artifacts >= 1
 
     skill, routed_plan = _resolve_skill_for_prompt(clean, None, history=None)
-    assert skill is not None and skill.get("name") == "skill.engineering_delivery"
-    assert routed_plan.force_agent is True
+    assert skill is None
+    # Markdown 复盘链 is not 做成 Word; post-run min stays 0 unless named Office/HTML.
+    assert routed_plan.min_artifacts == 0
+    assert routed_plan.force_agent is False
 
 
 def test_extract_file_artifacts_chinese_filenames() -> None:
