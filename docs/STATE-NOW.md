@@ -11,14 +11,14 @@ PRODUCT PASS: 未签 · 仅业主（#449 / #316）
 工作流: 形状冻结 · 禁止过程 PR · 禁止再写交接长文
 北极星: DIRECTION-NOW §0-star · 用法 = Grok · 禁定向猜任务
 真源优先级: 本页 + #634 冻结令 > 任何 HANDOFF-*.md > 聊天
-juanwan99/oneflow: 不当真源（待业主 Archive）
+juanwan99/oneflow: 不当真源（已 Archive 2026-08-24）
 ```
 
 ## 冻结令（业主 2026-08-24 · 本窗落账）
 
 1. **卡面冻结 14 天**（至 2026-09-07）。禁止过程 PR。禁止复活 315。禁止新 `HANDOFF-NEW-WINDOW-*.md`。
 2. **pico 在飞 = [#646](https://github.com/juanwan99/pico/issues/646)**。同域第二张执行卡带 `stamp-ok` = 废派。
-3. **`juanwan99/oneflow` 不当真源**。纪律只认本仓 `docs/ONEFLOW.md` / `TASK-CARD-STANDARD.md`（形状冻住，不改）。
+3. **`juanwan99/oneflow` 不当真源（已 Archive 2026-08-24）**。纪律只认本仓 `docs/ONEFLOW.md` / `TASK-CARD-STANDARD.md`（形状冻住，不改）。
 
 失真 = 出现任一：改卡模板 / 复活 315 / 同域第二张 `stamp-ok` / 新交接长文当现况 / 本页「在飞」对不上 stamped 执行卡 / 把 oneflow 仓当真源。总管打回，不讨论「这版更科学」。
 
