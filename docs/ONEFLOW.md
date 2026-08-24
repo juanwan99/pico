@@ -3,9 +3,18 @@
 ```text
 DOC: docs/ONEFLOW.md
 STATUS: BINDING v2.1 — 2026-08-23
+EXEC: 2026-08-24 三刀 BINDING（卡面不改）
 REPO: juanwan99/pico ONLY
 ALIGN: edu-core TASK-DISPATCH v2（派发条 + 合同在 Issue）
 NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
+```
+
+```text
+执行三刀（开窗先看）
+1. 证据贴 Issue 评论。禁止 docs PR 专贴截图。
+2. 无 ECS / 不能 prod-update = 拒领。DONE 必须 curl tip = origin/main。
+3. 过门 = 老师手。写控件清单 = 退回调查，禁开工。
+现况: docs/STATE-NOW.md
 ```
 
 > GitHub Flow + 生产认 SHA。不是 Git Flow。不是 315 填表。

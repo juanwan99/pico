@@ -3,9 +3,11 @@
 ```text
 DOC: docs/TASK-CARD-STANDARD.md
 STATUS: BINDING v2.2 — 2026-08-24
-FROZEN until 2026-09-07 — 禁止改本文件形状、复活 315、新开过程卡。业主未说「开过程卡」一律废派。
+FROZEN 卡面 — 禁止改本文件形状、复活 315
+EXEC 三刀 BINDING:
+  证据贴 Issue 评论 · 无 ECS 拒领 · 过门=老师手 · DONE=curl tip=main
 SUPERSEDES: 四行短卡当派发形态
-真源: docs/ONEFLOW.md v2.1
+真源: docs/ONEFLOW.md v2.1 · 现况: docs/STATE-NOW.md
 模板: .github/ISSUE_TEMPLATE/ · docs/templates/card-build.md · docs/templates/dispatch-slip.md
 经验: docs/MEMORY-RESET.md（不进卡面；派发条只点名坑）
 北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok · 禁定向猜任务
