@@ -139,6 +139,79 @@ def test_land_without_edu_base_does_not_pretend(client) -> None:
     assert body.get("dumped") is False
 
 
+def test_search_green_library_unconfigured_is_honest(monkeypatch) -> None:
+    from app.auth import Principal
+    from app.edu_school import search_green_library
+    from app.settings import get_settings as gs
+
+    monkeypatch.setenv("PICO_EDU_BASE_URL", "")
+    monkeypatch.setenv("PICO_ENV", "development")
+    gs.cache_clear()
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=9999999999,
+        raw={},
+    )
+
+    async def _run() -> None:
+        data = await search_green_library(principal, query="校历")
+        assert data["configured"] is False
+        assert data["items"] == []
+        assert data["dumped"] is False
+
+    import asyncio
+
+    asyncio.run(_run())
+    gs.cache_clear()
+
+
+def test_search_green_library_maps_membership_items(monkeypatch) -> None:
+    from app import edu_school as mod
+    from app.auth import Principal
+    from app.edu_school import search_green_library
+
+    async def fake_get(principal, path, *, params=None, settings=None):
+        _ = principal, settings
+        assert path == "/v1/pico/membership/search"
+        assert params == {"q": "校历"}
+        return {
+            "configured": True,
+            "dumped": False,
+            "items": [
+                {
+                    "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                    "title": "校历",
+                    "excerpt": "三月开学",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(mod, "_edu_get", fake_get)
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=9999999999,
+        raw={},
+    )
+
+    async def _run() -> None:
+        data = await search_green_library(principal, query="校历")
+        assert data["configured"] is True
+        assert data["items"][0]["title"] == "校历"
+        assert data["dumped"] is False
+
+    import asyncio
+
+    asyncio.run(_run())
+
+
 def test_materials_without_edu_base_does_not_dump(client) -> None:
     res = client.get(
         "/v1/edu/materials",

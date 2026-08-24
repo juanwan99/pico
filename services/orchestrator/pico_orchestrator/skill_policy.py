@@ -67,7 +67,8 @@ _POLICIES: dict[str, SkillPolicy] = {
             "若老师要打开 Word/表格/PPT：sandbox_document_open，在沙箱 LibreOffice 里打开，"
             "禁止转 PDF/HTML，禁止让老师下载算打开成功。"
             "用户回复只给文件名与下载/打开指引，禁止贴全量源码或 Artifact ID。"
-            "老师问已上传/学校材料时必须先 kb_search，不必等「去搜库」；honest_miss 就老实说没找到。"
+            "只有老师问学校材料时才 kb_search；工具在列表不代表必须调用。"
+            "honest_miss 就老实说没找到，禁止编造。"
         ),
     ),
     "skill-engineering-delivery": SkillPolicy(
@@ -108,7 +109,8 @@ _POLICIES: dict[str, SkillPolicy] = {
             "微信/教务不作为必须过关。"
             "用户侧只报文件名并指引结果区下载；"
             "扩展名与类型一致；禁止聊天长文/全量 HTML 源码墙冒充交付。"
-            "问材料/文档时先 kb_search，禁止编造未命中内容。"
+            "只有问学校材料时才 kb_search；工具在列表不代表必须调用。"
+            "禁止编造未命中内容。"
         ),
     ),
     "skill-chat": SkillPolicy(
@@ -243,8 +245,9 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="read",
         instruction=(
-            "本轮使用 skill.kb_ask：必须先 kb_search 查阅已挂载材料（不必等人说去搜库）；"
-            "回答引用标题与摘录；honest_miss=true 时诚实说明未命中，禁止编造材料内容。"
+            "本轮使用 skill.kb_ask：老师问学校材料时才 kb_search；"
+            "回答必须带出处（标题+摘录）；honest_miss=true 时诚实说明未命中，禁止编造。"
+            "Pico 对话随传文件不是学校库。工具在列表不代表必须调用。"
         ),
     ),
 }
