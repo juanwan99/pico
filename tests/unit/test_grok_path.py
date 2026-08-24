@@ -80,6 +80,9 @@ def test_system_md_is_generic_not_scene_if(tmp_path: Path) -> None:
     body = pico_system_text()
     assert "This block is **SYSTEM**" in body
     assert "Being listed does **not** mean you must call them" in body
+    assert "Default is a chat answer" in body
+    assert "Call `kb_search` only when the teacher asks about school materials" in body
+    assert "uploaded materials" not in body
     assert "这是什么" not in body
     assert "课件" not in body
     assert "通知" not in body
