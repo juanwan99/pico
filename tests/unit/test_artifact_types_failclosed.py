@@ -66,6 +66,32 @@ def test_ooxml_validation():
     assert title_protected_extension("note.txt") is None
 
 
+@pytest.mark.asyncio
+async def test_generate_docx_rejects_short_body_without_padding():
+    gw = build_default_gateway(Mem())
+    with pytest.raises(ToolError) as ei:
+        await gw.invoke(
+            P(),
+            "generate_docx_document",
+            {"title": "家长会通知.docx", "marker": "M", "body": "一行"},
+        )
+    assert ei.value.code == "tool.invalid_arguments"
+    assert "垫字" in ei.value.message or "正文过短" in ei.value.message
+
+
+@pytest.mark.asyncio
+async def test_generate_pptx_rejects_one_slide_without_padding():
+    gw = build_default_gateway(Mem())
+    with pytest.raises(ToolError) as ei:
+        await gw.invoke(
+            P(),
+            "generate_pptx_document",
+            {"title": "培训.pptx", "marker": "M", "body": "只有一页"},
+        )
+    assert ei.value.code == "tool.invalid_arguments"
+    assert "垫页" in ei.value.message or "不足三页" in ei.value.message
+
+
 def test_html_generator_not_protected_write():
     html = build_html_document(title="t.html", marker="M")
     assert b"Content-Security-Policy" in html

@@ -201,6 +201,13 @@ function describeSearchOrTool(event: PicoRunEvent): string | null {
     }
     return workbenchToolResultLine(tool, ok);
   }
+  if (event.type === 'compaction.begin' || event.type === 'compaction.end') {
+    const text = event.payload?.text;
+    if (typeof text === 'string' && text.trim()) {
+      return text.trim();
+    }
+    return '在整理上文';
+  }
   return null;
 }
 

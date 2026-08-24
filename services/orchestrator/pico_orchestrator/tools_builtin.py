@@ -24,6 +24,8 @@ from pico_orchestrator.document_generators import (
     build_html_document,
     build_pptx_document,
     build_xlsx_document,
+    require_docx_body,
+    require_pptx_body,
 )
 from pico_orchestrator.edu_adapter import EduAdapterError, list_classes
 from pico_orchestrator.gateway import (
@@ -595,6 +597,7 @@ def _workspace_handlers(
         marker = _marker_arg(args)
         body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
         try:
+            require_docx_body(body)
             raw = build_docx_document(title=title, marker=marker, body=body)
         except ValueError as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
@@ -613,6 +616,7 @@ def _workspace_handlers(
         marker = _marker_arg(args)
         body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
         try:
+            require_pptx_body(body)
             raw = build_pptx_document(title=title, marker=marker, body=body)
         except ValueError as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
@@ -1855,7 +1859,14 @@ def openai_tool_schemas(
                     "type": "string",
                     "description": "Unique visible marker string required in the document",
                 },
-                "body": {"type": "string", "description": "Optional extra paragraph text"},
+                "body": {
+                    "type": "string",
+                    "description": (
+                        "题面正文 only. Blank lines separate paragraphs. "
+                        "At least several hundred characters of the actual notice/minutes. "
+                        "Short body fails — the tool will not pad filler."
+                    ),
+                },
             },
             "required": ["title", "marker"],
         },
@@ -1870,7 +1881,14 @@ def openai_tool_schemas(
                     "type": "string",
                     "description": "Unique visible marker string required on the slide",
                 },
-                "body": {"type": "string", "description": "Optional extra slide text"},
+                "body": {
+                    "type": "string",
+                    "description": (
+                        "题面页稿. Separate slides with a blank line or ---. "
+                        "At least three titled pages from the prompt. "
+                        "Fewer pages fail — the tool will not invent 说明 slides."
+                    ),
+                },
             },
             "required": ["title", "marker"],
         },

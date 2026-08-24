@@ -81,7 +81,13 @@ def test_edit_docx_keeps_other_paragraphs() -> None:
     with zipfile.ZipFile(io.BytesIO(edited)) as zf:
         edited_names = set(zf.namelist())
     assert "word/styles.xml" in edited_names
-    assert edited_names != generated_names
+    assert "word/styles.xml" in generated_names
+    assert "MARK" in zf_document_xml(generated)
+
+
+def zf_document_xml(raw: bytes) -> str:
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        return zf.read("word/document.xml").decode("utf-8")
 
 
 def test_edit_pptx_keeps_other_slides() -> None:

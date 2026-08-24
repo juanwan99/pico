@@ -51,6 +51,8 @@ _POLICIES: dict[str, SkillPolicy] = {
         instruction=(
             "本轮交付真实文件：HTML/Word/PPT 从零造必须分别调用 generate_html_document / "
             "generate_docx_document / generate_pptx_document（每份唯一 marker）；"
+            "Word 的 body 必须是题面完整多段正文（数百字以上；不足会失败，禁止套话垫字）；"
+            "PPT 的 body 必须按题面排出至少三页有标题的幻灯（空行或 --- 分页；不足会失败，禁止垫页）；"
             "改老师已上传的 Word/PPT 必须 edit_docx_document / edit_pptx_document"
             "（读账本原件再改，禁止 generate_* 另起一份空模板冒充改原件）；"
             "出图必须 generate_image（SiliconFlow）；失败用人话说明，禁止编造图；"
@@ -94,7 +96,8 @@ _POLICIES: dict[str, SkillPolicy] = {
             "本轮是工程交付（多产物 / 隐式方案包 / 流水线落盘 / 可运行物 / 修订联动）："
             "用户说「方案包/套件/一整套」而未报文件数时，仍须拆成多份独立 Artifact；"
             "每个交付物或阶段必须独立写入（不同 title，文件名体现用途）；"
-            "真 Office/HTML 从零造用 generate_*_document；改已上传 Word/PPT 用 edit_*_document，"
+            "真 Office/HTML 从零造用 generate_*_document（Word 写题面正文、PPT 按题面至少三页；不足会失败，禁止套话垫字/垫页）；"
+            "改已上传 Word/PPT 用 edit_*_document，"
             "禁止 generate_* 另造冒充改原件；出图用 generate_image；其它用 workspace_write_file；"
             "会话改口（推翻/收窄/改成保守等）时先 list/read 已交付产物再写更新或版本号新文件；"
             "HTML 交互页：generate_html_document 的 body 必须是**完整可运行 HTML 文档**"

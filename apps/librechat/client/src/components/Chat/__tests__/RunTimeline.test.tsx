@@ -182,6 +182,18 @@ describe('RunTimeline', () => {
     expect(screen.queryByText(/generate_docx_document/)).not.toBeInTheDocument();
   });
 
+  it('shows 在整理上文 for compaction.begin (T-COMPACT-OFFICE-HARD)', () => {
+    render(
+      <RunTimeline
+        run={run('running')}
+        events={[
+          event('compact', 1, 'compaction.begin', { text: '在整理上文', source: 'true-pi' }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('在整理上文')).toBeInTheDocument();
+  });
+
   it('renders clickable search sources and honest miss copy', () => {
     const { rerender } = render(
       <RunTimeline

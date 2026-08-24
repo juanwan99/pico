@@ -54,6 +54,30 @@ PI_MODELS_JSON = "models.json"
 PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
 
 
+def official_compaction_settings(max_context: int) -> dict[str, Any]:
+    """Pi official compaction knobs only. Trigger: used > window - reserveTokens.
+
+    Do not invent a compressor. Windows stay 128k/256k. Raise reserveTokens so a
+    same-conversation long office run (several turns, tens of thousands of
+    tokens) actually fires; keepRecentTokens stays large enough that current
+    files and the last turn survive. One-shot short office stays under the line.
+    """
+    window = int(max_context) or 256_000
+    if window >= 200_000:
+        # deep 256k: fire when used > 64k (256k - 192k).
+        reserve, keep = 192_000, 20_000
+    else:
+        # fast 128k: fire when used > 56k (128k - 72k).
+        reserve, keep = 72_000, 16_000
+    return {
+        "compaction": {
+            "enabled": True,
+            "reserveTokens": reserve,
+            "keepRecentTokens": keep,
+        }
+    }
+
+
 def true_pi_windows_from_caps(caps: Any | None) -> tuple[int, int]:
     """Lane windows: context window, output cap. Never treat them as the same."""
     thinking = bool(getattr(caps, "thinking_on", False)) if caps is not None else False
@@ -260,13 +284,7 @@ class SubprocessTransport(TruePiTransport):
         )
         # Official Pi compaction settings (docs/compaction.md). Not a self-built
         # compressor: keepRecentTokens / reserveTokens are Pi's own knobs.
-        settings = {
-            "compaction": {
-                "enabled": True,
-                "reserveTokens": 16384,
-                "keepRecentTokens": 20000,
-            }
-        }
+        settings = official_compaction_settings(self.max_context)
         settings_text = json.dumps(settings, ensure_ascii=False, indent=2) + "\n"
         (dest / "settings.json").write_text(settings_text, encoding="utf-8")
         project_pi = (self.spawn_cwd or self.session_dir) / ".pi"
