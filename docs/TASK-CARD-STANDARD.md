@@ -3,6 +3,7 @@
 ```text
 DOC: docs/TASK-CARD-STANDARD.md
 STATUS: BINDING v2.2 — 2026-08-24
+FROZEN until 2026-09-07 — 禁止改本文件形状、复活 315、新开过程卡。业主未说「开过程卡」一律废派。
 SUPERSEDES: 四行短卡当派发形态
 真源: docs/ONEFLOW.md v2.1
 模板: .github/ISSUE_TEMPLATE/ · docs/templates/card-build.md · docs/templates/dispatch-slip.md

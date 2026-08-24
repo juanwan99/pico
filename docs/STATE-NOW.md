@@ -1,65 +1,59 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-08-23（交接刷新 · #634）
+FROZEN until 2026-09-07
+DATE: 2026-08-24（业主令 · 本窗落账）
 仓: juanwan99/pico ONLY
+在飞执行卡: #646 T-GROK-PATH（stamp-ok · KEEP）
 CLAIM-WB-DEGREE-WEB: NO
-PRODUCT PASS: 未签 · 等业主 OWNER DECISION（#449）
-公网 tip（本次刷新 curl）: b713464ca05cb54fc2c30309cf05dc8f3710a825（#629 SSO 聊天 403）
-origin/main: ff2c6bca407d8be8549bd43c761d77885cfb2d1c（只多文档 #632/#633，故意不部）
-  · 开工必 curl 实查：curl -fsS https://pico.aivia.asia/api/pico/tip
-活动主线: ① #623 已关 · 差业主侧人路径复验（总管未亲自登录复点）② 下一张工程 #627 T-CI-UI-GATE（无 stamp-ok）③ 阶段 1.5 两包排队
-  · 方向真源 DIRECTION-NOW §0b · 卡序：T-CI-UI-GATE → A1 → A2 → B1 → A3 → B2 → B3
-工作流: OneFlow v2（#619 已合）— 四行卡 · 禁 315 填表
-北极星: DIRECTION-NOW §0-star · 用法 = Grok · 禁定向猜任务（2026-08-24）
-本窗交接: docs/HANDOFF-NEW-WINDOW-2026-08-23.md · Issue #634（#573 作废）
+PRODUCT PASS: 未签 · 仅业主（#449 / #316）
+生产: curl -fsS https://pico.aivia.asia/api/pico/tip  （禁止把本页旧 SHA 当现网）
+工作流: 形状冻结 · 禁止过程 PR · 禁止再写交接长文
+北极星: DIRECTION-NOW §0-star · 用法 = Grok · 禁定向猜任务
+真源优先级: 本页 + #634 冻结令 > 任何 HANDOFF-*.md > 聊天
+juanwan99/oneflow: 不当真源（待业主 Archive）
 ```
+
+## 冻结令（业主 2026-08-24 · 本窗落账）
+
+1. **卡面冻结 14 天**（至 2026-09-07）。禁止过程 PR。禁止复活 315。禁止新 `HANDOFF-NEW-WINDOW-*.md`。
+2. **pico 在飞 = [#646](https://github.com/juanwan99/pico/issues/646)**。同域第二张执行卡带 `stamp-ok` = 废派。
+3. **`juanwan99/oneflow` 不当真源**。纪律只认本仓 `docs/ONEFLOW.md` / `TASK-CARD-STANDARD.md`（形状冻住，不改）。
+
+失真 = 出现任一：改卡模板 / 复活 315 / 同域第二张 `stamp-ok` / 新交接长文当现况 / 本页「在飞」对不上 stamped 执行卡 / 把 oneflow 仓当真源。总管打回，不讨论「这版更科学」。
+
+14 天内业主没有「开过程卡」四字，过程改动一律废派。
 
 ## 架构法律（BINDING）
 
 **禁止自研 · 只做薄适配：** [`LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)
 
-## 当前活动主线（阶段 1.5 · 2026-08-23 交接刷新）
+## 当前活动主线
 
-| 优先级 | Issue / PR | 说明 |
+| 优先级 | Issue | 说明 |
 |--------|-------|------|
-| **下一张** | [#627](https://github.com/juanwan99/pico/issues/627) | T-CI-UI-GATE：CI 装前端 jest（无 `stamp-ok` · 业主点头再打再派） |
-| 排队 | [#628](https://github.com/juanwan99/pico/issues/628) | 包 A1 Meili · 须 627 关卡 · **误章已摘** |
-| 收口差人眼 | [#623](https://github.com/juanwan99/pico/issues/623) 已关 | 三波+#629 已部 tip `b713464…`；老师侧 PDF/HTML 为**执行回执**，总管未亲自登录复点 |
-| 等业主配钥 | `SILICONFLOW_API_KEY` | ECS `.env`（compose 已留位）；有钥 A1 上 hybrid，无钥先纯全文诚实降级 |
-| 产品签 | [#449](https://github.com/juanwan99/pico/issues/449) · [#316](https://github.com/juanwan99/pico/issues/316) | CLAIM 材料等**业主** · 工程禁代签 · **勿关** |
-| HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | KA-3 默认切流须业主书面授权 · 未执行 · **勿关** |
-| 规划/讨论 | [#505](https://github.com/juanwan99/pico/issues/505) · [#530](https://github.com/juanwan99/pico/issues/530)（序1/序2 已激活） · [#498](https://github.com/juanwan99/pico/issues/498) · [#600](https://github.com/juanwan99/pico/issues/600) | 规划稿/指针 · **勿关 · 勿当本周执行** |
-| 运行线程 | [#475](https://github.com/juanwan99/pico/issues/475) · [#634](https://github.com/juanwan99/pico/issues/634) | controller-bot poll log · **现行总管交接** · 长期开（#573 作废仍勿关） |
+| **在飞** | [#646](https://github.com/juanwan99/pico/issues/646) | T-GROK-PATH · 用法=Grok · 拆定向焊接 · KEEP · stamp-ok |
+| 产品签 | [#449](https://github.com/juanwan99/pico/issues/449) · [#316](https://github.com/juanwan99/pico/issues/316) | 仅业主 · 工程禁代签 · **勿关** |
+| HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
+| 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 冻结令入口；8-23 交接正文不当现况 |
+| 规划/讨论 | #505 #530 #498 #600 | **勿关 · 勿当本周执行** |
+| 运行线程 | [#475](https://github.com/juanwan99/pico/issues/475) | controller-bot poll log · 长期开 |
 
 ```text
-2026-08-23 已收口：#615 #613 #619 #620 #621 #622 #623 #624 #625 #629 #630 #631 #632 #633 · #586 关闭不合（业主决定 · 分支保留）
-现网 tip b713464… 已含：#623 三波 + #629 SSO 聊天 403
-禁止误关：#316 #449 #498 #505 #530 #170 #475 #573 #600 #634
-禁止把已 close 卡当活动主线
-#573 作废不当现况（仍勿关，防旧窗当现役）
+8-23 交接（#634 旧正文 / HANDOFF-NEW-WINDOW-2026-08-23.md）不当现况。
+#573 作废已关。禁止再写日期交接长文。新总管只读本页 + curl tip + #646。
+禁止误关：#316 #449 #498 #505 #530 #170 #475 #600 #634 #646
 ```
 
 ## 业主方向（最新 BINDING）
 
-见 **[docs/DIRECTION-NOW.md](./DIRECTION-NOW.md)**（四条目标收窄）。
+见 **[docs/DIRECTION-NOW.md](./DIRECTION-NOW.md)**。
 
 ```text
-1) 通用开放域 · 教育仅之一
-2) Pi + DeepSeek
-3) 通用能力 + 复杂问题（办公优先）
-4) 对标 WorkBuddy · 本阶段只打牢 Agent + UI/UX
-   不做：连接器 / MCP / Skill 摊子
-```
-
-## 锁定句
-
-```text
-目标：Web 上对标 WorkBuddy 的办事能力（体验向）
-方案：Pico 整车 + Pi + DeepSeek
-本阶段：基础能力（Agent 优化 + 交互体验）
-不做：Dify 门脸 · 场景卷对标 · 双核 · MCP/Skill/连接器铺开
-验收秤：阶段一底座全优 → 阶段二加压；基建是手段
+用法：Grok（通用 LLM · 挂载才办事 · 系统≠人话）
+目标：Web 上对标 WorkBuddy 的办事能力
+方案：Pico 整车 + 真 Pi + DeepSeek
+不做：Dify 门脸 · 场景卷对标 · 双核 · MCP/Skill/连接器铺开 · 定向猜任务
 CLAIM-WB-DEGREE-WEB: NO
 ```
 
@@ -67,16 +61,19 @@ CLAIM-WB-DEGREE-WEB: NO
 
 | 项 | 值 |
 |----|-----|
-| 公网 tip | `GET /api/pico/tip` → 须 40 位实查（写窗 `b713464ca05cb54fc2c30309cf05dc8f3710a825`；main `ff2c6bca…` 故意不部） |
-| multi-step 默认 | **pi-true**（`PICO_TRUE_PI_DEFAULT=1`） |
+| 公网 tip | `GET /api/pico/tip` → 须 40 位实查 · 禁止抄本页历史 SHA |
+| 发布 | `PICO_DEPLOY_SHA=<40位> bash /opt/pico/scripts/prod-update.sh` |
+| multi-step 默认 | **pi-true** |
 | 事故回滚 | **仅** `PICO_HOSTED_LOOP=1` |
 | 钉版 | `@mariozechner/pi-coding-agent@0.73.1` |
-| drain | 45s inflight · grace 60s · **≠ 零中断** |
-| 真源主机 | ECS `47.121.197.52`（`ssh ecs` · `/opt/pico` · 18765）；dmit 仅 443 反代 |
-| 搜索 | gateway `web_search` / `web_fetch` · 来源链接或「未检索到可用来源」 |
+| 真源主机 | ECS `47.121.197.52`（`ssh ecs` · `/opt/pico` · 18765） |
 | P4 出图 | **HOLD** · 禁当交件 |
 | CLAIM-WB | **NO** |
 
 ## 错误记忆
 
-见 MEMORY-RESET：禁止 edu 串仓；禁止工程代签 CLAIM-WB YES；禁止把冻结 tip 当现网 tip；禁止把已关空壳当活动主线；禁止 315 填表卡面（OneFlow v2 后四行卡）。
+- 禁止把 #634 旧正文 / `HANDOFF-NEW-WINDOW-2026-08-23.md` 当现况
+- 禁止把 #627/#628 当在飞（已不在 OPEN）
+- 禁止过程 PR、新交接、oneflow 仓当真源
+- 禁止 edu 串仓；禁止代签 CLAIM-WB YES
+- 禁止把本页历史 SHA 当现网 tip

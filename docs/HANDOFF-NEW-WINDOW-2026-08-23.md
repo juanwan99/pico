@@ -1,152 +1,33 @@
 # 交接 · Pico 总管新窗（2026-08-23）
 
+> **SUPERSEDED 2026-08-24。不当现况。**  
+> 现况只认 [`docs/STATE-NOW.md`](./STATE-NOW.md) + [Issue #634 冻结令](https://github.com/juanwan99/pico/issues/634)。  
+> 在飞执行卡 = [#646](https://github.com/juanwan99/pico/issues/646)。禁止再写交接长文。形状冻到 2026-09-07。
+
 ```text
-STATUS: BINDING 交接 · 接替本窗 · #573 作废
-DATE: 2026-08-23
+STATUS: SUPERSEDED · 2026-08-24 冻结令作废本文当现况
+DATE: 2026-08-23（原稿，不当现况）
 入口: https://github.com/juanwan99/pico/issues/634
 仓: juanwan99/pico ONLY · 禁止 edu-core 混线
 公网: https://pico.aivia.asia
-生产: SSH pico-prod / ecs · /opt/pico
-现网 tip（写窗 curl）: b713464ca05cb54fc2c30309cf05dc8f3710a825
-origin/main（写窗）: ff2c6bca407d8be8549bd43c761d77885cfb2d1c（只多文档 #632/#633，故意不部）
 CLAIM-WB-DEGREE-WEB: NO · 工程禁止代签
 ```
+
+以下为 8-23 交接原稿，仅供历史。新窗不读下文当现况。
+
+---
 
 你接的是 **[juanwan99/pico](https://github.com/juanwan99/pico) 总管**：调查、跟业主对齐、派四行卡、核 SHA、放行合/装。默认不写业务码。执行丢给无记忆窗。
 
 **不管 edu-core。** 不派、不改、不赶那个仓的卡。
 
 > **宏观目标错了 = 整窗作废。**  
-> 先读本文 → [DIRECTION-NOW](./DIRECTION-NOW.md) → [ONEFLOW](./ONEFLOW.md) → [STATE-NOW](./STATE-NOW.md) → [LAW](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md) → 活动 Issue。
+> 先读 [STATE-NOW](./STATE-NOW.md) → [DIRECTION-NOW](./DIRECTION-NOW.md) → [LAW](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md) → 活动 Issue #646。
 
 ---
 
 ## 0. 三句话
 
 1. **做谁：** 公网 AI 工作台 **Pico**（LibreChat + 账本 + **真 Pi 薄桥** + **DeepSeek**），对标 **WorkBuddy 级能办事**。
-2. **做到哪：** 阶段 1.5「AI 本体 + 知识库」两包未开；#623 已合已部，差业主侧人路径复验；**CLAIM-WB 未签**。
-3. **怎么干：** 单窗 SOLO · 先测/RCA 再修 · OneFlow v2 四行卡 · DS 主执行 · 总管 L2 · 禁自签 PASS · 禁 315。
-
----
-
-## 1. 整个项目在干什么
-
-给老师用的两套东西：
-
-- **edu-core**（别人负责）：学校业务网站。班课、表格、填报。
-- **Pico**（你负责）：AI 工作台。长对话、改文档、出文件。核是 **真 Pi + DeepSeek**，禁止自研 Agent 内核。
-
-老师怎么用：侧栏帮填教务网页（偏文本）；要生成 Word/PPT/图，进 Pico 工作台。侧栏不要挂工作区重工具。
-
-北极星：**Pico 的用法 = Grok 的用法**（通用 LLM · 挂载才办事 · 没点名不交件）。办事程度对标 WorkBuddy 六条，**不是**用启发式逼交件。真源：`docs/DIRECTION-NOW.md` §0-star。**只有业主能签** `CLAIM-WB-DEGREE-WEB`。工程禁止代签。
-
-锁定句：
-
-```text
-用法：Grok（通用模型 + 挂载；系统≠人话）
-目标：Web 上 WorkBuddy 程度（六条硬标准）
-方案：Pico 整车 + 默认编排核 Pi + DeepSeek
-执行：单窗 SOLO（改→合→装→验）
-不做：Dify 门脸 · 场景卷对标 · 双核并列真源 · 定向猜任务
-本阶段（DIRECTION-NOW）：不铺 连接器 / MCP / Skill 市场
-```
-
-法律：`docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md` — 禁止自研核 / 厚桥 / 第二编排真源。只允许薄适配。
-
-```text
-门脸 LibreChat → 控制面/账本 Pico API → 编排 true_pi 默认 → 模型 DeepSeek
-回滚: 仅 PICO_HOSTED_LOOP=1 → hosted pi_runtime
-钉版: @mariozechner/pi-coding-agent@0.73.1
-```
-
----
-
-## 2. 这个仓库在干什么
-
-Pico = AI **过程**真源（会话、工具、产物、双档）。不是第二套教务系统。Agent 不直写成绩库。
-
-公网：https://pico.aivia.asia  
-机器：ECS `/opt/pico`（`ssh ecs` / `pico-prod`）。发布：`PICO_DEPLOY_SHA=<40位> bash /opt/pico/scripts/prod-update.sh`  
-生产只认：`curl -fsS https://pico.aivia.asia/api/pico/tip`
-
-[#573](https://github.com/juanwan99/pico/issues/573) 是 8-15 旧交接（还在说 315、#572/#570），**作废，不要当现况。** 现行入口：[Issue #634](https://github.com/juanwan99/pico/issues/634)。
-
----
-
-## 3. 你当总管要守的
-
-- 一张结果一张卡。残债同卡续，禁 `T-*-DEBT`。
-- **执行窗零记忆。** 调查写入 Issue 标准任务卡（已锁事实/IN），不要留在总管聊天。
-- **派 = Issue 已开 + stamp-ok + 对话只贴** [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)（合同链接 · 必读点名 · ≤3 坑名）。缺一条没派。
-- 卡面体例对齐 #627 标准任务卡。四行是骨架，禁止用四行短卡替代合同。
-- 经验、工具写在手册。条上点名：`ONEFLOW.md` · `MEMORY-RESET.md` · `TOOLING-CATALOG.md`。
-- 无 `stamp-ok` 拒领。写入不自签 PASS。CI 红不合。合了没装 = 老师没看见。
-- 总管默认不写业务码。不信回执里的 SHA，自己 curl tip。
-
----
-
-## 4. 现在实际状态（2026-08-23 写窗 curl）
-
-| | |
-|--|--|
-| 现网 tip | `b713464ca05cb54fc2c30309cf05dc8f3710a825`（#629 SSO 聊天 403 那刀） |
-| origin/main | `ff2c6bca407d8be8549bd43c761d77885cfb2d1c`（只多文档 #632/#633，**故意不部**） |
-| 老师侧 | 学校登录能聊、PDF 能开、能生成 HTML（**执行回执**；总管未亲自登录复点） |
-
-刚收口：#623 产物/登录（已关）；#615 多轮对话；#613 跑时人话；#631 任务卡瘦身（已关 · #632+#633 已合）。
-
-**下一张：** [#627](https://github.com/juanwan99/pico/issues/627) 给 CI 装前端 jest。现无 `stamp-ok`，业主点头再打再派。（#627 上「下一张是 #631」旧注已过期 — #631 已关。）
-
-**再下一张：** [#628](https://github.com/juanwan99/pico/issues/628) 材料检索上 Meili。必须 627 关了再开。**写窗已摘掉误挂的 `stamp-ok`。**
-
-出图（P4）HOLD。不要把旧规划 #530/#505/#498/#316 当本周执行。
-
-卡序（DIRECTION-NOW §0b）：`T-CI-UI-GATE` → A1 → A2 → B1 → A3 → B2 → B3。SOLO 一张在飞。
-
-```text
-主线唯一: 等业主点头 → #627 → #628
-并行勿抢: CLAIM 只等业主 · HOLD 不动
-禁卫生大扫除
-```
-
----
-
-## 5. 新窗第一件事（复制执行）
-
-```text
-1) curl -fsS https://pico.aivia.asia/api/pico/tip
-2) 读 docs/ONEFLOW.md、本交接、docs/DIRECTION-NOW.md、docs/STATE-NOW.md
-3) 对业主只报：现网 b713464…；下一张是不是 627
-4) 确认 #628 已无 stamp-ok（写窗已摘；若还在就再摘）
-5) 不写业务代码，除非业主点头给 #627 打 stamp-ok
-6) #623 不开第四波，除非业主侧人路径复验失败
-7) Ready 不暗示 CLAIM-WB-DEGREE-WEB: YES
-8) 勿卫生大扫除、勿动 HOLD（#170）
-```
-
-`CLAIM-WB-DEGREE-WEB: NO`
-
----
-
-## 6. 角色
-
-| 角色 | 职责 |
-|------|------|
-| 业主 | 方向 · CLAIM-WB · HOLD 授权 · 给 #627 打 stamp-ok |
-| 总管 Grok | 调查写入 Issue · 打章 · 对话只贴派发条 · L2 核 SHA · 禁自签 · 禁自己当执行窗 |
-| DS | 主执行 · L1 自审 · 边测边修 |
-
----
-
-## 7. 一句话交给新窗
-
-```text
-Pico = 真 Pi + DeepSeek；CLAIM-WB 未签。
-下一张工程主线 = #627 给 CI 装前端 jest 门（无章，业主点头再派）。
-#628 误章已摘，须 627 关卡。#623 已部差人眼。
-禁自研厚桥 · 禁 edu 混线 · 禁代签 · 禁 315 · 禁无章开工。
-```
-
----
-
-**冲突时：Issue 正文 + 最新 tip 实查 + DIRECTION-NOW / 本交接 / TRUTH-FREEZE / LAW > 聊天摘要。**
+2. **做到哪：** 在飞 #646；**CLAIM-WB 未签**。
+3. **怎么干：** 单窗 SOLO · 形状冻结 · 禁自签 PASS · 禁 315 · 禁过程 PR。
