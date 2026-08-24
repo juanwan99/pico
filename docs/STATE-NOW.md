@@ -11,6 +11,7 @@ origin/main: ff2c6bca407d8be8549bd43c761d77885cfb2d1c（只多文档 #632/#633�
 活动主线: ① #623 已关 · 差业主侧人路径复验（总管未亲自登录复点）② 下一张工程 #627 T-CI-UI-GATE（无 stamp-ok）③ 阶段 1.5 两包排队
   · 方向真源 DIRECTION-NOW §0b · 卡序：T-CI-UI-GATE → A1 → A2 → B1 → A3 → B2 → B3
 工作流: OneFlow v2（#619 已合）— 四行卡 · 禁 315 填表
+北极星: DIRECTION-NOW §0-star · 用法 = Grok · 禁定向猜任务（2026-08-24）
 本窗交接: docs/HANDOFF-NEW-WINDOW-2026-08-23.md · Issue #634（#573 作废）
 ```
 

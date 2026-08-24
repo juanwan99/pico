@@ -38,15 +38,16 @@ CLAIM-WB-DEGREE-WEB: NO · 工程禁止代签
 
 老师怎么用：侧栏帮填教务网页（偏文本）；要生成 Word/PPT/图，进 Pico 工作台。侧栏不要挂工作区重工具。
 
-北极星：网上用起来接近 WorkBuddy 那种程度（对话稳、长任务跑完、文件找得到）。**只有业主能签** `CLAIM-WB-DEGREE-WEB`。工程禁止代签。
+北极星：**Pico 的用法 = Grok 的用法**（通用 LLM · 挂载才办事 · 没点名不交件）。办事程度对标 WorkBuddy 六条，**不是**用启发式逼交件。真源：`docs/DIRECTION-NOW.md` §0-star。**只有业主能签** `CLAIM-WB-DEGREE-WEB`。工程禁止代签。
 
 锁定句：
 
 ```text
+用法：Grok（通用模型 + 挂载；系统≠人话）
 目标：Web 上 WorkBuddy 程度（六条硬标准）
 方案：Pico 整车 + 默认编排核 Pi + DeepSeek
 执行：单窗 SOLO（改→合→装→验）
-不做：Dify 门脸 · 场景卷对标 · 双核并列真源
+不做：Dify 门脸 · 场景卷对标 · 双核并列真源 · 定向猜任务
 本阶段（DIRECTION-NOW）：不铺 连接器 / MCP / Skill 市场
 ```
 

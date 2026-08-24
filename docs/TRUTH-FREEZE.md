@@ -2,12 +2,12 @@
 
 ```
 DOC: docs/TRUTH-FREEZE.md
-STATUS: BINDING FREEZE v1.1
-FROZEN_AT: 2026-08-06
+STATUS: BINDING FREEZE v1.2
+FROZEN_AT: 2026-08-24
 PURPOSE: 固定产品/架构真源，防止聊天与旧文档再次冲掉校准结论
-AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO；代码/PR 证据可更新「实现现状」，不可偷偷改「目标」
-SUPERSEDES: v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
-RELATED: docs/HANDOFF-WB-PI.md → docs/MEMORY-RESET.md（产品目标权威）
+AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star
+SUPERSEDES: v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/MEMORY-RESET.md
 ```
 
 ---
@@ -23,14 +23,15 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/MEMORY-RESET.md（产品目标权威）
 
 ---
 
-## 1. 冻结决策集 v1.1（目标 · 不可被执行窗改写）
+## 1. 冻结决策集 v1.2（目标 · 不可被执行窗改写）
 
 ### 1.1 产品是什么
 
 | # | 冻结句 |
 |---|--------|
-| P1 | Pico = **任务型 AI 工作台（Web）** 底座（对话 + 办事 + 产物 + 唯一 AI 账本 + 控制面）；类 WorkBuddy 程度（六条） |
-| P2 | **不是** 网盘 / 教务 SaaS / 成绩主库 / 自托管大模型默认 / Dify 门脸终局 / 场景考卷对标 |
+| P0 | **用法 = Grok**：通用 LLM；老师的话是 user；系统纪律是 system，不得冒充人话；工具/材料/Skill 是挂载，模型自己决定调不调。没点名不交件。禁止读正文猜任务、force_agent 自动挂交付、把「必须交 N 个文件」焊进 user prompt。真源：DIRECTION-NOW §0-star |
+| P1 | Pico = **任务型 AI 工作台（Web）** 底座（对话 + 办事 + 产物 + 唯一 AI 账本 + 控制面）；办事程度类 WorkBuddy（六条）。P1 不得压过 P0 |
+| P2 | **不是** 网盘 / 教务 SaaS / 成绩主库 / 自托管大模型默认 / Dify 门脸终局 / 场景考卷对标 / 定向猜任务的办公机器人 |
 | P3 | 用户成功 = 公网登录 → 开放派活 → 多步过程可见 → 真产物 → 能停、能找回、同会话可改 → 状态诚实 |
 | P4 | 壳 = **`apps/librechat`（MIT）**；禁止回潮 web/nextchat/workbench；禁止拆闭源 WorkBuddy |
 | P5 | 与 edu：Pico = **AI 过程真源**；edu-core = **业务事实真源**；对接后置；**禁止写 edu-cloud**；**禁止 Agent 写成绩/教务库** |

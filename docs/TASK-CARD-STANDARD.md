@@ -2,11 +2,12 @@
 
 ```text
 DOC: docs/TASK-CARD-STANDARD.md
-STATUS: BINDING v2.1 — 2026-08-23
+STATUS: BINDING v2.2 — 2026-08-24
 SUPERSEDES: 四行短卡当派发形态
 真源: docs/ONEFLOW.md v2.1
 模板: .github/ISSUE_TEMPLATE/ · docs/templates/card-build.md · docs/templates/dispatch-slip.md
 经验: docs/MEMORY-RESET.md（不进卡面；派发条只点名坑）
+北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok · 禁定向猜任务
 ```
 
 点 **New Issue** 选「执行卡」或贴 **标准任务卡**（#627 体例）。卡必须自含【已锁事实】【IN】【验收】——执行窗零记忆，总管聊天里的调查它看不见。
@@ -74,3 +75,5 @@ PASS：未签
 - 用四行短卡当已派
 - 对执行窗贴 Issue 全文，或不贴派发条
 - 把调查留在总管聊天
+- **定向卡**：读正文猜任务、force_agent 自动挂交付、把「必须交文件」焊进 user prompt（北极星 DIRECTION-NOW §0-star）
+- 问题没讨论清就开执行 PR（调查先写 Issue；无 stamp-ok 禁开工）

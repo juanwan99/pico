@@ -12,7 +12,7 @@
 合同：https://github.com/juanwan99/pico/issues/<N>
 一句话：<老师在 pico.aivia.asia 能看见什么>
 禁止：自签 PASS · 直推 main · 残债新卡
-必读：docs/ONEFLOW.md · docs/MEMORY-RESET.md · docs/TOOLING-CATALOG.md · <本卡多的一本，如 LAW>
+必读：docs/ONEFLOW.md · docs/MEMORY-RESET.md · docs/DIRECTION-NOW.md · docs/TOOLING-CATALOG.md · <本卡多的一本，如 LAW>
 坑：<最多 3 个短名，按名去手册或合同【已锁事实】找 · 禁止在条里贴调查全文>
 回执：评论 #<N> · 五句 · PASS 未签
 ```

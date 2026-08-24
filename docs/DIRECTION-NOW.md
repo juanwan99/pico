@@ -1,16 +1,38 @@
-# DIRECTION-NOW · 业主方向锁定（2026-08-09 · v1.1 加线 2026-08-23）
+# DIRECTION-NOW · 业主方向锁定（2026-08-09 · v1.2 北极星 2026-08-24）
 
 ```text
-STATUS: BINDING · 业主书面四条 + 阶段 1.5 加线
+STATUS: BINDING · 业主书面四条 + 阶段 1.5 加线 + 北极星（Grok 用法）
 DATE: 2026-08-09
-UPDATED: 2026-08-23 · 业主拍板「AI 本体 + 知识库」两包（§0b）
+UPDATED: 2026-08-24 · 业主书面：Pico 用法 = Grok 用法 · 禁定向猜任务
 仓: juanwan99/pico ONLY
-SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.1 · PLAN-TWO-PHASE-WB · STATE-NOW
+SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.2 · PLAN-TWO-PHASE-WB · STATE-NOW
 CLAIM-WB-DEGREE-WEB: NO
 ```
 
 > 本页 = **当前阶段目标收窄与优先级**。与旧「先铺 Skill/MCP/连接器」冲突时 **以本页为准**。  
-> 改目标类句子 → PR 升版，禁止只在聊天改口。
+> 改目标类句子 → PR 升版，禁止只在聊天改口。  
+> **北极星（§0-star）压过本页其余「交得出 / Agent 真能干」表述。**
+
+---
+
+## 0-star. 北极星（2026-08-24 业主书面 · BINDING）
+
+```text
+Pico 的用法 = Grok 的用法。
+Pico 是通用 LLM。老师的话是 user。系统纪律是 system，不得冒充人话。
+工具 / 材料 / Skill 是挂载；模型看老师的话决定用不用。
+问「这是什么」就解释。说「做成 Word」才交文件。
+禁止：读正文猜任务 · force_agent 自动挂交付 Skill
+禁止：把「本轮必须交 N 个文件」焊进 user prompt
+禁止：用课件/通知/模块等词表做定向工作流
+```
+
+| 北极星 | 指什么 | 不指什么 |
+|--------|--------|----------|
+| **Grok** | 对话用法：通用模型 + 挂载的工具，模型自己决定调不调 | 复刻 Grok 品牌/功能清单 |
+| **WorkBuddy** | 体验上限：长任务跑完、真文件打开能用（六条） | 用启发式逼模型交件 |
+
+与「办公硬度 / 交得出」冲突时：**先当通用模型，再交件。** 没点名就不交。
 
 ---
 
@@ -113,7 +135,8 @@ CLAIM-WB-DEGREE-WEB: NO
 ## 4. 禁区（继承 + 本阶段加严）
 
 - 串 edu-cloud；Dify 门脸终局；双核真源  
-- 定向优化 / 考题特判 / 假绿 / 自签 CLAIM-WB  
+- **定向优化**：考题特判、读正文猜任务、force_agent 自动挂交付、把工作流焊进 user prompt（见 §0-star）  
+- 假绿 / 自签 CLAIM-WB  
 - 本阶段 PR 以「接上 MCP/Skill/连接器」为主线 = **范围违规**  
 - 把产品做成「仅教育课件生成器」  
 
@@ -122,16 +145,17 @@ CLAIM-WB-DEGREE-WEB: NO
 ## 5. 一句话
 
 ```text
+Pico 用法 = Grok 用法（通用 LLM · 挂载才办事 · 没点名不交件）
 通用开放域（教育仅之一）· Pi + DeepSeek
-要通用复杂能力（办公优先）· 对标 WorkBuddy
+办事程度对标 WorkBuddy（六条）· 不是用启发式逼交件
 本阶段：Agent + 交互体验打扎实
-不做：连接器 · MCP · Skill 摊子
+不做：连接器 · MCP · Skill 摊子 · 定向猜任务
 CLAIM-WB: NO
 ```
 
 ```
 ════════════════════════════════════
-BINDING · DIRECTION-NOW · 2026-08-09
-Foundation = Agent + UX · Not MCP/Skill/Connectors
+BINDING · DIRECTION-NOW · v1.2 · 2026-08-24
+Pico 用法 = Grok 用法 · 禁定向猜任务
 ════════════════════════════════════
 ```

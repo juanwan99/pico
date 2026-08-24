@@ -5,6 +5,7 @@ DOC: docs/ONEFLOW.md
 STATUS: BINDING v2.1 — 2026-08-23
 REPO: juanwan99/pico ONLY
 ALIGN: edu-core TASK-DISPATCH v2（派发条 + 合同在 Issue）
+NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 ```
 
 > GitHub Flow + 生产认 SHA。不是 Git Flow。不是 315 填表。

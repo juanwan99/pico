@@ -12,10 +12,13 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 
 ## 0. 一句话
 
-**Pico = 面向学校场景的「独立 AI 工作台」产品底座：**  
-人在浏览器里下任务 → 模型与工具干活 → **过程与产物记在 Pico 唯一 AI 账本** → 需要改业务时走 **人确认（S7）** → 业务数据仍归 **edu**（后置对接）。
+**Pico 的用法 = Grok 的用法。** 通用 LLM。老师的话是 user；系统纪律是 system，不得冒充人话。工具 / 材料 / Skill 是挂载，模型看老师的话决定用不用。问「这是什么」就解释；说「做成 Word」才交文件。
 
-它不是网盘，不是教务系统，不是「再造一个大模型」，也不是「已经接好开源 Kimi Agent 运行时」的成品叙事。
+工作台（LibreChat + Pico 账本）是壳和控制面，**不是**读正文猜任务的定向工作流。
+
+**禁止：** force_agent 自动挂交付 Skill、把「本轮必须交 N 个文件」焊进 user prompt、用课件/通知/模块词表定向。
+
+详见 [`DIRECTION-NOW.md` §0-star](./DIRECTION-NOW.md)。
 
 ---
 
@@ -23,7 +26,7 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 
 | 维度 | 定义 |
 |------|------|
-| **品类** | 类 Claude / Codex / WorkBuddy 的 **任务型 AI 工作台**（对话 + 办事 + 产物） |
+| **品类** | **通用 LLM**（用法对齐 Grok）+ 任务型工作台壳（对话 + 可挂载工具办事 + 产物账本）；办事程度对标 WorkBuddy 六条 |
 | **用户** | 教师/管理者等（学校场景），先独立可试用 |
 | **壳** | **`apps/librechat`（MIT）** 中文工作台；禁止回潮 web/nextchat/workbench；禁止拆闭源 WorkBuddy |
 | **智能** | **云端模型 HTTPS API**（**DeepSeek 为主**，Kimi 可选后备密钥） |
@@ -45,7 +48,7 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 | 教务 SaaS / 成绩主库 | 学籍班课考在 edu |
 | 自托管大模型训练集群 | 默认买 API |
 | 自研「Agent OS」终局品牌 | **目标禁止**；代码里若有薄工具环 = **待归位债务** |
-| 「开源 Kimi Agent 已深度接入」 | **当前不成立**（见 §4）；禁止再当完成态宣传 |
+| 读正文猜任务的定向 Agent | **禁止**。特定任务只因老师挂了文件/Skill/工具。见 DIRECTION-NOW §0-star |
 | Live Preview 沙箱端口故事 | 业主主路径是 **公网 HTTPS** |
 
 ---
