@@ -8,6 +8,9 @@ via ``_finalize_run``.
 Used by:
 - ``services/api/app/openai_compat.py`` -> ``_finalize_run`` (interactive chat)
 - ``services/api/app/run_service.py``   -> ``_execute_run``  (retry / /v1/tasks / automation)
+
+T-HARNESS-SLIM: no prompt-word supervisor. Gates are assistant-claim vs disk
+and empty Office zip only.
 """
 
 from __future__ import annotations
@@ -15,7 +18,6 @@ from __future__ import annotations
 from typing import Any
 
 from pico_orchestrator.delivery_policy import (
-    analyze_delivery,
     count_user_artifacts,
     is_bookkeeping_title,
     looks_like_clarification,
@@ -61,40 +63,17 @@ async def apply_delivery_gate(
     final_text: str | None,
     user_prompt: str | None,
 ) -> None:
-    """Emit ``delivery.summary`` and fail-closed when delivery intent is unmet.
+    """Emit ``delivery.summary`` and fail-closed when a file claim is unmet.
 
     Mutates ``run.status`` / ``run.error`` in place and writes events via
     ``append_event(..., commit=False)``; the caller is responsible for commit.
     """
     from sqlalchemy import select
 
-    from app.db import ArtifactRow, TaskRow, append_event
+    from app.db import ArtifactRow, append_event
 
-    # Lazy imports keep this module out of the openai_compat <-> run_service cycle.
-    from app.openai_compat import _prior_artifact_titles_for_principal
-
+    del user_prompt
     run_id = run.id
-
-    # Principal-scoped prior titles when available on the run's school/membership.
-    prior_titles: list[str] = []
-    try:
-        task = await session.get(TaskRow, run.task_id) if run.task_id else None
-        if task is not None:
-
-            class _P:
-                school_id = task.school_id
-                membership_id = task.membership_id
-
-            prior_titles = await _prior_artifact_titles_for_principal(_P())
-    except Exception:  # noqa: BLE001 — policy must not fail the run
-        prior_titles = []
-
-    prompt_for_plan = user_prompt or run.prompt or ""
-    plan = analyze_delivery(prompt_for_plan, prior_artifact_titles=prior_titles)
-    from dataclasses import replace as _dc_replace_plan
-
-    # Never fail-closed from a user-prompt word list. Observability only.
-    plan = _dc_replace_plan(plan, min_artifacts=0, force_agent=False)
 
     art_rows = await session.execute(
         select(
@@ -116,15 +95,6 @@ async def apply_delivery_gate(
     )
 
     status = run.status
-    # G5 observability: machine-readable delivery summary (always, when we have a plan).
-    # G1 ok: multi/pipeline require min count; single-unit with ≥1 file is user-visible OK.
-    multi_or_pipeline = bool(plan.multi_deliverable or plan.pipeline)
-    if plan.min_artifacts <= 0:
-        delivery_ok = True
-    elif multi_or_pipeline:
-        delivery_ok = user_art_count >= plan.min_artifacts
-    else:
-        delivery_ok = user_art_count >= 1
     if status in ("succeeded", "failed", "cancelled"):
         await append_event(
             session,
@@ -133,29 +103,23 @@ async def apply_delivery_gate(
             {
                 "status": status,
                 "artifact_count": user_art_count,
-                "min_required": plan.min_artifacts,
+                "min_required": 0,
                 "titles": titles[:40],
-                "multi_deliverable": plan.multi_deliverable,
-                "pipeline": plan.pipeline,
-                "revision": plan.revision,
-                "runnable_html": plan.runnable_html,
-                "implicit_package": bool(
-                    getattr(plan, "implicit_package", False)
-                ),
-                "structure_item_count": int(
-                    getattr(plan, "structure_item_count", 0) or 0
-                ),
-                "prior_artifact_count": int(
-                    getattr(plan, "prior_artifact_count", 0) or 0
-                ),
-                "ok": delivery_ok if status == "succeeded" else False,
+                "multi_deliverable": False,
+                "pipeline": False,
+                "revision": False,
+                "runnable_html": False,
+                "implicit_package": False,
+                "structure_item_count": 0,
+                "prior_artifact_count": 0,
+                "ok": status == "succeeded",
                 "human_titles": titles[:40],
                 "note": (
                     "Prefer run.status + delivery.summary + artifact list over "
                     "client stream timeout alone. "
                     "Scripts: scripts/wait_delivery_summary.py. "
                     "Human lens: open files in app/browser; L0≠人类可用. "
-                    "G1: single-unit + ≥1 file is ok even if heuristic min was higher."
+                    "min_required is never guessed from the user prompt."
                 ),
             },
             commit=False,

@@ -32,20 +32,12 @@ PROMPT = (
 
 
 def test_pico_markers_mask_delivery_intent_until_stripped() -> None:
-    """RC-1: markers still stripped. T-GROK-PATH: no auto skill bind."""
+    """RC-1: markers still stripped. Routing never guesses min/force."""
     from app.openai_compat import _resolve_skill_for_prompt, _strip_pico_markers
-    from pico_orchestrator.delivery_policy import analyze_delivery
-
-    marked = analyze_delivery(MARKED + PROMPT)
-    assert marked.force_agent is False
-    assert marked.min_artifacts == 0
 
     clean = _strip_pico_markers(MARKED + PROMPT)
     assert "【Pico-User" not in clean
     assert "【权限" not in clean
-    plan = analyze_delivery(clean)
-    assert plan.force_agent is True
-    assert plan.min_artifacts >= 1
 
     skill, routed_plan = _resolve_skill_for_prompt(clean, None, history=None)
     assert skill is None
