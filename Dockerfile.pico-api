@@ -1,11 +1,11 @@
 # Lean Pico API image for Aliyun (CN PyPI mirror) — NO Node / pi binary.
 # Public host deploy (DEFAULT=1) MUST use Dockerfile.pico-api.true-pi
 # via docker-compose.host.yml (T-OPS-TRUE-PI-HYGIENE / #436).
+#
+# Cache law: never ARG/ENV a per-deploy SHA above pip/apt layers.
 FROM python:3.12-slim
 
 WORKDIR /app
-ARG PICO_GIT_SHA=unknown
-ENV PICO_GIT_SHA=${PICO_GIT_SHA}
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -35,11 +35,12 @@ RUN set -eux; \
       libglib2.0-0 libgomp1 libgl1 libxcb1 libsm6 libxext6 libxrender1; \
     rm -rf /var/lib/apt/lists/*
 
-# T-PICO-NO-TORCH: do not hit pytorch.org. Office Docling does not need torch.
-# PIP_DEFAULT_TIMEOUT=120 bounds the install. Uninstall if a transitive dep pulled it.
+# T-PICO-NO-TORCH: do not install the `docling` meta package (pulls torch).
+# Fail closed if torch still resolves; do not download-then-uninstall.
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
-      "docling>=2.14,<3" opencv-python-headless rapidocr onnxruntime pypdfium2 \
- && pip uninstall -y torch torchvision || true
+      "docling-slim[format-office,format-xlsx,convert-core]>=2.14,<3" \
+      opencv-python-headless rapidocr onnxruntime pypdfium2 \
+ && python -c "import importlib.util,sys; sys.exit(1 if importlib.util.find_spec('torch') else 0)"
 
 ENV DOCLING_ARTIFACTS_PATH=/opt/docling-models \
     HF_HOME=/opt/docling-models/hf \
@@ -55,6 +56,10 @@ ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
 
 RUN mkdir -p /app/data
+
+# Per-deploy identity. Must stay below every pip/apt RUN.
+ARG PICO_GIT_SHA=unknown
+ENV PICO_GIT_SHA=${PICO_GIT_SHA}
 
 EXPOSE 18765
 CMD ["uvicorn", "app.main:app", "--app-dir", "services/api", "--host", "127.0.0.1", "--port", "18765"]
