@@ -7,6 +7,7 @@
 冻结令: https://github.com/juanwan99/pico/issues/634
 在飞: 无
 执行三刀: 证据贴 Issue · 无 ECS 拒领 · 过门=老师手
+对业主: 开卡前三行复述；审查四行（完成/证据/原因/下一步）。禁云。
 禁止: 改卡模板 · 证据 PR · 合了未部报 DONE · 第二张 stamp-ok · oneflow 仓当真源
 新窗: STATE-NOW → curl tip。无在飞则讨论，不开卡。
 ```
