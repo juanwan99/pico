@@ -1,14 +1,14 @@
 # Pico agent rules (binding)
 
-> **FROZEN until 2026-09-07。现况只认下面框，其余当索引不当现况。**
+> **现况只认下面框。其余当索引不当现况。卡面仍冻。**
 
 ```text
 现况: docs/STATE-NOW.md
 冻结令: https://github.com/juanwan99/pico/issues/634
-在飞: https://github.com/juanwan99/pico/issues/646
-禁止: 过程 PR · 新交接长文 · 第二张 stamp-ok · oneflow 仓当真源
-新窗: STATE-NOW → curl tip → #646
-不要从本文件旧「Current dispatch」 / DAY-TASK / #310 / 4xx 文档开干。
+在飞: 无
+执行三刀: 证据贴 Issue · 无 ECS 拒领 · 过门=老师手
+禁止: 改卡模板 · 证据 PR · 合了未部报 DONE · 第二张 stamp-ok · oneflow 仓当真源
+新窗: STATE-NOW → curl tip。无在飞则讨论，不开卡。
 ```
 
 
