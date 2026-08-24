@@ -64,9 +64,9 @@ def test_sticky_does_not_force_pure_casual() -> None:
 
 
 def test_short_chat_still_not_forced() -> None:
-    from pico_orchestrator.delivery_policy import analyze_delivery
+    from app.openai_compat import _this_round_delivery_plan
 
-    plan = analyze_delivery("你是什么模型")
+    plan = _this_round_delivery_plan("你是什么模型")
     assert plan.force_agent is False
     assert plan.min_artifacts == 0
 

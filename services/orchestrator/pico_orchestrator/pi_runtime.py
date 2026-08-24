@@ -132,6 +132,7 @@ async def run_pi_agent(
         content = item.get("content")
         if role in {"user", "assistant"} and content:
             messages.append({"role": role, "content": str(content)[:4000]})
+    # User turn is the teacher original. Skill/Landing stay in system, never welded here.
     messages.append({"role": "user", "content": prompt})
 
     await emit("run.status", {"status": "running", "runtime": RUNTIME_LABEL})

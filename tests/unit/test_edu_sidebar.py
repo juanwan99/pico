@@ -7,9 +7,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from pico_orchestrator.delivery_policy import analyze_delivery
 from pico_orchestrator.edu_sidebar import (
     HONEST_MISS_SUMMARY,
     JSON_ONLY_OUTPUT,
@@ -41,14 +41,15 @@ def test_json_only_does_not_use_fuzzy_chinese() -> None:
     assert is_json_only_propose("不要走交付") is False
 
 
-def test_workbench_write_plan_still_delivery() -> None:
-    plan = analyze_delivery("请写一份可下载的活动方案.md，用工具落盘")
-    assert plan.force_agent is True
-    assert plan.min_artifacts >= 1
+def test_workbench_write_plan_does_not_guess_route() -> None:
+    from app.openai_compat import _this_round_delivery_plan
+
+    plan = _this_round_delivery_plan("请写一份可下载的活动方案.md，用工具落盘")
+    assert plan.force_agent is False
+    assert plan.min_artifacts == 0
 
 
-def test_sidebar_json_without_bypass_still_false_positive() -> None:
-    # Documents why openai_compat must short-circuit before analyze_delivery.
+def test_sidebar_json_is_chat_only_not_a_word_list_gate() -> None:
     body = json.dumps(
         {
             "asked": "把高中英语周课时改成 5",
@@ -64,8 +65,6 @@ def test_sidebar_json_without_bypass_still_false_positive() -> None:
         },
         ensure_ascii=False,
     )
-    leaked = analyze_delivery(body)
-    assert leaked.force_agent is True
     assert is_json_only_propose(body) is True
 
 

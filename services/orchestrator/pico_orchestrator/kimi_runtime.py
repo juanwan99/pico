@@ -563,9 +563,9 @@ def _user_input(
     history: list[dict[str, Any]] | None,
     skill_instruction: str,
 ) -> str:
+    """Teacher original (+ recent transcript). Never weld skill/Landing into user."""
+    del skill_instruction
     parts: list[str] = []
-    if skill_instruction:
-        parts.append(f"<pico_skill_instruction>\n{skill_instruction}\n</pico_skill_instruction>")
     transcript: list[str] = []
     for item in (history or [])[-20:]:
         role = item.get("role")

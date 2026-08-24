@@ -103,3 +103,11 @@ def test_assistant_claim_detector_is_not_a_user_prompt_table() -> None:
     assert looks_like_delivery_claim("文件 notes.docx 已生成，请下载。") is True
     assert looks_like_delivery_claim("17+25=42") is False
     assert looks_like_delivery_claim("这是一份活动安排的说明。") is False
+
+
+def test_kimi_user_input_does_not_weld_skill() -> None:
+    src = (ROOT / "services" / "orchestrator" / "pico_orchestrator" / "kimi_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    assert "<pico_skill_instruction>" not in src
+    assert "del skill_instruction" in src

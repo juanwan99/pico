@@ -19,9 +19,9 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 
-def test_single_html_multi_section_min_is_one() -> None:
-    """RC-D: 「做可下载 HTML 互动页 X：五个结构/三个区块/两按钮」is ONE page."""
-    from pico_orchestrator.delivery_policy import analyze_delivery
+def test_single_html_multi_section_routing_does_not_guess() -> None:
+    """Routing never sets min from HTML section packing or explicit multi phrasing."""
+    from app.openai_compat import _this_round_delivery_plan
 
     single_unit_prompts = [
         (
@@ -34,32 +34,20 @@ def test_single_html_multi_section_min_is_one() -> None:
             "请做一份可下载的 HTML 单页课件「太阳系行星介绍」：大标题、"
             "八颗行星各一节、两个交互按钮。"
         ),
-        # P3: the 的 particle (「可下载的 HTML …」) is natural Chinese; without
-        # a preceding 一个/一份 it used to fall through to structure enumeration
-        # and false-fail as under-delivery.
         (
             "请制作可下载的 HTML 互动页「珠峰登山准备清单」：大标题、"
             "八项准备勾选、两个按钮「随机提示」「重置」。"
         ),
         "请生成可下载的 HTML 课件「质数入门」：大标题、三个小节、两个按钮。",
         "请制作可下载的 HTML 页面「值班板」：大标题、三列表格、两个按钮。",
+        "请分别交付 3 个独立 HTML 文件：A.html B.html C.html。",
+        "请交付 4 个独立可下载文件：甲.md 乙.md 丙.md 丁.md。",
     ]
     for prompt in single_unit_prompts:
-        plan = analyze_delivery(prompt)
-        assert plan.min_artifacts == 1, prompt
+        plan = _this_round_delivery_plan(prompt)
+        assert plan.min_artifacts == 0, prompt
+        assert plan.force_agent is False, prompt
         assert plan.multi_deliverable is False, prompt
-
-    # Explicit multi-file language must still force multi.
-    assert (
-        analyze_delivery("请分别交付 3 个独立 HTML 文件：A.html B.html C.html。")
-        .min_artifacts
-        >= 3
-    )
-    assert (
-        analyze_delivery("请交付 4 个独立可下载文件：甲.md 乙.md 丙.md 丁.md。")
-        .min_artifacts
-        == 4
-    )
 
 
 @pytest.mark.asyncio

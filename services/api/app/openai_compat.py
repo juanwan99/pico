@@ -410,12 +410,7 @@ def _title_completion_payload(
 
 
 def _strip_pico_markers(text: str) -> str:
-    """Remove Pico-internal ledger markers before delivery analysis / model view.
-
-    P1-RELIABLE-LAND: routing (force_agent) must analyze the clean user prompt;
-    the markers (Pico-User / Pico-Convo / 权限 / 模型偏好 / …) mask delivery intent
-    and caused long-chain prompts to misroute to direct deepseek-chat.
-    """
+    """Remove Pico-internal ledger markers before the model sees the user turn."""
     import re
 
     t = str(text or "")
@@ -591,50 +586,6 @@ def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
     return [(name, body or "hi")]
 
 
-def _wants_deliverable_document(prompt: str) -> bool:
-    """NL Office/HTML phrasing helper. NOT a run gate (T-GROK-PATH).
-
-    Do not wire this into routing, caps, or fail-closed. The live gate only
-    checks assistant file-claims vs landed artifacts.
-    """
-    import re
-
-    text = prompt or ""
-    if not text.strip():
-        return False
-    # Delivery-intent verbs / packaging words near Office/HTML types.
-    intent = (
-        r"(?:生成|重新生成|下载|可下载|导出|交付|做成|输出|改一版|改版|"
-        r"做一份|写一份|整理成|准备一份|generate|export|download|create)"
-    )
-    office = r"(?:html|网页|word|docx|ppt|pptx|幻灯片|课件|Power\s*Point|powerpoint)"
-    if re.search(rf"{intent}.{{0,40}}{office}", text, re.IGNORECASE):
-        return True
-    if re.search(rf"{office}.{{0,16}}(?:文件|文档|下载|file)", text, re.IGNORECASE):
-        return True
-    if re.search(
-        r"(?:把第.{0,8}(?:段|页|张).{0,12}(?:改|标题)|改短|改已有|"
-        r"改.{0,12}(?:word|docx|ppt|pptx|幻灯))",
-        text,
-        re.IGNORECASE,
-    ):
-        return True
-    if re.search(r"(?:画|生成|出)\s*(?:一\s*张).{0,40}图", text):
-        return True
-    if re.search(r"\.(?:html?|docx|pptx)\b", text, re.IGNORECASE) and re.search(
-        intent, text, re.IGNORECASE
-    ):
-        return True
-    # Explicit “方案/说明 Word” packaging (not bare format lists in materials).
-    return bool(
-        re.search(
-            r"(?:方案|说明|通知|报告|小结).{0,8}(?:Word|word|docx|PPT|pptx)",
-            text,
-            re.IGNORECASE,
-        )
-    )
-
-
 def _this_round_delivery_plan(
     raw_prompt: str,
     *,
@@ -644,14 +595,10 @@ def _this_round_delivery_plan(
 
     Tools stay mounted. The post-run gate only fails a chat-only *claim*.
     """
-    from dataclasses import replace
+    del raw_prompt, prior_artifact_titles
+    from pico_orchestrator.delivery_policy import no_guess_plan
 
-    from pico_orchestrator.delivery_policy import analyze_delivery
-
-    plan = analyze_delivery(
-        raw_prompt, prior_artifact_titles=prior_artifact_titles
-    )
-    return replace(plan, min_artifacts=0, force_agent=False)
+    return no_guess_plan()
 
 
 def _sticky_delivery_plan(
@@ -737,49 +684,6 @@ def _instruction_with_delivery(
 
     del prompt, plan, prior_artifact_titles
     return instruction_for_snapshot(skill_snapshot)
-
-
-async def _prior_artifact_titles_for_principal(
-    principal: Any,
-    *,
-    conversation_id: str | None = None,
-) -> list[str]:
-    """Session artifact graph for revision binding (D2). Best-effort, never raises."""
-    try:
-        from pico_orchestrator.delivery_policy import is_bookkeeping_title
-        from sqlalchemy import select
-
-        from app.db import ArtifactRow, TaskRow
-
-        factory = session_factory()
-        async with factory() as session:
-            cond = [
-                TaskRow.school_id == principal.school_id,
-                TaskRow.membership_id == principal.membership_id,
-            ]
-            if conversation_id:
-                cond.append(TaskRow.conversation_id == conversation_id)
-            rows = await session.execute(
-                select(ArtifactRow.title)
-                .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
-                .where(*cond)
-                .order_by(ArtifactRow.created_at.desc())
-                .limit(40)
-            )
-            titles: list[str] = []
-            seen: set[str] = set()
-            for (title,) in rows.all():
-                t = str(title or "").strip()
-                if not t or is_bookkeeping_title(t):
-                    continue
-                key = t.lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                titles.append(t)
-            return titles
-    except Exception:  # noqa: BLE001 — policy must not fail chat
-        return []
 
 
 async def _finalize_run(
@@ -1224,18 +1128,8 @@ async def chat_completions(
         request_tools = _normalize_allowed_tools(body.tools)
     conversation_id = _conversation_id_from(body, x_conversation_id)
     workspace_id = _workspace_id_from(body, x_workspace_id)
-    # D2: bind revision to session artifact graph (prior deliverables).
-    # Edu sidebar + conversation: only this cabinet. Do not dump membership pile.
-    if json_only or (edu_sidebar and not conversation_id):
-        prior_titles = []
-    else:
-        prior_titles = await _prior_artifact_titles_for_principal(
-            principal,
-            conversation_id=conversation_id if conversation_id else None,
-        )
+    # T-HARNESS-SLIM: do not fetch prior titles to guess a delivery plan.
     # strip ledger markers from model-visible prompt; project instruction → system
-    # P1: marker-strip BEFORE delivery analysis too — the markers mask force_agent
-    # intent and misroute multi-deliverable chains to direct deepseek-chat.
     m_proj = re.search(r"【项目指令：([^】]+)】", raw_prompt)
     project_instruction = m_proj.group(1).strip() if m_proj else ""
     prompt = _strip_pico_markers(raw_prompt).strip() or raw_prompt
@@ -1315,10 +1209,8 @@ async def chat_completions(
         )
 
     history = _history_for_agent(body.messages)
-    # Engineering multi/pipeline/runnable OR classic Office/HTML → force agent tool path.
-    # Sticky: same-session delivery continuation (after clarify) stays on pico-agent.
-    # Use the marker-stripped prompt so delivery intent is not masked (P1).
-    # edu sidebar (附属标记) is chat, not delivery — never land files / force_agent.
+    # edu sidebar (附属标记) is chat, not delivery — never land files.
+    # Routing does not guess min_artifacts / force_agent from the prompt.
     chat_only = _sidebar_chat_only(edu_sidebar=edu_sidebar, json_only=json_only)
     sidebar_system = client_system or None
     sidebar_web_hits: dict[str, Any] | None = None
@@ -1364,7 +1256,6 @@ async def chat_completions(
         skill_snapshot, delivery_plan = _resolve_skill_for_prompt(
             prompt,
             skill_snapshot,
-            prior_artifact_titles=prior_titles,
             history=history,
         )
     model = (

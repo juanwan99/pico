@@ -13,7 +13,6 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from pico_orchestrator.delivery_policy import analyze_delivery
 from pico_orchestrator.provider import resolve_model_id, runtime_policy_for_model
 from pico_orchestrator.true_pi.client import (
     RpcEvent,
@@ -142,15 +141,19 @@ def test_lane_models_flash_vs_reasoner(monkeypatch: pytest.MonkeyPatch) -> None:
     assert runtime_policy_for_model("pico-deep")["backend_model"] == "deepseek-reasoner"
 
 
-def test_office_bench_10_never_empty_success() -> None:
+def test_office_bench_10_routing_does_not_guess() -> None:
+    from app.openai_compat import _this_round_delivery_plan
+
     assert len(OFFICE_BENCH_10) == 10
-    for prompt, need in OFFICE_BENCH_10:
-        plan = analyze_delivery(prompt)
-        assert plan.force_agent is True, prompt
-        assert plan.min_artifacts >= need, (prompt, plan.min_artifacts, need)
-        assert plan.min_artifacts >= 1, prompt
+    for prompt, _need in OFFICE_BENCH_10:
+        plan = _this_round_delivery_plan(prompt)
+        assert plan.force_agent is False, prompt
+        assert plan.min_artifacts == 0, (prompt, plan.min_artifacts)
 
 
 def test_casual_chat_still_zero_artifacts() -> None:
-    plan = analyze_delivery("你好，今天天气怎么样？")
+    from app.openai_compat import _this_round_delivery_plan
+
+    plan = _this_round_delivery_plan("你好，今天天气怎么样？")
     assert plan.min_artifacts == 0
+    assert plan.force_agent is False
