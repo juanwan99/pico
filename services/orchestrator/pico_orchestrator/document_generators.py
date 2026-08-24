@@ -13,9 +13,18 @@ import zipfile
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
-# Delivery floor: Word opens with hundreds of characters; PPT has ≥3 titled slides.
+# Delivery floor on the *caller* body (not generator padding).
+# Short body → tool fails; do not invent 套话 to hit the number.
 MIN_DOCX_BODY_CHARS = 300
 MIN_PPTX_SLIDES = 3
+DOCX_BODY_TOO_SHORT = (
+    "Word 正文过短。请把题面写成完整多段正文（至少数百字）再调用 "
+    "generate_docx_document，不要只交一行，也不要指望系统垫字。"
+)
+PPTX_SLIDES_TOO_FEW = (
+    "课件不足三页。请按题面用空行或 --- 分成至少三页（每页有标题）再调用 "
+    "generate_pptx_document，不要指望系统垫页。"
+)
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
@@ -130,65 +139,34 @@ def office_shell_reason(raw: bytes, ext: str) -> str | None:
     return None
 
 
-def _docx_body_paragraphs(body: str | None, *, title: str, marker: str) -> list[str]:
-    heading = _display_title(title, "办公文稿")
-    chunks = _split_blocks(body or "")
-    if not chunks:
-        chunks = [f"本文档主题：{heading}。"]
-    if _visible_len("".join(chunks)) >= MIN_DOCX_BODY_CHARS:
-        return chunks
-    seed = "\n".join(chunks)
-    paras = [
-        f"本文档主题：{heading}。",
-        "一、事项说明",
-        seed,
-        "二、执行要点",
-        (
-            f"请按「{heading}」落实：写清对象、时间与责任人。"
-            f"以下为本次正文，供打开后直接使用。{seed}"
-        ),
-        "三、备注",
-        (
-            f"本文件是可打开的 Word 正文，不是空壳标记页。"
-            f"主题：{heading}。内部标记：{marker}。"
-            "若要改一版，指出段落后即可改。"
-        ),
-        (
-            f"四、打开说明。请用 Word / LibreOffice 打开本文件阅读全文，"
-            f"不要只看标题或标记。主题仍是「{heading}」。"
-            "正文如下，便于打印或转发："
-            f"{seed}"
-            "请核对时间、对象、地点是否与题面一致；有误指出段落即可改一版。"
-        ),
-    ]
-    while _visible_len("".join(paras)) < MIN_DOCX_BODY_CHARS:
-        paras.append(
-            f"补充：{heading}。{seed}。"
-            "本段保证打开后有可读正文，而不是三行空壳。"
-        )
-        if len(paras) > 16:
-            break
-    return paras
+def require_docx_body(body: str | None) -> None:
+    """Fail closed when the caller did not pass enough 题面正文. No padding."""
+    if _visible_len(body or "") < MIN_DOCX_BODY_CHARS:
+        raise ValueError(DOCX_BODY_TOO_SHORT)
+
+
+def require_pptx_body(body: str | None) -> None:
+    """Fail closed when the caller did not pass ≥3 题面 pages. No padding."""
+    if len(_split_blocks(body or "")) < MIN_PPTX_SLIDES:
+        raise ValueError(PPTX_SLIDES_TOO_FEW)
+
+
+def _docx_body_paragraphs(body: str | None) -> list[str]:
+    """Caller text only. Never invent 事项说明 / 打开说明 filler."""
+    return _split_blocks(body or "")
 
 
 def _pptx_slides(body: str | None, *, title: str, marker: str) -> list[tuple[str, str]]:
+    """One slide per caller block. Never pad 要点/说明 pages."""
     heading = _display_title(title, "Pico PPTX")
     parts = _split_blocks(body or "")
     if not parts:
-        parts = [f"本课件围绕「{heading}」展开，含目标、要点与说明。"]
-    slides: list[tuple[str, str]] = [(heading, f"标记：{marker}\n{parts[0]}")]
-    for index, chunk in enumerate(parts[1:], start=2):
-        first = chunk.split("\n", 1)[0].strip()[:40] or f"第{index}页"
-        slides.append((first, chunk))
-    if len(slides) < MIN_PPTX_SLIDES:
-        slides.append(("要点", "\n".join(parts)))
-    if len(slides) < MIN_PPTX_SLIDES:
-        slides.append(
-            (
-                "说明",
-                f"本课件不少于三页。主题：{heading}。标记：{marker}。请按页内标题讲解。",
-            )
-        )
+        return [(heading, f"标记：{marker}")]
+    slides: list[tuple[str, str]] = []
+    for index, chunk in enumerate(parts):
+        first = chunk.split("\n", 1)[0].strip()[:40] or (heading if index == 0 else f"第{index + 1}页")
+        slide_body = f"标记：{marker}\n{chunk}" if index == 0 else chunk
+        slides.append((first, slide_body))
     return slides[:20]
 
 
@@ -428,7 +406,7 @@ def build_docx_document(
     marker: str,
     body: str | None = None,
 ) -> bytes:
-    """python-docx Word with visible multi-paragraph body (not a three-line XML zip)."""
+    """python-docx Word with the caller body. Does not pad 套话 to hit a quota."""
     marker = _require_marker(marker)
     heading = _display_title(title, "Pico DOCX")
     from docx import Document
@@ -436,15 +414,11 @@ def build_docx_document(
     doc = Document()
     doc.add_heading(heading, level=0)
     doc.add_paragraph(f"标记：{marker}")
-    for para in _docx_body_paragraphs(body, title=heading, marker=marker):
+    for para in _docx_body_paragraphs(body):
         doc.add_paragraph(para)
     buf = io.BytesIO()
     doc.save(buf)
-    data = buf.getvalue()
-    reason = office_shell_reason(data, ".docx")
-    if reason:
-        raise ValueError(reason)
-    return data
+    return buf.getvalue()
 
 
 KNOWN_CALC_CELL = "NIGHT-P4-CELL-ALPHA"
@@ -560,7 +534,7 @@ def build_pptx_document(
     marker: str,
     body: str | None = None,
 ) -> bytes:
-    """python-pptx deck with at least three titled slides (not a one-slide XML zip)."""
+    """python-pptx deck from caller slides. Does not pad empty 说明 pages."""
     marker = _require_marker(marker)
     heading = _display_title(title, "Pico PPTX")
     from pptx import Presentation
@@ -572,8 +546,4 @@ def build_pptx_document(
         _set_slide_title_body(slide, slide_title, slide_body)
     buf = io.BytesIO()
     deck.save(buf)
-    data = buf.getvalue()
-    reason = office_shell_reason(data, ".pptx")
-    if reason:
-        raise ValueError(reason)
-    return data
+    return buf.getvalue()
