@@ -316,6 +316,43 @@ async def _edu_call(
     return data
 
 
+async def search_green_library(
+    principal: Principal,
+    *,
+    query: str,
+    field_id: str = "",
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    """Retrieve-only: membership search of edu green-zone slices. No Pico tree."""
+    params = {"q": str(query or "")}
+    scoped = sanitize_field_id(field_id)
+    if scoped:
+        params["field_id"] = scoped
+    try:
+        data = await _edu_get(
+            principal, "/v1/pico/membership/search", params=params, settings=settings
+        )
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        return {
+            "configured": True,
+            "items": [],
+            "dumped": False,
+            "error_code": str(detail.get("code") or "edu.error"),
+            "error": str(detail.get("message") or "学校绿区现在连不上"),
+            "status": int(exc.status_code),
+        }
+    items = data.get("items") if isinstance(data.get("items"), list) else []
+    return {
+        "configured": bool(data.get("configured", True)),
+        "items": [row for row in items if isinstance(row, dict)],
+        "dumped": False,
+        "error_code": "",
+        "error": "",
+        "status": 200,
+    }
+
+
 async def excerpts_for_conversation(
     principal: Principal,
     conversation_id: str,

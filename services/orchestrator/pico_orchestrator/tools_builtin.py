@@ -37,7 +37,6 @@ from pico_orchestrator.gateway import (
 )
 from pico_orchestrator.image_generate import generate_image_bytes
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
-from pico_orchestrator.meili_kb import extract_index_text, meili_configured, search_materials
 from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
 from pico_orchestrator.sandbox_s1 import (
     MAX_CONTENT_CHARS,
@@ -381,70 +380,8 @@ def _workspace_handlers(
         )
         return {"artifacts": artifacts, "count": len(artifacts)}
 
-    async def _scan_kb_hits(
-        principal: Principal, query: str, limit: int
-    ) -> list[dict[str, Any]]:
-        listed = await store.list(principal, limit=min(100, max(limit * 3, 20)))
-        hits: list[dict[str, Any]] = []
-        q_low = query.lower()
-        for meta in listed:
-            title = str(meta.get("title") or "")
-            if title in _SKIP_KB_TITLES:
-                continue
-            art_id = str(meta.get("artifact_id") or meta.get("id") or "")
-            if not art_id:
-                continue
-            full = await store.read(principal, artifact_id=art_id, title=None)
-            if not full:
-                continue
-            content = full.get("content")
-            raw = None
-            b64 = full.get("content_base64")
-            if isinstance(b64, str) and b64:
-                try:
-                    raw = base64.b64decode(b64)
-                except Exception:  # noqa: BLE001
-                    raw = None
-            text = extract_index_text(
-                title=title,
-                kind=str(full.get("kind") or ""),
-                content=content if isinstance(content, str) else None,
-                raw=raw,
-            )
-            if not text:
-                if q_low not in title.lower():
-                    continue
-                hits.append(
-                    {
-                        "artifact_id": art_id,
-                        "title": title,
-                        "kind": full.get("kind"),
-                        "excerpt": f"（材料未能抽出正文，标题命中：{title}）",
-                        "match": "title",
-                    }
-                )
-                continue
-            title_hit = q_low in title.lower()
-            body_hit = q_low in text.lower()
-            if not title_hit and not body_hit:
-                continue
-            hits.append(
-                {
-                    "artifact_id": art_id,
-                    "title": title,
-                    "kind": full.get("kind"),
-                    "excerpt": _excerpt_around(text if body_hit else title, query),
-                    "match": "title+body" if title_hit and body_hit else (
-                        "title" if title_hit else "body"
-                    ),
-                }
-            )
-            if len(hits) >= limit:
-                break
-        return hits
-
     async def kb_search(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        """Search membership materials (Meili projection; scan fallback if Meili is down)."""
+        """School green-zone retrieve only. Pico chat uploads are not the school library."""
         query = _required_text(args, "query", maximum=_MAX_KB_QUERY)
         try:
             limit = int(args.get("limit") or 20)
@@ -452,89 +389,102 @@ def _workspace_handlers(
             raise ToolError("tool.invalid_arguments", "limit must be an integer") from exc
         if not 1 <= limit <= 50:
             raise ToolError("tool.invalid_arguments", "limit must be between 1 and 50")
+        # Client filter strings are ignored. Edu membership search injects ACL.
 
-        degraded = False
-        mode = "scan"
+        try:
+            from app.edu_school import search_green_library
+        except Exception as exc:
+            raise ToolError(
+                "edu.unconfigured",
+                "学校绿区检索口未接上，不能在 Pico 造第二套绿区。",
+            ) from exc
+
+        try:
+            data = await search_green_library(principal, query=query)
+        except ToolError:
+            raise
+        except Exception as exc:
+            raise ToolError("edu.unreachable", "学校绿区现在连不上") from exc
+
+        if not isinstance(data, dict):
+            raise ToolError("edu.contract_error", "学校绿区返回不是对象")
+        if data.get("configured") is False:
+            return {
+                "hits": [],
+                "count": 0,
+                "honest_miss": True,
+                "degraded": False,
+                "mode": "unconfigured",
+                "retrieved": False,
+                "sources": [],
+                "user_message": (
+                    "学校绿区检索口未接上。没有交绿全量 list / 出绿事件可投影，"
+                    "Pico 不造第二套绿区，也不把对话上传当学校库。"
+                ),
+            }
+        status = int(data.get("status") or 200)
+        error_code = str(data.get("error_code") or "")
+        if status >= 400 or error_code:
+            message = str(data.get("error") or "学校绿区现在连不上")
+            if status in {401, 403}:
+                raise ToolError(error_code or "edu.forbidden", message)
+            raise ToolError(error_code or "edu.unreachable", message)
+
         hits: list[dict[str, Any]] = []
-        if meili_configured():
-            try:
-                result = search_materials(
-                    query,
-                    school_id=principal.school_id,
-                    membership_id=principal.membership_id,
-                    limit=limit,
-                )
-                mode = "hybrid" if result.get("hybrid") else "keyword"
-                for row in result.get("hits") or []:
-                    if not isinstance(row, dict):
-                        continue
-                    art_id = str(row.get("artifact_id") or "")
-                    title = str(row.get("title") or "")
-                    text = str(row.get("text") or "")
-                    row_school = str(row.get("school_id") or "").strip()
-                    row_member = str(row.get("membership_id") or "").strip()
-                    if row_school and row_school != principal.school_id:
-                        continue
-                    if row_member and row_member != principal.membership_id:
-                        continue
-                    if not art_id or title in _SKIP_KB_TITLES:
-                        continue
-                    hits.append(
-                        {
-                            "artifact_id": art_id,
-                            "title": title,
-                            "kind": row.get("kind"),
-                            "excerpt": _excerpt_around(text or title, query),
-                            "match": "index",
-                        }
-                    )
-            except Exception:  # noqa: BLE001 — Meili down: honest scan fallback
-                degraded = True
-                mode = "scan"
-                hits = await _scan_kb_hits(principal, query, limit)
-        else:
-            hits = await _scan_kb_hits(principal, query, limit)
+        for row in data.get("items") or []:
+            if not isinstance(row, dict):
+                continue
+            item_id = str(row.get("id") or row.get("itemId") or row.get("item_id") or "")
+            title = str(row.get("title") or "")
+            if not item_id or title in _SKIP_KB_TITLES:
+                continue
+            excerpt = str(row.get("excerpt") or "")
+            hits.append(
+                {
+                    "item_id": item_id,
+                    "title": title,
+                    "kind": row.get("kind") or row.get("itemKind"),
+                    "field_id": row.get("fieldId") or row.get("field_id"),
+                    "excerpt": _excerpt_around(excerpt or title, query),
+                    "unread": row.get("unread") is True,
+                    "match": "edu_green",
+                    "source": "edu_green",
+                }
+            )
+            if len(hits) >= limit:
+                break
 
         sources = [
             {
                 "title": str(h.get("title") or "材料"),
-                "artifact_id": str(h.get("artifact_id") or ""),
+                "item_id": str(h.get("item_id") or ""),
                 "snippet": str(h.get("excerpt") or ""),
                 "url": "",
+                "field_id": str(h.get("field_id") or ""),
             }
             for h in hits
-            if h.get("artifact_id")
+            if h.get("item_id")
         ]
         if not hits:
             return {
                 "hits": [],
                 "count": 0,
                 "honest_miss": True,
-                "degraded": degraded,
-                "mode": mode,
+                "degraded": False,
+                "mode": "edu_green",
                 "retrieved": False,
                 "sources": [],
-                "user_message": (
-                    "未在已挂载的工作区材料中命中该问题。"
-                    "请先生成或上传材料到产物账本后再问，或换关键词。"
-                ),
+                "user_message": "未在学校绿区命中该问题。出绿或未交绿的材料不会出现。",
             }
-        engine = (
-            "语义检索"
-            if mode == "hybrid"
-            else "关键词检索" if mode == "keyword" else "账本扫描"
-        )
-        if degraded:
-            engine = "检索降级为账本扫描"
         return {
             "hits": hits,
             "count": len(hits),
             "honest_miss": False,
-            "degraded": degraded,
-            "mode": mode,
+            "degraded": False,
+            "mode": "edu_green",
             "retrieved": True,
             "sources": sources,
-            "user_message": f"命中 {len(hits)} 条材料依据（{engine}）。",
+            "user_message": f"命中 {len(hits)} 条学校绿区材料（含出处）。",
         }
 
     async def generate_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1468,10 +1418,12 @@ def build_default_gateway(
         ToolSpec(
             name="kb_search",
             description=(
-                "Search this teacher's uploaded/generated materials (md/pdf/docx and "
-                "ledger text). Call this when the user asks about documents, 材料, 这份, "
-                "or school files — do not wait for them to say 去搜库. Returns excerpts "
-                "+ artifact_id, or honest_miss. Never invent content. Args: query, limit?"
+                "Search school green-zone materials already 交绿 (plus in-library pages/"
+                "tables). Not Pico chat uploads. Call only when the teacher asks about "
+                "school/green materials. Do not call for 这是什么 or general chat, and "
+                "do not write Word just because this tool exists. Returns excerpts + "
+                "sources (title/item_id/snippet) or honest_miss. Never invent content. "
+                "Args: query, limit?"
             ),
             handler=kb_search,
             school_scoped=False,
@@ -1742,7 +1694,7 @@ def openai_tool_schemas(
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Keyword or question fragment to find in mounted materials",
+                    "description": "Keyword or question fragment to find in school green-zone materials",
                 },
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
             },

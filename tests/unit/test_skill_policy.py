@@ -175,3 +175,14 @@ def test_prompt_without_skill_marker_preserves_default_policy():
 
     assert prompt == "普通对话"
     assert snapshot is None
+
+
+def test_deliverable_does_not_force_kb_search_on_what_is_this():
+    snap = snapshot_for_skill("skill-deliverable")
+    text = instruction_for_snapshot(snap)
+    assert "必须先 kb_search" not in text
+    assert "这是什么" in text
+    assert "不搜库" in text
+    kb = snapshot_for_skill("skill-kb-ask")
+    assert "kb_search" in kb["tools"]
+    assert "出处" in instruction_for_snapshot(kb)
