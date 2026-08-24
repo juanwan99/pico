@@ -13,7 +13,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
@@ -69,7 +68,7 @@ async def test_gate_message_truthful_when_other_format_files_exist(
 ) -> None:
     """A landed file is a landed file. Do not fail-closed from a user-prompt Office list."""
     from app import db as db_mod
-    from app.db import ArtifactRow, EventRow, RunRow, TaskRow, new_id
+    from app.db import ArtifactRow, RunRow, TaskRow, new_id
     from app.delivery_gate import apply_delivery_gate
     from app.settings import get_settings
 
