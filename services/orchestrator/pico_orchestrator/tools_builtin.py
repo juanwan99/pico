@@ -1418,11 +1418,10 @@ def build_default_gateway(
         ToolSpec(
             name="kb_search",
             description=(
-                "Search school green-zone materials already 交绿 (plus in-library pages/"
-                "tables). Not Pico chat uploads. Call only when the teacher asks about "
-                "school/green materials. Do not call for 这是什么 or general chat, and "
-                "do not write Word just because this tool exists. Returns excerpts + "
-                "sources (title/item_id/snippet) or honest_miss. Never invent content. "
+                "Search school materials the teacher can already access. Not Pico chat "
+                "uploads. Call only when the teacher asks about school materials. Being "
+                "listed does not mean you must call. Returns excerpts + sources "
+                "(title/item_id/snippet) or honest_miss. Never invent content. "
                 "Args: query, limit?"
             ),
             handler=kb_search,
@@ -1694,7 +1693,7 @@ def openai_tool_schemas(
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Keyword or question fragment to find in school green-zone materials",
+                    "description": "Keyword or question fragment to find in school materials",
                 },
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
             },
