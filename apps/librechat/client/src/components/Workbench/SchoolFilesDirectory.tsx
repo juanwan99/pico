@@ -49,7 +49,7 @@ export default function SchoolFilesDirectory({ className }: { className?: string
 
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col px-2.5 py-2', className)} data-testid="school-files-directory">
-      <p className="pico-type-sidebar pico-type-medium text-[color:var(--pico-ink)]">学校文件</p>
+      <p className="pico-type-sidebar pico-type-medium text-[color:var(--pico-ink)]">学校材料</p>
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto">
         {error ? (
           <p className="pico-type-body text-[#b42318]" role="status">

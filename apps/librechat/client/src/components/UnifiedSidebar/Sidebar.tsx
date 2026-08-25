@@ -31,7 +31,7 @@ const NAV: NavItem[] = [
   { id: 'search', label: '搜索会话', icon: 'search', path: '/search' },
   { id: 'capability', label: '技能与连接器', icon: 'blocks', path: '/capability' },
   { id: 'files', label: '我的文件', icon: 'folder', path: '/more/files' },
-  { id: 'school', label: '学校文件', icon: 'books', path: '/more/files#school' },
+  { id: 'school', label: '学校材料', icon: 'books', path: '/more/files#school' },
 ];
 
 function isNavItemActive(pathname: string, hash: string, item: NavItem) {

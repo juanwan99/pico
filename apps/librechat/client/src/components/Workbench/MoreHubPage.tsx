@@ -15,7 +15,7 @@ const ITEMS = [
   },
   {
     id: 'school',
-    label: '学校文件',
+    label: '学校材料',
     desc: '学校场里的材料',
     icon: 'books' as PicoIconName,
     href: '/more/files#school',

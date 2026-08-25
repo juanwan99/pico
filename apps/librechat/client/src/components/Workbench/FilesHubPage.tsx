@@ -13,7 +13,7 @@ export default function FilesHubPage() {
 
   return (
     <WorkbenchShell
-      title={schoolView ? '学校文件' : '我的文件'}
+      title={schoolView ? '学校材料' : '我的文件'}
       subtitle={schoolView ? '有权场里的材料' : '本人做成的文件'}
       backTo="/c/new"
     >
