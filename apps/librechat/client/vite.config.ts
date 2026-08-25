@@ -86,7 +86,10 @@ export default defineConfig(({ command }) => ({
       },
     },
     VitePWA({
-      injectRegister: 'auto', // 'auto' | 'manual' | 'disabled'
+      // Pico tears down stale workbox in index.html. Do not re-register a SW
+      // on every load — that fight plus modulepreload of mermaid/sandpack
+      // made enter/hard-refresh wait on megabytes of unused JS.
+      injectRegister: false,
       registerType: 'autoUpdate', // 'prompt' | 'autoUpdate'
       devOptions: {
         enabled: false, // disable service worker registration in development mode
@@ -189,6 +192,15 @@ export default defineConfig(({ command }) => ({
     sourcemap: buildSourceMap,
     outDir: './dist',
     minify: 'oxc',
+    modulePreload: {
+      resolveDependencies: (_filename: string, deps: string[]) =>
+        deps.filter(
+          (dep) =>
+            !/(^|\/)(mermaid|sandpack|query-devtools|code-editor|math-katex|codemirror-|avatars|advanced-inputs|heic-converter)/.test(
+              dep,
+            ),
+        ),
+    },
     rolldownOptions: {
       preserveEntrySignatures: 'strict',
       output: {

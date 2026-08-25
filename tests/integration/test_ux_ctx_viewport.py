@@ -63,7 +63,12 @@ def test_history_and_chrome_source_locks() -> None:
     assert "TeacherTaskHome" not in sidebar
     assert "data-testid={`nav-${item.id}`}" in sidebar
     assert "新对话" in sidebar
-    assert 'id: \'more\'' in sidebar or 'id: "more"' in sidebar
+    assert "搜索会话" in sidebar
+    assert "技能与连接器" in sidebar
+    assert "我的文件" in sidebar
+    assert "学校材料" in sidebar
+    assert "专家" not in sidebar
+    assert "自动化" not in sidebar
     assert "nav-agents" not in sidebar
     assert "data-testid=\"convo-menu-trigger\"" in convo
     assert "convo-menu-pin" in convo

@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { listPicoSkillCatalog, type PicoSkillPolicy } from '~/data-provider/pico/api';
 import CapabilityHubPage from './CapabilityHubPage';
+
+const mockToggle = jest.fn();
 
 jest.mock('~/utils', () => ({
   cn: (...classes: unknown[]) =>
@@ -11,93 +12,101 @@ jest.mock('~/utils', () => ({
       .join(' '),
 }));
 
-jest.mock('~/utils/picoModelPref', () => ({
-  preferredModelForExpert: jest.fn(() => 'pico-agent'),
-  preferredModelForSkill: jest.fn(() => 'pico-agent'),
-  setActiveExpert: jest.fn(),
-  setPicoModelMode: jest.fn(),
-  queuePendingModel: jest.fn(),
-}));
-
-jest.mock('~/data-provider/pico/api', () => ({
-  listPicoSkillCatalog: jest.fn(),
+jest.mock('~/components/ui/pico-icons', () => ({
+  PicoIcon: () => <span />,
 }));
 
 jest.mock('./WorkbenchShell', () => ({
   __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
+  default: ({ children, title }: { children: React.ReactNode; title: string }) => (
+    <main>
+      <h1>{title}</h1>
+      {children}
+    </main>
+  ),
 }));
 
-const skills: PicoSkillPolicy[] = [
-  {
-    id: 'skill-chat',
-    name: 'skill.chat',
-    tools: [],
-    risk: 'low',
-    requires_s7: false,
-  },
-  {
-    id: 'skill-summarize',
-    name: 'skill.summarize',
-    tools: ['workspace_read_file', 'structured_outline', 'workspace_write_file'],
-    risk: 'low',
-    requires_s7: false,
-  },
-  {
-    id: 'skill-write-s7',
-    name: 'skill.write_s7',
-    tools: ['pico_propose_change'],
-    risk: 'write_s7',
-    requires_s7: true,
-  },
-  {
-    id: 'skill-unknown',
-    name: 'skill.unknown',
-    tools: ['unsafe_all_tools'],
-    risk: 'unknown',
-    requires_s7: false,
-  },
-];
+jest.mock('~/data-provider', () => ({
+  useListSkillsQuery: () => ({
+    data: {
+      skills: [
+        {
+          _id: 'skill-chat',
+          name: 'skill.chat',
+          displayTitle: '闲聊',
+          description: '纯对话',
+          author: 'user-1',
+          source: 'inline',
+        },
+        {
+          _id: 'skill-off',
+          name: 'skill.off',
+          displayTitle: '已关技能',
+          description: '默认关',
+          author: 'user-2',
+          source: 'inline',
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  }),
+}));
 
-function renderPage() {
+jest.mock('~/hooks', () => ({
+  useSkillActiveState: () => ({
+    isActive: (skill: { _id: string }) => skill._id !== 'skill-off',
+    toggle: mockToggle,
+    isLoading: false,
+  }),
+}));
+
+function renderPage(entry = '/capability') {
   return render(
-    <MemoryRouter initialEntries={['/capability?tab=skills']}>
+    <MemoryRouter initialEntries={[entry]}>
       <CapabilityHubPage />
     </MemoryRouter>,
   );
 }
 
-describe('CapabilityHubPage skill policies', () => {
+describe('CapabilityHubPage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.mocked(listPicoSkillCatalog).mockResolvedValue({ skills });
+    mockToggle.mockClear();
   });
 
-  it('renders policy-bound tools and keeps unknown skills fail-closed', async () => {
+  it('shows skills and connectors tabs, not experts or empty shells', () => {
     renderPage();
 
-    const summarize = await screen.findByRole('button', { name: /skill\.summarize/i });
-    expect(summarize).toHaveTextContent('workspace_read_file');
-    expect(summarize).toHaveTextContent('structured_outline');
-
-    const chat = screen.getByRole('button', { name: /skill\.chat/i });
-    expect(chat).toHaveTextContent('工具：无工具');
-    expect(chat).toHaveTextContent('风险：纯对话');
-    expect(screen.queryByText('skill.unknown')).not.toBeInTheDocument();
-    expect(screen.queryByText('unsafe_all_tools')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '技能与连接器' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '技能' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '连接器' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '专家' })).not.toBeInTheDocument();
+    expect(screen.getByText('闲聊')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '闲聊 已开启' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByRole('switch', { name: '已关技能 已关闭' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
   });
 
-  it('shows write_s7 proposal tooling with the confirmation requirement', async () => {
+  it('toggles a skill instead of starting a new task', () => {
     renderPage();
+    fireEvent.click(screen.getByRole('switch', { name: '闲聊 已开启' }));
+    expect(mockToggle).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('用此技能新建任务')).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(await screen.findByRole('button', { name: /skill\.write_s7/i }));
+  it('lists only school knowledge base and MCP on the connectors tab', () => {
+    renderPage('/capability?tab=connectors');
 
-    const policy = screen.getByText('工具权限（只读）').parentElement?.parentElement;
-    expect(policy).toBeTruthy();
-    expect(within(policy as HTMLElement).getByText('pico_propose_change')).toBeInTheDocument();
-    expect(within(policy as HTMLElement).getByText('写入提案 · 需确认')).toBeInTheDocument();
-    expect(
-      within(policy as HTMLElement).getByText('仅生成变更提案，必须经人工确认后执行。'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('学校知识库')).toBeInTheDocument();
+    expect(screen.getByText('已接通')).toBeInTheDocument();
+    expect(screen.getByText('MCP')).toBeInTheDocument();
+    expect(screen.getByText('未接')).toBeInTheDocument();
+    expect(screen.queryByText('邮箱')).not.toBeInTheDocument();
+    expect(screen.queryByText('腾讯文档')).not.toBeInTheDocument();
   });
 });

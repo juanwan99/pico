@@ -137,7 +137,7 @@ describe('ConversationsSection streaming re-renders', () => {
     });
   });
 
-  it('does not re-render FavoritesList or BookmarkNav when the section re-renders mid-stream', async () => {
+  it('does not re-render BookmarkNav when the section re-renders mid-stream', async () => {
     renderSection();
 
     // BookmarkNav is lazy-loaded; wait until it has actually rendered (its own
@@ -150,10 +150,8 @@ describe('ConversationsSection streaming re-renders', () => {
     // first stream tick doesn't carry it and inflate the children's counts.
     await act(async () => {});
 
-    expect(mockUseFavorites.mock.calls.length).toBeGreaterThan(0);
     expect(mockUseGetConversationTags.mock.calls.length).toBeGreaterThan(0);
 
-    const favBaseline = mockUseFavorites.mock.calls.length;
     const tagBaseline = mockUseGetConversationTags.mock.calls.length;
     const titleBaseline = mockUseTitleGeneration.mock.calls.length;
 
@@ -168,7 +166,6 @@ describe('ConversationsSection streaming re-renders', () => {
     expect(mockUseTitleGeneration.mock.calls.length).toBeGreaterThan(titleBaseline);
 
     // The memoized children, fed referentially stable props, did not re-render.
-    expect(mockUseFavorites.mock.calls.length).toBe(favBaseline);
     expect(mockUseGetConversationTags.mock.calls.length).toBe(tagBaseline);
   });
 });

@@ -18,17 +18,20 @@
     </script>
 
     <script>
-      /* Pico: early SW teardown so stale LibreChat workbox cannot blank the shell */
+      /* Pico: drop a leftover LibreChat workbox once. Do not wipe HTTP/Cache
+         storage on every visit — that forced a cold 10MB reload. */
       (function () {
         if (!('serviceWorker' in navigator)) return;
         navigator.serviceWorker.getRegistrations().then(function (regs) {
-          return Promise.all(regs.map(function (r) { return r.unregister(); }));
+          if (!regs.length) return;
+          return Promise.all(regs.map(function (r) { return r.unregister(); })).then(function () {
+            if (window.caches && caches.keys) {
+              return caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+              });
+            }
+          });
         }).catch(function () {});
-        if (window.caches && caches.keys) {
-          caches.keys().then(function (keys) {
-            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
-          }).catch(function () {});
-        }
       })();
     </script>
 

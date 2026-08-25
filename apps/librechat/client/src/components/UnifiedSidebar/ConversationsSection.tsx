@@ -17,7 +17,6 @@ import { useConversationsInfiniteQuery, useTitleGeneration } from '~/data-provid
 import { Conversations } from '~/components/Conversations';
 import ProjectsSection from '~/components/Conversations/ProjectsSection';
 import { ArchivedChatsModal } from '~/components/Nav/SettingsTabs/General/ArchivedChatsModal';
-import FavoritesList from '~/components/Nav/Favorites/FavoritesList';
 import SearchBar from '~/components/Nav/SearchBar';
 import store from '~/store';
 
@@ -43,11 +42,13 @@ const ConversationsSection = memo(() => {
 
   const search = useRecoilValue(store.search);
 
+  const searching = Boolean(search.debouncedQuery);
   const { data, fetchNextPage, isFetchingNextPage, isLoading, isFetching } =
     useConversationsInfiniteQuery(
       {
         tags: tags.length === 0 ? undefined : tags,
         search: search.debouncedQuery || undefined,
+        projectId: searching ? undefined : 'unassigned',
       },
       {
         enabled: isAuthenticated,
@@ -120,8 +121,7 @@ const ConversationsSection = memo(() => {
             <BookmarkNav tags={tags} setTags={setTags} />
           </Suspense>
         )}
-        {search.enabled &&
-        (Boolean(search.query) || location.pathname.startsWith('/search')) ? (
+        {(search.enabled && Boolean(search.query)) || location.pathname.startsWith('/search') ? (
           <SearchBar isSmallScreen={isSmallScreen} />
         ) : null}
         <button
@@ -136,11 +136,6 @@ const ConversationsSection = memo(() => {
       {showArchived ? (
         <ArchivedChatsModal open={showArchived} onOpenChange={setShowArchived} />
       ) : null}
-      {!search.query && (
-        <div className="px-3">
-          <FavoritesList isSmallScreen={isSmallScreen} toggleNav={toggleNav} />
-        </div>
-      )}
       {!search.query && <ProjectsSection toggleNav={toggleNav} isAuthenticated={isAuthenticated} />}
       <div className="flex min-h-0 flex-grow flex-col overflow-hidden">
         <Conversations

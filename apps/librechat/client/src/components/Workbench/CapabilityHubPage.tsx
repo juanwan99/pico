@@ -1,187 +1,55 @@
 /**
- * 专家 · 技能 · 连接器 hub — click-through to real secondary screens.
+ * 技能与连接器 — one page, two tabs. Skills toggle in place; no prompt injection.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PicoIcon } from '~/components/ui/pico-icons';
-import { listPicoSkillCatalog, type PicoSkillPolicy } from '~/data-provider/pico/api';
+import { useListSkillsQuery } from '~/data-provider';
+import { useSkillActiveState } from '~/hooks';
+import SkillToggle from '~/components/Skills/buttons/SkillToggle';
 import { cn } from '~/utils';
 import WorkbenchShell from './WorkbenchShell';
-import {
-  preferredModelForExpert,
-  preferredModelForSkill,
-  setActiveExpert,
-  queuePendingModel,
-} from '~/utils/picoModelPref';
 
-type HubTab = 'experts' | 'skills' | 'connectors';
+type HubTab = 'skills' | 'connectors';
 
 const TABS: { id: HubTab; label: string }[] = [
-  { id: 'experts', label: '专家' },
   { id: 'skills', label: '技能' },
   { id: 'connectors', label: '连接器' },
 ];
 
-const DEMO_EXPERTS = [
+const CONNECTORS = [
   {
-    id: 'e1',
-    name: '文档助理',
-    desc: '总结、改写、结构化长文',
-    tags: ['办公', '写作'],
-    method: '先确认目标与受众 → 大纲 → 成稿 → 可交付清单',
+    id: 'school-kb',
+    name: '学校知识库',
+    desc: '学校场里已挂上的材料，对话里可点名引用',
+    status: 'connected' as const,
   },
   {
-    id: 'e2',
-    name: '代码搭档',
-    desc: '阅读代码、解释错误、补丁建议',
-    tags: ['开发'],
-    method: '复现问题 → 定位 → 最小补丁 → 回归建议',
-  },
-  {
-    id: 'e3',
-    name: '研究分析',
-    desc: '资料检索与对比分析',
-    tags: ['研究'],
-    method: '界定问题 → 要点对比 → 风险 → 行动建议',
-  },
-  {
-    id: 'e4',
-    name: '教务助手',
-    desc: '校内事务说明与变更提案（须人工确认）',
-    tags: ['校园'],
-    method: '澄清需求 → 提案 → S7 确认 → 不写静默库',
+    id: 'mcp',
+    name: 'MCP',
+    desc: '通用 MCP 工具桥，当前未接通',
+    status: 'disconnected' as const,
   },
 ];
-
-const DEMO_CONNECTORS = [
-  { id: 'c1', name: 'MCP 通用', desc: '已配置的 MCP 服务器', status: 'ready' as const },
-  { id: 'c2', name: '自定义连接器', desc: 'OpenAPI / Webhook 后置', status: 'add' as const },
-  { id: 'c3', name: '邮箱', desc: '智能体邮箱 · 后置', status: 'add' as const },
-  { id: 'c4', name: '知识库', desc: '文档索引连接 · 后置', status: 'add' as const },
-  { id: 'c5', name: '腾讯文档', desc: '文档授权连接 · 后置', status: 'add' as const },
-];
-
-type SkillCopy = {
-  desc: string;
-  prompt: string;
-};
-
-type HubSkill = PicoSkillPolicy & SkillCopy;
-
-const SKILL_COPY: Record<string, SkillCopy> = {
-  'skill-chat': {
-    desc: '纯对话（chat-only），明确不启用工具',
-    prompt: '请直接回答我的问题，不要臆造学校数据。',
-  },
-  'skill-read': {
-    desc: '只读工作区产物；也可查询演示班级数据',
-    prompt: '请列出并读取相关工作区产物，用一句话概括。',
-  },
-  'skill-write-s7': {
-    desc: '业务变更提案进入现有 S7 人工确认',
-    prompt: '请提出一个把一班名称改为星辰一班的变更申请。',
-  },
-  'skill-summarize': {
-    desc: '读取材料、结构化总结并可保存工作区产物',
-    prompt: '请总结以下内容，列出要点、结论与待办；不要补充原文没有的事实：',
-  },
-  'skill-lesson-outline': {
-    desc: '结构化生成课程大纲并可保存工作区产物',
-    prompt: '请按教学目标、重点难点、课堂活动和检查点起草课程大纲。',
-  },
-  'skill-quiz-draft': {
-    desc: '读取材料、生成测验草稿并可保存工作区产物',
-    prompt: '请根据我提供的材料起草测验题、答案和简短解析，并标明这是待复核草稿。',
-  },
-  'skill-translate': {
-    desc: '读取材料、忠实翻译并可保存工作区产物',
-    prompt: '请忠实翻译以下内容，保留格式、专名和语气；不确定术语请标注：',
-  },
-  'skill-meeting-notes': {
-    desc: '结构化会议决定、负责人和待办并可保存',
-    prompt: '请把以下会议内容整理为议题、决定、负责人和待办；未明确负责人时标为待确认：',
-  },
-  'skill-kb-ask': {
-    desc: 'P2 知识库试点：检索已挂载材料并引用依据（非向量库）',
-    prompt: '请根据已挂载的工作区材料回答：',
-  },
-};
-
-function riskLabel(skill: PicoSkillPolicy): string {
-  if (skill.requires_s7 || skill.risk === 'write_s7') {
-    return '写入提案 · 需确认';
-  }
-  if (skill.risk === 'read') {
-    return '只读';
-  }
-  if (skill.tools.length === 0) {
-    return '纯对话';
-  }
-  return '低风险';
-}
 
 export default function CapabilityHubPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const tabParam = params.get('tab') as HubTab | null;
-  const projectId = params.get('projectId');
-  const returnTo = params.get('return');
-  const [tab, setTab] = useState<HubTab>(
-    tabParam && TABS.some((t) => t.id === tabParam) ? tabParam : 'experts',
-  );
+  const tabParam = params.get('tab');
+  const [tab, setTab] = useState<HubTab>(tabParam === 'connectors' ? 'connectors' : 'skills');
   const [q, setQ] = useState('');
-  const [expertId, setExpertId] = useState<string | null>(null);
-  const [skillId, setSkillId] = useState<string | null>(null);
-  const [skillPolicies, setSkillPolicies] = useState<PicoSkillPolicy[]>([]);
-  const [skillsLoading, setSkillsLoading] = useState(true);
-  const [skillsError, setSkillsError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (tabParam && TABS.some((t) => t.id === tabParam)) {
-      setTab(tabParam);
-    }
+    setTab(tabParam === 'connectors' ? 'connectors' : 'skills');
   }, [tabParam]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listPicoSkillCatalog()
-      .then(({ skills }) => {
-        if (cancelled) {
-          return;
-        }
-        setSkillPolicies(
-          (skills || [])
-            .filter((skill) => skill.id !== 'skill-unknown' && skill.name !== 'skill.unknown')
-            .map((skill) => ({
-              ...skill,
-              tools: Array.isArray(skill.tools) ? skill.tools : [],
-            })),
-        );
-        setSkillsError(null);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSkillPolicies([]);
-          setSkillsError('技能策略暂时不可用，请稍后重试。');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setSkillsLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const skillQuery = useListSkillsQuery({ limit: 100 });
+  const { isActive, toggle, isLoading: statesLoading } = useSkillActiveState();
 
   const setTabNav = (id: HubTab) => {
     setTab(id);
     setQ('');
-    setExpertId(null);
-    setSkillId(null);
     const next = new URLSearchParams(params);
-    if (id === 'experts') {
+    if (id === 'skills') {
       next.delete('tab');
     } else {
       next.set('tab', id);
@@ -189,126 +57,38 @@ export default function CapabilityHubPage() {
     setParams(next);
   };
 
-  const experts = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) {
-      return DEMO_EXPERTS;
-    }
-    return DEMO_EXPERTS.filter(
-      (e) => e.name.includes(s) || e.desc.includes(s) || e.tags.some((t) => t.includes(s)),
-    );
-  }, [q]);
-
-  const connectors = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) {
-      return DEMO_CONNECTORS;
-    }
-    return DEMO_CONNECTORS.filter((c) => c.name.includes(s) || c.desc.includes(s));
-  }, [q]);
-
-  const skillCatalog = useMemo<HubSkill[]>(
-    () =>
-      skillPolicies.map((policy) => ({
-        ...policy,
-        desc: SKILL_COPY[policy.id]?.desc || 'Pico 受控技能',
-        prompt: SKILL_COPY[policy.id]?.prompt || '请使用此技能协助完成当前任务。',
-      })),
-    [skillPolicies],
-  );
-
+  const skillCatalog = skillQuery.data?.skills ?? [];
   const skills = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) {
       return skillCatalog;
     }
-    return skillCatalog.filter((x) => x.name.includes(s) || x.desc.includes(s));
+    return skillCatalog.filter(
+      (skill) =>
+        skill.name.toLowerCase().includes(s) ||
+        (skill.displayTitle || '').toLowerCase().includes(s) ||
+        (skill.description || '').toLowerCase().includes(s),
+    );
   }, [q, skillCatalog]);
 
-  const selectedExpert = DEMO_EXPERTS.find((e) => e.id === expertId);
-  const selectedSkill = skillCatalog.find((skill) => skill.id === skillId);
-
-  const bindProjectCapability = (kind: 'expert' | 'skill', value: string) => {
-    if (!projectId || !returnTo) {
-      return false;
+  const connectors = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) {
+      return CONNECTORS;
     }
-    try {
-      const key = `pico:projectBindings:${projectId}`;
-      const current = JSON.parse(localStorage.getItem(key) || '{}') as Record<string, string>;
-      localStorage.setItem(key, JSON.stringify({ ...current, [kind]: value }));
-    } catch {
-      /* return navigation still works */
-    }
-    navigate(returnTo);
-    return true;
-  };
-
-  const summonExpert = (name: string, desc: string) => {
-    if (bindProjectCapability('expert', name)) {
-      return;
-    }
-    try {
-      sessionStorage.setItem('pico:pendingExpert', name);
-      sessionStorage.setItem('pico:pendingPrompt', `请以「${name}」专家身份协助：${desc}`);
-      setActiveExpert(name);
-      queuePendingModel(preferredModelForExpert(name));
-    } catch {
-      /* ignore */
-    }
-    navigate('/c/new');
-  };
-
-  const startSkill = (skill: HubSkill) => {
-    if (bindProjectCapability('skill', skill.name)) {
-      return;
-    }
-    try {
-      sessionStorage.setItem('pico:pendingSkillLabel', skill.name);
-      sessionStorage.setItem('pico:pendingPrompt', `【Pico-Skill:${skill.id}】\n${skill.prompt}`);
-      setActiveExpert(null);
-      queuePendingModel(preferredModelForSkill(skill.id));
-    } catch {
-      /* ignore */
-    }
-    navigate('/c/new');
-  };
-
-  const connectorHref = (connectorId: string) => {
-    const next = new URLSearchParams();
-    if (projectId) {
-      next.set('projectId', projectId);
-    }
-    if (returnTo) {
-      next.set('return', returnTo);
-    }
-    const suffix = next.toString();
-    return `/capability/connectors/${connectorId}${suffix ? `?${suffix}` : ''}`;
-  };
+    return CONNECTORS.filter((c) => c.name.includes(s) || c.desc.includes(s));
+  }, [q]);
 
   return (
-    <WorkbenchShell
-      title="专家·技能·连接器"
-      subtitle="能力中心"
-      backTo={returnTo || '/c/new'}
-      actions={
-        tab === 'skills' ? (
-          <button
-            type="button"
-            onClick={() => navigate('/skills/new')}
-            className="inline-flex items-center gap-1 rounded-lg bg-[color:var(--pico-ink)] px-3 py-1.5 text-[12.5px] font-medium text-white"
-          >
-            <PicoIcon name="plus" size="sm" />
-            添加技能
-          </button>
-        ) : null
-      }
-    >
+    <WorkbenchShell title="技能与连接器" subtitle="能力" backTo="/c/new">
       <div className="border-b border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-4 dark:bg-surface-primary">
-        <div className="flex gap-1">
+        <div className="flex gap-1" role="tablist" aria-label="技能与连接器">
           {TABS.map((t) => (
             <button
               key={t.id}
               type="button"
+              role="tab"
+              aria-selected={tab === t.id}
               onClick={() => setTabNav(t.id)}
               className={cn(
                 'rounded-t-lg px-3.5 py-2.5 text-[13px] font-medium',
@@ -329,210 +109,73 @@ export default function CapabilityHubPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={
-              tab === 'experts' ? '搜索专家' : tab === 'skills' ? '搜索技能' : '搜索连接器'
-            }
+            placeholder={tab === 'skills' ? '搜索技能' : '搜索连接器'}
             className="w-full bg-transparent text-[13px] outline-none"
           />
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {tab === 'experts' && !selectedExpert && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {experts.map((e) => (
-              <button
-                key={e.id}
-                type="button"
-                onClick={() => setExpertId(e.id)}
-                className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4 text-left shadow-sm transition hover:border-[color:var(--pico-line-2)]"
-              >
-                <div className="mb-2 flex size-9 items-center justify-center rounded-xl bg-[color:var(--pico-surface-2)]">
-                  <PicoIcon name="user" size="sm" />
-                </div>
-                <p className="text-[14px] font-medium">{e.name}</p>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-[color:var(--pico-ink-2)]">{e.desc}</p>
-                <div className="mt-3 flex items-center text-[12px] font-medium text-[color:var(--pico-ink)]">
-                  查看详情
-                  <PicoIcon name="arrow" size="sm" className="h-3.5 w-3.5" />
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {tab === 'experts' && selectedExpert && (
-          <div className="mx-auto max-w-lg space-y-3">
-            <button
-              type="button"
-              className="text-[12.5px] text-[color:var(--pico-ink-2)] hover:underline"
-              onClick={() => setExpertId(null)}
-            >
-              ← 返回专家列表
-            </button>
-            <div className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-5">
-              <p className="text-[17px] font-semibold">{selectedExpert.name}</p>
-              <p className="mt-1 text-[13px] text-[color:var(--pico-ink-2)]">{selectedExpert.desc}</p>
-              <p className="mt-4 text-[12px] font-medium text-[color:var(--pico-ink-3)]">工作方法</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-[color:var(--pico-ink)]">
-                {selectedExpert.method}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-1">
-                {selectedExpert.tags.map((tag) => (
-                  <span key={tag} className="rounded-full bg-[#f2f2f2] px-2 py-0.5 text-[11px]">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="mt-5 w-full rounded-lg bg-[color:var(--pico-ink)] py-2.5 text-[13px] font-medium text-white"
-                onClick={() => summonExpert(selectedExpert.name, selectedExpert.desc)}
-              >
-                {projectId ? '绑定到项目' : '在任务中召唤'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {tab === 'skills' && !selectedSkill && (
-          <div className="mx-auto max-w-2xl space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[12px] text-[color:var(--pico-ink-3)]">
-                Pico 技能快路径 · 完整目录与自定义技能请前往 /skills
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate('/skills/manage')}
-                className="text-[12.5px] font-medium underline-offset-2 hover:underline"
-              >
-                管理全部技能 →
-              </button>
-            </div>
-            {skillsLoading ? (
+        {tab === 'skills' && (
+          <div className="mx-auto max-w-2xl space-y-2">
+            {skillQuery.isLoading || statesLoading ? (
               <p
                 role="status"
                 className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4 text-[13px] text-[color:var(--pico-ink-2)]"
               >
-                正在读取技能策略…
+                正在读取技能…
               </p>
-            ) : skillsError ? (
+            ) : skillQuery.isError ? (
               <p
                 role="alert"
                 className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-900"
               >
-                {skillsError}
+                技能目录暂时不可用，请稍后重试。
+              </p>
+            ) : skills.length === 0 ? (
+              <p className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4 text-[13px] text-[color:var(--pico-ink-2)]">
+                还没有技能。
               </p>
             ) : (
-              skills.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setSkillId(s.id)}
-                  className="flex w-full items-start gap-3 rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4 text-left hover:border-[color:var(--pico-line-2)]"
-                >
-                  <div className="flex size-10 items-center justify-center rounded-xl bg-[color:var(--pico-surface-2)]">
-                    <PicoIcon name="spark" />
+              skills.map((skill) => {
+                const enabled = isActive(skill);
+                const title = skill.displayTitle || skill.name;
+                return (
+                  <div
+                    key={skill._id}
+                    className="flex w-full items-center gap-3 rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-4 py-3"
+                    data-testid={`skill-row-${skill._id}`}
+                  >
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[color:var(--pico-surface-2)]">
+                      <PicoIcon name="spark" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px] font-medium">{title}</p>
+                      {skill.description ? (
+                        <p className="mt-0.5 line-clamp-2 text-[12.5px] text-[color:var(--pico-ink-2)]">
+                          {skill.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <SkillToggle
+                      enabled={enabled}
+                      onChange={() => toggle(skill)}
+                      ariaLabel={`${title} ${enabled ? '已开启' : '已关闭'}`}
+                    />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-medium">{s.name}</p>
-                    <p className="mt-0.5 text-[12.5px] text-[color:var(--pico-ink-2)]">{s.desc}</p>
-                    <p className="mt-1 truncate text-[11px] text-[color:var(--pico-ink-3)]">
-                      工具：{s.tools.length ? s.tools.join(' · ') : '无工具'} · 风险：
-                      {riskLabel(s)}
-                    </p>
-                  </div>
-                  <PicoIcon name="arrow" size="sm" className="mt-1 h-4 w-4 shrink-0 text-[color:var(--pico-ink-3)]" />
-                </button>
-              ))
+                );
+              })
             )}
-            <button
-              type="button"
-              onClick={() => navigate('/skills/new')}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[color:var(--pico-line-2)] py-4 text-[13px] text-[color:var(--pico-ink-2)]"
-            >
-              <PicoIcon name="plus" size="sm" />
-              添加自定义技能
-            </button>
-          </div>
-        )}
-
-        {tab === 'skills' && selectedSkill && (
-          <div className="mx-auto max-w-lg space-y-3">
-            <button
-              type="button"
-              className="text-[12.5px] text-[color:var(--pico-ink-2)] hover:underline"
-              onClick={() => setSkillId(null)}
-            >
-              ← 返回技能列表
-            </button>
-            <div className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-5">
-              <div className="mb-4 flex items-start gap-3">
-                <div className="flex size-10 items-center justify-center rounded-lg bg-[color:var(--pico-surface-2)]">
-                  <PicoIcon name="spark" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[17px] font-semibold">{selectedSkill.name}</p>
-                  <p className="mt-1 text-[13px] text-[color:var(--pico-ink-2)]">{selectedSkill.desc}</p>
-                </div>
-              </div>
-              <p className="text-[12px] font-medium text-[color:var(--pico-ink-3)]">任务模板</p>
-              <p className="mt-1 rounded-lg bg-[color:var(--pico-surface-2)] p-3 text-[13px] leading-relaxed text-[color:var(--pico-ink)]">
-                {selectedSkill.prompt}
-              </p>
-              <div className="mt-4 rounded-lg border border-[color:var(--pico-line)] p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[12px] font-medium text-[color:var(--pico-ink-2)]">工具权限（只读）</p>
-                  <span className="rounded-full bg-[color:var(--pico-surface-2)] px-2 py-0.5 text-[11px] text-[color:var(--pico-ink)]">
-                    {riskLabel(selectedSkill)}
-                  </span>
-                </div>
-                {selectedSkill.tools.length ? (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {selectedSkill.tools.map((tool) => (
-                      <span
-                        key={tool}
-                        className="rounded-md bg-[color:var(--pico-surface-2)] px-2 py-1 font-mono text-[11px] text-[color:var(--pico-ink)]"
-                      >
-                        {tool}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-[12px] text-[color:var(--pico-ink-3)]">无工具 · 纯对话</p>
-                )}
-                {selectedSkill.requires_s7 ? (
-                  <p className="mt-2 text-[12px] font-medium text-amber-700">
-                    仅生成变更提案，必须经人工确认后执行。
-                  </p>
-                ) : null}
-              </div>
-              <p className="mt-3 text-[11.5px] text-[color:var(--pico-ink-3)]">
-                推荐模型：{preferredModelForSkill(selectedSkill.id)}
-              </p>
-              <p className="mt-1 text-[11.5px] text-[color:var(--pico-ink-3)]">
-                发送时写入 Pico Run 快照：{selectedSkill.id} · 工具：
-                {selectedSkill.tools.length ? selectedSkill.tools.join(' · ') : '无工具'}
-              </p>
-              <button
-                type="button"
-                className="mt-5 w-full rounded-lg bg-[color:var(--pico-ink)] py-2.5 text-[13px] font-medium text-white"
-                onClick={() => startSkill(selectedSkill)}
-              >
-                {projectId ? '绑定到项目' : '用此技能新建任务'}
-              </button>
-            </div>
           </div>
         )}
 
         {tab === 'connectors' && (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="mx-auto max-w-2xl space-y-2">
             {connectors.map((c) => (
-              <button
+              <div
                 key={c.id}
-                type="button"
-                onClick={() => navigate(connectorHref(c.id))}
-                className="flex items-start gap-3 rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4 text-left hover:border-[color:var(--pico-line-2)]"
+                className="flex items-start gap-3 rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4"
+                data-testid={`connector-row-${c.id}`}
               >
                 <div className="flex size-10 items-center justify-center rounded-xl bg-[color:var(--pico-surface-2)]">
                   <PicoIcon name="plug" />
@@ -540,18 +183,28 @@ export default function CapabilityHubPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="text-[14px] font-medium">{c.name}</p>
-                    {c.status === 'ready' ? (
-                      <span className="size-2 rounded-full bg-emerald-500" title="已连接" />
+                    {c.status === 'connected' ? (
+                      <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-800">
+                        已接通
+                      </span>
                     ) : (
-                      <span className="rounded-full bg-[color:var(--pico-surface-2)] px-1.5 text-[10px] text-[color:var(--pico-ink-3)]">
-                        后置
+                      <span className="rounded-full bg-[color:var(--pico-surface-2)] px-1.5 py-0.5 text-[10px] text-[color:var(--pico-ink-3)]">
+                        未接
                       </span>
                     )}
                   </div>
                   <p className="mt-1 text-[12.5px] text-[color:var(--pico-ink-2)]">{c.desc}</p>
                 </div>
-                <PicoIcon name="arrow" size="sm" className="mt-1 h-4 w-4 text-[color:var(--pico-ink-3)]" />
-              </button>
+                {c.id === 'school-kb' ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/more/files#school')}
+                    className="shrink-0 rounded-md px-2 py-1 text-[12px] text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
+                  >
+                    查看
+                  </button>
+                ) : null}
+              </div>
             ))}
           </div>
         )}

@@ -3,13 +3,14 @@ import type { ReactNode } from 'react';
 import { useRecoilState } from 'recoil';
 import { useForm } from 'react-hook-form';
 import { useMediaQuery } from '@librechat/client';
-import type { ChatFormValues } from '~/common';
+import type { ChatFormValues, NavLink } from '~/common';
 import { ChatContext, ChatFormProvider, ActivePanelProvider } from '~/Providers';
-import useUnifiedSidebarLinks from '~/hooks/Nav/useUnifiedSidebarLinks';
 import { useChatHelpers, useLocalize } from '~/hooks';
 import Sidebar from './Sidebar';
 import { cn } from '~/utils';
 import store from '~/store';
+
+const EMPTY_LINKS: NavLink[] = [];
 
 const COLLAPSED_WIDTH = 52;
 const EXPANDED_MIN = 264;
@@ -54,7 +55,7 @@ function UnifiedSidebar() {
     up: () => void;
   } | null>(null);
 
-  const links = useUnifiedSidebarLinks();
+  const links = EMPTY_LINKS;
 
   const handleCollapse = useCallback(() => {
     startTransition(() => {
