@@ -1,16 +1,15 @@
 import { Feather } from 'lucide-react';
 import { EModelEndpoint } from 'librechat-data-provider';
 import {
-  GPTIcon,
   Sparkles,
   BedrockIcon,
   AssistantIcon,
   AnthropicIcon,
-  AzureMinimalIcon,
   GoogleMinimalIcon,
   CustomMinimalIcon,
 } from '@librechat/client';
 import type { IconMapProps, AgentIconMapProps, IconsRecord } from '~/common';
+import WeiyujiMark from '~/components/Endpoints/WeiyujiMark';
 import UnknownIcon from './UnknownIcon';
 import { cn } from '~/utils';
 
@@ -58,9 +57,13 @@ const Bedrock = ({ className = '' }: IconMapProps) => {
   return <BedrockIcon className={cn(className, 'h-full w-full')} />;
 };
 
+const WeiyujiIcon = ({ className = '', size }: IconMapProps) => (
+  <WeiyujiMark className={className} size={size} />
+);
+
 export const icons: IconsRecord = {
-  [EModelEndpoint.azureOpenAI]: AzureMinimalIcon,
-  [EModelEndpoint.openAI]: GPTIcon,
+  [EModelEndpoint.azureOpenAI]: WeiyujiIcon,
+  [EModelEndpoint.openAI]: WeiyujiIcon,
   [EModelEndpoint.anthropic]: AnthropicIcon,
   [EModelEndpoint.google]: GoogleMinimalIcon,
   [EModelEndpoint.custom]: CustomMinimalIcon,

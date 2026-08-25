@@ -17,7 +17,7 @@ const knownEndpointAssets: Record<string, string> = {
   [KnownEndpoints.mistral]: 'assets/mistral.png',
   [KnownEndpoints.mlx]: 'assets/mlx.png',
   [KnownEndpoints.ollama]: 'assets/ollama.png',
-  openai: 'assets/openai.svg',
+  openai: 'assets/weiyuji-mark.svg',
   [KnownEndpoints.openrouter]: 'assets/openrouter.png',
   [KnownEndpoints.perplexity]: 'assets/perplexity.png',
   qwen: 'assets/qwen.svg',

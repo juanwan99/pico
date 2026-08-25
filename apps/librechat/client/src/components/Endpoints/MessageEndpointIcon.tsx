@@ -3,17 +3,16 @@ import { Feather } from 'lucide-react';
 import { EModelEndpoint, isAssistantsEndpoint, alternateName } from 'librechat-data-provider';
 import {
   Plugin,
-  GPTIcon,
   PaLMIcon,
   CodeyIcon,
   GeminiIcon,
   BedrockIcon,
   AssistantIcon,
   AnthropicIcon,
-  AzureMinimalIcon,
   CustomMinimalIcon,
 } from '@librechat/client';
 import UnknownIcon from '~/hooks/Endpoint/UnknownIcon';
+import WeiyujiMark from './WeiyujiMark';
 import { IconProps } from '~/common';
 import { cn } from '~/utils';
 
@@ -22,14 +21,6 @@ type EndpointIcon = {
   bg?: string;
   name?: string | null;
 };
-
-function getOpenAIColor(_model: string | null | undefined) {
-  const model = _model?.toLowerCase() ?? '';
-  if (model && (/\b(o\d)\b/i.test(model) || /\bgpt-[5-9](?:\.\d+)?\b/i.test(model))) {
-    return '#000000';
-  }
-  return model.includes('gpt-4') ? '#AB68FF' : '#19C37D';
-}
 
 function getGoogleIcon(model: string | null | undefined, size: number) {
   if (model?.toLowerCase().includes('code') === true) {
@@ -124,14 +115,14 @@ const MessageEndpointIcon: React.FC<IconProps> = (props) => {
     [EModelEndpoint.agents]: agentsIcon,
     [EModelEndpoint.azureAssistants]: assistantsIcon,
     [EModelEndpoint.azureOpenAI]: {
-      icon: <AzureMinimalIcon size={size * 0.5555555555555556} />,
-      bg: 'linear-gradient(0.375turn, #61bde2, #4389d0)',
-      name: 'ChatGPT',
+      icon: <WeiyujiMark size={size * 0.85} />,
+      bg: '#E8F4F8',
+      name: '微与积',
     },
     [EModelEndpoint.openAI]: {
-      icon: <GPTIcon size={size * 0.5555555555555556} />,
-      bg: getOpenAIColor(model),
-      name: 'ChatGPT',
+      icon: <WeiyujiMark size={size * 0.85} />,
+      bg: '#E8F4F8',
+      name: '微与积',
     },
     [EModelEndpoint.google]: {
       icon: getGoogleIcon(model, size),
@@ -151,7 +142,7 @@ const MessageEndpointIcon: React.FC<IconProps> = (props) => {
       icon: <CustomMinimalIcon size={size * 0.7} />,
       name: 'Custom',
     },
-    null: { icon: <GPTIcon size={size * 0.7} />, bg: 'grey', name: 'N/A' },
+    null: { icon: <WeiyujiMark size={size * 0.85} />, bg: '#E8F4F8', name: '微与积' },
     default: {
       icon: (
         <div className="h-6 w-6">

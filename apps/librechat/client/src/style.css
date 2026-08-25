@@ -3178,3 +3178,38 @@ html:not(.dark) .pico-result-panel {
 .pico-wb-secondary header h1 {
   letter-spacing: 0;
 }
+
+/* T-CHAT-FACE: chat body one size; headings keep weight, not giant/tiny mix */
+.markdown.message-content h1,
+.markdown.message-content h2,
+.markdown.message-content h3,
+.markdown.message-content h4,
+.markdown.message-content h5,
+.markdown.message-content h6,
+.message-content.prose :where(h1):not(:where([class~='not-prose'] *)),
+.message-content.prose :where(h2):not(:where([class~='not-prose'] *)),
+.message-content.prose :where(h3):not(:where([class~='not-prose'] *)),
+.message-content.prose :where(h4):not(:where([class~='not-prose'] *)),
+.message-content.prose :where(h5):not(:where([class~='not-prose'] *)),
+.message-content.prose :where(h6):not(:where([class~='not-prose'] *)) {
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: 600;
+}
+
+.message-content.prose :where([class~='lead']):not(:where([class~='not-prose'] *)),
+.message-content.prose :where(table):not(:where([class~='not-prose'] *)),
+.message-content.prose :where(figcaption):not(:where([class~='not-prose'] *)),
+.message-content.prose :where(code):not(:where([class~='not-prose'] *)):not(:where(pre *)) {
+  font-size: inherit;
+}
+
+/* Process rows may be slightly smaller than body copy */
+.progress-text-wrapper {
+  font-size: 0.875em;
+}
+
+.pico-pixel-animal {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}

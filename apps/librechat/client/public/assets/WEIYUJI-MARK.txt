@@ -1,0 +1,2 @@
+weiyuji-mark.svg is a copy of edu-core apps/web/public/logo-mark.svg
+(微与积鲸尾标志) into pico public assets. Pico does not edit edu-core.
