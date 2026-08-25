@@ -55,20 +55,21 @@ describe('SchoolMaterialsBar field + document checkboxes', () => {
   });
 
   it('re-lists that field\'s documents after picking a venue', async () => {
-    mockSearch
-      .mockResolvedValueOnce({ items: [] })
-      .mockResolvedValueOnce({ items: [{ id: 'doc-2', title: '教案.md' }] });
+    mockSearch.mockImplementation(async (_q: string, nextField = '') => {
+      if (nextField === 'field-1') {
+        return { items: [{ id: 'doc-2', title: '教案.md' }] };
+      }
+      return { items: [] };
+    });
 
     render(<SchoolMaterialsBar conversationId="c1" />);
     fireEvent.click(screen.getByTestId('school-materials-toggle'));
-    await waitFor(() => expect(mockListEduFields).toHaveBeenCalled());
+    expect(await screen.findByRole('option', { name: '本学期排课' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByTestId('school-land-field'), { target: { value: 'field-1' } });
 
-    await waitFor(() => {
-      expect(mockSearch).toHaveBeenCalledWith('', 'field-1');
-    });
     expect(await screen.findByTestId('school-material-doc-2')).toBeInTheDocument();
+    expect(mockSearch).toHaveBeenCalledWith('', 'field-1');
     expect(mockPutEduNamedIds).toHaveBeenCalledWith('c1', [], 'field-1');
   });
 });
