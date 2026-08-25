@@ -1,11 +1,7 @@
 import { memo } from 'react';
-import type { TConversation, TEndpointsConfig } from 'librechat-data-provider';
-import { useAgentsMapContext, useAssistantsMapContext } from '~/Providers';
-import EndpointIcon from '~/components/Endpoints/EndpointIcon';
-import { areConversationIconFieldsEqual } from './utils';
-import { useGetEndpointsQuery } from '~/data-provider';
-
-const emptyEndpointsConfig = {} as TEndpointsConfig;
+import type { TConversation } from 'librechat-data-provider';
+import WeiyujiMark from '~/components/Endpoints/WeiyujiMark';
+import { cn } from '~/utils';
 
 type EndpointIconContext = 'message' | 'nav' | 'landing' | 'menu-item';
 
@@ -16,34 +12,25 @@ type ConversationEndpointIconProps = {
   size?: number;
 };
 
+/** Left session list always uses the 微与积 mark, never Codex/OpenAI. */
 function ConversationEndpointIcon({
-  conversation,
   className,
-  context = 'menu-item',
   size = 20,
 }: ConversationEndpointIconProps) {
-  const { data: endpointsConfig = emptyEndpointsConfig } = useGetEndpointsQuery();
-  const agentsMap = useAgentsMapContext();
-  const assistantMap = useAssistantsMapContext();
-
   return (
-    <EndpointIcon
-      conversation={conversation}
-      endpointsConfig={endpointsConfig}
-      assistantMap={assistantMap}
-      agentsMap={agentsMap}
-      className={className}
-      size={size}
-      context={context}
-    />
+    <div
+      title="微与积"
+      style={{ width: size, height: size }}
+      className={cn(
+        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E8F4F8] p-0.5',
+        className,
+      )}
+    >
+      <WeiyujiMark size={size} />
+    </div>
   );
 }
 
 export default memo(ConversationEndpointIcon, (prevProps, nextProps) => {
-  return (
-    prevProps.className === nextProps.className &&
-    prevProps.context === nextProps.context &&
-    prevProps.size === nextProps.size &&
-    areConversationIconFieldsEqual(prevProps.conversation, nextProps.conversation)
-  );
+  return prevProps.className === nextProps.className && prevProps.size === nextProps.size;
 });

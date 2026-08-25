@@ -20,6 +20,7 @@ import type { TUser } from 'librechat-data-provider';
 import { useUploadAvatarMutation, useGetFileConfig } from '~/data-provider';
 import { cn, formatBytes } from '~/utils';
 import { useLocalize } from '~/hooks';
+import { PixelAnimalGrid } from '~/components/Chat/Messages/PixelAnimalPicker';
 import store from '~/store';
 
 interface AvatarEditorRef {
@@ -166,6 +167,10 @@ function Avatar() {
         }
       }}
     >
+      <div className="mb-4">
+        <p className="mb-2 text-sm font-medium text-text-primary">换像素动物头像</p>
+        <PixelAnimalGrid />
+      </div>
       <div className="flex items-center justify-between">
         <span>{localize('com_nav_profile_picture')}</span>
         <OGDialogTrigger asChild>
