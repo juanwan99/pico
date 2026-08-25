@@ -17,6 +17,7 @@ from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import FakeTransport, RpcEvent, SubprocessTransport
 from pico_orchestrator.true_pi.config import (
     persist_session_dir,
+    persist_session_file,
     plan_mode_extension_path,
     session_segment,
 )
@@ -46,6 +47,9 @@ def test_session_dir_isolated_by_school_and_convo(monkeypatch: pytest.MonkeyPatc
     assert a.parent.name == session_segment("school-a")
     assert persist_session_dir(school_id="", conversation_id="c") is None
     assert persist_session_dir(school_id="s", conversation_id=None) is None
+    pinned = persist_session_file(school_id="school-a", conversation_id="convo-1")
+    assert pinned == a / "pico.jsonl"
+    assert persist_session_file(school_id="", conversation_id="c") is None
 
 
 def test_session_segment_blocks_dotdot() -> None:
@@ -68,18 +72,23 @@ def test_official_plan_mode_is_vendored() -> None:
 
 def test_spawn_workbench_tree_flags() -> None:
     extra = Path("/tmp/plan-mode/index.ts")
+    session_file = Path("/tmp/tp-sess/pico.jsonl")
     t = SubprocessTransport(
         session_dir=Path("/tmp/tp-sess"),
         tool_url="http://127.0.0.1:1",
         tool_token="tok",
         run_id="r1",
         continue_session=True,
+        session_file=session_file,
         plan_flag=True,
         extra_extensions=[extra],
     )
     cmd = t.spawn_command()
     assert "--session-dir" in cmd
-    assert "--continue" in cmd
+    assert "--session" in cmd
+    assert str(session_file) in cmd
+    # Pinned --session, not most-recent --continue (empty sibling after compact).
+    assert "--continue" not in cmd
     assert "--plan" in cmd
     assert "--no-extensions" in cmd
     assert "--no-context-files" in cmd
@@ -206,10 +215,12 @@ async def test_compaction_end_emits_human_line() -> None:
     kinds = [k for k, _ in events]
     assert "compaction.begin" in kinds
     assert "compaction.end" in kinds
-    deltas = [p for k, p in events if k == "message.delta"]
-    assert deltas
+    compact_payloads = [p for k, p in events if k.startswith("compaction.")]
+    assert compact_payloads
     assert COMPACTION_HUMAN == "在整理上文"
-    assert all(COMPACTION_HUMAN in str(p.get("text")) for p in deltas)
+    assert all(p.get("text") == COMPACTION_HUMAN for p in compact_payloads)
+    # Product bubble stays the current answer, not the process line.
+    assert not any(k == "message.delta" for k, _ in events)
 
 
 @pytest.mark.asyncio

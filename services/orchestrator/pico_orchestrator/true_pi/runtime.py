@@ -32,6 +32,7 @@ from pico_orchestrator.true_pi.config import (
     ALLOWED_GATEWAY_TOOLS,
     RUNTIME_LABEL,
     persist_session_dir,
+    persist_session_file,
     plan_mode_extension_path,
     session_root,
 )
@@ -170,6 +171,14 @@ async def run_true_pi_agent(
             )
             sess = session_dir or persist_dir or (session_root() / rid)
             use_tree = persist_dir is not None and session_dir is None
+            session_file = (
+                persist_session_file(
+                    school_id=str(getattr(principal, "school_id", "") or ""),
+                    conversation_id=conversation_id,
+                )
+                if use_tree
+                else None
+            )
             extra_ext: list[Path] = []
             plan_path = plan_mode_extension_path()
             if use_tree and plan_path.is_file():
@@ -185,7 +194,8 @@ async def run_true_pi_agent(
                 max_context=max_context,
                 max_tokens=max_out,
                 extra_extensions=extra_ext,
-                continue_session=use_tree,
+                continue_session=use_tree and session_file is None,
+                session_file=session_file,
                 # Official plan-mode stays loaded. Do not force --plan on every
                 # workbench turn: that waits a second agent_end that may never
                 # land (T-AGENT-PLAIN-V1 live hang).
@@ -515,6 +525,7 @@ async def run_true_pi_agent(
             await watcher
         if client is not None:
             with suppress(Exception):
+                # Let Pi flush the session jsonl before SIGTERM (T-LONG-HOLD).
                 await client.close(kill=True)
         if tool_server is not None:
             with suppress(Exception):

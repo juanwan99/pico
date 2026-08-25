@@ -72,7 +72,9 @@ async def test_compaction_events_keep_search_sources() -> None:
     assert "compaction.end" in kinds
     sources = next(p for k, p in events if k == "search.sources")
     assert sources["sources"][0]["artifact_id"] == "art-1"
-    assert any(COMPACTION_HUMAN in str(p.get("text")) for k, p in events if k == "message.delta")
+    compact_payloads = [p for k, p in events if k.startswith("compaction.")]
+    assert any(COMPACTION_HUMAN in str(p.get("text")) for p in compact_payloads)
+    assert not any(k == "message.delta" for k, _ in events)
 
 
 def test_prepare_agent_home_writes_official_compaction_settings(tmp_path: Path) -> None:
