@@ -1,0 +1,8 @@
+Pixel animal avatars are tiles from "Tiny Creatures" by Clint Bellanger
+(https://opengameart.org/content/tiny-creatures), CC0 1.0,
+compatible with Kenney Tiny Dungeon / Tiny Town (also CC0).
+
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Selected tiles were nearest-neighbor scaled to 64×64 for chat avatars.
+No original drawing; no avatar engine.

@@ -2,11 +2,11 @@ import { useMemo, memo } from 'react';
 import { getEndpointField } from 'librechat-data-provider';
 import type { Assistant, Agent } from 'librechat-data-provider';
 import type { TMessageIcon } from '~/common';
-import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import { useGetEndpointsQuery } from '~/data-provider';
 import { getIconEndpoint } from '~/utils';
-import { isImageURL } from '~/utils/icons';
+import WeiyujiMark from '~/components/Endpoints/WeiyujiMark';
 import Icon from '~/components/Endpoints/Icon';
+import PixelAnimalPicker from './PixelAnimalPicker';
 
 type MessageIconProps = {
   iconData?: TMessageIcon;
@@ -65,31 +65,30 @@ const MessageIcon = memo(({ iconData, assistant, agent }: MessageIconProps) => {
     [endpointsConfig, endpoint],
   );
 
-  if (iconData?.isCreatedByUser !== true && isImageURL(iconURL)) {
+  if (iconData?.isCreatedByUser === true) {
     return (
-      <ConvoIconURL
-        iconURL={iconURL}
-        modelLabel={iconData?.modelLabel}
-        context="message"
-        assistantAvatar={assistantAvatar}
-        agentAvatar={agentAvatar}
-        endpointIconURL={endpointIconURL}
-        assistantName={assistantName}
-        agentName={agentName}
-      />
+      <PixelAnimalPicker>
+        <Icon
+          isCreatedByUser
+          endpoint={endpoint}
+          iconURL={avatarURL || endpointIconURL}
+          model={iconData?.model}
+          assistantName={assistantName}
+          agentName={agentName}
+          size={28.8}
+        />
+      </PixelAnimalPicker>
     );
   }
 
   return (
-    <Icon
-      isCreatedByUser={iconData?.isCreatedByUser ?? false}
-      endpoint={endpoint}
-      iconURL={avatarURL || endpointIconURL}
-      model={iconData?.model}
-      assistantName={assistantName}
-      agentName={agentName}
-      size={28.8}
-    />
+    <div
+      title="微与积"
+      style={{ width: 28.8, height: 28.8 }}
+      className="relative flex items-center justify-center overflow-hidden rounded-full bg-[#E8F4F8] p-0.5"
+    >
+      <WeiyujiMark size={28.8} />
+    </div>
   );
 }, arePropsEqual);
 

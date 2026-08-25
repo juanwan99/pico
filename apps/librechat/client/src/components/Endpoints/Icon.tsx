@@ -1,8 +1,10 @@
 import React, { memo } from 'react';
+import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
 import { UserIcon, useAvatar } from '@librechat/client';
 import type { IconProps } from '~/common';
 import MessageEndpointIcon from './MessageEndpointIcon';
+import { pixelAnimalById, pixelAnimalIdAtom } from '~/store/pixelAnimal';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -62,11 +64,15 @@ type UserAvatarProps = {
 
 const UserAvatar = memo(
   ({ size, avatar, avatarSrc, userId, username, className }: UserAvatarProps) => {
+    const pixelAnimalId = useAtomValue(pixelAnimalIdAtom);
+    const pixelAnimal = pixelAnimalById(pixelAnimalId);
     const [resolved, setResolved] = React.useState(() => resolveAvatar(userId, avatar, avatarSrc));
 
     React.useEffect(() => {
       setResolved(resolveAvatar(userId, avatar, avatarSrc));
     }, [userId, avatar, avatarSrc]);
+
+    const imgSrc = pixelAnimal?.src ?? (resolved.type === 'image' ? resolved.src : '');
 
     return (
       <div
@@ -74,12 +80,16 @@ const UserAvatar = memo(
         style={{ width: size, height: size }}
         className={cn('relative flex items-center justify-center', className ?? '')}
       >
-        {resolved.type === 'image' ? (
+        {imgSrc ? (
           <img
-            className="rounded-full"
-            src={resolved.src}
-            alt="avatar"
-            onError={() => setResolved(markAvatarFailed(userId, resolved.src))}
+            className={cn('rounded-full', pixelAnimal ? 'pico-pixel-animal' : '')}
+            src={imgSrc}
+            alt={pixelAnimal ? pixelAnimal.label : 'avatar'}
+            onError={() => {
+              if (!pixelAnimal && resolved.type === 'image') {
+                setResolved(markAvatarFailed(userId, resolved.src));
+              }
+            }}
           />
         ) : (
           <div
