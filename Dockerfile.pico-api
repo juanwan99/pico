@@ -2,8 +2,10 @@
 # Public host deploy (DEFAULT=1) MUST use Dockerfile.pico-api.true-pi
 # via docker-compose.host.yml (T-OPS-TRUE-PI-HYGIENE / #436).
 #
-# Cache law: never ARG/ENV a per-deploy SHA above pip/apt layers.
-FROM python:3.12-slim
+# Cache law: pin FROM digest; never ARG/ENV a per-deploy SHA; lock ingest
+# with constraints-no-torch so torch cannot sneak back as a transitive dep.
+
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
 
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -12,10 +14,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DEFAULT_TIMEOUT=120
 
 # Aliyun PyPI for build reliability in CN
-RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --upgrade pip
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ pip==26.2.1
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ -r /app/requirements.txt
+COPY requirements.txt constraints-no-torch.txt requirements-ingest.txt /app/
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
+      -c /app/constraints-no-torch.txt \
+      -r /app/requirements.txt
 
 COPY services /app/services
 COPY packages /app/packages
@@ -35,11 +39,10 @@ RUN set -eux; \
       libglib2.0-0 libgomp1 libgl1 libxcb1 libsm6 libxext6 libxrender1; \
     rm -rf /var/lib/apt/lists/*
 
-# T-PICO-NO-TORCH: do not install the `docling` meta package (pulls torch).
-# Fail closed if torch still resolves; do not download-then-uninstall.
+# T-PICO-NO-TORCH: lock office extras. Fail closed if torch still resolves.
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
-      "docling-slim[format-office,format-xlsx,convert-core]>=2.14,<3" \
-      opencv-python-headless rapidocr onnxruntime pypdfium2 \
+      -c /app/constraints-no-torch.txt \
+      -r /app/requirements-ingest.txt \
  && python -c "import importlib.util,sys; sys.exit(1 if importlib.util.find_spec('torch') else 0)"
 
 ENV DOCLING_ARTIFACTS_PATH=/opt/docling-models \
@@ -56,10 +59,6 @@ ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
 
 RUN mkdir -p /app/data
-
-# Per-deploy identity. Must stay below every pip/apt RUN.
-ARG PICO_GIT_SHA=unknown
-ENV PICO_GIT_SHA=${PICO_GIT_SHA}
 
 EXPOSE 18765
 CMD ["uvicorn", "app.main:app", "--app-dir", "services/api", "--host", "127.0.0.1", "--port", "18765"]

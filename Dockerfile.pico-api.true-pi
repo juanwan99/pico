@@ -6,11 +6,12 @@
 #
 # Lean-only image (no Node/pi): Dockerfile.pico-api — not for public DEFAULT=1.
 #
-# Cache law: never ARG/ENV a per-deploy SHA above pip/apt layers.
-# Runtime SHA is injected by compose (.env / PICO_GIT_SHA). A late ARG is
-# only a fallback for docker inspect.
+# Cache law (BINDING):
+# - Pin FROM digest. Floating python:3.12-slim retags bust every pip layer.
+# - Never ARG/ENV a per-deploy SHA. Runtime SHA is compose `.env` only.
+# - Never install the `docling` meta-package. Lock ingest + constraints-no-torch.
 
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
 
 WORKDIR /app
 ARG NODE_VERSION=22.22.0
@@ -44,18 +45,18 @@ RUN set -eux; \
     apt-get autoremove -y; \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --upgrade pip
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ pip==26.2.1
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ -r /app/requirements.txt
-
-# T-PICO-NO-TORCH: do not install the `docling` meta package — it depends on
-# docling-slim[standard] which pulls torch (~500MB + CUDA). Office ingest uses
-# format extras; scan PDF is pypdfium2 + RapidOCR ONNX. Fail closed if torch
-# still resolves; do not download-then-uninstall.
+COPY requirements.txt constraints-no-torch.txt requirements-ingest.txt /app/
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
-      "docling-slim[format-office,format-xlsx,convert-core]>=2.14,<3" \
-      opencv-python-headless rapidocr onnxruntime pypdfium2 \
+      -c /app/constraints-no-torch.txt \
+      -r /app/requirements.txt
+
+# T-PICO-NO-TORCH: lock office extras. constraints-no-torch fails closed
+# instead of downloading CUDA if a future extra starts requiring torch.
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
+      -c /app/constraints-no-torch.txt \
+      -r /app/requirements-ingest.txt \
  && python -c "import importlib.util,sys; sys.exit(1 if importlib.util.find_spec('torch') else 0)"
 
 RUN set -eux; \
@@ -83,10 +84,6 @@ ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
 
 RUN mkdir -p /app/data /tmp/pico-true-pi-sessions
-
-# Per-deploy identity. Must stay below every pip/apt RUN.
-ARG PICO_GIT_SHA=unknown
-ENV PICO_GIT_SHA=${PICO_GIT_SHA}
 
 EXPOSE 18765
 CMD ["uvicorn", "app.main:app", "--app-dir", "services/api", "--host", "127.0.0.1", "--port", "18765"]
