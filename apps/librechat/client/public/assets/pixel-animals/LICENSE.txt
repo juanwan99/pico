@@ -1,8 +1,5 @@
-Pixel animal avatars are tiles from "Tiny Creatures" by Clint Bellanger
-(https://opengameart.org/content/tiny-creatures), CC0 1.0,
-compatible with Kenney Tiny Dungeon / Tiny Town (also CC0).
+Generic animal icons copied from zoo-js/zoo 萌萌乐园动物区
+https://github.com/zoo-js/zoo
+MIT. Trademarked characters (Pikachu, Totoro, Mario, Gundam, etc.) were not copied.
 
-https://creativecommons.org/publicdomain/zero/1.0/
-
-Selected tiles were nearest-neighbor scaled to 64×64 for chat avatars.
-No original drawing; no avatar engine.
+Used as static PNG avatars only. No avatar drawing engine.

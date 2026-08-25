@@ -6,7 +6,6 @@ import { useGetEndpointsQuery } from '~/data-provider';
 import { getIconEndpoint } from '~/utils';
 import WeiyujiMark from '~/components/Endpoints/WeiyujiMark';
 import Icon from '~/components/Endpoints/Icon';
-import PixelAnimalPicker from './PixelAnimalPicker';
 
 type MessageIconProps = {
   iconData?: TMessageIcon;
@@ -67,17 +66,15 @@ const MessageIcon = memo(({ iconData, assistant, agent }: MessageIconProps) => {
 
   if (iconData?.isCreatedByUser === true) {
     return (
-      <PixelAnimalPicker>
-        <Icon
-          isCreatedByUser
-          endpoint={endpoint}
-          iconURL={avatarURL || endpointIconURL}
-          model={iconData?.model}
-          assistantName={assistantName}
-          agentName={agentName}
-          size={28.8}
-        />
-      </PixelAnimalPicker>
+      <Icon
+        isCreatedByUser
+        endpoint={endpoint}
+        iconURL={avatarURL || endpointIconURL}
+        model={iconData?.model}
+        assistantName={assistantName}
+        agentName={agentName}
+        size={28.8}
+      />
     );
   }
 

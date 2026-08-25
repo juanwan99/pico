@@ -1,15 +1,7 @@
 import { useState, memo, useRef } from 'react';
 import { useSetRecoilState } from 'recoil';
 import * as Menu from '@ariakit/react/menu';
-import {
-  GearIcon,
-  DropdownMenuSeparator,
-  Avatar,
-  OGDialog,
-  OGDialogContent,
-  OGDialogHeader,
-  OGDialogTitle,
-} from '@librechat/client';
+import { GearIcon, DropdownMenuSeparator } from '@librechat/client';
 import {
   Archive,
   ChevronRight,
@@ -18,13 +10,10 @@ import {
   Keyboard,
   LifeBuoy,
   LogOut,
-  PawPrint,
   Scale,
   ShieldCheck,
 } from 'lucide-react';
-import { useAtomValue } from 'jotai';
-import { PixelAnimalFace, PixelAnimalGrid } from '~/components/Chat/Messages/PixelAnimalPicker';
-import { pixelAnimalById, pixelAnimalIdAtom } from '~/store/pixelAnimal';
+import { PixelAnimalFace } from '~/components/Chat/Messages/PixelAnimalPicker';
 import { ArchivedChatsModal } from '~/components/Nav/SettingsTabs/General/ArchivedChatsModal';
 import { MyFilesModal } from '~/components/Chat/Input/Files/MyFilesModal';
 import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
@@ -112,12 +101,10 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
     enabled: !!isAuthenticated && startupConfig?.balance?.enabled,
   });
   const [showSettings, setShowSettings] = useState(false);
-  const [showPixelAnimals, setShowPixelAnimals] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
   const setShowShortcutsDialog = useSetRecoilState(store.showShortcutsDialog);
   const [showArchived, setShowArchived] = useState(false);
   const accountSettingsButtonRef = useRef<HTMLButtonElement>(null);
-  const pixelAnimal = pixelAnimalById(useAtomValue(pixelAnimalIdAtom));
   const faceSize = collapsed ? 28 : 32;
 
   return (
@@ -136,11 +123,7 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
           className={collapsed ? 'size-7 flex-shrink-0' : '-ml-0.9 -mt-0.8 h-8 w-8 flex-shrink-0'}
         >
           <div className="relative flex">
-            {pixelAnimal ? (
-              <PixelAnimalFace size={faceSize} />
-            ) : (
-              <Avatar user={user} size={faceSize} />
-            )}
+            <PixelAnimalFace size={faceSize} userId={user?.id ?? ''} />
           </div>
         </div>
         {!collapsed && (
@@ -188,13 +171,6 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
           {localize('com_nav_archived_chats')}
         </Menu.MenuItem>
         <Menu.MenuItem
-          onClick={() => setShowPixelAnimals(true)}
-          className="select-item text-sm"
-        >
-          <PawPrint className="icon-md" aria-hidden="true" />
-          换像素动物头像
-        </Menu.MenuItem>
-        <Menu.MenuItem
           onClick={() => setShowSettings(true)}
           className="select-item text-sm"
           data-testid="nav-settings"
@@ -223,15 +199,6 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
         />
       )}
       {showSettings && <Settings open={showSettings} onOpenChange={setShowSettings} />}
-      <OGDialog open={showPixelAnimals} onOpenChange={setShowPixelAnimals}>
-        <OGDialogContent className="w-11/12 max-w-sm">
-          <OGDialogHeader>
-            <OGDialogTitle>换像素动物头像</OGDialogTitle>
-          </OGDialogHeader>
-          <p className="mb-3 text-sm text-text-secondary">点一只，刷新还在</p>
-          <PixelAnimalGrid onPicked={() => setShowPixelAnimals(false)} />
-        </OGDialogContent>
-      </OGDialog>
     </Menu.MenuProvider>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { useSetRecoilState } from 'recoil';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
 // @ts-ignore - no type definitions available
 import AvatarEditor from 'react-avatar-editor';
 import { FileImage, RotateCw, Upload, ZoomIn, ZoomOut, Move, X } from 'lucide-react';
@@ -34,6 +34,7 @@ interface Position {
 }
 
 function Avatar() {
+  const user = useRecoilValue(store.user);
   const setUser = useSetRecoilState(store.user);
 
   const [scale, setScale] = useState<number>(1);
@@ -168,8 +169,9 @@ function Avatar() {
       }}
     >
       <div className="mb-4">
-        <p className="mb-2 text-sm font-medium text-text-primary">换像素动物头像</p>
-        <PixelAnimalGrid />
+        <p className="mb-2 text-sm font-medium text-text-primary">换动物头像</p>
+        <p className="mb-2 text-xs text-text-secondary">每人默认随机一只，点选后刷新还在</p>
+        <PixelAnimalGrid userId={user?.id ?? ''} />
       </div>
       <div className="flex items-center justify-between">
         <span>{localize('com_nav_profile_picture')}</span>

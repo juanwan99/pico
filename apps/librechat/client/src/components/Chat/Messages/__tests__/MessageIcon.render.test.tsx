@@ -26,14 +26,6 @@ jest.mock('~/components/Endpoints/Icon', () => {
   return { __esModule: true, default: Icon };
 });
 
-jest.mock('../PixelAnimalPicker', () => {
-  const PixelAnimalPicker = ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="pixel-animal-picker">{children}</div>
-  );
-  PixelAnimalPicker.displayName = 'PixelAnimalPicker';
-  return { __esModule: true, default: PixelAnimalPicker };
-});
-
 import MessageIcon from '../MessageIcon';
 
 const aiIconData: TMessageIcon = {
@@ -60,7 +52,6 @@ describe('MessageIcon chat face', () => {
     const mark = screen.getByAltText('微与积');
     expect(mark).toHaveAttribute('src', '/assets/weiyuji-mark.svg');
     expect(screen.queryByTestId('icon')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('pixel-animal-picker')).not.toBeInTheDocument();
   });
 
   it('ignores OpenAI/Codex icon URLs on AI messages', () => {
@@ -76,10 +67,9 @@ describe('MessageIcon chat face', () => {
     expect(screen.getByAltText('微与积')).toBeInTheDocument();
   });
 
-  it('wraps the user avatar with the pixel-animal picker', () => {
+  it('renders the user icon without a chat-bubble picker', () => {
     render(<MessageIcon iconData={userIconData} />);
 
-    expect(screen.getByTestId('pixel-animal-picker')).toBeInTheDocument();
     expect(screen.getByTestId('icon')).toHaveAttribute('data-user', 'true');
     expect(screen.queryByAltText('微与积')).not.toBeInTheDocument();
   });
