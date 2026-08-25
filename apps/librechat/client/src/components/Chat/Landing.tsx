@@ -110,11 +110,11 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
   return (
     <div className="pico-wb-landing pico-shell-bg flex min-h-full w-full flex-col items-center px-4 pb-8 pt-10 sm:px-6 sm:pt-[132px]">
       <div className="flex w-full max-w-[797px] flex-col items-center">
-        <h1 className="pico-type-medium text-center text-[30px] leading-none tracking-normal text-[color:var(--pico-ink)] dark:text-text-primary sm:text-[34px]">
+        <h1 className="pico-type-title text-center tracking-normal text-[color:var(--pico-ink)] dark:text-text-primary">
           Pico，我帮你
         </h1>
         {name ? (
-          <p className="pico-type-sidebar mt-2.5 text-[color:var(--pico-ink-3)]">
+          <p className="pico-type-aux mt-2.5 text-[color:var(--pico-ink-3)]">
             {name}，直接说就行
           </p>
         ) : null}

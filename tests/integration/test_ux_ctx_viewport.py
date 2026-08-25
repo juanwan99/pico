@@ -84,6 +84,31 @@ def test_history_and_chrome_source_locks() -> None:
     assert "打开我的文件" not in result
 
 
+def test_nav_layout_type_and_school_docs() -> None:
+    tokens = (ROOT / "apps/librechat/client/src/style/pico-tokens.css").read_text()
+    landing = (ROOT / "apps/librechat/client/src/components/Chat/Landing.tsx").read_text()
+    bar = (ROOT / "apps/librechat/client/src/components/Chat/SchoolMaterialsBar.tsx").read_text()
+    main = (ROOT / "apps/librechat/client/src/main.jsx").read_text()
+    index_html = (ROOT / "apps/librechat/client/index.html").read_text()
+    routes = (ROOT / "apps/librechat/client/src/routes/index.tsx").read_text()
+    assert "--pico-fs-aux: 13px" in tokens
+    assert "--pico-fs-sidebar: 15px" in tokens
+    assert "--pico-fs-body: 16px" in tokens
+    assert "--pico-fs-title: 22px" in tokens
+    assert "pico-type-title" in landing
+    assert "text-[30px]" not in landing
+    assert "text-[34px]" not in landing
+    assert "searchEduSchoolMaterials(q.trim(), next.fieldId)" in bar
+    assert "searchEduSchoolMaterials(nextQ.trim(), nextField)" in bar
+    assert "text-[11px]" not in bar
+    assert "text-[12px]" not in bar
+    assert "katex/dist/katex.min.css" not in main
+    assert "bootstrap-entry" not in index_html
+    assert "lazy: loadChatRoute" in routes
+    assert "lazy: loadRoot" in routes
+    assert "element: <ChatRoute />" not in routes
+
+
 @pytest.mark.asyncio
 async def test_v1_example_com_desktop_viewport() -> None:
     pytest.importorskip("playwright.async_api")

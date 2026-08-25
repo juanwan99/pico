@@ -125,6 +125,18 @@ describe('edu school materials client', () => {
     );
   });
 
+  it('searches membership materials for a named field', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [{ id: 'a', title: '课时' }], dumped: false }),
+    });
+    await searchEduSchoolMaterials('课时', 'field-1');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/pico/v1/edu/materials?q=%E8%AF%BE%E6%97%B6&field_id=field-1',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
   it('puts named ids only', async () => {
     fetchMock.mockResolvedValue({
       ok: true,

@@ -7,9 +7,10 @@
 :root {
   --pico-font: 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans SC', 'Noto Sans SC',
     'Microsoft YaHei', 'Heiti SC', system-ui, sans-serif;
-  --pico-fs-sidebar: 13px;
-  --pico-fs-body: 15px;
-  --pico-fs-aux: 12px;
+  --pico-fs-aux: 13px;
+  --pico-fs-sidebar: 15px;
+  --pico-fs-body: 16px;
+  --pico-fs-title: 22px;
   --pico-fw: 400;
   --pico-fw-medium: 560;
 }
@@ -45,13 +46,14 @@
   /* CJK first — Inter must not be the Chinese primary face */
   --pico-font: 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans SC', 'Noto Sans SC',
     'Microsoft YaHei', 'Heiti SC', system-ui, sans-serif;
-  --pico-fs-sidebar: 13px;
-  --pico-fs-body: 15px;
-  --pico-fs-aux: 12px;
+  --pico-fs-aux: 13px;
+  --pico-fs-sidebar: 15px;
+  --pico-fs-body: 16px;
+  --pico-fs-title: 22px;
   --pico-fw: 400;
   --pico-fw-medium: 560;
-  --font-size-base: 15px;
-  --markdown-font-size: 15px;
+  --font-size-base: 16px;
+  --markdown-font-size: 16px;
   color: var(--pico-ink);
   font-family: var(--pico-font);
   font-size: var(--pico-fs-body);
@@ -82,6 +84,12 @@
 .pico-app .pico-type-aux {
   font-size: var(--pico-fs-aux);
   font-weight: var(--pico-fw);
+}
+.pico-app .pico-type-title {
+  font-size: var(--pico-fs-title);
+  font-weight: var(--pico-fw-medium);
+  font-family: var(--pico-font);
+  line-height: 1.25;
 }
 .pico-app .pico-type-medium {
   font-weight: var(--pico-fw-medium);

@@ -13,6 +13,13 @@ import {
 } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
 
+function asNamedIds(row: { ids?: string[]; field_id?: string }) {
+  return {
+    ids: Array.isArray(row.ids) ? row.ids : [],
+    fieldId: typeof row.field_id === 'string' ? row.field_id : '',
+  };
+}
+
 export default function SchoolMaterialsBar({ conversationId }: { conversationId?: string | null }) {
   const convo = conversationId && conversationId !== 'new' ? conversationId : '';
   const [open, setOpen] = useState(false);
@@ -24,30 +31,11 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshNamed = useCallback(async () => {
-    try {
-      const row = await getEduNamedIds(convo);
-      setNamed(Array.isArray(row.ids) ? row.ids : []);
-      setFieldId(typeof row.field_id === 'string' ? row.field_id : '');
-    } catch {
-      setNamed([]);
-      setFieldId('');
-    }
-  }, [convo]);
-
-  useEffect(() => {
-    if (!open) return;
-    void refreshNamed();
-    void listEduFields()
-      .then((row) => setFields(Array.isArray(row.fields) ? row.fields : []))
-      .catch(() => setFields([]));
-  }, [open, refreshNamed]);
-
-  const search = useCallback(async () => {
+  const search = useCallback(async (nextField = fieldId, nextQ = q) => {
     setBusy(true);
     setError(null);
     try {
-      const row = await searchEduSchoolMaterials(q.trim());
+      const row = await searchEduSchoolMaterials(nextQ.trim(), nextField);
       setItems(Array.isArray(row.items) ? row.items : []);
       if (row.configured === false) {
         setError('学校材料口还没接通');
@@ -63,7 +51,55 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
     } finally {
       setBusy(false);
     }
-  }, [q]);
+  }, [fieldId, q]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setBusy(true);
+      setError(null);
+      try {
+        const [namedRow, fieldsRow] = await Promise.all([
+          getEduNamedIds(convo).catch(() => ({ ids: [] as string[], field_id: '' })),
+          listEduFields().catch(() => ({ fields: [] as EduSchoolField[] })),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        const next = asNamedIds(namedRow);
+        setNamed(next.ids);
+        setFieldId(next.fieldId);
+        setFields(Array.isArray(fieldsRow.fields) ? fieldsRow.fields : []);
+        const row = await searchEduSchoolMaterials(q.trim(), next.fieldId);
+        if (cancelled) {
+          return;
+        }
+        setItems(Array.isArray(row.items) ? row.items : []);
+        if (row.configured === false) {
+          setError('学校材料口还没接通');
+        }
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+        const status = err instanceof Error ? err.message : String(err);
+        setError(/\b403\b/.test(status) ? '无权看这份材料' : '学校材料现在列不出');
+        setItems([]);
+      } finally {
+        if (!cancelled) {
+          setBusy(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Open-load uses the query at the moment the panel opens; typing then 搜.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, convo]);
 
   const toggle = useCallback(
     async (id: string) => {
@@ -89,37 +125,32 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
       } catch {
         setError('落点场没写上');
       }
+      await search(nextField);
     },
-    [convo, named],
+    [convo, named, search],
   );
 
   return (
     <div className="mb-2 w-full" data-testid="school-materials-bar">
       <button
         type="button"
-        className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] text-[#555] hover:bg-black/[0.04]"
+        className="pico-type-sidebar inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[color:var(--pico-ink-2)] hover:bg-black/[0.04]"
         data-testid="school-materials-toggle"
         aria-expanded={open}
-        onClick={() => {
-          setOpen((v) => {
-            const next = !v;
-            if (next) void search();
-            return next;
-          });
-        }}
+        onClick={() => setOpen((v) => !v)}
       >
         学校材料
         {named.length ? (
-          <span className="rounded-full bg-[#3b6fd9] px-1.5 text-[10px] font-semibold text-white">
+          <span className="pico-type-aux rounded-full bg-[#3b6fd9] px-1.5 font-semibold text-white">
             {named.length}
           </span>
         ) : (
-          <span className="text-[#999]">未勾选不读正文</span>
+          <span className="pico-type-aux text-[color:var(--pico-ink-3)]">未勾选不读正文</span>
         )}
       </button>
       {open ? (
-        <div className="mt-1 rounded-lg border border-black/[0.08] bg-white p-2 text-[12px]">
-          <label className="mb-1 block text-[11px] text-[#666]">
+        <div className="pico-type-body mt-1 rounded-lg border border-black/[0.08] bg-white p-2">
+          <label className="pico-type-aux mb-1 block text-[color:var(--pico-ink-2)]">
             落到哪一场
             <select
               className="mt-0.5 h-8 w-full rounded-md border border-black/[0.08] px-2 outline-none"
@@ -187,7 +218,11 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
             })}
           </ul>
           {!busy && items.length === 0 ? (
-            <p className="mt-1 text-[#999]">没有列出材料。搜一下，或确认学校侧有权。</p>
+            <p className="pico-type-aux mt-1 text-[color:var(--pico-ink-3)]">
+              {fieldId
+                ? '这场还没有列出文档。搜一下，或确认学校侧有权。'
+                : '先点名一场，再勾该场下的具体文档。'}
+            </p>
           ) : null}
         </div>
       ) : null}

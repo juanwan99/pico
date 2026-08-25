@@ -442,6 +442,17 @@ describe('Pico proxy routes', () => {
     );
   });
 
+  it('forwards field_id when listing a venue\'s documents', async () => {
+    const response = await request(app)
+      .get('/api/pico/v1/edu/materials')
+      .query({ q: '课时', field_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' });
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/edu/materials?q=%E8%AF%BE%E6%97%B6&field_id=aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('proxies named school material ids for this conversation', async () => {
     const response = await request(app)
       .put('/api/pico/v1/edu/named')

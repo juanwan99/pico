@@ -1,5 +1,4 @@
 import { Navigate, useParams } from 'react-router-dom';
-import DashboardRoute from './Layouts/Dashboard';
 
 function PromptsRedirect() {
   const { '*': splat } = useParams();
@@ -9,7 +8,7 @@ function PromptsRedirect() {
 
 const dashboardRoutes = {
   path: 'd/*',
-  element: <DashboardRoute />,
+  lazy: () => import('./Layouts/Dashboard').then((m) => ({ Component: m.default })),
   children: [
     {
       path: 'prompts/*',

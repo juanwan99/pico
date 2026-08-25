@@ -8,17 +8,12 @@ import {
   TwoFactorScreen,
   RequestPasswordReset,
 } from '~/components/Auth';
-import { OAuthSuccess, OAuthError } from '~/components/OAuth';
 import { AuthContextProvider } from '~/hooks/AuthContext';
 import WithRum from '~/lib/rum/WithRum';
 import RouteErrorBoundary from './RouteErrorBoundary';
 import StartupLayout from './Layouts/Startup';
 import LoginLayout from './Layouts/Login';
 import dashboardRoutes from './Dashboard';
-import ShareRoute from './ShareRoute';
-import ChatRoute from './ChatRoute';
-import Search from './Search';
-import Root from './Root';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -99,6 +94,36 @@ const loadWorkspaceHub = () =>
     Component: m.default,
   }));
 
+const loadShareRoute = () =>
+  import('./ShareRoute').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadOAuthSuccess = () =>
+  import('~/components/OAuth/OAuthSuccess').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadOAuthError = () =>
+  import('~/components/OAuth/OAuthError').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadRoot = () =>
+  import('./Root').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadChatRoute = () =>
+  import('./ChatRoute').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadSearch = () =>
+  import('./Search').then((m) => ({
+    Component: m.default,
+  }));
+
 const baseEl = document.querySelector('base');
 const baseHref = baseEl?.getAttribute('href') || '/';
 
@@ -106,7 +131,7 @@ export const router = createBrowserRouter(
   [
     {
       path: 'share/:shareId',
-      element: <ShareRoute />,
+      lazy: loadShareRoute,
       errorElement: <RouteErrorBoundary />,
     },
     {
@@ -115,11 +140,11 @@ export const router = createBrowserRouter(
       children: [
         {
           path: 'success',
-          element: <OAuthSuccess />,
+          lazy: loadOAuthSuccess,
         },
         {
           path: 'error',
-          element: <OAuthError />,
+          lazy: loadOAuthError,
         },
       ],
     },
@@ -168,7 +193,7 @@ export const router = createBrowserRouter(
         dashboardRoutes,
         {
           path: '/',
-          element: <Root />,
+          lazy: loadRoot,
           children: [
             {
               index: true,
@@ -176,11 +201,11 @@ export const router = createBrowserRouter(
             },
             {
               path: 'c/:conversationId?',
-              element: <ChatRoute />,
+              lazy: loadChatRoute,
             },
             {
               path: 'search',
-              element: <Search />,
+              lazy: loadSearch,
             },
             {
               path: 'prompts',
