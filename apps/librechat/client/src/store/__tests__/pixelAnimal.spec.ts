@@ -1,11 +1,19 @@
-import { PIXEL_ANIMALS, defaultAnimalIdForUser, pixelAnimalById } from '../pixelAnimal';
+import {
+  PIXEL_ANIMAL_STORAGE_KEY,
+  PIXEL_ANIMALS,
+  defaultAnimalIdForUser,
+  pixelAnimalById,
+} from '../pixelAnimal';
 
 describe('pixelAnimals catalog', () => {
-  it('ships a fixed zoo-js animal set with public static paths', () => {
-    expect(PIXEL_ANIMALS.length).toBeGreaterThanOrEqual(20);
+  it('ships the full generic zoo-js animal set with cache-busting paths', () => {
+    expect(PIXEL_ANIMALS.length).toBe(78);
+    const ids = PIXEL_ANIMALS.map((animal) => animal.id);
+    expect(new Set(ids).size).toBe(78);
+    expect(ids).not.toContain('pikachu');
+    expect(ids).not.toContain('totoro');
     for (const animal of PIXEL_ANIMALS) {
-      expect(animal.src.startsWith('/assets/pixel-animals/')).toBe(true);
-      expect(animal.src.endsWith('.png')).toBe(true);
+      expect(animal.src).toBe(`/assets/zoo-animals/${animal.id}.png`);
       expect(animal.label.length).toBeGreaterThan(0);
     }
   });
@@ -23,5 +31,9 @@ describe('pixelAnimals catalog', () => {
     expect(defaultAnimalIdForUser('user-aaa')).toBe(a);
     expect(['user-aaa', 'user-bbb']).toContain('user-aaa');
     expect(typeof b).toBe('string');
+  });
+
+  it('does not reuse the Tiny Creatures storage key', () => {
+    expect(PIXEL_ANIMAL_STORAGE_KEY).toBe('pico.zooAnimalId');
   });
 });

@@ -33,25 +33,33 @@ export function PixelAnimalGrid({
   const activeId = useEnsuredAnimalId(userId);
 
   return (
-    <div className="grid grid-cols-5 gap-2">
-      {PIXEL_ANIMALS.map((animal) => (
-        <button
-          key={animal.id}
-          type="button"
-          aria-label={animal.label}
-          aria-pressed={activeId === animal.id}
-          className={cn(
-            'flex items-center justify-center rounded-lg p-1 hover:bg-surface-hover',
-            activeId === animal.id && 'ring-2 ring-border-xheavy',
-          )}
-          onClick={() => {
-            setSelectedId(animal.id);
-            onPicked?.();
-          }}
-        >
-          <img src={animal.src} alt={animal.label} className="h-9 w-9 rounded-full" width={36} height={36} />
-        </button>
-      ))}
+    <div className="max-h-64 overflow-y-auto pr-1">
+      <div className="grid grid-cols-6 gap-2">
+        {PIXEL_ANIMALS.map((animal) => (
+          <button
+            key={animal.id}
+            type="button"
+            aria-label={animal.label}
+            aria-pressed={activeId === animal.id}
+            className={cn(
+              'flex items-center justify-center rounded-lg p-1 hover:bg-surface-hover',
+              activeId === animal.id && 'ring-2 ring-border-xheavy',
+            )}
+            onClick={() => {
+              setSelectedId(animal.id);
+              onPicked?.();
+            }}
+          >
+            <img
+              src={animal.src}
+              alt={animal.label}
+              className="h-9 w-9 rounded-full"
+              width={36}
+              height={36}
+            />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -170,7 +170,9 @@ function Avatar() {
     >
       <div className="mb-4">
         <p className="mb-2 text-sm font-medium text-text-primary">换动物头像</p>
-        <p className="mb-2 text-xs text-text-secondary">每人默认随机一只，点选后刷新还在</p>
+        <p className="mb-2 text-xs text-text-secondary">
+          zoo-js 动物区 78 只，每人默认随机一只，点选后刷新还在
+        </p>
         <PixelAnimalGrid userId={user?.id ?? ''} />
       </div>
       <div className="flex items-center justify-between">
