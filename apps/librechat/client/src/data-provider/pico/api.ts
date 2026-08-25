@@ -169,7 +169,26 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`pico ${res.status}: ${text.slice(0, 200)}`);
+    try {
+      const parsed = JSON.parse(text) as {
+        detail?: { message?: string } | string;
+        message?: string;
+        user_message?: string;
+      };
+      const detail =
+        typeof parsed.detail === 'string'
+          ? parsed.detail
+          : parsed.detail && typeof parsed.detail === 'object'
+            ? parsed.detail.message
+            : '';
+      const msg = parsed.user_message || parsed.message || detail || text;
+      throw new Error(String(msg).slice(0, 200) || `pico ${res.status}`);
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        throw new Error(`pico ${res.status}: ${text.slice(0, 200)}`);
+      }
+      throw err;
+    }
   }
   return res.json() as Promise<T>;
 }

@@ -114,6 +114,30 @@ describe('Pico proxy routes', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('forwards my-files folder create to Pico API', async () => {
+    const response = await request(app)
+      .post('/api/pico/v1/my/folders')
+      .send({ name: '备课' });
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/my/folders',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: '备课' }),
+      }),
+    );
+  });
+
+  it('forwards my-files folder list to Pico API', async () => {
+    const response = await request(app).get('/api/pico/v1/my/folders');
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/my/folders',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('forwards run event requests to Pico API', async () => {
     const response = await request(app).get('/api/pico/v1/runs/run-1/events');
 

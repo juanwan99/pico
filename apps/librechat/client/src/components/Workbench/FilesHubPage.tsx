@@ -4,6 +4,7 @@
  */
 import { useLocation } from 'react-router-dom';
 import FilesDirectoryPanel from './FilesDirectoryPanel';
+import SchoolFilesDirectory from './SchoolFilesDirectory';
 import WorkbenchShell from './WorkbenchShell';
 
 export default function FilesHubPage() {
@@ -13,13 +14,11 @@ export default function FilesHubPage() {
   return (
     <WorkbenchShell
       title={schoolView ? '学校材料' : '我的文件'}
-      subtitle={schoolView ? '在对话里按场文件夹勾选' : '本人做成的文件'}
+      subtitle={schoolView ? '有权场里的材料' : '本人做成的文件'}
       backTo="/c/new"
     >
       {schoolView ? (
-        <div className="pico-type-body flex h-full items-start p-6 text-[color:var(--pico-ink-2)]">
-          学校材料在对话里打开就是文件夹树。转存请到左侧「我的文件」目录。
-        </div>
+        <SchoolFilesDirectory className="h-full" />
       ) : (
         <FilesDirectoryPanel className="h-full" />
       )}

@@ -40,6 +40,10 @@ describe('FilesDirectoryPanel', () => {
     expect(await screen.findByTestId('my-files-transfer-art-1')).toBeInTheDocument();
     expect(screen.queryByText('落到哪一场')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('搜索学校材料标题')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('my-files-create-folder'));
+    await waitFor(() => {
+      expect(mockCreate).toHaveBeenCalledWith('未命名夹');
+    });
     fireEvent.change(screen.getByTestId('my-files-folder-name'), { target: { value: '备课' } });
     fireEvent.click(screen.getByTestId('my-files-create-folder'));
     await waitFor(() => {
