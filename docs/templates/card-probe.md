@@ -9,7 +9,7 @@
 # 调查卡 · T-改这里-ID
 
 开工先读（只读，禁止把正文贴进卡）：
-docs/ONEFLOW.md · docs/MEMORY-RESET.md · docs/TOOLING-CATALOG.md
+docs/EXPERIENCE.md · docs/STATE-NOW.md
 
 ## 合同
 

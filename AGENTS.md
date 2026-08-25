@@ -1,27 +1,14 @@
 # Pico agent rules (binding)
 
-> **现况只认下面框。其余当索引不当现况。卡面仍冻。业主不用记规范。**
+> **现况只认下面框。其余当索引不当现况。卡面四行。怎么跟业主说话不限。**
 
 ```text
 现况: docs/STATE-NOW.md · 冻结令 #634
 在飞: 只认 STATE-NOW（禁止凭记忆）
-执行三刀: 证据贴 Issue · 无 ECS 拒领 · 过门=老师手
-
-对业主聊天只准两套嘴。超了重写。GitHub 回执五句不准拿来对业主说。
-
-开卡前（没听到「对」不准 stamp）：
-  你要的：打开 __ ，做 __ ，看见 __ 还在
-  我不准写成：<控件/实现 · 禁止进过门>
-  能否开卡：能 / 不能
-
-审查（问完成没有）：
-  完成：是 / 否
-  证据：live SHA · 过门哪条过或不过（人话）
-  没完成因为：一句
-  下一步：同卡续 / 合了部 / 请你 PASS / 等你拍板 —— 一句
-
-禁止: 改卡模板 · 证据 PR · 合了未部报 DONE · 第二张 stamp-ok · 对业主讲架构课 · oneflow 当真源
-新窗: STATE-NOW → curl tip。无在飞则讨论，不开卡。
+经验: docs/EXPERIENCE.md（唯一 · 禁止贴进卡）
+执行: 证据贴 Issue · 无 ECS 拒领 · 过门=老师手 · 1卡1PR
+禁止: 改卡贴 315 · 证据 PR · 合了未部报 DONE · 第二张 stamp-ok · Closes 部前关卡 · oneflow 当真源
+新窗: STATE-NOW → EXPERIENCE → curl tip。无在飞则讨论，不开卡。
 ```
 
 
@@ -118,7 +105,7 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 **Memory reset:** [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md) — **本周 ≤3 坑**，禁止加长。  
 **Stage package:** [`docs/STAGE-PACKAGE-MODE.md`](docs/STAGE-PACKAGE-MODE.md) — 单窗阶段包（废默认多窗碎卡）。  
 **Task card format:** [`docs/ONEFLOW.md`](docs/ONEFLOW.md) + [`docs/TASK-CARD-STANDARD.md`](docs/TASK-CARD-STANDARD.md) — Issue 用标准任务卡；对执行窗只贴 [`docs/templates/dispatch-slip.md`](docs/templates/dispatch-slip.md)。禁止 315。禁止用四行短卡当已派。  
-**开工先读：** [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md)（别记错的）· [`docs/TOOLING-CATALOG.md`](docs/TOOLING-CATALOG.md)（工具）。派发条点名手册和坑，不抄全文。执行窗零记忆，调查必须写进 Issue。  
+**开工先读：** [`docs/EXPERIENCE.md`](docs/EXPERIENCE.md)。派发条点名编号，不抄全文。执行窗零记忆，调查必须写进 Issue。  
 **Doc index (truth order):** [`docs/README.md`](docs/README.md) — prefer GitHub over prose.
 
 **Context policy:** [`docs/CONTEXT-POLICY.md`](docs/CONTEXT-POLICY.md)（默认不清理上下文）  

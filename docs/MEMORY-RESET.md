@@ -1,19 +1,6 @@
-# MEMORY-RESET · 本周坑（封顶 3）
+# MEMORY-RESET
 
-```text
-STATUS: BINDING · 2026-08-24 执行三刀
-仓: juanwan99/pico
-经验只写本页。本周 ≤3。能再踩才进考古。过期删。禁止过程卡、禁止复活 315。
-```
-
-## 本周 3 坑
-
-1. **证据禁止进 PR** — 截图/硬刷帧只贴 Issue 评论
-2. **无部署权拒领** — DONE 必须 `curl tip` = origin/main；合了未部 = 沠完；PR `Closes` 不得在部前关卡
-3. **过门必须是老师手** — 写 1px 轨/选择器 = 退回调查，禁开工
-
-现况只认 [`STATE-NOW.md`](./STATE-NOW.md) + [#634](https://github.com/juanwan99/pico/issues/634)。  
-用法 = Grok：[`DIRECTION-NOW.md`](./DIRECTION-NOW.md) §0-star。
+经验真源已迁到 [`docs/EXPERIENCE.md`](./EXPERIENCE.md)。本文不作经验。开窗读 EXPERIENCE。
 
 ## 考古（不当现况 · 禁止当开场必清）
 
@@ -21,14 +8,16 @@ STATUS: BINDING · 2026-08-24 执行三刀
 |----------|------|
 | 本窗负责 edu-core | **否** · 仅 pico |
 | 开了 Issue = 已派 | **否** · stamp-ok + 派发条 |
-| 总管聊天执行窗能看见 | **否** · 写进 Issue；行为卡 KEEP |
+| 总管聊天执行窗能看见 | **否** · 写进 Issue |
 | 证据用 docs PR 进仓 | **否** · 贴 Issue 评论 |
 | 合 main = 完 | **否** · live SHA 对齐才 DONE |
 | 过门写控件清单 | **否** · 老师手一句 |
 | CLAIM-WB 可签 | **否** · 仍 NO |
 | 双核 Kimi+Pi / Dify 门脸 | **否** |
-| 旧交接 / DAY-TASK / #627 / 已关 #646 当在飞 | **否** |
+| 旧交接 / DAY-TASK 当在飞 | **否** |
 | oneflow 仓当真源 | **否** · 已 Archive |
-| 把 GIT SHA 当 Dockerfile build-arg 焊在 pip 之上 | **否** · 每次部废缓存、docling 再拉 torch（#655/#659） |
+| 把 GIT SHA 当 Dockerfile build-arg | **否** · 每次部废缓存、docling 再拉 torch（#659） |
 | 改 Python 工具说明 = Pi 看见 | **否** · 真路径看 `pico-gateway-tools.ts` + SYSTEM.md |
 | PR `Closes #` 合并就算收口 | **否** · 部上且老师手点过门才关 |
+| 对业主必须四行/两套嘴 | **否** · 已解除 |
+| CI 红就新开 PR | **否** · 原 PR 补 |
