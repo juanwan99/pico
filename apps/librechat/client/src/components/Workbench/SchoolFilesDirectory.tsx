@@ -1,8 +1,10 @@
 /**
  * Left/school directory: venue folder tree of school files. Browse only.
+ * Folder/file icons follow Windows Explorer language.
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { EduSchoolField, EduSchoolMaterial } from '~/data-provider/pico/api';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { groupSchoolTree, loadSchoolFieldTree } from '~/utils/picoSchoolTree';
 import { cn } from '~/utils';
 
@@ -71,6 +73,11 @@ export default function SchoolFilesDirectory({ className }: { className?: string
                 onClick={() => setExpanded((prev) => ({ ...prev, [fieldKey]: !isOpen }))}
               >
                 <span className="w-4 shrink-0 text-[color:var(--pico-ink-2)]">{isOpen ? '▾' : '▸'}</span>
+                <PicoIcon
+                  name={isOpen ? 'folder-open' : 'folder'}
+                  size="sm"
+                  className="shrink-0 text-[color:var(--pico-ink-2)]"
+                />
                 <span>{group.field.name || group.field.id}</span>
               </button>
               {isOpen ? (
@@ -80,8 +87,12 @@ export default function SchoolFilesDirectory({ className }: { className?: string
                   <ul className="pl-5">
                     {group.items.map((row) =>
                       row.id ? (
-                        <li key={row.id} className="pico-type-body py-0.5 text-[color:var(--pico-ink)]">
-                          {row.title || row.id}
+                        <li
+                          key={row.id}
+                          className="pico-type-body flex items-center gap-1 py-0.5 text-[color:var(--pico-ink)]"
+                        >
+                          <PicoIcon name="file" size="sm" className="shrink-0 text-[color:var(--pico-ink-2)]" />
+                          <span className="min-w-0 truncate">{row.title || row.id}</span>
                         </li>
                       ) : null,
                     )}

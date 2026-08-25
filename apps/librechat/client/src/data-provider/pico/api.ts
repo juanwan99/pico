@@ -24,6 +24,7 @@ export type PicoArtifact = {
 export type PicoPersonalFolder = {
   id: string;
   name?: string;
+  parent_id?: string;
   created_at?: string | null;
 };
 
@@ -562,10 +563,10 @@ export async function listMyFolders() {
   return picoFetch<{ folders?: PicoPersonalFolder[]; count?: number }>(`/v1/my/folders`);
 }
 
-export async function createMyFolder(name = '') {
+export async function createMyFolder(name = '', parentId = '') {
   return picoFetch<{ folder?: PicoPersonalFolder }>(`/v1/my/folders`, {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, parent_id: parentId || '' }),
   });
 }
 

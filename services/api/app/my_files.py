@@ -31,6 +31,7 @@ _MAX_FOLDERS = 40
 
 class FolderCreateBody(BaseModel):
     name: str = ""
+    parent_id: str = ""
 
 
 class FolderRenameBody(BaseModel):
@@ -94,6 +95,7 @@ def _folder_dict(row: PersonalFolderRow) -> dict[str, Any]:
     return {
         "id": row.id,
         "name": row.name,
+        "parent_id": row.parent_id or "",
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
@@ -124,6 +126,14 @@ async def create_my_folder(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     desired = _folder_name(body.name)
+    parent_id = sanitize_folder_id(body.parent_id) or ""
+    if parent_id:
+        parent = await owned_folder(session, principal, parent_id)
+        if parent is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "folder_not_found", "message": "找不到这个夹"},
+            )
     existing = (
         await session.execute(
             select(PersonalFolderRow).where(
@@ -138,11 +148,13 @@ async def create_my_folder(
             status_code=422,
             detail={"code": "folder_limit", "message": "夹太多了，先用现有的"},
         )
-    name = _unique_folder_name(desired, {row.name for row in rows})
+    siblings = {row.name for row in rows if (row.parent_id or "") == parent_id}
+    name = _unique_folder_name(desired, siblings)
     row = PersonalFolderRow(
         id=new_id(),
         school_id=principal.school_id,
         membership_id=principal.membership_id,
+        parent_id=parent_id,
         name=name,
     )
     session.add(row)
@@ -171,11 +183,13 @@ async def rename_my_folder(
             detail={"code": "folder_not_found", "message": "找不到这个夹"},
         )
     name = _folder_name(body.name)
+    parent_id = folder.parent_id or ""
     clash = (
         await session.execute(
             select(PersonalFolderRow).where(
                 PersonalFolderRow.school_id == principal.school_id,
                 PersonalFolderRow.membership_id == principal.membership_id,
+                PersonalFolderRow.parent_id == parent_id,
                 PersonalFolderRow.name == name,
                 PersonalFolderRow.id != folder.id,
             )

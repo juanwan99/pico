@@ -76,6 +76,7 @@ def test_create_empty_name_defaults_and_unique(client) -> None:
     first = client.post("/v1/my/folders", json={"name": ""}, headers=headers)
     assert first.status_code == 200, first.text
     assert first.json()["folder"]["name"] == "新建文件夹"
+    assert first.json()["folder"]["parent_id"] == ""
     second = client.post("/v1/my/folders", json={"name": ""}, headers=headers)
     assert second.status_code == 200, second.text
     assert second.json()["folder"]["name"] == "新建文件夹 (2)"
@@ -86,6 +87,41 @@ def test_create_empty_name_defaults_and_unique(client) -> None:
     )
     assert renamed.status_code == 200, renamed.text
     assert renamed.json()["folder"]["name"] == "备课"
+
+
+def test_create_nested_folder_under_parent(client) -> None:
+    headers = _headers(client)
+    parent = client.post("/v1/my/folders", json={"name": "备课"}, headers=headers)
+    assert parent.status_code == 200, parent.text
+    parent_id = parent.json()["folder"]["id"]
+    child = client.post(
+        "/v1/my/folders",
+        json={"name": "", "parent_id": parent_id},
+        headers=headers,
+    )
+    assert child.status_code == 200, child.text
+    body = child.json()["folder"]
+    assert body["name"] == "新建文件夹"
+    assert body["parent_id"] == parent_id
+    listed = client.get("/v1/my/folders", headers=headers)
+    assert listed.status_code == 200
+    by_id = {row["id"]: row for row in listed.json()["folders"]}
+    assert by_id[body["id"]]["parent_id"] == parent_id
+    same = client.post(
+        "/v1/my/folders",
+        json={"name": "新建文件夹", "parent_id": parent_id},
+        headers=headers,
+    )
+    assert same.status_code == 200, same.text
+    assert same.json()["folder"]["name"] == "新建文件夹 (2)"
+    root_again = client.post(
+        "/v1/my/folders",
+        json={"name": "新建文件夹", "parent_id": ""},
+        headers=headers,
+    )
+    assert root_again.status_code == 200, root_again.text
+    assert root_again.json()["folder"]["name"] == "新建文件夹"
+    assert root_again.json()["folder"]["parent_id"] == ""
 
 
 def test_write_stays_in_archive_folder_and_does_not_auto_land(client) -> None:

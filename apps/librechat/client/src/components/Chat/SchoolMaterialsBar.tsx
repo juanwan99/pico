@@ -9,6 +9,7 @@ import {
   type EduSchoolField,
   type EduSchoolMaterial,
 } from '~/data-provider/pico/api';
+import { PicoIcon } from '~/components/ui/pico-icons';
 import { groupSchoolTree, loadSchoolFieldTree } from '~/utils/picoSchoolTree';
 import { cn } from '~/utils';
 
@@ -128,6 +129,11 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
                   onClick={() => setExpanded((prev) => ({ ...prev, [fieldKey]: !isOpen }))}
                 >
                   <span className="w-4 shrink-0 text-[color:var(--pico-ink-2)]">{isOpen ? '▾' : '▸'}</span>
+                  <PicoIcon
+                    name={isOpen ? 'folder-open' : 'folder'}
+                    size="sm"
+                    className="shrink-0 text-[color:var(--pico-ink-2)]"
+                  />
                   <span>{group.field.name || group.field.id}</span>
                 </button>
                 {isOpen ? (
@@ -147,6 +153,11 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
                               checked={checked}
                               onChange={() => void toggle(id)}
                               data-testid={`school-material-${id}`}
+                            />
+                            <PicoIcon
+                              name="file"
+                              size="sm"
+                              className="mt-0.5 shrink-0 text-[color:var(--pico-ink-2)]"
                             />
                             <span
                               className={cn(

@@ -9,6 +9,7 @@ import {
   putMyArchiveFolder,
   type PicoPersonalFolder,
 } from '~/data-provider/pico/api';
+import { folderLabelPath } from '~/utils/picoPersonalFolderTree';
 
 export default function ArchiveFolderBar({ conversationId }: { conversationId?: string | null }) {
   const convo = conversationId && conversationId !== 'new' ? conversationId : '';
@@ -49,7 +50,7 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
     [convo],
   );
 
-  const currentName = folders.find((row) => row.id === folderId)?.name || '我的文件';
+  const currentName = folderId ? folderLabelPath(folders, folderId) : '我的文件';
 
   return (
     <div className="mb-2 w-full text-left" data-testid="archive-folder-bar">
@@ -67,7 +68,7 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
             {folders.map((folder) =>
               folder.id ? (
                 <option key={folder.id} value={folder.id}>
-                  {folder.name || folder.id}
+                  {folderLabelPath(folders, folder.id)}
                 </option>
               ) : null,
             )}

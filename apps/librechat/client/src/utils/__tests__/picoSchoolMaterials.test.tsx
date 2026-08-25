@@ -16,6 +16,10 @@ jest.mock('~/utils', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
 }));
 
+jest.mock('~/components/ui/pico-icons', () => ({
+  PicoIcon: ({ name }: { name: string }) => <span data-testid={`pico-icon-${name}`} />,
+}));
+
 jest.mock('~/data-provider/pico/api', () => ({
   getEduNamedIds: jest.fn(),
   listEduFields: jest.fn(),
@@ -57,6 +61,8 @@ describe('SchoolMaterialsBar venue folder tree', () => {
     expect(screen.getByTestId('school-material-doc-2')).toBeInTheDocument();
     expect(screen.getByTestId('school-field-folder-field-1')).toBeInTheDocument();
     expect(screen.getByTestId('school-field-folder-field-2')).toBeInTheDocument();
+    expect(screen.getAllByTestId('pico-icon-folder-open').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('pico-icon-file').length).toBeGreaterThan(0);
     expect(screen.queryByTestId('school-materials-q')).not.toBeInTheDocument();
     expect(screen.queryByText('搜')).not.toBeInTheDocument();
     expect(screen.queryByText('落到哪一场')).not.toBeInTheDocument();
