@@ -50,6 +50,11 @@ jest.mock('~/components/Chat/SchoolMaterialsBar', () => ({
   default: () => null,
 }));
 
+jest.mock('~/components/Chat/ArchiveFolderBar', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 jest.mock('~/components/ui/pico-icons', () => ({
   PicoIcon: () => <span data-testid="pico-icon" />,
 }));

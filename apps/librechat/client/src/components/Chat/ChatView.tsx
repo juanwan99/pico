@@ -22,6 +22,7 @@ import ProjectLandingChip from './ProjectLandingChip';
 import MessagesView from './Messages/MessagesView';
 import Presentation from './Presentation';
 import ChatForm from './Input/ChatForm';
+import ArchiveFolderBar from './ArchiveFolderBar';
 import SchoolMaterialsBar from './SchoolMaterialsBar';
 import Landing from './Landing';
 import MainDeliveryStrip from './MainDeliveryStrip';
@@ -265,6 +266,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     {!isLandingPage ? (
                       <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">
                         <SchoolMaterialsBar conversationId={conversationId} />
+                        <ArchiveFolderBar conversationId={conversationId} />
                         <ChatForm index={index} placeholder={chatFormPlaceholder} />
                       </div>
                     ) : null}

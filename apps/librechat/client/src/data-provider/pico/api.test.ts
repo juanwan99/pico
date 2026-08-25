@@ -8,6 +8,9 @@ import {
   putEduNamedIds,
   listEduFields,
   listMyPicoArtifacts,
+  listMyFolders,
+  createMyFolder,
+  transferMyArtifact,
 } from './api';
 
 jest.mock('librechat-data-provider', () => ({
@@ -186,6 +189,38 @@ describe('edu school materials client', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/pico/v1/artifacts?mine=true',
       expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('creates a personal folder and transfers via existing land mouth', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ folder: { id: 'f1', name: '备课' } }),
+    });
+    await expect(createMyFolder('备课')).resolves.toEqual({
+      folder: { id: 'f1', name: '备课' },
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ folders: [{ id: 'f1', name: '备课' }] }),
+    });
+    await expect(listMyFolders()).resolves.toEqual({
+      folders: [{ id: 'f1', name: '备课' }],
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ landed: false, code: 'edu.unconfigured' }),
+    });
+    await expect(transferMyArtifact('art-1', 'field-1', 'copy')).resolves.toEqual({
+      landed: false,
+      code: 'edu.unconfigured',
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/pico/v1/my/artifacts/art-1/transfer',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ field_id: 'field-1', mode: 'copy' }),
+      }),
     );
   });
 });

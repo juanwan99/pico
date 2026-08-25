@@ -14,6 +14,7 @@ import { useLocalize, useNewConvo } from '~/hooks';
 import { clearMessagesCache, cn } from '~/utils';
 import store from '~/store';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
+import FilesDirectoryPanel from '~/components/Workbench/FilesDirectoryPanel';
 import { rememberTaskRoute } from '~/components/Workbench/workbenchSession';
 
 const AccountSettings = lazy(() => import('~/components/Nav/AccountSettings'));
@@ -66,6 +67,8 @@ function Sidebar({
   const queryClient = useQueryClient();
   const { newConversation } = useNewConvo();
   const conversationId = useRecoilValue(store.conversationIdByIndex(0));
+  const filesDirectory =
+    location.pathname.startsWith('/more/files') && location.hash !== '#school';
 
   useEffect(() => {
     rememberTaskRoute(location.pathname, location.search);
@@ -194,9 +197,9 @@ function Sidebar({
 
         <div
           className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-[color:var(--pico-line)] pt-2"
-          data-testid="sidebar-task-history"
+          data-testid={filesDirectory ? 'sidebar-files-directory' : 'sidebar-task-history'}
         >
-          <ConversationsSection />
+          {filesDirectory ? <FilesDirectoryPanel /> : <ConversationsSection />}
         </div>
       </div>
 

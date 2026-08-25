@@ -98,10 +98,17 @@ def test_nav_layout_type_and_school_docs() -> None:
     assert "pico-type-title" in landing
     assert "text-[30px]" not in landing
     assert "text-[34px]" not in landing
-    assert "searchEduSchoolMaterials(q.trim(), next.fieldId)" in bar
-    assert "searchEduSchoolMaterials(nextQ.trim(), nextField)" in bar
+    assert "ArchiveFolderBar" in landing
+    assert "loadDocumentsForFields" in bar
+    assert "school-materials-tree" in bar
+    assert "落到哪一场" not in bar
+    assert "school-materials-q" not in bar
+    assert "school-land-field" not in bar
     assert "text-[11px]" not in bar
     assert "text-[12px]" not in bar
+    sidebar = (ROOT / "apps/librechat/client/src/components/UnifiedSidebar/Sidebar.tsx").read_text()
+    assert "FilesDirectoryPanel" in sidebar
+    assert "sidebar-files-directory" in sidebar
     assert "katex/dist/katex.min.css" not in main
     assert "bootstrap-entry" not in index_html
     assert "lazy: loadChatRoute" in routes

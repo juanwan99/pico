@@ -47,6 +47,7 @@ from app.edu_kb_ingest import router as edu_kb_ingest_router
 from app.edu_school import router as edu_school_router
 from app.edu_sso import router as edu_sso_router
 from app.kb_rebuild import rebuild_materials
+from app.my_files import router as my_files_router
 from app.openai_compat import router as openai_compat_router
 from app.rate_limit import ChatRateLimitMiddleware
 from app.settings import Settings, get_settings
@@ -133,6 +134,7 @@ app.include_router(edu_files_router)
 app.include_router(edu_kb_ingest_router)
 app.include_router(edu_sso_router)
 app.include_router(edu_school_router)
+app.include_router(my_files_router)
 
 
 # ----- meta / auth -----
@@ -1408,11 +1410,14 @@ async def get_task(
 async def list_conversation_artifacts(
     conversation_id: str = "",
     mine: bool = False,
+    folder_id: str | None = None,
     principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     if mine:
-        arts = await run_service.list_artifacts_for_principal(session, principal)
+        arts = await run_service.list_artifacts_for_principal(
+            session, principal, folder_id=folder_id
+        )
     else:
         cid = str(conversation_id or "").strip()
         if not cid:
@@ -1425,6 +1430,7 @@ async def list_conversation_artifacts(
                 "id": a.id,
                 "title": a.title,
                 "kind": a.kind,
+                "folder_id": getattr(a, "folder_id", "") or "",
                 "created_at": a.created_at.isoformat() if a.created_at else None,
                 "download_path": f"/v1/artifacts/{a.id}/content?download=true",
             }

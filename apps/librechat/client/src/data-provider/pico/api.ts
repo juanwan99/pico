@@ -18,6 +18,13 @@ export type PicoArtifact = {
   content_sha256?: string;
   /** Relative download path on Pico API (proxied via /api/pico). */
   download_path?: string;
+  folder_id?: string;
+};
+
+export type PicoPersonalFolder = {
+  id: string;
+  name?: string;
+  created_at?: string | null;
 };
 
 export type PicoTaskLatestRun = {
@@ -524,6 +531,70 @@ export async function listEduFields() {
   );
 }
 
-export async function listMyPicoArtifacts() {
-  return picoFetch<{ count?: number; artifacts?: PicoArtifact[] }>(`/v1/artifacts?mine=true`);
+export async function listMyPicoArtifacts(folderId?: string | null) {
+  const params = new URLSearchParams({ mine: 'true' });
+  if (folderId !== undefined && folderId !== null) {
+    params.set('folder_id', folderId);
+  }
+  return picoFetch<{ count?: number; artifacts?: PicoArtifact[] }>(`/v1/artifacts?${params}`);
+}
+
+export async function listMyFolders() {
+  return picoFetch<{ folders?: PicoPersonalFolder[]; count?: number }>(`/v1/my/folders`);
+}
+
+export async function createMyFolder(name: string) {
+  return picoFetch<{ folder?: PicoPersonalFolder }>(`/v1/my/folders`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function getMyArchiveFolder(conversationId = '') {
+  const qs = conversationId ? `?conversation_id=${encodeURIComponent(conversationId)}` : '';
+  return picoFetch<{ folder_id?: string; folder_name?: string }>(`/v1/my/archive${qs}`);
+}
+
+export async function putMyArchiveFolder(conversationId: string, folderId = '') {
+  return picoFetch<{ folder_id?: string; folder_name?: string }>(`/v1/my/archive`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      conversation_id: conversationId || '',
+      folder_id: folderId || '',
+    }),
+  });
+}
+
+export async function placeMyArtifact(artifactId: string, folderId = '') {
+  return picoFetch<{ id?: string; folder_id?: string }>(
+    `/v1/my/artifacts/${encodeURIComponent(artifactId)}/place`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ folder_id: folderId || '' }),
+    },
+  );
+}
+
+export type PicoTransferResult = {
+  ok?: boolean;
+  landed?: boolean;
+  moved?: boolean;
+  mode?: string;
+  code?: string;
+  error?: string;
+  user_message?: string;
+};
+
+export async function transferMyArtifact(
+  artifactId: string,
+  fieldId: string,
+  mode: 'copy' | 'move' = 'copy',
+) {
+  return picoFetch<PicoTransferResult>(
+    `/v1/my/artifacts/${encodeURIComponent(artifactId)}/transfer`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ field_id: fieldId || '', mode }),
+    },
+  );
 }

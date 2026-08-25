@@ -130,6 +130,7 @@ class ArtifactRow(Base):
     content_encoding: Mapped[str] = mapped_column(String(16), default="utf8")
     content_sha256: Mapped[str] = mapped_column(String(64), default="")
     byte_size: Mapped[int] = mapped_column(Integer, default=0)
+    folder_id: Mapped[str] = mapped_column(String(36), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     task: Mapped[TaskRow] = relationship(back_populates="artifacts")
@@ -246,7 +247,28 @@ class EduNamedBindRow(Base):
     conversation_id: Mapped[str] = mapped_column(String(128), default="")
     item_ids_json: Mapped[str] = mapped_column(Text, default="[]")
     field_id: Mapped[str] = mapped_column(String(36), default="")
+    archive_folder_id: Mapped[str] = mapped_column(String(36), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class PersonalFolderRow(Base):
+    """Membership folders inside 「我的文件」. Not a school library."""
+
+    __tablename__ = "personal_folders"
+    __table_args__ = (
+        UniqueConstraint(
+            "school_id",
+            "membership_id",
+            "name",
+            name="personal_folders_name_uniq",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    school_id: Mapped[str] = mapped_column(String(128), index=True)
+    membership_id: Mapped[str] = mapped_column(String(128), index=True)
+    name: Mapped[str] = mapped_column(String(40), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 _engine = None
@@ -329,6 +351,8 @@ def _migrate_sqlite_sync(conn) -> None:
             )
         if "byte_size" not in acols:
             conn.execute(text("ALTER TABLE artifacts ADD COLUMN byte_size INTEGER DEFAULT 0"))
+        if "folder_id" not in acols:
+            conn.execute(text("ALTER TABLE artifacts ADD COLUMN folder_id VARCHAR(36) DEFAULT ''"))
 
     try:
         named_rows = conn.execute(text("PRAGMA table_info(edu_named_bind)")).fetchall()
@@ -337,6 +361,10 @@ def _migrate_sqlite_sync(conn) -> None:
     ncols = {r[1] for r in named_rows}
     if ncols and "field_id" not in ncols:
         conn.execute(text("ALTER TABLE edu_named_bind ADD COLUMN field_id VARCHAR(36) DEFAULT ''"))
+    if ncols and "archive_folder_id" not in ncols:
+        conn.execute(
+            text("ALTER TABLE edu_named_bind ADD COLUMN archive_folder_id VARCHAR(36) DEFAULT ''")
+        )
 
     duplicate_runs = conn.execute(
         text("SELECT run_id FROM events GROUP BY run_id, seq HAVING COUNT(*) > 1")

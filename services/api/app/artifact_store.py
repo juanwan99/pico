@@ -11,7 +11,7 @@ from pico_orchestrator.gateway import Principal, ToolError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.db import ArtifactRow, RunRow, TaskRow, append_event, new_id
+from app.db import ArtifactRow, PersonalFolderRow, RunRow, TaskRow, append_event, new_id
 
 ENCODING_UTF8 = "utf8"
 ENCODING_BASE64 = "base64"
@@ -109,6 +109,29 @@ class LedgerArtifactStore:
         stored, encoding, byte_size, digest = encode_artifact_payload(content)
         async with self._factory() as session:
             task = await self._task_for_write(session, principal, title)
+            folder_id = ""
+            convo = self._conversation_id or getattr(task, "conversation_id", None)
+            if convo:
+                try:
+                    from app.edu_school import load_archive_folder_id
+
+                    folder_id = await load_archive_folder_id(
+                        session,
+                        principal.school_id,
+                        principal.membership_id,
+                        str(convo),
+                    )
+                except Exception as exc:  # noqa: BLE001 — folder miss must not swallow the file
+                    logger.warning("archive folder lookup failed: %s", type(exc).__name__)
+                    folder_id = ""
+            if folder_id:
+                folder = await session.get(PersonalFolderRow, folder_id)
+                if (
+                    folder is None
+                    or folder.school_id != principal.school_id
+                    or folder.membership_id != principal.membership_id
+                ):
+                    folder_id = ""
             artifact = ArtifactRow(
                 id=new_id(),
                 task_id=task.id,
@@ -119,6 +142,7 @@ class LedgerArtifactStore:
                 content_encoding=encoding,
                 content_sha256=digest,
                 byte_size=byte_size,
+                folder_id=folder_id,
             )
             session.add(artifact)
             await session.flush()
@@ -155,8 +179,8 @@ class LedgerArtifactStore:
                 "content_encoding": encoding,
                 "content_sha256": digest,
                 "download_path": f"/v1/artifacts/{artifact.id}/content?download=true",
+                "folder_id": getattr(artifact, "folder_id", "") or "",
             }
-        convo = self._conversation_id or getattr(task, "conversation_id", None)
         try:
             from pico_orchestrator.meili_kb import project_material_artifact
 
@@ -169,25 +193,6 @@ class LedgerArtifactStore:
             )
         except Exception as exc:  # noqa: BLE001 — projection must not block the ledger
             logger.warning("meili project after write failed: %s", type(exc).__name__)
-        try:
-            from app.edu_school import land_generated_artifact
-
-            school = await land_generated_artifact(
-                principal,
-                title=title,
-                content=content,
-                conversation_id=str(convo or ""),
-            )
-        except Exception as exc:  # noqa: BLE001 — land miss must not swallow the file
-            school = {
-                "ok": False,
-                "landed": False,
-                "code": "edu.land_failed",
-                "error": str(exc)[:200],
-                "user_message": "学校这次没写成。这份只留在对话草稿纸，刷新学校看不见。",
-            }
-        if school and school.get("code") != "kind_skip":
-            out["school"] = school
         return out
 
     def _owned_artifacts(self, principal: Principal):
