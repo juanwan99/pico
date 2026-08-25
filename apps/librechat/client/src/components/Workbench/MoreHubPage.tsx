@@ -3,28 +3,38 @@
  */
 import { useNavigate } from 'react-router-dom';
 import { PicoIcon, type PicoIconName } from '~/components/ui/pico-icons';
+import { setPicoSidebarRail, type PicoSidebarRail } from '~/utils/picoSidebarRail';
 import WorkbenchShell from './WorkbenchShell';
 
-const ITEMS = [
+const ITEMS: Array<{
+  id: string;
+  label: string;
+  desc: string;
+  icon: PicoIconName;
+  href: string;
+  rail?: PicoSidebarRail;
+}> = [
   {
     id: 'files',
     label: '我的文件',
     desc: '本人做成的文件',
-    icon: 'folder' as PicoIconName,
-    href: '/more/files',
+    icon: 'folder',
+    href: '/c/new',
+    rail: 'files',
   },
   {
     id: 'school',
     label: '学校材料',
     desc: '学校场里的材料',
-    icon: 'books' as PicoIconName,
-    href: '/more/files#school',
+    icon: 'books',
+    href: '/c/new',
+    rail: 'school',
   },
   {
     id: 'capability',
     label: '技能与连接器',
     desc: '技能开关 · 学校知识库与 MCP',
-    icon: 'blocks' as PicoIconName,
+    icon: 'blocks',
     href: '/capability',
   },
 ];
@@ -39,7 +49,10 @@ export default function MoreHubPage() {
           <button
             key={item.id}
             type="button"
-            onClick={() => navigate(item.href)}
+            onClick={() => {
+              if (item.rail) setPicoSidebarRail(item.rail);
+              navigate(item.href);
+            }}
             className="pico-card pico-card-interactive flex h-full flex-col p-5 text-left"
           >
             <span className="mb-3 flex size-10 items-center justify-center rounded-xl bg-[color:var(--pico-surface-2)]">

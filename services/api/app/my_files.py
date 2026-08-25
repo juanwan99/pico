@@ -13,7 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.artifact_store import decode_artifact_payload
 from app.auth import Principal, require_any_scope
-from app.db import PersonalFolderRow, TaskRow, get_session, new_id
+from app.db import (
+    ArtifactRow,
+    EduNamedBindRow,
+    PersonalFolderRow,
+    TaskRow,
+    get_session,
+    new_id,
+)
 from app.edu_school import (
     land_generated_artifact,
     load_archive_folder_id,
@@ -210,6 +217,74 @@ async def rename_my_folder(
             detail={"code": "folder_exists", "message": "这个夹已经有了"},
         ) from exc
     return {"folder": _folder_dict(folder)}
+
+
+@router.delete("/v1/my/folders/{folder_id}")
+async def delete_my_folder(
+    folder_id: str,
+    principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    folder = await owned_folder(session, principal, folder_id)
+    if folder is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "folder_not_found", "message": "找不到这个夹"},
+        )
+    child = (
+        await session.execute(
+            select(PersonalFolderRow.id)
+            .where(
+                PersonalFolderRow.school_id == principal.school_id,
+                PersonalFolderRow.membership_id == principal.membership_id,
+                PersonalFolderRow.parent_id == folder.id,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if child is not None:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "folder_not_empty", "message": "夹里还有子夹，先清空再删"},
+        )
+    art = (
+        await session.execute(
+            select(ArtifactRow.id)
+            .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+            .where(
+                TaskRow.school_id == principal.school_id,
+                TaskRow.membership_id == principal.membership_id,
+                ArtifactRow.folder_id == folder.id,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if art is not None:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "folder_not_empty", "message": "夹里还有文件，先清空再删"},
+        )
+    binds = (
+        await session.execute(
+            select(EduNamedBindRow).where(
+                EduNamedBindRow.school_id == principal.school_id,
+                EduNamedBindRow.membership_id == principal.membership_id,
+                EduNamedBindRow.archive_folder_id == folder.id,
+            )
+        )
+    ).scalars()
+    for bind in binds:
+        bind.archive_folder_id = ""
+    await session.delete(folder)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "folder_delete_failed", "message": "这个夹没删掉"},
+        ) from exc
+    return {"ok": True, "id": folder_id}
 
 
 @router.get("/v1/my/archive")

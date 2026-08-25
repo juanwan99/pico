@@ -1,10 +1,10 @@
 /**
- * 「我的文件」— Windows Explorer: folder icons, persistent tree, nested create/rename.
- * Transfer to school stays here; chat dialog does not transfer.
+ * 「我的文件」侧栏单树：展开层内首位「新建」、空夹可删。无中间大页、无「当前文件夹」二遍列表。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   createMyFolder,
+  deleteMyFolder,
   getPicoArtifactContent,
   listEduFields,
   listMyFolders,
@@ -16,15 +16,11 @@ import {
   type PicoPersonalFolder,
 } from '~/data-provider/pico/api';
 import { PicoIcon } from '~/components/ui/pico-icons';
-import {
-  childrenOf,
-  folderPath,
-} from '~/utils/picoPersonalFolderTree';
+import { childrenOf } from '~/utils/picoPersonalFolderTree';
 import { cn } from '~/utils';
 
 export default function FilesDirectoryPanel({ className }: { className?: string }) {
   const [folders, setFolders] = useState<PicoPersonalFolder[]>([]);
-  const [folderId, setFolderId] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ root: true });
   const [mine, setMine] = useState<PicoArtifact[]>([]);
   const [fields, setFields] = useState<EduSchoolField[]>([]);
@@ -45,7 +41,7 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
     setError(null);
     try {
       const [mineRow, folderRow, fieldRow] = await Promise.all([
-        listMyPicoArtifacts(folderId).catch(() => ({ artifacts: [] as PicoArtifact[] })),
+        listMyPicoArtifacts().catch(() => ({ artifacts: [] as PicoArtifact[] })),
         listMyFolders().catch(() => ({ folders: [] as PicoPersonalFolder[] })),
         listEduFields().catch(() => ({ fields: [] as EduSchoolField[] })),
       ]);
@@ -58,7 +54,7 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
     } finally {
       setLoading(false);
     }
-  }, [folderId]);
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -72,23 +68,16 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
     input.select();
   }, [renamingId]);
 
-  const breadcrumb = useMemo(() => folderPath(folders, folderId), [folders, folderId]);
-  const childFolders = useMemo(() => childrenOf(folders, folderId), [folders, folderId]);
-
-  const openFolder = (id: string) => {
-    setFolderId(id);
-    if (id) {
-      setExpanded((prev) => ({ ...prev, root: true, [id]: true }));
-      const chain = folderPath(folders, id);
-      setExpanded((prev) => {
-        const next = { ...prev, root: true };
-        for (const row of chain) {
-          next[row.id] = true;
-        }
-        return next;
-      });
+  const filesByFolder = useMemo(() => {
+    const map = new Map<string, PicoArtifact[]>();
+    for (const row of mine) {
+      const key = row.folder_id || '';
+      const list = map.get(key) || [];
+      list.push(row);
+      map.set(key, list);
     }
-  };
+    return map;
+  }, [mine]);
 
   const beginRename = (folder: PicoPersonalFolder) => {
     setRenamingId(folder.id);
@@ -111,23 +100,44 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
     }
   };
 
-  const createFolder = async () => {
+  const createFolder = async (parentId: string) => {
     setError(null);
     try {
-      const created = await createMyFolder('', folderId);
+      const created = await createMyFolder('', parentId);
       const folder = created.folder;
-      if (folderId) {
-        setExpanded((prev) => ({ ...prev, root: true, [folderId]: true }));
-      } else {
-        setExpanded((prev) => ({ ...prev, root: true }));
-      }
+      setExpanded((prev) => ({
+        ...prev,
+        root: true,
+        ...(parentId ? { [parentId]: true } : {}),
+      }));
       await refresh();
       if (folder?.id) {
-        beginRename({ id: folder.id, name: folder.name || '新建文件夹', parent_id: folder.parent_id || folderId });
+        beginRename({
+          id: folder.id,
+          name: folder.name || '新建文件夹',
+          parent_id: folder.parent_id || parentId,
+        });
       }
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : '夹没建成');
     }
+  };
+
+  const removeFolder = async (folder: PicoPersonalFolder) => {
+    setError(null);
+    setMessage(null);
+    try {
+      await deleteMyFolder(folder.id);
+      await refresh();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '夹没删掉');
+    }
+  };
+
+  const isFolderEmpty = (folderId: string) => {
+    if (childrenOf(folders, folderId).length > 0) return false;
+    const files = filesByFolder.get(folderId) || [];
+    return files.length === 0;
   };
 
   const openMine = async (row: PicoArtifact) => {
@@ -192,37 +202,95 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
     />
   );
 
+  const renderNewFolderRow = (parentId: string, depth: number) => (
+    <div
+      className="flex items-center gap-0.5 py-0.5"
+      style={{ paddingLeft: `${depth * 12 + 16}px` }}
+      data-testid={`my-files-new-under-${parentId || 'root'}`}
+    >
+      <button
+        type="button"
+        className="pico-type-body inline-flex min-w-0 flex-1 items-center gap-1 text-left text-[color:var(--pico-ink)]"
+        onClick={() => void createFolder(parentId)}
+        data-testid={parentId ? `my-files-create-folder-${parentId}` : 'my-files-create-folder'}
+      >
+        <PicoIcon name="plus" size="sm" className="shrink-0 text-[color:var(--pico-ink-2)]" />
+        <span>新建文件夹</span>
+      </button>
+    </div>
+  );
+
+  const renderFiles = (parentId: string, depth: number) => {
+    const rows = filesByFolder.get(parentId) || [];
+    return rows.map((row) => {
+      const name = row.user_label || row.title || '未命名';
+      return (
+        <div
+          key={row.id}
+          className="py-0.5"
+          style={{ paddingLeft: `${depth * 12 + 16}px` }}
+          data-testid={`my-generated-${row.id}`}
+        >
+          <div className="flex items-center gap-1">
+            <PicoIcon name="file" size="sm" className="shrink-0 text-[color:var(--pico-ink-2)]" />
+            <p className="pico-type-body min-w-0 flex-1 truncate text-[color:var(--pico-ink)]">{name}</p>
+          </div>
+          <div className="mt-0.5 flex flex-wrap gap-2 pl-5">
+            <button
+              type="button"
+              className="pico-type-body text-[color:var(--pico-ink-2)]"
+              disabled={busyId !== null}
+              onClick={() => void openMine(row)}
+            >
+              打开
+            </button>
+            <button
+              type="button"
+              className="pico-type-body text-[color:var(--pico-ink-2)]"
+              onClick={() => {
+                setTransferOf(row);
+                setTransferField(fields[0]?.id || '');
+                setTransferMode('copy');
+                setMessage(null);
+              }}
+              data-testid={`my-files-transfer-${row.id}`}
+            >
+              转到学校
+            </button>
+          </div>
+        </div>
+      );
+    });
+  };
+
   const renderTreeNodes = (parentId: string, depth: number): ReactNode => {
     const rows = childrenOf(folders, parentId);
     return rows.map((folder) => {
       const kids = childrenOf(folders, folder.id);
-      const hasKids = kids.length > 0;
+      const files = filesByFolder.get(folder.id) || [];
+      const hasBody = kids.length > 0 || files.length > 0;
       const isOpen = expanded[folder.id] === true;
-      const selected = folderId === folder.id;
+      const empty = isFolderEmpty(folder.id);
       return (
         <div key={folder.id} data-testid={`my-files-tree-${folder.id}`}>
           <div
-            className={cn(
-              'flex items-center gap-0.5 py-0.5',
-              selected ? 'bg-[color:var(--pico-surface-2,transparent)]' : '',
-            )}
+            className="flex items-center gap-0.5 py-0.5"
             style={{ paddingLeft: `${depth * 12}px` }}
           >
             <button
               type="button"
               className="flex h-5 w-4 shrink-0 items-center justify-center text-[color:var(--pico-ink-2)]"
               aria-label={isOpen ? '收起' : '展开'}
-              aria-expanded={hasKids ? isOpen : undefined}
-              disabled={!hasKids}
+              aria-expanded={isOpen}
               onClick={() =>
                 setExpanded((prev) => ({ ...prev, [folder.id]: !isOpen }))
               }
               data-testid={`my-files-tree-toggle-${folder.id}`}
             >
-              {hasKids ? (isOpen ? '▾' : '▸') : <span className="inline-block w-2" />}
+              {isOpen ? '▾' : '▸'}
             </button>
             <PicoIcon
-              name={selected || isOpen ? 'folder-open' : 'folder'}
+              name={isOpen ? 'folder-open' : 'folder'}
               size="sm"
               className="shrink-0 text-[color:var(--pico-ink-2)]"
             />
@@ -233,174 +301,112 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
                 type="button"
                 className="pico-type-body min-w-0 flex-1 truncate text-left text-[color:var(--pico-ink)]"
                 data-testid={`my-files-folder-${folder.id}`}
-                onClick={() => openFolder(folder.id)}
-                onDoubleClick={() => openFolder(folder.id)}
+                onClick={() =>
+                  setExpanded((prev) => ({ ...prev, [folder.id]: true }))
+                }
               >
                 {folder.name || '新建文件夹'}
               </button>
             )}
             {renamingId === folder.id ? null : (
-              <button
-                type="button"
-                className="pico-type-aux shrink-0 text-[color:var(--pico-ink-2)]"
-                onClick={() => beginRename(folder)}
-                data-testid={`my-files-folder-rename-btn-${folder.id}`}
-              >
-                重命名
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="pico-type-aux shrink-0 text-[color:var(--pico-ink-2)]"
+                  onClick={() => beginRename(folder)}
+                  data-testid={`my-files-folder-rename-btn-${folder.id}`}
+                >
+                  重命名
+                </button>
+                <button
+                  type="button"
+                  className="pico-type-aux shrink-0 text-[color:var(--pico-ink-2)] disabled:opacity-40"
+                  disabled={!empty}
+                  title={empty ? '删除空夹' : '夹里还有内容，先清空再删'}
+                  onClick={() => void removeFolder(folder)}
+                  data-testid={`my-files-folder-delete-${folder.id}`}
+                >
+                  删除
+                </button>
+              </>
             )}
           </div>
-          {hasKids && isOpen ? renderTreeNodes(folder.id, depth + 1) : null}
+          {isOpen ? (
+            <>
+              {renderNewFolderRow(folder.id, depth + 1)}
+              {renderTreeNodes(folder.id, depth + 1)}
+              {renderFiles(folder.id, depth + 1)}
+              {!hasBody && !renamingId ? (
+                <p
+                  className="pico-type-aux py-0.5 text-[color:var(--pico-ink-3)]"
+                  style={{ paddingLeft: `${(depth + 1) * 12 + 16}px` }}
+                >
+                  空文件夹
+                </p>
+              ) : null}
+            </>
+          ) : null}
         </div>
       );
     });
   };
+
+  const rootOpen = expanded.root !== false;
 
   return (
     <div
       className={cn('flex min-h-0 flex-1 flex-col px-2.5 py-2', className)}
       data-testid="files-directory"
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-1">
-        <button
-          type="button"
-          className="pico-type-sidebar inline-flex min-w-0 items-center gap-1 text-[color:var(--pico-ink-2)]"
-          onClick={() => openFolder('')}
-          data-testid="my-files-root"
-        >
-          <PicoIcon name={folderId ? 'folder' : 'folder-open'} size="sm" />
-          <span>我的文件</span>
-        </button>
-        {breadcrumb.map((row) => (
-          <span key={row.id} className="inline-flex min-w-0 items-center gap-1">
-            <span className="pico-type-aux text-[color:var(--pico-ink-3)]">/</span>
-            <button
-              type="button"
-              className="pico-type-sidebar truncate text-[color:var(--pico-ink)]"
-              onClick={() => openFolder(row.id)}
-            >
-              {row.name || '新建文件夹'}
-            </button>
-          </span>
-        ))}
-      </div>
-
-      <button
-        type="button"
-        className="pico-type-body mt-2 self-start text-[color:var(--pico-ink)]"
-        onClick={() => void createFolder()}
-        data-testid="my-files-create-folder"
-      >
-        新建文件夹
-      </button>
-
       {error ? (
-        <p className="pico-type-body mt-1 text-[#b42318]" role="alert">
+        <p className="pico-type-body text-[#b42318]" role="alert">
           {error}
         </p>
       ) : null}
       {message ? (
-        <p className="pico-type-body mt-1 text-[color:var(--pico-ink-2)]" role="status">
+        <p className="pico-type-body text-[color:var(--pico-ink-2)]" role="status">
           {message}
         </p>
       ) : null}
 
-      <div className="mt-2 min-h-0 flex-1 overflow-y-auto" data-testid="my-generated-files">
+      <div className="min-h-0 flex-1 overflow-y-auto" data-testid="my-files-tree">
         {loading && mine.length === 0 && folders.length === 0 ? (
           <p className="pico-type-aux text-[color:var(--pico-ink-3)]">正在列出目录…</p>
         ) : (
           <>
-            <div data-testid="my-files-tree" className="mb-2 border-b border-[color:var(--pico-line)] pb-2">
-              <div className="flex items-center gap-0.5 py-0.5">
-                <button
-                  type="button"
-                  className="flex h-5 w-4 shrink-0 items-center justify-center text-[color:var(--pico-ink-2)]"
-                  aria-expanded={expanded.root !== false}
-                  onClick={() =>
-                    setExpanded((prev) => ({ ...prev, root: !(prev.root !== false) }))
-                  }
-                  data-testid="my-files-tree-toggle-root"
-                >
-                  {expanded.root !== false ? '▾' : '▸'}
-                </button>
-                <PicoIcon
-                  name={folderId ? 'folder' : 'folder-open'}
-                  size="sm"
-                  className="shrink-0 text-[color:var(--pico-ink-2)]"
-                />
-                <button
-                  type="button"
-                  className={cn(
-                    'pico-type-sidebar min-w-0 flex-1 truncate text-left',
-                    folderId ? 'text-[color:var(--pico-ink-2)]' : 'text-[color:var(--pico-ink)]',
-                  )}
-                  onClick={() => openFolder('')}
-                >
-                  我的文件
-                </button>
-              </div>
-              {expanded.root !== false ? renderTreeNodes('', 1) : null}
-            </div>
-
-            <p className="pico-type-aux mb-1 text-[color:var(--pico-ink-3)]">当前文件夹</p>
-            {childFolders.map((folder) => (
-              <div
-                key={`content-${folder.id}`}
-                className="flex items-center gap-1 py-1"
-                data-testid={`my-files-content-folder-${folder.id}`}
+            <div className="flex items-center gap-0.5 py-0.5">
+              <button
+                type="button"
+                className="flex h-5 w-4 shrink-0 items-center justify-center text-[color:var(--pico-ink-2)]"
+                aria-expanded={rootOpen}
+                onClick={() =>
+                  setExpanded((prev) => ({ ...prev, root: !(prev.root !== false) }))
+                }
+                data-testid="my-files-tree-toggle-root"
               >
-                <PicoIcon name="folder" size="sm" className="shrink-0 text-[color:var(--pico-ink-2)]" />
-                <button
-                  type="button"
-                  className="pico-type-body min-w-0 flex-1 truncate text-left text-[color:var(--pico-ink)]"
-                  onClick={() => openFolder(folder.id)}
-                  onDoubleClick={() => openFolder(folder.id)}
-                >
-                  {folder.name || '新建文件夹'}
-                </button>
-              </div>
-            ))}
-
-            {mine.length === 0 && childFolders.length === 0 && !loading && !renamingId ? (
-              <p className="pico-type-body text-[color:var(--pico-ink-2)]">还没有文件</p>
-            ) : (
-              mine.map((row) => {
-                const name = row.user_label || row.title || '未命名';
-                return (
-                  <div key={row.id} className="py-1" data-testid={`my-generated-${row.id}`}>
-                    <div className="flex items-center gap-1">
-                      <PicoIcon name="file" size="sm" className="shrink-0 text-[color:var(--pico-ink-2)]" />
-                      <p className="pico-type-body min-w-0 flex-1 truncate text-[color:var(--pico-ink)]">
-                        {name}
-                      </p>
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap gap-2 pl-5">
-                      <button
-                        type="button"
-                        className="pico-type-body text-[color:var(--pico-ink-2)]"
-                        disabled={busyId !== null}
-                        onClick={() => void openMine(row)}
-                      >
-                        打开
-                      </button>
-                      <button
-                        type="button"
-                        className="pico-type-body text-[color:var(--pico-ink-2)]"
-                        onClick={() => {
-                          setTransferOf(row);
-                          setTransferField(fields[0]?.id || '');
-                          setTransferMode('copy');
-                          setMessage(null);
-                        }}
-                        data-testid={`my-files-transfer-${row.id}`}
-                      >
-                        转到学校
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
+                {rootOpen ? '▾' : '▸'}
+              </button>
+              <PicoIcon
+                name={rootOpen ? 'folder-open' : 'folder'}
+                size="sm"
+                className="shrink-0 text-[color:var(--pico-ink-2)]"
+              />
+              <button
+                type="button"
+                className="pico-type-sidebar min-w-0 flex-1 truncate text-left text-[color:var(--pico-ink)]"
+                data-testid="my-files-root"
+                onClick={() => setExpanded((prev) => ({ ...prev, root: true }))}
+              >
+                我的文件
+              </button>
+            </div>
+            {rootOpen ? (
+              <>
+                {renderNewFolderRow('', 1)}
+                {renderTreeNodes('', 1)}
+                {renderFiles('', 1)}
+              </>
+            ) : null}
           </>
         )}
       </div>

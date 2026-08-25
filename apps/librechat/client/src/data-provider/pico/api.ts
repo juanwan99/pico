@@ -580,6 +580,13 @@ export async function renameMyFolder(folderId: string, name: string) {
   );
 }
 
+export async function deleteMyFolder(folderId: string) {
+  return picoFetch<{ ok?: boolean; id?: string }>(
+    `/v1/my/folders/${encodeURIComponent(folderId)}`,
+    { method: 'DELETE' },
+  );
+}
+
 export async function getMyArchiveFolder(conversationId = '') {
   const qs = conversationId ? `?conversation_id=${encodeURIComponent(conversationId)}` : '';
   return picoFetch<{ folder_id?: string; folder_name?: string }>(`/v1/my/archive${qs}`);
