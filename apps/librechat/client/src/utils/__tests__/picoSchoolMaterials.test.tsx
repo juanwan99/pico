@@ -1,6 +1,6 @@
 /**
- * T-FILES-PLACE: school materials are venue folders; check across venues.
- * Dialog has no landing destination.
+ * T-FILES-PLACE: opening school materials shows a venue folder tree.
+ * No search-first, no landing dropdown.
  */
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -28,7 +28,7 @@ const mockListEduFields = listEduFields as jest.MockedFunction<typeof listEduFie
 const mockPutEduNamedIds = putEduNamedIds as jest.MockedFunction<typeof putEduNamedIds>;
 const mockSearch = searchEduSchoolMaterials as jest.MockedFunction<typeof searchEduSchoolMaterials>;
 
-describe('SchoolMaterialsBar venue folders + cross-venue check', () => {
+describe('SchoolMaterialsBar venue folder tree', () => {
   beforeEach(() => {
     mockGetEduNamedIds.mockResolvedValue({ ids: [] });
     mockListEduFields.mockResolvedValue({
@@ -38,38 +38,36 @@ describe('SchoolMaterialsBar venue folders + cross-venue check', () => {
       ],
     });
     mockPutEduNamedIds.mockResolvedValue({ ids: [] });
-    mockSearch.mockResolvedValue({ items: [] });
+    mockSearch.mockImplementation(async (_q: string, fieldId = '') => {
+      if (fieldId === 'field-1') {
+        return { items: [{ id: 'doc-1', title: '课时计划.docx', fieldId: 'field-1' }] };
+      }
+      if (fieldId === 'field-2') {
+        return { items: [{ id: 'doc-2', title: '课文.docx', fieldId: 'field-2' }] };
+      }
+      return { items: [] };
+    });
   });
 
-  it('lists documents under venue folders without a landing picker', async () => {
-    mockSearch.mockResolvedValue({
-      items: [
-        { id: 'doc-1', title: '课时计划.docx', fieldId: 'field-1' },
-        { id: 'doc-2', title: '课文.docx', fieldId: 'field-2' },
-      ],
-    });
-
+  it('opens into a folder tree with documents, without search or landing picker', async () => {
     render(<SchoolMaterialsBar conversationId="c1" />);
     fireEvent.click(screen.getByTestId('school-materials-toggle'));
 
-    await waitFor(() => {
-      expect(mockSearch).toHaveBeenCalledWith('', '');
-    });
     expect(await screen.findByTestId('school-material-doc-1')).toBeInTheDocument();
     expect(screen.getByTestId('school-material-doc-2')).toBeInTheDocument();
     expect(screen.getByTestId('school-field-folder-field-1')).toBeInTheDocument();
     expect(screen.getByTestId('school-field-folder-field-2')).toBeInTheDocument();
+    expect(screen.queryByTestId('school-materials-q')).not.toBeInTheDocument();
+    expect(screen.queryByText('搜')).not.toBeInTheDocument();
     expect(screen.queryByText('落到哪一场')).not.toBeInTheDocument();
     expect(screen.queryByTestId('school-land-field')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockSearch).toHaveBeenCalledWith('', 'field-1');
+      expect(mockSearch).toHaveBeenCalledWith('', 'field-2');
+    });
   });
 
   it('can check documents from two venues', async () => {
-    mockSearch.mockResolvedValue({
-      items: [
-        { id: 'doc-1', title: '课时计划.docx', fieldId: 'field-1' },
-        { id: 'doc-2', title: '课文.docx', fieldId: 'field-2' },
-      ],
-    });
     mockPutEduNamedIds.mockImplementation(async (_convo: string, ids: string[]) => ({ ids }));
 
     render(<SchoolMaterialsBar conversationId="c1" />);

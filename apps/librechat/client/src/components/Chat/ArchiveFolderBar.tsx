@@ -1,5 +1,5 @@
 /**
- * Dialog archive location: default 我的文件 root. Pick a self-made folder.
+ * Chat archive location: default 我的文件 root. Pick a self-made folder.
  * School transfer is not here.
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -50,11 +50,11 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
   );
 
   return (
-    <div className="mb-2 w-full" data-testid="archive-folder-bar">
-      <label className="pico-type-sidebar flex items-center gap-2 text-[color:var(--pico-ink-2)]">
+    <div className="mb-2 w-full text-left" data-testid="archive-folder-bar">
+      <label className="pico-type-body flex items-center gap-2 text-[color:var(--pico-ink)]">
         存档位置
         <select
-          className="h-8 min-w-0 flex-1 rounded-md border border-black/[0.08] px-2 outline-none"
+          className="pico-type-body h-9 min-w-0 flex-1 bg-transparent outline-none"
           value={folderId}
           data-testid="archive-folder-select"
           onChange={(e) => void pick(e.target.value)}
@@ -73,11 +73,7 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
         <p className="pico-type-aux mt-0.5 text-[#b42318]" role="status">
           {error}
         </p>
-      ) : (
-        <p className="pico-type-aux mt-0.5 text-[color:var(--pico-ink-3)]">
-          不改则生成物进我的文件根。建夹去「我的文件」页。
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }
