@@ -233,6 +233,7 @@ class SubprocessTransport(TruePiTransport):
         ext: Path | None = None,
         extra_extensions: list[Path] | None = None,
         continue_session: bool = False,
+        session_file: Path | None = None,
         plan_flag: bool = False,
         spawn_cwd: Path | None = None,
         system_prompt_text: str = "",
@@ -256,6 +257,7 @@ class SubprocessTransport(TruePiTransport):
         self.ext = ext or extension_path()
         self.extra_extensions = list(extra_extensions or [])
         self.continue_session = bool(continue_session)
+        self.session_file = Path(session_file) if session_file is not None else None
         self.plan_flag = bool(plan_flag)
         self.spawn_cwd = spawn_cwd or session_dir
         self.system_prompt_text = str(system_prompt_text or "")
@@ -325,7 +327,11 @@ class SubprocessTransport(TruePiTransport):
             "--thinking",
             "on" if self.thinking else "off",
         ]
-        if self.continue_session:
+        # Pin the conversation jsonl. ``--continue`` is most-recent-in-dir and
+        # can resume an empty sibling after compact/kill. Official ``--session``.
+        if self.session_file is not None:
+            cmd.extend(["--session", str(self.session_file)])
+        elif self.continue_session:
             cmd.append("--continue")
         if self.plan_flag:
             cmd.append("--plan")
@@ -336,6 +342,8 @@ class SubprocessTransport(TruePiTransport):
 
     async def start(self) -> None:
         self.session_dir.mkdir(parents=True, exist_ok=True)
+        if self.session_file is not None:
+            self.session_file.parent.mkdir(parents=True, exist_ok=True)
         if not self.ext.is_file():
             raise TruePiClientError(f"true-pi extension missing: {self.ext}")
         env = os.environ.copy()
@@ -506,6 +514,13 @@ class SubprocessTransport(TruePiTransport):
                 proc.stdin.close()
             except Exception as exc:  # noqa: BLE001
                 logger.debug("true_pi stdin close: %s", type(exc).__name__)
+        # Flush the official session jsonl before SIGTERM so the next turn's
+        # ``--session`` still has the compacted tree + current files/question.
+        if proc.returncode is None:
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=2.0)
+            except TimeoutError:
+                pass
         if kill and proc.returncode is None:
             try:
                 os.killpg(proc.pid, signal.SIGTERM)

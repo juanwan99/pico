@@ -117,6 +117,10 @@ def session_segment(raw: str, *, max_len: int = 80) -> str:
     return safe
 
 
+# Official Pi ``--session`` file for one workbench conversation. Not a second tree.
+PERSIST_SESSION_FILE = "pico.jsonl"
+
+
 def persist_session_dir(*, school_id: str, conversation_id: str | None) -> Path | None:
     """Workbench Pi session tree: school_id / conversation_id.
 
@@ -128,6 +132,18 @@ def persist_session_dir(*, school_id: str, conversation_id: str | None) -> Path 
     if not school or not convo:
         return None
     return session_root() / session_segment(school) / session_segment(convo)
+
+
+def persist_session_file(*, school_id: str, conversation_id: str | None) -> Path | None:
+    """Stable Pi session jsonl for one conversation.
+
+    ``--continue`` is most-recent-in-dir and can pick an empty sibling after a
+    compact/kill. Pin the official ``--session`` path instead.
+    """
+    root = persist_session_dir(school_id=school_id, conversation_id=conversation_id)
+    if root is None:
+        return None
+    return root / PERSIST_SESSION_FILE
 
 
 def history_n() -> int:

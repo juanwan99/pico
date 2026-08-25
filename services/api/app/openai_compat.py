@@ -1551,6 +1551,10 @@ async def chat_completions(
                 text = str(payload.get("text") or "")
                 if text:
                     await q.put(("delta", text))
+            elif event_type in {"compaction.begin", "compaction.end"}:
+                # Process chrome only. 在整理上文 must not become the product bubble.
+                text = str(payload.get("text") or "").strip() or "在整理上文"
+                await q.put(("status", f"{text}\n"))
             elif event_type == "plan.progress":
                 from pico_orchestrator.human_package import public_progress_delta
 

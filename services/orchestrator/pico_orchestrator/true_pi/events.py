@@ -232,10 +232,21 @@ async def map_event(
         payload = {**tag, "source": "true-pi", "text": COMPACTION_HUMAN}
         if raw.get("reason"):
             payload["reason"] = raw.get("reason")
+        result = raw.get("result") if isinstance(raw.get("result"), dict) else {}
+        details = result.get("details") if isinstance(result.get("details"), dict) else {}
+        # Official Pi CompactionDetails (read/modified files). Pass through only.
+        for key in ("readFiles", "modifiedFiles"):
+            files = details.get(key)
+            if isinstance(files, list):
+                payload[key] = [str(item) for item in files[:40]]
+        kept = result.get("firstKeptEntryId")
+        if kept:
+            payload["firstKeptEntryId"] = str(kept)
+        if "willRetry" in raw:
+            payload["will_retry"] = bool(raw.get("willRetry"))
         await emit(f"compaction.{phase}", payload)
-        # Process line on start so the teacher sees 在整理上文 while Pi works.
-        # End keeps the same line so a late join still has human text.
-        await emit("message.delta", {"text": COMPACTION_HUMAN, **tag})
+        # Process strip / timeline already show 在整理上文. Do not write it into
+        # message.delta — that becomes the product bubble and looks like amnesia.
         return
 
     if kind == "extension_ui_request":
