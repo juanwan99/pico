@@ -1,3 +1,5 @@
+import 'katex/dist/katex.min.css';
+import 'katex/dist/contrib/copy-tex.js';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import supersub from 'remark-supersub';

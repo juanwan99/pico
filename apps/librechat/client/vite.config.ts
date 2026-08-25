@@ -196,7 +196,7 @@ export default defineConfig(({ command }) => ({
       resolveDependencies: (_filename: string, deps: string[]) =>
         deps.filter(
           (dep) =>
-            !/(^|\/)(mermaid|sandpack|query-devtools|code-editor|math-katex|codemirror-|avatars|advanced-inputs|heic-converter)/.test(
+            !/(^|\/)(mermaid|sandpack|query-devtools|code-editor|math-katex|codemirror-|avatars|advanced-inputs|heic-converter|markdown-processing|virtualization|react-interactions|animations|framer-motion|forms|security-ui|date-utils|ArchivedChats|ProjectCreate|RunTimeline|SchoolMaterials|SidePanel)/.test(
               dep,
             ),
         ),
