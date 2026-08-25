@@ -505,7 +505,7 @@ const ProjectsSection = ({ toggleNav, isAuthenticated }: ProjectsSectionProps) =
           type="button"
           aria-expanded={isExpanded}
         >
-          <span className="select-none truncate">{localize('com_ui_projects')}</span>
+          <span className="select-none truncate">项目夹</span>
           <ChevronDown
             className={cn(
               'h-3 w-3 shrink-0 transition-transform duration-200',

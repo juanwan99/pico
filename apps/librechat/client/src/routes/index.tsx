@@ -8,8 +8,6 @@ import {
   TwoFactorScreen,
   RequestPasswordReset,
 } from '~/components/Auth';
-import { MarketplaceProvider } from '~/components/Agents/MarketplaceContext';
-import AgentMarketplace from '~/components/Agents/Marketplace';
 import { OAuthSuccess, OAuthError } from '~/components/OAuth';
 import { AuthContextProvider } from '~/hooks/AuthContext';
 import WithRum from '~/lib/rum/WithRum';
@@ -20,13 +18,6 @@ import dashboardRoutes from './Dashboard';
 import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
 import Search from './Search';
-import AutomationPage from '~/components/Workbench/AutomationPage';
-import MoreHubPage from '~/components/Workbench/MoreHubPage';
-import CapabilityHubPage from '~/components/Workbench/CapabilityHubPage';
-import AssistantPage from '~/components/Workbench/AssistantPage';
-import FilesHubPage from '~/components/Workbench/FilesHubPage';
-import ConnectorDetailPage from '~/components/Workbench/ConnectorDetailPage';
-import WorkspaceHubPage from '~/components/Workbench/WorkspaceHubPage';
 import Root from './Root';
 
 const AuthLayout = () => (
@@ -56,6 +47,56 @@ const loadProjectsView = () =>
 const loadProjectWorkspace = () =>
   import('~/components/Projects').then((m) => ({
     Component: m.ProjectWorkspace,
+  }));
+
+const loadAgentMarketplace = () =>
+  Promise.all([
+    import('~/components/Agents/Marketplace'),
+    import('~/components/Agents/MarketplaceContext'),
+  ]).then(([market, ctx]) => {
+    function AgentMarketplaceRoute() {
+      return (
+        <ctx.MarketplaceProvider>
+          <market.default />
+        </ctx.MarketplaceProvider>
+      );
+    }
+    return { Component: AgentMarketplaceRoute };
+  });
+
+const loadCapabilityHub = () =>
+  import('~/components/Workbench/CapabilityHubPage').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadConnectorDetail = () =>
+  import('~/components/Workbench/ConnectorDetailPage').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadAssistantPage = () =>
+  import('~/components/Workbench/AssistantPage').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadAutomationPage = () =>
+  import('~/components/Workbench/AutomationPage').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadMoreHub = () =>
+  import('~/components/Workbench/MoreHubPage').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadFilesHub = () =>
+  import('~/components/Workbench/FilesHubPage').then((m) => ({
+    Component: m.default,
+  }));
+
+const loadWorkspaceHub = () =>
+  import('~/components/Workbench/WorkspaceHubPage').then((m) => ({
+    Component: m.default,
   }));
 
 const baseEl = document.querySelector('base');
@@ -179,31 +220,23 @@ export const router = createBrowserRouter(
             },
             {
               path: 'agents',
-              element: (
-                <MarketplaceProvider>
-                  <AgentMarketplace />
-                </MarketplaceProvider>
-              ),
+              lazy: loadAgentMarketplace,
             },
             {
               path: 'agents/:category',
-              element: (
-                <MarketplaceProvider>
-                  <AgentMarketplace />
-                </MarketplaceProvider>
-              ),
+              lazy: loadAgentMarketplace,
             },
             {
               path: 'assistants',
-              element: <AssistantPage />,
+              lazy: loadAssistantPage,
             },
             {
               path: 'capability',
-              element: <CapabilityHubPage />,
+              lazy: loadCapabilityHub,
             },
             {
               path: 'capability/connectors/:connectorId',
-              element: <ConnectorDetailPage />,
+              lazy: loadConnectorDetail,
             },
             {
               path: 'skills/manage',
@@ -211,19 +244,19 @@ export const router = createBrowserRouter(
             },
             {
               path: 'automation',
-              element: <AutomationPage />,
+              lazy: loadAutomationPage,
             },
             {
               path: 'more',
-              element: <MoreHubPage />,
+              lazy: loadMoreHub,
             },
             {
               path: 'more/files',
-              element: <FilesHubPage />,
+              lazy: loadFilesHub,
             },
             {
               path: 'workspaces',
-              element: <WorkspaceHubPage />,
+              lazy: loadWorkspaceHub,
             },
           ],
         },

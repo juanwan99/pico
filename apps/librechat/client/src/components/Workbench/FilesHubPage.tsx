@@ -2,7 +2,7 @@
  * School field files. Pico ledger is scratch paper, not the workspace.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, Eye, Loader2, RefreshCw, Search, X } from 'lucide-react';
 import {
   getPicoArtifactContent,
@@ -43,6 +43,8 @@ function typeLabel(row: EduSchoolMaterial) {
 
 export default function FilesHubPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const schoolView = location.hash === '#school';
   const [rows, setRows] = useState<EduSchoolMaterial[]>([]);
   const [fields, setFields] = useState<EduSchoolField[]>([]);
   const [mine, setMine] = useState<PicoArtifact[]>([]);
@@ -183,14 +185,21 @@ export default function FilesHubPage() {
   };
 
   const mineBlock =
-    mine.length === 0 ? null : (
+    mine.length === 0 ? (
+      <div className="flex flex-1 flex-col items-center justify-center gap-1.5 text-[color:var(--pico-ink-3)]">
+        <p className="text-[13px] font-medium text-[color:var(--pico-ink)]">还没有我的文件</p>
+        <p className="max-w-xs text-center text-[11.5px] leading-4">
+          对话里做成、没点名落到学校那场的文件会出现在这里。
+        </p>
+      </div>
+    ) : (
       <section
-        className="border-t border-black/[0.06] bg-[#fafafa] px-3 py-3"
+        className="flex-1 overflow-y-auto bg-[#fafafa] px-3 py-3"
         data-testid="my-generated-files"
       >
-        <p className="mb-1 text-[12px] font-medium text-[#333]">我的生成物</p>
+        <p className="mb-1 text-[12px] font-medium text-[#333]">我的文件</p>
         <p className="mb-2 text-[11px] leading-4 text-[#8c8c8c]">
-          Pico 账本里本人刚做成的文件。落到学校那场的仍在上面；没点名场的只在这里。
+          Pico 账本里本人做成的文件。点名落到学校那场的去「学校材料」看。
         </p>
         {mineError ? (
           <p className="mb-2 text-[11px] text-red-700" role="alert">
@@ -261,9 +270,9 @@ export default function FilesHubPage() {
 
   return (
     <WorkbenchShell
-      title="我的文件"
-      subtitle="学校场里的材料，不是 Pico 账本"
-      backTo="/more"
+      title={schoolView ? '学校材料' : '我的文件'}
+      subtitle={schoolView ? '学校场里的材料' : '本人做成的文件'}
+      backTo="/c/new"
       actions={
         <button
           type="button"
@@ -277,6 +286,8 @@ export default function FilesHubPage() {
       }
     >
       <div className="flex h-full min-h-[420px] flex-col">
+        {schoolView ? (
+          <>
         <div className="border-b border-black/[0.06] bg-white px-3 py-2">
           <p className="mb-1 text-[12px] font-medium text-[#333]">点名落到哪一场</p>
           <SchoolMaterialsBar />
@@ -349,7 +360,7 @@ export default function FilesHubPage() {
             </div>
             <p className="text-[13px] font-medium text-[color:var(--pico-ink)]">还没有学校材料</p>
             <p className="max-w-xs text-center text-[11.5px] leading-4">
-              在对话里做网页或 Word，先点名一场。做成了刷新学校那场能看见。没点名的在下面「我的生成物」。
+              在对话里做网页或 Word，先点名一场。做成了刷新学校那场能看见。没点名的去「我的文件」。
             </p>
             <button
               type="button"
@@ -444,7 +455,10 @@ export default function FilesHubPage() {
             </section>
           </div>
         )}
-        {mineBlock}
+          </>
+        ) : (
+          mineBlock
+        )}
       </div>
     </WorkbenchShell>
   );
