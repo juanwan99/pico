@@ -138,6 +138,20 @@ describe('Pico proxy routes', () => {
     );
   });
 
+  it('forwards my-files folder rename to Pico API', async () => {
+    const response = await request(app)
+      .patch('/api/pico/v1/my/folders/fold-1')
+      .send({ name: '备课' });
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/my/folders/fold-1',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ name: '备课' }),
+      }),
+    );
+  });
+
   it('forwards run event requests to Pico API', async () => {
     const response = await request(app).get('/api/pico/v1/runs/run-1/events');
 

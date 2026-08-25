@@ -71,6 +71,23 @@ def test_create_folder_and_bind_archive(client) -> None:
     assert got.json()["folder_id"] == folder_id
 
 
+def test_create_empty_name_defaults_and_unique(client) -> None:
+    headers = _headers(client)
+    first = client.post("/v1/my/folders", json={"name": ""}, headers=headers)
+    assert first.status_code == 200, first.text
+    assert first.json()["folder"]["name"] == "新建文件夹"
+    second = client.post("/v1/my/folders", json={"name": ""}, headers=headers)
+    assert second.status_code == 200, second.text
+    assert second.json()["folder"]["name"] == "新建文件夹 (2)"
+    renamed = client.patch(
+        f"/v1/my/folders/{first.json()['folder']['id']}",
+        json={"name": "备课"},
+        headers=headers,
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["folder"]["name"] == "备课"
+
+
 def test_write_stays_in_archive_folder_and_does_not_auto_land(client) -> None:
     headers = _headers(client)
     created = client.post("/v1/my/folders", json={"name": "教案夹"}, headers=headers)

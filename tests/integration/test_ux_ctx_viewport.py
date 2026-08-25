@@ -114,6 +114,13 @@ def test_nav_layout_type_and_school_docs() -> None:
     proxy = (ROOT / "apps/librechat/api/server/routes/pico.js").read_text()
     assert "router.post('/v1/my/folders'" in proxy
     assert "router.get('/v1/my/folders'" in proxy
+    assert "router.patch('/v1/my/folders/:folderId'" in proxy
+    directory = (
+        ROOT / "apps/librechat/client/src/components/Workbench/FilesDirectoryPanel.tsx"
+    ).read_text()
+    assert "新建文件夹" in directory
+    assert "renameMyFolder" in directory
+    assert "新夹名" not in directory
     assert "katex/dist/katex.min.css" not in main
     assert "bootstrap-entry" not in index_html
     assert "lazy: loadChatRoute" in routes

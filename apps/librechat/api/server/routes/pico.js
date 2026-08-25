@@ -409,6 +409,14 @@ router.post('/v1/edu/land', (req, res) => proxy(req, res, '/v1/edu/land'));
 
 router.get('/v1/my/folders', (req, res) => proxy(req, res, '/v1/my/folders'));
 router.post('/v1/my/folders', (req, res) => proxy(req, res, '/v1/my/folders'));
+router.patch('/v1/my/folders/:folderId', (req, res) => {
+  try {
+    assertId(req.params.folderId, 'folderId');
+    return proxy(req, res, `/v1/my/folders/${req.params.folderId}`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
 router.get('/v1/my/archive', (req, res) => proxy(req, res, '/v1/my/archive'));
 router.put('/v1/my/archive', (req, res) => proxy(req, res, '/v1/my/archive'));
 router.post('/v1/my/artifacts/:artifactId/place', (req, res) => {

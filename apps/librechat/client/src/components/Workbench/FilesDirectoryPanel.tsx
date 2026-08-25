@@ -1,14 +1,15 @@
 /**
- * Left file directory: personal folders + generated files.
- * Create folders and transfer to a writable school field via membership/land.
+ * Left file directory — Windows-like create / rename / open.
+ * Transfer to school stays here; chat dialog does not transfer.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createMyFolder,
   getPicoArtifactContent,
   listEduFields,
   listMyFolders,
   listMyPicoArtifacts,
+  renameMyFolder,
   transferMyArtifact,
   type EduSchoolField,
   type PicoArtifact,
@@ -19,12 +20,14 @@ import { cn } from '~/utils';
 export default function FilesDirectoryPanel({ className }: { className?: string }) {
   const [folders, setFolders] = useState<PicoPersonalFolder[]>([]);
   const [folderId, setFolderId] = useState('');
-  const [newFolderName, setNewFolderName] = useState('');
   const [mine, setMine] = useState<PicoArtifact[]>([]);
   const [fields, setFields] = useState<EduSchoolField[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
   const [transferOf, setTransferOf] = useState<PicoArtifact | null>(null);
   const [transferField, setTransferField] = useState('');
   const [transferMode, setTransferMode] = useState<'copy' | 'move'>('copy');
@@ -55,30 +58,50 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!renamingId) return;
+    const input = renameInputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }, [renamingId]);
+
   const currentFolderName = useMemo(() => {
     if (!folderId) return '';
     return folders.find((row) => row.id === folderId)?.name || '';
   }, [folderId, folders]);
 
-  const unusedFolderName = () => {
-    const typed = newFolderName.trim();
-    if (typed) return typed;
-    const taken = new Set(folders.map((row) => row.name));
-    if (!taken.has('未命名夹')) return '未命名夹';
-    for (let i = 2; i < 80; i += 1) {
-      const name = `未命名夹 ${i}`;
-      if (!taken.has(name)) return name;
+  const beginRename = (folder: PicoPersonalFolder) => {
+    setRenamingId(folder.id);
+    setRenameDraft(folder.name || '新建文件夹');
+  };
+
+  const commitRename = async () => {
+    if (!renamingId) return;
+    const name = renameDraft.trim() || '新建文件夹';
+    const current = folders.find((row) => row.id === renamingId);
+    setRenamingId(null);
+    if (current && current.name === name) return;
+    setError(null);
+    try {
+      await renameMyFolder(renamingId, name);
+      await refresh();
+    } catch (renameError) {
+      setError(renameError instanceof Error ? renameError.message : '改名没写成');
+      await refresh();
     }
-    return '未命名夹';
   };
 
   const createFolder = async () => {
-    const name = unusedFolderName();
+    if (folderId) return;
     setError(null);
     try {
-      await createMyFolder(name);
-      setNewFolderName('');
+      const created = await createMyFolder('');
+      const folder = created.folder;
       await refresh();
+      if (folder?.id) {
+        beginRename({ id: folder.id, name: folder.name || '新建文件夹' });
+      }
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : '夹没建成');
     }
@@ -130,42 +153,45 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
       className={cn('flex min-h-0 flex-1 flex-col px-2.5 py-2', className)}
       data-testid="files-directory"
     >
-      <p className="pico-type-sidebar pico-type-medium text-[color:var(--pico-ink)]">
-        {currentFolderName ? currentFolderName : '我的文件'}
-      </p>
-      {folderId ? (
+      <div className="flex items-center gap-2">
         <button
           type="button"
-          className="pico-type-body mt-1 py-0.5 text-left text-[color:var(--pico-ink-2)]"
+          className="pico-type-sidebar text-[color:var(--pico-ink-2)]"
+          onClick={() => setFolderId('')}
+          data-testid="my-files-root"
+        >
+          我的文件
+        </button>
+        {currentFolderName ? (
+          <>
+            <span className="pico-type-aux text-[color:var(--pico-ink-3)]">/</span>
+            <span className="pico-type-sidebar truncate text-[color:var(--pico-ink)]">
+              {currentFolderName}
+            </span>
+          </>
+        ) : null}
+      </div>
+
+      {!folderId ? (
+        <button
+          type="button"
+          className="pico-type-body mt-2 self-start text-[color:var(--pico-ink)]"
+          onClick={() => void createFolder()}
+          data-testid="my-files-create-folder"
+        >
+          新建文件夹
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="pico-type-body mt-2 self-start text-[color:var(--pico-ink-2)]"
           onClick={() => setFolderId('')}
           data-testid="my-files-folder-up"
         >
-          返回根目录
+          返回上一级
         </button>
-      ) : (
-        <form
-          className="mt-2 flex gap-1"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void createFolder();
-          }}
-        >
-          <input
-            value={newFolderName}
-            onChange={(event) => setNewFolderName(event.target.value)}
-            placeholder="新夹名"
-            className="pico-type-body h-9 min-w-0 flex-1 bg-transparent outline-none"
-            data-testid="my-files-folder-name"
-          />
-          <button
-            type="submit"
-            className="pico-type-body h-9 shrink-0 text-[color:var(--pico-ink)]"
-            data-testid="my-files-create-folder"
-          >
-            新建夹
-          </button>
-        </form>
       )}
+
       {error ? (
         <p className="pico-type-body mt-1 text-[#b42318]" role="alert">
           {error}
@@ -176,6 +202,7 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
           {message}
         </p>
       ) : null}
+
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto" data-testid="my-generated-files">
         {loading && mine.length === 0 && folders.length === 0 ? (
           <p className="pico-type-aux text-[color:var(--pico-ink-3)]">正在列出目录…</p>
@@ -183,31 +210,72 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
           <>
             {!folderId
               ? folders.map((folder) => (
-                  <button
+                  <div
                     key={folder.id}
-                    type="button"
-                    className="pico-type-body flex w-full items-center gap-1 py-1 text-left text-[color:var(--pico-ink)]"
-                    onClick={() => setFolderId(folder.id)}
+                    className="flex items-center gap-1 py-1"
                     data-testid={`my-files-folder-${folder.id}`}
                   >
-                    <span className="w-4 shrink-0 text-[color:var(--pico-ink-2)]">▸</span>
-                    {folder.name || '未命名夹'}
-                  </button>
+                    <span className="w-4 shrink-0 text-[color:var(--pico-ink-2)]" aria-hidden>
+                      ▸
+                    </span>
+                    {renamingId === folder.id ? (
+                      <input
+                        ref={renameInputRef}
+                        value={renameDraft}
+                        data-testid={`my-files-folder-rename-${folder.id}`}
+                        className="pico-type-body min-w-0 flex-1 border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-1 py-0.5 outline-none"
+                        onChange={(event) => setRenameDraft(event.target.value)}
+                        onBlur={() => void commitRename()}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void commitRename();
+                          }
+                          if (event.key === 'Escape') {
+                            event.preventDefault();
+                            setRenamingId(null);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="pico-type-body min-w-0 flex-1 truncate text-left text-[color:var(--pico-ink)]"
+                        onDoubleClick={() => setFolderId(folder.id)}
+                        onClick={() => setFolderId(folder.id)}
+                      >
+                        {folder.name || '新建文件夹'}
+                      </button>
+                    )}
+                    {renamingId === folder.id ? null : (
+                      <button
+                        type="button"
+                        className="pico-type-aux shrink-0 text-[color:var(--pico-ink-2)]"
+                        onClick={() => beginRename(folder)}
+                        data-testid={`my-files-folder-rename-btn-${folder.id}`}
+                      >
+                        重命名
+                      </button>
+                    )}
+                  </div>
                 ))
               : null}
-            {mine.length === 0 && (folderId || folders.length === 0) && !loading ? (
+            {mine.length === 0 && (folderId || folders.length === 0) && !loading && !renamingId ? (
               <p className="pico-type-body text-[color:var(--pico-ink-2)]">还没有文件</p>
             ) : (
               mine.map((row) => {
                 const name = row.user_label || row.title || '未命名';
                 return (
-                  <div
-                    key={row.id}
-                    className="py-1"
-                    data-testid={`my-generated-${row.id}`}
-                  >
-                    <p className="pico-type-body truncate text-[color:var(--pico-ink)]">{name}</p>
-                    <div className="mt-0.5 flex flex-wrap gap-2">
+                  <div key={row.id} className="py-1" data-testid={`my-generated-${row.id}`}>
+                    <div className="flex items-center gap-1">
+                      <span className="w-4 shrink-0 text-[color:var(--pico-ink-2)]" aria-hidden>
+                        ·
+                      </span>
+                      <p className="pico-type-body min-w-0 flex-1 truncate text-[color:var(--pico-ink)]">
+                        {name}
+                      </p>
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-2 pl-5">
                       <button
                         type="button"
                         className="pico-type-body text-[color:var(--pico-ink-2)]"
@@ -237,8 +305,12 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
           </>
         )}
       </div>
+
       {transferOf ? (
-        <div className="mt-2 border-t border-[color:var(--pico-line)] pt-2" data-testid="my-files-transfer-dialog">
+        <div
+          className="mt-2 border-t border-[color:var(--pico-line)] pt-2"
+          data-testid="my-files-transfer-dialog"
+        >
           <p className="pico-type-body text-[color:var(--pico-ink)]">
             转到学校 · {transferOf.user_label || transferOf.title}
           </p>

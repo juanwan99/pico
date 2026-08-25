@@ -33,6 +33,10 @@ class FolderCreateBody(BaseModel):
     name: str = ""
 
 
+class FolderRenameBody(BaseModel):
+    name: str = ""
+
+
 class ArchiveBody(BaseModel):
     conversation_id: str = ""
     folder_id: str = ""
@@ -48,13 +52,23 @@ class TransferBody(BaseModel):
 
 
 def _folder_name(raw: str | None) -> str:
-    value = str(raw or "").strip()
-    if not value or not _FOLDER_NAME_RE.match(value):
+    value = str(raw or "").strip() or "新建文件夹"
+    if not _FOLDER_NAME_RE.match(value):
         raise HTTPException(
             status_code=422,
             detail={"code": "folder_name_invalid", "message": "夹名请用 1–40 个字，不要带斜杠"},
         )
     return value
+
+
+def _unique_folder_name(desired: str, taken: set[str]) -> str:
+    if desired not in taken:
+        return desired
+    for i in range(2, 80):
+        candidate = f"{desired} ({i})"
+        if candidate not in taken:
+            return candidate
+    return f"{desired} ({new_id()[:8]})"
 
 
 async def owned_folder(
@@ -109,7 +123,7 @@ async def create_my_folder(
     principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    name = _folder_name(body.name)
+    desired = _folder_name(body.name)
     existing = (
         await session.execute(
             select(PersonalFolderRow).where(
@@ -124,11 +138,7 @@ async def create_my_folder(
             status_code=422,
             detail={"code": "folder_limit", "message": "夹太多了，先用现有的"},
         )
-    if any(row.name == name for row in rows):
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "folder_exists", "message": "这个夹已经有了"},
-        )
+    name = _unique_folder_name(desired, {row.name for row in rows})
     row = PersonalFolderRow(
         id=new_id(),
         school_id=principal.school_id,
@@ -145,6 +155,47 @@ async def create_my_folder(
             detail={"code": "folder_exists", "message": "这个夹已经有了"},
         ) from exc
     return {"folder": _folder_dict(row)}
+
+
+@router.patch("/v1/my/folders/{folder_id}")
+async def rename_my_folder(
+    folder_id: str,
+    body: FolderRenameBody,
+    principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    folder = await owned_folder(session, principal, folder_id)
+    if folder is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "folder_not_found", "message": "找不到这个夹"},
+        )
+    name = _folder_name(body.name)
+    clash = (
+        await session.execute(
+            select(PersonalFolderRow).where(
+                PersonalFolderRow.school_id == principal.school_id,
+                PersonalFolderRow.membership_id == principal.membership_id,
+                PersonalFolderRow.name == name,
+                PersonalFolderRow.id != folder.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if clash is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "folder_exists", "message": "这个夹已经有了"},
+        )
+    folder.name = name
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "folder_exists", "message": "这个夹已经有了"},
+        ) from exc
+    return {"folder": _folder_dict(folder)}
 
 
 @router.get("/v1/my/archive")
