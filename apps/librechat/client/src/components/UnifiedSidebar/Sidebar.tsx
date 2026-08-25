@@ -1,8 +1,9 @@
 /**
  * Pico left rail: 新对话 + 搜索 + 技能与连接器 + 文件/材料 + 项目夹/未分组会话.
+ * 我的文件 / 学校材料只在侧栏展开，不开中间大页。
  * Conversation menus come from LibreChat ConvoOptions (pin/archive/delete/folder).
  */
-import { memo, useCallback, lazy, Suspense, useEffect } from 'react';
+import { memo, useCallback, lazy, Suspense, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { PicoIcon, type PicoIconName } from '~/components/ui/pico-icons';
@@ -12,6 +13,12 @@ import { Skeleton, Button, TooltipAnchor } from '@librechat/client';
 import type { NavLink } from '~/common';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { clearMessagesCache, cn } from '~/utils';
+import {
+  getPicoSidebarRail,
+  setPicoSidebarRail,
+  subscribePicoSidebarRail,
+  type PicoSidebarRail,
+} from '~/utils/picoSidebarRail';
 import store from '~/store';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
 import FilesDirectoryPanel from '~/components/Workbench/FilesDirectoryPanel';
@@ -25,21 +32,22 @@ type NavItem = {
   label: string;
   icon: PicoIconName;
   path: string;
+  rail?: PicoSidebarRail;
 };
 
 const NAV: NavItem[] = [
   { id: 'search', label: '搜索会话', icon: 'search', path: '/search' },
   { id: 'capability', label: '技能与连接器', icon: 'blocks', path: '/capability' },
-  { id: 'files', label: '我的文件', icon: 'folder', path: '/more/files' },
-  { id: 'school', label: '学校材料', icon: 'books', path: '/more/files#school' },
+  { id: 'files', label: '我的文件', icon: 'folder', path: '/c/new', rail: 'files' },
+  { id: 'school', label: '学校材料', icon: 'books', path: '/c/new', rail: 'school' },
 ];
 
-function isNavItemActive(pathname: string, hash: string, item: NavItem) {
+function isNavItemActive(pathname: string, item: NavItem, rail: PicoSidebarRail) {
   if (item.id === 'files') {
-    return pathname.startsWith('/more/files') && hash !== '#school';
+    return rail === 'files';
   }
   if (item.id === 'school') {
-    return pathname.startsWith('/more/files') && hash === '#school';
+    return rail === 'school';
   }
   if (item.id === 'capability') {
     return pathname.startsWith('/capability') || pathname.startsWith('/skills');
@@ -68,30 +76,58 @@ function Sidebar({
   const queryClient = useQueryClient();
   const { newConversation } = useNewConvo();
   const conversationId = useRecoilValue(store.conversationIdByIndex(0));
-  const filesDirectory =
-    location.pathname.startsWith('/more/files') && location.hash !== '#school';
-  const schoolDirectory =
-    location.pathname.startsWith('/more/files') && location.hash === '#school';
+  const [rail, setRail] = useState<PicoSidebarRail>(() => getPicoSidebarRail());
+  const filesDirectory = rail === 'files';
+  const schoolDirectory = rail === 'school';
 
   useEffect(() => {
     rememberTaskRoute(location.pathname, location.search);
   }, [location.pathname, location.search]);
 
+  useEffect(() => subscribePicoSidebarRail(setRail), []);
+
+  useEffect(() => {
+    if (!location.pathname.startsWith('/more/files')) return;
+    const next: PicoSidebarRail = location.hash === '#school' ? 'school' : 'files';
+    setPicoSidebarRail(next);
+    setRail(next);
+    navigate('/c/new', { replace: true });
+  }, [location.pathname, location.hash, navigate]);
+
   const onNewTask = useCallback(() => {
+    setPicoSidebarRail('chats');
+    setRail('chats');
     clearMessagesCache(queryClient, conversationId);
     queryClient.invalidateQueries([QueryKeys.messages]);
     newConversation();
     navigate('/c/new');
   }, [queryClient, conversationId, newConversation, navigate]);
 
+  const onNavClick = useCallback(
+    (item: NavItem) => {
+      if (item.rail) {
+        setPicoSidebarRail(item.rail);
+        setRail(item.rail);
+        if (location.pathname.startsWith('/more/files')) {
+          navigate('/c/new', { replace: true });
+        }
+        return;
+      }
+      setPicoSidebarRail('chats');
+      setRail('chats');
+      navigate(item.path);
+    },
+    [location.pathname, navigate],
+  );
+
   const navButtons = (compact: boolean) =>
     NAV.map((item) => {
-      const active = isNavItemActive(location.pathname, location.hash, item);
+      const active = isNavItemActive(location.pathname, item, rail);
       const button = (
         <button
           type="button"
           data-testid={`nav-${item.id}`}
-          onClick={() => navigate(item.path)}
+          onClick={() => onNavClick(item)}
           className={
             compact
               ? cn(

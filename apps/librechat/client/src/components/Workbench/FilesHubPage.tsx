@@ -1,27 +1,23 @@
 /**
- * 我的文件 page. Directory actions live in the left rail + this panel.
- * Dialog does not transfer. No search-first school picker.
+ * Legacy /more/files route — redirect to chat and open sidebar rail.
+ * Directory lives only in the left rail (no middle hub page).
  */
-import { useLocation } from 'react-router-dom';
-import FilesDirectoryPanel from './FilesDirectoryPanel';
-import SchoolFilesDirectory from './SchoolFilesDirectory';
-import WorkbenchShell from './WorkbenchShell';
+import { useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { setPicoSidebarRail } from '~/utils/picoSidebarRail';
 
 export default function FilesHubPage() {
+  const navigate = useNavigate();
   const location = useLocation();
-  const schoolView = location.hash === '#school';
+
+  useEffect(() => {
+    setPicoSidebarRail(location.hash === '#school' ? 'school' : 'files');
+    navigate('/c/new', { replace: true });
+  }, [location.hash, navigate]);
 
   return (
-    <WorkbenchShell
-      title={schoolView ? '学校材料' : '我的文件'}
-      subtitle={schoolView ? '有权场里的材料' : '本人做成的文件'}
-      backTo="/c/new"
-    >
-      {schoolView ? (
-        <SchoolFilesDirectory className="h-full" />
-      ) : (
-        <FilesDirectoryPanel className="h-full" />
-      )}
-    </WorkbenchShell>
+    <div className="pico-type-body flex h-full items-center justify-center text-[color:var(--pico-ink-2)]">
+      正在打开侧栏目录…
+    </div>
   );
 }

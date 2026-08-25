@@ -89,6 +89,29 @@ def test_create_empty_name_defaults_and_unique(client) -> None:
     assert renamed.json()["folder"]["name"] == "备课"
 
 
+def test_delete_empty_folder_only(client) -> None:
+    headers = _headers(client)
+    empty = client.post("/v1/my/folders", json={"name": "空夹"}, headers=headers)
+    assert empty.status_code == 200, empty.text
+    empty_id = empty.json()["folder"]["id"]
+    parent = client.post("/v1/my/folders", json={"name": "有子"}, headers=headers)
+    parent_id = parent.json()["folder"]["id"]
+    client.post(
+        "/v1/my/folders",
+        json={"name": "子", "parent_id": parent_id},
+        headers=headers,
+    )
+    blocked = client.delete(f"/v1/my/folders/{parent_id}", headers=headers)
+    assert blocked.status_code == 422, blocked.text
+    assert blocked.json()["detail"]["code"] == "folder_not_empty"
+    deleted = client.delete(f"/v1/my/folders/{empty_id}", headers=headers)
+    assert deleted.status_code == 200, deleted.text
+    listed = client.get("/v1/my/folders", headers=headers)
+    ids = {row["id"] for row in listed.json()["folders"]}
+    assert empty_id not in ids
+    assert parent_id in ids
+
+
 def test_create_nested_folder_under_parent(client) -> None:
     headers = _headers(client)
     parent = client.post("/v1/my/folders", json={"name": "备课"}, headers=headers)
