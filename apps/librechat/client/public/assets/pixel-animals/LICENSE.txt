@@ -1,5 +1,0 @@
-Generic animal icons copied from zoo-js/zoo 萌萌乐园动物区
-https://github.com/zoo-js/zoo
-MIT. Trademarked characters (Pikachu, Totoro, Mario, Gundam, etc.) were not copied.
-
-Used as static PNG avatars only. No avatar drawing engine.

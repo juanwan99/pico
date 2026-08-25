@@ -21,9 +21,20 @@ describe('PixelAnimalGrid', () => {
       </Provider>,
     );
 
-    await user.click(screen.getByRole('button', { name: '狐' }));
+    await user.click(screen.getByRole('button', { name: '狐狸' }));
 
     expect(store.get(pixelAnimalIdAtom)).toBe('fox');
     expect(JSON.parse(window.localStorage.getItem(PIXEL_ANIMAL_STORAGE_KEY) ?? '""')).toBe('fox');
+  });
+
+  it('renders the full zoo-js animal grid', () => {
+    const store = createStore();
+    store.set(pixelAnimalIdAtom, '');
+    render(
+      <Provider store={store}>
+        <PixelAnimalGrid userId="user-1" />
+      </Provider>,
+    );
+    expect(screen.getAllByRole('button')).toHaveLength(78);
   });
 });
