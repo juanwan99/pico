@@ -3,13 +3,13 @@
 ```text
 STATUS: BINDING · 2026-08-24 执行三刀
 仓: juanwan99/pico
-本周 ≤3。禁止再往本表堆历史冤案。
+经验只写本页。本周 ≤3。能再踩才进考古。过期删。禁止过程卡、禁止复活 315。
 ```
 
 ## 本周 3 坑
 
 1. **证据禁止进 PR** — 截图/硬刷帧只贴 Issue 评论
-2. **无部署权拒领** — DONE 必须 `curl tip` = origin/main；合了未部 = 没完
+2. **无部署权拒领** — DONE 必须 `curl tip` = origin/main；合了未部 = 沠完；PR `Closes` 不得在部前关卡
 3. **过门必须是老师手** — 写 1px 轨/选择器 = 退回调查，禁开工
 
 现况只认 [`STATE-NOW.md`](./STATE-NOW.md) + [#634](https://github.com/juanwan99/pico/issues/634)。  
@@ -29,3 +29,6 @@ STATUS: BINDING · 2026-08-24 执行三刀
 | 双核 Kimi+Pi / Dify 门脸 | **否** |
 | 旧交接 / DAY-TASK / #627 / 已关 #646 当在飞 | **否** |
 | oneflow 仓当真源 | **否** · 已 Archive |
+| 把 GIT SHA 当 Dockerfile build-arg 焊在 pip 之上 | **否** · 每次部废缓存、docling 再拉 torch（#655/#659） |
+| 改 Python 工具说明 = Pi 看见 | **否** · 真路径看 `pico-gateway-tools.ts` + SYSTEM.md |
+| PR `Closes #` 合并就算收口 | **否** · 部上且老师手点过门才关 |
