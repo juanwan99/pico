@@ -29,3 +29,4 @@ STATUS: BINDING · 2026-08-24 执行三刀
 | 双核 Kimi+Pi / Dify 门脸 | **否** |
 | 旧交接 / DAY-TASK / #627 / 已关 #646 当在飞 | **否** |
 | oneflow 仓当真源 | **否** · 已 Archive |
+| 部署换 SHA 必须重下 torch | **否** · SHA 只进 runtime env；禁止 build-arg；FROM 钉 digest；ingest 锁 docling-slim + `constraints-no-torch` |
