@@ -1,6 +1,8 @@
 /**
  * Chat school materials: venue folder tree. Open = see folders and documents.
  * No landing destination, no search-first, no venue dropdown.
+ * Tree load = fields + one unscoped search (no N× field_id fan-out).
+ * Empty venues refill lazily on expand.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -10,7 +12,11 @@ import {
   type EduSchoolMaterial,
 } from '~/data-provider/pico/api';
 import { PicoIcon } from '~/components/ui/pico-icons';
-import { groupSchoolTree, loadSchoolFieldTree } from '~/utils/picoSchoolTree';
+import {
+  groupSchoolTree,
+  loadSchoolFieldItems,
+  loadSchoolFieldTree,
+} from '~/utils/picoSchoolTree';
 import { cn } from '~/utils';
 
 function asNamedIds(row: { ids?: string[] }) {
@@ -27,6 +33,7 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   const [fields, setFields] = useState<EduSchoolField[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  const [loadingField, setLoadingField] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,10 +56,15 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
         setFields(tree.fields);
         setItems(tree.items);
         const openMap: Record<string, boolean> = {};
+        const byField = new Set(
+          tree.items
+            .map((row) => (typeof row.fieldId === 'string' ? row.fieldId : ''))
+            .filter(Boolean),
+        );
         for (const field of tree.fields) {
-          if (field.id) openMap[field.id] = true;
+          if (field.id) openMap[field.id] = byField.has(field.id);
         }
-        openMap.other = true;
+        openMap.other = tree.items.some((row) => !row.fieldId);
         setExpanded(openMap);
         if (tree.configured === false) {
           setError('学校材料口还没接通');
@@ -89,6 +101,29 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
     [convo, named],
   );
 
+  const toggleField = useCallback(
+    async (fieldKey: string) => {
+      const nextOpen = !expanded[fieldKey];
+      setExpanded((prev) => ({ ...prev, [fieldKey]: nextOpen }));
+      if (!nextOpen || !fieldKey || fieldKey === 'other') return;
+      const hasItems = items.some((row) => row.fieldId === fieldKey);
+      if (hasItems) return;
+      setLoadingField(fieldKey);
+      try {
+        const row = await loadSchoolFieldItems(fieldKey);
+        setItems((prev) => {
+          const kept = prev.filter((item) => item.fieldId !== fieldKey);
+          return [...kept, ...row.items];
+        });
+      } catch {
+        /* leave empty */
+      } finally {
+        setLoadingField(null);
+      }
+    },
+    [expanded, items],
+  );
+
   const groups = useMemo(() => groupSchoolTree(fields, items), [fields, items]);
 
   return (
@@ -119,14 +154,14 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
           ) : null}
           {groups.map((group) => {
             const fieldKey = group.field.id || 'other';
-            const isOpen = expanded[fieldKey] !== false;
+            const isOpen = !!expanded[fieldKey];
             return (
               <section key={fieldKey} className="py-0.5" data-testid={`school-field-folder-${fieldKey}`}>
                 <button
                   type="button"
                   className="pico-type-sidebar flex w-full items-center gap-1 py-0.5 text-left text-[color:var(--pico-ink)]"
                   aria-expanded={isOpen}
-                  onClick={() => setExpanded((prev) => ({ ...prev, [fieldKey]: !isOpen }))}
+                  onClick={() => void toggleField(fieldKey)}
                 >
                   <span className="w-4 shrink-0 text-[color:var(--pico-ink-2)]">{isOpen ? '▾' : '▸'}</span>
                   <PicoIcon
@@ -137,7 +172,9 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
                   <span>{group.field.name || group.field.id}</span>
                 </button>
                 {isOpen ? (
-                  group.items.length === 0 ? (
+                  loadingField === fieldKey && group.items.length === 0 ? (
+                    <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">正在列出文档…</p>
+                  ) : group.items.length === 0 ? (
                     <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">这场没有文档</p>
                   ) : (
                     <ul className="pl-5">

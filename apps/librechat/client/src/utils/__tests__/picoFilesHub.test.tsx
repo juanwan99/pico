@@ -62,6 +62,8 @@ describe('FilesDirectoryPanel', () => {
     expect(screen.queryByText('当前文件夹')).not.toBeInTheDocument();
     expect(await screen.findByTestId('my-files-transfer-art-1')).toBeInTheDocument();
     expect(screen.getAllByTestId('pico-icon-folder-open').length).toBeGreaterThan(0);
+    // Edu fields are not fetched until 转到学校 opens.
+    expect(mockFields).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('my-files-create-folder'));
     await waitFor(() => {
       expect(mockCreate).toHaveBeenCalledWith('', '');
@@ -74,6 +76,9 @@ describe('FilesDirectoryPanel', () => {
     });
     fireEvent.click(screen.getByTestId('my-files-transfer-art-1'));
     expect(await screen.findByTestId('my-files-transfer-dialog')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockFields).toHaveBeenCalled();
+    });
   });
 
   it('creates nested folder as first icon under an opened folder', async () => {

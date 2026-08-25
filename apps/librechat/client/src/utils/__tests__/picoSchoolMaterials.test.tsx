@@ -1,6 +1,6 @@
 /**
  * T-FILES-PLACE: opening school materials shows a venue folder tree.
- * No search-first, no landing dropdown.
+ * No search-first, no landing dropdown. No per-field N+1 fan-out.
  */
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -42,14 +42,11 @@ describe('SchoolMaterialsBar venue folder tree', () => {
       ],
     });
     mockPutEduNamedIds.mockResolvedValue({ ids: [] });
-    mockSearch.mockImplementation(async (_q: string, fieldId = '') => {
-      if (fieldId === 'field-1') {
-        return { items: [{ id: 'doc-1', title: '课时计划.docx', fieldId: 'field-1' }] };
-      }
-      if (fieldId === 'field-2') {
-        return { items: [{ id: 'doc-2', title: '课文.docx', fieldId: 'field-2' }] };
-      }
-      return { items: [] };
+    mockSearch.mockResolvedValue({
+      items: [
+        { id: 'doc-1', title: '课时计划.docx', fieldId: 'field-1' },
+        { id: 'doc-2', title: '课文.docx', fieldId: 'field-2' },
+      ],
     });
   });
 
@@ -68,8 +65,10 @@ describe('SchoolMaterialsBar venue folder tree', () => {
     expect(screen.queryByText('落到哪一场')).not.toBeInTheDocument();
     expect(screen.queryByTestId('school-land-field')).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(mockSearch).toHaveBeenCalledWith('', 'field-1');
-      expect(mockSearch).toHaveBeenCalledWith('', 'field-2');
+      expect(mockListEduFields).toHaveBeenCalled();
+      // One unscoped search — not N× materials?field_id=
+      expect(mockSearch).toHaveBeenCalledWith('', '');
+      expect(mockSearch).toHaveBeenCalledTimes(1);
     });
   });
 

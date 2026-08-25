@@ -5,8 +5,6 @@ import {
   type EduSchoolMaterial,
 } from '~/data-provider/pico/api';
 
-const FIELD_FETCH_CAP = 24;
-
 export type SchoolFieldGroup = {
   field: EduSchoolField;
   items: EduSchoolMaterial[];
@@ -16,44 +14,70 @@ function materialFieldId(row: EduSchoolMaterial) {
   return typeof row.fieldId === 'string' && row.fieldId ? row.fieldId : '';
 }
 
+function tagItems(items: EduSchoolMaterial[], fallbackFieldId = '') {
+  return items.map((item) => ({
+    ...item,
+    fieldId: materialFieldId(item) || fallbackFieldId || undefined,
+  }));
+}
+
+/** Fields only — first paint for the venue folder tree. */
+export async function loadSchoolFields(): Promise<{
+  fields: EduSchoolField[];
+  configured?: boolean;
+}> {
+  const fieldsRow = await listEduFields().catch(() => ({
+    fields: [] as EduSchoolField[],
+    configured: undefined as boolean | undefined,
+  }));
+  return {
+    fields: Array.isArray(fieldsRow.fields) ? fieldsRow.fields : [],
+    configured: fieldsRow.configured,
+  };
+}
+
+/** One venue's documents (lazy expand). */
+export async function loadSchoolFieldItems(fieldId: string): Promise<{
+  items: EduSchoolMaterial[];
+  configured?: boolean;
+}> {
+  const id = String(fieldId || '').trim();
+  if (!id || id === 'other') {
+    return { items: [], configured: true };
+  }
+  try {
+    const row = await searchEduSchoolMaterials('', id);
+    const items = Array.isArray(row.items) ? row.items : [];
+    return { items: tagItems(items, id), configured: row.configured };
+  } catch {
+    return { items: [], configured: true };
+  }
+}
+
+/**
+ * Venue tree without N+1 fan-out.
+ * Parallel: fields list + one unscoped materials search, then group by fieldId.
+ * Empty venues still appear from the fields list.
+ */
 export async function loadSchoolFieldTree(): Promise<{
   fields: EduSchoolField[];
   items: EduSchoolMaterial[];
   configured?: boolean;
 }> {
-  const fieldsRow = await listEduFields().catch(() => ({ fields: [] as EduSchoolField[] }));
-  const fields = Array.isArray(fieldsRow.fields) ? fieldsRow.fields : [];
-  const scoped = fields.filter((field) => field.id).slice(0, FIELD_FETCH_CAP);
-  if (scoped.length === 0) {
-    const row = await searchEduSchoolMaterials('', '');
-    return {
-      fields,
-      items: Array.isArray(row.items) ? row.items : [],
-      configured: row.configured,
-    };
-  }
-  const chunks = await Promise.all(
-    scoped.map(async (field) => {
-      try {
-        const row = await searchEduSchoolMaterials('', field.id);
-        const items = Array.isArray(row.items) ? row.items : [];
-        return {
-          configured: row.configured,
-          items: items.map((item) => ({
-            ...item,
-            fieldId: materialFieldId(item) || field.id,
-          })),
-        };
-      } catch {
-        return { configured: true, items: [] as EduSchoolMaterial[] };
-      }
-    }),
-  );
-  return {
-    fields,
-    items: chunks.flatMap((chunk) => chunk.items),
-    configured: chunks.every((chunk) => chunk.configured !== false),
-  };
+  const [fieldsRow, materialsRow] = await Promise.all([
+    loadSchoolFields(),
+    searchEduSchoolMaterials('', '').catch(() => ({
+      items: [] as EduSchoolMaterial[],
+      configured: undefined as boolean | undefined,
+    })),
+  ]);
+  const fields = fieldsRow.fields;
+  const items = tagItems(Array.isArray(materialsRow.items) ? materialsRow.items : []);
+  const configured =
+    fieldsRow.configured === false || materialsRow.configured === false
+      ? false
+      : fieldsRow.configured ?? materialsRow.configured;
+  return { fields, items, configured };
 }
 
 export function groupSchoolTree(
