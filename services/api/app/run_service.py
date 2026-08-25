@@ -893,16 +893,20 @@ async def list_artifacts_for_principal(
     principal: Principal,
     *,
     limit: int = 80,
+    folder_id: str | None = None,
 ) -> list[ArtifactRow]:
-    """Membership-scoped recent artifacts (FilesHub「我的生成物」). Not a second ledger."""
+    """Membership-scoped recent artifacts (FilesHub「我的文件」). Not a second ledger."""
     skip_titles = {"回复摘要", "summary", "run summary"}
+    filters = [
+        TaskRow.school_id == principal.school_id,
+        TaskRow.membership_id == principal.membership_id,
+    ]
+    if folder_id is not None:
+        filters.append(ArtifactRow.folder_id == (folder_id or ""))
     result = await session.execute(
         select(ArtifactRow)
         .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
-        .where(
-            TaskRow.school_id == principal.school_id,
-            TaskRow.membership_id == principal.membership_id,
-        )
+        .where(*filters)
         .order_by(ArtifactRow.created_at.desc())
         .limit(max(1, min(int(limit or 80), 200)))
     )

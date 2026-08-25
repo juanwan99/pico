@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal, issue_edu_read_token, issue_edu_write_token, require_any_scope
-from app.db import EduNamedBindRow, get_session, new_id, session_factory
+from app.db import EduNamedBindRow, get_session, new_id
 from app.edu_sso import sanitize_named_ids
 from app.settings import Settings, get_settings
 
@@ -208,6 +208,88 @@ async def load_named_field_id(
     if row is None:
         return ""
     return sanitize_field_id(getattr(row, "field_id", "") or "")
+
+
+def sanitize_folder_id(raw: str | None) -> str:
+    value = str(raw or "").strip()
+    return value if _UUID_RE.match(value) else ""
+
+
+async def _named_bind_row(
+    session: AsyncSession,
+    school_id: str,
+    membership_id: str,
+    conversation_id: str,
+) -> EduNamedBindRow | None:
+    key = _conversation_key(conversation_id)
+    row = (
+        await session.execute(
+            select(EduNamedBindRow).where(
+                EduNamedBindRow.school_id == school_id,
+                EduNamedBindRow.membership_id == membership_id,
+                EduNamedBindRow.conversation_id == key,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None and key:
+        row = (
+            await session.execute(
+                select(EduNamedBindRow).where(
+                    EduNamedBindRow.school_id == school_id,
+                    EduNamedBindRow.membership_id == membership_id,
+                    EduNamedBindRow.conversation_id == "",
+                )
+            )
+        ).scalar_one_or_none()
+    return row
+
+
+async def load_archive_folder_id(
+    session: AsyncSession,
+    school_id: str,
+    membership_id: str,
+    conversation_id: str,
+) -> str:
+    row = await _named_bind_row(session, school_id, membership_id, conversation_id)
+    if row is None:
+        return ""
+    return sanitize_folder_id(getattr(row, "archive_folder_id", "") or "")
+
+
+async def remember_archive_folder_id(
+    session: AsyncSession,
+    school_id: str,
+    membership_id: str,
+    conversation_id: str,
+    folder_id: str,
+) -> str:
+    key = _conversation_key(conversation_id)
+    target = sanitize_folder_id(folder_id)
+    row = (
+        await session.execute(
+            select(EduNamedBindRow).where(
+                EduNamedBindRow.school_id == school_id,
+                EduNamedBindRow.membership_id == membership_id,
+                EduNamedBindRow.conversation_id == key,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        session.add(
+            EduNamedBindRow(
+                id=new_id(),
+                school_id=school_id,
+                membership_id=membership_id,
+                conversation_id=key,
+                item_ids_json="[]",
+                field_id="",
+                archive_folder_id=target,
+            )
+        )
+    else:
+        row.archive_folder_id = target
+    await session.commit()
+    return target
 
 
 async def _edu_get(
@@ -502,7 +584,7 @@ def _school_land_copy(result: dict[str, Any] | None) -> dict[str, Any]:
             "title": data.get("title") or "",
             "publish_state": data.get("publish_state") or "draft",
             "zone": data.get("zone") or "draft",
-            "user_message": f"已落到学校那场{where}。刷新学校能看见。",
+            "user_message": f"已转到学校那场{where}。刷新学校能看见。",
         }
     message = str(data.get("error") or data.get("message") or "学校没写上")
     return {
@@ -519,11 +601,12 @@ async def land_generated_artifact(
     *,
     title: str,
     content: str | bytes,
+    field_id: str = "",
     conversation_id: str | None = None,
     item_id: str = "",
     settings: Settings | None = None,
 ) -> dict[str, Any]:
-    """Best-effort school land. Ledger write already happened. Never pretend it landed."""
+    """Explicit school write through membership/land. Never pretend it landed."""
     name = str(title or "").strip()
     if not name or name in _BOOKKEEPING:
         return {"ok": False, "landed": False, "code": "kind_skip"}
@@ -536,27 +619,26 @@ async def land_generated_artifact(
             "landed": False,
             "code": "kind_skip",
             "error": "这份不进学校场（只网页/Word/Excel）",
+            "user_message": "这份不进学校场（只网页/Word/Excel）。还留在我的文件。",
+        }
+    target_field = sanitize_field_id(field_id)
+    if not target_field:
+        return {
+            "ok": False,
+            "landed": False,
+            "code": "need_named_field",
+            "error": "请选择要转存到的学校位置",
+            "user_message": "请选择要转存到的学校位置。没选不会写进学校。",
         }
     convo = str(conversation_id or "").strip()
-    factory = session_factory()
-    async with factory() as session:
-        field_id = await load_named_field_id(
-            session, principal.school_id, principal.membership_id, convo
-        )
-        named_ids = await load_named_ids(
-            session, principal.school_id, principal.membership_id, convo
-        )
     payload: dict[str, Any] = {
         "title": name.rsplit(".", 1)[0][:80] if "." in name else name[:80],
         "filename": name[:180],
         "kind": kind,
         "conversation_id": convo,
+        "field_id": target_field,
     }
-    if field_id:
-        payload["field_id"] = field_id
     target_item = sanitize_field_id(item_id)
-    if not target_item and len(named_ids) == 1:
-        target_item = named_ids[0]
     if target_item:
         payload["item_id"] = target_item
     if kind == "page":
@@ -577,14 +659,14 @@ async def land_generated_artifact(
         detail = exc.detail if isinstance(exc.detail, dict) else {}
         message = str(detail.get("message") or "学校这次没写成")
         code = str(detail.get("code") or "edu.land_failed")
-        if not field_id and code in {"need_named_field", "edu.error"}:
-            message = "请点名要落到哪一场。没点名不会写进学校。"
+        if code in {"need_named_field", "field_write_required"}:
+            message = message or "这场你没有写权，进不去。"
         return {
             "ok": False,
             "landed": False,
             "code": code,
             "error": message,
-            "user_message": f"学校没写上：{message}这份只留在对话草稿纸，刷新学校看不见。",
+            "user_message": f"学校没写上：{message}这份还留在我的文件。",
         }
     if data.get("configured") is False:
         return {
@@ -592,6 +674,6 @@ async def land_generated_artifact(
             "landed": False,
             "code": "edu.unconfigured",
             "error": "学校材料口还没接通",
-            "user_message": "学校材料口还没接通。这份只留在对话草稿纸，刷新学校看不见。",
+            "user_message": "学校材料口还没接通。这份还留在我的文件。",
         }
     return _school_land_copy(data)

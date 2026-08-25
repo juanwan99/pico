@@ -1,8 +1,8 @@
 /**
- * Workbench picker: list/search school materials the membership can see, then check
- * which ones enter this round. Unchecked bodies never go to the model.
+ * Workbench picker: school materials as venue folders. Check documents across
+ * venues. Unchecked bodies never go to the model. No landing destination here.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getEduNamedIds,
   listEduFields,
@@ -13,11 +13,14 @@ import {
 } from '~/data-provider/pico/api';
 import { cn } from '~/utils';
 
-function asNamedIds(row: { ids?: string[]; field_id?: string }) {
+function asNamedIds(row: { ids?: string[] }) {
   return {
     ids: Array.isArray(row.ids) ? row.ids : [],
-    fieldId: typeof row.field_id === 'string' ? row.field_id : '',
   };
+}
+
+function materialFieldId(row: EduSchoolMaterial) {
+  return typeof row.fieldId === 'string' ? row.fieldId : '';
 }
 
 export default function SchoolMaterialsBar({ conversationId }: { conversationId?: string | null }) {
@@ -26,16 +29,15 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   const [q, setQ] = useState('');
   const [items, setItems] = useState<EduSchoolMaterial[]>([]);
   const [named, setNamed] = useState<string[]>([]);
-  const [fieldId, setFieldId] = useState('');
   const [fields, setFields] = useState<EduSchoolField[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const search = useCallback(async (nextField = fieldId, nextQ = q) => {
+  const search = useCallback(async (nextQ = q) => {
     setBusy(true);
     setError(null);
     try {
-      const row = await searchEduSchoolMaterials(nextQ.trim(), nextField);
+      const row = await searchEduSchoolMaterials(nextQ.trim(), '');
       setItems(Array.isArray(row.items) ? row.items : []);
       if (row.configured === false) {
         setError('学校材料口还没接通');
@@ -51,7 +53,7 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
     } finally {
       setBusy(false);
     }
-  }, [fieldId, q]);
+  }, [q]);
 
   useEffect(() => {
     if (!open) {
@@ -62,23 +64,18 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
       setBusy(true);
       setError(null);
       try {
-        const [namedRow, fieldsRow] = await Promise.all([
-          getEduNamedIds(convo).catch(() => ({ ids: [] as string[], field_id: '' })),
+        const [namedRow, fieldsRow, listed] = await Promise.all([
+          getEduNamedIds(convo).catch(() => ({ ids: [] as string[] })),
           listEduFields().catch(() => ({ fields: [] as EduSchoolField[] })),
+          searchEduSchoolMaterials(q.trim(), ''),
         ]);
         if (cancelled) {
           return;
         }
-        const next = asNamedIds(namedRow);
-        setNamed(next.ids);
-        setFieldId(next.fieldId);
+        setNamed(asNamedIds(namedRow).ids);
         setFields(Array.isArray(fieldsRow.fields) ? fieldsRow.fields : []);
-        const row = await searchEduSchoolMaterials(q.trim(), next.fieldId);
-        if (cancelled) {
-          return;
-        }
-        setItems(Array.isArray(row.items) ? row.items : []);
-        if (row.configured === false) {
+        setItems(Array.isArray(listed.items) ? listed.items : []);
+        if (listed.configured === false) {
           setError('学校材料口还没接通');
         }
       } catch (err) {
@@ -106,29 +103,44 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
       const next = named.includes(id) ? named.filter((x) => x !== id) : [...named, id].slice(0, 12);
       setNamed(next);
       try {
-        const row = await putEduNamedIds(convo, next, fieldId);
+        const row = await putEduNamedIds(convo, next, '');
         setNamed(Array.isArray(row.ids) ? row.ids : next);
-        if (typeof row.field_id === 'string') setFieldId(row.field_id);
       } catch {
         setError('勾选没写上');
       }
     },
-    [convo, named, fieldId],
+    [convo, named],
   );
 
-  const pickField = useCallback(
-    async (nextField: string) => {
-      setFieldId(nextField);
-      try {
-        const row = await putEduNamedIds(convo, named, nextField);
-        if (typeof row.field_id === 'string') setFieldId(row.field_id);
-      } catch {
-        setError('落点场没写上');
+  const groups = useMemo(() => {
+    const byField = new Map<string, { field: EduSchoolField; items: EduSchoolMaterial[] }>();
+    for (const field of fields) {
+      if (!field.id) continue;
+      byField.set(field.id, { field, items: [] });
+    }
+    const other: EduSchoolMaterial[] = [];
+    for (const item of items) {
+      if (!item.id) continue;
+      const fid = materialFieldId(item);
+      const bucket = fid ? byField.get(fid) : undefined;
+      if (bucket) {
+        bucket.items.push(item);
+      } else {
+        other.push(item);
       }
-      await search(nextField);
-    },
-    [convo, named, search],
-  );
+    }
+    const listed = [...byField.values()];
+    if (other.length) {
+      listed.push({
+        field: { id: '', name: '其他' },
+        items: other,
+      });
+    }
+    if (q.trim()) {
+      return listed.filter((group) => group.items.length > 0);
+    }
+    return listed;
+  }, [fields, items, q]);
 
   return (
     <div className="mb-2 w-full" data-testid="school-materials-bar">
@@ -150,24 +162,6 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
       </button>
       {open ? (
         <div className="pico-type-body mt-1 rounded-lg border border-black/[0.08] bg-white p-2">
-          <label className="pico-type-aux mb-1 block text-[color:var(--pico-ink-2)]">
-            落到哪一场
-            <select
-              className="mt-0.5 h-8 w-full rounded-md border border-black/[0.08] px-2 outline-none"
-              value={fieldId}
-              data-testid="school-land-field"
-              onChange={(e) => void pickField(e.target.value)}
-            >
-              <option value="">请点名一场（没点名学校看不见）</option>
-              {fields.map((field) =>
-                field.id ? (
-                  <option key={field.id} value={field.id}>
-                    {field.name || field.id}
-                  </option>
-                ) : null,
-              )}
-            </select>
-          </label>
           <div className="flex gap-1">
             <input
               value={q}
@@ -196,32 +190,52 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
               {error}
             </p>
           ) : null}
-          <ul className="mt-1 max-h-40 overflow-y-auto">
-            {items.map((row) => {
-              const id = row.id;
-              if (!id) return null;
-              const checked = named.includes(id);
+          <div className="mt-1 max-h-56 overflow-y-auto" data-testid="school-materials-tree">
+            {groups.map((group) => {
+              const fieldKey = group.field.id || 'other';
               return (
-                <li key={id} className="flex items-start gap-2 py-1">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => void toggle(id)}
-                    data-testid={`school-material-${id}`}
-                  />
-                  <span className={cn('min-w-0', checked ? 'text-[#111]' : 'text-[#555]')}>
-                    {row.title || id}
-                    {row.unread ? <span className="ml-1 text-[#999]">未读懂</span> : null}
-                  </span>
-                </li>
+                <section
+                  key={fieldKey}
+                  className="mb-1.5"
+                  data-testid={`school-field-folder-${fieldKey}`}
+                >
+                  <p className="pico-type-aux px-0.5 py-0.5 font-medium text-[color:var(--pico-ink-2)]">
+                    {group.field.name || group.field.id || '其他'}
+                  </p>
+                  {group.items.length === 0 ? (
+                    <p className="pico-type-aux px-0.5 text-[color:var(--pico-ink-3)]">
+                      这场还没有列出文档
+                    </p>
+                  ) : (
+                    <ul>
+                      {group.items.map((row) => {
+                        const id = row.id;
+                        if (!id) return null;
+                        const checked = named.includes(id);
+                        return (
+                          <li key={id} className="flex items-start gap-2 py-1">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => void toggle(id)}
+                              data-testid={`school-material-${id}`}
+                            />
+                            <span className={cn('min-w-0', checked ? 'text-[#111]' : 'text-[#555]')}>
+                              {row.title || id}
+                              {row.unread ? <span className="ml-1 text-[#999]">未读懂</span> : null}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
               );
             })}
-          </ul>
-          {!busy && items.length === 0 ? (
+          </div>
+          {!busy && groups.length === 0 ? (
             <p className="pico-type-aux mt-1 text-[color:var(--pico-ink-3)]">
-              {fieldId
-                ? '这场还没有列出文档。搜一下，或确认学校侧有权。'
-                : '先点名一场，再勾该场下的具体文档。'}
+              还没有列出学校材料。搜一下，或确认学校侧有权。
             </p>
           ) : null}
         </div>

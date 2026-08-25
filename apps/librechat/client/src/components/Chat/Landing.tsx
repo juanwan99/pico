@@ -15,6 +15,7 @@ import {
   useComposerAttachInput,
 } from '~/components/Chat/Input/ComposerPlusMenu';
 import { cn } from '~/utils';
+import ArchiveFolderBar from '~/components/Chat/ArchiveFolderBar';
 import SchoolMaterialsBar from '~/components/Chat/SchoolMaterialsBar';
 import {
   consumePendingModel,
@@ -122,6 +123,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
         {/* One-row composer: + · input · send arrow */}
         <div className="mt-8 w-full max-w-[797px]">
           <SchoolMaterialsBar conversationId={chatCtx?.conversation?.conversationId} />
+          <ArchiveFolderBar conversationId={chatCtx?.conversation?.conversationId} />
           <div
             className="pico-wb-composer overflow-visible rounded-[var(--pico-radius)] border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] shadow-[var(--pico-shadow)]"
             data-testid="pico-wb-home-composer"
