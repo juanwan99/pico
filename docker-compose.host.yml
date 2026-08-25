@@ -34,8 +34,8 @@ services:
       # Production multi-step default is true Pi; image must ship pinned pi CLI.
       # Lean (no Node): Dockerfile.pico-api — not used by host deploy path.
       dockerfile: Dockerfile.pico-api.true-pi
-      args:
-        PICO_GIT_SHA: ${PICO_GIT_SHA:-unknown}
+      # SHA is runtime env only (.env / environment). Never a build-arg:
+      # a changing ARG busts every pip layer and re-downloads torch.
     restart: unless-stopped
     # B1: allow uvicorn lifespan drain (~45s) before SIGKILL on deploy recreate.
     stop_grace_period: 60s

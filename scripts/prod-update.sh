@@ -90,6 +90,7 @@ if [ -f .env ]; then
     echo "PICO_GIT_SHA=${CURRENT_SHA}" >>.env
   fi
 fi
+# Runtime identity for compose environment /health. Not a Docker build-arg.
 export PICO_GIT_SHA="$CURRENT_SHA"
 
 # One-teacher-one-disk host bind. Destroying a session must not wipe this tree.

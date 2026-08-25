@@ -1,0 +1,7 @@
+# Office ingest only. Never the `docling` meta-package (it pulls torch via [standard]).
+# Pin exact versions from the live no-torch image (docling-slim 2.121.0).
+docling-slim[format-office,format-xlsx,convert-core]==2.121.0
+opencv-python-headless==5.0.0.93
+rapidocr==3.9.2
+onnxruntime==1.29.0
+pypdfium2==5.13.0

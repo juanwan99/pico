@@ -1,0 +1,5 @@
+# Impossible pins. If any dependency asks for these, pip fails closed
+# instead of downloading torch/CUDA. Do not delete.
+torch==0.0.0
+torchvision==0.0.0
+torchaudio==0.0.0
