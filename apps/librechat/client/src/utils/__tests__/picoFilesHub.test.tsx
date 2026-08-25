@@ -4,7 +4,13 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import FilesDirectoryPanel from '~/components/Workbench/FilesDirectoryPanel';
-import { createMyFolder, listEduFields, listMyFolders, listMyPicoArtifacts } from '~/data-provider/pico/api';
+import {
+  createMyFolder,
+  listEduFields,
+  listMyFolders,
+  listMyPicoArtifacts,
+  renameMyFolder,
+} from '~/data-provider/pico/api';
 
 jest.mock('~/utils', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
@@ -16,10 +22,12 @@ jest.mock('~/data-provider/pico/api', () => ({
   listEduFields: jest.fn(),
   listMyFolders: jest.fn(),
   listMyPicoArtifacts: jest.fn(),
+  renameMyFolder: jest.fn(),
   transferMyArtifact: jest.fn(),
 }));
 
 const mockCreate = createMyFolder as jest.MockedFunction<typeof createMyFolder>;
+const mockRename = renameMyFolder as jest.MockedFunction<typeof renameMyFolder>;
 const mockFields = listEduFields as jest.MockedFunction<typeof listEduFields>;
 const mockFolders = listMyFolders as jest.MockedFunction<typeof listMyFolders>;
 const mockMine = listMyPicoArtifacts as jest.MockedFunction<typeof listMyPicoArtifacts>;
@@ -31,23 +39,28 @@ describe('FilesDirectoryPanel', () => {
     mockMine.mockResolvedValue({
       artifacts: [{ id: 'art-1', title: '通知.html', kind: 'html' }],
     });
-    mockCreate.mockResolvedValue({ folder: { id: 'fold-1', name: '备课' } });
+    mockCreate.mockResolvedValue({ folder: { id: 'fold-1', name: '新建文件夹' } });
+    mockRename.mockResolvedValue({ folder: { id: 'fold-1', name: '备课' } });
+    mockFolders
+      .mockResolvedValueOnce({ folders: [] })
+      .mockResolvedValue({ folders: [{ id: 'fold-1', name: '新建文件夹' }] });
   });
 
-  it('can create a folder and transfer a file, without 落到哪一场 or search', async () => {
+  it('creates a folder like Explorer then renames, and can transfer', async () => {
     render(<FilesDirectoryPanel />);
     expect(await screen.findByTestId('files-directory')).toBeInTheDocument();
     expect(await screen.findByTestId('my-files-transfer-art-1')).toBeInTheDocument();
     expect(screen.queryByText('落到哪一场')).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('搜索学校材料标题')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('新夹名')).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId('my-files-create-folder'));
     await waitFor(() => {
-      expect(mockCreate).toHaveBeenCalledWith('未命名夹');
+      expect(mockCreate).toHaveBeenCalledWith('');
     });
-    fireEvent.change(screen.getByTestId('my-files-folder-name'), { target: { value: '备课' } });
-    fireEvent.click(screen.getByTestId('my-files-create-folder'));
+    const rename = await screen.findByTestId('my-files-folder-rename-fold-1');
+    fireEvent.change(rename, { target: { value: '备课' } });
+    fireEvent.blur(rename);
     await waitFor(() => {
-      expect(mockCreate).toHaveBeenCalledWith('备课');
+      expect(mockRename).toHaveBeenCalledWith('fold-1', '备课');
     });
     fireEvent.click(screen.getByTestId('my-files-transfer-art-1'));
     expect(await screen.findByTestId('my-files-transfer-dialog')).toBeInTheDocument();
