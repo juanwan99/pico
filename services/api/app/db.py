@@ -259,14 +259,16 @@ class PersonalFolderRow(Base):
         UniqueConstraint(
             "school_id",
             "membership_id",
+            "parent_id",
             "name",
-            name="personal_folders_name_uniq",
+            name="personal_folders_parent_name_uniq",
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     school_id: Mapped[str] = mapped_column(String(128), index=True)
     membership_id: Mapped[str] = mapped_column(String(128), index=True)
+    parent_id: Mapped[str] = mapped_column(String(36), default="", index=True)
     name: Mapped[str] = mapped_column(String(40), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
@@ -364,6 +366,24 @@ def _migrate_sqlite_sync(conn) -> None:
     if ncols and "archive_folder_id" not in ncols:
         conn.execute(
             text("ALTER TABLE edu_named_bind ADD COLUMN archive_folder_id VARCHAR(36) DEFAULT ''")
+        )
+
+    try:
+        pf_rows = conn.execute(text("PRAGMA table_info(personal_folders)")).fetchall()
+    except Exception:  # noqa: BLE001
+        pf_rows = []
+    pfcols = {r[1] for r in pf_rows}
+    if pfcols and "parent_id" not in pfcols:
+        conn.execute(
+            text("ALTER TABLE personal_folders ADD COLUMN parent_id VARCHAR(36) DEFAULT ''")
+        )
+    if pfcols:
+        conn.execute(text("DROP INDEX IF EXISTS personal_folders_name_uniq"))
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS personal_folders_parent_name_uniq "
+                "ON personal_folders (school_id, membership_id, parent_id, name)"
+            )
         )
 
     duplicate_runs = conn.execute(
