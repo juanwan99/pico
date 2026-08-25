@@ -123,6 +123,12 @@ async function proxy(req, res, path, options = {}) {
     if (['1', 'true'].includes(sp.get('mine'))) {
       out.set('mine', 'true');
     }
+    if (sp.has('folder_id')) {
+      const folderId = sp.get('folder_id') || '';
+      if (!folderId || ID_RE.test(folderId)) {
+        out.set('folder_id', folderId);
+      }
+    }
     const s = out.toString();
     safeQs = s ? `?${s}` : '';
   }
@@ -400,6 +406,27 @@ router.get('/v1/edu/materials/:itemId', (req, res) => {
 router.get('/v1/edu/named', (req, res) => proxy(req, res, '/v1/edu/named'));
 router.put('/v1/edu/named', (req, res) => proxy(req, res, '/v1/edu/named'));
 router.post('/v1/edu/land', (req, res) => proxy(req, res, '/v1/edu/land'));
+
+router.get('/v1/my/folders', (req, res) => proxy(req, res, '/v1/my/folders'));
+router.post('/v1/my/folders', (req, res) => proxy(req, res, '/v1/my/folders'));
+router.get('/v1/my/archive', (req, res) => proxy(req, res, '/v1/my/archive'));
+router.put('/v1/my/archive', (req, res) => proxy(req, res, '/v1/my/archive'));
+router.post('/v1/my/artifacts/:artifactId/place', (req, res) => {
+  try {
+    assertId(req.params.artifactId, 'artifactId');
+    return proxy(req, res, `/v1/my/artifacts/${req.params.artifactId}/place`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+router.post('/v1/my/artifacts/:artifactId/transfer', (req, res) => {
+  try {
+    assertId(req.params.artifactId, 'artifactId');
+    return proxy(req, res, `/v1/my/artifacts/${req.params.artifactId}/transfer`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
 
 // R5: teacher self-read wrong paths → human 404 (not opaque Express default).
 router.use((req, res) => {

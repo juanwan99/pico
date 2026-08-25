@@ -60,9 +60,20 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
     return folders.find((row) => row.id === folderId)?.name || '';
   }, [folderId, folders]);
 
+  const unusedFolderName = () => {
+    const typed = newFolderName.trim();
+    if (typed) return typed;
+    const taken = new Set(folders.map((row) => row.name));
+    if (!taken.has('未命名夹')) return '未命名夹';
+    for (let i = 2; i < 80; i += 1) {
+      const name = `未命名夹 ${i}`;
+      if (!taken.has(name)) return name;
+    }
+    return '未命名夹';
+  };
+
   const createFolder = async () => {
-    const name = newFolderName.trim();
-    if (!name) return;
+    const name = unusedFolderName();
     setError(null);
     try {
       await createMyFolder(name);

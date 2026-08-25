@@ -5,56 +5,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getEduNamedIds,
-  listEduFields,
   putEduNamedIds,
-  searchEduSchoolMaterials,
   type EduSchoolField,
   type EduSchoolMaterial,
 } from '~/data-provider/pico/api';
+import { groupSchoolTree, loadSchoolFieldTree } from '~/utils/picoSchoolTree';
 import { cn } from '~/utils';
-
-const FIELD_FETCH_CAP = 24;
 
 function asNamedIds(row: { ids?: string[] }) {
   return {
     ids: Array.isArray(row.ids) ? row.ids : [],
-  };
-}
-
-function materialFieldId(row: EduSchoolMaterial) {
-  return typeof row.fieldId === 'string' && row.fieldId ? row.fieldId : '';
-}
-
-async function loadDocumentsForFields(fields: EduSchoolField[]) {
-  const scoped = fields.filter((field) => field.id).slice(0, FIELD_FETCH_CAP);
-  if (scoped.length === 0) {
-    const row = await searchEduSchoolMaterials('', '');
-    return {
-      items: Array.isArray(row.items) ? row.items : [],
-      configured: row.configured,
-    };
-  }
-  const chunks = await Promise.all(
-    scoped.map(async (field) => {
-      try {
-        const row = await searchEduSchoolMaterials('', field.id);
-        const items = Array.isArray(row.items) ? row.items : [];
-        return {
-          configured: row.configured,
-          items: items.map((item) => ({
-            ...item,
-            fieldId: materialFieldId(item) || field.id,
-          })),
-        };
-      } catch {
-        return { configured: true, items: [] as EduSchoolMaterial[] };
-      }
-    }),
-  );
-  const configured = chunks.every((chunk) => chunk.configured !== false);
-  return {
-    configured,
-    items: chunks.flatMap((chunk) => chunk.items),
   };
 }
 
@@ -77,28 +37,23 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
       setBusy(true);
       setError(null);
       try {
-        const [namedRow, fieldsRow] = await Promise.all([
+        const [namedRow, tree] = await Promise.all([
           getEduNamedIds(convo).catch(() => ({ ids: [] as string[] })),
-          listEduFields().catch(() => ({ fields: [] as EduSchoolField[] })),
+          loadSchoolFieldTree(),
         ]);
         if (cancelled) {
           return;
         }
-        const nextFields = Array.isArray(fieldsRow.fields) ? fieldsRow.fields : [];
         setNamed(asNamedIds(namedRow).ids);
-        setFields(nextFields);
-        const listed = await loadDocumentsForFields(nextFields);
-        if (cancelled) {
-          return;
-        }
-        setItems(listed.items);
+        setFields(tree.fields);
+        setItems(tree.items);
         const openMap: Record<string, boolean> = {};
-        for (const field of nextFields) {
+        for (const field of tree.fields) {
           if (field.id) openMap[field.id] = true;
         }
         openMap.other = true;
         setExpanded(openMap);
-        if (listed.configured === false) {
+        if (tree.configured === false) {
           setError('学校材料口还没接通');
         }
       } catch (err) {
@@ -133,32 +88,7 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
     [convo, named],
   );
 
-  const groups = useMemo(() => {
-    const byField = new Map<string, { field: EduSchoolField; items: EduSchoolMaterial[] }>();
-    for (const field of fields) {
-      if (!field.id) continue;
-      byField.set(field.id, { field, items: [] });
-    }
-    const other: EduSchoolMaterial[] = [];
-    for (const item of items) {
-      if (!item.id) continue;
-      const fid = materialFieldId(item);
-      const bucket = fid ? byField.get(fid) : undefined;
-      if (bucket) {
-        bucket.items.push(item);
-      } else {
-        other.push(item);
-      }
-    }
-    const listed = [...byField.values()];
-    if (other.length) {
-      listed.push({
-        field: { id: 'other', name: '其他' },
-        items: other,
-      });
-    }
-    return listed;
-  }, [fields, items]);
+  const groups = useMemo(() => groupSchoolTree(fields, items), [fields, items]);
 
   return (
     <div className="mb-1 w-full text-left" data-testid="school-materials-bar">

@@ -49,25 +49,34 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
     [convo],
   );
 
+  const currentName = folders.find((row) => row.id === folderId)?.name || '我的文件';
+
   return (
     <div className="mb-2 w-full text-left" data-testid="archive-folder-bar">
-      <label className="pico-type-body flex items-center gap-2 text-[color:var(--pico-ink)]">
+      <label className="pico-type-body flex items-baseline gap-2 text-[color:var(--pico-ink)]">
         存档位置
-        <select
-          className="pico-type-body h-9 min-w-0 flex-1 bg-transparent outline-none"
-          value={folderId}
-          data-testid="archive-folder-select"
-          onChange={(e) => void pick(e.target.value)}
-        >
-          <option value="">我的文件</option>
-          {folders.map((folder) =>
-            folder.id ? (
-              <option key={folder.id} value={folder.id}>
-                {folder.name || folder.id}
-              </option>
-            ) : null,
-          )}
-        </select>
+        <span className="relative min-w-0 flex-1">
+          <select
+            className="pico-type-body relative z-10 w-full cursor-pointer border-0 bg-transparent p-0 text-transparent shadow-none outline-none [appearance:none] [-moz-appearance:none] [-webkit-appearance:none]"
+            value={folderId}
+            data-testid="archive-folder-select"
+            aria-label="存档位置"
+            onChange={(e) => void pick(e.target.value)}
+          >
+            <option value="">我的文件</option>
+            {folders.map((folder) =>
+              folder.id ? (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name || folder.id}
+                </option>
+              ) : null,
+            )}
+          </select>
+          <span className="pointer-events-none absolute inset-0 flex items-baseline gap-1 text-[color:var(--pico-ink-2)]">
+            <span className="truncate">{currentName}</span>
+            <span aria-hidden>▾</span>
+          </span>
+        </span>
       </label>
       {error ? (
         <p className="pico-type-aux mt-0.5 text-[#b42318]" role="status">
