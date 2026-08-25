@@ -1,5 +1,7 @@
 """Skill thin policy unit tests."""
 
+from pathlib import Path
+
 from pico_orchestrator.skill_policy import (
     declared_tools_for_skill,
     instruction_for_snapshot,
@@ -198,3 +200,27 @@ def test_kb_search_only_when_asking_school_materials():
     kb = snapshot_for_skill("skill-kb-ask")
     assert "kb_search" in kb["tools"]
     assert "出处" in instruction_for_snapshot(kb)
+    ts = (
+        Path(__file__).resolve().parents[2]
+        / "services"
+        / "true_pi_bridge"
+        / "pico-gateway-tools.ts"
+    ).read_text(encoding="utf-8")
+    assert "Call only when the teacher asks about school materials" in ts
+    assert "does not mean you must call" in ts
+    assert "uploaded/generated" not in ts
+    assert "去搜库" not in ts
+    assert "材料/文档" not in ts
+    assert "这是什么" not in ts
+    skill_md = (
+        Path(__file__).resolve().parents[2]
+        / "apps"
+        / "librechat"
+        / "skill"
+        / "skill-kb-ask"
+        / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "Always search first" not in skill_md
+    assert "Call `kb_search` first" not in skill_md
+    assert "does not mean you must call" in skill_md
+    assert "这是什么" not in skill_md
