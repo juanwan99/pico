@@ -2,27 +2,49 @@
 
 ```text
 仓: juanwan99/pico ONLY
-DATE: 2026-08-25
+DATE: 2026-08-26
 用法: 开窗读本文。禁止把正文贴进卡或对业主聊天。
-派发条只点名编号（最多 3 条）。过期删。
-工具: docs/TOOLING-CATALOG.md（本文不抄）。
+派发条只点名编号（最多 3 条）。过期删（总管同轮删/并）。
+工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
 北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok
+按域检索: A 派发 · B 产品 · C 部署/ECS · D Cloud Agent
 ```
 
-## 派发 / 收口
+## A · 派发 / 收口
 
 1. **只改 pico。** 禁写 edu-core / edu-cloud。
-2. **1 卡 1 PR。** CI 红、测炸、部翻车，都在**原 PR 原分支**补。禁止为修测/修部/修 Dockerfile/改文档新开第二张 PR。同卡续 = 业主说还差。
+2. **1 卡 1 PR。** CI 红、测炸、部翻车，都在**原 PR 原分支**补。禁止为修测/修部/修 Dockerfile/改文档新开第二张 PR（同卡续 = 业主说还差）。
 3. **无部署权拒领。** 不能 `PICO_DEPLOY_SHA=… bash /opt/pico/scripts/prod-update.sh` = 不 stamp。DONE 必须 `curl -fsS https://pico.aivia.asia/api/pico/tip` = origin/main。合了未部 = 没完。
 4. **禁止 PR 写 `Closes #<卡>`。** 部前关卡 = 失真。合了未部要打回 OPEN。
 5. **证据贴本卡 Issue 评论。** 禁止截图 docs PR。
 6. **过门是老师手。** 写 1px 轨 / 词表 / 选择器 = 退回。禁开工。
 7. **同域一张 `stamp-ok`。** 残债同卡。禁 `T-*-DEBT`。
 8. **卡面四行合同。** 已锁事实写 Issue 评论，禁止把手册/315 贴进卡。
+9. **聊天默认易失。** 约束下一窗 → Issue 评论或 `STATE-NOW` / 本文 / `TOOLING-CATALOG`。回复用 `§编号` / `Issue#`，禁「上次我们说」。
+10. **合与部只归执行窗。** 总管 / 主管窗 / 本类 Cloud Agent：**不合 main、不跑 prod-update**。总管做：派发·两问戳·黄红审戳·现况三行·经验/工具入库。P0 止血可调查、起候选 PR，**合与部仍交执行窗**（有 stamp 才领）。禁止「总管代合代部」当常态。
+21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / ECS 常驻 Grok / 聊天当真源。
+22. **总管环（不合不部）：** stamp → 派发条贴本卡 `## 派发` → **spawn-executor**（官方 `POST /v1/agents`；首条=派发条；`CURSOR_EXECUTOR_ENV` = 单独执行环境，含 TS/SSH）→ 订 PR/CI → timer 读评 → tip-pin → 刷 STATE-NOW/#634 → CLEAR。无钥则合同 PR/Issue 评 `@cursor`。合了未部关卡=打回 OPEN。禁止 mailbox / ECS 常驻。禁止总管代合代部（含「应急改+部」）。
+23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审/过门（不开新卡）· `CLEAR` tip=main + 五句后停或下一张。人只留：目标 · 黄红争议 · 老师手 · PASS。同域第二张 stamp-ok=废派。
 
-## 现网 / 产品
+## B · 现网 / 产品
 
-9. **GIT SHA 不当 Docker build-arg。** 当 ARG 会让每次部重下 torch（#658/#659）。SHA 只进 compose `.env`。改 Python 工具说明 ≠ Pi 看见；真路径是 `pico-gateway-tools.ts` + SYSTEM.md。
-10. **用法 = Grok。** 禁问句/材料特判、禁词表监工、禁自研压缩器/记忆 OS。只接 Pi 官方 compact。
-11. **CLAIM-WB-DEGREE-WEB 仍 NO。** 不代签 PASS。
-12. **`juanwan99/oneflow` 不当真源**（已 Archive）。
+11. **用法 = Grok。** 禁问句/材料特判、禁词表监工、禁自研压缩器/记忆 OS。只接 Pi 官方 compact。
+12. **CLAIM-WB-DEGREE-WEB 仍 NO。** 不代签 PASS。
+13. **`juanwan99/oneflow` 不当真源**（已 Archive）。
+14. **改 Python 工具说明 ≠ Pi 看见。** 真路径：`pico-gateway-tools.ts` + `SYSTEM.md`。
+
+## C · 部署 / ECS
+
+15. **GIT SHA 不当 Docker build-arg。** 当 ARG 会让每次部重下 torch（#658/#659）。SHA 只进 compose `.env`。
+16. **部署真源：** `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`；证伪用 **tip-pin** + **remote-health**（见 TOOLING-CATALOG）。公网 tip 与 ECS loopback 必须同 SHA。
+17. **SSH 进机：只用 Tailscale MagicDNS。** Host 别名 `ecs` / `pico-prod` → `aliyun-hy`，用户 `ops`。禁止拿 Cloud Agent 公网 egress IP 去开安全组 22（IP 漂移 = 假通路）。
+
+## D · Cloud Agent
+
+18. **环境 Secrets（名 only · 值不进仓）：** `TS_AUTHKEY`（reusable/ephemeral）、`PICO_PROD_SSH_PRIVATE_KEY`；建议 `PICO_PROD_SSH_USER=ops`、`PICO_PROD_SSH_HOST=aliyun-hy`。脚本对错误值 `ps` / 公网 `47.*|139.*|100.*` 会强制改回 ops@aliyun-hy。
+19. **Bootstrap：** `scripts/cloud-agent-install.sh`（install）+ `scripts/cloud-agent-start.sh`（每 boot：tailscaled → `tailscale up` → 写 `~/.ssh` → 软测 `ssh ecs`）。Dashboard Environment 的 install/start 可回退到 `~/.local/bin` 同名脚本（snapshot 基座）。
+20. **禁止：** 密钥写进 `environment.json` / Issue / PR；把「白名单 22」当 Cloud Agent 部署通道；Save 前不经 draft build + 新 agent 验 `ECS_OK`。
+
+```text
+派发点名示例：经验 §3 §17 §22 · 工具 spawn-executor · tip-pin · ssh-ecs
+```

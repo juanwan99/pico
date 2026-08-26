@@ -1,6 +1,6 @@
 # MEMORY-RESET
 
-经验真源已迁到 [`docs/EXPERIENCE.md`](./EXPERIENCE.md)。本文不作经验。开窗读 EXPERIENCE。
+经验真源已迁到 [`docs/EXPERIENCE.md`](./EXPERIENCE.md)（按域）。本文**只考古**，不作经验、不当开场必清。
 
 ## 考古（不当现况 · 禁止当开场必清）
 
@@ -14,10 +14,11 @@
 | 过门写控件清单 | **否** · 老师手一句 |
 | CLAIM-WB 可签 | **否** · 仍 NO |
 | 双核 Kimi+Pi / Dify 门脸 | **否** |
-| 旧交接 / DAY-TASK 当在飞 | **否** |
+| 旧交接 / DAY-TASK / #646 当在飞 | **否** · 现况只认 STATE-NOW 三行 |
 | oneflow 仓当真源 | **否** · 已 Archive |
 | 把 GIT SHA 当 Dockerfile build-arg | **否** · 每次部废缓存、docling 再拉 torch（#659） |
 | 改 Python 工具说明 = Pi 看见 | **否** · 真路径看 `pico-gateway-tools.ts` + SYSTEM.md |
 | PR `Closes #` 合并就算收口 | **否** · 部上且老师手点过门才关 |
 | 对业主必须四行/两套嘴 | **否** · 已解除 |
 | CI 红就新开 PR | **否** · 原 PR 补 |
+| Cloud Agent 靠公网 22 / egress 白名单进 ECS | **否** · Tailscale MagicDNS · `ssh ecs`（ops@aliyun-hy）· EXPERIENCE §17–19 |
