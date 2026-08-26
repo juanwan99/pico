@@ -66,7 +66,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#697](https://github.com/juanwan99/pico/issues/697) | T-HTML-PUBLIC HTML 公网页 + 收数 · 业主 PASS · tip=`837443f4…` |
 | 已收口 | [#701](https://github.com/juanwan99/pico/pull/701) | 来源条对齐 + 夜间整页 · 业主 pass · tip=`88160b31…` |
 | 已部 | [#703](https://github.com/juanwan99/pico/issues/703) · [#704](https://github.com/juanwan99/pico/pull/704) | T-UNMASK-PI 已部 @ `af0ca6e5…` · 现 tip 含其后四刀 · 等老师手 T1/T2/T3 |
-| 已部等老师手 | [#706](https://github.com/juanwan99/pico/issues/706) | 夜战母卡 · 四子卡已部 · 禁自签 PASS · 禁关 |
+| 已部等老师手 | [#706](https://github.com/juanwan99/pico/issues/706) | 夜战母卡 · 四子卡已部 · docs #715 禁部 · 禁自签 PASS · 禁关 |
 | 已部 | [#707](https://github.com/juanwan99/pico/issues/707) · [#711](https://github.com/juanwan99/pico/pull/711) | T-VISION-SANDBOX · tip 对齐 `97e421c6…` · 等老师手 |
 | 已部 | [#708](https://github.com/juanwan99/pico/issues/708) · [#713](https://github.com/juanwan99/pico/pull/713) | T-VISION-IN-FILE · tip 对齐 `97e421c6…` · 等老师手 |
 | 已部 | [#709](https://github.com/juanwan99/pico/issues/709) · [#712](https://github.com/juanwan99/pico/pull/712) | T-PPT-IMAGE-IN-DECK · tip 对齐 `97e421c6…` · 等老师手 |
