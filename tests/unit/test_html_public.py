@@ -11,7 +11,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.gateway import ToolError
-from pico_orchestrator.html_public import inject_collect_hook, normalize_collect_payload
+from pico_orchestrator.html_public import (
+    COLLECT_HOOK,
+    inject_collect_hook,
+    normalize_collect_payload,
+)
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 from pico_orchestrator.true_pi.runtime import pico_system_text
 
@@ -24,7 +28,8 @@ def test_collect_hook_is_plumbing_not_prompt():
     assert "教师" not in out
     assert "姓名" not in out
     again = inject_collect_hook(out)
-    assert again.count("__PICO_COLLECT__") == 1
+    assert again == out
+    assert again.count(COLLECT_HOOK) == 1
 
 
 def test_collect_payload_caps():

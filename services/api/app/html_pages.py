@@ -11,12 +11,6 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-from app.artifact_store import decode_artifact_payload, encode_artifact_payload
-from app.auth import Principal
-from app.db import ArtifactRow, HtmlPageRow, PersonalFolderRow, TaskRow, new_id
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.html_public import (
     PUBLIC_CSP,
@@ -24,6 +18,12 @@ from pico_orchestrator.html_public import (
     inject_collect_hook,
     normalize_collect_payload,
 )
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.artifact_store import decode_artifact_payload, encode_artifact_payload
+from app.auth import Principal
+from app.db import ArtifactRow, HtmlPageRow, PersonalFolderRow, TaskRow, new_id
 
 router = APIRouter()
 

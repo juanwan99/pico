@@ -46,8 +46,8 @@ from app.edu_files import router as edu_files_router
 from app.edu_kb_ingest import router as edu_kb_ingest_router
 from app.edu_school import router as edu_school_router
 from app.edu_sso import router as edu_sso_router
-from app.kb_rebuild import rebuild_materials
 from app.html_pages import router as html_pages_router
+from app.kb_rebuild import rebuild_materials
 from app.my_files import router as my_files_router
 from app.openai_compat import router as openai_compat_router
 from app.rate_limit import ChatRateLimitMiddleware
