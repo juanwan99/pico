@@ -15,16 +15,17 @@
   --pico-fw-medium: 560;
 }
 
+html.dark,
 html.dark .pico-app {
-  --pico-shell: #212121;
-  --pico-sidebar: #171717;
-  --pico-surface: #2a2a2a;
-  --pico-surface-2: #262626;
-  --pico-ink: #f0f0ee;
-  --pico-ink-2: #b8bbb7;
-  --pico-ink-3: #8d918c;
-  --pico-line: #333433;
-  --pico-line-2: #3d3e3c;
+  --pico-shell: #1c1c1c;
+  --pico-sidebar: #141414;
+  --pico-surface: #242424;
+  --pico-surface-2: #2c2c2c;
+  --pico-ink: #f4f4f2;
+  --pico-ink-2: #d5d6d3;
+  --pico-ink-3: #b8bab6;
+  --pico-line: #3f403e;
+  --pico-line-2: #4a4b49;
   --pico-mint-wash: #16352c;
   --pico-violet-wash: #2a2448;
   --pico-violet-line: #4a3f7a;
@@ -33,6 +34,12 @@ html.dark .pico-app {
   --pico-blue-wash: #1c2740;
   --pico-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 12px 32px rgba(0, 0, 0, 0.22);
   --pico-shadow-raised: 0 2px 5px rgba(0, 0, 0, 0.32), 0 18px 44px rgba(0, 0, 0, 0.28);
+  --pico-wb-bg: #1c1c1c;
+  --pico-wb-rail: #141414;
+  --pico-wb-surface: #242424;
+  --pico-wb-ink: #f4f4f2;
+  --pico-wb-muted: #b8bab6;
+  --pico-wb-line: rgba(255, 255, 255, 0.1);
   color: var(--pico-ink);
 }
 

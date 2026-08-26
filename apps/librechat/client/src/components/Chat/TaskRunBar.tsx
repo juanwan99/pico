@@ -50,11 +50,11 @@ function TaskRunBar({
 
   return (
     <div
-      className="dark:bg-surface-primary/90 relative z-[210] mt-[52px] flex min-h-11 shrink-0 items-center gap-2 overflow-hidden border-b border-black/[0.06] bg-white px-3 py-1 dark:border-border-light sm:px-4"
+      className="relative z-[210] mt-[52px] flex min-h-11 shrink-0 items-center gap-2 overflow-hidden border-b border-black/[0.06] bg-[color:var(--pico-surface)] px-3 py-1 text-[color:var(--pico-ink)] dark:border-[color:var(--pico-line)] sm:px-4"
       data-testid="task-run-bar"
     >
       <div className="min-w-0 flex-1 overflow-hidden">
-        <p className="truncate text-[13px] font-medium text-[#1a1a1a] dark:text-text-primary">
+        <p className="truncate text-[13px] font-medium text-[color:var(--pico-ink)]">
           {displayTitle}
         </p>
         {model ? <p className="truncate text-[11px] text-[#8c8c8c]">模型 {model}</p> : null}

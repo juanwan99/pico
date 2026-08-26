@@ -552,7 +552,7 @@ const ChatForm = memo(function ChatForm({
                   : 'shadow-[0_2px_12px_rgba(0,0,0,0.04)]',
                 isTemporary
                   ? 'border-violet-800/60 bg-violet-950/10'
-                  : 'border-black/[0.06] bg-white dark:border-border-light dark:bg-surface-chat',
+                  : 'border-black/[0.06] bg-[color:var(--pico-surface)] dark:border-[color:var(--pico-line)]',
               )}
             >
               <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} />

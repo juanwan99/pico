@@ -140,7 +140,7 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
     <div className="mb-1 w-full text-left" data-testid="school-materials-bar">
       <button
         type="button"
-        className="pico-type-body inline-flex items-center gap-2 py-0.5 text-[color:var(--pico-ink)]"
+        className="pico-type-body inline-flex items-center gap-2 py-0.5 text-[color:var(--pico-ink)] dark:text-text-primary"
         data-testid="school-materials-toggle"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
