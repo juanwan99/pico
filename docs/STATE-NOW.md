@@ -4,13 +4,13 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #690 T-OFFICE-KERNEL（办公文档核 · 卡 1/2 · stamp-ok）
+在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → dcb47c0059311c836960499b6f5d54207b9500bf = origin/main（#687 已部；#686 业主 PASS）
-阻塞: 无 · #690 本窗写核（1卡1PR）
+      → 0acf8f624905955bc4d3ff9b777228a7130349de = origin/main（#691 已部；#690 业主 PASS）
+阻塞: 无 · 无在飞则讨论不开卡
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
-PRODUCT PASS: #682/#684/#686 业主已签 · #449/#316 勿关 · 记忆/人视角日用挂起
+PRODUCT PASS: #682/#684/#686/#690 业主已签 · #449/#316 勿关 · 记忆/人视角日用挂起
 经验: docs/EXPERIENCE.md（唯一 · 按域）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 北极星: DIRECTION-NOW §0-star · 用法 = Grok
@@ -61,7 +61,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#679](https://github.com/juanwan99/pico/pull/679) | Cloud Agent TS + ssh ecs · 已合 main |
 | 已收口 | [#671](https://github.com/juanwan99/pico/issues/671) | T-FILES-PLACE · 业主令收口 |
 | 产品签 | [#449](https://github.com/juanwan99/pico/issues/449) · [#316](https://github.com/juanwan99/pico/issues/316) | 业主 YES · **勿关** |
-| 在飞 | [#690](https://github.com/juanwan99/pico/issues/690) | T-OFFICE-KERNEL 办公文档核 · 卡 1/2 · stamp-ok · 卡 2 勿开 |
+| 已收口 | [#690](https://github.com/juanwan99/pico/issues/690) | T-OFFICE-KERNEL 办公文档核 · 业主 PASS · tip=`0acf8f62…` · 卡 2 等点头 |
 | 挂起 | 记忆 · 人视角日用 | 业主令后面再做 · 不开卡 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面冻到 9/7 · 可钉现况三行评论 |
