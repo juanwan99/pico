@@ -119,5 +119,6 @@ def test_cover_tools_on_pi_allowlist():
         "verify_document",
     ):
         assert name in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_pptx_lib" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 25
+    assert len(ALLOWED_GATEWAY_TOOLS) == 26

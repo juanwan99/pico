@@ -23,6 +23,7 @@ const ALLOWED = [
   "generate_html_document",
   "generate_docx_document",
   "generate_pptx_document",
+  "sandbox_pptx_lib",
   "generate_xlsx_document",
   "edit_docx_document",
   "edit_pptx_document",
@@ -341,6 +342,19 @@ export default function (pi: ExtensionAPI) {
       {
         artifact_id: Type.Optional(Type.String()),
         preview_url: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "sandbox_pptx_lib",
+    "Ceiling isolated python-pptx. Prefer generate_pptx_document/spec for ordinary decks. No import; use Presentation/Inches/save_deck/IMAGE_PATHS. Must save_deck(prs). Empty shells fail. No host bash.",
+    Type.Object(
+      {
+        source: Type.String(),
+        title: Type.Optional(Type.String()),
+        image_artifact_ids: Type.Optional(Type.Array(Type.String())),
       },
       { additionalProperties: true },
     ),
