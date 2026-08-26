@@ -293,6 +293,21 @@ async def meta_tip() -> dict:
     }
 
 
+def _ops_reindex_peer_allowed(host: str) -> bool:
+    """pico-api binds 127.0.0.1 only; host-network hairpin may present eth0, not 127.0.0.1."""
+    peer = (host or "").strip().lower()
+    if peer in {"127.0.0.1", "::1", "localhost"}:
+        return True
+    try:
+        import ipaddress
+
+        ip = ipaddress.ip_address(peer)
+    except ValueError:
+        return False
+    # Reachable peers are already local to the loopback bind; allow RFC1918 / link-local / loopback.
+    return bool(ip.is_loopback or ip.is_private or ip.is_link_local)
+
+
 @app.post("/v1/kb/reindex")
 async def kb_reindex(
     principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
@@ -303,9 +318,9 @@ async def kb_reindex(
 
 @app.post("/v1/kb/reindex-all")
 async def kb_reindex_all(request: Request) -> dict:
-    """Ops rebuild. Loopback only — pico-api is not published."""
+    """Ops rebuild. pico-api is loopback-bound; peer may be eth0 under host-network hairpin."""
     host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1"}:
+    if not _ops_reindex_peer_allowed(host):
         raise HTTPException(status_code=403, detail={"code": "forbidden", "message": "loopback only"})
     return await rebuild_materials(None)
 

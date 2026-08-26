@@ -10,6 +10,7 @@ from pico_orchestrator.meili_kb import (
     MeiliIndex,
     document_from_artifact,
     extract_index_text,
+    health_fields,
     is_material,
     parse_office_bytes,
     quote_filter_value,
@@ -202,3 +203,44 @@ def test_ensure_sets_filterable(monkeypatch: pytest.MonkeyPatch) -> None:
     assert patches
     attrs = patches[0][2]["filterableAttributes"]
     assert "school_id" in attrs and "membership_id" in attrs
+
+
+def test_health_fields_honest_tiers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MEILI_MASTER_KEY", raising=False)
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    scan = health_fields()
+    assert scan["meili_configured"] is False
+    assert scan["kb_mode"] == "scan"
+
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+
+    class _Down:
+        def ping(self) -> bool:
+            return False
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _Down())
+    down = health_fields()
+    assert down["meili_configured"] is True
+    assert down["meili_reachable"] is False
+    assert down["kb_mode"] == "scan"
+    assert down["meili_embedder"] is False
+
+    class _Up:
+        def ping(self) -> bool:
+            return True
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _Up())
+    keyword = health_fields()
+    assert keyword["meili_reachable"] is True
+    assert keyword["kb_mode"] == "keyword"
+
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "sk-sf")
+    hybrid = health_fields()
+    assert hybrid["meili_embedder"] is True
+    assert hybrid["kb_mode"] == "hybrid"
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _Down())
+    no_fake = health_fields()
+    assert no_fake["meili_embedder"] is True
+    assert no_fake["kb_mode"] == "scan"

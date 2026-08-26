@@ -45,6 +45,8 @@ def _fake_runtime(
     login_code: str = "200",
     login_network_fail: bool = False,
     login_failures_before_success: int = 0,
+    reindex_http: str = "200",
+    reindex_body: str = '{"ok":true,"indexed":1,"skipped":0,"total":1}',
 ) -> Path:
     """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w)."""
     bin_dir = tmp_path / "bin"
@@ -70,15 +72,35 @@ def _fake_runtime(
     else:
         # Real prod-update uses: curl -o /dev/null -w "%{http_code}" …/login
         login_body = f"  */login) printf '%s' '{login_code}' ;;\n"
+    # Keep reindex JSON free of single quotes so the fake curl stays simple.
+    assert "'" not in reindex_body
     (bin_dir / "curl").write_text(
         "#!/usr/bin/env bash\n"
+        "out_file=\"\"\n"
+        "args=(\"$@\")\n"
+        "i=0\n"
+        "while [ \"$i\" -lt \"${#args[@]}\" ]; do\n"
+        "  if [ \"${args[$i]}\" = \"-o\" ]; then\n"
+        "    i=$((i + 1))\n"
+        "    out_file=\"${args[$i]}\"\n"
+        "  fi\n"
+        "  i=$((i + 1))\n"
+        "done\n"
         "case \"${*: -1}\" in\n"
         "  */health) printf '{\"ok\":true,\"git_sha\":\"%s\","
         "\"true_pi_binary_available\":true,"
         "\"true_pi_package_pin\":\"@mariozechner/pi-coding-agent@0.73.1\"}' "
         "\"$PICO_GIT_SHA\" ;;\n"
-        f"{login_body}"
-        "esac\n"
+        "  */kb/reindex-all)\n"
+        "    if [ -n \"$out_file\" ]; then printf '%s' '"
+        + reindex_body
+        + "' >\"$out_file\"; fi\n"
+        "    printf '%s' '"
+        + reindex_http
+        + "'\n"
+        "    ;;\n"
+        + login_body
+        + "esac\n"
     )
     for path in bin_dir.iterdir():
         path.chmod(0o755)
@@ -242,6 +264,19 @@ def test_prod_update_refuses_login_network_failure(tmp_path: Path) -> None:
     assert "[pico] done" not in result.stdout
 
 
+def test_prod_update_refuses_kb_reindex_failure(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(
+        tmp_path,
+        reindex_http="403",
+        reindex_body='{"detail":{"code":"forbidden","message":"loopback only"}}',
+    )
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 10
+    assert "kb reindex-all failed" in result.stderr
+    assert "[pico] done" not in result.stdout
+
+
 def test_prod_update_ui_readiness_uses_librechat_url_default(tmp_path: Path) -> None:
     production, sha = _production_checkout(tmp_path)
     bin_dir = _fake_runtime(tmp_path)
@@ -249,6 +284,7 @@ def test_prod_update_ui_readiness_uses_librechat_url_default(tmp_path: Path) -> 
     assert result.returncode == 0, result.stderr
     assert "UI readiness: waiting for http://127.0.0.1:18088/login HTTP 200" in result.stdout
     assert "8080/login" not in result.stdout
+    assert "kb reindex ok" in result.stdout
 
 
 def test_prod_update_ui_readiness_honors_librechat_url_override(tmp_path: Path) -> None:

@@ -108,59 +108,64 @@ def test_mcp_tools_respect_empty_allowlist(monkeypatch: pytest.MonkeyPatch) -> N
 def test_kb_search_hit_and_miss(monkeypatch: pytest.MonkeyPatch) -> None:
     store = _MemStore()
     principal = _P()
-    green = [
-        {
-            "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-            "title": "校历要点.md",
-            "excerpt": "春季学期于 3 月 1 日开学，期末考试在 6 月下旬。",
-            "kind": "material",
-            "fieldId": "ffffffff-1111-4222-8333-444444444444",
-        }
-    ]
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
 
-    async def fake_green(p, *, query, field_id="", settings=None):
-        _ = p, field_id, settings
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None):
+        _ = client
+        assert school_id == principal.school_id
+        assert membership_id == principal.membership_id
         if "量子" in query:
-            return {"configured": True, "items": [], "dumped": False, "status": 200}
-        return {"configured": True, "items": green, "dumped": False, "status": 200}
+            return {"hits": [], "hybrid": False}
+        return {
+            "hybrid": False,
+            "hits": [
+                {
+                    "artifact_id": "art-cal",
+                    "title": "校历要点.md",
+                    "text": "春季学期于 3 月 1 日开学，期末考试在 6 月下旬。",
+                    "school_id": principal.school_id,
+                    "membership_id": principal.membership_id,
+                }
+            ],
+        }
 
-    monkeypatch.setattr("app.edu_school.search_green_library", fake_green)
+    monkeypatch.setattr(
+        "pico_orchestrator.tools_builtin.search_materials", fake_search
+    )
 
     async def _run() -> None:
-        await store.write(
-            principal,
-            title="会话随传.md",
-            content="春季学期于 3 月 1 日开学。这段只在 Pico 对话里。",
-            kind="text",
-        )
         gw = build_default_gateway(store)
         hit = await gw.invoke(principal, "kb_search", {"query": "开学"})
         assert hit["honest_miss"] is False
         assert hit["count"] == 1
-        assert hit["hits"][0]["item_id"] == green[0]["id"]
-        assert "artifact_id" not in hit["hits"][0]
+        assert hit["hits"][0]["artifact_id"] == "art-cal"
         assert "开学" in hit["hits"][0]["excerpt"]
         assert hit["retrieved"] is True
-        assert hit["sources"][0]["item_id"] == green[0]["id"]
+        assert hit["sources"][0]["artifact_id"] == "art-cal"
         assert hit["sources"][0]["title"] == "校历要点.md"
-        assert hit["mode"] == "edu_green"
+        assert hit["mode"] == "keyword"
 
         miss = await gw.invoke(principal, "kb_search", {"query": "量子隧穿"})
         assert miss["honest_miss"] is True
         assert miss["count"] == 0
         assert miss["sources"] == []
-        assert "绿区" in miss["user_message"]
+        assert "已入库" in miss["user_message"]
 
     asyncio.run(_run())
 
 
-def test_kb_search_unconfigured_does_not_scan_pico_uploads(
+def test_kb_search_meili_down_falls_back_to_scan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_green(*_a, **_k):
-        return {"configured": False, "items": [], "dumped": False, "status": 200}
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
 
-    monkeypatch.setattr("app.edu_school.search_green_library", fake_green)
+    def boom(*_a, **_k):
+        raise RuntimeError("meili unavailable")
+
+    monkeypatch.setattr("pico_orchestrator.tools_builtin.search_materials", boom)
     store = _MemStore()
     principal = _P()
 
@@ -173,38 +178,41 @@ def test_kb_search_unconfigured_does_not_scan_pico_uploads(
         )
         gw = build_default_gateway(store)
         out = await gw.invoke(principal, "kb_search", {"query": "开学"})
-        assert out["honest_miss"] is True
-        assert out["mode"] == "unconfigured"
-        assert out["hits"] == []
-        assert out["sources"] == []
-        assert "不造第二套绿区" in out["user_message"]
+        assert out["honest_miss"] is False
+        assert out["mode"] == "scan"
+        assert out["degraded"] is True
+        assert out["hits"][0]["artifact_id"].startswith("art-")
+        assert out["sources"][0]["artifact_id"]
 
     asyncio.run(_run())
 
 
 def test_kb_search_ignores_client_filter(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict[str, str] = {}
+    captured: dict[str, Any] = {}
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
 
-    async def fake_green(p, *, query, field_id="", settings=None):
-        captured["school_id"] = p.school_id
-        captured["membership_id"] = p.membership_id
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None):
+        captured["school_id"] = school_id
+        captured["membership_id"] = membership_id
         captured["query"] = query
-        captured["field_id"] = field_id
-        _ = settings
+        _ = limit, client
         return {
-            "configured": True,
-            "status": 200,
-            "items": [
+            "hybrid": False,
+            "hits": [
                 {
-                    "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                    "artifact_id": "art-1",
                     "title": "本校.md",
-                    "excerpt": "开学典礼",
-                    "kind": "material",
+                    "text": "开学典礼",
+                    "school_id": school_id,
+                    "membership_id": membership_id,
                 }
             ],
         }
 
-    monkeypatch.setattr("app.edu_school.search_green_library", fake_green)
+    monkeypatch.setattr(
+        "pico_orchestrator.tools_builtin.search_materials", fake_search
+    )
     gw = build_default_gateway(_MemStore())
     principal = _P()
 
@@ -217,10 +225,7 @@ def test_kb_search_ignores_client_filter(monkeypatch: pytest.MonkeyPatch) -> Non
         assert captured["school_id"] == principal.school_id
         assert captured["membership_id"] == principal.membership_id
         assert captured["query"] == "开学"
-        assert captured["field_id"] == ""
-        assert [h["item_id"] for h in out["hits"]] == [
-            "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-        ]
+        assert [h["artifact_id"] for h in out["hits"]] == ["art-1"]
         assert out["honest_miss"] is False
 
     asyncio.run(_run())
@@ -243,31 +248,36 @@ def test_mcp_time_and_workspace_stat() -> None:
     asyncio.run(_run())
 
 
-def test_kb_search_leave_green_is_honest_miss(monkeypatch: pytest.MonkeyPatch) -> None:
-    items = [
-        {
-            "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-            "title": "校历要点.md",
-            "excerpt": "三月开学",
-            "kind": "material",
+def test_kb_search_drops_other_tenant_hits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None):
+        _ = query, school_id, membership_id, limit, client
+        return {
+            "hybrid": False,
+            "hits": [
+                {
+                    "artifact_id": "art-other",
+                    "title": "别校.md",
+                    "text": "三月开学",
+                    "school_id": "other-school",
+                    "membership_id": "other-member",
+                }
+            ],
         }
-    ]
 
-    async def fake_green(*_a, **_k):
-        return {"configured": True, "items": list(items), "dumped": False, "status": 200}
-
-    monkeypatch.setattr("app.edu_school.search_green_library", fake_green)
+    monkeypatch.setattr(
+        "pico_orchestrator.tools_builtin.search_materials", fake_search
+    )
     gw = build_default_gateway(_MemStore())
     principal = _P()
 
     async def _run() -> None:
-        hit = await gw.invoke(principal, "kb_search", {"query": "开学"})
-        assert hit["honest_miss"] is False
-        items.clear()
         miss = await gw.invoke(principal, "kb_search", {"query": "开学"})
         assert miss["honest_miss"] is True
+        assert miss["hits"] == []
         assert miss["sources"] == []
-        assert "出绿" in miss["user_message"]
 
     asyncio.run(_run())
 
