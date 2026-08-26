@@ -27,6 +27,7 @@ class ToolServer:
     principal: Principal
     gateway: AllowlistGateway
     run_id: str
+    conversation_id: str | None = None
     token: str = field(default_factory=lambda: secrets.token_urlsafe(24))
     host: str = "127.0.0.1"
     port: int = 0
@@ -158,6 +159,7 @@ class ToolServer:
             school_id=self.principal.school_id,
             membership_id=self.principal.membership_id,
             run_id=self.run_id,
+            conversation_id=self.conversation_id,
         )
         try:
             result = await self.gateway.invoke(self.principal, name, args)

@@ -71,6 +71,7 @@ from pico_orchestrator.sandbox_s1 import (
 from pico_orchestrator.sandbox_s2 import PNG_MAGIC, raster_html_isolated, raster_meta_from_write
 from pico_orchestrator.sandbox_sidecar import sidecar_json
 from pico_orchestrator.usage_hook import emit_sandbox_usage
+from pico_orchestrator.vision import remember_conversation_png
 from pico_orchestrator.web_guard import parse_public_http_url
 from pico_orchestrator.web_tools import web_fetch_handler, web_search_handler
 
@@ -1222,6 +1223,7 @@ def _workspace_handlers(
                     )
                     raster_fields = raster_meta_from_write(shot, byte_size=len(png))
                     screenshot_id = raster_fields.get("screenshot", {}).get("artifact_id")
+                    remember_conversation_png(png)
                     seen = True
             except Exception:  # noqa: BLE001 — raster must not drop title/h1
                 raster_fields = {}
@@ -1395,6 +1397,43 @@ def _workspace_handlers(
             )
             if not isinstance(out, dict):
                 raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
+            png: bytes | None = None
+            try:
+                raw = await sidecar_json(
+                    "GET",
+                    f"/v1/internal/sessions/{session_id}/png",
+                    params={
+                        "school_id": principal.school_id,
+                        "membership_id": principal.membership_id,
+                    },
+                )
+                if isinstance(raw, (bytes, bytearray)) and bytes(raw).startswith(
+                    PNG_MAGIC
+                ):
+                    png = bytes(raw)
+            except Exception:
+                logger.debug("sandbox screenshot png fetch skipped", exc_info=True)
+            if png:
+                remember_conversation_png(png)
+                try:
+                    shot_title = (
+                        f"shot-{safe_segment(session_id, fallback='page')}.png"
+                    )
+                    deny_secret_filename(shot_title)
+                    shot = await with_io_timeout(
+                        store.write(
+                            principal,
+                            title=shot_title,
+                            content=png,
+                            kind="image",
+                        ),
+                        what="sandbox_browser_screenshot_png",
+                    )
+                    out = {**out, **raster_meta_from_write(shot, byte_size=len(png))}
+                except Exception:
+                    logger.debug(
+                        "sandbox screenshot artifact write skipped", exc_info=True
+                    )
             await _emit(True, {"workspace_id": out.get("workspace_id") or ws})
             return out
         except ToolError as exc:
@@ -1797,6 +1836,7 @@ def build_default_gateway(
             description=(
                 "See THIS run's HTML preview: given artifact_id or this-run preview_url, "
                 "return title, h1, and a PNG screenshot artifact of the same-run HTML. "
+                "The PNG is remembered so the teacher's next question can see the page. "
                 "Does not fetch public sites or intranet (127.0.0.1 / pico.aivia.asia admin denied). "
                 "Args: artifact_id? | preview_url?"
             ),
@@ -1835,7 +1875,8 @@ def build_default_gateway(
         ToolSpec(
             name="sandbox_browser_screenshot",
             description=(
-                "Return metadata for the current isolated browser screen (PNG on the view path). "
+                "Capture the current isolated browser screen as a PNG artifact. "
+                "The PNG is remembered so the teacher's next question can see the page. "
                 "Args: session_id."
             ),
             handler=browser_screenshot,
