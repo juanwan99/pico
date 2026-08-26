@@ -23,6 +23,10 @@ const ALLOWED = [
   "generate_html_document",
   "generate_docx_document",
   "generate_pptx_document",
+  "inspect_document",
+  "render_document",
+  "edit_document",
+  "verify_document",
   "edit_docx_document",
   "edit_pptx_document",
   "generate_image",
@@ -159,12 +163,14 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_docx_document",
-    "Create a real .docx Artifact (Pico gateway).",
+    "Create a real .docx via pico.office.spec/v1. Tables must be table blocks (or markdown tables in body). Images: pass image_artifact_id from generate_image.",
     Type.Object(
       {
         title: Type.String(),
         marker: Type.Optional(Type.String()),
         body: Type.Optional(Type.String()),
+        spec: Type.Optional(Type.String()),
+        image_artifact_id: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),
@@ -172,12 +178,67 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_pptx_document",
-    "Create a real .pptx Artifact (Pico gateway).",
+    "Create a real .pptx via pico.office.spec/v1. Put pictures on slides (image_artifact_id or spec.slide.image), not as a sidecar png.",
     Type.Object(
       {
         title: Type.String(),
         marker: Type.Optional(Type.String()),
         body: Type.Optional(Type.String()),
+        spec: Type.Optional(Type.String()),
+        image_artifact_id: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "inspect_document",
+    "Read Word/PPT structure: addresses p:N, t:N, s:N.title. Does not write a file.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "render_document",
+    "Render pico.office.spec/v1 into a real .docx/.pptx Artifact (path A).",
+    Type.Object(
+      {
+        spec: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
+        marker: Type.Optional(Type.String()),
+        image_artifact_id: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "edit_document",
+    "Path B: change one inspect address on an uploaded Word/PPT. Other parts stay.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
+        address: Type.Optional(Type.String()),
+        text: Type.Optional(Type.String()),
+        output_title: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "verify_document",
+    "Fail-closed OOXML check (package + can open). sandbox_document_open is preview only.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),

@@ -405,20 +405,24 @@ def build_docx_document(
     title: str,
     marker: str,
     body: str | None = None,
+    spec: object | None = None,
+    images: dict[str, bytes] | None = None,
 ) -> bytes:
-    """python-docx Word with the caller body. Does not pad 套话 to hit a quota."""
+    """Word via spec → python-docx render. Does not pad 套话 to hit a quota."""
+    from pico_orchestrator.office.render import render_spec
+    from pico_orchestrator.office.spec import parse_spec, spec_from_plain_body
+
     marker = _require_marker(marker)
     heading = _display_title(title, "Pico DOCX")
-    from docx import Document
-
-    doc = Document()
-    doc.add_heading(heading, level=0)
-    doc.add_paragraph(f"标记：{marker}")
-    for para in _docx_body_paragraphs(body):
-        doc.add_paragraph(para)
-    buf = io.BytesIO()
-    doc.save(buf)
-    return buf.getvalue()
+    if spec is not None:
+        parsed = parse_spec(spec)
+        if parsed.get("kind") != "docx":
+            raise ValueError("这份 spec 不是 Word（kind 必须是 docx）。")
+        parsed["title"] = parsed.get("title") or heading
+        parsed["marker"] = marker
+        return render_spec(parsed, images=images)
+    compiled = spec_from_plain_body(kind="docx", title=heading, marker=marker, body=body)
+    return render_spec(compiled, images=images)
 
 
 KNOWN_CALC_CELL = "NIGHT-P4-CELL-ALPHA"
@@ -533,17 +537,21 @@ def build_pptx_document(
     title: str,
     marker: str,
     body: str | None = None,
+    spec: object | None = None,
+    images: dict[str, bytes] | None = None,
 ) -> bytes:
-    """python-pptx deck from caller slides. Does not pad empty 说明 pages."""
+    """PPT via spec → python-pptx render. Does not pad empty 说明 pages."""
+    from pico_orchestrator.office.render import render_spec
+    from pico_orchestrator.office.spec import parse_spec, spec_from_plain_body
+
     marker = _require_marker(marker)
     heading = _display_title(title, "Pico PPTX")
-    from pptx import Presentation
-
-    deck = Presentation()
-    layout = deck.slide_layouts[1] if len(deck.slide_layouts) > 1 else deck.slide_layouts[0]
-    for slide_title, slide_body in _pptx_slides(body, title=heading, marker=marker):
-        slide = deck.slides.add_slide(layout)
-        _set_slide_title_body(slide, slide_title, slide_body)
-    buf = io.BytesIO()
-    deck.save(buf)
-    return buf.getvalue()
+    if spec is not None:
+        parsed = parse_spec(spec)
+        if parsed.get("kind") != "pptx":
+            raise ValueError("这份 spec 不是 PPT（kind 必须是 pptx）。")
+        parsed["title"] = parsed.get("title") or heading
+        parsed["marker"] = marker
+        return render_spec(parsed, images=images)
+    compiled = spec_from_plain_body(kind="pptx", title=heading, marker=marker, body=body)
+    return render_spec(compiled, images=images)

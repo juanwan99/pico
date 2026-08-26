@@ -4,10 +4,10 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: 无
+在飞: #690 T-OFFICE-KERNEL（办公文档核 · 卡 1/2 · stamp-ok）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → dcb47c0059311c836960499b6f5d54207b9500bf = origin/main（#687 已部；#686 业主 PASS）
-阻塞: 无 · 无在飞则讨论不开卡
+      → dcb47c0059311c836960499b6f5d54207b9500bf （#687 已部；#688 docs 合 main 未部、不要部）
+阻塞: 无
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686 业主已签 · #449/#316 勿关 · 记忆/人视角日用挂起
@@ -54,6 +54,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 
 | 优先级 | Issue | 说明 |
 |--------|-------|------|
+| 在飞 | [#690](https://github.com/juanwan99/pico/issues/690) | T-OFFICE-KERNEL 办公文档核 · 卡 1/2 |
 | 已收口 | [#686](https://github.com/juanwan99/pico/issues/686) | T-LONG-OFFICE 长任务办公 · 业主 PASS · tip=`dcb47c00…` |
 | 已收口 | [#684](https://github.com/juanwan99/pico/issues/684) | T-KB-USABLE 库能用 · 业主 PASS · tip=`c8acc46b…` |
 | 已收口 | [#682](https://github.com/juanwan99/pico/issues/682) | A1 T-KB-ENGINE-ON · 业主 PASS · tip=`590772fe…` |

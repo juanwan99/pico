@@ -38,6 +38,17 @@ from pico_orchestrator.gateway import (
 from pico_orchestrator.image_generate import generate_image_bytes
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
 from pico_orchestrator.meili_kb import extract_index_text, meili_configured, search_materials
+from pico_orchestrator.office.edit import edit_by_address
+from pico_orchestrator.office.inspect import inspect_bytes
+from pico_orchestrator.office.qa import verify_bytes
+from pico_orchestrator.office.render import render_spec
+from pico_orchestrator.office.spec import (
+    SpecError,
+    attach_image_block,
+    body_has_markdown_table,
+    parse_spec,
+    spec_from_plain_body,
+)
 from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
 from pico_orchestrator.sandbox_s1 import (
     MAX_CONTENT_CHARS,
@@ -593,14 +604,69 @@ def _workspace_handlers(
         )
         return result
 
+    async def _office_images_from_spec(
+        principal: Principal, spec: dict[str, Any]
+    ) -> dict[str, bytes]:
+        ids: list[str] = []
+        for block in spec.get("blocks") or []:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "image":
+                aid = str(block.get("artifact_id") or "").strip()
+                if aid:
+                    ids.append(aid)
+            image = block.get("image")
+            if isinstance(image, dict):
+                aid = str(image.get("artifact_id") or "").strip()
+                if aid:
+                    ids.append(aid)
+        out: dict[str, bytes] = {}
+        for aid in ids:
+            row = await store.read(principal, artifact_id=aid)
+            if row is None:
+                raise ToolError(
+                    "artifact.not_found",
+                    f"找不到图 {aid}。请先 generate_image，再把 artifact_id 写进 spec。",
+                )
+            try:
+                out[aid] = _artifact_bytes(row)
+            except ToolError as exc:
+                raise ToolError(
+                    "artifact.not_image",
+                    f"artifact {aid} 不是可插入的图。",
+                ) from exc
+        return out
+
+    def _spec_arg(args: dict[str, Any]) -> dict[str, Any] | None:
+        raw = args.get("spec")
+        if raw is None or raw == "":
+            return None
+        try:
+            return parse_spec(raw)
+        except SpecError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+
     async def generate_docx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _ensure_extension(_artifact_title(args), ".docx")
         marker = _marker_arg(args)
         body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+        spec = _spec_arg(args)
+        image_id = args.get("image_artifact_id")
+        image_id = str(image_id).strip() if image_id is not None else ""
         try:
-            require_docx_body(body)
-            raw = build_docx_document(title=title, marker=marker, body=body)
-        except ValueError as exc:
+            if spec is None:
+                if not body_has_markdown_table(body) and not image_id:
+                    require_docx_body(body)
+                spec = spec_from_plain_body(
+                    kind="docx", title=title, marker=marker, body=body
+                )
+            if image_id:
+                spec = attach_image_block(spec, artifact_id=image_id)
+            images = await _office_images_from_spec(principal, spec)
+            raw = build_docx_document(
+                title=title, marker=marker, spec=spec, images=images
+            )
+        except (ValueError, SpecError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         result = await store.write(
             principal,
@@ -610,16 +676,29 @@ def _workspace_handlers(
         )
         result["format"] = "docx"
         result["marker"] = marker
+        result["spec_version"] = spec.get("version")
         return result
 
     async def generate_pptx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _ensure_extension(_artifact_title(args), ".pptx")
         marker = _marker_arg(args)
         body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+        spec = _spec_arg(args)
+        image_id = args.get("image_artifact_id")
+        image_id = str(image_id).strip() if image_id is not None else ""
         try:
-            require_pptx_body(body)
-            raw = build_pptx_document(title=title, marker=marker, body=body)
-        except ValueError as exc:
+            if spec is None:
+                require_pptx_body(body)
+                spec = spec_from_plain_body(
+                    kind="pptx", title=title, marker=marker, body=body
+                )
+            if image_id:
+                spec = attach_image_block(spec, artifact_id=image_id)
+            images = await _office_images_from_spec(principal, spec)
+            raw = build_pptx_document(
+                title=title, marker=marker, spec=spec, images=images
+            )
+        except (ValueError, SpecError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         result = await store.write(
             principal,
@@ -629,7 +708,124 @@ def _workspace_handlers(
         )
         result["format"] = "pptx"
         result["marker"] = marker
+        result["spec_version"] = spec.get("version")
         return result
+
+    async def inspect_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        row, raw, ext = await _load_office_any(principal, args)
+        try:
+            outline = inspect_bytes(raw, ext)
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        outline["artifact_id"] = row.get("artifact_id")
+        outline["title"] = row.get("title")
+        return outline
+
+    async def render_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        spec = _spec_arg(args)
+        if spec is None:
+            raise ToolError("tool.invalid_arguments", "render_document 需要 spec（pico.office.spec/v1）。")
+        marker = _marker_arg(args)
+        image_id = args.get("image_artifact_id")
+        image_id = str(image_id).strip() if image_id is not None else ""
+        try:
+            if image_id:
+                spec = attach_image_block(spec, artifact_id=image_id)
+            images = await _office_images_from_spec(principal, spec)
+            raw = render_spec(spec, images=images)
+        except (ValueError, SpecError) as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        kind = spec["kind"]
+        default_title = spec.get("title") or ("文档.docx" if kind == "docx" else "课件.pptx")
+        title = _ensure_extension(
+            str(args.get("title") or default_title),
+            f".{kind}",
+        )
+        result = await store.write(principal, title=title, content=raw, kind=kind)
+        result["format"] = kind
+        result["marker"] = marker
+        result["spec_version"] = spec.get("version")
+        return result
+
+    async def edit_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        row, raw, ext = await _load_office_any(principal, args)
+        address = args.get("address")
+        address = str(address).strip() if address is not None else ""
+        if not address:
+            para_i = _optional_int(args, "paragraph_index")
+            slide_i = _optional_int(args, "slide_index")
+            if para_i is not None:
+                address = f"p:{para_i}"
+            elif slide_i is not None:
+                address = f"s:{slide_i}.title"
+        text = args.get("text")
+        if text is None:
+            text = args.get("new_title")
+        text = str(text).strip() if text is not None else ""
+        try:
+            edited = await _run_bounded(
+                asyncio.to_thread(
+                    edit_by_address, raw, ext=ext, address=address, text=text
+                ),
+                seconds=_EDIT_TIMEOUT_S,
+                code="office.timeout",
+                message="改文档超时（20 秒）。请换更小的文件或稍后再试。",
+            )
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        kind = "docx" if ext == ".docx" else "pptx"
+        out_title = _ensure_extension(
+            str(args.get("output_title") or row.get("title") or f"已改.{kind}"),
+            f".{kind}",
+        )
+        result = await store.write(principal, title=out_title, content=edited, kind=kind)
+        result["format"] = kind
+        result["edited"] = True
+        result["address"] = address
+        result["source_artifact_id"] = row.get("artifact_id")
+        return result
+
+    async def verify_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        row, raw, ext = await _load_office_any(principal, args)
+        report = verify_bytes(raw, ext)
+        report["artifact_id"] = row.get("artifact_id")
+        report["title"] = row.get("title")
+        if not report.get("ok"):
+            return report
+        return report
+
+    async def _load_office_any(
+        principal: Principal, args: dict[str, Any]
+    ) -> tuple[dict[str, Any], bytes, str]:
+        artifact_id = args.get("artifact_id")
+        title = args.get("title")
+        artifact_id = str(artifact_id).strip() if artifact_id is not None else None
+        title = str(title).strip() if title is not None else None
+        if not artifact_id and not title:
+            raise ToolError(
+                "tool.invalid_arguments",
+                "请提供已上传文件的 artifact_id 或 title。",
+            )
+        row = await store.read(
+            principal,
+            artifact_id=artifact_id or None,
+            title=title or None,
+        )
+        if row is None:
+            raise ToolError(
+                "artifact.not_found",
+                "找不到这份文件。请先在工作台上传或生成原件。",
+            )
+        raw = _artifact_bytes(row)
+        kind = str(row.get("kind") or "").lower()
+        title_name = str(row.get("title") or "")
+        if kind == "docx" or title_name.lower().endswith(".docx"):
+            ext = ".docx"
+        elif kind == "pptx" or title_name.lower().endswith(".pptx"):
+            ext = ".pptx"
+        else:
+            raise ToolError("artifact.not_ooxml", "这份不是 Word/PPT，不能 inspect/edit/verify。")
+        return row, raw, ext
 
     async def _load_office(
         principal: Principal,
@@ -1278,6 +1474,10 @@ def _workspace_handlers(
         generate_html,
         generate_docx,
         generate_pptx,
+        inspect_document,
+        render_document,
+        edit_document,
+        verify_document,
         edit_docx,
         edit_pptx,
         generate_image,
@@ -1401,6 +1601,10 @@ def build_default_gateway(
         generate_html,
         generate_docx,
         generate_pptx,
+        inspect_document,
+        render_document,
+        edit_document,
+        verify_document,
         edit_docx,
         edit_pptx,
         generate_image,
@@ -1557,8 +1761,10 @@ def build_default_gateway(
         ToolSpec(
             name="generate_docx_document",
             description=(
-                "Create a real OOXML .docx Artifact (ZIP with Content_Types + word/document.xml) "
-                "containing a unique marker. Args: title, marker, body?"
+                "Create a real OOXML .docx via pico.office.spec/v1 (python-docx). "
+                "Use spec.blocks for heading/para/table/image so tables are tables. "
+                "Or pass body (blank-line paragraphs; markdown pipe tables become real tables). "
+                "Args: title, marker?, body?, spec?, image_artifact_id?"
             ),
             handler=generate_docx,
             school_scoped=False,
@@ -1568,10 +1774,60 @@ def build_default_gateway(
         ToolSpec(
             name="generate_pptx_document",
             description=(
-                "Create a real OOXML .pptx Artifact (presentation + ≥1 slide) "
-                "containing a unique marker. Args: title, marker, body?"
+                "Create a real OOXML .pptx via pico.office.spec/v1 (python-pptx). "
+                "Use spec slides with title/bullets/image so pictures sit on the slide. "
+                "Or pass body (--- / blank line = pages). "
+                "Args: title, marker?, body?, spec?, image_artifact_id?"
             ),
             handler=generate_pptx,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="inspect_document",
+            description=(
+                "Read structure of an existing Word/PPT: addresses p:N / t:N / s:N.title. "
+                "Does not write a file. Call before edit_document. "
+                "Args: artifact_id | title"
+            ),
+            handler=inspect_document,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="render_document",
+            description=(
+                "Render pico.office.spec/v1 into a real .docx or .pptx Artifact. "
+                "Path A: edit spec then render the whole file. "
+                "Args: spec (required), title?, marker?, image_artifact_id?"
+            ),
+            handler=render_document,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="edit_document",
+            description=(
+                "Path B: change one inspect address on an uploaded Word/PPT. "
+                "Other parts stay. Never invent a blank template. "
+                "Args: artifact_id|title, address (p:N / t:N.rR.cC / s:N.title / s:N.b:M), text, output_title?"
+            ),
+            handler=edit_document,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="verify_document",
+            description=(
+                "Fail-closed OOXML check: package parts + python-docx/pptx can open. "
+                "LibreOffice sandbox_document_open is preview only — do not treat it as verify. "
+                "Args: artifact_id | title"
+            ),
+            handler=verify_document,
             school_scoped=False,
         )
     )
@@ -1864,13 +2120,20 @@ def openai_tool_schemas(
                 "body": {
                     "type": "string",
                     "description": (
-                        "题面正文 only. Blank lines separate paragraphs. "
-                        "At least several hundred characters of the actual notice/minutes. "
-                        "Short body fails — the tool will not pad filler."
+                        "题面正文. Blank lines separate paragraphs. "
+                        "Markdown pipe tables become real Word tables. "
+                        "Short body without a table/spec fails — no filler padding."
                     ),
                 },
+                "spec": {
+                    "description": "pico.office.spec/v1 object or JSON (kind=docx, blocks=heading|para|table|image)",
+                },
+                "image_artifact_id": {
+                    "type": "string",
+                    "description": "generate_image artifact_id to insert as a real picture",
+                },
             },
-            "required": ["title", "marker"],
+            "required": ["title"],
         },
         "generate_pptx_document": {
             "type": "object",
@@ -1887,12 +2150,61 @@ def openai_tool_schemas(
                     "type": "string",
                     "description": (
                         "题面页稿. Separate slides with a blank line or ---. "
-                        "At least three titled pages from the prompt. "
+                        "At least three titled pages from the prompt unless spec is provided. "
                         "Fewer pages fail — the tool will not invent 说明 slides."
                     ),
                 },
+                "spec": {
+                    "description": "pico.office.spec/v1 object or JSON (kind=pptx, blocks=slide)",
+                },
+                "image_artifact_id": {
+                    "type": "string",
+                    "description": "generate_image artifact_id to place on the last slide",
+                },
             },
-            "required": ["title", "marker"],
+            "required": ["title"],
+        },
+        "inspect_document": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {"type": "string"},
+                "title": {"type": "string"},
+            },
+        },
+        "render_document": {
+            "type": "object",
+            "properties": {
+                "spec": {
+                    "description": "pico.office.spec/v1 object or JSON string",
+                },
+                "title": {"type": "string"},
+                "marker": {"type": "string"},
+                "image_artifact_id": {"type": "string"},
+            },
+            "required": ["spec"],
+        },
+        "edit_document": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {"type": "string"},
+                "title": {"type": "string"},
+                "address": {
+                    "type": "string",
+                    "description": "p:N / t:N.rR.cC / s:N.title / s:N.b:M from inspect_document",
+                },
+                "text": {"type": "string"},
+                "new_title": {"type": "string"},
+                "paragraph_index": {"type": "integer"},
+                "slide_index": {"type": "integer"},
+                "output_title": {"type": "string"},
+            },
+        },
+        "verify_document": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {"type": "string"},
+                "title": {"type": "string"},
+            },
         },
         "edit_docx_document": {
             "type": "object",

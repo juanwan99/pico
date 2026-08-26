@@ -34,6 +34,10 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_html_document",
             "generate_docx_document",
             "generate_pptx_document",
+            "inspect_document",
+            "render_document",
+            "edit_document",
+            "verify_document",
             "edit_docx_document",
             "edit_pptx_document",
             "generate_image",
@@ -51,10 +55,13 @@ _POLICIES: dict[str, SkillPolicy] = {
         instruction=(
             "本轮交付真实文件：HTML/Word/PPT 从零造必须分别调用 generate_html_document / "
             "generate_docx_document / generate_pptx_document（每份唯一 marker）；"
+            "Word/PPT 表和图必须进文档（spec 或 markdown 表；图用 generate_image 的 artifact_id 插入 spec）；"
+            "先读结构用 inspect_document，按地址改用 edit_document；"
+            "verify_document 核对 OOXML（sandbox_document_open 只预览）；"
             "Word 的 body 必须是题面完整多段正文（数百字以上；不足会失败，禁止套话垫字）；"
             "PPT 的 body 必须按题面排出至少三页有标题的幻灯（空行或 --- 分页；不足会失败，禁止垫页）；"
-            "改老师已上传的 Word/PPT 必须 edit_docx_document / edit_pptx_document"
-            "（读账本原件再改，禁止 generate_* 另起一份空模板冒充改原件）；"
+            "改老师已上传的 Word/PPT 必须 inspect_document 再 edit_document"
+            "（或 edit_docx_document / edit_pptx_document；读账本原件再改，禁止 generate_* 另起一份空模板冒充改原件）；"
             "出图必须 generate_image（SiliconFlow）；失败用人话说明，禁止编造图；"
             "其它文本/清单/多产物用 workspace_write_file 各写独立 title；"
             "禁止代码块改后缀冒充 .html/.docx/.pptx；"
@@ -81,6 +88,10 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_html_document",
             "generate_docx_document",
             "generate_pptx_document",
+            "inspect_document",
+            "render_document",
+            "edit_document",
+            "verify_document",
             "edit_docx_document",
             "edit_pptx_document",
             "generate_image",

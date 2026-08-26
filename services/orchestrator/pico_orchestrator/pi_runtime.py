@@ -40,6 +40,8 @@ _WRITE_TOOLS = frozenset(
         "generate_html_document",
         "generate_docx_document",
         "generate_pptx_document",
+        "render_document",
+        "edit_document",
         "edit_docx_document",
         "edit_pptx_document",
         "generate_image",
