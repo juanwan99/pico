@@ -723,7 +723,7 @@ export default function ResultPanel({
   return (
     <aside
       className={cn(
-        'pico-result-panel relative flex h-full min-w-0 shrink-0 flex-col overflow-x-hidden border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-surface-primary dark:text-text-primary',
+        'pico-result-panel relative flex h-full min-w-0 shrink-0 flex-col overflow-x-hidden border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-[color:var(--pico-surface)] dark:text-text-primary',
         expanded && 'pico-result-panel--expanded fixed inset-0 z-[200]',
       )}
       style={{ ['--pico-result-w' as string]: `${paneWidth}px` }}
@@ -744,7 +744,7 @@ export default function ResultPanel({
         />
       ) : null}
       {/* Header — sandbox only. Zoom/fullscreen live in the ⋯ menu. */}
-      <div className="flex h-10 items-center gap-1 border-b border-black/[0.06] bg-[#fafafa] px-2 dark:border-border-light">
+      <div className="flex h-10 items-center gap-1 border-b border-black/[0.06] bg-[#fafafa] px-2 dark:border-border-light dark:bg-[color:var(--pico-surface-2)]">
         <div className="px-2 text-[13px] font-medium text-[#1a1a1a] dark:text-text-primary">
           沙箱
         </div>
@@ -1041,7 +1041,7 @@ export default function ResultPanel({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa] px-4 py-10 text-[#9a9a9a]">
+                  <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa] px-4 py-10 text-[#9a9a9a] dark:border-border-light dark:bg-[color:var(--pico-surface-2)] dark:text-text-secondary">
                     <PicoIcon name="file" className="opacity-30" />
                     <p className="text-[13px] font-medium text-[#6b6b6b]">
                       {runStatusLabel?.startsWith('失败') || runStatusLabel?.startsWith('已停止')

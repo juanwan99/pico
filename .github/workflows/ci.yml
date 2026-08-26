@@ -138,6 +138,6 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
         run: >
           npx jest --ci --coverage=false
-          --testPathPatterns='src/hooks/Pico/|src/utils/__tests__/pico'
+          --testPathPatterns='src/hooks/Pico/|src/utils/__tests__/pico|src/components/Chat/__tests__/MainDeliveryStrip'
           --testPathIgnorePatterns='Pico/usePicoTaskLedger\.spec\.tsx$|Pico/usePicoTaskLedger\.cancel|usePicoConversationStatusMap\.spec|picoSandboxSession\.test'
 

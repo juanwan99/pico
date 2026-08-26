@@ -54,7 +54,7 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
 
   return (
     <div className="mb-2 w-full text-left" data-testid="archive-folder-bar">
-      <label className="pico-type-body flex items-baseline gap-2 text-[color:var(--pico-ink)]">
+      <label className="pico-type-body flex items-baseline gap-2 text-[color:var(--pico-ink)] dark:text-text-primary">
         存档位置
         <span className="relative min-w-0 flex-1">
           <select

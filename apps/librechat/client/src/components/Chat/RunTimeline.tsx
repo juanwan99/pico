@@ -288,7 +288,7 @@ export default function RunTimeline({
                 key={event.id}
                 className="flex gap-2 rounded-lg border border-black/[0.05] bg-[#fafafa] px-2.5 py-2 dark:border-border-light dark:bg-surface-tertiary"
               >
-                <span className="mt-0.5 text-[#6b6b6b]" aria-hidden="true">
+                <span className="mt-0.5 text-[#6b6b6b] dark:text-text-secondary" aria-hidden="true">
                   <EventIcon type={event.type} />
                 </span>
                 <div className="min-w-0">

@@ -30,7 +30,7 @@ export default function PicoSearchSources({
     >
       <p className="mb-1.5 text-[12px] font-semibold text-[#1a3a7a] dark:text-text-primary">来源</p>
       {view.sources.length === 0 ? (
-        <p className="text-[12px] text-[#6b6b6b]" data-testid="pico-search-sources-miss">
+        <p className="text-[12px] text-[#6b6b6b] dark:text-text-secondary" data-testid="pico-search-sources-miss">
           未检索到可用来源
         </p>
       ) : (

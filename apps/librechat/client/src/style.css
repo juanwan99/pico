@@ -3054,7 +3054,6 @@ html:not(.dark) .bg-surface-primary {
 .pico-wb-composer {
   min-height: 0;
   overflow: visible;
-  background: #fff !important;
 }
 html:not(.dark) .pico-wb-composer textarea {
   font-size: var(--pico-fs-body) !important;
@@ -3095,13 +3094,39 @@ html:not(.dark) .pico-wb-composer textarea::placeholder {
 
 /* pico contrast: dark sidebar inactive labels */
 html.dark .pico-wb-sidebar {
-  color: #e8e8e8;
+  background: var(--pico-sidebar) !important;
+  border-right-color: var(--pico-line);
+  color: var(--pico-ink);
 }
 html.dark .pico-wb-sidebar .text-\[\#3d3d3d\],
 html.dark .pico-wb-sidebar .text-\[\#6b6b6b\],
 html.dark .pico-wb-sidebar .text-\[\#4a4a4a\],
 html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
-  color: #c8c8c8 !important;
+  color: var(--pico-ink-2) !important;
+}
+html.dark .pico-wb-stage {
+  background: var(--pico-shell) !important;
+}
+html.dark .pico-wb-composer {
+  background: var(--pico-surface) !important;
+  border-color: var(--pico-line) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28) !important;
+  color: var(--pico-ink);
+}
+html.dark .pico-wb-composer textarea {
+  color: var(--pico-ink) !important;
+}
+html.dark .pico-wb-composer textarea::placeholder {
+  color: var(--pico-ink-3) !important;
+  opacity: 1 !important;
+}
+html.dark .pico-result-panel {
+  background: var(--pico-surface) !important;
+  color: var(--pico-ink);
+  box-shadow: -1px 0 0 var(--pico-line);
+}
+html.dark .pico-shell-bg {
+  background: var(--pico-shell);
 }
 
 /* ========== Pico WorkBuddy pixel tokens (clean-room · 2026-07-30) ========== */
@@ -3212,4 +3237,77 @@ html:not(.dark) .pico-result-panel {
 .pico-pixel-animal {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+}
+
+/* Dark chrome last-wins: one face, no leftover light slabs / dark-on-dark type */
+html.dark .pico-app,
+html.dark .pico-app .pico-shell-bg,
+html.dark .pico-app .pico-wb-stage,
+html.dark .pico-app .bg-presentation {
+  background-color: var(--pico-shell) !important;
+  color: var(--pico-ink);
+}
+
+html.dark .pico-app [data-testid='task-run-bar'] {
+  background: var(--pico-surface) !important;
+  border-color: var(--pico-line) !important;
+  color: var(--pico-ink) !important;
+}
+
+html.dark .pico-app [data-testid='school-materials-bar'],
+html.dark .pico-app [data-testid='archive-folder-bar'] {
+  color: var(--pico-ink) !important;
+}
+html.dark .pico-app [data-testid='school-materials-bar'] button,
+html.dark .pico-app [data-testid='archive-folder-bar'] label {
+  color: var(--pico-ink) !important;
+}
+html.dark .pico-app [data-testid='school-materials-bar'] .pico-type-aux,
+html.dark .pico-app [data-testid='archive-folder-bar'] span {
+  color: var(--pico-ink-2) !important;
+}
+
+html.dark .pico-app .pico-wb-composer,
+html.dark .pico-app .pico-wb-composer textarea,
+html.dark .pico-app [data-testid='text-input'] {
+  background-color: var(--pico-surface) !important;
+  color: var(--pico-ink) !important;
+  border-color: var(--pico-line) !important;
+  caret-color: var(--pico-ink);
+}
+
+html.dark .pico-app .pico-result-panel,
+html.dark .pico-app [data-testid='result-panel'] {
+  background: var(--pico-surface) !important;
+  color: var(--pico-ink) !important;
+  border-color: var(--pico-line) !important;
+}
+html.dark .pico-app .pico-result-panel [class*='bg-[#fafafa]'],
+html.dark .pico-app .pico-result-panel [class*='bg-[#f5f5f5]'] {
+  background-color: var(--pico-surface-2) !important;
+}
+
+html.dark .pico-app [data-testid='pico-search-sources'],
+html.dark .pico-app [data-testid='main-delivery-strip'] > div {
+  background-color: var(--pico-surface-2) !important;
+  border-color: var(--pico-line) !important;
+  color: var(--pico-ink);
+}
+
+html.dark .pico-app .text-\[\#1a1a1a\],
+html.dark .pico-app .text-\[\#3d3d3d\] {
+  color: var(--pico-ink) !important;
+}
+html.dark .pico-app .text-\[\#6b6b6b\],
+html.dark .pico-app .text-\[\#8c8c8c\],
+html.dark .pico-app .text-\[\#9a9a9a\] {
+  color: var(--pico-ink-2) !important;
+}
+html.dark .pico-app .bg-\[\#fafafa\],
+html.dark .pico-app .bg-\[\#f5f5f5\],
+html.dark .pico-app .bg-\[\#f3f3f3\],
+html.dark .pico-app .bg-\[\#f5f9ff\],
+html.dark .pico-app .bg-\[\#edf1f4\],
+html.dark .pico-app .bg-\[\#eef7ee\] {
+  background-color: var(--pico-surface-2) !important;
 }
