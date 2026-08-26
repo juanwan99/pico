@@ -15,3 +15,4 @@ def test_image_in_deck_does_not_add_host_bash() -> None:
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
     assert "generate_pptx_document" in ALLOWED_GATEWAY_TOOLS
     assert "generate_image" in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_workspace_exec" in ALLOWED_GATEWAY_TOOLS
