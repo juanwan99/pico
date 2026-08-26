@@ -6,7 +6,7 @@ DATE: 2026-08-26
 ── 现况三行（开窗先对；禁止凭记忆）──
 在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 97e421c6aaa804b933c9963a04a50f38abb28d37 = 产品 tip（#704 + 夜战四刀已合已部）
+      → 3847323c9121c79beac8a5abf4cf90322d5ec5f2 = 产品 tip（#716 现况收口已部 · 含四刀）
 阻塞: 无
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
