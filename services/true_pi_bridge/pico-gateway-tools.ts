@@ -40,6 +40,8 @@ const ALLOWED = [
   "sandbox_browser_open",
   "sandbox_browser_screenshot",
   "sandbox_document_open",
+  "publish_html_page",
+  "unpublish_html_page",
 ] as const;
 
 type ToolName = (typeof ALLOWED)[number];
@@ -387,6 +389,29 @@ export default function (pi: ExtensionAPI) {
         filename: Type.Optional(Type.String()),
         kind: Type.Optional(Type.String()),
         body: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "publish_html_page",
+    "Publish an existing HTML artifact to a public URL. Visitors can open it without login. Forms may POST JSON to the page collect path; entries land in the publisher archive.",
+    Type.Object(
+      {
+        artifact_id: Type.String(),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "unpublish_html_page",
+    "Revoke a published HTML page. The public URL and collect path return 404.",
+    Type.Object(
+      {
+        page_id: Type.Optional(Type.String()),
+        artifact_id: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),

@@ -545,7 +545,7 @@ def test_gateway_allowlist_includes_web_pair() -> None:
     assert "generate_image" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
     assert "kb_search" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 23
+    assert len(ALLOWED_GATEWAY_TOOLS) == 25
 
 
 def test_attach_teacher_sources_footer() -> None:

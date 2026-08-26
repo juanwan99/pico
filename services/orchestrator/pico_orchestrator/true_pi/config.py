@@ -62,6 +62,8 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "sandbox_browser_open",
         "sandbox_browser_screenshot",
         "sandbox_document_open",
+        "publish_html_page",
+        "unpublish_html_page",
     }
 )
 

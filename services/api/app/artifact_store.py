@@ -105,13 +105,18 @@ class LedgerArtifactStore:
         title: str,
         content: str | bytes,
         kind: str,
+        folder_id: str | None = None,
     ) -> dict[str, Any]:
         stored, encoding, byte_size, digest = encode_artifact_payload(content)
         async with self._factory() as session:
             task = await self._task_for_write(session, principal, title)
-            folder_id = ""
+            explicit_folder = folder_id is not None and str(folder_id).strip() != ""
+            if explicit_folder:
+                folder_id = str(folder_id).strip()
+            else:
+                folder_id = ""
             convo = self._conversation_id or getattr(task, "conversation_id", None)
-            if convo:
+            if convo and not explicit_folder:
                 try:
                     from app.edu_school import load_archive_folder_id
 

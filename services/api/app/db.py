@@ -136,6 +136,22 @@ class ArtifactRow(Base):
     task: Mapped[TaskRow] = relationship(back_populates="artifacts")
 
 
+class HtmlPageRow(Base):
+    """Published HTML artifact (public GET + collect). Not a second ledger."""
+
+    __tablename__ = "html_pages"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    artifact_id: Mapped[str] = mapped_column(String(36), index=True)
+    school_id: Mapped[str] = mapped_column(String(128), index=True)
+    membership_id: Mapped[str] = mapped_column(String(128), index=True)
+    task_id: Mapped[str] = mapped_column(String(36), default="")
+    folder_id: Mapped[str] = mapped_column(String(36), default="")
+    status: Mapped[str] = mapped_column(String(16), default="live", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class ChangeProposalRow(Base):
     """S7 minimal human-confirm path — no silent business write."""
 

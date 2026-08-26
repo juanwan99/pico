@@ -70,6 +70,53 @@ describe('Pico proxy routes', () => {
     expect(global.fetch).toHaveBeenCalledWith('http://127.0.0.1:18765/health');
   });
 
+  it('proxies public HTML pages without JWT membership header', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      headers: {
+        get: (name) =>
+          ({
+            'content-type': 'text/html; charset=utf-8',
+            'content-security-policy': "default-src 'none'",
+          })[name] || null,
+      },
+      arrayBuffer: async () => Buffer.from('<html>ok</html>'),
+      text: async () => '<html>ok</html>',
+    });
+    const response = await request(app).get('/api/pico/p/pubTestPage01');
+    expect(response.status).toBe(200);
+    expect(response.headers['content-security-policy']).toBe("default-src 'none'");
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/p/pubTestPage01',
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          'X-Pico-Membership-Id': expect.anything(),
+        }),
+      }),
+    );
+  });
+
+  it('proxies public collect POST without JWT membership header', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      headers: { get: () => 'application/json' },
+      text: async () => JSON.stringify({ ok: true, id: 'entry-1' }),
+    });
+    const response = await request(app)
+      .post('/api/pico/p/pubTestPage01/collect')
+      .send({ n: 'alice' });
+    expect(response.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/p/pubTestPage01/collect',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.not.objectContaining({
+          'X-Pico-Membership-Id': expect.anything(),
+        }),
+      }),
+    );
+  });
+
   it.each(['unknown', 'abc', '5a900f69906630c8ad3843b371909eecc998ac4', 'not-a-sha', ''])(
     'rejects non-40-hex git_sha as tip truth (%s)',
     async (badSha) => {
