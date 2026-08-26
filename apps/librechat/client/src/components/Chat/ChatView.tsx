@@ -219,7 +219,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     processHint={ledger.processHint || (isSubmitting ? '正在检索或作答' : null)}
                   />
                   {ledger.error ? (
-                    <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900">
+                    <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
                       账本：{ledger.error}
                     </div>
                   ) : null}
@@ -231,8 +231,8 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   className={cn(
                     'flex min-w-0 flex-1 flex-col',
                     isLandingPage
-                      ? 'pico-wb-stage items-center justify-center gap-3 overflow-y-auto bg-[#f5f5f5] py-6 dark:bg-presentation'
-                      : 'h-full overflow-hidden bg-[#fafafa] dark:bg-presentation',
+                      ? 'pico-wb-stage items-center justify-center gap-3 overflow-y-auto bg-[color:var(--pico-shell)] py-6'
+                      : 'h-full overflow-hidden bg-[color:var(--pico-shell)]',
                   )}
                 >
                   <div

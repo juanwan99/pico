@@ -59,7 +59,14 @@ export default function MainDeliveryStrip({
   const sourcesBlock = <PicoSearchSources events={runEvents} messages={messages} />;
 
   if (items.length === 0) {
-    return sourcesBlock;
+    return (
+      <div
+        className="mx-auto w-full max-w-[797px] px-2 pb-2 sm:px-0"
+        data-testid="main-delivery-strip"
+      >
+        {sourcesBlock}
+      </div>
+    );
   }
 
   const openArtifact = async (a: PicoArtifact) => {

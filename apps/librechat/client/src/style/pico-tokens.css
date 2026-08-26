@@ -15,6 +15,27 @@
   --pico-fw-medium: 560;
 }
 
+html.dark .pico-app {
+  --pico-shell: #212121;
+  --pico-sidebar: #171717;
+  --pico-surface: #2a2a2a;
+  --pico-surface-2: #262626;
+  --pico-ink: #f0f0ee;
+  --pico-ink-2: #b8bbb7;
+  --pico-ink-3: #8d918c;
+  --pico-line: #333433;
+  --pico-line-2: #3d3e3c;
+  --pico-mint-wash: #16352c;
+  --pico-violet-wash: #2a2448;
+  --pico-violet-line: #4a3f7a;
+  --pico-red-wash: #3a1e22;
+  --pico-amber-wash: #3a2a14;
+  --pico-blue-wash: #1c2740;
+  --pico-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 12px 32px rgba(0, 0, 0, 0.22);
+  --pico-shadow-raised: 0 2px 5px rgba(0, 0, 0, 0.32), 0 18px 44px rgba(0, 0, 0, 0.28);
+  color: var(--pico-ink);
+}
+
 .pico-app {
   --pico-shell: #f7f7f6;
   --pico-sidebar: #f1f2f0;

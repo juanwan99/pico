@@ -3054,7 +3054,6 @@ html:not(.dark) .bg-surface-primary {
 .pico-wb-composer {
   min-height: 0;
   overflow: visible;
-  background: #fff !important;
 }
 html:not(.dark) .pico-wb-composer textarea {
   font-size: var(--pico-fs-body) !important;
@@ -3095,13 +3094,39 @@ html:not(.dark) .pico-wb-composer textarea::placeholder {
 
 /* pico contrast: dark sidebar inactive labels */
 html.dark .pico-wb-sidebar {
-  color: #e8e8e8;
+  background: var(--pico-sidebar) !important;
+  border-right-color: var(--pico-line);
+  color: var(--pico-ink);
 }
 html.dark .pico-wb-sidebar .text-\[\#3d3d3d\],
 html.dark .pico-wb-sidebar .text-\[\#6b6b6b\],
 html.dark .pico-wb-sidebar .text-\[\#4a4a4a\],
 html.dark .pico-wb-sidebar .text-\[\#8c8c8c\] {
-  color: #c8c8c8 !important;
+  color: var(--pico-ink-2) !important;
+}
+html.dark .pico-wb-stage {
+  background: var(--pico-shell) !important;
+}
+html.dark .pico-wb-composer {
+  background: var(--pico-surface) !important;
+  border-color: var(--pico-line) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28) !important;
+  color: var(--pico-ink);
+}
+html.dark .pico-wb-composer textarea {
+  color: var(--pico-ink) !important;
+}
+html.dark .pico-wb-composer textarea::placeholder {
+  color: var(--pico-ink-3) !important;
+  opacity: 1 !important;
+}
+html.dark .pico-result-panel {
+  background: var(--pico-surface) !important;
+  color: var(--pico-ink);
+  box-shadow: -1px 0 0 var(--pico-line);
+}
+html.dark .pico-shell-bg {
+  background: var(--pico-shell);
 }
 
 /* ========== Pico WorkBuddy pixel tokens (clean-room · 2026-07-30) ========== */
