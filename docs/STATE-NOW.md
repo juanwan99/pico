@@ -4,10 +4,10 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #703 T-UNMASK-PI（拆笼子 · 贴图直送提供商）
+在飞: #703 T-UNMASK-PI（已部 · 等老师手 T1/T2/T3）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 88160b316b481151575955aa8e3b18b7602d5dd8 = 产品 tip（#701 已部；本卡未部）
-阻塞: 无 · 本卡黄档 · 禁部未对 tip 的 docs SHA
+      → af0ca6e516fa9021883f7fbbc5a350a6fae180fe = 产品 tip（#704 已合已部）
+阻塞: 老师手过门 · 禁自签 PASS
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #449/#316 勿关 · 记忆/人视角日用挂起
@@ -65,7 +65,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#694](https://github.com/juanwan99/pico/issues/694) | T-OFFICE-COVER 办公文档覆盖 · 业主 PASS · tip=`18537f47…` |
 | 已收口 | [#697](https://github.com/juanwan99/pico/issues/697) | T-HTML-PUBLIC HTML 公网页 + 收数 · 业主 PASS · tip=`837443f4…` |
 | 已收口 | [#701](https://github.com/juanwan99/pico/pull/701) | 来源条对齐 + 夜间整页 · 业主 pass · tip=`88160b31…` |
-| 在飞 | [#703](https://github.com/juanwan99/pico/issues/703) | T-UNMASK-PI 拆能力笼子 · 业主 stamp · 黄档 |
+| 已部 | [#703](https://github.com/juanwan99/pico/issues/703) · [#704](https://github.com/juanwan99/pico/pull/704) | T-UNMASK-PI 已部 @ `af0ca6e5…` · 等老师手 T1/T2/T3 |
 | 挂起 | 记忆 · 人视角日用 | 业主令后面再做 · 不开卡 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面冻到 9/7 · 可钉现况三行评论 |
