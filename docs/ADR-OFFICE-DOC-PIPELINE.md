@@ -137,6 +137,6 @@ pico.office.spec/v1
 
 ## 8. 后果
 
-- **现在：** 卡 1 #690 已过门。卡 2 [#694](https://github.com/juanwan99/pico/issues/694) 在飞。记忆 / 人视角日用仍挂起。  
-- **业主点头卡 2：** 覆盖 · 一张阶段包 · 1 PR · 证据贴 Issue。禁第三张办公卡。  
+- **现在：** 卡 1 #690 · 卡 2 [#694](https://github.com/juanwan99/pico/issues/694) 均过门 @ 产品 tip `18537f47…`。记忆 / 人视角日用仍挂起。  
+- **禁第三张办公卡。** 覆盖已收口，不再拆残债卡。  
 - **产品承诺：** 两张做完 = 日常真文件办公同档 Claude/Codex skill；不同档 Word 内 Copilot。
