@@ -5,6 +5,12 @@ import MainDeliveryStrip from '../MainDeliveryStrip';
 jest.mock('~/data-provider/pico/api', () => ({
   getPicoArtifactContent: jest.fn(),
 }));
+jest.mock('~/utils', () => ({
+  cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
+}));
+jest.mock('~/utils', () => ({
+  cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
+}));
 
 function searchEvent(): PicoRunEvent {
   return {
