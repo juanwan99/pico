@@ -20,8 +20,9 @@ if [[ "$(id -u)" -ne 0 ]]; then
   SUDO="sudo"
 fi
 
-mkdir -p "$(dirname "$SOCK")" "$(dirname "$STATE")" "${HOME}/.ssh"
+mkdir -p "${HOME}/.ssh"
 chmod 700 "${HOME}/.ssh"
+# /var/* needs root; never mkdir those as the unprivileged agent user.
 $SUDO mkdir -p "$(dirname "$SOCK")" "$(dirname "$STATE")"
 
 if ! command -v tailscale >/dev/null 2>&1; then
