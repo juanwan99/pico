@@ -7,7 +7,7 @@ DATE: 2026-08-26
 在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok · OPEN · CANDIDATE #683）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 363f1638ac8680900f8ff816fce6f0fa35a05d53（须现场再 curl）
-阻塞: #683 pytest 红（prod-update 夹具未 mock reindex）· 总管不合
+阻塞: #683 等 CI @9c22b25d · 黄审未过 · 总管不合
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: NO
 PRODUCT PASS: 未签 · 仅业主（#449 / #316）
