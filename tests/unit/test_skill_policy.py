@@ -40,6 +40,7 @@ def test_snapshot_tools_subset_of_gateway():
                 "generate_html_document",
                 "generate_docx_document",
                 "generate_pptx_document",
+                "sandbox_pptx_lib",
                 "generate_xlsx_document",
                 "edit_docx_document",
                 "edit_pptx_document",

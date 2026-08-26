@@ -34,6 +34,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_html_document",
             "generate_docx_document",
             "generate_pptx_document",
+            "sandbox_pptx_lib",
             "generate_xlsx_document",
             "edit_docx_document",
             "edit_pptx_document",
@@ -59,6 +60,8 @@ _POLICIES: dict[str, SkillPolicy] = {
             "本轮交付真实文件：HTML/Word/PPT/Excel 从零造必须分别调用 generate_html_document / "
             "generate_docx_document / generate_pptx_document / generate_xlsx_document（每份唯一 marker）；"
             "Word/PPT 写入实际内容，禁止空壳、禁止套话垫字/垫页；"
+            "日常 PPT 用 generate_pptx_document/spec；复杂排版上限才 sandbox_pptx_lib"
+            "（隔离 python-pptx，禁止 host bash）；"
             "带表/图/公式/批注/模板的 Word/PPT/Excel 用 generate_* 的 spec/blocks 或 render_document；"
             "改老师已上传的 Word/PPT/Excel 必须先 inspect_document 再 edit_docx_document / "
             "edit_pptx_document / edit_xlsx_document"

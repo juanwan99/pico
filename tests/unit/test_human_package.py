@@ -66,9 +66,10 @@ def test_titles_from_tool_results() -> None:
             ("verify_html_document", {"overall": "pass", "verification_level": "L0"}),
             ("workspace_write_file", {"title": "b.md", "artifact_id": "2"}),
             ("workspace_write_file", {"title": "回复摘要", "artifact_id": "3"}),
+            ("sandbox_pptx_lib", {"title": "上限.pptx", "artifact_id": "4"}),
         ]
     )
-    assert titles == ["a.html", "b.md"]
+    assert titles == ["a.html", "b.md", "上限.pptx"]
 
 
 def test_fenced_html_stripped() -> None:

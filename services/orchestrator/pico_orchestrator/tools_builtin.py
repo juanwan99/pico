@@ -42,6 +42,7 @@ from pico_orchestrator.office.inspect import inspect_office_bytes
 from pico_orchestrator.office.legacy import guess_office_ext
 from pico_orchestrator.office.qa import verify_office_bytes
 from pico_orchestrator.office.render import render_spec
+from pico_orchestrator.office.sandbox_lib import run_pptx_lib_source_async
 from pico_orchestrator.office.spec import parse_spec
 from pico_orchestrator.office_editors import (
     comment_docx_bytes,
@@ -180,6 +181,38 @@ def _marker_arg(args: dict[str, Any]) -> str:
     if len(value) > _MAX_MARKER:
         raise ToolError("tool.invalid_arguments", f"marker exceeds {_MAX_MARKER} characters")
     return value
+
+
+def _make_sandbox_pptx_lib(store: ArtifactStore):
+    async def sandbox_pptx_lib(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        source = _required_text(args, "source", maximum=20_000)
+        title_raw = args.get("title")
+        title = _ensure_extension(
+            str(title_raw).strip() if isinstance(title_raw, str) and title_raw.strip() else "沙箱上限.pptx",
+            ".pptx",
+        )
+        deny_secret_filename(title)
+        raw_ids = args.get("image_artifact_ids") or args.get("images") or []
+        if raw_ids is None:
+            raw_ids = []
+        if not isinstance(raw_ids, list):
+            raise ToolError("tool.invalid_arguments", "image_artifact_ids 必须是数组。")
+        images: dict[str, bytes] = {}
+        for item in raw_ids:
+            aid = str(item or "").strip()
+            if not aid:
+                continue
+            row = await store.read(principal, artifact_id=aid, title=None)
+            if row is None:
+                raise ToolError("artifact.not_found", f"找不到图片 {aid}。请先 generate_image。")
+            images[aid] = _artifact_bytes(row)
+        raw = await run_pptx_lib_source_async(source, images=images)
+        result = await store.write(principal, title=title, content=raw, kind="pptx")
+        result["format"] = "pptx"
+        result["via"] = "sandbox_pptx_lib"
+        return result
+
+    return sandbox_pptx_lib
 
 
 def _ensure_extension(title: str, ext: str) -> str:
@@ -1911,11 +1944,26 @@ def build_default_gateway(
         ToolSpec(
             name="generate_pptx_document",
             description=(
-                "Create a real OOXML .pptx. Prefer spec/blocks of slide "
-                "{title, bullets, image_artifact_id} so images sit on the slide. "
+                "Default PPT path: real OOXML .pptx via spec/blocks of slide "
+                "{title, bullets, image_artifact_id}. Ordinary decks use this. "
+                "Complex layout ceiling is sandbox_pptx_lib. "
                 "Args: title, marker, body? | spec? | blocks?"
             ),
             handler=generate_pptx,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="sandbox_pptx_lib",
+            description=(
+                "Ceiling: isolated python-pptx (not host bash, not a second Office OS). "
+                "Prefer generate_pptx_document/spec for ordinary decks. "
+                "Source cannot import; Presentation/Inches/save_deck/IMAGE_PATHS are injected. "
+                "Must call save_deck(prs). Empty shells fail. "
+                "Args: source, title?, image_artifact_ids?"
+            ),
+            handler=_make_sandbox_pptx_lib(store),
             school_scoped=False,
         )
     )
@@ -2305,6 +2353,25 @@ def openai_tool_schemas(
                 },
             },
             "required": ["title", "marker"],
+        },
+        "sandbox_pptx_lib": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "description": "python-pptx body. No import. Use Presentation/Inches/save_deck.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Filename, preferably ending with .pptx",
+                },
+                "image_artifact_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Ledger image ids exposed as IMAGE_PATHS",
+                },
+            },
+            "required": ["source"],
         },
         "generate_pptx_document": {
             "type": "object",
