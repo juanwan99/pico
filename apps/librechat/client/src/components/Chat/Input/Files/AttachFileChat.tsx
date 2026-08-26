@@ -116,6 +116,7 @@ function AttachFileChat({
     );
   } else if ((isAgents || endpointSupportsFiles) && !isUploadDisabled) {
     if (!sharePointEnabled) {
+      /** Pico chat: one click → file picker → model. No destination menu. */
       return (
         <AttachFile
           disabled={disableInputs}
