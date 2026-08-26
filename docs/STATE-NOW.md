@@ -7,7 +7,7 @@ DATE: 2026-08-26
 在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok · OPEN · #683 黄审 PASS）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 363f1638ac8680900f8ff816fce6f0fa35a05d53（须现场再 curl）
-阻塞: 等执行窗合 `9c22b25d` + 部 · 总管已续派 spawn-executor · 不合不部
+阻塞: 执行窗已起 @cursor `bc-ed0a5f63` · 等合 `9c22b25d` + 部 · 总管不合不部
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: NO
 PRODUCT PASS: 未签 · 仅业主（#449 / #316）

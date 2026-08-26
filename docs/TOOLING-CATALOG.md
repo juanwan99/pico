@@ -43,7 +43,7 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 | **subscribe-pr** | 订 PR 事件唤醒总管 | Cursor `subscribe_github_pr`（repo/pr） | 总管环 OPEN 后 | 当第二账本；代替 Issue 回执 | — |
 | **subscribe-ci** | 订分支 CI 终态 | Cursor `subscribe_github_ci` | 执行窗已推分支 | 未知名分支空订 | — |
 | **subscribe-timer** | 兜底读合同评论 | Cursor `subscribe_timer` | Issue 评论无原生订约时 | ECS cron 自驱 agent | — |
-| **spawn-executor** | 总管起/唤醒执行窗 | `scripts/spawn-executor.sh`（官方 Cloud Agents API） | `## 派发` 已贴、要起执行窗；黄审过要续派合部 | 总管自己合/部；mailbox；密钥进仓 | `CURSOR_API_KEY` ·（建议）`CURSOR_EXECUTOR_ENV` |
+| **spawn-executor** | 总管起/唤醒执行窗 | `scripts/spawn-executor.sh`（官方 Cloud Agents API）；无钥时合同 PR/Issue 评 `@cursor` | `## 派发` 已贴、要起执行窗；黄审过要续派合部 | 总管自己合/部；mailbox；密钥进仓 | `CURSOR_API_KEY` ·（建议）`CURSOR_EXECUTOR_ENV` |
 
 **说明：** `visual-gate` / `tip-pin` 以仓内脚本为准；`tool-status` 对缺失报 `ok:false`。
 
