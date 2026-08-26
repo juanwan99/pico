@@ -4,10 +4,10 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #671 T-FILES-PLACE（stamp-ok）
+在飞: #671 T-FILES-PLACE（stamp-ok）· 等老师手 T1–T4
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → dcaa48aaae95dbd1746365187cc27ff1a485c1ba（须现场再 curl）
-阻塞: #678 黄审待独立 PASS · #679 Cloud Agent 脚本待合 · 部 #671 差量等审后
+      → 709460c5c871cd1cd3ea862b2366fb3f0a3780cb（须现场再 curl）
+阻塞: 老师手过门 · #679/#680 待合（非本卡阻塞）
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: NO
 PRODUCT PASS: 未签 · 仅业主（#449 / #316）
@@ -54,7 +54,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 优先级 | Issue | 说明 |
 |--------|-------|------|
 | 在飞 | [#671](https://github.com/juanwan99/pico/issues/671) | T-FILES-PLACE · stamp-ok · 残债同卡 |
-| 候选 | [#678](https://github.com/juanwan99/pico/pull/678) | 学校材料去 N+1 · 黄 · 待独立审 |
+| 已合已部 | [#678](https://github.com/juanwan99/pico/pull/678) | 去 N+1 · tip=`709460c5…` · 等老师手 |
 | 运维 | [#679](https://github.com/juanwan99/pico/pull/679) | Cloud Agent TS + ssh ecs · CI 绿 |
 | 产品签 | [#449](https://github.com/juanwan99/pico/issues/449) · [#316](https://github.com/juanwan99/pico/issues/316) | 仅业主 · **勿关** |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
