@@ -44,6 +44,8 @@ _DOING: dict[str, str] = {
     "web_search": "正在检索",
     "web_fetch": "正在阅读网页",
     "kb_search": "正在查材料",
+    "publish_html_page": "正在发布网页",
+    "unpublish_html_page": "正在撤回网页",
 }
 
 _DONE: dict[str, str] = {
@@ -65,6 +67,8 @@ _DONE: dict[str, str] = {
     "web_search": "已检索到来源",
     "web_fetch": "已读页",
     "kb_search": "已查到材料",
+    "publish_html_page": "已发布网页",
+    "unpublish_html_page": "已撤回网页",
 }
 
 _FAIL: dict[str, str] = {
@@ -86,6 +90,8 @@ _FAIL: dict[str, str] = {
     "web_search": "检索未完成",
     "web_fetch": "读页未完成",
     "kb_search": "没查到材料",
+    "publish_html_page": "没发布成网页",
+    "unpublish_html_page": "没撤回网页",
 }
 
 FALLBACK_DOING = "正在调工具"

@@ -37,7 +37,7 @@ MATERIAL_KINDS = frozenset(
         "txt",
     }
 )
-SKIP_KINDS = frozenset({"html", "png", "image", "screenshot", "preview"})
+SKIP_KINDS = frozenset({"html", "png", "image", "screenshot", "preview", "form_entry"})
 PARSE_EXT = frozenset({".pdf", ".docx"})
 OFFICE_EXTRACT_EXT = frozenset({".xlsx", ".pptx", ".txt"})
 MATERIAL_EXTS = frozenset({".md", ".txt", ".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".json"})

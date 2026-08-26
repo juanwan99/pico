@@ -4,10 +4,10 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: 无
+在飞: #697 T-HTML-PUBLIC
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 18537f4753c8b1dd474ce577101c00c0b561afe8 = 产品 tip（#695 已部；本 CLEAR docs 未部）
-阻塞: 无 · 禁部 docs SHA
+      → 18537f4753c8b1dd474ce577101c00c0b561afe8 = 产品 tip（#695 已部；docs #696 未部）
+阻塞: 无 · 黄档 · 禁部 docs SHA
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686/#690/#694 业主已签 · #449/#316 勿关 · 记忆/人视角日用挂起
@@ -63,6 +63,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 产品签 | [#449](https://github.com/juanwan99/pico/issues/449) · [#316](https://github.com/juanwan99/pico/issues/316) | 业主 YES · **勿关** |
 | 已收口 | [#690](https://github.com/juanwan99/pico/issues/690) | T-OFFICE-KERNEL 办公文档核 · 业主 PASS · tip=`0acf8f62…` |
 | 已收口 | [#694](https://github.com/juanwan99/pico/issues/694) | T-OFFICE-COVER 办公文档覆盖 · 业主 PASS · tip=`18537f47…` |
+| 在飞 | [#697](https://github.com/juanwan99/pico/issues/697) | T-HTML-PUBLIC HTML 公网页 + 收数 · 业主点头开工 |
 | 挂起 | 记忆 · 人视角日用 | 业主令后面再做 · 不开卡 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面冻到 9/7 · 可钉现况三行评论 |

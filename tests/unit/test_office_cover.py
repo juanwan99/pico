@@ -120,4 +120,4 @@ def test_cover_tools_on_pi_allowlist():
     ):
         assert name in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 23
+    assert len(ALLOWED_GATEWAY_TOOLS) == 25

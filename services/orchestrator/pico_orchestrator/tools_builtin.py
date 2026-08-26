@@ -1542,6 +1542,21 @@ def _workspace_handlers(
             await _emit(False, {"error_code": exc.code, "workspace_id": ws})
             raise
 
+    async def publish_html_page(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        from app.html_pages import publish_html_page as do_publish
+
+        artifact_id = str(args.get("artifact_id") or "").strip()
+        return await do_publish(principal, artifact_id=artifact_id)
+
+    async def unpublish_html_page(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        from app.html_pages import unpublish_html_page as do_unpublish
+
+        return await do_unpublish(
+            principal,
+            page_id=str(args.get("page_id") or "").strip(),
+            artifact_id=str(args.get("artifact_id") or "").strip(),
+        )
+
     return (
         write_file,
         read_file,
@@ -1564,6 +1579,8 @@ def _workspace_handlers(
         render_document,
         inspect_document,
         verify_document,
+        publish_html_page,
+        unpublish_html_page,
     )
 
 
@@ -1692,6 +1709,8 @@ def build_default_gateway(
         render_document,
         inspect_document,
         verify_document,
+        publish_html_page,
+        unpublish_html_page,
     ) = _workspace_handlers(store)
     gw.register(
         ToolSpec(
@@ -1939,6 +1958,30 @@ def build_default_gateway(
                 "Old .doc/.ppt/.xls fail in Chinese. Args: artifact_id|title, kind?"
             ),
             handler=verify_document,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="publish_html_page",
+            description=(
+                "Publish an existing HTML artifact to a public URL. "
+                "Visitors can open it without login. Forms may POST JSON to the "
+                "page collect path; entries land in the publisher's archive. "
+                "Args: artifact_id."
+            ),
+            handler=publish_html_page,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="unpublish_html_page",
+            description=(
+                "Revoke a published HTML page. The public URL and collect path "
+                "return 404. Args: page_id? | artifact_id?"
+            ),
+            handler=unpublish_html_page,
             school_scoped=False,
         )
     )
@@ -2278,6 +2321,23 @@ def openai_tool_schemas(
                 "artifact_id": {"type": "string"},
                 "title": {"type": "string"},
                 "kind": {"type": "string", "description": "docx, pptx, or xlsx"},
+            },
+        },
+        "publish_html_page": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Existing HTML artifact to publish",
+                },
+            },
+            "required": ["artifact_id"],
+        },
+        "unpublish_html_page": {
+            "type": "object",
+            "properties": {
+                "page_id": {"type": "string"},
+                "artifact_id": {"type": "string"},
             },
         },
         "generate_xlsx_document": {

@@ -295,7 +295,7 @@ def test_bridge_allowlist_is_thin() -> None:
     assert "inspect_document" in ALLOWED_GATEWAY_TOOLS
     assert "verify_document" in ALLOWED_GATEWAY_TOOLS
     assert "generate_image" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 23
+    assert len(ALLOWED_GATEWAY_TOOLS) == 25
 
 
 def test_shadow_diff_flags_false_green() -> None:

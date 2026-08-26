@@ -55,6 +55,60 @@ router.get('/tip', async (_req, res) => {
   }
 });
 
+const PAGE_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
+async function publicPageProxy(req, res, path, { binary = false } = {}) {
+  const target = `${picoBase()}${path}`;
+  try {
+    const headers = { Accept: req.headers.accept || '*/*' };
+    if (req.headers['content-type']) {
+      headers['Content-Type'] = req.headers['content-type'];
+    }
+    if (req.headers['x-forwarded-for']) {
+      headers['X-Forwarded-For'] = String(req.headers['x-forwarded-for']);
+    }
+    const init = { method: req.method, headers };
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      if (req.body && typeof req.body === 'object' && Object.keys(req.body).length) {
+        init.body = JSON.stringify(req.body);
+        headers['Content-Type'] = 'application/json';
+      }
+    }
+    const r = await fetch(target, init);
+    const body = binary ? Buffer.from(await r.arrayBuffer()) : await r.text();
+    res.status(r.status);
+    const ct = r.headers.get('content-type');
+    if (ct) {
+      res.setHeader('Content-Type', ct);
+    }
+    const csp = r.headers.get('content-security-policy');
+    if (csp) {
+      res.setHeader('Content-Security-Policy', csp);
+    }
+    const nosniff = r.headers.get('x-content-type-options');
+    if (nosniff) {
+      res.setHeader('X-Content-Type-Options', nosniff);
+    }
+    res.send(body);
+  } catch (err) {
+    logger.error('[pico public page]', err);
+    res.status(502).json({ error: 'pico_upstream_unavailable' });
+  }
+}
+
+router.get('/p/:pageId', (req, res) => {
+  if (!PAGE_ID_RE.test(req.params.pageId || '')) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+  return publicPageProxy(req, res, `/p/${req.params.pageId}`, { binary: true });
+});
+router.post('/p/:pageId/collect', (req, res) => {
+  if (!PAGE_ID_RE.test(req.params.pageId || '')) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+  return publicPageProxy(req, res, `/p/${req.params.pageId}/collect`);
+});
+
 // All remaining ledger routes require an authenticated product session.
 router.use(requireJwtAuth);
 
