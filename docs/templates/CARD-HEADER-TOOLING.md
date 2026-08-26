@@ -20,6 +20,7 @@ CLAIM-WB: NO
 【工具合同 · docs/TOOLING-CATALOG.md】
 批准 id：
   visual-gate · tip-pin · remote-health · gh-git
+  subscribe-pr · subscribe-ci · subscribe-timer
   ssh-ecs · cloud-agent-ts · prod-update
   playwright-mcp · chrome-devtools-mcp · pytest-ruff
 证据路径：docs/evidence/<card>/<scene>/V0–V3
