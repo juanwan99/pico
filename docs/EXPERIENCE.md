@@ -33,7 +33,7 @@ DATE: 2026-08-26
 13. **`juanwan99/oneflow` 不当真源**（已 Archive）。
 14. **改 Python 工具说明 ≠ Pi 看见。** 真路径：`pico-gateway-tools.ts` + `SYSTEM.md`。
 24. **办公文档 = [ADR-OFFICE-DOC-PIPELINE](./ADR-OFFICE-DOC-PIPELINE.md)。** spec/`generate_*` = **稳妥默认**，不是天花板。卡 1 #690 / 卡 2 #694 已收口。禁再加厚 spec 当天花板（「第三张办公卡」指这个）。上限 = 上游 Pi skill + 沙箱库；禁 host bash、禁自研幻灯 OS。
-27. **能力笼子已拆（#703 T-UNMASK-PI）。** 聊天图进 Pi RPC `images`；有图走 vision 模型；上传收 png/jpg；PPT 三页硬律退役（只打空壳）；进度词不再写「课件」。控制面仍留：账本·租户·假绿门·不代登·用法=Grok。贴图实测走 `/v1/chat/completions` 真载荷（`content[]` + 旁路 `image_urls`）。相对 `/images/` 不拉（禁 SSRF）。沙箱截图工具仍回元数据，不是识图像素。贴图/拖图全是图且提供商可贴时直送提供商，不弹 LibreChat 三选。
+27. **能力笼子已拆（#703 T-UNMASK-PI）。** 聊天图进 Pi RPC `images`；有图走 vision 模型；上传收 png/jpg；PPT 三页硬律退役（只打空壳）；进度词不再写「课件」。控制面仍留：账本·租户·假绿门·不代登·用法=Grok。贴图实测走 `/v1/chat/completions` 真载荷（`content[]` + 旁路 `image_urls`）。相对 `/images/` 不拉（禁 SSRF）。沙箱截图工具仍回元数据，不是识图像素。贴图/拖图全是图且提供商可贴时直送提供商，不弹 LibreChat 三选。回形针无 SharePoint 时一点即传，不弹目的地菜单。
 25. **HTML 公网页 = 能力。** 公网链 `/p/{id}`（不是 SPA）。`publish_html_page` / 收集口 / `unpublish_html_page`。数据落发布人账本。禁焊场景提示词。#697 在飞。
 
 ## C · 部署 / ECS

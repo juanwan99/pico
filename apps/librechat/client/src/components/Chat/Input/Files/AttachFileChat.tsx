@@ -10,7 +10,12 @@ import {
 } from 'librechat-data-provider';
 import type { TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter } from '~/common';
-import { useGetFileConfig, useGetEndpointsQuery, useGetAgentByIdQuery } from '~/data-provider';
+import {
+  useGetFileConfig,
+  useGetEndpointsQuery,
+  useGetAgentByIdQuery,
+  useGetStartupConfig,
+} from '~/data-provider';
 import { useAgentsMapContext } from '~/Providers';
 import AttachFileMenu from './AttachFileMenu';
 import AttachFile from './AttachFile';
@@ -62,6 +67,8 @@ function AttachFileChat({
   });
 
   const { data: endpointsConfig } = useGetEndpointsQuery();
+  const { data: startupConfig } = useGetStartupConfig();
+  const sharePointEnabled = startupConfig?.sharePointFilePickerEnabled === true;
 
   const agentProvider = useMemo(() => {
     if (!isAgents || !conversation?.agent_id) {
@@ -108,6 +115,17 @@ function AttachFileChat({
       />
     );
   } else if ((isAgents || endpointSupportsFiles) && !isUploadDisabled) {
+    if (!sharePointEnabled) {
+      return (
+        <AttachFile
+          disabled={disableInputs}
+          files={files}
+          setFiles={setFiles}
+          setFilesLoading={setFilesLoading}
+          conversation={conversation}
+        />
+      );
+    }
     return (
       <AttachFileMenu
         endpoint={endpoint}

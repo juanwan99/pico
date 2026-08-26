@@ -22,6 +22,7 @@ const defaultFileConfig = mergeFileConfig({
 });
 
 let mockFileConfig = defaultFileConfig;
+let mockSharePointEnabled = false;
 
 let mockAgentsMap: Record<string, Partial<Agent>> = {};
 let mockAgentQueryData: Partial<Agent> | undefined;
@@ -32,6 +33,9 @@ jest.mock('~/data-provider', () => ({
     data: select != null ? select(mockFileConfig) : mockFileConfig,
   }),
   useGetAgentByIdQuery: () => ({ data: mockAgentQueryData }),
+  useGetStartupConfig: () => ({
+    data: { sharePointFilePickerEnabled: mockSharePointEnabled },
+  }),
 }));
 
 jest.mock('~/Providers', () => ({
@@ -74,19 +78,28 @@ function renderComponent(conversation: Record<string, unknown> | null, disableIn
 describe('AttachFileChat', () => {
   beforeEach(() => {
     mockFileConfig = defaultFileConfig;
+    mockSharePointEnabled = false;
     mockAgentsMap = {};
     mockAgentQueryData = undefined;
     mockAttachFileMenuProps = {};
   });
 
   describe('rendering decisions', () => {
-    it('renders AttachFileMenu for agents endpoint', () => {
+    it('renders one-click AttachFile for agents when SharePoint is off', () => {
       renderComponent({ endpoint: EModelEndpoint.agents, agent_id: 'agent-1' });
-      expect(screen.getByTestId('attach-file-menu')).toBeInTheDocument();
+      expect(screen.getByTestId('attach-file')).toBeInTheDocument();
+      expect(screen.queryByTestId('attach-file-menu')).not.toBeInTheDocument();
     });
 
-    it('renders AttachFileMenu for custom endpoint with file support', () => {
+    it('renders one-click AttachFile for custom endpoint when SharePoint is off', () => {
       renderComponent({ endpoint: 'Moonshot' });
+      expect(screen.getByTestId('attach-file')).toBeInTheDocument();
+      expect(screen.queryByTestId('attach-file-menu')).not.toBeInTheDocument();
+    });
+
+    it('renders AttachFileMenu for agents when SharePoint is on', () => {
+      mockSharePointEnabled = true;
+      renderComponent({ endpoint: EModelEndpoint.agents, agent_id: 'agent-1' });
       expect(screen.getByTestId('attach-file-menu')).toBeInTheDocument();
     });
 
@@ -97,6 +110,10 @@ describe('AttachFileChat', () => {
   });
 
   describe('endpointType resolution for agents', () => {
+    beforeEach(() => {
+      mockSharePointEnabled = true;
+    });
+
     it('passes custom endpointType when agent provider is a custom endpoint', () => {
       mockAgentsMap = {
         'agent-1': { provider: 'Moonshot', model_parameters: {} } as Partial<Agent>,
@@ -140,6 +157,10 @@ describe('AttachFileChat', () => {
   });
 
   describe('useResponsesApi resolution for agents', () => {
+    beforeEach(() => {
+      mockSharePointEnabled = true;
+    });
+
     it('passes useResponsesApi from fetched agent model parameters', () => {
       mockAgentQueryData = {
         provider: EModelEndpoint.azureOpenAI,
@@ -176,6 +197,10 @@ describe('AttachFileChat', () => {
   });
 
   describe('endpointType resolution for non-agents', () => {
+    beforeEach(() => {
+      mockSharePointEnabled = true;
+    });
+
     it('passes custom endpointType for a custom endpoint', () => {
       renderComponent({ endpoint: 'Moonshot' });
       expect(mockAttachFileMenuProps.endpointType).toBe(EModelEndpoint.custom);
@@ -188,6 +213,10 @@ describe('AttachFileChat', () => {
   });
 
   describe('consistency: same endpoint type for direct vs agent usage', () => {
+    beforeEach(() => {
+      mockSharePointEnabled = true;
+    });
+
     it('resolves Moonshot the same way whether used directly or through an agent', () => {
       renderComponent({ endpoint: 'Moonshot' });
       const directType = mockAttachFileMenuProps.endpointType;
@@ -229,7 +258,7 @@ describe('AttachFileChat', () => {
       expect(screen.getByTestId('attach-file')).toBeInTheDocument();
     });
 
-    it('renders AttachFileMenu when provider-specific config overrides agents disabled', () => {
+    it('renders AttachFile when provider-specific config overrides agents disabled', () => {
       mockFileConfig = mergeFileConfig({
         endpoints: {
           Moonshot: { disabled: false, fileLimit: 5 },
@@ -240,7 +269,7 @@ describe('AttachFileChat', () => {
         'agent-1': { provider: 'Moonshot', model_parameters: {} } as Partial<Agent>,
       };
       renderComponent({ endpoint: EModelEndpoint.agents, agent_id: 'agent-1' });
-      expect(screen.getByTestId('attach-file-menu')).toBeInTheDocument();
+      expect(screen.getByTestId('attach-file')).toBeInTheDocument();
     });
 
     it('renders null for assistants endpoint when fileConfig.assistants.disabled is true', () => {
@@ -257,6 +286,10 @@ describe('AttachFileChat', () => {
   });
 
   describe('endpointFileConfig resolution', () => {
+    beforeEach(() => {
+      mockSharePointEnabled = true;
+    });
+
     it('passes Moonshot-specific file config for agent with Moonshot provider', () => {
       mockAgentsMap = {
         'agent-1': { provider: 'Moonshot', model_parameters: {} } as Partial<Agent>,
