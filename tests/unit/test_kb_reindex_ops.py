@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from app.main import _ops_reindex_peer_allowed, app  # noqa: E402
+from app.main import _ops_reindex_peer_allowed, app, kb_reindex_all
 
 
 @pytest.mark.parametrize(
@@ -44,10 +46,6 @@ def test_reindex_all_allows_private_hairpin(monkeypatch: pytest.MonkeyPatch) -> 
     class _Req:
         client = _Client()
 
-    import asyncio
-
-    from app.main import kb_reindex_all
-
     out = asyncio.run(kb_reindex_all(_Req()))  # type: ignore[arg-type]
     assert out["ok"] is True
     assert out["indexed"] == 2
@@ -63,12 +61,6 @@ def test_reindex_all_rejects_public_peer(monkeypatch: pytest.MonkeyPatch) -> Non
 
     class _Req:
         client = _Client()
-
-    import asyncio
-
-    from fastapi import HTTPException
-
-    from app.main import kb_reindex_all
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(kb_reindex_all(_Req()))  # type: ignore[arg-type]
