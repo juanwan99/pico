@@ -66,7 +66,11 @@ def extract_images_from_content(content: Any) -> list[dict[str, Any]]:
 
 
 def last_user_images(messages: list[Any]) -> list[dict[str, Any]]:
-    """Images on the latest user turn only (current prompt)."""
+    """Images on the latest user turn only (current prompt).
+
+    Accepts OpenAI ``content[]`` parts **and** LibreChat sibling ``image_urls``.
+    Relative ``/images/...`` URLs stay dropped (no fetch / no SSRF).
+    """
     for item in reversed(messages or []):
         role = getattr(item, "role", None)
         if role is None and isinstance(item, dict):
@@ -76,7 +80,21 @@ def last_user_images(messages: list[Any]) -> list[dict[str, Any]]:
         content = getattr(item, "content", None)
         if content is None and isinstance(item, dict):
             content = item.get("content")
-        return extract_images_from_content(content)
+        found = extract_images_from_content(content)
+        if found:
+            return found
+        extra = getattr(item, "image_urls", None)
+        if extra is None and isinstance(item, dict):
+            extra = item.get("image_urls")
+        if extra is None:
+            extra = getattr(item, "images", None)
+            if extra is None and isinstance(item, dict):
+                extra = item.get("images")
+        if extra:
+            found = extract_images_from_content(extra)
+            if found:
+                return found
+        return []
     return []
 
 

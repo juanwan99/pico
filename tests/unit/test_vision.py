@@ -58,6 +58,32 @@ def test_extracts_data_url_and_drops_text_only() -> None:
     assert hosted[1]["type"] == "image_url"
 
 
+def test_last_user_images_reads_librechat_sibling_image_urls() -> None:
+    """LC AgentClient may keep pixels on message.image_urls while content is text."""
+    msg = _Msg("user", "这是什么")
+    msg.image_urls = [
+        {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{PNG_B64}"},
+        }
+    ]
+    images = last_user_images([msg])
+    assert len(images) == 1
+    assert images[0]["data"] == PNG_B64
+    assert pi_rpc_images(images)[0]["data"] == PNG_B64
+
+
+def test_last_user_images_drops_relative_librechat_path() -> None:
+    """`/images/user/file.png` is not fetched (SSRF / cross-container FS)."""
+    parts = [
+        {"type": "text", "text": "这是什么"},
+        {"type": "image_url", "image_url": {"url": "/images/u1/shot.png"}},
+    ]
+    assert extract_images_from_content(parts) == []
+    assert last_user_images([_Msg("user", parts)]) == []
+    assert pi_rpc_images([{"type": "image_url", "url": "/images/u1/shot.png"}]) == []
+
+
 def test_last_user_images_only_current_turn() -> None:
     prior = _Msg(
         "user",

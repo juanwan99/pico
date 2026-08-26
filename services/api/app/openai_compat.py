@@ -41,6 +41,9 @@ router = APIRouter(tags=["openai-compat"])
 class ChatMessage(BaseModel):
     role: str
     content: str | list[Any] | None = ""
+    # LibreChat AgentClient may put vision parts on the message instead of
+    # (or as well as) content[]. Extra fields were previously dropped.
+    image_urls: list[Any] | None = None
 
 
 class ChatCompletionRequest(BaseModel):
