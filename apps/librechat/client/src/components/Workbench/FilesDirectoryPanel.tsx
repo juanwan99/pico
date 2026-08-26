@@ -40,19 +40,33 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
     setLoading(true);
     setError(null);
     try {
-      const [mineRow, folderRow, fieldRow] = await Promise.all([
+      // Do not pull edu fields on every open — only when opening 转到学校.
+      const [mineRow, folderRow] = await Promise.all([
         listMyPicoArtifacts().catch(() => ({ artifacts: [] as PicoArtifact[] })),
         listMyFolders().catch(() => ({ folders: [] as PicoPersonalFolder[] })),
-        listEduFields().catch(() => ({ fields: [] as EduSchoolField[] })),
       ]);
       setMine(Array.isArray(mineRow.artifacts) ? mineRow.artifacts : []);
       setFolders(Array.isArray(folderRow.folders) ? folderRow.folders : []);
-      setFields(Array.isArray(fieldRow.fields) ? fieldRow.fields : []);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : '文件目录现在列不出');
       setMine([]);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const openTransfer = useCallback(async (row: PicoArtifact) => {
+    setTransferOf(row);
+    setTransferMode('copy');
+    setMessage(null);
+    try {
+      const fieldRow = await listEduFields().catch(() => ({ fields: [] as EduSchoolField[] }));
+      const next = Array.isArray(fieldRow.fields) ? fieldRow.fields : [];
+      setFields(next);
+      setTransferField(next.find((field) => field.id)?.id || '');
+    } catch {
+      setFields([]);
+      setTransferField('');
     }
   }, []);
 
@@ -247,12 +261,7 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
             <button
               type="button"
               className="pico-type-body text-[color:var(--pico-ink-2)]"
-              onClick={() => {
-                setTransferOf(row);
-                setTransferField(fields[0]?.id || '');
-                setTransferMode('copy');
-                setMessage(null);
-              }}
+              onClick={() => void openTransfer(row)}
               data-testid={`my-files-transfer-${row.id}`}
             >
               转到学校
