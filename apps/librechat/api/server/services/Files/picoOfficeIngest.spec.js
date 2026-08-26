@@ -21,7 +21,9 @@ describe('pico composer ingest (T-AGENT-PLAIN-V1 F2)', () => {
     expect(INGEST_EXT.has('.docx')).toBe(true);
     expect(INGEST_EXT.has('.pdf')).toBe(true);
     expect(INGEST_EXT.has('.pptx')).toBe(true);
-    expect(INGEST_EXT.has('.png')).toBe(false);
+    expect(INGEST_EXT.has('.png')).toBe(true);
+    expect(INGEST_EXT.has('.jpg')).toBe(true);
+    expect(INGEST_EXT.has('.webp')).toBe(true);
   });
 
   it('does not stamp reserved conversation ids', () => {

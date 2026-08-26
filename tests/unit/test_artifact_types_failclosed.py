@@ -76,20 +76,26 @@ async def test_generate_docx_rejects_short_body_without_padding():
             {"title": "家长会通知.docx", "marker": "M", "body": "一行"},
         )
     assert ei.value.code == "tool.invalid_arguments"
-    assert "垫字" in ei.value.message or "正文过短" in ei.value.message
+    assert "垫字" in ei.value.message or "空" in ei.value.message
 
 
 @pytest.mark.asyncio
-async def test_generate_pptx_rejects_one_slide_without_padding():
+async def test_generate_pptx_accepts_one_slide_and_rejects_empty():
     gw = build_default_gateway(Mem())
+    one = await gw.invoke(
+        P(),
+        "generate_pptx_document",
+        {"title": "培训.pptx", "marker": "M", "body": "只有一页"},
+    )
+    assert one.get("format") == "pptx"
     with pytest.raises(ToolError) as ei:
         await gw.invoke(
             P(),
             "generate_pptx_document",
-            {"title": "培训.pptx", "marker": "M", "body": "只有一页"},
+            {"title": "空.pptx", "marker": "M", "body": "   "},
         )
     assert ei.value.code == "tool.invalid_arguments"
-    assert "垫页" in ei.value.message or "不足三页" in ei.value.message
+    assert "垫页" in ei.value.message or "没有可渲染" in ei.value.message
 
 
 def test_html_generator_not_protected_write():

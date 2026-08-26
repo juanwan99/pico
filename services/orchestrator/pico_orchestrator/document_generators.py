@@ -13,17 +13,16 @@ import zipfile
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
-# Delivery floor on the *caller* body (not generator padding).
-# Short body → tool fails; do not invent 套话 to hit the number.
-MIN_DOCX_BODY_CHARS = 300
-MIN_PPTX_SLIDES = 3
+# Empty-shell floor only. Do not invent 套话, and do not demand a page quota.
+MIN_DOCX_BODY_CHARS = 20
+MIN_PPTX_SLIDES = 1
 DOCX_BODY_TOO_SHORT = (
-    "Word 正文过短。请把题面写成完整多段正文（至少数百字）再调用 "
-    "generate_docx_document，不要只交一行，也不要指望系统垫字。"
+    "Word 正文是空的。请写入实际内容再调用 generate_docx_document，"
+    "系统不会垫字。"
 )
 PPTX_SLIDES_TOO_FEW = (
-    "课件不足三页。请按题面用空行或 --- 分成至少三页（每页有标题）再调用 "
-    "generate_pptx_document，不要指望系统垫页。"
+    "PPT 没有可渲染的页。请写入至少一页再调用 generate_pptx_document，"
+    "系统不会垫页。"
 )
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -123,8 +122,8 @@ def office_shell_reason(raw: bytes, ext: str) -> str | None:
         text = docx_visible_text(raw)
         if _visible_len(text) < MIN_DOCX_BODY_CHARS:
             return (
-                "Word 正文过短，打开后几乎是空壳。"
-                "请用 generate_docx_document 写入完整多段正文（至少数百字）后再交。"
+                "Word 打开后几乎是空壳。"
+                "请用 generate_docx_document 写入实际正文后再交。"
             )
         return None
     if suffix == ".pptx":
@@ -132,8 +131,8 @@ def office_shell_reason(raw: bytes, ext: str) -> str | None:
         titled = sum(1 for t in titles if (t or "").strip())
         if len(titles) < MIN_PPTX_SLIDES or titled < MIN_PPTX_SLIDES:
             return (
-                "课件不足三页有标题，打开后几乎是空页。"
-                "请用 generate_pptx_document 写出至少三页后再交。"
+                "PPT 打开后没有可看的页。"
+                "请用 generate_pptx_document 写出至少一页后再交。"
             )
         return None
     return None

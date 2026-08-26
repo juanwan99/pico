@@ -48,6 +48,7 @@ Pi 只调白名单工具，不写 python-docx，不跑公网 bash。
 | **检查** | `is_valid_ooxml` 失败关；LibreOffice `sandbox_document_open` **只预览** | LibreOffice 当排版引擎；坏包装绿 |
 | **Pi 看见** | `pico-gateway-tools.ts` + `SYSTEM.md`；动词少、spec 富 | 给 Pi host bash / 代码执行；MCP 办公室栈 |
 | **图** | `generate_image` 产物 **插入** spec（进 Word/PPT） | 图和文档两张皮 |
+| **天花板** | 上游 Pi 官方/成熟文档 skill + 隔离沙箱跑 `python-pptx` | 把 v1 spec 焊成唯一核、加厚自研 DSL |
 | **升级** | 只改适配层（spec 字段 + 三个模块） | 桥内再造 Office OS |
 
 ### 两条路径（必须同时成立）
@@ -120,7 +121,7 @@ pico.office.spec/v1
 
 ## 6. 禁区（违法或必落后）
 
-1. 让 Pi / DeepSeek **即兴写 python-docx**（Codex 社区已证明文件常坏）。  
+1. 让 Pi / DeepSeek **在宿主机即兴写 python-docx**（Codex 社区已证明文件常坏）。隔离沙箱 + 官方 skill 是后话，不是本 ADR 的矮天花板。  
 2. 公网默认 host bash / 代码执行当办公能力。  
 3. 自研 MCP 协议栈或「四十个细工具」办公室服务器。  
 4. 自研 OOXML / 排版引擎 / 第二套账本。  
@@ -138,5 +139,5 @@ pico.office.spec/v1
 ## 8. 后果
 
 - **现在：** 卡 1 #690 · 卡 2 [#694](https://github.com/juanwan99/pico/issues/694) 均过门 @ 产品 tip `18537f47…`。记忆 / 人视角日用仍挂起。  
-- **禁第三张办公卡。** 覆盖已收口，不再拆残债卡。  
-- **产品承诺：** 两张做完 = 日常真文件办公同档 Claude/Codex skill；不同档 Word 内 Copilot。
+- **禁第三张「加厚 spec」办公卡。** 覆盖已收口。再动办公 = 打开 Pi skill/沙箱，不是再加字段。  
+- **产品承诺：** spec/`generate_*` 是稳妥默认。上限对齐 Claude/Codex **文档 skill**，不是 Word 内 Copilot。#703 拆掉纯文本/三页律等笼子。

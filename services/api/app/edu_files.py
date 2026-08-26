@@ -84,6 +84,19 @@ def extract_for_kb(filename: str, data: bytes) -> dict[str, Any]:
     from pathlib import Path
 
     suffix = Path(filename or "file").suffix.lower()
+    if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        ext = "jpg" if suffix in {".jpg", ".jpeg"} else suffix.lstrip(".")
+        return {
+            "filename": (filename or "file")[:180],
+            "kind": ext,
+            "status": "ok",
+            "headline": "图片",
+            "rows": None,
+            "cols": None,
+            "sheets": [],
+            "text": "",
+            "error": None,
+        }
     if suffix in PARSE_EXT:
         text = parse_office_bytes(filename=filename or "file", data=data)
         ext = suffix.lstrip(".")

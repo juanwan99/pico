@@ -205,10 +205,9 @@ def test_short_body_is_not_padded_and_generate_fails() -> None:
     for phrase in PAD_PHRASES:
         assert phrase not in text
     assert office_shell_reason(raw, ".docx")
-    with pytest.raises(ValueError, match="正文过短"):
-        require_docx_body("一行通知")
-    with pytest.raises(ValueError, match="不足三页"):
-        require_pptx_body("只有一页")
+    with pytest.raises(ValueError, match="空"):
+        require_docx_body("   ")
+    require_pptx_body("只有一页")
     require_docx_body(PARENT_NOTICE_BODY)
     require_pptx_body(TRAINING_DECK_BODY)
 

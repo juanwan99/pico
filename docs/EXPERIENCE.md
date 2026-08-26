@@ -32,7 +32,8 @@ DATE: 2026-08-26
 12. **CLAIM-WB-DEGREE-WEB 业主 2026-08-26 已签 YES** @ tip `dcb47c00…`（#449/#316 OWNER DECISION）。工程仍禁改口/再代签。记忆·人视角日用挂起。
 13. **`juanwan99/oneflow` 不当真源**（已 Archive）。
 14. **改 Python 工具说明 ≠ Pi 看见。** 真路径：`pico-gateway-tools.ts` + `SYSTEM.md`。
-24. **办公文档 = [ADR-OFFICE-DOC-PIPELINE](./ADR-OFFICE-DOC-PIPELINE.md)。** 真源 spec；只两张卡，均已收口。卡 1 #690 PASS @ `0acf8f62…`。卡 2 #694 PASS @ `18537f47…`。禁第三张办公卡、禁模型即兴写库、禁四刀碎卡。
+24. **办公文档 = [ADR-OFFICE-DOC-PIPELINE](./ADR-OFFICE-DOC-PIPELINE.md)。** spec/`generate_*` = **稳妥默认**，不是天花板。卡 1 #690 / 卡 2 #694 已收口。禁再加厚 spec 当天花板（「第三张办公卡」指这个）。上限 = 上游 Pi skill + 沙箱库；禁 host bash、禁自研幻灯 OS。
+27. **能力笼子已拆（#703 T-UNMASK-PI）。** 聊天图进 Pi RPC `images`；有图走 vision 模型；上传收 png/jpg；PPT 三页硬律退役（只打空壳）；进度词不再写「课件」。控制面仍留：账本·租户·假绿门·不代登·用法=Grok。
 25. **HTML 公网页 = 能力。** 公网链 `/p/{id}`（不是 SPA）。`publish_html_page` / 收集口 / `unpublish_html_page`。数据落发布人账本。禁焊场景提示词。#697 在飞。
 
 ## C · 部署 / ECS
