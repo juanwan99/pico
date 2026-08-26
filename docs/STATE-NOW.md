@@ -4,10 +4,10 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok · OPEN · CANDIDATE #683）
+在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok · OPEN · #683 黄审 PASS）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 363f1638ac8680900f8ff816fce6f0fa35a05d53（须现场再 curl）
-阻塞: #683 等 CI @9c22b25d · 黄审未过 · 总管不合
+阻塞: 等执行窗合 `9c22b25d` + 部 · 总管不合不部
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: NO
 PRODUCT PASS: 未签 · 仅业主（#449 / #316）
@@ -54,7 +54,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 
 | 优先级 | Issue | 说明 |
 |--------|-------|------|
-| 在飞 | [#682](https://github.com/juanwan99/pico/issues/682) | A1 T-KB-ENGINE-ON · CANDIDATE [#683](https://github.com/juanwan99/pico/pull/683) · CI 未绿 |
+| 在飞 | [#682](https://github.com/juanwan99/pico/issues/682) | A1 · [#683](https://github.com/juanwan99/pico/pull/683) 黄审 PASS @`9c22b25d` · 等执行窗合部 |
 | 已收口 | [#671](https://github.com/juanwan99/pico/issues/671) | T-FILES-PLACE · 业主令收口 · tip=`363f1638…` |
 | 运维 | [#679](https://github.com/juanwan99/pico/pull/679) | Cloud Agent TS + ssh ecs · 待执行窗合 |
 | 真源 docs | [#680](https://github.com/juanwan99/pico/pull/680) | 现况/经验/工具 · 待执行窗合 · 不部 |
