@@ -4,7 +4,7 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #703 T-UNMASK-PI（拆能力笼子 · 留控制面）
+在飞: #703 T-UNMASK-PI（拆笼子 · 贴图直送提供商）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 88160b316b481151575955aa8e3b18b7602d5dd8 = 产品 tip（#701 已部；本卡未部）
 阻塞: 无 · 本卡黄档 · 禁部未对 tip 的 docs SHA

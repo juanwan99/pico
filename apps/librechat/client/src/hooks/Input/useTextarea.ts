@@ -17,6 +17,7 @@ import {
   getEntityName,
   getEntity,
   checkIfScrollable,
+  resolveUploadRoute,
 } from '~/utils';
 import { useAssistantsMapContext } from '~/Providers/AssistantsMapContext';
 import { useLatestMessageMeta } from '~/hooks/Messages/useLatestMessage';
@@ -337,14 +338,15 @@ export default function useTextarea({
         }
 
         const options = getUploadOptions(timestampedFiles);
-        if (options.length === 0) {
+        const decision = resolveUploadRoute(timestampedFiles, options);
+        if (decision.kind === 'reject') {
           showToast({ message: localize('com_error_files_unsupported'), status: 'error' });
           setFilesLoading(false);
           return;
         }
-        if (options.length === 1) {
-          routeFiles(timestampedFiles, options[0]);
-          if (options[0] === EToolResources.context) {
+        if (decision.kind === 'route') {
+          routeFiles(timestampedFiles, decision.toolResource);
+          if (decision.toolResource === EToolResources.context) {
             showToast({ message: localize('com_ui_file_attached_as_text'), status: 'info' });
           }
           return;
