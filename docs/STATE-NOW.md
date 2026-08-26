@@ -4,13 +4,13 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok · OPEN · tip=main · 五句已贴）
+在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 590772fea8a79f044c49a4fc69f6ec759c382713 = origin/main
-阻塞: 老师手过门 · PASS 未签 · 不关卡
+阻塞: 无 · 无在飞则讨论不开卡
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: NO
-PRODUCT PASS: 未签 · 仅业主（#449 / #316）
+PRODUCT PASS: #682 业主已签 · #449 / #316 仍仅业主 · CLAIM-WB 仍 NO
 经验: docs/EXPERIENCE.md（唯一 · 按域）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 北极星: DIRECTION-NOW §0-star · 用法 = Grok
@@ -54,8 +54,8 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 
 | 优先级 | Issue | 说明 |
 |--------|-------|------|
-| 在飞 | [#682](https://github.com/juanwan99/pico/issues/682) | A1 · tip=main · 五句已贴 · 等老师手 · 勿关 |
-| 已收口 | [#671](https://github.com/juanwan99/pico/issues/671) | T-FILES-PLACE · 业主令收口 · tip=`363f1638…` |
+| 已收口 | [#682](https://github.com/juanwan99/pico/issues/682) | A1 T-KB-ENGINE-ON · 业主 PASS · tip=`590772fe…` |
+| 已收口 | [#671](https://github.com/juanwan99/pico/issues/671) | T-FILES-PLACE · 业主令收口 |
 | 运维 | [#679](https://github.com/juanwan99/pico/pull/679) | Cloud Agent TS + ssh ecs · 待执行窗合 |
 | 真源 docs | [#680](https://github.com/juanwan99/pico/pull/680) | 现况/经验/工具 · 待执行窗合 · 不部 |
 | 产品签 | [#449](https://github.com/juanwan99/pico/issues/449) · [#316](https://github.com/juanwan99/pico/issues/316) | 仅业主 · **勿关** |

@@ -26,7 +26,6 @@ NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
 |----------|------|------|
 | **NOW** | **[STATE-NOW.md](./STATE-NOW.md)** | **唯一现况三行**（冻结到 9/7） |
 | **NOW** | **[#634](https://github.com/juanwan99/pico/issues/634)** | **冻结令** · 可钉现况三行评论 |
-| **NOW** | **[#682](https://github.com/juanwan99/pico/issues/682)** | **在飞** A1 T-KB-ENGINE-ON · stamp-ok |
 | 0 | **[DIRECTION-NOW.md](./DIRECTION-NOW.md)** | 北极星 §0-star · 用法 = Grok |
 | 0 | **[LAW-NO-SELF-BUILD-THIN-ADAPTER.md](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)** | 禁止自研 |
 | 0 | **[EXPERIENCE.md](./EXPERIENCE.md)** | 经验唯一 · 按域 · 派发点名 ≤3 |
@@ -60,7 +59,7 @@ NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
 
 **现况:** [STATE-NOW.md](./STATE-NOW.md)  
 **冻结令:** [#634](https://github.com/juanwan99/pico/issues/634)  
-**在飞:** [#682](https://github.com/juanwan99/pico/issues/682) T-KB-ENGINE-ON  
+**在飞:** 无  
 **经验 / 工具:** [EXPERIENCE.md](./EXPERIENCE.md) · [TOOLING-CATALOG.md](./TOOLING-CATALOG.md)  
 **北极星:** [DIRECTION-NOW.md](./DIRECTION-NOW.md) §0-star  
 **不当下一张:** #627 / #628 / #646 / 任何 DAY-TASK
