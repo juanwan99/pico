@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import binascii
 import re
+import threading
 from typing import Any
 
 from pico_orchestrator.run_types import RunCaps
@@ -16,6 +17,10 @@ from pico_orchestrator.run_types import RunCaps
 DEFAULT_DEEPSEEK_VISION = "deepseek-v4-flash-vision-exp"
 _MAX_IMAGES = 8
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
+_MAX_CONVOS = 64
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+_PENDING: dict[str, list[dict[str, Any]]] = {}
+_PENDING_LOCK = threading.Lock()
 _DATA_URL_RE = re.compile(
     r"^data:(image/(?:png|jpeg|jpg|gif|webp));base64,(.+)$",
     re.IGNORECASE | re.DOTALL,
@@ -63,6 +68,83 @@ def extract_images_from_content(content: Any) -> list[dict[str, Any]]:
         if parsed is not None:
             out.append(parsed)
     return out
+
+
+def png_bytes_to_image(raw: bytes, *, mime: str = "image/png") -> dict[str, Any] | None:
+    """Keep real raster bytes. Refuse non-PNG / oversize. No HTTP fetch."""
+    if not raw or not raw.startswith(_PNG_MAGIC) or len(raw) > _MAX_IMAGE_BYTES:
+        return None
+    data = base64.b64encode(raw).decode("ascii")
+    kind = mime if mime.startswith("image/") else "image/png"
+    return {"type": "image", "data": data, "mimeType": kind}
+
+
+def merge_images(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Stable merge. User-turn pixels first; drop duplicates; cap 8."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for group in groups:
+        for item in group or []:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("data") or item.get("url") or "")
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+            if len(out) >= _MAX_IMAGES:
+                return out
+    return out
+
+
+def _conversation_from_bind() -> str:
+    try:
+        from pico_orchestrator.usage_hook import current_usage_bind
+
+        bind = current_usage_bind()
+    except Exception:  # noqa: BLE001 — bind is optional on tool paths
+        return ""
+    if bind is None:
+        return ""
+    return str(getattr(bind, "conversation_id", "") or "").strip()
+
+
+def remember_conversation_png(
+    raw: bytes, *, conversation_id: str | None = None
+) -> bool:
+    """Remember a sandbox raster for the next chat turn. No tool-JSON base64."""
+    item = png_bytes_to_image(raw)
+    if item is None:
+        return False
+    cid = (conversation_id or "").strip() or _conversation_from_bind()
+    if not cid:
+        return False
+    with _PENDING_LOCK:
+        if cid not in _PENDING and len(_PENDING) >= _MAX_CONVOS:
+            _PENDING.pop(next(iter(_PENDING)))
+        bucket = list(_PENDING.get(cid) or [])
+        bucket.append(item)
+        del bucket[:-_MAX_IMAGES]
+        _PENDING.pop(cid, None)
+        _PENDING[cid] = bucket
+    return True
+
+
+def conversation_images(conversation_id: str | None) -> list[dict[str, Any]]:
+    """Peek last sandbox rasters for this conversation. Does not consume."""
+    cid = (conversation_id or "").strip()
+    if not cid:
+        return []
+    with _PENDING_LOCK:
+        return list(_PENDING.get(cid) or [])
+
+
+def clear_conversation_images(conversation_id: str | None = None) -> None:
+    with _PENDING_LOCK:
+        if conversation_id:
+            _PENDING.pop(str(conversation_id).strip(), None)
+        else:
+            _PENDING.clear()
 
 
 def last_user_images(messages: list[Any]) -> list[dict[str, Any]]:

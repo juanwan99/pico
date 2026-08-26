@@ -336,7 +336,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_preview_inspect",
-    "See THIS run's HTML preview (title/h1). Not public crawl. Not intranet.",
+    "See THIS run's HTML preview (title/h1) and keep a PNG so the teacher's next question can see the page. Not public crawl. Not intranet.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),
@@ -371,7 +371,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_screenshot",
-    "Capture the current isolated sandbox browser screen. Teacher logs in on the view page; do not ask for passwords in chat.",
+    "Capture the current isolated sandbox browser screen and keep the PNG so the teacher's next question can see the page. Teacher logs in on the view page; do not ask for passwords in chat.",
     Type.Object(
       {
         session_id: Type.String(),

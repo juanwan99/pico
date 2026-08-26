@@ -164,7 +164,12 @@ async def run_true_pi_agent(
                 backend_model = vision_model_for_images(backend_model)
             thinking_on = bool(getattr(caps, "thinking_on", False))
             max_context, max_out = true_pi_windows_from_caps(caps)
-            tool_server = ToolServer(principal=principal, gateway=gateway, run_id=rid)
+            tool_server = ToolServer(
+                principal=principal,
+                gateway=gateway,
+                run_id=rid,
+                conversation_id=conversation_id,
+            )
             tool_url = await tool_server.start()
             persist_dir = (
                 persist_session_dir(

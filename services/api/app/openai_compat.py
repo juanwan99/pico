@@ -1110,7 +1110,11 @@ async def chat_completions(
     import re
 
     principal = _principal_from_auth(authorization, settings)
-    from pico_orchestrator.vision import last_user_images
+    from pico_orchestrator.vision import (
+        conversation_images,
+        last_user_images,
+        merge_images,
+    )
 
     turn_images = last_user_images(body.messages)
     raw_for_user = _last_user_prompt(body.messages)
@@ -1142,6 +1146,7 @@ async def chat_completions(
     if request_tools is None:
         request_tools = _normalize_allowed_tools(body.tools)
     conversation_id = _conversation_id_from(body, x_conversation_id)
+    turn_images = merge_images(turn_images, conversation_images(conversation_id))
     workspace_id = _workspace_id_from(body, x_workspace_id)
     # T-HARNESS-SLIM: do not fetch prior titles to guess a delivery plan.
     # strip ledger markers from model-visible prompt; project instruction → system

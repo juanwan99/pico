@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
@@ -634,6 +634,7 @@ class ToolInvokeRequest(BaseModel):
 async def invoke_tool(
     body: ToolInvokeRequest,
     principal: Principal = Depends(require_scope("ai:run")),
+    x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
 ) -> dict:
     from pico_orchestrator.gateway import ToolError
     from pico_orchestrator.tools_builtin import build_default_gateway
@@ -647,6 +648,7 @@ async def invoke_tool(
     token = bind_usage_context(
         school_id=principal.school_id,
         membership_id=principal.membership_id,
+        conversation_id=x_conversation_id,
     )
     try:
         result = await gw.invoke(principal, body.name, dict(body.arguments))

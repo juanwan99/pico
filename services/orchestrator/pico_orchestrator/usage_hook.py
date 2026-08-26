@@ -34,6 +34,7 @@ class UsageBind:
     run_id: str | None = None
     task_id: str | None = None
     tool_call_id: str | None = None
+    conversation_id: str | None = None
 
 
 _BIND: ContextVar[UsageBind | None] = ContextVar("pico_usage_bind", default=None)
@@ -46,6 +47,7 @@ def bind_usage_context(
     run_id: str | None = None,
     task_id: str | None = None,
     tool_call_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> object:
     """Set request-scoped identity for search/fetch emits. Returns a token to reset."""
     return _BIND.set(
@@ -55,6 +57,7 @@ def bind_usage_context(
             run_id=run_id,
             task_id=task_id,
             tool_call_id=tool_call_id,
+            conversation_id=(conversation_id or "").strip() or None,
         )
     )
 
