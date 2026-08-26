@@ -828,6 +828,7 @@ async def _finalize_run(
                     content_encoding="utf8",
                     content_sha256=hashlib.sha256(raw_bytes).hexdigest(),
                     byte_size=len(raw_bytes),
+                    kept=0,
                 )
                 session.add(artifact)
                 existing_keys.add(key)

@@ -147,7 +147,7 @@ def test_create_nested_folder_under_parent(client) -> None:
     assert root_again.json()["folder"]["parent_id"] == ""
 
 
-def test_write_stays_in_archive_folder_and_does_not_auto_land(client) -> None:
+def test_write_stays_ephemeral_until_keep(client) -> None:
     headers = _headers(client)
     created = client.post("/v1/my/folders", json={"name": "教案夹"}, headers=headers)
     folder_id = created.json()["folder"]["id"]
@@ -181,7 +181,23 @@ def test_write_stays_in_archive_folder_and_does_not_auto_land(client) -> None:
 
     out = asyncio.run(_run())
     assert "school" not in out
-    assert out["folder_id"] == folder_id
+    assert out["folder_id"] == ""
+    assert out["kept"] is False
+    hidden = client.get(
+        "/v1/artifacts",
+        params={"mine": True, "folder_id": folder_id},
+        headers=headers,
+    )
+    assert hidden.status_code == 200, hidden.text
+    assert "通知.html" not in [row["title"] for row in hidden.json()["artifacts"]]
+    kept = client.post(
+        f"/v1/my/artifacts/{out['artifact_id']}/keep",
+        json={"conversation_id": "c-write"},
+        headers=headers,
+    )
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["kept"] is True
+    assert kept.json()["folder_id"] == folder_id
     listed = client.get(
         "/v1/artifacts",
         params={"mine": True, "folder_id": folder_id},
@@ -190,6 +206,65 @@ def test_write_stays_in_archive_folder_and_does_not_auto_land(client) -> None:
     assert listed.status_code == 200, listed.text
     titles = [row["title"] for row in listed.json()["artifacts"]]
     assert "通知.html" in titles
+
+
+def test_download_does_not_keep(client) -> None:
+    headers = _headers(client)
+    from app.artifact_store import LedgerArtifactStore
+    from app.db import session_factory
+
+    store = LedgerArtifactStore(session_factory(), conversation_id="c-dl")
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=9999999999,
+        raw={},
+    )
+    out = asyncio.run(
+        store.write(principal, title="页.html", content="<p>灰</p>", kind="html")
+    )
+    downloaded = client.get(
+        f"/v1/artifacts/{out['artifact_id']}/content",
+        params={"download": True},
+        headers=headers,
+    )
+    assert downloaded.status_code == 200, downloaded.text
+    mine = client.get("/v1/artifacts", params={"mine": True}, headers=headers)
+    assert mine.status_code == 200, mine.text
+    assert "页.html" not in [row["title"] for row in mine.json()["artifacts"]]
+
+
+def test_keep_creates_default_folder_when_no_archive(client) -> None:
+    headers = _headers(client)
+    from app.artifact_store import LedgerArtifactStore
+    from app.db import session_factory
+
+    store = LedgerArtifactStore(session_factory(), conversation_id="c-keep")
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=9999999999,
+        raw={},
+    )
+    out = asyncio.run(
+        store.write(principal, title="页.html", content="<p>灰</p>", kind="html")
+    )
+    kept = client.post(
+        f"/v1/my/artifacts/{out['artifact_id']}/keep",
+        json={"conversation_id": "c-keep"},
+        headers=headers,
+    )
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["folder_name"] == "默认"
+    folders = client.get("/v1/my/folders", headers=headers)
+    names = [row["name"] for row in folders.json()["folders"]]
+    assert "默认" in names
 
 
 def test_land_generated_artifact_without_field_is_honest(monkeypatch) -> None:

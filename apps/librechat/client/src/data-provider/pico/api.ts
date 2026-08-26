@@ -19,6 +19,7 @@ export type PicoArtifact = {
   /** Relative download path on Pico API (proxied via /api/pico). */
   download_path?: string;
   folder_id?: string;
+  kept?: boolean;
 };
 
 export type PicoPersonalFolder = {
@@ -205,6 +206,34 @@ export async function getPicoArtifactContent(id: string, download = false): Prom
     throw new Error(`pico ${res.status}: ${text.slice(0, 200)}`);
   }
   return res.blob();
+}
+
+export async function getPicoArtifactPages(artifactId: string) {
+  return picoFetch<{ ok?: boolean; page_count: number; title?: string }>(
+    `/v1/artifacts/${encodeURIComponent(artifactId)}/pages`,
+  );
+}
+
+export async function getPicoArtifactPage(artifactId: string, page: number): Promise<Blob> {
+  const res = await fetch(
+    `/api/pico/v1/artifacts/${encodeURIComponent(artifactId)}/pages/${page}`,
+    { credentials: 'include', headers: authHeaders(), cache: 'no-store' },
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`pico ${res.status}: ${text.slice(0, 200)}`);
+  }
+  return res.blob();
+}
+
+export async function keepMyArtifact(artifactId: string, conversationId = '') {
+  return picoFetch<{ id?: string; folder_id?: string; folder_name?: string; kept?: boolean }>(
+    `/v1/my/artifacts/${encodeURIComponent(artifactId)}/keep`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ conversation_id: conversationId || '' }),
+    },
+  );
 }
 
 export async function listPicoTasks(conversationId?: string) {

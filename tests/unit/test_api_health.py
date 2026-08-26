@@ -26,6 +26,8 @@ def test_health() -> None:
         "key_scope": "membership_or_ip",
     }
     assert body["default_runtime"] == "pi-agent"
+    assert "image_generate_configured" in body
+    assert body["image_generate_configured"] is False
     assert body["pi_agent_runtime_enabled"] is True
     assert body["pi_agent_scope"] == "all"
     assert body["kimi_agent_runtime_enabled"] is False

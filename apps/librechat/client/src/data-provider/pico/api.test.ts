@@ -10,6 +10,7 @@ import {
   listMyPicoArtifacts,
   listMyFolders,
   createMyFolder,
+  keepMyArtifact,
   transferMyArtifact,
 } from './api';
 
@@ -220,6 +221,26 @@ describe('edu school materials client', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ field_id: 'field-1', mode: 'copy' }),
+      }),
+    );
+  });
+
+  it('keeps an artifact into the default folder', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'art-1', folder_id: 'f-default', folder_name: '默认', kept: true }),
+    });
+    await expect(keepMyArtifact('art-1', 'c1')).resolves.toEqual({
+      id: 'art-1',
+      folder_id: 'f-default',
+      folder_name: '默认',
+      kept: true,
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/pico/v1/my/artifacts/art-1/keep',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ conversation_id: 'c1' }),
       }),
     );
   });

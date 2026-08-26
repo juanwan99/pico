@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { Download, FileText, Loader2 } from 'lucide-react';
 import {
   getPicoArtifactContent,
+  keepMyArtifact,
   type PicoArtifact,
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
@@ -19,10 +20,11 @@ type Props = {
   artifacts?: PicoArtifact[] | null;
   runEvents?: PicoRunEvent[] | null;
   messages?: PicoSourceMessage[] | null;
+  conversationId?: string | null;
   onOpenResultPanel?: () => void;
 };
 
-type Busy = { id: string; type: 'open' | 'download' } | null;
+type Busy = { id: string; type: 'open' | 'download' | 'keep' } | null;
 
 function isBookkeeping(a: PicoArtifact): boolean {
   const title = (a.user_label || a.title || '').trim();
@@ -45,6 +47,7 @@ export default function MainDeliveryStrip({
   artifacts,
   runEvents,
   messages,
+  conversationId,
   onOpenResultPanel,
 }: Props) {
   const items = useMemo(
@@ -53,6 +56,7 @@ export default function MainDeliveryStrip({
   );
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
+  const [keptIds, setKeptIds] = useState<Record<string, boolean>>({});
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
 
@@ -92,6 +96,19 @@ export default function MainDeliveryStrip({
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (err) {
       setError(err instanceof Error ? err.message : '打开失败');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const keepArtifact = async (a: PicoArtifact) => {
+    setBusy({ id: a.id, type: 'keep' });
+    setError(null);
+    try {
+      await keepMyArtifact(a.id, conversationId || '');
+      setKeptIds((current) => ({ ...current, [a.id]: true }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保留失败');
     } finally {
       setBusy(null);
     }
@@ -146,7 +163,9 @@ export default function MainDeliveryStrip({
           {items.map((a) => {
             const name = displayName(a);
             const opening = busy?.id === a.id && busy.type === 'open';
+            const keeping = busy?.id === a.id && busy.type === 'keep';
             const downloading = busy?.id === a.id && busy.type === 'download';
+            const kept = Boolean(a.kept || keptIds[a.id]);
             return (
               <li
                 key={a.id}
@@ -173,6 +192,16 @@ export default function MainDeliveryStrip({
                   onClick={() => void openArtifact(a)}
                 >
                   {opening ? '打开中' : '打开'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="main-delivery-keep"
+                  className="h-8 rounded-md border border-black/[0.08] px-2.5 text-[12px] font-medium disabled:opacity-50"
+                  disabled={busy !== null || kept}
+                  onClick={() => void keepArtifact(a)}
+                  aria-label={`保留${name}`}
+                >
+                  {kept ? '已保留' : keeping ? '保留中' : '保留'}
                 </button>
                 <button
                   type="button"

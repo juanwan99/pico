@@ -9,6 +9,9 @@ import { PicoIcon } from '~/components/ui/pico-icons';
 import type { TMessage } from 'librechat-data-provider';
 import {
   getPicoArtifactContent,
+  getPicoArtifactPage,
+  getPicoArtifactPages,
+  keepMyArtifact,
   picoAuthedGet,
   openPicoSandboxBrowser,
   openPicoSandboxDocument,
@@ -33,6 +36,7 @@ import {
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
+import OfficeContentPane from './OfficeContentPane';
 import SandboxWebPane from './SandboxWebPane';
 import PaneZoomBar, { usePaneZoom } from './PaneZoomBar';
 
@@ -50,11 +54,12 @@ type ArtifactItem = {
   contentEncoding?: string;
   byteSize?: number;
   contentSha256?: string;
+  kept?: boolean;
 };
 
 type ArtifactAction = {
   id: string;
-  type: 'open' | 'download';
+  type: 'open' | 'download' | 'keep';
 };
 
 const UNNAMED_ARTIFACT = '未命名产物';
@@ -270,8 +275,13 @@ export default function ResultPanel({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewPdf, setPreviewPdf] = useState<string | null>(null);
   const [previewOffice, setPreviewOffice] = useState<string | null>(null);
+  const [previewPages, setPreviewPages] = useState<{ title: string; urls: string[] } | null>(
+    null,
+  );
+  const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
   const [previewArtifactId, setPreviewArtifactId] = useState<string | null>(null);
+  const [keptIds, setKeptIds] = useState<Record<string, boolean>>({});
   const [localSandbox, setLocalSandbox] = useState<{
     sessionId: string;
     url: string;
@@ -298,9 +308,10 @@ export default function ResultPanel({
   useEffect(() => {
     setLocalSandbox(null);
     openedWebsiteRef.current = null;
+    setKeptIds({});
   }, [conversationId]);
   const previewActive = Boolean(
-    previewHtml || previewImage || previewPdf || previewText || previewOffice,
+    previewHtml || previewImage || previewPdf || previewText || previewOffice || previewPages,
   );
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
@@ -342,6 +353,7 @@ export default function ResultPanel({
             contentEncoding: encoding,
             byteSize,
             contentSha256: artifact.content_sha256,
+            kept: Boolean(artifact.kept),
           };
         });
       // Filename-first: real files before misc. Keep composer uploads even when
@@ -412,6 +424,11 @@ export default function ResultPanel({
     setPreviewImage(null);
     setPreviewPdf(null);
     setPreviewOffice(null);
+    setPreviewPages((current) => {
+      current?.urls.forEach((url) => URL.revokeObjectURL(url));
+      return null;
+    });
+    setPreviewPageIndex(0);
     setPreviewTitle(null);
     setPreviewArtifactId(null);
   };
@@ -454,7 +471,58 @@ export default function ResultPanel({
     }
   };
 
+  const showOfficePages = async (artifact: ArtifactItem) => {
+    const meta = await getPicoArtifactPages(artifact.id);
+    const count = Math.max(0, Number(meta.page_count) || 0);
+    if (!count) {
+      throw new Error('artifact content unavailable');
+    }
+    const urls: string[] = [];
+    for (let i = 1; i <= count; i += 1) {
+      const pageBlob = await getPicoArtifactPage(artifact.id, i);
+      urls.push(URL.createObjectURL(pageBlob));
+    }
+    setPreviewPages({ title: artifact.name, urls });
+    setPreviewPageIndex(0);
+    setPreviewTitle(artifact.name || '文档内容');
+    setPreviewArtifactId(artifact.id);
+    setView('overview');
+  };
+
   const openOfficeInPane = async (intent: OfficeOpenIntent, artifactId?: string) => {
+    const match = artifactId
+      ? artifacts.find((item) => item.id === artifactId)
+      : artifacts.find((item) => {
+          const name = item.name || '';
+          if (intent.filename && name === intent.filename) {
+            return true;
+          }
+          if (intent.kind === 'writer') {
+            return /\.(docx?|odt)$/i.test(name);
+          }
+          if (intent.kind === 'calc') {
+            return /\.(xlsx?|ods)$/i.test(name);
+          }
+          return /\.(pptx?|odp)$/i.test(name);
+        });
+    if (match?.picoArtifact) {
+      const key = `pages:${match.id}`;
+      if (openedWebsiteRef.current === key) {
+        setView('overview');
+        return;
+      }
+      openedWebsiteRef.current = key;
+      setWebsiteError(null);
+      clearFilePreview();
+      try {
+        await showOfficePages(match);
+      } catch (err) {
+        openedWebsiteRef.current = null;
+        const message = err instanceof Error ? err.message : String(err);
+        setWebsiteError(message.includes('office_unavailable') ? '沙箱还没有装字处理软件' : '打开文档失败，请稍后重试');
+      }
+      return;
+    }
     const key = `${intent.kind}:${artifactId || intent.filename || 'new'}`;
     if (openedWebsiteRef.current === key && sandboxSession) {
       setView('web');
@@ -465,21 +533,6 @@ export default function ResultPanel({
     clearFilePreview();
     setView('web');
     try {
-      const match = artifactId
-        ? artifacts.find((item) => item.id === artifactId)
-        : artifacts.find((item) => {
-            const name = item.name || '';
-            if (intent.filename && name === intent.filename) {
-              return true;
-            }
-            if (intent.kind === 'writer') {
-              return /\.(docx?|odt)$/i.test(name);
-            }
-            if (intent.kind === 'calc') {
-              return /\.(xlsx?|ods)$/i.test(name);
-            }
-            return /\.(pptx?|odp)$/i.test(name);
-          });
       const meta = await openPicoSandboxDocument({
         kind: intent.kind,
         artifact_id: match?.id,
@@ -610,6 +663,10 @@ export default function ResultPanel({
       return;
     }
     if (kind === 'office') {
+      if (artifact.picoArtifact) {
+        await showOfficePages(artifact);
+        return;
+      }
       const officeKind = /\.(pptx?|odp)$/i.test(artifact.name)
         ? 'impress'
         : /\.(xlsx?|ods)$/i.test(artifact.name)
@@ -668,6 +725,25 @@ export default function ResultPanel({
     }
   };
 
+  const keepArtifact = async (artifact: ArtifactItem) => {
+    if (!artifact.picoArtifact) {
+      return;
+    }
+    dismissOverlayMenus();
+    setArtifactAction({ id: artifact.id, type: 'keep' });
+    setArtifactError(null);
+    try {
+      await keepMyArtifact(artifact.id, conversationId || '');
+      setKeptIds((current) => ({ ...current, [artifact.id]: true }));
+    } catch (keepError) {
+      setArtifactError(artifactActionError('keep', keepError));
+    } finally {
+      setArtifactAction((current) =>
+        current?.id === artifact.id && current.type === 'keep' ? null : current,
+      );
+    }
+  };
+
   const downloadArtifact = async (artifact: ArtifactItem) => {
     dismissOverlayMenus();
     setArtifactAction({ id: artifact.id, type: 'download' });
@@ -718,7 +794,7 @@ export default function ResultPanel({
     ? artifacts.find((item) => item.id === previewArtifactId)
     : undefined;
 
-  const showZoom = Boolean(previewHtml || previewImage);
+  const showZoom = Boolean(previewHtml || previewImage || previewPages);
 
   return (
     <aside
@@ -823,7 +899,9 @@ export default function ResultPanel({
                 ? 'html'
                 : previewImage !== null
                   ? 'image'
-                  : previewOffice !== null
+                  : previewPages !== null
+                    ? 'office-pages'
+                    : previewOffice !== null
                     ? 'office'
                     : 'text'
             }
@@ -831,6 +909,21 @@ export default function ResultPanel({
             <div className="flex items-center justify-between gap-2 border-b border-black/[0.06] px-2.5 py-1.5">
               <p className="truncate text-[12px] font-medium text-[#3d3d3d]">{previewTitle}</p>
               <div className="flex shrink-0 items-center gap-2">
+                {previewArtifact?.picoArtifact ? (
+                  <button
+                    type="button"
+                    data-testid="artifact-keep-button"
+                    className="text-[11px] font-medium text-[#3d3d3d] underline disabled:opacity-50"
+                    aria-label={`保留${previewArtifact.name}`}
+                    onClick={() => void keepArtifact(previewArtifact)}
+                    disabled={
+                      artifactAction !== null ||
+                      Boolean(previewArtifact.kept || keptIds[previewArtifact.id])
+                    }
+                  >
+                    {previewArtifact.kept || keptIds[previewArtifact.id] ? '已保留' : '保留'}
+                  </button>
+                ) : null}
                 {previewArtifact &&
                 (previewArtifact.url ||
                   previewArtifact.picoArtifact ||
@@ -930,6 +1023,16 @@ export default function ResultPanel({
               >
                 {previewText}
               </pre>
+            ) : null}
+            {previewPages !== null ? (
+              <OfficeContentPane
+                title={previewTitle || previewPages.title}
+                pageUrls={previewPages.urls}
+                pageIndex={previewPageIndex}
+                onPage={setPreviewPageIndex}
+                zoom={paneZoom.zoom}
+                onWheel={paneZoom.onWheel}
+              />
             ) : null}
             {previewOffice !== null ? (
               <div
@@ -1065,7 +1168,7 @@ export default function ResultPanel({
                     可下载文件（{artifacts.length}）
                   </p>
                   <p className="text-[11px] leading-relaxed text-[#8c8c8c]">
-                    文件名点「打开」铺满本区；Office 只下载，不承诺区内翻页。
+                    打开后只显示内容页。下载不会落档；点「保留」才进默认文件夹。
                   </p>
                 </li>
                 {artifacts.map((a) => (
@@ -1103,6 +1206,27 @@ export default function ResultPanel({
                           ? '打开中'
                           : '打开'}
                       </button>
+                      {a.picoArtifact ? (
+                        <button
+                          type="button"
+                          data-testid="artifact-keep-button"
+                          className="h-9 rounded-lg border border-black/[0.08] bg-white px-3 text-[12px] font-medium text-[#3d3d3d] hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-light dark:bg-surface-secondary dark:text-text-primary"
+                          onClick={() => void keepArtifact(a)}
+                          disabled={artifactAction !== null || Boolean(a.kept || keptIds[a.id])}
+                          aria-label={`保留${a.name}`}
+                          aria-busy={
+                            artifactAction?.id === a.id && artifactAction.type === 'keep'
+                              ? true
+                              : undefined
+                          }
+                        >
+                          {a.kept || keptIds[a.id]
+                            ? '已保留'
+                            : artifactAction?.id === a.id && artifactAction.type === 'keep'
+                              ? '保留中'
+                              : '保留'}
+                        </button>
+                      ) : null}
                       {a.url || a.picoArtifact || a.body !== undefined ? (
                         <button
                           type="button"

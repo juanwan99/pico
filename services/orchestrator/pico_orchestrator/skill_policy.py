@@ -66,7 +66,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "改老师已上传的 Word/PPT/Excel 必须先 inspect_document 再 edit_docx_document / "
             "edit_pptx_document / edit_xlsx_document"
             "（读账本原件再改，禁止 generate_* 另起一份空模板冒充改原件）；"
-            "出图必须 generate_image；失败用人话说明，禁止编造图；图要进 Word/PPT 时把 artifact id 写入 spec；"
+            "出图必须 generate_image；失败用人话说明，禁止编造图；密钥未配置是运维缺口不是产品不会出图；图要进 Word/PPT 时把 artifact id 写入 spec；"
             "其它文本/清单/多产物用 workspace_write_file 各写独立 title；"
             "禁止代码块改后缀冒充 .html/.docx/.pptx；"
             "多交付时禁止单文件多标题冒充；HTML 可运行页生成后应 verify_html_document"

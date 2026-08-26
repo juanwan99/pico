@@ -583,6 +583,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                 kind="table",
                 title="工具产物",
                 inline=result.artifact_markdown,
+                kept=0,
             )
             session.add(art)
             await append_event(
@@ -901,6 +902,7 @@ async def list_artifacts_for_principal(
         TaskRow.school_id == principal.school_id,
         TaskRow.membership_id == principal.membership_id,
     ]
+    filters.append(ArtifactRow.kept == 1)
     if folder_id is not None:
         filters.append(ArtifactRow.folder_id == (folder_id or ""))
     result = await session.execute(

@@ -69,7 +69,7 @@ describe('RunTimeline', () => {
       />,
     );
 
-    expect(screen.getByText('没落成盘')).toBeInTheDocument();
+    expect(screen.getByText('没生成文件')).toBeInTheDocument();
     expect(screen.getByText('失败 · 错误码：tool.denied')).toBeInTheDocument();
     expect(screen.getByText('运行失败')).toBeInTheDocument();
     expect(screen.getByText('处理超时，请重试。 · 错误码：timeout')).toBeInTheDocument();

@@ -285,7 +285,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_image",
-    "Create one png/jpg via the configured HTTPS image API. To place it inside Word/PPT, pass the returned artifact id as image_artifact_id on spec. Never invent pixels on failure.",
+    "Create one png/jpg via the configured HTTPS image API. To place it inside Word/PPT, pass the returned artifact id as image_artifact_id on spec. If unconfigured, say the host is missing SILICONFLOW_API_KEY (ops gap), not that Pico has no image ability. Never invent pixels on failure.",
     Type.Object(
       {
         prompt: Type.String(),

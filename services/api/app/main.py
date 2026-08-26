@@ -248,6 +248,9 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.meili_kb import health_fields as meili_health_fields
 
     body.update(meili_health_fields())
+    from pico_orchestrator.image_generate import image_generate_configured
+
+    body["image_generate_configured"] = image_generate_configured()
     if pi_batch:
         body["pi_agent_canary_batch"] = pi_batch
     if kimi_batch:
@@ -1417,6 +1420,8 @@ async def get_task(
                 "byte_size": byte_size,
                 "content_sha256": sha,
                 "download_path": f"/v1/artifacts/{a.id}/content?download=true",
+                "folder_id": getattr(a, "folder_id", "") or "",
+                "kept": bool(getattr(a, "kept", 0)),
             }
         )
     return {
@@ -1450,6 +1455,7 @@ async def list_conversation_artifacts(
                 "title": a.title,
                 "kind": a.kind,
                 "folder_id": getattr(a, "folder_id", "") or "",
+                "kept": bool(getattr(a, "kept", 0)),
                 "created_at": a.created_at.isoformat() if a.created_at else None,
                 "download_path": f"/v1/artifacts/{a.id}/content?download=true",
             }
@@ -1612,6 +1618,81 @@ async def get_artifact_content(
     )
 
 
+@app.get("/v1/artifacts/{artifact_id}/pages")
+async def get_artifact_pages(
+    artifact_id: str,
+    principal: Principal = Depends(require_scope("ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from pico_orchestrator.gateway import ToolError
+
+    from app.artifact_store import decode_artifact_payload
+    from app.office_pages import page_meta, pages_for_document
+
+    artifact = await run_service.get_artifact_for_principal(session, artifact_id, principal)
+    if artifact is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "artifact.not_found", "message": "找不到该产物"},
+        )
+    filename = (artifact.title or f"{artifact.id}.bin").replace("\r", "").replace("\n", "")
+    encoding = getattr(artifact, "content_encoding", None) or "utf8"
+    try:
+        raw = decode_artifact_payload(artifact.inline, encoding)
+        pages = await pages_for_document(filename, raw)
+    except ToolError as exc:
+        raise HTTPException(
+            status_code=400, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "sandbox.raster_failed", "message": "文档内容页转换失败"},
+        ) from exc
+    return page_meta(filename, pages)
+
+
+@app.get("/v1/artifacts/{artifact_id}/pages/{page}")
+async def get_artifact_page(
+    artifact_id: str,
+    page: int,
+    principal: Principal = Depends(require_scope("ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    from pico_orchestrator.gateway import ToolError
+
+    from app.artifact_store import decode_artifact_payload
+    from app.office_pages import pages_for_document
+
+    artifact = await run_service.get_artifact_for_principal(session, artifact_id, principal)
+    if artifact is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "artifact.not_found", "message": "找不到该产物"},
+        )
+    filename = (artifact.title or f"{artifact.id}.bin").replace("\r", "").replace("\n", "")
+    encoding = getattr(artifact, "content_encoding", None) or "utf8"
+    try:
+        raw = decode_artifact_payload(artifact.inline, encoding)
+        pages = await pages_for_document(filename, raw)
+    except ToolError as exc:
+        raise HTTPException(
+            status_code=400, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    index = int(page) - 1
+    if index < 0 or index >= len(pages):
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "page.not_found", "message": "没有这一页"},
+        )
+    return Response(
+        content=pages[index],
+        media_type="image/png",
+        headers={
+            "Cache-Control": "private, max-age=120",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 class RebindConversationRequest(BaseModel):

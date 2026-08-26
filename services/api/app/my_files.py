@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -31,6 +32,7 @@ from app.edu_school import (
 from app.run_service import get_artifact_for_principal
 
 router = APIRouter(tags=["my-files"])
+logger = logging.getLogger(__name__)
 
 _FOLDER_NAME_RE = re.compile(r"^[^/\\\n\r]{1,40}$")
 _MAX_FOLDERS = 40
@@ -52,6 +54,60 @@ class ArchiveBody(BaseModel):
 
 class PlaceBody(BaseModel):
     folder_id: str = ""
+
+
+class KeepBody(BaseModel):
+    conversation_id: str = ""
+
+
+DEFAULT_FOLDER_NAME = "默认"
+
+
+async def resolve_keep_folder(
+    session: AsyncSession,
+    principal: Principal,
+    conversation_id: str,
+) -> PersonalFolderRow:
+    cid = str(conversation_id or "").strip()
+    if cid:
+        archive_id = await load_archive_folder_id(
+            session, principal.school_id, principal.membership_id, cid
+        )
+        folder = await owned_folder(session, principal, archive_id) if archive_id else None
+        if folder is not None:
+            return folder
+    existing = (
+        await session.execute(
+            select(PersonalFolderRow).where(
+                PersonalFolderRow.school_id == principal.school_id,
+                PersonalFolderRow.membership_id == principal.membership_id,
+                PersonalFolderRow.parent_id == "",
+                PersonalFolderRow.name == DEFAULT_FOLDER_NAME,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    taken = (
+        await session.execute(
+            select(PersonalFolderRow.name).where(
+                PersonalFolderRow.school_id == principal.school_id,
+                PersonalFolderRow.membership_id == principal.membership_id,
+                PersonalFolderRow.parent_id == "",
+            )
+        )
+    ).scalars()
+    name = _unique_folder_name(DEFAULT_FOLDER_NAME, set(taken))
+    row = PersonalFolderRow(
+        id=new_id(),
+        school_id=principal.school_id,
+        membership_id=principal.membership_id,
+        parent_id="",
+        name=name,
+    )
+    session.add(row)
+    await session.flush()
+    return row
 
 
 class TransferBody(BaseModel):
@@ -351,8 +407,47 @@ async def place_my_artifact(
                 detail={"code": "folder_not_found", "message": "找不到这个夹"},
             )
     artifact.folder_id = folder.id if folder else ""
+    artifact.kept = 1
     await session.commit()
-    return {"id": artifact.id, "folder_id": artifact.folder_id}
+    return {"id": artifact.id, "folder_id": artifact.folder_id, "kept": True}
+
+
+@router.post("/v1/my/artifacts/{artifact_id}/keep")
+async def keep_my_artifact(
+    artifact_id: str,
+    body: KeepBody,
+    principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    artifact = await get_artifact_for_principal(session, artifact_id, principal)
+    if artifact is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "artifact.not_found", "message": "找不到这份文件"},
+        )
+    folder = await resolve_keep_folder(session, principal, body.conversation_id)
+    artifact.folder_id = folder.id
+    artifact.kept = 1
+    await session.commit()
+    try:
+        from pico_orchestrator.meili_kb import project_material_artifact
+
+        raw = decode_artifact_payload(artifact.inline, getattr(artifact, "content_encoding", None))
+        project_material_artifact(
+            principal,
+            artifact_id=artifact.id,
+            title=artifact.title,
+            kind=artifact.kind,
+            content=raw,
+        )
+    except Exception as exc:  # noqa: BLE001 — keep must not fail on search projection
+        logger.warning("meili project after keep failed: %s", type(exc).__name__)
+    return {
+        "id": artifact.id,
+        "folder_id": folder.id,
+        "folder_name": folder.name,
+        "kept": True,
+    }
 
 
 @router.post("/v1/my/artifacts/{artifact_id}/transfer")

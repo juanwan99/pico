@@ -14,7 +14,7 @@ export const RESULT_PANE_VIEW_LABEL: Record<ResultPaneView, string> = {
 };
 
 export const OFFICE_NO_PREVIEW_COPY =
-  '该 Office 文件不支持区内预览或翻页，已开始下载。请用 Word / WPS / LibreOffice 打开。';
+  '打不开这份文档的内容页。请点下载，用 Word / WPS / LibreOffice 打开。';
 
 export type ArtifactPreviewKind = 'html' | 'image' | 'text' | 'office' | 'pdf' | 'download';
 
@@ -70,10 +70,10 @@ export function picoUploadDownloadUrl(
 
 /** Honest open/download copy. Do not treat a missing file as「产物服务暂时不可用」. */
 export function humanArtifactActionError(
-  action: 'open' | 'download',
+  action: 'open' | 'download' | 'keep',
   error: unknown,
 ): string {
-  const verb = action === 'open' ? '打开' : '下载';
+  const verb = action === 'open' ? '打开' : action === 'keep' ? '保留' : '下载';
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes('401')) {
     return `${verb}产物失败：登录已失效，请刷新页面后重新登录。`;

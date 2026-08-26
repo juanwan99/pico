@@ -1059,7 +1059,7 @@ def _workspace_handlers(
             kind=kind,
         )
         result["format"] = ext
-        result["user_message"] = "图已生成，可在结果区下载。"
+        result["user_message"] = "图已生成，可在结果区打开或下载。点「保留」才会进默认文件夹。"
         return result
 
     async def verify_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -2087,7 +2087,8 @@ def build_default_gateway(
             name="generate_image",
             description=(
                 "Create one downloadable png/jpg via SiliconFlow HTTPS images API. "
-                "On missing key, timeout, or 4xx: honest Chinese failure; never invent pixels. "
+                "If the host key is missing, say that ops has not written SILICONFLOW_API_KEY — "
+                "not that Pico cannot generate images. Never invent pixels. "
                 "Args: prompt, title?"
             ),
             handler=generate_image,

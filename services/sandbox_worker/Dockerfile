@@ -40,7 +40,7 @@ RUN set -eux; \
     playwright install --with-deps chromium; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-      xvfb scrot xdotool \
+      xvfb scrot xdotool poppler-utils \
       libreoffice-writer libreoffice-calc libreoffice-impress \
       fonts-wqy-zenhei fonts-liberation; \
     rm -rf /var/lib/apt/lists/*; \

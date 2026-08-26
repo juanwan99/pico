@@ -231,10 +231,43 @@ async def get_owner_disk(
     return redact_secrets(owner_disk_meta(school_id, membership_id))
 
 
+class PreviewBody(BaseModel):
+    filename: str = ""
+    document_base64: str = ""
+
+
 class ClearDiskBody(BaseModel):
     school_id: str
     membership_id: str
     confirm: bool = False
+
+
+@app.post("/v1/internal/office/preview")
+async def office_preview(
+    body: PreviewBody,
+    x_pico_sandbox_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_token(x_pico_sandbox_token)
+    if not body.document_base64.strip():
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "tool.invalid_arguments", "message": "document_base64 无效"},
+        )
+    import base64
+
+    try:
+        document = base64.b64decode(body.document_base64, validate=False)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "tool.invalid_arguments", "message": "document_base64 无效"},
+        ) from exc
+    from sandbox_worker.office_preview import preview_office_payload
+
+    try:
+        return await preview_office_payload(body.filename, document)
+    except ToolError as exc:
+        raise _tool_http(exc) from exc
 
 
 @app.post("/v1/internal/disk/clear")

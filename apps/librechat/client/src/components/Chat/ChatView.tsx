@@ -249,6 +249,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                         artifacts={ledger.artifacts}
                         runEvents={ledger.events}
                         messages={flatMessages}
+                        conversationId={conversationId}
                         onOpenResultPanel={() => setResultOpen(true)}
                       />
                     ) : null}

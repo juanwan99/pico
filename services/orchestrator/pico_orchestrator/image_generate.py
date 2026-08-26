@@ -23,7 +23,16 @@ _MAX_IMAGE_BYTES = 8 * 1024 * 1024
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 JPEG_MAGIC = b"\xff\xd8\xff"
 
-NO_KEY_MESSAGE = "出图服务未配置。请管理员在主机写入 SILICONFLOW_API_KEY 后重试，不能编造图片。"
+NO_KEY_MESSAGE = (
+    "出图服务未配置：主机还没有写入 SILICONFLOW_API_KEY。"
+    "Pico 已接通出图接口，配置密钥后即可生成真实图片，不能编造图片。"
+)
+
+
+def image_generate_configured() -> bool:
+    return bool(siliconflow_api_key())
+
+
 TIMEOUT_MESSAGE = "出图超时（45 秒）。请稍后重试，不能编造图片。"
 REJECT_MESSAGE = "出图服务拒绝了这次请求。请稍后重试或换一句描述，不能编造图片。"
 INVALID_MESSAGE = "出图结果不是可打开的 png/jpg，未保存，不能编造图片。"

@@ -115,20 +115,6 @@ class LedgerArtifactStore:
                 folder_id = str(folder_id).strip()
             else:
                 folder_id = ""
-            convo = self._conversation_id or getattr(task, "conversation_id", None)
-            if convo and not explicit_folder:
-                try:
-                    from app.edu_school import load_archive_folder_id
-
-                    folder_id = await load_archive_folder_id(
-                        session,
-                        principal.school_id,
-                        principal.membership_id,
-                        str(convo),
-                    )
-                except Exception as exc:  # noqa: BLE001 — folder miss must not swallow the file
-                    logger.warning("archive folder lookup failed: %s", type(exc).__name__)
-                    folder_id = ""
             if folder_id:
                 folder = await session.get(PersonalFolderRow, folder_id)
                 if (
@@ -137,6 +123,7 @@ class LedgerArtifactStore:
                     or folder.membership_id != principal.membership_id
                 ):
                     folder_id = ""
+            kept = 1 if folder_id else 0
             artifact = ArtifactRow(
                 id=new_id(),
                 task_id=task.id,
@@ -148,6 +135,7 @@ class LedgerArtifactStore:
                 content_sha256=digest,
                 byte_size=byte_size,
                 folder_id=folder_id,
+                kept=kept,
             )
             session.add(artifact)
             await session.flush()
@@ -185,19 +173,21 @@ class LedgerArtifactStore:
                 "content_sha256": digest,
                 "download_path": f"/v1/artifacts/{artifact.id}/content?download=true",
                 "folder_id": getattr(artifact, "folder_id", "") or "",
+                "kept": bool(getattr(artifact, "kept", 0)),
             }
-        try:
-            from pico_orchestrator.meili_kb import project_material_artifact
+        if out.get("kept"):
+            try:
+                from pico_orchestrator.meili_kb import project_material_artifact
 
-            project_material_artifact(
-                principal,
-                artifact_id=str(out["artifact_id"]),
-                title=title,
-                kind=kind,
-                content=content,
-            )
-        except Exception as exc:  # noqa: BLE001 — projection must not block the ledger
-            logger.warning("meili project after write failed: %s", type(exc).__name__)
+                project_material_artifact(
+                    principal,
+                    artifact_id=str(out["artifact_id"]),
+                    title=title,
+                    kind=kind,
+                    content=content,
+                )
+            except Exception as exc:  # noqa: BLE001 — projection must not block the ledger
+                logger.warning("meili project after write failed: %s", type(exc).__name__)
         return out
 
     def _owned_artifacts(self, principal: Principal):
@@ -252,6 +242,8 @@ class LedgerArtifactStore:
             "content_encoding": encoding,
             "content_sha256": digest,
             "created_at": artifact.created_at.isoformat() if artifact.created_at else None,
+            "folder_id": getattr(artifact, "folder_id", "") or "",
+            "kept": bool(getattr(artifact, "kept", 0)),
         }
         if content:
             if encoding == ENCODING_BASE64:

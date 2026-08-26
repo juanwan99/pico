@@ -158,6 +158,7 @@ async def publish_html_page(principal: Principal, *, artifact_id: str) -> dict[s
             )
             if not artifact.folder_id:
                 artifact.folder_id = folder_id
+            artifact.kept = 1
             page = HtmlPageRow(
                 id=new_page_id(),
                 artifact_id=artifact.id,
@@ -284,6 +285,7 @@ async def public_html_collect(page_id: str, request: Request) -> dict[str, Any]:
             content_sha256=digest,
             byte_size=byte_size,
             folder_id=page.folder_id,
+            kept=1,
         )
         session.add(artifact)
         await session.commit()

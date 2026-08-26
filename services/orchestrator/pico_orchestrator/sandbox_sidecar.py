@@ -79,6 +79,19 @@ async def _embedded_call(
         )
         out["human_copy"] = "已按你的要求清空这台老师盘。"
         return out
+    if method == "POST" and path.rstrip("/").endswith("/office/preview"):
+        body = json_body or {}
+        raw_b64 = str(body.get("document_base64") or "").strip()
+        if not raw_b64:
+            raise ToolError("tool.invalid_arguments", "document_base64 无效")
+        import base64
+
+        from sandbox_worker.office_preview import preview_office_payload
+
+        return await preview_office_payload(
+            str(body.get("filename") or ""),
+            base64.b64decode(raw_b64, validate=False),
+        )
     if method == "POST" and path.endswith("/sessions/open"):
         body = json_body or {}
         document = None

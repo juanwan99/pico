@@ -37,18 +37,13 @@ from sandbox_worker.browser import (
     open_chromium,
 )
 from sandbox_worker.files import FilesSurface, list_workspace_files, open_files_surface
-from sandbox_worker.office import (
-    KIND_LABEL,
-    OFFICE_ENGINE,
-    OfficeDesktop,
-    open_office,
-    resolve_kind,
-)
+from sandbox_worker.office import KIND_LABEL, OFFICE_ENGINE, open_office, resolve_kind
+from sandbox_worker.office_preview import OfficePages
 
 logger = logging.getLogger(__name__)
 
 HUMAN_LOGIN_COPY = "请在此画面自行登录，不要在聊天里发送密码"
-HUMAN_OFFICE_COPY = "沙箱已用 LibreOffice 打开这份文档。这是字处理窗口，不是 PDF，也不是下载。"
+HUMAN_OFFICE_COPY = "沙箱只显示文档内容页，没有字处理工具栏。"
 SESSION_TTL_S = int(os.environ.get("PICO_SANDBOX_TTL_S") or str(30 * 60))
 MAX_SESSIONS = int(os.environ.get("PICO_SANDBOX_MAX_SESSIONS") or "8")
 APPLIED_COPY = (
@@ -79,7 +74,7 @@ OpenBrowser = Callable[[str], Awaitable[BrowserPage]]
 class SandboxWindow:
     window_id: str
     kind: str
-    surface: BrowserPage | OfficeDesktop
+    surface: BrowserPage | OfficePages | FilesSurface
 
 
 @dataclass
@@ -118,7 +113,7 @@ class SandboxSession:
         return None
 
     @property
-    def desktop(self) -> OfficeDesktop | None:
+    def desktop(self) -> OfficePages | FilesSurface | None:
         focused = None
         try:
             focused = self.focused()

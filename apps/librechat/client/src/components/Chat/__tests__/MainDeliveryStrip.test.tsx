@@ -4,6 +4,7 @@ import MainDeliveryStrip from '../MainDeliveryStrip';
 
 jest.mock('~/data-provider/pico/api', () => ({
   getPicoArtifactContent: jest.fn(),
+  keepMyArtifact: jest.fn(),
 }));
 jest.mock('~/utils', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -46,5 +47,13 @@ describe('MainDeliveryStrip column', () => {
     expect(strip).toContainElement(screen.getByTestId('pico-search-sources'));
     expect(strip).toContainElement(screen.getByTestId('main-delivery-item'));
     expect(strip.className).toContain('max-w-[797px]');
+  });
+
+  it('puts 保留 to the left of 下载', () => {
+    render(<MainDeliveryStrip artifacts={[artifact()]} />);
+    const keep = screen.getByTestId('main-delivery-keep');
+    const download = screen.getByTestId('main-delivery-download');
+    expect(keep.compareDocumentPosition(download) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(keep).toHaveTextContent('保留');
   });
 });

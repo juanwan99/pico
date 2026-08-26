@@ -131,6 +131,7 @@ class ArtifactRow(Base):
     content_sha256: Mapped[str] = mapped_column(String(64), default="")
     byte_size: Mapped[int] = mapped_column(Integer, default=0)
     folder_id: Mapped[str] = mapped_column(String(36), default="", index=True)
+    kept: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     task: Mapped[TaskRow] = relationship(back_populates="artifacts")
@@ -371,6 +372,8 @@ def _migrate_sqlite_sync(conn) -> None:
             conn.execute(text("ALTER TABLE artifacts ADD COLUMN byte_size INTEGER DEFAULT 0"))
         if "folder_id" not in acols:
             conn.execute(text("ALTER TABLE artifacts ADD COLUMN folder_id VARCHAR(36) DEFAULT ''"))
+        if "kept" not in acols:
+            conn.execute(text("ALTER TABLE artifacts ADD COLUMN kept INTEGER DEFAULT 1"))
 
     try:
         named_rows = conn.execute(text("PRAGMA table_info(edu_named_bind)")).fetchall()

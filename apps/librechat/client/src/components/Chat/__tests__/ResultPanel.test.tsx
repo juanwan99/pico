@@ -7,6 +7,9 @@ import {
   getPicoSandboxScreenshot,
   getPicoSandboxSession,
   openPicoSandboxBrowser,
+  getPicoArtifactPages,
+  getPicoArtifactPage,
+  keepMyArtifact,
   openPicoSandboxDocument,
   type PicoArtifact,
   type PicoRun,
@@ -24,6 +27,9 @@ jest.mock('~/data-provider/pico/api', () => ({
   openPicoSandboxBrowser: jest.fn(),
   openPicoSandboxDocument: jest.fn(),
   focusPicoSandboxWindow: jest.fn(),
+  getPicoArtifactPages: jest.fn(),
+  getPicoArtifactPage: jest.fn(),
+  keepMyArtifact: jest.fn(),
 }));
 jest.mock('~/utils', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -385,23 +391,12 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(screen.getByTestId('artifact-inline-preview')).toHaveTextContent('正文可见');
   });
 
-  it('T4/F2: opening docx goes to sandbox Writer, not a download or PDF', async () => {
+  it('T4/F2: opening docx shows content pages, not Writer chrome', async () => {
     const user = userEvent.setup();
-    const mockOpenDoc = openPicoSandboxDocument as jest.MockedFunction<
-      typeof openPicoSandboxDocument
-    >;
-    mockOpenDoc.mockResolvedValue({
-      session_id: 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb',
-      url: 'sandbox://writer/报告.docx',
-      title: 'LibreOffice Writer · 报告.docx',
-      kind: 'writer',
-      human_copy: '沙箱已用 LibreOffice 打开这份文档。',
-    });
-    (getPicoSandboxSession as jest.Mock).mockResolvedValue({
-      session_id: 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb',
-      title: 'LibreOffice Writer · 报告.docx',
-      kind: 'writer',
-    });
+    const mockPages = getPicoArtifactPages as jest.MockedFunction<typeof getPicoArtifactPages>;
+    const mockPage = getPicoArtifactPage as jest.MockedFunction<typeof getPicoArtifactPage>;
+    mockPages.mockResolvedValue({ page_count: 1, title: '报告.docx' });
+    mockPage.mockResolvedValue(new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }));
     mockGetPicoArtifactContent.mockResolvedValue(
       new Blob([new Uint8Array([80, 75, 3, 4])], {
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -409,9 +404,24 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     );
     renderPanel([{ id: 'art-docx', title: '报告.docx', kind: 'docx' }]);
     await user.click(screen.getByRole('button', { name: '打开' }));
-    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
-    expect(mockOpenDoc).toHaveBeenCalled();
+    expect(await screen.findByTestId('office-content-pane')).toBeInTheDocument();
+    expect(screen.getByTestId('office-content-page')).toBeInTheDocument();
+    expect(openPicoSandboxDocument).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
     expect(screen.queryByTestId('artifact-office-download')).not.toBeInTheDocument();
+  });
+
+  it('keep button sits left of download and calls keep', async () => {
+    const user = userEvent.setup();
+    const mockKeep = keepMyArtifact as jest.MockedFunction<typeof keepMyArtifact>;
+    mockKeep.mockResolvedValue({ id: 'art-docx', folder_id: 'fold-1', kept: true, folder_name: '默认' });
+    renderPanel([{ id: 'art-docx', title: '报告.docx', kind: 'docx' }]);
+    const keep = screen.getByTestId('artifact-keep-button');
+    const download = screen.getAllByTestId('artifact-download-button')[0];
+    expect(keep.compareDocumentPosition(download) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(keep);
+    await waitFor(() => expect(mockKeep).toHaveBeenCalledWith('art-docx', ''));
+    expect(await screen.findByText('已保留')).toBeInTheDocument();
   });
 
   it('T8: opening a PDF attachment previews in-pane and never mistakes it for HTML', async () => {
@@ -671,6 +681,44 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
     await waitFor(() => expect(mockOpenDoc).toHaveBeenCalled());
     expect(mockOpenBrowser).not.toHaveBeenCalled();
+  });
+
+  it('S2b: 打开这份 PPT with a ledger artifact shows content pages, not chrome', async () => {
+    const mockPages = getPicoArtifactPages as jest.MockedFunction<typeof getPicoArtifactPages>;
+    const mockPage = getPicoArtifactPage as jest.MockedFunction<typeof getPicoArtifactPage>;
+    const mockOpenDoc = openPicoSandboxDocument as jest.MockedFunction<
+      typeof openPicoSandboxDocument
+    >;
+    mockPages.mockResolvedValue({ page_count: 1, title: '豌豆杂交实验PPT.pptx' });
+    mockPage.mockResolvedValue(new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }));
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          picoArtifacts={[
+            {
+              id: 'art-ppt',
+              title: '豌豆杂交实验PPT.pptx',
+              kind: 'pptx',
+            },
+          ]}
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开这份 PPT',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('office-content-pane')).toBeInTheDocument();
+    expect(screen.getByTestId('office-content-page')).toBeInTheDocument();
+    expect(mockOpenDoc).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
   });
 
   it('S3: 你好 does not open a sandbox session', async () => {

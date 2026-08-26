@@ -325,11 +325,12 @@ export default function SandboxWebPane({
         </div>
       ) : null}
       <div
-        className="relative min-h-0 flex-1 overflow-auto bg-[#f3f3f3]"
+        className={isOffice ? 'relative min-h-0 flex-1 overflow-auto bg-[#111]' : 'relative min-h-0 flex-1 overflow-auto bg-[#f3f3f3]'}
         data-testid="sandbox-web-stage"
         data-zoom={`${Math.round(zoom * 100)}%`}
         onWheel={onWheelZoom}
       >
+        {isOffice ? null : (
         <div className="absolute right-2 top-2 z-10">
           <button
             type="button"
@@ -353,7 +354,7 @@ export default function SandboxWebPane({
               <p className="mt-1 px-1 text-[11px] text-[#6b6b6b]" data-testid="sandbox-web-copy">
                 {humanCopy ||
                   (isOffice
-                    ? '沙箱已用 LibreOffice 打开这份文档。这是字处理窗口，不是 PDF。'
+                    ? '只显示文档内容页，没有字处理工具栏。'
                     : '请在此画面自行登录，不要在聊天里发送密码')}
               </p>
               <p className="mt-0.5 px-1 text-[10px] text-[#9a9a9a]" data-testid="sandbox-web-status">
@@ -403,6 +404,7 @@ export default function SandboxWebPane({
             </div>
           ) : null}
         </div>
+        )}
         {focusedKind === 'files' && files.length > 0 ? (
           <div className="space-y-1 bg-white p-2" data-testid="sandbox-file-list">
             {files.map((file) => (
@@ -428,7 +430,7 @@ export default function SandboxWebPane({
             width={VIEWPORT_W}
             onClick={(ev) => void onViewportClick(ev)}
             style={{ width: `${Math.round(zoom * 100)}%` }}
-            className="mx-auto block h-auto max-w-none cursor-crosshair bg-white"
+            className={isOffice ? 'mx-auto block h-auto max-w-none bg-transparent' : 'mx-auto block h-auto max-w-none cursor-crosshair bg-white'}
             data-testid="sandbox-web-viewport"
           />
         ) : (

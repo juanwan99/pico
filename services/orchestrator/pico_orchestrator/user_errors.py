@@ -36,7 +36,7 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
             return "出图超时。请稍后重试，不能编造图片。"
         if c in ("image.provider", "image.invalid") and "未配置" not in text:
             return "这次没能出图。请稍后重试，不能编造图片。"
-        return "出图服务未配置。请管理员在主机写入密钥后重试，不能编造图片。"
+        return "出图接口已接通，但主机还没写入出图密钥。写入后即可生成真实图片，不能编造图片。"
     if c in ("office.timeout", "artifact.not_ooxml", "artifact.not_binary", "artifact.not_found") or (
         "找不到" in text and ("文件" in text or "原件" in text or "word" in low or "ppt" in low)
     ):
