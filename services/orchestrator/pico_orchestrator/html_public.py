@@ -12,6 +12,10 @@ from typing import Any
 from pico_orchestrator.gateway import ToolError
 
 PAGE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+_CSP_META_RE = re.compile(
+    r"<meta\b[^>]*http-equiv=[\"']Content-Security-Policy[\"'][^>]*>\s*",
+    re.IGNORECASE,
+)
 COLLECT_MAX_BYTES = 16_384
 COLLECT_MAX_KEYS = 32
 COLLECT_MAX_STR = 2_000
@@ -53,6 +57,11 @@ def inject_collect_hook(html: str) -> str:
     if idx >= 0:
         return text[:idx] + COLLECT_HOOK + text[idx:]
     return text + COLLECT_HOOK
+
+
+def prepare_public_html(html: str) -> str:
+    """Serve-time only: drop embedded CSP (often form-action none) then inject hook."""
+    return inject_collect_hook(_CSP_META_RE.sub("", html or ""))
 
 
 def normalize_collect_payload(raw: Any) -> dict[str, Any]:

@@ -309,6 +309,7 @@ const startServer = async () => {
   app.use('/api/mcp', routes.mcp);
   app.use('/api/rum', routes.rum);
   app.use('/api/pico', routes.pico);
+  app.use('/p', routes.pico.publicRoot);
 
   app.use('/metrics', metricsRouter);
 

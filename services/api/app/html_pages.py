@@ -15,8 +15,8 @@ from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.html_public import (
     PUBLIC_CSP,
     assert_page_id,
-    inject_collect_hook,
     normalize_collect_payload,
+    prepare_public_html,
 )
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -56,8 +56,27 @@ def _rate_ok(page_id: str, ip: str) -> bool:
     return True
 
 
+PUBLIC_NOT_FOUND_HTML = (
+    "<!doctype html><meta charset='utf-8'><title>Not found</title>"
+    "<p>This public page is not available.</p>"
+)
+
+
 def public_url_for(page_id: str) -> str:
-    return f"https://pico.aivia.asia/api/pico/p/{page_id}"
+    return f"https://pico.aivia.asia/p/{page_id}"
+
+
+def new_page_id() -> str:
+    return secrets.token_hex(16)
+
+
+def public_not_found() -> Response:
+    return Response(
+        content=PUBLIC_NOT_FOUND_HTML.encode("utf-8"),
+        status_code=404,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 async def _owned_html(
@@ -140,7 +159,7 @@ async def publish_html_page(principal: Principal, *, artifact_id: str) -> dict[s
             if not artifact.folder_id:
                 artifact.folder_id = folder_id
             page = HtmlPageRow(
-                id=secrets.token_urlsafe(16),
+                id=new_page_id(),
                 artifact_id=artifact.id,
                 school_id=principal.school_id,
                 membership_id=principal.membership_id,
@@ -203,12 +222,12 @@ async def public_html_page(page_id: str) -> Response:
             page = await _live_page(session, page_id)
             artifact = await session.get(ArtifactRow, page.artifact_id)
             if artifact is None:
-                raise HTTPException(status_code=404, detail="not found")
+                return public_not_found()
             raw = decode_artifact_payload(
                 artifact.inline, getattr(artifact, "content_encoding", None)
             )
             html = raw.decode("utf-8", errors="replace")
-            body = inject_collect_hook(html)
+            body = prepare_public_html(html)
             return Response(
                 content=body.encode("utf-8"),
                 media_type="text/html; charset=utf-8",
@@ -218,8 +237,12 @@ async def public_html_page(page_id: str) -> Response:
                     "Cache-Control": "no-store",
                 },
             )
-    except ToolError as exc:
-        raise HTTPException(status_code=404, detail="not found") from exc
+    except ToolError:
+        return public_not_found()
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            return public_not_found()
+        raise
 
 
 @router.post("/p/{page_id}/collect")
