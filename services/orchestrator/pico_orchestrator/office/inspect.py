@@ -91,6 +91,8 @@ def _inspect_pptx(raw: bytes) -> dict[str, object]:
         leftovers.extend(leftover_placeholders(title))
         bullets: list[str] = []
         slide_images = 0
+        max_w = 0
+        max_h = 0
         for item in slide.shapes:
             if item is shape:
                 continue
@@ -102,15 +104,19 @@ def _inspect_pptx(raw: bytes) -> dict[str, object]:
             if getattr(item, "shape_type", None) == MSO_SHAPE_TYPE.PICTURE:
                 slide_images += 1
                 image_n += 1
-        units.append(
-            {
-                "index": i,
-                "kind": "slide",
-                "title": title[:240],
-                "bullets": bullets[:12],
-                "images": slide_images,
-            }
-        )
+                max_w = max(max_w, int(getattr(item, "width", 0) or 0))
+                max_h = max(max_h, int(getattr(item, "height", 0) or 0))
+        unit: dict[str, object] = {
+            "index": i,
+            "kind": "slide",
+            "title": title[:240],
+            "bullets": bullets[:12],
+            "images": slide_images,
+        }
+        if slide_images:
+            unit["image_width_emu"] = max_w
+            unit["image_height_emu"] = max_h
+        units.append(unit)
     return {
         "kind": "pptx",
         "slides": len(units),
