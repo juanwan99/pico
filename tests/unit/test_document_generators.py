@@ -156,10 +156,10 @@ def test_xlsx_is_real_ooxml_with_known_cell() -> None:
         names = set(zf.namelist())
         assert "[Content_Types].xml" in names
         assert "xl/workbook.xml" in names
-        assert "xl/worksheets/sheet1.xml" in names
-        sheet = zf.read("xl/worksheets/sheet1.xml").decode("utf-8")
-        assert KNOWN_CALC_CELL in sheet
-        assert marker in sheet
+        assert any(n.startswith("xl/worksheets/sheet") and n.endswith(".xml") for n in names)
+        blob = b"".join(zf.read(n) for n in names).decode("utf-8", errors="ignore")
+        assert KNOWN_CALC_CELL in blob
+        assert marker in blob
 
 
 def test_pptx_is_real_ooxml_with_slide() -> None:

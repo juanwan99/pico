@@ -1,7 +1,7 @@
-"""Deterministic allowlist document generators (HTML / DOCX / PPTX).
+"""Deterministic allowlist document generators (HTML / DOCX / PPTX / XLSX).
 
-HTML / XLSX stay stdlib. Word / PPTX are thin python-docx / python-pptx
-adapters — real Office packages with visible body, not three-line XML zips.
+HTML stays stdlib. Word / PPT / Excel are thin python-docx / python-pptx /
+openpyxl adapters. Hand-written XLSX XML is a test fixture only.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def _visible_len(text: str) -> int:
 def _display_title(title: str, fallback: str) -> str:
     name = (title or "").strip() or fallback
     lower = name.lower()
-    for ext in (".docx", ".pptx", ".html", ".htm", ".md"):
+    for ext in (".docx", ".pptx", ".xlsx", ".html", ".htm", ".md"):
         if lower.endswith(ext):
             stem = name[: -len(ext)].strip()
             return stem or fallback
@@ -420,13 +420,13 @@ def build_docx_document(
 KNOWN_CALC_CELL = "NIGHT-P4-CELL-ALPHA"
 
 
-def build_xlsx_document(
+def build_xlsx_legacy_xml(
     *,
     title: str,
     marker: str,
     body: str | None = None,
 ) -> bytes:
-    """Minimal valid OOXML XLSX with A1 visible cell text (not CSV renamed)."""
+    """Hand-written XLSX XML — test fixture only. Teacher path uses openpyxl."""
     marker = _require_marker(marker)
     cell = escape((body or "").strip() or KNOWN_CALC_CELL)
     marker_xml = escape(marker)
@@ -494,6 +494,23 @@ def build_xlsx_document(
         zf.writestr("xl/worksheets/sheet1.xml", sheet)
         zf.writestr("xl/styles.xml", styles)
     return buf.getvalue()
+
+
+def build_xlsx_document(
+    *,
+    title: str,
+    marker: str,
+    body: str | None = None,
+) -> bytes:
+    """openpyxl Excel. A1 is the caller body (or night-calc marker)."""
+    from pico_orchestrator.office.render import render_spec
+    from pico_orchestrator.office.spec import spec_from_plain
+
+    marker = _require_marker(marker)
+    heading = _display_title(title, "Pico XLSX")
+    return render_spec(
+        spec_from_plain(kind="xlsx", title=heading, marker=marker, body=body)
+    )
 
 
 def _set_slide_title_body(slide: object, heading: str, body: str) -> None:

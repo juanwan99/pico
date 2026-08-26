@@ -170,8 +170,10 @@ def titles_from_tool_results(
         "generate_html_document",
         "generate_docx_document",
         "generate_pptx_document",
+        "generate_xlsx_document",
         "edit_docx_document",
         "edit_pptx_document",
+        "edit_xlsx_document",
         "render_document",
         "generate_image",
     }

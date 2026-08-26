@@ -87,6 +87,6 @@ async def test_document_open_calc_sends_xlsx_with_known_cell(monkeypatch):
     assert raw[:2] == b"PK"
     assert captured["body"]["kind"] == "calc"
     with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-        sheet = zf.read("xl/worksheets/sheet1.xml")
-        assert b"NIGHT-P4-CELL-ALPHA" in sheet
+        blob = b"".join(zf.read(n) for n in zf.namelist())
+        assert b"NIGHT-P4-CELL-ALPHA" in blob
     assert b"%PDF" not in raw

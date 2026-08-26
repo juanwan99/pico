@@ -114,8 +114,8 @@ def test_bad_zip_fail_closed():
         inspect_office_bytes(b"not-a-zip", ".docx")
 
 
-def test_xlsx_kind_rejected_on_card1():
-    with pytest.raises(ValueError, match="卡 2"):
+def test_xlsx_kind_needs_sheet():
+    with pytest.raises(ValueError, match="sheet"):
         parse_spec({"kind": "xlsx", "blocks": [{"type": "para", "text": "x"}]})
 
 
