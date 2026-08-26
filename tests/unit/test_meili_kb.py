@@ -10,9 +10,11 @@ from pico_orchestrator.meili_kb import (
     MeiliIndex,
     document_from_artifact,
     extract_index_text,
+    extract_office_text,
     health_fields,
     is_material,
     parse_office_bytes,
+    project_material_artifact,
     quote_filter_value,
     search_materials,
     tenant_filter,
@@ -130,6 +132,9 @@ def test_is_material_skips_html_keeps_docs() -> None:
     assert is_material(kind="file", title="校历.md") is True
     assert is_material(kind="png", title="图.png") is False
     assert is_material(kind="bin", title="通知.pdf") is True
+    assert is_material(kind="bin", title="课时.xlsx") is True
+    assert is_material(kind="xlsx", title="课时.xlsx") is True
+    assert is_material(kind="pptx", title="封面.pptx") is True
 
 
 def test_extract_index_text_utf8_not_title_only() -> None:
@@ -177,6 +182,82 @@ def test_parse_to_index_uses_field_kb_ingest_not_title(
     )
     assert "一月二十日" in doc["text"]
     assert doc["text"] != doc["title"]
+
+
+def test_extract_index_text_office_extract_xlsx_pptx_txt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "pico_orchestrator.meili_kb.extract_office_text",
+        lambda *, filename, data: f"抽出:{filename}:{data.decode('utf-8', errors='ignore')[:20]}",
+    )
+    xlsx = extract_index_text(
+        title="课时.xlsx",
+        kind="edu_office",
+        content=None,
+        raw=b"PK-xlsx-unique-cell",
+    )
+    assert "课时.xlsx" in xlsx
+    pptx = extract_index_text(
+        title="封面.pptx",
+        kind="edu_office",
+        content=None,
+        raw=b"PK-pptx-unique-slide",
+    )
+    assert "封面.pptx" in pptx
+    txt = extract_index_text(
+        title="备忘.txt",
+        kind="file",
+        content="已有正文：三月开学。",
+        raw=b"ignored-when-content",
+    )
+    assert "三月开学" in txt
+
+
+def test_extract_office_text_uses_stdlib_extract(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+    from pathlib import Path
+
+    api = Path(__file__).resolve().parents[2] / "services" / "api"
+    if str(api) not in sys.path:
+        sys.path.insert(0, str(api))
+    import app.office_extract as oe
+
+    def fake(filename: str, data: bytes):
+        assert filename.endswith(".xlsx")
+        _ = data
+        return {"status": "ok", "text": "高一1班,语文,5"}
+
+    monkeypatch.setattr(oe, "extract_office", fake)
+    text = extract_office_text(filename="课时.xlsx", data=b"PK")
+    assert "语文" in text
+
+
+def test_project_empty_pdf_is_not_fake_green(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setattr(
+        "pico_orchestrator.meili_kb.parse_office_bytes",
+        lambda **_k: "",
+    )
+    posted: list[Any] = []
+
+    class _P:
+        school_id = "school-a"
+        membership_id = "m1"
+
+    monkeypatch.setattr(
+        "pico_orchestrator.meili_kb.upsert_material",
+        lambda doc, client=None: posted.append(doc) or True,
+    )
+    ok = project_material_artifact(
+        _P(),
+        artifact_id="art-empty",
+        title="空.pdf",
+        kind="edu_office",
+        content=b"%PDF-1.4",
+    )
+    assert ok is False
+    assert posted == []
 
 
 def test_upsert_posts_to_index(monkeypatch: pytest.MonkeyPatch) -> None:

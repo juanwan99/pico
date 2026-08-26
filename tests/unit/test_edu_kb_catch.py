@@ -53,3 +53,57 @@ def test_extract_for_kb_md_still_office_extract() -> None:
     out = extract_for_kb("校历.md", "春季学期三月开学。".encode())
     assert out["status"] == "ok"
     assert "三月" in (out.get("text") or "")
+
+
+def test_extract_for_kb_txt_xlsx_via_office_extract(monkeypatch) -> None:
+    from app import edu_files as mod
+
+    monkeypatch.setattr(
+        mod,
+        "extract_office",
+        lambda name, _d: {
+            "filename": name,
+            "kind": name.rsplit(".", 1)[-1],
+            "status": "ok",
+            "headline": "抽出",
+            "rows": 1,
+            "cols": 1,
+            "sheets": [],
+            "text": f"正文来自{name}",
+            "error": None,
+        },
+    )
+    txt = extract_for_kb("备忘.txt", b"hello")
+    assert txt["status"] == "ok"
+    assert "备忘.txt" in (txt.get("text") or "")
+    xlsx = extract_for_kb("课时.xlsx", b"PK")
+    assert xlsx["status"] == "ok"
+    assert "课时.xlsx" in (xlsx.get("text") or "")
+    pptx = extract_for_kb("封面.pptx", b"PK")
+    assert pptx["status"] == "ok"
+    assert "封面.pptx" in (pptx.get("text") or "")
+
+
+def test_extract_for_kb_pdf_unread_when_docling_missing(monkeypatch) -> None:
+    from app import edu_files as mod
+
+    monkeypatch.setattr(mod, "parse_office_bytes", lambda **_k: "")
+    monkeypatch.setattr(
+        mod,
+        "extract_office",
+        lambda _n, _d: {
+            "filename": "空.pdf",
+            "kind": "pdf",
+            "status": "unsupported",
+            "headline": "抽不出",
+            "rows": None,
+            "cols": None,
+            "sheets": [],
+            "text": "",
+            "error": "这种格式抽不出正文",
+        },
+    )
+    out = extract_for_kb("空.pdf", b"%PDF-1.4")
+    assert out["status"] == "unread"
+    assert out["text"] == ""
+    assert out.get("error")
