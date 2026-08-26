@@ -60,7 +60,7 @@ NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
 
 **现况:** [STATE-NOW.md](./STATE-NOW.md)  
 **冻结令:** [#634](https://github.com/juanwan99/pico/issues/634)  
-**在飞:** [#671](https://github.com/juanwan99/pico/issues/671) T-FILES-PLACE  
+**在飞:** [#682](https://github.com/juanwan99/pico/issues/682) T-KB-ENGINE-ON  
 **经验 / 工具:** [EXPERIENCE.md](./EXPERIENCE.md) · [TOOLING-CATALOG.md](./TOOLING-CATALOG.md)  
 **北极星:** [DIRECTION-NOW.md](./DIRECTION-NOW.md) §0-star  
 **不当下一张:** #627 / #628 / #646 / 任何 DAY-TASK

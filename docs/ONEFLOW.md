@@ -51,7 +51,8 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 ```text
 总管调查 → 写入 Issue 标准任务卡（已锁事实 / IN / 验收）
          → stamp-ok
-         → 派发条贴合同 Issue（## 派发）并作为执行窗首条
+         → 派发条贴合同 Issue（## 派发）
+         → 总管 spawn-executor（官方 API · 首条=派发条 · 单独执行环境）
 执行窗只认：派发条 + 合同 Issue
 总管环：订 PR/CI + timer 读 ## CANDIDATE/DEPLOYED/DONE → tip-pin → CLEAR
 ```

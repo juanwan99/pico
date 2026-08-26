@@ -15,7 +15,7 @@ SUPERSEDES: 四行短卡当派发形态
 
 点 **New Issue** 选「执行卡」或贴 **标准任务卡**（#627 体例）。卡必须自含【已锁事实】【IN】【验收】——执行窗零记忆，总管聊天里的调查它看不见。
 
-派给执行窗时：派发条贴合同 Issue（`## 派发`）+ 执行窗首条，模板 [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)。卡上无 `## 派发` = 没派。
+派给执行窗时：派发条贴合同 Issue（`## 派发`），总管再 `spawn-executor --issue N`（首条=条）。模板 [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)。卡上无 `## 派发` = 没派。
 
 ## 卡面（Issue 合同）
 

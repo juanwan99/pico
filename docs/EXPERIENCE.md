@@ -23,7 +23,7 @@ DATE: 2026-08-26
 9. **聊天默认易失。** 约束下一窗 → Issue 评论或 `STATE-NOW` / 本文 / `TOOLING-CATALOG`。回复用 `§编号` / `Issue#`，禁「上次我们说」。
 10. **合与部只归执行窗。** 总管 / 主管窗 / 本类 Cloud Agent：**不合 main、不跑 prod-update**。总管做：派发·两问戳·黄红审戳·现况三行·经验/工具入库。P0 止血可调查、起候选 PR，**合与部仍交执行窗**（有 stamp 才领）。禁止「总管代合代部」当常态。
 21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / ECS 常驻 Grok / 聊天当真源。
-22. **总管环（不合不部）：** stamp → 派发条贴本卡 `## 派发` → 起执行 Cloud Agent（首条=派发条；**单独 executor 环境**，含 TS/SSH）→ 订 PR/CI（`subscribe-pr`/`subscribe-ci`）→ timer 兜底读评 → tip-pin → 刷 STATE-NOW/#634 → CLEAR。无 spawn 口时人粘贴启动是过渡，不当终态。
+22. **总管环（不合不部）：** stamp → 派发条贴本卡 `## 派发` → **spawn-executor**（官方 `POST /v1/agents`；首条=派发条；`CURSOR_EXECUTOR_ENV` = 单独执行环境，含 TS/SSH）→ 订 PR/CI（`subscribe-pr`/`subscribe-ci`）→ timer 读评 → tip-pin → 刷 STATE-NOW/#634 → CLEAR。钥未配才允许人粘贴启动。禁止 mailbox / ECS 常驻。
 23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审/过门（不开新卡）· `CLEAR` tip=main + 五句后停或下一张。人只留：目标 · 黄红争议 · 老师手 · PASS。同域第二张 stamp-ok=废派。
 
 ## B · 现网 / 产品
