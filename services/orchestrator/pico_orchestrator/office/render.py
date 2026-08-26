@@ -83,7 +83,7 @@ def _render_docx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
 def _render_pptx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
     from pptx import Presentation
     from pptx.dml.color import RGBColor
-    from pptx.util import Inches, Pt
+    from pptx.util import Pt
 
     deck = Presentation()
     layout = deck.slide_layouts[1] if len(deck.slide_layouts) > 1 else deck.slide_layouts[0]
@@ -106,10 +106,15 @@ def _render_pptx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
                         if accent:
                             run.font.color.rgb = RGBColor(*accent)
         body = "\n".join(block.bullets)
-        _set_pptx_body(slide, body, font_name=body_font)
+        _set_pptx_body(
+            slide,
+            body,
+            font_name=body_font,
+            narrow_for_image=bool(block.image_artifact_id and block.bullets),
+        )
         if block.image_artifact_id:
             raw = _need_image(images, block.image_artifact_id)
-            slide.shapes.add_picture(io.BytesIO(raw), Inches(6.2), Inches(1.6), width=Inches(3.2))
+            _place_pptx_picture(slide, raw, has_bullets=bool(block.bullets))
     if not deck.slides:
         raise ValueError("PPT spec 没有可渲染的 slide。")
     buf = io.BytesIO()
@@ -214,7 +219,30 @@ def _style_table_header(table: object, theme: Theme | None) -> None:
                     run._element.rPr.rFonts.set(qn("w:eastAsia"), theme.heading_font)
 
 
-def _set_pptx_body(slide: object, body: str, *, font_name: str | None) -> None:
+def _place_pptx_picture(slide: object, raw: bytes, *, has_bullets: bool) -> None:
+    """Put the picture in the content well. No extra spec fields.
+
+    Default deck is 10×7.5 in. The old 3.2in stamp at (6.2, 1.6) is retired.
+    """
+    from pptx.util import Inches
+
+    if has_bullets:
+        slide.shapes.add_picture(
+            io.BytesIO(raw), Inches(5.15), Inches(1.7), width=Inches(4.5)
+        )
+        return
+    slide.shapes.add_picture(
+        io.BytesIO(raw), Inches(1.2), Inches(1.6), width=Inches(7.6)
+    )
+
+
+def _set_pptx_body(
+    slide: object,
+    body: str,
+    *,
+    font_name: str | None,
+    narrow_for_image: bool = False,
+) -> None:
     from pptx.util import Pt
 
     placeholders = getattr(slide, "placeholders", None)
@@ -234,6 +262,11 @@ def _set_pptx_body(slide: object, body: str, *, font_name: str | None) -> None:
                 break
     if target is None:
         return
+    if narrow_for_image:
+        from pptx.util import Inches
+
+        target.width = Inches(4.6)
+        target.left = Inches(0.5)
     target.text = body
     if font_name:
         for para in target.text_frame.paragraphs:
