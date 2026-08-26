@@ -1,19 +1,26 @@
 /**
- * Left/school directory: venue folder tree of school files. Browse only.
- * Folder/file icons follow Windows Explorer language.
+ * Left/school directory: venue folder tree. Fields first; documents lazy on expand.
+ * Avoids N× materials?field_id= fan-out that stalled the sidebar 2–3s+.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EduSchoolField, EduSchoolMaterial } from '~/data-provider/pico/api';
 import { PicoIcon } from '~/components/ui/pico-icons';
-import { groupSchoolTree, loadSchoolFieldTree } from '~/utils/picoSchoolTree';
+import {
+  groupSchoolTree,
+  loadSchoolFieldItems,
+  loadSchoolFields,
+} from '~/utils/picoSchoolTree';
 import { cn } from '~/utils';
 
 export default function SchoolFilesDirectory({ className }: { className?: string }) {
   const [fields, setFields] = useState<EduSchoolField[]>([]);
-  const [items, setItems] = useState<EduSchoolMaterial[]>([]);
+  const [itemsByField, setItemsByField] = useState<Record<string, EduSchoolMaterial[]>>({});
+  const [loadedFields, setLoadedFields] = useState<Record<string, boolean>>({});
+  const [loadingFields, setLoadingFields] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const inflight = useRef<Record<string, Promise<void>>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -21,17 +28,10 @@ export default function SchoolFilesDirectory({ className }: { className?: string
       setBusy(true);
       setError(null);
       try {
-        const tree = await loadSchoolFieldTree();
+        const row = await loadSchoolFields();
         if (cancelled) return;
-        setFields(tree.fields);
-        setItems(tree.items);
-        const openMap: Record<string, boolean> = {};
-        for (const field of tree.fields) {
-          if (field.id) openMap[field.id] = true;
-        }
-        openMap.other = true;
-        setExpanded(openMap);
-        if (tree.configured === false) {
+        setFields(row.fields);
+        if (row.configured === false) {
           setError('学校材料口还没接通');
         }
       } catch (err) {
@@ -47,6 +47,48 @@ export default function SchoolFilesDirectory({ className }: { className?: string
     };
   }, []);
 
+  const ensureFieldLoaded = useCallback(async (fieldId: string) => {
+    if (!fieldId || fieldId === 'other') return;
+    if (loadedFields[fieldId]) return;
+    if (inflight.current[fieldId]) {
+      await inflight.current[fieldId];
+      return;
+    }
+    setLoadingFields((prev) => ({ ...prev, [fieldId]: true }));
+    const task = (async () => {
+      try {
+        const row = await loadSchoolFieldItems(fieldId);
+        setItemsByField((prev) => ({ ...prev, [fieldId]: row.items }));
+        setLoadedFields((prev) => ({ ...prev, [fieldId]: true }));
+        if (row.configured === false) {
+          setError('学校材料口还没接通');
+        }
+      } catch {
+        setItemsByField((prev) => ({ ...prev, [fieldId]: [] }));
+        setLoadedFields((prev) => ({ ...prev, [fieldId]: true }));
+      } finally {
+        setLoadingFields((prev) => ({ ...prev, [fieldId]: false }));
+        delete inflight.current[fieldId];
+      }
+    })();
+    inflight.current[fieldId] = task;
+    await task;
+  }, [loadedFields]);
+
+  const toggleField = useCallback(
+    (fieldId: string) => {
+      setExpanded((prev) => {
+        const nextOpen = !prev[fieldId];
+        if (nextOpen) {
+          void ensureFieldLoaded(fieldId);
+        }
+        return { ...prev, [fieldId]: nextOpen };
+      });
+    },
+    [ensureFieldLoaded],
+  );
+
+  const items = useMemo(() => Object.values(itemsByField).flat(), [itemsByField]);
   const groups = useMemo(() => groupSchoolTree(fields, items), [fields, items]);
 
   return (
@@ -63,14 +105,17 @@ export default function SchoolFilesDirectory({ className }: { className?: string
         ) : null}
         {groups.map((group) => {
           const fieldKey = group.field.id || 'other';
-          const isOpen = expanded[fieldKey] !== false;
+          const isOpen = !!expanded[fieldKey];
+          const isLoading = !!loadingFields[fieldKey];
+          const hasLoaded = !!loadedFields[fieldKey] || fieldKey === 'other';
           return (
             <section key={fieldKey} className="py-0.5" data-testid={`school-dir-folder-${fieldKey}`}>
               <button
                 type="button"
                 className="pico-type-sidebar flex w-full items-center gap-1 py-0.5 text-left text-[color:var(--pico-ink)]"
                 aria-expanded={isOpen}
-                onClick={() => setExpanded((prev) => ({ ...prev, [fieldKey]: !isOpen }))}
+                data-testid={`school-dir-folder-toggle-${fieldKey}`}
+                onClick={() => toggleField(fieldKey)}
               >
                 <span className="w-4 shrink-0 text-[color:var(--pico-ink-2)]">{isOpen ? '▾' : '▸'}</span>
                 <PicoIcon
@@ -81,7 +126,9 @@ export default function SchoolFilesDirectory({ className }: { className?: string
                 <span>{group.field.name || group.field.id}</span>
               </button>
               {isOpen ? (
-                group.items.length === 0 ? (
+                isLoading || !hasLoaded ? (
+                  <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">正在列出文档…</p>
+                ) : group.items.length === 0 ? (
                   <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">这场没有文档</p>
                 ) : (
                   <ul className="pl-5">

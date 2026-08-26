@@ -163,8 +163,33 @@ if [ "$meili_ready" -ne 1 ]; then
   exit 9
 fi
 echo "[pico] meili health ok"
-REINDEX_OUT="$(curl -fsS --max-time 60 -X POST http://127.0.0.1:18765/v1/kb/reindex-all || true)"
-echo "[pico] kb reindex: ${REINDEX_OUT:-failed}"
+REINDEX_FILE="$(mktemp)"
+REINDEX_CODE="$(curl -sS -o "$REINDEX_FILE" -w "%{http_code}" --max-time 120 -X POST http://127.0.0.1:18765/v1/kb/reindex-all || echo 000)"
+REINDEX_OUT="$(cat "$REINDEX_FILE" 2>/dev/null || true)"
+rm -f "$REINDEX_FILE"
+echo "[pico] kb reindex http=${REINDEX_CODE} body=${REINDEX_OUT:-empty}"
+if [ "$REINDEX_CODE" != "200" ]; then
+  echo "[pico] FATAL: kb reindex-all failed (http=${REINDEX_CODE}) — refusing fake-green deploy" >&2
+  exit 10
+fi
+if ! python3 -c '
+import json, sys
+raw = sys.argv[1]
+try:
+    body = json.loads(raw)
+except Exception as exc:
+    print(f"[pico] FATAL: kb reindex body not JSON: {exc}", file=sys.stderr)
+    raise SystemExit(10)
+if body.get("ok") is not True:
+    print("[pico] FATAL: kb reindex ok is not true", file=sys.stderr)
+    raise SystemExit(10)
+print(
+    "[pico] kb reindex ok indexed=%s skipped=%s total=%s"
+    % (body.get("indexed"), body.get("skipped"), body.get("total"))
+)
+' "$REINDEX_OUT"; then
+  exit 10
+fi
 if command -v ss >/dev/null 2>&1; then
   if ss -lntp 2>/dev/null | grep -E '0\.0\.0\.0:7700|\*:7700' >/dev/null; then
     echo "[pico] FATAL: meilisearch listening on 0.0.0.0:7700" >&2

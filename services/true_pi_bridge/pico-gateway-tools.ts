@@ -244,7 +244,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "kb_search",
-    "Search school materials the teacher can already access. Not Pico chat uploads. Call only when the teacher asks about school materials. Being listed does not mean you must call. Returns excerpts + sources (title/item_id/snippet) or honest_miss. Never invent content.",
+    "Search this membership's indexed materials (Meili projection; keyword or hybrid). Call only when the teacher asks about school materials. Being listed does not mean you must call. Returns excerpts + sources (title/artifact_id/snippet) or honest_miss. Never invent content.",
     Type.Object(
       {
         query: Type.String(),

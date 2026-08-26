@@ -20,6 +20,8 @@ CLAIM-WB: NO
 【工具合同 · docs/TOOLING-CATALOG.md】
 批准 id：
   visual-gate · tip-pin · remote-health · gh-git
+  subscribe-pr · subscribe-ci · subscribe-timer · spawn-executor
+  ssh-ecs · cloud-agent-ts · prod-update
   playwright-mcp · chrome-devtools-mcp · pytest-ruff
 证据路径：docs/evidence/<card>/<scene>/V0–V3
 回执必贴：bash scripts/tool-status.sh --json（无 secret）
@@ -29,6 +31,7 @@ missing 非空 或 blocked_for_visual_gate=true → BLOCKED，禁止场景视觉
   Cool / Keel / mailbox / relay / self-drive / 常驻总控
   第二 E2E 栈 · Browser Use/Stagehand 当 Ready · Percy 替主气泡
   闭源 Computer Use 当验收真源 · 无图 Ready · 只读表审查
+  Cloud Agent 公网 22 / egress 白名单当部署通道（用 ssh-ecs）
 
 CLAIM-WB: NO · 产品 Ready：默认未过（直至 #384 帧齐且审查读图）
 ```

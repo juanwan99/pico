@@ -1,8 +1,8 @@
 /**
- * Chat school materials: venue folder tree. Open = see folders and documents.
- * No landing destination, no search-first, no venue dropdown.
+ * Chat school materials: venue folder tree. Open = see folders; documents lazy on expand.
+ * No landing destination, no search-first, no venue dropdown, no N× field_id on open.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getEduNamedIds,
   putEduNamedIds,
@@ -10,7 +10,11 @@ import {
   type EduSchoolMaterial,
 } from '~/data-provider/pico/api';
 import { PicoIcon } from '~/components/ui/pico-icons';
-import { groupSchoolTree, loadSchoolFieldTree } from '~/utils/picoSchoolTree';
+import {
+  groupSchoolTree,
+  loadSchoolFieldItems,
+  loadSchoolFields,
+} from '~/utils/picoSchoolTree';
 import { cn } from '~/utils';
 
 function asNamedIds(row: { ids?: string[] }) {
@@ -22,12 +26,15 @@ function asNamedIds(row: { ids?: string[] }) {
 export default function SchoolMaterialsBar({ conversationId }: { conversationId?: string | null }) {
   const convo = conversationId && conversationId !== 'new' ? conversationId : '';
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<EduSchoolMaterial[]>([]);
+  const [itemsByField, setItemsByField] = useState<Record<string, EduSchoolMaterial[]>>({});
+  const [loadedFields, setLoadedFields] = useState<Record<string, boolean>>({});
+  const [loadingFields, setLoadingFields] = useState<Record<string, boolean>>({});
   const [named, setNamed] = useState<string[]>([]);
   const [fields, setFields] = useState<EduSchoolField[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inflight = useRef<Record<string, Promise<void>>>({});
 
   useEffect(() => {
     if (!open) {
@@ -38,23 +45,19 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
       setBusy(true);
       setError(null);
       try {
-        const [namedRow, tree] = await Promise.all([
+        const [namedRow, fieldsRow] = await Promise.all([
           getEduNamedIds(convo).catch(() => ({ ids: [] as string[] })),
-          loadSchoolFieldTree(),
+          loadSchoolFields(),
         ]);
         if (cancelled) {
           return;
         }
         setNamed(asNamedIds(namedRow).ids);
-        setFields(tree.fields);
-        setItems(tree.items);
-        const openMap: Record<string, boolean> = {};
-        for (const field of tree.fields) {
-          if (field.id) openMap[field.id] = true;
-        }
-        openMap.other = true;
-        setExpanded(openMap);
-        if (tree.configured === false) {
+        setFields(fieldsRow.fields);
+        setItemsByField({});
+        setLoadedFields({});
+        setExpanded({});
+        if (fieldsRow.configured === false) {
           setError('学校材料口还没接通');
         }
       } catch (err) {
@@ -63,7 +66,7 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
         }
         const status = err instanceof Error ? err.message : String(err);
         setError(/\b403\b/.test(status) ? '无权看这份材料' : '学校材料现在列不出');
-        setItems([]);
+        setFields([]);
       } finally {
         if (!cancelled) {
           setBusy(false);
@@ -74,6 +77,34 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
       cancelled = true;
     };
   }, [open, convo]);
+
+  const ensureFieldLoaded = useCallback(async (fieldId: string) => {
+    if (!fieldId || fieldId === 'other') return;
+    if (loadedFields[fieldId]) return;
+    if (inflight.current[fieldId]) {
+      await inflight.current[fieldId];
+      return;
+    }
+    setLoadingFields((prev) => ({ ...prev, [fieldId]: true }));
+    const task = (async () => {
+      try {
+        const row = await loadSchoolFieldItems(fieldId);
+        setItemsByField((prev) => ({ ...prev, [fieldId]: row.items }));
+        setLoadedFields((prev) => ({ ...prev, [fieldId]: true }));
+        if (row.configured === false) {
+          setError('学校材料口还没接通');
+        }
+      } catch {
+        setItemsByField((prev) => ({ ...prev, [fieldId]: [] }));
+        setLoadedFields((prev) => ({ ...prev, [fieldId]: true }));
+      } finally {
+        setLoadingFields((prev) => ({ ...prev, [fieldId]: false }));
+        delete inflight.current[fieldId];
+      }
+    })();
+    inflight.current[fieldId] = task;
+    await task;
+  }, [loadedFields]);
 
   const toggle = useCallback(
     async (id: string) => {
@@ -89,6 +120,20 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
     [convo, named],
   );
 
+  const toggleField = useCallback(
+    (fieldKey: string) => {
+      setExpanded((prev) => {
+        const nextOpen = !prev[fieldKey];
+        if (nextOpen) {
+          void ensureFieldLoaded(fieldKey);
+        }
+        return { ...prev, [fieldKey]: nextOpen };
+      });
+    },
+    [ensureFieldLoaded],
+  );
+
+  const items = useMemo(() => Object.values(itemsByField).flat(), [itemsByField]);
   const groups = useMemo(() => groupSchoolTree(fields, items), [fields, items]);
 
   return (
@@ -119,14 +164,17 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
           ) : null}
           {groups.map((group) => {
             const fieldKey = group.field.id || 'other';
-            const isOpen = expanded[fieldKey] !== false;
+            const isOpen = !!expanded[fieldKey];
+            const isLoading = !!loadingFields[fieldKey];
+            const hasLoaded = !!loadedFields[fieldKey] || fieldKey === 'other';
             return (
               <section key={fieldKey} className="py-0.5" data-testid={`school-field-folder-${fieldKey}`}>
                 <button
                   type="button"
                   className="pico-type-sidebar flex w-full items-center gap-1 py-0.5 text-left text-[color:var(--pico-ink)]"
                   aria-expanded={isOpen}
-                  onClick={() => setExpanded((prev) => ({ ...prev, [fieldKey]: !isOpen }))}
+                  data-testid={`school-field-toggle-${fieldKey}`}
+                  onClick={() => toggleField(fieldKey)}
                 >
                   <span className="w-4 shrink-0 text-[color:var(--pico-ink-2)]">{isOpen ? '▾' : '▸'}</span>
                   <PicoIcon
@@ -137,7 +185,9 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
                   <span>{group.field.name || group.field.id}</span>
                 </button>
                 {isOpen ? (
-                  group.items.length === 0 ? (
+                  isLoading || !hasLoaded ? (
+                    <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">正在列出文档…</p>
+                  ) : group.items.length === 0 ? (
                     <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">这场没有文档</p>
                   ) : (
                     <ul className="pl-5">

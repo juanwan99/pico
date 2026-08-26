@@ -99,7 +99,10 @@ def test_nav_layout_type_and_school_docs() -> None:
     assert "text-[30px]" not in landing
     assert "text-[34px]" not in landing
     assert "ArchiveFolderBar" in landing
-    assert "loadSchoolFieldTree" in bar
+    # Chat bar: fields on open, documents lazy per venue (no N× fan-out on open).
+    assert "loadSchoolFields" in bar
+    assert "loadSchoolFieldItems" in bar
+    assert "loadSchoolFieldTree" not in bar
     assert "school-materials-tree" in bar
     assert "落到哪一场" not in bar
     assert "school-materials-q" not in bar

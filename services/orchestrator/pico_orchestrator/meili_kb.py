@@ -339,6 +339,7 @@ def project_material_artifact(
 
 
 def health_fields() -> dict[str, Any]:
+    """Honest Meili tier. hybrid only with embedder key + reachable; never fake hybrid."""
     configured = meili_configured()
     reachable = False
     if configured:
@@ -346,11 +347,16 @@ def health_fields() -> dict[str, Any]:
             reachable = MeiliIndex().ping()
         except Exception:  # noqa: BLE001
             reachable = False
+    has_embedder = bool(siliconflow_embed_key())
+    if configured and reachable and has_embedder:
+        mode = "hybrid"
+    elif configured and reachable:
+        mode = "keyword"
+    else:
+        mode = "scan"
     return {
         "meili_configured": configured,
         "meili_reachable": reachable,
-        "meili_embedder": bool(siliconflow_embed_key()),
-        "kb_mode": (
-            "hybrid" if (configured and siliconflow_embed_key()) else "keyword" if configured else "scan"
-        ),
+        "meili_embedder": has_embedder,
+        "kb_mode": mode,
     }
