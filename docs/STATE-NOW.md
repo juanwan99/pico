@@ -4,9 +4,9 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #684 T-KB-USABLE
+在飞: #686 T-LONG-OFFICE
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 590772fea8a79f044c49a4fc69f6ec759c382713 ≠ origin/main d8cca403…（#679+#680 已合未部；本卡部完 tip=合后 main）
+      → c8acc46b67bf4bc354807aebb737eedff5748748 = origin/main（#685 已部；#684 业主 PASS）
 阻塞: 无
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: NO
@@ -54,7 +54,8 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 
 | 优先级 | Issue | 说明 |
 |--------|-------|------|
-| 在飞 | [#684](https://github.com/juanwan99/pico/issues/684) | T-KB-USABLE 库能用 · A2+A3 一张 |
+| 在飞 | [#686](https://github.com/juanwan99/pico/issues/686) | T-LONG-OFFICE 长任务办公 · B1+B2+B3 一张 |
+| 已收口 | [#684](https://github.com/juanwan99/pico/issues/684) | T-KB-USABLE 库能用 · 业主 PASS · tip=`c8acc46b…` |
 | 已收口 | [#682](https://github.com/juanwan99/pico/issues/682) | A1 T-KB-ENGINE-ON · 业主 PASS · tip=`590772fe…` |
 | 已收口 | [#680](https://github.com/juanwan99/pico/pull/680) | 现况/经验/工具 · 已合 main · 随本卡一部 |
 | 已收口 | [#679](https://github.com/juanwan99/pico/pull/679) | Cloud Agent TS + ssh ecs · 已合 main · 随本卡一部 |
