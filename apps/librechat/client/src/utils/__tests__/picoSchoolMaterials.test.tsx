@@ -1,6 +1,6 @@
 /**
  * T-FILES-PLACE: opening school materials shows a venue folder tree.
- * No search-first, no landing dropdown. No per-field N+1 fan-out.
+ * No search-first, no landing dropdown. Open = fields only; docs lazy on expand.
  */
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -42,32 +42,37 @@ describe('SchoolMaterialsBar venue folder tree', () => {
       ],
     });
     mockPutEduNamedIds.mockResolvedValue({ ids: [] });
-    mockSearch.mockResolvedValue({
-      items: [
-        { id: 'doc-1', title: '课时计划.docx', fieldId: 'field-1' },
-        { id: 'doc-2', title: '课文.docx', fieldId: 'field-2' },
-      ],
+    mockSearch.mockImplementation(async (_q: string, fieldId = '') => {
+      if (fieldId === 'field-1') {
+        return { items: [{ id: 'doc-1', title: '课时计划.docx', fieldId: 'field-1' }] };
+      }
+      if (fieldId === 'field-2') {
+        return { items: [{ id: 'doc-2', title: '课文.docx', fieldId: 'field-2' }] };
+      }
+      return { items: [] };
     });
   });
 
-  it('opens into a folder tree with documents, without search or landing picker', async () => {
+  it('opens into venue folders without materials fan-out; docs load on expand', async () => {
     render(<SchoolMaterialsBar conversationId="c1" />);
     fireEvent.click(screen.getByTestId('school-materials-toggle'));
 
-    expect(await screen.findByTestId('school-material-doc-1')).toBeInTheDocument();
-    expect(screen.getByTestId('school-material-doc-2')).toBeInTheDocument();
-    expect(screen.getByTestId('school-field-folder-field-1')).toBeInTheDocument();
+    expect(await screen.findByTestId('school-field-folder-field-1')).toBeInTheDocument();
     expect(screen.getByTestId('school-field-folder-field-2')).toBeInTheDocument();
-    expect(screen.getAllByTestId('pico-icon-folder-open').length).toBeGreaterThan(0);
-    expect(screen.getAllByTestId('pico-icon-file').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('school-material-doc-1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('school-materials-q')).not.toBeInTheDocument();
     expect(screen.queryByText('搜')).not.toBeInTheDocument();
     expect(screen.queryByText('落到哪一场')).not.toBeInTheDocument();
     expect(screen.queryByTestId('school-land-field')).not.toBeInTheDocument();
     await waitFor(() => {
       expect(mockListEduFields).toHaveBeenCalled();
-      // One unscoped search — not N× materials?field_id=
-      expect(mockSearch).toHaveBeenCalledWith('', '');
+      expect(mockSearch).not.toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByTestId('school-field-toggle-field-1'));
+    expect(await screen.findByTestId('school-material-doc-1')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockSearch).toHaveBeenCalledWith('', 'field-1');
       expect(mockSearch).toHaveBeenCalledTimes(1);
     });
   });
@@ -77,6 +82,8 @@ describe('SchoolMaterialsBar venue folder tree', () => {
 
     render(<SchoolMaterialsBar conversationId="c1" />);
     fireEvent.click(screen.getByTestId('school-materials-toggle'));
+    fireEvent.click(await screen.findByTestId('school-field-toggle-field-1'));
+    fireEvent.click(await screen.findByTestId('school-field-toggle-field-2'));
     fireEvent.click(await screen.findByTestId('school-material-doc-1'));
     fireEvent.click(await screen.findByTestId('school-material-doc-2'));
 
