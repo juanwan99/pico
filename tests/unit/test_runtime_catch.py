@@ -159,3 +159,31 @@ def test_casual_chat_still_zero_artifacts() -> None:
     plan = _this_round_delivery_plan("你好，今天天气怎么样？")
     assert plan.min_artifacts == 0
     assert plan.force_agent is False
+
+
+def test_t_long_office_short_ask_does_not_force_delivery() -> None:
+    """T-LONG-OFFICE T2: 问「这是什么」must stay explain-only. No word-list gate."""
+    from app.openai_compat import _this_round_delivery_plan
+
+    for prompt in (
+        "这是什么",
+        "这是什么？用两三句话说明 Pico 是做什么的。不要交任何文件。",
+        "培训通知\n\n各部门：定于下周一 14:00 在三楼会议室开展新学期教师培训。\n\n这是什么",
+    ):
+        plan = _this_round_delivery_plan(prompt)
+        assert plan.min_artifacts == 0, prompt
+        assert plan.force_agent is False, prompt
+
+
+def test_t_long_office_named_word_still_no_guess() -> None:
+    """T-LONG-OFFICE T3/T4: named Word stays tools-mounted, never force_agent / min from words."""
+    from app.openai_compat import _this_round_delivery_plan
+
+    prompts = [
+        "请把下面这段家长通知做成一份可下载的 Word 文档。各位家长：本校定于 9 月 4 日召开家长会。",
+        "把刚才那份 Word 的标题改成「一年级三月家长会通知」，再交一版。",
+    ]
+    for prompt in prompts:
+        plan = _this_round_delivery_plan(prompt)
+        assert plan.force_agent is False, prompt
+        assert plan.min_artifacts == 0, prompt
