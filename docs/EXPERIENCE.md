@@ -29,7 +29,7 @@ DATE: 2026-08-26
 ## B · 现网 / 产品
 
 11. **用法 = Grok。** 禁问句/材料特判、禁词表监工、禁自研压缩器/记忆 OS。只接 Pi 官方 compact。
-12. **CLAIM-WB-DEGREE-WEB 仍 NO。** 不代签 PASS。
+12. **CLAIM-WB-DEGREE-WEB 业主 2026-08-26 已签 YES** @ tip `dcb47c00…`（#449/#316 OWNER DECISION）。工程仍禁改口/再代签。记忆·人视角日用挂起。
 13. **`juanwan99/oneflow` 不当真源**（已 Archive）。
 14. **改 Python 工具说明 ≠ Pi 看见。** 真路径：`pico-gateway-tools.ts` + `SYSTEM.md`。
 
