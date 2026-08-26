@@ -13,5 +13,6 @@
 一句话：<老师在 pico.aivia.asia 能看见什么>
 禁止：自签 PASS · 直推 main · 残债新卡 · 证据 PR · 合了未部报 DONE · Closes 部前关卡 · 拆第二张 PR
 经验：docs/EXPERIENCE.md · 点名 <最多3个编号>
+工具：docs/TOOLING-CATALOG.md · 点名 <最多3个 id>（需要碰机时必含 tip-pin 或 ssh-ecs）
 回执：评论 #<N> · live SHA=main · 1卡1PR · PASS 未签
 ```

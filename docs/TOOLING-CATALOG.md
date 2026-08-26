@@ -1,11 +1,12 @@
 # TOOLING-CATALOG · 批准 / 禁止工具合同
 
 ```text
-STATUS: BINDING · pico 工具目录（#386 D1A · #387）
-DATE: 2026-08-09
-SCOPE: juanwan99/pico · ECS 执行窗
+STATUS: BINDING · pico 工具目录（唯一派发 ID 表）
+DATE: 2026-08-26
+SCOPE: juanwan99/pico · ECS 执行窗 · Cloud Agent
 CLAIM-WB: NO · 本文件不签产品 Ready
 PARENT: #386 原则 1–7 · #384 视觉门 · host 禁 Cool/Keel
+派发: 只勾本表 id；用法在本表；密钥永不进仓
 ```
 
 ## 0. 铁律
@@ -36,15 +37,25 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 | id | 工具 | 入口 | 何时必须 | 何时禁止 | env 名（无值） |
 |----|------|------|----------|----------|----------------|
 | **visual-gate** | 公网 V0–V3 强制截图 | `scripts/visual-gate.mjs` · [VISUAL-GATE.md](./VISUAL-GATE.md) | UI/交付/Agent 场景验收 | 散文「我测了」无图；各窗另写截图脚本 | `DEMO_EMAIL` / `DEMO_PASSWORD` 或 `PICO_E2E_*` |
-| **tip-pin** | 公网 tip 40 位 SHA | `scripts/tip-pin.sh` · [TIP-PROBE.md](./TIP-PROBE.md) | 每测前 / 回执 E0 | SPA `/health` 的 `OK` 冒充 tip | — |
-| **remote-health** | SSH 权威 health | `scripts/remote-health.sh` | 与公网 tip 三行对齐 | Issue 贴 canary membership 列表 | SSH host 配置 |
-| **gh-git** | PR / 证据进仓 | `gh` · `git` | 合入链 · 证据 PR | 密钥进 commit | `GH_TOKEN` 等（主机已配） |
+| **tip-pin** | 公网 tip 40 位 SHA | `scripts/tip-pin.sh` · [TIP-PROBE.md](./TIP-PROBE.md) | 每测前 / 回执 E0 / DONE | SPA `/health` 的 `OK` 冒充 tip | — |
+| **remote-health** | SSH 权威 health | `scripts/remote-health.sh` | 与公网 tip 三行对齐 | Issue 贴 canary membership 列表 | 经 **ssh-ecs** |
+| **gh-git** | PR / 证据进仓 | `gh` · `git` | 合入链 | 密钥进 commit；证据截图进 docs PR | `GH_TOKEN` 等（主机已配） |
 
-**说明：** `visual-gate` / `tip-pin` 以仓内脚本为准（见 #385 合入状态）；`tool-status` 对缺失报 `ok:false`。
+**说明：** `visual-gate` / `tip-pin` 以仓内脚本为准；`tool-status` 对缺失报 `ok:false`。
 
 ---
 
-## 2. 调试 / 工程工具（辅助 · 不当 Ready 真源）
+## 2. 部署 / 现网通道（执行窗 · Cloud Agent）
+
+| id | 工具 | 入口 | 何时必须 | 何时禁止 | env 名（无值） |
+|----|------|------|----------|----------|----------------|
+| **ssh-ecs** | Tailscale → 生产机 | `ssh ecs`（`~/.ssh/config`：`ecs`/`pico-prod`→`aliyun-hy`，User `ops`）· EXPERIENCE §17–19 | 一切 ECS 探活 / prod-update / remote-health | 公网 IP:22；安全组追 Cloud Agent egress | `TS_AUTHKEY` · `PICO_PROD_SSH_PRIVATE_KEY` ·（建议）`PICO_PROD_SSH_USER` · `PICO_PROD_SSH_HOST` |
+| **cloud-agent-ts** | Cloud Agent 入网 | `scripts/cloud-agent-install.sh` + `scripts/cloud-agent-start.sh`（或 `~/.local/bin` 同名） | 新 Cloud Agent 要碰 ECS | 把密钥写进 environment.json；无 draft 验就 Save | 同上 |
+| **prod-update** | exact-SHA 部署 | `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh` | 卡面「有差才部」 | 无 SHA；未 tip 对齐报 DONE | 机上已有 |
+
+---
+
+## 3. 调试 / 工程工具（辅助 · 不当 Ready 真源）
 
 | id | 工具 | 入口 | 何时必须 | 何时禁止 |
 |----|------|------|----------|----------|
@@ -54,7 +65,7 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 
 ---
 
-## 3. 禁止表（硬）
+## 4. 禁止表（硬）
 
 | 禁止 | 原因 |
 |------|------|
@@ -66,10 +77,11 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 | **闭源 Computer Use 当验收真源** | 不贴双模 ECS + tip/证据仓 |
 | **无图 Ready / 只读表审查** | #384 一票否决 |
 | **密钥、DEMO 密码进 GitHub/Issue** | 安全 |
+| **Cloud Agent 靠公网 22 / 漂移 egress 白名单当部署通道** | 假通路；真源 = Tailscale MagicDNS（**ssh-ecs**） |
 
 ---
 
-## 4. 卡头强制抄录（D4A · UI/交付/Agent 卡）
+## 5. 卡头强制抄录（D4A · UI/交付/Agent 卡）
 
 完整可复制块见：[`docs/templates/CARD-HEADER-TOOLING.md`](./templates/CARD-HEADER-TOOLING.md)
 
@@ -82,28 +94,28 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 - 审查必须读图；只读表 = 审查无效
 
 【工具合同 · TOOLING-CATALOG】
-批准 id：visual-gate · tip-pin · playwright-mcp · chrome-devtools-mcp · gh-git · pytest-ruff · remote-health
-回执：bash scripts/tool-status.sh --json（无密）；missing 非空 = BLOCKED
-禁止：Cool/Keel/mailbox · 第二 E2E · 无图 Ready · 只读表审查
+批准 id：visual-gate · tip-pin · remote-health · gh-git · ssh-ecs · cloud-agent-ts · prod-update · playwright-mcp · chrome-devtools-mcp · pytest-ruff
+回执：bash scripts/tool-status.sh --json（无密）；missing 非空 = BLOCKED（视觉卡）
+禁止：Cool/Keel/mailbox · 第二 E2E · 无图 Ready · 公网22当 Cloud Agent 通道
 CLAIM-WB: NO
 ```
 
 ---
 
-## 5. tool-status
+## 6. tool-status
 
 ```bash
 bash scripts/tool-status.sh          # 人类可读
-bash scripts/tool-status.sh --json   # 机器 JSON · 贴 PR/卡回执
+bash scripts/tool-status.sh --json   # 机器 JSON · 贴卡回执（无密）
 ```
 
 关键字段：`tools.*.ok` · `tip.git_sha`（40 位）· `retired_mechanisms.clear` · `blocked_for_visual_gate` · `missing[]`。
 
-**不含**任何密码/token。
+**不含**任何密码/token。`ssh-ecs` / `cloud-agent-ts` 以本机 `ssh ecs` / Tailscale 证伪，不强制写入 tool-status 旧 schema。
 
 ---
 
-## 6. 退役机制（archive 路径）
+## 7. 退役机制（archive 路径）
 
 | 原路径 | 处理后 |
 |--------|--------|
@@ -114,14 +126,14 @@ bash scripts/tool-status.sh --json   # 机器 JSON · 贴 PR/卡回执
 
 ---
 
-## 7. 变更
+## 8. 变更
 
-改本表 → PR · 引用 #386/#387 · 任务卡写 `TOOLING: CATALOG@<本文件路径>`。
+改本表 → PR。任务卡/派发条写 `TOOLING: <id>…`（≤N）。不另建第二工具真源文件。
 
 ```text
 ════════════════════════════════════
-BINDING · 工具合同 pico
+BINDING · 工具合同 pico · 唯一 ID 表
 批准进仓 · status 证伪 · Cool 清零
-不替 #384 读图 · CLAIM-WB 仅业主
+ssh-ecs = Tailscale · CLAIM-WB 仅业主
 ════════════════════════════════════
 ```
