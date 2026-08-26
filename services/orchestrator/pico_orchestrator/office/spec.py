@@ -74,7 +74,7 @@ def parse_spec(raw: Any, *, default_kind: Kind | None = None) -> OfficeSpec:
         except json.JSONDecodeError as exc:
             raise ValueError("spec 不是合法 JSON。") from exc
     if not isinstance(raw, dict):
-        raise ValueError("spec 必须是对象。")
+        raise TypeError("spec 必须是对象。")
     kind = str(raw.get("kind") or default_kind or "").strip().lower()
     if kind not in {"docx", "pptx"}:
         raise ValueError("spec.kind 只支持 docx 或 pptx（Excel 是卡 2）。")
@@ -126,7 +126,7 @@ def _bullets_from_body(body: str) -> tuple[str, ...]:
 
 def _parse_block(item: Any, *, kind: Kind) -> Block:
     if not isinstance(item, dict):
-        raise ValueError("block 必须是对象。")
+        raise TypeError("block 必须是对象。")
     btype = str(item.get("type") or "").strip().lower()
     if kind == "pptx":
         if btype and btype != "slide":

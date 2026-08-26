@@ -642,7 +642,7 @@ def _workspace_handlers(
                 body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
                 require_docx_body(body)
                 raw = build_docx_document(title=title, marker=marker, body=body)
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         result = await store.write(
             principal,
@@ -681,7 +681,7 @@ def _workspace_handlers(
                 body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
                 require_pptx_body(body)
                 raw = build_pptx_document(title=title, marker=marker, body=body)
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         result = await store.write(
             principal,
@@ -699,7 +699,7 @@ def _workspace_handlers(
         try:
             spec = parse_spec(spec_raw)
             raw = render_spec(spec, images=await _load_spec_images(principal, spec))
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         ext = ".docx" if spec.kind == "docx" else ".pptx"
         title = _ensure_extension(str(args.get("title") or spec.title or f"pico{ext}"), ext)
@@ -724,7 +724,7 @@ def _workspace_handlers(
         row, raw = await _load_office(principal, args, ext=ext)
         try:
             outline = inspect_office_bytes(raw, ext)
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         outline["artifact_id"] = row.get("artifact_id")
         outline["title"] = row.get("title")

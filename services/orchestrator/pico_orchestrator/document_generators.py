@@ -409,8 +409,6 @@ def build_docx_document(
     """python-docx Word with the caller body. Does not pad 套话 to hit a quota."""
     marker = _require_marker(marker)
     heading = _display_title(title, "Pico DOCX")
-    from docx import Document
-
     from pico_orchestrator.office.render import render_spec
     from pico_orchestrator.office.spec import spec_from_plain
 

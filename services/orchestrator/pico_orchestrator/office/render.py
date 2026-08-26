@@ -26,7 +26,8 @@ def render_spec(spec: OfficeSpec, *, images: dict[str, bytes] | None = None) -> 
 def _render_docx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
     from docx import Document
     from docx.oxml.ns import qn
-    from docx.shared import Inches, Pt, RGBColor as DocxRGB
+    from docx.shared import Inches
+    from docx.shared import RGBColor as DocxRGB
 
     doc = Document()
     _apply_docx_theme(doc, spec.theme)
