@@ -38,6 +38,10 @@ from pico_orchestrator.gateway import (
 from pico_orchestrator.image_generate import generate_image_bytes
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
 from pico_orchestrator.meili_kb import extract_index_text, meili_configured, search_materials
+from pico_orchestrator.office.inspect import inspect_office_bytes
+from pico_orchestrator.office.qa import verify_office_bytes
+from pico_orchestrator.office.render import render_spec
+from pico_orchestrator.office.spec import parse_spec
 from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
 from pico_orchestrator.sandbox_s1 import (
     MAX_CONTENT_CHARS,
@@ -593,13 +597,51 @@ def _workspace_handlers(
         )
         return result
 
+    async def _load_spec_images(principal: Principal, spec: object) -> dict[str, bytes]:
+        out: dict[str, bytes] = {}
+        for aid in getattr(spec, "image_ids", lambda: ())():
+            row = await store.read(principal, artifact_id=aid)
+            if row is None:
+                raise ToolError(
+                    "artifact.not_found",
+                    f"找不到图片 {aid}。请先 generate_image。",
+                )
+            out[str(aid)] = _artifact_bytes(row)
+        return out
+
+    def _spec_arg(args: dict[str, Any]) -> object | None:
+        if args.get("spec") is not None:
+            return args.get("spec")
+        if args.get("blocks") is not None:
+            return args.get("blocks")
+        return None
+
     async def generate_docx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _ensure_extension(_artifact_title(args), ".docx")
         marker = _marker_arg(args)
-        body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+        spec_raw = _spec_arg(args)
         try:
-            require_docx_body(body)
-            raw = build_docx_document(title=title, marker=marker, body=body)
+            if spec_raw is not None:
+                if isinstance(spec_raw, list):
+                    spec_raw = {
+                        "kind": "docx",
+                        "title": title,
+                        "marker": marker,
+                        "blocks": spec_raw,
+                    }
+                elif isinstance(spec_raw, dict):
+                    spec_raw = {
+                        **spec_raw,
+                        "kind": spec_raw.get("kind") or "docx",
+                        "title": spec_raw.get("title") or title,
+                        "marker": spec_raw.get("marker") or marker,
+                    }
+                spec = parse_spec(spec_raw, default_kind="docx")
+                raw = render_spec(spec, images=await _load_spec_images(principal, spec))
+            else:
+                body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+                require_docx_body(body)
+                raw = build_docx_document(title=title, marker=marker, body=body)
         except ValueError as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         result = await store.write(
@@ -610,15 +652,35 @@ def _workspace_handlers(
         )
         result["format"] = "docx"
         result["marker"] = marker
+        result["via"] = "spec" if spec_raw is not None else "plain"
         return result
 
     async def generate_pptx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _ensure_extension(_artifact_title(args), ".pptx")
         marker = _marker_arg(args)
-        body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+        spec_raw = _spec_arg(args)
         try:
-            require_pptx_body(body)
-            raw = build_pptx_document(title=title, marker=marker, body=body)
+            if spec_raw is not None:
+                if isinstance(spec_raw, list):
+                    spec_raw = {
+                        "kind": "pptx",
+                        "title": title,
+                        "marker": marker,
+                        "blocks": spec_raw,
+                    }
+                elif isinstance(spec_raw, dict):
+                    spec_raw = {
+                        **spec_raw,
+                        "kind": spec_raw.get("kind") or "pptx",
+                        "title": spec_raw.get("title") or title,
+                        "marker": spec_raw.get("marker") or marker,
+                    }
+                spec = parse_spec(spec_raw, default_kind="pptx")
+                raw = render_spec(spec, images=await _load_spec_images(principal, spec))
+            else:
+                body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+                require_pptx_body(body)
+                raw = build_pptx_document(title=title, marker=marker, body=body)
         except ValueError as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         result = await store.write(
@@ -629,7 +691,56 @@ def _workspace_handlers(
         )
         result["format"] = "pptx"
         result["marker"] = marker
+        result["via"] = "spec" if spec_raw is not None else "plain"
         return result
+
+    async def render_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        spec_raw = args.get("spec") if args.get("spec") is not None else args
+        try:
+            spec = parse_spec(spec_raw)
+            raw = render_spec(spec, images=await _load_spec_images(principal, spec))
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        ext = ".docx" if spec.kind == "docx" else ".pptx"
+        title = _ensure_extension(str(args.get("title") or spec.title or f"pico{ext}"), ext)
+        result = await store.write(
+            principal,
+            title=title,
+            content=raw,
+            kind=spec.kind,
+        )
+        result["format"] = spec.kind
+        result["via"] = "spec"
+        check = verify_office_bytes(raw, ext)
+        result["valid_ooxml"] = check.get("valid_ooxml")
+        return result
+
+    async def inspect_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        kind = str(args.get("kind") or "").strip().lower()
+        ext = ".pptx" if kind == "pptx" else ".docx" if kind == "docx" else ""
+        if not ext:
+            title_hint = str(args.get("title") or "")
+            ext = ".pptx" if title_hint.lower().endswith(".pptx") else ".docx"
+        row, raw = await _load_office(principal, args, ext=ext)
+        try:
+            outline = inspect_office_bytes(raw, ext)
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        outline["artifact_id"] = row.get("artifact_id")
+        outline["title"] = row.get("title")
+        return outline
+
+    async def verify_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        kind = str(args.get("kind") or "").strip().lower()
+        ext = ".pptx" if kind == "pptx" else ".docx" if kind == "docx" else ""
+        if not ext:
+            title_hint = str(args.get("title") or "")
+            ext = ".pptx" if title_hint.lower().endswith(".pptx") else ".docx"
+        row, raw = await _load_office(principal, args, ext=ext)
+        check = verify_office_bytes(raw, ext)
+        check["artifact_id"] = row.get("artifact_id")
+        check["title"] = row.get("title")
+        return check
 
     async def _load_office(
         principal: Principal,
@@ -1287,6 +1398,9 @@ def _workspace_handlers(
         browser_open,
         browser_screenshot,
         document_open,
+        render_document,
+        inspect_document,
+        verify_document,
     )
 
 
@@ -1410,6 +1524,9 @@ def build_default_gateway(
         browser_open,
         browser_screenshot,
         document_open,
+        render_document,
+        inspect_document,
+        verify_document,
     ) = _workspace_handlers(store)
     gw.register(
         ToolSpec(
@@ -1557,8 +1674,9 @@ def build_default_gateway(
         ToolSpec(
             name="generate_docx_document",
             description=(
-                "Create a real OOXML .docx Artifact (ZIP with Content_Types + word/document.xml) "
-                "containing a unique marker. Args: title, marker, body?"
+                "Create a real OOXML .docx. Prefer spec/blocks (heading/para/table/image) "
+                "so the file is not one blob of text. Plain body still works. "
+                "Args: title, marker, body? | spec? | blocks?"
             ),
             handler=generate_docx,
             school_scoped=False,
@@ -1568,8 +1686,9 @@ def build_default_gateway(
         ToolSpec(
             name="generate_pptx_document",
             description=(
-                "Create a real OOXML .pptx Artifact (presentation + ≥1 slide) "
-                "containing a unique marker. Args: title, marker, body?"
+                "Create a real OOXML .pptx. Prefer spec/blocks of slide "
+                "{title, bullets, image_artifact_id} so images sit on the slide. "
+                "Args: title, marker, body? | spec? | blocks?"
             ),
             handler=generate_pptx,
             school_scoped=False,
@@ -1596,6 +1715,39 @@ def build_default_gateway(
                 "Args: artifact_id|title, slide_index? (default 1), new_title, output_title?"
             ),
             handler=edit_pptx,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="render_document",
+            description=(
+                "Create Word/PPT from pico.office.spec/v1 (blocks: heading/para/table/image "
+                "or slide). Tables and images go inside the file. Args: spec, title?"
+            ),
+            handler=render_document,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="inspect_document",
+            description=(
+                "Read structure of an uploaded .docx/.pptx: paragraph/slide indexes, "
+                "tables, images. Call this before edit_*. Args: artifact_id|title, kind?"
+            ),
+            handler=inspect_document,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="verify_document",
+            description=(
+                "Fail-closed OOXML check for a ledger Word/PPT. "
+                "Args: artifact_id|title, kind?"
+            ),
+            handler=verify_document,
             school_scoped=False,
         )
     )
@@ -1869,6 +2021,14 @@ def openai_tool_schemas(
                         "Short body fails — the tool will not pad filler."
                     ),
                 },
+                "spec": {
+                    "type": "object",
+                    "description": "pico.office.spec/v1. Use for tables/images. Overrides body.",
+                },
+                "blocks": {
+                    "type": "array",
+                    "description": "spec.blocks shortcut (heading/para/table/image)",
+                },
             },
             "required": ["title", "marker"],
         },
@@ -1891,8 +2051,43 @@ def openai_tool_schemas(
                         "Fewer pages fail — the tool will not invent 说明 slides."
                     ),
                 },
+                "spec": {
+                    "type": "object",
+                    "description": "pico.office.spec/v1 slides. Overrides body.",
+                },
+                "blocks": {
+                    "type": "array",
+                    "description": "spec.blocks shortcut (slide objects)",
+                },
             },
             "required": ["title", "marker"],
+        },
+        "render_document": {
+            "type": "object",
+            "properties": {
+                "spec": {
+                    "type": "object",
+                    "description": "pico.office.spec/v1 (kind + blocks)",
+                },
+                "title": {"type": "string", "description": "Download filename"},
+            },
+            "required": ["spec"],
+        },
+        "inspect_document": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {"type": "string"},
+                "title": {"type": "string"},
+                "kind": {"type": "string", "description": "docx or pptx"},
+            },
+        },
+        "verify_document": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {"type": "string"},
+                "title": {"type": "string"},
+                "kind": {"type": "string", "description": "docx or pptx"},
+            },
         },
         "edit_docx_document": {
             "type": "object",

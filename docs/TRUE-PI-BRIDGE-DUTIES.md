@@ -34,6 +34,9 @@ generate_docx_document
 generate_pptx_document
 edit_docx_document
 edit_pptx_document
+render_document
+inspect_document
+verify_document
 generate_image
 verify_html_document
 web_search

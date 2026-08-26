@@ -289,8 +289,11 @@ def test_bridge_allowlist_is_thin() -> None:
     assert "sandbox_document_open" in ALLOWED_GATEWAY_TOOLS
     assert "edit_docx_document" in ALLOWED_GATEWAY_TOOLS
     assert "edit_pptx_document" in ALLOWED_GATEWAY_TOOLS
+    assert "render_document" in ALLOWED_GATEWAY_TOOLS
+    assert "inspect_document" in ALLOWED_GATEWAY_TOOLS
+    assert "verify_document" in ALLOWED_GATEWAY_TOOLS
     assert "generate_image" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 18
+    assert len(ALLOWED_GATEWAY_TOOLS) == 21
 
 
 def test_shadow_diff_flags_false_green() -> None:

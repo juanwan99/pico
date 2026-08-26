@@ -7,7 +7,7 @@ DATE: 2026-08-26
 在飞: #690 T-OFFICE-KERNEL（办公文档核 · 卡 1/2 · stamp-ok）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → dcb47c0059311c836960499b6f5d54207b9500bf = origin/main（#687 已部；#686 业主 PASS）
-阻塞: 无 · 执行窗领 #690
+阻塞: 无 · #690 本窗写核（1卡1PR）
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686 业主已签 · #449/#316 勿关 · 记忆/人视角日用挂起

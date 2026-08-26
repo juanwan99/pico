@@ -25,6 +25,9 @@ const ALLOWED = [
   "generate_pptx_document",
   "edit_docx_document",
   "edit_pptx_document",
+  "render_document",
+  "inspect_document",
+  "verify_document",
   "generate_image",
   "verify_html_document",
   "web_search",
@@ -208,6 +211,38 @@ export default function (pi: ExtensionAPI) {
         slide_index: Type.Optional(Type.Number()),
         new_title: Type.Optional(Type.String()),
         output_title: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "render_document",
+    "Create Word/PPT from pico.office.spec/v1 (tables/images inside the file).",
+    AnyArgs,
+  );
+  registerTool(
+    pi,
+    "inspect_document",
+    "Read paragraph/slide/table/image indexes of a ledger Word/PPT. Call before edit.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
+        kind: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "verify_document",
+    "Fail-closed OOXML check for a ledger Word/PPT.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
+        kind: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),

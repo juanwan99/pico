@@ -172,6 +172,7 @@ def titles_from_tool_results(
         "generate_pptx_document",
         "edit_docx_document",
         "edit_pptx_document",
+        "render_document",
         "generate_image",
     }
     for name, value in tool_results:
