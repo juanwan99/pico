@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 SCHEMA = "pico.office.spec/v1"
-Kind = Literal["docx", "pptx"]
+Kind = Literal["docx", "pptx", "xlsx"]
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,12 @@ class Theme:
 
 
 @dataclass(frozen=True)
+class CommentSpec:
+    paragraph: int
+    text: str
+
+
+@dataclass(frozen=True)
 class Block:
     type: str
     text: str = ""
@@ -37,6 +43,7 @@ class Block:
     bullets: tuple[str, ...] = ()
     notes: str = ""
     image_artifact_id: str | None = None
+    headers: tuple[str, ...] = ()
 
     def image_ids(self) -> tuple[str, ...]:
         ids: list[str] = []
@@ -55,6 +62,8 @@ class OfficeSpec:
     marker: str
     theme: Theme | None = None
     blocks: tuple[Block, ...] = field(default_factory=tuple)
+    comments: tuple[CommentSpec, ...] = field(default_factory=tuple)
+    values: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
     def image_ids(self) -> tuple[str, ...]:
         seen: list[str] = []
@@ -63,6 +72,9 @@ class OfficeSpec:
                 if item not in seen:
                     seen.append(item)
         return tuple(seen)
+
+    def values_map(self) -> dict[str, str]:
+        return {key: val for key, val in self.values if key}
 
 
 def parse_spec(raw: Any, *, default_kind: Kind | None = None) -> OfficeSpec:
@@ -76,13 +88,15 @@ def parse_spec(raw: Any, *, default_kind: Kind | None = None) -> OfficeSpec:
     if not isinstance(raw, dict):
         raise TypeError("spec 必须是对象。")
     kind = str(raw.get("kind") or default_kind or "").strip().lower()
-    if kind not in {"docx", "pptx"}:
-        raise ValueError("spec.kind 只支持 docx 或 pptx（Excel 是卡 2）。")
-    title = str(raw.get("title") or "").strip() or ("Pico DOCX" if kind == "docx" else "Pico PPTX")
+    if kind not in {"docx", "pptx", "xlsx"}:
+        raise ValueError("spec.kind 只支持 docx、pptx 或 xlsx。")
+    title = str(raw.get("title") or "").strip() or _default_title(kind)
     marker = str(raw.get("marker") or "").strip()
     blocks_raw = raw.get("blocks")
+    if kind == "xlsx" and not blocks_raw:
+        blocks_raw = raw.get("sheets")
     if not isinstance(blocks_raw, list) or not blocks_raw:
-        raise ValueError("spec.blocks 不能为空。")
+        raise ValueError("spec.blocks 不能为空。" if kind != "xlsx" else "Excel spec 需要 sheets 或 blocks。")
     blocks = tuple(_parse_block(item, kind=kind) for item in blocks_raw)  # type: ignore[misc]
     return OfficeSpec(
         schema=str(raw.get("schema") or SCHEMA),
@@ -91,6 +105,8 @@ def parse_spec(raw: Any, *, default_kind: Kind | None = None) -> OfficeSpec:
         marker=marker,
         theme=Theme.from_raw(raw.get("theme")),
         blocks=blocks,
+        comments=_parse_comments(raw.get("comments")),
+        values=_parse_values(raw.get("values") or raw.get("fill")),
     )
 
 
@@ -104,6 +120,19 @@ def spec_from_plain(
     """Compat: old generate_* text body → v1 spec. No invented filler."""
     from pico_orchestrator.document_generators import _docx_body_paragraphs, _pptx_slides
 
+    if kind == "xlsx":
+        from pico_orchestrator.document_generators import KNOWN_CALC_CELL
+
+        cell = (body or "").strip() or KNOWN_CALC_CELL
+        heading = title.strip() or "Pico XLSX"
+        rows = ((cell,), (heading,), (f"marker:{marker}",))
+        return OfficeSpec(
+            schema=SCHEMA,
+            kind="xlsx",
+            title=heading,
+            marker=marker,
+            blocks=(Block(type="sheet", title="Sheet1", rows=rows),),
+        )
     if kind == "docx":
         blocks = [Block(type="heading", text=title, level=0)]
         if marker:
@@ -119,6 +148,14 @@ def spec_from_plain(
     return OfficeSpec(schema=SCHEMA, kind="pptx", title=title, marker=marker, blocks=blocks)
 
 
+def _default_title(kind: str) -> str:
+    if kind == "xlsx":
+        return "Pico XLSX"
+    if kind == "pptx":
+        return "Pico PPTX"
+    return "Pico DOCX"
+
+
 def _bullets_from_body(body: str) -> tuple[str, ...]:
     lines = [ln.strip() for ln in (body or "").splitlines() if ln.strip()]
     return tuple(lines) if lines else ("",)
@@ -128,6 +165,21 @@ def _parse_block(item: Any, *, kind: Kind) -> Block:
     if not isinstance(item, dict):
         raise TypeError("block 必须是对象。")
     btype = str(item.get("type") or "").strip().lower()
+    if kind == "xlsx":
+        if btype and btype != "sheet":
+            raise ValueError("Excel spec 的 block.type 必须是 sheet。")
+        name = str(item.get("name") or item.get("title") or "Sheet1").strip() or "Sheet1"
+        headers_raw = item.get("headers")
+        headers = (
+            tuple(str(x) for x in headers_raw)
+            if isinstance(headers_raw, list) and headers_raw
+            else ()
+        )
+        rows_raw = item.get("rows")
+        rows = _table_rows(rows_raw) if rows_raw is not None else ()
+        if not headers and not rows:
+            raise ValueError("Excel sheet 需要 headers 或 rows。")
+        return Block(type="sheet", title=name[:31], headers=headers, rows=rows)
     if kind == "pptx":
         if btype and btype != "slide":
             raise ValueError("PPT spec 的 block.type 必须是 slide。")
@@ -176,6 +228,37 @@ def _parse_block(item: Any, *, kind: Kind) -> Block:
     raise ValueError(f"不支持的 block.type：{btype or '空'}。")
 
 
+def _parse_comments(raw: Any) -> tuple[CommentSpec, ...]:
+    if raw in (None, ""):
+        return ()
+    if not isinstance(raw, list):
+        raise TypeError("comments 必须是数组。")
+    out: list[CommentSpec] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise TypeError("comment 必须是对象。")
+        text = str(item.get("text") or "").strip()
+        if not text:
+            raise ValueError("comment.text 不能为空。")
+        para = item.get("paragraph", item.get("paragraph_index", item.get("index")))
+        try:
+            idx = int(para)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("comment.paragraph 必须是数字，从 1 起。") from exc
+        if idx < 1:
+            raise ValueError("comment.paragraph 从 1 起。")
+        out.append(CommentSpec(paragraph=idx, text=text))
+    return tuple(out)
+
+
+def _parse_values(raw: Any) -> tuple[tuple[str, str], ...]:
+    if raw in (None, ""):
+        return ()
+    if not isinstance(raw, dict):
+        raise TypeError("values 必须是对象，例如 {\"姓名\": \"张三\"}。")
+    return tuple((str(key).strip(), str(val)) for key, val in raw.items() if str(key).strip())
+
+
 def _table_rows(raw: Any) -> tuple[tuple[str, ...], ...]:
     if not isinstance(raw, list) or not raw:
         raise ValueError("table.rows 不能为空。")
@@ -184,7 +267,7 @@ def _table_rows(raw: Any) -> tuple[tuple[str, ...], ...]:
     for row in raw:
         if not isinstance(row, list) or not row:
             raise ValueError("table 每一行必须是非空数组。")
-        cells = tuple(str(c) for c in row)
+        cells = tuple(str(c) if c is not None else "" for c in row)
         width = max(width, len(cells))
         rows.append(cells)
     padded = tuple(cells + ("",) * (width - len(cells)) for cells in rows)

@@ -1,9 +1,11 @@
-"""spec → legal OOXML bytes via python-docx / python-pptx."""
+"""spec → legal OOXML bytes via python-docx / python-pptx / openpyxl."""
 
 from __future__ import annotations
 
 import io
 
+from pico_orchestrator.office.comment import add_docx_comment
+from pico_orchestrator.office.fill import fill_office_bytes
 from pico_orchestrator.office.qa import verify_office_bytes
 from pico_orchestrator.office.spec import OfficeSpec, Theme
 
@@ -12,14 +14,21 @@ def render_spec(spec: OfficeSpec, *, images: dict[str, bytes] | None = None) -> 
     pictures = images or {}
     if spec.kind == "docx":
         raw = _render_docx(spec, pictures)
-        check = verify_office_bytes(raw, ".docx")
-        if not check["ok"]:
-            raise ValueError(str(check.get("error") or "Word 渲染失败。"))
-        return raw
-    raw = _render_pptx(spec, pictures)
-    check = verify_office_bytes(raw, ".pptx")
+        ext = ".docx"
+    elif spec.kind == "pptx":
+        raw = _render_pptx(spec, pictures)
+        ext = ".pptx"
+    else:
+        raw = _render_xlsx(spec)
+        ext = ".xlsx"
+    if spec.values:
+        raw = fill_office_bytes(raw, ext, dict(spec.values))
+    if spec.kind == "docx" and spec.comments:
+        for item in spec.comments:
+            raw = add_docx_comment(raw, paragraph_index=item.paragraph, text=item.text)
+    check = verify_office_bytes(raw, ext)
     if not check["ok"]:
-        raise ValueError(str(check.get("error") or "PPT 渲染失败。"))
+        raise ValueError(str(check.get("error") or "文档渲染失败。"))
     return raw
 
 
@@ -43,6 +52,7 @@ def _render_docx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
             for r_i, row in enumerate(block.rows):
                 for c_i, cell in enumerate(row):
                     table.rows[r_i].cells[c_i].text = cell
+            _style_table_header(table, spec.theme)
         elif block.type == "image":
             raw = _need_image(images, block.artifact_id)
             doc.add_picture(io.BytesIO(raw), width=Inches(4.5))
@@ -105,6 +115,103 @@ def _render_pptx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
     buf = io.BytesIO()
     deck.save(buf)
     return buf.getvalue()
+
+
+def _render_xlsx(spec: OfficeSpec) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    book = Workbook()
+    default = book.active
+    first = True
+    accent = _rgb(spec.theme.accent) if spec.theme else None
+    heading_font = spec.theme.heading_font if spec.theme else None
+    body_font = spec.theme.body_font if spec.theme else None
+    fill = None
+    if accent is not None:
+        fill = PatternFill("solid", fgColor=f"{accent[0]:02X}{accent[1]:02X}{accent[2]:02X}")
+    header_font = Font(
+        name=heading_font or "Calibri",
+        bold=True,
+        color="FFFFFF" if fill is not None else "000000",
+    )
+    data_font = Font(name=body_font or "Calibri") if body_font else None
+    for block in spec.blocks:
+        if block.type != "sheet":
+            continue
+        sheet = default if first else book.create_sheet()
+        first = False
+        sheet.title = (block.title or "Sheet1")[:31]
+        row_i = 1
+        if block.headers:
+            for c_i, header in enumerate(block.headers, start=1):
+                cell = sheet.cell(row=row_i, column=c_i, value=header)
+                cell.font = header_font
+                if fill is not None:
+                    cell.fill = fill
+            row_i += 1
+        for row in block.rows:
+            for c_i, raw in enumerate(row, start=1):
+                cell = sheet.cell(row=row_i, column=c_i)
+                _write_xlsx_cell(cell, raw)
+                if data_font is not None:
+                    cell.font = data_font
+            row_i += 1
+        if spec.marker and not any(spec.marker in "".join(row) for row in block.rows):
+            sheet.cell(row=row_i, column=1, value=f"marker:{spec.marker}")
+        width = max(len(block.headers), max((len(r) for r in block.rows), default=1), 1)
+        for c_i in range(1, width + 1):
+            sheet.column_dimensions[get_column_letter(c_i)].width = 14
+    if first:
+        raise ValueError("Excel spec 没有可渲染的 sheet。")
+    buf = io.BytesIO()
+    book.save(buf)
+    return buf.getvalue()
+
+
+def _write_xlsx_cell(cell: object, raw: str) -> None:
+    text = "" if raw is None else str(raw)
+    if text.startswith("="):
+        cell.value = text
+        return
+    try:
+        if text and text.lstrip("-").isdigit():
+            cell.value = int(text)
+            return
+        if text and text.replace(".", "", 1).lstrip("-").isdigit() and text.count(".") == 1:
+            cell.value = float(text)
+            return
+    except (TypeError, ValueError):
+        pass
+    cell.value = text
+
+
+def _style_table_header(table: object, theme: Theme | None) -> None:
+    if theme is None or not theme.accent or not getattr(table, "rows", None):
+        return
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import RGBColor as DocxRGB
+
+    color = _rgb(theme.accent)
+    if color is None:
+        return
+    hex_color = f"{color[0]:02X}{color[1]:02X}{color[2]:02X}"
+    for cell in table.rows[0].cells:
+        tc = cell._tc
+        tc_pr = tc.get_or_add_tcPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:fill"), hex_color)
+        shd.set(qn("w:val"), "clear")
+        tc_pr.append(shd)
+        for para in cell.paragraphs:
+            for run in para.runs:
+                run.font.bold = True
+                run.font.color.rgb = DocxRGB(255, 255, 255)
+                if theme.heading_font:
+                    run.font.name = theme.heading_font
+                    run._element.rPr.rFonts.set(qn("w:eastAsia"), theme.heading_font)
 
 
 def _set_pptx_body(slide: object, body: str, *, font_name: str | None) -> None:

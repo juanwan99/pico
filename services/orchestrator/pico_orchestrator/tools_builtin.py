@@ -39,10 +39,17 @@ from pico_orchestrator.image_generate import generate_image_bytes
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
 from pico_orchestrator.meili_kb import extract_index_text, meili_configured, search_materials
 from pico_orchestrator.office.inspect import inspect_office_bytes
+from pico_orchestrator.office.legacy import guess_office_ext
 from pico_orchestrator.office.qa import verify_office_bytes
 from pico_orchestrator.office.render import render_spec
 from pico_orchestrator.office.spec import parse_spec
-from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
+from pico_orchestrator.office_editors import (
+    comment_docx_bytes,
+    edit_docx_bytes,
+    edit_pptx_title_bytes,
+    edit_xlsx_cell_bytes,
+    fill_office_bytes,
+)
 from pico_orchestrator.sandbox_s1 import (
     MAX_CONTENT_CHARS,
     assert_content_caps,
@@ -694,6 +701,44 @@ def _workspace_handlers(
         result["via"] = "spec" if spec_raw is not None else "plain"
         return result
 
+    async def generate_xlsx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        title = _ensure_extension(_artifact_title(args), ".xlsx")
+        marker = _marker_arg(args)
+        spec_raw = _spec_arg(args)
+        try:
+            if spec_raw is not None:
+                if isinstance(spec_raw, list):
+                    spec_raw = {
+                        "kind": "xlsx",
+                        "title": title,
+                        "marker": marker,
+                        "blocks": spec_raw,
+                    }
+                elif isinstance(spec_raw, dict):
+                    spec_raw = {
+                        **spec_raw,
+                        "kind": spec_raw.get("kind") or "xlsx",
+                        "title": spec_raw.get("title") or title,
+                        "marker": spec_raw.get("marker") or marker,
+                    }
+                spec = parse_spec(spec_raw, default_kind="xlsx")
+                raw = render_spec(spec, images=await _load_spec_images(principal, spec))
+            else:
+                body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+                raw = build_xlsx_document(title=title, marker=marker, body=body)
+        except (ValueError, TypeError) as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        result = await store.write(
+            principal,
+            title=title,
+            content=raw,
+            kind="xlsx",
+        )
+        result["format"] = "xlsx"
+        result["marker"] = marker
+        result["via"] = "spec" if spec_raw is not None else "plain"
+        return result
+
     async def render_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         spec_raw = args.get("spec") if args.get("spec") is not None else args
         try:
@@ -701,7 +746,7 @@ def _workspace_handlers(
             raw = render_spec(spec, images=await _load_spec_images(principal, spec))
         except (ValueError, TypeError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
-        ext = ".docx" if spec.kind == "docx" else ".pptx"
+        ext = f".{spec.kind}"
         title = _ensure_extension(str(args.get("title") or spec.title or f"pico{ext}"), ext)
         result = await store.write(
             principal,
@@ -715,12 +760,17 @@ def _workspace_handlers(
         result["valid_ooxml"] = check.get("valid_ooxml")
         return result
 
+    def _office_ext_from_args(args: dict[str, Any]) -> str:
+        try:
+            return guess_office_ext(
+                kind=str(args.get("kind") or ""),
+                title=str(args.get("title") or args.get("filename") or ""),
+            )
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+
     async def inspect_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        kind = str(args.get("kind") or "").strip().lower()
-        ext = ".pptx" if kind == "pptx" else ".docx" if kind == "docx" else ""
-        if not ext:
-            title_hint = str(args.get("title") or "")
-            ext = ".pptx" if title_hint.lower().endswith(".pptx") else ".docx"
+        ext = _office_ext_from_args(args)
         row, raw = await _load_office(principal, args, ext=ext)
         try:
             outline = inspect_office_bytes(raw, ext)
@@ -731,11 +781,18 @@ def _workspace_handlers(
         return outline
 
     async def verify_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        kind = str(args.get("kind") or "").strip().lower()
-        ext = ".pptx" if kind == "pptx" else ".docx" if kind == "docx" else ""
-        if not ext:
-            title_hint = str(args.get("title") or "")
-            ext = ".pptx" if title_hint.lower().endswith(".pptx") else ".docx"
+        try:
+            ext = guess_office_ext(
+                kind=str(args.get("kind") or ""),
+                title=str(args.get("title") or ""),
+            )
+        except ValueError as exc:
+            return {
+                "ok": False,
+                "valid_ooxml": False,
+                "error": str(exc),
+                "title": args.get("title"),
+            }
         row, raw = await _load_office(principal, args, ext=ext)
         check = verify_office_bytes(raw, ext)
         check["artifact_id"] = row.get("artifact_id")
@@ -768,6 +825,11 @@ def _workspace_handlers(
                 "找不到这份文件。请先在工作台上传原件再改。",
             )
         raw = _artifact_bytes(row)
+        title_name = str(row.get("title") or args.get("title") or "")
+        try:
+            guess_office_ext(kind=ext.lstrip("."), title=title_name)
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
         if not is_valid_ooxml_package(raw, ext):
             raise ToolError(
                 "artifact.not_ooxml",
@@ -775,17 +837,41 @@ def _workspace_handlers(
             )
         return row, raw
 
+    def _values_arg(args: dict[str, Any]) -> dict[str, str] | None:
+        raw = args.get("values")
+        if raw is None:
+            return None
+        if not isinstance(raw, dict) or not raw:
+            raise ToolError("tool.invalid_arguments", "values 必须是对象，例如 {\"姓名\": \"张三\"}。")
+        return {str(k).strip(): str(v) for k, v in raw.items() if str(k).strip()}
+
     async def edit_docx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         row, raw = await _load_office(principal, args, ext=".docx")
+        values = _values_arg(args)
+        comment = str(args.get("comment") or "").strip()
         index = _optional_int(args, "paragraph_index")
-        if index is None:
+        text = str(args.get("text") or "").strip()
+        if values is None and not comment and not text:
+            raise ToolError(
+                "tool.invalid_arguments",
+                "请指定 text（改一段）、comment（留批注）或 values（套 {{key}}）。",
+            )
+        if (text or comment) and index is None:
             raise ToolError("tool.invalid_arguments", "请指定 paragraph_index（从 1 起）。")
-        text = _required_text(args, "text", maximum=_MAX_DOC_BODY)
+
+        def _apply() -> bytes:
+            edited = raw
+            if values is not None:
+                edited = fill_office_bytes(edited, ".docx", values)
+            if comment:
+                edited = comment_docx_bytes(edited, paragraph_index=index or 1, text=comment)
+            if text:
+                edited = edit_docx_bytes(edited, paragraph_index=index or 1, text=text)
+            return edited
+
         try:
             edited = await _run_bounded(
-                asyncio.to_thread(
-                    edit_docx_bytes, raw, paragraph_index=index, text=text
-                ),
+                asyncio.to_thread(_apply),
                 seconds=_EDIT_TIMEOUT_S,
                 code="office.timeout",
                 message="改文档超时（20 秒）。请换更小的文件或稍后再试。",
@@ -806,17 +892,36 @@ def _workspace_handlers(
         result["edited"] = True
         result["paragraph_index"] = index
         result["source_artifact_id"] = row.get("artifact_id")
+        if comment:
+            result["commented"] = True
+        if values is not None:
+            result["filled"] = True
         return result
 
     async def edit_pptx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         row, raw = await _load_office(principal, args, ext=".pptx")
+        values = _values_arg(args)
+        new_title = str(args.get("new_title") or "").strip()
         index = _optional_int(args, "slide_index", default=1) or 1
-        new_title = _required_text(args, "new_title", maximum=500)
+        if values is None and not new_title:
+            raise ToolError(
+                "tool.invalid_arguments",
+                "请指定 new_title（改页标题）或 values（套 {{key}}）。",
+            )
+
+        def _apply() -> bytes:
+            edited = raw
+            if values is not None:
+                edited = fill_office_bytes(edited, ".pptx", values)
+            if new_title:
+                edited = edit_pptx_title_bytes(
+                    edited, slide_index=index, new_title=new_title
+                )
+            return edited
+
         try:
             edited = await _run_bounded(
-                asyncio.to_thread(
-                    edit_pptx_title_bytes, raw, slide_index=index, new_title=new_title
-                ),
+                asyncio.to_thread(_apply),
                 seconds=_EDIT_TIMEOUT_S,
                 code="office.timeout",
                 message="改文档超时（20 秒）。请换更小的文件或稍后再试。",
@@ -837,6 +942,62 @@ def _workspace_handlers(
         result["edited"] = True
         result["slide_index"] = index
         result["source_artifact_id"] = row.get("artifact_id")
+        if values is not None:
+            result["filled"] = True
+        return result
+
+    async def edit_xlsx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        row, raw = await _load_office(principal, args, ext=".xlsx")
+        values = _values_arg(args)
+        cell = str(args.get("cell") or args.get("address") or "").strip()
+        value = args.get("value")
+        sheet = args.get("sheet")
+        if values is None and not cell:
+            raise ToolError(
+                "tool.invalid_arguments",
+                "请指定 cell（如 D2）和 value，或 values（套 {{key}}）。",
+            )
+
+        def _apply() -> bytes:
+            edited = raw
+            if values is not None:
+                edited = fill_office_bytes(edited, ".xlsx", values)
+            if cell:
+                if value is None:
+                    raise ValueError("改格需要 value。")
+                edited = edit_xlsx_cell_bytes(
+                    edited,
+                    cell=cell,
+                    value=str(value),
+                    sheet=sheet if isinstance(sheet, (str, int)) or sheet is None else str(sheet),
+                )
+            return edited
+
+        try:
+            edited = await _run_bounded(
+                asyncio.to_thread(_apply),
+                seconds=_EDIT_TIMEOUT_S,
+                code="office.timeout",
+                message="改文档超时（20 秒）。请换更小的文件或稍后再试。",
+            )
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        out_title = _ensure_extension(
+            str(args.get("output_title") or row.get("title") or "已改.xlsx"),
+            ".xlsx",
+        )
+        result = await store.write(
+            principal,
+            title=out_title,
+            content=edited,
+            kind="xlsx",
+        )
+        result["format"] = "xlsx"
+        result["edited"] = True
+        result["cell"] = cell or None
+        result["source_artifact_id"] = row.get("artifact_id")
+        if values is not None:
+            result["filled"] = True
         return result
 
     async def generate_image(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1389,8 +1550,10 @@ def _workspace_handlers(
         generate_html,
         generate_docx,
         generate_pptx,
+        generate_xlsx,
         edit_docx,
         edit_pptx,
+        edit_xlsx,
         generate_image,
         verify_html,
         inspect_preview,
@@ -1515,8 +1678,10 @@ def build_default_gateway(
         generate_html,
         generate_docx,
         generate_pptx,
+        generate_xlsx,
         edit_docx,
         edit_pptx,
+        edit_xlsx,
         generate_image,
         verify_html,
         inspect_preview,
@@ -1696,11 +1861,23 @@ def build_default_gateway(
     )
     gw.register(
         ToolSpec(
+            name="generate_xlsx_document",
+            description=(
+                "Create a real OOXML .xlsx via openpyxl. Prefer spec/sheets "
+                "(headers + rows; cells starting with = are formulas). "
+                "Args: title, marker, body? | spec? | blocks?"
+            ),
+            handler=generate_xlsx,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
             name="edit_docx_document",
             description=(
-                "Edit an already uploaded .docx in the Pico ledger with python-docx. "
-                "Original other paragraphs stay. Never create a blank template. "
-                "Args: artifact_id|title, paragraph_index (1-based), text, output_title?"
+                "Edit an already uploaded .docx: replace a paragraph, add a comment, "
+                "or fill {{key}} values. Other content stays. Never create a blank template. "
+                "Args: artifact_id|title, paragraph_index?, text?, comment?, values?, output_title?"
             ),
             handler=edit_docx,
             school_scoped=False,
@@ -1710,9 +1887,9 @@ def build_default_gateway(
         ToolSpec(
             name="edit_pptx_document",
             description=(
-                "Edit an already uploaded .pptx in the Pico ledger with python-pptx. "
-                "Change one slide title; other slides stay. Never create a blank deck. "
-                "Args: artifact_id|title, slide_index? (default 1), new_title, output_title?"
+                "Edit an already uploaded .pptx: change one slide title or fill {{key}}. "
+                "Other slides stay. Never create a blank deck. "
+                "Args: artifact_id|title, slide_index?, new_title?, values?, output_title?"
             ),
             handler=edit_pptx,
             school_scoped=False,
@@ -1720,10 +1897,23 @@ def build_default_gateway(
     )
     gw.register(
         ToolSpec(
+            name="edit_xlsx_document",
+            description=(
+                "Edit an already uploaded .xlsx: set one cell (A1-style; =formula) "
+                "or fill {{key}}. Other cells stay. Args: artifact_id|title, cell?, "
+                "value?, sheet?, values?, output_title?"
+            ),
+            handler=edit_xlsx,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
             name="render_document",
             description=(
-                "Create Word/PPT from pico.office.spec/v1 (blocks: heading/para/table/image "
-                "or slide). Tables and images go inside the file. Args: spec, title?"
+                "Create Word/PPT/Excel from pico.office.spec/v1 (docx/pptx/xlsx). "
+                "Tables, images, formulas, comments, {{key}} values go inside the file. "
+                "Args: spec, title?"
             ),
             handler=render_document,
             school_scoped=False,
@@ -1733,8 +1923,9 @@ def build_default_gateway(
         ToolSpec(
             name="inspect_document",
             description=(
-                "Read structure of an uploaded .docx/.pptx: paragraph/slide indexes, "
-                "tables, images. Call this before edit_*. Args: artifact_id|title, kind?"
+                "Read structure of an uploaded .docx/.pptx/.xlsx: paragraph/slide/cell "
+                "indexes, tables, comments, leftover {{key}}. Call before edit_*. "
+                "Old .doc/.ppt/.xls fail in Chinese. Args: artifact_id|title, kind?"
             ),
             handler=inspect_document,
             school_scoped=False,
@@ -1744,8 +1935,8 @@ def build_default_gateway(
         ToolSpec(
             name="verify_document",
             description=(
-                "Fail-closed OOXML check for a ledger Word/PPT. "
-                "Args: artifact_id|title, kind?"
+                "Fail-closed OOXML check for a ledger Word/PPT/Excel. "
+                "Old .doc/.ppt/.xls fail in Chinese. Args: artifact_id|title, kind?"
             ),
             handler=verify_document,
             school_scoped=False,
@@ -2078,7 +2269,7 @@ def openai_tool_schemas(
             "properties": {
                 "artifact_id": {"type": "string"},
                 "title": {"type": "string"},
-                "kind": {"type": "string", "description": "docx or pptx"},
+                "kind": {"type": "string", "description": "docx, pptx, or xlsx"},
             },
         },
         "verify_document": {
@@ -2086,7 +2277,33 @@ def openai_tool_schemas(
             "properties": {
                 "artifact_id": {"type": "string"},
                 "title": {"type": "string"},
-                "kind": {"type": "string", "description": "docx or pptx"},
+                "kind": {"type": "string", "description": "docx, pptx, or xlsx"},
+            },
+        },
+        "generate_xlsx_document": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Download filename"},
+                "marker": {"type": "string"},
+                "body": {"type": "string"},
+                "spec": {"type": "object", "description": "pico.office.spec/v1 sheets"},
+                "blocks": {"type": "array", "description": "spec.blocks shortcut (sheet objects)"},
+            },
+            "required": ["title", "marker"],
+        },
+        "edit_xlsx_document": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {"type": "string"},
+                "title": {"type": "string"},
+                "cell": {"type": "string", "description": "A1-style address"},
+                "value": {"type": "string", "description": "New cell value; = starts a formula"},
+                "sheet": {"description": "Sheet name or 1-based index"},
+                "values": {
+                    "type": "object",
+                    "description": "{{key}} replacements",
+                },
+                "output_title": {"type": "string"},
             },
         },
         "edit_docx_document": {
@@ -2102,15 +2319,19 @@ def openai_tool_schemas(
                 },
                 "paragraph_index": {
                     "type": "integer",
-                    "description": "1-based nonempty paragraph to replace",
+                    "description": "1-based nonempty paragraph to replace or comment",
                 },
                 "text": {"type": "string", "description": "New paragraph text"},
+                "comment": {"type": "string", "description": "Word comment on that paragraph"},
+                "values": {
+                    "type": "object",
+                    "description": "{{key}} replacements",
+                },
                 "output_title": {
                     "type": "string",
                     "description": "Optional download filename",
                 },
             },
-            "required": ["paragraph_index", "text"],
         },
         "edit_pptx_document": {
             "type": "object",

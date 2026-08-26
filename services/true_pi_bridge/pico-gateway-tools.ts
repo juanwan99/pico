@@ -23,8 +23,10 @@ const ALLOWED = [
   "generate_html_document",
   "generate_docx_document",
   "generate_pptx_document",
+  "generate_xlsx_document",
   "edit_docx_document",
   "edit_pptx_document",
+  "edit_xlsx_document",
   "render_document",
   "inspect_document",
   "verify_document",
@@ -187,6 +189,19 @@ export default function (pi: ExtensionAPI) {
   );
   registerTool(
     pi,
+    "generate_xlsx_document",
+    "Create a real .xlsx Artifact via openpyxl (Pico gateway). Use spec/sheets for grades with formulas.",
+    Type.Object(
+      {
+        title: Type.String(),
+        marker: Type.Optional(Type.String()),
+        body: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
     "edit_docx_document",
     "Edit an already uploaded .docx in the Pico ledger (python-docx). Other paragraphs stay.",
     Type.Object(
@@ -195,6 +210,7 @@ export default function (pi: ExtensionAPI) {
         title: Type.Optional(Type.String()),
         paragraph_index: Type.Optional(Type.Number()),
         text: Type.Optional(Type.String()),
+        comment: Type.Optional(Type.String()),
         output_title: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
@@ -217,14 +233,30 @@ export default function (pi: ExtensionAPI) {
   );
   registerTool(
     pi,
+    "edit_xlsx_document",
+    "Edit an already uploaded .xlsx in the Pico ledger (openpyxl). Set one cell or fill {{key}}.",
+    Type.Object(
+      {
+        artifact_id: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
+        cell: Type.Optional(Type.String()),
+        value: Type.Optional(Type.String()),
+        sheet: Type.Optional(Type.String()),
+        output_title: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
     "render_document",
-    "Create Word/PPT from pico.office.spec/v1 (tables/images inside the file).",
+    "Create Word/PPT/Excel from pico.office.spec/v1 (tables/images/formulas inside the file).",
     AnyArgs,
   );
   registerTool(
     pi,
     "inspect_document",
-    "Read paragraph/slide/table/image indexes of a ledger Word/PPT. Call before edit.",
+    "Read paragraph/slide/sheet/comment indexes of a ledger Word/PPT/Excel. Call before edit.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),
@@ -237,7 +269,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "verify_document",
-    "Fail-closed OOXML check for a ledger Word/PPT.",
+    "Fail-closed OOXML check for a ledger Word/PPT/Excel. Old .doc/.ppt/.xls fail honestly.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),

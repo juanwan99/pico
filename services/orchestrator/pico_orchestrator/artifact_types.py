@@ -6,7 +6,7 @@ import io
 import zipfile
 
 # Extensions that MUST only come from dedicated generators (or valid bytes).
-PROTECTED_EXTENSIONS = frozenset({".html", ".htm", ".docx", ".pptx"})
+PROTECTED_EXTENSIONS = frozenset({".html", ".htm", ".docx", ".pptx", ".xlsx"})
 
 
 def title_protected_extension(title: str) -> str | None:
@@ -19,7 +19,7 @@ def title_protected_extension(title: str) -> str | None:
 
 
 def is_valid_ooxml_package(raw: bytes, ext: str) -> bool:
-    """True only if ZIP contains the minimal OOXML parts for docx/pptx."""
+    """True only if ZIP contains the minimal OOXML parts for docx/pptx/xlsx."""
     if not raw or raw[:2] != b"PK":
         return False
     try:
@@ -35,11 +35,16 @@ def is_valid_ooxml_package(raw: bytes, ext: str) -> bool:
         return "ppt/presentation.xml" in names and any(
             n.startswith("ppt/slides/slide") and n.endswith(".xml") for n in names
         )
+    if ext == ".xlsx":
+        return "xl/workbook.xml" in names and any(
+            n.startswith("xl/worksheets/sheet") and n.endswith(".xml") for n in names
+        )
     return False
 
 
 def reject_fake_protected_write_message(ext: str) -> str:
     return (
         f"禁止用 workspace_write_file 写入 {ext}（改后缀文本不算真文件）。"
-        "请使用 generate_html_document / generate_docx_document / generate_pptx_document。"
+        "请使用 generate_html_document / generate_docx_document / "
+        "generate_pptx_document / generate_xlsx_document / render_document。"
     )
