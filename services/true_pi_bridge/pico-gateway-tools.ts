@@ -259,7 +259,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "inspect_document",
-    "Read paragraph/slide/sheet/comment indexes of a ledger Word/PPT/Excel. Call before edit.",
+    "Read paragraph/slide/sheet/comment indexes of a ledger Word/PPT/Excel. Embedded pictures are kept so the teacher's next question can see them. Call before edit.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),
