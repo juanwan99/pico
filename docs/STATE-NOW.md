@@ -4,7 +4,7 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok · OPEN · tip=main · 机内 T1–T4 已贴）
+在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok · OPEN · tip=main · 五句已贴）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 590772fea8a79f044c49a4fc69f6ec759c382713 = origin/main
 阻塞: 老师手过门 · PASS 未签 · 不关卡
@@ -54,7 +54,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 
 | 优先级 | Issue | 说明 |
 |--------|-------|------|
-| 在飞 | [#682](https://github.com/juanwan99/pico/issues/682) | A1 · tip=`590772fe` = main · 等五句/T1–T4 · 勿关 |
+| 在飞 | [#682](https://github.com/juanwan99/pico/issues/682) | A1 · tip=main · 五句已贴 · 等老师手 · 勿关 |
 | 已收口 | [#671](https://github.com/juanwan99/pico/issues/671) | T-FILES-PLACE · 业主令收口 · tip=`363f1638…` |
 | 运维 | [#679](https://github.com/juanwan99/pico/pull/679) | Cloud Agent TS + ssh ecs · 待执行窗合 |
 | 真源 docs | [#680](https://github.com/juanwan99/pico/pull/680) | 现况/经验/工具 · 待执行窗合 · 不部 |
