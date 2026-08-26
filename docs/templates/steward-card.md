@@ -14,7 +14,8 @@
 工具：只认 TOOLING-CATALOG · ssh-ecs=Tailscale ops@aliyun-hy · 禁公网22
 证据：贴本卡 Issue · 禁证据进 PR · 禁 Closes 部前关卡
 DONE：live tip = origin/main · 合了未部=没完 · 写入不自签 PASS
-应急：总管可改+部（P0/无窗）· 同轮回执评论 + 经验/工具入库
+合/部：只归执行窗 · 总管不合 main、不 prod-update
+总管：派发·审戳·现况·经验入库 · P0 可起候选 PR 仍交执行窗合部
 北极星：用法=Grok · CLAIM-WB=NO · 薄适配·禁自研核
 冻结：#634 至 9/7 · 不改卡面形状 · 不复活315 · 不写新HANDOFF
 ```
