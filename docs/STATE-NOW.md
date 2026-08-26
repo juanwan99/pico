@@ -4,10 +4,10 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #703 T-UNMASK-PI（已部 · 等老师手 T1/T2/T3）
+在飞: #703 老师手 · #706 四子卡已部等老师手（#707/#708/#709/#710 均 tip 对齐）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → af0ca6e516fa9021883f7fbbc5a350a6fae180fe = 产品 tip（#704 已合已部）
-阻塞: 老师手过门 · 禁自签 PASS
+      → 97e421c6aaa804b933c9963a04a50f38abb28d37 = 产品 tip（#704 + 夜战四刀 #711/#712/#713/#714 已合已部）
+阻塞: 老师手过门 · 禁自签 PASS · 禁关 #703/#707/#708/#709/#710/#706
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #449/#316 勿关 · 记忆/人视角日用挂起
@@ -65,7 +65,12 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#694](https://github.com/juanwan99/pico/issues/694) | T-OFFICE-COVER 办公文档覆盖 · 业主 PASS · tip=`18537f47…` |
 | 已收口 | [#697](https://github.com/juanwan99/pico/issues/697) | T-HTML-PUBLIC HTML 公网页 + 收数 · 业主 PASS · tip=`837443f4…` |
 | 已收口 | [#701](https://github.com/juanwan99/pico/pull/701) | 来源条对齐 + 夜间整页 · 业主 pass · tip=`88160b31…` |
-| 已部 | [#703](https://github.com/juanwan99/pico/issues/703) · [#704](https://github.com/juanwan99/pico/pull/704) | T-UNMASK-PI 已部 @ `af0ca6e5…` · 等老师手 T1/T2/T3 |
+| 已部 | [#703](https://github.com/juanwan99/pico/issues/703) · [#704](https://github.com/juanwan99/pico/pull/704) | T-UNMASK-PI 已部 @ `af0ca6e5…` · 现 tip 含其后四刀 · 等老师手 T1/T2/T3 |
+| 已部等老师手 | [#706](https://github.com/juanwan99/pico/issues/706) | 夜战母卡 · 四子卡已部 · 禁自签 PASS · 禁关 |
+| 已部 | [#707](https://github.com/juanwan99/pico/issues/707) · [#711](https://github.com/juanwan99/pico/pull/711) | T-VISION-SANDBOX · tip 对齐 `97e421c6…` · 等老师手 |
+| 已部 | [#708](https://github.com/juanwan99/pico/issues/708) · [#713](https://github.com/juanwan99/pico/pull/713) | T-VISION-IN-FILE · tip 对齐 `97e421c6…` · 等老师手 |
+| 已部 | [#709](https://github.com/juanwan99/pico/issues/709) · [#712](https://github.com/juanwan99/pico/pull/712) | T-PPT-IMAGE-IN-DECK · tip 对齐 `97e421c6…` · 等老师手 |
+| 已部 | [#710](https://github.com/juanwan99/pico/issues/710) · [#714](https://github.com/juanwan99/pico/pull/714) | T-PPT-SANDBOX-LIB · tip 对齐 `97e421c6…` · 等老师手 |
 | 挂起 | 记忆 · 人视角日用 | 业主令后面再做 · 不开卡 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面冻到 9/7 · 可钉现况三行评论 |
