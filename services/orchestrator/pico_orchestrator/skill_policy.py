@@ -36,6 +36,9 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_pptx_document",
             "edit_docx_document",
             "edit_pptx_document",
+            "render_document",
+            "inspect_document",
+            "verify_document",
             "generate_image",
             "workspace_write_file",
             "workspace_list_files",
@@ -53,7 +56,8 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_docx_document / generate_pptx_document（每份唯一 marker）；"
             "Word 的 body 必须是题面完整多段正文（数百字以上；不足会失败，禁止套话垫字）；"
             "PPT 的 body 必须按题面排出至少三页有标题的幻灯（空行或 --- 分页；不足会失败，禁止垫页）；"
-            "改老师已上传的 Word/PPT 必须 edit_docx_document / edit_pptx_document"
+            "带表/图的 Word/PPT 用 generate_* 的 spec/blocks 或 render_document；"
+            "改老师已上传的 Word/PPT 必须先 inspect_document 再 edit_docx_document / edit_pptx_document"
             "（读账本原件再改，禁止 generate_* 另起一份空模板冒充改原件）；"
             "出图必须 generate_image（SiliconFlow）；失败用人话说明，禁止编造图；"
             "其它文本/清单/多产物用 workspace_write_file 各写独立 title；"
@@ -83,6 +87,9 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_pptx_document",
             "edit_docx_document",
             "edit_pptx_document",
+            "render_document",
+            "inspect_document",
+            "verify_document",
             "generate_image",
             "verify_html_document",
             "structured_outline",

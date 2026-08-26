@@ -409,16 +409,12 @@ def build_docx_document(
     """python-docx Word with the caller body. Does not pad 套话 to hit a quota."""
     marker = _require_marker(marker)
     heading = _display_title(title, "Pico DOCX")
-    from docx import Document
+    from pico_orchestrator.office.render import render_spec
+    from pico_orchestrator.office.spec import spec_from_plain
 
-    doc = Document()
-    doc.add_heading(heading, level=0)
-    doc.add_paragraph(f"标记：{marker}")
-    for para in _docx_body_paragraphs(body):
-        doc.add_paragraph(para)
-    buf = io.BytesIO()
-    doc.save(buf)
-    return buf.getvalue()
+    return render_spec(
+        spec_from_plain(kind="docx", title=heading, marker=marker, body=body)
+    )
 
 
 KNOWN_CALC_CELL = "NIGHT-P4-CELL-ALPHA"
@@ -537,13 +533,9 @@ def build_pptx_document(
     """python-pptx deck from caller slides. Does not pad empty 说明 pages."""
     marker = _require_marker(marker)
     heading = _display_title(title, "Pico PPTX")
-    from pptx import Presentation
+    from pico_orchestrator.office.render import render_spec
+    from pico_orchestrator.office.spec import spec_from_plain
 
-    deck = Presentation()
-    layout = deck.slide_layouts[1] if len(deck.slide_layouts) > 1 else deck.slide_layouts[0]
-    for slide_title, slide_body in _pptx_slides(body, title=heading, marker=marker):
-        slide = deck.slides.add_slide(layout)
-        _set_slide_title_body(slide, slide_title, slide_body)
-    buf = io.BytesIO()
-    deck.save(buf)
-    return buf.getvalue()
+    return render_spec(
+        spec_from_plain(kind="pptx", title=heading, marker=marker, body=body)
+    )

@@ -32,6 +32,7 @@ DATE: 2026-08-26
 12. **CLAIM-WB-DEGREE-WEB 业主 2026-08-26 已签 YES** @ tip `dcb47c00…`（#449/#316 OWNER DECISION）。工程仍禁改口/再代签。记忆·人视角日用挂起。
 13. **`juanwan99/oneflow` 不当真源**（已 Archive）。
 14. **改 Python 工具说明 ≠ Pi 看见。** 真路径：`pico-gateway-tools.ts` + `SYSTEM.md`。
+24. **办公文档核 = [ADR-OFFICE-DOC-PIPELINE](./ADR-OFFICE-DOC-PIPELINE.md)。** 真源 spec；只两张卡（核→覆盖）。在飞 #690 卡 1。禁模型即兴写库、禁四刀碎卡、禁核和覆盖捏一张、禁同域开卡 2。
 
 ## C · 部署 / ECS
 
