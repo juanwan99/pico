@@ -4,10 +4,10 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok · OPEN · tip=main 等五句/过门）
+在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok · OPEN · tip=main · 机内 T1–T4 已贴）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 590772fea8a79f044c49a4fc69f6ec759c382713 = origin/main
-阻塞: 等执行窗 T1–T4 + 五句 · 老师手 · PASS 未签
+阻塞: 老师手过门 · PASS 未签 · 不关卡
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: NO
 PRODUCT PASS: 未签 · 仅业主（#449 / #316）
