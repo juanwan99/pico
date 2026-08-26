@@ -38,6 +38,7 @@ from pico_orchestrator.gateway import (
 from pico_orchestrator.image_generate import generate_image_bytes
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
 from pico_orchestrator.meili_kb import extract_index_text, meili_configured, search_materials
+from pico_orchestrator.office.extract import extract_embedded_images
 from pico_orchestrator.office.inspect import inspect_office_bytes
 from pico_orchestrator.office.legacy import guess_office_ext
 from pico_orchestrator.office.qa import verify_office_bytes
@@ -779,6 +780,11 @@ def _workspace_handlers(
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         outline["artifact_id"] = row.get("artifact_id")
         outline["title"] = row.get("title")
+        kept = 0
+        for blob in extract_embedded_images(raw, ext):
+            if remember_conversation_png(blob):
+                kept += 1
+        outline["extracted_images"] = kept
         return outline
 
     async def verify_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1984,8 +1990,10 @@ def build_default_gateway(
             name="inspect_document",
             description=(
                 "Read structure of an uploaded .docx/.pptx/.xlsx: paragraph/slide/cell "
-                "indexes, tables, comments, leftover {{key}}. Call before edit_*. "
-                "Old .doc/.ppt/.xls fail in Chinese. Args: artifact_id|title, kind?"
+                "indexes, tables, comments, leftover {{key}}. Embedded pictures are "
+                "remembered so the teacher's next question can see the pixels. "
+                "Call before edit_*. Old .doc/.ppt/.xls fail in Chinese. "
+                "Args: artifact_id|title, kind?"
             ),
             handler=inspect_document,
             school_scoped=False,
