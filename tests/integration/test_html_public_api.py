@@ -70,7 +70,8 @@ def test_publish_collect_unpublish_and_cross_account(client) -> None:
     assert pub.status_code == 200, pub.text
     page_id = pub.json()["result"]["page_id"]
     assert page_id
-    assert "/p/" in pub.json()["result"]["public_url"]
+    assert pub.json()["result"]["public_url"].endswith(f"/p/{page_id}")
+    assert "/api/pico/p/" not in pub.json()["result"]["public_url"]
 
     opened = client.get(f"/p/{page_id}")
     assert opened.status_code == 200
@@ -129,5 +130,9 @@ def test_publish_collect_unpublish_and_cross_account(client) -> None:
 
 
 def test_unpublished_page_is_404(client) -> None:
-    assert client.get("/p/does-not-exist-page").status_code == 404
+    missing = client.get("/p/does-not-exist-page")
+    assert missing.status_code == 404
+    assert "text/html" in missing.headers.get("content-type", "")
+    assert "not available" in missing.text
+    assert '{"error":"not_found"}' not in missing.text
     assert client.post("/p/does-not-exist-page/collect", json={"n": "x"}).status_code == 404

@@ -96,6 +96,42 @@ describe('Pico proxy routes', () => {
     );
   });
 
+  it('serves HTML 404 for a short public page id instead of JSON not_found', async () => {
+    const response = await request(app).get('/api/pico/p/abc');
+    expect(response.status).toBe(404);
+    expect(response.headers['content-type']).toMatch(/text\/html/);
+    expect(response.text).toContain('This public page is not available');
+    expect(response.body.error).toBeUndefined();
+  });
+
+  it('mounts short /p/:id without JWT membership header', async () => {
+    const root = express();
+    root.use(express.json());
+    root.use('/p', router.publicRoot);
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      headers: {
+        get: (name) =>
+          ({
+            'content-type': 'text/html; charset=utf-8',
+            'content-security-policy': "default-src 'none'",
+          })[name] || null,
+      },
+      arrayBuffer: async () => Buffer.from('<html>ok</html>'),
+      text: async () => '<html>ok</html>',
+    });
+    const response = await request(root).get('/p/pubTestPage01');
+    expect(response.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/p/pubTestPage01',
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          'X-Pico-Membership-Id': expect.anything(),
+        }),
+      }),
+    );
+  });
+
   it('proxies public collect POST without JWT membership header', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       status: 200,

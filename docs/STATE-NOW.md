@@ -4,10 +4,10 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #697 T-HTML-PUBLIC
+在飞: #697 T-HTML-PUBLIC（同卡续 · 公网打开）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 18537f4753c8b1dd474ce577101c00c0b561afe8 = 产品 tip（#695 已部；docs #696 未部）
-阻塞: 无 · 黄档 · 禁部 docs SHA
+      → 3780d9df708517b2de046fd940d074a591ca7c19 = 产品 tip（#698 已部；docs #696 未部）
+阻塞: 打开链 JSON not_found · 黄档 · 禁部 docs SHA
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686/#690/#694 业主已签 · #449/#316 勿关 · 记忆/人视角日用挂起

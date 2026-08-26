@@ -56,8 +56,18 @@ router.get('/tip', async (_req, res) => {
 });
 
 const PAGE_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+const PUBLIC_NOT_FOUND_HTML =
+  '<!doctype html><meta charset="utf-8"><title>Not found</title>' +
+  '<p>This public page is not available.</p>';
 
-async function publicPageProxy(req, res, path, { binary = false } = {}) {
+function sendPublicNotFound(res) {
+  res.status(404);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  return res.send(PUBLIC_NOT_FOUND_HTML);
+}
+
+async function publicPageProxy(req, res, path, { binary = false, htmlNotFound = false } = {}) {
   const target = `${picoBase()}${path}`;
   try {
     const headers = { Accept: req.headers.accept || '*/*' };
@@ -75,6 +85,9 @@ async function publicPageProxy(req, res, path, { binary = false } = {}) {
       }
     }
     const r = await fetch(target, init);
+    if (htmlNotFound && r.status === 404) {
+      return sendPublicNotFound(res);
+    }
     const body = binary ? Buffer.from(await r.arrayBuffer()) : await r.text();
     res.status(r.status);
     const ct = r.headers.get('content-type');
@@ -96,18 +109,31 @@ async function publicPageProxy(req, res, path, { binary = false } = {}) {
   }
 }
 
-router.get('/p/:pageId', (req, res) => {
-  if (!PAGE_ID_RE.test(req.params.pageId || '')) {
-    return res.status(404).json({ error: 'not_found' });
-  }
-  return publicPageProxy(req, res, `/p/${req.params.pageId}`, { binary: true });
-});
-router.post('/p/:pageId/collect', (req, res) => {
-  if (!PAGE_ID_RE.test(req.params.pageId || '')) {
-    return res.status(404).json({ error: 'not_found' });
-  }
-  return publicPageProxy(req, res, `/p/${req.params.pageId}/collect`);
-});
+function mountPublicPageRoutes(r, { prefix = '' } = {}) {
+  r.get(`${prefix}/:pageId`, (req, res) => {
+    if (!PAGE_ID_RE.test(req.params.pageId || '')) {
+      return sendPublicNotFound(res);
+    }
+    return publicPageProxy(req, res, `/p/${req.params.pageId}`, {
+      binary: true,
+      htmlNotFound: true,
+    });
+  });
+  r.get(`${prefix}/:pageId/collect`, (_req, res) => {
+    res.status(405).json({ error: 'method_not_allowed' });
+  });
+  r.post(`${prefix}/:pageId/collect`, (req, res) => {
+    if (!PAGE_ID_RE.test(req.params.pageId || '')) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    return publicPageProxy(req, res, `/p/${req.params.pageId}/collect`);
+  });
+}
+
+mountPublicPageRoutes(router, { prefix: '/p' });
+const publicRoot = express.Router();
+mountPublicPageRoutes(publicRoot, { prefix: '' });
+router.publicRoot = publicRoot;
 
 // All remaining ledger routes require an authenticated product session.
 router.use(requireJwtAuth);

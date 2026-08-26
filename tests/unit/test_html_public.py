@@ -15,6 +15,7 @@ from pico_orchestrator.html_public import (
     COLLECT_HOOK,
     inject_collect_hook,
     normalize_collect_payload,
+    prepare_public_html,
 )
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 from pico_orchestrator.true_pi.runtime import pico_system_text
@@ -55,3 +56,19 @@ def test_publish_tools_on_allowlist_and_system_stays_generic():
     assert "教师看板" not in body
     assert "发布并收表" not in body
     assert "Do not publish unless the teacher asked" in body
+    assert "public_url" in body
+    assert "问卷" not in body
+
+
+def test_prepare_public_html_drops_embedded_form_action_none():
+    html = (
+        "<html><head>"
+        "<meta http-equiv=\"Content-Security-Policy\" "
+        "content=\"default-src 'none'; form-action 'none';\" />"
+        "</head><body><form><input name='n'></form></body></html>"
+    )
+    out = prepare_public_html(html)
+    assert "form-action 'none'" not in out
+    assert "__PICO_COLLECT__" in out
+    assert "学生" not in out
+    assert "问卷" not in out
