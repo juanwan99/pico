@@ -52,9 +52,10 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 总管调查 → 写入 Issue 标准任务卡（已锁事实 / IN / 验收）
          → stamp-ok
          → 派发条贴合同 Issue（## 派发）
-         → 总管 spawn-executor（官方 API · 首条=派发条 · 单独执行环境）
+         → 总管 spawn-executor（官方 API · 首条=派发条）；无钥则 `@cursor`
 执行窗只认：派发条 + 合同 Issue
 总管环：订 PR/CI + timer 读 ## CANDIDATE/DEPLOYED/DONE → tip-pin → CLEAR
+         合了未部关卡=打回 OPEN · 总管不合不部
 ```
 
 **Issue 合同**用标准任务卡体例（#627：锁定句 / 已锁事实 / IN / OUT / 验收 / CLAIM / 回写）。四行（结果 / 不准 / 过门 / 部署）是骨架，嵌在卡里，**禁止用四行短卡替代合同**——无状态窗会丢已锁事实。
@@ -78,8 +79,8 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 
 | 谁 | 做什么 | 禁止 |
 |----|--------|------|
-| 业主 | 目标；签 PASS；老师手过门 | 当粘贴中继（终态） |
-| 总管 | 调查写入 Issue；打章；`## 派发`；起执行窗；订约读回执；刷现况 | 自签；合 main；prod-update；当执行窗写业务码 |
+| 业主 | 目标；黄红争议；老师手过门；签 PASS | 当粘贴中继（终态） |
+| 总管 | 调查写入 Issue；打章；`## 派发`；spawn-executor / `@cursor`；订约读回执；刷现况 | 自签；合 main；prod-update；代合代部；当执行窗写业务码 |
 | 写入 | 改、测、PR、部、五句回执贴合同 | 自签 PASS；直推 main；写 edu-core 业务 |
 
 ## 4. 发布
