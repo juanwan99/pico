@@ -33,7 +33,8 @@ DATE: 2026-08-26
 13. **`juanwan99/oneflow` 不当真源**（已 Archive）。
 14. **改 Python 工具说明 ≠ Pi 看见。** 真路径：`pico-gateway-tools.ts` + `SYSTEM.md`。
 24. **办公文档 = [ADR-OFFICE-DOC-PIPELINE](./ADR-OFFICE-DOC-PIPELINE.md)。** 真源 spec；只两张卡，均已收口。卡 1 #690 PASS @ `0acf8f62…`。卡 2 #694 PASS @ `18537f47…`。禁第三张办公卡、禁模型即兴写库、禁四刀碎卡。
-25. **HTML 公网页 = 能力。** 公网链 `/p/{id}`（不是 SPA）。`publish_html_page` / 收集口 / `unpublish_html_page`。数据落发布人账本。禁焊场景提示词。#697 在飞。
+25. **HTML 公网页 = 能力。** 公网链 `/p/{id}`（不是 SPA）。`publish_html_page` / 收集口 / `unpublish_html_page`。数据落发布人账本。禁焊场景提示词。禁焊学校标识到 URL/伺候层。#697 业主 PASS @ `837443f4…`。
+26. **夜间壳 = `html.dark` last-wins。** 顶栏/输入/学校材料字/结果区跟壳同色阶。公网 `/p/{id}` 是发布页本身，不跟工作台主题。#701 业主 pass @ `88160b31…`。
 
 ## C · 部署 / ECS
 
