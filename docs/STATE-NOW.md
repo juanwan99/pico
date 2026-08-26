@@ -4,10 +4,10 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #671 T-FILES-PLACE（stamp-ok）· 等老师手 T1–T4
+在飞: #671 T-FILES-PLACE（stamp-ok）· #678+#681 已部 · 等老师手
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 709460c5c871cd1cd3ea862b2366fb3f0a3780cb（须现场再 curl）
-阻塞: 老师手过门 · #679/#680 待合（非本卡阻塞）
+      → 363f1638ac8680900f8ff816fce6f0fa35a05d53（须现场再 curl）
+阻塞: 老师手 T1–T4 · #679/#680 待合（非本卡）
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: NO
 PRODUCT PASS: 未签 · 仅业主（#449 / #316）
