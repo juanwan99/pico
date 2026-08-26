@@ -21,10 +21,26 @@ EMBED_MODEL = "BAAI/bge-m3"
 EMBED_URL = "https://api.siliconflow.cn/v1/embeddings"
 
 MATERIAL_KINDS = frozenset(
-    {"file", "text", "md", "doc", "material", "kb_text", "edu_office", "edu_excerpt"}
+    {
+        "file",
+        "text",
+        "md",
+        "doc",
+        "material",
+        "kb_text",
+        "edu_office",
+        "edu_excerpt",
+        "pdf",
+        "docx",
+        "xlsx",
+        "pptx",
+        "txt",
+    }
 )
 SKIP_KINDS = frozenset({"html", "png", "image", "screenshot", "preview"})
 PARSE_EXT = frozenset({".pdf", ".docx"})
+OFFICE_EXTRACT_EXT = frozenset({".xlsx", ".pptx", ".txt"})
+MATERIAL_EXTS = frozenset({".md", ".txt", ".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".json"})
 _ID_SAFE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
@@ -121,22 +137,58 @@ def is_material(*, kind: str | None, title: str | None) -> bool:
         return False
     if k in MATERIAL_KINDS:
         return True
-    return any(name.endswith(ext) for ext in (".md", ".txt", ".pdf", ".docx", ".csv", ".json"))
+    return any(name.endswith(ext) for ext in MATERIAL_EXTS)
+
+
+def _suffix_of(title: str) -> str:
+    name = title or "file"
+    if "." not in name:
+        return ""
+    return "." + name.rsplit(".", 1)[-1].lower()
 
 
 def extract_index_text(*, title: str, kind: str, content: str | None, raw: bytes | None) -> str:
-    """UTF-8 ledger text, or field-kb-ingest for pdf/docx. Never a self-built parser."""
+    """Ledger UTF-8, Docling for pdf/docx, office_extract for xlsx/pptx/txt. No self-built parser."""
     name = title or "file"
-    suffix = ""
-    if "." in name:
-        suffix = "." + name.rsplit(".", 1)[-1].lower()
+    suffix = _suffix_of(name)
     if content and suffix not in PARSE_EXT:
         return content[:MAX_TEXT]
     if suffix in PARSE_EXT and raw:
         parsed = parse_office_bytes(filename=name, data=raw)
         if parsed:
             return parsed[:MAX_TEXT]
+        return (content or "")[:MAX_TEXT]
+    if suffix in OFFICE_EXTRACT_EXT and raw:
+        parsed = extract_office_text(filename=name, data=raw)
+        if parsed:
+            return parsed[:MAX_TEXT]
     return (content or "")[:MAX_TEXT]
+
+
+def extract_office_text(*, filename: str, data: bytes) -> str:
+    """Thin call into app.office_extract (xlsx/pptx/txt). Not a self-built parser."""
+    try:
+        from app.office_extract import extract_office
+    except Exception:  # noqa: BLE001
+        import sys
+        from pathlib import Path
+
+        api = Path(__file__).resolve().parents[2] / "api"
+        if str(api) not in sys.path:
+            sys.path.insert(0, str(api))
+        try:
+            from app.office_extract import extract_office
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("office_extract unavailable: %s", type(exc).__name__)
+            return ""
+    try:
+        out = extract_office(filename, data)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("office_extract failed: %s", type(exc).__name__)
+        return ""
+    if not isinstance(out, dict) or out.get("status") != "ok":
+        return ""
+    return str(out.get("text") or "").strip()
 
 
 def parse_office_bytes(*, filename: str, data: bytes) -> str:
@@ -325,6 +377,11 @@ def project_material_artifact(
     elif isinstance(content, str):
         text = content
     text = extract_index_text(title=title, kind=kind, content=text or None, raw=raw)
+    suffix = _suffix_of(title)
+    needs_body = suffix in PARSE_EXT or suffix in OFFICE_EXTRACT_EXT
+    if needs_body and not str(text or "").strip():
+        # Empty Docling / office_extract: do not index title-only (no fake green).
+        return False
     if not text and not title:
         return False
     doc = document_from_artifact(

@@ -282,6 +282,19 @@ def test_kb_search_drops_other_tenant_hits(monkeypatch: pytest.MonkeyPatch) -> N
     asyncio.run(_run())
 
 
+def test_kb_search_is_meili_not_edu_green() -> None:
+    import inspect
+
+    from pico_orchestrator import tools_builtin
+
+    src = inspect.getsource(tools_builtin)
+    assert "search_materials" in src
+    assert "search_green_library" not in src
+    gw = build_default_gateway(_MemStore())
+    assert "这是什么" not in gw.tools["kb_search"].description
+    assert "does not mean you must call" in gw.tools["kb_search"].description
+
+
 def test_skill_kb_ask_snapshot() -> None:
     snap = snapshot_for_skill("skill-kb-ask")
     assert snap is not None
