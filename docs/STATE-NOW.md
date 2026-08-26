@@ -4,10 +4,10 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #671 T-FILES-PLACE（stamp-ok）· #678+#681 已部 · 等老师手
+在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 363f1638ac8680900f8ff816fce6f0fa35a05d53（须现场再 curl）
-阻塞: 老师手 T1–T4 · #679/#680 待合（非本卡）
+阻塞: 无 · #679/#680 待执行窗合（非本卡）
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: NO
 PRODUCT PASS: 未签 · 仅业主（#449 / #316）
@@ -53,12 +53,13 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 
 | 优先级 | Issue | 说明 |
 |--------|-------|------|
-| 在飞 | [#671](https://github.com/juanwan99/pico/issues/671) | T-FILES-PLACE · stamp-ok · 残债同卡 |
-| 已合已部 | [#678](https://github.com/juanwan99/pico/pull/678) | 去 N+1 · tip=`709460c5…` · 等老师手 |
-| 运维 | [#679](https://github.com/juanwan99/pico/pull/679) | Cloud Agent TS + ssh ecs · CI 绿 |
+| 在飞 | [#682](https://github.com/juanwan99/pico/issues/682) | A1 T-KB-ENGINE-ON · stamp-ok · 包 A |
+| 已收口 | [#671](https://github.com/juanwan99/pico/issues/671) | T-FILES-PLACE · 业主令收口 · tip=`363f1638…` |
+| 运维 | [#679](https://github.com/juanwan99/pico/pull/679) | Cloud Agent TS + ssh ecs · 待执行窗合 |
+| 真源 docs | [#680](https://github.com/juanwan99/pico/pull/680) | 现况/经验/工具 · 待执行窗合 · 不部 |
 | 产品签 | [#449](https://github.com/juanwan99/pico/issues/449) · [#316](https://github.com/juanwan99/pico/issues/316) | 仅业主 · **勿关** |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面冻到 9/7 · 可钉现况三行评论 |
 | 运行线程 | [#475](https://github.com/juanwan99/pico/issues/475) | controller-bot · 长期开 |
 
-**不当现况：** `#646`（已关）· `DAY-TASK-*` · 任何 HANDOFF 长文 · 聊天 SHA。
+**不当现况：** `#646`（已关）· `#671`（已关）· `DAY-TASK-*` · 任何 HANDOFF 长文 · 聊天 SHA。
