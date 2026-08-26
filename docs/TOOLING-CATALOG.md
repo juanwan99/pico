@@ -40,6 +40,9 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 | **tip-pin** | 公网 tip 40 位 SHA | `scripts/tip-pin.sh` · [TIP-PROBE.md](./TIP-PROBE.md) | 每测前 / 回执 E0 / DONE | SPA `/health` 的 `OK` 冒充 tip | — |
 | **remote-health** | SSH 权威 health | `scripts/remote-health.sh` | 与公网 tip 三行对齐 | Issue 贴 canary membership 列表 | 经 **ssh-ecs** |
 | **gh-git** | PR / 证据进仓 | `gh` · `git` | 合入链 | 密钥进 commit；证据截图进 docs PR | `GH_TOKEN` 等（主机已配） |
+| **subscribe-pr** | 订 PR 事件唤醒总管 | Cursor `subscribe_github_pr`（repo/pr） | 总管环 OPEN 后 | 当第二账本；代替 Issue 回执 | — |
+| **subscribe-ci** | 订分支 CI 终态 | Cursor `subscribe_github_ci` | 执行窗已推分支 | 未知名分支空订 | — |
+| **subscribe-timer** | 兜底读合同评论 | Cursor `subscribe_timer` | Issue 评论无原生订约时 | ECS cron 自驱 agent | — |
 
 **说明：** `visual-gate` / `tip-pin` 以仓内脚本为准；`tool-status` 对缺失报 `ok:false`。
 
@@ -94,7 +97,7 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 - 审查必须读图；只读表 = 审查无效
 
 【工具合同 · TOOLING-CATALOG】
-批准 id：visual-gate · tip-pin · remote-health · gh-git · ssh-ecs · cloud-agent-ts · prod-update · playwright-mcp · chrome-devtools-mcp · pytest-ruff
+批准 id：visual-gate · tip-pin · remote-health · gh-git · subscribe-pr · subscribe-ci · subscribe-timer · ssh-ecs · cloud-agent-ts · prod-update · playwright-mcp · chrome-devtools-mcp · pytest-ruff
 回执：bash scripts/tool-status.sh --json（无密）；missing 非空 = BLOCKED（视觉卡）
 禁止：Cool/Keel/mailbox · 第二 E2E · 无图 Ready · 公网22当 Cloud Agent 通道
 CLAIM-WB: NO

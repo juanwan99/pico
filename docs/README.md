@@ -7,7 +7,7 @@
 ```
 STATUS: BINDING navigation · 现况不在本页
 TRUTH: code + tests + GitHub (PR/SHA/CI/DEPLOY comments) outrank all prose
-NOW: docs/STATE-NOW.md · issue #634 · 在飞 #671
+NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
 ```
 
 ## Do not
@@ -24,9 +24,9 @@ NOW: docs/STATE-NOW.md · issue #634 · 在飞 #671
 
 | Priority | Path | Role |
 |----------|------|------|
-| **NOW** | **[STATE-NOW.md](./STATE-NOW.md)** | **唯一现况三行**（在飞 #671 · 冻结到 9/7） |
+| **NOW** | **[STATE-NOW.md](./STATE-NOW.md)** | **唯一现况三行**（冻结到 9/7） |
 | **NOW** | **[#634](https://github.com/juanwan99/pico/issues/634)** | **冻结令** · 可钉现况三行评论 |
-| **NOW** | **[#671](https://github.com/juanwan99/pico/issues/671)** | **在飞执行卡** stamp-ok |
+| **NOW** | **[#682](https://github.com/juanwan99/pico/issues/682)** | **在飞** A1 T-KB-ENGINE-ON · stamp-ok |
 | 0 | **[DIRECTION-NOW.md](./DIRECTION-NOW.md)** | 北极星 §0-star · 用法 = Grok |
 | 0 | **[LAW-NO-SELF-BUILD-THIN-ADAPTER.md](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)** | 禁止自研 |
 | 0 | **[EXPERIENCE.md](./EXPERIENCE.md)** | 经验唯一 · 按域 · 派发点名 ≤3 |

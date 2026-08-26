@@ -44,22 +44,23 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 
 未 MERGED 不算做完。合了没部署 = 用户看不见。
 
-## 2. 合同在 Issue，派发条在对话
+## 2. 合同在 Issue，派发条在卡评
 
 执行窗**每次新开、零记忆**。看不见总管聊天，找不到你没写进 Issue 的调查。
 
 ```text
 总管调查 → 写入 Issue 标准任务卡（已锁事实 / IN / 验收）
          → stamp-ok
-         → 对执行窗的对话只贴派发条
+         → 派发条贴合同 Issue（## 派发）并作为执行窗首条
 执行窗只认：派发条 + 合同 Issue
+总管环：订 PR/CI + timer 读 ## CANDIDATE/DEPLOYED/DONE → tip-pin → CLEAR
 ```
 
 **Issue 合同**用标准任务卡体例（#627：锁定句 / 已锁事实 / IN / OUT / 验收 / CLAIM / 回写）。四行（结果 / 不准 / 过门 / 部署）是骨架，嵌在卡里，**禁止用四行短卡替代合同**——无状态窗会丢已锁事实。
 
-**对话只贴** [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)：合同链接 + 一句话 + 禁止 + **必读手册点名** + **最多 3 个坑名** + 回执五句。禁止贴 Issue 全文。
+**派发条** [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md) 贴两处：合同 Issue `## 派发` + 执行窗首条。业主聊天可贴同一段，不当账本。禁止贴 Issue 全文。
 
-缺任一则没派：Issue 未开 · 无 stamp-ok · 没贴派发条 · 条上无必读/坑名。
+缺任一则没派：Issue 未开 · 无 stamp-ok · 卡上无 `## 派发` · 条上无必读/坑名。
 
 模板：`.github/ISSUE_TEMPLATE/` · `docs/templates/card-build.md` · `docs/templates/dispatch-slip.md`。指针：`docs/TASK-CARD-STANDARD.md`。
 
@@ -76,9 +77,9 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 
 | 谁 | 做什么 | 禁止 |
 |----|--------|------|
-| 业主 | 目标；签 PASS | 当信使 |
-| 总管 | 调查写入 Issue；打章；对话只贴派发条；核 SHA | 自签；当执行窗写业务码；把调查留在聊天 |
-| 写入 | 改、测、PR、部、五句回执 | 自签 PASS；直推 main；写 edu-core 业务 |
+| 业主 | 目标；签 PASS；老师手过门 | 当粘贴中继（终态） |
+| 总管 | 调查写入 Issue；打章；`## 派发`；起执行窗；订约读回执；刷现况 | 自签；合 main；prod-update；当执行窗写业务码 |
+| 写入 | 改、测、PR、部、五句回执贴合同 | 自签 PASS；直推 main；写 edu-core 业务 |
 
 ## 4. 发布
 
@@ -99,5 +100,6 @@ curl -fsS https://pico.aivia.asia/api/pico/tip
 - 把 edu 的 315 卡面抄进 pico
 - 用四行短卡当已派（执行窗找不到已锁事实）
 - 把调查留在总管聊天、不写进 Issue
-- 对执行窗贴 Issue 全文，或不贴派发条
-- 总管自己当执行窗写业务码
+- 对执行窗贴 Issue 全文，或合同上无 `## 派发`
+- 总管自己当执行窗写业务码 / 合 main / prod-update
+- 造 mailbox、ECS 常驻 Grok、与 GitHub 平行的进度总线

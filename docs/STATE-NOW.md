@@ -4,7 +4,7 @@
 DATE: 2026-08-26
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok）
+在飞: #682 T-KB-ENGINE-ON（A1 · stamp-ok · OPEN · 已 ACK）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 363f1638ac8680900f8ff816fce6f0fa35a05d53（须现场再 curl）
 阻塞: 无 · #679/#680 待执行窗合（非本卡）
@@ -28,6 +28,7 @@ juanwan99/oneflow: 不当真源（已 Archive）
 4. **1 卡 1 PR。** CI/测/部的修补走原 PR。同卡续只在业主说还差。
 5. **聊天默认易失。** 约束下一窗的结论必须落 Issue 评论或本页/`EXPERIENCE`/`TOOLING-CATALOG`。
 6. **合与部只归执行窗。** 总管不合 main、不 prod-update；P0 可调查/起候选 PR，合部仍交执行窗（经验 §10）。
+7. **自循环。** 总线=合同 Issue 标题（`## 派发`/`CANDIDATE`/`DEPLOYED`/五句 DONE）。总管订 PR/CI + timer 读回执；禁 mailbox / ECS 常驻 Grok（经验 §21–23）。
 
 失真 = 证据 PR / 合了报 DONE / 过门写控件 / 拆 PR / 凭聊天当真源。总管打回。
 
