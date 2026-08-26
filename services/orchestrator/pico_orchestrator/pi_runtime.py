@@ -561,6 +561,11 @@ async def run_pi_agent(
                     run_id=run_id,
                     task_id=task_id,
                     tool_call_id=call_id,
+                    conversation_id=(
+                        getattr(store, "_conversation_id", None)
+                        if store is not None
+                        else None
+                    ),
                 )
                 try:
                     result = await gateway.invoke(principal, name, arguments)

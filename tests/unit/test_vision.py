@@ -20,10 +20,15 @@ from pico_orchestrator.true_pi.client import (
 )
 from pico_orchestrator.vision import (
     apply_images_to_caps,
+    clear_conversation_images,
+    conversation_images,
     extract_images_from_content,
     hosted_user_content,
     last_user_images,
+    merge_images,
     pi_rpc_images,
+    png_bytes_to_image,
+    remember_conversation_png,
 )
 
 
@@ -124,6 +129,28 @@ def test_models_json_text_only_unless_vision() -> None:
         max_tokens=8000,
     )
     assert vision["providers"]["deepseek"]["models"][0]["input"] == ["text", "image"]
+
+
+def test_png_bytes_and_merge_and_conversation_remember() -> None:
+    raw = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    item = png_bytes_to_image(raw)
+    assert item and item["mimeType"] == "image/png"
+    assert png_bytes_to_image(b"not-png") is None
+    merged = merge_images(
+        [{"type": "image", "data": "aaa", "mimeType": "image/png"}],
+        [{"type": "image", "data": "aaa", "mimeType": "image/png"}, item],
+    )
+    assert len(merged) == 2
+    clear_conversation_images()
+    assert remember_conversation_png(raw, conversation_id="c-vis-1")
+    assert not remember_conversation_png(raw, conversation_id="")
+    pending = conversation_images("c-vis-1")
+    assert pending and pending[0]["data"] == item["data"]
+    assert conversation_images("other") == []
+    clear_conversation_images("c-vis-1")
+    assert conversation_images("c-vis-1") == []
 
 
 @pytest.mark.asyncio
