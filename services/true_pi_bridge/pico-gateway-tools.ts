@@ -179,7 +179,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_pptx_document",
-    "Create a real .pptx Artifact (Pico gateway).",
+    "Create a real .pptx Artifact. Prefer spec/blocks of slides {title, bullets, image_artifact_id} so pictures sit on the slide. Call generate_image first when the deck needs pictures.",
     Type.Object(
       {
         title: Type.String(),
@@ -284,7 +284,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_image",
-    "Create one downloadable png/jpg via SiliconFlow HTTPS. Never invent an image on failure.",
+    "Create one png/jpg via the configured HTTPS image API. To place it inside Word/PPT, pass the returned artifact id as image_artifact_id on spec. Never invent pixels on failure.",
     Type.Object(
       {
         prompt: Type.String(),

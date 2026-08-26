@@ -157,6 +157,11 @@ async def run_true_pi_agent(
             backend_model = str(getattr(caps, "backend_model", "") or "") or str(
                 policy.get("backend_model") or provider.model
             )
+            images = list(getattr(caps, "images", None) or [])
+            if images:
+                from pico_orchestrator.vision import vision_model_for_images
+
+                backend_model = vision_model_for_images(backend_model)
             thinking_on = bool(getattr(caps, "thinking_on", False))
             max_context, max_out = true_pi_windows_from_caps(caps)
             tool_server = ToolServer(principal=principal, gateway=gateway, run_id=rid)
@@ -202,6 +207,7 @@ async def run_true_pi_agent(
                 plan_flag=False,
                 spawn_cwd=sess,
                 system_prompt_text=system_text,
+                accept_image=bool(images),
                 env={
                     "DEEPSEEK_API_KEY": provider.api_key
                     if provider.name == "deepseek"
@@ -249,7 +255,7 @@ async def run_true_pi_agent(
             system_prompt=str(getattr(caps, "system_prompt", "") or ""),
         )
 
-        await client.prompt(full_prompt)
+        await client.prompt(full_prompt, images=list(getattr(caps, "images", None) or []))
 
         async def _consume() -> None:
             nonlocal last_progress_wall, last_tool_ok_wall

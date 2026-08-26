@@ -2192,6 +2192,7 @@ export const supportsBalanceCheck = {
 };
 
 export const visionModels = [
+  'pico',
   'qwen-vl',
   'grok-vision',
   'grok-2-vision',

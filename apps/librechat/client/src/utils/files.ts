@@ -430,6 +430,36 @@ export const getViableUploadOptions = (
   return options;
 };
 
+export type UploadRouteDecision =
+  | { kind: 'reject' }
+  | { kind: 'route'; toolResource: EToolResources | undefined }
+  | { kind: 'ask' };
+
+const isImageFile = (file: File): boolean => {
+  const type = inferMimeType(file.name, file.type);
+  return typeof type === 'string' && type.startsWith('image/');
+};
+
+/**
+ * Decide whether to auto-route or prompt. Image-only pastes/drops go to the
+ * chat provider when that destination is available — usage = Grok (no picker).
+ */
+export const resolveUploadRoute = (
+  fileList: File[],
+  options: (EToolResources | undefined)[],
+): UploadRouteDecision => {
+  if (fileList.length === 0 || options.length === 0) {
+    return { kind: 'reject' };
+  }
+  if (fileList.every(isImageFile) && options.includes(undefined)) {
+    return { kind: 'route', toolResource: undefined };
+  }
+  if (options.length === 1) {
+    return { kind: 'route', toolResource: options[0] };
+  }
+  return { kind: 'ask' };
+};
+
 export function sortPagesByRelevance(
   pages: number[],
   pageRelevance: Record<number, number>,

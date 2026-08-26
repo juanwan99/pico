@@ -46,6 +46,8 @@ class RunCaps:
     # when the thinking-on lane has no successful tool execution for this many
     # seconds. Injectable for unit tests; production default 180s.
     no_progress_seconds: int = 180
+    # Chat-turn images (Pi RPC / hosted vision). Empty = text-only path.
+    images: list[dict[str, Any]] | None = None
 
 
 @dataclass

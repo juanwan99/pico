@@ -138,7 +138,10 @@ async def run_pi_agent(
         if role in {"user", "assistant"} and content:
             messages.append({"role": role, "content": str(content)[:4000]})
     # User turn is the teacher original. Skill/Landing stay in system, never welded here.
-    messages.append({"role": "user", "content": prompt})
+    from pico_orchestrator.vision import hosted_user_content
+
+    images = list(getattr(caps, "images", None) or [])
+    messages.append({"role": "user", "content": hosted_user_content(prompt, images)})
 
     await emit("run.status", {"status": "running", "runtime": RUNTIME_LABEL})
 
@@ -251,7 +254,7 @@ async def run_pi_agent(
             # not abort a real delivery turn. Retry (same model) up to
             # caps.max_retries on non-timeout errors before failing honestly.
             create_kwargs: dict[str, Any] = {
-                "model": provider.model,
+                "model": str(getattr(caps, "backend_model", "") or "") or provider.model,
                 "messages": messages,
                 "max_tokens": min(4096, max(256, caps.max_tokens - token_usage["total_tokens"])),
             }

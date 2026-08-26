@@ -35,6 +35,11 @@ const INGEST_EXT = new Set([
   '.json',
   '.html',
   '.htm',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
 ]);
 const RESERVED_CONVO = new Set(['new', 'search']);
 

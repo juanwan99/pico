@@ -1010,7 +1010,7 @@ def _workspace_handlers(
             code="image.timeout",
             message="出图超时（45 秒）。请稍后重试，不能编造图片。",
         )
-        title = _ensure_extension(title_hint or "课堂示意图", f".{ext}")
+        title = _ensure_extension(title_hint or "示意图", f".{ext}")
         kind = "png" if ext == "png" else "jpg"
         result = await store.write(
             principal,
@@ -2250,9 +2250,8 @@ def openai_tool_schemas(
                 "body": {
                     "type": "string",
                     "description": (
-                        "题面正文 only. Blank lines separate paragraphs. "
-                        "At least several hundred characters of the actual notice/minutes. "
-                        "Short body fails — the tool will not pad filler."
+                        "Document body. Blank lines separate paragraphs. "
+                        "Empty body fails — the tool will not pad filler."
                     ),
                 },
                 "spec": {
@@ -2280,9 +2279,8 @@ def openai_tool_schemas(
                 "body": {
                     "type": "string",
                     "description": (
-                        "题面页稿. Separate slides with a blank line or ---. "
-                        "At least three titled pages from the prompt. "
-                        "Fewer pages fail — the tool will not invent 说明 slides."
+                        "Slide draft. Separate slides with a blank line or ---. "
+                        "Empty deck fails — the tool will not invent slides."
                     ),
                 },
                 "spec": {

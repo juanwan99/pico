@@ -10,9 +10,11 @@ from openai import AsyncOpenAI
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
 DEFAULT_DEEPSEEK_REASONER = "deepseek-reasoner"
+DEFAULT_DEEPSEEK_VISION = "deepseek-v4-flash-vision-exp"
 DEFAULT_DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 KNOWN_DEEPSEEK_MODELS = (
     "deepseek-v4-flash",
+    "deepseek-v4-flash-vision-exp",
     "deepseek-chat",
     "deepseek-reasoner",
 )

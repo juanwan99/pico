@@ -16,6 +16,7 @@ import type * as t from 'librechat-data-provider';
 import useFileUploadRouter from './useFileUploadRouter';
 import { useUploadModalContext } from '~/Providers';
 import useUploadOptions from './useUploadOptions';
+import { resolveUploadRoute } from '~/utils';
 import useLocalize from '../useLocalize';
 import store from '~/store';
 
@@ -81,12 +82,13 @@ export default function useDragHelpers() {
       }
 
       const options = getOptionsRef.current(item.files);
-      if (options.length === 0) {
+      const decision = resolveUploadRoute(item.files, options);
+      if (decision.kind === 'reject') {
         showToast({ message: localize('com_error_files_unsupported'), status: 'error' });
         return;
       }
-      if (options.length === 1) {
-        routeFilesRef.current(item.files, options[0]);
+      if (decision.kind === 'route') {
+        routeFilesRef.current(item.files, decision.toolResource);
         return;
       }
       openModalRef.current(item.files);

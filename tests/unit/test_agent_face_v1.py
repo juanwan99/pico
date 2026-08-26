@@ -39,6 +39,7 @@ async def _not_cancelled() -> bool:
 
 
 def test_progress_lines_are_chinese_no_percent() -> None:
+    assert workbench_tool_step_line("generate_pptx_document") == "正在写 PPT"
     assert workbench_tool_step_line("generate_docx_document") == "正在写 Word"
     assert workbench_tool_step_line("edit_docx_document") == "正在改 Word"
     assert workbench_tool_step_line("generate_image") == "正在出图"

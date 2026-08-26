@@ -41,6 +41,9 @@ router = APIRouter(tags=["openai-compat"])
 class ChatMessage(BaseModel):
     role: str
     content: str | list[Any] | None = ""
+    # LibreChat AgentClient may put vision parts on the message instead of
+    # (or as well as) content[]. Extra fields were previously dropped.
+    image_urls: list[Any] | None = None
 
 
 class ChatCompletionRequest(BaseModel):
@@ -64,7 +67,7 @@ def _content_text(content: str | list[Any] | None) -> str:
         return ""
     if isinstance(content, str):
         return content
-    # multimodal array — take text parts
+    # Text only. Image parts are kept via last_user_images → RunCaps.images.
     parts: list[str] = []
     for p in content:
         if isinstance(p, dict) and p.get("type") == "text":
@@ -646,6 +649,13 @@ def _caps_with_landing_min(caps: Any, delivery_plan: Any, skill_snapshot: dict |
     return caps
 
 
+def _caps_with_images(caps: Any, images: list[dict[str, Any]] | None) -> Any:
+    """Keep chat image parts; switch backend to a vision model when present."""
+    from pico_orchestrator.vision import apply_images_to_caps
+
+    return apply_images_to_caps(caps, images or [])
+
+
 def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
     """Apply the dual-mode runtime policy onto RunCaps (Pico 快速 / Pico 深度).
 
@@ -948,6 +958,7 @@ async def _run_and_collect(
     allowed_tools: list[str] | None = None,
     system_prompt: str = "",
     conversation_id: str | None = None,
+    images: list[dict[str, Any]] | None = None,
 ) -> Any:
     from pico_orchestrator.runtime import run_agent_runtime
 
@@ -972,6 +983,7 @@ async def _run_and_collect(
     )
     # Dual-mode: Pico 快速 / Pico 深度 set their own steps/tokens/thinking.
     caps = _caps_with_dual_mode(caps, model)
+    caps = _caps_with_images(caps, images)
     # Landing gate: force min_artifacts into Pi so chat-only "done" cannot succeed.
     caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
     if system_prompt:
@@ -1098,6 +1110,9 @@ async def chat_completions(
     import re
 
     principal = _principal_from_auth(authorization, settings)
+    from pico_orchestrator.vision import last_user_images
+
+    turn_images = last_user_images(body.messages)
     raw_for_user = _last_user_prompt(body.messages)
     m_user = re.search(r"【Pico-User:([^】]+)】", raw_for_user)
     marker_membership = m_user.group(1).strip() if m_user else None
@@ -1354,6 +1369,7 @@ async def chat_completions(
                 allowed_tools=request_tools,
                 system_prompt=client_system if edu_sidebar else "",
                 conversation_id=conversation_id,
+                images=turn_images,
             )
             text = result.final_text or result.error or "(empty)"
             await _finalize_run(
@@ -1609,6 +1625,7 @@ async def chat_completions(
                     )
                 # Stream path must apply the same dual-mode policy as non-stream.
                 caps = _caps_with_dual_mode(caps, model)
+                caps = _caps_with_images(caps, turn_images)
                 # Stream path must apply the same landing min as non-stream.
                 caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
                 if edu_sidebar and client_system:

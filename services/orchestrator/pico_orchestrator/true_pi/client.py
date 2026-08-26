@@ -96,14 +96,22 @@ def true_pi_models_document(
     model: str,
     max_context: int,
     max_tokens: int,
+    accept_image: bool | None = None,
 ) -> dict[str, Any]:
     """Pi 0.73.1 models.json overlay. Official path, not a invented CLI flag."""
+    from pico_orchestrator.vision import model_accepts_image
+
     name = (provider or "deepseek").strip() or "deepseek"
     mid = (model or "deepseek-v4-flash").strip() or "deepseek-v4-flash"
     overlay = {
         "contextWindow": int(max_context),
         "maxTokens": int(max_tokens),
     }
+    inputs = ["text"]
+    if accept_image is None:
+        accept_image = model_accepts_image(mid)
+    if accept_image:
+        inputs.append("image")
     return {
         "providers": {
             name: {
@@ -112,7 +120,7 @@ def true_pi_models_document(
                     {
                         "id": mid,
                         "reasoning": True,
-                        "input": ["text"],
+                        "input": inputs,
                         **overlay,
                     }
                 ],
@@ -237,6 +245,7 @@ class SubprocessTransport(TruePiTransport):
         plan_flag: bool = False,
         spawn_cwd: Path | None = None,
         system_prompt_text: str = "",
+        accept_image: bool = False,
     ) -> None:
         self.session_dir = session_dir
         self.tool_url = tool_url
@@ -261,6 +270,7 @@ class SubprocessTransport(TruePiTransport):
         self.plan_flag = bool(plan_flag)
         self.spawn_cwd = spawn_cwd or session_dir
         self.system_prompt_text = str(system_prompt_text or "")
+        self.accept_image = bool(accept_image)
         self.plan_execute_pending = False
         self.plan_agent_ends = 0
         self.plan_stayed = False
@@ -275,6 +285,7 @@ class SubprocessTransport(TruePiTransport):
             model=self.model,
             max_context=self.max_context,
             max_tokens=self.max_tokens,
+            accept_image=self.accept_image,
         )
 
     def prepare_agent_home(self, home: Path | None = None) -> Path:
@@ -557,9 +568,22 @@ class TruePiRpcClient:
     async def start(self) -> None:
         await self.transport.start()
 
-    async def prompt(self, message: str, *, req_id: str | None = None) -> dict[str, Any]:
+    async def prompt(
+        self,
+        message: str,
+        *,
+        images: list[dict[str, Any]] | None = None,
+        req_id: str | None = None,
+    ) -> dict[str, Any]:
         rid = req_id or f"p-{uuid.uuid4().hex[:10]}"
-        await self.transport.send({"id": rid, "type": "prompt", "message": message})
+        payload: dict[str, Any] = {"id": rid, "type": "prompt", "message": message}
+        if images:
+            from pico_orchestrator.vision import pi_rpc_images
+
+            rpc_images = pi_rpc_images(images)
+            if rpc_images:
+                payload["images"] = rpc_images
+        await self.transport.send(payload)
         resp = await self.transport.wait_response("prompt", req_id=rid, timeout=60.0)
         if not resp.get("success"):
             raise TruePiClientError(f"prompt rejected: {resp}")
