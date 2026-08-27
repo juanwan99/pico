@@ -683,7 +683,9 @@ def _workspace_handlers(
     async def _load_spec_images(principal: Principal, spec: object) -> dict[str, bytes]:
         out: dict[str, bytes] = {}
         for aid in getattr(spec, "image_ids", lambda: ())():
-            row = await store.read(principal, artifact_id=aid)
+            # Production LedgerArtifactStore.read is keyword-only and requires title=.
+            # Memory-store tests used to default title=None and hid this miss.
+            row = await store.read(principal, artifact_id=aid, title=None)
             if row is None:
                 raise ToolError(
                     "artifact.not_found",

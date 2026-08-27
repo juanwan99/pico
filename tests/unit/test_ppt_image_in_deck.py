@@ -97,8 +97,8 @@ class MemoryArtifactStore:
         self,
         principal: P,
         *,
-        artifact_id: str | None = None,
-        title: str | None = None,
+        artifact_id: str | None,
+        title: str | None,
     ) -> dict[str, Any] | None:
         for row in reversed(self._rows(principal)):
             if artifact_id and row["artifact_id"] == artifact_id:
@@ -162,7 +162,7 @@ async def test_teacher_image_then_pptx_has_real_picture(monkeypatch) -> None:
             },
         },
     )
-    row = await store.read(owner, artifact_id=deck["artifact_id"])
+    row = await store.read(owner, artifact_id=deck["artifact_id"], title=None)
     assert row is not None
     raw = base64.b64decode(row["content_base64"])
     assert is_valid_ooxml_package(raw, ".pptx")

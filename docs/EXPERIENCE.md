@@ -37,7 +37,7 @@ DATE: 2026-08-27
 25. **HTML 公网页 = 能力。** 公网链 `/p/{id}`（不是 SPA）。`publish_html_page` / 收集口 / `unpublish_html_page`。数据落发布人账本。禁焊场景提示词。#697 已收口。
 28. **出图：智谱 glm-image（#729）。** 硅基流动出图已否决，禁止再建议。真源 = `ZHIPU_API_KEY` + `POST …/paas/v4/images/generations` · model=`glm-image`。禁 GLM-Flash 当出图。禁自研图核。SILICONFLOW 出图路径 fail-closed。
 29. **Meili hybrid：只认 live embedder。** health `meili_embedder` ≠ 有钥。禁每条 upsert `ensure()` PATCH（会冲垮 task 队列）。清洪水用 `POST /tasks/cancel`（不是 DELETE）。#733/#737。
-30. **PPT 图进页 = `image_artifact_id`。** 出图成功 ≠ 进页。`[image:…]` / markdown 写在 body 不会嵌。Pi 真源：`pico-gateway-tools.ts` + SYSTEM。#740。
+30. **PPT 图进页 = `image_artifact_id`。** 出图成功 ≠ 进页。`[image:…]` / markdown 写在 body 不会嵌。Pi 真源：`pico-gateway-tools.ts` + SYSTEM。生产 `LedgerArtifactStore.read` 必传 `title=`；`_load_spec_images` 漏传会 TypeError，图在账本、页里 0。单测 MemoryStore 给 default 会漏。#740。
 
 ## C · 部署 / ECS
 
