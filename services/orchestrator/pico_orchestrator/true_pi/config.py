@@ -55,6 +55,7 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "inspect_document",
         "verify_document",
         "generate_image",
+        "generate_diagram",
         "verify_html_document",
         "web_search",
         "web_fetch",

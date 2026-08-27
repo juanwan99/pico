@@ -16,6 +16,8 @@ from pico_orchestrator.sandbox_persist import (
 from pydantic import BaseModel, Field
 
 from sandbox_worker.browser import ENGINE_NAME, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
+from sandbox_worker.diagram import mermaid_js_ready, render_diagram
+from sandbox_worker.mermaid_pin import MERMAID_VERSION
 from sandbox_worker.ports import SANDBOX_DEFAULT_PORT, assert_listen_port
 from sandbox_worker.runtime import HUMAN_LOGIN_COPY, RUNTIME, redact_secrets
 
@@ -68,6 +70,8 @@ def _tool_http(exc: ToolError) -> HTTPException:
         status = 429
     elif exc.code in {"sandbox.session_not_found", "artifact.not_found", "sandbox.file_not_found"}:
         status = 404
+    elif exc.code == "diagram.missing_engine":
+        status = 503
     else:
         status = 400
     return HTTPException(status_code=status, detail={"code": exc.code, "message": exc.message})
@@ -86,6 +90,8 @@ async def health() -> dict[str, Any]:
         "viewport": {"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
         "human_copy": HUMAN_LOGIN_COPY,
         "claim_wb": "NO",
+        "mermaid_js": mermaid_js_ready(),
+        "mermaid_version": MERMAID_VERSION,
     }
 
 
@@ -231,10 +237,27 @@ async def get_owner_disk(
     return redact_secrets(owner_disk_meta(school_id, membership_id))
 
 
+class DiagramBody(BaseModel):
+    source: str
+    kind: str = "mermaid"
+
+
 class ClearDiskBody(BaseModel):
     school_id: str
     membership_id: str
     confirm: bool = False
+
+
+@app.post("/v1/internal/diagram")
+async def post_diagram(
+    body: DiagramBody,
+    x_pico_sandbox_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_token(x_pico_sandbox_token)
+    try:
+        return await render_diagram(source=body.source, kind=body.kind)
+    except ToolError as exc:
+        raise _tool_http(exc) from exc
 
 
 @app.post("/v1/internal/disk/clear")

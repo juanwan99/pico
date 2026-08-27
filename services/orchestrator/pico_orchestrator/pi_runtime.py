@@ -49,6 +49,7 @@ _WRITE_TOOLS = frozenset(
         "inspect_document",
         "verify_document",
         "generate_image",
+        "generate_diagram",
     }
 )
 

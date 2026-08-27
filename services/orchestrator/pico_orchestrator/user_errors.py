@@ -25,6 +25,14 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
     if "cancelled" in low or c == "cancelled":
         # Distinct from input-bar「停止生成」(screen-only): this is ledger cancel.
         return "云端任务已停止。需要结果时可点「重新运行」。"
+    if c.startswith("diagram.") or "结构图" in text:
+        if c == "diagram.timeout" or "超时" in text:
+            return "结构图超时。请稍后重试，不能假装画出结构图。"
+        if c == "diagram.unsupported":
+            return text or "这一档只支持 mermaid。D2 还没接，不能假装画出结构图。"
+        if c == "diagram.parse":
+            return text or "这段结构图语法不对，我没画出来。"
+        return text or "这次没能画出结构图。请稍后重试，不能假装画出来。"
     # Image / office before generic「未配置」so SILICONFLOW 无钥不会装成模型钥。
     if (
         c.startswith("image.")

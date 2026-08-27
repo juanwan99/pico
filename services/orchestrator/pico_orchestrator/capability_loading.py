@@ -1,6 +1,6 @@
 """Capability loading — always-on verbs vs skill-extended.
 
-ADR: docs/ADR-CAPABILITY-LOADING.md (draft #720 if not yet on main).
+ADR: docs/ADR-CAPABILITY-LOADING.md (Accepted).
 Thin adapter only. Not a tool_search kernel. Not a scene router.
 
 Gateway ceiling stays ALLOWED_GATEWAY_TOOLS (execute).
@@ -29,6 +29,7 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "edit_xlsx_document",
     "inspect_document",
     "generate_image",
+    "generate_diagram",
     "web_search",
     "web_fetch",
     "kb_search",

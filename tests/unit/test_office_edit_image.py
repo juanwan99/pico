@@ -153,7 +153,12 @@ def test_sidebar_chat_has_no_edit_or_image_tools() -> None:
     assert chat is not None
     assert chat["tools"] == []
     assert openai_tool_schemas(build_default_gateway(), allowed_tools=[]) == []
-    forbidden = {"edit_docx_document", "edit_pptx_document", "generate_image"}
+    forbidden = {
+        "edit_docx_document",
+        "edit_pptx_document",
+        "generate_image",
+        "generate_diagram",
+    }
     assert forbidden.isdisjoint(chat["tools"])
     deliver = snapshot_for_skill("skill-deliverable")
     assert deliver is not None

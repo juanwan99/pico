@@ -43,6 +43,7 @@ def test_progress_lines_are_chinese_no_percent() -> None:
     assert workbench_tool_step_line("generate_docx_document") == "正在写 Word"
     assert workbench_tool_step_line("edit_docx_document") == "正在改 Word"
     assert workbench_tool_step_line("generate_image") == "正在出图"
+    assert workbench_tool_step_line("generate_diagram") == "正在画结构图"
     assert workbench_tool_step_line("mystery_tool") == "正在调工具"
     assert workbench_tool_step_line("") == ""
     assert "%" not in workbench_tool_step_line("generate_docx_document")
