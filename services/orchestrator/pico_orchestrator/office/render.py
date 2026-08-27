@@ -219,21 +219,74 @@ def _style_table_header(table: object, theme: Theme | None) -> None:
                     run._element.rPr.rFonts.set(qn("w:eastAsia"), theme.heading_font)
 
 
-def _place_pptx_picture(slide: object, raw: bytes, *, has_bullets: bool) -> None:
-    """Put the picture in the content well. No extra spec fields.
+# Default 10×7.5in Title-and-Content well. Pin all four edges when
+# shrinking the body for a picture — setting only width/left collapses
+# the placeholder to height=0 and the text paints over the title.
+_PPTX_WELL_TOP_IN = 1.7
+_PPTX_WELL_HEIGHT_IN = 5.2
+_PPTX_BODY_LEFT_IN = 0.5
+_PPTX_BODY_WIDTH_IN = 4.6
+_PPTX_PIC_LEFT_IN = 5.15
+_PPTX_PIC_WIDTH_IN = 4.5
+_PPTX_HERO_LEFT_IN = 1.2
+_PPTX_HERO_WIDTH_IN = 7.6
+_PPTX_SLIDE_HEIGHT_IN = 7.5
 
-    Default deck is 10×7.5 in. The old 3.2in stamp at (6.2, 1.6) is retired.
-    """
+
+def _place_pptx_picture(slide: object, raw: bytes, *, has_bullets: bool) -> None:
+    """Put the picture in the content well. No extra spec fields."""
     from pptx.util import Inches
 
     if has_bullets:
-        slide.shapes.add_picture(
-            io.BytesIO(raw), Inches(5.15), Inches(1.7), width=Inches(4.5)
+        pic = slide.shapes.add_picture(
+            io.BytesIO(raw),
+            Inches(_PPTX_PIC_LEFT_IN),
+            Inches(_PPTX_WELL_TOP_IN),
+            width=Inches(_PPTX_PIC_WIDTH_IN),
+        )
+        _fit_pptx_picture(
+            pic,
+            left=Inches(_PPTX_PIC_LEFT_IN),
+            top=Inches(_PPTX_WELL_TOP_IN),
+            max_width=Inches(_PPTX_PIC_WIDTH_IN),
+            max_height=Inches(_PPTX_WELL_HEIGHT_IN),
         )
         return
-    slide.shapes.add_picture(
-        io.BytesIO(raw), Inches(1.2), Inches(1.6), width=Inches(7.6)
+    pic = slide.shapes.add_picture(
+        io.BytesIO(raw),
+        Inches(_PPTX_HERO_LEFT_IN),
+        Inches(_PPTX_WELL_TOP_IN),
+        width=Inches(_PPTX_HERO_WIDTH_IN),
     )
+    _fit_pptx_picture(
+        pic,
+        left=Inches(_PPTX_HERO_LEFT_IN),
+        top=Inches(_PPTX_WELL_TOP_IN),
+        max_width=Inches(_PPTX_HERO_WIDTH_IN),
+        max_height=Inches(_PPTX_WELL_HEIGHT_IN),
+    )
+
+
+def _fit_pptx_picture(
+    pic: object,
+    *,
+    left: int,
+    top: int,
+    max_width: int,
+    max_height: int,
+) -> None:
+    pic.left = left
+    pic.top = top
+    width = int(getattr(pic, "width", 0) or 0)
+    height = int(getattr(pic, "height", 0) or 0)
+    if width > max_width and width > 0:
+        height = int(height * (max_width / width))
+        width = int(max_width)
+    if height > max_height and height > 0:
+        width = int(width * (max_height / height))
+        height = int(max_height)
+    pic.width = width
+    pic.height = height
 
 
 def _set_pptx_body(
@@ -265,8 +318,12 @@ def _set_pptx_body(
     if narrow_for_image:
         from pptx.util import Inches
 
-        target.width = Inches(4.6)
-        target.left = Inches(0.5)
+        target.left = Inches(_PPTX_BODY_LEFT_IN)
+        target.top = Inches(_PPTX_WELL_TOP_IN)
+        target.width = Inches(_PPTX_BODY_WIDTH_IN)
+        target.height = Inches(_PPTX_WELL_HEIGHT_IN)
+        if getattr(target, "text_frame", None) is not None:
+            target.text_frame.word_wrap = True
     target.text = body
     if font_name:
         for para in target.text_frame.paragraphs:
