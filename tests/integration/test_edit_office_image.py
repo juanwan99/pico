@@ -6,7 +6,6 @@ import base64
 import io
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
