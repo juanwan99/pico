@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import base64
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+import pytest
 from pico_orchestrator.office.inspect import inspect_office_bytes
 from pico_orchestrator.office.render import render_spec
 from pico_orchestrator.office.spec import parse_spec, sanitize_slide_text, spec_from_plain
 from pico_orchestrator.tool_observation import observe_write
+from pico_orchestrator.tools_builtin import build_default_gateway
 from pico_orchestrator.true_pi.runtime import pico_system_text
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -127,3 +131,100 @@ def test_pi_surface_names_image_artifact_id() -> None:
     system = pico_system_text()
     assert "image_artifact_id" in system
     assert "[image:" in system
+
+
+@dataclass
+class _P:
+    school_id: str
+    membership_id: str
+    scopes: list[str]
+
+
+class _ProdShapedStore:
+    """Same keyword-only read() as production LedgerArtifactStore. No defaults."""
+
+    def __init__(self) -> None:
+        self.rows: list[dict[str, Any]] = []
+
+    async def write(
+        self,
+        principal: _P,
+        *,
+        title: str,
+        content: str | bytes,
+        kind: str,
+    ) -> dict[str, Any]:
+        del principal
+        raw = content if isinstance(content, bytes) else content.encode("utf-8")
+        row = {
+            "artifact_id": f"art-{len(self.rows) + 1}",
+            "title": title,
+            "kind": kind,
+            "byte_size": len(raw),
+            "content_base64": base64.b64encode(raw).decode("ascii")
+            if isinstance(content, bytes)
+            else None,
+            "content": None if isinstance(content, bytes) else content,
+        }
+        self.rows.append(row)
+        return {k: v for k, v in row.items() if k not in {"content", "content_base64"}}
+
+    async def read(
+        self,
+        principal: _P,
+        *,
+        artifact_id: str | None,
+        title: str | None,
+    ) -> dict[str, Any] | None:
+        del principal
+        for row in reversed(self.rows):
+            if artifact_id and row["artifact_id"] == artifact_id:
+                return dict(row)
+            if not artifact_id and title and row["title"] == title:
+                return dict(row)
+        return None
+
+    async def list(self, principal: _P, *, limit: int) -> list[dict[str, Any]]:
+        del principal
+        return list(reversed(self.rows))[:limit]
+
+
+@pytest.mark.asyncio
+async def test_generate_pptx_loads_image_when_store_requires_title() -> None:
+    """Live bug: _load_spec_images omitted title= and LedgerArtifactStore TypeError'd."""
+    store = _ProdShapedStore()
+    gw = build_default_gateway(store)
+    owner = _P("s", "m", ["ai:run"])
+    store.rows.append(
+        {
+            "artifact_id": "img-live",
+            "title": "cover.jpg",
+            "kind": "jpg",
+            "byte_size": len(PNG),
+            "content_base64": base64.b64encode(PNG).decode("ascii"),
+            "content": None,
+        }
+    )
+    deck = await gw.invoke(
+        owner,
+        "generate_pptx_document",
+        {
+            "title": "嵌图.pptx",
+            "spec": {
+                "kind": "pptx",
+                "blocks": [
+                    {
+                        "type": "slide",
+                        "title": "封面",
+                        "bullets": ["见图"],
+                        "image_artifact_id": "img-live",
+                    }
+                ],
+            },
+        },
+    )
+    row = await store.read(owner, artifact_id=deck["artifact_id"], title=None)
+    assert row is not None
+    raw = base64.b64decode(row["content_base64"])
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert outline["images"] >= 1
