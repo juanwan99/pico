@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from pico_orchestrator.office.inspect import inspect_office_bytes
 from pico_orchestrator.office.render import render_spec
 from pico_orchestrator.office.spec import parse_spec, sanitize_slide_text, spec_from_plain
