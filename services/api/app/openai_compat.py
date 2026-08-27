@@ -242,6 +242,11 @@ def _assert_model_allowed(model: str, settings: Settings) -> None:
         return
     if normalized in {"pico-fast", "pico-deep"} and {"pico-fast", "pico-deep"}.intersection(allowed):
         return
+    # Product delivery name. Host allowlist is often pico-fast,pico-deep only.
+    if normalized in {"pico-agent", "pico"} and {"pico-fast", "pico-deep"}.intersection(
+        allowed
+    ):
+        return
     raise HTTPException(status_code=400, detail="model is not allowed")
 
 

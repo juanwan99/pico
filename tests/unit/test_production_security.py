@@ -91,6 +91,8 @@ def test_production_rejects_default_proxy_but_accepts_strong_internal_proxy() ->
 def test_production_model_allowlist_rejects_unknown() -> None:
     settings = _valid_production()
     _assert_model_allowed("openAI/deepseek-chat", settings)
+    _assert_model_allowed("pico-agent", settings)
+    _assert_model_allowed("pico", settings)
     with pytest.raises(HTTPException) as rejected:
         _assert_model_allowed("unknown-expensive-model", settings)
     assert rejected.value.status_code == 400
