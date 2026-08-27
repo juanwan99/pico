@@ -16,7 +16,7 @@
 人留：目标 · 黄红争议 · 老师手 · PASS
 工具：只认 TOOLING-CATALOG · 起窗 spawn-executor · ssh-ecs=Tailscale ops@aliyun-hy · 禁公网22
 证据：贴本卡 Issue · 禁证据进 PR · 禁 Closes 部前关卡
-DONE：live tip = origin/main · 写入不自签 PASS · CLAIM-WB=NO
+DONE：live tip = origin/main · 写入不自签 PASS · CLAIM-WB 不代签（以 STATE-NOW 为准）
 P0：可调查/起候选 PR，合部仍交执行窗
 北极星：用法=Grok · 薄适配·禁自研核 · 禁 mailbox/ECS常驻
 冻结：#634 至 9/7 · 不改卡面形状 · 不复活315 · 不写新HANDOFF

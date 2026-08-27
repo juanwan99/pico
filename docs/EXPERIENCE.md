@@ -2,7 +2,7 @@
 
 ```text
 仓: juanwan99/pico ONLY
-DATE: 2026-08-26
+DATE: 2026-08-27
 用法: 开窗读本文。禁止把正文贴进卡或对业主聊天。
 派发条只点名编号（最多 3 条）。过期删（总管同轮删/并）。
 工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
@@ -35,6 +35,7 @@ DATE: 2026-08-26
 24. **办公文档 = [ADR-OFFICE-DOC-PIPELINE](./ADR-OFFICE-DOC-PIPELINE.md)。** spec/`generate_*` = **稳妥默认**，不是天花板。卡 1 #690 / 卡 2 #694 已收口。禁再加厚 spec 当天花板（「第三张办公卡」指这个）。上限 = 上游 Pi skill + 沙箱库；禁 host bash、禁自研幻灯 OS。
 27. **能力笼子已拆（#703 T-UNMASK-PI）。** 聊天图进 Pi RPC `images`；有图走 vision 模型；上传收 png/jpg；PPT 三页硬律退役（只打空壳）；进度词不再写「课件」。控制面仍留：账本·租户·假绿门·不代登·用法=Grok。贴图实测走 `/v1/chat/completions` 真载荷（`content[]` + 旁路 `image_urls`）。相对 `/images/` 不拉（禁 SSRF）。沙箱预览/截图 PNG 已可记入下一轮 chat `images[]`（#707）。贴图/拖图全是图且提供商可贴时直送提供商，不弹 LibreChat 三选。回形针无 SharePoint 时一点即传，不弹目的地菜单。
 25. **HTML 公网页 = 能力。** 公网链 `/p/{id}`（不是 SPA）。`publish_html_page` / 收集口 / `unpublish_html_page`。数据落发布人账本。禁焊场景提示词。#697 已收口。
+28. **出图：收钥 ≠ 接线。** 现网 `generate_image` 只认 `SILICONFLOW_API_KEY`（业主未点硅基）。智谱钥可收进主机 / `.secrets`，未接 `glm-image`。禁把 GLM-Flash 当出图。禁自研图核。要接须业主书面「接 glm-image」。
 
 ## C · 部署 / ECS
 

@@ -1,7 +1,7 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-08-26
+DATE: 2026-08-27
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
 在飞: 无

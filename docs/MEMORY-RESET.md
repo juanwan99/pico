@@ -12,7 +12,7 @@
 | 证据用 docs PR 进仓 | **否** · 贴 Issue 评论 |
 | 合 main = 完 | **否** · live SHA 对齐才 DONE |
 | 过门写控件清单 | **否** · 老师手一句 |
-| CLAIM-WB 可签 | **否** · 仍 NO |
+| CLAIM-WB 可再代签 | **否** · STATE-NOW 已是 YES · 工程禁改口 |
 | 双核 Kimi+Pi / Dify 门脸 | **否** |
 | 旧交接 / DAY-TASK / #646 当在飞 | **否** · 现况只认 STATE-NOW 三行 |
 | oneflow 仓当真源 | **否** · 已 Archive |
