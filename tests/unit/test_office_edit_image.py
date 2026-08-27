@@ -1,11 +1,13 @@
-"""T-AGENT-EXT-V1: python-docx/pptx edit originals + image generate fail-closed."""
+"""T-AGENT-EXT-V1: python-docx/pptx edit originals + Zhipu glm-image mock."""
 
 from __future__ import annotations
 
+import base64
 import io
 import sys
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -104,20 +106,21 @@ def test_edit_pptx_keeps_other_slides() -> None:
 @pytest.mark.asyncio
 async def test_generate_image_no_key_chinese(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     with pytest.raises(ToolError) as caught:
         await generate_image_bytes("分数的初步认识")
     assert caught.value.code == "image.unconfigured"
     assert "不能编造" in caught.value.message
     assert "SILICONFLOW" not in caught.value.message
-    assert "硅基" not in caught.value.message or "否决" in caught.value.message
     assert caught.value.message == NO_KEY_MESSAGE
 
 
 @pytest.mark.asyncio
-async def test_generate_image_siliconflow_key_rejected(
+async def test_generate_image_siliconflow_only_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SILICONFLOW_API_KEY", "test-key-not-a-secret")
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     with pytest.raises(ToolError) as caught:
         await generate_image_bytes("分数的初步认识课堂示意图")
     assert caught.value.code == "image.provider_rejected"
@@ -126,22 +129,44 @@ async def test_generate_image_siliconflow_key_rejected(
 
 
 @pytest.mark.asyncio
-async def test_generate_image_never_calls_silicon_http(
+async def test_generate_image_zhipu_mock_https_png(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("SILICONFLOW_API_KEY", "test-key-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
 
-    async def boom(*_a, **_k):
-        raise AssertionError("SiliconFlow HTTP must not be called")
+    async def fake_post(payload, *, api_key, timeout):
+        assert api_key == "test-zhipu-not-a-secret"
+        assert payload["model"] == "glm-image"
+        assert payload["prompt"]
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
+            },
+        )
 
-    monkeypatch.setattr(
-        "pico_orchestrator.image_generate.siliconflow_api_key",
-        lambda: "x",
-    )
-    # No _post_images in module anymore; ensure generate still refuses.
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
+    raw, ext = await generate_image_bytes("分数的初步认识课堂示意图")
+    assert ext == "png"
+    assert raw.startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_generate_image_zhipu_4xx_no_fake(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+
+    async def fake_post(payload, *, api_key, timeout):
+        return SimpleNamespace(status_code=400, json=lambda: {"error": "bad"})
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
     with pytest.raises(ToolError) as caught:
         await generate_image_bytes("画一只猫")
-    assert caught.value.code == "image.provider_rejected"
+    assert caught.value.code == "image.provider"
+    assert "不能编造" in caught.value.message
 
 
 def test_sidebar_chat_has_no_edit_or_image_tools() -> None:

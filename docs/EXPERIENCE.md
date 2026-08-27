@@ -35,7 +35,7 @@ DATE: 2026-08-27
 24. **办公文档 = [ADR-OFFICE-DOC-PIPELINE](./ADR-OFFICE-DOC-PIPELINE.md)。** spec/`generate_*` = **稳妥默认**，不是天花板。卡 1 #690 / 卡 2 #694 已收口。禁再加厚 spec 当天花板（「第三张办公卡」指这个）。上限 = 上游 Pi skill + 沙箱库；禁 host bash、禁自研幻灯 OS。
 27. **能力笼子已拆（#703 T-UNMASK-PI）。** 聊天图进 Pi RPC `images`；有图走 vision 模型；上传收 png/jpg；PPT 三页硬律退役（只打空壳）；进度词不再写「课件」。控制面仍留：账本·租户·假绿门·不代登·用法=Grok。贴图实测走 `/v1/chat/completions` 真载荷（`content[]` + 旁路 `image_urls`）。相对 `/images/` 不拉（禁 SSRF）。沙箱预览/截图 PNG 已可记入下一轮 chat `images[]`（#707）。贴图/拖图全是图且提供商可贴时直送提供商，不弹 LibreChat 三选。回形针无 SharePoint 时一点即传，不弹目的地菜单。
 25. **HTML 公网页 = 能力。** 公网链 `/p/{id}`（不是 SPA）。`publish_html_page` / 收集口 / `unpublish_html_page`。数据落发布人账本。禁焊场景提示词。#697 已收口。
-28. **出图：硅基流动已否决（业主 2026-08-27）。** 禁止再建议点硅基 / 写 `SILICONFLOW_API_KEY` 做出图。产品出图真源 = 智谱 `glm-image`（钥可收、未接；须书面「接 glm-image」）。禁 GLM-Flash 当出图。禁自研图核。仓内旧 SiliconFlow 出图适配 = 废路径，调用须 fail-closed。
+28. **出图：智谱 glm-image（#729）。** 硅基流动出图已否决，禁止再建议。真源 = `ZHIPU_API_KEY` + `POST …/paas/v4/images/generations` · model=`glm-image`。禁 GLM-Flash 当出图。禁自研图核。SILICONFLOW 出图路径 fail-closed。
 
 ## C · 部署 / ECS
 

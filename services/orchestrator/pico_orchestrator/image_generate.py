@@ -1,48 +1,202 @@
-"""Image generation adapter.
+"""Thin Zhipu glm-image HTTPS adapter. No local diffusion / no SiliconFlow.
 
-Owner 2026-08-27: SiliconFlow for images is REJECTED. Do not call it.
-Product path = Zhipu glm-image when owner writes 「接 glm-image」.
-Until then: fail-closed, never invent pixels, never ask ops for SILICONFLOW.
+Owner 2026-08-27: SiliconFlow images REJECTED.
+Owner 2026-08-27: 「1 开工」= wire glm-image (#729).
+Upstream: Zhipu / Z.AI POST …/paas/v4/images/generations model=glm-image.
 """
 
 from __future__ import annotations
 
+import base64
+import ipaddress
 import logging
 import os
+from io import BytesIO
+from typing import Any
+from urllib.parse import urlparse
+
+import httpx
 
 from pico_orchestrator.gateway import ToolError
 
 logger = logging.getLogger(__name__)
 
+# China default (ZHIPU_* keys). Override with ZHIPU_IMAGES_URL for api.z.ai.
+DEFAULT_IMAGES_URL = "https://open.bigmodel.cn/api/paas/v4/images/generations"
+DEFAULT_MODEL = "glm-image"
+DEFAULT_SIZE = "1280x1280"
+DEFAULT_QUALITY = "standard"
+IMAGE_TIMEOUT_S = 90.0
 _MAX_PROMPT = 2000
+_MAX_IMAGE_BYTES = 8 * 1024 * 1024
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+JPEG_MAGIC = b"\xff\xd8\xff"
 
-# Keep name stable for tests / face copy that import NO_KEY_MESSAGE.
-NO_KEY_MESSAGE = "出图尚未接通。待业主书面接通智谱 glm-image，不能编造图片。"
+NO_KEY_MESSAGE = "出图尚未接通。请管理员在主机写入 ZHIPU_API_KEY 后重试，不能编造图片。"
 REJECTED_PROVIDER_MESSAGE = (
-    "出图提供商硅基流动已否决，不再调用。待接通智谱 glm-image，不能编造图片。"
+    "出图提供商硅基流动已否决，不再调用。请使用智谱 glm-image，不能编造图片。"
 )
-TIMEOUT_MESSAGE = "出图超时（45 秒）。请稍后重试，不能编造图片。"
+TIMEOUT_MESSAGE = "出图超时（90 秒）。请稍后重试，不能编造图片。"
 REJECT_MESSAGE = "出图服务拒绝了这次请求。请稍后重试或换一句描述，不能编造图片。"
 INVALID_MESSAGE = "出图结果不是可打开的 png/jpg，未保存，不能编造图片。"
 
 
 def siliconflow_api_key() -> str:
-    """Legacy env peek only — presence must reject, not enable."""
+    """Legacy env peek — presence must reject, not enable."""
     return (os.environ.get("SILICONFLOW_API_KEY") or "").strip()
 
 
+def zhipu_api_key() -> str:
+    return (os.environ.get("ZHIPU_API_KEY") or "").strip()
+
+
+def images_url() -> str:
+    raw = (os.environ.get("ZHIPU_IMAGES_URL") or "").strip()
+    return raw or DEFAULT_IMAGES_URL
+
+
 def image_model() -> str:
-    return ""
+    return (os.environ.get("ZHIPU_IMAGE_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+
+
+def image_size() -> str:
+    return (os.environ.get("ZHIPU_IMAGE_SIZE") or DEFAULT_SIZE).strip() or DEFAULT_SIZE
+
+
+def image_quality() -> str:
+    raw = (os.environ.get("ZHIPU_IMAGE_QUALITY") or DEFAULT_QUALITY).strip().lower()
+    return raw if raw in {"hd", "standard"} else DEFAULT_QUALITY
+
+
+def _as_png_or_jpeg(raw: bytes) -> tuple[bytes, str]:
+    if not raw or len(raw) > _MAX_IMAGE_BYTES:
+        raise ToolError("image.invalid", INVALID_MESSAGE)
+    if raw.startswith(PNG_MAGIC):
+        return raw, "png"
+    if raw[:3] == JPEG_MAGIC:
+        return raw, "jpg"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        from PIL import Image
+
+        image = Image.open(BytesIO(raw))
+        out = BytesIO()
+        image.convert("RGB").save(out, format="PNG")
+        return out.getvalue(), "png"
+    raise ToolError("image.invalid", INVALID_MESSAGE)
+
+
+def _public_https_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise ToolError("image.invalid", INVALID_MESSAGE)
+    host = parsed.hostname
+    try:
+        addr = ipaddress.ip_address(host)
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+        ):
+            raise ToolError("image.invalid", INVALID_MESSAGE)
+    except ValueError:
+        # hostname, not literal IP — ok
+        low = host.lower()
+        if low in {"localhost"} or low.endswith(".local") or low.endswith(".internal"):
+            raise ToolError("image.invalid", INVALID_MESSAGE) from None
+    return url.strip()
+
+
+async def _post_images(
+    payload: dict[str, Any], *, api_key: str, timeout: float
+) -> httpx.Response:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        return await client.post(images_url(), json=payload, headers=headers)
+
+
+async def _fetch_url(url: str, *, timeout: float) -> bytes:
+    safe = _public_https_url(url)
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        response = await client.get(safe)
+    if response.status_code >= 400:
+        raise ToolError("image.provider", REJECT_MESSAGE)
+    return response.content
+
+
+def _first_image_payload(body: Any) -> tuple[str | None, str | None]:
+    if not isinstance(body, dict):
+        return None, None
+    rows = body.get("data")
+    if not isinstance(rows, list):
+        rows = body.get("images")
+    if not isinstance(rows, list) or not rows:
+        return None, None
+    first = rows[0]
+    if not isinstance(first, dict):
+        return None, None
+    url = first.get("url") or first.get("image")
+    b64 = first.get("b64_json") or first.get("b64")
+    url_s = str(url).strip() if isinstance(url, str) else None
+    b64_s = str(b64).strip() if isinstance(b64, str) else None
+    return url_s or None, b64_s or None
 
 
 async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
-    """Return (image_bytes, png|jpg). Never invent pixels. SiliconFlow path dead."""
+    """Return (image_bytes, png|jpg). Never invent pixels on failure."""
     text = (prompt or "").strip()
     if not text:
         raise ToolError("tool.invalid_arguments", "请写要画的内容。")
     if len(text) > _MAX_PROMPT:
         raise ToolError("tool.invalid_arguments", f"出图描述不能超过 {_MAX_PROMPT} 字。")
-    if siliconflow_api_key():
-        logger.warning("generate_image refused: SiliconFlow key present but provider rejected")
+    if siliconflow_api_key() and not zhipu_api_key():
+        logger.warning("generate_image refused: SiliconFlow-only key; provider rejected")
         raise ToolError("image.provider_rejected", REJECTED_PROVIDER_MESSAGE)
-    raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
+    api_key = zhipu_api_key()
+    if not api_key:
+        raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
+    payload = {
+        "model": image_model(),
+        "prompt": text,
+        "size": image_size(),
+        "quality": image_quality(),
+    }
+    try:
+        response = await _post_images(payload, api_key=api_key, timeout=IMAGE_TIMEOUT_S)
+    except httpx.TimeoutException as exc:
+        raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("zhipu images transport failed: %s", type(exc).__name__)
+        raise ToolError("image.provider", REJECT_MESSAGE) from exc
+    if response.status_code in {401, 403}:
+        raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
+    if response.status_code >= 400:
+        logger.warning("zhipu images HTTP %s", response.status_code)
+        raise ToolError("image.provider", REJECT_MESSAGE)
+    try:
+        body = response.json()
+    except Exception as exc:
+        raise ToolError("image.invalid", INVALID_MESSAGE) from exc
+    url, b64 = _first_image_payload(body)
+    raw = b""
+    if b64:
+        try:
+            raw = base64.b64decode(b64, validate=False)
+        except Exception as exc:
+            raise ToolError("image.invalid", INVALID_MESSAGE) from exc
+    elif url:
+        try:
+            raw = await _fetch_url(url, timeout=IMAGE_TIMEOUT_S)
+        except ToolError:
+            raise
+        except httpx.TimeoutException as exc:
+            raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc
+        except httpx.HTTPError as exc:
+            raise ToolError("image.provider", REJECT_MESSAGE) from exc
+    else:
+        raise ToolError("image.invalid", INVALID_MESSAGE)
+    return _as_png_or_jpeg(raw)

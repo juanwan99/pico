@@ -77,6 +77,11 @@ def _sync_settings_to_environ() -> None:
         "PICO_MEILI_URL": s.pico_meili_url,
         "MEILI_MASTER_KEY": s.meili_master_key,
         "SILICONFLOW_API_KEY": s.siliconflow_api_key,
+        "ZHIPU_API_KEY": s.zhipu_api_key,
+        "ZHIPU_IMAGES_URL": s.zhipu_images_url,
+        "ZHIPU_IMAGE_MODEL": s.zhipu_image_model,
+        "ZHIPU_IMAGE_SIZE": s.zhipu_image_size,
+        "ZHIPU_IMAGE_QUALITY": s.zhipu_image_quality,
     }
     for k, v in mapping.items():
         if v and not os.environ.get(k):
