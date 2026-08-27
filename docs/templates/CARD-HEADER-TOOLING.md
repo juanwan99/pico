@@ -2,7 +2,7 @@
 
 ```text
 STATUS: BINDING 抄录块 · UI/交付/Agent 卡强制（#386 D4A · #387 T3）
-CLAIM-WB: NO
+CLAIM-WB: 本抄录不签 · 以 STATE-NOW 为准
 ```
 
 复制到执行卡 / Issue 正文（可整段粘贴）：
@@ -33,7 +33,7 @@ missing 非空 或 blocked_for_visual_gate=true → BLOCKED，禁止场景视觉
   闭源 Computer Use 当验收真源 · 无图 Ready · 只读表审查
   Cloud Agent 公网 22 / egress 白名单当部署通道（用 ssh-ecs）
 
-CLAIM-WB: NO · 产品 Ready：默认未过（直至 #384 帧齐且审查读图）
+CLAIM-WB: 不代签（以 STATE-NOW 为准）· 视觉 Ready：默认未过（直至 #384 帧齐且审查读图）
 ```
 
 ---

@@ -2,9 +2,9 @@
 
 ```text
 STATUS: BINDING · pico 工具目录（唯一派发 ID 表）
-DATE: 2026-08-26
+DATE: 2026-08-27
 SCOPE: juanwan99/pico · ECS 执行窗 · Cloud Agent
-CLAIM-WB: NO · 本文件不签产品 Ready
+CLAIM-WB: 本文件不签 · 以 STATE-NOW 为准
 PARENT: #386 原则 1–7 · #384 视觉门 · host 禁 Cool/Keel
 派发: 只勾本表 id；用法在本表；密钥永不进仓
 ```
@@ -101,7 +101,7 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 批准 id：visual-gate · tip-pin · remote-health · gh-git · subscribe-pr · subscribe-ci · subscribe-timer · spawn-executor · ssh-ecs · cloud-agent-ts · prod-update · playwright-mcp · chrome-devtools-mcp · pytest-ruff
 回执：bash scripts/tool-status.sh --json（无密）；missing 非空 = BLOCKED（视觉卡）
 禁止：Cool/Keel/mailbox · 第二 E2E · 无图 Ready · 公网22当 Cloud Agent 通道
-CLAIM-WB: NO
+CLAIM-WB: 不代签 · 以 STATE-NOW 为准
 ```
 
 ---
