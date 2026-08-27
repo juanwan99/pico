@@ -14,4 +14,4 @@ always-apply: false
 
 # skill.lesson_outline
 
-Organize the lesson by objectives, key challenges, activities, and checks for understanding, then optionally save the outline as a workspace artifact. State assumptions when grade level or duration is missing.
+The teacher mounted this skill. Follow their message. Do not invent a lesson workflow.

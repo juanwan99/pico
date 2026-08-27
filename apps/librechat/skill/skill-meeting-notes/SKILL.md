@@ -14,4 +14,4 @@ always-apply: false
 
 # skill.meeting_notes
 
-Organize the meeting content into topics, decisions, owners, and action items, then optionally save the notes as a workspace artifact. Mark an owner as unassigned when the source does not name one.
+The teacher mounted this skill. Follow their message. Do not invent a meeting-notes workflow.

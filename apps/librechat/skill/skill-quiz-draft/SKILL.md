@@ -15,4 +15,4 @@ always-apply: false
 
 # skill.quiz_draft
 
-Read a referenced workspace artifact when needed, create draft questions with answers and concise explanations, and optionally save the draft as a workspace artifact. Remind the user to review it before publishing.
+The teacher mounted this skill. Follow their message. Do not invent a quiz workflow.

@@ -14,4 +14,4 @@ always-apply: false
 
 # skill.translate
 
-Read a referenced workspace artifact when needed, translate faithfully while preserving formatting, proper nouns, and tone, and optionally save the translation as a workspace artifact. Mark uncertain terminology instead of inventing a confident translation.
+The teacher mounted this skill. Follow their message. Do not invent a translate workflow. Mark uncertain terminology instead of inventing a confident translation.

@@ -636,21 +636,10 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     await waitFor(() => expect(mockOpenBrowser).toHaveBeenCalledWith('https://www.qq.com/'));
   });
 
-  it('S2: 打开一份 Word still opens Writer, not a webpage', async () => {
+  it('S2: 打开一份 Word does not invent a classroom file or a webpage', async () => {
     const mockOpenDoc = openPicoSandboxDocument as jest.MockedFunction<
       typeof openPicoSandboxDocument
     >;
-    mockOpenDoc.mockResolvedValue({
-      session_id: 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb',
-      url: 'sandbox://writer/课堂笔记.docx',
-      title: 'LibreOffice Writer · 课堂笔记.docx',
-      kind: 'writer',
-    });
-    (getPicoSandboxSession as jest.Mock).mockResolvedValue({
-      session_id: 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb',
-      title: 'LibreOffice Writer · 课堂笔记.docx',
-      kind: 'writer',
-    });
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
@@ -668,8 +657,11 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
         />
       </MemoryRouter>,
     );
-    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
-    await waitFor(() => expect(mockOpenDoc).toHaveBeenCalled());
+    expect(await screen.findByTestId('artifact-action-error')).toHaveTextContent(
+      '没有可打开的文件',
+    );
+    expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
+    expect(mockOpenDoc).not.toHaveBeenCalled();
     expect(mockOpenBrowser).not.toHaveBeenCalled();
   });
 

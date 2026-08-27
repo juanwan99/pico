@@ -172,7 +172,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_html_document",
-    "Create a real .html Artifact (Pico gateway).",
+    "Create a real .html Artifact (Pico gateway). Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
@@ -185,7 +185,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_docx_document",
-    "Create a real .docx Artifact (Pico gateway).",
+    "Create a real .docx Artifact (Pico gateway). Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
@@ -198,7 +198,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_pptx_document",
-    "Create a real .pptx Artifact. Prefer spec/blocks of slides {title, bullets, image_artifact_id} so pictures sit on the slide. Call generate_image first when the deck needs pictures.",
+    "Create a real .pptx Artifact. Result includes an observation of what landed. ok is not finished — read it. Pictures: generate_image first when needed.",
     Type.Object(
       {
         title: Type.String(),
@@ -211,7 +211,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_xlsx_document",
-    "Create a real .xlsx Artifact via openpyxl (Pico gateway). Use spec/sheets for grades with formulas.",
+    "Create a real .xlsx Artifact (Pico gateway). Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
@@ -224,7 +224,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "edit_docx_document",
-    "Edit an already uploaded .docx in the Pico ledger (python-docx). Other paragraphs stay.",
+    "Edit an already uploaded .docx. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),
@@ -240,7 +240,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "edit_pptx_document",
-    "Edit an already uploaded .pptx in the Pico ledger (python-pptx). Other slides stay.",
+    "Edit an already uploaded .pptx. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),
@@ -255,7 +255,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "edit_xlsx_document",
-    "Edit an already uploaded .xlsx in the Pico ledger (openpyxl). Set one cell or fill {{key}}.",
+    "Edit an already uploaded .xlsx. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),

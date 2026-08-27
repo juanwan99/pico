@@ -58,28 +58,9 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮交付真实文件：HTML/Word/PPT/Excel 从零造必须分别调用 generate_html_document / "
-            "generate_docx_document / generate_pptx_document / generate_xlsx_document（每份唯一 marker）；"
-            "Word/PPT 写入实际内容，禁止空壳、禁止套话垫字/垫页；"
-            "日常 PPT 用 generate_pptx_document/spec；复杂排版上限才 sandbox_pptx_lib"
-            "（隔离 python-pptx，禁止 host bash）；"
-            "带表/图/公式/批注/模板的 Word/PPT/Excel 用 generate_* 的 spec/blocks 或 render_document；"
-            "改老师已上传的 Word/PPT/Excel 必须先 inspect_document 再 edit_docx_document / "
-            "edit_pptx_document / edit_xlsx_document"
-            "（读账本原件再改，禁止 generate_* 另起一份空模板冒充改原件）；"
-            "出图必须 generate_image；失败用人话说明，禁止编造图；图要进 Word/PPT 时把 artifact id 写入 spec；"
-            "结构图/流程/时序必须 generate_diagram（mermaid）；失败用人话说明，禁止用 generate_image 或手画 SVG 冒充结构图；"
-            "其它文本/清单/多产物用 workspace_write_file 各写独立 title；"
-            "禁止代码块改后缀冒充 .html/.docx/.pptx；"
-            "多交付时禁止单文件多标题冒充；HTML 可运行页生成后应 verify_html_document"
-            "（校验供系统；勿向用户复读 verification_level 等字段）；"
-            "生成 HTML 后调用 sandbox_preview_inspect 抽取 title/h1，证明系统看见了本次预览；"
-            "若老师要打开公开站：sandbox_browser_open 打开公网页，画面自动出现在结果区「沙箱」态"
-            "（请在此画面自行登录，不要在聊天里发送密码）。不要指引 iframe 浏览器。微信/教务不是过关条件；"
-            "站点禁自动化时用人话说明失败。禁止 B3 代登或在聊天收集密码。"
-            "若老师要打开 Word/表格/PPT：sandbox_document_open，在沙箱 LibreOffice 里打开，"
-            "禁止转 PDF/HTML，禁止让老师下载算打开成功。"
-            "用户回复只给文件名与下载/打开指引，禁止贴全量源码或 Artifact ID。"
+            "老师要真实文件或改已有文件。工具已挂载，你自己决定调哪个。"
+            "工具返回 ok 不算完：读 observation（落地了什么），不对就再调。"
+            "禁止空壳、禁止编造文件。不要向用户复读机读字段或 Artifact ID。"
             "只有老师问学校材料时才 kb_search；工具在列表不代表必须调用。"
             "honest_miss 就老实说没找到，禁止编造。"
         ),
@@ -115,22 +96,10 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮是工程交付（多产物 / 隐式方案包 / 流水线落盘 / 可运行物 / 修订联动）："
-            "用户说「方案包/套件/一整套」而未报文件数时，仍须拆成多份独立 Artifact；"
-            "每个交付物或阶段必须独立写入（不同 title，文件名体现用途）；"
-            "真 Office/HTML 从零造用 generate_*_document（写入实际内容，禁止空壳，禁止套话垫字/垫页）；"
-            "改已上传 Word/PPT 用 edit_*_document，"
-            "禁止 generate_* 另造冒充改原件；出图用 generate_image；结构图用 generate_diagram；其它用 workspace_write_file；"
-            "会话改口（推翻/收窄/改成保守等）时先 list/read 已交付产物再写更新或版本号新文件；"
-            "HTML 交互页：generate_html_document 的 body 必须是**完整可运行 HTML 文档**"
-            "（含真实 <button>/<script>，禁止把源码当正文转义交差）；"
-            "生成后 verify_html_document（系统侧）并 sandbox_preview_inspect 抽取 title/h1；"
-            "公开站打开/登录走隔离 sidecar 的 sandbox_browser_open + 结果区沙箱态，禁止聊天贴密码；"
-            "打开 Word/表格/PPT 走 sandbox_document_open（LibreOffice Writer/Calc/Impress，禁止转 PDF/HTML）；"
-            "微信/教务不作为必须过关。"
-            "用户侧只报文件名并指引结果区下载；"
-            "扩展名与类型一致；禁止聊天长文/全量 HTML 源码墙冒充交付。"
-            "只有问学校材料时才 kb_search；工具在列表不代表必须调用。"
+            "老师要多份文件或一套东西。工具已挂载，你自己决定怎么拆、怎么写。"
+            "工具返回 ok 不算完：读 observation，不对就再调。"
+            "禁止空壳、禁止编造。不要向用户复读机读字段。"
+            "只有老师问学校材料时才 kb_search；工具在列表不代表必须调用。"
             "禁止编造未命中内容。"
         ),
     ),
@@ -182,10 +151,8 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮使用 skill.summarize：提炼用户提供内容的要点、结论与待办；"
-            "可读取工作区材料、生成结构化结果并把总结保存为工作区产物；"
-            "需要交付 HTML/Word/PPT 时必须调用专用 generate_*_document 工具（真文件，禁止改后缀冒充）；"
-            "不得补写原文中不存在的事实。"
+            "老师挂了这份 Skill。按老师的话做，不要发明一套总结流程。"
+            "工具在列表不代表必须调用。不得补写原文中不存在的事实。"
         ),
     ),
     "skill-lesson-outline": SkillPolicy(
@@ -200,9 +167,8 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮使用 skill.lesson_outline：按教学目标、重点难点、活动与检查点生成课程大纲；"
-            "缺少年级或课时信息时明确假设，可把大纲保存为工作区产物；"
-            "需要 HTML/Word/PPT 交付时必须调用 generate_html_document / generate_docx_document / generate_pptx_document。"
+            "老师挂了这份 Skill。按老师的话做，不要发明一套教案流程。"
+            "工具在列表不代表必须调用。"
         ),
     ),
     "skill-quiz-draft": SkillPolicy(
@@ -218,9 +184,8 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮使用 skill.quiz_draft：根据用户给定材料起草题目、答案与简短解析；"
-            "可读取工作区材料并保存草稿；题目仅为草稿，提醒用户发布前复核；"
-            "需要 HTML/Word/PPT 交付时必须调用专用 generate_*_document 工具。"
+            "老师挂了这份 Skill。按老师的话做，不要发明一套出题流程。"
+            "工具在列表不代表必须调用。"
         ),
     ),
     "skill-translate": SkillPolicy(
@@ -235,9 +200,8 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮使用 skill.translate：忠实翻译用户提供内容，保留格式、专名与语气；"
-            "可读取工作区材料并保存译文；不确定术语应标注而非臆造；"
-            "需要 HTML/Word/PPT 交付时必须调用专用 generate_*_document 工具。"
+            "老师挂了这份 Skill。按老师的话做，不要发明一套翻译流程。"
+            "工具在列表不代表必须调用。不确定术语应标注而非臆造。"
         ),
     ),
     "skill-meeting-notes": SkillPolicy(
@@ -252,8 +216,8 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮使用 skill.meeting_notes：把用户提供的会议内容整理为议题、决定、"
-            "负责人和待办，并可保存为工作区产物；没有明确负责人的事项标为待确认。"
+            "老师挂了这份 Skill。按老师的话做，不要发明一套会议纪要流程。"
+            "工具在列表不代表必须调用。"
         ),
     ),
     "skill-kb-ask": SkillPolicy(

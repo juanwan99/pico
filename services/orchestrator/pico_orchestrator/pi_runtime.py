@@ -53,11 +53,7 @@ _WRITE_TOOLS = frozenset(
     }
 )
 
-_LANDING_NUDGE = (
-    "【系统落盘门闩】本轮交付意图要求写入可下载文件，但工具账本尚未落盘足够产物。"
-    "请立即调用 workspace_write_file 或 generate_*_document 写入真实文件；"
-    "禁止只在聊天里复述正文或假装已交付。写完后再用人话说明文件名与如何下载。"
-)
+# Hosted leftover. Do not weld a fake teacher message that orders files.
 
 
 def count_write_tool_successes(
@@ -152,7 +148,6 @@ async def run_pi_agent(
         "output_tokens": 0,
         "total_tokens": 0,
     }
-    landing_retries = 0
     min_arts = max(0, int(getattr(caps, "min_artifacts", 0) or 0))
     # Dual-mode circuit breaker (deep lane only): track whether the loop makes
     # any useful tool progress; bail out with a human-readable message instead
@@ -430,25 +425,6 @@ async def run_pi_agent(
                         tool_results=tool_context_results,
                         principal=principal,
                     )
-                if (
-                    not landing_ok
-                    and landing_retries < 1
-                    and step < max(1, caps.max_steps)
-                ):
-                    landing_retries += 1
-                    await emit(
-                        "delivery.landing_retry",
-                        {
-                            "min_artifacts": min_arts,
-                            "write_tool_successes": writes,
-                            "attempt": landing_retries,
-                            "runtime": RUNTIME_LABEL,
-                        },
-                    )
-                    messages.append({"role": "user", "content": _LANDING_NUDGE})
-                    # Do not stream the chat-only claim as a terminal success.
-                    continue
-
                 if not landing_ok:
                     return await _failed_result(
                         emit,

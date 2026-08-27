@@ -480,23 +480,15 @@ export default function ResultPanel({
             }
             return /\.(pptx?|odp)$/i.test(name);
           });
+      if (!match?.id && !intent.filename) {
+        openedWebsiteRef.current = null;
+        setWebsiteError('没有可打开的文件。请先生成或上传，再点结果区打开。');
+        return;
+      }
       const meta = await openPicoSandboxDocument({
         kind: intent.kind,
         artifact_id: match?.id,
-        filename:
-          intent.filename ||
-          match?.name ||
-          (intent.kind === 'calc'
-            ? '课堂成绩.xlsx'
-            : intent.kind === 'impress'
-              ? '课堂演示.pptx'
-              : '课堂笔记.docx'),
-        body:
-          intent.kind === 'calc'
-            ? 'NIGHT-P4-CELL-ALPHA'
-            : intent.kind === 'impress'
-              ? 'NIGHT-P4-SLIDE-ALPHA'
-              : '沙箱里的这份 Word 正文。打开 = Writer 窗口，不是 PDF。',
+        filename: intent.filename || match?.name,
       });
       const sessionId = String(meta.session_id || '').trim();
       if (!sessionId.startsWith('sbox_')) {
