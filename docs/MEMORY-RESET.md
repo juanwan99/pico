@@ -22,3 +22,4 @@
 | 对业主必须四行/两套嘴 | **否** · 已解除 |
 | CI 红就新开 PR | **否** · 原 PR 补 |
 | Cloud Agent 靠公网 22 / egress 白名单进 ECS | **否** · Tailscale MagicDNS · `ssh ecs`（ops@aliyun-hy）· EXPERIENCE §17–19 |
+| 出图还靠硅基流动 / 再要 SILICONFLOW 出图钥 | **否** · 业主已否决 · 只待智谱 glm-image（§28） |

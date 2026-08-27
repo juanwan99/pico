@@ -157,18 +157,8 @@ def test_upload_edit_pptx_download(client) -> None:
     assert deck.slides[1].shapes.title.text.strip() == "第二页还在"
 
 
-def test_generate_image_download_mocked(client, monkeypatch) -> None:
+def test_generate_image_siliconflow_key_rejected(client, monkeypatch) -> None:
     monkeypatch.setenv("SILICONFLOW_API_KEY", "test-key-not-a-secret")
-
-    async def fake_post(payload, *, api_key, timeout):
-        return SimpleNamespace(
-            status_code=200,
-            json=lambda: {
-                "images": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
-            },
-        )
-
-    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
     headers = _headers(client)
     created = _invoke(
         client,
@@ -176,15 +166,12 @@ def test_generate_image_download_mocked(client, monkeypatch) -> None:
         "generate_image",
         {"prompt": "分数的初步认识课堂示意图", "title": "分数.png"},
     )
-    assert created.status_code == 200, created.text
-    aid = created.json()["result"]["artifact_id"]
-    content = client.get(
-        f"/v1/artifacts/{aid}/content?download=true",
-        headers=headers,
-    )
-    assert content.status_code == 200
-    assert content.content.startswith(b"\x89PNG")
-    assert len(content.content) > 8
+    assert created.status_code == 400, created.text
+    detail = created.json().get("detail") or {}
+    message = detail.get("message") if isinstance(detail, dict) else str(detail)
+    assert "否决" in str(message)
+    assert "SILICONFLOW_API_KEY" not in str(message)
+    assert "artifact_id" not in created.text
 
 
 def test_generate_image_no_key_no_artifact(client, monkeypatch) -> None:
@@ -203,4 +190,5 @@ def test_generate_image_no_key_no_artifact(client, monkeypatch) -> None:
     else:
         message = str(detail)
     assert "不能编造" in message
+    assert "SILICONFLOW" not in message
     assert "artifact_id" not in created.text
