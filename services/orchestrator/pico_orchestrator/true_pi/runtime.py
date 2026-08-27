@@ -29,7 +29,6 @@ from pico_orchestrator.true_pi.client import (
     true_pi_windows_from_caps,
 )
 from pico_orchestrator.true_pi.config import (
-    ALLOWED_GATEWAY_TOOLS,
     RUNTIME_LABEL,
     persist_session_dir,
     persist_session_file,
@@ -97,11 +96,14 @@ async def run_true_pi_agent(
         await emit("run.status", {"status": "cancelled", **tag})
         return RunResult(status="cancelled", final_text="")
 
-    # Restrict tools to the thin-bridge allowlist, further intersect caps.
+    # Visible = CORE, or a hung skill's snapshot (⊆ gateway). Not the full 26.
+    from pico_orchestrator.capability_loading import (
+        resolve_visible_tools,
+        visible_tools_env,
+    )
+
     gateway = build_default_gateway(artifact_store)
-    allowed = list(ALLOWED_GATEWAY_TOOLS)
-    if caps.allowed_tools is not None:
-        allowed = [t for t in allowed if t in set(caps.allowed_tools)]
+    allowed = resolve_visible_tools(caps.allowed_tools)
     gateway = gateway.restricted_to(allowed)
     system_text = pico_system_text(
         skill=str(getattr(caps, "skill_instruction", "") or ""),
@@ -220,6 +222,7 @@ async def run_true_pi_agent(
                     "OPENAI_API_KEY": provider.api_key
                     if provider.name != "deepseek"
                     else "",
+                    "PICO_TRUE_PI_VISIBLE_TOOLS": visible_tools_env(allowed),
                 },
             )
 

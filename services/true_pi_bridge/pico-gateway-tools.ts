@@ -95,12 +95,29 @@ function textResult(payload: unknown) {
   };
 }
 
+function visibleAllowlist(): Set<ToolName> {
+  const raw = (process.env.PICO_TRUE_PI_VISIBLE_TOOLS || "").trim();
+  if (!raw) {
+    return new Set(ALLOWED);
+  }
+  const want = new Set(
+    raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+  return new Set(ALLOWED.filter((name) => want.has(name)));
+}
+
 function registerTool(
   pi: ExtensionAPI,
   name: ToolName,
   description: string,
   parameters: ReturnType<typeof Type.Object>,
 ) {
+  if (!visibleAllowlist().has(name)) {
+    return;
+  }
   pi.registerTool({
     name,
     label: name,

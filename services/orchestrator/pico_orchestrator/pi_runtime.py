@@ -74,24 +74,19 @@ def count_write_tool_successes(
 
 _DEFAULT_SYSTEM = """# Pico · Pi harness
 
-You are **Pico**, a task-oriented AI workbench agent (Pi-style minimal harness).
+This block is **SYSTEM**. It is not the teacher's message.
 
-## Rules
-- Use tools when they help deliver real work (files, documents, lists).
-- Prefer structured, professional Chinese or English matching the user.
-- Tenant identity comes from the verified token — never invent school_id / membership_id.
-- No host shell, no unrestricted web crawl, no MCP unless the control plane allows it.
-- Public retrieval: call web_search for current/public facts; call web_fetch for a user-pasted http(s) URL.
-- Cite clickable markdown sources in the final reply. If the tool returns honest_miss / 未检索, say 「未检索」 — never invent citations.
-- When creating files/documents, call the generate_* or workspace_write tools.
-- Short answers: do not force a file. Delivery tasks: produce real artifact(s).
-- Multi-deliverable / pipeline stages: one tool write per independent file — never a single long chat dump with fake multi-H1 sections.
-- Revisions: list/read prior artifacts, then write updated or versioned files for affected deliverables.
-- Runnable HTML: generate then verify_html_document (system only); user reply = filenames + download/open guidance only — never L0/self-check walls, honest_note paraphrase, or full HTML source.
-- On failure, say so honestly. Never claim success without tool evidence.
+You are **Pico**, a general-purpose assistant on a Pi harness. Tools are mounted; you decide whether to call them. Short questions get a short answer.
+
+## Tools
+- Default is a chat answer. Being listed does **not** mean you must call them.
+- Call `kb_search` only when the teacher asks about school materials.
 
 ## Skill instruction (if any)
 $skill_block
+
+## Skill catalog
+$skill_catalog
 """
 
 
@@ -120,8 +115,11 @@ async def run_pi_agent(
             reason="Pi runtime requires DEEPSEEK_API_KEY (preferred) or KIMI_API_KEY",
         )
 
-    gateway = build_default_gateway(artifact_store).restricted_to(caps.allowed_tools)
-    tool_schemas = openai_tool_schemas(gateway, allowed_tools=caps.allowed_tools)
+    from pico_orchestrator.capability_loading import resolve_visible_tools
+
+    visible = resolve_visible_tools(caps.allowed_tools)
+    gateway = build_default_gateway(artifact_store).restricted_to(visible)
+    tool_schemas = openai_tool_schemas(gateway, allowed_tools=visible)
     client = AsyncOpenAI(api_key=provider.api_key, base_url=provider.base_url)
 
     skill_block = caps.skill_instruction.strip() if caps.skill_instruction else "(none)"
@@ -668,15 +666,22 @@ async def run_pi_agent(
             await watcher
 
 
-def _load_system_prompt(skill_block: str) -> str:
+def _load_system_prompt(skill_block: str, skill_catalog: str = "") -> str:
+    from pico_orchestrator.capability_loading import skill_catalog_block
+
     packaged = Path(__file__).resolve().parent / "agent_assets" / "system.md"
     if packaged.is_file():
         raw = packaged.read_text(encoding="utf-8")
     else:
         raw = _DEFAULT_SYSTEM
-    # Support $skill_block (Template) and plain {skill_block}; leave other braces alone.
-    if "$skill_block" in raw:
-        return Template(raw).safe_substitute(skill_block=skill_block, ROLE_ADDITIONAL="")
+    catalog = skill_catalog or skill_catalog_block()
+    # Support $skill_block / $skill_catalog (Template). Leave other braces alone.
+    if "$skill_block" in raw or "$skill_catalog" in raw:
+        return Template(raw).safe_substitute(
+            skill_block=skill_block,
+            skill_catalog=catalog,
+            ROLE_ADDITIONAL="",
+        )
     if "{skill_block}" in raw:
         return raw.replace("{skill_block}", skill_block).replace("${ROLE_ADDITIONAL}", "").replace(
             "{ROLE_ADDITIONAL}", ""
