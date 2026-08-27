@@ -2,8 +2,33 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
+
+_FAKE_IMAGE = re.compile(r"\[image:[^\]]*\]", re.IGNORECASE)
+_MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_MD_CODE = re.compile(r"`+")
+_HEADING = re.compile(r"^#{1,6}\s+")
+_LIST = re.compile(r"^(\s*[-*+]|\s*\d+\.)\s+")
+_HR = re.compile(r"^[-*_]{3,}$")
+
+
+def sanitize_slide_text(raw: str | None) -> str:
+    """Drop chat/markdown leftovers. Not a layout engine."""
+    text = _FAKE_IMAGE.sub("", str(raw or ""))
+    text = _MD_BOLD.sub(r"\1", text)
+    text = _MD_CODE.sub("", text)
+    parts: list[str] = []
+    for line in text.splitlines():
+        item = line.strip()
+        if not item or _HR.match(item):
+            continue
+        item = _HEADING.sub("", item)
+        item = _LIST.sub("", item).strip()
+        if item:
+            parts.append(item)
+    return "\n".join(parts)
 
 SCHEMA = "pico.office.spec/v1"
 Kind = Literal["docx", "pptx", "xlsx"]
@@ -142,7 +167,11 @@ def spec_from_plain(
         return OfficeSpec(schema=SCHEMA, kind="docx", title=title, marker=marker, blocks=tuple(blocks))
     slides = _pptx_slides(body, title=title, marker=marker)
     blocks = tuple(
-        Block(type="slide", title=slide_title, bullets=_bullets_from_body(slide_body))
+        Block(
+            type="slide",
+            title=sanitize_slide_text(slide_title) or "幻灯",
+            bullets=_bullets_from_body(slide_body),
+        )
         for slide_title, slide_body in slides
     )
     return OfficeSpec(schema=SCHEMA, kind="pptx", title=title, marker=marker, blocks=blocks)
@@ -157,7 +186,11 @@ def _default_title(kind: str) -> str:
 
 
 def _bullets_from_body(body: str) -> tuple[str, ...]:
-    lines = [ln.strip() for ln in (body or "").splitlines() if ln.strip()]
+    lines: list[str] = []
+    for raw in (body or "").splitlines():
+        item = sanitize_slide_text(raw)
+        if item:
+            lines.append(item)
     return tuple(lines) if lines else ("",)
 
 
@@ -183,12 +216,16 @@ def _parse_block(item: Any, *, kind: Kind) -> Block:
     if kind == "pptx":
         if btype and btype != "slide":
             raise ValueError("PPT spec 的 block.type 必须是 slide。")
-        title = str(item.get("title") or "").strip()
+        title = sanitize_slide_text(str(item.get("title") or "").strip())
         bullets_raw = item.get("bullets")
         if isinstance(item.get("text"), str) and not bullets_raw:
             bullets = _bullets_from_body(item["text"])
         elif isinstance(bullets_raw, list):
-            bullets = tuple(str(x).strip() for x in bullets_raw if str(x).strip())
+            bullets = tuple(
+                item_text
+                for item_text in (sanitize_slide_text(str(x)) for x in bullets_raw)
+                if item_text
+            )
         else:
             bullets = ()
         if not title and not bullets:

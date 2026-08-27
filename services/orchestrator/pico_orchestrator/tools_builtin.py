@@ -2033,9 +2033,11 @@ def build_default_gateway(
         ToolSpec(
             name="generate_pptx_document",
             description=(
-                "Create a real OOXML .pptx. Result includes an observation of "
-                "what landed (pages, titles, counts — not a score). ok is not "
-                "finished. Args: title, marker, body? | spec? | blocks?"
+                "Create a real OOXML .pptx. Read observation.outline.images. "
+                "To embed a picture, pass generate_image/generate_diagram "
+                "artifact id as image_artifact_id on the slide in spec/blocks. "
+                "[image:…] in body does not embed. ok is not finished. "
+                "Args: title, marker, body? | spec? | blocks?"
             ),
             handler=generate_pptx,
             school_scoped=False,
@@ -2171,9 +2173,10 @@ def build_default_gateway(
         ToolSpec(
             name="generate_image",
             description=(
-                "Create one downloadable png/jpg via SiliconFlow HTTPS images API. "
+                "Create one downloadable png/jpg via Zhipu glm-image HTTPS API. "
                 "On missing key, timeout, or 4xx: honest Chinese failure; never invent pixels. "
-                "Args: prompt, title?"
+                "To place it in Word/PPT, pass the returned artifact id as "
+                "image_artifact_id on spec. Args: prompt, title?"
             ),
             handler=generate_image,
             school_scoped=False,
@@ -2496,17 +2499,24 @@ def openai_tool_schemas(
                 "body": {
                     "type": "string",
                     "description": (
-                        "Slide draft. Separate slides with a blank line or ---. "
+                        "Text-only slide draft. Separate slides with a blank line or ---. "
+                        "Do not put [image:…] here — it will not embed. "
                         "Empty deck fails — the tool will not invent slides."
                     ),
                 },
                 "spec": {
                     "type": "object",
-                    "description": "pico.office.spec/v1 slides. Overrides body.",
+                    "description": (
+                        "pico.office.spec/v1 slides. Overrides body. "
+                        "Each slide may set image_artifact_id to a ledger png/jpg id."
+                    ),
                 },
                 "blocks": {
                     "type": "array",
-                    "description": "spec.blocks shortcut (slide objects)",
+                    "description": (
+                        "spec.blocks shortcut. Slide objects: title, bullets, "
+                        "image_artifact_id (artifact id from generate_image/generate_diagram)."
+                    ),
                 },
             },
             "required": ["title", "marker"],

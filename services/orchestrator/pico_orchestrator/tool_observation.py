@@ -94,11 +94,18 @@ def _compact_office(outline: dict[str, Any]) -> dict[str, Any]:
             if preview:
                 page["preview"] = preview
             pages.append(page)
-        return {
+        compact = {
             "slides": outline.get("slides"),
             "images": outline.get("images"),
             "pages": pages,
         }
+        if int(outline.get("images") or 0) <= 0:
+            compact["hint"] = (
+                "本份 PPT 未嵌入图片。要把已生成的图放进页内，"
+                "用 spec.blocks[].image_artifact_id=图的 artifact id。"
+                "body 里写 [image:…] 不会进页。"
+            )
+        return compact
     if kind == "docx":
         first = ""
         for unit in outline.get("units") or []:
