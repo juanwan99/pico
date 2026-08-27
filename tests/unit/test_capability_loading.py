@@ -92,6 +92,7 @@ def test_system_md_slim_and_catalog_not_scene_weld():
     assert "通知" not in body
     assert "这是什么" not in body
     assert "Landing requirement" not in body
+    assert "A tool returning ok is not finished" in body
 
 
 def test_hung_skill_body_only_when_mounted():

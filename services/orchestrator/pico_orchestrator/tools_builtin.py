@@ -20,7 +20,6 @@ from pico_orchestrator.artifact_types import (
 )
 from pico_orchestrator.diagram_generate import render_diagram_bytes
 from pico_orchestrator.document_generators import (
-    KNOWN_CALC_CELL,
     build_docx_document,
     build_html_document,
     build_pptx_document,
@@ -184,6 +183,43 @@ def _marker_arg(args: dict[str, Any]) -> str:
     if len(value) > _MAX_MARKER:
         raise ToolError("tool.invalid_arguments", f"marker exceeds {_MAX_MARKER} characters")
     return value
+
+
+def _attach_write_observation(
+    result: dict[str, Any],
+    *,
+    kind: str,
+    title: str,
+    raw: bytes | str | None,
+) -> dict[str, Any]:
+    from pico_orchestrator.tool_observation import observe_write
+
+    result["observation"] = observe_write(
+        kind=kind, title=title, raw=raw, extra=result
+    )
+    if str(kind).lower() == "png" and isinstance(raw, (bytes, bytearray)):
+        remember_conversation_png(bytes(raw))
+    return result
+
+
+async def _observe_document_open(
+    out: dict[str, Any], *, filename: str, kind: str
+) -> dict[str, Any]:
+    saw = False
+    sid = str(out.get("session_id") or "")
+    if sid.startswith("sbox_"):
+        try:
+            png = await sidecar_json("GET", f"/v1/internal/sessions/{sid}/png")
+            if isinstance(png, (bytes, bytearray)):
+                saw = remember_conversation_png(bytes(png))
+        except Exception:
+            logger.debug("document_open screen skip", exc_info=True)
+    out["observation"] = {
+        "opened": filename or str(out.get("title") or ""),
+        "kind": str(out.get("kind") or kind),
+        "saw_screen": saw,
+    }
+    return out
 
 
 def _make_sandbox_pptx_lib(store: ArtifactStore):
@@ -612,6 +648,9 @@ def _workspace_handlers(
         result["format"] = "html"
         result["marker"] = marker
         result = attach_preview_meta(result, principal, store=store)
+        result = _attach_write_observation(
+            result, kind="html", title=title, raw=content
+        )
         run_id = current_run_id(principal, store) or result.get("run_id")
         if isinstance(content, str):
             materialize_workspace_html(
@@ -697,7 +736,7 @@ def _workspace_handlers(
         result["format"] = "docx"
         result["marker"] = marker
         result["via"] = "spec" if spec_raw is not None else "plain"
-        return result
+        return _attach_write_observation(result, kind="docx", title=title, raw=raw)
 
     async def generate_pptx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _ensure_extension(_artifact_title(args), ".pptx")
@@ -736,7 +775,7 @@ def _workspace_handlers(
         result["format"] = "pptx"
         result["marker"] = marker
         result["via"] = "spec" if spec_raw is not None else "plain"
-        return result
+        return _attach_write_observation(result, kind="pptx", title=title, raw=raw)
 
     async def generate_xlsx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         title = _ensure_extension(_artifact_title(args), ".xlsx")
@@ -774,7 +813,7 @@ def _workspace_handlers(
         result["format"] = "xlsx"
         result["marker"] = marker
         result["via"] = "spec" if spec_raw is not None else "plain"
-        return result
+        return _attach_write_observation(result, kind="xlsx", title=title, raw=raw)
 
     async def render_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         spec_raw = args.get("spec") if args.get("spec") is not None else args
@@ -795,7 +834,9 @@ def _workspace_handlers(
         result["via"] = "spec"
         check = verify_office_bytes(raw, ext)
         result["valid_ooxml"] = check.get("valid_ooxml")
-        return result
+        return _attach_write_observation(
+            result, kind=spec.kind, title=title, raw=raw
+        )
 
     def _office_ext_from_args(args: dict[str, Any]) -> str:
         try:
@@ -1062,7 +1103,7 @@ def _workspace_handlers(
         )
         result["format"] = ext
         result["user_message"] = "图已生成，可在结果区下载。"
-        return result
+        return _attach_write_observation(result, kind=kind, title=title, raw=raw)
 
     async def generate_diagram(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         source = _required_text(args, "source", maximum=32_000)
@@ -1091,7 +1132,7 @@ def _workspace_handlers(
         if meta.get("svg_omitted"):
             result["svg_omitted"] = True
         result["user_message"] = "结构图已生成，可在结果区下载。要放进 Word/PPT 时把 artifact id 写入 spec。"
-        return result
+        return _attach_write_observation(result, kind="png", title=title, raw=raw)
 
     async def verify_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         """Static HTML self-check — never claims runtime PASS without evidence."""
@@ -1550,7 +1591,7 @@ def _workspace_handlers(
                 if not isinstance(out, dict):
                     raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
                 await _emit(True, {"session_id": out.get("session_id"), "workspace_id": out.get("workspace_id") or ws})
-                return out
+                return await _observe_document_open(out, filename=filename or "files", kind="files")
             raw: bytes | None = None
             if artifact_id:
                 row = await store.read(principal, artifact_id=artifact_id, title=None)
@@ -1601,35 +1642,40 @@ def _workspace_handlers(
                         True,
                         {"session_id": out.get("session_id"), "workspace_id": out.get("workspace_id") or ws},
                     )
-                    return out
+                    return await _observe_document_open(out, filename=want, kind=kind or "writer")
             if raw is None:
+                if not body_text:
+                    raise ToolError(
+                        "tool.invalid_arguments",
+                        "请提供已有文件的 artifact_id、磁盘上的文件名，或要打开的正文。不会编一份文件。",
+                    )
                 name = (filename or "").lower()
                 if kind in {"calc"} or name.endswith((".xlsx", ".xls", ".ods", ".csv")):
-                    title = filename or "课堂成绩.xlsx"
+                    title = filename or "sheet.xlsx"
                     filename = _ensure_extension(title, ".xlsx")
                     kind = "calc"
                     raw = build_xlsx_document(
                         title=title,
                         marker=_marker_arg({"marker": args.get("marker")}),
-                        body=body_text or KNOWN_CALC_CELL,
+                        body=body_text,
                     )
                 elif kind in {"impress"} or name.endswith((".pptx", ".ppt", ".odp")):
-                    title = filename or "课堂演示.pptx"
+                    title = filename or "deck.pptx"
                     filename = _ensure_extension(title, ".pptx")
                     kind = "impress"
                     raw = build_pptx_document(
                         title=title,
                         marker=_marker_arg({"marker": args.get("marker")}),
-                        body=body_text or "NIGHT-P4-SLIDE-ALPHA",
+                        body=body_text,
                     )
                 else:
-                    title = filename or "课堂笔记.docx"
+                    title = filename or "document.docx"
                     filename = _ensure_extension(title, ".docx")
                     kind = "writer"
                     raw = build_docx_document(
                         title=title,
                         marker=_marker_arg({"marker": args.get("marker")}),
-                        body=body_text or "沙箱里的这份 Word 正文。打开 = Writer 窗口，不是 PDF。",
+                        body=body_text,
                     )
             out = await sidecar_json(
                 "POST",
@@ -1646,7 +1692,9 @@ def _workspace_handlers(
             if not isinstance(out, dict):
                 raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
             await _emit(True, {"session_id": out.get("session_id"), "workspace_id": out.get("workspace_id") or ws})
-            return out
+            return await _observe_document_open(
+                out, filename=filename or "document.docx", kind=kind or "writer"
+            )
         except ToolError as exc:
             await _emit(False, {"error_code": exc.code, "workspace_id": ws})
             raise
@@ -1983,10 +2031,9 @@ def build_default_gateway(
         ToolSpec(
             name="generate_pptx_document",
             description=(
-                "Default PPT path: real OOXML .pptx via spec/blocks of slide "
-                "{title, bullets, image_artifact_id}. Ordinary decks use this. "
-                "Complex layout ceiling is sandbox_pptx_lib. "
-                "Args: title, marker, body? | spec? | blocks?"
+                "Create a real OOXML .pptx. Result includes an observation of "
+                "what landed (pages, titles, counts — not a score). ok is not "
+                "finished. Args: title, marker, body? | spec? | blocks?"
             ),
             handler=generate_pptx,
             school_scoped=False,

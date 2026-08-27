@@ -145,7 +145,7 @@ def require_docx_body(body: str | None) -> None:
 
 
 def require_pptx_body(body: str | None) -> None:
-    """Fail closed when the caller did not pass ≥3 题面 pages. No padding."""
+    """Fail closed when the caller did not pass any slide block. No padding."""
     if len(_split_blocks(body or "")) < MIN_PPTX_SLIDES:
         raise ValueError(PPTX_SLIDES_TOO_FEW)
 

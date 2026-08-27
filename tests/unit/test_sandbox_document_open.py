@@ -36,12 +36,14 @@ async def test_document_open_sends_ooxml_not_pdf(monkeypatch):
     captured: dict = {}
 
     async def fake_sidecar(method, path, **kwargs):
+        if method == "GET" and str(path).endswith("/png"):
+            return b""
         captured["body"] = kwargs.get("json_body") or {}
         return {
             "ok": True,
             "session_id": "sbox_cccccccccccccccccccccccc",
             "kind": "writer",
-            "title": "LibreOffice Writer · 课堂笔记.docx",
+            "title": "LibreOffice Writer · notes.docx",
             "engine": "libreoffice-writer",
             "human_copy": "沙箱已用 LibreOffice 打开这份文档。",
         }
@@ -52,7 +54,15 @@ async def test_document_open_sends_ooxml_not_pdf(monkeypatch):
     )
     gw = build_default_gateway()
     owner = P(school_id="sch", membership_id="mem")
-    out = await gw.invoke(owner, "sandbox_document_open", {"kind": "writer", "filename": "课堂笔记.docx"})
+    out = await gw.invoke(
+        owner,
+        "sandbox_document_open",
+        {
+            "kind": "writer",
+            "filename": "notes.docx",
+            "body": "沙箱里的这份 Word 正文。打开 = Writer 窗口，不是 PDF。",
+        },
+    )
     assert out["session_id"].startswith("sbox_")
     raw = base64.b64decode(captured["body"]["document_base64"])
     assert raw[:2] == b"PK"
@@ -65,6 +75,8 @@ async def test_document_open_calc_sends_xlsx_with_known_cell(monkeypatch):
     captured: dict = {}
 
     async def fake_sidecar(method, path, **kwargs):
+        if method == "GET" and str(path).endswith("/png"):
+            return b""
         captured["body"] = kwargs.get("json_body") or {}
         return {
             "ok": True,

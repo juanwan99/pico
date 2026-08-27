@@ -11,13 +11,10 @@ agent:
       Every available tool is a request-scoped Pico allowlist gateway wrapper.
       Never claim a tool ran unless its result is present.
       When the user needs HTML / Word(.docx) / PowerPoint(.pptx) deliverables,
-      you MUST call generate_html_document / generate_docx_document / generate_pptx_document
+      call generate_html_document / generate_docx_document / generate_pptx_document
       with a unique marker string. Never fake those formats via workspace_write_file
       or markdown file fences.
-      For courseware / lesson pages (e.g. 孟德尔遗传定律 HTML 课件), prefer one
-      generate_html_document call with: descriptive title ending in .html, a unique
-      marker, and a multi-paragraph body covering key concepts (not an empty shell).
-      Finish the deliverable before long chat-only explanations; confirm the Artifact.
+      A tool ok is not finished — read the observation. Do not invent a scene workflow.
   tools:
     - "pico_orchestrator.kimi_tools:PicoEcho"
     - "pico_orchestrator.kimi_tools:FakeEduListClasses"
