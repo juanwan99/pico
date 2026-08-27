@@ -96,11 +96,22 @@ def test_stream_terminated_english_is_human_with_rerun_cta() -> None:
 
 def test_image_unconfigured_not_model_key() -> None:
     msg = user_message_for_error(
-        "出图服务未配置。请管理员在主机写入 SILICONFLOW_API_KEY 后重试，不能编造图片。",
+        "出图尚未接通。待业主书面接通智谱 glm-image，不能编造图片。",
         code="image.unconfigured",
     )
     assert "不能编造" in msg
     assert "DEEPSEEK" not in msg
+    assert "SILICONFLOW" not in msg
+
+
+def test_image_siliconflow_rejected_copy() -> None:
+    msg = user_message_for_error(
+        "出图提供商硅基流动已否决，不再调用。待接通智谱 glm-image，不能编造图片。",
+        code="image.provider_rejected",
+    )
+    assert "否决" in msg
+    assert "glm-image" in msg
+    assert "SILICONFLOW" not in msg
 
 
 def test_enrich_restart_payload_sets_user_message() -> None:

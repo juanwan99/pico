@@ -33,18 +33,23 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         if c == "diagram.parse":
             return text or "这段结构图语法不对，我没画出来。"
         return text or "这次没能画出结构图。请稍后重试，不能假装画出来。"
-    # Image / office before generic「未配置」so SILICONFLOW 无钥不会装成模型钥。
+    # Image before generic「未配置」— never recommend SiliconFlow (owner rejected).
     if (
         c.startswith("image.")
-        or "siliconflow" in low
         or "不能编造" in text
-        or "出图服务" in text
+        or "出图" in text
+        or "硅基" in text
     ):
         if c == "image.timeout" or "超时" in text:
             return "出图超时。请稍后重试，不能编造图片。"
-        if c in ("image.provider", "image.invalid") and "未配置" not in text:
+        if c == "image.provider_rejected" or "硅基流动已否决" in text:
+            return (
+                "出图提供商硅基流动已否决，不再调用。"
+                "待接通智谱 glm-image，不能编造图片。"
+            )
+        if c in ("image.provider", "image.invalid") and "未配置" not in text and "尚未接通" not in text:
             return "这次没能出图。请稍后重试，不能编造图片。"
-        return "出图服务未配置。请管理员在主机写入密钥后重试，不能编造图片。"
+        return "出图尚未接通。待业主书面接通智谱 glm-image，不能编造图片。"
     if c in ("office.timeout", "artifact.not_ooxml", "artifact.not_binary", "artifact.not_found") or (
         "找不到" in text and ("文件" in text or "原件" in text or "word" in low or "ppt" in low)
     ):

@@ -1,4 +1,4 @@
-"""T-AGENT-EXT-V1: python-docx/pptx edit originals + SiliconFlow image mock."""
+"""T-AGENT-EXT-V1: python-docx/pptx edit originals + image generate fail-closed."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import io
 import sys
 import zipfile
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -18,7 +17,7 @@ from pico_orchestrator.document_generators import build_docx_document
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.image_generate import (
     NO_KEY_MESSAGE,
-    REJECT_MESSAGE,
+    REJECTED_PROVIDER_MESSAGE,
     generate_image_bytes,
 )
 from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
@@ -109,43 +108,40 @@ async def test_generate_image_no_key_chinese(monkeypatch: pytest.MonkeyPatch) ->
         await generate_image_bytes("分数的初步认识")
     assert caught.value.code == "image.unconfigured"
     assert "不能编造" in caught.value.message
+    assert "SILICONFLOW" not in caught.value.message
+    assert "硅基" not in caught.value.message or "否决" in caught.value.message
     assert caught.value.message == NO_KEY_MESSAGE
 
 
 @pytest.mark.asyncio
-async def test_generate_image_mock_https_png(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_generate_image_siliconflow_key_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("SILICONFLOW_API_KEY", "test-key-not-a-secret")
-    import base64
-
-    async def fake_post(payload, *, api_key, timeout):
-        assert api_key == "test-key-not-a-secret"
-        assert payload["prompt"]
-        return SimpleNamespace(
-            status_code=200,
-            json=lambda: {
-                "images": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
-            },
-        )
-
-    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
-    raw, ext = await generate_image_bytes("分数的初步认识课堂示意图")
-    assert ext == "png"
-    assert raw.startswith(b"\x89PNG")
+    with pytest.raises(ToolError) as caught:
+        await generate_image_bytes("分数的初步认识课堂示意图")
+    assert caught.value.code == "image.provider_rejected"
+    assert caught.value.message == REJECTED_PROVIDER_MESSAGE
+    assert "SILICONFLOW_API_KEY" not in caught.value.message
 
 
 @pytest.mark.asyncio
-async def test_generate_image_4xx_no_fake(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_generate_image_never_calls_silicon_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("SILICONFLOW_API_KEY", "test-key-not-a-secret")
 
-    async def fake_post(payload, *, api_key, timeout):
-        return SimpleNamespace(status_code=400, json=lambda: {"error": "bad"})
+    async def boom(*_a, **_k):
+        raise AssertionError("SiliconFlow HTTP must not be called")
 
-    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
+    monkeypatch.setattr(
+        "pico_orchestrator.image_generate.siliconflow_api_key",
+        lambda: "x",
+    )
+    # No _post_images in module anymore; ensure generate still refuses.
     with pytest.raises(ToolError) as caught:
         await generate_image_bytes("画一只猫")
-    assert caught.value.code == "image.provider"
-    assert caught.value.message == REJECT_MESSAGE
-    assert "不能编造" in caught.value.message
+    assert caught.value.code == "image.provider_rejected"
 
 
 def test_sidebar_chat_has_no_edit_or_image_tools() -> None:
