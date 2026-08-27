@@ -51,6 +51,8 @@ PARSE_EXT = frozenset({".pdf", ".docx"})
 OFFICE_EXTRACT_EXT = frozenset({".xlsx", ".pptx", ".txt"})
 MATERIAL_EXTS = frozenset({".md", ".txt", ".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".json"})
 _ID_SAFE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+# Process-local: avoid PATCH settings on every upsert (floods Meili task queue).
+_ENSURE_CACHE: dict[str, bool] = {}
 
 
 class HttpClient(Protocol):
@@ -305,7 +307,21 @@ class MeiliIndex:
         except Exception:  # noqa: BLE001
             return False
 
-    def ensure(self) -> None:
+    def live_embedder_armed(self) -> bool:
+        """True only when Meili index actually has a ``default`` REST embedder."""
+        try:
+            status, body = self._call("GET", f"/indexes/{INDEX}/settings/embedders", timeout=3.0)
+        except Exception:  # noqa: BLE001
+            return False
+        if status >= 400 or not isinstance(body, dict):
+            return False
+        default = body.get("default")
+        return isinstance(default, dict) and bool(default.get("source") or default.get("url"))
+
+    def ensure(self, *, force: bool = False) -> None:
+        cache_key = f"{meili_url()}|{INDEX}|{embedder_provider() or 'none'}"
+        if not force and _ENSURE_CACHE.get(cache_key):
+            return
         status, _ = self._call("GET", f"/indexes/{INDEX}")
         if status == 404:
             self._call(
@@ -313,15 +329,69 @@ class MeiliIndex:
                 "/indexes",
                 {"uid": INDEX, "primaryKey": PRIMARY_KEY},
             )
+            _ENSURE_CACHE.pop(cache_key, None)
+        want_embedders = _embedder_settings()
+        # Skip PATCH when index already matches (stops reindex flooding settingsUpdate).
+        if not force and self._settings_match(want_embedders):
+            _ENSURE_CACHE[cache_key] = True
+            return
         settings: dict[str, Any] = {
             "filterableAttributes": FILTERABLE,
             "searchableAttributes": SEARCHABLE,
             "displayedAttributes": DISPLAYED,
         }
-        embedders = _embedder_settings()
-        if embedders:
-            settings["embedders"] = embedders
-        self._call("PATCH", f"/indexes/{INDEX}/settings", settings, timeout=20.0)
+        if want_embedders:
+            settings["embedders"] = want_embedders
+        patch_status, patch_body = self._call(
+            "PATCH", f"/indexes/{INDEX}/settings", settings, timeout=20.0
+        )
+        if patch_status < 400 and isinstance(patch_body, dict) and patch_body.get("taskUid") is not None:
+            self._wait_task(int(patch_body["taskUid"]), timeout_s=45.0)
+        if want_embedders:
+            # Only cache success when Meili really armed the embedder.
+            if self.live_embedder_armed():
+                _ENSURE_CACHE[cache_key] = True
+            else:
+                _ENSURE_CACHE.pop(cache_key, None)
+        else:
+            _ENSURE_CACHE[cache_key] = True
+
+    def _settings_match(self, want_embedders: dict[str, Any] | None) -> bool:
+        try:
+            status, body = self._call("GET", f"/indexes/{INDEX}/settings", timeout=3.0)
+        except Exception:  # noqa: BLE001
+            return False
+        if status >= 400 or not isinstance(body, dict):
+            return False
+        if list(body.get("filterableAttributes") or []) != list(FILTERABLE):
+            return False
+        if want_embedders:
+            live = body.get("embedders") if isinstance(body.get("embedders"), dict) else {}
+            default = live.get("default") if isinstance(live, dict) else None
+            if not isinstance(default, dict):
+                return False
+            want_default = want_embedders.get("default") or {}
+            return str(default.get("url") or "") == str(want_default.get("url") or "")
+        live = body.get("embedders") if isinstance(body.get("embedders"), dict) else {}
+        return not live
+
+    def _wait_task(self, task_uid: int, *, timeout_s: float = 45.0) -> None:
+        import time
+
+        deadline = time.monotonic() + max(1.0, timeout_s)
+        while time.monotonic() < deadline:
+            try:
+                status, body = self._call("GET", f"/tasks/{task_uid}", timeout=3.0)
+            except Exception:  # noqa: BLE001
+                return
+            if status >= 400 or not isinstance(body, dict):
+                return
+            state = str(body.get("status") or "")
+            if state in {"succeeded", "failed", "canceled"}:
+                if state != "succeeded":
+                    logger.warning("meili settings task %s: %s", task_uid, state)
+                return
+            time.sleep(0.4)
 
     def upsert(self, doc: dict[str, Any]) -> None:
         if not doc.get("artifact_id"):
@@ -353,9 +423,14 @@ class MeiliIndex:
             "highlightPreTag": "",
             "highlightPostTag": "",
         }
-        if _embedder_settings():
+        want_hybrid = bool(_embedder_settings()) and self.live_embedder_armed()
+        if want_hybrid:
             body["hybrid"] = {"semanticRatio": SEMANTIC_RATIO, "embedder": "default"}
         status, payload = self._call("POST", f"/indexes/{INDEX}/search", body, timeout=12.0)
+        # Embedder key present but index not armed yet → honest keyword fallback.
+        if status >= 400 and body.get("hybrid"):
+            body.pop("hybrid", None)
+            status, payload = self._call("POST", f"/indexes/{INDEX}/search", body, timeout=12.0)
         if status >= 400:
             raise RuntimeError(f"meili search http {status}")
         hits = payload.get("hits") if isinstance(payload, dict) else None
@@ -439,17 +514,22 @@ def project_material_artifact(
 
 
 def health_fields() -> dict[str, Any]:
-    """Honest Meili tier. hybrid only with embedder key + reachable; never fake hybrid."""
+    """Honest Meili tier. hybrid only when index embedder is live; never key-only fake."""
     configured = meili_configured()
     reachable = False
+    live_embedder = False
     if configured:
         try:
-            reachable = MeiliIndex().ping()
+            idx = MeiliIndex()
+            reachable = idx.ping()
+            if reachable:
+                live_embedder = idx.live_embedder_armed()
         except Exception:  # noqa: BLE001
             reachable = False
-    provider = embedder_provider()
-    has_embedder = bool(provider)
-    if configured and reachable and has_embedder:
+            live_embedder = False
+    provider = embedder_provider() if live_embedder else None
+    # Key present but index not armed → keyword, not hybrid (no fake green).
+    if configured and reachable and live_embedder:
         mode = "hybrid"
     elif configured and reachable:
         mode = "keyword"
@@ -458,7 +538,8 @@ def health_fields() -> dict[str, Any]:
     return {
         "meili_configured": configured,
         "meili_reachable": reachable,
-        "meili_embedder": has_embedder,
+        "meili_embedder": live_embedder,
         "meili_embedder_provider": provider or "",
+        "meili_embedder_key_present": bool(embedder_provider()),
         "kb_mode": mode,
     }
