@@ -36,7 +36,8 @@ PINNED_PI_PACKAGE = "@mariozechner/pi-coding-agent@0.73.1"
 RUNTIME_LABEL = "pi-true"
 HOSTED_RUNTIME_LABEL = "pi-agent"
 
-# Thin bridge allowlist — #516 added B2 browser tools (still no shell).
+# Thin bridge allowlist — execute ceiling (still no shell).
+# Pi-visible default is CORE_VISIBLE_TOOLS in capability_loading.py, not this full set.
 ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
     {
         "workspace_list_files",
