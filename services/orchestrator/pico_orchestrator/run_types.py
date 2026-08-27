@@ -30,6 +30,8 @@ class RunCaps:
     # Edu sidebar (and similar clients) may replace the default Pico workbench
     # system so the model reads the page short-profile instead of the file cabinet.
     system_prompt: str = ""
+    # Thin day-use appendix (name + recent ledger titles). Not a memory OS.
+    day_use: str = ""
     # Delivery landing gate (T-AGENT-LANDING-RELIABLE): when >0, Pi will not
     # report runtime success until at least this many write/generate tool
     # successes land — or it fails closed after one landing retry.

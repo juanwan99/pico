@@ -127,6 +127,9 @@ async def run_pi_agent(
             system = f"{override}\n\n{caps.skill_instruction.strip()}"
     else:
         system = _load_system_prompt(skill_block)
+    day = str(getattr(caps, "day_use", "") or "").strip()
+    if day:
+        system = f"{system}\n\n{day}"
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
     for item in (history or [])[-20:]:
         role = item.get("role")

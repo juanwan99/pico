@@ -22,4 +22,6 @@ endpoints:
       # Joint school:membership when edu SSO is present; else LibreChat user id.
       # Must match /api/pico membershipFromReq so school land + 文件页读同一账本。
       X-Pico-Membership-Id: "{{PICO_MEMBERSHIP_ID}}"
+      # SSO / LibreChat display name → thin day-use SYSTEM (b64: for CJK).
+      X-Pico-Display-Name: "{{LIBRECHAT_USER_NAME}}"
       X-Conversation-Id: "{{LIBRECHAT_BODY_CONVERSATIONID}}"
