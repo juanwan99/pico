@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import base64
 import re
-from typing import Iterable
+from collections.abc import Iterable
 
 from pico_orchestrator.delivery_policy import is_bookkeeping_title
 
