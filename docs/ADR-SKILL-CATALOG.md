@@ -19,6 +19,7 @@ DECIDERS: 业主 · 总管 · 实现窗（Codex）
 2. 执行仍受 **全局工具白名单** 约束（Skill 只能收窄）。  
 3. 账本 Run 必须能存 **受控快照**（与上游可变配置解耦）。  
 4. 60–90 分钟只读调查可验证现状后再写代码。
+5. **怎么挂进模型**（少常驻 / 目录一行 / 正文按需）见 [`docs/ADR-CAPABILITY-LOADING.md`](ADR-CAPABILITY-LOADING.md)；本 ADR 只管目录唯一，不管加载纪律。
 
 ## 选项
 

@@ -54,6 +54,7 @@ Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 | 模型 | DeepSeek 等现成 API |
 | 产品 | 门脸适配、人包、假绿防护、租户隔离 |
 | 接入 | MCP/KB 以后接现成组件（分期），不自写协议内核 |
+| 加载 | 少常驻动词 + Skill 渐进披露；见 [`ADR-CAPABILITY-LOADING.md`](./ADR-CAPABILITY-LOADING.md)。禁自研选工具核 |
 
 ---
 
