@@ -103,7 +103,7 @@ def _public_https_url(url: str) -> str:
     except ValueError:
         # hostname, not literal IP — ok
         low = host.lower()
-        if low in {"localhost"} or low.endswith(".local") or low.endswith(".internal"):
+        if low == "localhost" or low.endswith((".local", ".internal")):
             raise ToolError("image.invalid", INVALID_MESSAGE) from None
     return url.strip()
 
