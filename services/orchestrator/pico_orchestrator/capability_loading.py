@@ -15,7 +15,8 @@ from collections.abc import Iterable
 
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
-# Always-on: teacher-said verbs. Merge later; do not add a scheduler.
+# Always-on: teacher-said verbs. Target shrink toward ADR ≤15; do not add a scheduler.
+# Day-use keeps gen/edit/image/kb/web. Browse/publish/sandbox heavy verbs are skill-extended.
 CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "workspace_list_files",
     "workspace_read_file",
@@ -33,14 +34,14 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "web_search",
     "web_fetch",
     "kb_search",
-    "sandbox_browser_open",
-    "sandbox_document_open",
-    "publish_html_page",
-    "unpublish_html_page",
 )
 
 # Same gateway, not registered unless a hung skill lists them.
 EXTENDED_TOOLS: tuple[str, ...] = (
+    "sandbox_browser_open",
+    "sandbox_document_open",
+    "publish_html_page",
+    "unpublish_html_page",
     "render_document",
     "verify_document",
     "verify_html_document",

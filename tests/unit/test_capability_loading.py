@@ -27,10 +27,13 @@ def test_core_and_extended_partition_gateway():
     assert set(CORE_VISIBLE_TOOLS) & set(EXTENDED_TOOLS) == set()
     assert "bash" not in CORE_VISIBLE_TOOLS
     assert "bash" not in EXTENDED_TOOLS
-    assert len(CORE_VISIBLE_TOOLS) == 20
-    assert len(EXTENDED_TOOLS) == 7
+    assert len(CORE_VISIBLE_TOOLS) == 16
+    assert len(EXTENDED_TOOLS) == 11
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_browser_open" in EXTENDED_TOOLS
+    assert "publish_html_page" in EXTENDED_TOOLS
+    assert "kb_search" in CORE_VISIBLE_TOOLS
 
 
 def test_default_visible_is_core_not_full_allowlist():
@@ -40,7 +43,9 @@ def test_default_visible_is_core_not_full_allowlist():
     assert "verify_html_document" not in visible
     assert "generate_docx_document" in visible
     assert "generate_diagram" in visible
-    assert "publish_html_page" in visible
+    assert "publish_html_page" not in visible
+    assert "sandbox_browser_open" not in visible
+    assert "kb_search" in visible
 
 
 def test_hung_skill_may_narrow_and_may_include_extended():
