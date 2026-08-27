@@ -17,8 +17,17 @@ SEARCHABLE = ["title", "text"]
 DISPLAYED = ["artifact_id", "title", "text", "school_id", "membership_id", "created_at"]
 MAX_TEXT = 20_000
 SEMANTIC_RATIO = 0.5
-EMBED_MODEL = "BAAI/bge-m3"
-EMBED_URL = "https://api.siliconflow.cn/v1/embeddings"
+# Prefer SiliconFlow bge-m3 when key present; else Zhipu embedding-3 (same REST
+# shape Meili expects). Never invent a local vector kernel. Images stay Zhipu
+# glm-image only — SF key here is embeddings-only.
+SF_EMBED_MODEL = "BAAI/bge-m3"
+SF_EMBED_URL = "https://api.siliconflow.cn/v1/embeddings"
+ZHIPU_EMBED_MODEL = "embedding-3"
+ZHIPU_EMBED_URL = "https://open.bigmodel.cn/api/paas/v4/embeddings"
+ZHIPU_EMBED_DIMS = 1024
+# Back-compat aliases (tests / older imports).
+EMBED_MODEL = SF_EMBED_MODEL
+EMBED_URL = SF_EMBED_URL
 
 MATERIAL_KINDS = frozenset(
     {
@@ -89,6 +98,24 @@ def siliconflow_embed_key() -> str:
     return (os.environ.get("SILICONFLOW_API_KEY") or "").strip()
 
 
+def zhipu_embed_key() -> str:
+    return (os.environ.get("ZHIPU_API_KEY") or "").strip()
+
+
+def embedder_provider() -> str | None:
+    """Which external embed REST Meili will call. SF preferred; Zhipu fallback."""
+    if siliconflow_embed_key():
+        return "siliconflow"
+    if zhipu_embed_key():
+        return "zhipu"
+    return None
+
+
+def embedding_api_key() -> str:
+    """Nonempty when hybrid can arm. Prefer SF; else Zhipu (prod has Zhipu)."""
+    return siliconflow_embed_key() or zhipu_embed_key()
+
+
 def meili_configured() -> bool:
     return bool(meili_url() and meili_key())
 
@@ -115,19 +142,35 @@ def _headers() -> dict[str, str]:
 
 
 def _embedder_settings() -> dict[str, Any] | None:
-    key = siliconflow_embed_key()
-    if not key:
-        return None
-    return {
-        "default": {
-            "source": "rest",
-            "url": EMBED_URL,
-            "apiKey": key,
-            "documentTemplate": "{{doc.title}}\n{{doc.text}}",
-            "request": {"model": EMBED_MODEL, "input": ["{{text}}"]},
-            "response": {"data": [{"embedding": "{{embedding}}"}]},
+    """Meili REST embedder config, or None → keyword-only search."""
+    provider = embedder_provider()
+    if provider == "siliconflow":
+        return {
+            "default": {
+                "source": "rest",
+                "url": SF_EMBED_URL,
+                "apiKey": siliconflow_embed_key(),
+                "documentTemplate": "{{doc.title}}\n{{doc.text}}",
+                "request": {"model": SF_EMBED_MODEL, "input": ["{{text}}"]},
+                "response": {"data": [{"embedding": "{{embedding}}"}]},
+            }
         }
-    }
+    if provider == "zhipu":
+        return {
+            "default": {
+                "source": "rest",
+                "url": ZHIPU_EMBED_URL,
+                "apiKey": zhipu_embed_key(),
+                "documentTemplate": "{{doc.title}}\n{{doc.text}}",
+                "request": {
+                    "model": ZHIPU_EMBED_MODEL,
+                    "input": ["{{text}}"],
+                    "dimensions": ZHIPU_EMBED_DIMS,
+                },
+                "response": {"data": [{"embedding": "{{embedding}}"}]},
+            }
+        }
+    return None
 
 
 def is_material(*, kind: str | None, title: str | None) -> bool:
@@ -404,7 +447,8 @@ def health_fields() -> dict[str, Any]:
             reachable = MeiliIndex().ping()
         except Exception:  # noqa: BLE001
             reachable = False
-    has_embedder = bool(siliconflow_embed_key())
+    provider = embedder_provider()
+    has_embedder = bool(provider)
     if configured and reachable and has_embedder:
         mode = "hybrid"
     elif configured and reachable:
@@ -415,5 +459,6 @@ def health_fields() -> dict[str, Any]:
         "meili_configured": configured,
         "meili_reachable": reachable,
         "meili_embedder": has_embedder,
+        "meili_embedder_provider": provider or "",
         "kb_mode": mode,
     }
