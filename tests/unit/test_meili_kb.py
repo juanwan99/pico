@@ -28,6 +28,8 @@ class FakeHttp:
         self.search_hits: list[dict[str, Any]] = []
         self.search_status = 200
         self.fail_search = False
+        self.embedders_armed = False
+        self.embedder_url = "https://api.siliconflow.cn/v1/embeddings"
 
     def request(
         self,
@@ -41,12 +43,53 @@ class FakeHttp:
         self.calls.append((method, url, json))
         if url.endswith("/health"):
             return 200, {"status": "available"}
+        if method == "GET" and "/tasks/" in url:
+            return 200, {"status": "succeeded", "uid": 1}
+        if method == "GET" and url.endswith("/settings/embedders"):
+            if self.embedders_armed:
+                return 200, {
+                    "default": {
+                        "source": "rest",
+                        "url": self.embedder_url,
+                    }
+                }
+            return 200, {}
+        if method == "GET" and url.endswith("/indexes/pico_materials/settings"):
+            emb = (
+                {
+                    "default": {
+                        "source": "rest",
+                        "url": self.embedder_url,
+                    }
+                }
+                if self.embedders_armed
+                else {}
+            )
+            return 200, {
+                "filterableAttributes": ["school_id", "membership_id"],
+                "searchableAttributes": ["title", "text"],
+                "displayedAttributes": [
+                    "artifact_id",
+                    "title",
+                    "text",
+                    "school_id",
+                    "membership_id",
+                    "created_at",
+                ],
+                "embedders": emb,
+            }
         if method == "GET" and url.endswith("/indexes/pico_materials"):
             return 200, {"uid": "pico_materials"}
         if method == "POST" and url.endswith("/search"):
             if self.fail_search:
                 return 503, {"message": "down"}
             return self.search_status, {"hits": list(self.search_hits)}
+        if method == "PATCH" and url.endswith("/settings"):
+            if isinstance(json, dict) and json.get("embedders"):
+                self.embedders_armed = True
+                default = (json.get("embedders") or {}).get("default") or {}
+                self.embedder_url = str(default.get("url") or self.embedder_url)
+            return 202, {"taskUid": 1}
         return 202, {"taskUid": 1}
 
 
@@ -95,24 +138,45 @@ def test_search_hybrid_only_when_embed_key(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     monkeypatch.setenv("SILICONFLOW_API_KEY", "sk-sf")
     http = FakeHttp()
+    http.embedders_armed = True
     search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)
     body = next(c[2] for c in http.calls if str(c[1]).endswith("/search"))
     assert body["hybrid"]["semanticRatio"] == 0.5
     assert body["hybrid"]["embedder"] == "default"
 
 
+def test_search_keyword_when_key_but_embedder_not_armed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("ZHIPU_API_KEY", "zk")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    http = FakeHttp()
+    http.embedders_armed = False
+    out = search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)
+    body = next(c[2] for c in http.calls if str(c[1]).endswith("/search"))
+    assert "hybrid" not in body
+    assert out["hybrid"] is False
+
+
 def test_search_hybrid_zhipu_when_no_siliconflow(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prod has Zhipu, not SF — hybrid must arm without inventing a vector kernel."""
+    import pico_orchestrator.meili_kb as mk
+
+    mk._ENSURE_CACHE.clear()
     monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
     monkeypatch.setenv("ZHIPU_API_KEY", "zk-zhipu")
     http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "https://open.bigmodel.cn/api/paas/v4/embeddings"
     search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)
     body = next(c[2] for c in http.calls if str(c[1]).endswith("/search"))
     assert body["hybrid"]["embedder"] == "default"
 
-    MeiliIndex(http).ensure()
-    patch = next(c[2] for c in http.calls if c[0] == "PATCH")
+    http2 = FakeHttp()
+    MeiliIndex(http2).ensure(force=True)
+    patch = next(c[2] for c in http2.calls if c[0] == "PATCH")
     emb = patch["embedders"]["default"]
     assert emb["url"] == "https://open.bigmodel.cn/api/paas/v4/embeddings"
     assert emb["apiKey"] == "zk-zhipu"
@@ -121,16 +185,35 @@ def test_search_hybrid_zhipu_when_no_siliconflow(monkeypatch: pytest.MonkeyPatch
 
 
 def test_siliconflow_preferred_over_zhipu(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pico_orchestrator.meili_kb as mk
+
+    mk._ENSURE_CACHE.clear()
     monkeypatch.setenv("SILICONFLOW_API_KEY", "sk-sf")
     monkeypatch.setenv("ZHIPU_API_KEY", "zk-zhipu")
     monkeypatch.setenv("MEILI_MASTER_KEY", "k")
     http = FakeHttp()
-    MeiliIndex(http).ensure()
+    MeiliIndex(http).ensure(force=True)
     patch = next(c[2] for c in http.calls if c[0] == "PATCH")
     emb = patch["embedders"]["default"]
     assert "siliconflow" in emb["url"]
     assert emb["apiKey"] == "sk-sf"
     assert emb["request"]["model"] == "BAAI/bge-m3"
+
+
+def test_ensure_skips_repeat_patch(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pico_orchestrator.meili_kb as mk
+
+    mk._ENSURE_CACHE.clear()
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("ZHIPU_API_KEY", "zk")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    http = FakeHttp()
+    idx = MeiliIndex(http)
+    idx.ensure(force=True)
+    patches = [c for c in http.calls if c[0] == "PATCH"]
+    assert len(patches) == 1
+    idx.ensure()
+    assert len([c for c in http.calls if c[0] == "PATCH"]) == 1
 
 
 def test_search_raises_when_meili_down(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -311,9 +394,12 @@ def test_upsert_posts_to_index(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_ensure_sets_filterable(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pico_orchestrator.meili_kb as mk
+
+    mk._ENSURE_CACHE.clear()
     monkeypatch.setenv("MEILI_MASTER_KEY", "k")
     http = FakeHttp()
-    MeiliIndex(http).ensure()
+    MeiliIndex(http).ensure(force=True)
     patches = [c for c in http.calls if c[0] == "PATCH"]
     assert patches
     attrs = patches[0][2]["filterableAttributes"]
@@ -336,6 +422,9 @@ def test_health_fields_honest_tiers(monkeypatch: pytest.MonkeyPatch) -> None:
         def ping(self) -> bool:
             return False
 
+        def live_embedder_armed(self) -> bool:
+            return False
+
     monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _Down())
     down = health_fields()
     assert down["meili_configured"] is True
@@ -343,16 +432,32 @@ def test_health_fields_honest_tiers(monkeypatch: pytest.MonkeyPatch) -> None:
     assert down["kb_mode"] == "scan"
     assert down["meili_embedder"] is False
 
-    class _Up:
+    class _UpKeyword:
         def ping(self) -> bool:
             return True
 
-    monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _Up())
+        def live_embedder_armed(self) -> bool:
+            return False
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _UpKeyword())
     keyword = health_fields()
     assert keyword["meili_reachable"] is True
     assert keyword["kb_mode"] == "keyword"
-
+    # Key alone must not fake hybrid.
     monkeypatch.setenv("SILICONFLOW_API_KEY", "sk-sf")
+    still_keyword = health_fields()
+    assert still_keyword["meili_embedder"] is False
+    assert still_keyword["kb_mode"] == "keyword"
+    assert still_keyword["meili_embedder_key_present"] is True
+
+    class _UpHybrid:
+        def ping(self) -> bool:
+            return True
+
+        def live_embedder_armed(self) -> bool:
+            return True
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _UpHybrid())
     hybrid = health_fields()
     assert hybrid["meili_embedder"] is True
     assert hybrid["kb_mode"] == "hybrid"
@@ -367,5 +472,5 @@ def test_health_fields_honest_tiers(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _Down())
     no_fake = health_fields()
-    assert no_fake["meili_embedder"] is True
+    assert no_fake["meili_embedder"] is False
     assert no_fake["kb_mode"] == "scan"
