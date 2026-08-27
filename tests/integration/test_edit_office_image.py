@@ -158,6 +158,7 @@ def test_upload_edit_pptx_download(client) -> None:
 
 def test_generate_image_siliconflow_key_rejected(client, monkeypatch) -> None:
     monkeypatch.setenv("SILICONFLOW_API_KEY", "test-key-not-a-secret")
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     headers = _headers(client)
     created = _invoke(
         client,
@@ -175,6 +176,7 @@ def test_generate_image_siliconflow_key_rejected(client, monkeypatch) -> None:
 
 def test_generate_image_no_key_no_artifact(client, monkeypatch) -> None:
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     headers = _headers(client)
     created = _invoke(
         client,

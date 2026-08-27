@@ -86,7 +86,13 @@ services:
       PICO_SANDBOX_URL: http://127.0.0.1:18767
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
       PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
-      # Image vendor (host .env only; never commit the value)
+      # Image: Zhipu glm-image (host .env only). SiliconFlow images REJECTED.
+      ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
+      ZHIPU_IMAGES_URL: ${ZHIPU_IMAGES_URL:-}
+      ZHIPU_IMAGE_MODEL: ${ZHIPU_IMAGE_MODEL:-glm-image}
+      ZHIPU_IMAGE_SIZE: ${ZHIPU_IMAGE_SIZE:-}
+      ZHIPU_IMAGE_QUALITY: ${ZHIPU_IMAGE_QUALITY:-}
+      # Optional Meili embedder only — NOT image gen.
       SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
       SILICONFLOW_IMAGE_MODEL: ${SILICONFLOW_IMAGE_MODEL:-}
       PICO_MEILI_URL: ${PICO_MEILI_URL:-http://127.0.0.1:7700}
