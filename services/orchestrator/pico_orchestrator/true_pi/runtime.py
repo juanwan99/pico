@@ -108,6 +108,7 @@ async def run_true_pi_agent(
     system_text = pico_system_text(
         skill=str(getattr(caps, "skill_instruction", "") or ""),
         system_override=str(getattr(caps, "system_prompt", "") or ""),
+        day_use=str(getattr(caps, "day_use", "") or ""),
     )
 
     tool_server: ToolServer | None = None
@@ -546,17 +547,23 @@ async def run_true_pi_agent(
                 await tool_server.stop()
 
 
-def pico_system_text(*, skill: str = "", system_override: str = "") -> str:
+def pico_system_text(*, skill: str = "", system_override: str = "", day_use: str = "") -> str:
     """Pi SYSTEM.md body. Never the teacher turn; never a Landing-requirement weld."""
     override = str(system_override or "").strip()
     skill_block = str(skill or "").strip() or "(none)"
+    day = str(day_use or "").strip()
     if override:
         if skill_block and skill_block != "(none)":
-            return f"{override}\n\n{skill_block}"
-        return override
-    from pico_orchestrator.pi_runtime import _load_system_prompt
+            body = f"{override}\n\n{skill_block}"
+        else:
+            body = override
+    else:
+        from pico_orchestrator.pi_runtime import _load_system_prompt
 
-    return _load_system_prompt(skill_block)
+        body = _load_system_prompt(skill_block)
+    if day:
+        return f"{body}\n\n{day}"
+    return body
 
 
 def _compose_prompt(

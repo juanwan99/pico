@@ -496,6 +496,26 @@ def _workspace_id_from(
     return None
 
 
+async def _day_use_system_block(
+    principal: Principal, display_header: str | None
+) -> str:
+    """SSO name + recent ledger titles → SYSTEM appendix. Fail soft; never a memory OS."""
+    from pico_orchestrator.day_use import build_day_use_block, decode_display_name_header
+
+    name = decode_display_name_header(display_header)
+    titles: list[str] = []
+    try:
+        from app.run_service import list_artifacts_for_principal
+
+        factory = session_factory()
+        async with factory() as session:
+            rows = await list_artifacts_for_principal(session, principal, limit=12)
+        titles = [str(getattr(row, "title", "") or "") for row in rows]
+    except Exception:  # noqa: BLE001 — missing ledger must not block chat
+        titles = []
+    return build_day_use_block(display_name=name, recent_titles=titles)
+
+
 async def _ledger_task_run(
     *,
     principal: Principal,
@@ -964,6 +984,7 @@ async def _run_and_collect(
     system_prompt: str = "",
     conversation_id: str | None = None,
     images: list[dict[str, Any]] | None = None,
+    day_use: str = "",
 ) -> Any:
     from pico_orchestrator.runtime import run_agent_runtime
 
@@ -995,6 +1016,10 @@ async def _run_and_collect(
         from dataclasses import replace as _dc_replace_sys
 
         caps = _dc_replace_sys(caps, system_prompt=system_prompt)
+    if day_use:
+        from dataclasses import replace as _dc_replace_day
+
+        caps = _dc_replace_day(caps, day_use=day_use)
     if skill_snapshot:
         await emit("skill.snapshot", skill_snapshot)
     if delivery_plan is not None and getattr(delivery_plan, "engineering", False):
@@ -1109,6 +1134,7 @@ async def chat_completions(
     x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
     x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
     x_pico_membership_id: str | None = Header(default=None, alias="X-Pico-Membership-Id"),
+    x_pico_display_name: str | None = Header(default=None, alias="X-Pico-Display-Name"),
     x_pico_output: str | None = Header(default=None, alias="X-Pico-Output"),
     settings: Settings = Depends(get_settings),
 ):
@@ -1131,6 +1157,7 @@ async def chat_completions(
         raise HTTPException(status_code=403, detail="proxy membership mismatch")
     principal = scope_proxy_principal(principal, x_pico_membership_id)
     enforce_scope(principal, "ai:run")
+    day_use_block = await _day_use_system_block(principal, x_pico_display_name)
     raw_prompt_with_skill = _last_user_prompt(body.messages)
     from pico_orchestrator.skill_policy import (
         snapshot_for_skill,
@@ -1346,6 +1373,8 @@ async def chat_completions(
             )
             if delivery_instr:
                 system = system + "\n" + delivery_instr
+            if day_use_block:
+                system = system + "\n\n" + day_use_block
             parts: list[str] = []
             try:
                 if json_only and sidebar_web_hits and sidebar_web_hits.get("honest_miss"):
@@ -1380,6 +1409,7 @@ async def chat_completions(
                 system_prompt=client_system if edu_sidebar else "",
                 conversation_id=conversation_id,
                 images=turn_images,
+                day_use=day_use_block,
             )
             text = result.final_text or result.error or "(empty)"
             await _finalize_run(
@@ -1464,6 +1494,8 @@ async def chat_completions(
             )
             if delivery_instr:
                 system = system + "\n" + delivery_instr
+            if day_use_block:
+                system = system + "\n\n" + day_use_block
             parts: list[str] = []
             finalized = False
             try:
@@ -1642,6 +1674,10 @@ async def chat_completions(
                     from dataclasses import replace as _dc_replace_sys_stream
 
                     caps = _dc_replace_sys_stream(caps, system_prompt=client_system)
+                if day_use_block:
+                    from dataclasses import replace as _dc_replace_day_stream
+
+                    caps = _dc_replace_day_stream(caps, day_use=day_use_block)
                 if skill_snapshot:
                     await emit("skill.snapshot", skill_snapshot)
                 if delivery_plan is not None and getattr(
