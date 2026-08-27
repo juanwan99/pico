@@ -6,7 +6,7 @@ DATE: 2026-08-27
 ── 现况三行（开窗先对；禁止凭记忆）──
 在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 必须 = origin/main（现网已对齐 · 含四刀 + 现况收口）
+      → 必须 = origin/main（现网已对齐 · #725 深度测三刺）
 阻塞: 无
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
