@@ -13,6 +13,7 @@ import {
   type PicoRunEvent,
   type PicoTask,
 } from '~/data-provider/pico/api';
+import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
 import { workbenchToolResultLine, workbenchToolStepLine } from '~/utils/picoWorkbenchProgress';
 
 export type PicoLedgerState = {
@@ -653,7 +654,7 @@ export function usePicoTaskLedger(
 
         setTask(preferred.task);
         taskRef.current = preferred.task;
-        setArtifacts(detail.artifacts || []);
+        setArtifacts(latestArtifactsByFilename(detail.artifacts || []));
         const nextRun = mergePolledRun(runRef.current, preferred.run);
         runRef.current = nextRun;
         setRun(nextRun);

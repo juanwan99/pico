@@ -47,4 +47,15 @@ describe('MainDeliveryStrip column', () => {
     expect(strip).toContainElement(screen.getByTestId('main-delivery-item'));
     expect(strip.className).toContain('max-w-[797px]');
   });
+
+  it('shows one row when the same filename was written many times', () => {
+    const dupes = Array.from({ length: 8 }, (_, index) => ({
+      id: `art-${index}`,
+      title: 'Live Observe.pptx',
+      kind: 'pptx',
+    }));
+    render(<MainDeliveryStrip artifacts={dupes} />);
+    expect(screen.getAllByTestId('main-delivery-item')).toHaveLength(1);
+    expect(screen.getByText('成品 · 可下载文件（1）')).toBeInTheDocument();
+  });
 });

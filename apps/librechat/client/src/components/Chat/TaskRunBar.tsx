@@ -72,7 +72,7 @@ function TaskRunBar({
             data-testid="task-stop-button"
             title="取消云端任务（真停止，与输入区「停止生成」不同）"
             aria-label="停止云端任务"
-            className="inline-flex items-center gap-1 rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[12px] font-medium text-[#6b3f3f] hover:bg-[#fdeeee] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-surface-secondary"
+            className="relative z-[230] inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.08] bg-white px-2.5 py-1.5 text-[12px] font-medium text-[#6b3f3f] hover:bg-[#fdeeee] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-surface-secondary"
             onClick={onCancel}
             disabled={cancelling}
             aria-busy={cancelling || undefined}

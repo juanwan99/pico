@@ -665,6 +665,75 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(mockOpenBrowser).not.toHaveBeenCalled();
   });
 
+  it('clears leftover 没有可打开的文件 after a later turn that is not an open intent', async () => {
+    const { rerender } = render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开一份 Word',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('artifact-action-error')).toHaveTextContent(
+      '没有可打开的文件',
+    );
+    rerender(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开一份 Word',
+              isCreatedByUser: true,
+            },
+            {
+              messageId: 'a1',
+              conversationId: 'c1',
+              parentMessageId: 'u1',
+              text: '请先生成或上传',
+              isCreatedByUser: false,
+            },
+            {
+              messageId: 'u2',
+              conversationId: 'c1',
+              parentMessageId: 'a1',
+              text: '生成一份两页幻灯片，封面标题写 Live Observe',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId('artifact-action-error')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows one chip when the same filename was written many times', () => {
+    renderPanel(
+      Array.from({ length: 8 }, (_, index) => ({
+        id: `art-${index}`,
+        title: 'Live Observe.pptx',
+        kind: 'pptx',
+      })),
+    );
+    expect(screen.getAllByTestId('human-delivery-chip')).toHaveLength(1);
+    expect(screen.getByText('可下载文件（1）')).toBeInTheDocument();
+  });
+
   it('S3: 你好 does not open a sandbox session', async () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>

@@ -30,6 +30,7 @@ import {
   type OfficeOpenIntent,
   type ResultPaneView,
 } from '~/utils/picoOpenInPane';
+import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
@@ -298,6 +299,7 @@ export default function ResultPanel({
   useEffect(() => {
     setLocalSandbox(null);
     openedWebsiteRef.current = null;
+    setWebsiteError(null);
   }, [conversationId]);
   const previewActive = Boolean(
     previewHtml || previewImage || previewPdf || previewText || previewOffice,
@@ -305,7 +307,7 @@ export default function ResultPanel({
   const messageArts = useMemo(() => collectArtifacts(messages), [messages]);
   const artifacts = useMemo(() => {
     if (picoArtifacts?.length) {
-      const mapped = picoArtifacts
+      const mapped = latestArtifactsByFilename(picoArtifacts)
         .filter((artifact) => {
           // Bookkeeping "回复摘要" is not a user download — hide from first-class chips.
           const title = (artifact.title || artifact.user_label || '').trim();
@@ -543,7 +545,11 @@ export default function ResultPanel({
     }
     if (site) {
       void openWebsiteInPane(site);
+      return;
     }
+    setWebsiteError((prev) =>
+      prev && prev.startsWith('没有可打开的文件') ? null : prev,
+    );
     // Intent is derived from the latest user turn; skip if ledger already opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, ledgerSandbox]);
