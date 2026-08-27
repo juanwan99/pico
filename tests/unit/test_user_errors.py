@@ -104,6 +104,33 @@ def test_image_unconfigured_not_model_key() -> None:
     assert "SILICONFLOW" not in msg
 
 
+def test_image_provider_run_fail_not_blamed_on_missing_zhipu() -> None:
+    """Live bug 2026-08-27: tool returned image.provider; run failed as
+    tool.write_failed with already-humanized「这次没能出图」; enrich remapped
+    that copy to「ZHIPU_API_KEY 尚未接通」because code was not image.*.
+    """
+    from pico_orchestrator.user_errors import enrich_fail_payload
+
+    human = "这次没能出图。请稍后重试，不能编造图片。"
+    # Direct remap with run-level code (what enrich_fail_payload does).
+    msg = user_message_for_error(human, code="tool.write_failed")
+    assert "ZHIPU" not in msg
+    assert "尚未接通" not in msg
+    assert "没能出图" in msg
+
+    payload = enrich_fail_payload(
+        {
+            "status": "failed",
+            "reason": human,
+            "code": "tool.write_failed",
+            "runtime": "pi-true",
+        }
+    )
+    assert "ZHIPU" not in payload["user_message"]
+    assert "尚未接通" not in payload["user_message"]
+    assert "没能出图" in payload["user_message"]
+
+
 def test_image_siliconflow_rejected_copy() -> None:
     msg = user_message_for_error(
         "出图提供商硅基流动已否决，不再调用。请使用智谱 glm-image，不能编造图片。",

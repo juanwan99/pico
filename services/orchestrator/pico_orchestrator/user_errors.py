@@ -34,6 +34,8 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
             return text or "这段结构图语法不对，我没画出来。"
         return text or "这次没能画出结构图。请稍后重试，不能假装画出来。"
     # Image before generic「未配置」— never recommend SiliconFlow (owner rejected).
+    # Run-level code is often tool.write_failed with already-humanized copy; do not
+    # remap provider/runtime fails to ZHIPU_API_KEY unconfigured.
     if (
         c.startswith("image.")
         or "不能编造" in text
@@ -47,9 +49,14 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
                 "出图提供商硅基流动已否决，不再调用。"
                 "请使用智谱 glm-image，不能编造图片。"
             )
-        if c in ("image.provider", "image.invalid") and "未配置" not in text and "尚未接通" not in text:
-            return "这次没能出图。请稍后重试，不能编造图片。"
-        return "出图尚未接通。请管理员在主机写入 ZHIPU_API_KEY 后重试，不能编造图片。"
+        if (
+            c == "image.unconfigured"
+            or "尚未接通" in text
+            or ("zhipu_api_key" in low and ("未" in text or "写入" in text))
+        ):
+            return "出图尚未接通。请管理员在主机写入 ZHIPU_API_KEY 后重试，不能编造图片。"
+        # image.provider / image.invalid / tool.write_failed with「没能出图」/ etc.
+        return "这次没能出图。请稍后重试，不能编造图片。"
     if c in ("office.timeout", "artifact.not_ooxml", "artifact.not_binary", "artifact.not_found") or (
         "找不到" in text and ("文件" in text or "原件" in text or "word" in low or "ppt" in low)
     ):
