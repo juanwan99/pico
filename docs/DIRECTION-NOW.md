@@ -34,6 +34,8 @@ Pico 是通用 LLM。老师的话是 user。系统纪律是 system，不得冒�
 
 与「办公硬度 / 交得出」冲突时：**先当通用模型，再交件。** 没点名就不交。
 
+后续加 Skill / 工具先守 [`ADR-CAPABILITY-LOADING.md`](./ADR-CAPABILITY-LOADING.md)：少常驻、目录一行、用到再读全文；有成熟做法不自研。
+
 ---
 
 ## 0. 业主四条（原文义锁定）
