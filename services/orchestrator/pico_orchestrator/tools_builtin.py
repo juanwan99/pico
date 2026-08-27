@@ -35,7 +35,7 @@ from pico_orchestrator.gateway import (
     ToolError,
     ToolSpec,
 )
-from pico_orchestrator.image_generate import generate_image_bytes
+from pico_orchestrator.image_generate import IMAGE_TIMEOUT_S, generate_image_bytes
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
 from pico_orchestrator.meili_kb import extract_index_text, meili_configured, search_materials
 from pico_orchestrator.office.extract import extract_embedded_images
@@ -87,7 +87,7 @@ _MAX_KB_QUERY = 500
 _MAX_KB_EXCERPT = 280
 _SKIP_KB_TITLES = frozenset({"回复摘要"})
 _EDIT_TIMEOUT_S = 20.0
-_IMAGE_TIMEOUT_S = 45.0
+_IMAGE_TIMEOUT_S = IMAGE_TIMEOUT_S  # align with image_generate (90s)
 _DIAGRAM_TIMEOUT_S = 30.0
 
 logger = logging.getLogger(__name__)
@@ -1091,7 +1091,7 @@ def _workspace_handlers(
             generate_image_bytes(prompt),
             seconds=_IMAGE_TIMEOUT_S,
             code="image.timeout",
-            message="出图超时（45 秒）。请稍后重试，不能编造图片。",
+            message="出图超时（90 秒）。请稍后重试，不能编造图片。",
         )
         title = _ensure_extension(title_hint or "示意图", f".{ext}")
         kind = "png" if ext == "png" else "jpg"
