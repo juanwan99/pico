@@ -69,6 +69,7 @@ def test_search_injects_principal_filter_not_query(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     http = FakeHttp()
     http.search_hits = [
         {"artifact_id": "a1", "title": "校历.md", "text": "三月开学", "school_id": "school-a"}
@@ -91,12 +92,45 @@ def test_search_injects_principal_filter_not_query(monkeypatch: pytest.MonkeyPat
 
 def test_search_hybrid_only_when_embed_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     monkeypatch.setenv("SILICONFLOW_API_KEY", "sk-sf")
     http = FakeHttp()
     search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)
     body = next(c[2] for c in http.calls if str(c[1]).endswith("/search"))
     assert body["hybrid"]["semanticRatio"] == 0.5
     assert body["hybrid"]["embedder"] == "default"
+
+
+def test_search_hybrid_zhipu_when_no_siliconflow(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prod has Zhipu, not SF — hybrid must arm without inventing a vector kernel."""
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    monkeypatch.setenv("ZHIPU_API_KEY", "zk-zhipu")
+    http = FakeHttp()
+    search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)
+    body = next(c[2] for c in http.calls if str(c[1]).endswith("/search"))
+    assert body["hybrid"]["embedder"] == "default"
+
+    MeiliIndex(http).ensure()
+    patch = next(c[2] for c in http.calls if c[0] == "PATCH")
+    emb = patch["embedders"]["default"]
+    assert emb["url"] == "https://open.bigmodel.cn/api/paas/v4/embeddings"
+    assert emb["apiKey"] == "zk-zhipu"
+    assert emb["request"]["model"] == "embedding-3"
+    assert emb["request"]["dimensions"] == 1024
+
+
+def test_siliconflow_preferred_over_zhipu(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "sk-sf")
+    monkeypatch.setenv("ZHIPU_API_KEY", "zk-zhipu")
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    http = FakeHttp()
+    MeiliIndex(http).ensure()
+    patch = next(c[2] for c in http.calls if c[0] == "PATCH")
+    emb = patch["embedders"]["default"]
+    assert "siliconflow" in emb["url"]
+    assert emb["apiKey"] == "sk-sf"
+    assert emb["request"]["model"] == "BAAI/bge-m3"
 
 
 def test_search_raises_when_meili_down(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -289,9 +323,11 @@ def test_ensure_sets_filterable(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_health_fields_honest_tiers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MEILI_MASTER_KEY", raising=False)
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     scan = health_fields()
     assert scan["meili_configured"] is False
     assert scan["kb_mode"] == "scan"
+    assert scan["meili_embedder_provider"] == ""
 
     monkeypatch.setenv("MEILI_MASTER_KEY", "k")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
@@ -320,6 +356,14 @@ def test_health_fields_honest_tiers(monkeypatch: pytest.MonkeyPatch) -> None:
     hybrid = health_fields()
     assert hybrid["meili_embedder"] is True
     assert hybrid["kb_mode"] == "hybrid"
+    assert hybrid["meili_embedder_provider"] == "siliconflow"
+
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    monkeypatch.setenv("ZHIPU_API_KEY", "zk")
+    zhipu = health_fields()
+    assert zhipu["meili_embedder"] is True
+    assert zhipu["kb_mode"] == "hybrid"
+    assert zhipu["meili_embedder_provider"] == "zhipu"
 
     monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _Down())
     no_fake = health_fields()
