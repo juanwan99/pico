@@ -87,7 +87,7 @@ LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 - 桥上常驻工具已偏多，schema 每轮全挂。  
 - `skill-deliverable` 只留何时用 + 观察回执，禁止再灌交付剧本。  
 - 仓内已有场景 Skill 苗头（教案/出题）；须保持「不自动套用」，禁止再铺成默认工作流。  
-- 写/打开工具回 `observation`（事实，不是评分）。禁自研反思核。
+- 写/改/打开工具回 `observation`（事实，不是评分）。禁自研反思核。门脸不编课堂文件。
 
 收口另开实现切片，遵守本页，不另造核。
 

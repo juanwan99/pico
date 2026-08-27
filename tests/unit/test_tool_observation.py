@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,7 @@ class P:
 class MemoryArtifactStore:
     def __init__(self) -> None:
         self.rows: list[dict[str, Any]] = []
+        self.blobs: dict[str, bytes] = {}
 
     async def write(
         self,
@@ -46,7 +48,31 @@ class MemoryArtifactStore:
             "byte_size": len(raw),
         }
         self.rows.append(row)
+        self.blobs[row["artifact_id"]] = raw
         return dict(row)
+
+    async def read(
+        self,
+        principal: P,
+        *,
+        artifact_id: str | None = None,
+        title: str | None = None,
+    ) -> dict[str, Any] | None:
+        del principal
+        for row in self.rows:
+            if artifact_id and row["artifact_id"] == artifact_id:
+                out = dict(row)
+                out["content_base64"] = base64.b64encode(self.blobs[row["artifact_id"]]).decode(
+                    "ascii"
+                )
+                return out
+            if title and row["title"] == title:
+                out = dict(row)
+                out["content_base64"] = base64.b64encode(self.blobs[row["artifact_id"]]).decode(
+                    "ascii"
+                )
+                return out
+        return None
 
 
 def test_observe_pptx_is_counts_not_a_score() -> None:
@@ -60,6 +86,7 @@ def test_observe_pptx_is_counts_not_a_score() -> None:
     assert seen["outline"]["slides"] >= 2
     pages = seen["outline"]["pages"]
     assert pages[0]["title"]
+    assert pages[0]["preview"]
     assert "pass" not in seen
     assert "score" not in seen
     assert "crowded" not in seen
@@ -84,6 +111,37 @@ async def test_generate_pptx_returns_observation() -> None:
     assert obs["kind"] == "pptx"
     assert obs["outline"]["slides"] >= 2
     assert "pages" in obs["outline"]
+    assert obs["outline"]["pages"][0].get("preview")
+
+
+@pytest.mark.asyncio
+async def test_edit_pptx_returns_observation() -> None:
+    store = MemoryArtifactStore()
+    gw = build_default_gateway(store)
+    owner = P(school_id="s", membership_id="m", scopes=["*"])
+    made = await gw.invoke(
+        owner,
+        "generate_pptx_document",
+        {
+            "title": "汇报.pptx",
+            "marker": "mk-edit",
+            "body": "封面\n副题\n\n---\n内容\n一条",
+        },
+    )
+    out = await gw.invoke(
+        owner,
+        "edit_pptx_document",
+        {
+            "artifact_id": made["artifact_id"],
+            "slide_index": 1,
+            "new_title": "改过的封面",
+        },
+    )
+    assert out["edited"] is True
+    obs = out["observation"]
+    assert obs["kind"] == "pptx"
+    assert obs["outline"]["pages"][0]["title"] == "改过的封面"
+    assert "score" not in obs
 
 
 @pytest.mark.asyncio
@@ -114,3 +172,8 @@ def test_deliverable_skill_is_not_a_playbook() -> None:
     lesson = instruction_for_snapshot(snapshot_for_skill("skill-lesson-outline"))
     assert "教学目标" not in lesson
     assert "必须调用 generate_" not in lesson
+    for sid in ("skill-summarize", "skill-translate", "skill-meeting-notes"):
+        body = instruction_for_snapshot(snapshot_for_skill(sid))
+        assert "必须调用 generate_" not in body
+        assert "必须调用专用" not in body
+        assert "不要发明一套" in body

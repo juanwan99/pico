@@ -151,10 +151,8 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮使用 skill.summarize：提炼用户提供内容的要点、结论与待办；"
-            "可读取工作区材料、生成结构化结果并把总结保存为工作区产物；"
-            "需要交付 HTML/Word/PPT 时必须调用专用 generate_*_document 工具（真文件，禁止改后缀冒充）；"
-            "不得补写原文中不存在的事实。"
+            "老师挂了这份 Skill。按老师的话做，不要发明一套总结流程。"
+            "工具在列表不代表必须调用。不得补写原文中不存在的事实。"
         ),
     ),
     "skill-lesson-outline": SkillPolicy(
@@ -202,9 +200,8 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮使用 skill.translate：忠实翻译用户提供内容，保留格式、专名与语气；"
-            "可读取工作区材料并保存译文；不确定术语应标注而非臆造；"
-            "需要 HTML/Word/PPT 交付时必须调用专用 generate_*_document 工具。"
+            "老师挂了这份 Skill。按老师的话做，不要发明一套翻译流程。"
+            "工具在列表不代表必须调用。不确定术语应标注而非臆造。"
         ),
     ),
     "skill-meeting-notes": SkillPolicy(
@@ -219,8 +216,8 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="low",
         instruction=(
-            "本轮使用 skill.meeting_notes：把用户提供的会议内容整理为议题、决定、"
-            "负责人和待办，并可保存为工作区产物；没有明确负责人的事项标为待确认。"
+            "老师挂了这份 Skill。按老师的话做，不要发明一套会议纪要流程。"
+            "工具在列表不代表必须调用。"
         ),
     ),
     "skill-kb-ask": SkillPolicy(

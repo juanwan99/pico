@@ -249,7 +249,7 @@ def _make_sandbox_pptx_lib(store: ArtifactStore):
         result = await store.write(principal, title=title, content=raw, kind="pptx")
         result["format"] = "pptx"
         result["via"] = "sandbox_pptx_lib"
-        return result
+        return _attach_write_observation(result, kind="pptx", title=title, raw=raw)
 
     return sandbox_pptx_lib
 
@@ -979,7 +979,7 @@ def _workspace_handlers(
             result["commented"] = True
         if values is not None:
             result["filled"] = True
-        return result
+        return _attach_write_observation(result, kind="docx", title=out_title, raw=edited)
 
     async def edit_pptx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         row, raw = await _load_office(principal, args, ext=".pptx")
@@ -1027,7 +1027,7 @@ def _workspace_handlers(
         result["source_artifact_id"] = row.get("artifact_id")
         if values is not None:
             result["filled"] = True
-        return result
+        return _attach_write_observation(result, kind="pptx", title=out_title, raw=edited)
 
     async def edit_xlsx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         row, raw = await _load_office(principal, args, ext=".xlsx")
@@ -1081,7 +1081,7 @@ def _workspace_handlers(
         result["source_artifact_id"] = row.get("artifact_id")
         if values is not None:
             result["filled"] = True
-        return result
+        return _attach_write_observation(result, kind="xlsx", title=out_title, raw=edited)
 
     async def generate_image(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         prompt = _required_text(args, "prompt", maximum=2000)
@@ -1943,8 +1943,8 @@ def build_default_gateway(
         ToolSpec(
             name="generate_html_document",
             description=(
-                "Create a real .html Artifact with a unique visible marker. "
-                "Safe for sandbox preview (no external scripts). Args: title, marker, body?"
+                "Create a real .html Artifact. Result includes an observation of "
+                "what landed. ok is not finished. Args: title, marker, body?"
             ),
             handler=generate_html,
             school_scoped=False,
@@ -2008,7 +2008,9 @@ def build_default_gateway(
             name="sandbox_document_open",
             description=(
                 "Open a Word/Calc/Impress file in sidecar LibreOffice (the sandbox screen). "
-                "Word is Word — do not convert to PDF or HTML, do not ask the teacher to download. "
+                "Needs an existing artifact, a disk filename, or body. Does not invent a file. "
+                "Result includes an observation; a PNG screen is remembered when available. "
+                "Word is Word — do not convert to PDF or HTML. "
                 "Args: artifact_id? | filename? | kind?=writer | body?"
             ),
             handler=document_open,
@@ -2019,8 +2021,8 @@ def build_default_gateway(
         ToolSpec(
             name="generate_docx_document",
             description=(
-                "Create a real OOXML .docx. Prefer spec/blocks (heading/para/table/image) "
-                "so the file is not one blob of text. Plain body still works. "
+                "Create a real OOXML .docx. Result includes an observation of "
+                "what landed (counts, preview — not a score). ok is not finished. "
                 "Args: title, marker, body? | spec? | blocks?"
             ),
             handler=generate_docx,
@@ -2044,7 +2046,7 @@ def build_default_gateway(
             name="sandbox_pptx_lib",
             description=(
                 "Ceiling: isolated python-pptx (not host bash, not a second Office OS). "
-                "Prefer generate_pptx_document/spec for ordinary decks. "
+                "Result includes an observation of what landed. ok is not finished. "
                 "Source cannot import; Presentation/Inches/save_deck/IMAGE_PATHS are injected. "
                 "Must call save_deck(prs). Empty shells fail. "
                 "Args: source, title?, image_artifact_ids?"
@@ -2057,8 +2059,8 @@ def build_default_gateway(
         ToolSpec(
             name="generate_xlsx_document",
             description=(
-                "Create a real OOXML .xlsx via openpyxl. Prefer spec/sheets "
-                "(headers + rows; cells starting with = are formulas). "
+                "Create a real OOXML .xlsx. Result includes an observation of "
+                "what landed. ok is not finished. "
                 "Args: title, marker, body? | spec? | blocks?"
             ),
             handler=generate_xlsx,
@@ -2071,6 +2073,7 @@ def build_default_gateway(
             description=(
                 "Edit an already uploaded .docx: replace a paragraph, add a comment, "
                 "or fill {{key}} values. Other content stays. Never create a blank template. "
+                "Result includes an observation of what landed. ok is not finished. "
                 "Args: artifact_id|title, paragraph_index?, text?, comment?, values?, output_title?"
             ),
             handler=edit_docx,
@@ -2083,6 +2086,7 @@ def build_default_gateway(
             description=(
                 "Edit an already uploaded .pptx: change one slide title or fill {{key}}. "
                 "Other slides stay. Never create a blank deck. "
+                "Result includes an observation of what landed. ok is not finished. "
                 "Args: artifact_id|title, slide_index?, new_title?, values?, output_title?"
             ),
             handler=edit_pptx,
@@ -2094,7 +2098,8 @@ def build_default_gateway(
             name="edit_xlsx_document",
             description=(
                 "Edit an already uploaded .xlsx: set one cell (A1-style; =formula) "
-                "or fill {{key}}. Other cells stay. Args: artifact_id|title, cell?, "
+                "or fill {{key}}. Other cells stay. Result includes an observation. "
+                "ok is not finished. Args: artifact_id|title, cell?, "
                 "value?, sheet?, values?, output_title?"
             ),
             handler=edit_xlsx,

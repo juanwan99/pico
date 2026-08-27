@@ -25,7 +25,7 @@ CLAIM-WB: NO
 
 v7（加载纪律）：gateway 执行上限仍是全名单；Pi 默认只注册 CORE（`capability_loading.py`）。挂了 Skill 才按快照收窄/放出 EXTENDED。禁自研 tool_search。  
 v8（结构图）：一个 `generate_diagram`（官方 mermaid + 沙箱 Playwright 截进账本）。禁自研排版核、禁 Kroki、禁抄 pi-diagram。D2 未接则诚实拒绝。  
-v9（观察回执）：写/打开工具回 `observation`（落地事实，不是评分）。打开文档尽量把屏幕记入下一轮 `images[]`。禁 PPT/课件及格线。禁自研反思核。
+v9（观察回执）：写/改/打开工具回 `observation`（落地事实，不是评分）。打开文档尽量把屏幕记入下一轮 `images[]`。门脸不编课堂文件。禁 PPT/课件及格线。禁自研反思核。禁把落盘催促焊进 user prompt。
 
 ## 允许的工具（v2 · #507 web_search/web_fetch）
 

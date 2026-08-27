@@ -59,6 +59,11 @@ describe('picoOpenInPane', () => {
     expect(detectOpenOfficeIntent('打开 https://example.com')).toBeNull();
   });
 
+  it('does not invent a classroom filename when none was named', () => {
+    expect(detectOpenOfficeIntent('打开一份 Word')?.filename).toBeUndefined();
+    expect(detectOpenOfficeIntent('打开一个 word 文档在沙箱')?.filename).toBeUndefined();
+  });
+
   it('T5/T9: 打开 example.com is a website intent; 打开 file.md is not', () => {
     expect(detectOpenWebsiteIntent('打开 https://example.com')).toBe('https://example.com/');
     expect(detectOpenWebsiteIntent('打开 example.com')).toBe('https://example.com/');

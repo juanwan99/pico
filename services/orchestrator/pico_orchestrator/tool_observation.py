@@ -50,7 +50,7 @@ def _outline_for(
             from pico_orchestrator.office.inspect import inspect_office_bytes
 
             return _compact_office(inspect_office_bytes(payload, f".{low}"))
-        except Exception:
+        except (ValueError, TypeError, OSError, KeyError, ImportError):
             return {"unreadable": True}
     if low == "html":
         source = text
@@ -79,28 +79,51 @@ def _compact_office(outline: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(unit, dict) or unit.get("kind") != "slide":
                 continue
             bullets = unit.get("bullets") or []
-            pages.append(
-                {
-                    "index": unit.get("index"),
-                    "title": unit.get("title"),
-                    "bullet_count": len(bullets) if isinstance(bullets, list) else 0,
-                    "images": unit.get("images") or 0,
-                }
-            )
+            preview: list[str] = []
+            if isinstance(bullets, list):
+                for item in bullets[:3]:
+                    text = str(item or "").strip()
+                    if text:
+                        preview.append(text[:80])
+            page: dict[str, Any] = {
+                "index": unit.get("index"),
+                "title": unit.get("title"),
+                "bullet_count": len(bullets) if isinstance(bullets, list) else 0,
+                "images": unit.get("images") or 0,
+            }
+            if preview:
+                page["preview"] = preview
+            pages.append(page)
         return {
             "slides": outline.get("slides"),
             "images": outline.get("images"),
             "pages": pages,
         }
     if kind == "docx":
-        return {
+        first = ""
+        for unit in outline.get("units") or []:
+            if isinstance(unit, dict) and unit.get("kind") in {"heading", "para"}:
+                first = str(unit.get("text") or "").strip()[:160]
+                if first:
+                    break
+        out = {
             "paragraphs": outline.get("paragraphs"),
             "tables": outline.get("tables"),
             "images": outline.get("images"),
         }
+        if first:
+            out["preview"] = first
+        return out
     if kind == "xlsx":
-        return {
+        names: list[str] = []
+        for unit in outline.get("units") or []:
+            if isinstance(unit, dict) and unit.get("name"):
+                names.append(str(unit.get("name"))[:80])
+        out = {
             "sheets": outline.get("sheets"),
             "formulas": outline.get("formulas"),
         }
+        if names:
+            out["sheet_names"] = names[:12]
+        return out
     return {"kind": kind}

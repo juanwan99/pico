@@ -76,12 +76,12 @@ test.describe('T-SANDBOX-OPEN-REGRESS', () => {
     await page.screenshot({ path: path.join(FRAME_DIR, 'S1b-open-browser-1280.png') });
   });
 
-  test('S2 打开一份 Word still goes to Writer', async ({ page }) => {
-    await stubSandbox(page, 'sandbox://writer/课堂笔记.docx', 'LibreOffice Writer', 'writer');
+  test('S2 打开一份 Word does not invent a classroom file', async ({ page }) => {
     await page.goto(NEW_CHAT_PATH);
     await sendMessage(page, '打开一份 Word');
     await expect(page.getByTestId('result-panel')).toBeVisible({ timeout: 20000 });
-    await expect(page.getByTestId('sandbox-web-pane')).toBeVisible({ timeout: 20000 });
+    await expect(page.getByTestId('sandbox-web-pane')).toHaveCount(0);
+    await expect(page.getByTestId('artifact-action-error')).toContainText('没有可打开的文件');
     ensureDir();
     await page.screenshot({ path: path.join(FRAME_DIR, 'S2-word-1280.png') });
   });

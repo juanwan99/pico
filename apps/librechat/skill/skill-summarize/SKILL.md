@@ -15,4 +15,4 @@ always-apply: false
 
 # skill.summarize
 
-Read a referenced workspace artifact when needed, extract the main points, conclusions, and action items, and optionally save the result as a workspace artifact. Do not add facts that are absent from the source.
+The teacher mounted this skill. Follow their message. Do not invent a summarize workflow. Do not add facts that are absent from the source.
