@@ -182,3 +182,6 @@ apps/librechat/.env
 apps/librechat/data-node/
 apps/librechat/meili_data*/
 apps/librechat/uploads/
+
+# mermaid UMD is fetched at pico-sandbox image build, not committed
+services/sandbox_worker/vendor/mermaid.min.js

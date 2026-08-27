@@ -48,6 +48,12 @@ RUN set -eux; \
 
 COPY services /app/services
 
+# Official mermaid UMD (pin in mermaid_pin.py). No runtime CDN.
+RUN python -m sandbox_worker.fetch_mermaid --dest /opt/pico/vendor/mermaid.min.js \
+    && chmod -R a+rX /opt/pico
+
+ENV PICO_MERMAID_JS_PATH=/opt/pico/vendor/mermaid.min.js
+
 RUN useradd --create-home --uid 65532 --shell /usr/sbin/nologin sandbox \
     && mkdir -p /tmp/pico-sandbox-home /tmp/pico-sandbox-profiles /var/lib/pico/teacher-disks \
     && chown -R 65532:65532 /app /tmp/pico-sandbox-home /tmp/pico-sandbox-profiles /opt/ms-playwright /var/lib/pico/teacher-disks

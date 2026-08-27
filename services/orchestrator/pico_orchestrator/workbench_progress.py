@@ -22,6 +22,7 @@ WRITE_TOOLS = frozenset(
         "edit_xlsx_document",
         "render_document",
         "generate_image",
+        "generate_diagram",
     }
 )
 
@@ -39,6 +40,7 @@ _DOING: dict[str, str] = {
     "inspect_document": "正在读文档结构",
     "verify_document": "正在核对文档",
     "generate_image": "正在出图",
+    "generate_diagram": "正在画结构图",
     "workspace_write_file": "正在落盘",
     "workspace_list_files": "正在列文件",
     "workspace_read_file": "正在读文件",
@@ -63,6 +65,7 @@ _DONE: dict[str, str] = {
     "inspect_document": "已读文档结构",
     "verify_document": "已核对文档",
     "generate_image": "已出图",
+    "generate_diagram": "已画结构图",
     "workspace_write_file": "已落盘",
     "workspace_list_files": "已列文件",
     "workspace_read_file": "已读文件",
@@ -87,6 +90,7 @@ _FAIL: dict[str, str] = {
     "inspect_document": "没读成文档结构",
     "verify_document": "文档核对未完成",
     "generate_image": "没出成图",
+    "generate_diagram": "没画出结构图",
     "workspace_write_file": "没落成盘",
     "workspace_list_files": "没列出文件",
     "workspace_read_file": "没读成文件",

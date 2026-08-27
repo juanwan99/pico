@@ -54,7 +54,7 @@ _MARKDOWN_TABLE_L0 = re.compile(
 _PROCESS_LINE = re.compile(
     r"(?m)^[ \t]*[〔\[]?(?:"
     r"调用工具|工具完成|步骤\s*\d+|检查点已保存|仍在处理|正在思考|正在准备|"
-    r"正在写|正在改|正在调工具|正在落盘|正在出图|正在列文件|正在读文件|"
+    r"正在写|正在改|正在调工具|正在落盘|正在出图|正在画|正在列文件|正在读文件|"
     r"正在检索|正在阅读|正在核对"
     r")[^〕\]]*[〕\]]?[ \t]*$"
 )
@@ -177,6 +177,7 @@ def titles_from_tool_results(
         "edit_xlsx_document",
         "render_document",
         "generate_image",
+        "generate_diagram",
     }
     for name, value in tool_results:
         if name not in write_tools or not isinstance(value, dict):

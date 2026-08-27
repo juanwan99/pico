@@ -18,6 +18,7 @@ from pico_orchestrator.artifact_types import (
     reject_fake_protected_write_message,
     title_protected_extension,
 )
+from pico_orchestrator.diagram_generate import render_diagram_bytes
 from pico_orchestrator.document_generators import (
     KNOWN_CALC_CELL,
     build_docx_document,
@@ -88,6 +89,7 @@ _MAX_KB_EXCERPT = 280
 _SKIP_KB_TITLES = frozenset({"回复摘要"})
 _EDIT_TIMEOUT_S = 20.0
 _IMAGE_TIMEOUT_S = 45.0
+_DIAGRAM_TIMEOUT_S = 30.0
 
 logger = logging.getLogger(__name__)
 
@@ -1062,6 +1064,35 @@ def _workspace_handlers(
         result["user_message"] = "图已生成，可在结果区下载。"
         return result
 
+    async def generate_diagram(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        source = _required_text(args, "source", maximum=32_000)
+        kind_raw = args.get("kind")
+        kind = str(kind_raw).strip() if isinstance(kind_raw, str) else "mermaid"
+        title_raw = args.get("title")
+        title_hint = str(title_raw).strip() if isinstance(title_raw, str) else ""
+        raw, svg, meta = await _run_bounded(
+            render_diagram_bytes(source, kind=kind or "mermaid"),
+            seconds=_DIAGRAM_TIMEOUT_S,
+            code="diagram.timeout",
+            message="结构图超时（30 秒）。请稍后重试，不能假装画出结构图。",
+        )
+        title = _ensure_extension(title_hint or "结构图", ".png")
+        result = await store.write(
+            principal,
+            title=title,
+            content=raw,
+            kind="png",
+        )
+        result["format"] = "png"
+        result["diagram_kind"] = meta.get("kind") or "mermaid"
+        result["engine"] = meta.get("engine")
+        if svg:
+            result["svg"] = svg
+        if meta.get("svg_omitted"):
+            result["svg_omitted"] = True
+        result["user_message"] = "结构图已生成，可在结果区下载。要放进 Word/PPT 时把 artifact id 写入 spec。"
+        return result
+
     async def verify_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         """Static HTML self-check — never claims runtime PASS without evidence."""
         artifact_id = args.get("artifact_id")
@@ -1648,6 +1679,7 @@ def _workspace_handlers(
         edit_pptx,
         edit_xlsx,
         generate_image,
+        generate_diagram,
         verify_html,
         inspect_preview,
         workspace_exec,
@@ -1778,6 +1810,7 @@ def build_default_gateway(
         edit_pptx,
         edit_xlsx,
         generate_image,
+        generate_diagram,
         verify_html,
         inspect_preview,
         workspace_exec,
@@ -2091,6 +2124,22 @@ def build_default_gateway(
                 "Args: prompt, title?"
             ),
             handler=generate_image,
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
+            name="generate_diagram",
+            description=(
+                "Draw one structure diagram (flowchart, sequence, org chart) from mermaid "
+                "source into a downloadable PNG Artifact. Use this for structure diagrams, "
+                "not photos — photos still use generate_image. kind defaults to mermaid; "
+                "d2 is not wired and fails honestly. On parse/sandbox failure: honest "
+                "Chinese failure; never invent a diagram. To place it in Word/PPT, pass "
+                "the returned artifact id as image_artifact_id on spec. "
+                "Args: source, kind?, title?"
+            ),
+            handler=generate_diagram,
             school_scoped=False,
         )
     )
@@ -2543,6 +2592,24 @@ def openai_tool_schemas(
                 },
             },
             "required": ["prompt"],
+        },
+        "generate_diagram": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "description": "Mermaid source (fences optional). Flow/sequence/org charts.",
+                },
+                "kind": {
+                    "type": "string",
+                    "description": "Diagram language. Only mermaid is wired. d2 is rejected.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional download filename ending .png",
+                },
+            },
+            "required": ["source"],
         },
         "structured_outline": {
             "type": "object",

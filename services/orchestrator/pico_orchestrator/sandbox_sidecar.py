@@ -79,6 +79,14 @@ async def _embedded_call(
         )
         out["human_copy"] = "已按你的要求清空这台老师盘。"
         return out
+    if method == "POST" and path.rstrip("/").endswith("/diagram"):
+        body = json_body or {}
+        from sandbox_worker.diagram import render_diagram
+
+        return await render_diagram(
+            source=str(body.get("source") or ""),
+            kind=str(body.get("kind") or "mermaid"),
+        )
     if method == "POST" and path.endswith("/sessions/open"):
         body = json_body or {}
         document = None

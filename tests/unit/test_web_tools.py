@@ -543,10 +543,11 @@ def test_gateway_allowlist_includes_web_pair() -> None:
     assert "inspect_document" in ALLOWED_GATEWAY_TOOLS
     assert "verify_document" in ALLOWED_GATEWAY_TOOLS
     assert "generate_image" in ALLOWED_GATEWAY_TOOLS
+    assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_pptx_lib" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
     assert "kb_search" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 26
+    assert len(ALLOWED_GATEWAY_TOOLS) == 27
 
 
 def test_attach_teacher_sources_footer() -> None:

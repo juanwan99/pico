@@ -32,6 +32,7 @@ const ALLOWED = [
   "inspect_document",
   "verify_document",
   "generate_image",
+  "generate_diagram",
   "verify_html_document",
   "web_search",
   "web_fetch",
@@ -306,6 +307,19 @@ export default function (pi: ExtensionAPI) {
     Type.Object(
       {
         prompt: Type.String(),
+        title: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "generate_diagram",
+    "Draw one structure diagram (flowchart, sequence, org) from mermaid source into a PNG Artifact. Use for structure diagrams, not photos. kind=d2 is not wired. Never invent a diagram on failure. To place it in Word/PPT, pass the artifact id as image_artifact_id.",
+    Type.Object(
+      {
+        source: Type.String(),
+        kind: Type.Optional(Type.String()),
         title: Type.Optional(Type.String()),
       },
       { additionalProperties: true },

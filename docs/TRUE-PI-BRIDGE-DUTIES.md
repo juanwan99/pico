@@ -23,7 +23,8 @@ CLAIM-WB: NO
 | `services/true_pi_bridge/pico-gateway-tools.ts` | Pi extension：注册 gateway 工具（含 #507 web_search/web_fetch） |
 | `docs/OPS-TRUE-PI-ROLLBACK.md` | 部署 / 回滚一页 |
 
-v7（加载纪律）：gateway 执行上限仍是全名单；Pi 默认只注册 CORE（`capability_loading.py`）。挂了 Skill 才按快照收窄/放出 EXTENDED。禁自研 tool_search。
+v7（加载纪律）：gateway 执行上限仍是全名单；Pi 默认只注册 CORE（`capability_loading.py`）。挂了 Skill 才按快照收窄/放出 EXTENDED。禁自研 tool_search。  
+v8（结构图）：一个 `generate_diagram`（官方 mermaid + 沙箱 Playwright 截进账本）。禁自研排版核、禁 Kroki、禁抄 pi-diagram。D2 未接则诚实拒绝。
 
 ## 允许的工具（v2 · #507 web_search/web_fetch）
 
@@ -40,6 +41,7 @@ render_document
 inspect_document
 verify_document
 generate_image
+generate_diagram
 verify_html_document
 web_search
 web_fetch
