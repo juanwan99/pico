@@ -198,12 +198,26 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_pptx_document",
-    "Create a real .pptx Artifact. Result includes an observation of what landed. ok is not finished — read it. Pictures: generate_image first when needed.",
+    "Create a real .pptx Artifact. Read observation.outline.images after. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
         marker: Type.Optional(Type.String()),
         body: Type.Optional(Type.String()),
+        spec: Type.Optional(Type.Object({}, { additionalProperties: true })),
+        blocks: Type.Optional(
+          Type.Array(
+            Type.Object(
+              {
+                type: Type.Optional(Type.String()),
+                title: Type.Optional(Type.String()),
+                bullets: Type.Optional(Type.Array(Type.String())),
+                image_artifact_id: Type.Optional(Type.String()),
+              },
+              { additionalProperties: true },
+            ),
+          ),
+        ),
       },
       { additionalProperties: true },
     ),
