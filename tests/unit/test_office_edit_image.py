@@ -128,9 +128,11 @@ async def test_generate_image_mock_https_png(monkeypatch: pytest.MonkeyPatch) ->
         )
 
     monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
-    raw, ext = await generate_image_bytes("分数的初步认识课堂示意图")
+    raw, ext, meta = await generate_image_bytes("分数的初步认识课堂示意图")
     assert ext == "png"
     assert raw.startswith(b"\x89PNG")
+    assert meta["tier"] == "cheap"
+    assert "schnell" in meta["model"]
 
 
 @pytest.mark.asyncio

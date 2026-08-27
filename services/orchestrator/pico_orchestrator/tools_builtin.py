@@ -1046,8 +1046,10 @@ def _workspace_handlers(
         prompt = _required_text(args, "prompt", maximum=2000)
         title_raw = args.get("title")
         title_hint = str(title_raw).strip() if isinstance(title_raw, str) else ""
-        raw, ext = await _run_bounded(
-            generate_image_bytes(prompt),
+        tier_raw = args.get("tier")
+        tier = str(tier_raw).strip() if isinstance(tier_raw, str) else ""
+        raw, ext, meta = await _run_bounded(
+            generate_image_bytes(prompt, tier=tier or None),
             seconds=_IMAGE_TIMEOUT_S,
             code="image.timeout",
             message="出图超时（45 秒）。请稍后重试，不能编造图片。",
@@ -1061,6 +1063,8 @@ def _workspace_handlers(
             kind=kind,
         )
         result["format"] = ext
+        result["image_tier"] = meta.get("tier")
+        result["engine"] = meta.get("model")
         result["user_message"] = "图已生成，可在结果区下载。"
         return result
 
@@ -2120,8 +2124,10 @@ def build_default_gateway(
             name="generate_image",
             description=(
                 "Create one downloadable png/jpg via SiliconFlow HTTPS images API. "
-                "On missing key, timeout, or 4xx: honest Chinese failure; never invent pixels. "
-                "Args: prompt, title?"
+                "tier=cheap (default): unlabeled illustration, no letters on the pixels; "
+                "put Chinese words in HTML or generate_diagram. "
+                "tier=high: finer figure or photo-like picture. Never invent pixels. "
+                "Never use SVG as a photo. Args: prompt, tier?, title?"
             ),
             handler=generate_image,
             school_scoped=False,
@@ -2589,6 +2595,10 @@ def openai_tool_schemas(
                 "title": {
                     "type": "string",
                     "description": "Optional download filename ending .png/.jpg",
+                },
+                "tier": {
+                    "type": "string",
+                    "description": "cheap (default, unlabeled) or high (finer/photo-like)",
                 },
             },
             "required": ["prompt"],

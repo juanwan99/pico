@@ -81,6 +81,7 @@ def test_system_md_slim_and_catalog_not_scene_weld():
     assert "Being listed does **not** mean you must call them" in body
     assert "Call `kb_search` only when the teacher asks about school materials" in body
     assert "generate_diagram" in body
+    assert "tier=cheap" in body
     assert "Do not publish unless the teacher asked" in body
     assert "public_url" in body
     assert "`skill-deliverable`:" in body

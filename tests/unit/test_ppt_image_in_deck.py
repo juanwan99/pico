@@ -123,9 +123,9 @@ def _media_names(raw: bytes) -> list[str]:
 async def test_teacher_image_then_pptx_has_real_picture(monkeypatch) -> None:
     """Complex: generate_image fixture → generate_pptx_document → zip + size."""
 
-    async def fake_image(prompt: str) -> tuple[bytes, str]:
+    async def fake_image(prompt: str, *, tier: str | None = None) -> tuple[bytes, str, dict]:
         assert "图" in prompt or prompt
-        return FIXTURE_PNG, "png"
+        return FIXTURE_PNG, "png", {"tier": tier or "cheap", "model": "test"}
 
     monkeypatch.setattr(
         "pico_orchestrator.tools_builtin.generate_image_bytes", fake_image

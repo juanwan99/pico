@@ -1,4 +1,8 @@
-"""Thin SiliconFlow HTTPS image adapter. No local diffusion / no copied vendor kernels."""
+"""Thin SiliconFlow HTTPS image adapter. No local diffusion / no copied vendor kernels.
+
+Tiers (ADR-CAPABILITY-LOADING): one verb, 档 is a parameter.
+cheap = FLUX.1-schnell unlettered raster. high = Kolors (or env pin).
+"""
 
 from __future__ import annotations
 
@@ -16,7 +20,10 @@ from pico_orchestrator.gateway import ToolError
 logger = logging.getLogger(__name__)
 
 SILICONFLOW_IMAGES_URL = "https://api.siliconflow.cn/v1/images/generations"
-DEFAULT_MODEL = "Kwai-Kolors/Kolors"
+CHEAP_MODEL = "black-forest-labs/FLUX.1-schnell"
+HIGH_MODEL = "Kwai-Kolors/Kolors"
+# Kept for ops that still set the old single-model env (maps to high).
+DEFAULT_MODEL = HIGH_MODEL
 IMAGE_TIMEOUT_S = 45.0
 _MAX_PROMPT = 2000
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -27,14 +34,57 @@ NO_KEY_MESSAGE = "出图服务未配置。请管理员在主机写入 SILICONFLO
 TIMEOUT_MESSAGE = "出图超时（45 秒）。请稍后重试，不能编造图片。"
 REJECT_MESSAGE = "出图服务拒绝了这次请求。请稍后重试或换一句描述，不能编造图片。"
 INVALID_MESSAGE = "出图结果不是可打开的 png/jpg，未保存，不能编造图片。"
+TIER_MESSAGE = "出图只有 cheap / high 两档。不能编造图片。"
+NO_TEXT_SUFFIX = (
+    " No text, letters, numbers, captions, labels, or watermarks in the image."
+)
+
+_TIER_ALIASES = {
+    "cheap": "cheap",
+    "fast": "cheap",
+    "low": "cheap",
+    "sketch": "cheap",
+    "high": "high",
+    "quality": "high",
+    "photo": "high",
+    "best": "high",
+}
+DEFAULT_TIER = "cheap"
 
 
 def siliconflow_api_key() -> str:
     return (os.environ.get("SILICONFLOW_API_KEY") or "").strip()
 
 
+def normalize_image_tier(raw: str | None) -> str:
+    if raw is None:
+        return DEFAULT_TIER
+    text = str(raw).strip().lower()
+    if not text:
+        return DEFAULT_TIER
+    mapped = _TIER_ALIASES.get(text)
+    if mapped is None:
+        raise ToolError("image.unsupported_tier", TIER_MESSAGE)
+    return mapped
+
+
+def image_model_for(tier: str) -> str:
+    resolved = normalize_image_tier(tier)
+    if resolved == "cheap":
+        return (
+            (os.environ.get("SILICONFLOW_IMAGE_MODEL_CHEAP") or "").strip()
+            or CHEAP_MODEL
+        )
+    return (
+        (os.environ.get("SILICONFLOW_IMAGE_MODEL_HIGH") or "").strip()
+        or (os.environ.get("SILICONFLOW_IMAGE_MODEL") or "").strip()
+        or HIGH_MODEL
+    )
+
+
 def image_model() -> str:
-    return (os.environ.get("SILICONFLOW_IMAGE_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    """High-tier model (legacy env SILICONFLOW_IMAGE_MODEL)."""
+    return image_model_for("high")
 
 
 def _as_png_or_jpeg(raw: bytes) -> tuple[bytes, str]:
@@ -113,23 +163,38 @@ def _first_image_payload(body: Any) -> tuple[str | None, str | None]:
     return url_s or None, b64_s or None
 
 
-async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
-    """Return (image_bytes, png|jpg). Never invent pixels on failure."""
+def _payload_for(tier: str, model: str, prompt: str) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+        "image_size": "1024x1024",
+        "batch_size": 1,
+    }
+    if tier == "high":
+        body["num_inference_steps"] = 20
+    return body
+
+
+async def generate_image_bytes(
+    prompt: str,
+    *,
+    tier: str | None = None,
+) -> tuple[bytes, str, dict[str, Any]]:
+    """Return (image_bytes, png|jpg, meta). Never invent pixels on failure."""
     text = (prompt or "").strip()
     if not text:
         raise ToolError("tool.invalid_arguments", "请写要画的内容。")
     if len(text) > _MAX_PROMPT:
         raise ToolError("tool.invalid_arguments", f"出图描述不能超过 {_MAX_PROMPT} 字。")
+    resolved = normalize_image_tier(tier)
+    model = image_model_for(resolved)
+    send = text + NO_TEXT_SUFFIX if resolved == "cheap" else text
+    if len(send) > _MAX_PROMPT:
+        send = send[:_MAX_PROMPT]
     api_key = siliconflow_api_key()
     if not api_key:
         raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
-    payload = {
-        "model": image_model(),
-        "prompt": text,
-        "image_size": "1024x1024",
-        "batch_size": 1,
-        "num_inference_steps": 20,
-    }
+    payload = _payload_for(resolved, model, send)
     try:
         response = await _post_images(payload, api_key=api_key, timeout=IMAGE_TIMEOUT_S)
     except httpx.TimeoutException as exc:
@@ -163,4 +228,5 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
             raise ToolError("image.provider", REJECT_MESSAGE) from exc
     else:
         raise ToolError("image.invalid", INVALID_MESSAGE)
-    return _as_png_or_jpeg(raw)
+    png, ext = _as_png_or_jpeg(raw)
+    return png, ext, {"tier": resolved, "model": model, "unlettered": resolved == "cheap"}

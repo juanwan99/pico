@@ -303,11 +303,12 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_image",
-    "Create one png/jpg via the configured HTTPS image API. To place it inside Word/PPT, pass the returned artifact id as image_artifact_id on spec. Never invent pixels on failure.",
+    "Create one png/jpg via the configured HTTPS image API. tier=cheap (default): unlabeled illustration, no letters on the pixels — put Chinese in HTML or generate_diagram. tier=high: finer figure or photo-like. Never invent pixels. Never use SVG as a photo. To place it in Word/PPT, pass the artifact id as image_artifact_id.",
     Type.Object(
       {
         prompt: Type.String(),
         title: Type.Optional(Type.String()),
+        tier: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),
