@@ -2049,10 +2049,13 @@ def build_default_gateway(
         ToolSpec(
             name="generate_pptx_document",
             description=(
-                "Create a real OOXML .pptx via spec/blocks. Sibling of "
+                "Create a real OOXML .pptx via spec/blocks on stock python-pptx "
+                "layouts (title, bullets, table, theme colors). Sibling of "
                 "sandbox_pptx_lib (isolated python-pptx) — pick from the "
-                "teacher's ask, not a scene word. Same title replaces the file "
-                "the teacher opens. Read observation.outline.images. "
+                "teacher's ask, not a scene word. Free shapes / color blocks / "
+                "full-bleed geometry are not this tool; write python-pptx in "
+                "sandbox_pptx_lib. Same title replaces the file the teacher "
+                "opens. Read observation.outline.images. "
                 "A missing image_artifact_id skips that picture; the file still "
                 "lands. blocks[].type cover/content/title/page (or omitted) "
                 "are slides. To embed a picture, pass generate_image/"
@@ -2072,7 +2075,8 @@ def build_default_gateway(
                 "Sibling of generate_pptx_document — not the only PPT path. "
                 "Result includes an observation of what landed. ok is not finished. "
                 "from pptx import Presentation, Inches, Pt, RGBColor is allowed "
-                "(Inches/Pt also on pptx). Do not import os. "
+                "(Inches/Pt also on pptx). add_shape and RGBColor color blocks "
+                "are this tool. Do not import os. "
                 "add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); "
                 "add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first "
                 "picture. Must add slides then save_deck(prs). Empty "

@@ -52,7 +52,10 @@ def test_pi_and_hosted_pptx_descriptions_are_siblings() -> None:
     lib = gw.tools["sandbox_pptx_lib"].description
     diagram = gw.tools["generate_diagram"].description
     assert "Sibling of sandbox_pptx_lib" in pptx
+    assert "stock python-pptx layouts" in pptx
+    assert "Free shapes" in pptx
     assert "Sibling of generate_pptx_document" in lib
+    assert "add_shape and RGBColor color blocks are this tool" in lib
     assert "Sibling of generate_image" in diagram
     assert "veto" in diagram
     assert "精美" not in lib
@@ -65,6 +68,8 @@ def test_system_names_office_ceiling_without_scene_words() -> None:
     body = pico_system_text()
     assert "sandbox_pptx_lib" in body
     assert "siblings" in body
+    assert "stock python-pptx layouts" in body
+    assert "body bullets (not title-only walls)" not in body
     assert "课件" not in body
     assert "精美" not in body
     assert "通知" not in body
