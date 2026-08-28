@@ -9,7 +9,8 @@ from __future__ import annotations
 import base64
 import html
 import io
-from typing import Any, Iterator
+from collections.abc import Callable, Iterator
+from typing import Any
 
 from pico_orchestrator.artifact_types import is_valid_ooxml_package
 from pico_orchestrator.office.legacy import require_supported_office_ext
@@ -19,6 +20,16 @@ _MAX_IMAGES = 16
 _MAX_IMAGE_BYTES = 1_500_000
 _MAX_XLSX_ROWS = 40
 _MAX_XLSX_COLS = 16
+
+_OOXML_MISS = (AttributeError, ValueError, TypeError, KeyError, NotImplementedError)
+
+
+def _opt(call: Callable[[], Any], default: Any = None) -> Any:
+    """python-docx/pptx optional fields throw; skip that box, keep the page."""
+    try:
+        return call()
+    except _OOXML_MISS:
+        return default
 
 
 def preview_office_html(raw: bytes, ext: str) -> str:
@@ -131,14 +142,14 @@ def _docx_list_tag(para: Any) -> str | None:
     try:
         from docx.oxml.ns import qn
 
-        p_pr = para._element.find(qn("w:pPr"))  # noqa: SLF001
+        p_pr = para._element.find(qn("w:pPr"))
         if p_pr is None:
             return None
         num_pr = p_pr.find(qn("w:numPr"))
         if num_pr is None:
             return None
         return "ul"
-    except Exception:
+    except _OOXML_MISS:
         return None
 
 
@@ -157,8 +168,8 @@ def _docx_blocks(doc: Any) -> list[tuple]:
             out.append(("p", style, text, _docx_list_tag(para)))
             for run in para.runs:
                 try:
-                    drawing = run._element.find(".//" + qn("a:blip"))  # noqa: SLF001
-                except Exception:
+                    drawing = run._element.find(".//" + qn("a:blip"))
+                except _OOXML_MISS:
                     drawing = None
                 if drawing is None:
                     continue
@@ -168,7 +179,7 @@ def _docx_blocks(doc: Any) -> list[tuple]:
                 try:
                     part = doc.part.related_parts[embed]
                     blob = part.blob
-                except Exception:
+                except _OOXML_MISS:
                     continue
                 if blob:
                     out.append(("image", blob))
@@ -215,12 +226,12 @@ def _pptx_html(raw: bytes) -> str:
             )
             try:
                 shape_type = shape.shape_type
-            except Exception:
+            except _OOXML_MISS:
                 shape_type = None
             if shape_type == MSO_SHAPE_TYPE.PICTURE and image_n < _MAX_IMAGES:
                 try:
                     blob = shape.image.blob
-                except Exception:
+                except _OOXML_MISS:
                     blob = b""
                 uri = _data_uri(blob, _guess_image_type(blob)) if blob else None
                 if uri:
@@ -264,14 +275,14 @@ def _walk_shapes(shapes: Any, dx: int = 0, dy: int = 0) -> Iterator[tuple[Any, i
     for shape in shapes:
         try:
             shape_type = shape.shape_type
-        except Exception:
+        except _OOXML_MISS:
             shape_type = None
         if shape_type == MSO_SHAPE_TYPE.GROUP:
             try:
                 gdx = dx + int(shape.left or 0)
                 gdy = dy + int(shape.top or 0)
                 yield from _walk_shapes(shape.shapes, gdx, gdy)
-            except Exception:
+            except _OOXML_MISS:
                 continue
             continue
         yield shape, dx, dy
@@ -288,7 +299,7 @@ def _slide_bg_css(slide: Any) -> tuple[str, str]:
         r, g, b = int(rgb[0]), int(rgb[1]), int(rgb[2])
         luma = (r * 299 + g * 587 + b * 114) / 1000
         return f"#{r:02x}{g:02x}{b:02x}", "dark" if luma < 140 else "light"
-    except Exception:
+    except _OOXML_MISS:
         return "", "light"
 
 
@@ -300,7 +311,7 @@ def _shape_box(
         top = 100.0 * float((shape.top or 0) + dy) / sh
         width = 100.0 * float(shape.width or 0) / sw
         height = 100.0 * float(shape.height or 0) / sh
-    except Exception:
+    except _OOXML_MISS:
         return None
     if width <= 0.2 or height <= 0.2:
         return None
@@ -313,7 +324,7 @@ def _run_font_pt(run: Any) -> float | None:
         if size is None:
             return None
         return float(size.pt)
-    except Exception:
+    except _OOXML_MISS:
         return None
 
 
@@ -321,7 +332,7 @@ def _font_color_css(run: Any) -> str | None:
     try:
         rgb = run.font.color.rgb
         return f"#{int(rgb[0]):02x}{int(rgb[1]):02x}{int(rgb[2]):02x}"
-    except Exception:
+    except _OOXML_MISS:
         return None
 
 
@@ -339,11 +350,8 @@ def _shape_html(shape: Any) -> str:
             pt = _run_font_pt(run)
             if pt:
                 styles.append(f"font-size:{max(10, min(48, pt))}px")
-            try:
-                if run.font.bold:
-                    styles.append("font-weight:700")
-            except Exception:
-                pass
+            if _opt(lambda r=run: bool(r.font.bold)):
+                styles.append("font-weight:700")
             color = _font_color_css(run)
             if color:
                 styles.append(f"color:{color}")
