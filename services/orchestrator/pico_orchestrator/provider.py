@@ -343,7 +343,7 @@ def _responses_instructions_and_input(messages: list[dict]) -> tuple[str | None,
     for row in messages:
         role = str(row.get("role") or "")
         content = str(row.get("content") or "")
-    if not content:
+        if not content:
             continue
         if role == "system":
             instructions_parts.append(content)
