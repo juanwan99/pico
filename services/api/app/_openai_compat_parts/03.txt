@@ -1,0 +1,145 @@
+                "title:",
+            )
+        ):
+            continue
+        cleaned_lines.append(line.strip())
+    seed = cleaned_lines[0] if cleaned_lines else (prompt or "新对话")
+    seed = re.sub(r"\s+", " ", seed).strip(" \"'`，。；：,.!?")
+    if not seed:
+        seed = "新对话"
+    if len(seed) > 40:
+        seed = seed[:37].rstrip() + "…"
+    return seed
+
+
+def _title_completion_payload(
+    *,
+    completion_id: str,
+    created: int,
+    model: str,
+    title: str,
+    prompt: str,
+) -> dict[str, Any]:
+    return {
+        "id": completion_id,
+        "object": "chat.completion",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": title},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": _estimated_usage(prompt, title),
+    }
+
+
+def _strip_pico_markers(text: str) -> str:
+    """Remove Pico-internal ledger markers before the model sees the user turn."""
+    import re
+
+    t = str(text or "")
+    t = re.sub(r"【Pico-Convo:[^】]+】", "", t)
+    t = re.sub(r"【Pico-User:[^】]+】", "", t)
+    t = re.sub(r"【工作空间：[^】]+】", "", t)
+    t = re.sub(r"【权限：[^】]+】", "", t)
+    t = re.sub(r"【模型偏好：[^】]+】", "", t)
+    t = re.sub(r"【项目指令：[^】]+】", "", t)
+    return t
+
+
+def _last_user_prompt(messages: list[ChatMessage]) -> str:
+    for m in reversed(messages):
+        if m.role == "user":
+            t = _content_text(m.content).strip()
+            if t:
+                return t
+    return "\n".join(
+        f"{m.role}: {_content_text(m.content)}" for m in messages
+    ).strip() or "hello"
+
+
+def _history_for_agent(messages: list[ChatMessage]) -> list[dict[str, Any]]:
+    """Prior turns only (exclude the latest user message — runner appends it)."""
+    if not messages:
+        return []
+    # drop trailing user message(s) that form current prompt
+    trimmed = list(messages)
+    while trimmed and trimmed[-1].role == "user":
+        trimmed.pop()
+    out: list[dict[str, Any]] = []
+    for m in trimmed[-20:]:  # cap context
+        if m.role not in ("user", "assistant"):
+            continue
+        text = _strip_pico_markers(_content_text(m.content)).strip()
+        if text:
+            out.append({"role": m.role, "content": text})
+    return out
+
+
+
+def _conversation_id_from(
+    body: ChatCompletionRequest,
+    x_conversation_id: str | None,
+) -> str | None:
+    if x_conversation_id and x_conversation_id.strip():
+        return x_conversation_id.strip()[:128]
+    if body.metadata:
+        for k in ("conversation_id", "conversationId", "convo_id"):
+            v = body.metadata.get(k)
+            if v:
+                return str(v)[:128]
+    # parse 【Pico-Convo:xxx】 from latest user message
+    import re
+    prompt = _last_user_prompt(body.messages)
+    m = re.search(r"【Pico-Convo:([^】]+)】", prompt)
+    if m:
+        return m.group(1).strip()[:128]
+    if body.user and body.user.strip() and body.user not in {"default", "user"}:
+        return body.user.strip()[:128]
+    return None
+
+
+def _workspace_id_from(
+    body: ChatCompletionRequest,
+    x_workspace_id: str | None,
+) -> str | None:
+    if x_workspace_id and x_workspace_id.strip():
+        return x_workspace_id.strip()[:36]
+    if body.metadata:
+        v = body.metadata.get("workspace_id") or body.metadata.get("workspaceId")
+        if v:
+            return str(v)[:36]
+    return None
+
+
+async def _day_use_system_block(
+    principal: Principal, display_header: str | None
+) -> str:
+    """SSO name + recent ledger titles → SYSTEM appendix. Fail soft; never a memory OS."""
+    from pico_orchestrator.day_use import build_day_use_block, decode_display_name_header
+
+    name = decode_display_name_header(display_header)
+    titles: list[str] = []
+    try:
+        from app.run_service import list_artifacts_for_principal
+
+        factory = session_factory()
+        async with factory() as session:
+            rows = await list_artifacts_for_principal(session, principal, limit=12)
+        titles = [str(getattr(row, "title", "") or "") for row in rows]
+    except Exception:  # noqa: BLE001 — missing ledger must not block chat
+        titles = []
+    return build_day_use_block(display_name=name, recent_titles=titles)
+
+
+async def _ledger_task_run(
+    *,
+    principal: Principal,
+    prompt: str,
+    model: str,
+    conversation_id: str | None,
+    workspace_id: str | None,
+    skill_snapshot: dict[str, Any] | None = None,
