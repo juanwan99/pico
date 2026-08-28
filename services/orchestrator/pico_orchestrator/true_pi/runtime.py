@@ -174,6 +174,8 @@ async def run_true_pi_agent(
             pi_provider = "openai" if openai_brain or provider.name != "deepseek" else "deepseek"
             pi_base = provider.base_url if openai_brain else ""
             pi_api = "openai-responses" if openai_brain else ""
+            # Owner: gpt-5.6-sol medium. Pi 0.73.1 official levels, not on/off.
+            pi_thinking_level = "medium" if openai_brain else ""
             tool_server = ToolServer(
                 principal=principal,
                 gateway=gateway,
@@ -225,6 +227,7 @@ async def run_true_pi_agent(
                 accept_image=bool(images),
                 base_url=pi_base,
                 api=pi_api,
+                thinking_level=pi_thinking_level,
                 env={
                     "DEEPSEEK_API_KEY": provider.api_key
                     if pi_provider == "deepseek"

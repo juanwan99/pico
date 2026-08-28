@@ -41,7 +41,7 @@ DATE: 2026-08-28
 31. **加载诚实（#748）。** 办公天花板 `sandbox_pptx_lib` 常驻 CORE。挂 Skill 只要还露 `generate_pptx_document`，就必须成对露 `sandbox_pptx_lib`，否则挂 Skill = 藏天花板。焊句禁回潮（Prefer generate_pptx / Photos still use）。编程沙箱仍 EXTENDED。禁词表自动挂。只改 Python 说明 ≠ Pi 看见（仍认 §14）。
 32. **产品尺 ≠ 三问（#748）。** 自验必须拆 pptx：页数、嵌图、同聊改是否落盘。模型打勾 / UI「已完成」不当过。三问只证加载没焊死。办公厚度是 S2，不是再出一张更漂亮的三问。同名再写必须覆盖老师盘；沙箱同名打开必须重载，不能切回旧窗。只查老师盘会漏账本新版本。
 33. **办公厚度（#752）。** 缺 `image_artifact_id` 不得毁掉整份 PPT（跳过该图，observation.images 诚实）。成品条在已有 pptx/docx/xlsx 时不挂 sidecar 图。加厚走 `sandbox_pptx_lib` 帮手（`add_title_slide` / `add_content_slide` / `add_table`）+ 现有 slide 字段排封面/表，不加 spec 字段。焊句仍禁。
-34. **聊天脑 OpenAI Responses 反代（AIProxy 原版中转）。** 钥说明只认官方客户端 + 中转 URL：OpenAI `https://…/openai` · Claude `…/anthropic` · Gemini `…/gemini` · Grok `…/grok`。Pico 换 DS 只接 **OpenAI** 这条（Codex：`wire_api=responses`、无 `/v1`、`store:false`）。不要用 urllib 默认 UA 探活（403 假「没权限」）。Pi `--provider openai` + models.json `baseUrl`/`api=openai-responses`；DEEPSEEK_* 仍是脑槽位。`gpt-*` 贴图不要切回 deepseek vision。出图仍走 New API，不改打 `…/gemini`。禁止为 Claude/Grok 再造核。
+34. **聊天脑 OpenAI Responses 反代（AIProxy 原版中转）。** 钥说明只认官方客户端 + 中转 URL：OpenAI `https://…/openai` · Claude `…/anthropic` · Gemini `…/gemini` · Grok `…/grok`。Pico 换 DS 只接 **OpenAI** 这条。业主选用 **`gpt-5.6-sol` + `--thinking medium`**（Pi 官方档，不是 on/off）。无 `/v1`、`store:false`。不要用 urllib 默认 UA 探活。Pi `--provider openai` + models.json `baseUrl`/`api=openai-responses`；DEEPSEEK_* 仍是脑槽位。`gpt-*` 贴图不要切回 deepseek vision。**出图仍走 New API Gemini**（现网 `PICO_IMAGE_GATEWAY_*` · `gemini-3.1-flash-image`），不改打 AIProxy `…/gemini`。禁止为 Claude/Grok 再造核。
 
 ## C · 部署 / ECS
 
