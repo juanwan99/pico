@@ -10,9 +10,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import ipaddress
+import json
 import logging
 import os
 import time
+from datetime import UTC
+from email.utils import parsedate_to_datetime
 from io import BytesIO
 from typing import Any
 from urllib.parse import urlparse
@@ -29,12 +32,16 @@ DEFAULT_MODEL = "glm-image"
 DEFAULT_SIZE = "1280x1280"
 DEFAULT_QUALITY = "standard"
 IMAGE_TIMEOUT_S = 90.0
-# Live F4 (#752): Pi fired generate_image 2–3 times; each exhausted 6 POSTs
-# (27s) on 429. One in-process flight + longer backoff (60s sleep, still
-# inside 90s). Exhausted still image.provider — never invent pixels.
+# Live F5 (#752) this-round glm-image 429: Retry-After header absent,
+# body error.code=1113 「余额不足或无可用资源包,请充值。」. F4 single-flight +
+# 2/4/8/16/30 then rate-gate ~28s still consecutive-flew and 429'd.
+# Honor Retry-After (HTTP-date or seconds), cap = image timeout window.
+# Missing header → rest that window before the next POST, not 28s.
+# 1113 is not a rate limit — do not retry. Exhausted still
+# image.provider — never invent pixels.
 _429_MAX_TRIES = 6
-_429_BACKOFF_S = (2.0, 4.0, 8.0, 16.0, 30.0)
-_429_RETRY_AFTER_CAP_S = 30.0
+_429_RETRY_AFTER_CAP_S = IMAGE_TIMEOUT_S
+_429_NON_RETRYABLE_CODES = frozenset({"1113"})
 _flight_lock = asyncio.Lock()
 _glm_lock = asyncio.Lock()
 _inflight: dict[str, asyncio.Future[tuple[bytes, str]]] = {}
@@ -146,21 +153,62 @@ def _retry_after_header(response: Any) -> str | None:
 def _parse_retry_after_s(raw: str | None) -> float | None:
     if not raw:
         return None
+    text = str(raw).strip()
+    if not text:
+        return None
     try:
-        n = float(raw)
+        n = float(text)
     except ValueError:
+        n = None
+    if n is not None:
+        if n <= 0:
+            return None
+        return min(n, _429_RETRY_AFTER_CAP_S)
+    try:
+        dt = parsedate_to_datetime(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        delay = dt.timestamp() - time.time()
+    except (TypeError, ValueError, OverflowError, OSError):
         return None
-    if n <= 0:
+    if delay <= 0:
         return None
-    return min(n, _429_RETRY_AFTER_CAP_S)
+    return min(delay, _429_RETRY_AFTER_CAP_S)
 
 
-def _429_delay_s(retry_index: int, retry_after: str | None) -> float:
-    idx = min(max(retry_index, 0), len(_429_BACKOFF_S) - 1)
-    scheduled = _429_BACKOFF_S[idx]
+def _429_delay_s(retry_after: str | None) -> float:
+    """Seconds to rest before the next glm-image POST.
+
+    This round's live 429 had Retry-After absent — rest the timeout
+    window rather than 2/4/8/16/30 then ~28s consecutive fly.
+    """
     parsed = _parse_retry_after_s(retry_after)
-    delay = scheduled if parsed is None else max(scheduled, parsed)
-    return max(delay, 1.0)
+    if parsed is None:
+        return _429_RETRY_AFTER_CAP_S
+    return max(parsed, 1.0)
+
+
+def _zhipu_error_code(response: Any) -> str | None:
+    json_fn = getattr(response, "json", None)
+    body: Any = None
+    if callable(json_fn):
+        try:
+            body = json_fn()
+        except (TypeError, ValueError, json.JSONDecodeError, AttributeError):
+            body = None
+    elif isinstance(getattr(response, "text", None), str):
+        try:
+            body = json.loads(response.text)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            body = None
+    if not isinstance(body, dict):
+        return None
+    err = body.get("error")
+    code = err.get("code") if isinstance(err, dict) else body.get("code")
+    if code is None:
+        return None
+    text = str(code).strip()
+    return text or None
 
 
 def reset_image_generate_runtime() -> None:
@@ -194,6 +242,7 @@ def _http_provider_error(response: Any) -> ToolError:
     err = ToolError("image.provider", REJECT_MESSAGE)
     err.http_status = _http_status(response)
     err.retry_after = _retry_after_header(response)
+    err.zhipu_error_code = _zhipu_error_code(response)
     return err
 
 
@@ -289,12 +338,31 @@ async def _generate_image_campaign(text: str, api_key: str) -> tuple[bytes, str]
                 raise
             status = getattr(exc, "http_status", None)
             if status == 429:
-                if rate_tries >= _429_MAX_TRIES - 1:
-                    _arm_rate_gate(_429_RETRY_AFTER_CAP_S)
+                retry_after = getattr(exc, "retry_after", None)
+                error_code = str(getattr(exc, "zhipu_error_code", None) or "").strip()
+                delay = _429_delay_s(retry_after)
+                if error_code in _429_NON_RETRYABLE_CODES:
+                    delay = _429_RETRY_AFTER_CAP_S
+                _arm_rate_gate(delay)
+                no_retry = (
+                    error_code in _429_NON_RETRYABLE_CODES
+                    or rate_tries >= _429_MAX_TRIES - 1
+                    or delay >= _429_RETRY_AFTER_CAP_S
+                )
+                if no_retry:
+                    logger.warning(
+                        "zhipu images HTTP 429 retry-after=%r error_code=%s; "
+                        "gate %.1fs, no in-campaign fly",
+                        retry_after,
+                        error_code or None,
+                        delay,
+                    )
                     raise
-                delay = _429_delay_s(rate_tries, getattr(exc, "retry_after", None))
                 logger.warning(
-                    "zhipu images HTTP 429; retry %s/%s after %.1fs",
+                    "zhipu images HTTP 429 retry-after=%r error_code=%s; "
+                    "retry %s/%s after %.1fs",
+                    retry_after,
+                    error_code or None,
                     rate_tries + 1,
                     _429_MAX_TRIES - 1,
                     delay,
@@ -327,7 +395,12 @@ async def _generate_image_call(text: str, api_key: str) -> tuple[bytes, str]:
     if response.status_code in {401, 403}:
         raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
     if response.status_code >= 400:
-        logger.warning("zhipu images HTTP %s", response.status_code)
+        logger.warning(
+            "zhipu images HTTP %s retry-after=%r error_code=%s",
+            response.status_code,
+            _retry_after_header(response),
+            _zhipu_error_code(response),
+        )
         raise _http_provider_error(response)
     try:
         body = response.json()
