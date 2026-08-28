@@ -20,12 +20,12 @@ body:
         # 调查卡 · T-改这里-ID
 
         开工先读（只读，禁止把正文贴进卡）：
-        docs/ONEFLOW.md · docs/MEMORY-RESET.md · docs/TOOLING-CATALOG.md
+        docs.ONEFLOW.md · docs/MEMORY-RESET.md · docs/TOOLING-CATALOG.md
 
         ## 合同
 
         - **结果：** 查清改这里
-        - **不准：** 装过 · 开始大改码 · 建议 T-*-DEBT · 自签 PASS
+        - **不准：** 装过 · 开始大改码 · 建议 T-*-DEBT · 签产品 PASS
         - **过门：** ①点击 ②日志 ③源码
         - **部署：** 不部
 
@@ -36,7 +36,7 @@ body:
         SHA：live =
         查清：
         建议下一张执行卡结果（一句）：
-        PASS：未签
+        PASS：不签（调查卡 completed）
         ```
     validations:
       required: true

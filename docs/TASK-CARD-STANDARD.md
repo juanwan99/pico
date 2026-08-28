@@ -23,7 +23,7 @@ SUPERSEDES: 四行短卡当派发形态
 
 ```text
 结果：老师在 pico.aivia.asia 能看见什么
-不准：最多 5 条（必含：自签 PASS · 直推 main · ship-bff-web）
+不准：最多 5 条（必含：执行窗关卡 · 直推 main · ship-bff-web）
 过门：最多 4 条人路径
 部署：PICO_DEPLOY_SHA=<40位> bash /opt/pico/scripts/prod-update.sh
        没差写「不部」
@@ -46,7 +46,7 @@ PR：#
 SHA：live = origin/main =
 过门：T1 过/不过 · 证据
 剩下：无
-PASS：未签
+PASS：未签 / 总管已签
 ```
 
 ## 从 315 留下的（纪律，不填表）
@@ -63,7 +63,7 @@ PASS：未签
 | 执行窗零记忆 | 调查写进 Issue 已锁事实；派发条点名必读 + ≤3 坑 |
 | 生产认 40 位 SHA | `curl -fsS https://pico.aivia.asia/api/pico/tip` |
 | 合了没装 = 没做完 | live tip 对不上 origin/main 不算过 |
-| 写入不自签 | `PASS：未签`；`CLAIM-WB-DEGREE-WEB: NO` |
+| 卡 PASS 总管签 | live tip=main 且结果句老师手已点 → 总管自签关。执行窗不签。CLAIM-WB / 全球 PASS 仍不代签 |
 | 同域一张在飞 | 两问第一句 |
 | 视觉默认关 | 过门用 API/SHA；非业主点名不开浏览器 |
 

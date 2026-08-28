@@ -40,9 +40,10 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
   → 有差才 prod-update.sh 一次
   → live tip == origin/main
   → 回执五句
+  → 总管：结果句老师手已点则自签卡 PASS 关；未点不签。业主发现问题开新卡小口
 ```
 
-未 MERGED 不算做完。合了没部署 = 用户看不见。
+未 MERGED 不算做完。合了没部署 = 用户看不见。CI/API 200 不算老师手。CLAIM-WB / 全球 PASS 仍只业主签。
 
 ## 2. 合同在 Issue，派发条在卡评
 
@@ -70,7 +71,7 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 
 ```text
 结果：老师在 pico.aivia.asia 能看见什么
-不准：最多 5 条（必含：自签 PASS · 直推 main · ship-bff-web）
+不准：最多 5 条（必含：执行窗关卡 · 直推 main · ship-bff-web）
 过门：最多 4 条人路径
 部署：PICO_DEPLOY_SHA=<40位> bash /opt/pico/scripts/prod-update.sh
 ```
@@ -79,9 +80,9 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 
 | 谁 | 做什么 | 禁止 |
 |----|--------|------|
-| 业主 | 目标；黄红争议；老师手过门；签 PASS | 当粘贴中继（终态） |
-| 总管 | 调查写入 Issue；打章；`## 派发`；spawn-executor / `@cursor`；订约读回执；刷现况 | 自签；合 main；prod-update；代合代部；当执行窗写业务码 |
-| 写入 | 改、测、PR、部、五句回执贴合同 | 自签 PASS；直推 main；写 edu-core 业务 |
+| 业主 | 开卡（一句人话）；用产品；发现问题开新卡小口 | 盯合、盯部、签卡 PASS、当执行窗闹钟 |
+| 总管 | 调查写入 Issue；打章；`## 派发`；spawn-executor / `@cursor`；订约读回执；刷现况；条件满足自签卡 PASS 关 | 未点结果句就自签；请业主签卡 PASS；合 main；prod-update；代合代部；当执行窗写业务码（应急/开工除外） |
+| 写入 | 改、测、PR、部、五句回执贴合同 | 自签/关卡；直推 main；写 edu-core 业务 |
 
 ## 4. 发布
 
