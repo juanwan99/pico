@@ -1,50 +1,86 @@
-            if detach and not bg_task.done():
-                await asyncio.shield(
-                    emit(
-                        "run.client_detached",
-                        {
-                            "reason": "sse_disconnect",
-                            "message": "客户端已断开；任务在云端继续。",
-                            "run_id": run_id,
-                            "task_id": task_id,
+"pipeline": delivery_plan.pipeline,
+                            "revision": delivery_plan.revision,
+                            "runnable_html": delivery_plan.runnable_html,
+                            "min_artifacts": delivery_plan.min_artifacts,
+                            "implicit_package": bool(
+                                getattr(delivery_plan, "implicit_package", False)
+                            ),
+                            "structure_item_count": int(
+                                getattr(delivery_plan, "structure_item_count", 0) or 0
+                            ),
+                            "prior_artifact_count": int(
+                                getattr(delivery_plan, "prior_artifact_count", 0) or 0
+                            ),
                         },
                     )
+                await emit(
+                    "run.durable",
+                    {
+                        "detach_on_disconnect": settings.pico_run_detach_on_disconnect,
+                        "max_seconds": caps.max_seconds,
+                        "policy": "client_is_subscriber",
+                    },
                 )
-                # Do not cancel bg_task — ledger remains source of truth.
-                return
-            if not bg_task.done():
-                bg_task.cancel()
-            raise
-        finally:
-            if not detach:
-                # Legacy: stream lifetime owns the job.
-                if not bg_task.done():
-                    bg_task.cancel()
-                try:
-                    await bg_task
-                except asyncio.CancelledError:
-                    pass
-                except Exception as wait_err:  # noqa: BLE001
-                    _ = wait_err
-            elif bg_task.done():
-                # Detach mode but job already finished while client was connected.
-                with suppress(Exception):
-                    await bg_task
-
-        if detach and not bg_task.done():
-            # Client left the generator normally without consuming done — keep job.
-            await emit(
-                "run.client_detached",
-                {
-                    "reason": "stream_end_while_running",
-                    "message": "客户端流结束；任务在云端继续。",
-                    "run_id": run_id,
-                    "task_id": task_id,
-                },
-            )
-            return
-
-        yield chunk({}, finish="stop")
-        yield b"data: [DONE]\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+                result = await run_agent_runtime(
+                    use_pi_agent=settings.pico_pi_agent_runtime,
+                    pi_agent_canary_principals=settings.pi_agent_canary_principal_set,
+                    pi_agent_allow_all=settings.pi_agent_default_all,
+                    use_kimi_agent=settings.legacy_kimi_enabled,
+                    kimi_agent_canary_principals=(
+                        settings.kimi_agent_canary_principal_set
+                    ),
+                    kimi_agent_allow_all=settings.kimi_agent_default_all,
+                    legacy_agent_loop_emergency=settings.pico_legacy_agent_loop_emergency,
+                    prompt=prompt,
+                    principal=principal,
+                    emit=emit,
+                    is_cancelled=is_cancelled,
+                    caps=caps,
+                    history=history,
+                    artifact_store=LedgerArtifactStore(
+                        factory,
+                        task_id=task_id,
+                        run_id=run_id,
+                        conversation_id=conversation_id,
+                    ),
+                    conversation_id=conversation_id,
+                    persist_pi_session=True,
+                )
+                await _finalize_run(
+                    run_id,
+                    status=result.status,
+                    error=result.error,
+                    final_text=result.final_text,
+                    task_id=task_id,
+                    user_prompt=prompt,
+                    change_proposal=getattr(result, "change_proposal", None),
+                    token_usage=getattr(result, "token_usage", None),
+                )
+                await q.put(("done", result))
+            except asyncio.CancelledError:
+                # Only explicit task.cancel() (legacy kill path) lands here.
+                await asyncio.shield(
+                    _finalize_run(
+                        run_id,
+                        status="cancelled",
+                        error="run cancelled",
+                        task_id=task_id,
+                    )
+                )
+                raise
+            except Exception as e:  # noqa: BLE001
+                # If stop already requested, do not report failed+sqlite noise.
+                factory_local = session_factory()
+                cancel_hit = False
+                async with factory_local() as session:
+                    run = await session.get(RunRow, run_id)
+                    cancel_hit = bool(run and (run.cancel_requested or run.status == "cancelled"))
+                if cancel_hit:
+                    await _finalize_run(
+                        run_id,
+                        status="cancelled",
+                        error=None,
+                        task_id=task_id,
+                    )
+                    await q.put(
+              
