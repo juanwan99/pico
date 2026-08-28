@@ -214,8 +214,8 @@ def _parse_block(item: Any, *, kind: Kind) -> Block:
             raise ValueError("Excel sheet 需要 headers 或 rows。")
         return Block(type="sheet", title=name[:31], headers=headers, rows=rows)
     if kind == "pptx":
-        if btype and btype != "slide":
-            raise ValueError("PPT spec 的 block.type 必须是 slide。")
+        # Pi / document-skill send cover|content|title|page. Those are slides,
+        # not a new spec field. Missing type with title/bullets already worked.
         title = sanitize_slide_text(str(item.get("title") or "").strip())
         bullets_raw = item.get("bullets")
         if isinstance(item.get("text"), str) and not bullets_raw:

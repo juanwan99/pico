@@ -26,6 +26,22 @@ from pico_orchestrator.gateway import ToolError
 _TIMEOUT_S = 20.0
 _MAX_SOURCE = 20_000
 _DENIED_CALLS = frozenset({"exec", "eval", "compile", "open", "__import__"})
+# Upstream python-pptx (document-skill style). os / pathlib / subprocess stay denied.
+_ALLOWED_IMPORT_ROOTS = frozenset({"pptx", "pptx_helpers"})
+
+
+def _import_root(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Import):
+        roots = {alias.name.split(".")[0] for alias in node.names if alias.name}
+        if len(roots) == 1:
+            return next(iter(roots))
+        return None
+    if isinstance(node, ast.ImportFrom):
+        if node.level:
+            return None
+        mod = node.module or ""
+        return mod.split(".")[0] if mod else None
+    return None
 
 
 def assert_pptx_lib_source(source: str) -> None:
@@ -40,10 +56,12 @@ def assert_pptx_lib_source(source: str) -> None:
         raise ToolError("sandbox.exec_invalid", "python-pptx 脚本无法解析。") from exc
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            raise ToolError(
-                "sandbox.exec_denied",
-                "不要自己 import。沙箱已注入 Presentation / Inches / save_deck。",
-            )
+            root = _import_root(node)
+            if root not in _ALLOWED_IMPORT_ROOTS:
+                raise ToolError(
+                    "sandbox.exec_denied",
+                    "禁止 import os/宿主库。python-pptx 可用 from pptx import Presentation。",
+                )
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
@@ -161,12 +179,20 @@ def _wrapper_source(user_source: str, output_path: str, image_paths: dict[str, s
         "    if not hasattr(prs, 'save'):\n"
         "        raise SystemExit('save_deck 需要 Presentation')\n"
         "    prs.save(OUTPUT_PATH)\n"
+        "def _sandbox_import(name, globals=None, locals=None, fromlist=(), level=0):\n"
+        "    if level != 0:\n"
+        "        raise ImportError('relative import denied')\n"
+        "    root = str(name or '').split('.')[0]\n"
+        "    if root not in ('pptx', 'pptx_helpers'):\n"
+        "        raise ImportError('denied import ' + str(name))\n"
+        "    return __import__(name, globals, locals, fromlist, level)\n"
         "exec(cfg['source'], {\n"
         "    '__builtins__': {\n"
         "        'range': range, 'len': len, 'str': str, 'int': int,\n"
         "        'float': float, 'list': list, 'dict': dict, 'tuple': tuple,\n"
         "        'enumerate': enumerate, 'zip': zip, 'min': min, 'max': max,\n"
         "        'bool': bool,\n"
+        "        '__import__': _sandbox_import,\n"
         "    },\n"
         "    'Presentation': Presentation,\n"
         "    'Inches': Inches,\n"

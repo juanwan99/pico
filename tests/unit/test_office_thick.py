@@ -94,6 +94,75 @@ def test_pipe_table_rows_needs_two_columns() -> None:
     assert pipe_table_rows(["a|b"]) is None
 
 
+def test_cover_content_aliases_are_slides() -> None:
+    """Live F: Pi sent type=cover/content and the whole deck died."""
+    spec = parse_spec(
+        {
+            "kind": "pptx",
+            "title": "办公尺752.pptx",
+            "blocks": [
+                {
+                    "type": "cover",
+                    "title": "本周经营风险与下周动作",
+                    "bullets": ["责任人：张三", "日期：2026-08-28"],
+                    "image_artifact_id": "cover-id",
+                },
+                {
+                    "type": "content",
+                    "title": "本周经营风险总览",
+                    "bullets": ["收入端延期", "毛利承压", "回款变慢"],
+                },
+                {
+                    "type": "title",
+                    "title": "下周动作",
+                    "bullets": ["锁定供应商", "催收回款"],
+                },
+            ],
+        }
+    )
+    assert all(block.type == "slide" for block in spec.blocks)
+    raw = render_spec(spec, images={})
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_generate_pptx_live_cover_content_shape_writes() -> None:
+    """Exact first-fail argument shape from run b8763b35 seq 11."""
+    gw = build_default_gateway(MemoryArtifactStore())
+    out = await gw.invoke(
+        P(),
+        "generate_pptx_document",
+        {
+            "title": "风险二：毛利率承压",
+            "blocks": [
+                {
+                    "type": "cover",
+                    "title": "本周经营风险与下周动作",
+                    "bullets": ["责任人：张三", "日期：2026-08-28"],
+                    "image_artifact_id": "a4f6458a-dcd3-4b40-bebf-9d3df2864b37",
+                },
+                {
+                    "type": "content",
+                    "title": "本周经营风险总览",
+                    "bullets": [
+                        "收入端：核心客户订单交付延期，风险敞口约 12%",
+                        "毛利端：原材料涨价挤压毛利率约 2.3 个点",
+                    ],
+                },
+                {
+                    "type": "content",
+                    "title": "风险一：订单交付延期",
+                    "bullets": ["大客户 A 项目关键原料缺货，预计延期 5–7 天"],
+                },
+            ],
+        },
+    )
+    assert out.get("format") == "pptx"
+    assert int(out.get("observation", {}).get("outline", {}).get("slides") or 0) == 3
+    assert out.get("ok") is not False
+
+
 def test_missing_image_id_still_writes_deck() -> None:
     spec = parse_spec(
         {

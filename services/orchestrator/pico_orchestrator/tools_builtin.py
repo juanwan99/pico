@@ -2044,10 +2044,11 @@ def build_default_gateway(
                 "teacher's ask, not a scene word. Same title replaces the file "
                 "the teacher opens. Read observation.outline.images. "
                 "A missing image_artifact_id skips that picture; the file still "
-                "lands. To embed a picture, pass generate_image/generate_diagram "
-                "artifact id as image_artifact_id on the slide in spec/blocks. "
-                "[image:…] in body does not embed. ok is not finished. "
-                "Args: title, marker, body? | spec? | blocks?"
+                "lands. blocks[].type cover/content/title/page (or omitted) "
+                "are slides. To embed a picture, pass generate_image/"
+                "generate_diagram artifact id as image_artifact_id on the slide "
+                "in spec/blocks. [image:…] in body does not embed. ok is not "
+                "finished. Args: title, marker, body? | spec? | blocks?"
             ),
             handler=generate_pptx,
             school_scoped=False,
@@ -2060,11 +2061,12 @@ def build_default_gateway(
                 "Isolated python-pptx (not host bash, not a second Office OS). "
                 "Sibling of generate_pptx_document — not the only PPT path. "
                 "Result includes an observation of what landed. ok is not finished. "
-                "Source cannot import; Presentation/Inches/Pt/RGBColor/"
-                "add_title_slide/add_content_slide/add_table/save_deck/IMAGE_PATHS "
-                "are injected. Must call save_deck(prs). Empty shells fail. "
-                "A missing image_artifact_ids entry is skipped. "
-                "Args: source, title?, image_artifact_ids?"
+                "from pptx import Presentation/Inches/Pt/RGBColor is allowed "
+                "(also injected). Do not import os. Use add_title_slide/"
+                "add_content_slide/add_table/save_deck/IMAGE_PATHS. Must add "
+                "slides then save_deck(prs). Empty Presentation();save_deck "
+                "fails — do not send a placeholder. A missing image_artifact_ids "
+                "entry is skipped. Args: source, title?, image_artifact_ids?"
             ),
             handler=_make_sandbox_pptx_lib(store),
             school_scoped=False,
@@ -2486,7 +2488,10 @@ def openai_tool_schemas(
             "properties": {
                 "source": {
                     "type": "string",
-                    "description": "python-pptx body. No import. Use Presentation/Inches/save_deck.",
+                    "description": (
+                        "python-pptx body. from pptx import Presentation is allowed. "
+                        "Do not import os. Add slides then save_deck. Empty shells fail."
+                    ),
                 },
                 "title": {
                     "type": "string",
@@ -2530,7 +2535,8 @@ def openai_tool_schemas(
                     "type": "array",
                     "description": (
                         "spec.blocks shortcut. Slide objects: title, bullets, "
-                        "image_artifact_id (artifact id from generate_image/generate_diagram)."
+                        "image_artifact_id. type cover/content/title/page (or omitted) "
+                        "are slides."
                     ),
                 },
             },
