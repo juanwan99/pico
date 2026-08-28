@@ -1,0 +1,107 @@
+                settings,
+                run_id=run_id,
+                model=model,
+                history=history,
+                skill_snapshot=skill_snapshot,
+                delivery_plan=delivery_plan,
+                allowed_tools=request_tools,
+                system_prompt=client_system if edu_sidebar else "",
+                conversation_id=conversation_id,
+                images=turn_images,
+                day_use=day_use_block,
+            )
+            text = result.final_text or result.error or "(empty)"
+            await _finalize_run(
+                run_id,
+                status=result.status,
+                error=result.error,
+                final_text=result.final_text,
+                task_id=task_id,
+                user_prompt=prompt,
+                change_proposal=getattr(result, "change_proposal", None),
+                token_usage=getattr(result, "token_usage", None),
+            )
+        payload = {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": text},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": _estimated_usage(prompt, text),
+        }
+        if sidebar_web_hits is not None:
+            payload["pico_web_search"] = sidebar_web_hits
+        return payload
+
+    async def event_stream() -> AsyncIterator[bytes]:
+        def chunk(delta: dict, *, finish: str | None = None) -> bytes:
+            return _sse_chunk(
+                {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": delta,
+                            "finish_reason": finish,
+                        }
+                    ],
+                }
+            ).encode()
+
+        yield chunk({"role": "assistant"})
+
+        # Direct model (moonshot/deepseek/*) → real token stream (GPT-like handfeel)
+        use_direct = chat_only or (
+            model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+        )
+        if use_direct:
+            from pico_orchestrator.provider import stream_chat
+
+            task_id, run_id = await _ledger_task_run(
+                principal=principal,
+                prompt=prompt,
+                model=model,
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
+                skill_snapshot=skill_snapshot,
+            )
+            system = (
+                sidebar_system
+                if (json_only or edu_sidebar) and sidebar_system
+                else (
+                    "你是 Pico，面向学校场景的 AI 助手。"
+                    "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
+                    "不要编造不存在的学校数据。"
+                    "若用户要求创建或生成纯文本文件（如 hello.txt），请在回复中用代码块输出完整内容，"
+                    "格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
+                    "禁止用代码块或改后缀冒充 .html / .docx / .pptx；此类交付须走专用生成工具路径。"
+                )
+            )
+            if project_instruction:
+                system = system + "\n【项目约束】" + project_instruction
+            delivery_instr = _instruction_with_delivery(
+                skill_snapshot, prompt, delivery_plan
+            )
+            if delivery_instr:
+                system = system + "\n" + delivery_instr
+            if day_use_block:
+                system = system + "\n\n" + day_use_block
+            parts: list[str] = []
+            finalized = False
+            try:
+                async for piece in stream_chat(
+                    prompt,
+                    max_tokens=effective_max_tokens,
+                    history=history,
+                    system=system,
+                    model=model,
+  

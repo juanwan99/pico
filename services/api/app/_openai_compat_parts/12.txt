@@ -1,0 +1,90 @@
+)
+    model = (
+        _model_preference_from_prompt(raw_prompt)
+        or body.model
+        or settings.deepseek_model
+        or settings.kimi_model
+        or "pico-fast"
+    )
+    # Skill/tool path: preserve explicit dual-mode choice (pico-fast keeps thinking
+    # off + tight budget; pico-deep keeps thinking on + breaker). Only remap
+    # legacy agent SKUs / unknown ids onto pico-deep when a skill was hung.
+    if skill_snapshot and skill_snapshot.get("tools"):
+        low = str(model or "").strip().lower()
+        if low not in {"pico-fast", "pico-deep"}:
+            model = "pico-deep"
+    # Residual LibreChat prefs may still say kimi-k2.x after product default
+    # moved to DeepSeek. Remount onto the product brain when Kimi is not in the
+    # production allowlist so default-path chat does not 400.
+    model = _coerce_default_model(model, settings)
+    _assert_model_allowed(model, settings)
+    # Direct model = short tier; pico-agent = delivery tier for token ceiling.
+    # json_only / edu sidebar must not enter pi-agent even when the SKU is pico-fast.
+    use_direct = chat_only or (
+        model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+    )
+    token_ceiling = (
+        settings.pico_run_short_max_tokens if use_direct else settings.pico_run_max_tokens
+    )
+    effective_max_tokens = _effective_max_tokens(body.max_tokens, token_ceiling)
+    completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+    created = int(time.time())
+
+    # Direct Kimi (or DeepSeek) for non-agent models — real HTTPS API, not mock
+    if not body.stream:
+        task_id, run_id = await _ledger_task_run(
+            principal=principal,
+            prompt=prompt,
+            model=model,
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+            skill_snapshot=skill_snapshot,
+        )
+        if use_direct:
+            from pico_orchestrator.provider import stream_chat
+
+            system = (
+                sidebar_system
+                if (json_only or edu_sidebar) and sidebar_system
+                else (
+                    "你是 Pico，面向学校场景的 AI 助手。"
+                    "回答准确、结构清晰；需要分点时用简洁列表；中文优先。"
+                    "不要编造不存在的学校数据。"
+                    "若用户要求创建或生成纯文本文件（如 hello.txt），请在回复中用代码块输出完整内容，"
+                    "格式为 ```file:文件名 换行 正文 换行```；中文说明可附在代码块外。"
+                    "禁止用代码块或改后缀冒充 .html / .docx / .pptx；此类交付须走专用生成工具路径。"
+                )
+            )
+            if project_instruction:
+                system = system + "\n【项目约束】" + project_instruction
+            delivery_instr = _instruction_with_delivery(
+                skill_snapshot, prompt, delivery_plan
+            )
+            if delivery_instr:
+                system = system + "\n" + delivery_instr
+            if day_use_block:
+                system = system + "\n\n" + day_use_block
+            parts: list[str] = []
+            try:
+                if json_only and sidebar_web_hits and sidebar_web_hits.get("honest_miss"):
+                    text = honest_miss_json(sidebar_web_hits)
+                else:
+                    async for piece in stream_chat(
+                        prompt,
+                        max_tokens=effective_max_tokens,
+                        history=history,
+                        system=system,
+                        model=model,
+                        thinking=False if json_only else None,
+                    ):
+                        if piece:
+                            parts.append(piece)
+                    text = "".join(parts) or "(empty)"
+                await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id, user_prompt=prompt)
+            except Exception as e:  # noqa: BLE001
+                text = f"【错误】{user_message_for_error(str(e))}"
+                await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
+        else:
+            result = await _run_and_collect(
+                prompt,
+                principal,

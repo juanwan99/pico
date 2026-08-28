@@ -1,0 +1,104 @@
+                  thinking=False if json_only else None,
+                ):
+                    if piece:
+                        parts.append(piece)
+                        yield chunk({"content": piece})
+                await _finalize_run(
+                    run_id,
+                    status="succeeded",
+                    final_text="".join(parts),
+                    task_id=task_id,
+                    user_prompt=prompt,
+                )
+                finalized = True
+            except (asyncio.CancelledError, GeneratorExit):
+                await asyncio.shield(
+                    _finalize_run(
+                        run_id,
+                        status="cancelled",
+                        error="stream disconnected",
+                        task_id=task_id,
+                    )
+                )
+                finalized = True
+                raise
+            except Exception as e:  # noqa: BLE001
+                yield chunk({"content": f"【错误】{user_message_for_error(str(e))}"})
+                await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
+                finalized = True
+            finally:
+                if not finalized:
+                    await asyncio.shield(
+                        _finalize_run(
+                            run_id,
+                            status="cancelled",
+                            error="stream disconnected",
+                            task_id=task_id,
+                        )
+                    )
+            yield chunk({}, finish="stop")
+            yield b"data: [DONE]\n\n"
+            return
+
+        # pico-agent: progressive deltas from agent loop (not wait-then-fake-chunk)
+        from pico_orchestrator.runtime import run_agent_runtime
+
+        from app.db import init_db
+
+        await init_db()
+        factory = session_factory()
+        task_id = new_id()
+        run_id = new_id()
+        async with factory() as session:
+            session.add(
+                TaskRow(
+                    id=task_id,
+                    school_id=principal.school_id,
+                    membership_id=principal.membership_id,
+                    title=prompt[:80],
+                    conversation_id=conversation_id,
+                    workspace_id=workspace_id,
+                )
+            )
+            from app.db import _utcnow
+
+            session.add(
+                RunRow(
+                    id=run_id,
+                    task_id=task_id,
+                    status="running",
+                    prompt=prompt,
+                    model=model,
+                    started_at=_utcnow(),
+                    token_usage_json=json.dumps(
+                        {"skill_snapshot": skill_snapshot} if skill_snapshot else {},
+                        ensure_ascii=False,
+                    ),
+                )
+            )
+            await session.commit()
+
+        q: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+
+        async def emit(event_type: str, payload: dict[str, Any]) -> None:
+            async with factory() as session:
+                await append_event(session, run_id, event_type, payload)
+                # Checkpoint survives client detach (package B).
+                if event_type == "tool.result":
+                    tool_name = payload.get("name") or payload.get("tool") or "tool"
+                    await append_event(
+                        session,
+                        run_id,
+                        "run.checkpoint",
+                        {
+                            "kind": "tool.result",
+                            "tool": tool_name,
+                            "summary": str(
+                                payload.get("summary") or payload.get("ok") or ""
+                            )[:200],
+                        },
+                    )
+            if event_type == "message.delta":
+                text = str(payload.get("text") or "")
+                if text:
+                    await q.put(("delta", text))

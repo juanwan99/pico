@@ -1,0 +1,80 @@
+
+            elif event_type in {"compaction.begin", "compaction.end"}:
+                # Process chrome only. 在整理上文 must not become the product bubble.
+                text = str(payload.get("text") or "").strip() or "在整理上文"
+                await q.put(("status", f"{text}\n"))
+            elif event_type == "plan.progress":
+                from pico_orchestrator.human_package import public_progress_delta
+
+                text = public_progress_delta(payload)
+                if text:
+                    await q.put(("delta", f"{text}\n"))
+            elif event_type == "agent.step" and payload.get("phase") == "model":
+                # G2: user main channel stays human-package only.
+                # Tool/step process lives in ledger + ResultPanel timeline, not bubble.
+                if payload.get("step") == 1:
+                    await q.put(("status", "正在准备…\n"))
+            elif event_type == "tool.call":
+                step = str(payload.get("step_line") or "").strip() or _workbench_tool_step_line(
+                    str(payload.get("tool") or "")
+                )
+                if step:
+                    await q.put(("delta", f"{step}\n"))
+            elif event_type == "tool.result":
+                pass
+            elif event_type == "run.heartbeat":
+                elapsed = payload.get("elapsed_seconds")
+                if elapsed is not None:
+                    await q.put(("status", f"\n仍在处理…（已用时 {elapsed}s）\n"))
+                else:
+                    await q.put(("status", "\n仍在处理…\n"))
+            elif event_type == "run.checkpoint":
+                # Checkpoint is engineer state — do not spam the user bubble.
+                pass
+
+        async def is_cancelled() -> bool:
+            async with factory() as session:
+                run = await session.get(RunRow, run_id)
+                return bool(run and (run.cancel_requested or run.status == "cancelled"))
+
+        async def run() -> None:
+            try:
+                from app.artifact_store import LedgerArtifactStore
+
+                # Detach-on mode uses durable wall so leave-and-return jobs can exceed 900s.
+                skill_instr = _instruction_with_delivery(
+                    skill_snapshot, prompt, delivery_plan
+                )
+                if settings.pico_run_detach_on_disconnect:
+                    caps = settings.durable_run_caps(
+                        allowed_tools=_resolve_allowed_tools(skill_snapshot, request_tools),
+                        skill_instruction=skill_instr,
+                    )
+                else:
+                    caps = settings.delivery_run_caps(
+                        allowed_tools=_resolve_allowed_tools(skill_snapshot, request_tools),
+                        skill_instruction=skill_instr,
+                    )
+                # Stream path must apply the same dual-mode policy as non-stream.
+                caps = _caps_with_dual_mode(caps, model)
+                caps = _caps_with_images(caps, turn_images)
+                # Stream path must apply the same landing min as non-stream.
+                caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
+                if edu_sidebar and client_system:
+                    from dataclasses import replace as _dc_replace_sys_stream
+
+                    caps = _dc_replace_sys_stream(caps, system_prompt=client_system)
+                if day_use_block:
+                    from dataclasses import replace as _dc_replace_day_stream
+
+                    caps = _dc_replace_day_stream(caps, day_use=day_use_block)
+                if skill_snapshot:
+                    await emit("skill.snapshot", skill_snapshot)
+                if delivery_plan is not None and getattr(
+                    delivery_plan, "engineering", False
+                ):
+                    await emit(
+                        "delivery.plan",
+                        {
+                            "multi_deliverable": delivery_plan.multi_deliverable,
+                            
