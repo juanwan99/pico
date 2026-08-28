@@ -1,0 +1,117 @@
+        return None
+    requested = match.group(1).strip()
+    aliases = {
+        "pico": "pico-agent",
+        "pico agent": "pico-agent",
+        "pico fast": "pico-fast",
+        "pico 快速": "pico-fast",
+        "pico deep": "pico-deep",
+        "pico 深度": "pico-deep",
+        "kimi-k3": "kimi-k3",
+        "deepseek": "deepseek-v4-flash",
+        "deepseek-chat": "deepseek-chat",
+        "deepseek-reasoner": "deepseek-reasoner",
+    }
+    normalized = aliases.get(requested.lower(), requested)
+    if normalized.lower() == "auto":
+        return None
+
+    from pico_orchestrator.provider import KNOWN_DEEPSEEK_MODELS, KNOWN_KIMI_MODELS
+
+    allowed = {"pico-agent", "pico-fast", "pico-deep", *KNOWN_DEEPSEEK_MODELS, *KNOWN_KIMI_MODELS}
+    return normalized if normalized in allowed else None
+
+
+def _dev_proxy_keys(settings: Settings) -> set[str]:
+    """Explicit dev/proxy keys only — never KIMI_API_KEY or JWT secret."""
+    keys = {"pico-dev", "sk-pico-dev"}
+    extra = (settings.pico_openai_proxy_key or "").strip()
+    if extra:
+        keys.add(extra)
+    return keys
+
+
+def _production_proxy_key(settings: Settings) -> str | None:
+    key = (settings.pico_openai_proxy_key or "").strip()
+    if len(key) < 32 or key in {"pico-dev", "sk-pico-dev"}:
+        return None
+    return key
+
+
+def _principal_from_auth(
+    authorization: str | None,
+    settings: Settings,
+) -> Principal:
+    """Accept Pico JWT or a scoped OpenAI-compat proxy credential.
+
+    Production accepts only a strong explicit internal proxy credential. Model
+    keys and JWT signing secrets are never treated as Bearer credentials.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="missing bearer")
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="empty bearer")
+
+    env = (settings.pico_env or "development").lower()
+    production = env in {"production", "prod"}
+
+    # Prefer real JWT always
+    try:
+        return decode_token(token, settings)
+    except HTTPException as jwt_err:
+        # Dev defaults stay non-production; production accepts only the strong
+        # explicit internal proxy credential.
+        if (not production and token in _dev_proxy_keys(settings)) or (
+            production and token == _production_proxy_key(settings)
+        ):
+            return Principal(
+                school_id="school-a",
+                membership_id=LEGACY_PROXY_MEMBERSHIP_ID,
+                scopes=["ai:run", "ai:read", "ai:confirm"],
+                iss=settings.pico_jwt_iss,
+                aud=settings.pico_jwt_aud,
+                exp=int(time.time()) + 3600,
+                raw={"proxy": True},
+            )
+        if production and token in _dev_proxy_keys(settings):
+            raise HTTPException(
+                status_code=401,
+                detail="proxy keys disabled in production; use Pico JWT",
+            ) from jwt_err
+        raise
+
+
+def _normalized_model(model: str) -> str:
+    normalized = model.strip()
+    return normalized.split("/")[-1] if "/" in normalized else normalized
+
+
+def _assert_model_allowed(model: str, settings: Settings) -> None:
+    if not settings.is_production:
+        return
+    normalized = _normalized_model(model)
+    allowed = {_normalized_model(item) for item in settings.allowed_model_list}
+    product_surface = {"pico-fast", "pico-deep", "pico-agent", "pico"}
+    deepseek_aliases = {"deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"}
+    if normalized in allowed:
+        return
+    if product_surface.intersection(allowed) and normalized in deepseek_aliases:
+        return
+    if normalized in {"pico-fast", "pico-deep"} and {"pico-fast", "pico-deep"}.intersection(allowed):
+        return
+    # Product delivery name. Host allowlist is often pico-fast,pico-deep only.
+    if normalized in {"pico-agent", "pico"} and {"pico-fast", "pico-deep"}.intersection(
+        allowed
+    ):
+        return
+    raise HTTPException(status_code=400, detail="model is not allowed")
+
+
+def _coerce_default_model(model: str, settings: Settings) -> str:
+    """Rewrite legacy broken Kimi defaults onto DeepSeek when allowlist moved.
+
+    Owner E2E-DEFAULT: new chats must work without manually picking DeepSeek.
+    Old browser prefs that still hold ``kimi-k2.x`` should not dead-end when
+    production allowlist is ``deepseek-chat,pico-agent`` only.
+    """
