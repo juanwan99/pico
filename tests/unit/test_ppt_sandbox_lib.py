@@ -20,7 +20,11 @@ from pico_orchestrator.artifact_types import is_valid_ooxml_package
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.office.inspect import inspect_office_bytes
 from pico_orchestrator.office.pptx_helpers import ImagePathMap
-from pico_orchestrator.office.sandbox_lib import assert_pptx_lib_source, run_pptx_lib_source
+from pico_orchestrator.office.sandbox_lib import (
+    PPTX_LIB_MAX_SOURCE,
+    assert_pptx_lib_source,
+    run_pptx_lib_source,
+)
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 from pico_orchestrator.workbench_progress import (
@@ -156,6 +160,22 @@ def test_import_and_dunder_denied() -> None:
     assert ei.value.code == "sandbox.exec_denied"
     assert_pptx_lib_source(
         "from pptx import Presentation\nprs = Presentation()\nsave_deck(prs)"
+    )
+    assert_pptx_lib_source(
+        "from pathlib import Path\n"
+        "from pptx import Presentation\n"
+        "Path('/tmp/x').mkdir(parents=True, exist_ok=True)\n"
+        "prs = Presentation()\n"
+        "prs.save('/tmp/x/out.pptx')\n"
+    )
+    with pytest.raises(ToolError) as ei:
+        assert_pptx_lib_source("from pathlib.abc import Path")
+    assert ei.value.code == "sandbox.exec_denied"
+    assert_pptx_lib_source(
+        "from pptx import Presentation\n"
+        "prs = Presentation()\n"
+        "if __name__ == '__main__':\n"
+        "    prs.save('/tmp/x.pptx')\n"
     )
 
 
@@ -377,3 +397,170 @@ def test_runner_is_python_not_host_bash() -> None:
     assert "/bin/bash" not in src
     assert "shell=True" not in src
     assert "host bash" in src.lower() or "No host bash" in src or "禁止 host bash" in src
+
+
+NAKED_STYLE_SOURCE = """
+from pathlib import Path
+from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
+from pptx.enum.text import PP_ALIGN
+from pptx.util import Inches, Pt
+
+out = Path("/tmp/pico-sandbox-must-not-write-here")
+out.mkdir(parents=True, exist_ok=True)
+
+NAVY = RGBColor(15, 25, 44)
+CREAM = RGBColor(247, 244, 235)
+MINT = RGBColor(115, 214, 177)
+WHITE = RGBColor(255, 255, 255)
+
+def add_box(slide, x, y, w, h, fill):
+    if not isinstance(slide, object) or not hasattr(slide, "shapes"):
+        raise TypeError("slide")
+    shape = slide.shapes.add_shape(
+        MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(x), Inches(y), Inches(w), Inches(h)
+    )
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = fill
+    shape.line.fill.background()
+    return shape
+
+prs = Presentation()
+prs.slide_width = Inches(13.333)
+prs.slide_height = Inches(7.5)
+blank = prs.slide_layouts[6]
+
+slide = prs.slides.add_slide(blank)
+add_box(slide, 0, 0, 13.333, 7.5, NAVY)
+box = slide.shapes.add_textbox(Inches(0.8), Inches(2.4), Inches(11.5), Inches(1.4))
+tf = box.text_frame
+tf.clear()
+p = tf.paragraphs[0]
+p.alignment = PP_ALIGN.LEFT
+run = p.add_run()
+run.text = "减数分裂"
+run.font.size = Pt(44)
+run.font.bold = True
+run.font.color.rgb = WHITE
+
+slide = prs.slides.add_slide(blank)
+add_box(slide, 0, 0, 13.333, 7.5, CREAM)
+add_box(slide, 0.6, 1.6, 3.8, 4.6, MINT)
+box = slide.shapes.add_textbox(Inches(0.8), Inches(1.9), Inches(3.4), Inches(0.6))
+box.text_frame.paragraphs[0].text = "同源染色体配对"
+
+slide = prs.slides.add_slide(blank)
+add_box(slide, 0, 0, 13.333, 7.5, NAVY)
+add_box(slide, 0.7, 1.8, 5.8, 4.4, RGBColor(30, 45, 71))
+box = slide.shapes.add_textbox(Inches(1.0), Inches(2.1), Inches(5.2), Inches(0.5))
+box.text_frame.paragraphs[0].text = "有丝分裂 vs 减数分裂"
+
+prs.save("/tmp/pico-sandbox-must-not-write-here/out.pptx")
+"""
+
+
+def test_pathlib_stub_prs_save_routes_color_blocks_to_ledger() -> None:
+    leak = Path("/tmp/pico-sandbox-must-not-write-here/out.pptx")
+    if leak.exists():
+        leak.unlink()
+    raw = run_pptx_lib_source(NAKED_STYLE_SOURCE)
+    assert is_valid_ooxml_package(raw, ".pptx")
+    assert not leak.exists(), "prs.save(/tmp/...) must not write the host path"
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) >= 3
+    with zipfile.ZipFile(BytesIO(raw)) as zf:
+        xml = b"".join(
+            zf.read(name) for name in zf.namelist() if name.startswith("ppt/slides/")
+        )
+    blob = xml.decode("utf-8", errors="replace")
+    assert "减数分裂" in blob
+    assert "同源染色体配对" in blob
+    assert "srgbClr" in blob
+    assert "0F192C" in blob.upper() or "0f192c" in blob
+    assert "title-only" not in blob
+
+
+def test_naked_gpt_meiosis_fixture_runs_in_sandbox() -> None:
+    source = (ROOT / "tests/fixtures/office/naked_gpt_meiosis.py.txt").read_text(
+        encoding="utf-8"
+    )
+    assert len(source) > 10_000
+    raw = run_pptx_lib_source(source)
+    assert is_valid_ooxml_package(raw, ".pptx")
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) >= 4
+    with zipfile.ZipFile(BytesIO(raw)) as zf:
+        xml = b"".join(
+            zf.read(name) for name in zf.namelist() if name.startswith("ppt/slides/")
+        )
+    blob = xml.decode("utf-8", errors="replace")
+    assert "减数分裂" in blob
+    assert "srgbClr" in blob
+
+
+def test_pathlib_cannot_read_or_write_host_files() -> None:
+    with pytest.raises(ToolError) as ei:
+        run_pptx_lib_source(
+            "from pathlib import Path\nPath('/etc/passwd').read_text()\n"
+        )
+    assert ei.value.code == "sandbox.pptx_failed"
+    assert "host" in ei.value.message.lower() or "Permission" in ei.value.message
+    with pytest.raises(ToolError) as ei:
+        run_pptx_lib_source(
+            "from pathlib import Path\nPath('/tmp/pico-sandbox-pwn.txt').write_text('x')\n"
+        )
+    assert ei.value.code == "sandbox.pptx_failed"
+    assert not Path("/tmp/pico-sandbox-pwn.txt").exists()
+
+
+def test_dunder_name_main_guard_still_saves() -> None:
+    source = """
+from pptx import Presentation
+from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
+from pptx.dml.color import RGBColor
+from pptx.util import Inches, Pt
+prs = Presentation()
+slide = prs.slides.add_slide(prs.slide_layouts[6])
+shape = slide.shapes.add_shape(
+    MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(0), Inches(0), Inches(4), Inches(3)
+)
+shape.fill.solid()
+shape.fill.fore_color.rgb = RGBColor(15, 25, 44)
+box = slide.shapes.add_textbox(Inches(0.4), Inches(0.4), Inches(3), Inches(1))
+run = box.text_frame.paragraphs[0].add_run()
+run.text = "减数分裂封面"
+run.font.size = Pt(20)
+run.font.color.rgb = RGBColor(255, 255, 255)
+if __name__ == "__main__":
+    prs.save("/tmp/pico-sandbox-main-guard.pptx")
+"""
+    leak = Path("/tmp/pico-sandbox-main-guard.pptx")
+    if leak.exists():
+        leak.unlink()
+    raw = run_pptx_lib_source(source)
+    assert is_valid_ooxml_package(raw, ".pptx")
+    assert not leak.exists()
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) >= 1
+
+
+def test_source_cap_allows_gpt_length() -> None:
+    assert PPTX_LIB_MAX_SOURCE == 80_000
+    pad = "# pad\n" * 4_000
+    source = (
+        "from pptx import Presentation\n"
+        "prs = Presentation()\n"
+        "slide = prs.slides.add_slide(prs.slide_layouts[0])\n"
+        "slide.shapes.title.text = 'cap'\n"
+        + pad
+        + "save_deck(prs)\n"
+    )
+    assert len(source) > 20_000
+    assert_pptx_lib_source(source)
+    raw = run_pptx_lib_source(source)
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) >= 1
+    with pytest.raises(ToolError) as ei:
+        assert_pptx_lib_source("prs = Presentation()\n" + ("# x\n" * 50_000))
+    assert ei.value.code == "tool.invalid_arguments"
