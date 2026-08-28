@@ -107,7 +107,13 @@ def _docx_html(raw: bytes) -> str:
             if list_tag:
                 parts.append(f"<{list_tag}><li>{html.escape(text)}</li></{list_tag}>")
                 continue
-            tag = "h1" if style.startswith("Heading 1") else "h2" if style.startswith("Heading") else "p"
+            lowered = style.lower()
+            if lowered.startswith("heading 1") or lowered == "title":
+                tag = "h1"
+            elif lowered.startswith("heading"):
+                tag = "h2"
+            else:
+                tag = "p"
             parts.append(f"<{tag}>{html.escape(text)}</{tag}>")
         elif block[0] == "table":
             parts.append(_html_table(block[1]))

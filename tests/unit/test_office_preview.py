@@ -28,6 +28,7 @@ def test_docx_preview_is_page_not_writer_chrome():
     assert "LibreOffice" not in html
     assert "Writer" not in html
     assert "第一段" in html
+    assert "<h1>" in html
     assert "<script" not in html.lower()
 
 
