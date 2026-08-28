@@ -2037,7 +2037,8 @@ def build_default_gateway(
             description=(
                 "Create a real OOXML .pptx via spec/blocks. Sibling of "
                 "sandbox_pptx_lib (isolated python-pptx) — pick from the "
-                "teacher's ask, not a scene word. Read observation.outline.images. "
+                "teacher's ask, not a scene word. Same title replaces the file "
+                "the teacher opens. Read observation.outline.images. "
                 "To embed a picture, pass generate_image/generate_diagram "
                 "artifact id as image_artifact_id on the slide in spec/blocks. "
                 "[image:…] in body does not embed. ok is not finished. "

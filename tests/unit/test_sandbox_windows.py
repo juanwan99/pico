@@ -144,6 +144,54 @@ async def test_opening_new_docx_replaces_writer_and_keeps_tree():
 
 
 @pytest.mark.asyncio
+async def test_same_filename_new_bytes_reloads_office():
+    first_doc = FakeSurface("sandbox://impress/deck.pptx", "LibreOffice Impress · deck.pptx")
+    first_doc.filename = "deck.pptx"
+    second_doc = FakeSurface("sandbox://impress/deck.pptx", "LibreOffice Impress · deck.pptx")
+    second_doc.filename = "deck.pptx"
+    opened: list[bytes] = []
+
+    async def open_office(*, kind: str, filename: str, document: bytes):
+        _ = (kind, filename)
+        opened.append(document)
+        return first_doc if len(opened) == 1 else second_doc
+
+    runtime = SandboxRuntime()
+    import sandbox_worker.runtime as runtime_mod
+
+    async def open_files(names):
+        surface = FakeSurface("sandbox://files", "文件")
+        surface.names = names
+        return surface
+
+    runtime_mod.open_office = open_office  # type: ignore[attr-defined]
+    runtime_mod.open_files_surface = open_files  # type: ignore[attr-defined]
+
+    first = await runtime.open_session(
+        school_id="sch",
+        membership_id="mem",
+        run_id="r-edit",
+        kind="impress",
+        filename="deck.pptx",
+        document=b"PK-v1",
+    )
+    second = await runtime.open_session(
+        school_id="sch",
+        membership_id="mem",
+        run_id="r-edit",
+        kind="impress",
+        filename="deck.pptx",
+        document=b"PK-v2-longer",
+    )
+    assert second["session_id"] == first["session_id"]
+    assert opened == [b"PK-v1", b"PK-v2-longer"]
+    assert first_doc.closed is True
+    from pico_orchestrator.sandbox_persist import read_owner_disk_file
+
+    assert read_owner_disk_file("sch", "mem", "deck.pptx") == b"PK-v2-longer"
+
+
+@pytest.mark.asyncio
 async def test_ninth_desk_is_refused():
     import sandbox_worker.runtime as runtime_mod
     from pico_orchestrator.gateway import ToolError
