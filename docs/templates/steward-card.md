@@ -13,10 +13,10 @@
 派发：## 派发 只贴 dispatch-slip → spawn-executor；无钥则合同 PR/Issue 评 @cursor
 环：OPEN/WAIT/CLEAR · 订 PR/CI + timer · 读 ## CANDIDATE/DEPLOYED/五句 · tip-pin → 刷 STATE-NOW/#634
 合/部：只归执行窗 · 总管不合不部 · 合了未部关卡=打回 OPEN
-人留：目标 · 黄红争议 · 老师手 · PASS
+人留：开卡（一句人话）· 用产品；不对开新卡小口。不签卡 PASS。
 工具：只认 TOOLING-CATALOG · 起窗 spawn-executor · ssh-ecs=Tailscale ops@aliyun-hy · 禁公网22
 证据：贴本卡 Issue · 禁证据进 PR · 禁 Closes 部前关卡
-DONE：live tip = origin/main · 写入不自签 PASS · CLAIM-WB 不代签（以 STATE-NOW 为准）
+DONE：live tip = origin/main 且老师手点过结果句 → 总管自签 PASS 关。CI/API 不算。执行窗不签不关。CLAIM-WB / 全球 PASS 仍不代签。
 P0：可调查/起候选 PR，合部仍交执行窗
 北极星：用法=Grok · 薄适配·禁自研核 · 禁 mailbox/ECS常驻
 冻结：#634 至 9/7 · 不改卡面形状 · 不复活315 · 不写新HANDOFF
