@@ -6,7 +6,7 @@ adata:
     # parse 【Pico-Convo:xxx】 from latest user message
     import re
     prompt = _last_user_prompt(body.messages)
-    m = re.search(r"【Pico-Convo:([】]+)】", prompt)
+    m = re.search(r"【Pico-Convo:([^】]+)】", prompt)
     if m:
         return m.group(1).strip()[:128]
     if body.user and body.user.strip() and body.user not in {"default", "user"}:
