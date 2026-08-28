@@ -159,6 +159,20 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
     api_key = zhipu_api_key()
     if not api_key:
         raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
+    last_provider: ToolError | None = None
+    for attempt in (0, 1):
+        try:
+            return await _generate_image_call(text, api_key)
+        except ToolError as exc:
+            if exc.code != "image.provider" or attempt == 1:
+                raise
+            logger.warning("zhipu images provider failed; retrying once")
+            last_provider = exc
+    assert last_provider is not None
+    raise last_provider
+
+
+async def _generate_image_call(text: str, api_key: str) -> tuple[bytes, str]:
     payload = {
         "model": image_model(),
         "prompt": text,

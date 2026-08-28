@@ -158,8 +158,10 @@ async def test_generate_image_zhipu_4xx_no_fake(
 ) -> None:
     monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    calls = {"n": 0}
 
     async def fake_post(payload, *, api_key, timeout):
+        calls["n"] += 1
         return SimpleNamespace(status_code=400, json=lambda: {"error": "bad"})
 
     monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
@@ -167,6 +169,34 @@ async def test_generate_image_zhipu_4xx_no_fake(
         await generate_image_bytes("画一只猫")
     assert caught.value.code == "image.provider"
     assert "不能编造" in caught.value.message
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_generate_image_provider_retries_once_then_ok(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live F2: image.provider on first POST must retry once inside the tool."""
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return SimpleNamespace(status_code=500, json=lambda: {"error": "busy"})
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
+            },
+        )
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
+    raw, ext = await generate_image_bytes("封面示意图")
+    assert calls["n"] == 2
+    assert ext == "png"
+    assert raw.startswith(b"\x89PNG")
 
 
 def test_sidebar_chat_has_no_edit_or_image_tools() -> None:

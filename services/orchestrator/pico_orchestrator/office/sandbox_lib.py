@@ -60,7 +60,7 @@ def assert_pptx_lib_source(source: str) -> None:
             if root not in _ALLOWED_IMPORT_ROOTS:
                 raise ToolError(
                     "sandbox.exec_denied",
-                    "禁止 import os/宿主库。python-pptx 可用 from pptx import Presentation。",
+                    "禁止 import os/宿主库。python-pptx 可用 from pptx import Presentation, Inches, Pt。",
                 )
         if (
             isinstance(node, ast.Call)
@@ -168,13 +168,18 @@ def _wrapper_source(user_source: str, output_path: str, image_paths: dict[str, s
     )
     return (
         "import json\n"
+        "import pptx as _pptx_pkg\n"
         "from pptx import Presentation\n"
         "from pptx.dml.color import RGBColor\n"
         "from pptx.util import Emu, Inches, Pt\n"
-        "from pptx_helpers import add_content_slide, add_table, add_title_slide\n"
+        "from pptx_helpers import ImagePathMap, add_content_slide, add_table, add_title_slide\n"
+        "_pptx_pkg.Inches = Inches\n"
+        "_pptx_pkg.Pt = Pt\n"
+        "_pptx_pkg.Emu = Emu\n"
+        "_pptx_pkg.RGBColor = RGBColor\n"
         f"cfg = json.loads({payload!r})\n"
         "OUTPUT_PATH = cfg['output']\n"
-        "IMAGE_PATHS = cfg['images']\n"
+        "IMAGE_PATHS = ImagePathMap(cfg['images'])\n"
         "def save_deck(prs):\n"
         "    if not hasattr(prs, 'save'):\n"
         "        raise SystemExit('save_deck 需要 Presentation')\n"
@@ -185,7 +190,14 @@ def _wrapper_source(user_source: str, output_path: str, image_paths: dict[str, s
         "    root = str(name or '').split('.')[0]\n"
         "    if root not in ('pptx', 'pptx_helpers'):\n"
         "        raise ImportError('denied import ' + str(name))\n"
-        "    return __import__(name, globals, locals, fromlist, level)\n"
+        "    mod = __import__(name, globals, locals, fromlist, level)\n"
+        "    if root == 'pptx':\n"
+        "        import pptx as _pkg\n"
+        "        _pkg.Inches = Inches\n"
+        "        _pkg.Pt = Pt\n"
+        "        _pkg.Emu = Emu\n"
+        "        _pkg.RGBColor = RGBColor\n"
+        "    return mod\n"
         "exec(cfg['source'], {\n"
         "    '__builtins__': {\n"
         "        'range': range, 'len': len, 'str': str, 'int': int,\n"

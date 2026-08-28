@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 from pico_orchestrator.artifact_types import is_valid_ooxml_package
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.office.inspect import inspect_office_bytes
+from pico_orchestrator.office.pptx_helpers import ImagePathMap
 from pico_orchestrator.office.sandbox_lib import assert_pptx_lib_source, run_pptx_lib_source
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
@@ -171,6 +172,72 @@ save_deck(prs)
     raw = run_pptx_lib_source(source)
     outline = inspect_office_bytes(raw, ".pptx")
     assert int(outline["slides"]) >= 2
+
+
+def test_image_path_map_int_index() -> None:
+    """Live F2: IMAGE_PATHS[0] was KeyError because the inject is a dict."""
+    paths = ImagePathMap({"art-9": "/tmp/a.png", "art-2": "/tmp/b.png"})
+    assert paths[0] == "/tmp/a.png"
+    assert paths["art-9"] == "/tmp/a.png"
+    assert paths[1] == "/tmp/b.png"
+    assert 0 in paths
+    assert paths.get(0) == "/tmp/a.png"
+    empty = ImagePathMap()
+    with pytest.raises(IndexError):
+        empty[0]
+
+
+def test_from_pptx_import_inches_pt_on_pptx_package() -> None:
+    """Live F2: `from pptx import Presentation, Inches, Pt` was ImportError."""
+    source = """
+from pptx import Presentation, Inches, Pt
+prs = Presentation()
+slide = prs.slides.add_slide(prs.slide_layouts[0])
+slide.shapes.title.text = "封面"
+pic = IMAGE_PATHS[0]
+slide.shapes.add_picture(pic, Inches(1), Inches(1.6), width=Inches(5))
+save_deck(prs)
+"""
+    raw = run_pptx_lib_source(source, images={"art-cover": ONE_PNG})
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) >= 1
+    assert int(outline["images"]) >= 1
+    with zipfile.ZipFile(BytesIO(raw)) as zf:
+        media = [name for name in zf.namelist() if name.startswith("ppt/media/")]
+        assert media
+
+
+def test_helper_aliases_title_image_and_table_prs() -> None:
+    """Live F2: add_title_slide(image=) / add_table(prs=) / add_table(prs, rows)."""
+    source = """
+from pptx import Presentation, Inches, Pt
+prs = Presentation()
+add_title_slide(prs, "本周经营风险与下周动作", "责任人：张三", image=IMAGE_PATHS[0])
+add_content_slide(prs, "风险总览", ["订单交付延期", "毛利率承压", "回款变慢"])
+add_table(prs=prs, rows=[["项", "本周"], ["收入", "88"], ["毛利", "21"]])
+add_table(prs, [["项", "上周"], ["回款", "12"]])
+save_deck(prs)
+"""
+    raw = run_pptx_lib_source(source, images={"art-cover": ONE_PNG})
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) >= 4
+    assert int(outline["images"]) >= 1
+    from pptx import Presentation
+
+    deck = Presentation(BytesIO(raw))
+    tables = [s for sl in deck.slides for s in sl.shapes if getattr(s, "has_table", False)]
+    assert len(tables) >= 2
+    assert tables[0].table.cell(1, 1).text == "88"
+
+
+def test_add_table_without_rows_still_typeerror() -> None:
+    """Alias prs= does not invent a table when the grid is missing."""
+    from pico_orchestrator.office.pptx_helpers import add_table
+    from pptx import Presentation
+
+    prs = Presentation()
+    with pytest.raises(TypeError, match="rows"):
+        add_table(prs=prs)
 
 
 def test_live_placeholder_empty_shell_still_fails() -> None:
