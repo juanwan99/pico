@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 
 from pico_orchestrator.day_use import (
+    apply_day_use,
     build_day_use_block,
     decode_display_name_header,
     normalize_recent_titles,
@@ -58,3 +59,22 @@ def test_pico_system_text_appends_day_use() -> None:
     body = pico_system_text(day_use=build_day_use_block(display_name="Alice"))
     assert "Alice" in body
     assert "Day-use context" in body
+
+
+def test_edu_sidebar_strips_membership_cabinet() -> None:
+    cabinet = build_day_use_block(
+        display_name="枫溪管理员",
+        recent_titles=["豌豆杂交课件", "Word测试文档.docx"],
+    )
+    assert "豌豆杂交课件" in cabinet
+    stripped = apply_day_use(edu_sidebar=True, block=cabinet)
+    assert stripped == ""
+    assert "豌豆杂交课件" in apply_day_use(edu_sidebar=False, block=cabinet)
+    body = pico_system_text(
+        system_override="附属，不是用户要求\n{\"page\":{\"title\":\"成绩观察\"}}",
+        day_use=stripped,
+    )
+    assert "成绩观察" in body
+    assert "豌豆杂交课件" not in body
+    assert "Word测试文档" not in body
+    assert "Recent files on this membership" not in body
