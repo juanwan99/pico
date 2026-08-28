@@ -153,6 +153,36 @@ def test_import_and_dunder_denied() -> None:
     with pytest.raises(ToolError) as ei:
         assert_pptx_lib_source("Presentation.__class__")
     assert ei.value.code == "sandbox.exec_denied"
+    assert_pptx_lib_source(
+        "from pptx import Presentation\nprs = Presentation()\nsave_deck(prs)"
+    )
+
+
+def test_from_pptx_import_writes_real_deck() -> None:
+    """Live F: document-skill `from pptx import Presentation` was exec_denied."""
+    source = """
+from pptx import Presentation
+from pptx.util import Inches, Pt
+prs = Presentation()
+add_title_slide(prs, "本周经营风险与下周动作", "责任人：张三")
+add_content_slide(prs, "风险总览", ["收入端延期", "毛利承压", "回款变慢"])
+save_deck(prs)
+"""
+    raw = run_pptx_lib_source(source)
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) >= 2
+
+
+def test_live_placeholder_empty_shell_still_fails() -> None:
+    source = (
+        "from pptx import Presentation\n"
+        "prs = Presentation()\n"
+        "# 说明：此处使用沙箱其余逻辑由工具提供，本块只作占位\n"
+        "save_deck(prs)"
+    )
+    with pytest.raises(ToolError) as ei:
+        run_pptx_lib_source(source)
+    assert ei.value.code == "sandbox.pptx_shell"
 
 
 def test_empty_shell_fail_closed() -> None:
