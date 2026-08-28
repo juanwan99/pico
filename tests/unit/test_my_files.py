@@ -277,3 +277,27 @@ def test_transfer_without_field_does_not_write(client) -> None:
     assert res.status_code == 200, res.text
     assert res.json().get("landed") is False
     assert "转存到的学校位置" in (res.json().get("user_message") or "")
+
+
+def test_office_write_overwrites_teacher_disk(client, tmp_path, monkeypatch) -> None:
+    from app.artifact_store import LedgerArtifactStore
+    from app.db import session_factory
+    from pico_orchestrator.sandbox_persist import read_owner_disk_file
+
+    monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "teacher-disks"))
+    store = LedgerArtifactStore(session_factory(), conversation_id="c-office-disk")
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=9999999999,
+        raw={},
+    )
+    asyncio.run(store.write(principal, title="deck.pptx", content=b"PK-v1", kind="pptx"))
+    asyncio.run(store.write(principal, title="deck.pptx", content=b"PK-v2-edit", kind="pptx"))
+    asyncio.run(store.write(principal, title="cover.jpg", content=b"JPEG", kind="jpg"))
+    assert read_owner_disk_file("school-a", "m-edu", "deck.pptx") == b"PK-v2-edit"
+    names = list((tmp_path / "teacher-disks" / "school-a" / "m-edu").iterdir())
+    assert [p.name for p in names] == ["deck.pptx"]

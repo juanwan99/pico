@@ -198,7 +198,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_pptx_document",
-    "Create a real .pptx Artifact via spec/blocks. Sibling of sandbox_pptx_lib (isolated python-pptx) — pick from the teacher's ask, not a scene word. Read observation.outline.images after. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. ok is not finished.",
+    "Create a real .pptx Artifact via spec/blocks. Sibling of sandbox_pptx_lib (isolated python-pptx) — pick from the teacher's ask, not a scene word. Same title replaces the file the teacher opens. Read observation.outline.images after. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),

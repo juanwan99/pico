@@ -4,10 +4,10 @@
 DATE: 2026-08-28
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #748 T-LOAD-HONEST（拆焊 + 诚实加载）
+在飞: #748 T-LOAD-HONEST（拆焊 + 诚实加载 · 产品自验未过）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main
-阻塞: #740 等老师新对话过门（不改卡面）
+阻塞: #748 同名改页老师盘未覆盖（账本已有新版）· #740 不改卡面
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · 记忆 OS 仍挂起
@@ -73,7 +73,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#709](https://github.com/juanwan99/pico/issues/709) · [#712](https://github.com/juanwan99/pico/pull/712) | T-PPT-IMAGE-IN-DECK · 业主 PASS · tip `97e421c6…` |
 | 已收口 | [#710](https://github.com/juanwan99/pico/issues/710) · [#714](https://github.com/juanwan99/pico/pull/714) | T-PPT-SANDBOX-LIB · 业主 PASS · tip `97e421c6…` |
 | 已收口 | [#733](https://github.com/juanwan99/pico/issues/733) | T-NIGHT-CORE-3 · 业主 PASS @ tip `a6bc83df…` |
-| 在飞 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · 拆焊 + 诚实加载 · 办公天花板可见 |
+| 在飞 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · 同卡续：同名改页覆盖老师盘 · 不关卡 |
 | 等老师 | [#740](https://github.com/juanwan99/pico/issues/740) | T-PPT-CONTRACT · 已部 embed+layout · 须新对话过门 · 不改卡面 |
 | 挂起 | 记忆 OS | 人视角薄层已部（#736）；完整记忆 OS 仍挂 · 禁自研 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |

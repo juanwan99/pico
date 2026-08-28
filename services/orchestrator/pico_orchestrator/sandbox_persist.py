@@ -21,6 +21,7 @@ from pico_orchestrator.sandbox_s1 import (
 DEFAULT_OWNER_DISK_QUOTA = 2 * 1024 * 1024 * 1024
 QUOTA_COPY = "这台老师盘已满（上限 2GB）。关掉窗口不会删文件；请先清空不用的文件。"
 PERSIST_COPY = "文件在这台老师盘上。关掉窗口或会话不会删文件。"
+OFFICE_DISK_KINDS = frozenset({"pptx", "docx", "xlsx"})
 
 
 def disk_root() -> Path:
@@ -88,6 +89,30 @@ def owner_disk_file(school_id: str, membership_id: str, filename: str) -> Path:
     if not name or name in {".", ".."}:
         raise ToolError("sandbox.path_denied", "文件名非法")
     return join_workspace_path(root, name)
+
+
+def persist_office_to_owner_disk(
+    school_id: str,
+    membership_id: str,
+    title: str,
+    kind: str,
+    content: str | bytes,
+) -> bool:
+    """Same title replaces the file the teacher opens. Ledger stays the source.
+
+    No-op when PICO_SANDBOX_DISK is unset (unit tests without a teacher disk).
+    """
+    if not os.environ.get("PICO_SANDBOX_DISK", "").strip():
+        return False
+    low = str(kind or "").lower().lstrip(".")
+    if low not in OFFICE_DISK_KINDS:
+        return False
+    name = Path(title or "").name
+    if not name:
+        return False
+    payload = content.encode("utf-8") if isinstance(content, str) else bytes(content)
+    write_owner_disk_file(school_id, membership_id, name, payload)
+    return True
 
 
 def write_owner_disk_file(
