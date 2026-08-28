@@ -1,0 +1,104 @@
+ivery_plan.runnable_html,
+                "min_artifacts": delivery_plan.min_artifacts,
+                "implicit_package": bool(
+                    getattr(delivery_plan, "implicit_package", False)
+                ),
+                "structure_item_count": int(
+                    getattr(delivery_plan, "structure_item_count", 0) or 0
+                ),
+                "prior_artifact_count": int(
+                    getattr(delivery_plan, "prior_artifact_count", 0) or 0
+                ),
+            },
+        )
+    result = await run_agent_runtime(
+        use_pi_agent=settings.pico_pi_agent_runtime,
+        pi_agent_canary_principals=settings.pi_agent_canary_principal_set,
+        pi_agent_allow_all=settings.pi_agent_default_all,
+        use_kimi_agent=settings.legacy_kimi_enabled,
+        kimi_agent_canary_principals=(
+            settings.kimi_agent_canary_principal_set
+        ),
+        kimi_agent_allow_all=settings.kimi_agent_default_all,
+        legacy_agent_loop_emergency=settings.pico_legacy_agent_loop_emergency,
+        prompt=prompt,
+        principal=principal,  # structural Principal protocol
+        emit=emit,
+        is_cancelled=is_cancelled,
+        caps=caps,
+        history=history,
+        artifact_store=LedgerArtifactStore(
+            factory, run_id=run_id, conversation_id=conversation_id
+        ),
+        conversation_id=conversation_id,
+        persist_pi_session=True,
+    )
+    return result
+
+
+def _sse_chunk(data: dict[str, Any]) -> str:
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@router.get("/v1/models")
+async def list_models(
+    authorization: str | None = Header(default=None),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    enforce_scope(_principal_from_auth(authorization, settings), "ai:read")
+    from pico_orchestrator.provider import (
+        DEFAULT_DEEPSEEK_MODEL,
+        KNOWN_DEEPSEEK_MODELS,
+        KNOWN_KIMI_MODELS,
+        owned_by_for_model,
+    )
+
+    # Product default = DeepSeek first (LibreChat uses first OPENAI_MODELS entry;
+    # API list order stays aligned for honest branding).
+    if settings.deepseek_api_key.strip() and settings.pico_model_provider.strip().lower() != "kimi":
+        default = settings.deepseek_model or DEFAULT_DEEPSEEK_MODEL
+        known = list(KNOWN_DEEPSEEK_MODELS) + list(KNOWN_KIMI_MODELS)
+    else:
+        default = settings.kimi_model or settings.deepseek_model or DEFAULT_DEEPSEEK_MODEL
+        known = list(KNOWN_KIMI_MODELS) + list(KNOWN_DEEPSEEK_MODELS)
+    # Production allowlist (first entry = shell default) wins when set.
+    allow = settings.allowed_model_list
+    if allow:
+        ids: list[str] = []
+        for mid in allow:
+            bare = _normalized_model(mid)
+            if bare and bare not in ids:
+                ids.append(bare)
+    else:
+        ids = []
+        for mid in [default, *known, "pico-agent"]:
+            if mid not in ids:
+                ids.append(mid)
+    # Pico UI exposes ONLY the two product modes (F4). Any legacy/raw SKU that
+    # leaked in (deepseek-chat / deepseek-reasoner / kimi-* / pico-agent) is
+    # filtered out — the product surface is exactly {pico-fast, pico-deep}.
+    # This also makes /v1/models deterministic regardless of allowlist breadth.
+    ids = [mid for mid in ids if _normalized_model(mid) in {"pico-fast", "pico-deep"}]
+    if "pico-fast" not in ids:
+        ids.insert(0, "pico-fast")
+    if "pico-deep" not in ids:
+        ids.insert(1 if "pico-fast" in ids else 0, "pico-deep")
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": mid,
+                "object": "model",
+                "owned_by": owned_by_for_model(mid),
+            }
+            for mid in ids
+        ],
+    }
+
+
+@router.post("/v1/chat/completions")
+async def chat_completions(
+    body: ChatCompletionRequest,
+    authorization: str | None = Header(default=None),
+    x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
+   

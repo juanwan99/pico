@@ -1,0 +1,106 @@
+embership_id,
+                            task_id=run.task_id,
+                            run_id=run.id,
+                            title=str(prop.get("title") or "变更提案"),
+                            summary=str(prop.get("summary") or ""),
+                            payload_json=json.dumps(
+                                prop.get("payload") or {}, ensure_ascii=False
+                            ),
+                            status="proposed",
+                        )
+                        session.add(change)
+                        await append_event(
+                            session,
+                            run_id,
+                            "change.proposed",
+                            {"change_id": change.id, "title": change.title},
+                            commit=False,
+                        )
+
+        # Fail-closed delivery: real artifacts required when intent demands them.
+        # Shared gate (app.delivery_gate.apply_delivery_gate) — same gate is
+        # applied by the retry / REST / automation path (_execute_run) so re-runs
+        # cannot bypass #375 fail-closed semantics. Single source of truth.
+        from app.delivery_gate import apply_delivery_gate
+
+        await apply_delivery_gate(
+            session,
+            run,
+            final_text=final_text,
+            user_prompt=user_prompt,
+        )
+
+        await session.commit()
+
+    # Usage meter is best-effort and must never roll back the Run path.
+    from app.usage_ledger import emit_llm_usage_after_run
+
+    await emit_llm_usage_after_run(
+        run_id,
+        token_usage=token_usage,
+        prompt=user_prompt,
+        completion=final_text,
+        source="openai_compat",
+    )
+
+
+async def _run_and_collect(
+    prompt: str,
+    principal: Principal,
+    settings: Settings,
+    *,
+    run_id: str,
+    model: str | None = None,
+    history: list[dict[str, Any]] | None = None,
+    skill_snapshot: dict[str, Any] | None = None,
+    delivery_plan: Any | None = None,
+    allowed_tools: list[str] | None = None,
+    system_prompt: str = "",
+    conversation_id: str | None = None,
+    images: list[dict[str, Any]] | None = None,
+    day_use: str = "",
+) -> Any:
+    from pico_orchestrator.runtime import run_agent_runtime
+
+    from app.artifact_store import LedgerArtifactStore
+
+    factory = session_factory()
+
+    async def emit(event_type: str, payload: dict[str, Any]) -> None:
+        async with factory() as session:
+            await append_event(session, run_id, event_type, payload)
+
+    async def is_cancelled() -> bool:
+        async with factory() as session:
+            run = await session.get(RunRow, run_id)
+            return bool(run and (run.cancel_requested or run.status == "cancelled"))
+
+    caps = settings.delivery_run_caps(
+        allowed_tools=_resolve_allowed_tools(skill_snapshot, allowed_tools),
+        skill_instruction=_instruction_with_delivery(
+            skill_snapshot, prompt, delivery_plan
+        ),
+    )
+    # Dual-mode: Pico 快速 / Pico 深度 set their own steps/tokens/thinking.
+    caps = _caps_with_dual_mode(caps, model)
+    caps = _caps_with_images(caps, images)
+    # Landing gate: force min_artifacts into Pi so chat-only "done" cannot succeed.
+    caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
+    if system_prompt:
+        from dataclasses import replace as _dc_replace_sys
+
+        caps = _dc_replace_sys(caps, system_prompt=system_prompt)
+    if day_use:
+        from dataclasses import replace as _dc_replace_day
+
+        caps = _dc_replace_day(caps, day_use=day_use)
+    if skill_snapshot:
+        await emit("skill.snapshot", skill_snapshot)
+    if delivery_plan is not None and getattr(delivery_plan, "engineering", False):
+        await emit(
+            "delivery.plan",
+            {
+                "multi_deliverable": delivery_plan.multi_deliverable,
+                "pipeline": delivery_plan.pipeline,
+                "revision": delivery_plan.revision,
+                "runnable_html": del

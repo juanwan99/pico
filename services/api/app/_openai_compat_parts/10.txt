@@ -1,0 +1,84 @@
+ x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+    x_pico_membership_id: str | None = Header(default=None, alias="X-Pico-Membership-Id"),
+    x_pico_display_name: str | None = Header(default=None, alias="X-Pico-Display-Name"),
+    x_pico_output: str | None = Header(default=None, alias="X-Pico-Output"),
+    settings: Settings = Depends(get_settings),
+):
+    import re
+
+    principal = _principal_from_auth(authorization, settings)
+    from pico_orchestrator.vision import (
+        conversation_images,
+        last_user_images,
+        merge_images,
+    )
+
+    turn_images = last_user_images(body.messages)
+    raw_for_user = _last_user_prompt(body.messages)
+    m_user = re.search(r"【Pico-User:([^】]+)】", raw_for_user)
+    marker_membership = m_user.group(1).strip() if m_user else None
+    if principal.raw.get("proxy") and prompt_membership_conflicts_header(
+        marker_membership, x_pico_membership_id
+    ):
+        raise HTTPException(status_code=403, detail="proxy membership mismatch")
+    principal = scope_proxy_principal(principal, x_pico_membership_id)
+    enforce_scope(principal, "ai:run")
+    client_system = _client_system_from_messages(body.messages)
+    edu_sidebar = _is_edu_sidebar_system(client_system)
+    fetched_day_use = (
+        ""
+        if edu_sidebar
+        else await _day_use_system_block(principal, x_pico_display_name)
+    )
+    day_use_block = apply_day_use(edu_sidebar=edu_sidebar, block=fetched_day_use)
+    raw_prompt_with_skill = _last_user_prompt(body.messages)
+    from pico_orchestrator.skill_policy import (
+        snapshot_for_skill,
+        snapshot_from_prompt,
+    )
+
+    raw_prompt, skill_snapshot = snapshot_from_prompt(raw_prompt_with_skill)
+    if body.metadata and not skill_snapshot:
+        skill_snapshot = snapshot_for_skill(
+            body.metadata.get("pico_skill_id")
+            or body.metadata.get("skill_id")
+            or body.metadata.get("skillId")
+        )
+    json_only = is_json_only_propose(raw_prompt_with_skill, output_header=x_pico_output)
+    request_tools = _normalize_allowed_tools(body.allowed_tools)
+    if request_tools is None:
+        request_tools = _normalize_allowed_tools(body.tools)
+    conversation_id = _conversation_id_from(body, x_conversation_id)
+    turn_images = merge_images(turn_images, conversation_images(conversation_id))
+    workspace_id = _workspace_id_from(body, x_workspace_id)
+    # T-HARNESS-SLIM: do not fetch prior titles to guess a delivery plan.
+    # strip ledger markers from model-visible prompt; project instruction → system
+    m_proj = re.search(r"【项目指令：([^】]+)】", raw_prompt)
+    project_instruction = m_proj.group(1).strip() if m_proj else ""
+    prompt = _strip_pico_markers(raw_prompt).strip() or raw_prompt
+    if not edu_sidebar:
+        try:
+            from app.db import session_factory
+            from app.edu_school import excerpts_for_conversation, inject_named_school_materials
+
+            factory = session_factory()
+            async with factory() as named_session:
+                named_items = await excerpts_for_conversation(
+                    principal, conversation_id or "", named_session, settings
+                )
+            prompt = inject_named_school_materials(prompt, named_items)
+        except Exception:  # noqa: BLE001,S110 — unnamed school files must not leak; missing named is ok
+            pass
+    max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 12000) or 12000)
+    # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
+    # marker is explicit so this must not 400 a legal affordance table.
+    length_basis = prompt
+    if json_only:
+        try:
+            parsed_ask = json.loads(prompt)
+            if isinstance(parsed_ask, dict) and parsed_ask.get("asked") is not None:
+                length_basis = str(parsed_ask.get("asked") or "")
+        except json.JSONDecodeError:
+            length_basis = prompt
+    if len(length_basis) > max_chars:
+        # Exp
