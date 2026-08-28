@@ -39,6 +39,7 @@ DATE: 2026-08-28
 29. **Meili hybrid：只认 live embedder。** health `meili_embedder` ≠ 有钥。禁每条 upsert `ensure()` PATCH（会冲垮 task 队列）。清洪水用 `POST /tasks/cancel`（不是 DELETE）。#733/#737。
 30. **PPT 图进页 = `image_artifact_id`。** 出图成功 ≠ 进页。`[image:…]` / markdown 写在 body 不会嵌。Pi 真源：`pico-gateway-tools.ts` + SYSTEM。生产 `LedgerArtifactStore.read` 必传 `title=`；`_load_spec_images` 漏传会 TypeError，图在账本、页里 0。单测 MemoryStore 给 default 会漏。缩正文给图必须同时钉 top/height，只改 width 会 height=0 叠标题。#740。
 31. **加载诚实（#748）。** 办公天花板 `sandbox_pptx_lib` 常驻 CORE。挂 Skill 只要还露 `generate_pptx_document`，就必须成对露 `sandbox_pptx_lib`，否则挂 Skill = 藏天花板。焊句禁回潮（Prefer generate_pptx / Photos still use）。编程沙箱仍 EXTENDED。禁词表自动挂。只改 Python 说明 ≠ Pi 看见（仍认 §14）。
+32. **产品尺 ≠ 三问（#748）。** 自验必须拆 pptx：页数、嵌图、同聊改是否落盘。模型打勾 / UI「已完成」不当过。三问只证加载没焊死。办公厚度是 S2，不是再出一张更漂亮的三问。
 
 ## C · 部署 / ECS
 
