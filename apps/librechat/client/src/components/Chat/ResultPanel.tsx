@@ -590,14 +590,11 @@ export default function ResultPanel({
       if (artifact.picoArtifact) {
         try {
           const htmlBlob = await getPicoArtifactContent(artifact.id, false, { preview: true });
-          const type = htmlBlob.type || '';
-          if (/text\/html/i.test(type) || (htmlBlob.size > 0 && !/octet-stream/i.test(type))) {
-            const text = await htmlBlob.text();
-            if (text.includes('<html') || text.includes('<section') || text.includes('<article')) {
-              setPreviewHtml(text);
-              setView('overview');
-              return;
-            }
+          const text = await readBlobText(htmlBlob);
+          if (text.includes('<html') || text.includes('<section') || text.includes('<article')) {
+            setPreviewHtml(text);
+            setView('overview');
+            return;
           }
         } catch {
           /* fall through to honest copy */

@@ -387,26 +387,26 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
 
   it('T4/F2: opening docx shows the content box, not LibreOffice chrome', async () => {
     const user = userEvent.setup();
-    mockGetPicoArtifactContent.mockImplementation(async (_id, _download, opts) => {
-      if (opts?.preview) {
-        return new Blob(
-          [
-            '<!doctype html><html><body><article class="page"><h1>报告</h1><p>正文</p></article></body></html>',
-          ],
-          { type: 'text/html; charset=utf-8' },
-        );
-      }
-      return new Blob([new Uint8Array([80, 75, 3, 4])], {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      });
+    const zipBlob = new Blob([new Uint8Array([80, 75, 3, 4])], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
+    const htmlBlob = new Blob(
+      [
+        '<!doctype html><html><body><article class="page"><h1>报告</h1><p>正文</p></article></body></html>',
+      ],
+      { type: 'text/html' },
+    );
+    mockGetPicoArtifactContent.mockResolvedValueOnce(zipBlob).mockResolvedValueOnce(htmlBlob);
     renderPanel([{ id: 'art-docx', title: '报告.docx', kind: 'docx' }]);
     await user.click(screen.getByRole('button', { name: '打开' }));
     const pane = await screen.findByTestId('artifact-pane-preview');
     expect(pane).toHaveAttribute('data-kind', 'office');
-    expect(screen.getByTestId('artifact-office-iframe')).toBeInTheDocument();
+    expect(await screen.findByTestId('artifact-office-iframe')).toBeInTheDocument();
     expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
     expect(screen.queryByTestId('artifact-office-download')).not.toBeInTheDocument();
+    expect(mockGetPicoArtifactContent).toHaveBeenNthCalledWith(2, 'art-docx', false, {
+      preview: true,
+    });
   });
 
   it('T8: opening a PDF attachment previews in-pane and never mistakes it for HTML', async () => {
