@@ -1098,7 +1098,8 @@ def _workspace_handlers(
         title_hint = str(title_raw).strip() if isinstance(title_raw, str) else ""
         raw, ext = await _run_bounded(
             generate_image_bytes(prompt),
-            seconds=_IMAGE_TIMEOUT_S,
+            # F5: one Retry-After rest (≤ image timeout window) + one POST.
+            seconds=_IMAGE_TIMEOUT_S * 2,
             code="image.timeout",
             message="出图超时（90 秒）。请稍后重试，不能编造图片。",
         )
