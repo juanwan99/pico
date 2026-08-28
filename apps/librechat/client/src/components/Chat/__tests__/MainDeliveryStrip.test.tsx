@@ -58,4 +58,19 @@ describe('MainDeliveryStrip column', () => {
     expect(screen.getAllByTestId('main-delivery-item')).toHaveLength(1);
     expect(screen.getByText('成品 · 可下载文件（1）')).toBeInTheDocument();
   });
+
+  it('does not list sidecar cover images next to a pptx', () => {
+    render(
+      <MainDeliveryStrip
+        artifacts={[
+          { id: 'deck', title: '办公尺752.pptx', kind: 'pptx' },
+          { id: 'cover', title: '决策会封面图.jpg', kind: 'jpg' },
+        ]}
+      />,
+    );
+    expect(screen.getAllByTestId('main-delivery-item')).toHaveLength(1);
+    expect(screen.getByText('办公尺752.pptx')).toBeInTheDocument();
+    expect(screen.queryByText('决策会封面图.jpg')).not.toBeInTheDocument();
+    expect(screen.getByText('成品 · 可下载文件（1）')).toBeInTheDocument();
+  });
 });

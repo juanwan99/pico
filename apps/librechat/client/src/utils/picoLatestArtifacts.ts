@@ -18,3 +18,42 @@ export function latestArtifactsByFilename<
   }
   return out;
 }
+
+const OFFICE_EXT = /\.(pptx|docx|xlsx)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i;
+const OFFICE_KIND = /^(pptx|docx|xlsx)$/i;
+const IMAGE_KIND = /^(png|jpe?g|gif|webp|image)$/i;
+
+type NamedArtifact = {
+  id: string;
+  title?: string;
+  user_label?: string;
+  kind?: string;
+};
+
+function displayName(item: NamedArtifact): string {
+  return (item.user_label || item.title || '').trim();
+}
+
+export function isOfficeDeliverable(item: NamedArtifact): boolean {
+  const name = displayName(item);
+  const kind = (item.kind || '').trim();
+  return OFFICE_EXT.test(name) || OFFICE_KIND.test(kind);
+}
+
+export function isImageSidecar(item: NamedArtifact): boolean {
+  const name = displayName(item);
+  const kind = (item.kind || '').trim();
+  return IMAGE_EXT.test(name) || IMAGE_KIND.test(kind);
+}
+
+/** Finished office file is the deliverable. Embedded cover/diagram images stay inside it. */
+export function primaryDeliverables<T extends NamedArtifact>(
+  items: T[] | null | undefined,
+): T[] {
+  const latest = latestArtifactsByFilename(items);
+  if (!latest.some(isOfficeDeliverable)) {
+    return latest;
+  }
+  return latest.filter((item) => !isImageSidecar(item));
+}

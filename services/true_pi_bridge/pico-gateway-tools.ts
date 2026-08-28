@@ -198,7 +198,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_pptx_document",
-    "Create a real .pptx Artifact via spec/blocks. Sibling of sandbox_pptx_lib (isolated python-pptx) — pick from the teacher's ask, not a scene word. Same title replaces the file the teacher opens. Read observation.outline.images after. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. ok is not finished.",
+    "Create a real .pptx Artifact via spec/blocks. Sibling of sandbox_pptx_lib (isolated python-pptx) — pick from the teacher's ask, not a scene word. Same title replaces the file the teacher opens. Read observation.outline.images after. A missing image_artifact_id skips that picture; the file still lands. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. Pictures already inside the file are not separate downloads. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
@@ -317,7 +317,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_image",
-    "Create one png/jpg via the configured HTTPS image API. To place it inside Word/PPT, pass the returned artifact id as image_artifact_id on spec. Never invent pixels on failure.",
+    "Create one png/jpg via the configured HTTPS image API. To place it inside Word/PPT, pass the returned artifact id as image_artifact_id on spec. Do not also hand it to the teacher as a separate download when it is already inside the file. Never invent pixels on failure.",
     Type.Object(
       {
         prompt: Type.String(),
@@ -329,7 +329,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_diagram",
-    "Draw one structure diagram (flowchart, sequence, org) from mermaid source into a PNG Artifact. Sibling of generate_image — they do not veto each other. kind=d2 is not wired. Never invent a diagram on failure. To place it in Word/PPT, pass the artifact id as image_artifact_id.",
+    "Draw one structure diagram (flowchart, sequence, org) from mermaid source into a PNG Artifact. Sibling of generate_image — they do not veto each other. kind=d2 is not wired. Never invent a diagram on failure. To place it in Word/PPT, pass the artifact id as image_artifact_id. Do not also hand it to the teacher as a separate download when it is already inside the file.",
     Type.Object(
       {
         source: Type.String(),
@@ -394,7 +394,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_pptx_lib",
-    "Isolated python-pptx (not host bash, not a second Office OS). Sibling of generate_pptx_document — not the only PPT path. No import; use Presentation/Inches/save_deck/IMAGE_PATHS. Must save_deck(prs). Empty shells fail.",
+    "Isolated python-pptx (not host bash, not a second Office OS). Sibling of generate_pptx_document — not the only PPT path. No import; use Presentation/Inches/Pt/RGBColor/add_title_slide/add_content_slide/add_table/save_deck/IMAGE_PATHS. Must save_deck(prs). Empty shells fail. A missing image_artifact_ids entry is skipped.",
     Type.Object(
       {
         source: Type.String(),

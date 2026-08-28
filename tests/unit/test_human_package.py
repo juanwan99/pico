@@ -72,6 +72,23 @@ def test_titles_from_tool_results() -> None:
     assert titles == ["a.html", "b.md", "上限.pptx"]
 
 
+def test_titles_hide_sidecar_images_when_office_file_exists() -> None:
+    titles = titles_from_tool_results(
+        [
+            ("generate_image", {"title": "决策会封面图.jpg", "artifact_id": "img-1"}),
+            ("generate_diagram", {"title": "传导图.png", "artifact_id": "img-2"}),
+            ("generate_pptx_document", {"title": "办公尺752.pptx", "artifact_id": "deck-1"}),
+        ]
+    )
+    assert titles == ["办公尺752.pptx"]
+    images_only = titles_from_tool_results(
+        [
+            ("generate_image", {"title": "示意图.jpg", "artifact_id": "img-1"}),
+        ]
+    )
+    assert images_only == ["示意图.jpg"]
+
+
 def test_fenced_html_stripped() -> None:
     raw = "见代码：\n```html\n<html><body><button>x</button></body></html>\n```\n"
     out = sanitize_user_facing_text(raw, artifact_titles=["x.html"])
