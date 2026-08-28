@@ -1,3 +1,49 @@
+t title.js scaffold
+    if (
+        "please generate a concise title (max 40 characters) for a conversation that starts with"
+        in blob
+    ):
+        return True
+
+    # Same assistants scaffold with User:/Assistant:/Title: layout (no single-phrase match)
+    return (
+        "concise title" in blob
+        and "conversation that starts with" in blob
+        and "user:" in blob
+        and "title:" in blob
+    )
+
+
+def _synthetic_title_from_messages(messages: list[ChatMessage], prompt: str) -> str:
+    """Local title only — no model call, no ledger, no tools."""
+    import re
+
+    blob = _all_message_text(messages) or (prompt or "")
+    # Prefer embedded user turn if title prompt quoted it.
+    for pattern in (
+        r"(?im)^\s*user\s*:\s*(.+)$",
+        r"(?im)conversation:\s*(.+)$",
+        r"(?is)\{convo\}\s*(.+)$",
+    ):
+        match = re.search(pattern, blob)
+        if match:
+            blob = match.group(1).strip()
+            break
+    # Drop instruction scaffolding lines.
+    cleaned_lines: list[str] = []
+    for line in blob.splitlines():
+        low = line.strip().lower()
+        if not line.strip():
+            continue
+        if any(
+            skip in low
+            for skip in (
+                "analyze this conversation",
+                "provide a concise",
+                "please generate",
+                "only return the title",
+                "detected language",
+                "title case",
                 "title:",
             )
         ):
@@ -41,12 +87,12 @@ def _strip_pico_markers(text: str) -> str:
     import re
 
     t = str(text or "")
-    t = re.sub(r"【Pico-Convo:[^】]+】", "", t)
-    t = re.sub(r"【Pico-User:[^】]+】", "", t)
-    t = re.sub(r"【工作空间：[^】]+】", "", t)
-    t = re.sub(r"【权限：[^】]+】", "", t)
-    t = re.sub(r"【模型偏好：[^】]+】", "", t)
-    t = re.sub(r"【项目指令：[^】]+】", "", t)
+    t = re.sub(r"【Pico-Convo:[^\u3011]+】", "", t)
+    t = re.sub(r"【Pico-User:[^\u3011]+】", "", t)
+    t = re.sub(r"【工作空间：[^\u3011]+】", "", t)
+    t = re.sub(r"【权限：[^\u3011]+】", "", t)
+    t = re.sub(r"【模型偏好：[^\u3011]+】", "", t)
+    t = re.sub(r"【项目指令：[^\u3011]+】", "", t)
     return t
 
 
@@ -86,60 +132,4 @@ def _conversation_id_from(
 ) -> str | None:
     if x_conversation_id and x_conversation_id.strip():
         return x_conversation_id.strip()[:128]
-    if body.metadata:
-        for k in ("conversation_id", "conversationId", "convo_id"):
-            v = body.metadata.get(k)
-            if v:
-                return str(v)[:128]
-    # parse 【Pico-Convo:xxx】 from latest user message
-    import re
-    prompt = _last_user_prompt(body.messages)
-    m = re.search(r"【Pico-Convo:([^】]+)】", prompt)
-    if m:
-        return m.group(1).strip()[:128]
-    if body.user and body.user.strip() and body.user not in {"default", "user"}:
-        return body.user.strip()[:128]
-    return None
-
-
-def _workspace_id_from(
-    body: ChatCompletionRequest,
-    x_workspace_id: str | None,
-) -> str | None:
-    if x_workspace_id and x_workspace_id.strip():
-        return x_workspace_id.strip()[:36]
-    if body.metadata:
-        v = body.metadata.get("workspace_id") or body.metadata.get("workspaceId")
-        if v:
-            return str(v)[:36]
-    return None
-
-
-async def _day_use_system_block(
-    principal: Principal, display_header: str | None
-) -> str:
-    """SSO name + recent ledger titles → SYSTEM appendix. Fail soft; never a memory OS."""
-    from pico_orchestrator.day_use import build_day_use_block, decode_display_name_header
-
-    name = decode_display_name_header(display_header)
-    titles: list[str] = []
-    try:
-        from app.run_service import list_artifacts_for_principal
-
-        factory = session_factory()
-        async with factory() as session:
-            rows = await list_artifacts_for_principal(session, principal, limit=12)
-        titles = [str(getattr(row, "title", "") or "") for row in rows]
-    except Exception:  # noqa: BLE001 — missing ledger must not block chat
-        titles = []
-    return build_day_use_block(display_name=name, recent_titles=titles)
-
-
-async def _ledger_task_run(
-    *,
-    principal: Principal,
-    prompt: str,
-    model: str,
-    conversation_id: str | None,
-    workspace_id: str | None,
-    skill_snapshot: dict[str, Any] | None = None,
+    if body.met

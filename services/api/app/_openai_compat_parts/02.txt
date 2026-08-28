@@ -1,3 +1,25 @@
+s = {"deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"}
+    if normalized in allowed:
+        return
+    if product_surface.intersection(allowed) and normalized in deepseek_aliases:
+        return
+    if normalized in {"pico-fast", "pico-deep"} and {"pico-fast", "pico-deep"}.intersection(allowed):
+        return
+    # Product delivery name. Host allowlist is often pico-fast,pico-deep only.
+    if normalized in {"pico-agent", "pico"} and {"pico-fast", "pico-deep"}.intersection(
+        allowed
+    ):
+        return
+    raise HTTPException(status_code=400, detail="model is not allowed")
+
+
+def _coerce_default_model(model: str, settings: Settings) -> str:
+    """Rewrite legacy broken Kimi defaults onto DeepSeek when allowlist moved.
+
+    Owner E2E-DEFAULT: new chats must work without manually picking DeepSeek.
+    Old browser prefs that still hold ``kimi-k2.x`` should not dead-end when
+    production allowlist is ``deepseek-chat,pico-agent`` only.
+    """
     from pico_orchestrator.provider import is_kimi_model
 
     bare = _normalized_model(model or "")
@@ -74,49 +96,4 @@ def _is_title_generation_request(prompt: str, messages: list[ChatMessage]) -> bo
     ):
         return True
 
-    # assistants endpoint title.js scaffold
-    if (
-        "please generate a concise title (max 40 characters) for a conversation that starts with"
-        in blob
-    ):
-        return True
-
-    # Same assistants scaffold with User:/Assistant:/Title: layout (no single-phrase match)
-    return (
-        "concise title" in blob
-        and "conversation that starts with" in blob
-        and "user:" in blob
-        and "title:" in blob
-    )
-
-
-def _synthetic_title_from_messages(messages: list[ChatMessage], prompt: str) -> str:
-    """Local title only — no model call, no ledger, no tools."""
-    import re
-
-    blob = _all_message_text(messages) or (prompt or "")
-    # Prefer embedded user turn if title prompt quoted it.
-    for pattern in (
-        r"(?im)^\s*user\s*:\s*(.+)$",
-        r"(?im)conversation:\s*(.+)$",
-        r"(?is)\{convo\}\s*(.+)$",
-    ):
-        match = re.search(pattern, blob)
-        if match:
-            blob = match.group(1).strip()
-            break
-    # Drop instruction scaffolding lines.
-    cleaned_lines: list[str] = []
-    for line in blob.splitlines():
-        low = line.strip().lower()
-        if not line.strip():
-            continue
-        if any(
-            skip in low
-            for skip in (
-                "analyze this conversation",
-                "provide a concise",
-                "please generate",
-                "only return the title",
-                "detected language",
-                "title case",
+    # assistants endpoin

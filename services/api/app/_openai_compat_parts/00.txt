@@ -126,18 +126,4 @@ def _resolve_allowed_tools(
     """Request list is a ceiling. Empty intersection falls back to the request list."""
     skill_tools: list[str] | None = None
     if skill_snapshot and skill_snapshot.get("tools"):
-        skill_tools = [str(t) for t in skill_snapshot.get("tools") or [] if t]
-    if request_tools is None:
-        return skill_tools
-    if not skill_tools:
-        return request_tools
-    inter = [t for t in skill_tools if t in set(request_tools)]
-    return inter or request_tools
-
-
-def _model_preference_from_prompt(prompt: str) -> str | None:
-    """Resolve the workbench model preference from a strict allowlist."""
-    import re
-
-    match = re.search(r"【模型偏好：([^】]+)】", prompt or "")
-    if not match:
+        skill
