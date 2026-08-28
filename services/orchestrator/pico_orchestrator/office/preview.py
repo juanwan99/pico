@@ -244,12 +244,14 @@ def _pptx_html(raw: bytes) -> str:
                 ]
                 bits.append(f"<div class='box' style='{style}'>{_html_table(rows)}</div>")
                 continue
+            fill_css = _shape_fill_css(shape)
             inner = _shape_html(shape)
-            if not inner:
+            if not inner and not fill_css:
                 continue
             fallback_pt = max(12, min(36, int(box[3] * 1.6)))
+            extra = f";background:{fill_css}" if fill_css and not inner else ""
             bits.append(
-                f"<div class='box' style='{style};font-size:{fallback_pt}px'>{inner}</div>"
+                f"<div class='box' style='{style}{extra};font-size:{fallback_pt}px'>{inner}</div>"
             )
         tone_class = " dark" if tone == "dark" else ""
         bg_attr = f" background:{bg_css};" if bg_css else ""
@@ -301,6 +303,19 @@ def _slide_bg_css(slide: Any) -> tuple[str, str]:
         return f"#{r:02x}{g:02x}{b:02x}", "dark" if luma < 140 else "light"
     except _OOXML_MISS:
         return "", "light"
+
+
+def _shape_fill_css(shape: Any) -> str | None:
+    try:
+        from pptx.enum.dml import MSO_FILL
+
+        fill = shape.fill
+        if fill.type != MSO_FILL.SOLID:
+            return None
+        rgb = fill.fore_color.rgb
+        return f"#{int(rgb[0]):02x}{int(rgb[1]):02x}{int(rgb[2]):02x}"
+    except _OOXML_MISS:
+        return None
 
 
 def _shape_box(

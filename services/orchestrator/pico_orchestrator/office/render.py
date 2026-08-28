@@ -101,6 +101,7 @@ def _render_pptx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
         cover = _is_cover_slide(slide_index, block, picture)
         layout = title_layout if cover else content_layout
         slide = deck.slides.add_slide(layout)
+        _paint_pptx_theme(slide, spec.theme)
         title_shape = getattr(slide.shapes, "title", None)
         if title_shape is not None and getattr(title_shape, "has_text_frame", False):
             title_shape.text = block.title
@@ -109,11 +110,16 @@ def _render_pptx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
                     for run in para.runs:
                         if heading_font:
                             run.font.name = heading_font
-                            run.font.size = Pt(28)
+                            run.font.size = Pt(32 if cover else 28)
                         if accent:
                             run.font.color.rgb = RGBColor(*accent)
         if cover and block.bullets:
-            _set_placeholder_idx(slide, 1, block.bullets[0])
+            _set_pptx_body(
+                slide,
+                "\n".join(block.bullets),
+                font_name=body_font,
+                narrow_for_image=bool(picture),
+            )
         elif table_rows:
             from pptx.util import Inches as _Inches
 
@@ -137,7 +143,7 @@ def _render_pptx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
             _place_pptx_picture(
                 slide,
                 picture,
-                has_bullets=(bool(block.bullets) or bool(table_rows)) and not cover,
+                has_bullets=bool(block.bullets) or bool(table_rows),
             )
         slide_index += 1
     if not deck.slides:
@@ -370,20 +376,45 @@ def _apply_docx_theme(doc: object, theme: Theme | None) -> None:
 
 
 def _is_cover_slide(index: int, block: object, picture: bytes | None) -> bool:
-    """First slide + picture + at most one subtitle line = title layout."""
-    bullets = getattr(block, "bullets", ()) or ()
-    return index == 0 and bool(picture) and len(bullets) <= 1
+    """Title layout: inbound cover/title, or first slide that has a picture.
+
+    GPT sends type=cover with owner/date as extra bullets. Requiring ≤1
+    subtitle forced the default content layout (white + black bullets).
+    """
+    if bool(getattr(block, "cover", False)):
+        return True
+    return index == 0 and bool(picture)
 
 
-def _set_placeholder_idx(slide: object, idx: int, text: str) -> None:
-    placeholders = getattr(slide, "placeholders", None)
-    if placeholders is None:
+def _paint_pptx_theme(slide: object, theme: Theme | None) -> None:
+    """Project existing theme colors. Not a second slide OS."""
+    if theme is None:
         return
-    for shape in placeholders:
-        fmt = getattr(shape, "placeholder_format", None)
-        if getattr(fmt, "idx", None) == idx and getattr(shape, "has_text_frame", False):
-            shape.text = text
-            return
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.util import Emu, Inches
+
+    background = _rgb(theme.background)
+    accent = _rgb(theme.accent)
+    if background is not None:
+        fill = getattr(getattr(slide, "background", None), "fill", None)
+        if fill is not None:
+            fill.solid()
+            fill.fore_color.rgb = RGBColor(*background)
+    if accent is None:
+        return
+    bar = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        Emu(0),
+        Emu(0),
+        Inches(0.12),
+        Inches(_PPTX_SLIDE_HEIGHT_IN),
+    )
+    bar.fill.solid()
+    bar.fill.fore_color.rgb = RGBColor(*accent)
+    line = getattr(bar, "line", None)
+    if line is not None:
+        line.fill.background()
 
 
 def _optional_image(images: dict[str, bytes], artifact_id: str | None) -> bytes | None:
