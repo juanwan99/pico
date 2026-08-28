@@ -119,6 +119,20 @@ def gateway_key() -> str:
     return (os.environ.get("PICO_IMAGE_GATEWAY_KEY") or "").strip()
 
 
+def gateway_root_url() -> str:
+    raw = (os.environ.get("PICO_IMAGE_GATEWAY_URL") or "").strip()
+    if not raw:
+        return ""
+    text = raw.rstrip("/")
+    if text.endswith("/v1/images/generations"):
+        return text[: -len("/v1/images/generations")]
+    if text.endswith("/images/generations"):
+        return text[: -len("/images/generations")]
+    if text.endswith("/v1"):
+        return text[:-3]
+    return text
+
+
 def gateway_images_url() -> str:
     raw = (os.environ.get("PICO_IMAGE_GATEWAY_URL") or "").strip()
     if not raw:
@@ -132,6 +146,25 @@ def gateway_images_url() -> str:
 def gateway_model() -> str:
     raw = (os.environ.get("PICO_IMAGE_GATEWAY_MODEL") or "").strip()
     return raw or gemini_image_model()
+
+
+def gateway_uses_gemini_native() -> bool:
+    """New API /v1/images/generations only maps imagen-*.
+
+    Live QuantumNous new-api (2026-08-28): gemini-*-image on that
+    path → "only imagen models are supported". Official Gemini
+    flash-image is generateContent. Pico still talks only to New API
+    (Bearer gateway token), never Google directly.
+    """
+    name = gateway_model().lower()
+    return name.startswith("gemini-") and "image" in name
+
+
+def gateway_generate_content_url() -> str:
+    root = gateway_root_url()
+    if not root:
+        return ""
+    return f"{root}/v1beta/models/{gateway_model()}:generateContent"
 
 
 def allowed_image_key() -> bool:
@@ -324,14 +357,19 @@ async def _post_images(
 
 
 async def _post_gateway(
-    payload: dict[str, Any], *, api_key: str, timeout: float
+    payload: dict[str, Any],
+    *,
+    api_key: str,
+    timeout: float,
+    url: str | None = None,
 ) -> httpx.Response:
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+    target = (url or gateway_images_url()).strip()
     async with httpx.AsyncClient(timeout=timeout) as client:
-        return await client.post(gateway_images_url(), json=payload, headers=headers)
+        return await client.post(target, json=payload, headers=headers)
 
 
 async def _post_gemini(
@@ -564,6 +602,37 @@ async def _generate_zhipu_call(text: str) -> tuple[bytes, str]:
 
 
 async def _generate_gateway_call(text: str) -> tuple[bytes, str]:
+    if gateway_uses_gemini_native():
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": text}]}],
+            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+        }
+        try:
+            response = await _post_gateway(
+                payload,
+                api_key=gateway_key(),
+                timeout=IMAGE_TIMEOUT_S,
+                url=gateway_generate_content_url(),
+            )
+        except httpx.TimeoutException as exc:
+            raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc
+        except httpx.HTTPError as exc:
+            logger.warning("gateway generateContent transport failed: %s", type(exc).__name__)
+            raise ToolError("image.provider", REJECT_MESSAGE) from exc
+        await _raise_http_response(response, log_name="gateway generateContent")
+        try:
+            body = response.json()
+        except Exception as exc:
+            raise ToolError("image.invalid", INVALID_MESSAGE) from exc
+        b64 = _gemini_inline_b64(body)
+        if not b64:
+            raise ToolError("image.invalid", INVALID_MESSAGE)
+        try:
+            raw = base64.b64decode(b64, validate=False)
+        except Exception as exc:
+            raise ToolError("image.invalid", INVALID_MESSAGE) from exc
+        return _as_png_or_jpeg(raw)
+
     payload = {
         "model": gateway_model(),
         "prompt": text,

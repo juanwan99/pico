@@ -544,14 +544,29 @@ async def test_generate_image_gateway_mock_https_png(
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
     seen: dict[str, object] = {}
 
-    async def fake_gateway(payload, *, api_key, timeout):
+    async def fake_gateway(payload, *, api_key, timeout, url=None):
         seen["key"] = api_key
-        seen["model"] = payload["model"]
-        seen["prompt"] = payload["prompt"]
+        seen["url"] = url
+        seen["payload"] = payload
         return SimpleNamespace(
             status_code=200,
             json=lambda: {
-                "data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "inlineData": {
+                                        "mimeType": "image/png",
+                                        "data": base64.b64encode(ONE_PNG).decode(
+                                            "ascii"
+                                        ),
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
             },
         )
 
@@ -564,7 +579,45 @@ async def test_generate_image_gateway_mock_https_png(
     )
     raw, ext = await generate_image_bytes("封面示意图")
     assert seen["key"] == "sk-gateway-not-a-secret"
-    assert seen["model"] == "gemini-2.5-flash-image"
+    assert str(seen["url"]).endswith(
+        "/v1beta/models/gemini-2.5-flash-image:generateContent"
+    )
+    payload = seen["payload"]
+    assert isinstance(payload, dict)
+    assert payload["contents"][0]["parts"][0]["text"] == "封面示意图"
+    assert "IMAGE" in payload["generationConfig"]["responseModalities"]
+    assert ext == "png"
+    assert raw.startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_generate_image_gateway_imagen_openai_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "https://newapi.example.com")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEY", "sk-gateway-not-a-secret")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_MODEL", "imagen-4.0-generate-001")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    seen: dict[str, object] = {}
+
+    async def fake_gateway(payload, *, api_key, timeout, url=None):
+        seen["url"] = url
+        seen["payload"] = payload
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
+            },
+        )
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_gateway)
+    raw, ext = await generate_image_bytes("封面示意图")
+    assert seen["url"] is None
+    payload = seen["payload"]
+    assert isinstance(payload, dict)
+    assert payload["model"] == "imagen-4.0-generate-001"
+    assert payload["prompt"] == "封面示意图"
     assert ext == "png"
     assert raw.startswith(b"\x89PNG")
 
