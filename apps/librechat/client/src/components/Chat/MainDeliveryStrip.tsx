@@ -10,6 +10,7 @@ import {
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
 import { primaryDeliverables } from '~/utils/picoLatestArtifacts';
+import { stashPendingPreviewId } from '~/utils/picoOpenInPane';
 import { cn } from '~/utils';
 import PicoSearchSources from './PicoSearchSources';
 import type { PicoSourceMessage } from '~/utils/picoSearchSources';
@@ -42,6 +43,16 @@ function isHtml(a: PicoArtifact): boolean {
   return /\.html?$/i.test(name) || /html/i.test(a.kind || '');
 }
 
+function isImage(a: PicoArtifact): boolean {
+  const name = displayName(a);
+  return /\.(png|jpe?g|gif|webp)$/i.test(name) || /image/i.test(a.kind || '');
+}
+
+function isOffice(a: PicoArtifact): boolean {
+  const name = displayName(a);
+  return /\.(docx?|pptx?|xlsx?|odt|odp|ods)$/i.test(name) || /docx|pptx|xlsx/i.test(a.kind || '');
+}
+
 export default function MainDeliveryStrip({
   artifacts,
   runEvents,
@@ -55,6 +66,7 @@ export default function MainDeliveryStrip({
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
 
   const sourcesBlock = <PicoSearchSources events={runEvents} messages={messages} />;
@@ -74,13 +86,35 @@ export default function MainDeliveryStrip({
     setBusy({ id: a.id, type: 'open' });
     setError(null);
     setPreviewHtml(null);
+    setPreviewImage(null);
     try {
+      if (onOpenResultPanel && (isOffice(a) || isHtml(a) || isImage(a))) {
+        stashPendingPreviewId(a.id);
+        onOpenResultPanel();
+        return;
+      }
       const blob = await getPicoArtifactContent(a.id, false);
       if (isHtml(a) || /text\/html/i.test(blob.type || '')) {
         const text = await blob.text();
         setPreviewTitle(displayName(a));
         setPreviewHtml(text);
         return;
+      }
+      if (isImage(a) || /image\//i.test(blob.type || '')) {
+        const objectUrl = URL.createObjectURL(blob);
+        setPreviewTitle(displayName(a));
+        setPreviewImage(objectUrl);
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
+        return;
+      }
+      if (isOffice(a)) {
+        const htmlBlob = await getPicoArtifactContent(a.id, false, { preview: true });
+        const text = await htmlBlob.text();
+        if (text.includes('<html') || text.includes('<section') || text.includes('<article')) {
+          setPreviewTitle(displayName(a));
+          setPreviewHtml(text);
+          return;
+        }
       }
       // Non-HTML: fall back to download-friendly open
       const objectUrl = URL.createObjectURL(blob);
@@ -196,10 +230,10 @@ export default function MainDeliveryStrip({
         </ul>
         {previewHtml !== null ? (
           <div
-            className="mt-2 rounded-lg border border-black/[0.08] bg-white p-2 dark:border-border-light"
+            className="mt-2 overflow-hidden rounded-lg border border-black/[0.08] bg-[#ececec] dark:border-border-light"
             data-testid="main-delivery-html-preview"
           >
-            <div className="mb-1 flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 bg-white px-2 py-1">
               <p className="truncate text-[12px] font-medium">{previewTitle}</p>
               <button
                 type="button"
@@ -214,11 +248,37 @@ export default function MainDeliveryStrip({
             </div>
             <iframe
               title={previewTitle || 'HTML 预览'}
-              sandbox=""
+              sandbox={/\.(docx?|pptx?|xlsx?)$/i.test(previewTitle || '') ? '' : 'allow-scripts'}
               referrerPolicy="no-referrer"
               srcDoc={previewHtml}
-              className="h-56 w-full rounded border border-black/[0.06] bg-white"
+              className="h-[28rem] w-full border-0 bg-white"
               data-testid="main-delivery-html-iframe"
+            />
+          </div>
+        ) : null}
+        {previewImage !== null ? (
+          <div
+            className="mt-2 overflow-hidden rounded-lg border border-black/[0.08] bg-[#ececec] dark:border-border-light"
+            data-testid="main-delivery-image-preview"
+          >
+            <div className="flex items-center justify-between gap-2 bg-white px-2 py-1">
+              <p className="truncate text-[12px] font-medium">{previewTitle}</p>
+              <button
+                type="button"
+                className="text-[11px] text-[#6b6b6b] underline"
+                onClick={() => {
+                  setPreviewImage(null);
+                  setPreviewTitle(null);
+                }}
+              >
+                关闭预览
+              </button>
+            </div>
+            <img
+              src={previewImage}
+              alt={previewTitle || '图片预览'}
+              className="mx-auto max-h-[28rem] w-auto max-w-full object-contain"
+              data-testid="main-delivery-image"
             />
           </div>
         ) : null}

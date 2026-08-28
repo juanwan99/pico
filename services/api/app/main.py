@@ -1526,6 +1526,7 @@ async def get_artifact_content(
         ".htm": "text/html; charset=utf-8",
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }
     ext = Path(filename).suffix.lower()
     guessed_media_type = (
@@ -1575,6 +1576,38 @@ async def get_artifact_content(
     # unless this is an owner preview (?preview=1) with CSP sandbox.
     # Owner isolation already applied by get_artifact_for_principal (other accounts 404).
     extra_headers: dict[str, str] = {}
+    office_preview_exts = {".docx", ".pptx", ".xlsx"}
+    if preview and ext in office_preview_exts and not download:
+        from pico_orchestrator.office.preview import preview_office_html
+
+        try:
+            html_doc = preview_office_html(raw, ext)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=415,
+                detail="无法展开这份 Office 文件的内容框，请下载后用本地软件打开。",
+            ) from exc
+        extra_headers["Content-Security-Policy"] = (
+            "default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
+            "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+        )
+        extra_headers["X-Pico-Preview"] = "office-content-box"
+        return Response(
+            content=html_doc.encode("utf-8"),
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'inline; filename="{fallback}.html"; '
+                    f"filename*=UTF-8''{quote(filename)}.html"
+                ),
+                "X-Content-Type-Options": "nosniff",
+                "X-Pico-Content-Encoding": "utf8",
+                "X-Pico-Content-SHA256": getattr(artifact, "content_sha256", None) or "",
+                "X-Pico-Byte-Size": str(len(html_doc.encode("utf-8"))),
+                **extra_headers,
+            },
+        )
+
     if ext in {".html", ".htm"} and not download:
         if preview:
             if sig:

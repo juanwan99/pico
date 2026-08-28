@@ -42,6 +42,7 @@ DATE: 2026-08-28
 32. **产品尺 ≠ 三问（#748）。** 自验必须拆 pptx：页数、嵌图、同聊改是否落盘。模型打勾 / UI「已完成」不当过。三问只证加载没焊死。办公厚度是 S2，不是再出一张更漂亮的三问。同名再写必须覆盖老师盘；沙箱同名打开必须重载，不能切回旧窗。只查老师盘会漏账本新版本。
 33. **办公厚度（#752）。** 缺 `image_artifact_id` 不得毁掉整份 PPT（跳过该图，observation.images 诚实）。成品条在已有 pptx/docx/xlsx 时不挂 sidecar 图。加厚走 `sandbox_pptx_lib` 帮手（`add_title_slide` / `add_content_slide` / `add_table`）+ 现有 slide 字段排封面/表，不加 spec 字段。焊句仍禁。
 34. **聊天脑 OpenAI Responses 反代（AIProxy 原版中转）。** 钥说明只认官方客户端 + 中转 URL：OpenAI `https://…/openai` · Claude `…/anthropic` · Gemini `…/gemini` · Grok `…/grok`。Pico 换 DS 只接 **OpenAI** 这条。业主选用 **`gpt-5.6-sol` + `--thinking medium`**（Pi 官方档，不是 on/off）。无 `/v1`、`store:false`。不要用 urllib 默认 UA 探活。Pi `--provider openai` + models.json `baseUrl`/`api=openai-responses`；DEEPSEEK_* 仍是脑槽位。`gpt-*` 贴图不要切回 deepseek vision。**出图仍走 New API Gemini**（现网 `PICO_IMAGE_GATEWAY_*` · `gemini-3.1-flash-image`），不改打 AIProxy `…/gemini`。禁止为 Claude/Grok 再造核。
+35. **沙箱打开 Office = 内容框。** 默认「打开」docx/pptx/xlsx 走 `GET …/content?preview=1`，用 python-docx / python-pptx / openpyxl 投影页面/幻灯片画布（Codex 同形态）。不是 LibreOffice Writer/Impress 整窗。图与生成网页在结果区铺满（iframe/img）。外网网址仍走隔离 Chromium 截图。禁把 LO 当默认预览。
 
 ## C · 部署 / ECS
 

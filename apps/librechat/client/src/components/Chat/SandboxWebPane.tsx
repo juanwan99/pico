@@ -15,7 +15,7 @@ import {
   type PicoSandboxWindow,
 } from '~/data-provider/pico/api';
 
-const POLL_MS = 1500;
+const POLL_MS = 400;
 const VIEWPORT_W = 1280;
 const VIEWPORT_H = 800;
 

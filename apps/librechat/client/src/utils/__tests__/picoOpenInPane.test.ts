@@ -1,5 +1,8 @@
 import {
   classifyArtifactPreview,
+  stashPendingPreviewId,
+  peekPendingPreviewId,
+  takePendingPreviewId,
   clampResultPaneWidth,
   clampResultPaneZoom,
   detectOpenOfficeIntent,
@@ -17,7 +20,22 @@ import {
 } from '../picoOpenInPane';
 
 describe('picoOpenInPane', () => {
-  it('T1/T9: html/image/text classify as in-pane preview; office is honest download', () => {
+  it('stashes a pending preview id and notifies the result panel', () => {
+    const seen: string[] = [];
+    const onPending = (event: Event) => {
+      seen.push(String((event as CustomEvent<string>).detail || ''));
+    };
+    window.addEventListener('pico:pending-preview', onPending);
+    sessionStorage.clear();
+    stashPendingPreviewId('art-office-1');
+    expect(peekPendingPreviewId()).toBe('art-office-1');
+    expect(seen).toEqual(['art-office-1']);
+    expect(takePendingPreviewId()).toBe('art-office-1');
+    expect(peekPendingPreviewId()).toBeNull();
+    window.removeEventListener('pico:pending-preview', onPending);
+  });
+
+  it('T1/T9: html/image/text classify as in-pane preview; office is content-box', () => {
     expect(classifyArtifactPreview('page.html', 'html')).toBe('html');
     expect(classifyArtifactPreview('shot.png', 'image')).toBe('image');
     expect(classifyArtifactPreview('课程总结.md', 'markdown')).toBe('text');

@@ -34,16 +34,17 @@ describe('getPicoArtifactContent', () => {
   });
 
   it.each([
-    ['inline', false, ''],
-    ['download', true, '?download=true'],
-  ])('requests the authenticated %s artifact blob', async (_mode, download, query) => {
+    ['inline', false, '', undefined],
+    ['download', true, '?download=true', undefined],
+    ['preview', false, '?preview=1', { preview: true }],
+  ])('requests the authenticated %s artifact blob', async (_mode, download, query, opts) => {
     const blob = new Blob(['artifact bytes'], { type: 'text/plain' });
     fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => blob,
     });
 
-    await expect(getPicoArtifactContent('artifact-1', download)).resolves.toBe(blob);
+    await expect(getPicoArtifactContent('artifact-1', download as boolean, opts as { preview?: boolean } | undefined)).resolves.toBe(blob);
     expect(fetchMock).toHaveBeenCalledWith(`/api/pico/v1/artifacts/artifact-1/content${query}`, {
       credentials: 'include',
       headers: expect.objectContaining({
