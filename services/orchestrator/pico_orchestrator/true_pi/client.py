@@ -131,6 +131,16 @@ def true_pi_models_document(
     if kind:
         provider_entry["api"] = kind
         model_entry["api"] = kind
+        if kind == "openai-responses":
+            # Owner: medium reasoning on Codex-class gpt-*. Official Pi map.
+            model_entry["thinkingLevelMap"] = {
+                "off": "medium",
+                "minimal": "medium",
+                "low": "medium",
+                "medium": "medium",
+                "high": "medium",
+                "xhigh": "medium",
+            }
     return {"providers": {name: provider_entry}}
 
 
@@ -253,6 +263,7 @@ class SubprocessTransport(TruePiTransport):
         accept_image: bool = False,
         base_url: str = "",
         api: str = "",
+        thinking_level: str = "",
     ) -> None:
         self.session_dir = session_dir
         self.tool_url = tool_url
@@ -280,6 +291,7 @@ class SubprocessTransport(TruePiTransport):
         self.accept_image = bool(accept_image)
         self.base_url = str(base_url or "").strip()
         self.api = str(api or "").strip()
+        self.thinking_level = str(thinking_level or "").strip()
         self.plan_execute_pending = False
         self.plan_agent_ends = 0
         self.plan_stayed = False
@@ -347,7 +359,7 @@ class SubprocessTransport(TruePiTransport):
             "--model",
             self.model,
             "--thinking",
-            "on" if self.thinking else "off",
+            self.thinking_level or ("on" if self.thinking else "off"),
         ]
         # Pin the conversation jsonl. ``--continue`` is most-recent-in-dir and
         # can resume an empty sibling after compact/kill. Official ``--session``.

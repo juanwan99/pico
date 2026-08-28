@@ -152,25 +152,28 @@ def test_openai_responses_models_json_overlay(tmp_path: Path) -> None:
         tool_token="tok",
         run_id="r-oai",
         provider="openai",
-        model="gpt-5.5",
-        thinking=False,
+        model="gpt-5.6-sol",
+        thinking=True,
         max_context=128_000,
         max_tokens=8_000,
         base_url="https://superaichao.xin/openai",
         api="openai-responses",
         accept_image=True,
+        thinking_level="medium",
     )
     home = t.prepare_agent_home()
     written = json.loads((home / "models.json").read_text(encoding="utf-8"))
     block = written["providers"]["openai"]
     assert block["baseUrl"] == "https://superaichao.xin/openai"
     assert block["api"] == "openai-responses"
-    assert block["models"][0]["id"] == "gpt-5.5"
+    assert block["models"][0]["id"] == "gpt-5.6-sol"
     assert block["models"][0]["api"] == "openai-responses"
+    assert block["models"][0]["thinkingLevelMap"]["medium"] == "medium"
     assert block["models"][0]["input"] == ["text", "image"]
     cmd = t.spawn_command()
     assert cmd[cmd.index("--provider") + 1] == "openai"
-    assert cmd[cmd.index("--model") + 1] == "gpt-5.5"
+    assert cmd[cmd.index("--model") + 1] == "gpt-5.6-sol"
+    assert cmd[cmd.index("--thinking") + 1] == "medium"
 
 
 def test_true_pi_runtime_source_passes_caps_windows() -> None:
