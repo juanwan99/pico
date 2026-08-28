@@ -1,0 +1,50 @@
+            if detach and not bg_task.done():
+                await asyncio.shield(
+                    emit(
+                        "run.client_detached",
+                        {
+                            "reason": "sse_disconnect",
+                            "message": "客户端已断开；任务在云端继续。",
+                            "run_id": run_id,
+                            "task_id": task_id,
+                        },
+                    )
+                )
+                # Do not cancel bg_task — ledger remains source of truth.
+                return
+            if not bg_task.done():
+                bg_task.cancel()
+            raise
+        finally:
+            if not detach:
+                # Legacy: stream lifetime owns the job.
+                if not bg_task.done():
+                    bg_task.cancel()
+                try:
+                    await bg_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as wait_err:  # noqa: BLE001
+                    _ = wait_err
+            elif bg_task.done():
+                # Detach mode but job already finished while client was connected.
+                with suppress(Exception):
+                    await bg_task
+
+        if detach and not bg_task.done():
+            # Client left the generator normally without consuming done — keep job.
+            await emit(
+                "run.client_detached",
+                {
+                    "reason": "stream_end_while_running",
+                    "message": "客户端流结束；任务在云端继续。",
+                    "run_id": run_id,
+                    "task_id": task_id,
+                },
+            )
+            return
+
+        yield chunk({}, finish="stop")
+        yield b"data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
