@@ -56,7 +56,7 @@ def test_publish_tools_on_allowlist_and_system_stays_generic():
     assert "学生端" not in body
     assert "教师看板" not in body
     assert "发布并收表" not in body
-    assert "Do not publish unless the teacher asked" in body
+    assert "If `publish_html_page` is listed this turn" in body
     assert "public_url" in body
     assert "问卷" not in body
 
