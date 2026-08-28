@@ -127,6 +127,13 @@ class Settings(BaseSettings):
     zhipu_image_model: str = "glm-image"
     zhipu_image_size: str = ""
     zhipu_image_quality: str = ""
+    gemini_api_key: str = ""
+    google_api_key: str = ""
+    gemini_images_url: str = ""
+    gemini_image_model: str = "gemini-2.5-flash-image"
+    pico_image_gateway_url: str = ""
+    pico_image_gateway_key: str = ""
+    pico_image_gateway_model: str = ""
 
     # edu → Pico service hooks
     pico_hook_service_token: str = ""  # shared secret for /v1/hooks/edu/*

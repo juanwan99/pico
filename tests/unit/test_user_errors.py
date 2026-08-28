@@ -96,7 +96,8 @@ def test_stream_terminated_english_is_human_with_rerun_cta() -> None:
 
 def test_image_unconfigured_not_model_key() -> None:
     msg = user_message_for_error(
-        "出图尚未接通。请管理员在主机写入 ZHIPU_API_KEY 后重试，不能编造图片。",
+        "出图尚未接通。请管理员在主机写入 GEMINI_API_KEY"
+        "（或 PICO_IMAGE_GATEWAY_URL + PICO_IMAGE_GATEWAY_KEY）后重试，不能编造图片。",
         code="image.unconfigured",
     )
     assert "不能编造" in msg
@@ -133,11 +134,11 @@ def test_image_provider_run_fail_not_blamed_on_missing_zhipu() -> None:
 
 def test_image_siliconflow_rejected_copy() -> None:
     msg = user_message_for_error(
-        "出图提供商硅基流动已否决，不再调用。请使用智谱 glm-image，不能编造图片。",
+        "出图提供商硅基流动已否决，不再调用。请使用 Gemini 或智谱出图，不能编造图片。",
         code="image.provider_rejected",
     )
     assert "否决" in msg
-    assert "glm-image" in msg
+    assert "Gemini" in msg or "智谱" in msg
     assert "SILICONFLOW" not in msg
 
 

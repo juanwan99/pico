@@ -82,6 +82,13 @@ def _sync_settings_to_environ() -> None:
         "ZHIPU_IMAGE_MODEL": s.zhipu_image_model,
         "ZHIPU_IMAGE_SIZE": s.zhipu_image_size,
         "ZHIPU_IMAGE_QUALITY": s.zhipu_image_quality,
+        "GEMINI_API_KEY": s.gemini_api_key,
+        "GOOGLE_API_KEY": s.google_api_key,
+        "GEMINI_IMAGES_URL": s.gemini_images_url,
+        "GEMINI_IMAGE_MODEL": s.gemini_image_model,
+        "PICO_IMAGE_GATEWAY_URL": s.pico_image_gateway_url,
+        "PICO_IMAGE_GATEWAY_KEY": s.pico_image_gateway_key,
+        "PICO_IMAGE_GATEWAY_MODEL": s.pico_image_gateway_model,
     }
     for k, v in mapping.items():
         if v and not os.environ.get(k):

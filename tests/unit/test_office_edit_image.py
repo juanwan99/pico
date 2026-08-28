@@ -41,8 +41,15 @@ ONE_PNG = (
 
 
 @pytest.fixture(autouse=True)
-def _reset_image_runtime():
+def _reset_image_runtime(monkeypatch: pytest.MonkeyPatch):
     reset_image_generate_runtime()
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_IMAGES_URL", raising=False)
+    monkeypatch.delenv("GEMINI_IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("PICO_IMAGE_GATEWAY_URL", raising=False)
+    monkeypatch.delenv("PICO_IMAGE_GATEWAY_KEY", raising=False)
+    monkeypatch.delenv("PICO_IMAGE_GATEWAY_MODEL", raising=False)
     yield
     reset_image_generate_runtime()
 
@@ -478,6 +485,105 @@ async def test_generate_image_1113_no_retry_no_fake(
         await generate_image_bytes("另一张封面")
     assert calls["n"] == 2
     assert slept == [pytest.approx(IMAGE_TIMEOUT_S, abs=0.05)]
+
+
+@pytest.mark.asyncio
+async def test_generate_image_gemini_mock_https_png(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-not-a-secret")
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    seen: dict[str, object] = {}
+
+    async def fake_gemini(payload, *, api_key, timeout):
+        seen["key"] = api_key
+        seen["modalities"] = payload["generationConfig"]["responseModalities"]
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "inlineData": {
+                                        "mimeType": "image/png",
+                                        "data": base64.b64encode(ONE_PNG).decode(
+                                            "ascii"
+                                        ),
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    async def zhipu_should_not_run(payload, *, api_key, timeout):
+        raise AssertionError("zhipu must not run when Gemini key is set")
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gemini", fake_gemini)
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", zhipu_should_not_run)
+    raw, ext = await generate_image_bytes("封面示意图")
+    assert seen["key"] == "test-gemini-not-a-secret"
+    assert "IMAGE" in seen["modalities"]
+    assert ext == "png"
+    assert raw.startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_generate_image_gateway_mock_https_png(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "https://newapi.example.com")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEY", "sk-gateway-not-a-secret")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_MODEL", "gemini-2.5-flash-image")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    seen: dict[str, object] = {}
+
+    async def fake_gateway(payload, *, api_key, timeout):
+        seen["key"] = api_key
+        seen["model"] = payload["model"]
+        seen["prompt"] = payload["prompt"]
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
+            },
+        )
+
+    async def gemini_should_not_run(payload, *, api_key, timeout):
+        raise AssertionError("direct Gemini must not run when gateway is set")
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_gateway)
+    monkeypatch.setattr(
+        "pico_orchestrator.image_generate._post_gemini", gemini_should_not_run
+    )
+    raw, ext = await generate_image_bytes("封面示意图")
+    assert seen["key"] == "sk-gateway-not-a-secret"
+    assert seen["model"] == "gemini-2.5-flash-image"
+    assert ext == "png"
+    assert raw.startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_generate_image_gemini_400_no_fake(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+
+    async def fake_gemini(payload, *, api_key, timeout):
+        return SimpleNamespace(status_code=400, json=lambda: {"error": {"message": "bad"}})
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gemini", fake_gemini)
+    with pytest.raises(ToolError) as caught:
+        await generate_image_bytes("封面示意图")
+    assert caught.value.code == "image.provider"
+    assert "不能编造" in caught.value.message
 
 
 @pytest.mark.asyncio
