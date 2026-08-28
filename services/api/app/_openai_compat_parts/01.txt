@@ -11,7 +11,7 @@ def _model_preference_from_prompt(prompt: str) -> str | None:
     """Resolve the workbench model preference from a strict allowlist."""
     import re
 
-    match = re.search(r"【模型偏好：([^\u3011]+)\u3011", prompt or "")
+    match = re.search(r"【模型偏好：([^】]+)】", prompt or "")
     if not match:
         return None
     requested = match.group(1).strip()

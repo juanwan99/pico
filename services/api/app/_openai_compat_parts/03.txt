@@ -87,12 +87,12 @@ def _strip_pico_markers(text: str) -> str:
     import re
 
     t = str(text or "")
-    t = re.sub(r"【Pico-Convo:[^\u3011]+】", "", t)
-    t = re.sub(r"【Pico-User:[^\u3011]+】", "", t)
-    t = re.sub(r"【工作空间：[^\u3011]+】", "", t)
-    t = re.sub(r"【权限：[^\u3011]+】", "", t)
-    t = re.sub(r"【模型偏好：[^\u3011]+】", "", t)
-    t = re.sub(r"【项目指令：[^\u3011]+】", "", t)
+    t = re.sub(r"【Pico-Convo:[^】]+】", "", t)
+    t = re.sub(r"【Pico-User:[^】]+】", "", t)
+    t = re.sub(r"【工作空间：[^】]+】", "", t)
+    t = re.sub(r"【权限：[^】]+】", "", t)
+    t = re.sub(r"【模型偏好：[^】]+】", "", t)
+    t = re.sub(r"【项目指令：[^】]+】", "", t)
     return t
 
 
