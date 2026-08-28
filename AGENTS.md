@@ -130,9 +130,9 @@ Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 
 ## Product rules
 - **Org:** default **single-window SOLO** — [docs/STAGE-PACKAGE-MODE.md](docs/STAGE-PACKAGE-MODE.md). Old windows 1/2/4 are **duty aliases**, not parallel staffing. See [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md).
 - **Ship steps:** [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. **One window** runs the chain; no multi-issue process OS.
-- **Product goal:** Web WorkBuddy degree — [docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star。用法 = Grok。禁焊死路径。先能力后编排。
+- **Product goal:** 对标 WorkBuddy（办公核心 · 编程兼顾）— [docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star。对话纪律 = Grok 形。禁焊死路径。先能力后编排。
 - **Default runtime:** **Pi** + **DeepSeek**. Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted** (never the goal).
-- **Prod flags:** `PICO_PI_AGENT_RUNTIME=1` default; legacy Kimi only if emergency. Do **not** claim `CLAIM-WB-DEGREE-WEB` until six bars + GitHub evidence.
+- **Prod flags:** `PICO_PI_AGENT_RUNTIME=1` default; legacy Kimi only if emergency. CLAIM-WB 六条已签 YES；禁止改口；六条 ≠ 办公/编程能力终局。
 - **KA-4 HARD:** `run_agent_loop` / `runner.py` **removed**. Rollback multi-step = redeploy prior tip or legacy flag — not revive loop.
 - **Speed:** deploy + smoke beat new process docs; see `docs/VELOCITY-CLEAN.md`.
 - Tenant fail-closed; **Pico owns the unique AI ledger**.

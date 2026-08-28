@@ -8,7 +8,7 @@ STATUS: Accepted · 业主令：底子打好，选型要对，后期慢慢追上
 CLAIM-WB: 不改签（已 YES · 本 ADR 不代签）
 REPO: juanwan99/pico ONLY
 LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
-北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok
+北极星: docs/DIRECTION-NOW.md §0-star · 对标 WB · 办公核心 · 编程兼顾
 现况: docs/STATE-NOW.md · 本 ADR 是选型真源，不是在飞卡
 ```
 

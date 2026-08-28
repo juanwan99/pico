@@ -6,7 +6,7 @@ STATUS: BINDING · 项目法律 · 全体执行窗/总管强制
 DATE: 2026-08-11
 OWNER_ORDER: Pico 禁止自研，只做薄适配
 REPO: juanwan99/pico ONLY
-CLAIM-WB: NO
+CLAIM-WB: YES（六条体验已签 · 本 LAW 不代签 · 不等于能力终局）
 ```
 
 ---
@@ -41,8 +41,8 @@ Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 5. 公网默认 Host Shell / 任意 bash 当能力卖点
 6. 用自研补丁冒充「已经是上游生态」（名实造假）
 7. 复制 edu-core 栈进 Pico 当第二产品
-8. **定向工作流冒充用户**：读正文猜任务、force_agent 自动挂交付 Skill、把 skill/Landing requirement/「必须交 N 个文件」焊进 user prompt（北极星 DIRECTION-NOW §0-star；用法 = Grok）
-9. **焊死唯一能力路径**：把其中一条工具 / 图源 / 模型写成 SYSTEM 或词表的唯一主路。先扎实多项能力，再编排层自己选（北极星 v1.3）
+8. **定向工作流冒充用户**：读正文猜任务、force_agent 自动挂交付 Skill、把 skill/Landing requirement/「必须交 N 个文件」焊进 user prompt（北极星 DIRECTION-NOW §0-star；对话纪律 = Grok 形）
+9. **焊死唯一能力路径**：把其中一条工具 / 图源 / 模型写成 SYSTEM 或词表的唯一主路。办公核心 ≠ 办公唯一路径。先扎实多项能力，再编排层自己选（北极星 v1.4）
 
 ---
 

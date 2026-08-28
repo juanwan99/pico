@@ -2,11 +2,11 @@
 
 ```
 DOC: docs/TRUTH-FREEZE.md
-STATUS: BINDING FREEZE v1.3
+STATUS: BINDING FREEZE v1.4
 FROZEN_AT: 2026-08-28
 PURPOSE: 固定产品/架构真源，防止聊天与旧文档再次冲掉校准结论
 AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star
-SUPERSEDES: v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+SUPERSEDES: v1.3「用法=Grok 成品类」；v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
 RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/MEMORY-RESET.md
 ```
 
@@ -23,18 +23,19 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 
 ---
 
-## 1. 冻结决策集 v1.3（目标 · 不可被执行窗改写）
+## 1. 冻结决策集 v1.4（目标 · 不可被执行窗改写）
 
 ### 1.1 产品是什么
 
 | # | 冻结句 |
 |---|--------|
-| P0 | **用法 = Grok**：通用 LLM；老师的话是 user；系统纪律是 system，不得冒充人话；工具/材料/Skill 是挂载，模型自己决定调不调。先扎实多项能力，再优化编排层。禁止焊死唯一能力路径。以后多源 AI 自动编排，编排核仍是上游 Pi，禁止自研第二编排真源。没点名不交件。禁止读正文猜任务、force_agent 自动挂交付、把「必须交 N 个文件」焊进 user prompt。真源：DIRECTION-NOW §0-star |
-| P1 | Pico = **任务型 AI 工作台（Web）** 底座（对话 + 办事 + 产物 + 唯一 AI 账本 + 控制面）；办事程度类 WorkBuddy（六条）。P1 不得压过 P0 |
+| P0 | **品类终局 = 对标 WorkBuddy**：通用能力的 Web 工作台。办公是核心能力。编程兼顾。互不否决。对话纪律 = Grok 形（老师的话是 user，纪律是 system，工具/材料/Skill 是挂载，模型自己选）。核 = 上游 Pi + DeepSeek。只做薄适配。禁止焊死唯一能力路径。问就解释；说「做成 Word/PPT」才交文件。禁止读正文猜任务、force_agent 自动挂交付、把「必须交 N 个文件」焊进 user prompt。真源：DIRECTION-NOW §0-star |
+| P1 | Pico = **任务型 AI 工作台（Web）**（对话 + 办事 + 产物 + 唯一 AI 账本 + 控制面）。六条 = 体验验收（已签 YES），不得冒充办公/编程能力终局。P1 不得压过 P0 |
 | P2 | **不是** 网盘 / 教务 SaaS / 成绩主库 / 自托管大模型默认 / Dify 门脸终局 / 场景考卷对标 / 定向猜任务的办公机器人 |
 | P3 | 用户成功 = 公网登录 → 开放派活 → 多步过程可见 → 真产物 → 能停、能找回、同会话可改 → 状态诚实 |
 | P4 | 壳 = **`apps/librechat`（MIT）**；禁止回潮 web/nextchat/workbench；禁止拆闭源 WorkBuddy |
 | P5 | 与 edu：Pico = **AI 过程真源**；edu-core = **业务事实真源**；对接后置；**禁止写 edu-cloud**；**禁止 Agent 写成绩/教务库** |
+| P6 | **能力结构**：通用底座 · 办公核心 · 编程兼顾 · 互不否决。办公核心 = 投资与硬度，不是唯一主路。编程 = 隔离沙箱能跑、能服务办公；禁止公网 host bash 当卖点 |
 
 ### 1.2 架构四层
 
@@ -56,19 +57,19 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 | O5 | **禁止双核并列真源**（Pi + Reasonix + Kimi 同时「官方唯一」）。默认只钉 Pi。 |
 | O6 | Reasonix 等实验须 flag，不得写「唯一目标」。 |
 | O7 | 刷新/历史/停止/重试 = **控制面与壳通路**，不得单独用来证明 O1 已完成。 |
-| O8 | **能力并列、编排后置**：多项能力都能用、互不否决。禁止把其中一条焊成唯一主路（SYSTEM / 词表 / `if 场景 then 工具`）。以后多源自动选；现在不焊。编排核仍是上游 Pi，禁止 Pico 自研第二编排真源。 |
+| O8 | **能力并列、编排后置**：通用 / 办公 / 编程都能用、互不否决。禁止把其中一条焊成唯一主路（SYSTEM / 词表 / `if 场景 then 工具`）。办公核心 ≠ 办公唯一路径。以后多源自动选；现在不焊。编排核仍是上游 Pi，禁止 Pico 自研第二编排真源。 |
 
 ### 1.4 能力边界
 
 | # | 做 | 不做（冻结期内默认） |
 |---|----|----------------------|
-| C1 | 日用可靠（刷新/历史/停止/重试通路） | 教师默认 **执行沙箱**（Codex 式） |
+| C1 | 日用可靠（刷新/历史/停止/重试通路） | 公网默认 **host bash / Codex 式教师沙箱** 当卖点 |
 | C2 | 租户/membership 数据隔离 | 把数据隔离叫「每校执行沙箱」并当主线 |
 | C3 | 公网 HTTPS 工作台 | 以 Live Preview 为业主主路径 |
 | C4 | Skill 前台可见可选（分期） | 自研 MCP 协议栈 / 自研向量库内核 |
-| C5 | MCP / KB = 接入现成组件（分期） | 默认开放 Host Shell/任意脚本 |
+| C5 | MCP / KB = 接入现成组件（分期）；编程走隔离沙箱 | 默认开放 Host Shell/任意脚本 |
 | C6 | S7：业务变更需确认 | AI 直接改正式成绩 |
-| C7 | WorkBuddy **Web 六条** | 桌面 exe / 像素 1:1 / 固定场景考卷冒充完成 |
+| C7 | WorkBuddy **Web 六条**（体验已签） | 桌面 exe / 像素 1:1 / 固定场景考卷冒充完成；用六条冒充能力终局 |
 
 ### 1.5 协作与仓
 
@@ -134,7 +135,7 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | **v1.0** | 2026-08-01 | 首次冻结：Kimi Agent 唯一 / 禁 Pi |
 | **v1.1** | 2026-08-06 | 对齐 HANDOFF-WB-PI：默认 Pi + DeepSeek；Kimi 遗产回滚；禁双核真源；**单窗 SOLO**（废多窗日常派） |
 
-升版规则：任何 P1–W5 / A1–A4 / O1–O8 / C1–C7 的修改 → **v1.x** 新 PR，标题含 `TRUTH-FREEZE`。
+升版规则：任何 P0–P6 / W1–W5 / A1–A4 / O1–O8 / C1–C7 的修改 → **v1.x** 新 PR，标题含 `TRUTH-FREEZE`。
 
 ### v1.2 · 2026-08-11
 
@@ -144,3 +145,7 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 ### v1.3 · 2026-08-28
 
 - **北极星补钉（业主书面）：** 先扎实多项能力，再优化编排层；禁止焊死唯一能力路径；以后多源 AI 自动编排，核仍是上游 Pi。真源：DIRECTION-NOW §0-star · O8
+
+### v1.4 · 2026-08-28
+
+- **宪法草案 1（业主令）：** 品类终局 = 对标 WorkBuddy；办公核心；编程兼顾；Grok 降为对话纪律。P0/P1/P6/O8/C1/C5/C7。#744

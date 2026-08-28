@@ -8,7 +8,7 @@ STATUS: Accepted · 业主令：先纪律后能力；有成熟做法不自研
 CLAIM-WB: 不改签（已 YES · 本 ADR 不代签）
 REPO: juanwan99/pico ONLY
 LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
-北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok
+北极星: docs/DIRECTION-NOW.md §0-star · 对标 WB · 办公核心 · 编程兼顾
 目录: docs/ADR-SKILL-CATALOG.md（唯一 Skill 面 = LibreChat Skills）
 现况: docs/STATE-NOW.md · 本 ADR 是加载纪律真源，不是在飞卡
 ```
