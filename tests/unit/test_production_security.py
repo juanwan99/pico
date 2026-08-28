@@ -61,7 +61,11 @@ def test_production_configuration_fails_closed(overrides: dict[str, object], mes
         _valid_production(**overrides).validate_production()
 
 
-def test_production_rejects_test_issuer_without_break_glass() -> None:
+def test_production_allows_gpt55_on_pico_fast_deep_lanes() -> None:
+    _valid_production(
+        deepseek_model="gpt-5.5",
+        deepseek_base_url="https://superaichao.xin/openai",
+    ).validate_production()
     with pytest.raises(ValueError, match="BREAK_GLASS"):
         _valid_production(pico_accept_test_issuer=True).validate_production()
 

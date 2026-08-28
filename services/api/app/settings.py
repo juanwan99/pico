@@ -355,7 +355,11 @@ class Settings(BaseSettings):
             if provider_model not in self.allowed_model_list and not (
                 _normalize_model_name(provider_model) in normalized_allowed
                 or (
-                    _normalize_model_name(provider_model) in {"deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"}
+                    (
+                        _normalize_model_name(provider_model)
+                        in {"deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"}
+                        or _normalize_model_name(provider_model).startswith("gpt-")
+                    )
                     and {"pico-fast", "pico-deep"}.intersection(normalized_allowed)
                 )
             ):

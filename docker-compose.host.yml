@@ -72,6 +72,8 @@ services:
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}"
       DEEPSEEK_MODEL: "${DEEPSEEK_MODEL:-deepseek-v4-flash}"
+      # Brain slot: DeepSeek Completions (default) or OpenAI Responses proxy
+      # (Codex-class: base_url=https://host/openai · model=gpt-5.5).
       PICO_KIMI_WORKDIR_BASE: /app/data/kimi-work
       PICO_PI_WORKDIR_BASE: /app/data/pi-work
       # True-Pi cutover (env_file wins when set; listed for ops visibility)

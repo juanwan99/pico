@@ -97,6 +97,8 @@ def true_pi_models_document(
     max_context: int,
     max_tokens: int,
     accept_image: bool | None = None,
+    base_url: str = "",
+    api: str = "",
 ) -> dict[str, Any]:
     """Pi 0.73.1 models.json overlay. Official path, not a invented CLI flag."""
     from pico_orchestrator.vision import model_accepts_image
@@ -112,21 +114,24 @@ def true_pi_models_document(
         accept_image = model_accepts_image(mid)
     if accept_image:
         inputs.append("image")
-    return {
-        "providers": {
-            name: {
-                "modelOverrides": {mid: dict(overlay)},
-                "models": [
-                    {
-                        "id": mid,
-                        "reasoning": True,
-                        "input": inputs,
-                        **overlay,
-                    }
-                ],
-            }
-        }
+    model_entry: dict[str, Any] = {
+        "id": mid,
+        "reasoning": True,
+        "input": inputs,
+        **overlay,
     }
+    provider_entry: dict[str, Any] = {
+        "modelOverrides": {mid: dict(overlay)},
+        "models": [model_entry],
+    }
+    url = (base_url or "").strip()
+    if url:
+        provider_entry["baseUrl"] = url.rstrip("/")
+    kind = (api or "").strip()
+    if kind:
+        provider_entry["api"] = kind
+        model_entry["api"] = kind
+    return {"providers": {name: provider_entry}}
 
 
 class TruePiClientError(RuntimeError):
@@ -246,6 +251,8 @@ class SubprocessTransport(TruePiTransport):
         spawn_cwd: Path | None = None,
         system_prompt_text: str = "",
         accept_image: bool = False,
+        base_url: str = "",
+        api: str = "",
     ) -> None:
         self.session_dir = session_dir
         self.tool_url = tool_url
@@ -271,6 +278,8 @@ class SubprocessTransport(TruePiTransport):
         self.spawn_cwd = spawn_cwd or session_dir
         self.system_prompt_text = str(system_prompt_text or "")
         self.accept_image = bool(accept_image)
+        self.base_url = str(base_url or "").strip()
+        self.api = str(api or "").strip()
         self.plan_execute_pending = False
         self.plan_agent_ends = 0
         self.plan_stayed = False
@@ -286,6 +295,8 @@ class SubprocessTransport(TruePiTransport):
             max_context=self.max_context,
             max_tokens=self.max_tokens,
             accept_image=self.accept_image,
+            base_url=self.base_url,
+            api=self.api,
         )
 
     def prepare_agent_home(self, home: Path | None = None) -> Path:

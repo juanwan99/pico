@@ -75,6 +75,37 @@ def is_agent_model(model: str | None) -> bool:
     return not bare or bare in {"pico-agent", "pico", "pico-fast", "pico-deep"} or bare.startswith("pico-")
 
 
+def is_openai_responses_model(model: str | None) -> bool:
+    """Codex / OpenAI Responses ids (gpt-5.5, gpt-5.6, …). Not DeepSeek."""
+    return _bare_model(model).lower().startswith("gpt-")
+
+
+def uses_openai_responses_brain(cfg: ProviderConfig | None = None) -> bool:
+    """True when the product brain is an OpenAI Responses proxy, not DeepSeek.
+
+    Codex-class relays (AIProxy ``base_url=…/openai`` + ``wire_api=responses``)
+    keep using the DEEPSEEK_* env slot as the brain key, but Pi must spawn
+    ``--provider openai`` and overlay ``baseUrl``.
+    """
+    target = cfg if cfg is not None else resolve_provider()
+    if target is None:
+        return False
+    base = (target.base_url or "").strip().lower()
+    if "deepseek.com" in base:
+        return False
+    if is_openai_responses_model(target.model):
+        return True
+    return "/openai" in base
+
+
+def product_backend_model(*, deep: bool) -> str:
+    """Lane backend id. OpenAI Responses brain keeps its configured model."""
+    cfg = resolve_provider()
+    if cfg is not None and uses_openai_responses_brain(cfg):
+        return cfg.model
+    return DEFAULT_DEEPSEEK_REASONER if deep else DEFAULT_DEEPSEEK_MODEL
+
+
 def _deepseek_config() -> ProviderConfig | None:
     ds_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
     if not ds_key:
@@ -163,9 +194,9 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
     if is_agent_model(requested):
         low = str(requested).strip().lower()
         if low == "pico-fast":
-            return DEFAULT_DEEPSEEK_MODEL
+            return product_backend_model(deep=False)
         if low == "pico-deep":
-            return DEFAULT_DEEPSEEK_REASONER
+            return product_backend_model(deep=True)
         return cfg.model
 
     bare = _bare_model(requested)
@@ -176,9 +207,9 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
         if is_deepseek_model(bare):
             return bare
         if bare == "pico-fast":
-            return DEFAULT_DEEPSEEK_MODEL
+            return product_backend_model(deep=False)
         if bare == "pico-deep":
-            return DEFAULT_DEEPSEEK_REASONER
+            return product_backend_model(deep=True)
         # Kimi / other labels remounted onto DeepSeek → use product default
         return cfg.model
 
@@ -201,41 +232,41 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
     if low == "pico-fast":
         return {
             "ui_model": low,
-            "backend_model": DEFAULT_DEEPSEEK_MODEL,
+            "backend_model": product_backend_model(deep=False),
             "thinking": False,
             "max_steps": 12,
             "max_tokens": 8000,
             "max_context": 128000,
-            "fallback": DEFAULT_DEEPSEEK_MODEL,
+            "fallback": product_backend_model(deep=False),
         }
     if low == "pico-deep":
         return {
             "ui_model": low,
-            "backend_model": DEFAULT_DEEPSEEK_REASONER,
+            "backend_model": product_backend_model(deep=True),
             "thinking": True,
             "max_steps": 24,
             "max_tokens": 32000,
             "max_context": 256000,
-            "fallback": DEFAULT_DEEPSEEK_REASONER,
+            "fallback": product_backend_model(deep=True),
         }
     if low in {"pico-agent", "pico"}:
         return {
             "ui_model": "pico-agent",
-            "backend_model": DEFAULT_DEEPSEEK_REASONER,
+            "backend_model": product_backend_model(deep=True),
             "thinking": True,
             "max_steps": 24,
             "max_tokens": 32000,
             "max_context": 256000,
-            "fallback": DEFAULT_DEEPSEEK_REASONER,
+            "fallback": product_backend_model(deep=True),
         }
     return {
         "ui_model": requested or "pico-fast",
-        "backend_model": DEFAULT_DEEPSEEK_MODEL,
+        "backend_model": product_backend_model(deep=False),
         "thinking": False,
         "max_steps": 12,
         "max_tokens": 8000,
         "max_context": 128000,
-        "fallback": DEFAULT_DEEPSEEK_MODEL,
+        "fallback": product_backend_model(deep=False),
     }
 
 

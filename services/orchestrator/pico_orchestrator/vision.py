@@ -36,6 +36,8 @@ _MIME_BY_EXT = {
 
 def model_accepts_image(model: str | None) -> bool:
     mid = (model or "").strip().lower()
+    if mid.startswith("gpt-"):
+        return True
     return "vision" in mid or mid.endswith("-vl")
 
 
