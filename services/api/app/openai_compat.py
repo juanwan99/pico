@@ -37,25 +37,3 @@ from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
 
 router = APIRouter(tags=["openai-compat"])
-
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str | list[Any] | None = ""
-    image_urls: list[Any] | None = None
-
-
-class ChatCompletionRequest(BaseModel):
-    model: str | None = None
-    messages: list[ChatMessage]
-    stream: bool = False
-    temperature: float | None = None
-    max_tokens: int | None = None
-    user: str | None = None
-    metadata: dict[str, Any] | None = None
-    web_search: bool = False
-    tools: list[Any] | None = None
-    allowed_tools: list[str] | None = None
-
-
-EDU_SIDEBAR_MARK = "附属，不是用户要求"
