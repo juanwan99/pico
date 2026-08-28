@@ -152,6 +152,39 @@ def test_generate_and_download_bytes_safe(
         assert art["inline"] is None
 
 
+def test_office_preview_returns_content_box_html(client) -> None:
+    headers = _headers(client)
+    created = _invoke(
+        client,
+        headers,
+        "generate_pptx_document",
+        {
+            "title": "preview.pptx",
+            "marker": "PREVIEW-BOX-1",
+            "body": _body_for_tool("generate_pptx_document", "PREVIEW-BOX-1"),
+        },
+    )
+    assert created.status_code == 200, created.text
+    artifact_id = created.json()["result"]["artifact_id"]
+    preview = client.get(
+        f"/v1/artifacts/{artifact_id}/content?preview=1",
+        headers=headers,
+    )
+    assert preview.status_code == 200, preview.text
+    assert "text/html" in (preview.headers.get("content-type") or "")
+    assert preview.headers.get("x-pico-preview") == "office-content-box"
+    body = preview.text
+    assert "slide" in body
+    assert "LibreOffice" not in body
+    assert "Impress" not in body
+    raw = client.get(
+        f"/v1/artifacts/{artifact_id}/content?download=true",
+        headers=headers,
+    )
+    assert raw.status_code == 200
+    assert "application/vnd.openxmlformats" in (raw.headers.get("content-type") or "")
+
+
 def test_text_workspace_write_still_utf8(client) -> None:
     headers = _headers(client)
     created = _invoke(

@@ -292,6 +292,73 @@ async def test_generate_pptx_skips_missing_image_id() -> None:
     assert "image_artifact_id" in (out.get("observation", {}).get("outline", {}).get("hint") or "")
 
 
+def test_gpt_camelcase_theme_and_cover_bullets_land() -> None:
+    """Live run 263d087e: gpt-5.6-sol sent accentColor/fontFace + cover with 3 lines.
+
+    Parser used to drop those keys and force content layout when bullets > 1,
+    so the deck looked like a blank student template.
+    """
+    spec = parse_spec(
+        {
+            "kind": "pptx",
+            "title": "减数分裂·精美教学课件.pptx",
+            "theme": {
+                "name": "Modern Biology",
+                "primaryColor": "0B2239",
+                "accentColor": "18A6A6",
+                "secondaryColor": "F07C5A",
+                "backgroundColor": "F7FAFC",
+                "fontFace": "Aptos",
+            },
+            "blocks": [
+                {
+                    "type": "cover",
+                    "title": "减数分裂",
+                    "bullets": [
+                        "Meiosis | 从一到四，染色体数目减半",
+                        "生物学必修模块 · 课堂教学课件",
+                        "授课教师：梁伯雁｜2026年8月28日",
+                    ],
+                    "image_artifact_id": "cover",
+                },
+                {
+                    "type": "content",
+                    "title": "05 遗传多样性从哪里来？",
+                    "bullets": [
+                        "交叉互换：同源染色体的非姐妹染色单体交换片段",
+                        "自由组合：非同源染色体独立、随机分配",
+                        "受精的随机性：不同配子结合",
+                    ],
+                },
+            ],
+        }
+    )
+    assert spec.theme is not None
+    assert spec.theme.accent == "18A6A6"
+    assert spec.theme.background == "F7FAFC"
+    assert spec.theme.heading_font == "Aptos"
+    assert spec.theme.body_font == "Aptos"
+    assert spec.blocks[0].cover is True
+    assert spec.blocks[1].cover is False
+    raw = render_spec(spec, images={"cover": PNG})
+    blob = zipfile.ZipFile(io.BytesIO(raw)).read("ppt/slides/slide1.xml").decode("utf-8")
+    assert "18A6A6" in blob
+    assert "减数分裂" in blob
+    assert "梁伯雁" in blob
+    body = zipfile.ZipFile(io.BytesIO(raw)).read("ppt/slides/slide2.xml").decode("utf-8")
+    assert "18A6A6" in body
+    assert "Aptos" in body
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["images"]) >= 1
+    deck = Presentation(io.BytesIO(raw))
+    assert deck.slides[0].slide_layout == deck.slide_layouts[0]
+    from pico_orchestrator.office.preview import preview_office_html
+
+    html = preview_office_html(raw, ".pptx")
+    assert "18a6a6" in html.lower()
+    assert "遗传多样性" in html
+
+
 def test_cover_uses_title_layout_and_embeds() -> None:
     spec = parse_spec(
         {

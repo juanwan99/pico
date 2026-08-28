@@ -385,33 +385,28 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(screen.getByTestId('artifact-inline-preview')).toHaveTextContent('正文可见');
   });
 
-  it('T4/F2: opening docx goes to sandbox Writer, not a download or PDF', async () => {
+  it('T4/F2: opening docx shows the content box, not LibreOffice chrome', async () => {
     const user = userEvent.setup();
-    const mockOpenDoc = openPicoSandboxDocument as jest.MockedFunction<
-      typeof openPicoSandboxDocument
-    >;
-    mockOpenDoc.mockResolvedValue({
-      session_id: 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb',
-      url: 'sandbox://writer/报告.docx',
-      title: 'LibreOffice Writer · 报告.docx',
-      kind: 'writer',
-      human_copy: '沙箱已用 LibreOffice 打开这份文档。',
+    const zipBlob = new Blob([new Uint8Array([80, 75, 3, 4])], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
-    (getPicoSandboxSession as jest.Mock).mockResolvedValue({
-      session_id: 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb',
-      title: 'LibreOffice Writer · 报告.docx',
-      kind: 'writer',
-    });
-    mockGetPicoArtifactContent.mockResolvedValue(
-      new Blob([new Uint8Array([80, 75, 3, 4])], {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      }),
+    const htmlBlob = new Blob(
+      [
+        '<!doctype html><html><body><article class="page"><h1>报告</h1><p>正文</p></article></body></html>',
+      ],
+      { type: 'text/html' },
     );
+    mockGetPicoArtifactContent.mockResolvedValueOnce(zipBlob).mockResolvedValueOnce(htmlBlob);
     renderPanel([{ id: 'art-docx', title: '报告.docx', kind: 'docx' }]);
     await user.click(screen.getByRole('button', { name: '打开' }));
-    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
-    expect(mockOpenDoc).toHaveBeenCalled();
+    const pane = await screen.findByTestId('artifact-pane-preview');
+    expect(pane).toHaveAttribute('data-kind', 'office');
+    expect(await screen.findByTestId('artifact-office-iframe')).toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
     expect(screen.queryByTestId('artifact-office-download')).not.toBeInTheDocument();
+    expect(mockGetPicoArtifactContent).toHaveBeenNthCalledWith(2, 'art-docx', false, {
+      preview: true,
+    });
   });
 
   it('T8: opening a PDF attachment previews in-pane and never mistakes it for HTML', async () => {

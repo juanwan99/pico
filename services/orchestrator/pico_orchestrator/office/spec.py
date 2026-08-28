@@ -39,15 +39,29 @@ class Theme:
     heading_font: str | None = None
     body_font: str | None = None
     accent: str | None = None
+    background: str | None = None
 
     @classmethod
     def from_raw(cls, raw: Any) -> Theme | None:
         if not isinstance(raw, dict) or not raw:
             return None
+        # GPT / Codex send CSS-like camelCase. Same three colors + fonts —
+        # not a new spec field. Snake_case keys stay first.
+        heading = _first_str(raw, "heading_font", "headingFont", "fontFace", "font")
+        body = _first_str(raw, "body_font", "bodyFont", "fontFace", "font")
+        accent = _first_str(
+            raw, "accent", "accentColor", "accent_color", "primaryColor", "primary"
+        )
+        background = _first_str(
+            raw, "background", "backgroundColor", "background_color"
+        )
+        if not any((heading, body, accent, background)):
+            return None
         return cls(
-            heading_font=_opt_str(raw.get("heading_font")),
-            body_font=_opt_str(raw.get("body_font")),
-            accent=_opt_str(raw.get("accent")),
+            heading_font=heading,
+            body_font=body,
+            accent=accent,
+            background=background,
         )
 
 
@@ -69,6 +83,7 @@ class Block:
     notes: str = ""
     image_artifact_id: str | None = None
     headers: tuple[str, ...] = ()
+    cover: bool = False
 
     def image_ids(self) -> tuple[str, ...]:
         ids: list[str] = []
@@ -243,6 +258,7 @@ def _parse_block(item: Any, *, kind: Kind) -> Block:
             bullets=bullets,
             notes=str(item.get("notes") or "").strip(),
             image_artifact_id=_opt_str(item.get("image_artifact_id") or item.get("image")),
+            cover=btype in {"cover", "title"},
         )
     if btype == "heading":
         text = str(item.get("text") or "").strip()
@@ -323,3 +339,11 @@ def _opt_str(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _first_str(raw: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        got = _opt_str(raw.get(key))
+        if got:
+            return got
+    return None

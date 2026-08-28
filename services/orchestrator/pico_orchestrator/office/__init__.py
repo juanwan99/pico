@@ -12,6 +12,7 @@ from pico_orchestrator.office.edit import (
 )
 from pico_orchestrator.office.fill import fill_office_bytes
 from pico_orchestrator.office.inspect import inspect_office_bytes
+from pico_orchestrator.office.preview import preview_office_html
 from pico_orchestrator.office.qa import verify_office_bytes
 from pico_orchestrator.office.render import render_spec
 from pico_orchestrator.office.spec import OfficeSpec, parse_spec, spec_from_plain
@@ -25,6 +26,7 @@ __all__ = [
     "fill_office_bytes",
     "inspect_office_bytes",
     "parse_spec",
+    "preview_office_html",
     "render_spec",
     "spec_from_plain",
     "verify_office_bytes",

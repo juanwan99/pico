@@ -194,8 +194,12 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function getPicoArtifactContent(id: string, download = false): Promise<Blob> {
-  const query = download ? '?download=true' : '';
+export async function getPicoArtifactContent(
+  id: string,
+  download = false,
+  opts?: { preview?: boolean },
+): Promise<Blob> {
+  const query = download ? '?download=true' : opts?.preview ? '?preview=1' : '';
   const res = await fetch(`/api/pico/v1/artifacts/${encodeURIComponent(id)}/content${query}`, {
     credentials: 'include',
     headers: authHeaders(),

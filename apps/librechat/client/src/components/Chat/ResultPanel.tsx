@@ -11,7 +11,6 @@ import {
   getPicoArtifactContent,
   picoAuthedGet,
   openPicoSandboxBrowser,
-  openPicoSandboxDocument,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -27,6 +26,10 @@ import {
   readBlobText,
   readStoredResultPaneWidth,
   RESULT_PANE_WIDTH_STORAGE_KEY,
+  takePendingPreviewId,
+  peekPendingPreviewId,
+  PICO_PENDING_PREVIEW_EVENT,
+  OFFICE_NO_PREVIEW_COPY,
   type OfficeOpenIntent,
   type ResultPaneView,
 } from '~/utils/picoOpenInPane';
@@ -121,6 +124,13 @@ function isImageArtifact(artifact: ArtifactItem, blobType?: string): boolean {
     /\.(png|jpe?g|gif|webp)$/i.test(artifact.name || '') ||
     /image/i.test(artifact.kindLabel || '') ||
     /image\//i.test(blobType || '')
+  );
+}
+
+function isOfficeArtifact(artifact: ArtifactItem): boolean {
+  return (
+    /\.(docx?|pptx?|xlsx?|odt|odp|ods)$/i.test(artifact.name || '') ||
+    /docx|pptx|xlsx|word|ppt|excel/i.test(artifact.kindLabel || '')
   );
 }
 
@@ -457,57 +467,26 @@ export default function ResultPanel({
   };
 
   const openOfficeInPane = async (intent: OfficeOpenIntent, artifactId?: string) => {
-    const key = `${intent.kind}:${artifactId || intent.filename || 'new'}`;
-    if (openedWebsiteRef.current === key && sandboxSession) {
-      setView('web');
+    const match = artifactId
+      ? artifacts.find((item) => item.id === artifactId)
+      : artifacts.find((item) => {
+          const name = item.name || '';
+          if (intent.filename && name === intent.filename) {
+            return true;
+          }
+          if (intent.kind === 'writer') {
+            return /\.(docx?|odt)$/i.test(name);
+          }
+          if (intent.kind === 'calc') {
+            return /\.(xlsx?|ods)$/i.test(name);
+          }
+          return /\.(pptx?|odp)$/i.test(name);
+        });
+    if (!match) {
+      setWebsiteError('没有可打开的文件。请先生成或上传，再点结果区打开。');
       return;
     }
-    openedWebsiteRef.current = key;
-    setWebsiteError(null);
-    clearFilePreview();
-    setView('web');
-    try {
-      const match = artifactId
-        ? artifacts.find((item) => item.id === artifactId)
-        : artifacts.find((item) => {
-            const name = item.name || '';
-            if (intent.filename && name === intent.filename) {
-              return true;
-            }
-            if (intent.kind === 'writer') {
-              return /\.(docx?|odt)$/i.test(name);
-            }
-            if (intent.kind === 'calc') {
-              return /\.(xlsx?|ods)$/i.test(name);
-            }
-            return /\.(pptx?|odp)$/i.test(name);
-          });
-      if (!match?.id && !intent.filename) {
-        openedWebsiteRef.current = null;
-        setWebsiteError('没有可打开的文件。请先生成或上传，再点结果区打开。');
-        return;
-      }
-      const meta = await openPicoSandboxDocument({
-        kind: intent.kind,
-        artifact_id: match?.id,
-        filename: intent.filename || match?.name,
-      });
-      const sessionId = String(meta.session_id || '').trim();
-      if (!sessionId.startsWith('sbox_')) {
-        throw new Error('sandbox session missing');
-      }
-      setLocalSandbox({
-        sessionId,
-        url: String(meta.url || ''),
-        title: String(meta.title || ''),
-        humanCopy: String(meta.human_copy || '沙箱已用 LibreOffice 打开这份文档。'),
-        kind: String(meta.kind || intent.kind),
-      });
-    } catch (err) {
-      openedWebsiteRef.current = null;
-      const message = err instanceof Error ? err.message : String(err);
-      setWebsiteError(message.includes('office_unavailable') ? '沙箱还没有装字处理软件' : '打开文档失败，请稍后重试');
-    }
+    await openArtifact(match);
   };
 
   useEffect(() => {
@@ -607,13 +586,22 @@ export default function ResultPanel({
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
       return;
     }
-    if (kind === 'office') {
-      const officeKind = /\.(pptx?|odp)$/i.test(artifact.name)
-        ? 'impress'
-        : /\.(xlsx?|ods)$/i.test(artifact.name)
-          ? 'calc'
-          : 'writer';
-      await openOfficeInPane({ kind: officeKind, filename: artifact.name }, artifact.id);
+    if (kind === 'office' || isOfficeArtifact(artifact)) {
+      if (artifact.picoArtifact) {
+        try {
+          const htmlBlob = await getPicoArtifactContent(artifact.id, false, { preview: true });
+          const text = await readBlobText(htmlBlob);
+          if (text.includes('<html') || text.includes('<section') || text.includes('<article')) {
+            setPreviewHtml(text);
+            setView('overview');
+            return;
+          }
+        } catch {
+          /* fall through to honest copy */
+        }
+      }
+      setPreviewOffice(OFFICE_NO_PREVIEW_COPY);
+      setView('overview');
       return;
     }
     if (kind === 'text' || (blob.size <= 512_000 && kind !== 'download')) {
@@ -666,6 +654,26 @@ export default function ResultPanel({
     }
   };
 
+  useEffect(() => {
+    const consume = () => {
+      const pending = peekPendingPreviewId();
+      if (!pending) {
+        return;
+      }
+      const match = artifacts.find((item) => item.id === pending);
+      if (!match) {
+        return;
+      }
+      takePendingPreviewId();
+      void openArtifact(match);
+    };
+    consume();
+    window.addEventListener(PICO_PENDING_PREVIEW_EVENT, consume);
+    return () => window.removeEventListener(PICO_PENDING_PREVIEW_EVENT, consume);
+    // Strip stashes an id then opens this panel; consume once the file list is ready.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artifacts]);
+
   const downloadArtifact = async (artifact: ArtifactItem) => {
     dismissOverlayMenus();
     setArtifactAction({ id: artifact.id, type: 'download' });
@@ -715,6 +723,12 @@ export default function ResultPanel({
   const previewArtifact = previewArtifactId
     ? artifacts.find((item) => item.id === previewArtifactId)
     : undefined;
+  const officePreview =
+    previewHtml !== null &&
+    Boolean(
+      (previewArtifact && isOfficeArtifact(previewArtifact)) ||
+        /\.(docx?|pptx?|xlsx?|odt|odp|ods)$/i.test(previewTitle || ''),
+    );
 
   const showZoom = Boolean(previewHtml || previewImage);
 
@@ -817,13 +831,15 @@ export default function ResultPanel({
             className="flex min-h-0 flex-1 flex-col"
             data-testid="artifact-pane-preview"
             data-kind={
-              previewHtml !== null
-                ? 'html'
-                : previewImage !== null
-                  ? 'image'
-                  : previewOffice !== null
+              previewImage !== null
+                ? 'image'
+                : previewPdf !== null
+                  ? 'pdf'
+                  : officePreview || previewOffice !== null
                     ? 'office'
-                    : 'text'
+                    : previewHtml !== null
+                      ? 'html'
+                      : 'text'
             }
           >
             <div className="flex items-center justify-between gap-2 border-b border-black/[0.06] px-2.5 py-1.5">
@@ -856,11 +872,17 @@ export default function ResultPanel({
             {previewHtml !== null ? (
               <>
                 <p className="border-b border-black/[0.04] px-2.5 py-1 text-[10px] text-[#8c8c8c]">
-                  安全预览：sandbox 禁用脚本与同源；铺满结果区 · {paneZoom.label}
+                  {officePreview
+                    ? '内容框预览：只渲染页面/幻灯片，不是完整 Word/PPT 窗 · '
+                    : '隔离网页：脚本不出本框；铺满结果区 · '}
+                  {paneZoom.label}
                 </p>
                 <div
-                  className="relative min-h-0 flex-1 overflow-auto bg-white"
-                  data-testid="artifact-html-stage"
+                  className={cn(
+                    'relative min-h-0 flex-1 overflow-auto',
+                    officePreview ? 'bg-[#ececec]' : 'bg-white',
+                  )}
+                  data-testid={officePreview ? 'artifact-office-stage' : 'artifact-html-stage'}
                   data-zoom={paneZoom.label}
                   onWheel={paneZoom.onWheel}
                 >
@@ -872,8 +894,8 @@ export default function ResultPanel({
                     }}
                   >
                     <iframe
-                      title={previewTitle || 'HTML 安全预览'}
-                      sandbox=""
+                      title={previewTitle || (officePreview ? 'Office 内容框' : 'HTML 预览')}
+                      sandbox={officePreview ? '' : 'allow-scripts'}
                       referrerPolicy="no-referrer"
                       srcDoc={previewHtml}
                       style={{
@@ -882,8 +904,8 @@ export default function ResultPanel({
                         transform: `scale(${paneZoom.zoom})`,
                         transformOrigin: 'top left',
                       }}
-                      className="min-h-full border-0 bg-white"
-                      data-testid="artifact-html-iframe"
+                      className="min-h-full border-0 bg-transparent"
+                      data-testid={officePreview ? 'artifact-office-iframe' : 'artifact-html-iframe'}
                     />
                   </div>
                 </div>
@@ -907,16 +929,20 @@ export default function ResultPanel({
             ) : null}
             {previewImage !== null ? (
               <div
-                className="min-h-0 flex-1 overflow-auto bg-[#111]"
+                className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[#ececec]"
                 data-testid="artifact-image-stage"
                 data-zoom={paneZoom.label}
                 onWheel={paneZoom.onWheel}
               >
                 <img
                   src={previewImage}
-                  alt={previewTitle || 'inspect raster'}
-                  style={{ width: `${paneZoom.zoom * 100}%` }}
-                  className="mx-auto block h-auto max-w-none bg-white object-contain"
+                  alt={previewTitle || '图片预览'}
+                  style={{
+                    width: paneZoom.zoom === 1 ? 'auto' : `${paneZoom.zoom * 100}%`,
+                    maxWidth: paneZoom.zoom === 1 ? '100%' : 'none',
+                    maxHeight: paneZoom.zoom === 1 ? '100%' : 'none',
+                  }}
+                  className="block h-auto bg-white object-contain shadow-[0_8px_28px_rgba(0,0,0,0.08)]"
                   data-testid="artifact-image"
                 />
               </div>
@@ -1063,7 +1089,7 @@ export default function ResultPanel({
                     可下载文件（{artifacts.length}）
                   </p>
                   <p className="text-[11px] leading-relaxed text-[#8c8c8c]">
-                    文件名点「打开」铺满本区；Office 只下载，不承诺区内翻页。
+                    点「打开」在结果区看内容框（图/网页铺满；Word/PPT 只渲页面）。完整文件请下载。
                   </p>
                 </li>
                 {artifacts.map((a) => (

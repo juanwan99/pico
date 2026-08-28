@@ -14,7 +14,52 @@ export const RESULT_PANE_VIEW_LABEL: Record<ResultPaneView, string> = {
 };
 
 export const OFFICE_NO_PREVIEW_COPY =
-  '该 Office 文件不支持区内预览或翻页，已开始下载。请用 Word / WPS / LibreOffice 打开。';
+  '无法在结果区展开内容框，请下载后用本地软件打开。';
+
+export const PICO_PENDING_PREVIEW_KEY = 'pico.pendingPreviewArtifactId';
+export const PICO_PENDING_PREVIEW_EVENT = 'pico:pending-preview';
+
+export function stashPendingPreviewId(id: string): void {
+  const value = (id || '').trim();
+  if (!value || typeof sessionStorage === 'undefined') {
+    return;
+  }
+  try {
+    sessionStorage.setItem(PICO_PENDING_PREVIEW_KEY, value);
+  } catch {
+    /* quota / private mode */
+  }
+  try {
+    window.dispatchEvent(new CustomEvent(PICO_PENDING_PREVIEW_EVENT, { detail: value }));
+  } catch {
+    /* jsdom / SSR */
+  }
+}
+
+export function peekPendingPreviewId(): string | null {
+  if (typeof sessionStorage === 'undefined') {
+    return null;
+  }
+  try {
+    const value = sessionStorage.getItem(PICO_PENDING_PREVIEW_KEY);
+    return value && value.trim() ? value.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function takePendingPreviewId(): string | null {
+  const value = peekPendingPreviewId();
+  if (!value || typeof sessionStorage === 'undefined') {
+    return value;
+  }
+  try {
+    sessionStorage.removeItem(PICO_PENDING_PREVIEW_KEY);
+  } catch {
+    /* ignore */
+  }
+  return value;
+}
 
 export type ArtifactPreviewKind = 'html' | 'image' | 'text' | 'office' | 'pdf' | 'download';
 
