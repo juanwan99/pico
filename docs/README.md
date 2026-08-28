@@ -31,6 +31,7 @@ NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
 | 0 | **[ADR-CAPABILITY-LOADING.md](./ADR-CAPABILITY-LOADING.md)** | 能力加载纪律（少常驻 · Skill 渐进披露 · 禁自研选工具核）· 不当在飞 |
 | 0 | **[EXPERIENCE.md](./EXPERIENCE.md)** | 经验唯一 · 按域 · 派发点名 ≤3 |
 | 0 | **[TOOLING-CATALOG.md](./TOOLING-CATALOG.md)** | 工具唯一 ID 表 |
+| — | **[STAGE-PLAN-WB-CORE.md](./STAGE-PLAN-WB-CORE.md)** | 对标 WB 四步总计划（待业主核）· 不当在飞 · 不 stamp |
 | — | **[ADR-OFFICE-DOC-PIPELINE.md](./ADR-OFFICE-DOC-PIPELINE.md)** | 办公文档选型（spec→渲染→检查）· 不当在飞 |
 | — | [MEMORY-RESET.md](./MEMORY-RESET.md) | 考古错误记忆 · 不当经验真源 |
 | — | [HANDOFF-NEW-WINDOW-2026-08-23.md](./HANDOFF-NEW-WINDOW-2026-08-23.md) | **SUPERSEDED** · 不当现况 |
