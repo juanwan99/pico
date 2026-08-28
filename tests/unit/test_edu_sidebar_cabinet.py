@@ -18,6 +18,7 @@ from app.openai_compat import (
     _resolve_allowed_tools,
     _sidebar_chat_only,
 )
+from pico_orchestrator.day_use import apply_day_use
 from pico_orchestrator.edu_sidebar import SIDEBAR_WORKBENCH_HINT
 
 
@@ -100,6 +101,31 @@ def test_true_pi_compose_uses_edu_system_override() -> None:
     assert "工作台" in system
 
 
+def test_edu_sidebar_strips_membership_day_use() -> None:
+    from pico_orchestrator.day_use import build_day_use_block
+    from pico_orchestrator.true_pi.runtime import pico_system_text
+
+    cabinet = build_day_use_block(
+        display_name="枫溪管理员",
+        recent_titles=["豌豆杂交课件", "Word测试文档.docx"],
+    )
+    assert "豌豆杂交课件" in cabinet
+    assert "Recent files on this membership" in cabinet
+    stripped = apply_day_use(edu_sidebar=True, block=cabinet)
+    assert stripped == ""
+    kept = apply_day_use(edu_sidebar=False, block=cabinet)
+    assert "豌豆杂交课件" in kept
+    system = pico_system_text(
+        system_override="附属，不是用户要求\n{\"page\":{\"title\":\"成绩观察\"}}",
+        day_use=stripped,
+    )
+    assert "附属，不是用户要求" in system
+    assert "成绩观察" in system
+    assert "豌豆杂交课件" not in system
+    assert "Word测试文档" not in system
+    assert "Recent files on this membership" not in system
+
+
 if __name__ == "__main__":
     test_edu_sidebar_mark_detects_accessory()
     test_sidebar_chat_only_skips_agent()
@@ -109,4 +135,5 @@ if __name__ == "__main__":
     test_resolve_allowed_tools_request_is_ceiling()
     test_resolve_allowed_tools_empty_intersection_keeps_request()
     test_true_pi_compose_uses_edu_system_override()
+    test_edu_sidebar_strips_membership_day_use()
     print("test_edu_sidebar_cabinet.py OK")

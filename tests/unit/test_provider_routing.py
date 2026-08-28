@@ -282,3 +282,124 @@ def test_deepseek_url_does_not_count_as_openai_responses(
     cfg = resolve_provider()
     assert cfg is not None
     assert not uses_openai_responses_brain(cfg)
+
+
+def test_responses_input_splits_system_from_turns() -> None:
+    from pico_orchestrator.provider import _responses_instructions_and_input
+
+    instructions, items = _responses_instructions_and_input(
+        [
+            {"role": "system", "content": "附属，不是用户要求"},
+            {"role": "user", "content": "你能看到当前界面吗"},
+        ]
+    )
+    assert instructions == "附属，不是用户要求"
+    assert items == [{"role": "user", "content": "你能看到当前界面吗"}]
+
+
+def test_responses_text_delta_ignores_reasoning() -> None:
+    from types import SimpleNamespace
+
+    from pico_orchestrator.provider import _responses_text_delta
+
+    assert (
+        _responses_text_delta(
+            SimpleNamespace(type="response.output_text.delta", delta="高一期末")
+        )
+        == "高一期末"
+    )
+    assert (
+        _responses_text_delta(
+            {"type": "response.reasoning_text.delta", "delta": "think"}
+        )
+        == ""
+    )
+
+
+def test_responses_kwargs_skip_reasoning_when_thinking_off() -> None:
+    from pico_orchestrator.provider import _responses_create_kwargs
+
+    kwargs = _responses_create_kwargs(
+        model_id="gpt-5.6-sol",
+        messages=[{"role": "user", "content": "hi"}],
+        max_tokens=64,
+        thinking=False,
+    )
+    assert kwargs["model"] == "gpt-5.6-sol"
+    assert kwargs["stream"] is True
+    assert kwargs["max_output_tokens"] == 64
+    assert "reasoning" not in kwargs
+    assert "extra_body" not in kwargs
+
+    on = _responses_create_kwargs(
+        model_id="gpt-5.6-sol",
+        messages=[{"role": "user", "content": "hi"}],
+        max_tokens=64,
+        thinking=True,
+    )
+    assert on["reasoning"] == {"effort": "medium"}
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_uses_responses_for_gpt_brain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edu sidebar is use_direct + gpt-5.6-sol; Chat Completions 404s as 'Not Found'."""
+    from types import SimpleNamespace
+
+    import pico_orchestrator.provider as provider
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-aiproxy-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gpt-5.6-sol")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://superaichao.xin/openai")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+
+    calls: dict[str, object] = {}
+
+    class FakeStream:
+        def __init__(self, events):
+            self._events = list(events)
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if not self._events:
+                raise StopAsyncIteration
+            return self._events.pop(0)
+
+    class FakeResponses:
+        async def create(self, **kwargs):
+            calls["responses"] = kwargs
+            return FakeStream(
+                [SimpleNamespace(type="response.output_text.delta", delta="成绩观察板")]
+            )
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            calls["chat"] = kwargs
+            raise AssertionError("gpt-5.6-sol must not use chat.completions")
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            calls["client"] = kwargs
+            self.responses = FakeResponses()
+            self.chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr(provider, "AsyncOpenAI", FakeClient)
+    parts: list[str] = []
+    async for piece in provider.stream_chat(
+        "你能看到当前界面吗",
+        max_tokens=32,
+        model="pico-fast",
+        system="附属，不是用户要求",
+        thinking=False,
+    ):
+        parts.append(piece)
+    assert "".join(parts) == "成绩观察板"
+    assert "chat" not in calls
+    sent = calls["responses"]
+    assert sent["model"] == "gpt-5.6-sol"
+    assert sent["instructions"] == "附属，不是用户要求"
+    assert sent["input"] == [{"role": "user", "content": "你能看到当前界面吗"}]

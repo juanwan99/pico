@@ -336,6 +336,74 @@ def _messages_for_chat(
     return messages
 
 
+def _responses_instructions_and_input(messages: list[dict]) -> tuple[str | None, list[dict]]:
+    """Split chat messages into Responses ``instructions`` + ``input``."""
+    instructions_parts: list[str] = []
+    items: list[dict] = []
+    for row in messages:
+        role = str(row.get("role") or "")
+        content = str(row.get("content") or "")
+        if not content:
+            continue
+        if role == "system":
+            instructions_parts.append(content)
+            continue
+        if role in ("user", "assistant"):
+            items.append({"role": role, "content": content})
+    if not items:
+        items = [{"role": "user", "content": " "}]
+    instructions = "\n".join(instructions_parts).strip() or None
+    return instructions, items
+
+
+def _responses_text_delta(event: object) -> str:
+    """Yield visible assistant text from an OpenAI Responses stream event."""
+    if isinstance(event, dict):
+        et = str(event.get("type") or "")
+        delta = event.get("delta")
+    else:
+        et = str(getattr(event, "type", "") or "")
+        delta = getattr(event, "delta", None)
+    if et not in {"response.output_text.delta", "response.refusal.delta"}:
+        return ""
+    return str(delta or "")
+
+
+def _responses_create_kwargs(
+    *,
+    model_id: str,
+    messages: list[dict],
+    max_tokens: int,
+    thinking: bool | None,
+) -> dict[str, object]:
+    instructions, input_items = _responses_instructions_and_input(messages)
+    kwargs: dict[str, object] = {
+        "model": model_id,
+        "input": input_items,
+        "stream": True,
+        "max_output_tokens": max_tokens,
+    }
+    if instructions:
+        kwargs["instructions"] = instructions
+    # pico-fast / json_only keep thinking off; pico-deep uses medium (true Pi overlay).
+    if thinking is True:
+        kwargs["reasoning"] = {"effort": "medium"}
+    return kwargs
+
+
+async def _iter_stream_text(stream: object, *, responses: bool) -> AsyncIterator[str]:
+    if responses:
+        async for event in stream:  # type: ignore[union-attr]
+            piece = _responses_text_delta(event)
+            if piece:
+                yield piece
+        return
+    async for chunk in stream:  # type: ignore[union-attr]
+        delta = chunk.choices[0].delta.content if getattr(chunk, "choices", None) else None
+        if delta:
+            yield delta
+
+
 def _is_auth_error(exc: Exception) -> bool:
     msg = str(exc)
     low = msg.lower()
@@ -387,6 +455,14 @@ async def stream_chat(
 
     async def _open_stream(provider: ProviderConfig, mid: str):
         client = AsyncOpenAI(api_key=provider.api_key, base_url=provider.base_url)
+        if uses_openai_responses_brain(provider):
+            kwargs = _responses_create_kwargs(
+                model_id=mid,
+                messages=messages,
+                max_tokens=max_tokens,
+                thinking=thinking,
+            )
+            return await client.responses.create(**kwargs)
         return await client.chat.completions.create(
             model=mid,
             messages=messages,
@@ -413,10 +489,10 @@ async def stream_chat(
             else:
                 cfg = fallback
                 model_id = fallback.model
-                async for chunk in stream:
-                    delta = chunk.choices[0].delta.content if chunk.choices else None
-                    if delta:
-                        yield delta
+                async for piece in _iter_stream_text(
+                    stream, responses=uses_openai_responses_brain(cfg)
+                ):
+                    yield piece
                 return
 
         msg = str(e)
@@ -433,7 +509,7 @@ async def stream_chat(
             raise RuntimeError("模型调用过于频繁，请稍后再试。") from e
         raise RuntimeError(f"模型调用失败：{msg}") from e
 
-    async for chunk in stream:
-        delta = chunk.choices[0].delta.content if chunk.choices else None
-        if delta:
-            yield delta
+    async for piece in _iter_stream_text(
+        stream, responses=uses_openai_responses_brain(cfg)
+    ):
+        yield piece
