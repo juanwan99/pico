@@ -1,0 +1,93 @@
+        existing_keys = {(kind, title) for kind, title in existing.all()}
+            files = _extract_file_artifacts(final_text)
+            if not files:
+                files = _file_from_user_prompt(user_prompt)
+            for name, body in files:
+                key = ("file", name)
+                if key in existing_keys:
+                    continue
+                import hashlib
+
+                raw_bytes = body.encode("utf-8")
+                artifact = ArtifactRow(
+                    id=new_id(),
+                    task_id=run.task_id,
+                    run_id=run_id,
+                    kind="file",
+                    title=name,
+                    inline=body,
+                    content_encoding="utf8",
+                    content_sha256=hashlib.sha256(raw_bytes).hexdigest(),
+                    byte_size=len(raw_bytes),
+                )
+                session.add(artifact)
+                existing_keys.add(key)
+                await append_event(
+                    session,
+                    run_id,
+                    "artifact.created",
+                    {
+                        "artifact_id": artifact.id,
+                        "title": name,
+                        "user_label": name,
+                        "kind": "file",
+                        "download_path": (
+                            f"/v1/artifacts/{artifact.id}/content?download=true"
+                        ),
+                    },
+                    commit=False,
+                )
+
+            # T-GROK-PATH: 回复摘要 stays in run.final_text (bookkeeping), not
+            # a result-area Artifact. Do not mint a downloadable 回复摘要 chip.
+        if (
+            isinstance(skill_snapshot, dict)
+            and skill_snapshot.get("requires_s7")
+            and status == "succeeded"
+        ):
+            existing_change = await session.execute(
+                select(ChangeProposalRow.id).where(ChangeProposalRow.run_id == run_id).limit(1)
+            )
+            if existing_change.scalar_one_or_none() is None:
+                task_row = await session.get(TaskRow, run.task_id)
+                if task_row is None:
+                    await session.rollback()
+                    return
+                prop = _skill_s7_payload(
+                    prompt=run.prompt,
+                    final_text=final_text,
+                    snapshot=skill_snapshot,
+                )
+                change = ChangeProposalRow(
+                    id=new_id(),
+                    school_id=task_row.school_id,
+                    membership_id=task_row.membership_id,
+                    task_id=run.task_id,
+                    run_id=run.id,
+                    title=prop["title"],
+                    summary=prop["summary"],
+                    payload_json=json.dumps(prop["payload"], ensure_ascii=False),
+                    status="proposed",
+                )
+                session.add(change)
+                await append_event(
+                    session,
+                    run_id,
+                    "change.proposed",
+                    {"change_id": change.id, "title": change.title},
+                    commit=False,
+                )
+        # Tool-path S7: persist pico_propose_change even when skill does not require_s7.
+        if change_proposal and status in ("succeeded", "failed"):
+            existing_tool_change = await session.execute(
+                select(ChangeProposalRow.id).where(ChangeProposalRow.run_id == run_id).limit(1)
+            )
+            if existing_tool_change.scalar_one_or_none() is None:
+                task_row = await session.get(TaskRow, run.task_id)
+                if task_row is not None:
+                    prop = change_proposal.get("proposal") or change_proposal
+                    if isinstance(prop, dict):
+                        change = ChangeProposalRow(
+                            id=new_id(),
+                            school_id=task_row.school_id,
+                            membership_id=task_row.m

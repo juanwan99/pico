@@ -1,0 +1,126 @@
+          continue
+        out.append((name[:200], body[:50000]))
+    return out
+
+
+def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
+    """Synthesize file when user explicitly asks to create name.ext with content."""
+    import re
+
+    if not user_prompt:
+        return []
+    um = re.search(
+        r"(?:创建|生成|写|保存).{0,40}?([\w.\-]+\.(?:txt|md|csv|json))",
+        user_prompt,
+        re.IGNORECASE,
+    )
+    if not um:
+        return []
+    name = um.group(1)
+    cm = re.search(r"内容\s*[为是:=：]\s*([^\n，,。；;]{1,200})", user_prompt)
+    body = "hi"
+    if cm:
+        body = cm.group(1).strip().strip("\"'「」")
+    return [(name, body or "hi")]
+
+
+def _this_round_delivery_plan(
+    raw_prompt: str,
+    *,
+    prior_artifact_titles: list[str] | None = None,
+) -> Any:
+    """Never set min_artifacts / force_agent from a user-prompt word list.
+
+    Tools stay mounted. The post-run gate only fails a chat-only *claim*.
+    """
+    del raw_prompt, prior_artifact_titles
+    from pico_orchestrator.delivery_policy import no_guess_plan
+
+    return no_guess_plan()
+
+
+def _sticky_delivery_plan(
+    raw_prompt: str,
+    history: list[dict[str, Any]] | None,
+    *,
+    prior_artifact_titles: list[str] | None = None,
+) -> Any:
+    """T-GROK-PATH: no prior-turn force_agent; no prompt word table."""
+    del history
+    return _this_round_delivery_plan(
+        raw_prompt, prior_artifact_titles=prior_artifact_titles
+    )
+
+
+def _resolve_skill_for_prompt(
+    raw_prompt: str,
+    skill_snapshot: dict[str, Any] | None,
+    *,
+    prior_artifact_titles: list[str] | None = None,
+    history: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any] | None, Any]:
+    """Keep an explicit hung skill. Do not guess-and-attach deliverable/engineering.
+
+    Returns (skill_snapshot, DeliveryPlan). Tools stay on the allowlist either way.
+    """
+    plan = _sticky_delivery_plan(
+        raw_prompt,
+        history,
+        prior_artifact_titles=prior_artifact_titles,
+    )
+    return skill_snapshot, plan
+
+
+def _caps_with_landing_min(caps: Any, delivery_plan: Any, skill_snapshot: dict | None) -> Any:
+    """Post-run min_artifacts only. Do not floor because a skill name was guessed."""
+    from dataclasses import replace as _dc_replace
+
+    del skill_snapshot
+    need = 0
+    if delivery_plan is not None:
+        need = int(getattr(delivery_plan, "min_artifacts", 0) or 0)
+    if need > 0:
+        return _dc_replace(caps, min_artifacts=need)
+    return caps
+
+
+def _caps_with_images(caps: Any, images: list[dict[str, Any]] | None) -> Any:
+    """Keep chat image parts; switch backend to a vision model when present."""
+    from pico_orchestrator.vision import apply_images_to_caps
+
+    return apply_images_to_caps(caps, images or [])
+
+
+def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
+    """Apply the dual-mode runtime policy onto RunCaps (Pico 快速 / Pico 深度).
+
+    - pico-fast: deepseek-v4-flash, thinking off, tighter steps/tokens.
+    - pico-deep: deepseek-reasoner, thinking on + circuit breaker armed.
+    """
+    from dataclasses import replace as _dc_replace
+
+    from pico_orchestrator.provider import runtime_policy_for_model
+
+    low = (model or "").strip().lower()
+    if low not in {"pico-fast", "pico-deep"}:
+        return caps
+    policy = runtime_policy_for_model(low)
+    fields: dict[str, Any] = {
+        "max_steps": int(policy.get("max_steps", caps.max_steps)),
+        "max_tokens": int(policy.get("max_tokens", caps.max_tokens)),
+        "thinking_on": bool(policy.get("thinking", False)),
+        "ui_model": low,
+        "backend_model": str(policy.get("backend_model") or ""),
+    }
+    if hasattr(caps, "max_context"):
+        fields["max_context"] = int(policy.get("max_context", caps.max_context))
+    return _dc_replace(caps, **fields)
+
+
+def _instruction_with_delivery(
+    skill_snapshot: dict[str, Any] | None,
+    prompt: str,
+    plan: Any | None = None,
+    *,
+    prior_artifact_titles: list[str] | None = None,
+) ->

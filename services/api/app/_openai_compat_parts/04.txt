@@ -1,0 +1,122 @@
+adata:
+        for k in ("conversation_id", "conversationId", "convo_id"):
+            v = body.metadata.get(k)
+            if v:
+                return str(v)[:128]
+    # parse 【Pico-Convo:xxx】 from latest user message
+    import re
+    prompt = _last_user_prompt(body.messages)
+    m = re.search(r"【Pico-Convo:([】]+)】", prompt)
+    if m:
+        return m.group(1).strip()[:128]
+    if body.user and body.user.strip() and body.user not in {"default", "user"}:
+        return body.user.strip()[:128]
+    return None
+
+
+def _workspace_id_from(
+    body: ChatCompletionRequest,
+    x_workspace_id: str | None,
+) -> str | None:
+    if x_workspace_id and x_workspace_id.strip():
+        return x_workspace_id.strip()[:36]
+    if body.metadata:
+        v = body.metadata.get("workspace_id") or body.metadata.get("workspaceId")
+        if v:
+            return str(v)[:36]
+    return None
+
+
+async def _day_use_system_block(
+    principal: Principal, display_header: str | None
+) -> str:
+    """SSO name + recent ledger titles → SYSTEM appendix. Fail soft; never a memory OS."""
+    from pico_orchestrator.day_use import build_day_use_block, decode_display_name_header
+
+    name = decode_display_name_header(display_header)
+    titles: list[str] = []
+    try:
+        from app.run_service import list_artifacts_for_principal
+
+        factory = session_factory()
+        async with factory() as session:
+            rows = await list_artifacts_for_principal(session, principal, limit=12)
+        titles = [str(getattr(row, "title", "") or "") for row in rows]
+    except Exception:  # noqa: BLE001 — missing ledger must not block chat
+        titles = []
+    return build_day_use_block(display_name=name, recent_titles=titles)
+
+
+async def _ledger_task_run(
+    *,
+    principal: Principal,
+    prompt: str,
+    model: str,
+    conversation_id: str | None,
+    workspace_id: str | None,
+    skill_snapshot: dict[str, Any] | None = None,
+    status: str = "running",
+) -> tuple[str, str]:
+    """Create Task+Run rows for any chat completion path."""
+    from app.db import _utcnow, init_db
+
+    await init_db()
+    factory = session_factory()
+    task_id = new_id()
+    run_id = new_id()
+    title = prompt[:80]
+    # Running rows must stamp started_at so A5/G9 overlap timelines are auditable.
+    started = _utcnow() if status == "running" else None
+    async with factory() as session:
+        session.add(
+            TaskRow(
+                id=task_id,
+                school_id=principal.school_id,
+                membership_id=principal.membership_id,
+                title=title,
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
+            )
+        )
+        session.add(
+            RunRow(
+                id=run_id,
+                task_id=task_id,
+                status=status,
+                prompt=prompt,
+                model=model or "",
+                started_at=started,
+                token_usage_json=json.dumps(
+                    {"skill_snapshot": skill_snapshot} if skill_snapshot else {},
+                    ensure_ascii=False,
+                ),
+            )
+        )
+        await session.commit()
+    return task_id, run_id
+
+
+def _extract_file_artifacts(text: str) -> list[tuple[str, str]]:
+    """Parse fenced file blocks into (filename, body).
+
+    Protected extensions (.html/.docx/.pptx) are never accepted from fences —
+    those must come from generate_*_document tools (fail-closed anti-fake).
+    """
+    import re
+
+    from pico_orchestrator.artifact_types import title_protected_extension
+
+    out: list[tuple[str, str]] = []
+    if not text:
+        return out
+    for m in re.finditer(
+        r"```(?:file:)?([\w.\-]+\.[A-Za-z0-9]{1,12})\s*\n([\s\S]*?)```",
+        text,
+    ):
+        name = m.group(1).strip()
+        body = m.group(2).rstrip()
+        if not name:
+            continue
+        if title_protected_extension(name):
+            # Drop pseudo Office/HTML fences rather than storing fake bytes.
+  

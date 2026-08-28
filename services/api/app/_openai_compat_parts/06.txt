@@ -1,0 +1,120 @@
+ str:
+    """Explicit hung-skill catalog text only. Do not weld per-turn Landing N into it."""
+    from pico_orchestrator.skill_policy import instruction_for_snapshot
+
+    del prompt, plan, prior_artifact_titles
+    return instruction_for_snapshot(skill_snapshot)
+
+
+async def _finalize_run(
+    run_id: str,
+    *,
+    status: str,
+    error: str | None = None,
+    final_text: str | None = None,
+    task_id: str | None = None,
+    user_prompt: str | None = None,
+    change_proposal: dict | None = None,
+    token_usage: dict[str, Any] | None = None,
+) -> None:
+    from sqlalchemy import case, select, update
+
+    from app.db import ArtifactRow, ChangeProposalRow, EventRow, TaskRow, _utcnow
+    from app.run_service import _json_dict, _skill_s7_payload
+
+    terminal = ("succeeded", "failed", "cancelled")
+    if status not in terminal:
+        raise ValueError(f"invalid terminal run status: {status}")
+
+    factory = session_factory()
+    async with factory() as session:
+        requested_status = status
+        mark_cancel = status == "cancelled"
+        values: dict = {
+            "status": case(
+                (RunRow.cancel_requested != 0, "cancelled"),
+                else_=status,
+            ),
+            "error": case(
+                (RunRow.cancel_requested != 0, None),
+                else_=error,
+            ),
+            "ended_at": _utcnow(),
+        }
+        if mark_cancel:
+            values["cancel_requested"] = case(
+                (RunRow.cancel_requested != 0, RunRow.cancel_requested),
+                else_=1,
+            )
+
+        claimed = await session.execute(
+            update(RunRow)
+            .where(
+                RunRow.id == run_id,
+                RunRow.status.not_in(terminal),
+            )
+            .values(**values)
+        )
+        if claimed.rowcount != 1:
+            await session.rollback()
+            return
+
+        run = await session.get(RunRow, run_id)
+        if not run:
+            await session.rollback()
+            return
+        if task_id is not None and task_id != run.task_id:
+            await session.rollback()
+            raise ValueError("run/task mismatch during finalize")
+        status = run.status
+        if status == "cancelled":
+            # Honest ledger when stop only tears down the stream.
+            await append_event(
+                session,
+                run_id,
+                "run.cancel_requested",
+                {
+                    "source": (
+                        "stream_or_finalize"
+                        if requested_status == "cancelled"
+                        else "flag_before_finalize"
+                    )
+                },
+                commit=False,
+            )
+            await append_event(
+                session,
+                run_id,
+                "run.status",
+                {"status": "cancelled"},
+                commit=False,
+            )
+
+        usage = _json_dict(run.token_usage_json)
+        skill_snapshot = usage.get("skill_snapshot")
+        if isinstance(skill_snapshot, dict) and status == "succeeded":
+            existing_skill_event = await session.execute(
+                select(EventRow.id)
+                .where(EventRow.run_id == run_id, EventRow.type == "skill.snapshot")
+                .limit(1)
+            )
+            if existing_skill_event.scalar_one_or_none() is None:
+                await append_event(
+                    session,
+                    run_id,
+                    "skill.snapshot",
+                    skill_snapshot,
+                    commit=False,
+                )
+
+        unknown_skill = (
+            isinstance(skill_snapshot, dict)
+            and skill_snapshot.get("name") == "skill.unknown"
+        )
+        if final_text and status == "succeeded" and not unknown_skill:
+            existing = await session.execute(
+                select(ArtifactRow.kind, ArtifactRow.title).where(
+                    ArtifactRow.run_id == run_id
+                )
+            )
+    
