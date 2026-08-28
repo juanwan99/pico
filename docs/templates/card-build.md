@@ -16,12 +16,12 @@ docs/EXPERIENCE.md · docs/STATE-NOW.md
 ## 合同
 
 - **结果：** 改这里（一句人话，老师在 pico.aivia.asia 能看见什么）
-- **不准：** 自签 PASS · 直推 main · ship-bff-web · 改这里
+- **不准：** 执行窗关卡 · 直推 main · ship-bff-web · 改这里
 - **过门：**
   - T1 改这里（人路径）
 - **部署：** 有差才 `PICO_DEPLOY_SHA=<40位> bash /opt/pico/scripts/prod-update.sh` 一次；对 `curl -fsS https://pico.aivia.asia/api/pico/tip`。没差写不部
 
-T-ID：T-改这里-ID · 风险：绿/黄/红 · PASS：禁止自签
+T-ID：T-改这里-ID · 风险：绿/黄/红 · PASS：总管条件满足后自签关
 
 ## 回执
 
@@ -31,5 +31,5 @@ PR：#
 SHA：live = origin/main =
 过门：T1 过/不过 · 证据
 剩下：无
-PASS：未签
+PASS：未签 / 总管已签
 ```

@@ -12,9 +12,9 @@
 派发 · T-改这里-ID
 合同：https://github.com/juanwan99/pico/issues/<N>
 一句话：<老师在 pico.aivia.asia 能看见什么>
-禁止：自签 PASS · 直推 main · 残债新卡 · 证据 PR · 合了未部报 DONE · Closes 部前关卡 · 拆第二张 PR
+禁止：执行窗自签/关卡 · 未点结果句关卡 · 直推 main · 残债新卡 · 证据 PR · 合了未部报 DONE · Closes 部前关卡 · 拆第二张 PR · 请业主签卡 PASS
 经验：docs/EXPERIENCE.md · 点名 <最多3个编号>
 工具：docs/TOOLING-CATALOG.md · 点名 <最多3个 id>（需要碰机时必含 tip-pin 或 ssh-ecs）
-回执：评论 #<N> · live SHA=main · 1卡1PR · PASS 未签
+回执：评论 #<N> · live SHA=main · 1卡1PR · 未点写未签；点过结果句由总管自签关
 起窗：总管 `bash scripts/spawn-executor.sh --issue <N>`（首条=本条）；无钥则本条上墙后评 `@cursor`
 ```
