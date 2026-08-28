@@ -98,6 +98,8 @@ def run_pptx_lib_source(
             dest = root / name
             dest.write_bytes(blob)
             image_paths[str(key)] = str(dest)
+        helpers_src = Path(__file__).with_name("pptx_helpers.py").read_text(encoding="utf-8")
+        (root / "pptx_helpers.py").write_text(helpers_src, encoding="utf-8")
         wrapper = root / "runner.py"
         wrapper.write_text(
             _wrapper_source(source, str(out_path), image_paths),
@@ -149,7 +151,9 @@ def _wrapper_source(user_source: str, output_path: str, image_paths: dict[str, s
     return (
         "import json\n"
         "from pptx import Presentation\n"
+        "from pptx.dml.color import RGBColor\n"
         "from pptx.util import Emu, Inches, Pt\n"
+        "from pptx_helpers import add_content_slide, add_table, add_title_slide\n"
         f"cfg = json.loads({payload!r})\n"
         "OUTPUT_PATH = cfg['output']\n"
         "IMAGE_PATHS = cfg['images']\n"
@@ -158,11 +162,20 @@ def _wrapper_source(user_source: str, output_path: str, image_paths: dict[str, s
         "        raise SystemExit('save_deck 需要 Presentation')\n"
         "    prs.save(OUTPUT_PATH)\n"
         "exec(cfg['source'], {\n"
-        "    '__builtins__': {'range': range, 'len': len, 'str': str, 'int': int, 'list': list, 'dict': dict},\n"
+        "    '__builtins__': {\n"
+        "        'range': range, 'len': len, 'str': str, 'int': int,\n"
+        "        'float': float, 'list': list, 'dict': dict, 'tuple': tuple,\n"
+        "        'enumerate': enumerate, 'zip': zip, 'min': min, 'max': max,\n"
+        "        'bool': bool,\n"
+        "    },\n"
         "    'Presentation': Presentation,\n"
         "    'Inches': Inches,\n"
         "    'Emu': Emu,\n"
         "    'Pt': Pt,\n"
+        "    'RGBColor': RGBColor,\n"
+        "    'add_title_slide': add_title_slide,\n"
+        "    'add_content_slide': add_content_slide,\n"
+        "    'add_table': add_table,\n"
         "    'save_deck': save_deck,\n"
         "    'IMAGE_PATHS': IMAGE_PATHS,\n"
         "    'OUTPUT_PATH': OUTPUT_PATH,\n"

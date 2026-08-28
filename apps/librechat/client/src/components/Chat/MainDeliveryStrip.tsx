@@ -9,7 +9,7 @@ import {
   type PicoArtifact,
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
-import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
+import { primaryDeliverables } from '~/utils/picoLatestArtifacts';
 import { cn } from '~/utils';
 import PicoSearchSources from './PicoSearchSources';
 import type { PicoSourceMessage } from '~/utils/picoSearchSources';
@@ -49,7 +49,7 @@ export default function MainDeliveryStrip({
   onOpenResultPanel,
 }: Props) {
   const items = useMemo(
-    () => latestArtifactsByFilename(artifacts).filter((a) => a?.id && !isBookkeeping(a)),
+    () => primaryDeliverables(artifacts).filter((a) => a?.id && !isBookkeeping(a)),
     [artifacts],
   );
   const [busy, setBusy] = useState<Busy>(null);

@@ -6,6 +6,7 @@ import io
 
 from pico_orchestrator.office.comment import add_docx_comment
 from pico_orchestrator.office.fill import fill_office_bytes
+from pico_orchestrator.office.pptx_helpers import add_table, pipe_table_rows
 from pico_orchestrator.office.qa import verify_office_bytes
 from pico_orchestrator.office.spec import OfficeSpec, Theme
 
@@ -86,13 +87,19 @@ def _render_pptx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
     from pptx.util import Pt
 
     deck = Presentation()
-    layout = deck.slide_layouts[1] if len(deck.slide_layouts) > 1 else deck.slide_layouts[0]
+    content_layout = deck.slide_layouts[1] if len(deck.slide_layouts) > 1 else deck.slide_layouts[0]
+    title_layout = deck.slide_layouts[0]
     accent = _rgb(spec.theme.accent) if spec.theme else None
     body_font = spec.theme.body_font if spec.theme else None
     heading_font = spec.theme.heading_font if spec.theme else None
+    slide_index = 0
     for block in spec.blocks:
         if block.type != "slide":
             continue
+        picture = _optional_image(images, block.image_artifact_id)
+        table_rows = pipe_table_rows(block.bullets)
+        cover = _is_cover_slide(slide_index, block, picture)
+        layout = title_layout if cover else content_layout
         slide = deck.slides.add_slide(layout)
         title_shape = getattr(slide.shapes, "title", None)
         if title_shape is not None and getattr(title_shape, "has_text_frame", False):
@@ -105,16 +112,34 @@ def _render_pptx(spec: OfficeSpec, images: dict[str, bytes]) -> bytes:
                             run.font.size = Pt(28)
                         if accent:
                             run.font.color.rgb = RGBColor(*accent)
-        body = "\n".join(block.bullets)
-        _set_pptx_body(
-            slide,
-            body,
-            font_name=body_font,
-            narrow_for_image=bool(block.image_artifact_id and block.bullets),
-        )
-        if block.image_artifact_id:
-            raw = _need_image(images, block.image_artifact_id)
-            _place_pptx_picture(slide, raw, has_bullets=bool(block.bullets))
+        if cover and block.bullets:
+            _set_placeholder_idx(slide, 1, block.bullets[0])
+        elif table_rows:
+            from pptx.util import Inches as _Inches
+
+            add_table(
+                slide,
+                table_rows,
+                left=_Inches(_PPTX_BODY_LEFT_IN),
+                top=_Inches(_PPTX_WELL_TOP_IN),
+                width=_Inches(_PPTX_BODY_WIDTH_IN if picture else 9.0),
+                height=_Inches(_PPTX_WELL_HEIGHT_IN),
+            )
+        else:
+            body = "\n".join(block.bullets)
+            _set_pptx_body(
+                slide,
+                body,
+                font_name=body_font,
+                narrow_for_image=bool(picture and block.bullets),
+            )
+        if picture:
+            _place_pptx_picture(
+                slide,
+                picture,
+                has_bullets=(bool(block.bullets) or bool(table_rows)) and not cover,
+            )
+        slide_index += 1
     if not deck.slides:
         raise ValueError("PPT spec 没有可渲染的 slide。")
     buf = io.BytesIO()
@@ -342,6 +367,35 @@ def _apply_docx_theme(doc: object, theme: Theme | None) -> None:
     style.font.name = theme.body_font
     style.font.size = Pt(12)
     style._element.rPr.rFonts.set(qn("w:eastAsia"), theme.body_font)
+
+
+def _is_cover_slide(index: int, block: object, picture: bytes | None) -> bool:
+    """First slide + picture + at most one subtitle line = title layout."""
+    bullets = getattr(block, "bullets", ()) or ()
+    return index == 0 and bool(picture) and len(bullets) <= 1
+
+
+def _set_placeholder_idx(slide: object, idx: int, text: str) -> None:
+    placeholders = getattr(slide, "placeholders", None)
+    if placeholders is None:
+        return
+    for shape in placeholders:
+        fmt = getattr(shape, "placeholder_format", None)
+        if getattr(fmt, "idx", None) == idx and getattr(shape, "has_text_frame", False):
+            shape.text = text
+            return
+
+
+def _optional_image(images: dict[str, bytes], artifact_id: str | None) -> bytes | None:
+    """Skip a missing id. Do not fail the whole deck (S2 first-write)."""
+    if not artifact_id:
+        return None
+    raw = images.get(artifact_id)
+    if not raw:
+        return None
+    if raw[:8] != b"\x89PNG\r\n\x1a\n" and raw[:2] != b"\xff\xd8":
+        return None
+    return raw
 
 
 def _need_image(images: dict[str, bytes], artifact_id: str | None) -> bytes:

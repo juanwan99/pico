@@ -148,6 +148,14 @@ _TOOL_NAME_BARE = re.compile(
 )
 
 
+def _is_office_title(title: str) -> bool:
+    return title.lower().endswith((".pptx", ".docx", ".xlsx"))
+
+
+def _is_image_title(title: str) -> bool:
+    return title.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
+
+
 def is_bookkeeping_title(title: str | None) -> bool:
     t = (title or "").strip()
     if not t:
@@ -179,6 +187,8 @@ def titles_from_tool_results(
         "generate_image",
         "generate_diagram",
     }
+    image_tools = {"generate_image", "generate_diagram"}
+    collected: list[tuple[str, str]] = []
     for name, value in tool_results:
         if name not in write_tools or not isinstance(value, dict):
             continue
@@ -192,6 +202,11 @@ def titles_from_tool_results(
         if key in seen:
             continue
         seen.add(key)
+        collected.append((name, title))
+    has_office = any(_is_office_title(title) for _name, title in collected)
+    for name, title in collected:
+        if has_office and (name in image_tools or _is_image_title(title)):
+            continue
         out.append(title)
     return out
 

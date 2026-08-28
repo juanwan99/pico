@@ -243,7 +243,7 @@ def _make_sandbox_pptx_lib(store: ArtifactStore):
                 continue
             row = await store.read(principal, artifact_id=aid, title=None)
             if row is None:
-                raise ToolError("artifact.not_found", f"找不到图片 {aid}。请先 generate_image。")
+                continue
             images[aid] = _artifact_bytes(row)
         raw = await run_pptx_lib_source_async(source, images=images)
         result = await store.write(principal, title=title, content=raw, kind="pptx")
@@ -685,12 +685,10 @@ def _workspace_handlers(
         for aid in getattr(spec, "image_ids", lambda: ())():
             # Production LedgerArtifactStore.read is keyword-only and requires title=.
             # Memory-store tests used to default title=None and hid this miss.
+            # Missing id: skip. Do not fail the whole deck (S2 first-write).
             row = await store.read(principal, artifact_id=aid, title=None)
             if row is None:
-                raise ToolError(
-                    "artifact.not_found",
-                    f"找不到图片 {aid}。请先 generate_image。",
-                )
+                continue
             out[str(aid)] = _artifact_bytes(row)
         return out
 
@@ -1104,7 +1102,10 @@ def _workspace_handlers(
             kind=kind,
         )
         result["format"] = ext
-        result["user_message"] = "图已生成，可在结果区下载。"
+        result["user_message"] = (
+            "图已生成。要放进 PPT/Word 时把 artifact id 写入 image_artifact_id，"
+            "不要单独当成品交给老师。"
+        )
         return _attach_write_observation(result, kind=kind, title=title, raw=raw)
 
     async def generate_diagram(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1133,7 +1134,10 @@ def _workspace_handlers(
             result["svg"] = svg
         if meta.get("svg_omitted"):
             result["svg_omitted"] = True
-        result["user_message"] = "结构图已生成，可在结果区下载。要放进 Word/PPT 时把 artifact id 写入 spec。"
+        result["user_message"] = (
+            "结构图已生成。要放进 Word/PPT 时把 artifact id 写入 image_artifact_id，"
+            "不要单独当成品交给老师。"
+        )
         return _attach_write_observation(result, kind="png", title=title, raw=raw)
 
     async def verify_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -2039,7 +2043,8 @@ def build_default_gateway(
                 "sandbox_pptx_lib (isolated python-pptx) — pick from the "
                 "teacher's ask, not a scene word. Same title replaces the file "
                 "the teacher opens. Read observation.outline.images. "
-                "To embed a picture, pass generate_image/generate_diagram "
+                "A missing image_artifact_id skips that picture; the file still "
+                "lands. To embed a picture, pass generate_image/generate_diagram "
                 "artifact id as image_artifact_id on the slide in spec/blocks. "
                 "[image:…] in body does not embed. ok is not finished. "
                 "Args: title, marker, body? | spec? | blocks?"
@@ -2055,8 +2060,10 @@ def build_default_gateway(
                 "Isolated python-pptx (not host bash, not a second Office OS). "
                 "Sibling of generate_pptx_document — not the only PPT path. "
                 "Result includes an observation of what landed. ok is not finished. "
-                "Source cannot import; Presentation/Inches/save_deck/IMAGE_PATHS are injected. "
-                "Must call save_deck(prs). Empty shells fail. "
+                "Source cannot import; Presentation/Inches/Pt/RGBColor/"
+                "add_title_slide/add_content_slide/add_table/save_deck/IMAGE_PATHS "
+                "are injected. Must call save_deck(prs). Empty shells fail. "
+                "A missing image_artifact_ids entry is skipped. "
                 "Args: source, title?, image_artifact_ids?"
             ),
             handler=_make_sandbox_pptx_lib(store),
@@ -2182,7 +2189,9 @@ def build_default_gateway(
                 "Create one downloadable png/jpg via Zhipu glm-image HTTPS API. "
                 "On missing key, timeout, or 4xx: honest Chinese failure; never invent pixels. "
                 "To place it in Word/PPT, pass the returned artifact id as "
-                "image_artifact_id on spec. Args: prompt, title?"
+                "image_artifact_id on spec. Do not also hand it to the teacher as a "
+                "separate download when it is already inside the file. "
+                "Args: prompt, title?"
             ),
             handler=generate_image,
             school_scoped=False,
