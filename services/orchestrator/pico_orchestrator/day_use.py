@@ -58,6 +58,13 @@ def normalize_recent_titles(titles: Iterable[str] | None, *, limit: int = _MAX_T
     return out
 
 
+def apply_day_use(*, edu_sidebar: bool, block: str) -> str:
+    """Edu sidebar must not see membership cabinet titles as the current screen."""
+    if edu_sidebar:
+        return ""
+    return str(block or "")
+
+
 def build_day_use_block(
     *,
     display_name: str = "",
