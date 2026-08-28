@@ -10,11 +10,11 @@
 现况：只认 docs/STATE-NOW.md + #634 钉评 · 禁聊天当真源
 在飞：无 stamp-ok 不领 · 同域第二张 stamp-ok=废派 · 无在飞则讨论不开卡
 合同：卡面四行（结果/不准/过门/部署）· 过门=老师手一句 · 禁控件清单
-派发：## 派发 只贴 dispatch-slip → spawn-executor；无钥则合同 PR/Issue 评 @cursor
+派发：## 派发 只贴 dispatch-slip → grok-ecs（spawn-grok-ecs.sh）；禁默认 spawn-executor/@cursor
 环：OPEN/WAIT/CLEAR · 订 PR/CI + timer · 读 ## CANDIDATE/DEPLOYED/五句 · tip-pin → 刷 STATE-NOW/#634
 合/部：只归执行窗 · 总管不合不部 · 合了未部关卡=打回 OPEN
 人留：目标 · 黄红争议 · 老师手 · PASS
-工具：只认 TOOLING-CATALOG · 起窗 spawn-executor · ssh-ecs=Tailscale ops@aliyun-hy · 禁公网22
+工具：只认 TOOLING-CATALOG · 起窗 grok-ecs · ssh-ecs=Tailscale ops@aliyun-hy · 禁公网22
 证据：贴本卡 Issue · 禁证据进 PR · 禁 Closes 部前关卡
 DONE：live tip = origin/main · 写入不自签 PASS · CLAIM-WB 不代签（以 STATE-NOW 为准）
 P0：可调查/起候选 PR，合部仍交执行窗

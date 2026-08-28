@@ -2,8 +2,8 @@
 
 ```text
 STATUS: BINDING · pico 工具目录（唯一派发 ID 表）
-DATE: 2026-08-27
-SCOPE: juanwan99/pico · ECS 执行窗 · Cloud Agent
+DATE: 2026-08-28
+SCOPE: juanwan99/pico · ECS 执行窗 · grok-ecs 默认 · Cloud Agent 额度暂停
 CLAIM-WB: 本文件不签 · 以 STATE-NOW 为准
 PARENT: #386 原则 1–7 · #384 视觉门 · host 禁 Cool/Keel
 派发: 只勾本表 id；用法在本表；密钥永不进仓
@@ -43,9 +43,11 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 | **subscribe-pr** | 订 PR 事件唤醒总管 | Cursor `subscribe_github_pr`（repo/pr） | 总管环 OPEN 后 | 当第二账本；代替 Issue 回执 | — |
 | **subscribe-ci** | 订分支 CI 终态 | Cursor `subscribe_github_ci` | 执行窗已推分支 | 未知名分支空订 | — |
 | **subscribe-timer** | 兜底读合同评论 | Cursor `subscribe_timer` | Issue 评论无原生订约时 | ECS cron 自驱 agent | — |
-| **spawn-executor** | 总管起/唤醒执行窗 | `scripts/spawn-executor.sh`（官方 Cloud Agents API）；无钥时合同 PR/Issue 评 `@cursor` | `## 派发` 已贴、要起执行窗；黄审过要续派合部 | 总管自己合/部；mailbox；密钥进仓 | `CURSOR_API_KEY` ·（建议）`CURSOR_EXECUTOR_ENV` |
+| **grok-ecs** | **默认执行窗**：把派发条交给 ECS 上已登录的 Grok Build | `scripts/spawn-grok-ecs.sh`（经 **ssh-ecs** · `/home/ops/.grok/bin/grok --cwd /opt/pico`） | `## 派发` 已贴、要起执行窗；后续新执行一律走这条 | 常驻 daemon；mailbox；`--always-approve` 当默认；进 grok-bot（本窗 ACL 不通） | 经 **ssh-ecs**；可选 `GROK_ECS_ALWAYS_APPROVE` |
+| **spawn-executor** | 云端 Cursor 执行窗（**额度暂停**） | `scripts/spawn-executor.sh`（官方 Cloud Agents API） | **仅业主书面豁免额度后** | **默认新执行窗**（改走 **grok-ecs**）；总管自己合/部；mailbox；密钥进仓 | `CURSOR_API_KEY` ·（建议）`CURSOR_EXECUTOR_ENV` |
 
-**说明：** `visual-gate` / `tip-pin` 以仓内脚本为准；`tool-status` 对缺失报 `ok:false`。
+**说明：** `visual-gate` / `tip-pin` 以仓内脚本为准；`tool-status` 对缺失报 `ok:false`。  
+**起窗默认 = grok-ecs**（业主 2026-08-28 · 云端 Cursor 额度不足）。`spawn-grok-ecs.sh --probe` 证伪：`ssh ecs` + 二进制 + `auth.json` 存在（不打印值）。grok-bot 在线但本窗 Tailscale ACL 进不去，**不当默认 ID**。
 
 ---
 
@@ -82,6 +84,8 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 | **无图 Ready / 只读表审查** | #384 一票否决 |
 | **密钥、DEMO 密码进 GitHub/Issue** | 安全 |
 | **Cloud Agent 靠公网 22 / 漂移 egress 白名单当部署通道** | 假通路；真源 = Tailscale MagicDNS（**ssh-ecs**） |
+| **默认新开云端 Cursor 执行窗（spawn-executor / @cursor）** | 业主 2026-08-28：额度不足；后续执行走 **grok-ecs** |
+| **ECS / grok-bot 常驻 Grok daemon** | 与 mailbox/self-drive 同类；只允许一次 kick |
 
 ---
 
@@ -98,9 +102,9 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 - 审查必须读图；只读表 = 审查无效
 
 【工具合同 · TOOLING-CATALOG】
-批准 id：visual-gate · tip-pin · remote-health · gh-git · subscribe-pr · subscribe-ci · subscribe-timer · spawn-executor · ssh-ecs · cloud-agent-ts · prod-update · playwright-mcp · chrome-devtools-mcp · pytest-ruff
+批准 id：visual-gate · tip-pin · remote-health · gh-git · subscribe-pr · subscribe-ci · subscribe-timer · grok-ecs · spawn-executor · ssh-ecs · cloud-agent-ts · prod-update · playwright-mcp · chrome-devtools-mcp · pytest-ruff
 回执：bash scripts/tool-status.sh --json（无密）；missing 非空 = BLOCKED（视觉卡）
-禁止：Cool/Keel/mailbox · 第二 E2E · 无图 Ready · 公网22当 Cloud Agent 通道
+禁止：Cool/Keel/mailbox · 第二 E2E · 无图 Ready · 公网22当 Cloud Agent 通道 · 默认云端 Cursor 执行窗
 CLAIM-WB: 不代签 · 以 STATE-NOW 为准
 ```
 
@@ -115,7 +119,7 @@ bash scripts/tool-status.sh --json   # 机器 JSON · 贴卡回执（无密）
 
 关键字段：`tools.*.ok` · `tip.git_sha`（40 位）· `retired_mechanisms.clear` · `blocked_for_visual_gate` · `missing[]`。
 
-**不含**任何密码/token。`ssh-ecs` / `cloud-agent-ts` 以本机 `ssh ecs` / Tailscale 证伪，不强制写入 tool-status 旧 schema。
+**不含**任何密码/token。`ssh-ecs` / `cloud-agent-ts` / **grok-ecs** 以本机 `ssh ecs` / `spawn-grok-ecs.sh --probe` 证伪，不强制写入 tool-status 旧 schema（CI 无 ECS 不红）。
 
 ---
 

@@ -60,6 +60,9 @@ tip_script_ok=false
 rh_ok=false
 [[ -f "$ROOT/scripts/remote-health.sh" ]] && rh_ok=true
 
+grok_ecs_ok=false
+[[ -f "$ROOT/scripts/spawn-grok-ecs.sh" ]] && grok_ecs_ok=true
+
 catalog_ok=false
 [[ -f "$ROOT/docs/TOOLING-CATALOG.md" ]] && catalog_ok=true
 
@@ -181,7 +184,7 @@ if [[ "$JSON" -eq 1 ]]; then
     "$pw_mcp_ok" "$pw_mcp_browser" \
     "$cdt_mcp_ok" \
     "$gh_ok" "$git_ok" "$pytest_ok" "$ruff_ok" "$docker_ok" "$ssh_ok" \
-    "$vg_ok" "$tip_script_ok" "$rh_ok" "$catalog_ok" \
+    "$vg_ok" "$tip_script_ok" "$rh_ok" "$grok_ecs_ok" "$catalog_ok" \
     "$demo_ok" "$demo_email_set" \
     "$tip_ok" "$tip_sha" "$TIP_URL" \
     "$retired_clear" "$cool_active" "$sup_active" "$archive_present" "$archive_dir" \
@@ -194,7 +197,7 @@ import json, sys
     pw_mcp_ok, pw_mcp_browser,
     cdt_ok,
     gh_ok, git_ok, pytest_ok, ruff_ok, docker_ok, ssh_ok,
-    vg_ok, tip_script_ok, rh_ok, catalog_ok,
+    vg_ok, tip_script_ok, rh_ok, grok_ecs_ok, catalog_ok,
     demo_ok, demo_email_set,
     tip_ok, tip_sha, tip_url,
     retired_clear, cool_active, sup_active, archive_present, archive_dir,
@@ -227,6 +230,7 @@ out = {
         "visual_gate_script": {"ok": b(vg_ok), "path": "scripts/visual-gate.mjs"},
         "tip_pin_script": {"ok": b(tip_script_ok), "path": "scripts/tip-pin.sh"},
         "remote_health_script": {"ok": b(rh_ok), "path": "scripts/remote-health.sh"},
+        "grok_ecs_script": {"ok": b(grok_ecs_ok), "path": "scripts/spawn-grok-ecs.sh"},
         "tooling_catalog_doc": {"ok": b(catalog_ok), "path": "docs/TOOLING-CATALOG.md"},
         "demo_secret": {
             "ok": b(demo_ok),
@@ -266,6 +270,7 @@ echo "chrome_devtools_mcp: ok=$cdt_mcp_ok"
 echo "visual_gate_script: ok=$vg_ok"
 echo "tip_pin_script: ok=$tip_script_ok"
 echo "remote_health: ok=$rh_ok"
+echo "grok_ecs_script: ok=$grok_ecs_ok"
 echo "gh/git/pytest/ruff: $gh_ok/$git_ok/$pytest_ok/$ruff_ok"
 echo "retired_mechanisms.clear: $retired_clear (cool_active=$cool_active supervisor_active=$sup_active)"
 echo "archive_present: $archive_present → $archive_dir"
