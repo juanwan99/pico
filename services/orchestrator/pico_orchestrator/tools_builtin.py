@@ -693,10 +693,19 @@ def _workspace_handlers(
         return out
 
     def _spec_arg(args: dict[str, Any]) -> object | None:
-        if args.get("spec") is not None:
-            return args.get("spec")
-        if args.get("blocks") is not None:
-            return args.get("blocks")
+        spec = args.get("spec")
+        blocks = args.get("blocks")
+        # Live F4: Pi sent spec={"images": []} (or kpi_table_title) AND sibling
+        # top-level blocks. Preferring spec dropped the slides → 不能为空.
+        if isinstance(spec, dict):
+            have = spec.get("blocks")
+            if (not isinstance(have, list) or not have) and isinstance(blocks, list) and blocks:
+                return {**spec, "blocks": blocks}
+            return spec
+        if spec is not None:
+            return spec
+        if blocks is not None:
+            return blocks
         return None
 
     async def generate_docx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:

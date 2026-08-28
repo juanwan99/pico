@@ -159,6 +159,38 @@ def test_import_and_dunder_denied() -> None:
     )
 
 
+def test_blank_layout_go_title_body_writes() -> None:
+    """Live F4 r2: blank + go() hit shapes.title None → sandbox.pptx_failed."""
+    source = """
+from pptx import Presentation, Inches, Pt
+prs = Presentation()
+blank = prs.slide_layouts[6]
+def go(slide, title_txt, bullets):
+    t = slide.shapes.title
+    t.text = title_txt
+    body = slide.placeholders[1].text_frame
+    body.clear()
+    for b in bullets:
+        p = body.add_paragraph()
+        p.text = b
+slide = prs.slides.add_slide(blank)
+box = slide.shapes.add_textbox(Inches(0.8), Inches(2.2), Inches(11.7), Inches(1.4))
+box.text_frame.text = "办公简报：本周经营风险与下周动作"
+slide = prs.slides.add_slide(blank)
+go(slide, "本周经营风险总览", ["市场端询盘下降", "交付延迟风险"])
+save_deck(prs)
+"""
+    raw = run_pptx_lib_source(source)
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) >= 2
+    with zipfile.ZipFile(BytesIO(raw)) as zf:
+        xml = b"".join(
+            zf.read(name) for name in zf.namelist() if name.startswith("ppt/slides/")
+        )
+    blob = xml.decode("utf-8", errors="replace")
+    assert "本周经营风险总览" in blob or "市场端询盘下降" in blob
+
+
 def test_from_pptx_import_writes_real_deck() -> None:
     """Live F: document-skill `from pptx import Presentation` was exec_denied."""
     source = """

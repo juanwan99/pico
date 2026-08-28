@@ -237,3 +237,52 @@ def _embed_picture(slide: Any, image: Any, *, cover: bool) -> None:
         slide.shapes.add_picture(target, left, top, width=width)
     except OSError:
         return
+
+
+_BLANK_COMPAT_INSTALLED = False
+
+
+def install_blank_slide_compat() -> None:
+    """Blank layout still answers ``shapes.title`` / ``placeholders[1]``.
+
+    Live F4 r2: Pi used ``slide_layouts[6]`` then ``go()`` which did
+    ``slide.shapes.title.text`` → AttributeError NoneType → sandbox.pptx_failed.
+    Not a second slide OS: synthesize a textbox when the placeholder is missing.
+    """
+    global _BLANK_COMPAT_INSTALLED
+    if _BLANK_COMPAT_INSTALLED:
+        return
+    from pptx.shapes.shapetree import SlidePlaceholders, SlideShapes
+    from pptx.util import Inches
+
+    orig_title = SlideShapes.title.fget
+    orig_ph = SlidePlaceholders.__getitem__
+
+    def _title(self: Any) -> Any:
+        found = orig_title(self) if orig_title is not None else None
+        if found is not None:
+            return found
+        cached = getattr(self, "_pico_synth_title", None)
+        if cached is not None:
+            return cached
+        box = self.add_textbox(Inches(0.5), Inches(0.3), Inches(12.3), Inches(1.2))
+        self._pico_synth_title = box
+        return box
+
+    def _placeholder(self: Any, idx: int) -> Any:
+        try:
+            return orig_ph(self, idx)
+        except KeyError:
+            if int(idx) != 1:
+                raise
+            cached = getattr(self, "_pico_synth_body", None)
+            if cached is not None:
+                return cached
+            slide = self._parent
+            box = slide.shapes.add_textbox(Inches(0.5), Inches(1.6), Inches(12.3), Inches(5.2))
+            self._pico_synth_body = box
+            return box
+
+    SlideShapes.title = property(_title)  # type: ignore[method-assign, assignment]
+    SlidePlaceholders.__getitem__ = _placeholder  # type: ignore[method-assign]
+    _BLANK_COMPAT_INSTALLED = True

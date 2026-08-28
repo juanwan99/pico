@@ -21,9 +21,11 @@ from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.image_generate import (
     _429_BACKOFF_S,
     _429_MAX_TRIES,
+    _429_RETRY_AFTER_CAP_S,
     NO_KEY_MESSAGE,
     REJECTED_PROVIDER_MESSAGE,
     generate_image_bytes,
+    reset_image_generate_runtime,
 )
 from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
 from pico_orchestrator.skill_policy import snapshot_for_skill
@@ -36,6 +38,13 @@ ONE_PNG = (
     b"\x00\x00\x00\x0cIDATx\x9cc``\x00\x00\x00\x04\x00\x01\xa3\x0a\x0d\xe4"
     b"\x00\x00\x00\x00IEND\xaeB`\x82"
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_image_runtime():
+    reset_image_generate_runtime()
+    yield
+    reset_image_generate_runtime()
 
 
 def _three_para_docx() -> bytes:
@@ -156,6 +165,7 @@ async def test_generate_image_zhipu_mock_https_png(
 
 
 async def _record_sleep(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    reset_image_generate_runtime()
     slept: list[float] = []
 
     async def fake_sleep(seconds: float) -> None:
@@ -238,7 +248,7 @@ async def test_generate_image_429_then_200(
     monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
     raw, ext = await generate_image_bytes("封面示意图")
     assert calls["n"] == 2
-    assert slept == [1.0]
+    assert slept == [_429_BACKOFF_S[0]]
     assert all(s >= 1.0 for s in slept)
     assert ext == "png"
     assert raw.startswith(b"\x89PNG")
@@ -267,6 +277,76 @@ async def test_generate_image_429_exhausted_no_fake(
     assert slept == list(_429_BACKOFF_S)
     assert all(s >= 1.0 for s in slept)
     assert sum(slept) == sum(_429_BACKOFF_S)
+
+
+@pytest.mark.asyncio
+async def test_generate_image_same_prompt_single_flight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live F4: Pi retrying the same cover must not each burn 6 POSTs."""
+    import asyncio
+
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    reset_image_generate_runtime()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout):
+        calls["n"] += 1
+        started.set()
+        await release.wait()
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
+            },
+        )
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
+    first = asyncio.create_task(generate_image_bytes("corporate cover"))
+    await started.wait()
+    second = asyncio.create_task(generate_image_bytes("corporate cover"))
+    await asyncio.sleep(0)
+    release.set()
+    one, two = await asyncio.gather(first, second)
+    assert calls["n"] == 1
+    assert one == two
+    assert one[1] == "png"
+
+
+@pytest.mark.asyncio
+async def test_generate_image_429_exhausted_next_call_uses_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After one campaign burns 429, the next call waits instead of hammering."""
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    slept = await _record_sleep(monkeypatch)
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout):
+        calls["n"] += 1
+        if calls["n"] <= _429_MAX_TRIES:
+            return SimpleNamespace(status_code=429, json=lambda: {"error": "rate"})
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
+            },
+        )
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
+    with pytest.raises(ToolError) as caught:
+        await generate_image_bytes("封面示意图")
+    assert caught.value.code == "image.provider"
+    raw, ext = await generate_image_bytes("另一张封面")
+    assert ext == "png"
+    assert raw.startswith(b"\x89PNG")
+    assert calls["n"] == _429_MAX_TRIES + 1
+    assert slept[-1] == pytest.approx(_429_RETRY_AFTER_CAP_S, abs=0.05)
+    assert slept[: len(_429_BACKOFF_S)] == list(_429_BACKOFF_S)
 
 
 @pytest.mark.asyncio
