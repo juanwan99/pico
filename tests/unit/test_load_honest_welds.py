@@ -58,6 +58,7 @@ def test_pi_and_hosted_pptx_descriptions_are_siblings() -> None:
     assert "精美" not in lib
     assert "课件" not in lib
     assert "精美" not in pptx
+    assert "Same title replaces the file the teacher opens" in pptx
 
 
 def test_system_names_office_ceiling_without_scene_words() -> None:
@@ -69,6 +70,7 @@ def test_system_names_office_ceiling_without_scene_words() -> None:
     assert "通知" not in body
     assert "If `publish_html_page` is listed this turn" in body
     assert "Do not name or call publish tools that are not listed" in body
+    assert "same title replaces the file the teacher opens" in body.lower()
 
 
 def test_default_core_shows_office_not_programming() -> None:

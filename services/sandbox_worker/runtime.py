@@ -549,15 +549,8 @@ class SandboxRuntime:
         for item in list(sess.windows):
             if item.kind != kind:
                 continue
-            existing_name = str(getattr(item.surface, "filename", "") or "")
-            if existing_name == filename:
-                sess.focused_id = item.window_id
-                await self._ensure_files_window(sess)
-                await self._sync(sess)
-                return self._public_meta(
-                    sess,
-                    message=f"已切到沙箱 {KIND_LABEL.get(kind, kind)}。{HUMAN_OFFICE_COPY}",
-                )
+            # Always reload. Focusing a live Impress/Writer window keeps the old bytes
+            # even after the teacher-disk file was overwritten (same-chat edit).
             try:
                 await item.surface.close()
             except Exception:

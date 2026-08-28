@@ -8,6 +8,7 @@ from pico_orchestrator.sandbox_persist import (
     clear_owner_disk,
     list_owner_disk_names,
     owner_disk_dir,
+    persist_office_to_owner_disk,
     read_owner_disk_file,
     write_owner_disk_file,
 )
@@ -75,6 +76,25 @@ def test_quota_is_human_and_per_teacher(disk, monkeypatch) -> None:
     assert denied.value.code == "sandbox.quota"
     assert "2GB" in denied.value.message or "已满" in denied.value.message
     write_owner_disk_file("sch", "other", "b.docx", b"y" * 30)
+
+
+def test_same_title_office_write_replaces_teacher_disk(disk) -> None:
+    assert persist_office_to_owner_disk(
+        "sch", "mem", "管理层决策会_2026Q3.pptx", "pptx", b"PK-v1"
+    )
+    assert read_owner_disk_file("sch", "mem", "管理层决策会_2026Q3.pptx") == b"PK-v1"
+    assert persist_office_to_owner_disk(
+        "sch", "mem", "管理层决策会_2026Q3.pptx", "pptx", b"PK-v2-eleven-pages"
+    )
+    assert read_owner_disk_file("sch", "mem", "管理层决策会_2026Q3.pptx") == b"PK-v2-eleven-pages"
+    assert persist_office_to_owner_disk("sch", "mem", "cover.jpg", "jpg", b"JPEG") is False
+    assert "cover.jpg" not in list_owner_disk_names("sch", "mem")
+
+
+def test_persist_office_noop_without_disk_env(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("PICO_SANDBOX_DISK", raising=False)
+    assert persist_office_to_owner_disk("sch", "mem", "a.pptx", "pptx", b"PK") is False
+    assert not (tmp_path / "disks").exists()
 
 
 def test_clear_is_explicit(disk) -> None:

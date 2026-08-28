@@ -198,6 +198,18 @@ class LedgerArtifactStore:
             )
         except Exception as exc:  # noqa: BLE001 — projection must not block the ledger
             logger.warning("meili project after write failed: %s", type(exc).__name__)
+        try:
+            from pico_orchestrator.sandbox_persist import persist_office_to_owner_disk
+
+            persist_office_to_owner_disk(
+                principal.school_id,
+                principal.membership_id,
+                title,
+                kind,
+                content,
+            )
+        except Exception as exc:  # noqa: BLE001 — disk projection must not swallow the ledger
+            logger.warning("owner-disk persist after write failed: %s", type(exc).__name__)
         return out
 
     def _owned_artifacts(self, principal: Principal):
