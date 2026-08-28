@@ -2061,12 +2061,14 @@ def build_default_gateway(
                 "Isolated python-pptx (not host bash, not a second Office OS). "
                 "Sibling of generate_pptx_document — not the only PPT path. "
                 "Result includes an observation of what landed. ok is not finished. "
-                "from pptx import Presentation/Inches/Pt/RGBColor is allowed "
-                "(also injected). Do not import os. Use add_title_slide/"
-                "add_content_slide/add_table/save_deck/IMAGE_PATHS. Must add "
-                "slides then save_deck(prs). Empty Presentation();save_deck "
-                "fails — do not send a placeholder. A missing image_artifact_ids "
-                "entry is skipped. Args: source, title?, image_artifact_ids?"
+                "from pptx import Presentation, Inches, Pt, RGBColor is allowed "
+                "(Inches/Pt also on pptx). Do not import os. "
+                "add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); "
+                "add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first "
+                "picture. Must add slides then save_deck(prs). Empty "
+                "Presentation();save_deck fails — do not send a placeholder. "
+                "A missing image_artifact_ids entry is skipped. Args: source, "
+                "title?, image_artifact_ids?"
             ),
             handler=_make_sandbox_pptx_lib(store),
             school_scoped=False,
@@ -2489,7 +2491,9 @@ def openai_tool_schemas(
                 "source": {
                     "type": "string",
                     "description": (
-                        "python-pptx body. from pptx import Presentation is allowed. "
+                        "python-pptx body. from pptx import Presentation, Inches, Pt "
+                        "is allowed. IMAGE_PATHS[0] is the first picture. "
+                        "add_title_slide image= and add_table prs=/rows= aliases. "
                         "Do not import os. Add slides then save_deck. Empty shells fail."
                     ),
                 },
