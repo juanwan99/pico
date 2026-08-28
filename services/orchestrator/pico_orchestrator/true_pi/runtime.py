@@ -153,7 +153,10 @@ async def run_true_pi_agent(
             # Dual-mode (F1/F3): lane policy flows into the true_pi kernel —
             # pico-fast → deepseek-v4-flash; pico-deep → deepseek-reasoner.
             # thinking flag follows caps.thinking_on. Never a global hardcoded off.
-            from pico_orchestrator.provider import runtime_policy_for_model
+            from pico_orchestrator.provider import (
+                runtime_policy_for_model,
+                uses_openai_responses_brain,
+            )
 
             ui_model = str(getattr(caps, "ui_model", "") or "")
             policy = runtime_policy_for_model(ui_model or None)
@@ -167,6 +170,10 @@ async def run_true_pi_agent(
                 backend_model = vision_model_for_images(backend_model)
             thinking_on = bool(getattr(caps, "thinking_on", False))
             max_context, max_out = true_pi_windows_from_caps(caps)
+            openai_brain = uses_openai_responses_brain(provider)
+            pi_provider = "openai" if openai_brain or provider.name != "deepseek" else "deepseek"
+            pi_base = provider.base_url if openai_brain else ""
+            pi_api = "openai-responses" if openai_brain else ""
             tool_server = ToolServer(
                 principal=principal,
                 gateway=gateway,
@@ -201,7 +208,7 @@ async def run_true_pi_agent(
                 tool_url=tool_url,
                 tool_token=tool_server.token,
                 run_id=rid,
-                provider="deepseek" if provider.name == "deepseek" else "openai",
+                provider=pi_provider,
                 model=backend_model,
                 thinking=thinking_on,
                 max_context=max_context,
@@ -216,12 +223,14 @@ async def run_true_pi_agent(
                 spawn_cwd=sess,
                 system_prompt_text=system_text,
                 accept_image=bool(images),
+                base_url=pi_base,
+                api=pi_api,
                 env={
                     "DEEPSEEK_API_KEY": provider.api_key
-                    if provider.name == "deepseek"
+                    if pi_provider == "deepseek"
                     else "",
                     "OPENAI_API_KEY": provider.api_key
-                    if provider.name != "deepseek"
+                    if pi_provider != "deepseek"
                     else "",
                     "PICO_TRUE_PI_VISIBLE_TOOLS": visible_tools_env(allowed),
                 },

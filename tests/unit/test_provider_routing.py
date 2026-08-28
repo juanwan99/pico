@@ -247,3 +247,38 @@ def test_list_models_filters_to_dual_mode_only() -> None:
     dev_result = asyncio.run(_call_dev())
     dev_ids = [m["id"] for m in dev_result["data"]]
     assert set(dev_ids) == {"pico-fast", "pico-deep"}
+
+
+def test_openai_responses_brain_keeps_gpt_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-aiproxy-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gpt-5.5")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://superaichao.xin/openai")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    from pico_orchestrator.provider import (
+        product_backend_model,
+        resolve_model_id,
+        resolve_provider,
+        runtime_policy_for_model,
+        uses_openai_responses_brain,
+    )
+
+    cfg = resolve_provider()
+    assert cfg is not None
+    assert uses_openai_responses_brain(cfg)
+    assert product_backend_model(deep=False) == "gpt-5.5"
+    assert product_backend_model(deep=True) == "gpt-5.5"
+    assert resolve_model_id("pico-fast", cfg) == "gpt-5.5"
+    assert resolve_model_id("pico-deep", cfg) == "gpt-5.5"
+    assert runtime_policy_for_model("pico-fast")["backend_model"] == "gpt-5.5"
+    assert runtime_policy_for_model("pico-deep")["backend_model"] == "gpt-5.5"
+
+
+def test_deepseek_url_does_not_count_as_openai_responses(
+    deepseek_only: None,
+) -> None:
+    from pico_orchestrator.provider import resolve_provider, uses_openai_responses_brain
+
+    cfg = resolve_provider()
+    assert cfg is not None
+    assert not uses_openai_responses_brain(cfg)

@@ -114,6 +114,23 @@ def test_apply_images_switches_to_vision_model() -> None:
     assert is_deepseek_model(DEFAULT_DEEPSEEK_VISION)
 
 
+def test_gpt55_keeps_model_when_images_attached() -> None:
+    caps = apply_images_to_caps(
+        RunCaps(backend_model="gpt-5.5"),
+        [{"type": "image", "data": PNG_B64, "mimeType": "image/png"}],
+    )
+    assert caps.backend_model == "gpt-5.5"
+    gpt = true_pi_models_document(
+        provider="openai",
+        model="gpt-5.5",
+        max_context=128000,
+        max_tokens=8000,
+        base_url="https://superaichao.xin/openai",
+        api="openai-responses",
+    )
+    assert gpt["providers"]["openai"]["models"][0]["input"] == ["text", "image"]
+
+
 def test_models_json_text_only_unless_vision() -> None:
     flash = true_pi_models_document(
         provider="deepseek",

@@ -145,6 +145,34 @@ def test_c2_true_pi_deep_context_256k_output_still_32k(tmp_path: Path) -> None:
     assert cmd[cmd.index("--thinking") + 1] == "on"
 
 
+def test_openai_responses_models_json_overlay(tmp_path: Path) -> None:
+    t = SubprocessTransport(
+        session_dir=tmp_path / "sess-oai",
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r-oai",
+        provider="openai",
+        model="gpt-5.5",
+        thinking=False,
+        max_context=128_000,
+        max_tokens=8_000,
+        base_url="https://superaichao.xin/openai",
+        api="openai-responses",
+        accept_image=True,
+    )
+    home = t.prepare_agent_home()
+    written = json.loads((home / "models.json").read_text(encoding="utf-8"))
+    block = written["providers"]["openai"]
+    assert block["baseUrl"] == "https://superaichao.xin/openai"
+    assert block["api"] == "openai-responses"
+    assert block["models"][0]["id"] == "gpt-5.5"
+    assert block["models"][0]["api"] == "openai-responses"
+    assert block["models"][0]["input"] == ["text", "image"]
+    cmd = t.spawn_command()
+    assert cmd[cmd.index("--provider") + 1] == "openai"
+    assert cmd[cmd.index("--model") + 1] == "gpt-5.5"
+
+
 def test_true_pi_runtime_source_passes_caps_windows() -> None:
     """runtime must feed caps.max_context into SubprocessTransport (not provider-only)."""
     src = (
