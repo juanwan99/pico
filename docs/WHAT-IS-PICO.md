@@ -3,7 +3,7 @@
 ```
 DOC: docs/WHAT-IS-PICO.md
 STATUS: BINDING · 覆盖一切冲突的产品口述与旧文档金句
-FREEZE: docs/TRUTH-FREEZE.md v1.1 · HANDOFF-WB-PI（默认 Pi + DeepSeek）
+FREEZE: docs/TRUTH-FREEZE.md v1.3 · HANDOFF-WB-PI（默认 Pi + DeepSeek）
 OWNER: 业主目标 + 总管落盘
 TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可更新「现状」；不可偷偷改「目标」
 ```
@@ -12,11 +12,11 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 
 ## 0. 一句话
 
-**Pico 的用法 = Grok 的用法。** 通用 LLM。老师的话是 user；系统纪律是 system，不得冒充人话。工具 / 材料 / Skill 是挂载，模型看老师的话决定用不用。问「这是什么」就解释；说「做成 Word」才交文件。
+**Pico 的用法 = Grok 的用法。** 通用 LLM。老师的话是 user；系统纪律是 system，不得冒充人话。工具 / 材料 / Skill 是挂载，模型看老师的话决定用不用。先扎实多项能力，再优化编排层：模型自己选源。以后多源 AI 自动编排，核仍是上游 Pi。禁止焊死唯一能力路径。问「这是什么」就解释；说「做成 Word」才交文件。
 
 工作台（LibreChat + Pico 账本）是壳和控制面，**不是**读正文猜任务的定向工作流。
 
-**禁止：** force_agent 自动挂交付 Skill、把「本轮必须交 N 个文件」焊进 user prompt、用课件/通知/模块词表定向。
+**禁止：** force_agent 自动挂交付 Skill、把「本轮必须交 N 个文件」焊进 user prompt、用课件/通知/模块词表定向、把其中一条能力焊成唯一主路。
 
 详见 [`DIRECTION-NOW.md` §0-star](./DIRECTION-NOW.md)。
 
@@ -79,7 +79,7 @@ Kimi Agent = 遗产/可选回滚，非产品唯一目标
 
 ### 4.2 实现事实（2026-08-09 · **不是目标**）
 
-> **真源：** TRUTH-FREEZE **v1.1** + HANDOFF-WB-PI。  
+> **真源：** TRUTH-FREEZE **v1.3** + HANDOFF-WB-PI。  
 > 旧 v1.0「唯一核 = Kimi Agent / 禁 Pi」**已作废**。  
 > `run_agent_loop` **从未**是产品目标；已移除，**禁止**复活为终局叙事。
 
@@ -128,5 +128,5 @@ Kimi HTTPS 密钥                                   ⚠️ 可选后备 · 非�
 ## 7. 三句记忆
 
 1. Pico 是 AI 工作台底座（壳 + 账本 + 控制面 + 模型 API），不是网盘/教务。  
-2. **目标默认：Pi 编排 + DeepSeek 模型**（TRUTH-FREEZE v1.1）；Kimi Agent 是遗产回滚，不是产品唯一目标。  
+2. **目标默认：Pi 编排 + DeepSeek 模型**（TRUTH-FREEZE v1.3）；能力并列、编排后置；Kimi Agent 是遗产回滚，不是产品唯一目标。  
 3. 自研工具环与双核并列真源均禁止；实现现状以 tip/STATE-NOW 为准，禁止假称完成。

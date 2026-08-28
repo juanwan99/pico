@@ -1,11 +1,11 @@
-# DIRECTION-NOW · 业主方向锁定（2026-08-09 · v1.2 北极星 2026-08-24）
+# DIRECTION-NOW · 业主方向锁定（2026-08-09 · v1.3 北极星 2026-08-28）
 
 ```text
-STATUS: BINDING · 业主书面四条 + 阶段 1.5 加线 + 北极星（Grok 用法）
+STATUS: BINDING · 业主书面四条 + 阶段 1.5 加线 + 北极星（Grok 用法 · 禁焊死路径）
 DATE: 2026-08-09
-UPDATED: 2026-08-24 · 业主书面：Pico 用法 = Grok 用法 · 禁定向猜任务
+UPDATED: 2026-08-28 · 业主书面：先扎实多项能力，再编排层自己选；禁焊死唯一路径
 仓: juanwan99/pico ONLY
-SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.2 · PLAN-TWO-PHASE-WB · STATE-NOW
+SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.3 · PLAN-TWO-PHASE-WB · STATE-NOW
 CLAIM-WB-DEGREE-WEB: NO
 ```
 
@@ -15,12 +15,16 @@ CLAIM-WB-DEGREE-WEB: NO
 
 ---
 
-## 0-star. 北极星（2026-08-24 业主书面 · BINDING）
+## 0-star. 北极星（2026-08-28 业主书面 · BINDING）
 
 ```text
 Pico 的用法 = Grok 的用法。
 Pico 是通用 LLM。老师的话是 user。系统纪律是 system，不得冒充人话。
 工具 / 材料 / Skill 是挂载；模型看老师的话决定用不用。
+先扎实多项能力（并列、都能用、互不否决），再优化编排层：
+模型在该时刻自己选源。以后走多源 AI 自动编排。
+编排核仍是上游 Pi。禁止自研第二编排真源。
+禁止焊死唯一能力路径（SYSTEM / 词表 / if 场景 then 工具）。
 问「这是什么」就解释。说「做成 Word」才交文件。
 禁止：读正文猜任务 · force_agent 自动挂交付 Skill
 禁止：把「本轮必须交 N 个文件」焊进 user prompt
@@ -31,6 +35,8 @@ Pico 是通用 LLM。老师的话是 user。系统纪律是 system，不得冒�
 |--------|--------|----------|
 | **Grok** | 对话用法：通用模型 + 挂载的工具，模型自己决定调不调 | 复刻 Grok 品牌/功能清单 |
 | **WorkBuddy** | 体验上限：长任务跑完、真文件打开能用（六条） | 用启发式逼模型交件 |
+| **能力** | 多项并列、都能用、互不否决 | 把其中一条焊成唯一主路（「必须真图 / 必须造图 / 必须某工具」） |
+| **编排** | 后置；模型自己选；以后多源自动选；核 = 上游 Pi | Pico 自研调度 OS / 词表 if / 双核并列 |
 
 与「办公硬度 / 交得出」冲突时：**先当通用模型，再交件。** 没点名就不交。
 
@@ -148,6 +154,8 @@ Pico 是通用 LLM。老师的话是 user。系统纪律是 system，不得冒�
 
 ```text
 Pico 用法 = Grok 用法（通用 LLM · 挂载才办事 · 没点名不交件）
+多项能力并列 · 禁焊死唯一路径 · 先能力后编排
+以后多源自动编排 · 核仍是上游 Pi · 禁自研第二编排
 通用开放域（教育仅之一）· Pi + DeepSeek
 办事程度对标 WorkBuddy（六条）· 不是用启发式逼交件
 本阶段：Agent + 交互体验打扎实
@@ -157,7 +165,7 @@ CLAIM-WB: NO
 
 ```
 ════════════════════════════════════
-BINDING · DIRECTION-NOW · v1.2 · 2026-08-24
-Pico 用法 = Grok 用法 · 禁定向猜任务
+BINDING · DIRECTION-NOW · v1.3 · 2026-08-28
+Pico 用法 = Grok 用法 · 禁焊死路径 · 先能力后编排
 ════════════════════════════════════
 ```

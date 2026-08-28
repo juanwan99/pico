@@ -13,7 +13,7 @@ CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 t
 PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · 记忆 OS 仍挂起
 经验: docs/EXPERIENCE.md（唯一 · 按域）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
-北极星: DIRECTION-NOW §0-star · 用法 = Grok
+北极星: DIRECTION-NOW §0-star · 用法 = Grok · 禁焊死路径 · #744 升 v1.3
 真源优先级: 本页三行 + #634 > 任何 HANDOFF-*.md > 聊天
 juanwan99/oneflow: 不当真源（已 Archive）
 ```

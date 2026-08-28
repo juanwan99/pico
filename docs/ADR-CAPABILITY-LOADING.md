@@ -47,7 +47,7 @@ LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 | **Skill 目录** | 每条只挂 **名字 + 一句何时用** | Agent Skills 第一层；Codex 目录约占上下文 ≤2% | 唯一目录 = LibreChat Skills。老师可不点；`$` 是高手出口。禁止第二商店 |
 | **Skill 全文** | 对上了才读 `SKILL.md` 与附件 | 渐进披露第二/三层 | Skill **只能收窄** 白名单。禁止把 `skill-deliverable` 那种长说明书每轮灌进 |
 
-工具说明必须写 **做什么 + 何时用**。那就是路由，Pico 不写 `if 课件 then …`。
+工具说明必须写 **做什么 + 何时用**。那就是路由，Pico 不写 `if 课件 then …`。说明「何时适合」≠ 焊死唯一路径；多项能力并列，模型自己选。
 
 延后加载 / `tool_search` 是 Claude API 能力。Pico 的 Pi **没有**就不要自研同款核。工具未到上百，先靠「少常驻 + Skill 目录」。
 

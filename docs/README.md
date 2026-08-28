@@ -26,7 +26,7 @@ NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
 |----------|------|------|
 | **NOW** | **[STATE-NOW.md](./STATE-NOW.md)** | **唯一现况三行**（冻结到 9/7） |
 | **NOW** | **[#634](https://github.com/juanwan99/pico/issues/634)** | **冻结令** · 可钉现况三行评论 |
-| 0 | **[DIRECTION-NOW.md](./DIRECTION-NOW.md)** | 北极星 §0-star · 用法 = Grok |
+| 0 | **[DIRECTION-NOW.md](./DIRECTION-NOW.md)** | 北极星 §0-star · 用法 = Grok · 禁焊死路径 |
 | 0 | **[LAW-NO-SELF-BUILD-THIN-ADAPTER.md](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)** | 禁止自研 |
 | 0 | **[ADR-CAPABILITY-LOADING.md](./ADR-CAPABILITY-LOADING.md)** | 能力加载纪律（少常驻 · Skill 渐进披露 · 禁自研选工具核）· 不当在飞 |
 | 0 | **[EXPERIENCE.md](./EXPERIENCE.md)** | 经验唯一 · 按域 · 派发点名 ≤3 |

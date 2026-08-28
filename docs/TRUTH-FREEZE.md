@@ -2,11 +2,11 @@
 
 ```
 DOC: docs/TRUTH-FREEZE.md
-STATUS: BINDING FREEZE v1.2
-FROZEN_AT: 2026-08-24
+STATUS: BINDING FREEZE v1.3
+FROZEN_AT: 2026-08-28
 PURPOSE: 固定产品/架构真源，防止聊天与旧文档再次冲掉校准结论
 AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star
-SUPERSEDES: v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+SUPERSEDES: v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
 RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/MEMORY-RESET.md
 ```
 
@@ -23,13 +23,13 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 
 ---
 
-## 1. 冻结决策集 v1.2（目标 · 不可被执行窗改写）
+## 1. 冻结决策集 v1.3（目标 · 不可被执行窗改写）
 
 ### 1.1 产品是什么
 
 | # | 冻结句 |
 |---|--------|
-| P0 | **用法 = Grok**：通用 LLM；老师的话是 user；系统纪律是 system，不得冒充人话；工具/材料/Skill 是挂载，模型自己决定调不调。没点名不交件。禁止读正文猜任务、force_agent 自动挂交付、把「必须交 N 个文件」焊进 user prompt。真源：DIRECTION-NOW §0-star |
+| P0 | **用法 = Grok**：通用 LLM；老师的话是 user；系统纪律是 system，不得冒充人话；工具/材料/Skill 是挂载，模型自己决定调不调。先扎实多项能力，再优化编排层。禁止焊死唯一能力路径。以后多源 AI 自动编排，编排核仍是上游 Pi，禁止自研第二编排真源。没点名不交件。禁止读正文猜任务、force_agent 自动挂交付、把「必须交 N 个文件」焊进 user prompt。真源：DIRECTION-NOW §0-star |
 | P1 | Pico = **任务型 AI 工作台（Web）** 底座（对话 + 办事 + 产物 + 唯一 AI 账本 + 控制面）；办事程度类 WorkBuddy（六条）。P1 不得压过 P0 |
 | P2 | **不是** 网盘 / 教务 SaaS / 成绩主库 / 自托管大模型默认 / Dify 门脸终局 / 场景考卷对标 / 定向猜任务的办公机器人 |
 | P3 | 用户成功 = 公网登录 → 开放派活 → 多步过程可见 → 真产物 → 能停、能找回、同会话可改 → 状态诚实 |
@@ -56,6 +56,7 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 | O5 | **禁止双核并列真源**（Pi + Reasonix + Kimi 同时「官方唯一」）。默认只钉 Pi。 |
 | O6 | Reasonix 等实验须 flag，不得写「唯一目标」。 |
 | O7 | 刷新/历史/停止/重试 = **控制面与壳通路**，不得单独用来证明 O1 已完成。 |
+| O8 | **能力并列、编排后置**：多项能力都能用、互不否决。禁止把其中一条焊成唯一主路（SYSTEM / 词表 / `if 场景 then 工具`）。以后多源自动选；现在不焊。编排核仍是上游 Pi，禁止 Pico 自研第二编排真源。 |
 
 ### 1.4 能力边界
 
@@ -133,9 +134,13 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | **v1.0** | 2026-08-01 | 首次冻结：Kimi Agent 唯一 / 禁 Pi |
 | **v1.1** | 2026-08-06 | 对齐 HANDOFF-WB-PI：默认 Pi + DeepSeek；Kimi 遗产回滚；禁双核真源；**单窗 SOLO**（废多窗日常派） |
 
-升版规则：任何 P1–W5 / A1–A4 / O1–O7 / C1–C7 的修改 → **v1.x** 新 PR，标题含 `TRUTH-FREEZE`。
+升版规则：任何 P1–W5 / A1–A4 / O1–O8 / C1–C7 的修改 → **v1.x** 新 PR，标题含 `TRUTH-FREEZE`。
 
 ### v1.2 · 2026-08-11
 
 - **项目法律：** [`docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md) — **禁止自研 · 只做薄适配**
 - 真核 = 上游 Pi harness + 薄桥；禁止桥膨胀；禁止自研 MCP/向量内核
+
+### v1.3 · 2026-08-28
+
+- **北极星补钉（业主书面）：** 先扎实多项能力，再优化编排层；禁止焊死唯一能力路径；以后多源 AI 自动编排，核仍是上游 Pi。真源：DIRECTION-NOW §0-star · O8

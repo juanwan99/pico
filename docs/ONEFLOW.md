@@ -6,7 +6,7 @@ STATUS: BINDING v2.1 — 2026-08-23
 EXEC: 2026-08-24 三刀 BINDING（卡面不改）
 REPO: juanwan99/pico ONLY
 ALIGN: edu-core TASK-DISPATCH v2（派发条 + 合同在 Issue）
-NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
+NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁焊死路径 · 禁定向猜任务）
 ```
 
 ```text

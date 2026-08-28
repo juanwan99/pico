@@ -2,11 +2,11 @@
 
 ```text
 仓: juanwan99/pico ONLY
-DATE: 2026-08-27
+DATE: 2026-08-28
 用法: 开窗读本文。禁止把正文贴进卡或对业主聊天。
 派发条只点名编号（最多 3 条）。过期删（总管同轮删/并）。
 工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
-北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok
+北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok · 禁焊死路径
 按域检索: A 派发 · B 产品 · C 部署/ECS · D Cloud Agent
 ```
 
@@ -28,7 +28,7 @@ DATE: 2026-08-27
 
 ## B · 现网 / 产品
 
-11. **用法 = Grok。** 禁问句/材料特判、禁词表监工、禁自研压缩器/记忆 OS。只接 Pi 官方 compact。
+11. **用法 = Grok。** 禁问句/材料特判、禁词表监工、禁自研压缩器/记忆 OS。只接 Pi 官方 compact。**禁焊死唯一能力路径**（SYSTEM / 词表 / `if 场景 then 工具`）。先扎实多项能力，再编排层自己选。#744。
 12. **CLAIM-WB-DEGREE-WEB 业主 2026-08-26 已签 YES** @ tip `dcb47c00…`（#449/#316 OWNER DECISION）。工程仍禁改口/再代签。记忆 OS 仍挂起；人视角薄层（名+最近文件）#733/#736 已部。
 13. **`juanwan99/oneflow` 不当真源**（已 Archive）。
 14. **改 Python 工具说明 ≠ Pi 看见。** 真路径：`pico-gateway-tools.ts` + `SYSTEM.md`。
