@@ -7,6 +7,7 @@ Upstream: Zhipu / Z.AI POST …/paas/v4/images/generations model=glm-image.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import ipaddress
 import logging
@@ -27,6 +28,11 @@ DEFAULT_MODEL = "glm-image"
 DEFAULT_SIZE = "1280x1280"
 DEFAULT_QUALITY = "standard"
 IMAGE_TIMEOUT_S = 90.0
+# Live F3 (#752): glm-image HTTP 429 survived 1 immediate retry. Back off
+# before ok=false. Total sleep 27s so one real generation still fits in 90s.
+_429_MAX_TRIES = 6
+_429_BACKOFF_S = (1.0, 2.0, 4.0, 8.0, 12.0)
+_429_RETRY_AFTER_CAP_S = 12.0
 _MAX_PROMPT = 2000
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -108,6 +114,56 @@ def _public_https_url(url: str) -> str:
     return url.strip()
 
 
+def _http_status(response: Any) -> int:
+    try:
+        return int(getattr(response, "status_code", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _retry_after_header(response: Any) -> str | None:
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    get = getattr(headers, "get", None)
+    if not callable(get):
+        return None
+    raw = get("Retry-After")
+    if raw is None:
+        raw = get("retry-after")
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    return text or None
+
+
+def _parse_retry_after_s(raw: str | None) -> float | None:
+    if not raw:
+        return None
+    try:
+        n = float(raw)
+    except ValueError:
+        return None
+    if n <= 0:
+        return None
+    return min(n, _429_RETRY_AFTER_CAP_S)
+
+
+def _429_delay_s(retry_index: int, retry_after: str | None) -> float:
+    idx = min(max(retry_index, 0), len(_429_BACKOFF_S) - 1)
+    scheduled = _429_BACKOFF_S[idx]
+    parsed = _parse_retry_after_s(retry_after)
+    delay = scheduled if parsed is None else max(scheduled, parsed)
+    return max(delay, 1.0)
+
+
+def _http_provider_error(response: Any) -> ToolError:
+    err = ToolError("image.provider", REJECT_MESSAGE)
+    err.http_status = _http_status(response)
+    err.retry_after = _retry_after_header(response)
+    return err
+
+
 async def _post_images(
     payload: dict[str, Any], *, api_key: str, timeout: float
 ) -> httpx.Response:
@@ -159,17 +215,34 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
     api_key = zhipu_api_key()
     if not api_key:
         raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
-    last_provider: ToolError | None = None
-    for attempt in (0, 1):
+    rate_tries = 0
+    provider_retried = False
+    while True:
         try:
             return await _generate_image_call(text, api_key)
         except ToolError as exc:
-            if exc.code != "image.provider" or attempt == 1:
+            if exc.code != "image.provider":
+                raise
+            status = getattr(exc, "http_status", None)
+            if status == 429:
+                if rate_tries >= _429_MAX_TRIES - 1:
+                    raise
+                delay = _429_delay_s(rate_tries, getattr(exc, "retry_after", None))
+                logger.warning(
+                    "zhipu images HTTP 429; retry %s/%s after %.1fs",
+                    rate_tries + 1,
+                    _429_MAX_TRIES - 1,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+                rate_tries += 1
+                continue
+            if isinstance(status, int) and 400 <= status < 500:
+                raise
+            if provider_retried:
                 raise
             logger.warning("zhipu images provider failed; retrying once")
-            last_provider = exc
-    assert last_provider is not None
-    raise last_provider
+            provider_retried = True
 
 
 async def _generate_image_call(text: str, api_key: str) -> tuple[bytes, str]:
@@ -190,7 +263,7 @@ async def _generate_image_call(text: str, api_key: str) -> tuple[bytes, str]:
         raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
     if response.status_code >= 400:
         logger.warning("zhipu images HTTP %s", response.status_code)
-        raise ToolError("image.provider", REJECT_MESSAGE)
+        raise _http_provider_error(response)
     try:
         body = response.json()
     except Exception as exc:

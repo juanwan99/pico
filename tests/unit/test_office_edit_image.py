@@ -9,6 +9,7 @@ import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +19,8 @@ from pico_orchestrator.artifact_types import is_valid_ooxml_package
 from pico_orchestrator.document_generators import build_docx_document
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.image_generate import (
+    _429_BACKOFF_S,
+    _429_MAX_TRIES,
     NO_KEY_MESSAGE,
     REJECTED_PROVIDER_MESSAGE,
     generate_image_bytes,
@@ -152,12 +155,23 @@ async def test_generate_image_zhipu_mock_https_png(
     assert raw.startswith(b"\x89PNG")
 
 
+async def _record_sleep(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    slept: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        slept.append(float(seconds))
+
+    monkeypatch.setattr("pico_orchestrator.image_generate.asyncio.sleep", fake_sleep)
+    return slept
+
+
 @pytest.mark.asyncio
 async def test_generate_image_zhipu_4xx_no_fake(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    slept = await _record_sleep(monkeypatch)
     calls = {"n": 0}
 
     async def fake_post(payload, *, api_key, timeout):
@@ -169,7 +183,8 @@ async def test_generate_image_zhipu_4xx_no_fake(
         await generate_image_bytes("画一只猫")
     assert caught.value.code == "image.provider"
     assert "不能编造" in caught.value.message
-    assert calls["n"] == 2
+    assert calls["n"] == 1
+    assert slept == []
 
 
 @pytest.mark.asyncio
@@ -197,6 +212,83 @@ async def test_generate_image_provider_retries_once_then_ok(
     assert calls["n"] == 2
     assert ext == "png"
     assert raw.startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_generate_image_429_then_200(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live F3: HTTP 429 must back off (>0s) then succeed on the next POST."""
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    slept = await _record_sleep(monkeypatch)
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return SimpleNamespace(status_code=429, json=lambda: {"error": "rate"})
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
+            },
+        )
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
+    raw, ext = await generate_image_bytes("封面示意图")
+    assert calls["n"] == 2
+    assert slept == [1.0]
+    assert all(s >= 1.0 for s in slept)
+    assert ext == "png"
+    assert raw.startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_generate_image_429_exhausted_no_fake(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live F3: consecutive 429 still image.provider; never invent pixels."""
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    slept = await _record_sleep(monkeypatch)
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout):
+        calls["n"] += 1
+        return SimpleNamespace(status_code=429, json=lambda: {"error": "rate"})
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
+    with pytest.raises(ToolError) as caught:
+        await generate_image_bytes("封面示意图")
+    assert caught.value.code == "image.provider"
+    assert "不能编造" in caught.value.message
+    assert calls["n"] == _429_MAX_TRIES
+    assert slept == list(_429_BACKOFF_S)
+    assert all(s >= 1.0 for s in slept)
+    assert sum(slept) == sum(_429_BACKOFF_S)
+
+
+@pytest.mark.asyncio
+async def test_generate_image_timeout_no_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-not-a-secret")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    slept = await _record_sleep(monkeypatch)
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout):
+        calls["n"] += 1
+        raise httpx.TimeoutException("read timeout")
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_images", fake_post)
+    with pytest.raises(ToolError) as caught:
+        await generate_image_bytes("封面示意图")
+    assert caught.value.code == "image.timeout"
+    assert "不能编造" in caught.value.message
+    assert calls["n"] == 1
+    assert slept == []
 
 
 def test_sidebar_chat_has_no_edit_or_image_tools() -> None:
