@@ -1,9 +1,10 @@
 """Thin image HTTPS adapter. No local diffusion / no SiliconFlow.
 
 Owner 2026-08-27: SiliconFlow images REJECTED.
-Owner 2026-08-28: Gemini official API or owner New API gateway first
-(#752). Zhipu glm-image stays as leftover when those keys are absent.
-No cookie/session Gemini web farm. No in-process multi-key rotator.
+Owner 2026-08-28: New API reverse-proxies many Gemini API keys (#752).
+Pico calls one OpenAI-compatible images URL. Direct Gemini / Zhipu
+are leftovers when the gateway is unset. No cookie farm. No Pico
+multi-key rotator.
 """
 
 from __future__ import annotations
@@ -142,7 +143,7 @@ def allowed_image_key() -> bool:
 
 
 def selected_image_provider() -> str | None:
-    """Owner 2026-08-28: gateway / Gemini first; Zhipu leftover."""
+    """Owner 2026-08-28: New API gateway first; Gemini/Zhipu leftover."""
     if gateway_images_url() and gateway_key():
         return PROVIDER_GATEWAY
     if gemini_api_key():
