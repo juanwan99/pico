@@ -720,3 +720,252 @@ def _instruction_with_delivery(
 
     del prompt, plan, prior_artifact_titles
     return instruction_for_snapshot(skill_snapshot)
+
+
+async def _finalize_run(
+    run_id: str,
+    *,
+    status: str,
+    error: str | None = None,
+    final_text: str | None = None,
+    task_id: str | None = None,
+    user_prompt: str | None = None,
+    change_proposal: dict | None = None,
+    token_usage: dict[str, Any] | None = None,
+) -> None:
+    from sqlalchemy import case, select, update
+
+    from app.db import ArtifactRow, ChangeProposalRow, EventRow, TaskRow, _utcnow
+    from app.run_service import _json_dict, _skill_s7_payload
+
+    terminal = ("succeeded", "failed", "cancelled")
+    if status not in terminal:
+        raise ValueError(f"invalid terminal run status: {status}")
+
+    factory = session_factory()
+    async with factory() as session:
+        requested_status = status
+        mark_cancel = status == "cancelled"
+        values: dict = {
+            "status": case(
+                (RunRow.cancel_requested != 0, "cancelled"),
+                else_=status,
+            ),
+            "error": case(
+                (RunRow.cancel_requested != 0, None),
+                else_=error,
+            ),
+            "ended_at": _utcnow(),
+        }
+        if mark_cancel:
+            values["cancel_requested"] = case(
+                (RunRow.cancel_requested != 0, RunRow.cancel_requested),
+                else_=1,
+            )
+
+        claimed = await session.execute(
+            update(RunRow)
+            .where(
+                RunRow.id == run_id,
+                RunRow.status.not_in(terminal),
+            )
+            .values(**values)
+        )
+        if claimed.rowcount != 1:
+            await session.rollback()
+            return
+
+        run = await session.get(RunRow, run_id)
+        if not run:
+            await session.rollback()
+            return
+        if task_id is not None and task_id != run.task_id:
+            await session.rollback()
+            raise ValueError("run/task mismatch during finalize")
+        status = run.status
+        if status == "cancelled":
+            # Honest ledger when stop only tears down the stream.
+            await append_event(
+                session,
+                run_id,
+                "run.cancel_requested",
+                {
+                    "source": (
+                        "stream_or_finalize"
+                        if requested_status == "cancelled"
+                        else "flag_before_finalize"
+                    )
+                },
+                commit=False,
+            )
+            await append_event(
+                session,
+                run_id,
+                "run.status",
+                {"status": "cancelled"},
+                commit=False,
+            )
+
+        usage = _json_dict(run.token_usage_json)
+        skill_snapshot = usage.get("skill_snapshot")
+        if isinstance(skill_snapshot, dict) and status == "succeeded":
+            existing_skill_event = await session.execute(
+                select(EventRow.id)
+                .where(EventRow.run_id == run_id, EventRow.type == "skill.snapshot")
+                .limit(1)
+            )
+            if existing_skill_event.scalar_one_or_none() is None:
+                await append_event(
+                    session,
+                    run_id,
+                    "skill.snapshot",
+                    skill_snapshot,
+                    commit=False,
+                )
+
+        unknown_skill = (
+            isinstance(skill_snapshot, dict)
+            and skill_snapshot.get("name") == "skill.unknown"
+        )
+        if final_text and status == "succeeded" and not unknown_skill:
+            existing = await session.execute(
+                select(ArtifactRow.kind, ArtifactRow.title).where(
+                    ArtifactRow.run_id == run_id
+                )
+            )
+            existing_keys = {(kind, title) for kind, title in existing.all()}
+            files = _extract_file_artifacts(final_text)
+            if not files:
+                files = _file_from_user_prompt(user_prompt)
+            for name, body in files:
+                key = ("file", name)
+                if key in existing_keys:
+                    continue
+                import hashlib
+
+                raw_bytes = body.encode("utf-8")
+                artifact = ArtifactRow(
+                    id=new_id(),
+                    task_id=run.task_id,
+                    run_id=run_id,
+                    kind="file",
+                    title=name,
+                    inline=body,
+                    content_encoding="utf8",
+                    content_sha256=hashlib.sha256(raw_bytes).hexdigest(),
+                    byte_size=len(raw_bytes),
+                )
+                session.add(artifact)
+                existing_keys.add(key)
+                await append_event(
+                    session,
+                    run_id,
+                    "artifact.created",
+                    {
+                        "artifact_id": artifact.id,
+                        "title": name,
+                        "user_label": name,
+                        "kind": "file",
+                        "download_path": (
+                            f"/v1/artifacts/{artifact.id}/content?download=true"
+                        ),
+                    },
+                    commit=False,
+                )
+
+            # T-GROK-PATH: 回复摘要 stays in run.final_text (bookkeeping), not
+            # a result-area Artifact. Do not mint a downloadable 回复摘要 chip.
+        if (
+            isinstance(skill_snapshot, dict)
+            and skill_snapshot.get("requires_s7")
+            and status == "succeeded"
+        ):
+            existing_change = await session.execute(
+                select(ChangeProposalRow.id).where(ChangeProposalRow.run_id == run_id).limit(1)
+            )
+            if existing_change.scalar_one_or_none() is None:
+                task_row = await session.get(TaskRow, run.task_id)
+                if task_row is None:
+                    await session.rollback()
+                    return
+                prop = _skill_s7_payload(
+                    prompt=run.prompt,
+                    final_text=final_text,
+                    snapshot=skill_snapshot,
+                )
+                change = ChangeProposalRow(
+                    id=new_id(),
+                    school_id=task_row.school_id,
+                    membership_id=task_row.membership_id,
+                    task_id=run.task_id,
+                    run_id=run.id,
+                    title=prop["title"],
+                    summary=prop["summary"],
+                    payload_json=json.dumps(prop["payload"], ensure_ascii=False),
+                    status="proposed",
+                )
+                session.add(change)
+                await append_event(
+                    session,
+                    run_id,
+                    "change.proposed",
+                    {"change_id": change.id, "title": change.title},
+                    commit=False,
+                )
+        # Tool-path S7: persist pico_propose_change even when skill does not require_s7.
+        if change_proposal and status in ("succeeded", "failed"):
+            existing_tool_change = await session.execute(
+                select(ChangeProposalRow.id).where(ChangeProposalRow.run_id == run_id).limit(1)
+            )
+            if existing_tool_change.scalar_one_or_none() is None:
+                task_row = await session.get(TaskRow, run.task_id)
+                if task_row is not None:
+                    prop = change_proposal.get("proposal") or change_proposal
+                    if isinstance(prop, dict):
+                        change = ChangeProposalRow(
+                            id=new_id(),
+                            school_id=task_row.school_id,
+                            membership_id=task_row.membership_id,
+                            task_id=run.task_id,
+                            run_id=run.id,
+                            title=str(prop.get("title") or "变更提案"),
+                            summary=str(prop.get("summary") or ""),
+                            payload_json=json.dumps(
+                                prop.get("payload") or {}, ensure_ascii=False
+                            ),
+                            status="proposed",
+                        )
+                        session.add(change)
+                        await append_event(
+                            session,
+                            run_id,
+                            "change.proposed",
+                            {"change_id": change.id, "title": change.title},
+                            commit=False,
+                        )
+
+        # Fail-closed delivery: real artifacts required when intent demands them.
+        # Shared gate (app.delivery_gate.apply_delivery_gate) — same gate is
+        # applied by the retry / REST / automation path (_execute_run) so re-runs
+        # cannot bypass #375 fail-closed semantics. Single source of truth.
+        from app.delivery_gate import apply_delivery_gate
+
+        await apply_delivery_gate(
+            session,
+            run,
+            final_text=final_text,
+            user_prompt=user_prompt,
+        )
+
+        await session.commit()
+
+    # Usage meter is best-effort and must never roll back the Run path.
+    from app.usage_ledger import emit_llm_usage_after_run
+
+    await emit_llm_usage_after_run(
+        run_id,
+        token_usage=token_usage,
+        prompt=user_prompt,
+        completion=final_text,
+        source="openai_compat",
+    )
