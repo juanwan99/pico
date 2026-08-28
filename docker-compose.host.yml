@@ -86,7 +86,7 @@ services:
       PICO_SANDBOX_URL: http://127.0.0.1:18767
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
       PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
-      # Image: Gemini official / owner New API gateway first. Zhipu leftover.
+      # Image: New API gateway (multi Gemini keys live in New API, not Pico).
       # SiliconFlow images REJECTED. Keys host .env only.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
