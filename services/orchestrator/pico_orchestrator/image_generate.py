@@ -1,8 +1,9 @@
-"""Thin Zhipu glm-image HTTPS adapter. No local diffusion / no SiliconFlow.
+"""Thin image HTTPS adapter. No local diffusion / no SiliconFlow.
 
 Owner 2026-08-27: SiliconFlow images REJECTED.
-Owner 2026-08-27: 「1 开工」= wire glm-image (#729).
-Upstream: Zhipu / Z.AI POST …/paas/v4/images/generations model=glm-image.
+Owner 2026-08-28: Gemini official API or owner New API gateway first
+(#752). Zhipu glm-image stays as leftover when those keys are absent.
+No cookie/session Gemini web farm. No in-process multi-key rotator.
 """
 
 from __future__ import annotations
@@ -26,11 +27,16 @@ from pico_orchestrator.gateway import ToolError
 
 logger = logging.getLogger(__name__)
 
-# China default (ZHIPU_* keys). Override with ZHIPU_IMAGES_URL for api.z.ai.
+# China leftover (ZHIPU_*). Override with ZHIPU_IMAGES_URL for api.z.ai.
 DEFAULT_IMAGES_URL = "https://open.bigmodel.cn/api/paas/v4/images/generations"
 DEFAULT_MODEL = "glm-image"
 DEFAULT_SIZE = "1280x1280"
 DEFAULT_QUALITY = "standard"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-image"
+DEFAULT_GEMINI_ROOT = "https://generativelanguage.googleapis.com/v1beta"
+PROVIDER_GATEWAY = "gateway"
+PROVIDER_GEMINI = "gemini"
+PROVIDER_ZHIPU = "zhipu"
 IMAGE_TIMEOUT_S = 90.0
 # Live F5 (#752) this-round glm-image 429: Retry-After header absent,
 # body error.code=1113 「余额不足或无可用资源包,请充值。」. F4 single-flight +
@@ -51,9 +57,12 @@ _MAX_IMAGE_BYTES = 8 * 1024 * 1024
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 JPEG_MAGIC = b"\xff\xd8\xff"
 
-NO_KEY_MESSAGE = "出图尚未接通。请管理员在主机写入 ZHIPU_API_KEY 后重试，不能编造图片。"
+NO_KEY_MESSAGE = (
+    "出图尚未接通。请管理员在主机写入 GEMINI_API_KEY"
+    "（或 PICO_IMAGE_GATEWAY_URL + PICO_IMAGE_GATEWAY_KEY）后重试，不能编造图片。"
+)
 REJECTED_PROVIDER_MESSAGE = (
-    "出图提供商硅基流动已否决，不再调用。请使用智谱 glm-image，不能编造图片。"
+    "出图提供商硅基流动已否决，不再调用。请使用 Gemini 或智谱出图，不能编造图片。"
 )
 TIMEOUT_MESSAGE = "出图超时（90 秒）。请稍后重试，不能编造图片。"
 REJECT_MESSAGE = "出图服务拒绝了这次请求。请稍后重试或换一句描述，不能编造图片。"
@@ -85,6 +94,62 @@ def image_size() -> str:
 def image_quality() -> str:
     raw = (os.environ.get("ZHIPU_IMAGE_QUALITY") or DEFAULT_QUALITY).strip().lower()
     return raw if raw in {"hd", "standard"} else DEFAULT_QUALITY
+
+
+def gemini_api_key() -> str:
+    return (
+        os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
+    ).strip()
+
+
+def gemini_image_model() -> str:
+    raw = (os.environ.get("GEMINI_IMAGE_MODEL") or DEFAULT_GEMINI_MODEL).strip()
+    return raw or DEFAULT_GEMINI_MODEL
+
+
+def gemini_generate_url() -> str:
+    raw = (os.environ.get("GEMINI_IMAGES_URL") or "").strip()
+    if raw:
+        return raw
+    return f"{DEFAULT_GEMINI_ROOT}/models/{gemini_image_model()}:generateContent"
+
+
+def gateway_key() -> str:
+    return (os.environ.get("PICO_IMAGE_GATEWAY_KEY") or "").strip()
+
+
+def gateway_images_url() -> str:
+    raw = (os.environ.get("PICO_IMAGE_GATEWAY_URL") or "").strip()
+    if not raw:
+        return ""
+    text = raw.rstrip("/")
+    if text.endswith("/images/generations"):
+        return text
+    return f"{text}/v1/images/generations"
+
+
+def gateway_model() -> str:
+    raw = (os.environ.get("PICO_IMAGE_GATEWAY_MODEL") or "").strip()
+    return raw or gemini_image_model()
+
+
+def allowed_image_key() -> bool:
+    return bool(
+        zhipu_api_key()
+        or gemini_api_key()
+        or (gateway_images_url() and gateway_key())
+    )
+
+
+def selected_image_provider() -> str | None:
+    """Owner 2026-08-28: gateway / Gemini first; Zhipu leftover."""
+    if gateway_images_url() and gateway_key():
+        return PROVIDER_GATEWAY
+    if gemini_api_key():
+        return PROVIDER_GEMINI
+    if zhipu_api_key():
+        return PROVIDER_ZHIPU
+    return None
 
 
 def _as_png_or_jpeg(raw: bytes) -> tuple[bytes, str]:
@@ -257,6 +322,28 @@ async def _post_images(
         return await client.post(images_url(), json=payload, headers=headers)
 
 
+async def _post_gateway(
+    payload: dict[str, Any], *, api_key: str, timeout: float
+) -> httpx.Response:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        return await client.post(gateway_images_url(), json=payload, headers=headers)
+
+
+async def _post_gemini(
+    payload: dict[str, Any], *, api_key: str, timeout: float
+) -> httpx.Response:
+    headers = {
+        "x-goog-api-key": api_key,
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        return await client.post(gemini_generate_url(), json=payload, headers=headers)
+
+
 async def _fetch_url(url: str, *, timeout: float) -> bytes:
     safe = _public_https_url(url)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
@@ -284,6 +371,33 @@ def _first_image_payload(body: Any) -> tuple[str | None, str | None]:
     return url_s or None, b64_s or None
 
 
+def _gemini_inline_b64(body: Any) -> str | None:
+    if not isinstance(body, dict):
+        return None
+    cands = body.get("candidates")
+    if not isinstance(cands, list):
+        return None
+    for cand in cands:
+        if not isinstance(cand, dict):
+            continue
+        content = cand.get("content")
+        if not isinstance(content, dict):
+            continue
+        parts = content.get("parts")
+        if not isinstance(parts, list):
+            continue
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            inline = part.get("inlineData") or part.get("inline_data")
+            if not isinstance(inline, dict):
+                continue
+            data = inline.get("data")
+            if isinstance(data, str) and data.strip():
+                return data.strip()
+    return None
+
+
 async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
     """Return (image_bytes, png|jpg). Never invent pixels on failure."""
     text = (prompt or "").strip()
@@ -291,11 +405,10 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
         raise ToolError("tool.invalid_arguments", "请写要画的内容。")
     if len(text) > _MAX_PROMPT:
         raise ToolError("tool.invalid_arguments", f"出图描述不能超过 {_MAX_PROMPT} 字。")
-    if siliconflow_api_key() and not zhipu_api_key():
+    if siliconflow_api_key() and not allowed_image_key():
         logger.warning("generate_image refused: SiliconFlow-only key; provider rejected")
         raise ToolError("image.provider_rejected", REJECTED_PROVIDER_MESSAGE)
-    api_key = zhipu_api_key()
-    if not api_key:
+    if selected_image_provider() is None:
         raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
     key = _prompt_key(text)
     async with _flight_lock:
@@ -311,7 +424,7 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
         return await asyncio.shield(fut)
     try:
         async with _glm_lock:
-            result = await _generate_image_campaign(text, api_key)
+            result = await _generate_image_campaign(text)
         if not fut.done():
             fut.set_result(result)
         return result
@@ -326,13 +439,13 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
                 _inflight.pop(key, None)
 
 
-async def _generate_image_campaign(text: str, api_key: str) -> tuple[bytes, str]:
+async def _generate_image_campaign(text: str) -> tuple[bytes, str]:
     await _respect_rate_gate()
     rate_tries = 0
     provider_retried = False
     while True:
         try:
-            return await _generate_image_call(text, api_key)
+            return await _generate_image_call(text)
         except ToolError as exc:
             if exc.code != "image.provider":
                 raise
@@ -351,7 +464,7 @@ async def _generate_image_campaign(text: str, api_key: str) -> tuple[bytes, str]
                 )
                 if no_retry:
                     logger.warning(
-                        "zhipu images HTTP 429 retry-after=%r error_code=%s; "
+                        "images HTTP 429 retry-after=%r error_code=%s; "
                         "gate %.1fs, no in-campaign fly",
                         retry_after,
                         error_code or None,
@@ -359,7 +472,7 @@ async def _generate_image_campaign(text: str, api_key: str) -> tuple[bytes, str]
                     )
                     raise
                 logger.warning(
-                    "zhipu images HTTP 429 retry-after=%r error_code=%s; "
+                    "images HTTP 429 retry-after=%r error_code=%s; "
                     "retry %s/%s after %.1fs",
                     retry_after,
                     error_code or None,
@@ -374,38 +487,36 @@ async def _generate_image_campaign(text: str, api_key: str) -> tuple[bytes, str]
                 raise
             if provider_retried:
                 raise
-            logger.warning("zhipu images provider failed; retrying once")
+            logger.warning("images provider failed; retrying once")
             provider_retried = True
 
 
-async def _generate_image_call(text: str, api_key: str) -> tuple[bytes, str]:
-    payload = {
-        "model": image_model(),
-        "prompt": text,
-        "size": image_size(),
-        "quality": image_quality(),
-    }
-    try:
-        response = await _post_images(payload, api_key=api_key, timeout=IMAGE_TIMEOUT_S)
-    except httpx.TimeoutException as exc:
-        raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc
-    except httpx.HTTPError as exc:
-        logger.warning("zhipu images transport failed: %s", type(exc).__name__)
-        raise ToolError("image.provider", REJECT_MESSAGE) from exc
+async def _generate_image_call(text: str) -> tuple[bytes, str]:
+    kind = selected_image_provider()
+    if kind == PROVIDER_GEMINI:
+        return await _generate_gemini_call(text)
+    if kind == PROVIDER_GATEWAY:
+        return await _generate_gateway_call(text)
+    if kind == PROVIDER_ZHIPU:
+        return await _generate_zhipu_call(text)
+    raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
+
+
+async def _raise_http_response(response: Any, *, log_name: str) -> None:
     if response.status_code in {401, 403}:
         raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
     if response.status_code >= 400:
         logger.warning(
-            "zhipu images HTTP %s retry-after=%r error_code=%s",
+            "%s HTTP %s retry-after=%r error_code=%s",
+            log_name,
             response.status_code,
             _retry_after_header(response),
             _zhipu_error_code(response),
         )
         raise _http_provider_error(response)
-    try:
-        body = response.json()
-    except Exception as exc:
-        raise ToolError("image.invalid", INVALID_MESSAGE) from exc
+
+
+async def _bytes_from_openai_image_body(body: Any) -> tuple[bytes, str]:
     url, b64 = _first_image_payload(body)
     raw = b""
     if b64:
@@ -424,4 +535,81 @@ async def _generate_image_call(text: str, api_key: str) -> tuple[bytes, str]:
             raise ToolError("image.provider", REJECT_MESSAGE) from exc
     else:
         raise ToolError("image.invalid", INVALID_MESSAGE)
+    return _as_png_or_jpeg(raw)
+
+
+async def _generate_zhipu_call(text: str) -> tuple[bytes, str]:
+    payload = {
+        "model": image_model(),
+        "prompt": text,
+        "size": image_size(),
+        "quality": image_quality(),
+    }
+    try:
+        response = await _post_images(
+            payload, api_key=zhipu_api_key(), timeout=IMAGE_TIMEOUT_S
+        )
+    except httpx.TimeoutException as exc:
+        raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("zhipu images transport failed: %s", type(exc).__name__)
+        raise ToolError("image.provider", REJECT_MESSAGE) from exc
+    await _raise_http_response(response, log_name="zhipu images")
+    try:
+        body = response.json()
+    except Exception as exc:
+        raise ToolError("image.invalid", INVALID_MESSAGE) from exc
+    return await _bytes_from_openai_image_body(body)
+
+
+async def _generate_gateway_call(text: str) -> tuple[bytes, str]:
+    payload = {
+        "model": gateway_model(),
+        "prompt": text,
+        "size": image_size(),
+        "n": 1,
+    }
+    try:
+        response = await _post_gateway(
+            payload, api_key=gateway_key(), timeout=IMAGE_TIMEOUT_S
+        )
+    except httpx.TimeoutException as exc:
+        raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("gateway images transport failed: %s", type(exc).__name__)
+        raise ToolError("image.provider", REJECT_MESSAGE) from exc
+    await _raise_http_response(response, log_name="gateway images")
+    try:
+        body = response.json()
+    except Exception as exc:
+        raise ToolError("image.invalid", INVALID_MESSAGE) from exc
+    return await _bytes_from_openai_image_body(body)
+
+
+async def _generate_gemini_call(text: str) -> tuple[bytes, str]:
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": text}]}],
+        "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+    }
+    try:
+        response = await _post_gemini(
+            payload, api_key=gemini_api_key(), timeout=IMAGE_TIMEOUT_S
+        )
+    except httpx.TimeoutException as exc:
+        raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("gemini images transport failed: %s", type(exc).__name__)
+        raise ToolError("image.provider", REJECT_MESSAGE) from exc
+    await _raise_http_response(response, log_name="gemini images")
+    try:
+        body = response.json()
+    except Exception as exc:
+        raise ToolError("image.invalid", INVALID_MESSAGE) from exc
+    b64 = _gemini_inline_b64(body)
+    if not b64:
+        raise ToolError("image.invalid", INVALID_MESSAGE)
+    try:
+        raw = base64.b64decode(b64, validate=False)
+    except Exception as exc:
+        raise ToolError("image.invalid", INVALID_MESSAGE) from exc
     return _as_png_or_jpeg(raw)

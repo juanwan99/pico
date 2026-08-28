@@ -47,14 +47,18 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         if c == "image.provider_rejected" or "硅基流动已否决" in text:
             return (
                 "出图提供商硅基流动已否决，不再调用。"
-                "请使用智谱 glm-image，不能编造图片。"
+                "请使用 Gemini 或智谱出图，不能编造图片。"
             )
         if (
             c == "image.unconfigured"
             or "尚未接通" in text
             or ("zhipu_api_key" in low and ("未" in text or "写入" in text))
+            or ("gemini_api_key" in low and ("未" in text or "写入" in text))
         ):
-            return "出图尚未接通。请管理员在主机写入 ZHIPU_API_KEY 后重试，不能编造图片。"
+            return (
+                "出图尚未接通。请管理员在主机写入 GEMINI_API_KEY"
+                "（或 PICO_IMAGE_GATEWAY_URL + PICO_IMAGE_GATEWAY_KEY）后重试，不能编造图片。"
+            )
         # image.provider / image.invalid / tool.write_failed with「没能出图」/ etc.
         return "这次没能出图。请稍后重试，不能编造图片。"
     if c in ("office.timeout", "artifact.not_ooxml", "artifact.not_binary", "artifact.not_found") or (
