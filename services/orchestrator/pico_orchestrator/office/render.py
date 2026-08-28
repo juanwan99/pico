@@ -376,14 +376,16 @@ def _apply_docx_theme(doc: object, theme: Theme | None) -> None:
 
 
 def _is_cover_slide(index: int, block: object, picture: bytes | None) -> bool:
-    """Title layout: inbound cover/title, or first slide that has a picture.
+    """Title layout for inbound cover/title, even with owner/date extra lines.
 
-    GPT sends type=cover with owner/date as extra bullets. Requiring ≤1
-    subtitle forced the default content layout (white + black bullets).
+    A first content slide that has a picture and several bullets stays in the
+    title-and-content well (#740). Do not treat every pictured first page as a
+    cover — that overlaps the body over the title.
     """
     if bool(getattr(block, "cover", False)):
         return True
-    return index == 0 and bool(picture)
+    bullets = getattr(block, "bullets", ()) or ()
+    return index == 0 and bool(picture) and len(bullets) <= 1
 
 
 def _paint_pptx_theme(slide: object, theme: Theme | None) -> None:
