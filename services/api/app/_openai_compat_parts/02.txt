@@ -1,0 +1,122 @@
+    from pico_orchestrator.provider import is_kimi_model
+
+    bare = _normalized_model(model or "")
+    if not bare or not is_kimi_model(bare):
+        return model
+    allowed = {_normalized_model(item) for item in settings.allowed_model_list}
+    if allowed and bare in allowed:
+        return model  # Kimi still explicitly allowed
+    # Prefer product DeepSeek default when key/provider says so.
+    prefer_deepseek = (
+        settings.deepseek_api_key.strip()
+        and settings.pico_model_provider.strip().lower() != "kimi"
+    )
+    if prefer_deepseek or (settings.deepseek_api_key.strip() and not settings.kimi_api_key.strip()):
+        target = (settings.deepseek_model or "deepseek-v4-flash").strip() or "deepseek-v4-flash"
+        if not allowed or _normalized_model(target) in allowed:
+            return target
+        if {"pico-fast", "pico-deep"}.intersection(allowed):
+            return "deepseek-v4-flash"
+    return model
+
+
+def _effective_max_tokens(requested: int | None, cap: int) -> int:
+    default = min(2048, cap)
+    return min(requested if requested and requested > 0 else default, cap)
+
+
+def _estimated_usage(prompt: str, completion: str) -> dict[str, int | bool]:
+    # Upstream streaming adapters do not expose provider usage yet. This is an
+    # explicit estimate rather than the previous misleading constant zero.
+    prompt_tokens = max(1, (len(prompt) + 3) // 4)
+    completion_tokens = max(1, (len(completion) + 3) // 4)
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+        "estimated": True,
+    }
+
+
+
+def _all_message_text(messages: list[ChatMessage]) -> str:
+    parts: list[str] = []
+    for message in messages or []:
+        parts.append(_content_text(message.content))
+    return "\n".join(parts)
+
+
+def _is_title_generation_request(prompt: str, messages: list[ChatMessage]) -> bool:
+    """Detect LibreChat *automatic* title prompts only (high precision).
+
+    Must never create durable Task/Run for shell auto-title traffic (stage #260).
+    Must NOT swallow real user tasks such as「请生成一个短标题」/「write a short title for …」.
+    Match multi-signal LibreChat scaffolds only — never a single short phrase.
+    """
+    blob = f"{_all_message_text(messages)}\n{prompt or ''}".lower()
+
+    # @librechat/agents createTitleRunnable default (language + title structured)
+    if (
+        "analyze this conversation and provide" in blob
+        and "detected language" in blob
+        and (
+            "concise title in the detected language" in blob
+            or ("5 words or less" in blob and "no punctuation" in blob)
+        )
+    ):
+        return True
+
+    # @librechat/agents createCompletionTitleRunnable default
+    if (
+        "provide a concise, 5-word-or-less title for the conversation" in blob
+        and "only return the title itself" in blob
+        and ("title case" in blob or "conversation:" in blob)
+    ):
+        return True
+
+    # assistants endpoint title.js scaffold
+    if (
+        "please generate a concise title (max 40 characters) for a conversation that starts with"
+        in blob
+    ):
+        return True
+
+    # Same assistants scaffold with User:/Assistant:/Title: layout (no single-phrase match)
+    return (
+        "concise title" in blob
+        and "conversation that starts with" in blob
+        and "user:" in blob
+        and "title:" in blob
+    )
+
+
+def _synthetic_title_from_messages(messages: list[ChatMessage], prompt: str) -> str:
+    """Local title only — no model call, no ledger, no tools."""
+    import re
+
+    blob = _all_message_text(messages) or (prompt or "")
+    # Prefer embedded user turn if title prompt quoted it.
+    for pattern in (
+        r"(?im)^\s*user\s*:\s*(.+)$",
+        r"(?im)conversation:\s*(.+)$",
+        r"(?is)\{convo\}\s*(.+)$",
+    ):
+        match = re.search(pattern, blob)
+        if match:
+            blob = match.group(1).strip()
+            break
+    # Drop instruction scaffolding lines.
+    cleaned_lines: list[str] = []
+    for line in blob.splitlines():
+        low = line.strip().lower()
+        if not line.strip():
+            continue
+        if any(
+            skip in low
+            for skip in (
+                "analyze this conversation",
+                "provide a concise",
+                "please generate",
+                "only return the title",
+                "detected language",
+                "title case",
