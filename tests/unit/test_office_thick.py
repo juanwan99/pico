@@ -94,6 +94,84 @@ def test_pipe_table_rows_needs_two_columns() -> None:
     assert pipe_table_rows(["a|b"]) is None
 
 
+def test_empty_blocks_with_title_become_one_slide() -> None:
+    """Live F4: spec.blocks empty must not fail the whole PPT when title exists."""
+    spec = parse_spec({"kind": "pptx", "title": "办公尺752.pptx", "blocks": []})
+    assert len(spec.blocks) == 1
+    assert spec.blocks[0].type == "slide"
+    assert "办公尺752" in spec.blocks[0].title
+    raw = render_spec(spec)
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) == 1
+
+
+def test_empty_blocks_without_title_or_theme_still_fail() -> None:
+    with pytest.raises(ValueError, match="不能为空"):
+        parse_spec({"kind": "pptx"})
+
+
+@pytest.mark.asyncio
+async def test_generate_pptx_sibling_blocks_not_dropped_by_stub_spec() -> None:
+    """Live F4 r1/r2: spec={images:[]} + top-level blocks was 不能为空."""
+    gw = build_default_gateway(MemoryArtifactStore())
+    out = await gw.invoke(
+        P(),
+        "generate_pptx_document",
+        {
+            "title": "办公尺752-f3m-r2.pptx",
+            "spec": {"images": []},
+            "blocks": [
+                {
+                    "type": "cover",
+                    "title": "办公简报：本周经营风险与下周动作",
+                    "bullets": ["责任人：张三", "日期：2026-08-28"],
+                },
+                {
+                    "type": "content",
+                    "title": "本周经营风险总览",
+                    "bullets": ["市场端询盘下降", "交付延迟", "回款压力"],
+                },
+                {
+                    "type": "content",
+                    "title": "下周动作",
+                    "bullets": ["催收回款", "锁定料源", "调整排期"],
+                },
+            ],
+        },
+    )
+    assert out.get("ok") is not False
+    assert out.get("format") == "pptx"
+    assert int(out.get("observation", {}).get("outline", {}).get("slides") or 0) == 3
+
+
+@pytest.mark.asyncio
+async def test_generate_pptx_kpi_stub_spec_keeps_sibling_blocks() -> None:
+    """Live F4 r1: spec={kpi_table_title} + sibling blocks."""
+    gw = build_default_gateway(MemoryArtifactStore())
+    out = await gw.invoke(
+        P(),
+        "generate_pptx_document",
+        {
+            "title": "办公尺752-f3m-r1.pptx",
+            "spec": {"kpi_table_title": "核心数字"},
+            "blocks": [
+                {
+                    "type": "cover",
+                    "title": "本周经营风险与下周动作",
+                    "bullets": ["责任人：张三"],
+                },
+                {
+                    "type": "content",
+                    "title": "风险总览",
+                    "bullets": ["收入端延期", "毛利承压"],
+                },
+            ],
+        },
+    )
+    assert out.get("format") == "pptx"
+    assert int(out.get("observation", {}).get("outline", {}).get("slides") or 0) == 2
+
+
 def test_cover_content_aliases_are_slides() -> None:
     """Live F: Pi sent type=cover/content and the whole deck died."""
     spec = parse_spec(

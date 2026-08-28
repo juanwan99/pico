@@ -12,6 +12,7 @@ import base64
 import ipaddress
 import logging
 import os
+import time
 from io import BytesIO
 from typing import Any
 from urllib.parse import urlparse
@@ -28,11 +29,16 @@ DEFAULT_MODEL = "glm-image"
 DEFAULT_SIZE = "1280x1280"
 DEFAULT_QUALITY = "standard"
 IMAGE_TIMEOUT_S = 90.0
-# Live F3 (#752): glm-image HTTP 429 survived 1 immediate retry. Back off
-# before ok=false. Total sleep 27s so one real generation still fits in 90s.
+# Live F4 (#752): Pi fired generate_image 2–3 times; each exhausted 6 POSTs
+# (27s) on 429. One in-process flight + longer backoff (60s sleep, still
+# inside 90s). Exhausted still image.provider — never invent pixels.
 _429_MAX_TRIES = 6
-_429_BACKOFF_S = (1.0, 2.0, 4.0, 8.0, 12.0)
-_429_RETRY_AFTER_CAP_S = 12.0
+_429_BACKOFF_S = (2.0, 4.0, 8.0, 16.0, 30.0)
+_429_RETRY_AFTER_CAP_S = 30.0
+_flight_lock = asyncio.Lock()
+_glm_lock = asyncio.Lock()
+_inflight: dict[str, asyncio.Future[tuple[bytes, str]]] = {}
+_next_post_mono = 0.0
 _MAX_PROMPT = 2000
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -157,6 +163,33 @@ def _429_delay_s(retry_index: int, retry_after: str | None) -> float:
     return max(delay, 1.0)
 
 
+def reset_image_generate_runtime() -> None:
+    """Tests only: drop in-flight joiners and the process 429 gate."""
+    global _next_post_mono, _flight_lock, _glm_lock
+    _next_post_mono = 0.0
+    _inflight.clear()
+    _flight_lock = asyncio.Lock()
+    _glm_lock = asyncio.Lock()
+
+
+def _prompt_key(text: str) -> str:
+    return " ".join((text or "").split())
+
+
+async def _respect_rate_gate() -> None:
+    delay = _next_post_mono - time.monotonic()
+    if delay <= 0:
+        return
+    logger.warning("zhipu images rate gate wait %.1fs", delay)
+    await asyncio.sleep(delay)
+
+
+def _arm_rate_gate(delay: float) -> None:
+    global _next_post_mono
+    wait = max(float(delay), 1.0)
+    _next_post_mono = max(_next_post_mono, time.monotonic() + wait)
+
+
 def _http_provider_error(response: Any) -> ToolError:
     err = ToolError("image.provider", REJECT_MESSAGE)
     err.http_status = _http_status(response)
@@ -215,6 +248,37 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
     api_key = zhipu_api_key()
     if not api_key:
         raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
+    key = _prompt_key(text)
+    async with _flight_lock:
+        existing = _inflight.get(key)
+        if existing is not None:
+            fut: asyncio.Future[tuple[bytes, str]] = existing
+            created = False
+        else:
+            fut = asyncio.get_running_loop().create_future()
+            _inflight[key] = fut
+            created = True
+    if not created:
+        return await asyncio.shield(fut)
+    try:
+        async with _glm_lock:
+            result = await _generate_image_campaign(text, api_key)
+        if not fut.done():
+            fut.set_result(result)
+        return result
+    except BaseException as exc:
+        if not fut.done():
+            fut.set_exception(exc)
+            fut.exception()
+        raise
+    finally:
+        async with _flight_lock:
+            if _inflight.get(key) is fut:
+                _inflight.pop(key, None)
+
+
+async def _generate_image_campaign(text: str, api_key: str) -> tuple[bytes, str]:
+    await _respect_rate_gate()
     rate_tries = 0
     provider_retried = False
     while True:
@@ -226,6 +290,7 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
             status = getattr(exc, "http_status", None)
             if status == 429:
                 if rate_tries >= _429_MAX_TRIES - 1:
+                    _arm_rate_gate(_429_RETRY_AFTER_CAP_S)
                     raise
                 delay = _429_delay_s(rate_tries, getattr(exc, "retry_after", None))
                 logger.warning(
