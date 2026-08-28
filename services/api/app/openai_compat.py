@@ -37,3 +37,54 @@ from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
 
 router = APIRouter(tags=["openai-compat"])
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str | list[Any] | None = ""
+    image_urls: list[Any] | None = None
+
+
+class ChatCompletionRequest(BaseModel):
+    model: str | None = None
+    messages: list[ChatMessage]
+    stream: bool = False
+    temperature: float | None = None
+    max_tokens: int | None = None
+    user: str | None = None
+    metadata: dict[str, Any] | None = None
+    web_search: bool = False
+    tools: list[Any] | None = None
+    allowed_tools: list[str] | None = None
+
+
+EDU_SIDEBAR_MARK = "附属，不是用户要求"
+
+
+def _content_text(content: str | list[Any] | None) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    parts: list[str] = []
+    for p in content:
+        if isinstance(p, dict) and p.get("type") == "text":
+            parts.append(str(p.get("text") or ""))
+        elif isinstance(p, str):
+            parts.append(p)
+    return "\n".join(parts)
+
+
+def _client_system_from_messages(messages: list[ChatMessage] | None) -> str:
+    for msg in messages or []:
+        if getattr(msg, "role", None) == "system":
+            return _content_text(getattr(msg, "content", "")).strip()
+    return ""
+
+
+def _is_edu_sidebar_system(text: str | None) -> bool:
+    return EDU_SIDEBAR_MARK in str(text or "")
+
+
+def _sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
+    return bool(json_only or edu_sidebar)
