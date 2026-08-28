@@ -198,7 +198,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_pptx_document",
-    "Create a real .pptx Artifact. Read observation.outline.images after. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. ok is not finished.",
+    "Create a real .pptx Artifact via spec/blocks. Sibling of sandbox_pptx_lib (isolated python-pptx) — pick from the teacher's ask, not a scene word. Read observation.outline.images after. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
@@ -329,7 +329,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_diagram",
-    "Draw one structure diagram (flowchart, sequence, org) from mermaid source into a PNG Artifact. Use for structure diagrams, not photos. kind=d2 is not wired. Never invent a diagram on failure. To place it in Word/PPT, pass the artifact id as image_artifact_id.",
+    "Draw one structure diagram (flowchart, sequence, org) from mermaid source into a PNG Artifact. Sibling of generate_image — they do not veto each other. kind=d2 is not wired. Never invent a diagram on failure. To place it in Word/PPT, pass the artifact id as image_artifact_id.",
     Type.Object(
       {
         source: Type.String(),
@@ -394,7 +394,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_pptx_lib",
-    "Ceiling isolated python-pptx. Prefer generate_pptx_document/spec for ordinary decks. No import; use Presentation/Inches/save_deck/IMAGE_PATHS. Must save_deck(prs). Empty shells fail. No host bash.",
+    "Isolated python-pptx (not host bash, not a second Office OS). Sibling of generate_pptx_document — not the only PPT path. No import; use Presentation/Inches/save_deck/IMAGE_PATHS. Must save_deck(prs). Empty shells fail.",
     Type.Object(
       {
         source: Type.String(),

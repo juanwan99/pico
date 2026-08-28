@@ -7,6 +7,7 @@ allowed-tools:
   - generate_html_document
   - generate_docx_document
   - generate_pptx_document
+  - sandbox_pptx_lib
 disable-model-invocation: true
 user-invocable: true
 always-apply: false

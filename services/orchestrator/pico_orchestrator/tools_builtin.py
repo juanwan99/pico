@@ -2035,7 +2035,9 @@ def build_default_gateway(
         ToolSpec(
             name="generate_pptx_document",
             description=(
-                "Create a real OOXML .pptx. Read observation.outline.images. "
+                "Create a real OOXML .pptx via spec/blocks. Sibling of "
+                "sandbox_pptx_lib (isolated python-pptx) — pick from the "
+                "teacher's ask, not a scene word. Read observation.outline.images. "
                 "To embed a picture, pass generate_image/generate_diagram "
                 "artifact id as image_artifact_id on the slide in spec/blocks. "
                 "[image:…] in body does not embed. ok is not finished. "
@@ -2049,7 +2051,8 @@ def build_default_gateway(
         ToolSpec(
             name="sandbox_pptx_lib",
             description=(
-                "Ceiling: isolated python-pptx (not host bash, not a second Office OS). "
+                "Isolated python-pptx (not host bash, not a second Office OS). "
+                "Sibling of generate_pptx_document — not the only PPT path. "
                 "Result includes an observation of what landed. ok is not finished. "
                 "Source cannot import; Presentation/Inches/save_deck/IMAGE_PATHS are injected. "
                 "Must call save_deck(prs). Empty shells fail. "
@@ -2189,12 +2192,12 @@ def build_default_gateway(
             name="generate_diagram",
             description=(
                 "Draw one structure diagram (flowchart, sequence, org chart) from mermaid "
-                "source into a downloadable PNG Artifact. Use this for structure diagrams, "
-                "not photos — photos still use generate_image. kind defaults to mermaid; "
-                "d2 is not wired and fails honestly. On parse/sandbox failure: honest "
-                "Chinese failure; never invent a diagram. To place it in Word/PPT, pass "
-                "the returned artifact id as image_artifact_id on spec. "
-                "Args: source, kind?, title?"
+                "source into a downloadable PNG Artifact. This tool draws structure; "
+                "it is not a photo generator. Sibling of generate_image — they do not "
+                "veto each other. kind defaults to mermaid; d2 is not wired and fails "
+                "honestly. On parse/sandbox failure: honest Chinese failure; never invent "
+                "a diagram. To place it in Word/PPT, pass the returned artifact id as "
+                "image_artifact_id on spec. Args: source, kind?, title?"
             ),
             handler=generate_diagram,
             school_scoped=False,

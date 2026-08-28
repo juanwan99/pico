@@ -15,8 +15,11 @@ from collections.abc import Iterable
 
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
-# Always-on: teacher-said verbs. Target shrink toward ADR ≤15; do not add a scheduler.
-# Day-use keeps gen/edit/image/kb/web. Browse/publish/sandbox heavy verbs are skill-extended.
+# Always-on: teacher-said verbs. Do not add a scheduler / tool_search.
+# Office ceiling (sandbox_pptx_lib) stays visible — hiding it in EXTENDED is a picker.
+# Programming sandbox stays extended until T-CODE-SANDBOX (S3).
+# Hung skills may narrow, but must not expose generate_pptx_document without
+# its sibling sandbox_pptx_lib (see ppt_siblings_honest).
 CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "workspace_list_files",
     "workspace_read_file",
@@ -24,6 +27,7 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "generate_html_document",
     "generate_docx_document",
     "generate_pptx_document",
+    "sandbox_pptx_lib",
     "generate_xlsx_document",
     "edit_docx_document",
     "edit_pptx_document",
@@ -45,7 +49,6 @@ EXTENDED_TOOLS: tuple[str, ...] = (
     "render_document",
     "verify_document",
     "verify_html_document",
-    "sandbox_pptx_lib",
     "sandbox_preview_inspect",
     "sandbox_workspace_exec",
     "sandbox_browser_screenshot",
@@ -84,6 +87,14 @@ def _intersect_gateway(names: Iterable[str]) -> list[str]:
             seen.add(name)
             out.append(name)
     return out
+
+
+def ppt_siblings_honest(names: Iterable[str]) -> bool:
+    """Spec PPT without isolated python-pptx is a hidden picker."""
+    visible = set(names)
+    if "generate_pptx_document" not in visible:
+        return True
+    return "sandbox_pptx_lib" in visible
 
 
 def resolve_visible_tools(allowed_tools: list[str] | tuple[str, ...] | None) -> list[str]:
