@@ -118,7 +118,7 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 **P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
 **Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
 **24h Standalone AI:** [`docs/STANDALONE-AI-24H.md`](docs/STANDALONE-AI-24H.md) (historical baseline)  
-**Current dispatch:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) · 在飞 **无**（#752 业主 PASS @ `0c7943ac…`）。`DAY-TASK-*` / #310 / #627 / 已关 #646 **不当现况**。   
+**Current dispatch:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) · 在飞 **无**（#740 业主 PASS @ `2e668686…` · #752 PASS @ `0c7943ac…`）。`DAY-TASK-*` / #310 / #627 / 已关 #646 **不当现况**。   
 **Kimi legacy:** [`docs/KIMI-AGENT-GAP.md`](docs/KIMI-AGENT-GAP.md) 仅考古/回滚；**产品默认 = Pi**  
 **KA-4:** soft historical [`docs/KA4-SOFT.md`](docs/KA4-SOFT.md) **superseded** · ops: [`docs/OPS-RUNBOOK-STABILIZE.md`](docs/OPS-RUNBOOK-STABILIZE.md)  
 **Skill ADR:** [`docs/ADR-SKILL-CATALOG.md`](docs/ADR-SKILL-CATALOG.md).  
