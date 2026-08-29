@@ -128,6 +128,8 @@ def test_prepare_agent_home_deep_lane_compaction_fires_on_long_office(tmp_path: 
 
 def test_lane_models_flash_vs_reasoner(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-deepseek-key-32chars-long")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
     from pico_orchestrator.provider import ProviderConfig
 

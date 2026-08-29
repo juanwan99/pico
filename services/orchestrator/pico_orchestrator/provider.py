@@ -6,7 +6,10 @@ import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
+import httpx
 from openai import AsyncOpenAI
+
+from pico_orchestrator.sse_keepalive import is_proxy_first_byte_timeout
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
 DEFAULT_DEEPSEEK_REASONER = "deepseek-reasoner"
@@ -348,6 +351,131 @@ def _is_model_missing_error(exc: Exception) -> bool:
     return "404" in msg or ("model" in low and "not" in low) or "invalid_request" in low
 
 
+def _llm_client(provider: ProviderConfig) -> AsyncOpenAI:
+    """Official OpenAI SDK. Long read timeout: GPT thinking can exceed 10 min."""
+    return AsyncOpenAI(
+        api_key=provider.api_key,
+        base_url=provider.base_url,
+        timeout=httpx.Timeout(connect=30.0, read=3600.0, write=60.0, pool=30.0),
+        max_retries=0,
+    )
+
+
+def _responses_input_from_messages(
+    messages: list[dict],
+) -> tuple[str | None, list[dict]]:
+    instructions: list[str] = []
+    items: list[dict] = []
+    for raw in messages:
+        role = str(raw.get("role") or "user")
+        content = raw.get("content")
+        if role == "system":
+            instructions.append(str(content or ""))
+            continue
+        items.append({"role": role, "content": content if content is not None else ""})
+    if not items:
+        items = [{"role": "user", "content": ""}]
+    joined = "\n".join(part for part in instructions if str(part).strip()) or None
+    return joined, items
+
+
+def _responses_text_delta(event: object) -> str:
+    et = getattr(event, "type", None)
+    if et is None and isinstance(event, dict):
+        et = event.get("type")
+    if et != "response.output_text.delta":
+        return ""
+    delta = getattr(event, "delta", None)
+    if delta is None and isinstance(event, dict):
+        delta = event.get("delta")
+    return str(delta or "")
+
+
+def _text_from_output_items(output: object) -> str:
+    if not isinstance(output, list):
+        return ""
+    parts: list[str] = []
+    for item in output:
+        content = (
+            item.get("content") if isinstance(item, dict) else getattr(item, "content", None)
+        )
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if isinstance(part, dict) and part.get("text"):
+                parts.append(str(part["text"]))
+                continue
+            text = getattr(part, "text", None)
+            if text:
+                parts.append(str(text))
+    return "".join(parts)
+
+
+def _responses_completed_text(event: object) -> str:
+    et = getattr(event, "type", None)
+    if et is None and isinstance(event, dict):
+        et = event.get("type")
+    if et != "response.completed":
+        return ""
+    body = getattr(event, "response", None)
+    if body is None and isinstance(event, dict):
+        body = event.get("response")
+    if isinstance(body, dict):
+        return _text_from_output_items(body.get("output"))
+    return _text_from_output_items(getattr(body, "output", None) if body is not None else None)
+
+
+async def _iter_openai_responses(
+    provider: ProviderConfig,
+    mid: str,
+    messages: list[dict],
+    *,
+    max_tokens: int,
+    thinking: bool | None,
+) -> AsyncIterator[str]:
+    """Official Responses stream. Never chat.completions against ``/openai``."""
+    client = _llm_client(provider)
+    instructions, items = _responses_input_from_messages(messages)
+    kwargs: dict = {
+        "model": mid,
+        "input": items,
+        "stream": True,
+        "store": False,
+        "max_output_tokens": int(max_tokens),
+        "reasoning": {"effort": "low" if thinking is False else "medium"},
+    }
+    if instructions:
+        kwargs["instructions"] = instructions
+    last_exc: Exception | None = None
+    yielded = False
+    for attempt in range(2):
+        try:
+            stream = await client.responses.create(**kwargs)
+            async for event in stream:
+                piece = _responses_text_delta(event)
+                if piece:
+                    yielded = True
+                    yield piece
+                    continue
+                if not yielded:
+                    full = _responses_completed_text(event)
+                    if full:
+                        yielded = True
+                        yield full
+            return
+        except Exception as exc:
+            last_exc = exc
+            if (
+                attempt == 0
+                and not yielded
+                and is_proxy_first_byte_timeout(exc)
+            ):
+                continue
+            raise
+    if last_exc is not None:
+        raise last_exc
+
+
 async def stream_chat(
     prompt: str,
     *,
@@ -385,55 +513,71 @@ async def stream_chat(
     model_id = resolve_model_id(model, cfg)
     extra_body = thinking_extra_body(model, thinking=thinking)
 
-    async def _open_stream(provider: ProviderConfig, mid: str):
-        client = AsyncOpenAI(api_key=provider.api_key, base_url=provider.base_url)
-        return await client.chat.completions.create(
+    async def _iter_chat_completions(
+        provider: ProviderConfig, mid: str
+    ) -> AsyncIterator[str]:
+        client = _llm_client(provider)
+        stream = await client.chat.completions.create(
             model=mid,
             messages=messages,
             stream=True,
             max_tokens=max_tokens,
             extra_body=extra_body,
         )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content if chunk.choices else None
+            if delta:
+                yield delta
 
-    try:
-        stream = await _open_stream(cfg, model_id)
-    except Exception as e:
-        # Broken Kimi key / unavailable kimi model → remount product DeepSeek.
-        fallback = _deepseek_config()
-        can_fallback = (
-            cfg.name == "kimi"
-            and fallback is not None
-            and (_is_auth_error(e) or _is_model_missing_error(e))
-        )
-        if can_fallback:
-            try:
-                stream = await _open_stream(fallback, fallback.model)
-            except Exception as fallback_exc:  # noqa: BLE001 — surface as user RuntimeError
-                e = fallback_exc
-            else:
-                cfg = fallback
-                model_id = fallback.model
-                async for chunk in stream:
-                    delta = chunk.choices[0].delta.content if chunk.choices else None
-                    if delta:
-                        yield delta
-                return
+    async def _iter_provider(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
+        if uses_openai_responses_brain(provider):
+            async for piece in _iter_openai_responses(
+                provider,
+                mid,
+                messages,
+                max_tokens=max_tokens,
+                thinking=thinking,
+            ):
+                yield piece
+            return
+        async for piece in _iter_chat_completions(provider, mid):
+            yield piece
 
-        msg = str(e)
-        low = msg.lower()
-        if _is_auth_error(e):
-            raise RuntimeError(
-                f"{cfg.name} 密钥无效或未授权，请检查服务端 API Key。"
-            ) from e
-        if _is_model_missing_error(e):
-            raise RuntimeError(
-                f"模型不可用：{model_id}。请检查 DEEPSEEK_MODEL / KIMI_MODEL。"
-            ) from e
-        if "429" in msg or "rate" in low:
-            raise RuntimeError("模型调用过于频繁，请稍后再试。") from e
-        raise RuntimeError(f"模型调用失败：{msg}") from e
+    async def _pump(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
+        try:
+            async for piece in _iter_provider(provider, mid):
+                yield piece
+        except Exception as e:
+            fallback = _deepseek_config()
+            can_fallback = (
+                provider.name == "kimi"
+                and fallback is not None
+                and (_is_auth_error(e) or _is_model_missing_error(e))
+            )
+            if can_fallback:
+                try:
+                    async for piece in _iter_provider(fallback, fallback.model):
+                        yield piece
+                    return
+                except Exception as fallback_exc:  # noqa: BLE001 — surface as user RuntimeError
+                    e = fallback_exc
+            msg = str(e)
+            low = msg.lower()
+            if is_proxy_first_byte_timeout(e):
+                raise RuntimeError(
+                    "模型中转等首包超时（HTTP 524）。长思考必须保持流式；请再试一次。"
+                ) from e
+            if _is_auth_error(e):
+                raise RuntimeError(
+                    f"{provider.name} 密钥无效或未授权，请检查服务端 API Key。"
+                ) from e
+            if _is_model_missing_error(e):
+                raise RuntimeError(
+                    f"模型不可用：{mid}。请检查 DEEPSEEK_MODEL / KIMI_MODEL。"
+                ) from e
+            if "429" in msg or "rate" in low:
+                raise RuntimeError("模型调用过于频繁，请稍后再试。") from e
+            raise RuntimeError(f"模型调用失败：{msg}") from e
 
-    async for chunk in stream:
-        delta = chunk.choices[0].delta.content if chunk.choices else None
-        if delta:
-            yield delta
+    async for piece in _pump(cfg, model_id):
+        yield piece

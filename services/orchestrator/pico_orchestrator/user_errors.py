@@ -17,6 +17,14 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "服务繁忙，请稍后重试。"
     if code == "token_cap" or "token cap" in low:
         return "本次回答超出长度上限。可点「再跑一次」，或缩短问题后重试。"
+    if (
+        "524" in low
+        or "aiproxy service is temporarily unavailable" in low
+        or "等首包" in text
+    ):
+        return (
+            "模型中转等首包超时。长思考必须走流式；请再试一次，不要关流。"
+        )
     if c == "timeout" or "timeout" in low or "timed out" in low:
         return (
             "处理超时。可点「再跑一次」继续生成，"
