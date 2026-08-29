@@ -555,48 +555,6 @@ export async function listEduFields() {
   );
 }
 
-export async function uploadMyFile(file: File, folderId = '') {
-  const form = new FormData();
-  form.append('file', file, file.name);
-  if (folderId) {
-    form.append('folder_id', folderId);
-  }
-  const res = await fetch('/api/pico/v1/files', {
-    method: 'POST',
-    credentials: 'include',
-    headers: authHeaders(),
-    body: form,
-  });
-  const text = await res.text().catch(() => '');
-  let parsed: {
-    id?: string;
-    status?: string;
-    error?: string;
-    message?: string;
-    user_message?: string;
-    detail?: { message?: string } | string;
-  } = {};
-  try {
-    parsed = text ? (JSON.parse(text) as typeof parsed) : {};
-  } catch {
-    parsed = {};
-  }
-  const detail =
-    typeof parsed.detail === 'string'
-      ? parsed.detail
-      : parsed.detail && typeof parsed.detail === 'object'
-        ? parsed.detail.message
-        : '';
-  const msg = parsed.user_message || parsed.message || parsed.error || detail || text;
-  if (!res.ok) {
-    throw new Error(String(msg).slice(0, 200) || `pico ${res.status}`);
-  }
-  if (!parsed.id) {
-    throw new Error(String(msg).slice(0, 200) || '文件没写进账本');
-  }
-  return parsed as { id: string; status?: string; error?: string; filename?: string };
-}
-
 export async function listMyPicoArtifacts(folderId?: string | null) {
   const params = new URLSearchParams({ mine: 'true' });
   if (folderId !== undefined && folderId !== null) {

@@ -10,58 +10,26 @@ describe('resolveUploadRoute (Pico paste/drop)', () => {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'report.xlsx',
   );
-  const threeImageDestinations = [
-    undefined,
-    EToolResources.execute_code,
-    EToolResources.context,
-  ];
+  const messageAttach = { kind: 'route' as const, toolResource: undefined };
 
   it('rejects empty files or empty options', () => {
     expect(resolveUploadRoute([], [undefined])).toEqual({ kind: 'reject' });
     expect(resolveUploadRoute([png], [])).toEqual({ kind: 'reject' });
   });
 
-  it('sends image-only pastes to the provider without asking', () => {
-    expect(resolveUploadRoute([png], threeImageDestinations)).toEqual({
-      kind: 'route',
-      toolResource: undefined,
-    });
+  it('routes images, PDFs, and mixed sets to the same message attach', () => {
     expect(
-      resolveUploadRoute([png, file('image/jpeg', 'two.jpg')], threeImageDestinations),
-    ).toEqual({ kind: 'route', toolResource: undefined });
-  });
-
-  it('routes a PDF to context instead of asking', () => {
+      resolveUploadRoute([png], [undefined, EToolResources.execute_code, EToolResources.context]),
+    ).toEqual(messageAttach);
     expect(
       resolveUploadRoute(
         [pdf],
-        [
-          undefined,
-          EToolResources.file_search,
-          EToolResources.execute_code,
-          EToolResources.context,
-        ],
+        [undefined, EToolResources.file_search, EToolResources.execute_code, EToolResources.context],
       ),
-    ).toEqual({ kind: 'route', toolResource: EToolResources.context });
-  });
-
-  it('routes mixed image + document to context instead of asking', () => {
-    expect(resolveUploadRoute([png, pdf], threeImageDestinations)).toEqual({
-      kind: 'route',
-      toolResource: EToolResources.context,
-    });
-  });
-
-  it('auto-routes a single leftover destination', () => {
-    expect(resolveUploadRoute([xlsx], [EToolResources.execute_code])).toEqual({
-      kind: 'route',
-      toolResource: EToolResources.execute_code,
-    });
-  });
-
-  it('routes images to context when the provider cannot take them', () => {
+    ).toEqual(messageAttach);
     expect(
-      resolveUploadRoute([png], [EToolResources.execute_code, EToolResources.context]),
-    ).toEqual({ kind: 'route', toolResource: EToolResources.context });
+      resolveUploadRoute([png, pdf], [undefined, EToolResources.context]),
+    ).toEqual(messageAttach);
+    expect(resolveUploadRoute([xlsx], [EToolResources.execute_code])).toEqual(messageAttach);
   });
 });

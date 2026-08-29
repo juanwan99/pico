@@ -300,3 +300,20 @@ def test_xlsx_cabinet_lists_one_row(client: TestClient) -> None:
     rows = [row for row in listed.json()["artifacts"] if row["title"] == "课时.xlsx"]
     assert len(rows) == 1
     assert rows[0]["kind"] == "edu_office"
+
+
+def test_system_tells_pi_to_read_paperclip_documents() -> None:
+    system = (
+        ROOT
+        / "services"
+        / "orchestrator"
+        / "pico_orchestrator"
+        / "agent_assets"
+        / "system.md"
+    ).read_text(encoding="utf-8")
+    assert "Documents attached this turn" in system
+    assert "workspace_read_file" in system
+    bridge = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "this-turn chat paperclip documents" in bridge

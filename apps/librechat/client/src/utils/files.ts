@@ -435,15 +435,9 @@ export type UploadRouteDecision =
   | { kind: 'route'; toolResource: EToolResources | undefined }
   | { kind: 'ask' };
 
-const isImageFile = (file: File): boolean => {
-  const type = inferMimeType(file.name, file.type);
-  return typeof type === 'string' && type.startsWith('image/');
-};
-
 /**
- * Decide a single destination. Image-only pastes go to the chat provider.
- * Documents go to context (Pico ledger ingest) when that option exists.
- * Pico does not ask LibreChat's destination menu (usage = Grok).
+ * Pico chat: one destination — this-turn message attach (AI use).
+ * Images and documents share the paperclip; no LibreChat cabinet menu.
  */
 export const resolveUploadRoute = (
   fileList: File[],
@@ -452,16 +446,7 @@ export const resolveUploadRoute = (
   if (fileList.length === 0 || options.length === 0) {
     return { kind: 'reject' };
   }
-  if (fileList.every(isImageFile) && options.includes(undefined)) {
-    return { kind: 'route', toolResource: undefined };
-  }
-  if (options.includes(EToolResources.context)) {
-    return { kind: 'route', toolResource: EToolResources.context };
-  }
-  if (options.includes(undefined)) {
-    return { kind: 'route', toolResource: undefined };
-  }
-  return { kind: 'route', toolResource: options[0] };
+  return { kind: 'route', toolResource: undefined };
 };
 
 export function sortPagesByRelevance(

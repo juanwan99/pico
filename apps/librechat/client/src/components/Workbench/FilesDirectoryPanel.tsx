@@ -1,7 +1,7 @@
 /**
  * 「我的文件」侧栏单树：展开层内首位「新建」、空夹可删。无中间大页、无「当前文件夹」二遍列表。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   createMyFolder,
   deleteMyFolder,
@@ -11,7 +11,6 @@ import {
   listMyPicoArtifacts,
   renameMyFolder,
   transferMyArtifact,
-  uploadMyFile,
   type EduSchoolField,
   type PicoArtifact,
   type PicoPersonalFolder,
@@ -31,9 +30,6 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const renameInputRef = useRef<HTMLInputElement | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const [uploadFolderId, setUploadFolderId] = useState('');
-  const [uploading, setUploading] = useState(false);
   const [transferOf, setTransferOf] = useState<PicoArtifact | null>(null);
   const [transferField, setTransferField] = useState('');
   const [transferMode, setTransferMode] = useState<'copy' | 'move'>('copy');
@@ -152,39 +148,6 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
     }
   };
 
-  const startUpload = (folderId: string) => {
-    setUploadFolderId(folderId);
-    setError(null);
-    setMessage(null);
-    const input = uploadInputRef.current;
-    if (!input) return;
-    input.value = '';
-    input.click();
-  };
-
-  const onUploadFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    setUploading(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const landed = await uploadMyFile(file, uploadFolderId);
-      if (landed.status && landed.status !== 'ok') {
-        setMessage(landed.error || '文件已存，正文没抽出');
-      }
-      if (uploadFolderId) {
-        setExpanded((prev) => ({ ...prev, root: true, [uploadFolderId]: true }));
-      }
-      await refresh();
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : '文件没传上');
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const isFolderEmpty = (folderId: string) => {
     if (childrenOf(folders, folderId).length > 0) return false;
     const files = filesByFolder.get(folderId) || [];
@@ -267,15 +230,6 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
       >
         <PicoIcon name="plus" size="sm" className="shrink-0 text-[color:var(--pico-ink-2)]" />
         <span>新建文件夹</span>
-      </button>
-      <button
-        type="button"
-        className="pico-type-body shrink-0 text-[color:var(--pico-ink-2)] disabled:opacity-40"
-        disabled={uploading}
-        onClick={() => startUpload(parentId)}
-        data-testid={parentId ? `my-files-upload-${parentId}` : 'my-files-upload'}
-      >
-        {uploading && uploadFolderId === parentId ? '上传中' : '上传'}
       </button>
     </div>
   );
@@ -413,14 +367,6 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
       className={cn('flex min-h-0 flex-1 flex-col px-2.5 py-2', className)}
       data-testid="files-directory"
     >
-      <input
-        ref={uploadInputRef}
-        type="file"
-        className="hidden"
-        accept=".pdf,.docx,.pptx,.xlsx,.md,.txt,.csv,.tsv,.json,.html,.htm,.png,.jpg,.jpeg,.gif,.webp"
-        onChange={(event) => void onUploadFile(event)}
-        data-testid="my-files-upload-input"
-      />
       {error ? (
         <p className="pico-type-body text-[#b42318]" role="alert">
           {error}

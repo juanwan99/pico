@@ -245,6 +245,7 @@ describe('useFileHandling', () => {
       const formData: FormData = mockMutate.mock.calls[0][0];
       expect(formData.get('endpoint')).toBe(EModelEndpoint.agents);
       expect(formData.get('endpointType')).toBe(EModelEndpoint.agents);
+      expect(formData.get('message_file')).toBe('true');
       expect(formData.get('conversationId')).toBeNull();
     });
 
@@ -272,7 +273,7 @@ describe('useFileHandling', () => {
       expect(mockMutate).toHaveBeenCalledTimes(1);
       const formData: FormData = mockMutate.mock.calls[0][0];
       expect(formData.get('endpoint')).toBe(EModelEndpoint.agents);
-      expect(formData.get('message_file')).toBeNull();
+      expect(formData.get('message_file')).toBe('true');
       expect(formData.get('version')).toBeNull();
       expect(formData.get('model')).toBeNull();
       expect(formData.get('assistant_id')).toBeNull();
