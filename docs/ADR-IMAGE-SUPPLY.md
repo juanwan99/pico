@@ -87,7 +87,7 @@ Google Gemini generateContent
 
 **Pro 还干什么：** 你自己在 Gemini 网页 / AI Studio 里画、试模型。那条路的额度不会流进 pico.aivia.asia。
 
-**API 侧额度：** 没开 Cloud Billing = Gemini API 免费档。Pico 现网模型 `gemini-3.1-flash-image` 官方定价 **Free Tier: Not available**（[pricing](https://ai.google.dev/gemini-api/docs/pricing)）——没开 Cloud Billing 时这一路常常是 **0 张/天**，不是网页 Pro 的一天几百张。课堂量大必须给**每个 Cloud 项目**开 API 付费。额度按 **项目** 计，不按 API key 把数（一个项目里十把 key 仍是一份桶）。三号要三份额度 = 三个账号、三个项目。具体 RPM/RPD 只认该项目 AI Studio → Rate limits，官方不保证一个全球固定数字。不是再买第四份网页 Pro，也不是 cookie。
+**API 侧额度：** 没开 Cloud Billing = Gemini API 免费档。Pico 现网模型 `gemini-3.1-flash-image` 官方定价 **Free Tier: Not available**（[pricing](https://ai.google.dev/gemini-api/docs/pricing)）——没开 Cloud Billing 时这一路常常是 **0 张/天**，不是网页 Pro 的一天几百张。课堂要稳定出图：**每个号自己的 Cloud 项目开 Billing**，并在 AI Studio Spend 页设 **Monthly spend cap**（硬顶，到了暂停；约 10 分钟延迟可能略超）。不要只设「预算邮件」——那不会停 API。[Billing / spend caps](https://ai.google.dev/gemini-api/docs/billing)。档位和账单封顶按 **Billing 账户** 走：三号要三份额度，就三个项目、**三份 Billing**，不要把三项目挂到同一张账单上。额度按项目计，不按 key 把数。具体 RPM/RPD 只认该项目 AI Studio → Rate limits。不是再买第四份网页 Pro，也不是 cookie。
 
 ---
 
