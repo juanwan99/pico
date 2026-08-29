@@ -27,9 +27,9 @@ from pico_orchestrator.image_generate import (
     REJECTED_PROVIDER_MESSAGE,
     gateway_keys,
     generate_image_bytes,
-    health_fields as image_health_fields,
     reset_image_generate_runtime,
 )
+from pico_orchestrator.image_generate import health_fields as image_health_fields
 from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
 from pico_orchestrator.skill_policy import snapshot_for_skill
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
