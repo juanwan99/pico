@@ -57,7 +57,7 @@ class RunResult:
     status: str  # succeeded|failed|cancelled
     final_text: str
     error: str | None = None
-    token_usage: dict[str, int] | None = None
+    token_usage: dict[str, Any] | None = None
     artifact_markdown: str | None = None
     change_proposal: dict[str, Any] | None = None
 

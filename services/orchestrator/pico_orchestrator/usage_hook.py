@@ -81,6 +81,57 @@ def is_sandbox_tool(name: str) -> bool:
     return (name or "").strip() in _SANDBOX_TOOLS
 
 
+async def emit_image_usage(
+    principal: Any,
+    *,
+    extra: dict[str, Any] | None = None,
+    tool_call_id: str | None = None,
+    ok: bool = True,
+    source: str = "generate_image",
+    model: str | None = None,
+) -> None:
+    """Record kind=image (Gemini/New API). Swallows all errors."""
+    bind = _BIND.get()
+    school = getattr(principal, "school_id", None) or (bind.school_id if bind else "")
+    member = getattr(principal, "membership_id", None) or (
+        bind.membership_id if bind else ""
+    )
+    if not school or not member:
+        return
+    run_id = (bind.run_id if bind else None) or None
+    task_id = (bind.task_id if bind else None) or None
+    store = getattr(principal, "_pico_artifact_store", None)
+    if run_id is None and store is not None:
+        run_id = getattr(store, "_run_id", None)
+        task_id = task_id or getattr(store, "_task_id", None)
+    payload = dict(extra or {})
+    payload["ok"] = bool(ok)
+    payload.setdefault("tool", source)
+    call_id = (
+        (tool_call_id or "").strip()
+        or (bind.tool_call_id if bind else "")
+        or uuid.uuid4().hex[:12]
+    )
+    key = f"image:{run_id or 'norun'}:{source}:{call_id}"
+    try:
+        from app.usage_ledger import record_usage_event
+    except Exception:  # noqa: BLE001
+        logger.debug("usage_ledger not importable; image emit skipped")
+        return
+    await record_usage_event(
+        school_id=str(school),
+        membership_id=str(member),
+        kind="image",
+        model=(model or "").strip() or None,
+        tokens_unknown=True,
+        task_id=str(task_id) if task_id else None,
+        run_id=str(run_id) if run_id else None,
+        source=(source or "generate_image")[:64],
+        extra=payload,
+        idempotency_key=key[:160],
+    )
+
+
 async def emit_search_usage(
     principal: Any,
     *,

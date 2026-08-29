@@ -16,6 +16,7 @@ def test_frozen_docs_exist_and_marked():
         "tools.md",
         "ai-facts.md",
         "change-handoff.md",
+        "usage-export.md",
     ):
         text = (DOCS / name).read_text(encoding="utf-8")
         assert "STATUS: FROZEN" in text, name

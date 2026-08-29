@@ -24,6 +24,7 @@ from app.usage_ledger import emit_llm_usage_after_run, record_usage_event
 async def client(tmp_path, monkeypatch):
     db = tmp_path / "usage.db"
     monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db}")
+    monkeypatch.setenv("PICO_HOOK_SERVICE_TOKEN", "hook-secret-token")
     from app import db as dbmod
     from app.db import init_db
     from app.settings import get_settings
@@ -229,7 +230,7 @@ async def test_search_kind_can_be_written_for_later_cards(client: AsyncClient):
     assert any(e["kind"] == "search" for e in r.json()["events"])
 
 
-async def test_emit_after_run_is_idempotent_and_estimated(client: AsyncClient):
+async def test_emit_after_run_is_idempotent_and_unknown_without_provider(client: AsyncClient):
     from app.auth import Principal
     from app.db import session_factory
     from app.run_service import create_task
@@ -271,7 +272,134 @@ async def test_emit_after_run_is_idempotent_and_estimated(client: AsyncClient):
     r = await client.get("/v1/usage/events", headers=headers, params={"kind": "llm"})
     matches = [e for e in r.json()["events"] if e["run_id"] == run_id]
     assert len(matches) == 1
-    assert matches[0]["estimated"] is True
-    assert matches[0]["tokens_unknown"] is False
-    assert matches[0]["prompt_tokens"] is not None
-    assert matches[0]["completion_tokens"] is not None
+    assert matches[0]["tokens_unknown"] is True
+    assert matches[0]["estimated"] is False
+    assert matches[0]["prompt_tokens"] is None
+    assert matches[0]["completion_tokens"] is None
+
+
+async def test_emit_provider_usage_is_native_not_estimated(client: AsyncClient):
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.run_service import create_task
+
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=0,
+        raw={},
+    )
+    factory = session_factory()
+    async with factory() as session:
+        _task, run = await create_task(session, principal, "t", "hello")
+        run_id = run.id
+
+    await emit_llm_usage_after_run(
+        run_id,
+        token_usage={
+            "input_tokens": 80,
+            "output_tokens": 20,
+            "total_tokens": 100,
+            "cached_tokens": 8,
+            "reasoning_tokens": 12,
+        },
+        source="openai_compat",
+        school_id="school-a",
+        membership_id="m1",
+        model="gpt-5.6-sol",
+    )
+    headers = await _auth(client)
+    r = await client.get("/v1/usage/events", headers=headers, params={"kind": "llm"})
+    row = next(e for e in r.json()["events"] if e["run_id"] == run_id)
+    assert row["estimated"] is False
+    assert row["tokens_unknown"] is False
+    assert row["prompt_tokens"] == 80
+    assert row["completion_tokens"] == 20
+    assert row["total_tokens"] == 100
+    assert row["model"] == "gpt-5.6-sol"
+    assert (row.get("extra") or {}).get("cached_tokens") == 8
+    assert (row.get("extra") or {}).get("reasoning_tokens") == 12
+    assert "price" not in (row.get("extra") or {})
+
+
+async def test_edu_export_is_service_token_only_and_paginates(client: AsyncClient):
+    first = await _seed_llm(
+        school="school-a",
+        member="m1",
+        run_id="run-export-a",
+        tokens={"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+    )
+    await _seed_llm(
+        school="school-a",
+        member="m1",
+        run_id="run-export-a2",
+        tokens={"prompt_tokens": 4, "completion_tokens": 1, "total_tokens": 5},
+    )
+    await _seed_llm(
+        school="school-b",
+        member="m9",
+        run_id="run-export-b",
+        tokens={"prompt_tokens": 9, "completion_tokens": 1, "total_tokens": 10},
+    )
+    user = await _auth(client)
+    denied = await client.get("/v1/internal/usage/export", headers=user)
+    assert denied.status_code == 401
+
+    hook = {"Authorization": "Bearer hook-secret-token"}
+    all_rows = await client.get("/v1/internal/usage/export", headers=hook, params={"limit": 10})
+    assert all_rows.status_code == 200, all_rows.text
+    body = all_rows.json()
+    assert body["billing"] is False
+    assert body["schema"] == "pico.usage.v1"
+    assert "price" not in body
+    ids = [e["id"] for e in body["events"]]
+    assert first in ids
+    assert any(e["school_id"] == "school-b" for e in body["events"])
+
+    school_a = await client.get(
+        "/v1/internal/usage/export",
+        headers=hook,
+        params={"school_id": "school-a", "limit": 1},
+    )
+    assert school_a.status_code == 200
+    page = school_a.json()
+    assert page["count"] == 1
+    assert page["events"][0]["school_id"] == "school-a"
+    assert page["next"] is not None
+    page2 = await client.get(
+        "/v1/internal/usage/export",
+        headers=hook,
+        params={
+            "school_id": "school-a",
+            "after_id": page["next"]["after_id"],
+            "limit": 50,
+        },
+    )
+    assert page2.status_code == 200
+    assert page["events"][0]["id"] not in [e["id"] for e in page2.json()["events"]]
+
+
+async def test_image_kind_can_be_written(client: AsyncClient):
+    row = await record_usage_event(
+        school_id="school-a",
+        membership_id="m1",
+        kind="image",
+        model="gemini-3.1-flash-image",
+        tokens_unknown=True,
+        source="generate_image",
+        extra={"bytes": 12, "ok": True},
+        idempotency_key="image:run-i:generate_image:c1",
+        run_id="run-i",
+    )
+    assert row is not None
+    headers = await _auth(client)
+    r = await client.get("/v1/usage/events", headers=headers, params={"kind": "image"})
+    assert r.status_code == 200
+    hit = next(e for e in r.json()["events"] if e["run_id"] == "run-i")
+    assert hit["tokens_unknown"] is True
+    assert hit["model"] == "gemini-3.1-flash-image"
+    assert (hit.get("extra") or {}).get("bytes") == 12
+

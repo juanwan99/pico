@@ -13,7 +13,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from pico_orchestrator.usage_parse import (
+    billed_model_id,
+    is_ui_lane,
+    parse_usage_blob,
+    usage_extra_bits,
+)
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +28,8 @@ from app.db import TaskRow, UsageEventRow, new_id, session_factory
 
 logger = logging.getLogger(__name__)
 
-USAGE_KINDS = frozenset({"llm", "search", "sandbox", "api", "other"})
+USAGE_KINDS = frozenset({"llm", "search", "sandbox", "image", "api", "other"})
+USAGE_EXPORT_SCHEMA = "pico.usage.v1"
 BILLING_COLUMN_NAMES = frozenset(
     {
         "price",
@@ -71,33 +78,15 @@ def extract_token_fields(usage: dict[str, Any] | None) -> TokenFields:
     Honest unknown: missing keys or uninitialized all-zero counters without
     an explicit estimated flag. Never invent a billing-grade zero.
     """
-    if not isinstance(usage, dict):
+    parsed = parse_usage_blob(usage) if isinstance(usage, dict) else None
+    if not parsed:
         return TokenFields.unknown()
-    prompt = _int_or_none(usage.get("prompt_tokens"))
-    if prompt is None:
-        prompt = _int_or_none(usage.get("input_tokens"))
-    completion = _int_or_none(usage.get("completion_tokens"))
-    if completion is None:
-        completion = _int_or_none(usage.get("output_tokens"))
-    total = _int_or_none(usage.get("total_tokens"))
-    estimated = bool(usage.get("estimated"))
-    if prompt is None and completion is None and total is None:
-        return TokenFields.unknown()
-    if (
-        not estimated
-        and (prompt or 0) == 0
-        and (completion or 0) == 0
-        and (total or 0) == 0
-    ):
-        return TokenFields.unknown()
-    if total is None and prompt is not None and completion is not None:
-        total = prompt + completion
     return TokenFields(
-        prompt_tokens=prompt,
-        completion_tokens=completion,
-        total_tokens=total,
+        prompt_tokens=_int_or_none(parsed.get("prompt_tokens")),
+        completion_tokens=_int_or_none(parsed.get("completion_tokens")),
+        total_tokens=_int_or_none(parsed.get("total_tokens")),
         tokens_unknown=False,
-        estimated=estimated,
+        estimated=bool(parsed.get("estimated")),
     )
 
 
@@ -144,6 +133,7 @@ def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
         "extra": extra,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "billing": False,
+        "schema": USAGE_EXPORT_SCHEMA,
     }
 
 
@@ -268,6 +258,30 @@ async def _record_usage_event_inner(
     raise RuntimeError(f"usage_events write exhausted: {last_err!r}")
 
 
+async def _backend_model_from_events(session: AsyncSession, run_id: str) -> str | None:
+    from sqlalchemy import select
+
+    from app.db import EventRow
+
+    result = await session.execute(
+        select(EventRow.payload_json)
+        .where(EventRow.run_id == run_id, EventRow.type == "run.model")
+        .order_by(EventRow.seq.desc())
+        .limit(1)
+    )
+    raw = result.scalar_one_or_none()
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    backend = str(payload.get("backend_model") or "").strip()
+    return backend or None
+
+
 async def emit_llm_usage_after_run(
     run_id: str,
     *,
@@ -279,8 +293,14 @@ async def emit_llm_usage_after_run(
     membership_id: str | None = None,
     model: str | None = None,
     task_id: str | None = None,
+    estimate_if_missing: bool = False,
 ) -> None:
-    """Best-effort llm event for a finished Run. Safe to call after commit."""
+    """Best-effort llm event for a finished Run. Safe to call after commit.
+
+    Default is honest unknown when the provider did not return usage.
+    Char/4 estimates are opt-in (``estimate_if_missing``) and never the
+    agent path — those numbers are not billable.
+    """
     from app.db import RunRow
 
     rid = (run_id or "").strip()
@@ -289,8 +309,10 @@ async def emit_llm_usage_after_run(
     school = school_id
     member = membership_id
     model_id = model
+    ui_model: str | None = None
     tid = task_id
     usage = token_usage
+    backend_from_event: str | None = None
     try:
         factory = session_factory()
         async with factory() as session:
@@ -299,7 +321,9 @@ async def emit_llm_usage_after_run(
                 return
             if run is not None:
                 tid = tid or run.task_id
-                model_id = model_id or (run.model or None)
+                ui_model = (run.model or "").strip() or None
+                model_id = model_id or ui_model
+                backend_from_event = await _backend_model_from_events(session, rid)
                 if usage is None:
                     try:
                         parsed = json.loads(run.token_usage_json or "{}")
@@ -318,14 +342,19 @@ async def emit_llm_usage_after_run(
 
     if not school or not member:
         return
-    fields = extract_token_fields(usage if isinstance(usage, dict) else None)
-    if fields.tokens_unknown and prompt is not None and completion is not None:
+    usage_dict = usage if isinstance(usage, dict) else None
+    fields = extract_token_fields(usage_dict)
+    if fields.tokens_unknown and estimate_if_missing and prompt is not None and completion is not None:
         fields = extract_token_fields(estimated_char_tokens(prompt, completion))
+    billed = billed_model_id(model_id, backend_from_event)
+    extra = usage_extra_bits(usage_dict)
+    if ui_model and is_ui_lane(ui_model):
+        extra.setdefault("ui_model", ui_model)
     await record_usage_event(
         school_id=school,
         membership_id=member,
         kind="llm",
-        model=model_id,
+        model=billed,
         prompt_tokens=fields.prompt_tokens,
         completion_tokens=fields.completion_tokens,
         total_tokens=fields.total_tokens,
@@ -334,6 +363,7 @@ async def emit_llm_usage_after_run(
         task_id=tid,
         run_id=rid,
         source=source or "llm",
+        extra=extra or None,
         idempotency_key=f"llm:{rid}",
     )
 
@@ -468,7 +498,89 @@ async def summarize_usage(
     ]
     return {
         "billing": False,
+        "schema": USAGE_EXPORT_SCHEMA,
         "school_id": school,
         "membership_id": member,
         "days": days,
+    }
+
+
+def _parse_since(since: str | None) -> datetime | None:
+    raw = (since or "").strip()
+    if not raw:
+        return None
+    try:
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(UTC).replace(tzinfo=None)
+        return dt
+    except ValueError as exc:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "usage.bad_since", "message": "since must be ISO-8601"},
+        ) from exc
+
+
+async def export_usage_events(
+    session: AsyncSession,
+    *,
+    school_id: str | None = None,
+    kind: str | None = None,
+    since: str | None = None,
+    after_id: str | None = None,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """Chronological export for edu-core. Service-token path only. No money."""
+    cap = max(1, min(int(limit or 200), 1000))
+    q = select(UsageEventRow)
+    school = (school_id or "").strip()
+    if school:
+        q = q.where(UsageEventRow.school_id == school)
+    if kind:
+        kind_n = kind.strip().lower()
+        if kind_n not in USAGE_KINDS:
+            from fastapi import HTTPException, status
+
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "usage.bad_kind", "message": f"kind must be one of {sorted(USAGE_KINDS)}"},
+            )
+        q = q.where(UsageEventRow.kind == kind_n)
+    since_dt = _parse_since(since)
+    if since_dt is not None:
+        q = q.where(UsageEventRow.created_at >= since_dt)
+    after = (after_id or "").strip()
+    if after:
+        anchor = await session.get(UsageEventRow, after)
+        if anchor is not None:
+            q = q.where(
+                or_(
+                    UsageEventRow.created_at > anchor.created_at,
+                    and_(
+                        UsageEventRow.created_at == anchor.created_at,
+                        UsageEventRow.id > anchor.id,
+                    ),
+                )
+            )
+    q = q.order_by(UsageEventRow.created_at.asc(), UsageEventRow.id.asc()).limit(cap + 1)
+    rows = list((await session.execute(q)).scalars().all())
+    has_more = len(rows) > cap
+    page = rows[:cap]
+    next_cursor = None
+    if has_more and page:
+        last = page[-1]
+        next_cursor = {
+            "after_id": last.id,
+            "since": last.created_at.isoformat() if last.created_at else None,
+        }
+    return {
+        "schema": USAGE_EXPORT_SCHEMA,
+        "billing": False,
+        "count": len(page),
+        "events": [usage_event_dict(r) for r in page],
+        "next": next_cursor,
     }

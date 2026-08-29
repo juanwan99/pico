@@ -291,8 +291,8 @@ def _effective_max_tokens(requested: int | None, cap: int) -> int:
 
 
 def _estimated_usage(prompt: str, completion: str) -> dict[str, int | bool]:
-    # Upstream streaming adapters do not expose provider usage yet. This is an
-    # explicit estimate rather than the previous misleading constant zero.
+    # Last-resort OpenAI-compat field for the shell. Ledger does not use this
+    # unless emit is explicitly asked to estimate.
     prompt_tokens = max(1, (len(prompt) + 3) // 4)
     completion_tokens = max(1, (len(completion) + 3) // 4)
     return {
@@ -301,6 +301,22 @@ def _estimated_usage(prompt: str, completion: str) -> dict[str, int | bool]:
         "total_tokens": prompt_tokens + completion_tokens,
         "estimated": True,
     }
+
+
+def _compat_usage_payload(
+    prompt: str, completion: str, provider_usage: dict[str, Any] | None
+) -> dict[str, int | bool]:
+    if isinstance(provider_usage, dict):
+        from pico_orchestrator.usage_parse import parse_usage_blob
+
+        parsed = parse_usage_blob(provider_usage)
+        if parsed and not parsed.get("estimated"):
+            return {
+                "prompt_tokens": int(parsed.get("prompt_tokens") or 0),
+                "completion_tokens": int(parsed.get("completion_tokens") or 0),
+                "total_tokens": int(parsed.get("total_tokens") or 0),
+            }
+    return _estimated_usage(prompt, completion)
 
 
 
@@ -812,6 +828,12 @@ async def _finalize_run(
             )
 
         usage = _json_dict(run.token_usage_json)
+        if token_usage:
+            snapshot = usage.get("skill_snapshot")
+            usage.update({k: v for k, v in token_usage.items() if k != "skill_snapshot"})
+            if isinstance(snapshot, dict):
+                usage["skill_snapshot"] = snapshot
+            run.token_usage_json = json.dumps(usage, ensure_ascii=False)
         skill_snapshot = usage.get("skill_snapshot")
         if isinstance(skill_snapshot, dict) and status == "succeeded":
             existing_skill_event = await session.execute(
@@ -1386,6 +1408,7 @@ async def chat_completions(
             if day_use_block:
                 system = system + "\n\n" + day_use_block
             parts: list[str] = []
+            direct_usage: dict[str, Any] = {}
             try:
                 if json_only and sidebar_web_hits and sidebar_web_hits.get("honest_miss"):
                     text = honest_miss_json(sidebar_web_hits)
@@ -1397,11 +1420,19 @@ async def chat_completions(
                         system=system,
                         model=model,
                         thinking=False if json_only else None,
+                        usage_out=direct_usage,
                     ):
                         if piece:
                             parts.append(piece)
                     text = "".join(parts) or "(empty)"
-                await _finalize_run(run_id, status="succeeded", final_text=text, task_id=task_id, user_prompt=prompt)
+                await _finalize_run(
+                    run_id,
+                    status="succeeded",
+                    final_text=text,
+                    task_id=task_id,
+                    user_prompt=prompt,
+                    token_usage=direct_usage or None,
+                )
             except Exception as e:  # noqa: BLE001
                 text = f"【错误】{user_message_for_error(str(e))}"
                 await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
@@ -1444,7 +1475,11 @@ async def chat_completions(
                     "finish_reason": "stop",
                 }
             ],
-            "usage": _estimated_usage(prompt, text),
+            "usage": _compat_usage_payload(
+                prompt,
+                text,
+                (direct_usage if use_direct else getattr(result, "token_usage", None)),
+            ),
         }
         if sidebar_web_hits is not None:
             payload["pico_web_search"] = sidebar_web_hits
@@ -1507,6 +1542,7 @@ async def chat_completions(
             if day_use_block:
                 system = system + "\n\n" + day_use_block
             parts: list[str] = []
+            stream_usage: dict[str, Any] = {}
             finalized = False
             try:
                 async for piece in iter_with_idle_ticks(
@@ -1517,6 +1553,7 @@ async def chat_completions(
                         system=system,
                         model=model,
                         thinking=False if json_only else None,
+                        usage_out=stream_usage,
                     )
                 ):
                     if piece is None:
@@ -1531,6 +1568,7 @@ async def chat_completions(
                     final_text="".join(parts),
                     task_id=task_id,
                     user_prompt=prompt,
+                    token_usage=stream_usage or None,
                 )
                 finalized = True
             except (asyncio.CancelledError, GeneratorExit):

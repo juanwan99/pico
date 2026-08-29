@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pico.local/schemas/usage-export.schema.json",
+  "title": "PicoUsageExport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "billing", "count", "events", "next"],
+  "properties": {
+    "schema": { "type": "string", "const": "pico.usage.v1" },
+    "billing": { "type": "boolean", "const": false },
+    "count": { "type": "integer", "minimum": 0 },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "./usage-event.schema.json" }
+    },
+    "next": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "after_id": { "type": "string" },
+        "since": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

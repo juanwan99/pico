@@ -41,6 +41,7 @@ class EventMapState:
     started: bool = False
     tool_calls: int = 0
     tool_oks: int = 0
+    token_usage: dict[str, Any] | None = None
 
 
 def _text_from_message(message: Any) -> str:
@@ -98,6 +99,13 @@ async def map_event(
     tag = {"runtime": RUNTIME_LABEL}
     if shadow:
         tag["shadow"] = True
+
+    from pico_orchestrator.usage_parse import add_usage, parse_usage_blob
+
+    nested = raw.get("usage") if isinstance(raw, dict) else None
+    piece = parse_usage_blob(raw) or parse_usage_blob(nested)
+    if piece:
+        state.token_usage = add_usage(state.token_usage, piece)
 
     if kind == "agent_start":
         state.started = True
