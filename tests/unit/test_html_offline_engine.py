@@ -18,6 +18,7 @@ from pico_orchestrator.document_generators import (
     HTML_INTERACTIVE_CSP,
     HTML_REMOTE_ENGINE_ERROR,
     build_html_document,
+    html_engine_violations,
     html_remote_violations,
 )
 from pico_orchestrator.gateway import Principal, ToolError
@@ -290,6 +291,89 @@ def test_verify_inline_import_fails_l0() -> None:
 def test_error_constant_mentions_canvas() -> None:
     assert "canvas" in HTML_REMOTE_ENGINE_ERROR
     assert "Three.js" in HTML_REMOTE_ENGINE_ERROR
+    assert "window.THREE" in HTML_REMOTE_ENGINE_ERROR
+
+
+def test_protocol_relative_script_fail_closed() -> None:
+    body = (
+        "<!DOCTYPE html><html><body>"
+        '<script src="//cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js"></script>'
+        "<div id='scene'></div></body></html>"
+    )
+    with pytest.raises(ValueError, match="外网资源"):
+        build_html_document(title="proto.html", marker="PR1", body=body)
+    assert "script_src" in html_remote_violations(body)
+
+
+def test_v2_three_global_without_cdn_fail_closed() -> None:
+    body = """<!DOCTYPE html><html><body>
+<div id="scene"></div>
+<p id="status">已暂停</p>
+<script>
+  if (!window.THREE) {
+    document.getElementById('status').textContent = 'Three.js加载失败';
+  }
+</script>
+</body></html>"""
+    with pytest.raises(ValueError, match="外网资源"):
+        build_html_document(title="v2.html", marker="physics-rod-ball-3d-v2", body=body)
+    assert "three_global" in html_engine_violations(body)
+
+
+def test_bare_three_specifier_fail_closed() -> None:
+    body = """<!DOCTYPE html><html><body>
+<script type="module">import * as THREE from 'three';</script>
+</body></html>"""
+    with pytest.raises(ValueError, match="外网资源"):
+        build_html_document(title="bare.html", marker="BARE1", body=body)
+    assert "three_import" in html_engine_violations(body)
+
+
+def test_canvas_only_fragment_not_escaped() -> None:
+    body = '<canvas id="c" width="80" height="60"></canvas>'
+    text = build_html_document(title="c.html", marker="CAN1", body=body).decode("utf-8")
+    assert "<canvas" in text.lower()
+    assert "&lt;canvas" not in text
+
+
+def test_rod_ball_offline_fixture_lands_and_draws() -> None:
+    fixture = (
+        ROOT / "tests" / "fixtures" / "html" / "physics-rod-ball-offline.html"
+    ).read_text(encoding="utf-8")
+    text = build_html_document(
+        title="轻杆小球运动与分裂.html",
+        marker="physics-rod-ball-offline-v4",
+        body=fixture,
+    ).decode("utf-8")
+    assert "<canvas" in text.lower()
+    assert 'getContext("2d")' in text
+    assert "分裂演示" in text
+    assert "jsdelivr" not in text
+    assert "window.THREE" not in text
+    assert html_remote_violations(text) == ()
+    assert html_engine_violations(text) == ()
+    assert HTML_INTERACTIVE_CSP in text
+    assert ";'none'" not in text
+
+
+def test_verify_v2_three_global_fails_l0() -> None:
+    gw = build_default_gateway(_MemStore())
+    v2 = """<!DOCTYPE html><html><body>
+<script>if (!window.THREE) {}</script>
+</body></html>"""
+
+    async def _run() -> dict[str, Any]:
+        return await gw.invoke(
+            _P(),  # type: ignore[arg-type]
+            "verify_html_document",
+            {"content": v2},
+        )
+
+    out = asyncio.run(_run())
+    assert out["ok"] is False
+    names = {c["name"]: c for c in out["checks"]}
+    assert names["no_remote_script"]["status"] == "fail"
+    assert "three_global" in names["no_remote_script"]["detail"]
 
 
 def test_pi_visible_offline_html_words() -> None:
@@ -306,9 +390,11 @@ def test_pi_visible_offline_html_words() -> None:
     ).read_text(encoding="utf-8")
     assert "no network" in sys_md
     assert "Three.js" in sys_md
+    assert "window.THREE" in sys_md
     assert "课件" not in sys_md
     assert "run offline" in ts
     assert "fails closed" in ts
+    assert "window.THREE" in ts
 
 
 def test_public_and_preview_csp_still_deny_cdn() -> None:

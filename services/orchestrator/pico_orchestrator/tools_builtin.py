@@ -24,6 +24,7 @@ from pico_orchestrator.document_generators import (
     build_html_document,
     build_pptx_document,
     build_xlsx_document,
+    html_engine_violations,
     html_remote_violations,
     require_docx_body,
     require_pptx_body,
@@ -415,12 +416,14 @@ def _static_html_checks(content: str) -> list[dict[str, Any]]:
 
     # Remote engines/assets (CDN import, script src, leftover fonts, img https).
     remote_hits = html_remote_violations(text)
+    engine_hits = html_engine_violations(text)
+    offline_hits = remote_hits + engine_hits
     add(
         "no_remote_script",
-        "fail" if remote_hits else "pass",
+        "fail" if offline_hits else "pass",
         (
-            "remote load: " + ",".join(remote_hits)
-            if remote_hits
+            "remote/engine: " + ",".join(offline_hits)
+            if offline_hits
             else "no remote script/import/asset load"
         ),
     )
@@ -1986,9 +1989,10 @@ def build_default_gateway(
             description=(
                 "Create a real .html Artifact that must run offline: inline CSS/JS "
                 "and canvas only. No CDN, no import/script-src of Three.js / Chart.js / "
-                "ECharts / KaTeX, no https images (use data: URLs). The tool fails if "
-                "the page still needs the network. Result includes an observation of "
-                "what landed. ok is not finished. Args: title, marker, body?"
+                "ECharts / KaTeX, no https or //cdn images (use data: URLs), no "
+                "window.THREE / new Chart / echarts.init. The tool fails if the page "
+                "still needs the network or those engines. Result includes an "
+                "observation of what landed. ok is not finished. Args: title, marker, body?"
             ),
             handler=generate_html,
             school_scoped=False,
