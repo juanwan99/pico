@@ -7,10 +7,10 @@ DATE: 2026-08-29
 在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main
-阻塞: #740 等老师手 · #748 合部完不关 · 记忆 OS 挂
+阻塞: #748 合部完不关 · 记忆 OS 挂
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
-PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · 记忆 OS 仍挂起
+PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · 记忆 OS 仍挂起
 经验: docs/EXPERIENCE.md（唯一 · 按域）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 北极星: DIRECTION-NOW §0-star · 用法 = Grok
@@ -74,8 +74,8 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#710](https://github.com/juanwan99/pico/issues/710) · [#714](https://github.com/juanwan99/pico/pull/714) | T-PPT-SANDBOX-LIB · 业主 PASS · tip `97e421c6…` |
 | 已收口 | [#733](https://github.com/juanwan99/pico/issues/733) | T-NIGHT-CORE-3 · 业主 PASS @ tip `a6bc83df…` |
 | 已收口 | [#752](https://github.com/juanwan99/pico/issues/752) | T-OFFICE-THICK · 业主 PASS @ tip `0c7943ac…` · 不关卡 |
+| 已收口 | [#740](https://github.com/juanwan99/pico/issues/740) | T-PPT-CONTRACT · 业主 PASS @ tip `2e668686…` · 不关卡 |
 | 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
-| 等老师 | [#740](https://github.com/juanwan99/pico/issues/740) | T-PPT-CONTRACT · 已部 embed+layout · 须新对话过门 · 不改卡面 |
 | 挂起 | 记忆 OS | 人视角薄层已部（#736）；完整记忆 OS 仍挂 · 禁自研 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面冻到 9/7 · 可钉现况三行评论 |
