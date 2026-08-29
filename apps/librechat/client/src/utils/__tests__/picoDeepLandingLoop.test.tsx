@@ -89,7 +89,6 @@ describe('Landing pico-deep does not React #185', () => {
   it('click 深度 settles without max-update-depth', () => {
     let renders = 0;
     render(<Harness onRender={() => renders++} />);
-    fireEvent.click(screen.getByTestId('composer-plus'));
     fireEvent.click(screen.getByTestId('composer-plus-mode-pico-deep'));
     expect(screen.getByTestId('composer-plus')).toBeInTheDocument();
     expect(renders).toBeLessThan(20);

@@ -26,9 +26,7 @@ import PendingManualSkillsChips from './PendingManualSkillsChips';
 import useAskAnswerMode from '~/hooks/Input/useAskAnswerMode';
 import AskUserQuestionPopover from './AskUserQuestionPopover';
 import {
-  ComposerPlusItem,
-  ComposerPlusMenu,
-  PLUS_MODE_ITEMS,
+  ComposerModeSwitch,
   useComposerAttachInput,
 } from './ComposerPlusMenu';
 import { PicoIcon } from '~/components/ui/pico-icons';
@@ -94,7 +92,6 @@ const ChatForm = memo(function ChatForm({
   const localize = useLocalize();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [plusOpen, setPlusOpen] = useState(false);
   const [, setIsScrollable] = useState(false);
   const [visualRowCount, setVisualRowCount] = useState(1);
   const [isTextAreaFocused, setIsTextAreaFocused] = useState(false);
@@ -140,7 +137,6 @@ const ChatForm = memo(function ChatForm({
     (raw: string) => {
       const id = normalizePicoModelMode(raw);
       setPicoModelMode(id);
-      setPlusOpen(false);
       setConversation?.((prev) => patchConversationModel(prev, id) ?? prev);
     },
     [setConversation],
@@ -406,7 +402,7 @@ const ChatForm = memo(function ChatForm({
     setFiles,
     setFilesLoading,
     disabled: disableInputs || isNotAppendable,
-    onPicked: () => setPlusOpen(false),
+    onPicked: undefined,
   });
 
   useQueryParams({ textAreaRef });
@@ -591,30 +587,12 @@ const ChatForm = memo(function ChatForm({
                   <button
                     type="button"
                     data-testid="composer-plus"
-                    aria-label="更多输入选项"
-                    aria-expanded={plusOpen}
+                    aria-label="上传附件"
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-ink-2)] hover:bg-black/[0.04] hover:text-[color:var(--pico-ink)]"
-                    onClick={() => setPlusOpen((value) => !value)}
+                    onClick={attach.openPicker}
                   >
                     <PicoIcon name="plus" />
                   </button>
-                  {plusOpen ? (
-                    <ComposerPlusMenu>
-                      {PLUS_MODE_ITEMS.map((item) => (
-                        <ComposerPlusItem
-                          key={item.id}
-                          testId={`composer-plus-mode-${item.id}`}
-                          active={picoMode === item.id}
-                          onClick={() => applyPicoMode(item.id)}
-                        >
-                          {item.label}
-                        </ComposerPlusItem>
-                      ))}
-                      <ComposerPlusItem testId="composer-plus-attach" onClick={attach.openPicker}>
-                        上传附件
-                      </ComposerPlusItem>
-                    </ComposerPlusMenu>
-                  ) : null}
                 </div>
                 <div
                   className="relative min-w-0 flex-1"
@@ -671,6 +649,7 @@ const ChatForm = memo(function ChatForm({
                     />
                   </div>
                 </div>
+                <ComposerModeSwitch value={picoMode} onChange={applyPicoMode} />
                 <div className="shrink-0 self-end">
                   {isSubmitting && showStopButton && !answerMode.active ? (
                     duringRunSlot

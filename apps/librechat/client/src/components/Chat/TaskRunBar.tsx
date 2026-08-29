@@ -4,6 +4,7 @@
 import { memo } from 'react';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import { cn } from '~/utils';
+import { isUnnamedConvoTitle } from '~/utils/picoConvoTitle';
 import RunLoadingIndicator from './RunLoadingIndicator';
 
 function TaskRunBar({
@@ -33,7 +34,7 @@ function TaskRunBar({
   rerunning?: boolean;
   onRerun?: () => void;
 }) {
-  const displayTitle = title && title !== 'New Chat' && title !== '新对话' ? title : '当前任务';
+  const displayTitle = !isUnnamedConvoTitle(title) ? title : '当前任务';
   const failed = Boolean(statusLabel?.startsWith('失败') || completedLabel?.startsWith('失败'));
   const cancelled = Boolean(
     statusLabel?.startsWith('已停止') ||

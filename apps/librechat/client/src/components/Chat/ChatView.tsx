@@ -32,6 +32,7 @@ import ChangeConfirmBanner from './ChangeConfirmBanner';
 import Header from './Header';
 import Footer from './Footer';
 import { cn } from '~/utils';
+import { isUnnamedConvoTitle } from '~/utils/picoConvoTitle';
 import store from '~/store';
 import { usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
@@ -125,10 +126,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const openPaneIntent = Boolean(websiteIntent || officeIntent);
   const openPaneIntentRef = useRef(openPaneIntent);
   openPaneIntentRef.current = openPaneIntent;
-  const taskTitle =
-    chatHelpers.conversation?.title && chatHelpers.conversation.title !== 'New Chat'
-      ? chatHelpers.conversation.title
-      : undefined;
+  const taskTitle = !isUnnamedConvoTitle(chatHelpers.conversation?.title)
+    ? chatHelpers.conversation?.title
+    : undefined;
   const ledger = usePicoTaskLedger(conversationId, isSubmitting);
   const cancellableRunId = ['queued', 'running', 'preparing'].includes(ledger.run?.status || '')
     ? ledger.run?.id

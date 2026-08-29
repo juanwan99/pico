@@ -30,6 +30,16 @@ jest.mock('~/components/Chat/Input/Files/FileFormChat', () => ({
   default: () => <div data-testid="file-form-chat" />,
 }));
 
+jest.mock('~/components/Chat/SchoolMaterialsBar', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
+jest.mock('~/components/Chat/ArchiveFolderBar', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 jest.mock('~/Providers', () => ({
   useOptionalChatFormContext: () => ({
     setValue: jest.fn(),
@@ -54,6 +64,8 @@ jest.mock('~/utils/picoModelPref', () => ({
   labelForPicoModel: (id: string) => id,
   normalizePicoModelMode: (id: string) => id,
   PICO_DUAL_MODELS: [{ id: 'pico-fast', label: '快速' }],
+  patchConversationModel: (prev: { model?: string } | null, id: string) =>
+    prev ? { ...prev, model: id } : prev,
   setPicoModelMode: jest.fn(),
 }));
 
@@ -76,27 +88,27 @@ describe('Landing composer chrome', () => {
     expect(row).toContainElement(screen.getByTestId('composer-plus'));
     expect(row).toContainElement(screen.getByTestId('text-input'));
     expect(row).toContainElement(screen.getByTestId('send-button'));
+    expect(row).toContainElement(screen.getByTestId('composer-mode-switch'));
     expect(screen.getByTestId('composer-plus').textContent?.trim()).not.toBe('+');
   });
 
-  it('plus menu is 快速 / 深度 / 上传附件 only', () => {
+  it('plus opens the file picker; 快速/深度 sit as a switch', () => {
     render(<Landing centerFormOnLanding />);
-    fireEvent.click(screen.getByTestId('composer-plus'));
-    expect(screen.getByTestId('composer-plus-menu')).toBeInTheDocument();
+    expect(screen.queryByTestId('composer-plus-menu')).not.toBeInTheDocument();
     expect(screen.getByTestId('composer-plus-mode-pico-fast')).toHaveTextContent('快速');
     expect(screen.getByTestId('composer-plus-mode-pico-deep')).toHaveTextContent('深度');
-    expect(screen.getByTestId('composer-plus-attach')).toHaveTextContent('上传附件');
+    const input = screen.getByTestId('composer-plus-file-input') as HTMLInputElement;
+    const click = jest.spyOn(input, 'click');
+    fireEvent.click(screen.getByTestId('composer-plus'));
+    expect(click).toHaveBeenCalled();
+    expect(screen.queryByTestId('composer-plus-menu')).not.toBeInTheDocument();
     expect(screen.queryByText('默认权限')).not.toBeInTheDocument();
     expect(screen.queryByText(/工作空间/)).not.toBeInTheDocument();
   });
 
-  it('上传附件 opens the file picker even without chatCtx.setFiles', () => {
+  it('plus file input stays in the composer', () => {
     render(<Landing centerFormOnLanding />);
-    fireEvent.click(screen.getByTestId('composer-plus'));
-    const input = screen.getByTestId('composer-plus-file-input') as HTMLInputElement;
-    const click = jest.spyOn(input, 'click');
-    fireEvent.click(screen.getByTestId('composer-plus-attach'));
-    expect(click).toHaveBeenCalled();
     expect(screen.getByTestId('composer-plus-file-input')).toBeInTheDocument();
+    expect(screen.queryByTestId('composer-plus-attach')).not.toBeInTheDocument();
   });
 });

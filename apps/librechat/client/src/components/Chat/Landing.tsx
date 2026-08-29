@@ -1,5 +1,5 @@
 /**
- * Pico home — one title, one composer row. Model + attach live in +.
+ * Pico home — one title, one composer row. Attach lives in +; 快速/深度 is a switch.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ExtendedFile } from '~/common';
@@ -9,9 +9,7 @@ import { useAuthContext } from '~/hooks';
 import useSubmitMessage from '~/hooks/Messages/useSubmitMessage';
 import FileFormChat from '~/components/Chat/Input/Files/FileFormChat';
 import {
-  ComposerPlusItem,
-  ComposerPlusMenu,
-  PLUS_MODE_ITEMS,
+  ComposerModeSwitch,
   useComposerAttachInput,
 } from '~/components/Chat/Input/ComposerPlusMenu';
 import { cn } from '~/utils';
@@ -32,7 +30,6 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
   const form = useOptionalChatFormContext();
   const { submitMessage } = useSubmitMessage();
   const [text, setText] = useState('');
-  const [plusOpen, setPlusOpen] = useState(false);
   const [model, setModel] = useState(() => {
     try {
       return normalizePicoModelMode(getPicoModelMode());
@@ -53,13 +50,12 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     files,
     setFiles,
     setFilesLoading,
-    onPicked: () => setPlusOpen(false),
+    onPicked: undefined,
   });
   const applyModel = useCallback((raw: string) => {
     const id = normalizePicoModelMode(raw);
     setModel((prev) => (prev === id ? prev : id));
     setPicoModelMode(id);
-    setPlusOpen(false);
     setConversationRef.current?.((prev) => patchConversationModel(prev, id) ?? prev);
   }, []);
 
@@ -144,31 +140,11 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                   type="button"
                   data-testid="composer-plus"
                   className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-ink-2)] hover:bg-black/[0.04]"
-                  aria-label="更多输入选项"
-                  aria-expanded={plusOpen}
-                  onClick={() => {
-                    setPlusOpen((v) => !v);
-                  }}
+                  aria-label="上传附件"
+                  onClick={attach.openPicker}
                 >
                   <PicoIcon name="plus" className="text-[color:var(--pico-ink-2)]" />
                 </button>
-                {plusOpen ? (
-                  <ComposerPlusMenu>
-                    {PLUS_MODE_ITEMS.map((item) => (
-                      <ComposerPlusItem
-                        key={item.id}
-                        testId={`composer-plus-mode-${item.id}`}
-                        active={model === item.id}
-                        onClick={() => applyModel(item.id)}
-                      >
-                        {item.label}
-                      </ComposerPlusItem>
-                    ))}
-                    <ComposerPlusItem testId="composer-plus-attach" onClick={attach.openPicker}>
-                      上传附件
-                    </ComposerPlusItem>
-                  </ComposerPlusMenu>
-                ) : null}
               </div>
               <textarea
                 id="pico-wb-home-input"
@@ -185,6 +161,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                 rows={1}
                 className="pico-type-body min-h-8 min-w-0 flex-1 resize-none border-0 bg-transparent py-2 leading-[1.55] text-[color:var(--pico-ink)] outline-none placeholder:text-[color:var(--pico-ink-3)]"
               />
+              <ComposerModeSwitch value={model} onChange={applyModel} />
               <button
                 type="button"
                 data-testid="send-button"
