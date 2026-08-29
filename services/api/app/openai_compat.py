@@ -21,6 +21,12 @@ from pico_orchestrator.edu_sidebar import (
     is_json_only_propose,
     shape_web_hits,
 )
+from pico_orchestrator.sse_keepalive import (
+    SSE_COMMENT_KEEPALIVE,
+    SSE_KEEPALIVE_SECONDS,
+    SSE_STREAM_HEADERS,
+    iter_with_idle_ticks,
+)
 from pico_orchestrator.user_errors import user_message_for_error
 from pydantic import BaseModel
 
@@ -1251,7 +1257,11 @@ async def chat_completions(
                 yield chunk({}, finish="stop")
                 yield b"data: [DONE]\n\n"
 
-            return StreamingResponse(title_event_stream(), media_type="text/event-stream")
+            return StreamingResponse(
+                title_event_stream(),
+                media_type="text/event-stream",
+                headers=dict(SSE_STREAM_HEADERS),
+            )
         return _title_completion_payload(
             completion_id=completion_id,
             created=created,
@@ -1499,14 +1509,19 @@ async def chat_completions(
             parts: list[str] = []
             finalized = False
             try:
-                async for piece in stream_chat(
-                    prompt,
-                    max_tokens=effective_max_tokens,
-                    history=history,
-                    system=system,
-                    model=model,
-                    thinking=False if json_only else None,
+                async for piece in iter_with_idle_ticks(
+                    stream_chat(
+                        prompt,
+                        max_tokens=effective_max_tokens,
+                        history=history,
+                        system=system,
+                        model=model,
+                        thinking=False if json_only else None,
+                    )
                 ):
+                    if piece is None:
+                        yield SSE_COMMENT_KEEPALIVE
+                        continue
                     if piece:
                         parts.append(piece)
                         yield chunk({"content": piece})
@@ -1798,6 +1813,7 @@ async def chat_completions(
         saw_text = False
         pending_status: list[str] = []
         detach = settings.pico_run_detach_on_disconnect
+        last_wire = time.monotonic()
         try:
             while True:
                 try:
@@ -1810,12 +1826,16 @@ async def chat_completions(
                         else:
                             break
                     else:
+                        if time.monotonic() - last_wire >= SSE_KEEPALIVE_SECONDS:
+                            last_wire = time.monotonic()
+                            yield SSE_COMMENT_KEEPALIVE
                         continue
                 if kind == "delta":
                     saw_text = True
                     # Drop buffered system chrome (「正在准备…」/heartbeat) —
                     # never leak it into the settled bubble (#461 L1).
                     pending_status.clear()
+                    last_wire = time.monotonic()
                     yield chunk({"content": str(payload)})
                 elif kind == "status":
                     # Buffer status chrome; only flush on the failure path where
@@ -1825,7 +1845,9 @@ async def chat_completions(
                 elif kind == "error":
                     if not saw_text and pending_status:
                         for p in pending_status:
+                            last_wire = time.monotonic()
                             yield chunk({"content": p})
+                    last_wire = time.monotonic()
                     yield chunk({"content": f"【错误】{user_message_for_error(str(payload))}"})
                     break
                 elif kind == "done":
@@ -1843,6 +1865,7 @@ async def chat_completions(
                         # small pieces if only final blob
                         step = 32
                         for i in range(0, len(text), step):
+                            last_wire = time.monotonic()
                             yield chunk({"content": text[i : i + step]})
                     break
         except (asyncio.CancelledError, GeneratorExit):
@@ -1896,4 +1919,8 @@ async def chat_completions(
         yield chunk({}, finish="stop")
         yield b"data: [DONE]\n\n"
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers=dict(SSE_STREAM_HEADERS),
+    )

@@ -1,0 +1,541 @@
+from pathlib import Path
+
+from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE, MSO_CONNECTOR
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.dml import MSO_LINE_DASH_STYLE
+from pptx.util import Inches, Pt
+
+
+OUTPUT_DIR = Path("/tmp/pico-naked")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+prs = Presentation()
+prs.slide_width = Inches(13.333)
+prs.slide_height = Inches(7.5)
+
+# Palette
+NAVY = RGBColor(15, 25, 44)
+INK = RGBColor(20, 28, 42)
+CREAM = RGBColor(247, 244, 235)
+MINT = RGBColor(115, 214, 177)
+CORAL = RGBColor(241, 111, 91)
+YELLOW = RGBColor(246, 202, 77)
+BLUE = RGBColor(92, 157, 224)
+LAVENDER = RGBColor(183, 164, 226)
+WHITE = RGBColor(255, 255, 255)
+MUTED = RGBColor(177, 189, 202)
+PALE_BLUE = RGBColor(221, 235, 246)
+PALE_MINT = RGBColor(218, 242, 229)
+PALE_CORAL = RGBColor(251, 222, 215)
+
+
+def rgb(hex_value):
+    hex_value = hex_value.lstrip("#")
+    return RGBColor(
+        int(hex_value[0:2], 16),
+        int(hex_value[2:4], 16),
+        int(hex_value[4:6], 16),
+    )
+
+
+def add_box(slide, x, y, w, h, fill, line=None, radius=False, transparency=0):
+    shape_type = (
+        MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE
+        if radius
+        else MSO_AUTO_SHAPE_TYPE.RECTANGLE
+    )
+    shape = slide.shapes.add_shape(
+        shape_type, Inches(x), Inches(y), Inches(w), Inches(h)
+    )
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = fill
+    shape.fill.transparency = transparency
+    shape.line.color.rgb = line if line else fill
+    shape.line.width = Pt(0.8)
+    return shape
+
+
+def add_circle(slide, x, y, d, fill, line=None, transparency=0):
+    shape = slide.shapes.add_shape(
+        MSO_AUTO_SHAPE_TYPE.OVAL, Inches(x), Inches(y), Inches(d), Inches(d)
+    )
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = fill
+    shape.fill.transparency = transparency
+    shape.line.color.rgb = line if line else fill
+    shape.line.width = Pt(1)
+    return shape
+
+
+def add_line(slide, x1, y1, x2, y2, color, width=2, dash=None):
+    line = slide.shapes.add_connector(
+        MSO_CONNECTOR.STRAIGHT,
+        Inches(x1),
+        Inches(y1),
+        Inches(x2),
+        Inches(y2),
+    )
+    line.line.color.rgb = color
+    line.line.width = Pt(width)
+    if dash:
+        line.line.dash_style = dash
+    return line
+
+
+def add_text(
+    slide,
+    text,
+    x,
+    y,
+    w,
+    h,
+    size=18,
+    color=INK,
+    bold=False,
+    font="Microsoft YaHei",
+    align=PP_ALIGN.LEFT,
+    valign=MSO_ANCHOR.TOP,
+    margin=0.04,
+):
+    box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+    tf = box.text_frame
+    tf.clear()
+    tf.word_wrap = True
+    tf.margin_left = Inches(margin)
+    tf.margin_right = Inches(margin)
+    tf.margin_top = Inches(margin)
+    tf.margin_bottom = Inches(margin)
+    tf.vertical_anchor = valign
+    p = tf.paragraphs[0]
+    p.alignment = align
+    run = p.add_run()
+    run.text = text
+    run.font.name = font
+    run.font.size = Pt(size)
+    run.font.bold = bold
+    run.font.color.rgb = color
+    return box
+
+
+def add_rich_text(slide, runs, x, y, w, h, size=16, color=INK, align=PP_ALIGN.LEFT):
+    box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+    tf = box.text_frame
+    tf.clear()
+    tf.word_wrap = True
+    tf.margin_left = Inches(0.04)
+    tf.margin_right = Inches(0.04)
+    tf.margin_top = Inches(0.03)
+    tf.margin_bottom = Inches(0.03)
+    p = tf.paragraphs[0]
+    p.alignment = align
+    for content, emphasis, run_color in runs:
+        run = p.add_run()
+        run.text = content
+        run.font.name = "Microsoft YaHei"
+        run.font.size = Pt(size)
+        run.font.bold = emphasis
+        run.font.color.rgb = run_color if run_color else color
+    return box
+
+
+def add_label(slide, text, x, y, w, fill, color=INK):
+    add_box(slide, x, y, w, 0.31, fill, fill, radius=True)
+    add_text(
+        slide,
+        text,
+        x,
+        y + 0.01,
+        w,
+        0.25,
+        size=10,
+        color=color,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+        valign=MSO_ANCHOR.MIDDLE,
+    )
+
+
+def add_title(slide, kicker, title, subtitle=None, dark=True):
+    title_color = CREAM if dark else INK
+    kicker_color = MINT if dark else CORAL
+    add_text(
+        slide,
+        kicker.upper(),
+        0.72,
+        0.48,
+        3.0,
+        0.3,
+        size=10,
+        color=kicker_color,
+        bold=True,
+    )
+    add_text(
+        slide,
+        title,
+        0.7,
+        0.82,
+        8.9,
+        0.7,
+        size=29,
+        color=title_color,
+        bold=True,
+    )
+    if subtitle:
+        add_text(
+            slide,
+            subtitle,
+            0.74,
+            1.54,
+            8.8,
+            0.38,
+            size=12,
+            color=MUTED if dark else rgb("657080"),
+        )
+
+
+def add_footer(slide, number, dark=True):
+    color = rgb("566477") if dark else rgb("B9C0C8")
+    add_text(
+        slide,
+        f"{number:02d} / 05",
+        11.95,
+        7.08,
+        0.7,
+        0.22,
+        size=9,
+        color=color,
+        bold=True,
+        align=PP_ALIGN.RIGHT,
+    )
+
+
+def draw_chromosome(slide, cx, cy, scale, color, duplicated=True, accent=None):
+    arm = 0.29 * scale
+    if duplicated:
+        add_line(slide, cx - arm, cy - 0.48 * scale, cx + arm, cy + 0.48 * scale, color, 6)
+        add_line(slide, cx + arm, cy - 0.48 * scale, cx - arm, cy + 0.48 * scale, color, 6)
+        add_circle(slide, cx - 0.055, cy - 0.055, 0.11, accent if accent else color)
+    else:
+        add_line(slide, cx, cy - 0.45 * scale, cx, cy + 0.45 * scale, color, 6)
+
+
+def draw_cell(slide, x, y, d, membrane=WHITE, nucleus=NAVY, chromosome_colors=None):
+    chromosome_colors = chromosome_colors or [CORAL, MINT]
+    add_circle(slide, x, y, d, membrane, line=rgb("C9D1D9"))
+    add_circle(
+        slide,
+        x + d * 0.22,
+        y + d * 0.22,
+        d * 0.56,
+        nucleus,
+        line=nucleus,
+        transparency=5,
+    )
+    draw_chromosome(
+        slide,
+        x + d * 0.43,
+        y + d * 0.46,
+        d * 0.6,
+        chromosome_colors[0],
+        duplicated=True,
+    )
+    draw_chromosome(
+        slide,
+        x + d * 0.57,
+        y + d * 0.52,
+        d * 0.52,
+        chromosome_colors[1],
+        duplicated=True,
+    )
+
+
+def draw_dividing_cell(slide, x, y, d, stage=1, left_color=CORAL, right_color=MINT):
+    add_circle(slide, x, y, d, WHITE, line=rgb("C9D1D9"))
+    center_x = x + d / 2
+    center_y = y + d / 2
+    if stage == 1:
+        draw_chromosome(slide, center_x - 0.16, center_y, d * 0.58, left_color, True)
+        draw_chromosome(slide, center_x + 0.16, center_y, d * 0.5, right_color, True)
+    elif stage == 2:
+        add_line(slide, x + 0.16, center_y, x + d - 0.16, center_y, rgb("CBD4DF"), 1, MSO_LINE_DASH_STYLE.DASH)
+        draw_chromosome(slide, center_x - 0.17, center_y, d * 0.5, left_color, True)
+        draw_chromosome(slide, center_x + 0.17, center_y, d * 0.5, right_color, True)
+    else:
+        add_line(slide, center_x, y + 0.14, center_x, y + d - 0.14, rgb("CBD4DF"), 1, MSO_LINE_DASH_STYLE.DASH)
+        draw_chromosome(slide, center_x - 0.18, center_y - 0.14, d * 0.37, left_color, False)
+        draw_chromosome(slide, center_x + 0.18, center_y + 0.14, d * 0.37, right_color, False)
+
+
+def add_arrow(slide, x, y, w, color=YELLOW):
+    add_line(slide, x, y, x + w - 0.12, y, color, 2.5)
+    add_line(slide, x + w - 0.12, y, x + w - 0.27, y - 0.1, color, 2.5)
+    add_line(slide, x + w - 0.12, y, x + w - 0.27, y + 0.1, color, 2.5)
+
+
+# Slide 1: cover
+slide = prs.slides.add_slide(prs.slide_layouts[6])
+add_box(slide, 0, 0, 13.333, 7.5, NAVY)
+add_box(slide, 0, 0, 0.18, 7.5, MINT)
+add_box(slide, 0.7, 2.02, 0.85, 0.12, CORAL)
+add_text(slide, "细胞如何制造\n“不同的自己”？", 0.7, 1.03, 6.9, 1.5, size=34, color=CREAM, bold=True)
+add_text(
+    slide,
+    "高中生物 · 减数分裂",
+    0.74,
+    2.42,
+    4.6,
+    0.38,
+    size=15,
+    color=MINT,
+    bold=True,
+)
+add_text(
+    slide,
+    "一次复制，两次分裂，四个单倍体细胞",
+    0.74,
+    3.13,
+    5.8,
+    0.42,
+    size=16,
+    color=rgb("D3DCE6"),
+)
+add_text(
+    slide,
+    "MEIOSIS",
+    0.74,
+    6.62,
+    2.1,
+    0.28,
+    size=11,
+    color=rgb("718094"),
+    bold=True,
+)
+add_text(
+    slide,
+    "遗传多样性的起点",
+    9.0,
+    6.62,
+    3.0,
+    0.28,
+    size=11,
+    color=rgb("718094"),
+    bold=True,
+    align=PP_ALIGN.RIGHT,
+)
+
+# Large right-side cell illustration
+add_circle(slide, 8.1, 1.18, 3.55, rgb("263956"), line=MINT)
+add_circle(slide, 8.58, 1.66, 2.59, rgb("1B2944"), line=rgb("46617E"))
+draw_chromosome(slide, 9.65, 3.0, 1.4, CORAL, True, YELLOW)
+draw_chromosome(slide, 10.25, 3.43, 1.05, MINT, True, YELLOW)
+add_circle(slide, 9.82, 3.17, 0.16, YELLOW)
+add_circle(slide, 10.08, 3.49, 0.13, YELLOW)
+add_text(slide, "2n", 9.4, 4.62, 1.3, 0.5, size=26, color=YELLOW, bold=True, align=PP_ALIGN.CENTER)
+add_text(slide, "亲代细胞", 9.12, 5.1, 1.9, 0.3, size=12, color=CREAM, align=PP_ALIGN.CENTER)
+
+add_box(slide, 6.8, 5.83, 5.35, 0.55, rgb("22324E"), line=rgb("3D5575"), radius=True)
+add_text(slide, "DNA复制", 7.05, 5.96, 1.1, 0.24, size=11, color=CREAM, bold=True)
+add_arrow(slide, 8.25, 6.1, 0.48, MINT)
+add_text(slide, "减数分裂 I", 8.85, 5.96, 1.25, 0.24, size=11, color=CREAM, bold=True)
+add_arrow(slide, 10.28, 6.1, 0.48, MINT)
+add_text(slide, "减数分裂 II", 10.85, 5.96, 1.18, 0.24, size=11, color=CREAM, bold=True)
+add_footer(slide, 1)
+
+
+# Slide 2: core logic
+slide = prs.slides.add_slide(prs.slide_layouts[6])
+add_box(slide, 0, 0, 13.333, 7.5, CREAM)
+add_box(slide, 0, 0, 13.333, 0.18, CORAL)
+add_title(slide, "01 · 核心逻辑", "减数分裂的三件大事", "先复制遗传物质，再连续分裂两次。", dark=False)
+
+# Three visual steps
+steps = [
+    (0.78, "01", "复制一次", "染色体先复制\n姐妹染色单体相连", PALE_CORAL, CORAL),
+    (4.56, "02", "分裂两次", "第一次分开同源染色体\n第二次分开姐妹染色单体", PALE_MINT, rgb("1D9B70")),
+    (8.34, "03", "得到四个", "4 个细胞\n染色体数目减半", PALE_BLUE, BLUE),
+]
+for x, num, heading, body, fill, accent in steps:
+    add_box(slide, x, 2.35, 3.1, 3.22, fill, line=fill, radius=True)
+    add_circle(slide, x + 0.26, 2.61, 0.56, accent)
+    add_text(slide, num, x + 0.26, 2.72, 0.56, 0.2, size=12, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+    add_text(slide, heading, x + 0.28, 3.42, 2.52, 0.4, size=21, color=INK, bold=True)
+    add_text(slide, body, x + 0.3, 4.13, 2.45, 0.78, size=13, color=rgb("566171"))
+    if num == "01":
+        draw_chromosome(slide, x + 1.52, 5.05, 0.62, CORAL, True, YELLOW)
+    elif num == "02":
+        add_circle(slide, x + 1.18, 4.85, 0.7, WHITE, line=rgb("9EDCC3"))
+        add_circle(slide, x + 1.97, 4.85, 0.7, WHITE, line=rgb("9EDCC3"))
+        draw_chromosome(slide, x + 1.53, 5.2, 0.34, CORAL, False)
+    else:
+        for ix in range(4):
+            add_circle(slide, x + 0.64 + (ix % 2) * 1.02, 4.72 + (ix // 2) * 0.53, 0.38, WHITE, line=BLUE)
+            draw_chromosome(slide, x + 0.83 + (ix % 2) * 1.02, 4.91 + (ix // 2) * 0.53, 0.23, MINT if ix % 2 else CORAL, False)
+
+add_arrow(slide, 3.99, 3.82, 0.42, CORAL)
+add_arrow(slide, 7.77, 3.82, 0.42, CORAL)
+
+add_box(slide, 0.78, 6.13, 10.65, 0.58, INK, INK, radius=True)
+add_rich_text(
+    slide,
+    [("关键结论  ", True, YELLOW), ("2n", True, MINT), ("  →  ", True, WHITE), ("n + n + n + n", True, CORAL), ("   染色体数目减半，但遗传组合更丰富", False, WHITE)],
+    1.03,
+    6.29,
+    10.1,
+    0.25,
+    size=13,
+)
+add_footer(slide, 2, dark=False)
+
+
+# Slide 3: meiosis I
+slide = prs.slides.add_slide(prs.slide_layouts[6])
+add_box(slide, 0, 0, 13.333, 7.5, NAVY)
+add_box(slide, 0, 0, 0.18, 7.5, YELLOW)
+add_title(slide, "02 · 减数分裂 I", "先分开同源染色体", "同源染色体彼此分离；姐妹染色单体仍然相连。", dark=True)
+
+# Main diagram
+add_box(slide, 0.72, 2.25, 7.35, 3.72, rgb("1B2A45"), line=rgb("334A68"), radius=True)
+add_text(slide, "一条细胞的旅程", 1.02, 2.54, 2.2, 0.3, size=13, color=MINT, bold=True)
+
+stage_x = [1.02, 2.65, 4.28, 5.91]
+stage_names = ["前期 I", "中期 I", "后期 I", "末期 I"]
+for i, (x, label) in enumerate(zip(stage_x, stage_names)):
+    add_text(slide, label, x, 3.03, 1.2, 0.25, size=11, color=CREAM, bold=True, align=PP_ALIGN.CENTER)
+    if i == 0:
+        draw_dividing_cell(slide, x, 3.42, 1.1, stage=1)
+    elif i == 1:
+        draw_dividing_cell(slide, x, 3.42, 1.1, stage=2)
+    elif i == 2:
+        draw_dividing_cell(slide, x, 3.42, 1.1, stage=3)
+    else:
+        add_circle(slide, x + 0.03, 3.52, 0.48, WHITE, line=rgb("C9D1D9"))
+        add_circle(slide, x + 0.59, 3.52, 0.48, WHITE, line=rgb("C9D1D9"))
+        draw_chromosome(slide, x + 0.27, 3.76, 0.32, CORAL, True)
+        draw_chromosome(slide, x + 0.83, 3.76, 0.32, MINT, True)
+    if i < 3:
+        add_arrow(slide, x + 1.2, 3.97, 0.35, YELLOW)
+
+# Annotation rail
+add_box(slide, 1.03, 5.12, 6.74, 0.48, rgb("233653"), line=rgb("233653"), radius=True)
+add_text(slide, "同源染色体", 1.28, 5.24, 1.18, 0.2, size=11, color=CORAL, bold=True)
+add_text(slide, "来自父母、形状相似的一对染色体", 2.58, 5.24, 3.0, 0.2, size=11, color=CREAM)
+add_text(slide, "第一次分裂的对象", 5.86, 5.24, 1.48, 0.2, size=11, color=YELLOW, bold=True, align=PP_ALIGN.RIGHT)
+
+# Right-side insight
+add_box(slide, 8.45, 2.25, 4.15, 3.72, CREAM, line=CREAM, radius=True)
+add_text(slide, "记住这个区别", 8.82, 2.62, 2.7, 0.35, size=20, color=INK, bold=True)
+add_box(slide, 8.82, 3.31, 3.38, 0.1, CORAL)
+add_rich_text(slide, [("同源染色体", True, CORAL), ("  ≠  ", True, INK), ("姐妹染色单体", True, BLUE)], 8.82, 3.67, 3.1, 0.33, size=15)
+add_text(slide, "减数分裂 I：", 8.84, 4.31, 1.5, 0.25, size=13, color=rgb("657080"), bold=True)
+add_text(slide, "同源染色体分离", 10.15, 4.29, 2.0, 0.3, size=15, color=INK, bold=True)
+add_text(slide, "姐妹染色单体还在一起，\n每个子细胞已经变成单倍体。", 8.84, 4.88, 3.1, 0.55, size=13, color=rgb("657080"))
+add_footer(slide, 3)
+
+
+# Slide 4: meiosis II
+slide = prs.slides.add_slide(prs.slide_layouts[6])
+add_box(slide, 0, 0, 13.333, 7.5, CREAM)
+add_box(slide, 0, 0, 13.333, 0.18, BLUE)
+add_title(slide, "03 · 减数分裂 II", "再分开姐妹染色单体", "不再进行 DNA 复制，两个细胞各自完成一次分裂。", dark=False)
+
+# Big branching diagram
+add_box(slide, 0.8, 2.35, 3.3, 3.65, NAVY, line=NAVY, radius=True)
+add_text(slide, "来自减数分裂 I", 1.08, 2.7, 2.6, 0.3, size=13, color=MINT, bold=True)
+add_circle(slide, 1.75, 3.4, 1.4, rgb("25344F"), line=MINT)
+draw_chromosome(slide, 2.45, 4.1, 1.0, CORAL, True, YELLOW)
+add_text(slide, "2 个单倍体细胞", 1.12, 5.25, 2.7, 0.3, size=15, color=CREAM, bold=True, align=PP_ALIGN.CENTER)
+
+# Branch connector
+add_line(slide, 4.25, 4.1, 5.15, 4.1, CORAL, 3)
+add_line(slide, 5.15, 4.1, 5.15, 3.25, CORAL, 3)
+add_line(slide, 5.15, 4.1, 5.15, 5.02, CORAL, 3)
+add_line(slide, 5.15, 3.25, 5.72, 3.25, CORAL, 3)
+add_line(slide, 5.15, 5.02, 5.72, 5.02, CORAL, 3)
+
+# Four outputs
+outputs = [
+    (5.85, 2.5, CORAL, "n"),
+    (8.2, 2.5, MINT, "n"),
+    (5.85, 4.45, MINT, "n"),
+    (8.2, 4.45, CORAL, "n"),
+]
+for x, y, chrom_color, number in outputs:
+    add_circle(slide, x, y, 1.35, WHITE, line=rgb("CCD4DD"))
+    draw_chromosome(slide, x + 0.68, y + 0.67, 0.88, chrom_color, False)
+    add_text(slide, number, x + 0.18, y + 1.48, 0.95, 0.25, size=14, color=chrom_color, bold=True, align=PP_ALIGN.CENTER)
+
+# Side explanation
+add_box(slide, 10.48, 2.45, 2.15, 3.0, PALE_BLUE, line=PALE_BLUE, radius=True)
+add_text(slide, "结果", 10.8, 2.78, 1.5, 0.3, size=19, color=INK, bold=True)
+add_text(slide, "4 个遗传上\n不完全相同的\n单倍体细胞", 10.8, 3.42, 1.45, 1.05, size=16, color=INK, bold=True)
+add_box(slide, 10.8, 4.9, 1.45, 0.08, BLUE)
+add_text(slide, "配子形成的基础", 10.8, 5.12, 1.5, 0.27, size=11, color=rgb("4A6A89"), bold=True)
+
+add_box(slide, 0.8, 6.33, 9.35, 0.48, INK, INK, radius=True)
+add_rich_text(
+    slide,
+    [("口诀  ", True, YELLOW), ("I 分同源，II 分姐妹", True, WHITE), ("   |   复制只发生在分裂前", False, rgb("D8E0E8"))],
+    1.08,
+    6.46,
+    8.75,
+    0.22,
+    size=13,
+)
+add_footer(slide, 4, dark=False)
+
+
+# Slide 5: comparison and recap
+slide = prs.slides.add_slide(prs.slide_layouts[6])
+add_box(slide, 0, 0, 13.333, 7.5, INK)
+add_box(slide, 0, 0, 0.18, 7.5, CORAL)
+add_title(slide, "04 · 一页总结", "减数分裂，究竟特别在哪里？", "用三个指标，把它和有丝分裂放在一起看。", dark=True)
+
+# Comparison table-like layout
+add_box(slide, 0.75, 2.35, 7.55, 3.65, rgb("25344F"), line=rgb("364C68"), radius=True)
+add_box(slide, 0.75, 2.35, 2.28, 0.62, rgb("35A17C"), line=rgb("35A17C"))
+add_text(slide, "比较维度", 1.02, 2.55, 1.7, 0.2, size=13, color=WHITE, bold=True)
+add_box(slide, 3.03, 2.35, 2.58, 0.62, CORAL, line=CORAL)
+add_text(slide, "有丝分裂", 3.36, 2.55, 1.85, 0.2, size=13, color=WHITE, bold=True)
+add_box(slide, 5.61, 2.35, 2.69, 0.62, BLUE, line=BLUE)
+add_text(slide, "减数分裂", 6.05, 2.55, 1.8, 0.2, size=13, color=WHITE, bold=True)
+
+rows = [
+    ("分裂次数", "1 次", "2 次"),
+    ("子细胞数量", "2 个", "4 个"),
+    ("染色体数目", "保持不变", "减半"),
+    ("遗传结果", "基本相同", "存在差异"),
+]
+for i, (label, mitosis, meiosis) in enumerate(rows):
+    y = 2.97 + i * 0.75
+    fill = rgb("1E2D47") if i % 2 == 0 else rgb("223653")
+    add_box(slide, 0.75, y, 7.55, 0.75, fill, line=fill)
+    add_text(slide, label, 1.02, y + 0.25, 1.68, 0.22, size=12, color=rgb("C5D0DC"), bold=True)
+    add_text(slide, mitosis, 3.36, y + 0.25, 1.85, 0.22, size=12, color=CREAM)
+    add_text(slide, meiosis, 6.05, y + 0.25, 1.9, 0.22, size=12, color=YELLOW if i > 1 else MINT, bold=i > 1)
+
+# Final takeaway panel
+add_box(slide, 8.75, 2.35, 3.83, 3.65, CREAM, line=CREAM, radius=True)
+add_text(slide, "带走三句话", 9.12, 2.7, 2.6, 0.34, size=20, color=INK, bold=True)
+takeaways = [
+    ("01", "复制一次"),
+    ("02", "分裂两次"),
+    ("03", "产生变异组合"),
+]
+for i, (n, statement) in enumerate(takeaways):
+    y = 3.48 + i * 0.68
+    add_circle(slide, 9.12, y, 0.38, [CORAL, MINT, BLUE][i])
+    add_text(slide, n, 9.12, y + 0.09, 0.38, 0.16, size=9, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+    add_text(slide, statement, 9.72, y + 0.05, 2.2, 0.25, size=14, color=INK, bold=True)
+
+add_box(slide, 8.98, 5.3, 3.35, 0.08, CORAL)
+add_text(slide, "为有性生殖准备单倍体配子", 9.12, 5.55, 2.9, 0.28, size=12, color=rgb("657080"), bold=True)
+
+add_text(slide, "2n  →  n", 0.82, 6.62, 2.2, 0.42, size=24, color=YELLOW, bold=True)
+add_text(slide, "染色体数目减半，遗传组合增加", 3.02, 6.73, 4.4, 0.22, size=12, color=rgb("B9C6D4"))
+add_text(slide, "END", 11.8, 6.73, 0.72, 0.22, size=10, color=MUTED, bold=True, align=PP_ALIGN.RIGHT)
+add_footer(slide, 5)
+
+
+prs.save("/tmp/pico-naked/naked_meiosis.pptx")

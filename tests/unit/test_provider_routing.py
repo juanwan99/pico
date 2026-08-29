@@ -26,6 +26,7 @@ from pico_orchestrator.provider import (
 def deepseek_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek-test")
     monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
     monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
@@ -35,6 +36,7 @@ def deepseek_only(monkeypatch: pytest.MonkeyPatch) -> None:
 def both_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek-test")
     monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     monkeypatch.setenv("KIMI_API_KEY", "sk-kimi-test")
     monkeypatch.setenv("KIMI_MODEL", "kimi-k2.6")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")

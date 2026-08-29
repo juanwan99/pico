@@ -70,6 +70,29 @@ def plan_settle_hold(
     return False, ends, plan_execute_pending
 
 
+def should_trip_true_pi_idle_breaker(
+    *,
+    thinking_on: bool,
+    openai_responses_brain: bool,
+    tool_oks: int,
+    tool_gap: float,
+    progress_gap: float,
+    breaker_seconds: float,
+) -> bool:
+    """Deep-lane empty-loop fuse. GPT Responses thinking is not an empty loop.
+
+    DeepSeek 深度 can spin with zero tools. Codex-class GPT often thinks
+    several minutes before the first token or tool; a 180s fuse falsely
+    kills long office HTML/PPT. Wall budget remains ``caps.max_seconds``.
+    """
+    if openai_responses_brain:
+        return False
+    if not thinking_on or tool_oks > 0:
+        return False
+    limit = max(1.0, float(breaker_seconds))
+    return tool_gap >= limit or progress_gap >= limit
+
+
 async def run_true_pi_agent(
     *,
     prompt: str,
@@ -123,6 +146,7 @@ async def run_true_pi_agent(
     # empty/no-tool-progress loop any more than the hosted kernel. Only the
     # thinking-on lane (Pico 深度) arms it; fast lane never trips.
     thinking_on = bool(getattr(caps, "thinking_on", False))
+    openai_responses_brain = False
     breaker_seconds = max(1, int(getattr(caps, "no_progress_seconds", 180) or 180))
     last_tool_ok_wall: float | None = None
     last_progress_wall = started
@@ -171,6 +195,7 @@ async def run_true_pi_agent(
             thinking_on = bool(getattr(caps, "thinking_on", False))
             max_context, max_out = true_pi_windows_from_caps(caps)
             openai_brain = uses_openai_responses_brain(provider)
+            openai_responses_brain = openai_brain
             pi_provider = "openai" if openai_brain or provider.name != "deepseek" else "deepseek"
             pi_base = provider.base_url if openai_brain else ""
             pi_api = "openai-responses" if openai_brain else ""
@@ -341,11 +366,8 @@ async def run_true_pi_agent(
                         principal=principal,
                         tag=tag,
                     )
-                # Dual-mode deep-lane circuit breaker (F2): the true_pi kernel
-                # must not run away on an empty / no-tool-progress loop. Only
-                # the thinking-on lane (Pico 深度) arms it; fast lane never
-                # trips. Two triggers: no tool success for ≥180s, or the event
-                # stream stalls ≥180s with zero tool success.
+                # Dual-mode deep-lane circuit breaker (F2): DeepSeek 深度 empty
+                # loop fuse. GPT Responses thinking is skipped (see helper).
                 if thinking_on and not state.settled:
                     now = loop.time()
                     tool_gap = (
@@ -353,34 +375,22 @@ async def run_true_pi_agent(
                         if last_tool_ok_wall is not None
                         else now - started
                     )
-                    if tool_gap >= breaker_seconds and state.tool_oks == 0:
+                    progress_gap = now - last_progress_wall
+                    if should_trip_true_pi_idle_breaker(
+                        thinking_on=thinking_on,
+                        openai_responses_brain=openai_responses_brain,
+                        tool_oks=state.tool_oks,
+                        tool_gap=tool_gap,
+                        progress_gap=progress_gap,
+                        breaker_seconds=breaker_seconds,
+                    ):
                         await client.abort()
                         await emit(
                             "circuit.breaker",
                             {
                                 "tool_exec_count": state.tool_oks,
                                 "wall_seconds": int(now - started),
-                                "runtime": RUNTIME_LABEL,
-                            },
-                        )
-                        return await _failed(
-                            emit,
-                            code="pi.no_progress",
-                            reason=(
-                                "深度模式长时间无有效进展，已触发熔断以避免空转/OOM。"
-                                "可点「再跑一次」或将任务拆短后重试。"
-                            ),
-                            state=state,
-                            principal=principal,
-                            tag=tag,
-                        )
-                    if now - last_progress_wall >= breaker_seconds and state.tool_oks == 0:
-                        await client.abort()
-                        await emit(
-                            "circuit.breaker",
-                            {
-                                "tool_exec_count": state.tool_oks,
-                                "stalled_seconds": int(now - last_progress_wall),
+                                "stalled_seconds": int(progress_gap),
                                 "runtime": RUNTIME_LABEL,
                             },
                         )

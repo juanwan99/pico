@@ -43,7 +43,10 @@ from pico_orchestrator.office.inspect import inspect_office_bytes
 from pico_orchestrator.office.legacy import guess_office_ext
 from pico_orchestrator.office.qa import verify_office_bytes
 from pico_orchestrator.office.render import render_spec
-from pico_orchestrator.office.sandbox_lib import run_pptx_lib_source_async
+from pico_orchestrator.office.sandbox_lib import (
+    PPTX_LIB_MAX_SOURCE,
+    run_pptx_lib_source_async,
+)
 from pico_orchestrator.office.spec import parse_spec
 from pico_orchestrator.office_editors import (
     comment_docx_bytes,
@@ -224,7 +227,7 @@ async def _observe_document_open(
 
 def _make_sandbox_pptx_lib(store: ArtifactStore):
     async def sandbox_pptx_lib(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        source = _required_text(args, "source", maximum=20_000)
+        source = _required_text(args, "source", maximum=PPTX_LIB_MAX_SOURCE)
         title_raw = args.get("title")
         title = _ensure_extension(
             str(title_raw).strip() if isinstance(title_raw, str) and title_raw.strip() else "沙箱上限.pptx",
@@ -2049,10 +2052,13 @@ def build_default_gateway(
         ToolSpec(
             name="generate_pptx_document",
             description=(
-                "Create a real OOXML .pptx via spec/blocks. Sibling of "
+                "Create a real OOXML .pptx via spec/blocks on stock python-pptx "
+                "layouts (title, bullets, table, theme colors). Sibling of "
                 "sandbox_pptx_lib (isolated python-pptx) — pick from the "
-                "teacher's ask, not a scene word. Same title replaces the file "
-                "the teacher opens. Read observation.outline.images. "
+                "teacher's ask, not a scene word. Free shapes / color blocks / "
+                "full-bleed geometry are not this tool; write python-pptx in "
+                "sandbox_pptx_lib. Same title replaces the file the teacher "
+                "opens. Read observation.outline.images. "
                 "A missing image_artifact_id skips that picture; the file still "
                 "lands. blocks[].type cover/content/title/page (or omitted) "
                 "are slides. To embed a picture, pass generate_image/"
@@ -2072,10 +2078,13 @@ def build_default_gateway(
                 "Sibling of generate_pptx_document — not the only PPT path. "
                 "Result includes an observation of what landed. ok is not finished. "
                 "from pptx import Presentation, Inches, Pt, RGBColor is allowed "
-                "(Inches/Pt also on pptx). Do not import os. "
+                "(Inches/Pt also on pptx). add_shape and RGBColor color blocks "
+                "are this tool. from pathlib import Path is a stub (mkdir ignored; "
+                "no host files). prs.save is routed to the ledger (same as save_deck). "
+                "Do not import os. "
                 "add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); "
                 "add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first "
-                "picture. Must add slides then save_deck(prs). Empty "
+                "picture. Must add slides then save_deck(prs) or prs.save. Empty "
                 "Presentation();save_deck fails — do not send a placeholder. "
                 "A missing image_artifact_ids entry is skipped. Args: source, "
                 "title?, image_artifact_ids?"
@@ -2501,10 +2510,12 @@ def openai_tool_schemas(
                 "source": {
                     "type": "string",
                     "description": (
-                        "python-pptx body. from pptx import Presentation, Inches, Pt "
-                        "is allowed. IMAGE_PATHS[0] is the first picture. "
-                        "add_title_slide image= and add_table prs=/rows= aliases. "
-                        "Do not import os. Add slides then save_deck. Empty shells fail."
+                        "python-pptx body. from pptx import Presentation, Inches, Pt, "
+                        "RGBColor is allowed. from pathlib import Path is a stub. "
+                        "prs.save is routed to the ledger. IMAGE_PATHS[0] is the first "
+                        "picture. add_title_slide image= and add_table prs=/rows= aliases. "
+                        "Do not import os. Add slides then save_deck or prs.save. "
+                        "Empty shells fail."
                     ),
                 },
                 "title": {

@@ -440,9 +440,9 @@ save_deck(prs)
 
 
 def test_sandbox_helpers_injected_no_import() -> None:
-    src = (ROOT / "services/orchestrator/pico_orchestrator/office/sandbox_lib.py").read_text(
-        encoding="utf-8"
-    )
+    src = (
+        ROOT / "services/orchestrator/pico_orchestrator/office/sandbox_exec.py"
+    ).read_text(encoding="utf-8")
     assert "add_title_slide" in src
     assert "add_content_slide" in src
     assert "add_table" in src

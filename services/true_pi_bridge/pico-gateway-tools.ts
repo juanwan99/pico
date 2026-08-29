@@ -198,7 +198,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_pptx_document",
-    "Create a real .pptx Artifact via spec/blocks. Sibling of sandbox_pptx_lib (isolated python-pptx) — pick from the teacher's ask, not a scene word. Same title replaces the file the teacher opens. Read observation.outline.images after. A missing image_artifact_id skips that picture; the file still lands. blocks[].type cover/content/title/page (or omitted) are slides — not a new spec field. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. Pictures already inside the file are not separate downloads. ok is not finished.",
+    "Create a real .pptx Artifact via spec/blocks on stock python-pptx layouts (title, bullets, table, theme colors). Sibling of sandbox_pptx_lib (isolated python-pptx) — pick from the teacher's ask, not a scene word. Free shapes / color blocks / full-bleed geometry are not this tool; write python-pptx in sandbox_pptx_lib. Same title replaces the file the teacher opens. Read observation.outline.images after. A missing image_artifact_id skips that picture; the file still lands. blocks[].type cover/content/title/page (or omitted) are slides — not a new spec field. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. Pictures already inside the file are not separate downloads. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
@@ -394,7 +394,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_pptx_lib",
-    "Isolated python-pptx (not host bash, not a second Office OS). Sibling of generate_pptx_document — not the only PPT path. from pptx import Presentation, Inches, Pt, RGBColor is allowed (Inches/Pt also on pptx). Do not import os. add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first picture. Must add slides then save_deck(prs). Empty Presentation();save_deck fails — do not send a placeholder. A missing image_artifact_ids entry is skipped.",
+    "Isolated python-pptx (not host bash, not a second Office OS). Sibling of generate_pptx_document — not the only PPT path. from pptx import Presentation, Inches, Pt, RGBColor is allowed (Inches/Pt also on pptx). add_shape and RGBColor color blocks are this tool. from pathlib import Path is a stub (mkdir ignored; no host files). prs.save is routed to the ledger (same as save_deck). Do not import os. add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first picture. Must add slides then save_deck(prs) or prs.save. Empty Presentation();save_deck fails — do not send a placeholder. A missing image_artifact_ids entry is skipped.",
     Type.Object(
       {
         source: Type.String(),
