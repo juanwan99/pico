@@ -1,42 +1,57 @@
 #!/usr/bin/env bash
-# spawn-executor — thin adapter to the official Cursor Cloud Agents API.
-# Steward only: launch / wake an executor. Never merge main. Never prod-update.
-# Upstream: https://cursor.com/docs/cloud-agent/api/endpoints  POST /v1/agents
-# Secrets stay in env. This script never prints key values.
+# spawn-executor — thin adapter: steward SSH → ECS grok CLI (executor).
+# Same GitHub contract (派发 / CANDIDATE / DEPLOYED). Not Cursor Cloud Agents.
+# Steward only: launch / wake. Never merge main from this script. Never prod-update.
+# Secrets stay in env / on-box grok login. This script never prints key values.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-API_BASE="${CURSOR_API_BASE:-https://api.cursor.com}"
-REPO_URL="${CURSOR_REPO_URL:-https://github.com/juanwan99/pico}"
-STARTING_REF="${CURSOR_STARTING_REF:-main}"
-EXEC_ENV="${CURSOR_EXECUTOR_ENV:-}"
+REMOTE_HELPER="$ROOT/scripts/ecs-grok-exec.sh"
 ISSUE=""
 PR_URL=""
 PROMPT_FILE=""
 PROMPT_TEXT=""
-AGENT_ID=""
+SESSION=""
 DISPLAY_NAME=""
+CWD=""
+REF="origin/main"
 WAKE_MERGE=0
 DRY_RUN=0
 PRINT_PAYLOAD=0
 NO_COMMENT=0
+FOREGROUND=0
+NO_WORKTREE=0
+CONTINUE=0
+MAX_TURNS="${PICO_GROK_MAX_TURNS:-80}"
 SHA=""
+AGENT_ID=""
+
+CONTRACT="$(cat <<'EOF'
+【执行者合同 · ECS Grok】
+你是 Pico 执行者。工作流不变：1卡1PR · GitHub Issue 是唯一总线 · VERDICT_AUTHORITY: NONE。
+runtime：本机 grok CLI（SSH 叫醒）。禁止改用 Cursor Cloud Agent / 评 @cursor 当执行者。
+工作目录：只在本隔离 checkout。禁止把 /opt/pico 或 /opt/edu-cloud 当开发树。
+部署：有差才 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`。
+回执贴合同 Issue：## CANDIDATE / ## DEPLOYED / 五句。禁止证据进 PR。禁止 Closes 部前关卡。禁止自签 PASS。总管不合不部——合与部归你。
+禁写 juanwan99/edu-cloud。
+EOF
+)"
 
 usage() {
   cat <<'EOF'
 Usage:
   bash scripts/spawn-executor.sh --issue N
-  bash scripts/spawn-executor.sh --prompt-file slip.txt [--env NAME]
-  bash scripts/spawn-executor.sh --agent bc-… --prompt-file wake.txt
+  bash scripts/spawn-executor.sh --prompt-file slip.txt
   bash scripts/spawn-executor.sh --issue N --wake-merge --pr 683 --sha <40>
+  bash scripts/spawn-executor.sh --cwd /tmp --prompt "…" --foreground --max-turns 1
 
 Env (names only; values never printed):
-  CURSOR_API_KEY          required except --print-payload / --dry-run
-  CURSOR_EXECUTOR_ENV     named cloud env with TS/SSH (exclusive with repos)
-  CURSOR_API_BASE         default https://api.cursor.com
-  CURSOR_REPO_URL         default https://github.com/juanwan99/pico
+  PICO_EXECUTOR_SSH_HOST   default ecs (Tailscale MagicDNS)
+  PICO_EXECUTOR_SSH        optional ssh wrapper (tests)
+  PICO_GROK_MAX_TURNS      default 80
 
-Does not merge. Does not deploy. Fail-closed if the key is missing.
+Fail-closed if ssh ecs fails (except --print-payload / --dry-run).
+Does not merge. Does not deploy. Does not spawn a Cursor Cloud Agent.
 EOF
 }
 
@@ -54,16 +69,28 @@ while [[ $# -gt 0 ]]; do
       ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
     --prompt) PROMPT_TEXT="${2:-}"; shift 2 ;;
+    --session) SESSION="${2:-}"; shift 2 ;;
     --agent) AGENT_ID="${2:-}"; shift 2 ;;
-    --env) EXEC_ENV="${2:-}"; shift 2 ;;
+    --env)
+      echo "[spawn-executor] WARN: --env ignored (Cursor cloud env retired; executor is ECS grok)" >&2
+      shift 2
+      ;;
     --name) DISPLAY_NAME="${2:-}"; shift 2 ;;
-    --repo) REPO_URL="${2:-}"; shift 2 ;;
-    --ref) STARTING_REF="${2:-}"; shift 2 ;;
+    --repo)
+      echo "[spawn-executor] WARN: --repo ignored (always juanwan99/pico on ECS)" >&2
+      shift 2
+      ;;
+    --ref) REF="${2:-}"; shift 2 ;;
+    --cwd) CWD="${2:-}"; shift 2 ;;
     --sha) SHA="${2:-}"; shift 2 ;;
     --wake-merge) WAKE_MERGE=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --print-payload) PRINT_PAYLOAD=1; shift ;;
     --no-comment) NO_COMMENT=1; shift ;;
+    --foreground) FOREGROUND=1; shift ;;
+    --no-worktree) NO_WORKTREE=1; shift ;;
+    --continue) CONTINUE=1; shift ;;
+    --max-turns) MAX_TURNS="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *)
       echo "[spawn-executor] ERROR: unknown arg: $1" >&2
@@ -72,6 +99,14 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "$AGENT_ID" ]]; then
+  if [[ "$AGENT_ID" == bc-* ]]; then
+    echo "[spawn-executor] ERROR: Cursor agent id retired. Executor is ECS grok. Use --session pico-exec-<issue>." >&2
+    exit 2
+  fi
+  SESSION="$AGENT_ID"
+fi
 
 if [[ -n "$PROMPT_FILE" ]]; then
   if [[ ! -f "$PROMPT_FILE" ]]; then
@@ -141,54 +176,76 @@ PY
   )"
 fi
 
-if [[ -z "${CURSOR_API_KEY:-}" && "$PRINT_PAYLOAD" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
-  echo "[spawn-executor] ERROR: CURSOR_API_KEY unset (Dashboard → API Keys). Fail-closed." >&2
+FULL_PROMPT="${CONTRACT}
+
+${PROMPT_TEXT}"
+
+if [[ -z "$SESSION" ]]; then
+  if [[ -n "$DISPLAY_NAME" ]]; then
+    SESSION="$(printf '%s' "$DISPLAY_NAME" | tr -c 'A-Za-z0-9_-' '-' | cut -c1-40)"
+  elif [[ -n "$ISSUE" ]]; then
+    SESSION="pico-exec-${ISSUE}"
+  else
+    SESSION="pico-exec-adhoc"
+  fi
+fi
+if [[ ! "$SESSION" =~ ^[A-Za-z0-9_-]+$ ]]; then
+  echo "[spawn-executor] ERROR: bad session name: $SESSION" >&2
   exit 2
 fi
 
+if [[ -n "$CWD" ]]; then
+  NO_WORKTREE=1
+fi
+if [[ -z "$CWD" && -z "$ISSUE" && "$NO_WORKTREE" -eq 1 ]]; then
+  echo "[spawn-executor] ERROR: --cwd required when --no-worktree without --issue" >&2
+  exit 2
+fi
+if [[ -z "$CWD" && -z "$ISSUE" ]]; then
+  echo "[spawn-executor] ERROR: need --issue or --cwd" >&2
+  exit 2
+fi
+
+REMOTE_CWD="$CWD"
+if [[ -z "$REMOTE_CWD" && -n "$ISSUE" ]]; then
+  REMOTE_CWD="/home/ops/pico-wt/issue-${ISSUE}"
+fi
+
+PR_N=""
+if [[ "$PR_URL" =~ /pull/([0-9]+) ]]; then
+  PR_N="${BASH_REMATCH[1]}"
+fi
+
 PAYLOAD="$(
-  PROMPT_TEXT="$PROMPT_TEXT" \
-  REPO_URL="$REPO_URL" \
-  STARTING_REF="$STARTING_REF" \
-  EXEC_ENV="$EXEC_ENV" \
-  PR_URL="$PR_URL" \
-  AGENT_ID="$AGENT_ID" \
-  DISPLAY_NAME="$DISPLAY_NAME" \
+  FULL_PROMPT="$FULL_PROMPT" \
+  SESSION="$SESSION" \
+  REMOTE_CWD="$REMOTE_CWD" \
+  ISSUE="$ISSUE" \
+  PR_N="$PR_N" \
+  REF="$REF" \
+  FOREGROUND="$FOREGROUND" \
+  NO_WORKTREE="$NO_WORKTREE" \
+  CONTINUE="$CONTINUE" \
+  MAX_TURNS="$MAX_TURNS" \
+  WAKE_MERGE="$WAKE_MERGE" \
+  PICO_EXECUTOR_SSH_HOST="${PICO_EXECUTOR_SSH_HOST:-}" \
   python3 - <<'PY'
 import json, os
-prompt = os.environ["PROMPT_TEXT"]
-agent_id = os.environ.get("AGENT_ID") or ""
-if agent_id:
-    body = {"prompt": {"text": prompt}}
-    print(json.dumps(body, ensure_ascii=False))
-    raise SystemExit(0)
-
-body = {
-    "prompt": {"text": prompt},
-    "autoCreatePR": False,
-    "skipReviewerRequest": True,
-}
-name = os.environ.get("DISPLAY_NAME") or ""
-if name:
-    body["name"] = name[:100]
-env_name = os.environ.get("EXEC_ENV") or ""
-pr_url = os.environ.get("PR_URL") or ""
-if env_name:
-    # Named cloud env is mutually exclusive with explicit repos.
-    body["env"] = {"type": "cloud", "name": env_name}
-    if pr_url:
-        body["prompt"]["text"] = (
-            prompt.rstrip()
-            + "\n\n工作对象 PR（环境已含仓，按此 PR 的 head 继续，勿新开第二张）："
-            + pr_url
-        )
-else:
-    repo = {"url": os.environ["REPO_URL"], "startingRef": os.environ["STARTING_REF"]}
-    if pr_url:
-        repo["prUrl"] = pr_url
-        body["workOnCurrentBranch"] = True
-    body["repos"] = [repo]
-print(json.dumps(body, ensure_ascii=False))
+print(json.dumps({
+    "runtime": "ecs-grok",
+    "ssh_host": os.environ.get("PICO_EXECUTOR_SSH_HOST") or "ecs",
+    "session": os.environ["SESSION"],
+    "cwd": os.environ.get("REMOTE_CWD") or "",
+    "issue": os.environ.get("ISSUE") or "",
+    "pr": os.environ.get("PR_N") or "",
+    "ref": os.environ.get("REF") or "origin/main",
+    "foreground": os.environ.get("FOREGROUND") == "1",
+    "no_worktree": os.environ.get("NO_WORKTREE") == "1",
+    "continue": os.environ.get("CONTINUE") == "1",
+    "max_turns": int(os.environ.get("MAX_TURNS") or "80"),
+    "wake_merge": os.environ.get("WAKE_MERGE") == "1",
+    "prompt": os.environ["FULL_PROMPT"],
+}, ensure_ascii=False))
 PY
 )"
 
@@ -196,88 +253,82 @@ if [[ "$PRINT_PAYLOAD" -eq 1 || "$DRY_RUN" -eq 1 ]]; then
   printf '%s\n' "$PAYLOAD"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "ok=dry-run"
-    echo "agent_id="
-    echo "agent_url="
+    echo "runtime=ecs-grok"
+    echo "session=${SESSION}"
+    echo "cwd=${REMOTE_CWD}"
   fi
   exit 0
 fi
 
-if [[ -n "$AGENT_ID" ]]; then
-  URL="${API_BASE%/}/v1/agents/${AGENT_ID}/runs"
-else
-  URL="${API_BASE%/}/v1/agents"
+if [[ ! -f "$REMOTE_HELPER" ]]; then
+  echo "[spawn-executor] ERROR: missing $REMOTE_HELPER" >&2
+  exit 2
 fi
 
-RESP="$(
-  URL="$URL" PAYLOAD="$PAYLOAD" python3 - <<'PY'
-import json, os, sys, urllib.error, urllib.request
-url = os.environ["URL"]
-payload = os.environ["PAYLOAD"].encode()
-key = os.environ.get("CURSOR_API_KEY") or ""
-req = urllib.request.Request(
-    url,
-    data=payload,
-    method="POST",
-    headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {key}",
-    },
-)
-try:
-    with urllib.request.urlopen(req, timeout=30) as r:
-        raw = r.read().decode()
-        code = r.status
-except urllib.error.HTTPError as e:
-    raw = e.read().decode() if e.fp else str(e)
-    print(f"[spawn-executor] ERROR: HTTP {e.code}: {raw[:400]}", file=sys.stderr)
-    raise SystemExit(2)
-except Exception as e:
-    print(f"[spawn-executor] ERROR: request failed: {e}", file=sys.stderr)
-    raise SystemExit(2)
-print(raw)
-PY
-)"
+executor_ssh() {
+  if [[ -n "${PICO_EXECUTOR_SSH:-}" ]]; then
+    # Test/override wrapper. Receives the remote command as remaining args.
+    # shellcheck disable=SC2086
+    ${PICO_EXECUTOR_SSH} "$@"
+    return
+  fi
+  ssh -o BatchMode=yes -o ConnectTimeout=20 "${PICO_EXECUTOR_SSH_HOST:-ecs}" "$@"
+}
 
-PARSED="$(
-  RESP="$RESP" AGENT_ID="$AGENT_ID" python3 - <<'PY'
-import json, os, sys
-data = json.loads(os.environ["RESP"])
-follow = bool(os.environ.get("AGENT_ID"))
-if follow:
-    run = data.get("run") or data
-    agent_id = run.get("agentId") or os.environ.get("AGENT_ID") or ""
-    run_id = run.get("id") or ""
-    status = run.get("status") or ""
-    url = f"https://cursor.com/agents/{agent_id}" if agent_id else ""
-else:
-    agent = data.get("agent") or data
-    run = data.get("run") or {}
-    agent_id = agent.get("id") or ""
-    run_id = run.get("id") or agent.get("latestRunId") or ""
-    status = run.get("status") or agent.get("status") or ""
-    url = agent.get("url") or (f"https://cursor.com/agents/{agent_id}" if agent_id else "")
-if not agent_id:
-    print("[spawn-executor] ERROR: no agent id in response", file=sys.stderr)
-    raise SystemExit(2)
-print(f"ok=true")
-print(f"agent_id={agent_id}")
-print(f"agent_url={url}")
-print(f"run_id={run_id}")
-print(f"run_status={status}")
-PY
-)"
+if ! executor_ssh "true"; then
+  echo "[spawn-executor] ERROR: ssh ecs failed (need ssh-ecs / Tailscale). Fail-closed." >&2
+  exit 2
+fi
+
+JOBDIR="/home/ops/.pico-exec/jobs/${SESSION}"
+executor_ssh "mkdir -p $(printf '%q' "$JOBDIR") && chmod 700 /home/ops/.pico-exec /home/ops/.pico-exec/jobs $(printf '%q' "$JOBDIR")"
+printf '%s' "$FULL_PROMPT" | executor_ssh "cat > $(printf '%q' "$JOBDIR/prompt.md")"
+executor_ssh "cat > $(printf '%q' "$JOBDIR/ecs-grok-exec.sh") && chmod +x $(printf '%q' "$JOBDIR/ecs-grok-exec.sh")" < "$REMOTE_HELPER"
+
+REMOTE_ARGS=(
+  bash "$(printf '%q' "$JOBDIR/ecs-grok-exec.sh")"
+  --session "$(printf '%q' "$SESSION")"
+  --prompt "$(printf '%q' "$JOBDIR/prompt.md")"
+  --max-turns "$(printf '%q' "$MAX_TURNS")"
+  --ref "$(printf '%q' "$REF")"
+)
+if [[ -n "$ISSUE" ]]; then
+  REMOTE_ARGS+=(--issue "$(printf '%q' "$ISSUE")")
+fi
+if [[ -n "$CWD" ]]; then
+  REMOTE_ARGS+=(--cwd "$(printf '%q' "$CWD")")
+fi
+if [[ "$NO_WORKTREE" -eq 1 ]]; then
+  REMOTE_ARGS+=(--no-worktree)
+fi
+if [[ "$FOREGROUND" -eq 1 ]]; then
+  REMOTE_ARGS+=(--foreground)
+fi
+if [[ "$CONTINUE" -eq 1 ]]; then
+  REMOTE_ARGS+=(--continue)
+fi
+if [[ -n "$PR_N" ]]; then
+  REMOTE_ARGS+=(--pr "$(printf '%q' "$PR_N")")
+fi
+
+# Join already-quoted tokens into one remote command.
+REMOTE_CMD="${REMOTE_ARGS[*]}"
+PARSED="$(executor_ssh "$REMOTE_CMD")"
 printf '%s\n' "$PARSED"
 
 if [[ -n "$ISSUE" && "$NO_COMMENT" -eq 0 ]] && command -v gh >/dev/null; then
-  AGENT_URL="$(printf '%s\n' "$PARSED" | awk -F= '/^agent_url=/{print $2}')"
-  AGENT_ID_OUT="$(printf '%s\n' "$PARSED" | awk -F= '/^agent_id=/{print $2}')"
+  LOG_PATH="$(printf '%s\n' "$PARSED" | awk -F= '/^log=/{print $2; exit}')"
+  CWD_OUT="$(printf '%s\n' "$PARSED" | awk -F= '/^cwd=/{print $2; exit}')"
   gh issue comment "$ISSUE" --repo juanwan99/pico --body "$(cat <<EOF
 ## 起窗
 
-- agent: ${AGENT_URL}
-- id: \`${AGENT_ID_OUT}\`
+- runtime: ecs-grok（SSH \`ecs\` → 机上 grok CLI）
+- session: \`${SESSION}\`
+- cwd: \`${CWD_OUT:-$REMOTE_CWD}\`
+- log: \`${LOG_PATH:-$JOBDIR/grok.log}\`
 - 首条 = 本卡 \`## 派发\` / \`## 续派\`
 - 总管不合不部
+- 禁止 Cursor Cloud Agent / \`@cursor\` 当执行者
 
 CLAIM-WB-DEGREE-WEB: NO
 EOF
