@@ -101,7 +101,9 @@ Google Gemini generateContent
 
 开 Billing 常见还要 **预存至少 $10**。用 spend cap 硬顶，不要只设预算邮件。Tier 1 账单封顶默认 $250/月（Billing 账户级）。
 
-**GPT 出图实测（2026-08-29 · 现网 AIProxy OpenAI 脑槽，不是 cookie）：** `{base}/images/generations` 口存在（无 `/v1`）。`gpt-image-2` / `gpt-image-1.5` / `gpt-image-1` / `dall-e-3` → **403 仅允许Openai模型访问/模型未配置**。`/v1/images/generations` → 404。New API 现网模型表只有 Gemini/Imagen，无 GPT 图。现网 **出不了 GPT 图**。官方价（[OpenAI pricing](https://platform.openai.com/docs/pricing) 每百万 token）：`gpt-image-1` 图输出 $40、文输入 $5；`gpt-image-2` 图输出 $30、文输入 $5。高真实 1024 大约 **$0.13–$0.17/张**（high），比 Gemini 3.1 Flash Image 1K **$0.067** 贵。要测效果须在 AIProxy 配 `gpt-image-*`，不是登录反代。
+**GPT 出 SVG 实测（2026-08-29）：** 现网 `gpt-5.6-sol` Responses（`stream:true` · `store:false` · thinking medium）能直接写出合法 SVG，不需要 gpt-image 模型、不走 cookie。豌豆植株示意图约 13KB、88 个 path；usage `input 424 + output 5713`（含 reasoning 182）。官方 `gpt-5.6-sol` 短上下文 **$4 / $20 每百万** → 这次约 **$0.116**。这是矢量示意图，不是照片。课堂「结构图」可以走这条（脑已在）；照片级仍要付费出图模型。
+
+**GPT 出图（像素）实测：** `{base}/images/generations` 口存在（无 `/v1`）。`gpt-image-*` / `dall-e-3` → **403 模型未配置**。New API 现网只有 Gemini/Imagen。像素 GPT 图现网出不了。官方 high 1024 约 **$0.13–$0.17/张**，贵过 Gemini 3.1 Flash Image 1K **$0.067**。
 
 **无免费 API ≠ 走登录反代。** 账户 cookie / 网页套餐反代 / New API「Gemini 网页」渠道 **不是退路**（ToS、风控、cookie 过期、Pico 法禁止自研第二图核）。正路只剩：① API key + Billing + New API 限速（课堂百张约数美元）；② 换更便宜的官方出图模型（仍付费）；③ 老师课先不出这张模型，人话失败、不编像素。禁止第四条。
 
