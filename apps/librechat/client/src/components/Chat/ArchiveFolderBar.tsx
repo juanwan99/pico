@@ -50,15 +50,13 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
     [convo],
   );
 
-  const currentName = folderId ? folderLabelPath(folders, folderId) : '我的文件';
-
   return (
     <div className="mb-2 w-full text-left" data-testid="archive-folder-bar">
-      <label className="pico-type-body flex items-baseline gap-2 text-[color:var(--pico-ink)] dark:text-text-primary">
-        存档位置
-        <span className="relative min-w-0 flex-1">
+      <label className="pico-type-body flex items-center gap-2 text-[color:var(--pico-ink)] dark:text-text-primary">
+        <span className="shrink-0 text-[color:var(--pico-ink-2)]">存档位置</span>
+        <span className="relative inline-flex min-w-0">
           <select
-            className="pico-type-body relative z-10 w-full cursor-pointer border-0 bg-transparent p-0 text-transparent shadow-none outline-none [appearance:none] [-moz-appearance:none] [-webkit-appearance:none]"
+            className="pico-type-body max-w-full cursor-pointer appearance-none rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] py-1 pl-2 pr-7 text-[color:var(--pico-ink)] shadow-sm outline-none hover:bg-[color:var(--pico-surface-2)]"
             value={folderId}
             data-testid="archive-folder-select"
             aria-label="存档位置"
@@ -73,9 +71,11 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
               ) : null,
             )}
           </select>
-          <span className="pointer-events-none absolute inset-0 flex items-baseline gap-1 text-[color:var(--pico-ink-2)]">
-            <span className="truncate">{currentName}</span>
-            <span aria-hidden>▾</span>
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[color:var(--pico-ink-3)]"
+          >
+            ▾
           </span>
         </span>
       </label>

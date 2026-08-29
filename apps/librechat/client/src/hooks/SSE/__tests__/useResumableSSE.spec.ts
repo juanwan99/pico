@@ -181,6 +181,10 @@ jest.mock('librechat-data-provider', () => {
       refreshToken: jest.fn(),
       dispatchTokenUpdatedEvent: jest.fn(),
     },
+    dataService: {
+      ...actual.dataService,
+      updateConversation: jest.fn().mockResolvedValue({}),
+    },
   };
 });
 

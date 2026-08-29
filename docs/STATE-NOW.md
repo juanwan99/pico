@@ -4,7 +4,7 @@
 DATE: 2026-08-29
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: 无
+在飞: #785 T-UI-CHROME · PR #786
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main
 阻塞: #748 合部完不关 · 记忆 OS 挂

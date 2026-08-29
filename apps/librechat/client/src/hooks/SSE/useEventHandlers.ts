@@ -12,6 +12,7 @@ import {
   tMessageSchema,
   tConvoUpdateSchema,
   isAssistantsEndpoint,
+  dataService,
 } from 'librechat-data-provider';
 import type {
   TMessage,
@@ -34,6 +35,7 @@ import {
   removeConvoFromAllQueries,
   findConversationInInfinite,
 } from '~/utils';
+import { isUnnamedConvoTitle, titleFromFirstMessage } from '~/utils/picoConvoTitle';
 import {
   startupConfigKey,
   queueTitleGeneration,
@@ -67,8 +69,7 @@ type TTitleEvent = {
   };
 };
 
-const hasRealTitle = (title?: string | null): title is string =>
-  title != null && title !== '' && title !== 'New Chat';
+const hasRealTitle = (title?: string | null): title is string => !isUnnamedConvoTitle(title);
 
 /** Skill caches refreshed when a chat turn authors a skill via `create_file`/`edit_file`. */
 const SKILL_QUERY_KEYS = [
@@ -241,12 +242,20 @@ export const getConvoTitle = ({
   queryClient,
   currentTitle,
   conversationId,
+  firstMessage,
 }: {
   parentId?: string | null;
   queryClient: ReturnType<typeof useQueryClient>;
   currentTitle?: string | null;
   conversationId?: string | null;
+  firstMessage?: string | null;
 }): string | null | undefined => {
+  if (parentId === Constants.NO_PARENT && isUnnamedConvoTitle(currentTitle)) {
+    const snippet = titleFromFirstMessage(firstMessage ?? '');
+    if (snippet) {
+      return snippet;
+    }
+  }
   if (
     parentId !== Constants.NO_PARENT &&
     (currentTitle?.toLowerCase().includes('new chat') ?? false)
@@ -266,6 +275,17 @@ export const getConvoTitle = ({
   }
   return currentTitle;
 };
+
+function persistNamedTitle(conversationId: string | null | undefined, title: string | null | undefined) {
+  if (!conversationId || conversationId === Constants.NEW_CONVO || !hasRealTitle(title)) {
+    return;
+  }
+  void dataService
+    .updateConversation({ conversationId, title })
+    .catch(() => {
+      /* local snippet still shows */
+    });
+}
 
 export default function useEventHandlers({
   setMessages,
@@ -473,6 +493,7 @@ export default function useEventHandlers({
             queryClient,
             conversationId,
             currentTitle: prevState?.title,
+            firstMessage: requestMessage.text,
           });
           update = tConvoUpdateSchema.parse({
             ...prevState,
@@ -486,6 +507,7 @@ export default function useEventHandlers({
 
         if (requestMessage.parentMessageId === Constants.NO_PARENT) {
           upsertConvoInAllQueries(queryClient, update);
+          persistNamedTitle(update.conversationId, update.title);
         } else {
           updateConvoInAllQueries(queryClient, update.conversationId!, (_c) => update, true);
         }
@@ -555,6 +577,7 @@ export default function useEventHandlers({
             queryClient,
             conversationId,
             currentTitle: prevState?.title,
+            firstMessage: userMessage.text,
           });
           update = tConvoUpdateSchema.parse({
             ...prevState,
@@ -567,6 +590,7 @@ export default function useEventHandlers({
         if (!isTemporary) {
           if (parentMessageId === Constants.NO_PARENT) {
             upsertConvoInAllQueries(queryClient, update);
+            persistNamedTitle(update.conversationId, update.title);
           } else {
             updateConvoInAllQueries(queryClient, update.conversationId!, (_c) => update, true);
           }

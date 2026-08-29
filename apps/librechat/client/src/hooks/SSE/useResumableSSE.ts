@@ -16,6 +16,7 @@ import {
   ApprovalEvents,
   ViolationTypes,
   removeNullishValues,
+  dataService,
 } from 'librechat-data-provider';
 import type {
   Agents,
@@ -57,6 +58,7 @@ import useEventHandlers, { buildCreatedInitialResponse } from './useEventHandler
 import useSteerConvert from '~/hooks/Chat/useSteerConvert';
 import { useAuthContext } from '~/hooks/AuthContext';
 import useUsageHandler from './useUsageHandler';
+import { persistFirstMessageTitle } from '~/utils/picoConvoTitle';
 import store from '~/store';
 
 type ChatHelpers = Pick<
@@ -502,6 +504,22 @@ export default function useResumableSSE(
       }
 
       const optimisticConversation = buildOptimisticConversation(currentSubmission, conversationId);
+      const named = persistFirstMessageTitle({
+        conversationId,
+        currentTitle: optimisticConversation.title,
+        firstMessage: currentSubmission.userMessage?.text,
+        isTemporary: currentSubmission.isTemporary,
+        updateTitle: (id, title) => dataService.updateConversation({ conversationId: id, title }),
+      });
+      if (named) {
+        optimisticConversation.title = named;
+        setConversation((prev) => {
+          if (!prev || (prev.conversationId && prev.conversationId !== conversationId && prev.conversationId !== Constants.NEW_CONVO)) {
+            return prev;
+          }
+          return { ...prev, conversationId, title: named };
+        });
+      }
       const optimisticMessages = getOptimisticMessages(
         currentSubmission,
         conversationId,
@@ -522,9 +540,16 @@ export default function useResumableSSE(
       );
       upsertConvoInAllQueries(queryClient, optimisticConversation);
 
-      return hydrateSubmissionMessages(currentSubmission, conversationId);
+      const hydrated = hydrateSubmissionMessages(currentSubmission, conversationId);
+      if (!named) {
+        return hydrated;
+      }
+      return {
+        ...hydrated,
+        conversation: { ...hydrated.conversation, title: named },
+      };
     },
-    [getMessages, queryClient],
+    [getMessages, queryClient, setConversation],
   );
   const [_completed, setCompleted] = useState(new Set());
   const [streamId, setStreamId] = useState<string | null>(null);

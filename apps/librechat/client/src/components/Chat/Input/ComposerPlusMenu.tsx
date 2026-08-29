@@ -9,40 +9,41 @@ export const PLUS_MODE_ITEMS = [
   { id: 'pico-deep', label: '深度' },
 ] as const;
 
-export function ComposerPlusMenu({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      data-testid="composer-plus-menu"
-      className="pico-card absolute bottom-full left-0 z-50 mb-2 w-52 overflow-hidden py-1 shadow-[var(--pico-shadow-raised)]"
-    >
-      {children}
-    </div>
-  );
-}
-
-export function ComposerPlusItem({
-  children,
-  onClick,
-  active,
-  testId,
+export function ComposerModeSwitch({
+  value,
+  onChange,
 }: {
-  children: React.ReactNode;
-  onClick: () => void;
-  active?: boolean;
-  testId?: string;
+  value: string;
+  onChange: (id: string) => void;
 }) {
   return (
-    <button
-      type="button"
-      data-testid={testId}
-      className={cn(
-        'pico-type-sidebar flex w-full px-3 py-2 text-left hover:bg-[color:var(--pico-surface-2)]',
-        active && 'font-medium text-[color:var(--pico-ink)]',
-      )}
-      onClick={onClick}
+    <div
+      role="group"
+      aria-label="回复深度"
+      data-testid="composer-mode-switch"
+      className="mb-0.5 inline-flex shrink-0 self-end rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-0.5"
     >
-      {children}
-    </button>
+      {PLUS_MODE_ITEMS.map((item) => {
+        const active = value === item.id;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            data-testid={`composer-plus-mode-${item.id}`}
+            aria-pressed={active}
+            className={cn(
+              'pico-type-aux h-7 rounded px-2 transition-colors',
+              active
+                ? 'bg-[color:var(--pico-surface-2)] font-medium text-[color:var(--pico-ink)]'
+                : 'text-[color:var(--pico-ink-3)] hover:text-[color:var(--pico-ink)]',
+            )}
+            onClick={() => onChange(item.id)}
+          >
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -93,38 +94,4 @@ export function useComposerAttachInput({
   );
 
   return { input, openPicker };
-}
-
-export function ComposerPlusAttach({
-  conversation,
-  files,
-  setFiles,
-  setFilesLoading,
-  disabled,
-  onPicked,
-}: {
-  conversation: TConversation | null;
-  files: Map<string, ExtendedFile>;
-  setFiles: FileSetter;
-  setFilesLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  disabled?: boolean;
-  onPicked?: () => void;
-}) {
-  const { input, openPicker } = useComposerAttachInput({
-    conversation,
-    files,
-    setFiles,
-    setFilesLoading,
-    disabled,
-    onPicked,
-  });
-
-  return (
-    <>
-      {input}
-      <ComposerPlusItem testId="composer-plus-attach" onClick={openPicker}>
-        上传附件
-      </ComposerPlusItem>
-    </>
-  );
 }

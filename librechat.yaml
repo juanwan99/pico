@@ -14,9 +14,8 @@ interface:
   agents: true
 endpoints:
   openAI:
-    # Auto-title via LLM would re-enter pico-agent and create ghost Task/Run rows.
-    # Titles still derive from the first user turn / ledger; API also short-circuits
-    # any residual title prompts (stage #260 P0).
+    # Titles come from the first user turn (client snippet + updateConversation).
+    # LLM TITLE_CONVO would re-enter pico-agent; #260 short-circuit is not a product title OS.
     titleConvo: false
     headers:
       # Joint school:membership when edu SSO is present; else LibreChat user id.

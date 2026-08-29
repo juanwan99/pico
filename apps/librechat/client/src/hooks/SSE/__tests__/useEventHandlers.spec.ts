@@ -2,6 +2,7 @@ import { Constants } from 'librechat-data-provider';
 import type { EventSubmission, TMessage } from 'librechat-data-provider';
 import {
   buildCreatedInitialResponse,
+  getConvoTitle,
   getExistingConversationAbortMessages,
   isInitialNewConversationSubmission,
   mergeRegenerateFinalMessages,
@@ -53,6 +54,32 @@ describe('buildCreatedInitialResponse', () => {
         parentMessageId: 'original-user-message',
       }),
     );
+  });
+});
+
+describe('getConvoTitle', () => {
+  it('names an unnamed first turn from the user message', () => {
+    expect(
+      getConvoTitle({
+        parentId: Constants.NO_PARENT,
+        queryClient: { getQueryData: jest.fn() } as never,
+        currentTitle: 'New Chat',
+        conversationId: 'c1',
+        firstMessage: '【权限：默认沙箱】\n写课时计划',
+      }),
+    ).toBe('写课时计划');
+  });
+
+  it('keeps a title the teacher already set', () => {
+    expect(
+      getConvoTitle({
+        parentId: Constants.NO_PARENT,
+        queryClient: { getQueryData: jest.fn() } as never,
+        currentTitle: '期末复习',
+        conversationId: 'c1',
+        firstMessage: '别的话',
+      }),
+    ).toBe('期末复习');
   });
 });
 

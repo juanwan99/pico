@@ -49,13 +49,15 @@ test.describe('T-UX-COMPOSER-TYPE-ICON', () => {
     await page.screenshot({ path: path.join(FRAME_DIR, 'c1-one-row-mock.png') });
   });
 
-  test('C2 plus opens a menu and closes on second click', async ({ page }) => {
+  test('C2 plus opens the file chooser; 快速/深度 is a visible switch', async ({ page }) => {
     await page.goto(NEW_CHAT_PATH);
-    const plus = page.getByTestId('composer-plus');
-    await plus.click();
-    await expect(page.getByTestId('composer-plus-menu')).toBeVisible();
-    await plus.click();
+    await expect(page.getByTestId('composer-mode-switch')).toBeVisible();
     await expect(page.getByTestId('composer-plus-menu')).toHaveCount(0);
+    const [chooser] = await Promise.all([
+      page.waitForEvent('filechooser', { timeout: 8000 }),
+      page.getByTestId('composer-plus').click(),
+    ]);
+    expect(chooser).toBeTruthy();
     fs.mkdirSync(FRAME_DIR, { recursive: true });
     await page.screenshot({ path: path.join(FRAME_DIR, 'c2-plus-closed-mock.png') });
   });

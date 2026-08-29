@@ -34,17 +34,19 @@ test.describe('T-UX-VISUAL-CHAT', () => {
     await page.screenshot({ path: path.join(FRAME_DIR, 'V1-empty-middle-1280.png') });
   });
 
-  test('V2 plus is 快速 / 深度 / 上传附件 only', async ({ page }) => {
+  test('V2 plus uploads; 快速/深度 is a switch, not a plus menu', async ({ page }) => {
     await page.goto(NEW_CHAT_PATH);
-    await page.getByTestId('composer-plus').click();
-    const menu = page.getByTestId('composer-plus-menu');
-    await expect(menu).toBeVisible();
-    await expect(menu.getByText('快速', { exact: true })).toBeVisible();
-    await expect(menu.getByText('深度', { exact: true })).toBeVisible();
-    await expect(page.getByTestId('composer-plus-attach')).toBeVisible();
-    await expect(menu.getByText(/工作空间/)).toHaveCount(0);
-    await expect(menu.getByText(/默认权限/)).toHaveCount(0);
-    await expect(menu.getByText(/Token|Badge|工作空间|默认权限/)).toHaveCount(0);
+    await expect(page.getByTestId('composer-mode-switch')).toBeVisible();
+    await expect(page.getByTestId('composer-plus-mode-pico-fast')).toBeVisible();
+    await expect(page.getByTestId('composer-plus-mode-pico-deep')).toBeVisible();
+    await expect(page.getByTestId('composer-plus-menu')).toHaveCount(0);
+    const [chooser] = await Promise.all([
+      page.waitForEvent('filechooser', { timeout: 8000 }),
+      page.getByTestId('composer-plus').click(),
+    ]);
+    expect(chooser).toBeTruthy();
+    await expect(page.getByText(/工作空间/)).toHaveCount(0);
+    await expect(page.getByText(/默认权限/)).toHaveCount(0);
     ensureDir();
     await page.screenshot({ path: path.join(FRAME_DIR, 'V2-plus-open-1280.png') });
   });

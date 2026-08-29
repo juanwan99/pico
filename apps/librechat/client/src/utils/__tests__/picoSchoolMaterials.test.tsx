@@ -77,6 +77,19 @@ describe('SchoolMaterialsBar venue folder tree', () => {
     });
   });
 
+  it('closes the tree when clicking outside', async () => {
+    render(
+      <div>
+        <SchoolMaterialsBar conversationId="c1" />
+        <button type="button">outside</button>
+      </div>,
+    );
+    fireEvent.click(screen.getByTestId('school-materials-toggle'));
+    expect(await screen.findByTestId('school-materials-tree')).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByText('outside'));
+    expect(screen.queryByTestId('school-materials-tree')).not.toBeInTheDocument();
+  });
+
   it('can check documents from two venues', async () => {
     mockPutEduNamedIds.mockImplementation(async (_convo: string, ids: string[]) => ({ ids }));
 

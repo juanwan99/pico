@@ -16,7 +16,7 @@ DATE: 2026-08-29
 2. **1 卡 1 PR。** CI 红、测炸、部翻车，都在**原 PR 原分支**补。禁止为修测/修部/修 Dockerfile/改文档新开第二张 PR（同卡续 = 业主说还差）。
 3. **无部署权拒领。** 不能 `PICO_DEPLOY_SHA=… bash /opt/pico/scripts/prod-update.sh` = 不 stamp。DONE 必须 `curl -fsS https://pico.aivia.asia/api/pico/tip` = origin/main。合了未部 = 没完。
 4. **禁止 PR 写 `Closes #<卡>`。** 部前关卡 = 失真。合了未部要打回 OPEN。
-5. **证据贴本卡 Issue 评论。** 禁止截图 docs PR。
+5. **证据贴本卡 Issue 评论。** 禁止截图 docs PR。UI 卡：执行窗合部后把过门截图贴合同 Issue **回执**（图跟五句一起）。Cloud Agent 本机无浏览器 ≠ 免过门；派发条写明「截图写回执」。
 6. **过门是老师手。** 写 1px 轨 / 词表 / 选择器 = 退回。禁开工。
 7. **同域一张 `stamp-ok`。** 残债同卡。禁 `T-*-DEBT`。
 8. **卡面四行合同。** 已锁事实写 Issue 评论，禁止把手册/315 贴进卡。

@@ -35,6 +35,30 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inflight = useRef<Record<string, Promise<void>>>({});
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (rootRef.current && target && !rootRef.current.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -137,12 +161,13 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   const groups = useMemo(() => groupSchoolTree(fields, items), [fields, items]);
 
   return (
-    <div className="mb-1 w-full text-left" data-testid="school-materials-bar">
+    <div ref={rootRef} className="mb-1 w-full text-left" data-testid="school-materials-bar">
       <button
         type="button"
-        className="pico-type-body inline-flex items-center gap-2 py-0.5 text-[color:var(--pico-ink)] dark:text-text-primary"
+        className="pico-type-body inline-flex items-center gap-1.5 rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-2 py-1 text-[color:var(--pico-ink)] shadow-sm hover:bg-[color:var(--pico-surface-2)] dark:text-text-primary"
         data-testid="school-materials-toggle"
         aria-expanded={open}
+        aria-haspopup="true"
         onClick={() => setOpen((v) => !v)}
       >
         <span>学校材料</span>
@@ -151,6 +176,9 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
         ) : (
           <span className="pico-type-aux text-[color:var(--pico-ink-3)]">未勾选不读正文</span>
         )}
+        <span aria-hidden className="pico-type-aux text-[color:var(--pico-ink-3)]">
+          {open ? '▴' : '▾'}
+        </span>
       </button>
       {open ? (
         <div className="mt-1" data-testid="school-materials-tree">
