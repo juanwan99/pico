@@ -22,8 +22,8 @@ DATE: 2026-08-29
 8. **卡面四行合同。** 已锁事实写 Issue 评论，禁止把手册/315 贴进卡。
 9. **聊天默认易失。** 约束下一窗 → Issue 评论或 `STATE-NOW` / 本文 / `TOOLING-CATALOG`。回复用 `§编号` / `Issue#`，禁「上次我们说」。
 10. **合与部只归执行窗。** 总管 / 主管窗 / 本类 Cloud Agent：**不合 main、不跑 prod-update**。总管做：派发·两问戳·黄红审戳·现况三行·经验/工具入库。P0 止血可调查、起候选 PR，**合与部仍交执行窗**（有 stamp 才领）。禁止「总管代合代部」当常态。
-21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / ECS 常驻 Grok / 聊天当真源。
-22. **总管环（不合不部）：** stamp → 派发条贴本卡 `## 派发` → **spawn-executor**（官方 `POST /v1/agents`；首条=派发条；`CURSOR_EXECUTOR_ENV` = 单独执行环境，含 TS/SSH）→ 订 PR/CI → timer 读评 → tip-pin → 刷 STATE-NOW/#634 → CLEAR。无钥则合同 PR/Issue 评 `@cursor`。合了未部关卡=打回 OPEN。禁止 mailbox / ECS 常驻。禁止总管代合代部（含「应急改+部」）。
+21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / 把 ECS Grok 当第二账本 / 聊天当真源。
+22. **总管环（不合不部）：** stamp → 派发条贴本卡 `## 派发` → **spawn-executor**（SSH `ecs` → 机上 grok CLI；隔离 checkout `/home/ops/pico-wt/issue-N`；禁写 `/opt/pico` 开发树）→ 订 PR/CI → timer 读评 → tip-pin → 刷 STATE-NOW/#634 → CLEAR。无 `ssh ecs` = 拒领。禁止 Cursor Cloud Agent / `@cursor` 当执行者。合了未部关卡=打回 OPEN。禁止 mailbox / 第二账本。禁止总管代合代部（含「应急改+部」）。
 23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审/过门（不开新卡）· `CLEAR` tip=main + 五句后停或下一张。人只留：目标 · 黄红争议 · 老师手 · PASS。同域第二张 stamp-ok=废派。
 
 ## B · 现网 / 产品
