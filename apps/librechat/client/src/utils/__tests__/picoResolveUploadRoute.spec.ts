@@ -1,6 +1,19 @@
 import { EToolResources } from 'librechat-data-provider';
 import { resolveUploadRoute } from '../files';
 
+jest.mock(
+  '@librechat/client',
+  () => ({
+    TextPaths: () => null,
+    FilePaths: () => null,
+    CodePaths: () => null,
+    AudioPaths: () => null,
+    VideoPaths: () => null,
+    SheetPaths: () => null,
+  }),
+  { virtual: true },
+);
+
 const file = (type: string, name: string) => new File(['x'], name, { type });
 
 describe('resolveUploadRoute (Pico paste/drop)', () => {
