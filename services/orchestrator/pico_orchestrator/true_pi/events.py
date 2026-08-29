@@ -42,6 +42,58 @@ class EventMapState:
     tool_calls: int = 0
     tool_oks: int = 0
     token_usage: dict[str, Any] | None = None
+    # Upstream Pi/OpenAI turn failure (stopReason=error / errorMessage).
+    # Must not be painted as succeeded + empty bubble.
+    provider_error: str | None = None
+
+
+def assistant_turn_error(blob: Any) -> str:
+    """Return the upstream turn error, or empty if this blob is not a failed turn.
+
+    Live 2026-08-29: gpt-5.6-sol + openai-responses landed
+    ``stopReason=error`` / ``errorMessage=The usage limit has been reached``
+    with ``content=[]``. Mapping that to succeeded+blank is fake green.
+    """
+    if not isinstance(blob, dict):
+        return ""
+    pieces: list[dict[str, Any]] = [blob]
+    nested = blob.get("message")
+    if isinstance(nested, dict):
+        pieces.append(nested)
+    for item in pieces:
+        stop = str(item.get("stopReason") or "").strip().lower()
+        raw_err = item.get("errorMessage")
+        if raw_err is None:
+            raw_err = item.get("error")
+        if isinstance(raw_err, dict):
+            err = str(raw_err.get("message") or raw_err.get("code") or "").strip()
+        else:
+            err = str(raw_err or "").strip()
+        if stop in {"error", "aborted", "cancelled"}:
+            return err or stop
+        if err and stop not in {"stop", "end_turn", "tool_calls", "length"}:
+            return err
+    return ""
+
+
+def _record_assistant_turn(state: EventMapState, *, msg: Any, raw: dict[str, Any]) -> None:
+    """Capture provider errors and product text. Plan chrome stays out of final_parts."""
+    if not isinstance(msg, dict):
+        msg = {}
+    role = str(msg.get("role") or raw.get("role") or "assistant")
+    if role != "assistant":
+        return
+    err = assistant_turn_error(msg) or assistant_turn_error(raw)
+    if err:
+        state.provider_error = err
+    custom = str(msg.get("customType") or raw.get("customType") or "")
+    text = _text_from_message(msg)
+    if text and custom not in _PLAN_INTERNAL_CUSTOM:
+        from pico_orchestrator.human_package import is_plan_passphrase, strip_ansi
+
+        cleaned = strip_ansi(text).strip()
+        if cleaned and not is_plan_passphrase(cleaned):
+            state.final_parts.append(cleaned)
 
 
 def _text_from_message(message: Any) -> str:
@@ -209,8 +261,8 @@ async def map_event(
                 )
         return
 
-    if kind == "message_end":
-        msg = raw.get("message") or {}
+    if kind in {"message_end", "message"}:
+        msg = raw.get("message") if isinstance(raw.get("message"), dict) else raw
         custom = ""
         if isinstance(msg, dict):
             custom = str(msg.get("customType") or raw.get("customType") or "")
@@ -218,16 +270,9 @@ async def map_event(
             if custom in {"plan-todo-list", "plan-complete", "plan-mode-execute"} and text:
                 state.event_kinds.append("plan.progress")
                 await emit("plan.progress", {"text": text, "customType": custom, **tag})
-            if (
-                msg.get("role") == "assistant"
-                and text
-                and custom not in _PLAN_INTERNAL_CUSTOM
-            ):
-                from pico_orchestrator.human_package import is_plan_passphrase, strip_ansi
-
-                cleaned = strip_ansi(text).strip()
-                if cleaned and not is_plan_passphrase(cleaned):
-                    state.final_parts.append(cleaned)
+        _record_assistant_turn(
+            state, msg=msg if isinstance(msg, dict) else {}, raw=raw
+        )
         return
 
     if kind == "message_update":
@@ -282,6 +327,14 @@ async def map_event(
         # pi 0.73.x emits agent_end when one low-level run completes.
         # willRetry=true means auto-retry follows — do not settle yet.
         will_retry = bool(raw.get("willRetry"))
+        packed = raw.get("messages")
+        if isinstance(packed, list):
+            for item in packed:
+                if isinstance(item, dict):
+                    _record_assistant_turn(state, msg=item, raw=item)
+        err = assistant_turn_error(raw)
+        if err:
+            state.provider_error = err
         state.event_kinds.append("agent.end")
         await emit("agent.end", {"will_retry": will_retry, **tag})
         if not will_retry:
@@ -301,17 +354,10 @@ async def map_event(
         # Not terminal alone (multi-turn tools), but useful progress.
         state.event_kinds.append("turn.end")
         await emit("agent.step", {"phase": "turn_end", "step": state.step, **tag})
-        # If message on turn_end carries final assistant text, harvest it.
         msg = raw.get("message") or {}
-        if isinstance(msg, dict) and msg.get("role") == "assistant":
-            text = _text_from_message(msg)
-            custom = str(msg.get("customType") or raw.get("customType") or "")
-            if text and custom not in _PLAN_INTERNAL_CUSTOM:
-                from pico_orchestrator.human_package import is_plan_passphrase, strip_ansi
-
-                cleaned = strip_ansi(text).strip()
-                if cleaned and not is_plan_passphrase(cleaned):
-                    state.final_parts.append(cleaned)
+        _record_assistant_turn(
+            state, msg=msg if isinstance(msg, dict) else {}, raw=raw
+        )
         return
 
     if kind == "extension_error":

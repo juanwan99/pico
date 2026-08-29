@@ -475,6 +475,17 @@ async def run_true_pi_agent(
                     tag=tag,
                 )
 
+        # Upstream said this turn failed (quota / provider). Do not succeed blank.
+        if state.provider_error:
+            return await _failed(
+                emit,
+                code=_provider_fail_code(state.provider_error),
+                reason=state.provider_error,
+                state=state,
+                principal=principal,
+                tag=tag,
+            )
+
         # Pull assistant text if event map did not capture it.
         if not state.final_parts and not isinstance(transport, FakeTransport):
             with suppress(TruePiClientError):
@@ -531,6 +542,15 @@ async def run_true_pi_agent(
             school_id=getattr(principal, "school_id", None),
             membership_id=getattr(principal, "membership_id", None),
         )
+        if not (final_text or "").strip() and writes <= 0:
+            return await _failed(
+                emit,
+                code="pi.empty_response",
+                reason="Pi agent received empty model response",
+                state=state,
+                principal=principal,
+                tag=tag,
+            )
         if final_text:
             await emit("message.delta", {"text": final_text, **tag})
         await emit("run.status", {"status": "succeeded", **tag})
@@ -567,6 +587,13 @@ async def run_true_pi_agent(
         if tool_server is not None:
             with suppress(Exception):
                 await tool_server.stop()
+
+
+def _provider_fail_code(reason: str) -> str:
+    low = (reason or "").lower()
+    if "usage limit" in low or "quota" in low or "insufficient_quota" in low:
+        return "model.usage_limit"
+    return "true_pi.assistant_error"
 
 
 def pico_system_text(*, skill: str = "", system_override: str = "", day_use: str = "") -> str:
