@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -28,6 +29,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.pool import NullPool
 
 from app.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -423,6 +426,14 @@ def _migrate_sqlite_sync(conn) -> None:
     )
 
 
+def _scrub_usage_events_sync(conn) -> None:
+    from app.usage_ledger import scrub_dirty_usage_events_sync
+
+    stats = scrub_dirty_usage_events_sync(conn)
+    if stats.get("estimated") or stats.get("ui_lane"):
+        logger.info("usage_events scrub %s", stats)
+
+
 def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
@@ -456,6 +467,7 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
         if "sqlite" in url:
             await conn.run_sync(_migrate_sqlite_sync)
+            await conn.run_sync(_scrub_usage_events_sync)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

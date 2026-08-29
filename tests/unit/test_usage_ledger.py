@@ -19,6 +19,7 @@ from app.usage_ledger import (
     extract_token_fields,
     record_usage_event,
     schema_has_billing_columns,
+    scrub_dirty_usage_events_sync,
 )
 
 
@@ -74,12 +75,13 @@ def test_extract_token_fields_provider_and_openai_aliases() -> None:
     assert b.estimated is False
 
 
-def test_extract_token_fields_estimated_flag() -> None:
+def test_extract_token_fields_estimated_flag_is_unknown() -> None:
     fields = extract_token_fields(
         {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4, "estimated": True}
     )
-    assert fields.estimated is True
-    assert fields.tokens_unknown is False
+    assert fields.tokens_unknown is True
+    assert fields.estimated is False
+    assert fields.prompt_tokens is None
 
 
 @pytest.mark.asyncio
@@ -104,3 +106,148 @@ async def test_record_rejects_unknown_kind_without_raising() -> None:
         idempotency_key="bad-kind",
     )
     assert row is None
+
+
+@pytest.fixture()
+async def usage_db(tmp_path, monkeypatch):
+    from app import db as dbmod
+    from app.db import init_db
+    from app.settings import get_settings
+
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'usage.db'}")
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+    try:
+        yield
+    finally:
+        assert dbmod._engine is not None
+        await dbmod._engine.dispose()
+        dbmod._engine = None
+        dbmod._Session = None
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_record_drops_estimated_numbers_and_ui_lane(usage_db) -> None:
+    dirty = await record_usage_event(
+        school_id="school-a",
+        membership_id="m1",
+        kind="llm",
+        model="pico-fast",
+        prompt_tokens=3,
+        completion_tokens=9,
+        total_tokens=12,
+        estimated=True,
+        source="test",
+        idempotency_key="llm:drop-estimate",
+    )
+    assert dirty is not None
+    assert dirty.estimated == 0
+    assert dirty.tokens_unknown == 1
+    assert dirty.prompt_tokens is None
+    assert dirty.completion_tokens is None
+    assert dirty.total_tokens is None
+    assert dirty.model is None
+    extra = __import__("json").loads(dirty.extra_json)
+    assert extra.get("ui_model") == "pico-fast"
+    assert extra.get("rejected_estimate") is True
+
+
+@pytest.mark.asyncio
+async def test_scrub_estimated_and_recover_backend_from_events(usage_db) -> None:
+    import json
+
+    from app import db as dbmod
+    from app.db import EventRow, RunRow, TaskRow, new_id, session_factory
+
+    run_id = new_id()
+    task_id = new_id()
+    dirty_id = new_id()
+    orphan_id = new_id()
+    factory = session_factory()
+    async with factory() as session:
+        session.add(
+            TaskRow(
+                id=task_id,
+                school_id="school-a",
+                membership_id="m1",
+                title="t",
+            )
+        )
+        session.add(RunRow(id=run_id, task_id=task_id, model="pico-fast"))
+        session.add(
+            EventRow(
+                run_id=run_id,
+                seq=1,
+                type="run.model",
+                payload_json=json.dumps({"backend_model": "gpt-5.6-sol"}),
+            )
+        )
+        session.add(
+            UsageEventRow(
+                id=dirty_id,
+                school_id="school-a",
+                membership_id="m1",
+                kind="llm",
+                model="pico-fast",
+                prompt_tokens=4,
+                completion_tokens=16,
+                total_tokens=20,
+                tokens_unknown=0,
+                estimated=1,
+                task_id=task_id,
+                run_id=run_id,
+                source="openai_compat",
+                extra_json="{}",
+                idempotency_key=f"llm:{run_id}",
+            )
+        )
+        session.add(
+            UsageEventRow(
+                id=orphan_id,
+                school_id="school-a",
+                membership_id="m1",
+                kind="llm",
+                model="pico-deep",
+                prompt_tokens=1,
+                completion_tokens=8,
+                total_tokens=9,
+                tokens_unknown=0,
+                estimated=1,
+                source="openai_compat",
+                extra_json="{}",
+                idempotency_key="llm:orphan-lane",
+            )
+        )
+        await session.commit()
+
+    assert dbmod._engine is not None
+    async with dbmod._engine.begin() as conn:
+        stats = await conn.run_sync(scrub_dirty_usage_events_sync)
+    assert stats["estimated"] == 2
+    assert stats["ui_lane"] == 2
+    assert stats["backend_recovered"] == 1
+
+    async with factory() as session:
+        recovered = await session.get(UsageEventRow, dirty_id)
+        orphan = await session.get(UsageEventRow, orphan_id)
+    assert recovered is not None
+    assert recovered.estimated == 0
+    assert recovered.tokens_unknown == 1
+    assert recovered.prompt_tokens is None
+    assert recovered.model == "gpt-5.6-sol"
+    extra_r = json.loads(recovered.extra_json)
+    assert extra_r.get("ui_model") == "pico-fast"
+    assert extra_r.get("scrubbed") == "estimated_char4"
+    assert orphan is not None
+    assert orphan.model is None
+    extra_o = json.loads(orphan.extra_json)
+    assert extra_o.get("ui_model") == "pico-deep"
+    assert extra_o.get("scrubbed_model") == "ui_lane"
+
+    async with dbmod._engine.begin() as conn:
+        again = await conn.run_sync(scrub_dirty_usage_events_sync)
+    assert again == {"estimated": 0, "ui_lane": 0, "backend_recovered": 0}
+

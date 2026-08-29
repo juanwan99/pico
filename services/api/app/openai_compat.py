@@ -290,22 +290,14 @@ def _effective_max_tokens(requested: int | None, cap: int) -> int:
     return min(requested if requested and requested > 0 else default, cap)
 
 
-def _estimated_usage(prompt: str, completion: str) -> dict[str, int | bool]:
-    # Last-resort OpenAI-compat field for the shell. Ledger does not use this
-    # unless emit is explicitly asked to estimate.
-    prompt_tokens = max(1, (len(prompt) + 3) // 4)
-    completion_tokens = max(1, (len(completion) + 3) // 4)
-    return {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": prompt_tokens + completion_tokens,
-        "estimated": True,
-    }
-
-
 def _compat_usage_payload(
     prompt: str, completion: str, provider_usage: dict[str, Any] | None
-) -> dict[str, int | bool]:
+) -> dict[str, int] | None:
+    """OpenAI-compat ``usage`` for the shell. Native provider numbers only.
+
+    Missing usage → omit the field. Never char/4.
+    """
+    del prompt, completion
     if isinstance(provider_usage, dict):
         from pico_orchestrator.usage_parse import parse_usage_blob
 
@@ -316,7 +308,7 @@ def _compat_usage_payload(
                 "completion_tokens": int(parsed.get("completion_tokens") or 0),
                 "total_tokens": int(parsed.get("total_tokens") or 0),
             }
-    return _estimated_usage(prompt, completion)
+    return None
 
 
 
@@ -423,6 +415,7 @@ def _title_completion_payload(
     title: str,
     prompt: str,
 ) -> dict[str, Any]:
+    del prompt
     return {
         "id": completion_id,
         "object": "chat.completion",
@@ -435,7 +428,6 @@ def _title_completion_payload(
                 "finish_reason": "stop",
             }
         ],
-        "usage": _estimated_usage(prompt, title),
     }
 
 
@@ -1475,33 +1467,36 @@ async def chat_completions(
                     "finish_reason": "stop",
                 }
             ],
-            "usage": _compat_usage_payload(
-                prompt,
-                text,
-                (direct_usage if use_direct else getattr(result, "token_usage", None)),
-            ),
         }
+        usage = _compat_usage_payload(
+            prompt,
+            text,
+            (direct_usage if use_direct else getattr(result, "token_usage", None)),
+        )
+        if usage:
+            payload["usage"] = usage
         if sidebar_web_hits is not None:
             payload["pico_web_search"] = sidebar_web_hits
         return payload
 
     async def event_stream() -> AsyncIterator[bytes]:
-        def chunk(delta: dict, *, finish: str | None = None) -> bytes:
-            return _sse_chunk(
-                {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": delta,
-                            "finish_reason": finish,
-                        }
-                    ],
-                }
-            ).encode()
+        def chunk(delta: dict, *, finish: str | None = None, usage: dict | None = None) -> bytes:
+            body: dict[str, Any] = {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": delta,
+                        "finish_reason": finish,
+                    }
+                ],
+            }
+            if usage:
+                body["usage"] = usage
+            return _sse_chunk(body).encode()
 
         yield chunk({"role": "assistant"})
 
@@ -1596,7 +1591,11 @@ async def chat_completions(
                             task_id=task_id,
                         )
                     )
-            yield chunk({}, finish="stop")
+            yield chunk(
+                {},
+                finish="stop",
+                usage=_compat_usage_payload(prompt, "".join(parts), stream_usage or None),
+            )
             yield b"data: [DONE]\n\n"
             return
 
@@ -1850,6 +1849,7 @@ async def chat_completions(
         _track_inflight(bg_task)
         saw_text = False
         pending_status: list[str] = []
+        native_usage: dict[str, int] | None = None
         detach = settings.pico_run_detach_on_disconnect
         last_wire = time.monotonic()
         try:
@@ -1890,6 +1890,11 @@ async def chat_completions(
                     break
                 elif kind == "done":
                     result = payload
+                    native_usage = _compat_usage_payload(
+                        prompt,
+                        getattr(result, "final_text", None) or "",
+                        getattr(result, "token_usage", None),
+                    )
                     if not saw_text:
                         # final_text is already complete + human-package cleaned;
                         # buffered chrome must NOT be prepended (would re-pollute
@@ -1954,7 +1959,7 @@ async def chat_completions(
             )
             return
 
-        yield chunk({}, finish="stop")
+        yield chunk({}, finish="stop", usage=native_usage)
         yield b"data: [DONE]\n\n"
 
     return StreamingResponse(

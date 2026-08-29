@@ -75,31 +75,19 @@ def _int_or_none(value: Any) -> int | None:
 def extract_token_fields(usage: dict[str, Any] | None) -> TokenFields:
     """Map provider/run usage dicts onto ledger token columns.
 
-    Honest unknown: missing keys or uninitialized all-zero counters without
-    an explicit estimated flag. Never invent a billing-grade zero.
+    Honest unknown: missing keys, uninitialized all-zero counters, or
+    char/4 ``estimated`` blobs. Never invent a billing-grade zero.
     """
     parsed = parse_usage_blob(usage) if isinstance(usage, dict) else None
-    if not parsed:
+    if not parsed or parsed.get("estimated"):
         return TokenFields.unknown()
     return TokenFields(
         prompt_tokens=_int_or_none(parsed.get("prompt_tokens")),
         completion_tokens=_int_or_none(parsed.get("completion_tokens")),
         total_tokens=_int_or_none(parsed.get("total_tokens")),
         tokens_unknown=False,
-        estimated=bool(parsed.get("estimated")),
+        estimated=False,
     )
-
-
-def estimated_char_tokens(prompt: str, completion: str) -> dict[str, int | bool]:
-    """Rough char/4 estimate — marked estimated, never a price."""
-    prompt_tokens = max(1, (len(prompt or "") + 3) // 4)
-    completion_tokens = max(1, (len(completion or "") + 3) // 4)
-    return {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": prompt_tokens + completion_tokens,
-        "estimated": True,
-    }
 
 
 def _strip_money_keys(extra: dict[str, Any] | None) -> dict[str, Any]:
@@ -140,6 +128,114 @@ def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
 def schema_has_billing_columns() -> bool:
     cols = {c.name.lower() for c in UsageEventRow.__table__.columns}
     return bool(cols & BILLING_COLUMN_NAMES)
+
+
+def _backend_from_payload(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    backend = str(payload.get("backend_model") or "").strip()
+    if backend and not is_ui_lane(backend):
+        return backend
+    return None
+
+
+def scrub_dirty_usage_events_sync(conn) -> dict[str, int]:
+    """Drop char/4 token numbers and UI-lane model ids. Keep who/when/kind.
+
+    Idempotent. Historical identity stays; fake integers do not. Do not guess
+    today's backend for old pico-fast rows unless ``run.model`` recorded one.
+    """
+    from sqlalchemy import text
+
+    stats = {"estimated": 0, "ui_lane": 0, "backend_recovered": 0}
+    try:
+        tables = {
+            str(r[0])
+            for r in conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table'")
+            ).fetchall()
+        }
+    except Exception:  # noqa: BLE001 — missing sqlite catalog
+        return stats
+    if "usage_events" not in tables:
+        return stats
+    rows = conn.execute(
+        text(
+            "SELECT id, model, estimated, extra_json, run_id "
+            "FROM usage_events"
+        )
+    ).fetchall()
+    have_events = "events" in tables
+    for row in rows:
+        event_id, model, estimated, extra_raw, run_id = row
+        try:
+            extra = json.loads(extra_raw or "{}")
+        except json.JSONDecodeError:
+            extra = {}
+        if not isinstance(extra, dict):
+            extra = {}
+        extra = _strip_money_keys(extra)
+        if int(estimated or 0) == 1:
+            extra["scrubbed"] = "estimated_char4"
+            extra.pop("rejected_estimate", None)
+            conn.execute(
+                text(
+                    "UPDATE usage_events SET prompt_tokens=NULL, completion_tokens=NULL, "
+                    "total_tokens=NULL, tokens_unknown=1, estimated=0, extra_json=:extra "
+                    "WHERE id=:id"
+                ),
+                {"extra": json.dumps(extra, ensure_ascii=False), "id": event_id},
+            )
+            stats["estimated"] += 1
+        model_n = (model or "").strip() or None
+        if not is_ui_lane(model_n):
+            continue
+        extra.setdefault("ui_model", model_n)
+        backend = None
+        if have_events and run_id:
+            try:
+                ev = conn.execute(
+                    text(
+                        "SELECT payload_json FROM events "
+                        "WHERE run_id=:rid AND type='run.model' "
+                        "ORDER BY seq DESC LIMIT 1"
+                    ),
+                    {"rid": run_id},
+                ).fetchone()
+            except Exception:  # noqa: BLE001
+                ev = None
+            if ev:
+                backend = _backend_from_payload(ev[0])
+        if backend:
+            extra.pop("scrubbed_model", None)
+            conn.execute(
+                text(
+                    "UPDATE usage_events SET model=:model, extra_json=:extra WHERE id=:id"
+                ),
+                {
+                    "model": backend,
+                    "extra": json.dumps(extra, ensure_ascii=False),
+                    "id": event_id,
+                },
+            )
+            stats["backend_recovered"] += 1
+            stats["ui_lane"] += 1
+        else:
+            extra["scrubbed_model"] = "ui_lane"
+            conn.execute(
+                text(
+                    "UPDATE usage_events SET model=NULL, extra_json=:extra WHERE id=:id"
+                ),
+                {"extra": json.dumps(extra, ensure_ascii=False), "id": event_id},
+            )
+            stats["ui_lane"] += 1
+    return stats
 
 
 async def record_usage_event(
@@ -210,6 +306,20 @@ async def _record_usage_event_inner(
         return None
     key = (idempotency_key or "").strip() or f"{kind_n}:{new_id()}"
     extra_clean = _strip_money_keys(extra if isinstance(extra, dict) else None)
+    model_n = (model or "").strip() or None
+    if is_ui_lane(model_n):
+        extra_clean.setdefault("ui_model", model_n)
+        model_n = None
+    if estimated or (
+        prompt_tokens is None and completion_tokens is None and total_tokens is None
+    ):
+        if estimated:
+            extra_clean["rejected_estimate"] = True
+        prompt_tokens = None
+        completion_tokens = None
+        total_tokens = None
+        tokens_unknown = True
+        estimated = False
     factory = session_factory()
     last_err: Exception | None = None
     for attempt in range(5):
@@ -220,7 +330,7 @@ async def _record_usage_event_inner(
                     school_id=school,
                     membership_id=member,
                     kind=kind_n,
-                    model=(model or "").strip() or None,
+                    model=model_n,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                     total_tokens=total_tokens,
@@ -298,8 +408,7 @@ async def emit_llm_usage_after_run(
     """Best-effort llm event for a finished Run. Safe to call after commit.
 
     Default is honest unknown when the provider did not return usage.
-    Char/4 estimates are opt-in (``estimate_if_missing``) and never the
-    agent path — those numbers are not billable.
+    ``estimate_if_missing`` is ignored — char/4 is never stored.
     """
     from app.db import RunRow
 
@@ -344,8 +453,7 @@ async def emit_llm_usage_after_run(
         return
     usage_dict = usage if isinstance(usage, dict) else None
     fields = extract_token_fields(usage_dict)
-    if fields.tokens_unknown and estimate_if_missing and prompt is not None and completion is not None:
-        fields = extract_token_fields(estimated_char_tokens(prompt, completion))
+    _ = prompt, completion, estimate_if_missing
     billed = billed_model_id(model_id, backend_from_event)
     extra = usage_extra_bits(usage_dict)
     if ui_model and is_ui_lane(ui_model):
