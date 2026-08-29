@@ -172,7 +172,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_html_document",
-    "Create a real .html Artifact (Pico gateway). Page must run offline: inline CSS/JS/canvas only. No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https images (use data: URLs). The tool fails closed if the page still needs the network. Result includes an observation of what landed. ok is not finished.",
+    "Create a real .html Artifact (Pico gateway). Page must run offline: inline CSS/JS/canvas only. No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images (use data: URLs), no window.THREE / new Chart / echarts.init. The tool fails closed if the page still needs the network or those engines. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),

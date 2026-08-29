@@ -184,7 +184,7 @@ class GenerateHtmlDocument(_GatewayTool):
     name = "generate_html_document"
     description = (
         "Create a real .html Artifact with a unique visible marker "
-        "(offline HTML: inline CSS/JS/canvas, no CDN/external scripts)."
+        "(offline HTML: inline CSS/JS/canvas, no CDN, no window.THREE)."
     )
     params = GenerateDocParams
 

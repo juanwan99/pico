@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>轻杆小球运动与分裂（离线 canvas）</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; font-family: system-ui, sans-serif; background: #0b1220; color: #e5eefc;
+    }
+    header {
+      display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center;
+      padding: 0.85rem 1.1rem; border-bottom: 1px solid #1e2d4a;
+    }
+    h1 { font-size: 1.05rem; margin: 0; font-weight: 650; }
+    #status {
+      font-size: 0.85rem; padding: 0.2rem 0.55rem; border-radius: 999px;
+      background: #1e3a5f; color: #93c5fd;
+    }
+    #status.run { background: #14532d; color: #86efac; }
+    nav { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    button {
+      background: #1d4ed8; color: #fff; border: 0; border-radius: 0.45rem;
+      padding: 0.4rem 0.75rem; font-size: 0.9rem; cursor: pointer;
+    }
+    button.alt { background: #334155; }
+    button:focus { outline: 2px solid #93c5fd; }
+    main { padding: 0.8rem 1.1rem 1.2rem; }
+    canvas {
+      display: block; width: 100%; max-width: 880px; height: auto;
+      background: #071018; border-radius: 0.75rem; border: 1px solid #1e2d4a;
+    }
+    p.note { max-width: 52rem; color: #93a4c3; font-size: 0.88rem; line-height: 1.55; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>轻杆小球运动与分裂</h1>
+    <span id="status">已暂停</span>
+    <nav>
+      <button type="button" id="play">播放 / 暂停</button>
+      <button type="button" id="split" class="alt">分裂演示</button>
+      <button type="button" id="view" class="alt">切换视角</button>
+      <button type="button" id="reset" class="alt">重置</button>
+    </nav>
+  </header>
+  <main>
+    <canvas id="stage" width="880" height="480"></canvas>
+    <p class="note">
+      两球用轻杆相连，绕质心匀速转动。点「分裂演示」后约束消失，两球沿该瞬时切向飞出。
+      本页只用页内 canvas，不加载 Three.js，断网可打开。
+    </p>
+  </main>
+  <script>
+(function () {
+  var canvas = document.getElementById("stage");
+  var ctx = canvas.getContext("2d");
+  var statusEl = document.getElementById("status");
+  var running = false;
+  var split = false;
+  var view = 0;
+  var theta = 0.35;
+  var omega = 1.15;
+  var tPrev = 0;
+  var L = 1.35;
+  var balls = [
+    { m: 1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, color: "#38bdf8" },
+    { m: 1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, color: "#fb923c" }
+  ];
+
+  function setStatus(text, live) {
+    statusEl.textContent = text;
+    statusEl.className = live ? "run" : "";
+  }
+
+  function boundPos() {
+    balls[0].x = (L / 2) * Math.cos(theta);
+    balls[0].y = (L / 2) * Math.sin(theta);
+    balls[0].z = 0;
+    balls[1].x = -balls[0].x;
+    balls[1].y = -balls[0].y;
+    balls[1].z = 0;
+  }
+
+  function splitNow() {
+    if (split) return;
+    split = true;
+    var s = omega * (L / 2);
+    balls[0].vx = -s * Math.sin(theta);
+    balls[0].vy = s * Math.cos(theta);
+    balls[0].vz = 0.35 * s;
+    balls[1].vx = -balls[0].vx;
+    balls[1].vy = -balls[0].vy;
+    balls[1].vz = -balls[0].vz;
+    if (!running) {
+      running = true;
+      tPrev = 0;
+      requestAnimationFrame(frame);
+    }
+    setStatus("已分裂 · 自由飞行", true);
+  }
+
+  function reset() {
+    running = false;
+    split = false;
+    theta = 0.35;
+    tPrev = 0;
+    boundPos();
+    balls[0].vx = balls[0].vy = balls[0].vz = 0;
+    balls[1].vx = balls[1].vy = balls[1].vz = 0;
+    setStatus("已暂停", false);
+    draw();
+  }
+
+  function project(x, y, z) {
+    var cx = canvas.width / 2;
+    var cy = canvas.height / 2 + 18;
+    var s = 150;
+    if (view === 0) {
+      return { X: cx + x * s, Y: cy - y * s, depth: z };
+    }
+    var c = Math.cos(0.55);
+    var si = Math.sin(0.55);
+    return {
+      X: cx + (x - z * 0.72) * s * c,
+      Y: cy - (y * 0.92 + (x + z) * 0.22) * s,
+      depth: x * si + z * c
+    };
+  }
+
+  function disc(p, r, color) {
+    var g = ctx.createRadialGradient(p.X - r * 0.3, p.Y - r * 0.3, r * 0.2, p.X, p.Y, r);
+    g.addColorStop(0, "#fff7");
+    g.addColorStop(0.2, color);
+    g.addColorStop(1, "#0b1220");
+    ctx.beginPath();
+    ctx.arc(p.X, p.Y, r, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = "#e2e8f0aa";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  function drawGrid() {
+    ctx.fillStyle = "#071018";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var origin = project(0, 0, 0);
+    ctx.strokeStyle = "#1e3a5f";
+    ctx.lineWidth = 1;
+    var i;
+    for (i = -3; i <= 3; i += 1) {
+      var a = project(i * 0.5, -1.6, -1.2);
+      var b = project(i * 0.5, -1.6, 1.2);
+      ctx.beginPath();
+      ctx.moveTo(a.X, a.Y);
+      ctx.lineTo(b.X, b.Y);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#64748b";
+    ctx.font = "13px system-ui";
+    ctx.fillText(view === 0 ? "侧视 · 质心静止" : "斜视 · 质心静止", 24, 28);
+    ctx.beginPath();
+    ctx.arc(origin.X, origin.Y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#e2e8f0";
+    ctx.fill();
+  }
+
+  function draw() {
+    drawGrid();
+    var p0 = project(balls[0].x, balls[0].y, balls[0].z);
+    var p1 = project(balls[1].x, balls[1].y, balls[1].z);
+    if (!split) {
+      ctx.beginPath();
+      ctx.moveTo(p0.X, p0.Y);
+      ctx.lineTo(p1.X, p1.Y);
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      ctx.strokeStyle = "#e2e8f0";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    var first = p0.depth >= p1.depth ? [p1, balls[1], p0, balls[0]] : [p0, balls[0], p1, balls[1]];
+    disc(first[0], 22, first[1].color);
+    disc(first[2], 22, first[3].color);
+    ctx.fillStyle = first[1].color;
+    ctx.font = "12px system-ui";
+    ctx.fillText("m1", first[0].X + 18, first[0].Y - 14);
+    ctx.fillStyle = first[3].color;
+    ctx.fillText("m2", first[2].X + 18, first[2].Y - 14);
+  }
+
+  function step(dt) {
+    if (split) {
+      var k;
+      for (k = 0; k < 2; k += 1) {
+        balls[k].x += balls[k].vx * dt;
+        balls[k].y += balls[k].vy * dt;
+        balls[k].z += balls[k].vz * dt;
+      }
+    } else {
+      theta += omega * dt;
+      boundPos();
+    }
+  }
+
+  function frame(ts) {
+    if (!running) return;
+    if (!tPrev) tPrev = ts;
+    var dt = Math.min(0.032, (ts - tPrev) / 1000);
+    tPrev = ts;
+    step(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  document.getElementById("play").onclick = function () {
+    running = !running;
+    if (running) {
+      tPrev = 0;
+      setStatus(split ? "已分裂 · 自由飞行" : "运行中", true);
+      requestAnimationFrame(frame);
+    } else {
+      setStatus("已暂停", false);
+    }
+  };
+  document.getElementById("split").onclick = splitNow;
+  document.getElementById("view").onclick = function () {
+    view = view ? 0 : 1;
+    draw();
+  };
+  document.getElementById("reset").onclick = reset;
+  reset();
+})();
+  </script>
+</body>
+</html>

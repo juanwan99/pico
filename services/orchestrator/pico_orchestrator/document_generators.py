@@ -32,16 +32,20 @@ HTML_INTERACTIVE_CSP = (
     "frame-ancestors 'none';"
 )
 HTML_REMOTE_ENGINE_ERROR = (
-    "这份 HTML 依赖外网资源（script/import/CDN/外链图），本地或学校网会打不开。"
+    "这份 HTML 依赖外网资源或外链引擎（script/import/CDN/外链图/"
+    "Three.js/Chart.js），本地或学校网会打不开。"
     "请用页内脚本和 canvas 自绘，图片只用 data: URL。"
-    "不要 Three.js/Chart.js/ECharts/KaTeX CDN，不要 import 或 script src 外链。"
+    "不要 Three.js/Chart.js/ECharts/KaTeX CDN，不要 import 或 script src 外链，"
+    "也不要假定 window.THREE 已经加载。"
 )
+# Protocol-relative //cdn… and https?:// — teacher HTML is srcDoc/file, no host.
+_REMOTE_URL = r"(?:https?:)?//[A-Za-z0-9]"
 _CSP_META_RE = re.compile(
     r"<meta\b[^>]*http-equiv\s*=\s*[\"']Content-Security-Policy[\"'][^>]*>\s*",
     re.IGNORECASE,
 )
 _LINK_HTTPS_RE = re.compile(
-    r"<link\b(?=[^>]*\bhref\s*=\s*[\"']https?://)[^>]*>",
+    r"<link\b(?=[^>]*\bhref\s*=\s*[\"']?(?:https?:)?//)[^>]*>",
     re.IGNORECASE,
 )
 
@@ -251,7 +255,7 @@ def _looks_like_html_markup(raw: str) -> bool:
     if re.search(
         r"<\s*(?:button|input|table|thead|tbody|tr|td|th|form|script|style|"
         r"div|section|article|nav|header|footer|main|h[1-6]|ul|ol|li|a|span|"
-        r"p|img|label|select|textarea|details|summary)\b",
+        r"p|img|canvas|svg|label|select|textarea|details|summary)\b",
         s,
         flags=re.IGNORECASE,
     ):
@@ -270,40 +274,80 @@ def html_remote_violations(doc: str) -> tuple[str, ...]:
         if name not in hits:
             hits.append(name)
 
-    if re.search(r"<script\b[^>]*\bsrc\s*=\s*[\"']?https?://", text, re.IGNORECASE):
+    if re.search(rf"<script\b[^>]*\bsrc\s*=\s*[\"']?{_REMOTE_URL}", text, re.IGNORECASE):
         add("script_src")
-    if re.search(r"""(?:^|[\s;{}(])from\s+["']https?://""", text, re.IGNORECASE | re.MULTILINE):
-        add("es_import")
-    if re.search(r"""(?:^|[\s;{}(])import\s+["']https?://""", text, re.IGNORECASE | re.MULTILINE):
-        add("es_import")
-    if re.search(r"""import\s*\(\s*["']https?://""", text, re.IGNORECASE):
+    if re.search(
+        rf"""(?:^|[\s;{{}}(])from\s+["']{_REMOTE_URL}""",
+        text,
+        re.IGNORECASE | re.MULTILINE,
+    ):
         add("es_import")
     if re.search(
-        r"<script\b[^>]*type\s*=\s*[\"']importmap[\"'][^>]*>[\s\S]*?https?://",
+        rf"""(?:^|[\s;{{}}(])import\s+["']{_REMOTE_URL}""",
+        text,
+        re.IGNORECASE | re.MULTILINE,
+    ):
+        add("es_import")
+    if re.search(rf"""import\s*\(\s*["']{_REMOTE_URL}""", text, re.IGNORECASE):
+        add("es_import")
+    if re.search(
+        rf"<script\b[^>]*type\s*=\s*[\"']importmap[\"'][^>]*>[\s\S]*?{_REMOTE_URL}",
         text,
         re.IGNORECASE,
     ):
         add("importmap")
-    if re.search(r"<link\b[^>]*\bhref\s*=\s*[\"']https?://", text, re.IGNORECASE):
+    if re.search(rf"<link\b[^>]*\bhref\s*=\s*[\"']?{_REMOTE_URL}", text, re.IGNORECASE):
         add("link_href")
-    if re.search(r"<iframe\b[^>]*\bsrc\s*=\s*[\"']https?://", text, re.IGNORECASE):
+    if re.search(rf"<iframe\b[^>]*\bsrc\s*=\s*[\"']?{_REMOTE_URL}", text, re.IGNORECASE):
         add("iframe_src")
-    if re.search(r"<img\b[^>]*\bsrc\s*=\s*[\"']https?://", text, re.IGNORECASE):
+    if re.search(rf"<img\b[^>]*\bsrc\s*=\s*[\"']?{_REMOTE_URL}", text, re.IGNORECASE):
         add("img_src")
-    if re.search(r"\bsrcset\s*=\s*[\"'][^\"']*https?://", text, re.IGNORECASE):
+    if re.search(rf"\bsrcset\s*=\s*[\"'][^\"']*{_REMOTE_URL}", text, re.IGNORECASE):
         add("img_src")
     if re.search(
-        r"<(?:video|audio|source|embed)\b[^>]*\bsrc\s*=\s*[\"']https?://",
+        rf"<(?:video|audio|source|embed)\b[^>]*\bsrc\s*=\s*[\"']?{_REMOTE_URL}",
         text,
         re.IGNORECASE,
     ):
         add("media_src")
-    if re.search(r"<object\b[^>]*\bdata\s*=\s*[\"']https?://", text, re.IGNORECASE):
+    if re.search(rf"<object\b[^>]*\bdata\s*=\s*[\"']?{_REMOTE_URL}", text, re.IGNORECASE):
         add("media_src")
-    if re.search(r"""\bfetch\s*\(\s*["']https?://""", text, re.IGNORECASE):
+    if re.search(rf"""\bfetch\s*\(\s*["']{_REMOTE_URL}""", text, re.IGNORECASE):
         add("fetch")
-    if re.search(r"url\s*\(\s*['\"]?https?://", text, re.IGNORECASE):
+    if re.search(rf"url\s*\(\s*['\"]?{_REMOTE_URL}", text, re.IGNORECASE):
         add("css_url")
+    return tuple(hits)
+
+
+def html_engine_violations(doc: str) -> tuple[str, ...]:
+    """Page expects Three/Chart/ECharts/KaTeX that Pico will not load."""
+    text = doc or ""
+    hits: list[str] = []
+
+    def add(name: str) -> None:
+        if name not in hits:
+            hits.append(name)
+
+    if re.search(r"""from\s+['"]three(?:/[^'"]*)?['"]""", text, re.IGNORECASE):
+        add("three_import")
+    if re.search(r"""import\s*\(\s*['"]three(?:/[^'"]*)?['"]""", text, re.IGNORECASE):
+        add("three_import")
+    if re.search(r"""from\s+['"]chart\.js['"]""", text, re.IGNORECASE):
+        add("chart_import")
+    if re.search(r"""from\s+['"]echarts['"]""", text, re.IGNORECASE):
+        add("echarts_import")
+    if re.search(
+        r"\bwindow\.THREE\b|\btypeof\s+THREE\b|\bnew\s+THREE\.|"
+        r"\bTHREE\.(?:Scene|WebGLRenderer|PerspectiveCamera|Clock|Mesh)\b",
+        text,
+    ):
+        add("three_global")
+    if re.search(r"\bnew\s+Chart\s*\(", text):
+        add("chart_global")
+    if re.search(r"\becharts\s*\.\s*init\s*\(", text):
+        add("echarts_global")
+    if re.search(r"\bkatex\s*\.\s*render", text, re.IGNORECASE):
+        add("katex_global")
     return tuple(hits)
 
 
@@ -318,9 +362,9 @@ def _strip_remote_script_src(doc: str) -> str:
 
 
 def _require_offline_html(doc: str) -> str:
-    """Fail closed if the page still needs the network after font-link strip."""
+    """Fail closed if the page still needs the network or a CDN engine."""
     cleaned = _strip_remote_stylesheets(doc)
-    if html_remote_violations(cleaned):
+    if html_remote_violations(cleaned) or html_engine_violations(cleaned):
         raise ValueError(HTML_REMOTE_ENGINE_ERROR)
     return cleaned
 
