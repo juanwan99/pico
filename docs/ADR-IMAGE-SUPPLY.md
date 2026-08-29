@@ -68,7 +68,30 @@ Google Gemini generateContent
 
 ---
 
-## 2. 现在就做（三账号 · 机上，不进 git）
+## 2. 三个 Google AI Pro 怎么用
+
+**Pro 网页套餐 ≠ Pico 出图配额。** 官方：[Google AI Plans](https://ai.google.dev/gemini-api/docs/google-ai-plans) — 订阅加的是 AI Studio **网页**额度；用 API key 打外部应用（New API / Pico）是另一套账，按 Gemini API Free / Cloud Billing 走。
+
+| 这三号买到的 | Pico 能用的 |
+|--------------|-------------|
+| gemini.google.com / App 里更高出图次数 | **不能**接到老师课。禁 cookie / 网页套餐反代 |
+| AI Studio 网页 Playground 更高额度 | **不能**被 New API 消耗 |
+| 三个独立 Google 身份 | **能**：每号一把 **API key** → New API 三条渠道 |
+
+**正确用法（每号做一遍，钥不进 git/Issue）：**
+
+1. 三个账号各开一个浏览器配置，登录 [Google AI Studio](https://aistudio.google.com)。
+2. 该号下 **Create API key**（Gemini Developer API）。不要导出登录 cookie。
+3. New API 加渠道：类型 **Gemini / Google Gemini（API key）**，不是「Gemini 网页 / cookie」。一把 key 一条渠道。三号同一组。
+4. Pico 仍只填一把 New API token。老师出图走 `generateContent`。
+
+**Pro 还干什么：** 你自己在 Gemini 网页 / AI Studio 里画、试模型。那条路的额度不会流进 pico.aivia.asia。
+
+**API 侧额度：** 没开 Cloud Billing = Gemini API 免费档，RPM/日限很紧，容易 429（正是要三号轮询的原因）。课堂量大再给对应 Cloud 项目开付费 API，**不是**再买第四份网页 Pro，也**不是**把 cookie 塞进 New API。
+
+---
+
+## 3. 现在就做（三账号 · 机上，不进 git）
 
 Google 钥、New API token **禁止**进仓 / Issue / PR。只在 New API 管理台和主机 `.env`。
 
@@ -84,7 +107,7 @@ Google 钥、New API token **禁止**进仓 / Issue / PR。只在 New API 管理
 
 ---
 
-## 3. Pico 熔断（已有 · 不再加厚）
+## 4. Pico 熔断（已有 · 不再加厚）
 
 仓内只允许：
 
@@ -106,7 +129,7 @@ Google 钥、New API token **禁止**进仓 / Issue / PR。只在 New API 管理
 
 ---
 
-## 4. 出口 IP（现在不做 · 以后不进 Pico）
+## 5. 出口 IP（现在不做 · 以后不进 Pico）
 
 三号共一台 New API、一个 NAT：Google 看见「三把钥、一个出口」。这是小团队常态，不是农场。**现在不拆 IP。**
 
@@ -122,7 +145,7 @@ Pico 永远不知道某次请求打了哪一个 Google IP。出口是 New API �
 
 ---
 
-## 5. 失败怎么说（老师面）
+## 6. 失败怎么说（老师面）
 
 | 情况 | 老师看见 |
 |------|----------|
@@ -133,7 +156,7 @@ Pico 永远不知道某次请求打了哪一个 Google IP。出口是 New API �
 
 ---
 
-## 6. 若 New API 不能「组内换渠道」
+## 7. 若 New API 不能「组内换渠道」
 
 少数面板一次请求 429 就直接回客户端、不试同组下一条。那时才用 **备选接线**（仍不是 Google 轮询核）：
 
@@ -141,14 +164,14 @@ Pico 永远不知道某次请求打了哪一个 Google IP。出口是 New API �
 - Pico `PICO_IMAGE_GATEWAY_KEYS` 填这三把 **New API token**
 - 429/401 换下一把
 
-先确认管理台有没有「失败重试其他渠道」。有则走第 2 节默认；没有再启用本备选。不要两种同时当真源。
+先确认管理台有没有「失败重试其他渠道」。有则走第 3 节默认；没有再启用本备选。不要两种同时当真源。
 
 ---
 
-## 7. 锁定句（业主回这一行即可）
+## 8. 锁定句（业主回这一行即可）
 
 ```text
 架构锁定：三号在 New API 一组；Pico 一把 token；轮询/RPM 不进 Pico；出口以后再拆。
 ```
 
-改选时只准改第 6 节备选，不准在 Pico 建 IP/cookie/Google 钥农场。
+改选时只准改第 7 节备选，不准在 Pico 建 IP/cookie/Google 钥农场。
