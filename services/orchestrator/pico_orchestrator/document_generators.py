@@ -24,6 +24,26 @@ PPTX_SLIDES_TOO_FEW = (
     "PPT 没有可渲染的页。请写入至少一页再调用 generate_pptx_document，"
     "系统不会垫页。"
 )
+# Interactive HTML must run with no network (school offline / CSP). Do not
+# allowlist jsdelivr. Full Three.js cannot fit the 50k body cap.
+HTML_INTERACTIVE_CSP = (
+    "default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
+    "script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; "
+    "frame-ancestors 'none';"
+)
+HTML_REMOTE_ENGINE_ERROR = (
+    "这份 HTML 依赖外网资源（script/import/CDN/外链图），本地或学校网会打不开。"
+    "请用页内脚本和 canvas 自绘，图片只用 data: URL。"
+    "不要 Three.js/Chart.js/ECharts/KaTeX CDN，不要 import 或 script src 外链。"
+)
+_CSP_META_RE = re.compile(
+    r"<meta\b[^>]*http-equiv\s*=\s*[\"']Content-Security-Policy[\"'][^>]*>\s*",
+    re.IGNORECASE,
+)
+_LINK_HTTPS_RE = re.compile(
+    r"<link\b(?=[^>]*\bhref\s*=\s*[\"']https?://)[^>]*>",
+    re.IGNORECASE,
+)
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
@@ -241,16 +261,101 @@ def _looks_like_html_markup(raw: str) -> bool:
     return len(tags) >= 2
 
 
+def html_remote_violations(doc: str) -> tuple[str, ...]:
+    """Executable or render remote loads. ``<a href=https>`` in prose is allowed."""
+    text = doc or ""
+    hits: list[str] = []
+
+    def add(name: str) -> None:
+        if name not in hits:
+            hits.append(name)
+
+    if re.search(r"<script\b[^>]*\bsrc\s*=\s*[\"']?https?://", text, re.I):
+        add("script_src")
+    if re.search(r"""(?:^|[\s;{}(])from\s+["']https?://""", text, re.I | re.M):
+        add("es_import")
+    if re.search(r"""(?:^|[\s;{}(])import\s+["']https?://""", text, re.I | re.M):
+        add("es_import")
+    if re.search(r"""import\s*\(\s*["']https?://""", text, re.I):
+        add("es_import")
+    if re.search(
+        r"<script\b[^>]*type\s*=\s*[\"']importmap[\"'][^>]*>[\s\S]*?https?://",
+        text,
+        re.I,
+    ):
+        add("importmap")
+    if re.search(r"<link\b[^>]*\bhref\s*=\s*[\"']https?://", text, re.I):
+        add("link_href")
+    if re.search(r"<iframe\b[^>]*\bsrc\s*=\s*[\"']https?://", text, re.I):
+        add("iframe_src")
+    if re.search(r"<img\b[^>]*\bsrc\s*=\s*[\"']https?://", text, re.I):
+        add("img_src")
+    if re.search(r"\bsrcset\s*=\s*[\"'][^\"']*https?://", text, re.I):
+        add("img_src")
+    if re.search(
+        r"<(?:video|audio|source|embed)\b[^>]*\bsrc\s*=\s*[\"']https?://",
+        text,
+        re.I,
+    ):
+        add("media_src")
+    if re.search(r"<object\b[^>]*\bdata\s*=\s*[\"']https?://", text, re.I):
+        add("media_src")
+    if re.search(r"""\bfetch\s*\(\s*["']https?://""", text, re.I):
+        add("fetch")
+    if re.search(r"url\s*\(\s*['\"]?https?://", text, re.I):
+        add("css_url")
+    return tuple(hits)
+
+
+def _strip_remote_stylesheets(doc: str) -> str:
+    """Drop remote CSS/font links. Engine scripts are not stripped-to-succeed."""
+    return _LINK_HTTPS_RE.sub("<!-- stripped remote stylesheet -->", doc or "")
+
+
+def _strip_remote_script_src(doc: str) -> str:
+    """Legacy helper. CDN engines fail-closed; this only strips https stylesheets."""
+    return _strip_remote_stylesheets(doc)
+
+
+def _require_offline_html(doc: str) -> str:
+    """Fail closed if the page still needs the network after font-link strip."""
+    cleaned = _strip_remote_stylesheets(doc)
+    if html_remote_violations(cleaned):
+        raise ValueError(HTML_REMOTE_ENGINE_ERROR)
+    return cleaned
+
+
+def _force_interactive_csp(doc: str) -> str:
+    """Replace every CSP meta with one legal offline policy (no quote-truncation)."""
+    text = _CSP_META_RE.sub("", doc or "")
+    meta = (
+        f'<meta http-equiv="Content-Security-Policy" content="{HTML_INTERACTIVE_CSP}" />'
+    )
+    if re.search(r"<head\b", text, re.I):
+        return re.sub(
+            r"(<head\b[^>]*>)",
+            rf"\1\n  {meta}",
+            text,
+            count=1,
+            flags=re.I,
+        )
+    if re.search(r"<html\b", text, re.I):
+        return re.sub(
+            r"(<html\b[^>]*>)",
+            rf"\1\n<head>\n  {meta}\n</head>",
+            text,
+            count=1,
+            flags=re.I,
+        )
+    return f"<head>\n  {meta}\n</head>\n{text}"
+
+
 def _wrap_html_fragment(raw_body: str, *, title: str, marker: str) -> str:
     """Wrap an HTML fragment in a minimal interactive document shell (tags kept)."""
     safe_title = html.escape((title or "Pico HTML").strip() or "Pico HTML")
     safe_marker = html.escape(marker)
-    body = _strip_remote_script_src(raw_body)
-    csp = (
-        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
-        "script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; "
-        "frame-ancestors 'none';"
-    )
+    body = _CSP_META_RE.sub("", _require_offline_html(raw_body))
+    csp = HTML_INTERACTIVE_CSP
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -270,16 +375,6 @@ def _wrap_html_fragment(raw_body: str, *, title: str, marker: str) -> str:
 </body>
 </html>
 """
-
-
-def _strip_remote_script_src(doc: str) -> str:
-    """Remove external script src (keep inline scripts for local interactivity)."""
-    return re.sub(
-        r"<script\b[^>]*\bsrc\s*=\s*[\"']https?://[^\"']*[\"'][^>]*>\s*</script>",
-        "<!-- stripped remote script -->",
-        doc,
-        flags=re.IGNORECASE,
-    )
 
 
 def _inject_marker_into_html(doc: str, *, marker: str, title: str) -> str:
@@ -309,32 +404,9 @@ def _inject_marker_into_html(doc: str, *, marker: str, title: str) -> str:
             count=1,
             flags=re.IGNORECASE,
         )
-    # Interactive local pages need inline script; keep remote blocked via strip.
-    # If CSP forbids scripts entirely, button handlers die → source-wall UX.
-    csp_interactive = (
-        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
-        "script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; "
-        "frame-ancestors 'none';"
-    )
-    if re.search(
-        r'http-equiv=["\']Content-Security-Policy["\']', doc, re.IGNORECASE
-    ):
-        doc = re.sub(
-            r'(<meta\b[^>]*http-equiv=["\']Content-Security-Policy["\'][^>]*content=["\'])([^"\']*)(["\'])',
-            rf"\1{csp_interactive}\3",
-            doc,
-            count=1,
-            flags=re.IGNORECASE,
-        )
-    elif re.search(r"<head\b", doc, re.IGNORECASE):
-        doc = re.sub(
-            r"(<head\b[^>]*>)",
-            rf'\1\n  <meta http-equiv="Content-Security-Policy" content="{csp_interactive}" />',
-            doc,
-            count=1,
-            flags=re.IGNORECASE,
-        )
-    return doc
+    # Interactive local pages need inline script. Replace the whole CSP meta
+    # (values contain quotes; a [^\"]* capture truncates and glues leftover CDN).
+    return _force_interactive_csp(doc)
 
 
 def build_html_document(
@@ -346,7 +418,7 @@ def build_html_document(
     """HTML bytes with unique marker.
 
     - Prose body → safe escaped paragraphs inside a shell (no script).
-    - Full HTML document body → kept as interactive page (remote scripts stripped).
+    - Full HTML document body → kept as interactive page (CDN/engine fail-closed).
       This prevents H-CODEDUMP where agents pass real UI source only to see it
       escaped into a source wall.
     """
@@ -359,7 +431,7 @@ def build_html_document(
 
     page_title = (title or "").strip() or "Pico HTML"
     if _looks_like_full_html_document(raw_body):
-        doc = _strip_remote_script_src(raw_body)
+        doc = _require_offline_html(raw_body)
         doc = _inject_marker_into_html(doc, marker=marker, title=page_title)
         if "data-pico-marker=" not in doc:
             # Extremely broken fragment — fall through to markup/prose paths.

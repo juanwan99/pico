@@ -172,7 +172,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_html_document",
-    "Create a real .html Artifact (Pico gateway). Result includes an observation of what landed. ok is not finished.",
+    "Create a real .html Artifact (Pico gateway). Page must run offline: inline CSS/JS/canvas only. No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https images (use data: URLs). The tool fails closed if the page still needs the network. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
@@ -342,7 +342,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "verify_html_document",
-    "Static HTML structure self-check via Pico gateway (not browser QA).",
+    "Static HTML structure self-check via Pico gateway (not browser QA). Fails when the page loads scripts, ES imports, styles, images, or media from http(s).",
     AnyArgs,
   );
   registerTool(

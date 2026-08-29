@@ -114,13 +114,13 @@ def test_html_full_document_body_not_source_wall() -> None:
     assert "&lt;script" not in text
     assert marker in text
     assert "script-src 'unsafe-inline'" in text
-    # Remote scripts stripped.
-    remote = build_html_document(
-        title="x.html",
-        marker="R1",
-        body='<!DOCTYPE html><html><body><script src="https://evil.example/x.js"></script><button>ok</button></body></html>',
-    ).decode("utf-8")
-    assert "evil.example" not in remote
+    # Remote engine pages fail closed — do not strip-to-empty-stage and succeed.
+    with pytest.raises(ValueError, match="外网资源"):
+        build_html_document(
+            title="x.html",
+            marker="R1",
+            body='<!DOCTYPE html><html><body><script src="https://evil.example/x.js"></script><button>ok</button></body></html>',
+        )
 
 
 def test_prompt_fixtures_meet_floor_without_padding() -> None:
