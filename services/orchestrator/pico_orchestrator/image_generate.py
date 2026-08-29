@@ -2,9 +2,11 @@
 
 Owner 2026-08-27: SiliconFlow images REJECTED.
 Owner 2026-08-28: New API reverse-proxies many Gemini API keys (#752).
-Pico calls one OpenAI-compatible images URL. Direct Gemini / Zhipu
-are leftovers when the gateway is unset. No cookie farm. No Pico
-multi-key rotator.
+Owner 2026-08-29: Gemini chain must stay up (risk + stability). Pico
+still never talks to Google when the gateway is set. Optional extra
+New API tokens (PICO_IMAGE_GATEWAY_KEYS) fail over on 429 — not a
+Google key farm. Direct Gemini / Zhipu are leftovers when unset.
+No cookie farm. No self-built image kernel.
 """
 
 from __future__ import annotations
@@ -53,6 +55,8 @@ _flight_lock = asyncio.Lock()
 _glm_lock = asyncio.Lock()
 _inflight: dict[str, asyncio.Future[tuple[bytes, str]]] = {}
 _next_post_mono = 0.0
+_key_next_idx = 0
+_key_cooldown_mono: dict[int, float] = {}
 _MAX_PROMPT = 2000
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -67,7 +71,12 @@ REJECTED_PROVIDER_MESSAGE = (
 )
 TIMEOUT_MESSAGE = "出图超时（90 秒）。请稍后重试，不能编造图片。"
 REJECT_MESSAGE = "出图服务拒绝了这次请求。请稍后重试或换一句描述，不能编造图片。"
+BUSY_MESSAGE = "出图通道繁忙（限流）。请稍后再试，不能编造图片。"
 INVALID_MESSAGE = "出图结果不是可打开的 png/jpg，未保存，不能编造图片。"
+# Per New API token. Caps burst onto one Gemini account behind that token.
+# 0 disables. Owner 2026-08-29 风控：默认 2s，不是 Google RPM 内核。
+_DEFAULT_KEY_MIN_INTERVAL_S = 2.0
+_KEY_MIN_INTERVAL_CAP_S = 30.0
 
 
 def siliconflow_api_key() -> str:
@@ -115,8 +124,46 @@ def gemini_generate_url() -> str:
     return f"{DEFAULT_GEMINI_ROOT}/models/{gemini_image_model()}:generateContent"
 
 
+def _split_gateway_tokens(raw: str) -> list[str]:
+    text = (raw or "").strip()
+    if not text:
+        return []
+    for sep in (";", ",", "\n", "\r", "\t"):
+        text = text.replace(sep, " ")
+    return [part for part in text.split() if part]
+
+
+def gateway_keys() -> tuple[str, ...]:
+    """New API tokens only (never Google keys). KEY first, then KEYS."""
+    seen: list[str] = []
+    bag: set[str] = set()
+    for raw in (
+        os.environ.get("PICO_IMAGE_GATEWAY_KEY") or "",
+        os.environ.get("PICO_IMAGE_GATEWAY_KEYS") or "",
+    ):
+        for token in _split_gateway_tokens(raw):
+            if token not in bag:
+                bag.add(token)
+                seen.append(token)
+    return tuple(seen)
+
+
 def gateway_key() -> str:
-    return (os.environ.get("PICO_IMAGE_GATEWAY_KEY") or "").strip()
+    keys = gateway_keys()
+    return keys[0] if keys else ""
+
+
+def gateway_key_min_interval_s() -> float:
+    raw = (os.environ.get("PICO_IMAGE_KEY_MIN_INTERVAL_S") or "").strip()
+    if not raw:
+        return _DEFAULT_KEY_MIN_INTERVAL_S
+    try:
+        value = float(raw)
+    except ValueError:
+        return _DEFAULT_KEY_MIN_INTERVAL_S
+    if value < 0:
+        return 0.0
+    return min(value, _KEY_MIN_INTERVAL_CAP_S)
 
 
 def gateway_root_url() -> str:
@@ -171,19 +218,35 @@ def allowed_image_key() -> bool:
     return bool(
         zhipu_api_key()
         or gemini_api_key()
-        or (gateway_images_url() and gateway_key())
+        or (gateway_images_url() and gateway_keys())
     )
 
 
 def selected_image_provider() -> str | None:
     """Owner 2026-08-28: New API gateway first; Gemini/Zhipu leftover."""
-    if gateway_images_url() and gateway_key():
+    if gateway_images_url() and gateway_keys():
         return PROVIDER_GATEWAY
     if gemini_api_key():
         return PROVIDER_GEMINI
     if zhipu_api_key():
         return PROVIDER_ZHIPU
     return None
+
+
+def health_fields() -> dict[str, Any]:
+    """Observability only — never emit token material."""
+    provider = selected_image_provider() or ""
+    keys = gateway_keys()
+    gated = bool(gateway_images_url() and keys)
+    return {
+        "image_provider": provider,
+        "image_gateway_configured": gated,
+        "image_gateway_key_count": len(keys) if gateway_images_url() else 0,
+        "image_gateway_model": gateway_model() if gated else "",
+        "image_key_min_interval_s": (
+            gateway_key_min_interval_s() if provider == PROVIDER_GATEWAY else 0.0
+        ),
+    }
 
 
 def _as_png_or_jpeg(raw: bytes) -> tuple[bytes, str]:
@@ -312,8 +375,10 @@ def _zhipu_error_code(response: Any) -> str | None:
 
 def reset_image_generate_runtime() -> None:
     """Tests only: drop in-flight joiners and the process 429 gate."""
-    global _next_post_mono, _flight_lock, _glm_lock
+    global _next_post_mono, _flight_lock, _glm_lock, _key_next_idx
     _next_post_mono = 0.0
+    _key_next_idx = 0
+    _key_cooldown_mono.clear()
     _inflight.clear()
     _flight_lock = asyncio.Lock()
     _glm_lock = asyncio.Lock()
@@ -335,6 +400,44 @@ def _arm_rate_gate(delay: float) -> None:
     global _next_post_mono
     wait = max(float(delay), 1.0)
     _next_post_mono = max(_next_post_mono, time.monotonic() + wait)
+
+
+def _arm_key_cooldown(idx: int, delay: float) -> None:
+    wait = max(float(delay), 0.0)
+    if wait <= 0:
+        return
+    _key_cooldown_mono[idx] = max(
+        _key_cooldown_mono.get(idx, 0.0), time.monotonic() + wait
+    )
+
+
+def _pick_gateway_key_index(
+    n: int, *, tries: list[int], max_tries: int
+) -> int | None:
+    global _key_next_idx
+    if n <= 0:
+        return None
+    now = time.monotonic()
+    for offset in range(n):
+        idx = (_key_next_idx + offset) % n
+        if tries[idx] >= max_tries:
+            continue
+        if _key_cooldown_mono.get(idx, 0.0) <= now:
+            _key_next_idx = (idx + 1) % n
+            return idx
+    return None
+
+
+def _min_ready_wait_s(n: int, *, tries: list[int], max_tries: int) -> float | None:
+    now = time.monotonic()
+    waits: list[float] = []
+    for idx in range(n):
+        if tries[idx] >= max_tries:
+            continue
+        waits.append(max(0.0, _key_cooldown_mono.get(idx, 0.0) - now))
+    if not waits:
+        return None
+    return min(waits)
 
 
 def _http_provider_error(response: Any) -> ToolError:
@@ -479,6 +582,8 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
 
 
 async def _generate_image_campaign(text: str) -> tuple[bytes, str]:
+    if selected_image_provider() == PROVIDER_GATEWAY:
+        return await _generate_gateway_campaign(text)
     await _respect_rate_gate()
     rate_tries = 0
     provider_retried = False
@@ -530,12 +635,94 @@ async def _generate_image_campaign(text: str) -> tuple[bytes, str]:
             provider_retried = True
 
 
+def _busy_or_last(exc: ToolError) -> ToolError:
+    error_code = str(getattr(exc, "zhipu_error_code", None) or "").strip()
+    if error_code in _429_NON_RETRYABLE_CODES:
+        return exc
+    status = getattr(exc, "http_status", None)
+    if status == 429 or exc.code == "image.busy":
+        busy = ToolError("image.busy", BUSY_MESSAGE)
+        busy.http_status = status
+        busy.retry_after = getattr(exc, "retry_after", None)
+        busy.zhipu_error_code = getattr(exc, "zhipu_error_code", None)
+        return busy
+    return exc
+
+
+async def _generate_gateway_campaign(text: str) -> tuple[bytes, str]:
+    """Round-robin New API tokens. 429 on one token tries the next immediately."""
+    keys = gateway_keys()
+    if not keys:
+        raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
+    n = len(keys)
+    tries = [0] * n
+    last: ToolError | None = None
+    min_interval = gateway_key_min_interval_s()
+    while True:
+        idx = _pick_gateway_key_index(n, tries=tries, max_tries=_429_MAX_TRIES)
+        if idx is None:
+            wait = _min_ready_wait_s(n, tries=tries, max_tries=_429_MAX_TRIES)
+            if wait is None or wait >= _429_RETRY_AFTER_CAP_S:
+                if last is not None:
+                    raise _busy_or_last(last)
+                raise ToolError("image.provider", REJECT_MESSAGE)
+            logger.warning("gateway all New API tokens cooling; wait %.1fs", wait)
+            await asyncio.sleep(wait)
+            continue
+        tries[idx] += 1
+        try:
+            result = await _generate_gateway_call(text, api_key=keys[idx])
+            _arm_key_cooldown(idx, min_interval)
+            return result
+        except ToolError as exc:
+            last = exc
+            status = getattr(exc, "http_status", None)
+            if exc.code == "image.timeout":
+                if n == 1:
+                    raise
+                _arm_key_cooldown(idx, max(min_interval, 1.0))
+                logger.warning("gateway key_index=%s timeout; trying next token", idx)
+                continue
+            if exc.code == "image.unconfigured":
+                _arm_key_cooldown(idx, _429_RETRY_AFTER_CAP_S)
+                tries[idx] = _429_MAX_TRIES
+                logger.warning("gateway key_index=%s 401/403; skipping token", idx)
+                continue
+            if exc.code != "image.provider":
+                raise
+            if status == 429:
+                retry_after = getattr(exc, "retry_after", None)
+                error_code = str(getattr(exc, "zhipu_error_code", None) or "").strip()
+                delay = _429_delay_s(retry_after)
+                if error_code in _429_NON_RETRYABLE_CODES:
+                    delay = _429_RETRY_AFTER_CAP_S
+                    tries[idx] = _429_MAX_TRIES
+                delay = max(delay, min_interval)
+                _arm_key_cooldown(idx, delay)
+                logger.warning(
+                    "gateway key_index=%s HTTP 429 retry-after=%r error_code=%s; "
+                    "cooldown %.1fs (not a Google key)",
+                    idx,
+                    retry_after,
+                    error_code or None,
+                    delay,
+                )
+                continue
+            if isinstance(status, int) and 400 <= status < 500:
+                raise
+            if n == 1 and tries[idx] >= 2:
+                raise
+            if tries[idx] >= 2:
+                _arm_key_cooldown(idx, _429_RETRY_AFTER_CAP_S)
+            logger.warning("gateway key_index=%s provider failed; trying next", idx)
+
+
 async def _generate_image_call(text: str) -> tuple[bytes, str]:
     kind = selected_image_provider()
     if kind == PROVIDER_GEMINI:
         return await _generate_gemini_call(text)
     if kind == PROVIDER_GATEWAY:
-        return await _generate_gateway_call(text)
+        return await _generate_gateway_call(text, api_key=gateway_key())
     if kind == PROVIDER_ZHIPU:
         return await _generate_zhipu_call(text)
     raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
@@ -601,7 +788,10 @@ async def _generate_zhipu_call(text: str) -> tuple[bytes, str]:
     return await _bytes_from_openai_image_body(body)
 
 
-async def _generate_gateway_call(text: str) -> tuple[bytes, str]:
+async def _generate_gateway_call(text: str, *, api_key: str) -> tuple[bytes, str]:
+    token = (api_key or "").strip()
+    if not token:
+        raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
     if gateway_uses_gemini_native():
         payload = {
             "contents": [{"role": "user", "parts": [{"text": text}]}],
@@ -610,7 +800,7 @@ async def _generate_gateway_call(text: str) -> tuple[bytes, str]:
         try:
             response = await _post_gateway(
                 payload,
-                api_key=gateway_key(),
+                api_key=token,
                 timeout=IMAGE_TIMEOUT_S,
                 url=gateway_generate_content_url(),
             )
@@ -641,7 +831,7 @@ async def _generate_gateway_call(text: str) -> tuple[bytes, str]:
     }
     try:
         response = await _post_gateway(
-            payload, api_key=gateway_key(), timeout=IMAGE_TIMEOUT_S
+            payload, api_key=token, timeout=IMAGE_TIMEOUT_S
         )
     except httpx.TimeoutException as exc:
         raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc

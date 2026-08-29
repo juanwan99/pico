@@ -163,6 +163,7 @@ def test_generate_image_siliconflow_key_rejected(client, monkeypatch) -> None:
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("PICO_IMAGE_GATEWAY_URL", raising=False)
     monkeypatch.delenv("PICO_IMAGE_GATEWAY_KEY", raising=False)
+    monkeypatch.delenv("PICO_IMAGE_GATEWAY_KEYS", raising=False)
     headers = _headers(client)
     created = _invoke(
         client,
@@ -185,6 +186,7 @@ def test_generate_image_no_key_no_artifact(client, monkeypatch) -> None:
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("PICO_IMAGE_GATEWAY_URL", raising=False)
     monkeypatch.delenv("PICO_IMAGE_GATEWAY_KEY", raising=False)
+    monkeypatch.delenv("PICO_IMAGE_GATEWAY_KEYS", raising=False)
     headers = _headers(client)
     created = _invoke(
         client,

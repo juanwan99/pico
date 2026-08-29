@@ -90,15 +90,17 @@ services:
       PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
       # edu pull GET /v1/internal/usage/export — empty = 503 hook.disabled
       PICO_HOOK_SERVICE_TOKEN: ${PICO_HOOK_SERVICE_TOKEN:-}
-      # Image: New API gateway (multi Gemini keys live in New API, not Pico).
-      # SiliconFlow images REJECTED. Keys host .env only.
+      # Image: New API gateway. Gemini 号在 New API 渠道组；Pico 可持多个 New API token。
+      # SiliconFlow images REJECTED. Tokens host .env only — never Google keys.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GEMINI_IMAGES_URL: ${GEMINI_IMAGES_URL:-}
       GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-2.5-flash-image}
       PICO_IMAGE_GATEWAY_URL: ${PICO_IMAGE_GATEWAY_URL:-}
       PICO_IMAGE_GATEWAY_KEY: ${PICO_IMAGE_GATEWAY_KEY:-}
+      PICO_IMAGE_GATEWAY_KEYS: ${PICO_IMAGE_GATEWAY_KEYS:-}
       PICO_IMAGE_GATEWAY_MODEL: ${PICO_IMAGE_GATEWAY_MODEL:-}
+      PICO_IMAGE_KEY_MIN_INTERVAL_S: ${PICO_IMAGE_KEY_MIN_INTERVAL_S:-2}
       ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
       ZHIPU_IMAGES_URL: ${ZHIPU_IMAGES_URL:-}
       ZHIPU_IMAGE_MODEL: ${ZHIPU_IMAGE_MODEL:-glm-image}

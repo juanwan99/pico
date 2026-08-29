@@ -88,7 +88,9 @@ def _sync_settings_to_environ() -> None:
         "GEMINI_IMAGE_MODEL": s.gemini_image_model,
         "PICO_IMAGE_GATEWAY_URL": s.pico_image_gateway_url,
         "PICO_IMAGE_GATEWAY_KEY": s.pico_image_gateway_key,
+        "PICO_IMAGE_GATEWAY_KEYS": s.pico_image_gateway_keys,
         "PICO_IMAGE_GATEWAY_MODEL": s.pico_image_gateway_model,
+        "PICO_IMAGE_KEY_MIN_INTERVAL_S": str(s.pico_image_key_min_interval_s),
     }
     for k, v in mapping.items():
         if v and not os.environ.get(k):
@@ -260,6 +262,9 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.meili_kb import health_fields as meili_health_fields
 
     body.update(meili_health_fields())
+    from pico_orchestrator.image_generate import health_fields as image_health_fields
+
+    body.update(image_health_fields())
     if pi_batch:
         body["pi_agent_canary_batch"] = pi_batch
     if kimi_batch:

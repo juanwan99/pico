@@ -4,7 +4,7 @@
 DATE: 2026-08-29
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: 无
+在飞: #778
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main
 阻塞: #748 合部完不关 · 记忆 OS 挂
@@ -76,6 +76,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#752](https://github.com/juanwan99/pico/issues/752) | T-OFFICE-THICK · 业主 PASS @ tip `0c7943ac…` · 不关卡 |
 | 已收口 | [#740](https://github.com/juanwan99/pico/issues/740) | T-PPT-CONTRACT · 业主 PASS @ tip `2e668686…` · 不关卡 |
 | 已收口 | [#776](https://github.com/juanwan99/pico/issues/776) · [#775](https://github.com/juanwan99/pico/pull/775) | T-SANDBOX-OFFICE-BOX · 业主 PASS @ tip `812360f6…` |
+| 在飞 | [#778](https://github.com/juanwan99/pico/issues/778) | T-GEMINI-IMAGE-CHAIN · Gemini 出图链（风控+稳定） |
 | 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
 | 挂起 | 记忆 OS | 人视角薄层已部（#736）；完整记忆 OS 仍挂 · 禁自研 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |

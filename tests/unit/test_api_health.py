@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,6 +39,10 @@ def test_health() -> None:
     assert body["kimi_agent_canary_membership_count"] == 0
     assert "kimi_agent_canary_batch" not in body
     assert not any("secret" in key or "token" in key for key in body)
+    assert isinstance(body["image_gateway_key_count"], int)
+    assert body["image_gateway_key_count"] >= 0
+    assert body["image_provider"] in {"", "gateway", "gemini", "zhipu"}
+    assert "pico_image_gateway_key" not in body
 
 
 def test_health_exposes_only_non_sensitive_canary_state() -> None:
@@ -90,6 +95,26 @@ def test_health_ignores_bare_membership_canary_entries() -> None:
     assert "bare-member-only" not in response.text
     assert "school-a" not in response.text
     assert "m1" not in response.text
+
+
+def test_health_image_gateway_count_does_not_leak_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "https://newapi.example.com")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEY", "sk-secret-must-not-leak")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEYS", "sk-two-must-not-leak,sk-three")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+    response = TestClient(app).get("/health")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["image_provider"] == "gateway"
+    assert body["image_gateway_configured"] is True
+    assert body["image_gateway_key_count"] == 3
+    assert "sk-secret-must-not-leak" not in response.text
+    assert "sk-two-must-not-leak" not in response.text
+    assert "sk-three" not in response.text
 
 
 

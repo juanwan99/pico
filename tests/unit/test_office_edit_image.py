@@ -21,10 +21,13 @@ from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.image_generate import (
     _429_MAX_TRIES,
     _429_RETRY_AFTER_CAP_S,
+    BUSY_MESSAGE,
     IMAGE_TIMEOUT_S,
     NO_KEY_MESSAGE,
     REJECTED_PROVIDER_MESSAGE,
+    gateway_keys,
     generate_image_bytes,
+    health_fields as image_health_fields,
     reset_image_generate_runtime,
 )
 from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
@@ -49,7 +52,9 @@ def _reset_image_runtime(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("GEMINI_IMAGE_MODEL", raising=False)
     monkeypatch.delenv("PICO_IMAGE_GATEWAY_URL", raising=False)
     monkeypatch.delenv("PICO_IMAGE_GATEWAY_KEY", raising=False)
+    monkeypatch.delenv("PICO_IMAGE_GATEWAY_KEYS", raising=False)
     monkeypatch.delenv("PICO_IMAGE_GATEWAY_MODEL", raising=False)
+    monkeypatch.delenv("PICO_IMAGE_KEY_MIN_INTERVAL_S", raising=False)
     yield
     reset_image_generate_runtime()
 
@@ -659,6 +664,129 @@ async def test_generate_image_timeout_no_retry(
     assert "不能编造" in caught.value.message
     assert calls["n"] == 1
     assert slept == []
+
+
+def test_gateway_keys_merges_and_dedupes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "https://newapi.example.com")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEY", "sk-a")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEYS", "sk-a, sk-b;sk-c")
+    assert gateway_keys() == ("sk-a", "sk-b", "sk-c")
+    fields = image_health_fields()
+    assert fields["image_provider"] == "gateway"
+    assert fields["image_gateway_key_count"] == 3
+    assert "sk-a" not in str(fields)
+
+
+def _gateway_png_ns() -> SimpleNamespace:
+    return SimpleNamespace(
+        status_code=200,
+        json=lambda: {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "inlineData": {
+                                    "mimeType": "image/png",
+                                    "data": base64.b64encode(ONE_PNG).decode("ascii"),
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_gateway_pool_429_fails_over_without_sleep(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "https://newapi.example.com")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEY", "sk-a-not-a-secret")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEYS", "sk-b-not-a-secret,sk-c-not-a-secret")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_MODEL", "gemini-2.5-flash-image")
+    monkeypatch.setenv("PICO_IMAGE_KEY_MIN_INTERVAL_S", "0")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    slept = await _record_sleep(monkeypatch)
+    seen: list[str] = []
+
+    async def fake_gateway(payload, *, api_key, timeout, url=None):
+        seen.append(api_key)
+        if api_key != "sk-c-not-a-secret":
+            return _429()
+        return _gateway_png_ns()
+
+    async def gemini_should_not_run(payload, *, api_key, timeout):
+        raise AssertionError("direct Gemini must not run when gateway pool is set")
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_gateway)
+    monkeypatch.setattr(
+        "pico_orchestrator.image_generate._post_gemini", gemini_should_not_run
+    )
+    raw, ext = await generate_image_bytes("课堂示意图")
+    assert seen == [
+        "sk-a-not-a-secret",
+        "sk-b-not-a-secret",
+        "sk-c-not-a-secret",
+    ]
+    assert slept == []
+    assert ext == "png"
+    assert raw.startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_gateway_pool_all_429_no_fake_pixels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "https://newapi.example.com")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEYS", "sk-a-not-a-secret,sk-b-not-a-secret")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_MODEL", "gemini-2.5-flash-image")
+    monkeypatch.setenv("PICO_IMAGE_KEY_MIN_INTERVAL_S", "0")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    slept = await _record_sleep(monkeypatch)
+    calls = {"n": 0}
+
+    async def fake_gateway(payload, *, api_key, timeout, url=None):
+        calls["n"] += 1
+        return _429()
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_gateway)
+    with pytest.raises(ToolError) as caught:
+        await generate_image_bytes("课堂示意图")
+    assert caught.value.code == "image.busy"
+    assert BUSY_MESSAGE == caught.value.message
+    assert "不能编造" in caught.value.message
+    assert calls["n"] == 2
+    assert slept == []
+
+
+@pytest.mark.asyncio
+async def test_gateway_1113_skips_token_next_ok(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "https://newapi.example.com")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEY", "sk-empty-not-a-secret")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEYS", "sk-ok-not-a-secret")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_MODEL", "gemini-2.5-flash-image")
+    monkeypatch.setenv("PICO_IMAGE_KEY_MIN_INTERVAL_S", "0")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    slept = await _record_sleep(monkeypatch)
+    seen: list[str] = []
+
+    async def fake_gateway(payload, *, api_key, timeout, url=None):
+        seen.append(api_key)
+        if api_key == "sk-empty-not-a-secret":
+            return _429(code="1113")
+        return _gateway_png_ns()
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_gateway)
+    raw, ext = await generate_image_bytes("课堂示意图")
+    assert seen == ["sk-empty-not-a-secret", "sk-ok-not-a-secret"]
+    assert slept == []
+    assert ext == "png"
+    assert raw.startswith(b"\x89PNG")
 
 
 def test_sidebar_chat_has_no_edit_or_image_tools() -> None:

@@ -142,6 +142,17 @@ def test_image_siliconflow_rejected_copy() -> None:
     assert "SILICONFLOW" not in msg
 
 
+def test_image_busy_copy() -> None:
+    msg = user_message_for_error(
+        "出图通道繁忙（限流）。请稍后再试，不能编造图片。",
+        code="image.busy",
+    )
+    assert "繁忙" in msg
+    assert "不能编造" in msg
+    assert "SILICONFLOW" not in msg
+    assert "DEEPSEEK" not in msg
+
+
 def test_enrich_restart_payload_sets_user_message() -> None:
     p = enrich_fail_payload(
         {

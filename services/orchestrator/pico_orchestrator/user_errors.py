@@ -57,6 +57,8 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
                 "出图提供商硅基流动已否决，不再调用。"
                 "请使用 Gemini 或智谱出图，不能编造图片。"
             )
+        if c == "image.busy" or "出图通道繁忙" in text:
+            return "出图通道繁忙。请稍后再试，不能编造图片。"
         if (
             c == "image.unconfigured"
             or "尚未接通" in text
