@@ -53,7 +53,7 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 总管调查 → 写入 Issue 标准任务卡（已锁事实 / IN / 验收）
          → stamp-ok
          → 派发条贴合同 Issue（## 派发）
-         → 总管 spawn-executor（官方 API · 首条=派发条）；无钥则 `@cursor`
+         → 总管 spawn-executor（SSH ecs grok · 首条=派发条）；无 ssh-ecs 拒领
 执行窗只认：派发条 + 合同 Issue
 总管环：订 PR/CI + timer 读 ## CANDIDATE/DEPLOYED/DONE → tip-pin → CLEAR
          合了未部关卡=打回 OPEN · 总管不合不部
@@ -81,7 +81,7 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 | 谁 | 做什么 | 禁止 |
 |----|--------|------|
 | 业主 | 开卡（一句人话）；用产品；发现问题开新卡小口 | 盯合、盯部、签卡 PASS、当执行窗闹钟 |
-| 总管 | 调查写入 Issue；打章；`## 派发`；spawn-executor / `@cursor`；订约读回执；刷现况；条件满足自签卡 PASS 关 | 未点结果句就自签；请业主签卡 PASS；合 main；prod-update；代合代部；当执行窗写业务码（应急/开工除外） |
+| 总管 | 调查写入 Issue；打章；`## 派发`；spawn-executor（SSH ecs grok）；订约读回执；刷现况；条件满足自签卡 PASS 关 | 未点结果句就自签；请业主签卡 PASS；合 main；prod-update；代合代部；当执行窗写业务码（应急/开工除外）；用 Cursor Agent / `@cursor` 当执行者 |
 | 写入 | 改、测、PR、部、五句回执贴合同 | 自签/关卡；直推 main；写 edu-core 业务 |
 
 ## 4. 发布
@@ -105,4 +105,4 @@ curl -fsS https://pico.aivia.asia/api/pico/tip
 - 把调查留在总管聊天、不写进 Issue
 - 对执行窗贴 Issue 全文，或合同上无 `## 派发`
 - 总管自己当执行窗写业务码 / 合 main / prod-update
-- 造 mailbox、ECS 常驻 Grok、与 GitHub 平行的进度总线
+- 造 mailbox、把 ECS Grok 当第二账本、与 GitHub 平行的进度总线

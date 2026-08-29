@@ -2,7 +2,7 @@
 
 ```text
 STATUS: BINDING · pico 工具目录（唯一派发 ID 表）
-DATE: 2026-08-27
+DATE: 2026-08-29
 SCOPE: juanwan99/pico · ECS 执行窗 · Cloud Agent
 CLAIM-WB: 本文件不签 · 以 STATE-NOW 为准
 PARENT: #386 原则 1–7 · #384 视觉门 · host 禁 Cool/Keel
@@ -43,7 +43,7 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 | **subscribe-pr** | 订 PR 事件唤醒总管 | Cursor `subscribe_github_pr`（repo/pr） | 总管环 OPEN 后 | 当第二账本；代替 Issue 回执 | — |
 | **subscribe-ci** | 订分支 CI 终态 | Cursor `subscribe_github_ci` | 执行窗已推分支 | 未知名分支空订 | — |
 | **subscribe-timer** | 兜底读合同评论 | Cursor `subscribe_timer` | Issue 评论无原生订约时 | ECS cron 自驱 agent | — |
-| **spawn-executor** | 总管起/唤醒执行窗 | `scripts/spawn-executor.sh`（官方 Cloud Agents API）；无钥时合同 PR/Issue 评 `@cursor` | `## 派发` 已贴、要起执行窗；黄审过要续派合部 | 总管自己合/部；mailbox；密钥进仓 | `CURSOR_API_KEY` ·（建议）`CURSOR_EXECUTOR_ENV` |
+| **spawn-executor** | 总管起/唤醒执行窗 | `scripts/spawn-executor.sh` → SSH `ecs` → 机上 grok CLI（`scripts/ecs-grok-exec.sh`）；隔离 worktree `/home/ops/pico-wt/issue-N` | `## 派发` 已贴、要起执行窗；黄审过要续派合部 | 总管自己合/部；mailbox；Cursor Cloud Agent / `@cursor` 当执行者；密钥进仓；写 `/opt/pico` 当开发树 | `PICO_EXECUTOR_SSH_HOST`（默认 `ecs`）· 机上 grok 登录 + `~/.grok/env.sh` |
 
 **说明：** `visual-gate` / `tip-pin` 以仓内脚本为准；`tool-status` 对缺失报 `ok:false`。
 
@@ -54,7 +54,7 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 | id | 工具 | 入口 | 何时必须 | 何时禁止 | env 名（无值） |
 |----|------|------|----------|----------|----------------|
 | **ssh-ecs** | Tailscale → 生产机 | `ssh ecs`（`~/.ssh/config`：`ecs`/`pico-prod`→`aliyun-hy`，User `ops`）· EXPERIENCE §17–19 | 一切 ECS 探活 / prod-update / remote-health | 公网 IP:22；安全组追 Cloud Agent egress | `TS_AUTHKEY` · `PICO_PROD_SSH_PRIVATE_KEY` ·（建议）`PICO_PROD_SSH_USER` · `PICO_PROD_SSH_HOST` |
-| **cloud-agent-ts** | Cloud Agent 入网 | `scripts/cloud-agent-install.sh` + `scripts/cloud-agent-start.sh`（或 `~/.local/bin` 同名） | 新 Cloud Agent 要碰 ECS | 把密钥写进 environment.json；无 draft 验就 Save | 同上 |
+| **cloud-agent-ts** | Cloud Agent 入网 | `scripts/cloud-agent-install.sh` + `scripts/cloud-agent-start.sh`（或 `~/.local/bin` 同名） | 总管 Cloud Agent 要 SSH 叫醒 ECS grok / 碰机 | 把密钥写进 environment.json；无 draft 验就 Save；把 Cloud Agent 当执行者 | 同上 |
 | **prod-update** | exact-SHA 部署 | `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh` | 卡面「有差才部」 | 无 SHA；未 tip 对齐报 DONE | 机上已有 |
 
 ---
@@ -82,6 +82,7 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 | **无图 Ready / 只读表审查** | #384 一票否决 |
 | **密钥、DEMO 密码进 GitHub/Issue** | 安全 |
 | **Cloud Agent 靠公网 22 / 漂移 egress 白名单当部署通道** | 假通路；真源 = Tailscale MagicDNS（**ssh-ecs**） |
+| **Cursor Cloud Agent / `@cursor` / `POST /v1/agents` 当执行者** | 业主令：执行者 = ECS grok CLI；总管 Cloud Agent 只负责派发/订约 |
 
 ---
 
@@ -100,7 +101,7 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 【工具合同 · TOOLING-CATALOG】
 批准 id：visual-gate · tip-pin · remote-health · gh-git · subscribe-pr · subscribe-ci · subscribe-timer · spawn-executor · ssh-ecs · cloud-agent-ts · prod-update · playwright-mcp · chrome-devtools-mcp · pytest-ruff
 回执：bash scripts/tool-status.sh --json（无密）；missing 非空 = BLOCKED（视觉卡）
-禁止：Cool/Keel/mailbox · 第二 E2E · 无图 Ready · 公网22当 Cloud Agent 通道
+禁止：Cool/Keel/mailbox · 第二 E2E · 无图 Ready · 公网22当 Cloud Agent 通道 · Cursor Agent 当执行者
 CLAIM-WB: 不代签 · 以 STATE-NOW 为准
 ```
 
