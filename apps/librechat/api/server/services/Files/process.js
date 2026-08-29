@@ -48,17 +48,13 @@ const { ingestOfficeToPico } = require('./picoOfficeIngest');
 const db = require('~/models');
 
 async function ingestComposerUpload(req, file, filename, extraPath) {
-  try {
-    await ingestOfficeToPico({
-      req,
-      filename: filename ?? file?.originalname,
-      filepath: extraPath || file?.path,
-      filePath: file?.path,
-      buffer: file?.buffer,
-    });
-  } catch (err) {
-    logger.warn('[pico office ingest]', err);
-  }
+  await ingestOfficeToPico({
+    req,
+    filename: filename ?? file?.originalname,
+    filepath: extraPath || file?.path,
+    filePath: file?.path,
+    buffer: file?.buffer,
+  });
 }
 
 /**

@@ -110,7 +110,7 @@ async function ingestOfficeToPico({ req, filename, filepath, buffer, filePath })
   }
   const data = await readOfficeBytes({ buffer, filepath, filePath });
   if (!data || !data.length) {
-    return null;
+    throw new Error('文件是空的，没写进账本');
   }
   const conversationId = conversationHeader(
     req.body?.conversationId || req.body?.conversation_id || req.headers['x-conversation-id'],
@@ -123,24 +123,23 @@ async function ingestOfficeToPico({ req, filename, filepath, buffer, filePath })
   if (conversationId) {
     headers['X-Conversation-Id'] = conversationId;
   }
-  try {
-    const res = await fetch(`${picoBase()}/v1/files`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        filename: name,
-        content_b64: data.toString('base64'),
-      }),
-    });
-    if (!res.ok) {
-      logger.warn(`[pico office ingest] HTTP ${res.status}`);
-      return null;
-    }
-    return await res.json();
-  } catch (err) {
-    logger.warn('[pico office ingest]', err);
-    return null;
+  const res = await fetch(`${picoBase()}/v1/files`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      filename: name,
+      content_b64: data.toString('base64'),
+    }),
+  });
+  if (!res.ok) {
+    logger.warn(`[pico office ingest] HTTP ${res.status}`);
+    throw new Error(`文件没写进账本（${res.status}）`);
   }
+  const json = await res.json();
+  if (!json || !json.id) {
+    throw new Error('文件没写进账本');
+  }
+  return json;
 }
 
 module.exports = {

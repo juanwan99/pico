@@ -31,7 +31,7 @@ describe('resolveUploadRoute (Pico paste/drop)', () => {
     ).toEqual({ kind: 'route', toolResource: undefined });
   });
 
-  it('still asks when a PDF has several destinations', () => {
+  it('routes a PDF to context instead of asking', () => {
     expect(
       resolveUploadRoute(
         [pdf],
@@ -42,11 +42,14 @@ describe('resolveUploadRoute (Pico paste/drop)', () => {
           EToolResources.context,
         ],
       ),
-    ).toEqual({ kind: 'ask' });
+    ).toEqual({ kind: 'route', toolResource: EToolResources.context });
   });
 
-  it('still asks for mixed image + document', () => {
-    expect(resolveUploadRoute([png, pdf], threeImageDestinations)).toEqual({ kind: 'ask' });
+  it('routes mixed image + document to context instead of asking', () => {
+    expect(resolveUploadRoute([png, pdf], threeImageDestinations)).toEqual({
+      kind: 'route',
+      toolResource: EToolResources.context,
+    });
   });
 
   it('auto-routes a single leftover destination', () => {
@@ -56,9 +59,9 @@ describe('resolveUploadRoute (Pico paste/drop)', () => {
     });
   });
 
-  it('does not invent a provider route when images cannot attach there', () => {
+  it('routes images to context when the provider cannot take them', () => {
     expect(
       resolveUploadRoute([png], [EToolResources.execute_code, EToolResources.context]),
-    ).toEqual({ kind: 'ask' });
+    ).toEqual({ kind: 'route', toolResource: EToolResources.context });
   });
 });

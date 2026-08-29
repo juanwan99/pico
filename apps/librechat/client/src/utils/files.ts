@@ -441,8 +441,9 @@ const isImageFile = (file: File): boolean => {
 };
 
 /**
- * Decide whether to auto-route or prompt. Image-only pastes/drops go to the
- * chat provider when that destination is available — usage = Grok (no picker).
+ * Decide a single destination. Image-only pastes go to the chat provider.
+ * Documents go to context (Pico ledger ingest) when that option exists.
+ * Pico does not ask LibreChat's destination menu (usage = Grok).
  */
 export const resolveUploadRoute = (
   fileList: File[],
@@ -454,10 +455,13 @@ export const resolveUploadRoute = (
   if (fileList.every(isImageFile) && options.includes(undefined)) {
     return { kind: 'route', toolResource: undefined };
   }
-  if (options.length === 1) {
-    return { kind: 'route', toolResource: options[0] };
+  if (options.includes(EToolResources.context)) {
+    return { kind: 'route', toolResource: EToolResources.context };
   }
-  return { kind: 'ask' };
+  if (options.includes(undefined)) {
+    return { kind: 'route', toolResource: undefined };
+  }
+  return { kind: 'route', toolResource: options[0] };
 };
 
 export function sortPagesByRelevance(

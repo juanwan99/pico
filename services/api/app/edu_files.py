@@ -30,6 +30,7 @@ class FileJsonIn(BaseModel):
     filename: str = Field(min_length=1, max_length=180)
     content_b64: str = Field(min_length=1)
     mime: str | None = None
+    folder_id: str = ""
 
 
 def _too_large() -> HTTPException:
@@ -59,7 +60,7 @@ def decode_b64(raw: str) -> bytes:
     return data
 
 
-async def _read_upload(request: Request) -> tuple[str, bytes]:
+async def _read_upload(request: Request) -> tuple[str, bytes, str]:
     ctype = (request.headers.get("content-type") or "").lower()
     if "multipart/form-data" in ctype:
         form = await request.form()
@@ -70,13 +71,14 @@ async def _read_upload(request: Request) -> tuple[str, bytes]:
         data = await upload.read()
         if len(data) > MAX_BYTES:
             raise _too_large()
-        return filename[:180], data
+        folder_id = str(form.get("folder_id") or "")
+        return filename[:180], data, folder_id
     try:
         payload = await request.json()
     except Exception as exc:
         raise _bad_body("要 JSON 或 multipart 文件") from exc
     parsed = FileJsonIn.model_validate(payload)
-    return parsed.filename, decode_b64(parsed.content_b64)
+    return parsed.filename, decode_b64(parsed.content_b64), parsed.folder_id or ""
 
 
 def extract_for_kb(filename: str, data: bytes) -> dict[str, Any]:
@@ -145,6 +147,31 @@ def _payload(file_id: str | None, extract: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def resolve_owned_folder_id(principal: Principal, raw: str | None) -> str:
+    """Empty folder_id → root. Unknown or malformed id fails closed (no silent root dump)."""
+    from app.edu_school import sanitize_folder_id
+    from app.my_files import owned_folder
+
+    raw_s = str(raw or "").strip()
+    if not raw_s:
+        return ""
+    fid = sanitize_folder_id(raw_s)
+    if not fid:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "folder_id_invalid", "message": "夹 id 不对"},
+        )
+    factory = session_factory()
+    async with factory() as session:
+        folder = await owned_folder(session, principal, fid)
+        if folder is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "folder_not_found", "message": "找不到这个夹"},
+            )
+        return folder.id
+
+
 async def persist_edu_file(
     principal: Principal,
     *,
@@ -152,6 +179,7 @@ async def persist_edu_file(
     data: bytes,
     extract: dict[str, Any],
     conversation_id: str | None = None,
+    folder_id: str = "",
 ) -> str:
     from app.artifact_store import encode_artifact_payload
 
@@ -186,6 +214,7 @@ async def persist_edu_file(
             content_encoding=encoding,
             content_sha256=digest,
             byte_size=byte_size,
+            folder_id=folder_id or "",
         )
         session.add(src)
         if artifact_kind == KIND_SRC and text_body:
@@ -245,10 +274,12 @@ async def persist_edu_file(
 async def load_edu_file(principal: Principal, file_id: str) -> dict[str, Any] | None:
     from sqlalchemy import select
 
+    from app.artifact_store import decode_artifact_payload
+
     factory = session_factory()
     async with factory() as session:
         src = await session.get(ArtifactRow, file_id)
-        if src is None or src.kind != KIND_SRC:
+        if src is None or src.kind in {KIND_EXCERPT, "kb_text"}:
             return None
         task = await session.get(TaskRow, src.task_id)
         if (
@@ -272,7 +303,24 @@ async def load_edu_file(principal: Principal, file_id: str) -> dict[str, Any] | 
                 extract = None
             if isinstance(extract, dict):
                 return _payload(src.id, extract)
-        return None
+        raw = decode_artifact_payload(src.inline, src.content_encoding)
+        text = ""
+        if src.content_encoding == "utf8":
+            text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw or "")
+        return _payload(
+            src.id,
+            {
+                "filename": src.title,
+                "kind": src.kind,
+                "status": "ok",
+                "headline": (text or src.title or "")[:80],
+                "rows": None,
+                "cols": None,
+                "sheets": [],
+                "text": text[:20000],
+                "error": None,
+            },
+        )
 
 
 @router.post("/v1/files")
@@ -281,17 +329,17 @@ async def post_edu_file(
     principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
     x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
 ) -> dict[str, Any]:
-    filename, data = await _read_upload(request)
+    filename, data, folder_raw = await _read_upload(request)
+    folder_id = await resolve_owned_folder_id(principal, folder_raw)
     extract = extract_for_kb(filename, data)
-    file_id = None
-    if extract.get("status") == "ok":
-        file_id = await persist_edu_file(
-            principal,
-            filename=filename,
-            data=data,
-            extract=extract,
-            conversation_id=x_conversation_id,
-        )
+    file_id = await persist_edu_file(
+        principal,
+        filename=filename,
+        data=data,
+        extract=extract,
+        conversation_id=x_conversation_id,
+        folder_id=folder_id,
+    )
     return _payload(file_id, extract)
 
 

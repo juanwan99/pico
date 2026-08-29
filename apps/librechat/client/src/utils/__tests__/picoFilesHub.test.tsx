@@ -11,6 +11,7 @@ import {
   listMyFolders,
   listMyPicoArtifacts,
   renameMyFolder,
+  uploadMyFile,
 } from '~/data-provider/pico/api';
 
 jest.mock('~/utils', () => ({
@@ -30,6 +31,7 @@ jest.mock('~/data-provider/pico/api', () => ({
   listMyPicoArtifacts: jest.fn(),
   renameMyFolder: jest.fn(),
   transferMyArtifact: jest.fn(),
+  uploadMyFile: jest.fn(),
 }));
 
 const mockCreate = createMyFolder as jest.MockedFunction<typeof createMyFolder>;
@@ -38,6 +40,7 @@ const mockRename = renameMyFolder as jest.MockedFunction<typeof renameMyFolder>;
 const mockFields = listEduFields as jest.MockedFunction<typeof listEduFields>;
 const mockFolders = listMyFolders as jest.MockedFunction<typeof listMyFolders>;
 const mockMine = listMyPicoArtifacts as jest.MockedFunction<typeof listMyPicoArtifacts>;
+const mockUpload = uploadMyFile as jest.MockedFunction<typeof uploadMyFile>;
 
 describe('FilesDirectoryPanel', () => {
   beforeEach(() => {
@@ -50,6 +53,7 @@ describe('FilesDirectoryPanel', () => {
     mockRename.mockResolvedValue({ folder: { id: 'fold-1', name: '备课', parent_id: '' } });
     mockDelete.mockResolvedValue({ ok: true, id: 'fold-1' });
     mockFolders.mockResolvedValue({ folders: [] });
+    mockUpload.mockResolvedValue({ id: 'art-up', status: 'ok', filename: '班情.md' });
   });
 
   it('creates under open root via first new icon, renames, keeps tree icons, can transfer', async () => {
@@ -115,5 +119,23 @@ describe('FilesDirectoryPanel', () => {
     await waitFor(() => {
       expect(mockDelete).toHaveBeenCalledWith('empty-1');
     });
+  });
+
+  it('uploads a local file into 我的文件', async () => {
+    mockMine
+      .mockResolvedValueOnce({ artifacts: [] })
+      .mockResolvedValue({
+        artifacts: [{ id: 'art-up', title: '班情.md', kind: 'file', folder_id: '' }],
+      });
+    render(<FilesDirectoryPanel />);
+    expect(await screen.findByTestId('my-files-upload')).toBeInTheDocument();
+    const input = screen.getByTestId('my-files-upload-input');
+    const file = new File(['年级：三班'], '班情.md', { type: 'text/markdown' });
+    fireEvent.click(screen.getByTestId('my-files-upload'));
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => {
+      expect(mockUpload).toHaveBeenCalledWith(file, '');
+    });
+    expect(await screen.findByText('班情.md')).toBeInTheDocument();
   });
 });

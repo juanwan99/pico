@@ -81,4 +81,19 @@ describe('pico composer ingest (T-AGENT-PLAIN-V1 F2)', () => {
     expect(body.filename).toBe('班情.md');
     expect(Buffer.from(body.content_b64, 'base64').toString('utf8')).toContain('三年级二班');
   });
+
+  it('throws when Pico ledger returns HTTP error', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => 'no',
+    });
+    await expect(
+      ingestOfficeToPico({
+        req: { user: { id: 'user-lc-1' }, body: {}, headers: {} },
+        filename: 'a.md',
+        buffer: Buffer.from('hi'),
+      }),
+    ).rejects.toThrow(/没写进账本/);
+  });
 });

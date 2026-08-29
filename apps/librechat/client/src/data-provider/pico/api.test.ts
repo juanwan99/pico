@@ -11,6 +11,7 @@ import {
   listMyFolders,
   createMyFolder,
   transferMyArtifact,
+  uploadMyFile,
 } from './api';
 
 jest.mock('librechat-data-provider', () => ({
@@ -191,6 +192,32 @@ describe('edu school materials client', () => {
       '/api/pico/v1/artifacts?mine=true',
       expect.objectContaining({ credentials: 'include' }),
     );
+  });
+
+  it('uploads a local file as multipart without JSON content-type', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ id: 'art-up', status: 'ok', filename: '班情.md' }),
+    });
+    const file = new File(['年级：三班'], '班情.md', { type: 'text/markdown' });
+    await expect(uploadMyFile(file, 'fold-1')).resolves.toEqual({
+      id: 'art-up',
+      status: 'ok',
+      filename: '班情.md',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/pico/v1/files',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer browser-jwt',
+        }),
+      }),
+    );
+    const init = fetchMock.mock.calls[0][1] as { body: FormData; headers: Record<string, string> };
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(init.headers['Content-Type']).toBeUndefined();
   });
 
   it('creates a personal folder and transfers via existing land mouth', async () => {

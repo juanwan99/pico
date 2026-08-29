@@ -44,6 +44,7 @@ DATE: 2026-08-29
 34. **聊天脑 OpenAI Responses 反代（AIProxy 原版中转）。** 钥说明只认官方客户端 + 中转 URL：OpenAI `https://…/openai` · Claude `…/anthropic` · Gemini `…/gemini` · Grok `…/grok`。Pico 换 DS 只接 **OpenAI** 这条。业主选用 **`gpt-5.6-sol` + `--thinking medium`**（Pi 官方档，不是 on/off）。无 `/v1`、`store:false`。不要用 urllib 默认 UA 探活。Pi `--provider openai` + models.json `baseUrl`/`api=openai-responses`；DEEPSEEK_* 仍是脑槽位。`gpt-*` 贴图不要切回 deepseek vision。**出图仍走 New API Gemini**（现网 `PICO_IMAGE_GATEWAY_*` · `gemini-3.1-flash-image`），不改打 AIProxy `…/gemini`。禁止为 Claude/Grok 再造核。长请求：Responses **必须 `stream:true`**（非流式/首包>约 100s → Cloudflare/AIProxy **HTTP 524**，不是 Pico 拒长文）。Pico 聊天 SSE 发 comment keepalive，禁把心跳写进气泡。直连 GPT 禁打 `chat/completions`（`/openai` 会 404）。GPT 思考不是空转，禁 180s 无工具熔断。上游 `stopReason=error`（如 usage limit）或空 content 不得标 succeeded 空气泡；人话失败，假绿禁止。
 35. **沙箱打开 Office = 内容框。** 默认「打开」docx/pptx/xlsx 走 `GET …/content?preview=1`，用 python-docx / python-pptx / openpyxl 投影页面/幻灯片画布（Codex 同形态）。不是 LibreOffice Writer/Impress 整窗。图与生成网页在结果区铺满（iframe/img）。外网网址仍走隔离 Chromium 截图。禁把 LO 当默认预览。
 36. **用量账不做钱。** Pico 只记 `usage_events`（谁/校/kind/后端模型/token 或诚实 unknown）。char/4 估数不能给 edu 计费，也不得留在账上（启动 scrub 成 unknown）。档位不得当 `model`。钱/点/钱包在 edu-core，拉 `GET /v1/internal/usage/export`（`PICO_HOOK_SERVICE_TOKEN`）。禁在 Pico 建点池。
+37. **文件上传 = 唯一账本口 `POST /v1/files`。** 聊天回形针与「我的文件」上传都落到 Artifact；抽出失败也落盘。LibreChat 本地仓不是老师柜。ingest HTTP 失败不得假装已传。贴图仍直送提供商。禁目的地三选 / VectorStore 当产品口。禁第二套文件 OS。
 
 ## C · 部署 / ECS
 
