@@ -87,7 +87,7 @@ Google Gemini generateContent
 
 **Pro 还干什么：** 你自己在 Gemini 网页 / AI Studio 里画、试模型。那条路的额度不会流进 pico.aivia.asia。
 
-**API 侧额度：** 没开 Cloud Billing = Gemini API 免费档，RPM/日限很紧，容易 429（正是要三号轮询的原因）。课堂量大再给对应 Cloud 项目开付费 API，**不是**再买第四份网页 Pro，也**不是**把 cookie 塞进 New API。
+**API 侧额度：** 没开 Cloud Billing = Gemini API 免费档。Pico 现网模型 `gemini-3.1-flash-image` 官方定价 **Free Tier: Not available**（[pricing](https://ai.google.dev/gemini-api/docs/pricing)）——没开 Cloud Billing 时这一路常常是 **0 张/天**，不是网页 Pro 的一天几百张。课堂量大必须给**每个 Cloud 项目**开 API 付费。额度按 **项目** 计，不按 API key 把数（一个项目里十把 key 仍是一份桶）。三号要三份额度 = 三个账号、三个项目。具体 RPM/RPD 只认该项目 AI Studio → Rate limits，官方不保证一个全球固定数字。不是再买第四份网页 Pro，也不是 cookie。
 
 ---
 
