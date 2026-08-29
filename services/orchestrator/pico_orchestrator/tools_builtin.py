@@ -24,6 +24,7 @@ from pico_orchestrator.document_generators import (
     build_html_document,
     build_pptx_document,
     build_xlsx_document,
+    html_remote_violations,
     require_docx_body,
     require_pptx_body,
 )
@@ -412,14 +413,16 @@ def _static_html_checks(content: str) -> list[dict[str, Any]]:
             "no localStorage/sessionStorage — refresh persistence not proven",
         )
 
-    # Dangerous remote script loads (soft warning).
-    remote_script = bool(
-        re.search(r"<script[^>]+src\s*=\s*[\"']https?://", low)
-    )
+    # Remote engines/assets (CDN import, script src, leftover fonts, img https).
+    remote_hits = html_remote_violations(text)
     add(
         "no_remote_script",
-        "fail" if remote_script else "pass",
-        "external script src found" if remote_script else "no external script src",
+        "fail" if remote_hits else "pass",
+        (
+            "remote load: " + ",".join(remote_hits)
+            if remote_hits
+            else "no remote script/import/asset load"
+        ),
     )
 
     return checks
@@ -1981,7 +1984,10 @@ def build_default_gateway(
         ToolSpec(
             name="generate_html_document",
             description=(
-                "Create a real .html Artifact. Result includes an observation of "
+                "Create a real .html Artifact that must run offline: inline CSS/JS "
+                "and canvas only. No CDN, no import/script-src of Three.js / Chart.js / "
+                "ECharts / KaTeX, no https images (use data: URLs). The tool fails if "
+                "the page still needs the network. Result includes an observation of "
                 "what landed. ok is not finished. Args: title, marker, body?"
             ),
             handler=generate_html,
@@ -2260,7 +2266,8 @@ def build_default_gateway(
             name="verify_html_document",
             description=(
                 "System-side static HTML structure self-check (artifact or inline content). "
-                "Returns machine JSON for the control plane (overall/checks). "
+                "Fails when the page loads scripts, ES imports, styles, images, or media "
+                "from http(s). Returns machine JSON for the control plane (overall/checks). "
                 "Do NOT paste field names (verification_level, interaction_status, L0/L1) "
                 "into the user chat — use results only to decide fix-or-honest-failure. "
                 "Never claims browser/human usability. "

@@ -45,6 +45,7 @@ DATE: 2026-08-29
 35. **沙箱打开 Office = 内容框。** 默认「打开」docx/pptx/xlsx 走 `GET …/content?preview=1`，用 python-docx / python-pptx / openpyxl 投影页面/幻灯片画布（Codex 同形态）。不是 LibreOffice Writer/Impress 整窗。LibreChat `pico.js` 必须转发 `preview=1`（禁只放行 `download`，丢掉会落到「无法展开内容框」）。图与生成网页在结果区铺满（iframe/img）。外网网址仍走隔离 Chromium 截图。禁把 LO 当默认预览。
 36. **用量账不做钱。** Pico 只记 `usage_events`（谁/校/kind/后端模型/token 或诚实 unknown）。char/4 估数不能给 edu 计费，也不得留在账上（启动 scrub 成 unknown）。档位不得当 `model`。钱/点/钱包在 edu-core，拉 `GET /v1/internal/usage/export`（`PICO_HOOK_SERVICE_TOKEN`）。禁在 Pico 建点池。
 37. **聊天回形针 = 老师唯一上传口。** 图和文档同一回形针：图本轮进 Pi `images[]`；文档落 `POST /v1/files`，抽出失败也落盘，AI 用 `workspace_read_file` 按文件名读。LibreChat 本地仓不是老师柜。ingest HTTP 失败不得假装已传。「我的文件」是生成物柜，不是第二本地上传口。禁目的地三选 / VectorStore / 转到学校当上传。禁第二套文件 OS。
+38. **HTML 交互页断网。** `generate_html_document` 禁 CDN / `import https` / Three.js / Chart.js；外链引擎失败闭合，不剥成空舞台再报成功。校验同样扫 import/src/href。禁放行 jsdelivr。#780
 
 ## C · 部署 / ECS
 
