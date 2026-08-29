@@ -61,7 +61,7 @@ async def _seed_llm(*, school: str, member: str, run_id: str, tokens: dict | Non
         school_id=school,
         membership_id=member,
         kind="llm",
-        model="pico-fast",
+        model="gpt-5.6-sol",
         prompt_tokens=None if tokens is None else tokens.get("prompt_tokens"),
         completion_tokens=None if tokens is None else tokens.get("completion_tokens"),
         total_tokens=None if tokens is None else tokens.get("total_tokens"),
@@ -97,7 +97,7 @@ async def test_cross_account_cannot_read_detail(client: AsyncClient):
     assert event_id in ids
     row = next(e for e in body["events"] if e["id"] == event_id)
     assert row["kind"] == "llm"
-    assert row["model"] == "pico-fast"
+    assert row["model"] == "gpt-5.6-sol"
     assert row["prompt_tokens"] == 12
     assert row["completion_tokens"] == 8
     assert row["tokens_unknown"] is False

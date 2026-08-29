@@ -29,7 +29,7 @@ Same shape as `GET /v1/usage/events` plus `schema: pico.usage.v1`.
 | `model` | **Backend** model id (`gpt-5.6-sol`, `gemini-…-image`). Not `pico-fast`. |
 | `prompt_tokens` / `completion_tokens` / `total_tokens` | Integers or `null` |
 | `tokens_unknown` | Provider did not return usage (agent/Pi often). **Do not treat as zero.** |
-| `estimated` | Char/4 last resort. **Do not bill as native usage.** |
+| `estimated` | Always `false` after scrub. Pico no longer writes char/4. **Do not bill.** |
 | `extra.ui_model` | Lane alias `pico-fast` / `pico-deep` when applicable |
 | `extra.cached_tokens` / `extra.reasoning_tokens` | Optional; edu may weight |
 | `billing` | Always `false` |

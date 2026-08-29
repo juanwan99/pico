@@ -113,6 +113,18 @@ if [ -f .env ]; then
     echo "MEILI_MASTER_KEY=${MEILI_GEN}" >> .env
     echo "[pico] MEILI_MASTER_KEY generated"
   fi
+  if grep -q '^PICO_HOOK_SERVICE_TOKEN=.\+' .env; then
+    echo "[pico] PICO_HOOK_SERVICE_TOKEN=SET"
+  else
+    # Empty PICO_HOOK_SERVICE_TOKEN= would otherwise leave export 503.
+    # Do not print the value.
+    if grep -q '^PICO_HOOK_SERVICE_TOKEN=' .env; then
+      sed -i '/^PICO_HOOK_SERVICE_TOKEN=/d' .env
+    fi
+    HOOK_GEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+    echo "PICO_HOOK_SERVICE_TOKEN=${HOOK_GEN}" >> .env
+    echo "[pico] PICO_HOOK_SERVICE_TOKEN generated"
+  fi
   if ! grep -q '^PICO_MEILI_URL=' .env; then
     echo "PICO_MEILI_URL=http://127.0.0.1:7700" >> .env
   fi

@@ -305,3 +305,10 @@ def test_prod_update_ui_readiness_honors_librechat_url_override(tmp_path: Path) 
     )
     assert result.returncode == 0, result.stderr
     assert "UI readiness: waiting for http://127.0.0.1:19999/login HTTP 200" in result.stdout
+
+
+def test_prod_update_generates_hook_token_when_missing() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "PICO_HOOK_SERVICE_TOKEN generated" in text
+    assert "PICO_HOOK_SERVICE_TOKEN=SET" in text
+    assert "Do not print the value" in text

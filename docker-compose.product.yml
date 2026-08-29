@@ -31,6 +31,7 @@ services:
       PICO_SANDBOX_URL: http://pico-sandbox:18767
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
       PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
+      PICO_HOOK_SERVICE_TOKEN: ${PICO_HOOK_SERVICE_TOKEN:-}
     # not published
     mem_limit: 512m
     depends_on:

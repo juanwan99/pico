@@ -47,7 +47,7 @@ schema 与 JSON 合同禁止 money 字段
 | `completion_tokens` | int \| null | 输出 token；未知则 null |
 | `total_tokens` | int \| null | 合计；未知则 null |
 | `tokens_unknown` | 0/1 | **诚实缺**：提供方未回 usage。**禁止当 0 计费** |
-| `estimated` | 0/1 | 1 = 字符估数；**禁止当原生 usage 计费** |
+| `estimated` | 0/1 | **不再写入 1。** 历史 char/4 启动时 scrub 成 0 + unknown |
 | `task_id` | string \| null | 关联 Task（运行账本） |
 | `run_id` | string \| null | 关联 Run |
 | `source` | string | 写入点：`openai_compat` / `run_service` / 后续卡 |
@@ -61,8 +61,10 @@ Token 规则：
 
 - 有提供方 usage（Responses `response.completed` / chat `include_usage` / Pi RPC 若带）→ 记整数，`estimated=0`。
 - 无 usage（现网 Pi 主路径常见）→ 三字段 null 且 `tokens_unknown=1`。**禁止**用用户可见正文做 char/4 冒充 token（现网曾把 prompt=1 写成「用量」）。
+- **禁止写入 `estimated=1`。** 历史 char/4 行在启动时 scrub 成 unknown（§8）。
 - `extra.ui_model` = 档位；`extra.cached_tokens` / `extra.reasoning_tokens` 可选，edu 自己加权。
 - 禁止用 `0` 假装「没用量」。
+- `model` 禁止长期留 `pico-fast` / `pico-deep`；档位只进 `extra.ui_model`。
 
 ---
 
@@ -165,3 +167,18 @@ await record_usage_event(
 4. 本文写清 search/sandbox/image emit。
 5. edu 导出无金额字段；`billing: false`。
 6. 不在 Pico 实现点池。
+
+---
+
+## 8. 历史脏行（一次性 scrub）
+
+业主令：假 token 不得留在账上。启动 `init_db` 对 sqlite 执行 `scrub_dirty_usage_events_sync`：
+
+| 旧行 | 处理后 |
+|------|--------|
+| `estimated=1`（char/4） | token 三字段 null · `tokens_unknown=1` · `estimated=0` · `extra.scrubbed=estimated_char4` |
+| `model` = `pico-fast` / `pico-deep` 等档位 | `extra.ui_model` 保留档位；有 `run.model` 的 `backend_model` 则回填，否则 `model=null`（不拿「今天的脑」去猜旧行） |
+
+**不删行**（谁/何时/kind 仍在）。LibreChat 气泡 `usage` 只回原生提供方数字，缺则省略字段。
+
+edu 拉数：主机 `.env` 的 `PICO_HOOK_SERVICE_TOKEN`（`prod-update.sh` 空则生成；值不进 GitHub）。
