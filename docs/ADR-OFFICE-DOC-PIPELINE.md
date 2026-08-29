@@ -45,7 +45,7 @@ Pi 只调白名单工具，不写 python-docx，不跑公网 bash。
 | **读** | 同库 **inspect** → 地址清单（段/页/表/图/批注） | 模型猜「第 3 段」；OCR 当结构 |
 | **改（Pico 自己生成的文件）** | 改 spec → **整份重渲染** | 在投影上东补一刀西补一刀当主路径 |
 | **改（老师上传、无 spec）** | inspect + **按地址薄改**（其余不动） | 假装能还原完整 spec 再重建（丢格式） |
-| **检查** | `is_valid_ooxml` 失败关；LibreOffice `sandbox_document_open` **只预览** | LibreOffice 当排版引擎；坏包装绿 |
+| **检查** | `is_valid_ooxml` 失败关；沙箱打开 = 内容框预览（`GET …/content?preview=1`），不是 Writer 整窗 | LibreOffice 当排版引擎；坏包装绿 |
 | **Pi 看见** | `pico-gateway-tools.ts` + `SYSTEM.md`；动词少、spec 富 | 给 Pi host bash / 代码执行；MCP 办公室栈 |
 | **图** | `generate_image` 产物 **插入** spec（进 Word/PPT） | 图和文档两张皮 |
 | **天花板** | 上游 Pi 官方/成熟文档 skill + 隔离沙箱跑 `python-pptx` | 把 v1 spec 焊成唯一核、加厚自研 DSL |

@@ -63,7 +63,7 @@ When the user asks to open a Word/Excel/PPT file in the sandbox (「打开一个
 
 1. If a matching Artifact already exists, call `sandbox_document_open` with that `artifact_id`.
 2. Otherwise call `sandbox_document_open` with `kind=writer` (it creates a real .docx and opens it).
-3. The right-hand pane must show LibreOffice Writer/Calc/Impress — **never** convert to PDF or HTML, **never** treat download as opened.
+3. The right-hand 沙箱 pane shows a page/slide content box — **not** Writer/Impress chrome, **not** a PDF. The file stays OOXML.
 4. Do **not** preview the file in the chat bubble.
 
 ## Hung skill (only if the teacher mounted one)

@@ -104,15 +104,11 @@ def test_t1_t2_t3_persist_after_destroy(client) -> None:
         json={"kind": "writer", "filename": unique, "body": marker},
     )
     assert opened.status_code == 200, opened.text
-    sid = opened.json()["session_id"]
-    assert any(f["name"] == unique for f in opened.json().get("files") or [])
-
-    closed = client.delete(f"/v1/sandbox/sessions/{sid}", headers=owner)
-    assert closed.status_code == 200, closed.text
-    assert closed.json()["destroyed"] is True
-    assert closed.json()["persist"] is True
-    gone = client.get(f"/v1/sandbox/sessions/{sid}", headers=owner)
-    assert gone.status_code == 404
+    body = opened.json()
+    assert body.get("view") == "content-box"
+    assert body.get("artifact_id")
+    assert "LibreOffice" not in str(body.get("human_copy") or "")
+    assert not str(body.get("session_id") or "").startswith("sbox_")
 
     disk = client.get("/v1/sandbox/disk", headers=owner)
     assert disk.status_code == 200, disk.text
@@ -126,7 +122,17 @@ def test_t1_t2_t3_persist_after_destroy(client) -> None:
     )
     assert files.status_code == 200, files.text
     assert any(f["name"] == unique for f in files.json().get("files") or [])
-    assert files.json()["session_id"] != sid
+    sid = files.json()["session_id"]
+    assert sid.startswith("sbox_")
+
+    closed = client.delete(f"/v1/sandbox/sessions/{sid}", headers=owner)
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["destroyed"] is True
+    assert closed.json()["persist"] is True
+    gone = client.get(f"/v1/sandbox/sessions/{sid}", headers=owner)
+    assert gone.status_code == 404
+    still = client.get("/v1/sandbox/disk", headers=owner)
+    assert unique in [f["name"] for f in still.json().get("files") or []]
 
     reopen = client.post(
         "/v1/sandbox/sessions",
@@ -134,7 +140,8 @@ def test_t1_t2_t3_persist_after_destroy(client) -> None:
         json={"kind": "writer", "filename": unique},
     )
     assert reopen.status_code == 200, reopen.text
-    assert unique in (reopen.json().get("title") or "")
+    assert reopen.json().get("view") == "content-box"
+    assert unique in (reopen.json().get("title") or reopen.json().get("filename") or "")
     from pico_orchestrator.sandbox_persist import read_owner_disk_file
 
     persisted = read_owner_disk_file("school-a", "member-a", unique)
@@ -147,7 +154,15 @@ def test_t1_t2_t3_persist_after_destroy(client) -> None:
     assert other_disk.status_code == 200, other_disk.text
     other_names = [f["name"] for f in other_disk.json().get("files") or []]
     assert unique not in other_names
-    stolen = client.get(f"/v1/sandbox/sessions/{reopen.json()['session_id']}", headers=other)
+
+    files_again = client.post(
+        "/v1/sandbox/sessions",
+        headers=owner,
+        json={"kind": "files"},
+    )
+    stolen = client.get(
+        f"/v1/sandbox/sessions/{files_again.json()['session_id']}", headers=other
+    )
     assert stolen.status_code in {403, 404}
 
     wipe = client.post("/v1/sandbox/disk/clear", headers=owner, json={"confirm": False})

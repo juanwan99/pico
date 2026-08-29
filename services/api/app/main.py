@@ -710,7 +710,7 @@ async def open_sandbox_session(
     body: OpenSandboxSessionRequest,
     principal: Principal = Depends(require_scope("ai:run")),
 ) -> dict:
-    """Teacher/result-pane open: browser URL or LibreOffice document. Same sidecar."""
+    """Teacher/result-pane open: browser URL or Office content-box. Files listing still sidecar."""
     from pico_orchestrator.gateway import ToolError
     from pico_orchestrator.tools_builtin import build_default_gateway
     from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
@@ -766,6 +766,21 @@ async def open_sandbox_session(
 
 def _sandbox_public_meta(session_id: str, meta: dict) -> dict:
     from pico_orchestrator.sandbox_session_event import sandbox_session_payload
+    from pico_orchestrator.tools_builtin import OFFICE_CONTENT_BOX_COPY
+
+    view = str(meta.get("view") or "").strip()
+    artifact_id = str(meta.get("artifact_id") or "").strip()
+    if view == "content-box" or (artifact_id and not str(session_id or "").startswith("sbox_")):
+        return {
+            "ok": True,
+            "view": "content-box",
+            "artifact_id": artifact_id,
+            "filename": str(meta.get("filename") or meta.get("title") or ""),
+            "title": str(meta.get("title") or ""),
+            "kind": str(meta.get("kind") or ""),
+            "human_copy": str(meta.get("human_copy") or OFFICE_CONTENT_BOX_COPY),
+            "engine": str(meta.get("engine") or "office-content-box"),
+        }
 
     payload = sandbox_session_payload({**meta, "session_id": session_id}) or {
         "session_id": session_id,

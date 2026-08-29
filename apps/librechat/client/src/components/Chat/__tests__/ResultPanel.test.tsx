@@ -409,6 +409,54 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     });
   });
 
+  it('sandbox_document_open shows the content box in 沙箱, not a LibreOffice screenshot', async () => {
+    const zipBlob = new Blob([new Uint8Array([80, 75, 3, 4])], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    const htmlBlob = new Blob(
+      [
+        '<!doctype html><html><body><article class="page"><h1>报告</h1><p>正文</p></article></body></html>',
+      ],
+      { type: 'text/html' },
+    );
+    mockGetPicoArtifactContent.mockResolvedValueOnce(zipBlob).mockResolvedValueOnce(htmlBlob);
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          picoArtifacts={[{ id: 'art-docx', title: '报告.docx', kind: 'docx' }]}
+          run={run()}
+          runStatusLabel="已完成"
+          runEvents={[
+            {
+              id: 'open-1',
+              run_id: 'run-1',
+              seq: 1,
+              type: 'tool.result',
+              payload: {
+                tool: 'sandbox_document_open',
+                ok: true,
+                result: {
+                  view: 'content-box',
+                  artifact_id: 'art-docx',
+                  filename: '报告.docx',
+                  kind: 'writer',
+                  human_copy: '沙箱内容框：只渲染页面/幻灯片，不是 Writer/Impress 整窗。',
+                },
+              },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('artifact-office-iframe')).toBeInTheDocument();
+    expect(screen.getByTestId('artifact-pane-preview')).toHaveAttribute('data-kind', 'office');
+    expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-web-viewport')).not.toBeInTheDocument();
+    expect(mockGetPicoArtifactContent).toHaveBeenNthCalledWith(2, 'art-docx', false, {
+      preview: true,
+    });
+  });
+
   it('T8: opening a PDF attachment previews in-pane and never mistakes it for HTML', async () => {
     const user = userEvent.setup();
     const pdfBytes = new Uint8Array([37, 80, 68, 70]); // %PDF

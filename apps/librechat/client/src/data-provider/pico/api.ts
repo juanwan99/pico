@@ -385,7 +385,10 @@ export type PicoSandboxWindow = {
 
 export type PicoSandboxSessionMeta = {
   ok?: boolean;
-  session_id: string;
+  session_id?: string;
+  artifact_id?: string;
+  view?: string;
+  filename?: string;
   url?: string;
   title?: string;
   human_copy?: string;
