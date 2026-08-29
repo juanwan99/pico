@@ -200,6 +200,11 @@ async function proxy(req, res, path, options = {}) {
     if (allowDownload && ['1', 'true'].includes(sp.get('download'))) {
       out.set('download', 'true');
     }
+    // Office content-box: client GET …/content?preview=1. Dropping this
+    // returns the OOXML zip and the pane falls through to「无法展开内容框」.
+    if (['1', 'true'].includes(sp.get('preview'))) {
+      out.set('preview', '1');
+    }
     if (['1', 'true'].includes(sp.get('mine'))) {
       out.set('mine', 'true');
     }
@@ -244,6 +249,14 @@ async function proxy(req, res, path, options = {}) {
     const contentTypeOptions = r.headers.get('x-content-type-options');
     if (contentTypeOptions) {
       res.setHeader('X-Content-Type-Options', contentTypeOptions);
+    }
+    const csp = r.headers.get('content-security-policy');
+    if (csp) {
+      res.setHeader('Content-Security-Policy', csp);
+    }
+    const picoPreview = r.headers.get('x-pico-preview');
+    if (picoPreview) {
+      res.setHeader('X-Pico-Preview', picoPreview);
     }
     res.send(body);
   } catch (err) {

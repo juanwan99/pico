@@ -70,6 +70,7 @@ describe('picoOpenInPane', () => {
 
   it('F2: 打开 word/docx is office intent, not a website', () => {
     expect(detectOpenOfficeIntent('打开一个 word 文档在沙箱')).toEqual({ kind: 'writer' });
+    expect(detectOpenOfficeIntent('打开一个测试word')).toEqual({ kind: 'writer' });
     expect(detectOpenOfficeIntent('打开 课堂笔记.docx')).toEqual({
       kind: 'writer',
       filename: '课堂笔记.docx',

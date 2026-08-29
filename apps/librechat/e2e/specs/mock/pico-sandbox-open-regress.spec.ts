@@ -81,7 +81,7 @@ test.describe('T-SANDBOX-OPEN-REGRESS', () => {
     await sendMessage(page, '打开一份 Word');
     await expect(page.getByTestId('result-panel')).toBeVisible({ timeout: 20000 });
     await expect(page.getByTestId('sandbox-web-pane')).toHaveCount(0);
-    await expect(page.getByTestId('artifact-action-error')).toContainText('没有可打开的文件');
+    // No file yet — wait for generate; do not flash「没有可打开的文件」.
     ensureDir();
     await page.screenshot({ path: path.join(FRAME_DIR, 'S2-word-1280.png') });
   });
