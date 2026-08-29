@@ -55,6 +55,7 @@ from pico_orchestrator.office_editors import (
     edit_xlsx_cell_bytes,
     fill_office_bytes,
 )
+from pico_orchestrator.sandbox_persist import read_owner_disk_file
 from pico_orchestrator.sandbox_s1 import (
     MAX_CONTENT_CHARS,
     assert_content_caps,
@@ -203,6 +204,35 @@ def _attach_write_observation(
     if str(kind).lower() == "png" and isinstance(raw, (bytes, bytearray)):
         remember_conversation_png(bytes(raw))
     return result
+
+
+OFFICE_CONTENT_BOX_COPY = "沙箱内容框：只渲染页面/幻灯片，不是 Writer/Impress 整窗。"
+
+
+def _office_open_kinds(kind: str, filename: str) -> tuple[str, str, str]:
+    """Map open args to (sandbox kind, ledger kind, filename with ext)."""
+    name = (filename or "").lower()
+    token = (kind or "").strip().lower()
+    if token in {"calc", "xlsx"} or name.endswith((".xlsx", ".xls", ".ods", ".csv")):
+        title = filename or "sheet.xlsx"
+        return "calc", "xlsx", _ensure_extension(title, ".xlsx")
+    if token in {"impress", "pptx"} or name.endswith((".pptx", ".ppt", ".odp")):
+        title = filename or "deck.pptx"
+        return "impress", "pptx", _ensure_extension(title, ".pptx")
+    title = filename or "document.docx"
+    return "writer", "docx", _ensure_extension(title, ".docx")
+
+
+def _try_read_owner_office(principal: Principal, filename: str) -> bytes | None:
+    want = Path(filename).name
+    if not want:
+        return None
+    try:
+        return read_owner_disk_file(principal.school_id, principal.membership_id, want)
+    except ToolError as exc:
+        if exc.code == "sandbox.file_not_found":
+            return None
+        raise
 
 
 async def _observe_document_open(
@@ -1594,9 +1624,7 @@ def _workspace_handlers(
             raise
 
     async def document_open(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        """Open a real Office file in sidecar LibreOffice (Writer/Calc/Impress)."""
-        import base64
-
+        """Open Office as a page/slide content box in the sandbox pane. Not LibreOffice chrome."""
         started = time.perf_counter()
         kind = str(args.get("kind") or "writer").strip().lower() or "writer"
         filename = str(args.get("filename") or args.get("title") or "").strip()
@@ -1634,109 +1662,77 @@ def _workspace_handlers(
                     raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
                 await _emit(True, {"session_id": out.get("session_id"), "workspace_id": out.get("workspace_id") or ws})
                 return await _observe_document_open(out, filename=filename or "files", kind="files")
+
+            sandbox_kind, ledger_kind, filename = _office_open_kinds(kind, filename)
             raw: bytes | None = None
             if artifact_id:
                 row = await store.read(principal, artifact_id=artifact_id, title=None)
                 if not row:
                     raise ToolError("artifact.not_found", "找不到该文档产物")
-                filename = filename or str(row.get("title") or row.get("user_label") or "document.docx")
+                filename = str(row.get("title") or row.get("user_label") or filename)
+                sandbox_kind, ledger_kind, filename = _office_open_kinds(
+                    sandbox_kind, filename
+                )
                 encoding = str(row.get("content_encoding") or "utf8").lower()
-                if encoding == "base64" and row.get("content_base64"):
-                    raw = base64.b64decode(str(row.get("content_base64") or ""), validate=False)
-                elif isinstance(row.get("content"), (bytes, bytearray)):
-                    raw = bytes(row.get("content"))
-                elif isinstance(row.get("content"), str) and row.get("content"):
-                    # Binary artifacts should be base64; refuse to treat UTF-8 as OOXML.
+                if encoding == "utf8" and isinstance(row.get("content"), str) and row.get("content"):
                     raise ToolError(
                         "tool.invalid_arguments",
                         "该产物不是二进制 Office 包，拒绝当 Word 打开",
                     )
-            if raw is None and filename and not body_text:
-                listing = await sidecar_json(
-                    "GET",
-                    "/v1/internal/disk",
-                    params={
-                        "school_id": principal.school_id,
-                        "membership_id": principal.membership_id,
-                    },
-                )
-                names: list[str] = []
-                if isinstance(listing, dict):
-                    for item in listing.get("files") or []:
-                        if isinstance(item, dict) and item.get("name"):
-                            names.append(str(item["name"]))
-                want = Path(filename).name
-                if want and want in names:
-                    out = await sidecar_json(
-                        "POST",
-                        "/v1/internal/sessions/open",
-                        json_body={
-                            "school_id": principal.school_id,
-                            "membership_id": principal.membership_id,
-                            "run_id": run_id,
-                            "kind": kind or "writer",
-                            "filename": want,
-                        },
-                    )
-                    if not isinstance(out, dict):
-                        raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
-                    await _emit(
-                        True,
-                        {"session_id": out.get("session_id"), "workspace_id": out.get("workspace_id") or ws},
-                    )
-                    return await _observe_document_open(out, filename=want, kind=kind or "writer")
+                raw = _artifact_bytes(row)
+
+            if raw is None and filename:
+                raw = _try_read_owner_office(principal, filename)
+
             if raw is None:
                 if not body_text:
                     raise ToolError(
                         "tool.invalid_arguments",
                         "请提供已有文件的 artifact_id、磁盘上的文件名，或要打开的正文。不会编一份文件。",
                     )
-                name = (filename or "").lower()
-                if kind in {"calc"} or name.endswith((".xlsx", ".xls", ".ods", ".csv")):
-                    title = filename or "sheet.xlsx"
-                    filename = _ensure_extension(title, ".xlsx")
-                    kind = "calc"
-                    raw = build_xlsx_document(
-                        title=title,
-                        marker=_marker_arg({"marker": args.get("marker")}),
-                        body=body_text,
-                    )
-                elif kind in {"impress"} or name.endswith((".pptx", ".ppt", ".odp")):
-                    title = filename or "deck.pptx"
-                    filename = _ensure_extension(title, ".pptx")
-                    kind = "impress"
-                    raw = build_pptx_document(
-                        title=title,
-                        marker=_marker_arg({"marker": args.get("marker")}),
-                        body=body_text,
-                    )
+                marker = _marker_arg({"marker": args.get("marker")})
+                if sandbox_kind == "calc":
+                    raw = build_xlsx_document(title=filename, marker=marker, body=body_text)
+                elif sandbox_kind == "impress":
+                    raw = build_pptx_document(title=filename, marker=marker, body=body_text)
                 else:
-                    title = filename or "document.docx"
-                    filename = _ensure_extension(title, ".docx")
-                    kind = "writer"
-                    raw = build_docx_document(
-                        title=title,
-                        marker=_marker_arg({"marker": args.get("marker")}),
-                        body=body_text,
-                    )
-            out = await sidecar_json(
-                "POST",
-                "/v1/internal/sessions/open",
-                json_body={
-                    "school_id": principal.school_id,
-                    "membership_id": principal.membership_id,
-                    "run_id": run_id,
-                    "kind": kind or "writer",
-                    "filename": filename or "document.docx",
-                    "document_base64": base64.b64encode(raw).decode("ascii"),
+                    raw = build_docx_document(title=filename, marker=marker, body=body_text)
+
+            if not artifact_id:
+                rec = await store.write(
+                    principal,
+                    title=filename,
+                    content=raw,
+                    kind=ledger_kind,
+                )
+                artifact_id = str(rec.get("artifact_id") or rec.get("id") or "").strip()
+            if not artifact_id:
+                raise ToolError("artifact.store_unavailable", "无法把文档记入账本，打不开内容框。")
+
+            await _emit(
+                True,
+                {
+                    "artifact_id": artifact_id,
+                    "workspace_id": ws,
+                    "view": "content-box",
                 },
             )
-            if not isinstance(out, dict):
-                raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
-            await _emit(True, {"session_id": out.get("session_id"), "workspace_id": out.get("workspace_id") or ws})
-            return await _observe_document_open(
-                out, filename=filename or "document.docx", kind=kind or "writer"
-            )
+            return {
+                "ok": True,
+                "view": "content-box",
+                "artifact_id": artifact_id,
+                "filename": filename,
+                "title": filename,
+                "kind": sandbox_kind,
+                "engine": "office-content-box",
+                "human_copy": OFFICE_CONTENT_BOX_COPY,
+                "observation": {
+                    "opened": filename,
+                    "kind": sandbox_kind,
+                    "view": "content-box",
+                    "saw_screen": False,
+                },
+            }
         except ToolError as exc:
             await _emit(False, {"error_code": exc.code, "workspace_id": ws})
             raise
@@ -2049,10 +2045,10 @@ def build_default_gateway(
         ToolSpec(
             name="sandbox_document_open",
             description=(
-                "Open a Word/Calc/Impress file in sidecar LibreOffice (the sandbox screen). "
-                "Needs an existing artifact, a disk filename, or body. Does not invent a file. "
-                "Result includes an observation; a PNG screen is remembered when available. "
-                "Word is Word — do not convert to PDF or HTML. "
+                "Open a Word/Excel/PPT file in the sandbox as a page/slide content box "
+                "(not LibreOffice Writer/Impress chrome). Needs an existing artifact_id, "
+                "a teacher-disk filename, or body. Does not invent a file. "
+                "The file stays OOXML — do not convert to PDF. "
                 "Args: artifact_id? | filename? | kind?=writer | body?"
             ),
             handler=document_open,
@@ -2482,11 +2478,11 @@ def openai_tool_schemas(
             "properties": {
                 "artifact_id": {
                     "type": "string",
-                    "description": "Existing .docx/.xlsx/.pptx artifact to open in LibreOffice",
+                    "description": "Existing .docx/.xlsx/.pptx artifact to open as a content box",
                 },
                 "filename": {
                     "type": "string",
-                    "description": "Document filename shown in the Writer window",
+                    "description": "Document filename shown on the content box",
                 },
                 "kind": {
                     "type": "string",

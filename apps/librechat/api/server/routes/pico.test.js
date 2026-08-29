@@ -356,6 +356,43 @@ describe('Pico proxy routes', () => {
     );
   });
 
+  it('forwards preview=1 so Office content-box HTML is not stripped to a zip', async () => {
+    const html = Buffer.from(
+      '<!doctype html><html><body><article class="page">页</article></body></html>',
+    );
+    global.fetch.mockResolvedValueOnce({
+      status: 200,
+      headers: {
+        get: (name) =>
+          ({
+            'content-type': 'text/html; charset=utf-8',
+            'content-disposition': 'inline; filename="doc.html"',
+            'x-content-type-options': 'nosniff',
+            'x-pico-preview': 'office-content-box',
+            'content-security-policy': "default-src 'none'; img-src data:",
+          })[name],
+      },
+      arrayBuffer: async () => html,
+    });
+
+    const response = await request(app).get(
+      '/api/pico/v1/artifacts/artifact-1/content?preview=1&unsafe=secret',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/text\/html/);
+    expect(response.headers['x-pico-preview']).toBe('office-content-box');
+    expect(response.headers['content-security-policy']).toMatch(/default-src 'none'/);
+    expect(response.text).toContain('class="page"');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/artifacts/artifact-1/content?preview=1',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    const upstreamUrl = global.fetch.mock.calls[0][0];
+    expect(upstreamUrl).not.toContain('download');
+    expect(upstreamUrl).not.toContain('unsafe');
+  });
+
   it('forwards mine=true when listing my artifacts', async () => {
     await request(app).get('/api/pico/v1/artifacts?mine=true&unsafe=drop');
     expect(global.fetch).toHaveBeenCalledWith(

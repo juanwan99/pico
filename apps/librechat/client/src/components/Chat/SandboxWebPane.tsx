@@ -14,6 +14,7 @@ import {
   postPicoSandboxInput,
   type PicoSandboxWindow,
 } from '~/data-provider/pico/api';
+import { isOfficeFilename } from '~/utils/picoOpenInPane';
 
 const POLL_MS = 400;
 const VIEWPORT_W = 1280;
@@ -32,6 +33,7 @@ export default function SandboxWebPane({
   kind,
   onDestroyed,
   onReopen,
+  onOpenOfficeFile,
 }: {
   sessionId: string;
   initialUrl?: string;
@@ -46,6 +48,7 @@ export default function SandboxWebPane({
   onZoomReset?: () => void;
   onDestroyed?: () => void;
   onReopen?: (args: { url: string; kind?: string }) => void;
+  onOpenOfficeFile?: (filename: string) => void;
 }) {
   const [windows, setWindows] = useState<PicoSandboxWindow[]>([]);
   const [files, setFiles] = useState<Array<{ name: string }>>([]);
@@ -353,7 +356,7 @@ export default function SandboxWebPane({
               <p className="mt-1 px-1 text-[11px] text-[#6b6b6b]" data-testid="sandbox-web-copy">
                 {humanCopy ||
                   (isOffice
-                    ? '沙箱已用 LibreOffice 打开这份文档。这是字处理窗口，不是 PDF。'
+                    ? '沙箱内容框：只渲染页面/幻灯片，不是 Writer/Impress 整窗。'
                     : '请在此画面自行登录，不要在聊天里发送密码')}
               </p>
               <p className="mt-0.5 px-1 text-[10px] text-[#9a9a9a]" data-testid="sandbox-web-status">
@@ -412,6 +415,10 @@ export default function SandboxWebPane({
                 data-testid={`sandbox-file-${file.name}`}
                 className="block w-full rounded px-2 py-1.5 text-left text-[12px] hover:bg-[#f0f0f0]"
                 onClick={() => {
+                  if (isOfficeFilename(file.name) && onOpenOfficeFile) {
+                    onOpenOfficeFile(file.name);
+                    return;
+                  }
                   void openPicoSandboxDocument({ filename: file.name });
                 }}
               >

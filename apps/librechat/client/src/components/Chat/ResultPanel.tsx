@@ -11,6 +11,7 @@ import {
   getPicoArtifactContent,
   picoAuthedGet,
   openPicoSandboxBrowser,
+  openPicoSandboxDocument,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -34,7 +35,7 @@ import {
   type ResultPaneView,
 } from '~/utils/picoOpenInPane';
 import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
-import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
+import { collectPicoOfficeContentBox, collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
 import SandboxWebPane from './SandboxWebPane';
@@ -304,11 +305,14 @@ export default function ResultPanel({
   const paneZoom = usePaneZoom();
   const tokenUsageLabel = formatRunTokenUsage(run);
   const ledgerSandbox = useMemo(() => collectPicoSandboxSession(runEvents), [runEvents]);
+  const officeBox = useMemo(() => collectPicoOfficeContentBox(runEvents), [runEvents]);
   const sandboxSession = localSandbox || ledgerSandbox;
+  const openedOfficeRef = useRef<string | null>(null);
 
   useEffect(() => {
     setLocalSandbox(null);
     openedWebsiteRef.current = null;
+    openedOfficeRef.current = null;
     setWebsiteError(null);
   }, [conversationId]);
   const previewActive = Boolean(
@@ -370,10 +374,13 @@ export default function ResultPanel({
   }, [picoArtifacts, messageArts]);
 
   useEffect(() => {
+    if (officeBox?.artifactId) {
+      return;
+    }
     if (sandboxSession) {
       setView('web');
     }
-  }, [sandboxSession?.sessionId]);
+  }, [sandboxSession?.sessionId, officeBox?.artifactId]);
 
   useEffect(() => {
     paneZoom.reset();
@@ -466,22 +473,28 @@ export default function ResultPanel({
     }
   };
 
+  const matchOfficeArtifact = (intent: OfficeOpenIntent, artifactId?: string) => {
+    if (artifactId) {
+      return artifacts.find((item) => item.id === artifactId);
+    }
+    const want = (intent.filename || '').trim().toLowerCase();
+    return artifacts.find((item) => {
+      const name = item.name || '';
+      if (want) {
+        return name.toLowerCase() === want;
+      }
+      if (intent.kind === 'writer') {
+        return /\.(docx?|odt)$/i.test(name);
+      }
+      if (intent.kind === 'calc') {
+        return /\.(xlsx?|ods)$/i.test(name);
+      }
+      return /\.(pptx?|odp)$/i.test(name);
+    });
+  };
+
   const openOfficeInPane = async (intent: OfficeOpenIntent, artifactId?: string) => {
-    const match = artifactId
-      ? artifacts.find((item) => item.id === artifactId)
-      : artifacts.find((item) => {
-          const name = item.name || '';
-          if (intent.filename && name === intent.filename) {
-            return true;
-          }
-          if (intent.kind === 'writer') {
-            return /\.(docx?|odt)$/i.test(name);
-          }
-          if (intent.kind === 'calc') {
-            return /\.(xlsx?|ods)$/i.test(name);
-          }
-          return /\.(pptx?|odp)$/i.test(name);
-        });
+    const match = matchOfficeArtifact(intent, artifactId);
     if (!match) {
       setWebsiteError('没有可打开的文件。请先生成或上传，再点结果区打开。');
       return;
@@ -492,16 +505,26 @@ export default function ResultPanel({
   useEffect(() => {
     const office = latestUserOpenOfficeIntent(messages);
     const site = latestUserOpenWebsiteIntent(messages);
-    if (ledgerSandbox) {
-      if (office) {
-        const want = (office.filename || '').toLowerCase();
-        const have = `${ledgerSandbox.title || ''} ${ledgerSandbox.url || ''}`.toLowerCase();
-        if (!want || have.includes(want.replace(/^.*\//, ''))) {
+    if (office) {
+      const match = matchOfficeArtifact(office);
+      if (match) {
+        if (openedOfficeRef.current === match.id) {
           return;
         }
+        openedOfficeRef.current = match.id;
         void openOfficeInPane(office);
         return;
       }
+      // 「打开一个测试word」fires before generate finishes. Wait — do not
+      // flash「没有可打开的文件」on an empty list, then fail to reopen.
+      const runBusy = ['queued', 'running', 'preparing'].includes(String(run?.status || ''));
+      if (runBusy || artifacts.length === 0) {
+        return;
+      }
+      void openOfficeInPane(office);
+      return;
+    }
+    if (ledgerSandbox) {
       if (site) {
         let already = false;
         try {
@@ -518,10 +541,6 @@ export default function ResultPanel({
       }
       return;
     }
-    if (office) {
-      void openOfficeInPane(office);
-      return;
-    }
     if (site) {
       void openWebsiteInPane(site);
       return;
@@ -529,9 +548,9 @@ export default function ResultPanel({
     setWebsiteError((prev) =>
       prev && prev.startsWith('没有可打开的文件') ? null : prev,
     );
-    // Intent is derived from the latest user turn; skip if ledger already opened.
+    // Intent is derived from the latest user turn; reopen when the file lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, ledgerSandbox]);
+  }, [messages, ledgerSandbox, artifacts, run?.status]);
 
   const readArtifactBlob = async (artifact: ArtifactItem, download: boolean): Promise<Blob> => {
     // Binary artifacts always fetch bytes from the content API (bytes-safe).
@@ -590,10 +609,17 @@ export default function ResultPanel({
       if (artifact.picoArtifact) {
         try {
           const htmlBlob = await getPicoArtifactContent(artifact.id, false, { preview: true });
+          const ctype = (htmlBlob.type || '').toLowerCase();
           const text = await readBlobText(htmlBlob);
-          if (text.includes('<html') || text.includes('<section') || text.includes('<article')) {
+          const looksHtml =
+            /text\/html/.test(ctype) ||
+            text.includes('<html') ||
+            text.includes('<section') ||
+            text.includes('<article');
+          if (looksHtml) {
             setPreviewHtml(text);
             setView('overview');
+            setWebsiteError(null);
             return;
           }
         } catch {
@@ -624,6 +650,7 @@ export default function ResultPanel({
     dismissOverlayMenus();
     setArtifactAction({ id: artifact.id, type: 'open' });
     setArtifactError(null);
+    setWebsiteError(null);
     clearFilePreview();
     try {
       if (artifact.url) {
@@ -673,6 +700,30 @@ export default function ResultPanel({
     // Strip stashes an id then opens this panel; consume once the file list is ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artifacts]);
+
+  useEffect(() => {
+    if (!officeBox?.artifactId) {
+      return;
+    }
+    if (openedOfficeRef.current === officeBox.artifactId) {
+      return;
+    }
+    const match =
+      artifacts.find((item) => item.id === officeBox.artifactId) ||
+      ({
+        id: officeBox.artifactId,
+        name: officeBox.filename || 'document.docx',
+        kindLabel: officeBox.kind || 'office',
+        sizeLabel: '—',
+        kind: 'file',
+        picoArtifact: true,
+        contentEncoding: 'base64',
+      } satisfies ArtifactItem);
+    openedOfficeRef.current = officeBox.artifactId;
+    void openArtifact(match);
+    // Agent open lands in the 沙箱 pane as a content box, not a screenshot session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [officeBox?.artifactId, artifacts]);
 
   const downloadArtifact = async (artifact: ArtifactItem) => {
     dismissOverlayMenus();
@@ -1193,6 +1244,34 @@ export default function ResultPanel({
                     void openWebsiteInPane(url);
                   }
                 }}
+                onOpenOfficeFile={(filename) => {
+                  const match = artifacts.find((item) => item.name === filename);
+                  if (match) {
+                    void openArtifact(match);
+                    return;
+                  }
+                  void (async () => {
+                    try {
+                      const meta = await openPicoSandboxDocument({ filename });
+                      const aid = String(meta.artifact_id || '').trim();
+                      if (!aid) {
+                        setWebsiteError('没有可打开的文件。请先生成或上传，再点结果区打开。');
+                        return;
+                      }
+                      await openArtifact({
+                        id: aid,
+                        name: String(meta.filename || meta.title || filename),
+                        kindLabel: String(meta.kind || 'office'),
+                        sizeLabel: '—',
+                        kind: 'file',
+                        picoArtifact: true,
+                        contentEncoding: 'base64',
+                      });
+                    } catch {
+                      setWebsiteError('打开文档失败，请稍后重试');
+                    }
+                  })();
+                }}
               />
             ) : (
               <div
@@ -1202,7 +1281,7 @@ export default function ResultPanel({
                 <PicoIcon name="link" className="opacity-35" />
                 <p className="text-[13px]">沙箱还没有打开窗口</p>
                 <p className="max-w-[16rem] text-[11px] leading-relaxed">
-                  对 Pico 说「打开 https://example.com」或「打开一份 Word」，右边会出现沙箱里的程序画面。
+                  对 Pico 说「打开 https://example.com」或「打开一份 Word」，右边会出现隔离网页或页面/幻灯片内容框。
                 </p>
               </div>
             )}

@@ -441,7 +441,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_document_open",
-    "Open a Word/Calc/Impress file in sidecar LibreOffice. Word is Word — do not convert to PDF or HTML.",
+    "Open a Word/Excel/PPT file in the sandbox as a page/slide content box (not LibreOffice chrome). Needs artifact_id, a disk filename, or body. Does not invent a file. The file stays OOXML — do not convert to PDF.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),

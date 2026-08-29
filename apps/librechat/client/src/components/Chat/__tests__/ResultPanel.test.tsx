@@ -330,6 +330,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
   beforeEach(() => {
     window.localStorage.removeItem('pico.resultPaneWidth');
     mockOpenBrowser.mockReset();
+    mockGetPicoArtifactContent.mockReset();
     (getPicoSandboxScreenshot as jest.Mock).mockResolvedValue(
       new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }),
     );
@@ -404,6 +405,54 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(await screen.findByTestId('artifact-office-iframe')).toBeInTheDocument();
     expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
     expect(screen.queryByTestId('artifact-office-download')).not.toBeInTheDocument();
+    expect(mockGetPicoArtifactContent).toHaveBeenNthCalledWith(2, 'art-docx', false, {
+      preview: true,
+    });
+  });
+
+  it('sandbox_document_open shows the content box in 沙箱, not a LibreOffice screenshot', async () => {
+    const zipBlob = new Blob([new Uint8Array([80, 75, 3, 4])], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    const htmlBlob = new Blob(
+      [
+        '<!doctype html><html><body><article class="page"><h1>报告</h1><p>正文</p></article></body></html>',
+      ],
+      { type: 'text/html' },
+    );
+    mockGetPicoArtifactContent.mockResolvedValueOnce(zipBlob).mockResolvedValueOnce(htmlBlob);
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          picoArtifacts={[{ id: 'art-docx', title: '报告.docx', kind: 'docx' }]}
+          run={run()}
+          runStatusLabel="已完成"
+          runEvents={[
+            {
+              id: 'open-1',
+              run_id: 'run-1',
+              seq: 1,
+              type: 'tool.result',
+              payload: {
+                tool: 'sandbox_document_open',
+                ok: true,
+                result: {
+                  view: 'content-box',
+                  artifact_id: 'art-docx',
+                  filename: '报告.docx',
+                  kind: 'writer',
+                  human_copy: '沙箱内容框：只渲染页面/幻灯片，不是 Writer/Impress 整窗。',
+                },
+              },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('artifact-office-iframe')).toBeInTheDocument();
+    expect(screen.getByTestId('artifact-pane-preview')).toHaveAttribute('data-kind', 'office');
+    expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-web-viewport')).not.toBeInTheDocument();
     expect(mockGetPicoArtifactContent).toHaveBeenNthCalledWith(2, 'art-docx', false, {
       preview: true,
     });
@@ -652,18 +701,78 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
         />
       </MemoryRouter>,
     );
-    expect(await screen.findByTestId('artifact-action-error')).toHaveTextContent(
-      '没有可打开的文件',
-    );
+    await waitFor(() => expect(mockOpenDoc).not.toHaveBeenCalled());
+    expect(screen.queryByTestId('artifact-action-error')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
-    expect(mockOpenDoc).not.toHaveBeenCalled();
     expect(mockOpenBrowser).not.toHaveBeenCalled();
   });
 
-  it('clears leftover 没有可打开的文件 after a later turn that is not an open intent', async () => {
+  it('opens the generated Word in the content box after 打开一个测试word', async () => {
+    const zipBlob = new Blob([new Uint8Array([80, 75, 3, 4])], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    const htmlBlob = new Blob(
+      [
+        '<!doctype html><html><body><article class="page"><h1>测试</h1><p>正文</p></article></body></html>',
+      ],
+      { type: 'text/html' },
+    );
+    mockGetPicoArtifactContent.mockResolvedValueOnce(zipBlob).mockResolvedValueOnce(htmlBlob);
+    const userTurn = {
+      messageId: 'u1',
+      conversationId: 'c1',
+      parentMessageId: null,
+      text: '打开一个测试word',
+      isCreatedByUser: true,
+    };
     const { rerender } = render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
+          run={{ ...run(), status: 'running' }}
+          runStatusLabel="仍在处理…"
+          messages={[userTurn]}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId('artifact-action-error')).not.toBeInTheDocument();
+    rerender(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          picoArtifacts={[{ id: 'art-docx', title: '测试Word文档.docx', kind: 'docx' }]}
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            userTurn,
+            {
+              messageId: 'a1',
+              conversationId: 'c1',
+              parentMessageId: 'u1',
+              text: '测试 Word 文档已生成：测试Word文档.docx',
+              isCreatedByUser: false,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('artifact-office-iframe')).toBeInTheDocument();
+    expect(screen.queryByText(/没有可打开的文件/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/无法在结果区展开内容框/)).not.toBeInTheDocument();
+    expect(mockGetPicoArtifactContent).toHaveBeenNthCalledWith(2, 'art-docx', false, {
+      preview: true,
+    });
+  });
+
+  it('clears leftover 没有可打开的文件 after a later turn that is not an open intent', async () => {
+    const htmlFile = {
+      id: 'art-html',
+      title: 'page.html',
+      kind: 'html',
+      inline: '<p>x</p>',
+    };
+    const { rerender } = render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          picoArtifacts={[htmlFile]}
           run={run()}
           runStatusLabel="已完成"
           messages={[
@@ -671,7 +780,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
               messageId: 'u1',
               conversationId: 'c1',
               parentMessageId: null,
-              text: '打开一份 Word',
+              text: '打开 报告.docx',
               isCreatedByUser: true,
             },
           ]}
@@ -684,6 +793,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     rerender(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
+          picoArtifacts={[htmlFile]}
           run={run()}
           runStatusLabel="已完成"
           messages={[
@@ -691,7 +801,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
               messageId: 'u1',
               conversationId: 'c1',
               parentMessageId: null,
-              text: '打开一份 Word',
+              text: '打开 报告.docx',
               isCreatedByUser: true,
             },
             {
