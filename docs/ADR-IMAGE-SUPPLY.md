@@ -87,13 +87,21 @@ Google Gemini generateContent
 
 **Pro 还干什么：** 你自己在 Gemini 网页 / AI Studio 里画、试模型。那条路的额度不会流进 pico.aivia.asia。
 
-**用量 / 速率：New API 统控，Pico 不自研限流核。** 三渠道同一组：轮询、等权、每渠道 RPM/RPD 宁低（低于 Google 免费档，避免先撞 Google 429）。Pico 只熔断。
+**用量 / 速率：New API 统控，Pico 不自研限流核。** 三渠道同一组：轮询、等权、每渠道 RPM/RPD 宁低。Pico 只熔断。New API **不能变出** Google 定价页上不存在的免费张数。
 
-**钱：默认不开 Cloud Billing（$0）。** 业主意向：不消耗真实费用，每号停在免费档。开了 Billing 才会按张计费；要 $0 就不要点 Set up billing。
+**官方价目（2026-08-29 查 [pricing](https://ai.google.dev/gemini-api/docs/pricing) · [billing](https://ai.google.dev/gemini-api/docs/billing) · [rate-limits](https://ai.google.dev/gemini-api/docs/rate-limits)）：**
 
-**硬约束：** Pico 现网 `gemini-3.1-flash-image` 官方定价 **Free Tier: Not available**（[pricing](https://ai.google.dev/gemini-api/docs/pricing)）。不开 Billing 时这条模型常常是 **0 张**——New API 只能「慢下来、换号」，**不能变出 Google 没有的免费额度**。网页 Pro 次数也不能充进 API。
+| 问 | 官方结论 |
+|----|----------|
+| 不开 Billing，Pico 现网 `gemini-3.1-flash-image` 有没有免费张？ | **没有。** 定价表 Free Tier = **Not available**。论坛实锤 429 `GenerateRequestsPerDayPerProjectPerModel-FreeTier` **limit: 0**。不是「额度很小」，是免费档配额指标就是 0。 |
+| 开了 Billing 有没有赠送免费出图？ | **没有。** 开 Billing = 付费档，**从第 1 张起按张计费**。付费档变高的是 RPM/RPD **上限**（能买多少张），不是赠送张。付费里写的每月 5000 次免费是 **Search grounding**，不是出图。2026-03-02 后 Cloud **$300 Welcome credit 不能付 Gemini API**。 |
+| 一张图多少钱？（现网模型 Standard 1K） | 图输出约 **$0.067/张**（1120 token × $60/百万）。另加提示词输入 **$0.50/百万 token**（课堂一句提示通常远小于 1 美分）。Batch 半价。更便宜的付费出图：`gemini-3.1-flash-lite-image` 约 **$0.034/张**、`gemini-2.5-flash-image` **$0.039/张**——同样 **无免费档**。 |
 
-**实测（每把 key，钥不进 git）：** 不开 Billing，New API 打一张 `gemini-3.1-flash-image`。200 有图 → $0 方案成立，New API 把每渠道 RPM/RPD 拧到免费档以下。429 且 `free_tier` / limit 0 → 这条模型没有免费 API，课堂要图只能退路：该项目开 Billing + AI Studio **Monthly spend cap**（硬顶，不是预算邮件）。三号要三份额度就三份 Billing，不要挂同一张账单。
+课堂粗算（只算图输出、1K）：100 张 ≈ $6.7；1000 张 ≈ $67。三号只是三份速率桶，**不会把单价砍成三分之一**。
+
+开 Billing 常见还要 **预存至少 $10**。用 spend cap 硬顶，不要只设预算邮件。Tier 1 账单封顶默认 $250/月（Billing 账户级）。
+
+**实测仍建议：** 每把 key 不开 Billing 打一张。预期 429 limit 0；若偶发 200，以你的项目为准（官方不保证）。
 
 不是再买第四份网页 Pro，也不是 cookie。
 
