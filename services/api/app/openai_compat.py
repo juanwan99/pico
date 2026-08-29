@@ -1905,6 +1905,11 @@ async def chat_completions(
                             text = user_message_for_error(getattr(result, "error", None))
                         if not text:
                             text = getattr(result, "error", None) or ""
+                        if not str(text).strip():
+                            text = user_message_for_error(
+                                "Pi agent received empty model response",
+                                code="pi.empty_response",
+                            )
                         # small pieces if only final blob
                         step = 32
                         for i in range(0, len(text), step):

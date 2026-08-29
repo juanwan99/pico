@@ -92,6 +92,15 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         if c == "concurrency_limit" or "concurrency" in low:
             return "当前对话繁忙（并发已满）。请稍后再试，或关闭其他进行中的任务。"
         return "请求过于频繁或模型限流。请稍后再试，勿并行轰炸。"
+    if (
+        c == "model.usage_limit"
+        or "usage limit" in low
+        or "insufficient_quota" in low
+        or ("quota" in low and "exceed" in low)
+    ):
+        return "模型中转用量已满。请稍后再问，不要连点；这不是你的问题写错。"
+    if c == "pi.empty_response" or "empty model response" in low:
+        return "这次没有生成可见回复。请再试一次；若刚提示用量已满，请稍等再问。"
     if c in (
         "runtime.emergency_noop",
         "runtime.loop_removed",
@@ -149,7 +158,7 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
     if "max_tokens" in low or "token cap" in low or c == "token_cap":
         return "本次回答超出长度上限。可点「再跑一次」，或缩短问题后重试。"
     if (
-        c in ("kimi.event_contract", "kimi.runtime_error", "pi.runtime_error", "pi.empty_response")
+        c in ("kimi.event_contract", "kimi.runtime_error", "pi.runtime_error")
         or "event_contract" in low
         or "kimi.runtime" in low
         or "pi.runtime" in low
