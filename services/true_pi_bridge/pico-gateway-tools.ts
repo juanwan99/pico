@@ -148,7 +148,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "workspace_read_file",
-    "Read one Artifact by id or title from the Pico ledger.",
+    "Read one Artifact by id or title from the Pico ledger (including this-turn chat paperclip documents).",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),

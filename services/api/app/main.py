@@ -1483,6 +1483,7 @@ async def list_conversation_artifacts(
             {
                 "id": a.id,
                 "title": a.title,
+                "user_label": a.title,
                 "kind": a.kind,
                 "folder_id": getattr(a, "folder_id", "") or "",
                 "created_at": a.created_at.isoformat() if a.created_at else None,

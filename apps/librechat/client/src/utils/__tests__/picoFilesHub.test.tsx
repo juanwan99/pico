@@ -116,4 +116,11 @@ describe('FilesDirectoryPanel', () => {
       expect(mockDelete).toHaveBeenCalledWith('empty-1');
     });
   });
+
+  it('does not offer a second local-upload mouth on 我的文件', async () => {
+    render(<FilesDirectoryPanel />);
+    expect(await screen.findByTestId('files-directory')).toBeInTheDocument();
+    expect(screen.queryByTestId('my-files-upload')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('my-files-upload-input')).not.toBeInTheDocument();
+  });
 });

@@ -896,9 +896,12 @@ async def list_artifacts_for_principal(
 ) -> list[ArtifactRow]:
     """Membership-scoped recent artifacts (FilesHub「我的文件」). Not a second ledger."""
     skip_titles = {"回复摘要", "summary", "run summary"}
+    # Sidecar rows from /v1/files ingest — teacher cabinet shows the source file only.
+    hidden_kinds = ("edu_excerpt", "kb_text")
     filters = [
         TaskRow.school_id == principal.school_id,
         TaskRow.membership_id == principal.membership_id,
+        ArtifactRow.kind.notin_(hidden_kinds),
     ]
     if folder_id is not None:
         filters.append(ArtifactRow.folder_id == (folder_id or ""))

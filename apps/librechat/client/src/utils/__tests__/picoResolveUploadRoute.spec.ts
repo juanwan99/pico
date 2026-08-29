@@ -1,6 +1,19 @@
 import { EToolResources } from 'librechat-data-provider';
 import { resolveUploadRoute } from '../files';
 
+jest.mock(
+  '@librechat/client',
+  () => ({
+    TextPaths: () => null,
+    FilePaths: () => null,
+    CodePaths: () => null,
+    AudioPaths: () => null,
+    VideoPaths: () => null,
+    SheetPaths: () => null,
+  }),
+  { virtual: true },
+);
+
 const file = (type: string, name: string) => new File(['x'], name, { type });
 
 describe('resolveUploadRoute (Pico paste/drop)', () => {
@@ -10,55 +23,26 @@ describe('resolveUploadRoute (Pico paste/drop)', () => {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'report.xlsx',
   );
-  const threeImageDestinations = [
-    undefined,
-    EToolResources.execute_code,
-    EToolResources.context,
-  ];
+  const messageAttach = { kind: 'route' as const, toolResource: undefined };
 
   it('rejects empty files or empty options', () => {
     expect(resolveUploadRoute([], [undefined])).toEqual({ kind: 'reject' });
     expect(resolveUploadRoute([png], [])).toEqual({ kind: 'reject' });
   });
 
-  it('sends image-only pastes to the provider without asking', () => {
-    expect(resolveUploadRoute([png], threeImageDestinations)).toEqual({
-      kind: 'route',
-      toolResource: undefined,
-    });
+  it('routes images, PDFs, and mixed sets to the same message attach', () => {
     expect(
-      resolveUploadRoute([png, file('image/jpeg', 'two.jpg')], threeImageDestinations),
-    ).toEqual({ kind: 'route', toolResource: undefined });
-  });
-
-  it('still asks when a PDF has several destinations', () => {
+      resolveUploadRoute([png], [undefined, EToolResources.execute_code, EToolResources.context]),
+    ).toEqual(messageAttach);
     expect(
       resolveUploadRoute(
         [pdf],
-        [
-          undefined,
-          EToolResources.file_search,
-          EToolResources.execute_code,
-          EToolResources.context,
-        ],
+        [undefined, EToolResources.file_search, EToolResources.execute_code, EToolResources.context],
       ),
-    ).toEqual({ kind: 'ask' });
-  });
-
-  it('still asks for mixed image + document', () => {
-    expect(resolveUploadRoute([png, pdf], threeImageDestinations)).toEqual({ kind: 'ask' });
-  });
-
-  it('auto-routes a single leftover destination', () => {
-    expect(resolveUploadRoute([xlsx], [EToolResources.execute_code])).toEqual({
-      kind: 'route',
-      toolResource: EToolResources.execute_code,
-    });
-  });
-
-  it('does not invent a provider route when images cannot attach there', () => {
+    ).toEqual(messageAttach);
     expect(
-      resolveUploadRoute([png], [EToolResources.execute_code, EToolResources.context]),
-    ).toEqual({ kind: 'ask' });
+      resolveUploadRoute([png, pdf], [undefined, EToolResources.context]),
+    ).toEqual(messageAttach);
+    expect(resolveUploadRoute([xlsx], [EToolResources.execute_code])).toEqual(messageAttach);
   });
 });

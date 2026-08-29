@@ -117,10 +117,10 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
 
   const uploadFile = useUploadFileMutation(
     {
-      onSuccess: (data) => {
+      onSuccess: (data, formData) => {
         clearUploadTimer(data.temp_file_id);
-        console.log('upload success', data);
-        if (agent_id) {
+        const isMessageFile = formData?.get?.('message_file') === 'true';
+        if (agent_id && !isMessageFile) {
           queryClient.refetchQueries([QueryKeys.agent, agent_id]);
           return;
         }
@@ -156,6 +156,9 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
             assistant_id ? true : false,
           );
         }, 300);
+        if (agent_id) {
+          queryClient.refetchQueries([QueryKeys.agent, agent_id]);
+        }
       },
       onError: (_error, body) => {
         const error = _error as TError | undefined;
@@ -223,12 +226,12 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
     }
 
     if (!isAssistantsEndpoint(endpointType ?? endpoint)) {
-      if (!agent_id) {
-        formData.append('message_file', 'true');
-      }
       const tool_resource = extendedFile.tool_resource;
       if (tool_resource != null) {
         formData.append('tool_resource', tool_resource);
+      } else if (formData.get('message_file') == null) {
+        /** Chat attach for AI this turn — Pico paperclip has no destination menu. */
+        formData.append('message_file', 'true');
       }
       if (conversation?.agent_id != null && formData.get('agent_id') == null) {
         formData.append('agent_id', conversation.agent_id);

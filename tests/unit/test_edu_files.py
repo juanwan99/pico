@@ -184,6 +184,13 @@ def test_post_markdown_is_workspace_readable(client: TestClient, tmp_path, monke
         assert "三年级二班" in str(got.get("content") or "")
         assert "42" in str(got.get("content") or "")
 
+    fetched = client.get(
+        f"/v1/files/{posted['id']}",
+        headers={"authorization": f"Bearer {token}"},
+    )
+    assert fetched.status_code == 200, fetched.text
+    assert "三年级二班" in (fetched.json().get("text") or "")
+
     asyncio.run(_check())
 
 
@@ -210,3 +217,103 @@ def test_foreign_membership_cannot_read(client: TestClient) -> None:
         headers={"authorization": f"Bearer {other}"},
     )
     assert res.status_code == 404
+
+
+def test_unread_pdf_still_lands_in_cabinet(client: TestClient) -> None:
+    token = _token()
+    headers = {"authorization": f"Bearer {token}"}
+    res = client.post(
+        "/v1/files",
+        headers=headers,
+        json={
+            "filename": "坏.pdf",
+            "content_b64": base64.b64encode(b"%PDF-1.4\n%not-a-real-pdf").decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["id"]
+    listed = client.get("/v1/artifacts", params={"mine": True}, headers=headers)
+    assert listed.status_code == 200, listed.text
+    rows = listed.json()["artifacts"]
+    titles = [row["title"] for row in rows]
+    assert "坏.pdf" in titles
+    kinds = {row["kind"] for row in rows}
+    assert "edu_excerpt" not in kinds
+    assert "kb_text" not in kinds
+
+
+def test_upload_into_folder_via_multipart(client: TestClient) -> None:
+    token = _token()
+    headers = {"authorization": f"Bearer {token}"}
+    folder = client.post("/v1/my/folders", json={"name": "备课"}, headers=headers)
+    assert folder.status_code == 200, folder.text
+    folder_id = folder.json()["folder"]["id"]
+    res = client.post(
+        "/v1/files",
+        headers=headers,
+        files={"file": ("班情.md", "年级：三班\n".encode(), "text/markdown")},
+        data={"folder_id": folder_id},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["id"]
+    listed = client.get(
+        "/v1/artifacts",
+        params={"mine": True, "folder_id": folder_id},
+        headers=headers,
+    )
+    assert listed.status_code == 200, listed.text
+    titles = [row["title"] for row in listed.json()["artifacts"]]
+    assert "班情.md" in titles
+    kinds = [row["kind"] for row in listed.json()["artifacts"]]
+    assert "edu_excerpt" not in kinds
+
+
+def test_unknown_folder_fails_closed(client: TestClient) -> None:
+    token = _token()
+    res = client.post(
+        "/v1/files",
+        headers={"authorization": f"Bearer {token}"},
+        json={
+            "filename": "a.md",
+            "content_b64": base64.b64encode(b"hi").decode("ascii"),
+            "folder_id": "00000000-0000-4000-8000-000000000001",
+        },
+    )
+    assert res.status_code == 404
+
+
+def test_xlsx_cabinet_lists_one_row(client: TestClient) -> None:
+    raw = _xlsx_bytes([["班", "周课时"], ["一班", "5"]])
+    token = _token()
+    headers = {"authorization": f"Bearer {token}"}
+    res = client.post(
+        "/v1/files",
+        headers=headers,
+        json={
+            "filename": "课时.xlsx",
+            "content_b64": base64.b64encode(raw).decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    listed = client.get("/v1/artifacts", params={"mine": True}, headers=headers)
+    rows = [row for row in listed.json()["artifacts"] if row["title"] == "课时.xlsx"]
+    assert len(rows) == 1
+    assert rows[0]["kind"] == "edu_office"
+
+
+def test_system_tells_pi_to_read_paperclip_documents() -> None:
+    system = (
+        ROOT
+        / "services"
+        / "orchestrator"
+        / "pico_orchestrator"
+        / "agent_assets"
+        / "system.md"
+    ).read_text(encoding="utf-8")
+    assert "Documents attached this turn" in system
+    assert "workspace_read_file" in system
+    bridge = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "this-turn chat paperclip documents" in bridge
