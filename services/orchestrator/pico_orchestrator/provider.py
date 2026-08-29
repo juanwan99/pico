@@ -425,6 +425,33 @@ def _responses_completed_text(event: object) -> str:
     return _text_from_output_items(getattr(body, "output", None) if body is not None else None)
 
 
+def _responses_completed_usage(event: object) -> dict | None:
+    """Official Responses ``response.completed`` usage — native, not char/4."""
+    et = getattr(event, "type", None)
+    if et is None and isinstance(event, dict):
+        et = event.get("type")
+    if et != "response.completed":
+        return None
+    body = getattr(event, "response", None)
+    if body is None and isinstance(event, dict):
+        body = event.get("response")
+    usage = body.get("usage") if isinstance(body, dict) else getattr(body, "usage", None)
+    from pico_orchestrator.usage_parse import parse_usage_blob
+
+    return parse_usage_blob(usage)
+
+
+def _apply_usage_out(usage_out: dict | None, blob: dict | None) -> None:
+    if usage_out is None or not blob:
+        return
+    from pico_orchestrator.usage_parse import add_usage
+
+    merged = add_usage(dict(usage_out) if usage_out else None, blob)
+    usage_out.clear()
+    if merged:
+        usage_out.update(merged)
+
+
 async def _iter_openai_responses(
     provider: ProviderConfig,
     mid: str,
@@ -432,6 +459,7 @@ async def _iter_openai_responses(
     *,
     max_tokens: int,
     thinking: bool | None,
+    usage_out: dict | None = None,
 ) -> AsyncIterator[str]:
     """Official Responses stream. Never chat.completions against ``/openai``."""
     client = _llm_client(provider)
@@ -452,6 +480,9 @@ async def _iter_openai_responses(
         try:
             stream = await client.responses.create(**kwargs)
             async for event in stream:
+                usage = _responses_completed_usage(event)
+                if usage:
+                    _apply_usage_out(usage_out, usage)
                 piece = _responses_text_delta(event)
                 if piece:
                     yielded = True
@@ -484,6 +515,7 @@ async def stream_chat(
     system: str | None = None,
     model: str | None = None,
     thinking: bool | None = None,
+    usage_out: dict | None = None,
 ) -> AsyncIterator[str]:
     """Stream assistant text deltas from the real model API (token-level).
 
@@ -517,15 +549,23 @@ async def stream_chat(
         provider: ProviderConfig, mid: str
     ) -> AsyncIterator[str]:
         client = _llm_client(provider)
-        stream = await client.chat.completions.create(
-            model=mid,
-            messages=messages,
-            stream=True,
-            max_tokens=max_tokens,
-            extra_body=extra_body,
-        )
+        kwargs: dict = {
+            "model": mid,
+            "messages": messages,
+            "stream": True,
+            "max_tokens": max_tokens,
+            "extra_body": extra_body,
+            "stream_options": {"include_usage": True},
+        }
+        stream = await client.chat.completions.create(**kwargs)
         async for chunk in stream:
-            delta = chunk.choices[0].delta.content if chunk.choices else None
+            usage = getattr(chunk, "usage", None)
+            if usage is not None:
+                from pico_orchestrator.usage_parse import parse_usage_blob
+
+                _apply_usage_out(usage_out, parse_usage_blob(usage))
+            choices = getattr(chunk, "choices", None) or []
+            delta = choices[0].delta.content if choices else None
             if delta:
                 yield delta
 
@@ -537,6 +577,7 @@ async def stream_chat(
                 messages,
                 max_tokens=max_tokens,
                 thinking=thinking,
+                usage_out=usage_out,
             ):
                 yield piece
             return

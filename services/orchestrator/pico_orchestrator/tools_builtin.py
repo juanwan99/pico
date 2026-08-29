@@ -75,7 +75,7 @@ from pico_orchestrator.sandbox_s1 import (
 )
 from pico_orchestrator.sandbox_s2 import PNG_MAGIC, raster_html_isolated, raster_meta_from_write
 from pico_orchestrator.sandbox_sidecar import sidecar_json
-from pico_orchestrator.usage_hook import emit_sandbox_usage
+from pico_orchestrator.usage_hook import emit_image_usage, emit_sandbox_usage
 from pico_orchestrator.vision import remember_conversation_png
 from pico_orchestrator.web_guard import parse_public_http_url
 from pico_orchestrator.web_tools import web_fetch_handler, web_search_handler
@@ -1099,27 +1099,50 @@ def _workspace_handlers(
         prompt = _required_text(args, "prompt", maximum=2000)
         title_raw = args.get("title")
         title_hint = str(title_raw).strip() if isinstance(title_raw, str) else ""
-        raw, ext = await _run_bounded(
-            generate_image_bytes(prompt),
-            # F5: one Retry-After rest (≤ image timeout window) + one POST.
-            seconds=_IMAGE_TIMEOUT_S * 2,
-            code="image.timeout",
-            message="出图超时（90 秒）。请稍后重试，不能编造图片。",
-        )
-        title = _ensure_extension(title_hint or "示意图", f".{ext}")
-        kind = "png" if ext == "png" else "jpg"
-        result = await store.write(
-            principal,
-            title=title,
-            content=raw,
-            kind=kind,
-        )
-        result["format"] = ext
-        result["user_message"] = (
-            "图已生成。要放进 PPT/Word 时把 artifact id 写入 image_artifact_id，"
-            "不要单独当成品交给老师。"
-        )
-        return _attach_write_observation(result, kind=kind, title=title, raw=raw)
+        from pico_orchestrator.image_generate import gateway_model, selected_image_provider
+
+        image_model = gateway_model()
+        try:
+            raw, ext = await _run_bounded(
+                generate_image_bytes(prompt),
+                # F5: one Retry-After rest (≤ image timeout window) + one POST.
+                seconds=_IMAGE_TIMEOUT_S * 2,
+                code="image.timeout",
+                message="出图超时（90 秒）。请稍后重试，不能编造图片。",
+            )
+            title = _ensure_extension(title_hint or "示意图", f".{ext}")
+            kind = "png" if ext == "png" else "jpg"
+            result = await store.write(
+                principal,
+                title=title,
+                content=raw,
+                kind=kind,
+            )
+            result["format"] = ext
+            result["user_message"] = (
+                "图已生成。要放进 PPT/Word 时把 artifact id 写入 image_artifact_id，"
+                "不要单独当成品交给老师。"
+            )
+            await emit_image_usage(
+                principal,
+                ok=True,
+                model=image_model,
+                extra={
+                    "bytes": len(raw),
+                    "format": ext,
+                    "provider": selected_image_provider(),
+                    "artifact_id": result.get("artifact_id"),
+                },
+            )
+            return _attach_write_observation(result, kind=kind, title=title, raw=raw)
+        except Exception:
+            await emit_image_usage(
+                principal,
+                ok=False,
+                model=image_model,
+                extra={"provider": selected_image_provider()},
+            )
+            raise
 
     async def generate_diagram(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         source = _required_text(args, "source", maximum=32_000)

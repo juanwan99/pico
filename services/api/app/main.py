@@ -575,6 +575,29 @@ async def my_usage_page(
     return HTMLResponse(html)
 
 
+@app.get("/v1/internal/usage/export")
+async def usage_export(
+    school_id: str | None = None,
+    kind: str | None = None,
+    since: str | None = None,
+    after_id: str | None = None,
+    limit: int = 200,
+    session: AsyncSession = Depends(get_session),
+    _: bool = Depends(require_service_token),
+) -> dict:
+    """edu-core pull. Pico meters; edu rates. No price fields."""
+    from app.usage_ledger import export_usage_events
+
+    return await export_usage_events(
+        session,
+        school_id=school_id,
+        kind=kind,
+        since=since,
+        after_id=after_id,
+        limit=limit,
+    )
+
+
 class HelloRequest(BaseModel):
     prompt: str = Field(default="Say hello in one short sentence.")
 

@@ -8,5 +8,7 @@ JSON Schema mirrors of `docs/contracts/*` **FROZEN v1.0**.
 | `schemas/tool-invoke.schema.json` | tools |
 | `schemas/event.schema.json` | ai-facts events |
 | `schemas/change-proposal.schema.json` | change-handoff |
+| `schemas/usage-event.schema.json` | usage-export event |
+| `schemas/usage-export.schema.json` | usage-export pull envelope |
 
 Validate in CI via `tests/unit/test_contract_schemas.py`.

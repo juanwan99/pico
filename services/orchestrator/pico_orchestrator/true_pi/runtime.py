@@ -534,7 +534,7 @@ async def run_true_pi_agent(
         if final_text:
             await emit("message.delta", {"text": final_text, **tag})
         await emit("run.status", {"status": "succeeded", **tag})
-        return RunResult(status="succeeded", final_text=final_text)
+        return RunResult(status="succeeded", final_text=final_text, token_usage=state.token_usage)
 
     except TruePiClientError as exc:
         return await _failed(
@@ -650,4 +650,9 @@ def _result(
         school_id=getattr(principal, "school_id", None) if principal else None,
         membership_id=getattr(principal, "membership_id", None) if principal else None,
     )
-    return RunResult(status=status, final_text=final_text, error=error)
+    return RunResult(
+        status=status,
+        final_text=final_text,
+        error=error,
+        token_usage=state.token_usage,
+    )

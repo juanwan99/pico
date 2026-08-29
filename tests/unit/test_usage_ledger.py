@@ -36,7 +36,7 @@ def test_schema_has_no_price_currency_billing_columns() -> None:
 
 
 def test_reserved_kinds_include_llm_and_later_cards() -> None:
-    assert USAGE_KINDS == frozenset({"llm", "search", "sandbox", "api", "other"})
+    assert USAGE_KINDS == frozenset({"llm", "search", "sandbox", "image", "api", "other"})
 
 
 def test_extract_token_fields_unknown_when_missing() -> None:

@@ -535,10 +535,9 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         run.ended_at = _utcnow()
         run.error = result.error
         skill_snapshot = _run_skill_snapshot(run)
-        # Pico has no billing-grade meters; always mark usage as estimated for UI.
+        # Pico has no billing-grade meters of its own; record provider usage
+        # as-is. Missing usage stays unknown — do not stamp estimated=True.
         usage_for_store = dict(result.token_usage or {}) if result.token_usage else None
-        if usage_for_store is not None:
-            usage_for_store["estimated"] = True
         run.token_usage_json = _merge_token_usage(
             run.token_usage_json,
             usage_for_store,
