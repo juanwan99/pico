@@ -270,39 +270,39 @@ def html_remote_violations(doc: str) -> tuple[str, ...]:
         if name not in hits:
             hits.append(name)
 
-    if re.search(r"<script\b[^>]*\bsrc\s*=\s*[\"']?https?://", text, re.I):
+    if re.search(r"<script\b[^>]*\bsrc\s*=\s*[\"']?https?://", text, re.IGNORECASE):
         add("script_src")
-    if re.search(r"""(?:^|[\s;{}(])from\s+["']https?://""", text, re.I | re.M):
+    if re.search(r"""(?:^|[\s;{}(])from\s+["']https?://""", text, re.IGNORECASE | re.MULTILINE):
         add("es_import")
-    if re.search(r"""(?:^|[\s;{}(])import\s+["']https?://""", text, re.I | re.M):
+    if re.search(r"""(?:^|[\s;{}(])import\s+["']https?://""", text, re.IGNORECASE | re.MULTILINE):
         add("es_import")
-    if re.search(r"""import\s*\(\s*["']https?://""", text, re.I):
+    if re.search(r"""import\s*\(\s*["']https?://""", text, re.IGNORECASE):
         add("es_import")
     if re.search(
         r"<script\b[^>]*type\s*=\s*[\"']importmap[\"'][^>]*>[\s\S]*?https?://",
         text,
-        re.I,
+        re.IGNORECASE,
     ):
         add("importmap")
-    if re.search(r"<link\b[^>]*\bhref\s*=\s*[\"']https?://", text, re.I):
+    if re.search(r"<link\b[^>]*\bhref\s*=\s*[\"']https?://", text, re.IGNORECASE):
         add("link_href")
-    if re.search(r"<iframe\b[^>]*\bsrc\s*=\s*[\"']https?://", text, re.I):
+    if re.search(r"<iframe\b[^>]*\bsrc\s*=\s*[\"']https?://", text, re.IGNORECASE):
         add("iframe_src")
-    if re.search(r"<img\b[^>]*\bsrc\s*=\s*[\"']https?://", text, re.I):
+    if re.search(r"<img\b[^>]*\bsrc\s*=\s*[\"']https?://", text, re.IGNORECASE):
         add("img_src")
-    if re.search(r"\bsrcset\s*=\s*[\"'][^\"']*https?://", text, re.I):
+    if re.search(r"\bsrcset\s*=\s*[\"'][^\"']*https?://", text, re.IGNORECASE):
         add("img_src")
     if re.search(
         r"<(?:video|audio|source|embed)\b[^>]*\bsrc\s*=\s*[\"']https?://",
         text,
-        re.I,
+        re.IGNORECASE,
     ):
         add("media_src")
-    if re.search(r"<object\b[^>]*\bdata\s*=\s*[\"']https?://", text, re.I):
+    if re.search(r"<object\b[^>]*\bdata\s*=\s*[\"']https?://", text, re.IGNORECASE):
         add("media_src")
-    if re.search(r"""\bfetch\s*\(\s*["']https?://""", text, re.I):
+    if re.search(r"""\bfetch\s*\(\s*["']https?://""", text, re.IGNORECASE):
         add("fetch")
-    if re.search(r"url\s*\(\s*['\"]?https?://", text, re.I):
+    if re.search(r"url\s*\(\s*['\"]?https?://", text, re.IGNORECASE):
         add("css_url")
     return tuple(hits)
 
@@ -331,21 +331,21 @@ def _force_interactive_csp(doc: str) -> str:
     meta = (
         f'<meta http-equiv="Content-Security-Policy" content="{HTML_INTERACTIVE_CSP}" />'
     )
-    if re.search(r"<head\b", text, re.I):
+    if re.search(r"<head\b", text, re.IGNORECASE):
         return re.sub(
             r"(<head\b[^>]*>)",
             rf"\1\n  {meta}",
             text,
             count=1,
-            flags=re.I,
+            flags=re.IGNORECASE,
         )
-    if re.search(r"<html\b", text, re.I):
+    if re.search(r"<html\b", text, re.IGNORECASE):
         return re.sub(
             r"(<html\b[^>]*>)",
             rf"\1\n<head>\n  {meta}\n</head>",
             text,
             count=1,
-            flags=re.I,
+            flags=re.IGNORECASE,
         )
     return f"<head>\n  {meta}\n</head>\n{text}"
 

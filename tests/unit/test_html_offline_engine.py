@@ -6,7 +6,7 @@ import asyncio
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -27,7 +27,7 @@ from pico_orchestrator.tools_builtin import build_default_gateway
 class _P:
     school_id = "s1"
     membership_id = "m1"
-    scopes: list[str] = ["ai:run"]
+    scopes: ClassVar[list[str]] = ["ai:run"]
 
 
 class _MemStore:
@@ -68,7 +68,9 @@ class _MemStore:
 
 
 def _csp_metas(html: str) -> list[str]:
-    return re.findall(r"<meta[^>]*Content-Security-Policy[^>]*>", html, flags=re.I)
+    return re.findall(
+        r"<meta[^>]*Content-Security-Policy[^>]*>", html, flags=re.IGNORECASE
+    )
 
 
 V1_IMPORT = """<!DOCTYPE html>
