@@ -87,7 +87,15 @@ Google Gemini generateContent
 
 **Pro 还干什么：** 你自己在 Gemini 网页 / AI Studio 里画、试模型。那条路的额度不会流进 pico.aivia.asia。
 
-**API 侧额度：** 没开 Cloud Billing = Gemini API 免费档。Pico 现网模型 `gemini-3.1-flash-image` 官方定价 **Free Tier: Not available**（[pricing](https://ai.google.dev/gemini-api/docs/pricing)）——没开 Cloud Billing 时这一路常常是 **0 张/天**，不是网页 Pro 的一天几百张。课堂要稳定出图：**每个号自己的 Cloud 项目开 Billing**，并在 AI Studio Spend 页设 **Monthly spend cap**（硬顶，到了暂停；约 10 分钟延迟可能略超）。不要只设「预算邮件」——那不会停 API。[Billing / spend caps](https://ai.google.dev/gemini-api/docs/billing)。档位和账单封顶按 **Billing 账户** 走：三号要三份额度，就三个项目、**三份 Billing**，不要把三项目挂到同一张账单上。额度按项目计，不按 key 把数。具体 RPM/RPD 只认该项目 AI Studio → Rate limits。不是再买第四份网页 Pro，也不是 cookie。
+**用量 / 速率：New API 统控，Pico 不自研限流核。** 三渠道同一组：轮询、等权、每渠道 RPM/RPD 宁低（低于 Google 免费档，避免先撞 Google 429）。Pico 只熔断。
+
+**钱：默认不开 Cloud Billing（$0）。** 业主意向：不消耗真实费用，每号停在免费档。开了 Billing 才会按张计费；要 $0 就不要点 Set up billing。
+
+**硬约束：** Pico 现网 `gemini-3.1-flash-image` 官方定价 **Free Tier: Not available**（[pricing](https://ai.google.dev/gemini-api/docs/pricing)）。不开 Billing 时这条模型常常是 **0 张**——New API 只能「慢下来、换号」，**不能变出 Google 没有的免费额度**。网页 Pro 次数也不能充进 API。
+
+**实测（每把 key，钥不进 git）：** 不开 Billing，New API 打一张 `gemini-3.1-flash-image`。200 有图 → $0 方案成立，New API 把每渠道 RPM/RPD 拧到免费档以下。429 且 `free_tier` / limit 0 → 这条模型没有免费 API，课堂要图只能退路：该项目开 Billing + AI Studio **Monthly spend cap**（硬顶，不是预算邮件）。三号要三份额度就三份 Billing，不要挂同一张账单。
+
+不是再买第四份网页 Pro，也不是 cookie。
 
 ---
 
@@ -97,7 +105,7 @@ Google 钥、New API token **禁止**进仓 / Issue / PR。只在 New API 管理
 
 1. 三个 Gemini 号，各一把 **API key**（不是网页套餐 cookie）。
 2. New API：三条 **Gemini** 渠道，一条渠道一把 key。
-3. 三条进**同一组**。策略：轮询（或等权）。每渠道单独 RPM（宁低，勿把三号合成一个大 RPM）。
+3. 三条进**同一组**。策略：轮询（或等权）。每渠道单独 RPM/RPD（由 New API 统控，宁低）。不要在 Pico 再做一套限流核。
 4. 若管理台有「失败试下一条渠道」：打开。这样一次 Pico 请求里，号 A 429 会换号 B，Pico 不必持三把 token。
 5. Pico 主机：`PICO_IMAGE_GATEWAY_URL` + **一把** 能打该组的 New API token。模型现网认 `gemini-3.1-flash-image`，走 `POST …/v1beta/models/{model}:generateContent`。
 6. **不要**把 `GEMINI_API_KEY` 当生产主路（那会从 ECS 直连 Google，风控更差）。
@@ -171,7 +179,7 @@ Pico 永远不知道某次请求打了哪一个 Google IP。出口是 New API �
 ## 8. 锁定句（业主回这一行即可）
 
 ```text
-架构锁定：三号在 New API 一组；Pico 一把 token；轮询/RPM 不进 Pico；出口以后再拆。
+架构锁定：三号在 New API 一组；Pico 一把 token；用量/速率只认 New API；默认不开 Billing；出口以后再拆。
 ```
 
 改选时只准改第 7 节备选，不准在 Pico 建 IP/cookie/Google 钥农场。
