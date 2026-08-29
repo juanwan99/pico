@@ -101,6 +101,8 @@ Google Gemini generateContent
 
 开 Billing 常见还要 **预存至少 $10**。用 spend cap 硬顶，不要只设预算邮件。Tier 1 账单封顶默认 $250/月（Billing 账户级）。
 
+**无免费 API ≠ 走登录反代。** 账户 cookie / 网页套餐反代 / New API「Gemini 网页」渠道 **不是退路**（ToS、风控、cookie 过期、Pico 法禁止自研第二图核）。正路只剩：① API key + Billing + New API 限速（课堂百张约数美元）；② 换更便宜的官方出图模型（仍付费）；③ 老师课先不出这张模型，人话失败、不编像素。禁止第四条。
+
 **实测仍建议：** 每把 key 不开 Billing 打一张。预期 429 limit 0；若偶发 200，以你的项目为准（官方不保证）。
 
 不是再买第四份网页 Pro，也不是 cookie。
