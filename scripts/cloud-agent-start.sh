@@ -33,7 +33,8 @@ ts() { $SUDO tailscale --socket="$SOCK" "$@"; }
 
 if ! ts status >/dev/null 2>&1; then
   $SUDO pkill tailscaled 2>/dev/null || true
-  $SUDO nohup tailscaled --state="$STATE" --socket="$SOCK" --port=41641 >/tmp/tailscaled.log 2>&1 &
+  # /tmp/tailscaled.log is often ubuntu-owned; sudo nohup cannot truncate it.
+  $SUDO bash -c "nohup tailscaled --state='$STATE' --socket='$SOCK' --port=41641 >/var/tmp/tailscaled.log 2>&1 &"
   for _ in $(seq 1 30); do
     ts status >/dev/null 2>&1 && break
     sleep 0.5
@@ -44,13 +45,17 @@ fi
 $SUDO tailscale --socket="$SOCK" set --operator="${USER:-ubuntu}" >/dev/null 2>&1 || true
 
 BACKEND="$(ts status --json 2>/dev/null | python3 -c 'import sys,json; print(json.load(sys.stdin).get("BackendState",""))' 2>/dev/null || true)"
-if [[ "$BACKEND" != "Running" ]]; then
-  if [[ -z "${TS_AUTHKEY:-}" ]]; then
+if [[ -z "${TS_AUTHKEY:-}" ]]; then
+  if [[ "$BACKEND" != "Running" ]]; then
     echo "[pico] BLOCKED: TS_AUTHKEY missing (BackendState=${BACKEND:-unknown})" >&2
     exit 2
   fi
+else
   HN="cursor-pico-${HOSTNAME:-agent}"
-  ts up --authkey="$TS_AUTHKEY" --hostname="$HN" --accept-routes --accept-dns
+  # Cloud Agent pods are IPv4-only. MagicDNS AAAA for controlplane kills
+  # map long-poll after sleep; connmark/nfmask is missing in this kernel.
+  ts up --reset --authkey="$TS_AUTHKEY" --hostname="$HN" \
+    --accept-routes --accept-dns=false --netfilter-mode=off
 fi
 
 if [[ -z "${PICO_PROD_SSH_PRIVATE_KEY:-}" ]]; then
@@ -70,6 +75,34 @@ fi
 printf '%s\n' "$KEY" > "${HOME}/.ssh/pico_prod_deploy"
 chmod 600 "${HOME}/.ssh/pico_prod_deploy"
 
+# Without MagicDNS, HostName must be the peer's 100.x (env 100.* is still rejected).
+SSH_HOST="$HOST_NAME"
+PEER_IP="$(
+  TS_PEER_HOST="$HOST_NAME" ts status --json 2>/dev/null | python3 -c '
+import json, os, sys
+want = os.environ.get("TS_PEER_HOST") or "aliyun-hy"
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(0)
+for peer in (data.get("Peer") or {}).values():
+    if peer.get("HostName") != want:
+        continue
+    ips = [ip for ip in (peer.get("TailscaleIPs") or []) if ":" not in ip]
+    if ips:
+        print(ips[0])
+    break
+' || true
+)"
+if [[ -n "${PEER_IP}" ]]; then
+  SSH_HOST="$PEER_IP"
+  if grep -qE '[[:space:]]aliyun-hy$' /etc/hosts 2>/dev/null; then
+    $SUDO sed -i "s/^.*[[:space:]]aliyun-hy$/${PEER_IP} aliyun-hy/" /etc/hosts
+  else
+    echo "${PEER_IP} aliyun-hy" | $SUDO tee -a /etc/hosts >/dev/null
+  fi
+fi
+
 cat > "${HOME}/.ssh/config" <<EOF
 Host *
   StrictHostKeyChecking accept-new
@@ -78,7 +111,7 @@ Host *
   ConnectTimeout 12
 
 Host ecs pico-prod aliyun-hy
-  HostName ${HOST_NAME}
+  HostName ${SSH_HOST}
   User ${USER_NAME}
 EOF
 chmod 600 "${HOME}/.ssh/config"
