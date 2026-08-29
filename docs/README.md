@@ -32,6 +32,7 @@ NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
 | 0 | **[EXPERIENCE.md](./EXPERIENCE.md)** | 经验唯一 · 按域 · 派发点名 ≤3 |
 | 0 | **[TOOLING-CATALOG.md](./TOOLING-CATALOG.md)** | 工具唯一 ID 表 |
 | — | **[ADR-OFFICE-DOC-PIPELINE.md](./ADR-OFFICE-DOC-PIPELINE.md)** | 办公文档选型（spec→渲染→检查）· 不当在飞 |
+| — | **[ADR-IMAGE-SUPPLY.md](./ADR-IMAGE-SUPPLY.md)** | 出图供应链（三 Gemini 号在 New API · Pico 熔断）· 不当在飞 |
 | — | [MEMORY-RESET.md](./MEMORY-RESET.md) | 考古错误记忆 · 不当经验真源 |
 | — | [HANDOFF-NEW-WINDOW-2026-08-23.md](./HANDOFF-NEW-WINDOW-2026-08-23.md) | **SUPERSEDED** · 不当现况 |
 | — | [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md) | 卡面冻结 · 禁改形状 |

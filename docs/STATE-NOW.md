@@ -42,7 +42,8 @@ juanwan99/oneflow: 不当真源（已 Archive）
 ## 架构法律（BINDING）
 
 **禁止自研 · 只做薄适配：** [`LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)  
-**能力加载纪律：** [`ADR-CAPABILITY-LOADING.md`](./ADR-CAPABILITY-LOADING.md)（少常驻 · Skill 先目录后全文 · 不当在飞）
+**能力加载纪律：** [`ADR-CAPABILITY-LOADING.md`](./ADR-CAPABILITY-LOADING.md)（少常驻 · Skill 先目录后全文 · 不当在飞）  
+**出图供应链：** [`ADR-IMAGE-SUPPLY.md`](./ADR-IMAGE-SUPPLY.md)（三号在 New API · Pico 熔断 · 等业主锁定；不当在飞）
 
 ## 开窗顺序
 

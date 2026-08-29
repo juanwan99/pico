@@ -2,11 +2,11 @@
 
 Owner 2026-08-27: SiliconFlow images REJECTED.
 Owner 2026-08-28: New API reverse-proxies many Gemini API keys (#752).
-Owner 2026-08-29: Gemini chain must stay up (risk + stability). Pico
-still never talks to Google when the gateway is set. Optional extra
-New API tokens (PICO_IMAGE_GATEWAY_KEYS) fail over on 429 — not a
-Google key farm. Direct Gemini / Zhipu are leftovers when unset.
-No cookie farm. No self-built image kernel.
+Owner 2026-08-29: Architecture ADR-IMAGE-SUPPLY — three Gemini accounts
+live in the New API channel group (poll / weight / RPM). Pico holds one
+New API token now. Optional PICO_IMAGE_GATEWAY_KEYS fail over on 429 —
+a fuse, not a Google key farm. Direct Gemini / Zhipu are leftovers when
+the gateway is unset. No cookie farm. No self-built image kernel.
 """
 
 from __future__ import annotations
