@@ -1,4 +1,4 @@
-"""Edu sidebar enters Pi via small hook — openai_compat.py is not edited."""
+"""Edu sidebar Pi hook. chat_completions must not locally import session_factory."""
 
 from __future__ import annotations
 
@@ -9,6 +9,31 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
+
+
+def test_chat_completions_does_not_shadow_session_factory() -> None:
+    """Edu sidebar skips the named-school block. A local import of
+    session_factory inside chat_completions makes it an unbound cell;
+    the Pi SSE path then raises NameError and the rail stays on 正在想.
+    """
+    import ast
+
+    tree = ast.parse(
+        (ROOT / "services" / "api" / "app" / "openai_compat.py").read_text(encoding="utf-8")
+    )
+    fn = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "chat_completions"
+    )
+    shadowed = [
+        child.lineno
+        for child in ast.walk(fn)
+        if isinstance(child, ast.ImportFrom)
+        and (child.module or "") == "app.db"
+        and any(alias.name == "session_factory" for alias in child.names)
+    ]
+    assert shadowed == []
 
 
 def test_app_init_does_not_import_orchestrator() -> None:

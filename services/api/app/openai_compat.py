@@ -1207,7 +1207,10 @@ async def chat_completions(
     prompt = _strip_pico_markers(raw_prompt).strip() or raw_prompt
     if not edu_sidebar:
         try:
-            from app.db import session_factory
+            # Use the module-level session_factory. A local `from app.db import
+            # session_factory` here makes it a cell of chat_completions; the
+            # nested event_stream then NameErrors on edu sidebar (this import
+            # is skipped) when the Pi path calls session_factory().
             from app.edu_school import excerpts_for_conversation, inject_named_school_materials
 
             factory = session_factory()
