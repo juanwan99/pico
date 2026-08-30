@@ -674,4 +674,32 @@ describe('Pico proxy routes', () => {
       expect.objectContaining({ method: 'GET' }),
     );
   });
+
+  it('forbids teacher role from gateway account soft actions', async () => {
+    global.__PICO_USER = { id: 'member-123', role: 'USER' };
+    const response = await request(app).post('/api/pico/v1/admin/gateway/accounts/9/refresh');
+    expect(response.status).toBe(403);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('proxies allowlisted soft actions for ADMIN and rejects unknown verbs', async () => {
+    global.__PICO_USER = { id: 'admin-1', role: 'ADMIN' };
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      headers: { get: () => 'application/json' },
+      text: async () => JSON.stringify({ ok: true, message: '已交给上游。' }),
+    });
+    const ok = await request(app).post('/api/pico/v1/admin/gateway/accounts/9/refresh');
+    expect(ok.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/admin/gateway/accounts/9/refresh',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const badVerb = await request(app).post(
+      '/api/pico/v1/admin/gateway/accounts/9/apply-oauth-credentials',
+    );
+    expect(badVerb.status).toBe(400);
+    const badId = await request(app).post('/api/pico/v1/admin/gateway/accounts/0/refresh');
+    expect(badId.status).toBe(400);
+  });
 });

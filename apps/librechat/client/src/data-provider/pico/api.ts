@@ -158,6 +158,18 @@ export async function picoAuthedGet(url: string): Promise<Response> {
   });
 }
 
+export async function picoAuthedPost(url: string, body?: unknown): Promise<Response> {
+  return fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      ...authHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api/pico${path}`, {
     credentials: 'include',

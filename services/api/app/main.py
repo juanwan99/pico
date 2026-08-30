@@ -46,7 +46,7 @@ from app.edu_files import router as edu_files_router
 from app.edu_kb_ingest import router as edu_kb_ingest_router
 from app.edu_school import router as edu_school_router
 from app.edu_sso import router as edu_sso_router
-from app.gateway_status import gateway_status
+from app.gateway_status import account_soft_action, gateway_status
 from app.html_pages import router as html_pages_router
 from app.kb_rebuild import rebuild_materials
 from app.my_files import router as my_files_router
@@ -286,6 +286,18 @@ async def admin_gateway(session: AsyncSession = Depends(get_session)) -> dict:
             "kinds": [],
         }
     return body
+
+
+@app.post("/v1/admin/gateway/accounts/{account_id}/{action}")
+async def admin_gateway_account_action(account_id: int, action: str):
+    """Soft restore only. Hard re-login stays on the Sub2API tailnet page."""
+    result = account_soft_action(account_id, action)
+    if not result.get("ok"):
+        code = int(result.get("http") or 502)
+        if code < 400:
+            code = 502
+        return JSONResponse(status_code=code, content=result)
+    return result
 
 
 @app.get("/v1/meta/version")
