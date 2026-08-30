@@ -1,9 +1,10 @@
-import { formatPointsLabel } from '~/hooks/Pico/formatPointsLabel';
+import { formatComposerQuote } from '~/hooks/Pico/formatPointsLabel';
 import { usePointsMeter } from '~/hooks/Pico/usePointsMeter';
 
+/** Live 预计 above the composer for the in-flight turn only. */
 export default function PointsBar() {
-  const { phase, points } = usePointsMeter();
-  const label = formatPointsLabel(phase, points);
+  const { composerLive, points } = usePointsMeter();
+  const label = formatComposerQuote(composerLive, points);
   if (!label) {
     return null;
   }

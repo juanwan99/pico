@@ -3,6 +3,7 @@ import type { TMessageProps } from '~/common';
 import { useMessageProcess, useMemoizedChatContext } from '~/hooks';
 import { areMessageRowPropsEqual } from '~/utils';
 import MessageRender from './ui/MessageRender';
+import TurnPointsFooter from '~/components/Chat/TurnPointsFooter';
 
 const MessageContainer = React.memo(function MessageContainer({
   handleScroll,
@@ -37,6 +38,10 @@ function Message(props: TMessageProps) {
     <MessageContainer handleScroll={handleScroll}>
       <div className="m-auto justify-center p-4 py-2 md:gap-6">
         <MessageRender {...props} isSubmitting={effectiveIsSubmitting} chatContext={chatContext} />
+        <TurnPointsFooter
+          messageId={message.messageId}
+          isCreatedByUser={message.isCreatedByUser}
+        />
       </div>
     </MessageContainer>
   );
