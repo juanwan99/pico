@@ -18,7 +18,7 @@ CLAIM-WB: NO
 | `pico_orchestrator/true_pi/client.py` | RPC JSONL 客户端 |
 | `pico_orchestrator/true_pi/tool_server.py` | 127.0.0.1 工具回调服 |
 | `pico_orchestrator/true_pi/events.py` | Pi 事件 → Pico ledger（含 compaction.*） |
-| `pico_orchestrator/true_pi/runtime.py` | `run_true_pi_agent` + 门闪 + 最小 history |
+| `pico_orchestrator/true_pi/runtime.py` | `run_true_pi_agent` + 门闩 + 最小 history |
 | `pico_orchestrator/true_pi/shadow.py` | 双跑 + diff 报告 |
 | `services/true_pi_bridge/pico-gateway-tools.ts` | Pi extension：注册 gateway 工具（含 #507 web_search/web_fetch） |
 | `docs/OPS-TRUE-PI-ROLLBACK.md` | 部署 / 回滚一页 |
@@ -59,7 +59,7 @@ v6（#703 T-UNMASK-PI）：`prompt()` 可带 `images[]`；`models.json` 在 visi
 
 - host shell / bash / 任意文件系统
 - 未登记 MCP
-- delivery_policy 全文复刻（只复用现有 `count_write_tool_successes` / min 门闪）
+- delivery_policy 全文复刻（只复用现有 `count_write_tool_successes` / min 门闩）
 - 第二业务账本 / 第二 OS
 - 无 live 冒烟强制切主
 - 密钥写入日志 / Issue
