@@ -4,7 +4,7 @@
 DOC: docs/OPS-TRUE-PI-ROLLBACK.md
 DATE: 2026-08-10
 Issue: #433 · #431 · #435 · #436
-钉版: @mariozechner/pi-coding-agent@0.73.1
+钉版: @earendil-works/pi-coding-agent@0.84.4
 CLAIM-WB: NO
 ```
 
@@ -43,7 +43,7 @@ CLAIM-WB: NO
 ### 生产 compose（host）
 
 - `docker-compose.host.yml` → **`Dockerfile.pico-api.true-pi`**
-- 钉版：`@mariozechner/pi-coding-agent@0.73.1`（Node ≥ 20，镜像装 22）
+- 钉版：`@earendil-works/pi-coding-agent@0.84.4`（Node ≥ 20，镜像装 22）
 - `scripts/prod-update.sh` 部署后校验：`health.true_pi_binary_available=true`（失败 exit 8）
 
 ### Lean 镜像
@@ -60,7 +60,7 @@ true_pi_binary_available: true|false
 true_pi_default_enabled: true|false
 true_pi_hosted_loop_forced: true|false
 true_pi_phase: p2-default | hosted-rollback | p2-canary | p2-bypass | p1-shadow | idle
-true_pi_package_pin: @mariozechner/pi-coding-agent@0.73.1
+true_pi_package_pin: @earendil-works/pi-coding-agent@0.84.4
 ```
 
 ---
@@ -87,7 +87,7 @@ curl -sf http://127.0.0.1:18765/health | python3 -c \
 # 恢复真核：删 .env 中 PICO_HOSTED_LOOP 行 → 再 recreate pico-api
 ```
 
-**禁止：** 为回滚删除 `pi_runtime.py`；为刷绿关闭落盘门闩；用关 `DEFAULT` 代替 `HOSTED_LOOP` 当唯一文档路径（可关，但事故首选 HOSTED）。
+**禁止：** 为回滚删除 `pi_runtime.py`；为刷绿关闭落盘门闪；用关 `DEFAULT` 代替 `HOSTED_LOOP` 当唯一文档路径（可关，但事故首选 HOSTED）。
 
 ---
 

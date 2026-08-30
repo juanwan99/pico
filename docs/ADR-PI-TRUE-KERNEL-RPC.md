@@ -8,7 +8,7 @@ STATUS: Accepted
 Issue: #431 P1 · #433 P2 · #435 CUTOVER · #436 HYGIENE
 调查: docs/INVESTIGATE-PI-TRUE-KERNEL-2026-08-10.md · #430（superseded for phase plan）
 计划: docs/PLAN-PI-TRUE-KERNEL-2PHASE.md（superseded · 阶段完成）
-钉版: @mariozechner/pi-coding-agent@0.73.1
+钉版: @earendil-works/pi-coding-agent@0.84.4
 CLAIM-WB: NO
 ```
 
@@ -31,7 +31,7 @@ CLAIM-WB: NO
 
 1. 调查结论：真 Pi 是 TS harness；非 Node 集成官方路径即 **RPC**。
 2. RPC 进程可监督、可超时杀进程组、session 目录可隔离。
-3. 工具回调留在 Python gateway → 账本/门闩/租户隔离不搬迁。
+3. 工具回调留在 Python gateway → 账本/门闪/租户隔离不搬迁。
 4. 桥保持薄：进程 + JSONL + 白名单工具回调 + 事件映射；不做第二 OS。
 5. #507：`web_search` 是 DeepSeek Responses 官方工具的薄转发，不是自研搜索核；`web_fetch` 是网关 SSRF 护栏下的读页。
 
