@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Live smoke for true Pi RPC (S1 L1–L5). No secrets printed.
 
 Usage:
