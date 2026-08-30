@@ -13,11 +13,13 @@ PARENT: docs/USAGE-LEDGER.md
 
 | Pico (this contract) | edu-core (not this repo) |
 |----------------------|--------------------------|
-| Unique usage meter: who / school / kind / model / tokens | Points, wallets, price, debit, invoices |
+| Unique usage meter: who / school / kind / model / tokens · derived `points` | Wallet, debit, invoices (same `points` number, no second conversion) |
 | Honest `tokens_unknown` / `estimated` | Rate table, 点, SKU |
 | Pull API below | Pull on a schedule; never a second AI run ledger |
 
 Pico **must not** grow price/currency/wallet columns. edu **must not** persist a parallel Task/Run tree for product AI.
+
+`points` on each event is Pico's already-converted meter (three decimals). edu debits that number as-is. **Do not multiply again.** null `points` is unknown, not zero. Conversion lives only in Pico (`points_meter.py`).
 
 ## Event (one row)
 
@@ -31,7 +33,8 @@ Same shape as `GET /v1/usage/events` plus `schema: pico.usage.v1`.
 | `tokens_unknown` | Provider did not return usage (agent/Pi often). **Do not treat as zero.** |
 | `estimated` | Always `false` after scrub. Pico no longer writes char/4. **Do not bill.** |
 | `extra.ui_model` | Lane alias `pico-fast` / `pico-deep` when applicable |
-| `extra.cached_tokens` / `extra.reasoning_tokens` | Optional; edu may weight |
+| `extra.cached_tokens` / `extra.reasoning_tokens` | Optional; already folded into Pico `points` if billed as tokens |
+| `points` | String `N.NNN` or `null`. **edu debits this as-is.** Do not rescale. |
 | `billing` | Always `false` |
 
 No `price` / `currency` / `cost` / `charge` / `amount`.
@@ -49,4 +52,4 @@ Order: `created_at ASC, id ASC`. `next` is `{ after_id, since }` or `null`.
 
 ## Phase 3
 
-edu implements the client. Pico does not push, does not convert 点, does not write edu-cloud.
+edu implements the wallet client. Pico does not push, does not store a balance, does not write edu-cloud. Pico attaches derived `points`; edu must not keep a second conversion.

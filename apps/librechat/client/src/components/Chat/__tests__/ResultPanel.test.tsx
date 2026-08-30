@@ -65,17 +65,18 @@ describe('ResultPanel token usage', () => {
     expect(formatRunTokenUsage(run({ skill_snapshot: { id: 'analysis' } }))).toBeNull();
   });
 
-  it('shows a concise usage line in the result overview', () => {
+  it('does not show a parallel token billing line for teachers', () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel run={run({ total_tokens: 42 })} runStatusLabel="已完成" />
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('result-token-usage')).toHaveTextContent('用量（估算） · 42 tokens');
+    expect(screen.queryByTestId('result-token-usage')).not.toBeInTheDocument();
+    expect(screen.queryByText(/tokens/i)).not.toBeInTheDocument();
   });
 
-  it('labels estimated token usage for teachers', () => {
+  it('does not surface estimated token counts on the result overview', () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
@@ -85,7 +86,7 @@ describe('ResultPanel token usage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('result-token-usage')).toHaveTextContent('用量（估算） · 99 tokens');
+    expect(screen.queryByTestId('result-token-usage')).not.toBeInTheDocument();
   });
 
   it('shows the failed user message consistently in the overview and timeline', () => {

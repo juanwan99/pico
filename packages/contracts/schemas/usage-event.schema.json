@@ -33,6 +33,11 @@
     "source": { "type": "string" },
     "extra": { "type": "object" },
     "created_at": { "type": ["string", "null"] },
+    "points": {
+      "description": "Derived meter units already converted by Pico. edu must debit this number as-is and must not rescale. null = unknown, not zero.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9]+\\.[0-9]{3}$"
+    },
     "billing": { "type": "boolean", "const": false },
     "schema": { "type": "string", "const": "pico.usage.v1" }
   }

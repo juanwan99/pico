@@ -562,6 +562,42 @@ async def usage_event_detail(
     return {"billing": False, "event": usage_event_dict(row)}
 
 
+class PointsQuoteRequest(BaseModel):
+    input_chars: int = Field(default=0, ge=0, le=200_000)
+
+
+@app.post("/v1/usage/points/quote")
+async def usage_points_quote(
+    body: PointsQuoteRequest,
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> dict:
+    from app.points_meter import quote_points_from_input_len
+
+    _ = principal
+    return {
+        "phase": "quote",
+        "points": quote_points_from_input_len(body.input_chars),
+        "wallet": False,
+    }
+
+
+@app.get("/v1/usage/points")
+async def usage_points_settle(
+    run_id: str,
+    principal: Principal = Depends(require_scope("ai:read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app.usage_ledger import settle_points_for_run
+
+    rid = (run_id or "").strip()
+    if not rid:
+        raise HTTPException(status_code=400, detail="run_id required")
+    out = await settle_points_for_run(session, principal, rid)
+    if out is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    return out
+
+
 @app.get("/v1/usage")
 async def my_usage_page(
     principal: Principal = Depends(require_scope("ai:read")),

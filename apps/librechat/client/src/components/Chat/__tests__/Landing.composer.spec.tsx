@@ -40,6 +40,11 @@ jest.mock('~/components/Chat/ArchiveFolderBar', () => ({
   default: () => null,
 }));
 
+jest.mock('~/components/Chat/PointsBar', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 jest.mock('~/Providers', () => ({
   useOptionalChatFormContext: () => ({
     setValue: jest.fn(),

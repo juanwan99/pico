@@ -31,10 +31,12 @@ import TaskRunBar from './TaskRunBar';
 import ChangeConfirmBanner from './ChangeConfirmBanner';
 import Header from './Header';
 import Footer from './Footer';
+import PointsBar from './PointsBar';
 import { cn } from '~/utils';
 import { isUnnamedConvoTitle } from '~/utils/picoConvoTitle';
 import store from '~/store';
 import { usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
+import { PointsMeterProvider } from '~/hooks/Pico/usePointsMeter';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 import {
   latestUserOpenOfficeIntent,
@@ -189,6 +191,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     <ChatFormProvider {...methods}>
       <ChatContext.Provider value={chatHelpers}>
         <AddedChatContext.Provider value={addedChatHelpers}>
+          <PointsMeterProvider runId={ledger.run?.id} runStatus={ledger.run?.status}>
           <Presentation>
             <div className="relative flex h-full w-full flex-col">
               {!isLandingPage && (
@@ -267,6 +270,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                       <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">
                         <SchoolMaterialsBar conversationId={conversationId} />
                         <ArchiveFolderBar conversationId={conversationId} />
+                        <PointsBar />
                         <ChatForm index={index} placeholder={chatFormPlaceholder} />
                       </div>
                     ) : null}
@@ -322,6 +326,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
               </div>
             </div>
           </Presentation>
+          </PointsMeterProvider>
         </AddedChatContext.Provider>
       </ChatContext.Provider>
     </ChatFormProvider>

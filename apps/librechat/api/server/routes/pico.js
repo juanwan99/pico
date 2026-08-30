@@ -180,6 +180,12 @@ async function proxy(req, res, path, options = {}) {
         out.set('conversation_id', cid);
       }
     }
+    if (sp.has('run_id')) {
+      const runId = sp.get('run_id') || '';
+      if (ID_RE.test(runId)) {
+        out.set('run_id', runId);
+      }
+    }
     if (sp.has('task_id')) {
       const taskId = sp.get('task_id') || '';
       if (ID_RE.test(taskId)) {
@@ -349,6 +355,8 @@ router.get('/v1/artifacts/:artifactId/content', (req, res) => {
   }
 });
 router.get('/v1/workspaces', (req, res) => proxy(req, res, '/v1/workspaces'));
+router.post('/v1/usage/points/quote', (req, res) => proxy(req, res, '/v1/usage/points/quote'));
+router.get('/v1/usage/points', (req, res) => proxy(req, res, '/v1/usage/points'));
 router.get('/v1/skills/catalog', (req, res) => proxy(req, res, '/v1/skills/catalog'));
 router.post('/v1/workspaces', (req, res) => proxy(req, res, '/v1/workspaces'));
 router.delete('/v1/workspaces/:id', (req, res) => {

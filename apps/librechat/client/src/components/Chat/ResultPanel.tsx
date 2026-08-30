@@ -303,7 +303,6 @@ export default function ResultPanel({
   const paneWidthRef = useRef(paneWidth);
   paneWidthRef.current = paneWidth;
   const paneZoom = usePaneZoom();
-  const tokenUsageLabel = formatRunTokenUsage(run);
   const ledgerSandbox = useMemo(() => collectPicoSandboxSession(runEvents), [runEvents]);
   const officeBox = useMemo(() => collectPicoOfficeContentBox(runEvents), [runEvents]);
   const sandboxSession = localSandbox || ledgerSandbox;
@@ -1023,7 +1022,7 @@ export default function ResultPanel({
         <>
         {!sandboxSession && (
           <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
-            {taskTitle || runStatusLabel || processHint || tokenUsageLabel ? (
+            {taskTitle || runStatusLabel || processHint ? (
               <div
                 className={cn(
                   'mb-3 rounded-lg px-3 py-2',
@@ -1062,14 +1061,6 @@ export default function ResultPanel({
                         data-testid="result-process-hint"
                       >
                         {processHint}
-                      </p>
-                    ) : null}
-                    {tokenUsageLabel ? (
-                      <p
-                        className="mt-0.5 truncate text-[11px] text-[#6b6b6b] dark:text-text-secondary"
-                        data-testid="result-token-usage"
-                      >
-                        {tokenUsageLabel}
                       </p>
                     ) : null}
                   </div>
