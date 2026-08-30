@@ -9,8 +9,8 @@
  * FORBIDDEN: bash, arbitrary FS, MCP, delivery_policy logic.
  */
 
-import { Type } from "@mariozechner/pi-ai";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Type } from "@earendil-works/pi-ai";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const TOOL_URL = (process.env.PICO_TRUE_PI_TOOL_URL || "").replace(/\/$/, "");
 const TOOL_TOKEN = process.env.PICO_TRUE_PI_TOOL_TOKEN || "";
