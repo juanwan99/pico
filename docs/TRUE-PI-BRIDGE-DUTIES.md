@@ -18,7 +18,7 @@ CLAIM-WB: NO
 | `pico_orchestrator/true_pi/client.py` | RPC JSONL 客户端 |
 | `pico_orchestrator/true_pi/tool_server.py` | 127.0.0.1 工具回调服 |
 | `pico_orchestrator/true_pi/events.py` | Pi 事件 → Pico ledger（含 compaction.*） |
-| `pico_orchestrator/true_pi/runtime.py` | `run_true_pi_agent` + 门闩 + 最小 history |
+| `pico_orchestrator/true_pi/runtime.py` | `run_true_pi_agent` + 门闪 + 最小 history |
 | `pico_orchestrator/true_pi/shadow.py` | 双跑 + diff 报告 |
 | `services/true_pi_bridge/pico-gateway-tools.ts` | Pi extension：注册 gateway 工具（含 #507 web_search/web_fetch） |
 | `docs/OPS-TRUE-PI-ROLLBACK.md` | 部署 / 回滚一页 |
@@ -50,7 +50,7 @@ web_fetch
 
 v1 曾增加：skill_instruction 注入、近 N 条 user/assistant history 文本、skill_snapshot 工具交并集。  
 v2（#507）：DeepSeek 官方 `web_search` 转发 + 网关 `web_fetch`（SSRF 拒绝内网/metadata/管理域）。仍禁 bash / 任意 FS / 浏览器代登。  
-v3（#608）：改已有 `.docx`/`.pptx` 走 PyPI `python-docx` / `python-pptx` 薄适配（禁止 `generate_*` 另造冒充改原件）。出图曾接 SiliconFlow（**业主 2026-08-27 已否决 · 废路径**；现只待智谱 glm-image）。侧栏仍空工具。  
+v3（#608）：改已有 `.docx`/`.pptx` 走 PyPI `python-docx` / `python-pptx` 薄适配（禁止 `generate_*` 另造冒充改原件）。出图曾接 SiliconFlow（**业主 2026-08-27 已否决 · 废路径**；现只待智谱 glm-image）。侧栏进 Pi；工具以请求天花板为准（默认空，不挂办公 CORE）；禁 force_agent、禁落 Artifact。  
 v4（#646 T-GROK-PATH）：禁止把 Skill / Landing / 历史焊进 `prompt()`。短纪律进 Pi `SYSTEM.md`（通用，无场景 if）。`prompt()` 只留老师原文。工具白名单仍挂载，模型决定调不调。跑后门只认「声称交件却没落盘」，不认正文词表。  
 v5（选型 · 未开工）：办公文档核见 [`docs/ADR-OFFICE-DOC-PIPELINE.md`](./ADR-OFFICE-DOC-PIPELINE.md)。后期只加 inspect/render/edit/verify 少动词；禁桥内 bash、禁模型即兴 python-docx、禁 MCP 办公室栈。  
 v6（#703 T-UNMASK-PI）：`prompt()` 可带 `images[]`；`models.json` 在 vision 模型上 `input: ["text","image"]`。仍禁 host bash / 任意 FS。spec 不是办公天花板。
@@ -59,7 +59,7 @@ v6（#703 T-UNMASK-PI）：`prompt()` 可带 `images[]`；`models.json` 在 visi
 
 - host shell / bash / 任意文件系统
 - 未登记 MCP
-- delivery_policy 全文复刻（只复用现有 `count_write_tool_successes` / min 门闩）
+- delivery_policy 全文复刻（只复用现有 `count_write_tool_successes` / min 门闪）
 - 第二业务账本 / 第二 OS
 - 无 live 冒烟强制切主
 - 密钥写入日志 / Issue
