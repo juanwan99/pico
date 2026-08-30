@@ -36,8 +36,18 @@ describe('GatewayAdminPage', () => {
       json: async () => ({
         ok: true,
         sub2api_is_frontend: false,
-        new_api: { bind: '127.0.0.1:3000', role: 'reverse_proxy', ok: true, http: 200 },
-        sub2api: { bind: '127.0.0.1:8081', role: 'account_polling_pool', ok: true, http: 200 },
+        pico_talks_to: 'new_api',
+        brain: { via: 'new_api', model: 'gpt-5.6-sol' },
+        new_api: { bind: '0.0.0.0:3000', role: 'pipe', ok: true, http: 200, models: ['gpt-5.6-sol'] },
+        sub2api: {
+          bind: '127.0.0.1:8081',
+          role: 'account_login_state',
+          ok: true,
+          http: 200,
+          needs_auth: true,
+          tailnet_ui: 'https://aliyun-hy.tail217880.ts.net',
+        },
+        usage: { ok: true, billing: false, day: '2026-08-30', kinds: [], note: '老师用量。' },
       }),
     });
   });
@@ -50,9 +60,12 @@ describe('GatewayAdminPage', () => {
     );
     expect(screen.getByRole('heading', { name: '网关管理' })).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText('New API 反代')).toBeInTheDocument();
+      expect(screen.getByText(/打开尾网账号台/)).toBeInTheDocument();
     });
-    expect(screen.getByText('Sub2API 账号池')).toBeInTheDocument();
+    expect(screen.getByText('管道 · New API')).toBeInTheDocument();
+    expect(screen.getByText('账号 · Sub2API 登录态')).toBeInTheDocument();
+    expect(screen.getByText('用户消耗 · Pico usage_events')).toBeInTheDocument();
+    expect(screen.getByText(/聊天脑已走 New API/)).toBeInTheDocument();
     expect(screen.queryByTestId('open-sub2api-admin')).not.toBeInTheDocument();
     expect(screen.queryByText(/打开账号管理/)).not.toBeInTheDocument();
   });
@@ -64,7 +77,7 @@ describe('GatewayAdminPage', () => {
         <GatewayAdminPage />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/只给管理者/)).toBeInTheDocument();
+    expect(screen.getByText(/只给所有者/)).toBeInTheDocument();
     expect(picoAuthedGet).not.toHaveBeenCalled();
   });
 });

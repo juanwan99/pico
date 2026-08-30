@@ -269,9 +269,23 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
 
 
 @app.get("/v1/admin/gateway")
-async def admin_gateway() -> dict:
-    """Manager snapshot of New API + Sub2API. Not a product frontend."""
-    return gateway_status()
+async def admin_gateway(session: AsyncSession = Depends(get_session)) -> dict:
+    """Manager snapshot of New API + Sub2API + Pico usage. Not a product frontend."""
+    body = gateway_status()
+    try:
+        from sqlalchemy.exc import SQLAlchemyError
+
+        from app.usage_ledger import owner_usage_today
+
+        body["usage"] = await owner_usage_today(session)
+    except (OSError, RuntimeError, ValueError, SQLAlchemyError):
+        body["usage"] = {
+            "ok": False,
+            "billing": False,
+            "source": "pico_usage_events",
+            "kinds": [],
+        }
+    return body
 
 
 @app.get("/v1/meta/version")

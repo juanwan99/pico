@@ -1,7 +1,8 @@
 # Production layout used on Aliyun light server (host network).
 # Public entry: Nginx 443 → 127.0.0.1:18088 only.
 # Shared ECS: LibreChat must bind 18088 — never 8080 (edu-core-bff on same host).
-# Sub2API is New API's loopback account pool, not a Pico frontend.
+# Sub2API is account login-state on loopback / tailnet, not a Pico frontend.
+# New API is the inference pipe (channels · keys · billing). Pico talks only to New API.
 #
 # Demo seeding is off by default. Enable only for an explicitly approved demo:
 #   PICO_DEMO_SEED=1 PICO_DEMO_EMAIL=... PICO_DEMO_PASSWORD=...
@@ -73,8 +74,8 @@ services:
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}"
       DEEPSEEK_MODEL: "${DEEPSEEK_MODEL:-deepseek-v4-flash}"
-      # Brain slot: DeepSeek Completions (default) or AIProxy OpenAI
-      # official client URL https://host/openai (Responses, no /v1).
+      # Brain slot: New API loopback (`http://127.0.0.1:3000/v1` + gpt-*).
+      # Upstream of that channel is AIProxy Responses (`…/openai/responses`, no /v1).
       PICO_KIMI_WORKDIR_BASE: /app/data/kimi-work
       PICO_PI_WORKDIR_BASE: /app/data/pi-work
       # True-Pi cutover (env_file wins when set; listed for ops visibility)

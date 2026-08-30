@@ -514,6 +514,41 @@ def _day_bounds(day: str) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=1)
 
 
+async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
+    """School-blind today rollup for the owner gateway page. No membership ids."""
+    today = datetime.now(UTC).date().isoformat()
+    start, end = _day_bounds(today)
+    q = (
+        select(
+            UsageEventRow.kind,
+            func.count().label("event_count"),
+            func.sum(UsageEventRow.total_tokens).label("total_tokens"),
+            func.sum(UsageEventRow.tokens_unknown).label("unknown_count"),
+        )
+        .where(UsageEventRow.created_at >= start, UsageEventRow.created_at < end)
+        .group_by(UsageEventRow.kind)
+        .order_by(UsageEventRow.kind)
+    )
+    rows = (await session.execute(q)).all()
+    kinds = [
+        {
+            "kind": r.kind,
+            "event_count": int(r.event_count or 0),
+            "total_tokens": int(r.total_tokens) if r.total_tokens is not None else None,
+            "unknown_count": int(r.unknown_count or 0),
+        }
+        for r in rows
+    ]
+    return {
+        "ok": True,
+        "billing": False,
+        "source": "pico_usage_events",
+        "day": today,
+        "kinds": kinds,
+        "note": "老师用量。管道成本在 New API。钱在 edu-core。",
+    }
+
+
 async def list_usage_events(
     session: AsyncSession,
     principal: Principal,
