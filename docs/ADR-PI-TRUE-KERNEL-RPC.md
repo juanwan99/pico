@@ -31,7 +31,7 @@ CLAIM-WB: NO
 
 1. 调查结论：真 Pi 是 TS harness；非 Node 集成官方路径即 **RPC**。
 2. RPC 进程可监督、可超时杀进程组、session 目录可隔离。
-3. 工具回调留在 Python gateway → 账本/门闸/租户隔离不搬迁。
+3. 工具回调留在 Python gateway → 账本/门闩/租户隔离不搬迁。
 4. 桥保持薄：进程 + JSONL + 白名单工具回调 + 事件映射；不做第二 OS。
 5. #507：`web_search` 是 DeepSeek Responses 官方工具的薄转发，不是自研搜索核；`web_fetch` 是网关 SSRF 护栏下的读页。
 
