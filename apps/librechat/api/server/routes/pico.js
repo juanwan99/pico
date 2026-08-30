@@ -285,12 +285,35 @@ router.get('/health', async (req, res) => {
   }
 });
 
-router.get('/v1/admin/gateway', (req, res) => {
+function requireGatewayAdmin(req, res) {
   const role = String(req.user?.role || '').toUpperCase();
   if (role !== 'ADMIN') {
-    return res.status(403).json({ error: 'forbidden', message: '管理者页，老师账号不可见。' });
+    res.status(403).json({ error: 'forbidden', message: '管理者页，老师账号不可见。' });
+    return false;
+  }
+  return true;
+}
+
+router.get('/v1/admin/gateway', (req, res) => {
+  if (!requireGatewayAdmin(req, res)) {
+    return;
   }
   return proxy(req, res, '/v1/admin/gateway');
+});
+
+router.post('/v1/admin/gateway/accounts/:id/:action', (req, res) => {
+  if (!requireGatewayAdmin(req, res)) {
+    return;
+  }
+  const id = String(req.params.id || '');
+  const action = String(req.params.action || '');
+  if (!/^[1-9][0-9]{0,11}$/.test(id)) {
+    return res.status(400).json({ error: 'bad_request', message: '账号不对。' });
+  }
+  if (!/^(refresh|test|clear-error|recover-state)$/.test(action)) {
+    return res.status(400).json({ error: 'bad_request', message: '没有这个动作。' });
+  }
+  return proxy(req, res, `/v1/admin/gateway/accounts/${id}/${action}`);
 });
 
 router.get('/v1/tasks', (req, res) => proxy(req, res, '/v1/tasks'));

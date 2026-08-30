@@ -2,6 +2,7 @@ import { getTokenHeader } from 'librechat-data-provider';
 import {
   getPicoArtifactContent,
   picoAuthedGet,
+  picoAuthedPost,
   humanizeRunError,
   labelForLatestRun,
   searchEduSchoolMaterials,
@@ -61,6 +62,20 @@ describe('getPicoArtifactContent', () => {
       headers: expect.objectContaining({
         Authorization: 'Bearer browser-jwt',
       }),
+    });
+  });
+
+  it('POSTs JSON with the same Authorization header', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+    await picoAuthedPost('/api/pico/v1/admin/gateway/accounts/9/refresh');
+    expect(fetchMock).toHaveBeenCalledWith('/api/pico/v1/admin/gateway/accounts/9/refresh', {
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({
+        Authorization: 'Bearer browser-jwt',
+        'Content-Type': 'application/json',
+      }),
+      body: undefined,
     });
   });
 });
