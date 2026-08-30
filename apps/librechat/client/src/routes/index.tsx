@@ -84,6 +84,11 @@ const loadMoreHub = () =>
     Component: m.default,
   }));
 
+const loadAccountsHub = () =>
+  import('~/components/Workbench/AccountsHubPage').then((m) => ({
+    Component: m.default,
+  }));
+
 const loadFilesHub = () =>
   import('~/components/Workbench/FilesHubPage').then((m) => ({
     Component: m.default,
@@ -274,6 +279,10 @@ export const router = createBrowserRouter(
             {
               path: 'more',
               lazy: loadMoreHub,
+            },
+            {
+              path: 'accounts',
+              lazy: loadAccountsHub,
             },
             {
               path: 'more/files',

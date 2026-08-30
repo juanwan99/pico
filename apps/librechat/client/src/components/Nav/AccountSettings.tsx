@@ -1,5 +1,6 @@
 import { useState, memo, useRef } from 'react';
 import { useSetRecoilState } from 'recoil';
+import { useNavigate } from 'react-router-dom';
 import * as Menu from '@ariakit/react/menu';
 import { GearIcon, DropdownMenuSeparator } from '@librechat/client';
 import {
@@ -8,6 +9,7 @@ import {
   CircleHelp,
   FileText,
   Keyboard,
+  KeyRound,
   LifeBuoy,
   LogOut,
   Scale,
@@ -95,6 +97,7 @@ function HelpSubmenu({
 
 function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
   const localize = useLocalize();
+  const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuthContext();
   const { data: startupConfig } = useGetStartupConfig();
   const balanceQuery = useGetUserBalance({
@@ -177,6 +180,14 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
         >
           <GearIcon className="icon-md" aria-hidden="true" />
           {localize('com_nav_settings')}
+        </Menu.MenuItem>
+        <Menu.MenuItem
+          onClick={() => navigate('/accounts')}
+          className="select-item text-sm"
+          data-testid="nav-sub2api-accounts"
+        >
+          <KeyRound className="icon-md" aria-hidden="true" />
+          账号管理
         </Menu.MenuItem>
         <DropdownMenuSeparator />
         <Menu.MenuItem onClick={() => logout()} className="select-item text-sm">

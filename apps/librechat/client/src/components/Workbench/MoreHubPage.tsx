@@ -37,6 +37,13 @@ const ITEMS: Array<{
     icon: 'blocks',
     href: '/capability',
   },
+  {
+    id: 'accounts',
+    label: '账号管理',
+    desc: 'Sub2API 登录 · 上游订阅账号',
+    icon: 'user',
+    href: '/accounts',
+  },
 ];
 
 export default function MoreHubPage() {

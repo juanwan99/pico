@@ -1,6 +1,7 @@
 # Production layout used on Aliyun light server (host network).
 # Public entry: Nginx 443 → 127.0.0.1:18088 only.
 # Shared ECS: LibreChat must bind 18088 — never 8080 (edu-core-bff on same host).
+# Sub2API admin door: pico.aivia.asia cookie-switch → 127.0.0.1:8081 (not this compose).
 #
 # Demo seeding is off by default. Enable only for an explicitly approved demo:
 #   PICO_DEMO_SEED=1 PICO_DEMO_EMAIL=... PICO_DEMO_PASSWORD=...
