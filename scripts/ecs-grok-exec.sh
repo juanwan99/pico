@@ -31,6 +31,9 @@ Usage: bash ecs-grok-exec.sh --session NAME --prompt FILE [options]
   --no-worktree      do not create a git worktree
   --max-turns N
   --continue         grok --continue in --cwd
+
+Live tmux session: refuse (exit 2 live=true). Do not kill-session.
+Dead pane only: kill leftover session then start.
 EOF
 }
 
@@ -155,16 +158,15 @@ exec grok -p "\$(cat $(printf '%q' "$abs_prompt"))" \\
 EOF
 chmod +x "$RUN"
 
-echo "ok=true"
-echo "runtime=ecs-grok"
-echo "session=${SESSION}"
-echo "cwd=${abs_cwd}"
-echo "log=${LOG}"
-echo "detached=$([[ "$FOREGROUND" -eq 1 ]] && echo false || echo true)"
-echo "grok=$(command -v grok)"
-echo "max_turns=${MAX_TURNS}"
-
 if [[ "$FOREGROUND" -eq 1 ]]; then
+  echo "ok=true"
+  echo "runtime=ecs-grok"
+  echo "session=${SESSION}"
+  echo "cwd=${abs_cwd}"
+  echo "log=${LOG}"
+  echo "detached=false"
+  echo "grok=$(command -v grok)"
+  echo "max_turns=${MAX_TURNS}"
   bash "$RUN" 2>&1 | tee "$LOG"
   exit "${PIPESTATUS[0]}"
 fi
@@ -174,9 +176,29 @@ if ! command -v tmux >/dev/null 2>&1; then
   exit 2
 fi
 
-# Only kill this named executor session. Never kill other grok processes (interactive pts stays).
+# Never kill a live executor. Leftover dead pane: drop the session then start.
 if tmux has-session -t "$SESSION" 2>/dev/null; then
+  live_panes="$(tmux list-panes -t "$SESSION" -F '#{pane_dead}' 2>/dev/null | grep -c '^0$' || true)"
+  if [[ "${live_panes}" -gt 0 ]]; then
+    echo "[ecs-grok-exec] ERROR: session ${SESSION} still live; refuse kill-session" >&2
+    echo "ok=false"
+    echo "live=true"
+    echo "runtime=ecs-grok"
+    echo "session=${SESSION}"
+    echo "cwd=${abs_cwd}"
+    echo "log=${LOG}"
+    exit 2
+  fi
   tmux kill-session -t "$SESSION"
 fi
+
+echo "ok=true"
+echo "runtime=ecs-grok"
+echo "session=${SESSION}"
+echo "cwd=${abs_cwd}"
+echo "log=${LOG}"
+echo "detached=true"
+echo "grok=$(command -v grok)"
+echo "max_turns=${MAX_TURNS}"
 tmux new-session -d -s "$SESSION" "bash $(printf '%q' "$RUN") > $(printf '%q' "$LOG") 2>&1"
 echo "tmux=${SESSION}"

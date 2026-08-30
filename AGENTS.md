@@ -7,7 +7,7 @@
 在飞: 只认 STATE-NOW 三行（禁止凭记忆）· 现 无
 经验: docs/EXPERIENCE.md（唯一 · 按域 · 禁止贴进卡）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
-执行: 证据贴 Issue · 无 ECS/ssh-ecs 拒领 · 过门=老师手 · 1卡1PR
+执行: 证据贴 Issue · 无 ECS/ssh-ecs 拒领 · 过门=老师手 · 1卡1PR · 贴派发当场 spawn
 禁止: 改卡贴 315 · 证据 PR · 合了未部报 DONE · 第二张 stamp-ok · Closes 部前关卡 · oneflow 当真源 · 公网22当 Cloud Agent 通道
 新窗: STATE-NOW → EXPERIENCE → curl tip。无在飞则讨论，不开卡。
 ```

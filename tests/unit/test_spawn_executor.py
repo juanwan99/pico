@@ -149,6 +149,8 @@ def test_wake_merge_appends_contract(tmp_path: Path) -> None:
     assert "issues/682" in text
     assert sha in text
     assert "第二张" in text
+    assert "origin/main" in text
+    assert "PR 头" in text
     assert body["wake_merge"] is True
     assert body["runtime"] == "ecs-grok"
 
@@ -189,3 +191,6 @@ def test_remote_helper_exists_and_forbids_prod_tree() -> None:
     assert "api.cursor.com" not in src
     assert "CURSOR_API_KEY" not in src
     assert "tmux kill-session" in text
+    assert "still live" in text
+    assert "refuse kill-session" in text
+    assert "pane_dead" in text

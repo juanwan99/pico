@@ -51,6 +51,7 @@ Env (names only; values never printed):
   PICO_GROK_MAX_TURNS      default 80
 
 Fail-closed if ssh ecs fails (except --print-payload / --dry-run).
+Live tmux pico-exec-N: remote exits 2 live=true (does not kill-session).
 Does not merge. Does not deploy. Does not spawn a Cursor Cloud Agent.
 EOF
 }
@@ -168,8 +169,8 @@ if pr:
 if sha:
     lines.append(f"exact SHA：{sha}")
 lines += [
-    "黄审已过则：squash 合该 SHA → 一次 prod-update → tip=origin/main → 五句 DONE 贴合同 Issue。",
-    "禁止：新开第二张 PR/卡 · 合了未部报 DONE · Closes 部前关卡 · 自签 PASS · 直推 main",
+    "黄审已过则：squash 合该候选 SHA → 读 origin/main 的 40 位 → 一次 PICO_DEPLOY_SHA=<main> prod-update → tip=origin/main → 五句 DONE 贴合同 Issue。",
+    "禁止：新开第二张 PR/卡 · 合了未部报 DONE · Closes 部前关卡 · 自签 PASS · 直推 main · 部 PR 头 SHA · 活窗再 spawn · 改生产账号哈希拍过门图",
 ]
 print("\n".join(lines))
 PY

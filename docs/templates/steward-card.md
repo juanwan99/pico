@@ -10,8 +10,9 @@
 现况：只认 docs/STATE-NOW.md + #634 钉评 · 禁聊天当真源
 在飞：无 stamp-ok 不领 · 同域第二张 stamp-ok=废派 · 无在飞则讨论不开卡
 合同：卡面四行（结果/不准/过门/部署）· 过门=老师手一句 · 禁控件清单
-派发：## 派发 只贴 dispatch-slip → spawn-executor（SSH ecs grok）；无 ssh-ecs 拒领
-环：OPEN/WAIT/CLEAR · 订 PR/CI + timer · 读 ## CANDIDATE/DEPLOYED/五句 · tip-pin → 刷 STATE-NOW/#634
+派发：## 派发 只贴 dispatch-slip → 当场 spawn-executor；只贴不 spawn=没派；活窗禁再 spawn；无 ssh-ecs 拒领
+环：OPEN/WAIT/CLEAR · 订 PR/CI + timer · 读 ## CANDIDATE/DEPLOYED/五句 · tip-pin 证已部 ≠ CLEAR
+CLEAR：tip=main + 五句 + 过门老师手 · PASS 另签 · 刷 STATE-NOW/#634
 合/部：只归执行窗 · 总管不合不部 · 合了未部关卡=打回 OPEN
 人留：开卡（一句人话）· 用产品；不对开新卡小口。不签卡 PASS。
 工具：只认 TOOLING-CATALOG · 起窗 spawn-executor · ssh-ecs=Tailscale ops@aliyun-hy · 禁公网22

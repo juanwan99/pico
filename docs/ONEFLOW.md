@@ -53,9 +53,9 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 总管调查 → 写入 Issue 标准任务卡（已锁事实 / IN / 验收）
          → stamp-ok
          → 派发条贴合同 Issue（## 派发）
-         → 总管 spawn-executor（SSH ecs grok · 首条=派发条）；无 ssh-ecs 拒领
+         → 总管当场 spawn-executor（SSH ecs grok · 首条=派发条）；只贴不 spawn=没派；活窗禁再 spawn；无 ssh-ecs 拒领
 执行窗只认：派发条 + 合同 Issue
-总管环：订 PR/CI + timer 读 ## CANDIDATE/DEPLOYED/DONE → tip-pin → CLEAR
+总管环：订 PR/CI + timer 读 ## CANDIDATE/DEPLOYED/DONE → tip-pin 证已部 → CLEAR=tip=main+五句+老师手
          合了未部关卡=打回 OPEN · 总管不合不部
 ```
 
@@ -63,7 +63,7 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 
 **派发条** [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md) 贴两处：合同 Issue `## 派发` + 执行窗首条。业主聊天可贴同一段，不当账本。禁止贴 Issue 全文。
 
-缺任一则没派：Issue 未开 · 无 stamp-ok · 卡上无 `## 派发` · 条上无必读/坑名。
+缺任一则没派：Issue 未开 · 无 stamp-ok · 卡上无 `## 派发` · 条上无必读/坑名 · 只贴不 spawn。
 
 模板：`.github/ISSUE_TEMPLATE/` · `docs/templates/card-build.md` · `docs/templates/dispatch-slip.md`。指针：`docs/TASK-CARD-STANDARD.md`。
 
