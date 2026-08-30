@@ -12,6 +12,7 @@ import {
 import { useMessageHelpers, useLocalize, useAttachments, useContentMetadata } from '~/hooks';
 import MessageTimestamp from '~/components/Chat/Messages/ui/MessageTimestamp';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
+import TurnPointsFooter from '~/components/Chat/TurnPointsFooter';
 import ContentParts from './Content/ContentParts';
 import { fontSizeAtom } from '~/store/fontSize';
 import SiblingSwitch from './SiblingSwitch';
@@ -187,6 +188,10 @@ function MessageParts(props: TMessageProps) {
               </div>
             </div>
           </div>
+          <TurnPointsFooter
+            messageId={messageId}
+            isCreatedByUser={isCreatedByUser}
+          />
         </div>
       </div>
     </>

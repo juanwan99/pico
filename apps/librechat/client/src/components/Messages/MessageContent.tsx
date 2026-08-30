@@ -2,6 +2,7 @@ import React from 'react';
 import type { TMessageProps } from '~/common';
 import { useMessageProcess, useMemoizedChatContext } from '~/hooks';
 import { areMessageRowPropsEqual } from '~/utils';
+import TurnPointsFooter from '~/components/Chat/TurnPointsFooter';
 import ContentRender from './ContentRender';
 
 const MessageContainer = React.memo(function MessageContainer({
@@ -37,6 +38,10 @@ function MessageContent(props: TMessageProps) {
     <MessageContainer handleScroll={handleScroll}>
       <div className="m-auto justify-center p-4 py-2 md:gap-6">
         <ContentRender {...props} isSubmitting={effectiveIsSubmitting} chatContext={chatContext} />
+        <TurnPointsFooter
+          messageId={message.messageId}
+          isCreatedByUser={message.isCreatedByUser}
+        />
       </div>
     </MessageContainer>
   );
