@@ -324,7 +324,7 @@ async def map_event(
         return
 
     if kind == "agent_end":
-        # pi 0.73.x emits agent_end when one low-level run completes.
+        # pi 0.84 still emits agent_end when one low-level run completes.
         # willRetry=true means auto-retry follows — do not settle yet.
         will_retry = bool(raw.get("willRetry"))
         packed = raw.get("messages")
@@ -377,3 +377,4 @@ async def map_event(
         return
 
     # Unknown event types: ignore (do not invent status).
+    # 0.84 may emit ui_prompt_start/end; side-bar honesty is T-PROCESS-VISIBLE #810.
