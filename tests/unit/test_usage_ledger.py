@@ -251,3 +251,33 @@ async def test_scrub_estimated_and_recover_backend_from_events(usage_db) -> None
         again = await conn.run_sync(scrub_dirty_usage_events_sync)
     assert again == {"estimated": 0, "ui_lane": 0, "backend_recovered": 0}
 
+
+@pytest.mark.asyncio
+async def test_owner_usage_today_has_no_membership_ids(usage_db) -> None:
+    from app.db import session_factory
+    from app.usage_ledger import owner_usage_today
+
+    await record_usage_event(
+        school_id="school-a",
+        membership_id="secret-member",
+        kind="llm",
+        model="gpt-5.6-sol",
+        prompt_tokens=4,
+        completion_tokens=6,
+        total_tokens=10,
+        source="test",
+        idempotency_key="llm:owner-snap",
+    )
+    factory = session_factory()
+    async with factory() as session:
+        snap = await owner_usage_today(session)
+    assert snap["billing"] is False
+    assert snap["ok"] is True
+    blob = str(snap)
+    assert "secret-member" not in blob
+    assert "school-a" not in blob
+    llm = next(row for row in snap["kinds"] if row["kind"] == "llm")
+    assert llm["event_count"] >= 1
+    assert llm["total_tokens"] == 10
+
+

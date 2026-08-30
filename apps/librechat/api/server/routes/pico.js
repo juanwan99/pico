@@ -285,6 +285,14 @@ router.get('/health', async (req, res) => {
   }
 });
 
+router.get('/v1/admin/gateway', (req, res) => {
+  const role = String(req.user?.role || '').toUpperCase();
+  if (role !== 'ADMIN') {
+    return res.status(403).json({ error: 'forbidden', message: '管理者页，老师账号不可见。' });
+  }
+  return proxy(req, res, '/v1/admin/gateway');
+});
+
 router.get('/v1/tasks', (req, res) => proxy(req, res, '/v1/tasks'));
 router.get('/v1/tasks/:taskId', (req, res) => {
   try {

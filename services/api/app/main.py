@@ -46,6 +46,7 @@ from app.edu_files import router as edu_files_router
 from app.edu_kb_ingest import router as edu_kb_ingest_router
 from app.edu_school import router as edu_school_router
 from app.edu_sso import router as edu_sso_router
+from app.gateway_status import gateway_status
 from app.html_pages import router as html_pages_router
 from app.kb_rebuild import rebuild_materials
 from app.my_files import router as my_files_router
@@ -264,6 +265,26 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         body["pi_agent_canary_batch"] = pi_batch
     if kimi_batch:
         body["kimi_agent_canary_batch"] = kimi_batch
+    return body
+
+
+@app.get("/v1/admin/gateway")
+async def admin_gateway(session: AsyncSession = Depends(get_session)) -> dict:
+    """Manager snapshot of New API + Sub2API + Pico usage. Not a product frontend."""
+    body = gateway_status()
+    try:
+        from sqlalchemy.exc import SQLAlchemyError
+
+        from app.usage_ledger import owner_usage_today
+
+        body["usage"] = await owner_usage_today(session)
+    except (OSError, RuntimeError, ValueError, SQLAlchemyError):
+        body["usage"] = {
+            "ok": False,
+            "billing": False,
+            "source": "pico_usage_events",
+            "kinds": [],
+        }
     return body
 
 
