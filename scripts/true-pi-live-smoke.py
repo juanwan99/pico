@@ -6,7 +6,7 @@ Usage:
   PYTHONPATH=services/api:services/orchestrator \\
     python3 scripts/true-pi-live-smoke.py [--out docs/evidence/pi-true-kernel-p2/live-smoke]
 
-Requires: pi on PATH (@mariozechner/pi-coding-agent@0.73.1), DEEPSEEK_API_KEY.
+Requires: pi on PATH (@earendil-works/pi-coding-agent@0.84.4), DEEPSEEK_API_KEY.
 """
 
 from __future__ import annotations
