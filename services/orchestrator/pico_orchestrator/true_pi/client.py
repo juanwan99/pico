@@ -48,7 +48,7 @@ def choose_plan_select(options: list[Any] | None) -> tuple[str, bool]:
         return opts[0], False
     return "", False
 
-# Isolated PI_CODING_AGENT_DIR filename. Pi 0.73.1 has no --context CLI flag;
+# Isolated PI_CODING_AGENT_DIR filename. Pi 0.84 still has no --context CLI flag;
 # the window is models.json contextWindow (see packages/coding-agent/docs/models.md).
 PI_MODELS_JSON = "models.json"
 PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
@@ -100,7 +100,7 @@ def true_pi_models_document(
     base_url: str = "",
     api: str = "",
 ) -> dict[str, Any]:
-    """Pi 0.73.1 models.json overlay. Official path, not a invented CLI flag."""
+    """Pi 0.84 models.json overlay. Official path, not an invented CLI flag."""
     from pico_orchestrator.vision import model_accepts_image
 
     name = (provider or "deepseek").strip() or "deepseek"
@@ -343,7 +343,7 @@ class SubprocessTransport(TruePiTransport):
 
         Dual-mode contract: the true_pi kernel must receive the lane's
         thinking flag and the policy model — never a global hardcoded off.
-        Context window is not a CLI flag in pi 0.73.1; see prepare_agent_home.
+        Context window is not a CLI flag in pi 0.84; see prepare_agent_home.
         """
         cmd = [
             self.binary,
@@ -657,7 +657,7 @@ def scripted_open_domain_success() -> list[dict[str, Any]]:
             "toolName": "workspace_write_file",
             "toolCallId": "c1",
             "isError": False,
-            "result": {"content": [{"type": "text", "text": '{"title":"notes.md"}'}]},
+            "result": {"content": [{"type": "text", "text": '{\"title\":\"notes.md\"}'}]},
         },
         {
             "type": "message_end",
