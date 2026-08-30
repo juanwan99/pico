@@ -97,6 +97,7 @@ def test_login_reads_monitors_and_strips_secrets(monkeypatch) -> None:
     from app.gateway_status import gateway_status
 
     _clear_token_cache()
+    monkeypatch.delenv("SUB2API_ADMIN_API_KEY", raising=False)
     monkeypatch.setenv("SUB2API_ADMIN_EMAIL", "owner@example.com")
     monkeypatch.setenv("SUB2API_ADMIN_PASSWORD", "super-secret-password")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
@@ -168,10 +169,66 @@ def test_login_reads_monitors_and_strips_secrets(monkeypatch) -> None:
     assert body["sub2api"]["needs_auth"] is False
 
 
+def test_admin_api_key_uses_x_api_key_not_password_login(monkeypatch) -> None:
+    from app.gateway_status import gateway_status
+
+    _clear_token_cache()
+    monkeypatch.setenv("SUB2API_ADMIN_API_KEY", "admin-deadbeef")
+    monkeypatch.setenv("SUB2API_ADMIN_EMAIL", "owner@example.com")
+    monkeypatch.setenv("SUB2API_ADMIN_PASSWORD", "super-secret-password")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setattr("app.gateway_status._probe", lambda url, timeout=2.0, headers=None: {"ok": True, "http": 200})
+    monkeypatch.setattr("app.gateway_status._new_api_models", list)
+    login_calls = {"n": 0}
+
+    def fake_probe_json(url, timeout=2.0, headers=None, method="GET", payload=None):
+        if url.endswith("/auth/login"):
+            login_calls["n"] += 1
+            raise AssertionError("password login must not run when admin API key is set")
+        assert headers == {"X-API-Key": "admin-deadbeef"}
+        if url.endswith("/channel-monitors"):
+            return 200, {"code": 0, "data": {"items": []}}
+        if url.endswith("/admin/accounts"):
+            return 200, {"code": 0, "data": {"items": []}}
+        return 200, {}
+
+    monkeypatch.setattr("app.gateway_status._probe_json", fake_probe_json)
+    body = gateway_status()
+    assert login_calls["n"] == 0
+    assert body["sub2api"]["needs_auth"] is False
+    assert body["sub2api"]["accounts"] == []
+    dumped = str(body).lower()
+    assert "admin-deadbeef" not in dumped
+    assert "super-secret-password" not in dumped
+
+
+def test_password_login_requires_2fa_marks_needs_auth(monkeypatch) -> None:
+    from app.gateway_status import gateway_status
+
+    _clear_token_cache()
+    monkeypatch.delenv("SUB2API_ADMIN_API_KEY", raising=False)
+    monkeypatch.setenv("SUB2API_ADMIN_EMAIL", "owner@example.com")
+    monkeypatch.setenv("SUB2API_ADMIN_PASSWORD", "super-secret-password")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setattr("app.gateway_status._probe", lambda url, timeout=2.0, headers=None: {"ok": True, "http": 200})
+    monkeypatch.setattr("app.gateway_status._new_api_models", list)
+
+    def fake_probe_json(url, timeout=2.0, headers=None, method="GET", payload=None):
+        if url.endswith("/auth/login"):
+            return 200, {"code": 0, "data": {"requires_2fa": True, "temp_token": "tmp"}}
+        return 401, {"code": 401, "message": "Authorization required"}
+
+    monkeypatch.setattr("app.gateway_status._probe_json", fake_probe_json)
+    body = gateway_status()
+    assert body["sub2api"]["needs_auth"] is True
+    assert "tmp" not in str(body)
+
+
 def test_admin_accounts_423_is_compliance_not_fake_success(monkeypatch) -> None:
     from app.gateway_status import account_soft_action, gateway_status
 
     _clear_token_cache()
+    monkeypatch.delenv("SUB2API_ADMIN_API_KEY", raising=False)
     monkeypatch.setenv("SUB2API_ADMIN_EMAIL", "owner@example.com")
     monkeypatch.setenv("SUB2API_ADMIN_PASSWORD", "super-secret-password")
     monkeypatch.setattr("app.gateway_status._probe", lambda url, timeout=2.0, headers=None: {"ok": True, "http": 200})

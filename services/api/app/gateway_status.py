@@ -12,7 +12,7 @@ NEW_API_STATUS = "http://127.0.0.1:3000/api/status"
 NEW_API_MODELS = "http://127.0.0.1:3000/v1/models"
 SUB2API_HEALTH = "http://127.0.0.1:8081/health"
 SUB2API_LOGIN = "http://127.0.0.1:8081/api/v1/auth/login"
-SUB2API_MONITORS = "http://127.0.0.1:8081/api/v1/channel-monitors"
+SUB2API_MONITORS = "http://127.0.0.1:8081/api/v1/admin/channel-monitors"
 SUB2API_ADMIN_ACCOUNTS = "http://127.0.0.1:8081/api/v1/admin/accounts"
 SUB2API_ACCOUNT_UI = "https://workbench.aivia.asia"
 SOFT_ACTIONS = frozenset({"refresh", "test", "clear-error", "recover-state"})
@@ -123,10 +123,12 @@ def _new_api_models() -> list[str]:
     return ids
 
 
-def _sub2api_token() -> str | None:
+def _admin_api_key() -> str | None:
     key = (os.environ.get("SUB2API_ADMIN_API_KEY") or "").strip()
-    if key:
-        return key
+    return key or None
+
+
+def _sub2api_token() -> str | None:
     cached = _token_cache.get("token")
     exp = float(_token_cache.get("exp") or 0)
     if isinstance(cached, str) and cached and time.time() < exp - 30:
@@ -144,7 +146,9 @@ def _sub2api_token() -> str | None:
     data = _unwrap(body)
     if code != 200 or not isinstance(data, dict):
         return None
-    token = str(data.get("access_token") or "").strip()
+    if data.get("requires_2fa") is True:
+        return None
+    token = str(data.get("access_token") or data.get("token") or "").strip()
     if not token:
         return None
     expires = data.get("expires_in")
@@ -155,6 +159,9 @@ def _sub2api_token() -> str | None:
 
 
 def _auth_headers() -> dict[str, str] | None:
+    key = _admin_api_key()
+    if key:
+        return {"X-API-Key": key}
     token = _sub2api_token()
     if not token:
         return None
