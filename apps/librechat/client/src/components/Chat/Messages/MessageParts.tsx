@@ -17,6 +17,7 @@ import { fontSizeAtom } from '~/store/fontSize';
 import SiblingSwitch from './SiblingSwitch';
 import HoverButtons from './HoverButtons';
 import SubRow from './SubRow';
+import TurnPointsFooter from '~/components/Chat/TurnPointsFooter';
 import store from '~/store';
 
 function MessageParts(props: TMessageProps) {
@@ -187,6 +188,7 @@ function MessageParts(props: TMessageProps) {
               </div>
             </div>
           </div>
+          <TurnPointsFooter messageId={messageId} isCreatedByUser={isCreatedByUser} />
         </div>
       </div>
     </>
