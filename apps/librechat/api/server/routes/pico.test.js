@@ -628,17 +628,28 @@ describe('Pico proxy routes', () => {
     );
   });
 
-  it('proxies school land writes', async () => {
-    const response = await request(app)
-      .post('/api/pico/v1/edu/land')
-      .send({ filename: '页.html', body_html: '<p>灰</p>' });
-    expect(response.status).toBe(201);
+  it('proxies points quote and settle without extra query keys', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      headers: { get: () => 'application/json' },
+      text: async () => JSON.stringify({ phase: 'quote', points: '0.120', wallet: false }),
+    });
+    const quoted = await request(app)
+      .post('/api/pico/v1/usage/points/quote')
+      .send({ input_chars: 80 });
+    expect(quoted.status).toBe(200);
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:18765/v1/edu/land',
+      'http://127.0.0.1:18765/v1/usage/points/quote',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ filename: '页.html', body_html: '<p>灰</p>' }),
+        body: JSON.stringify({ input_chars: 80 }),
       }),
+    );
+
+    await request(app).get('/api/pico/v1/usage/points?run_id=run_abc-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/usage/points?run_id=run_abc-1',
+      expect.objectContaining({ method: 'GET' }),
     );
   });
 });

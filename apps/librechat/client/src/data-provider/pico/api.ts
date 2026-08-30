@@ -642,3 +642,23 @@ export async function transferMyArtifact(
     },
   );
 }
+
+export type PicoPointsPhase = 'quote' | 'pending' | 'settled';
+
+export type PicoPointsView = {
+  phase: PicoPointsPhase;
+  points: string | null;
+  wallet?: boolean;
+  run_id?: string;
+};
+
+export async function quotePicoPoints(inputChars: number): Promise<PicoPointsView> {
+  return picoFetch<PicoPointsView>('/v1/usage/points/quote', {
+    method: 'POST',
+    body: JSON.stringify({ input_chars: Math.max(0, Math.floor(inputChars) || 0) }),
+  });
+}
+
+export async function getPicoRunPoints(runId: string): Promise<PicoPointsView> {
+  return picoFetch<PicoPointsView>(`/v1/usage/points?run_id=${encodeURIComponent(runId)}`);
+}

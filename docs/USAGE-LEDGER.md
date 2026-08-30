@@ -10,8 +10,9 @@ EDU: docs/contracts/usage-export.md（edu-core 拉干净行；钱在 edu）
 ```
 
 > **一本用量账，不是账单。** Pico 按账号记「谁、哪校、哪次任务、哪个**后端模型**、多少 token（或诚实缺）。  
-> **禁止** 定价、人民币、套餐、扣款、支付、发票、点池。本表与 API **不得** 出现 `price` / `currency` / `cost` / `charge` / `billing` 列。  
-> **edu-core 计费：** 只拉 [`docs/contracts/usage-export.md`](./contracts/usage-export.md)；汇率/点/钱包在 edu，不在 Pico。
+> 老师看见的**积分**是同一本账的派生（服务端换算，三位小数），不是第二套账、不是点池。  
+> **禁止** 定价、人民币、套餐、扣款、支付、发票、点池/余额列。本表与 API **不得** 出现 `price` / `currency` / `cost` / `charge` / `billing` 列。  
+> **edu-core：** 只拉 [`docs/contracts/usage-export.md`](./contracts/usage-export.md) 上的 `points` 数字扣点；禁止再乘。钱包仍在 edu。
 
 与现有概念的边界：
 
@@ -65,6 +66,8 @@ Token 规则：
 - `extra.ui_model` = 档位；`extra.cached_tokens` / `extra.reasoning_tokens` 可选，edu 自己加权。
 - 禁止用 `0` 假装「没用量」。
 - `model` 禁止长期留 `pico-fast` / `pico-deep`；档位只进 `extra.ui_model`。
+
+**积分（派生，#788）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算只在 `app/points_meter.py`。表上不增加积分/余额列。预计报价不写 token 列。`null` = 未结算，不是 0。
 
 ---
 
@@ -151,6 +154,8 @@ await record_usage_event(
 | GET | `/v1/usage/events` | 明细列表 |
 | GET | `/v1/usage/events/{id}` | 单条明细（跨账号 404） |
 | GET | `/v1/usage` | 极简「我的用量」HTML（只读 · 非运营后台） |
+| POST | `/v1/usage/points/quote` | 发任务 UX 预计积分（不写 token 列） |
+| GET | `/v1/usage/points?run_id=` | 本轮停下后的实际积分或 pending |
 | GET | `/v1/internal/usage/export` | **edu 拉数**：`PICO_HOOK_SERVICE_TOKEN` · 见 [usage-export.md](./contracts/usage-export.md) |
 
 查询参数：`kind` · `day=YYYY-MM-DD` · `limit` · `offset` · `membership_id`（仅 admin 且必须同校）。

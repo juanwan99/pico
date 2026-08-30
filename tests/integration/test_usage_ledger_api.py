@@ -320,6 +320,7 @@ async def test_emit_provider_usage_is_native_not_estimated(client: AsyncClient):
     assert row["completion_tokens"] == 20
     assert row["total_tokens"] == 100
     assert row["model"] == "gpt-5.6-sol"
+    assert row["points"] == "0.300"
     assert (row.get("extra") or {}).get("cached_tokens") == 8
     assert (row.get("extra") or {}).get("reasoning_tokens") == 12
     assert "price" not in (row.get("extra") or {})
@@ -401,5 +402,70 @@ async def test_image_kind_can_be_written(client: AsyncClient):
     hit = next(e for e in r.json()["events"] if e["run_id"] == "run-i")
     assert hit["tokens_unknown"] is True
     assert hit["model"] == "gemini-3.1-flash-image"
+    assert hit["points"] is None
     assert (hit.get("extra") or {}).get("bytes") == 12
+
+
+async def test_points_quote_hides_scale_and_settle_uses_ledger(client: AsyncClient):
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.run_service import create_task
+
+    headers = await _auth(client)
+    quoted = await client.post(
+        "/v1/usage/points/quote",
+        headers=headers,
+        json={"input_chars": 80},
+    )
+    assert quoted.status_code == 200, quoted.text
+    qbody = quoted.json()
+    assert qbody["phase"] == "quote"
+    assert qbody["wallet"] is False
+    assert isinstance(qbody["points"], str)
+    assert qbody["points"].count(".") == 1
+    assert len(qbody["points"].split(".")[1]) == 3
+    blob = quoted.text.lower()
+    assert "token" not in blob
+    assert "1000" not in blob
+    assert "×" not in quoted.text
+
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=0,
+        raw={},
+    )
+    factory = session_factory()
+    async with factory() as session:
+        _task, run = await create_task(session, principal, "t", "hello")
+        run_id = run.id
+
+    await record_usage_event(
+        school_id="school-a",
+        membership_id="m1",
+        kind="llm",
+        model="gpt-5.6-sol",
+        prompt_tokens=400,
+        completion_tokens=600,
+        total_tokens=1000,
+        tokens_unknown=False,
+        estimated=False,
+        run_id=run_id,
+        source="test",
+        idempotency_key=f"llm:{run_id}:points",
+    )
+    settled = await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})
+    assert settled.status_code == 200, settled.text
+    sbody = settled.json()
+    assert sbody["phase"] == "settled"
+    assert sbody["points"] == "3.000"
+    assert sbody["wallet"] is False
+    assert "token" not in settled.text.lower()
+
+    missing = await client.get("/v1/usage/points", headers=headers, params={"run_id": "no-such-run"})
+    assert missing.status_code == 404
+
 

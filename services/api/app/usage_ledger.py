@@ -104,6 +104,14 @@ def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
     if not isinstance(extra, dict):
         extra = {}
     extra = _strip_money_keys(extra)
+    from app.points_meter import points_from_tokens, tokens_from_row
+
+    token_n = tokens_from_row(
+        tokens_unknown=bool(row.tokens_unknown),
+        total_tokens=row.total_tokens,
+        prompt_tokens=row.prompt_tokens,
+        completion_tokens=row.completion_tokens,
+    )
     return {
         "id": row.id,
         "school_id": row.school_id,
@@ -120,6 +128,7 @@ def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
         "source": row.source,
         "extra": extra,
         "created_at": row.created_at.isoformat() if row.created_at else None,
+        "points": None if token_n is None else points_from_tokens(token_n),
         "billing": False,
         "schema": USAGE_EXPORT_SCHEMA,
     }
@@ -538,6 +547,75 @@ async def list_usage_events(
     q = q.order_by(UsageEventRow.created_at.desc()).offset(off).limit(cap)
     result = await session.execute(q)
     return list(result.scalars().all())
+
+
+async def list_usage_events_for_run(
+    session: AsyncSession,
+    principal: Principal,
+    run_id: str,
+) -> list[UsageEventRow]:
+    school, member = _tenant_filter(principal, None)
+    q = (
+        select(UsageEventRow)
+        .where(
+            UsageEventRow.school_id == school,
+            UsageEventRow.membership_id == member,
+            UsageEventRow.run_id == run_id,
+        )
+        .order_by(UsageEventRow.created_at.asc())
+    )
+    result = await session.execute(q)
+    return list(result.scalars().all())
+
+
+async def settle_points_for_run(
+    session: AsyncSession,
+    principal: Principal,
+    run_id: str,
+) -> dict[str, Any] | None:
+    """Same number edu should debit. No wallet. Unknown ≠ 0."""
+    from app.points_meter import points_from_tokens, tokens_from_row
+    from app.run_service import get_run_for_principal
+
+    run = await get_run_for_principal(session, run_id, principal)
+    if run is None:
+        return None
+    rows = await list_usage_events_for_run(session, principal, run_id)
+    known = 0
+    saw_known = False
+    saw_unknown = False
+    for row in rows:
+        token_n = tokens_from_row(
+            tokens_unknown=bool(row.tokens_unknown),
+            total_tokens=row.total_tokens,
+            prompt_tokens=row.prompt_tokens,
+            completion_tokens=row.completion_tokens,
+        )
+        if token_n is None:
+            saw_unknown = True
+            continue
+        saw_known = True
+        known += token_n
+    if saw_known:
+        return {
+            "phase": "settled",
+            "points": points_from_tokens(known),
+            "wallet": False,
+            "run_id": run_id,
+        }
+    if saw_unknown or not rows:
+        return {
+            "phase": "pending",
+            "points": None,
+            "wallet": False,
+            "run_id": run_id,
+        }
+    return {
+        "phase": "pending",
+        "points": None,
+        "wallet": False,
+        "run_id": run_id,
+    }
 
 
 async def get_usage_event_for_principal(

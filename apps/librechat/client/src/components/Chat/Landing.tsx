@@ -15,6 +15,8 @@ import {
 import { cn } from '~/utils';
 import ArchiveFolderBar from '~/components/Chat/ArchiveFolderBar';
 import SchoolMaterialsBar from '~/components/Chat/SchoolMaterialsBar';
+import PointsBar from '~/components/Chat/PointsBar';
+import { usePointsMeter } from '~/hooks/Pico/usePointsMeter';
 import {
   consumePendingModel,
   getPicoModelMode,
@@ -29,6 +31,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
   const { user } = useAuthContext();
   const form = useOptionalChatFormContext();
   const { submitMessage } = useSubmitMessage();
+  const { quoteFromChars } = usePointsMeter();
   const [text, setText] = useState('');
   const [model, setModel] = useState(() => {
     try {
@@ -76,10 +79,11 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     if (!value) {
       return;
     }
+    quoteFromChars(value.length);
     // Single submit path — no DOM bridge to hidden ChatForm
     submitMessage({ text: value });
     syncForm('');
-  }, [text, submitMessage, syncForm]);
+  }, [text, submitMessage, syncForm, quoteFromChars]);
 
   // Expert / skill "summon" prefill from capability hub. Mount-only: applyModel
   // used to write PENDING and depend on chatCtx, which retriggered consume → #185.
@@ -120,6 +124,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
         <div className="mt-8 w-full max-w-[797px]">
           <SchoolMaterialsBar conversationId={chatCtx?.conversation?.conversationId} />
           <ArchiveFolderBar conversationId={chatCtx?.conversation?.conversationId} />
+          <PointsBar />
           <div
             className="pico-wb-composer overflow-visible rounded-[var(--pico-radius)] border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] shadow-[var(--pico-shadow)]"
             data-testid="pico-wb-home-composer"
