@@ -139,7 +139,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
         run: >
           npx jest --ci --coverage=false
-          --testPathPatterns='src/hooks/Pico/|src/utils/__tests__/pico|src/components/Chat/__tests__/MainDeliveryStrip|src/components/Chat/__tests__/ResultPanel|src/components/Chat/__tests__/Landing.composer|src/components/Chat/__tests__/ChatTitleEditor|src/components/Chat/__tests__/PointsBar'
+          --testPathPatterns='src/hooks/Pico/|src/utils/__tests__/pico|src/components/Chat/__tests__/MainDeliveryStrip|src/components/Chat/__tests__/ResultPanel|src/components/Chat/__tests__/Landing.composer|src/components/Chat/__tests__/ChatTitleEditor|src/components/Chat/__tests__/PointsBar|src/components/Chat/__tests__/TurnPointsFooter'
           --testPathIgnorePatterns='Pico/usePicoTaskLedger\.spec\.tsx$|Pico/usePicoTaskLedger\.cancel|usePicoConversationStatusMap\.spec|picoSandboxSession\.test'
 
       - name: Pico proxy jest (preview=1 allowlist)

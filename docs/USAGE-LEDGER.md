@@ -67,7 +67,7 @@ Token 规则：
 - 禁止用 `0` 假装「没用量」。
 - `model` 禁止长期留 `pico-fast` / `pico-deep`；档位只进 `extra.ui_model`。
 
-**积分（派生，#788）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算只在 `app/points_meter.py`。表上不增加积分/余额列。预计报价不写 token 列。`null` = 未结算，不是 0。
+**积分（派生，#788）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算只在 `app/points_meter.py`。表上不增加积分/余额列。预计报价不写 token 列。账上 `null` = 未知 token，不是 0。老师面每一轮钉在该条回复末尾：有 token 显示「实际」；晚到则该轮继续显示「预计」，不改成「未结算」、不清理上一轮。
 
 ---
 

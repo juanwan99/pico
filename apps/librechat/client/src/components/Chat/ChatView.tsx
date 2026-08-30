@@ -131,6 +131,15 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const taskTitle = !isUnnamedConvoTitle(chatHelpers.conversation?.title)
     ? chatHelpers.conversation?.title
     : undefined;
+  const latestAssistantMessageId = useMemo(() => {
+    const msgs = flatMessages ?? [];
+    for (let i = msgs.length - 1; i >= 0; i -= 1) {
+      if (msgs[i] && !msgs[i].isCreatedByUser && msgs[i].messageId) {
+        return msgs[i].messageId;
+      }
+    }
+    return null;
+  }, [flatMessages]);
   const ledger = usePicoTaskLedger(conversationId, isSubmitting);
   const cancellableRunId = ['queued', 'running', 'preparing'].includes(ledger.run?.status || '')
     ? ledger.run?.id
@@ -191,7 +200,12 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     <ChatFormProvider {...methods}>
       <ChatContext.Provider value={chatHelpers}>
         <AddedChatContext.Provider value={addedChatHelpers}>
-          <PointsMeterProvider runId={ledger.run?.id} runStatus={ledger.run?.status}>
+          <PointsMeterProvider
+            runId={ledger.run?.id}
+            runStatus={ledger.run?.status}
+            latestAssistantMessageId={latestAssistantMessageId}
+            isSubmitting={isSubmitting}
+          >
           <Presentation>
             <div className="relative flex h-full w-full flex-col">
               {!isLandingPage && (
