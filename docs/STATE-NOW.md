@@ -28,9 +28,9 @@ juanwan99/oneflow: 不当真源（已 Archive）
 4. **1 卡 1 PR。** CI/测/部的修补走原 PR。同卡续只在业主说还差。
 5. **聊天默认易失。** 约束下一窗的结论必须落 Issue 评论或本页/`EXPERIENCE`/`TOOLING-CATALOG`。
 6. **合与部只归执行窗。** 总管不合 main、不 prod-update；P0 可调查/起候选 PR，合部仍交执行窗（经验 §10）。
-7. **自循环。** 总线=合同 Issue（`## 派发`/`CANDIDATE`/`DEPLOYED`/五句）。起窗=`spawn-executor`（SSH ecs grok）。无 ssh-ecs 拒领。禁 `@cursor` / Cloud Agent 当执行者。订约读回执；不合不部；合了未部关卡打回。禁 mailbox / 第二账本。
+7. **自循环。** 总线=合同 Issue（`## 派发`/`CANDIDATE`/`DEPLOYED`/五句）。起窗=`spawn-executor`（SSH ecs grok）。贴派发当场 spawn；只贴不 spawn=没派。活窗禁再 spawn。无 ssh-ecs 拒领。禁 `@cursor` / Cloud Agent 当执行者。订约读回执；不合不部；合了未部关卡打回。禁 mailbox / 第二账本。
 
-失真 = 证据 PR / 合了报 DONE / 过门写控件 / 拆 PR / 凭聊天当真源。总管打回。
+失真 = 证据 PR / 合了报 DONE / 过门写控件 / 拆 PR / 凭聊天当真源 / 只贴不 spawn / tip-pin 当 CLEAR。总管打回。
 
 ## 冻结令（卡面 · 仍有效至 2026-09-07）
 

@@ -17,5 +17,5 @@
 工具：docs/TOOLING-CATALOG.md · 点名 <最多3个 id>（需要碰机时必含 tip-pin 或 ssh-ecs）
 回执：评论 #<N> · live SHA=main · 1卡1PR · 未点写未签；点过结果句由总管自签关
       UI 卡：过门截图贴本回执（不进 PR）· Cloud Agent 无浏览器 ≠ 免过门
-起窗：总管 `bash scripts/spawn-executor.sh --issue <N>`（SSH ecs grok；首条=本条）；无 ssh-ecs 拒领
+起窗：总管 `bash scripts/spawn-executor.sh --issue <N>`（SSH ecs grok；首条=本条）；贴出当场 spawn；session 活着禁再 spawn；无 ssh-ecs 拒领
 ```

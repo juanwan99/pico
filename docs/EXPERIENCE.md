@@ -2,7 +2,7 @@
 
 ```text
 仓: juanwan99/pico ONLY
-DATE: 2026-08-29
+DATE: 2026-08-30
 用法: 开窗读本文。禁止把正文贴进卡或对业主聊天。
 派发条只点名编号（最多 3 条）。过期删（总管同轮删/并）。
 工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
@@ -16,15 +16,15 @@ DATE: 2026-08-29
 2. **1 卡 1 PR。** CI 红、测炸、部翻车，都在**原 PR 原分支**补。禁止为修测/修部/修 Dockerfile/改文档新开第二张 PR（同卡续 = 业主说还差）。
 3. **无部署权拒领。** 不能 `PICO_DEPLOY_SHA=… bash /opt/pico/scripts/prod-update.sh` = 不 stamp。DONE 必须 `curl -fsS https://pico.aivia.asia/api/pico/tip` = origin/main。合了未部 = 没完。
 4. **禁止 PR 写 `Closes #<卡>`。** 部前关卡 = 失真。合了未部要打回 OPEN。
-5. **证据贴本卡 Issue 评论。** 禁止截图 docs PR。UI 卡：执行窗合部后把过门截图贴合同 Issue **回执**（图跟五句一起）。Cloud Agent 本机无浏览器 ≠ 免过门；派发条写明「截图写回执」。
+5. **证据贴本卡 Issue 评论。** 禁止截图 docs PR。UI 卡：执行窗合部后把过门截图贴合同 Issue **回执**（图跟五句一起）。Cloud Agent 本机无浏览器 ≠ 免过门；派发条写明「截图写回执」。过门截图禁止改生产账号哈希/提权；没有 ADMIN 就写未点。
 6. **过门是老师手。** 写 1px 轨 / 词表 / 选择器 = 退回。禁开工。
 7. **同域一张 `stamp-ok`。** 残债同卡。禁 `T-*-DEBT`。
 8. **卡面四行合同。** 已锁事实写 Issue 评论，禁止把手册/315 贴进卡。
 9. **聊天默认易失。** 约束下一窗 → Issue 评论或 `STATE-NOW` / 本文 / `TOOLING-CATALOG`。回复用 `§编号` / `Issue#`，禁「上次我们说」。
-10. **合与部只归执行窗。** 总管 / 主管窗 / 本类 Cloud Agent：**不合 main、不跑 prod-update**。总管做：派发·两问戳·黄红审戳·现况三行·经验/工具入库。P0 止血可调查、起候选 PR，**合与部仍交执行窗**（有 stamp 才领）。禁止「总管代合代部」当常态。
+10. **合与部只归执行窗。** 总管 / 主管窗 / 本类 Cloud Agent：**不合 main、不跑 prod-update**。总管做：派发·两问戳·黄红审戳·现况三行·经验/工具入库。刷 STATE-NOW 是现况页，不是产品卡第二张 PR；未合的旧现况 PR 标覆盖，禁止合进去冲三行。P0 止血可调查、起候选 PR，**合与部仍交执行窗**（有 stamp 才领）。禁止「总管代合代部」当常态。
 21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / 把 ECS Grok 当第二账本 / 聊天当真源。
-22. **总管环（不合不部）：** stamp → 派发条贴本卡 `## 派发` → **spawn-executor**（SSH `ecs` → 机上 grok CLI；隔离 checkout `/home/ops/pico-wt/issue-N`；禁写 `/opt/pico` 开发树）→ 订 PR/CI → timer 读评 → tip-pin → 刷 STATE-NOW/#634 → CLEAR。无 `ssh ecs` = 拒领。禁止 Cursor Cloud Agent / `@cursor` 当执行者。合了未部关卡=打回 OPEN。禁止 mailbox / 第二账本。禁止总管代合代部（含「应急改+部」）。
-23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审/过门（不开新卡）· `CLEAR` tip=main + 五句后停或下一张。人只留：目标 · 黄红争议 · 老师手 · PASS。同域第二张 stamp-ok=废派。
+22. **总管环（不合不部）：** stamp → 派发条贴本卡 `## 派发` → **当场 spawn-executor**（SSH `ecs` → 机上 grok CLI；隔离 checkout `/home/ops/pico-wt/issue-N`；禁写 `/opt/pico` 开发树）。只贴不 spawn = 没派。session 仍在禁止再 spawn（脚本会 kill-session）。→ 订 PR/CI → timer 读评 → tip-pin → 刷 STATE-NOW/#634 → CLEAR。无 `ssh ecs` = 拒领。Cloud Agent 可当总管（派发/订约/刷现况），禁止当执行者；没有「改评 `@cursor`」退路。合了未部关卡=打回 OPEN。禁止 mailbox / 第二账本。禁止总管代合代部（含「应急改+部」）。
+23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审/过门（不开新卡）· `CLEAR` = tip=main + 五句 + 过门老师手（PASS 另签）。tip-pin 只证已部，不是 CLEAR。写者附图仍 NONE。人只留：目标 · 黄红争议 · 老师手 · PASS。同域第二张 stamp-ok=废派。
 
 ## B · 现网 / 产品
 
@@ -50,7 +50,7 @@ DATE: 2026-08-29
 ## C · 部署 / ECS
 
 15. **GIT SHA 不当 Docker build-arg。** 当 ARG 会让每次部重下 torch（#658/#659）。SHA 只进 compose `.env`。
-16. **部署真源：** `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`；证伪用 **tip-pin** + **remote-health**（见 TOOLING-CATALOG）。公网 tip 与 ECS loopback 必须同 SHA。
+16. **部署真源：** `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`；证伪用 **tip-pin** + **remote-health**（见 TOOLING-CATALOG）。公网 tip 与 ECS loopback 必须同 SHA。squash 后部 **origin/main** 的 40 位，禁止 `PICO_DEPLOY_SHA=PR头`。
 17. **SSH 进机：只用 Tailscale MagicDNS。** Host 别名 `ecs` / `pico-prod` → `aliyun-hy`，用户 `ops`。禁止拿 Cloud Agent 公网 egress IP 去开安全组 22（IP 漂移 = 假通路）。
 
 ## D · Cloud Agent
