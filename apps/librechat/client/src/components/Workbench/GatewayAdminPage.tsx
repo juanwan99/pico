@@ -1,6 +1,6 @@
 /**
  * Owner-only panel: New API pipe + Sub2API login-state + Pico usage.
- * Thin-read monitors (7d / 168h). Soft restore only. Hard re-login on tailnet.
+ * Thin-read monitors (7d / 168h). Soft restore only. Hard re-login on public Sub2API.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SystemRoles } from 'librechat-data-provider';
@@ -26,6 +26,7 @@ type Probe = {
   ok?: boolean;
   http?: number;
   models?: string[];
+  account_ui?: string;
   tailnet_ui?: string;
   monitors_http?: number;
   accounts_http?: number;
@@ -228,7 +229,7 @@ export default function GatewayAdminPage() {
         setActionMsg(
           body.message ||
             (res.status === 423
-              ? '要先在尾网 Sub2API 真页签合规承诺。Pico 不代签。'
+              ? '要先在账号台签合规承诺。Pico 不代签。'
               : '没做成。'),
         );
         return;
@@ -259,18 +260,19 @@ export default function GatewayAdminPage() {
   const monitorCount = status?.sub2api?.monitor_count;
   const compliance = status?.sub2api?.compliance_required === true;
   const needsAuth = status?.sub2api?.needs_auth === true;
+  const accountUi = status?.sub2api?.account_ui || status?.sub2api?.tailnet_ui;
   const sub2extra = compliance
-    ? '管理 API 要先在尾网真页签合规承诺。Pico 不代签。'
+    ? '管理 API 要先在账号台签合规承诺。Pico 不代签。'
     : needsAuth
       ? monitorCount == null
-        ? '监控卡还是空的。硬重登、签合规、导入订阅号都在尾网 Sub2API 真页。'
-        : `监控 ${monitorCount} 条。硬重登仍走尾网真页。`
-      : '硬重登走尾网 Sub2API 真页，不接管 pico.aivia.asia。';
+        ? '监控卡还是空的。硬重登、签合规、导入订阅号都在账号台。'
+        : `监控 ${monitorCount} 条。硬重登仍走账号台。`
+      : '硬重登走账号台，不接管 pico.aivia.asia。';
   const kinds = status?.usage?.kinds ?? [];
   const emptyMonitors = monitors.length === 0;
   const emptyCopy = compliance
-    ? '账号监控要先在尾网 Sub2API 真页签合规。Pico 不代签。'
-    : '还没有监控卡。硬重登、签合规、导入订阅号都在尾网 Sub2API 真页。';
+    ? '账号监控要先在账号台签合规。Pico 不代签。'
+    : '还没有监控卡。硬重登、签合规、导入订阅号都在账号台。';
 
   return (
     <WorkbenchShell title="网关管理" subtitle="所有者 · 三本账" backTo="/c/new">
@@ -301,14 +303,14 @@ export default function GatewayAdminPage() {
               }
             />
             <ProbeRow title="账号 · Sub2API 登录态" probe={status?.sub2api} extra={sub2extra} />
-            {status?.sub2api?.tailnet_ui ? (
+            {accountUi ? (
               <a
                 className="rounded-lg border border-[color:var(--pico-line)] px-4 py-3 text-[13px] text-[color:var(--pico-ink)]"
-                href={status.sub2api.tailnet_ui}
+                href={accountUi}
                 rel="noreferrer"
                 target="_blank"
               >
-                打开尾网账号台（硬重登 / 合规 / 监控）
+                打开账号台（硬重登 / 合规 / 监控）
               </a>
             ) : null}
 
@@ -371,7 +373,7 @@ export default function GatewayAdminPage() {
             <section className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4">
               <p className="text-[14px] font-medium">订阅号登录态</p>
               <p className="mt-1 text-[12.5px] leading-5 text-[color:var(--pico-ink-2)]">
-                软按钮只转发刷新 / 测活 / 清错 / 恢复。硬重登仍走尾网真页。
+                软按钮只转发刷新 / 测活 / 清错 / 恢复。硬重登仍走账号台。
               </p>
               {actionMsg ? (
                 <p role="status" className="mt-2 text-[12.5px] text-[color:var(--pico-ink)]">
@@ -381,8 +383,8 @@ export default function GatewayAdminPage() {
               {accounts.length === 0 ? (
                 <p className="mt-2 text-[12.5px] leading-5 text-[color:var(--pico-ink-2)]">
                   {compliance
-                    ? '账号列表要先在尾网真页签合规。Pico 不代签。'
-                    : '还没有订阅号。导入走尾网 Sub2API 真页。'}
+                    ? '账号列表要先在账号台签合规。Pico 不代签。'
+                    : '还没有订阅号。导入走账号台。'}
                 </p>
               ) : (
                 <ul className="mt-3 flex flex-col gap-2">

@@ -14,7 +14,7 @@ SUB2API_HEALTH = "http://127.0.0.1:8081/health"
 SUB2API_LOGIN = "http://127.0.0.1:8081/api/v1/auth/login"
 SUB2API_MONITORS = "http://127.0.0.1:8081/api/v1/channel-monitors"
 SUB2API_ADMIN_ACCOUNTS = "http://127.0.0.1:8081/api/v1/admin/accounts"
-SUB2API_TAILNET_UI = "https://aliyun-hy.tail217880.ts.net"
+SUB2API_ACCOUNT_UI = "https://workbench.aivia.asia"
 SOFT_ACTIONS = frozenset({"refresh", "test", "clear-error", "recover-state"})
 _STATUS_BUCKET = {
     "operational": "健康",
@@ -246,7 +246,7 @@ def _sub2api_login_state() -> dict:
         "accounts": accounts,
         "compliance_required": compliance_required,
         "needs_auth": headers is None or monitors_http == 401 or accounts_http == 401,
-        "hard_relogin": "sub2api_tailnet_ui",
+        "hard_relogin": "sub2api_public_ui",
         "soft_actions": sorted(SOFT_ACTIONS),
     }
 
@@ -259,7 +259,7 @@ def account_soft_action(account_id: int, action: str) -> dict:
         return {"ok": False, "http": 400, "message": "账号不对。"}
     headers = _auth_headers()
     if headers is None:
-        return {"ok": False, "http": 401, "message": "还没接上 Sub2API 管理账号。硬重登走尾网真页。"}
+        return {"ok": False, "http": 401, "message": "还没接上 Sub2API 管理账号。硬重登走账号台。"}
     url = f"{SUB2API_ADMIN_ACCOUNTS}/{account_id}/{action}"
     code, body = _probe_json(url, method="POST", headers=headers, timeout=12.0)
     message = "已交给上游。"
@@ -267,7 +267,7 @@ def account_soft_action(account_id: int, action: str) -> dict:
         raw_msg = str(body.get("message") or "").strip()
         err_code = str(body.get("code") or "")
         if err_code == "ADMIN_COMPLIANCE_ACK_REQUIRED" or code == 423:
-            message = "要先在尾网 Sub2API 真页签合规承诺。Pico 不代签。"
+            message = "要先在账号台签合规承诺。Pico 不代签。"
         elif raw_msg:
             message = raw_msg[:200]
     if code == 0:
@@ -298,7 +298,8 @@ def gateway_status() -> dict:
         "sub2api": {
             "bind": "127.0.0.1:8081",
             "role": "account_login_state",
-            "tailnet_ui": SUB2API_TAILNET_UI,
+            "account_ui": SUB2API_ACCOUNT_UI,
+            "tailnet_ui": SUB2API_ACCOUNT_UI,
             **_probe(SUB2API_HEALTH),
             **login_state,
         },

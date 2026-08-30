@@ -14,7 +14,7 @@ def test_gateway_status_is_manager_not_frontend(monkeypatch) -> None:
             "monitor_count": None,
             "compliance_required": False,
             "needs_auth": True,
-            "hard_relogin": "sub2api_tailnet_ui",
+            "hard_relogin": "sub2api_public_ui",
         },
     )
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
@@ -29,7 +29,8 @@ def test_gateway_status_is_manager_not_frontend(monkeypatch) -> None:
     assert body["brain"]["via"] == "new_api"
     assert body["brain"]["model"] == "gpt-5.6-sol"
     assert body["new_api"]["models"] == ["gpt-5.6-sol"]
-    assert body["sub2api"]["tailnet_ui"].startswith("https://")
+    assert body["sub2api"]["account_ui"] == "https://workbench.aivia.asia"
+    assert body["sub2api"]["tailnet_ui"] == body["sub2api"]["account_ui"]
     assert "token" not in str(body).lower()
     assert "password" not in str(body).lower()
     assert body["new_api"]["intended_bind"] == "127.0.0.1:3000"
@@ -47,7 +48,7 @@ def test_gateway_brain_flags_aiproxy_direct(monkeypatch) -> None:
             "monitor_count": None,
             "compliance_required": False,
             "needs_auth": True,
-            "hard_relogin": "sub2api_tailnet_ui",
+            "hard_relogin": "sub2api_public_ui",
         },
     )
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://superaichao.xin/openai")
@@ -69,16 +70,20 @@ def test_pico_nginx_snippet_is_librechat_only() -> None:
     assert "dify" not in text.lower()
 
 
-def test_workbench_snippet_is_retired() -> None:
+def test_workbench_snippet_proxies_sub2api_loopback() -> None:
     from pathlib import Path
 
     text = (
-        Path(__file__).resolve().parents[2] / "deploy" / "nginx" / "workbench.aivia.asia.retired.conf"
+        Path(__file__).resolve().parents[2] / "deploy" / "nginx" / "workbench.aivia.asia.conf"
     ).read_text(encoding="utf-8")
-    assert "return 410" in text
-    assert "8081" not in text
-    assert "13080" not in text
-    assert "proxy_pass" not in text
+    assert "127.0.0.1:8081" in text
+    assert "server_name workbench.aivia.asia" in text
+    assert "127.0.0.1:13080" not in text
+    assert "dify_workbench" not in text
+    pico = (Path(__file__).resolve().parents[2] / "deploy" / "nginx" / "pico.aivia.asia.conf").read_text(
+        encoding="utf-8"
+    )
+    assert "8081" not in pico
 
 
 def _clear_token_cache() -> None:
@@ -196,7 +201,7 @@ def test_admin_accounts_423_is_compliance_not_fake_success(monkeypatch) -> None:
     assert result["ok"] is False
     assert result["http"] == 423
     assert "不代签" in result["message"]
-    assert "尾网" in result["message"]
+    assert "账号台" in result["message"]
 
 
 def test_soft_action_rejects_unknown_verb() -> None:
