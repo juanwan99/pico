@@ -657,7 +657,7 @@ def scripted_open_domain_success() -> list[dict[str, Any]]:
             "toolName": "workspace_write_file",
             "toolCallId": "c1",
             "isError": False,
-            "result": {"content": [{"type": "text", "text": '{\"title\":\"notes.md\"}'}]},
+            "result": {"content": [{"type": "text", "text": '{"title":"notes.md"}'}]},
         },
         {
             "type": "message_end",
