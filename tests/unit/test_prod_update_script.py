@@ -64,8 +64,6 @@ def _fake_runtime(
             "    if [ -f \"$state\" ]; then read -r attempts <\"$state\"; fi\n"
             "    attempts=$((attempts + 1))\n"
             "    printf '%s' \"$attempts\" >\"$state\"\n"
-            "    attempts=$((attempts + 1))\n"
-            "    printf '%s' \"$attempts\" >\"$state\"\n"
             f"    if [ \"$attempts\" -le {login_failures_before_success} ]; then "
             "printf '000'; exit 7; fi\n"
             f"    printf '%s' '{login_code}'\n"
