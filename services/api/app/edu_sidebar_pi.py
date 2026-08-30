@@ -12,12 +12,21 @@ from contextvars import ContextVar
 from dataclasses import replace
 from typing import Any
 
-from pico_orchestrator.edu_sidebar import (
-    edu_sidebar_tool_ceiling,
-    is_json_only_propose,
-    sidebar_chat_only,
-    with_sidebar_workbench_hint,
-)
+
+def _sidebar_helpers():
+    from pico_orchestrator.edu_sidebar import (
+        edu_sidebar_tool_ceiling,
+        is_json_only_propose,
+        sidebar_chat_only,
+        with_sidebar_workbench_hint,
+    )
+
+    return (
+        edu_sidebar_tool_ceiling,
+        is_json_only_propose,
+        sidebar_chat_only,
+        with_sidebar_workbench_hint,
+    )
 
 # True only for this request's handler body (skill/tool ceiling). Stream
 # closures already captured those results; do not read this in the SSE task.
@@ -33,7 +42,7 @@ def _hint_caps(caps: Any) -> Any:
     mark = "附属，不是用户要求"
     if mark not in system:
         return caps
-    hinted = with_sidebar_workbench_hint(system)
+    hinted = _sidebar_helpers()[3](system)
     if hinted == system:
         return caps
     return replace(caps, system_prompt=hinted)
@@ -59,6 +68,8 @@ def install_edu_sidebar_pi(oc: Any) -> None:
     if getattr(oc, "_edu_sidebar_pi_installed", False):
         return
 
+    ceiling, is_json_only_propose, sidebar_chat_only, _unused_hint = _sidebar_helpers()
+    del _unused_hint
     oc._sidebar_chat_only = sidebar_chat_only
 
     orig_resolve = oc._resolve_skill_for_prompt
@@ -77,7 +88,7 @@ def install_edu_sidebar_pi(oc: Any) -> None:
     def normalize_allowed_tools(raw: Any) -> list[str] | None:
         out = orig_norm(raw)
         if EDU_SIDEBAR_PI.get():
-            return edu_sidebar_tool_ceiling(out)
+            return ceiling(out)
         return out
 
     oc._normalize_allowed_tools = normalize_allowed_tools
