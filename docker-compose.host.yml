@@ -102,8 +102,10 @@ services:
       PICO_IMAGE_GATEWAY_KEY: ${PICO_IMAGE_GATEWAY_KEY:-}
       PICO_IMAGE_GATEWAY_MODEL: ${PICO_IMAGE_GATEWAY_MODEL:-}
       # Sub2API admin login for /admin/gateway. Values live in host .env only.
+      # After owner TOTP bind, password login returns requires_2fa; use Admin API Key.
       SUB2API_ADMIN_EMAIL: ${SUB2API_ADMIN_EMAIL:-}
       SUB2API_ADMIN_PASSWORD: ${SUB2API_ADMIN_PASSWORD:-}
+      SUB2API_ADMIN_API_KEY: ${SUB2API_ADMIN_API_KEY:-}
       ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
       ZHIPU_IMAGES_URL: ${ZHIPU_IMAGES_URL:-}
       ZHIPU_IMAGE_MODEL: ${ZHIPU_IMAGE_MODEL:-glm-image}
