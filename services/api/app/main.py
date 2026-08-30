@@ -290,7 +290,7 @@ async def admin_gateway(session: AsyncSession = Depends(get_session)) -> dict:
 
 @app.post("/v1/admin/gateway/accounts/{account_id}/{action}")
 async def admin_gateway_account_action(account_id: int, action: str):
-    """Soft restore only. Hard re-login stays on the Sub2API tailnet page."""
+    """Soft restore only. Hard re-login stays on the Sub2API public console."""
     result = account_soft_action(account_id, action)
     if not result.get("ok"):
         code = int(result.get("http") or 502)

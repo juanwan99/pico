@@ -46,7 +46,8 @@ const baseStatus = {
     monitor_count: 0,
     monitors: [] as unknown[],
     accounts: [] as unknown[],
-    tailnet_ui: 'https://aliyun-hy.tail217880.ts.net',
+    account_ui: 'https://workbench.aivia.asia',
+    tailnet_ui: 'https://workbench.aivia.asia',
   },
   usage: { ok: true, billing: false, day: '2026-08-30', kinds: [], note: '老师用量。' },
 };
@@ -70,7 +71,11 @@ describe('GatewayAdminPage', () => {
     );
     expect(screen.getByRole('heading', { name: '网关管理' })).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText(/打开尾网账号台/)).toBeInTheDocument();
+      expect(screen.getByText(/打开账号台/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /打开账号台/ })).toHaveAttribute(
+        'href',
+        'https://workbench.aivia.asia',
+      );
     });
     expect(screen.getByText('管道 · New API')).toBeInTheDocument();
     expect(screen.getByText('账号 · Sub2API 登录态')).toBeInTheDocument();
@@ -168,7 +173,7 @@ describe('GatewayAdminPage', () => {
       json: async () => ({
         ok: false,
         http: 423,
-        message: '要先在尾网 Sub2API 真页签合规承诺。Pico 不代签。',
+        message: '要先在账号台签合规承诺。Pico 不代签。',
       }),
     });
     const user = userEvent.setup();
