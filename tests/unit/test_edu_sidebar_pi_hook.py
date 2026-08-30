@@ -11,6 +11,31 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 
+def test_app_init_does_not_import_orchestrator() -> None:
+    text = (ROOT / "services" / "api" / "app" / "__init__.py").read_text(encoding="utf-8")
+    assert "from pico_orchestrator" not in text
+    assert "import pico_orchestrator" not in text
+    assert "boot_edu_sidebar_pi" not in text
+
+
+def test_app_package_imports_without_orchestrator_on_path() -> None:
+    import subprocess
+
+    src = (
+        "import app\n"
+        "assert 'pico_orchestrator' not in __import__('sys').modules\n"
+        "print('ok')\n"
+    )
+    env_path = str(ROOT / "services" / "api")
+    out = subprocess.check_output(
+        [sys.executable, "-c", src],
+        env={**dict(**{k: v for k, v in __import__("os").environ.items()}), "PYTHONPATH": env_path},
+        cwd=str(ROOT),
+        text=True,
+    )
+    assert "ok" in out
+
+
 def test_settings_import_does_not_explode() -> None:
     from app.settings import Settings
 
