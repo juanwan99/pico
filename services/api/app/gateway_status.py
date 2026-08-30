@@ -16,11 +16,7 @@ def _probe(url: str, timeout: float = 2.0) -> dict:
         with urlopen(req, timeout=timeout) as resp:
             code = int(getattr(resp, "status", 200))
             return {"ok": 200 <= code < 500, "http": code}
-    except URLError:
-        return {"ok": False, "http": 0}
-    except TimeoutError:
-        return {"ok": False, "http": 0}
-    except Exception:
+    except (URLError, TimeoutError, OSError, ValueError):
         return {"ok": False, "http": 0}
 
 
