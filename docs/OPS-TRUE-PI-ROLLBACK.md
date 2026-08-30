@@ -87,7 +87,7 @@ curl -sf http://127.0.0.1:18765/health | python3 -c \
 # 恢复真核：删 .env 中 PICO_HOSTED_LOOP 行 → 再 recreate pico-api
 ```
 
-**禁止：** 为回滚删除 `pi_runtime.py`；为刷绿关闭落盘门闸；用关 `DEFAULT` 代替 `HOSTED_LOOP` 当唯一文档路径（可关，但事故首选 HOSTED）。
+**禁止：** 为回滚删除 `pi_runtime.py`；为刷绿关闭落盘门闩；用关 `DEFAULT` 代替 `HOSTED_LOOP` 当唯一文档路径（可关，但事故首选 HOSTED）。
 
 ---
 
