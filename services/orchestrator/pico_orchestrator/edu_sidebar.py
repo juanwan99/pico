@@ -21,6 +21,31 @@ SIDEBAR_WORKBENCH_HINT = (
     "本侧栏不得调用 generate_* / edit_* / 出图，不得落 Artifact。"
 )
 
+# Sidebar may enter Pi. Never inherit office CORE. Later page verbs join this set.
+EDU_SIDEBAR_ALLOWED_TOOLS = frozenset({"web_search", "web_fetch"})
+
+
+def sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
+    """json_only stays one-shot. Edu sidebar is not chat_only: it enters Pi.
+
+    Still never force_agent / land artifacts: no skill guess, request tool ceiling.
+    """
+    del edu_sidebar
+    return bool(json_only)
+
+
+def edu_sidebar_tool_ceiling(request_tools: list[str] | None) -> list[str]:
+    """Empty list = Pi with no tools. None must not fall through to CORE office tools."""
+    if not request_tools:
+        return []
+    return [t for t in request_tools if t in EDU_SIDEBAR_ALLOWED_TOOLS]
+
+
+def with_sidebar_workbench_hint(system: str | None) -> str:
+    if system:
+        return f"{system}\n{SIDEBAR_WORKBENCH_HINT}"
+    return SIDEBAR_WORKBENCH_HINT
+
 
 def is_json_only_propose(
     prompt: str | None,

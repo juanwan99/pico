@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 from app.openai_compat import (
     EDU_SIDEBAR_MARK,
     _client_system_from_messages,
+    _edu_sidebar_tool_ceiling,
     _is_edu_sidebar_system,
     _normalize_allowed_tools,
     _resolve_allowed_tools,
@@ -26,10 +27,17 @@ def test_edu_sidebar_mark_detects_accessory() -> None:
     assert _is_edu_sidebar_system("你是 Pico，面向学校场景的 AI 助手。") is False
 
 
-def test_sidebar_chat_only_skips_agent() -> None:
-    assert _sidebar_chat_only(edu_sidebar=True, json_only=False) is True
+def test_sidebar_json_only_skips_agent() -> None:
+    assert _sidebar_chat_only(edu_sidebar=True, json_only=False) is False
     assert _sidebar_chat_only(edu_sidebar=False, json_only=True) is True
     assert _sidebar_chat_only(edu_sidebar=False, json_only=False) is False
+
+
+def test_edu_sidebar_tool_ceiling_strips_office() -> None:
+    assert _edu_sidebar_tool_ceiling(None) == []
+    assert _edu_sidebar_tool_ceiling([]) == []
+    assert _edu_sidebar_tool_ceiling(["generate_html_document", "web_search"]) == ["web_search"]
+    assert _edu_sidebar_tool_ceiling(["workspace_list_files", "kb_search"]) == []
 
 
 def test_empty_allowed_tools_is_ceiling() -> None:
@@ -102,7 +110,8 @@ def test_true_pi_compose_uses_edu_system_override() -> None:
 
 if __name__ == "__main__":
     test_edu_sidebar_mark_detects_accessory()
-    test_sidebar_chat_only_skips_agent()
+    test_sidebar_json_only_skips_agent()
+    test_edu_sidebar_tool_ceiling_strips_office()
     test_empty_allowed_tools_is_ceiling()
     test_client_system_from_first_system_message()
     test_normalize_allowed_tools_names_and_openai_shape()

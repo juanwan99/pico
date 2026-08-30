@@ -152,9 +152,10 @@ def test_compose_prompt_history_still_available_without_tree() -> None:
     assert "你好" not in text
 
 
-def test_sidebar_chat_only_unchanged() -> None:
-    assert _sidebar_chat_only(edu_sidebar=True, json_only=False) is True
+def test_sidebar_enters_pi_unless_json_only() -> None:
+    assert _sidebar_chat_only(edu_sidebar=True, json_only=False) is False
     assert _sidebar_chat_only(edu_sidebar=False, json_only=False) is False
+    assert _sidebar_chat_only(edu_sidebar=True, json_only=True) is True
     assert _workbench_tool_step_line("generate_docx_document") == "正在写 Word"
     assert _workbench_tool_step_line("edit_docx_document") == "正在改 Word"
     assert _workbench_tool_step_line("generate_image") == "正在出图"
