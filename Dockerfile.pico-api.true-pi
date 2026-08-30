@@ -1,5 +1,5 @@
 # Pico API image with true-Pi RPC binary (production multi-step default).
-# Pin: @mariozechner/pi-coding-agent@0.73.1 (ADR-PI-TRUE-KERNEL-RPC)
+# Pin: @earendil-works/pi-coding-agent@0.84.4 (ADR-PI-TRUE-KERNEL-RPC · #806)
 #
 # CN-friendly build (Aliyun apt/pypi + npmmirror Node binary).
 # Avoid nodesource + deb.debian.org-only paths that stall on light VPS.
@@ -39,7 +39,7 @@ RUN set -eux; \
     tar -xJf /tmp/node.tar.xz -C /usr/local/lib/nodejs --strip-components=1; \
     rm -f /tmp/node.tar.xz; \
     npm config set registry https://registry.npmmirror.com; \
-    npm install -g @mariozechner/pi-coding-agent@0.73.1; \
+    npm install -g @earendil-works/pi-coding-agent@0.84.4; \
     pi --version; \
     apt-get purge -y xz-utils; \
     apt-get autoremove -y; \
