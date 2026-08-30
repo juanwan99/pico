@@ -42,6 +42,7 @@ from app.auth import (
     require_service_token,
 )
 from app.db import EventRow, RunRow, WorkspaceRow, get_session, init_db, new_id
+from app.gateway_status import gateway_status
 from app.edu_files import router as edu_files_router
 from app.edu_kb_ingest import router as edu_kb_ingest_router
 from app.edu_school import router as edu_school_router
@@ -265,6 +266,12 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
     if kimi_batch:
         body["kimi_agent_canary_batch"] = kimi_batch
     return body
+
+
+@app.get("/v1/admin/gateway")
+async def admin_gateway() -> dict:
+    """Manager snapshot of New API + Sub2API. Not a product frontend."""
+    return gateway_status()
 
 
 @app.get("/v1/meta/version")

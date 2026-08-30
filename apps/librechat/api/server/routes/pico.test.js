@@ -652,4 +652,26 @@ describe('Pico proxy routes', () => {
       expect.objectContaining({ method: 'GET' }),
     );
   });
+
+  it('forbids teacher role from the gateway admin snapshot', async () => {
+    global.__PICO_USER = { id: 'member-123', role: 'USER' };
+    const response = await request(app).get('/api/pico/v1/admin/gateway');
+    expect(response.status).toBe(403);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('proxies gateway admin snapshot for ADMIN', async () => {
+    global.__PICO_USER = { id: 'admin-1', role: 'ADMIN' };
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      headers: { get: () => 'application/json' },
+      text: async () => JSON.stringify({ ok: true, sub2api_is_frontend: false }),
+    });
+    const response = await request(app).get('/api/pico/v1/admin/gateway');
+    expect(response.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/admin/gateway',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
 });

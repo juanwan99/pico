@@ -15,6 +15,7 @@ import {
   Scale,
   ShieldCheck,
 } from 'lucide-react';
+import { SystemRoles } from 'librechat-data-provider';
 import { PixelAnimalFace } from '~/components/Chat/Messages/PixelAnimalPicker';
 import { ArchivedChatsModal } from '~/components/Nav/SettingsTabs/General/ArchivedChatsModal';
 import { MyFilesModal } from '~/components/Chat/Input/Files/MyFilesModal';
@@ -181,14 +182,16 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
           <GearIcon className="icon-md" aria-hidden="true" />
           {localize('com_nav_settings')}
         </Menu.MenuItem>
-        <Menu.MenuItem
-          onClick={() => navigate('/accounts')}
-          className="select-item text-sm"
-          data-testid="nav-sub2api-accounts"
-        >
-          <KeyRound className="icon-md" aria-hidden="true" />
-          账号管理
-        </Menu.MenuItem>
+        {user?.role === SystemRoles.ADMIN ? (
+          <Menu.MenuItem
+            onClick={() => navigate('/admin/gateway')}
+            className="select-item text-sm"
+            data-testid="nav-gateway-admin"
+          >
+            <KeyRound className="icon-md" aria-hidden="true" />
+            网关管理
+          </Menu.MenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         <Menu.MenuItem onClick={() => logout()} className="select-item text-sm">
           <LogOut className="icon-md" aria-hidden="true" />

@@ -84,8 +84,8 @@ const loadMoreHub = () =>
     Component: m.default,
   }));
 
-const loadAccountsHub = () =>
-  import('~/components/Workbench/AccountsHubPage').then((m) => ({
+const loadGatewayAdmin = () =>
+  import('~/components/Workbench/GatewayAdminPage').then((m) => ({
     Component: m.default,
   }));
 
@@ -281,8 +281,8 @@ export const router = createBrowserRouter(
               lazy: loadMoreHub,
             },
             {
-              path: 'accounts',
-              lazy: loadAccountsHub,
+              path: 'admin/gateway',
+              lazy: loadGatewayAdmin,
             },
             {
               path: 'more/files',
