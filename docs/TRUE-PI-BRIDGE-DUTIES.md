@@ -50,7 +50,7 @@ web_fetch
 
 v1 曾增加：skill_instruction 注入、近 N 条 user/assistant history 文本、skill_snapshot 工具交并集。  
 v2（#507）：DeepSeek 官方 `web_search` 转发 + 网关 `web_fetch`（SSRF 拒绝内网/metadata/管理域）。仍禁 bash / 任意 FS / 浏览器代登。  
-v3（#608）：改已有 `.docx`/`.pptx` 走 PyPI `python-docx` / `python-pptx` 薄适配（禁止 `generate_*` 另造冒充改原件）。出图曾接 SiliconFlow（**业主 2026-08-27 已否决 · 废路径**；现只待智谱 glm-image）。侧栏仍空工具。  
+v3（#608）：改已有 `.docx`/`.pptx` 走 PyPI `python-docx` / `python-pptx` 薄适配（禁止 `generate_*` 另造冒充改原件）。出图曾接 SiliconFlow（**业主 2026-08-27 已否决 · 废路径**；现只待智谱 glm-image）。侧栏进 Pi；工具以请求天花板为准（默认空，不挂办公 CORE）；禁 force_agent、禁落 Artifact。  
 v4（#646 T-GROK-PATH）：禁止把 Skill / Landing / 历史焊进 `prompt()`。短纪律进 Pi `SYSTEM.md`（通用，无场景 if）。`prompt()` 只留老师原文。工具白名单仍挂载，模型决定调不调。跑后门只认「声称交件却没落盘」，不认正文词表。  
 v5（选型 · 未开工）：办公文档核见 [`docs/ADR-OFFICE-DOC-PIPELINE.md`](./ADR-OFFICE-DOC-PIPELINE.md)。后期只加 inspect/render/edit/verify 少动词；禁桥内 bash、禁模型即兴 python-docx、禁 MCP 办公室栈。  
 v6（#703 T-UNMASK-PI）：`prompt()` 可带 `images[]`；`models.json` 在 vision 模型上 `input: ["text","image"]`。仍禁 host bash / 任意 FS。spec 不是办公天花板。

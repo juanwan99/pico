@@ -13,11 +13,15 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 from pico_orchestrator.edu_sidebar import (
     HONEST_MISS_SUMMARY,
     JSON_ONLY_OUTPUT,
+    SIDEBAR_WORKBENCH_HINT,
     asked_from_sidebar_prompt,
+    edu_sidebar_tool_ceiling,
     honest_miss_json,
     inject_web_hits,
     is_json_only_propose,
     shape_web_hits,
+    sidebar_chat_only,
+    with_sidebar_workbench_hint,
 )
 
 
@@ -90,3 +94,15 @@ def test_sidebar_web_hits_inject_and_honest_miss() -> None:
     assert hit["sources"][0]["url"].startswith("https://")
     empty_src = shape_web_hits({"retrieved": True, "sources": []})
     assert empty_src["honest_miss"] is True
+
+
+def test_sidebar_enters_pi_helpers() -> None:
+    assert sidebar_chat_only(edu_sidebar=True, json_only=False) is False
+    assert sidebar_chat_only(edu_sidebar=True, json_only=True) is True
+    assert edu_sidebar_tool_ceiling(None) == []
+    assert edu_sidebar_tool_ceiling([]) == []
+    assert edu_sidebar_tool_ceiling(["generate_html_document", "web_search"]) == ["web_search"]
+    assert edu_sidebar_tool_ceiling(["workspace_list_files", "kb_search"]) == []
+    hinted = with_sidebar_workbench_hint("附属，不是用户要求")
+    assert SIDEBAR_WORKBENCH_HINT in hinted
+    assert with_sidebar_workbench_hint(hinted) == hinted

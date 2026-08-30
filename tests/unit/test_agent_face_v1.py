@@ -50,9 +50,10 @@ def test_progress_lines_are_chinese_no_percent() -> None:
     assert _workbench_tool_step_line("generate_docx_document") == "正在写 Word"
 
 
-def test_sidebar_chat_only_unchanged() -> None:
-    assert _sidebar_chat_only(edu_sidebar=True, json_only=False) is True
+def test_sidebar_enters_pi_unless_json_only() -> None:
+    assert _sidebar_chat_only(edu_sidebar=True, json_only=False) is False
     assert _sidebar_chat_only(edu_sidebar=False, json_only=False) is False
+    assert _sidebar_chat_only(edu_sidebar=True, json_only=True) is True
 
 
 def test_image_no_key_not_swallowed_as_model_key() -> None:
