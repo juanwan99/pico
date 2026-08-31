@@ -403,3 +403,60 @@ def test_public_and_preview_csp_still_deny_cdn() -> None:
     assert "jsdelivr" not in PUBLIC_CSP.lower()
     assert "script-src 'unsafe-inline'" in PUBLIC_CSP
     assert "https:" not in PUBLIC_CSP
+
+
+def test_unbalanced_inline_script_fails_closed() -> None:
+    from pico_orchestrator.document_generators import HTML_SCRIPT_SYNTAX_ERROR
+
+    body = (
+        "<!DOCTYPE html><html><head></head><body>"
+        "<script>(function(){ var x = 1; })(); }</script>"
+        "</body></html>"
+    )
+    with pytest.raises(ValueError, match="括号不配对"):
+        build_html_document(title="lab.html", marker="js-bad", body=body)
+    assert "括号不配对" in HTML_SCRIPT_SYNTAX_ERROR
+
+
+def test_js_delimiters_skip_strings_and_comments() -> None:
+    from pico_orchestrator.document_generators import js_delimiters_balanced
+
+    assert js_delimiters_balanced("var x = '{'; /* } */") is True
+    assert js_delimiters_balanced("var x = 1; }") is False
+    assert js_delimiters_balanced("(function(){ var x = 1; })();") is True
+
+
+def test_verify_unbalanced_inline_script_fails_l0() -> None:
+    gw = build_default_gateway(_MemStore())
+    body = (
+        "<!DOCTYPE html><html><body>"
+        "<button type='button'>go</button>"
+        "<script>(function(){ var x = 1; })(); }</script>"
+        "</body></html>"
+    )
+
+    async def _run() -> dict[str, Any]:
+        return await gw.invoke(
+            _P(),  # type: ignore[arg-type]
+            "verify_html_document",
+            {"content": body},
+        )
+
+    out = asyncio.run(_run())
+    assert out["ok"] is False
+    names = {c["name"]: c for c in out["checks"]}
+    assert names["no_remote_script"]["status"] == "fail"
+    assert "script_syntax" in names["no_remote_script"]["detail"]
+
+
+def test_balanced_inline_script_still_lands() -> None:
+    body = (
+        "<!DOCTYPE html><html><head></head><body>"
+        "<button id='go'>go</button>"
+        "<script>(function(){ var x = 1; document.getElementById('go'); })();</script>"
+        "</body></html>"
+    )
+    raw = build_html_document(title="lab.html", marker="js-ok", body=body)
+    text = raw.decode("utf-8")
+    assert "var x = 1" in text
+    assert "js-ok" in text
