@@ -215,9 +215,7 @@ def _write_xlsx_cell(cell: object, raw: str) -> None:
         if text and text.lstrip("-").isdigit():
             cell.value = int(text)
             return
-        if text and text.replace(".", "", 1).lstrip("-").isdigit() and text.count(".") == 1:
-            cell.value = float(text)
-            return
+        # Keep decimals as text. float("99.1") is 99.0999… in the file.
     except (TypeError, ValueError):
         pass
     cell.value = text
