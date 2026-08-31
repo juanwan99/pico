@@ -313,6 +313,10 @@ async def run_true_pi_agent(
                 )
                 if parked.get("ok"):
                     return str(parked.get("answer") or "").strip()
+                from pico_orchestrator.ask_user import AskTimedOut
+
+                if str(parked.get("error") or "") == "timeout":
+                    raise AskTimedOut(str(parked.get("question") or ""))
                 return ""
 
             transport.ui_select = _plan_select
@@ -406,6 +410,16 @@ async def run_true_pi_agent(
         consumer = asyncio.create_task(_consume())
         try:
             while not state.settled and not stop.is_set():
+                if getattr(transport, "plan_ask_timed_out", False):
+                    await client.abort()
+                    return await _failed(
+                        emit,
+                        code="ask.timeout",
+                        reason="超时未选，没有执行。请再发一次并选「确认执行」。",
+                        state=state,
+                        principal=principal,
+                        tag=tag,
+                    )
                 if await is_cancelled():
                     await client.abort()
                     await emit("run.status", {"status": "cancelled", **tag})
@@ -483,6 +497,17 @@ async def run_true_pi_agent(
             else:
                 with suppress(Exception):
                     consumer.result()
+
+        if getattr(transport, "plan_ask_timed_out", False):
+            await client.abort()
+            return await _failed(
+                emit,
+                code="ask.timeout",
+                reason="超时未选，没有执行。请再发一次并选「确认执行」。",
+                state=state,
+                principal=principal,
+                tag=tag,
+            )
 
         if await is_cancelled():
             await client.abort()
