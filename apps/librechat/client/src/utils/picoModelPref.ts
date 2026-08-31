@@ -86,6 +86,7 @@ export function patchConversationModel<
   return { ...prev, endpoint, model: id };
 }
 
+/** Last-toggle recall only. New /c/new chats must not seed from this (#809 T3). */
 export function getPicoPlanOn(): boolean {
   try {
     return localStorage.getItem(PLAN_STORAGE) === '1';

@@ -21,7 +21,6 @@ import { usePointsMeter } from '~/hooks/Pico/usePointsMeter';
 import {
   consumePendingModel,
   getPicoModelMode,
-  getPicoPlanOn,
   normalizePicoModelMode,
   patchConversationModel,
   patchConversationPlan,
@@ -44,13 +43,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
       return 'pico-fast';
     }
   });
-  const [planOn, setPlanOn] = useState(() => {
-    try {
-      return getPicoPlanOn();
-    } catch {
-      return false;
-    }
-  });
+  const [planOn, setPlanOn] = useState(false);
   const chatCtx = useOptionalChatContext();
   const setConversationRef = useRef(chatCtx?.setConversation);
   setConversationRef.current = chatCtx?.setConversation;
@@ -111,7 +104,8 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
       if (pendingModel) {
         applyModelRef.current(pendingModel);
       }
-      applyPlanRef.current(getPicoPlanOn());
+      // New home: 先计划 off. Do not restore pico:planOn from storage (#809 T3).
+      applyPlanRef.current(false);
       const pre = sessionStorage.getItem('pico:pendingPrompt');
       if (pre) {
         sessionStorage.removeItem('pico:pendingPrompt');
