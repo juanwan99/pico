@@ -8,7 +8,7 @@ DATE: 2026-08-31
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main
 阻塞: #806/#810/#808/#807/#809 DEPLOYED 等主管 PASS · #748 合部完不关 · 下一张 #811
-──────────────────────────────────
+────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · #824 T-UI-C-POLISH 业主 PASS @ tip `af3e8ad0…` · 文件型记忆 #807 已部等 PASS
 经验: docs/EXPERIENCE.md（唯一 · 按域）
