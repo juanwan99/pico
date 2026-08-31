@@ -26,6 +26,7 @@ import ArchiveFolderBar from './ArchiveFolderBar';
 import SchoolMaterialsBar from './SchoolMaterialsBar';
 import Landing from './Landing';
 import MainDeliveryStrip from './MainDeliveryStrip';
+import PicoAskBar from './PicoAskBar';
 import ResultPanel from './ResultPanel';
 import TaskRunBar from './TaskRunBar';
 import ChangeConfirmBanner from './ChangeConfirmBanner';
@@ -38,6 +39,7 @@ import store from '~/store';
 import { usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
 import { PointsMeterProvider } from '~/hooks/Pico/usePointsMeter';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
+import { liveAskEvent } from '~/utils/picoAskPrompt';
 import {
   latestUserOpenOfficeIntent,
   latestUserOpenWebsiteIntent,
@@ -233,7 +235,14 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     )}
                     rerunning={ledger.rerunning}
                     onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
-                    processHint={ledger.processHint || (isSubmitting ? '正在检索或作答' : null)}
+                    processHint={
+                      ledger.processHint ||
+                      (liveAskEvent(ledger.events)
+                        ? '在等你选'
+                        : isSubmitting
+                          ? '正在检索或作答'
+                          : null)
+                    }
                   />
                   {ledger.error ? (
                     <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
@@ -280,14 +289,17 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   >
                     {isProjectLandingPage && project && <ProjectLandingChip project={project} />}
                     {/* Single submit path: Landing uses useSubmitMessage; ChatForm only when chatting */}
-                    {!isLandingPage ? (
+                    {isLandingPage ? (
+                      <PicoAskBar run={ledger.run} events={ledger.events} />
+                    ) : (
                       <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">
                         <SchoolMaterialsBar conversationId={conversationId} />
                         <ArchiveFolderBar conversationId={conversationId} />
                         <PointsBar />
+                        <PicoAskBar run={ledger.run} events={ledger.events} />
                         <ChatForm index={index} placeholder={chatFormPlaceholder} />
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 </div>
                 {showResultPanel ? (
@@ -296,7 +308,14 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     conversationId={conversationId}
                     taskTitle={taskTitle || ledger.task?.title}
                     runStatusLabel={runStatusLabel}
-                    processHint={ledger.processHint || (isSubmitting ? '正在检索或作答' : null)}
+                    processHint={
+                      ledger.processHint ||
+                      (liveAskEvent(ledger.events)
+                        ? '在等你选'
+                        : isSubmitting
+                          ? '正在检索或作答'
+                          : null)
+                    }
                     picoArtifacts={ledger.artifacts}
                     runEvents={ledger.events}
                     run={ledger.run}
