@@ -30,7 +30,7 @@ from pico_orchestrator.true_pi.events import (
     maybe_write_plan_artifact,
     plan_artifact_title,
 )
-from pico_orchestrator.true_pi.runtime import plan_settle_hold, run_true_pi_agent
+from pico_orchestrator.true_pi.runtime import plan_settle_hold, run_true_pi_agent, want_plan_mode_extension
 
 
 class Principal:
@@ -82,6 +82,12 @@ def test_caps_with_plan_is_opt_in() -> None:
     assert caps.plan_on is False
     assert _caps_with_plan(caps, False).plan_on is False
     assert _caps_with_plan(caps, True).plan_on is True
+
+
+def test_plan_mode_extension_only_when_this_spawn_plan_on() -> None:
+    """T3: tree sessions must not load plan-mode and resurrect HITL after hi."""
+    assert want_plan_mode_extension(plan_on=False) is False
+    assert want_plan_mode_extension(plan_on=True) is True
 
 
 def test_spawn_plan_flag_only_when_on() -> None:
