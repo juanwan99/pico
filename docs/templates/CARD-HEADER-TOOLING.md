@@ -20,7 +20,7 @@ CLAIM-WB: 本抄录不签 · 以 STATE-NOW 为准
 【工具合同 · docs/TOOLING-CATALOG.md】
 批准 id：
   visual-gate · tip-pin · remote-health · gh-git
-  subscribe-pr · subscribe-ci · subscribe-timer · grok-sandbox-exec
+  subscribe-pr · subscribe-ci · pr-ci-ready · subscribe-timer · grok-sandbox-exec
   ssh-ecs · prod-update
   playwright-mcp · chrome-devtools-mcp · pytest-ruff
 证据路径：docs/evidence/<card>/<scene>/V0–V3

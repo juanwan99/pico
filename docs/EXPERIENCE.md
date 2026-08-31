@@ -13,7 +13,7 @@ DATE: 2026-08-31
 ## A · 派发 / 收口
 
 1. **只改 pico。** 禁写 edu-core / edu-cloud。
-2. **1 卡 1 PR。** CI 红、测炸、部翻车，都在**原 PR 原分支**补。禁止为修测/修部/修 Dockerfile/改文档新开第二张 PR（同卡续 = 业主说还差）。
+2. **1 卡 1 PR。** CI 红、测炸、部翻车，都在**原 PR 原分支**补。禁止为修测/修部/修 Dockerfile/改文档新开第二张 PR（同卡续 = 业主说还差）。**禁止只改 STATE-NOW / 现况三行的独立 PR。** PASS 与现况写 Issue 评论；现况三行跟同轮改码 PR 顺手刷，或只评不 PR。
 3. **无部署权拒领。** 不能 `PICO_DEPLOY_SHA=… bash /opt/pico/scripts/prod-update.sh` = 不 stamp。DONE 必须 `curl -fsS https://pico.aivia.asia/api/pico/tip` = origin/main。合了未部 = 没完。
 4. **禁止 PR 写 `Closes #<卡>`。** 部前关卡 = 失真。合了未部要打回 OPEN。
 5. **证据贴本卡 Issue 评论。** 禁止截图 docs PR。UI 卡：执行窗合部后把过门截图贴合同 Issue **回执**（图跟五句一起）。Cloud Agent 本机无浏览器 ≠ 免过门；派发条写明「截图写回执」。
@@ -23,7 +23,7 @@ DATE: 2026-08-31
 9. **聊天默认易失。** 约束下一窗 → Issue 评论或 `STATE-NOW` / 本文 / `TOOLING-CATALOG`。回复用 `§编号` / `Issue#`，禁「上次我们说」。
 10. **合与部默认本窗。** 执行者 = 业主正在说话的这扇 Grok 沙箱。不要 spawn 子 agent / Cursor 云 Task / SSH 调 ECS grok。主管做：对齐需求·开卡·合·部·结果可见则自签 PASS。
 21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / 把 ECS 当第二账本 / 聊天当真源。
-22. **总管环（自驱动闭环）：** 对齐需求 → stamp → 本窗改+测+PR（叠 live）→ CI 绿立刻 squash 合 → 有差才部（ssh-ecs / prod-update）→ tip-pin → 结果可见则自签 PASS → 刷 STATE-NOW/#634。ECS 只部。合了未部关卡=打回 OPEN。禁止 mailbox。卡别拆太细。禁止拉 Cursor 云 Task 当执行者。
+22. **总管环（自驱动闭环）：** 对齐需求 → stamp → 本窗改+测+PR（叠 live）→ 订 subscribe-ci（禁止在窗里轮询 check-runs / sleep 等绿）→ 合前本窗跑 `scripts/pr-ci-ready.sh --pr N` 一眼（0 才合 · 1 停着再订 · 2 回原分支补）→ CI 绿再 squash 合 → 有差才部（ssh-ecs / prod-update）→ tip-pin → 结果可见则自签 PASS → 刷 STATE-NOW/#634。等 CI ≠ 卡死。ECS 只部。合了未部关卡=打回 OPEN。禁止 mailbox。卡别拆太细。禁止拉 Cursor 云 Task 当执行者。禁止 SSH 调 ECS grok。
 23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审（不开新卡）· `CLEAR` tip=main + 主管 PASS。人只留：目标 · 黄红争议 · PASS。同域第二张 stamp-ok=废派。
 
 ## B · 现网 / 产品
@@ -54,7 +54,7 @@ DATE: 2026-08-31
 16. **部署真源：** `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`；证伪用 **tip-pin** + **remote-health**（见 TOOLING-CATALOG）。公网 tip 与 ECS loopback 必须同 SHA。
 17. **SSH 进机：只用 Tailscale MagicDNS。** Host 别名 `ecs` / `pico-prod` → `aliyun-hy`，用户 `ops`。禁止拿 Cloud Agent 公网 egress IP 去开安全组 22（IP 漂移 = 假通路）。
 
-80. **执行者 = 业主正在说话的这扇 Grok 沙箱。** 不要再 SSH 调 ECS grok，不要拉 Cursor 云 Task。ECS 只部。跨机传话会丢。
+80. **执行者 = 业主正在说话的这扇 Grok 沙箱。** 不要再 SSH 调 ECS grok，不要拉 Cursor 云 Task。ECS 只部。跨机传话会丢。`scripts/spawn-executor.sh` / `scripts/ecs-grok-exec.sh` **入口已断**（一跑就退）。业主点名 Codex 的卡仍走业主点名，不当默认。
 81. **开窗先自检，假红当事故。** 密钥根可以是目录（`/root/.edu-secrets` 或 `$HOME/.edu-secrets`），一钥一文件；私钥文件可以叫 `ecs_ops`。不要用 `[[ -f 目录 ]]` 判断「无钥」——目录不是文件，会假红。无钥才 BLOCKED；钥齐但 ssh 不通才是真红。自检一边 BLOCKED 一边 exit 0 = 撒谎。
 82. **不要 sudo bash 写密钥或跑装机脚本。** sudo 会清掉环境变量，看起来像没钥。tailscaled 需要提权就在脚本里对那一条 sudo，整段不要包。
 83. **Tailscale 主机名按这台沙箱的 hostname，前面加仓前缀（`pico-…`）。** 禁止设成对面仓的固定名（如 `cursor-edu-core`）——会把另一扇窗踢下线。两窗不要抢同一个 Tailscale 节点。
@@ -63,7 +63,7 @@ DATE: 2026-08-31
 86. **抽测走用户能看见的那条路。** Grok 沙箱右侧预览必须是现网反代，禁止 iframe 套一套假站。禁止只打 API 当过门。过门仍是公网看得见结果句；CI 绿 ≠ 过门。
 87. **装机一次，自检每次。** 钥落到目录（chmod 700 目录、600 文件）后跑仓内 install / ssh-up；自检发现钥齐但 ssh 死，允许自动再 probe 一次。钥禁止进聊天、Issue、PR。两台机器磁盘不通，不要等总管窗「把钥传过来」。
 88. **切窗只复制现行总管卡。** 仓内模板改了不等于 Issue 钉文改了——接窗抄的是钉评。正源链接不要指向落后的 origin/main。
-89. **高质量执行清单（开卡后不等人喊开工）：** 自检真绿（含 ssh）→ CLAIM → 改+单测 → PR 叠 live → CI 绿立刻 squash 合 → 有差才部 → 五句回执。合了未部关卡=打回。证据贴本卡 Issue，不进 PR。部前禁 Closes。
+89. **高质量执行清单（开卡后不等人喊开工）：** 自检真绿（含 ssh）→ CLAIM → 改+单测 → PR 叠 live → 订 subscribe-ci → `pr-ci-ready` 一眼（0 才合；未绿不准合、不空转）→ CI 绿再 squash 合 → 有差才部 → 五句回执。合了未部关卡=打回。证据贴本卡 Issue，不进 PR。部前禁 Closes。
 90. **右侧不是 iframe 现网。** Grok 只展示沙箱 8080。现网几乎都有 `X-Frame-Options: SAMEORIGIN`，嵌 `pico.aivia.asia` 会白屏。要看见真站：在 8080 反代现网（`scripts/grok-preview-proxy.mjs`）。
 91. **反代要改四样，缺一样就不稳：** 请求 Host / Origin / Referer 改成现网；响应删 `X-Frame-Options` 和 CSP；`Location` 从 `https://pico.aivia.asia/...` 改成相对路径；`Set-Cookie` 去掉 Domain，SameSite=Lax。
 92. **开发路径不要进反代。** `/__grok`、`/@`、`/src`、`/node_modules`、`/auth/popup` 留给 Vite。其余 `/` 和 `/api` 走现网。不要在 8080 再起一套本地产品 SPA 冒充现网。
@@ -78,5 +78,5 @@ DATE: 2026-08-31
 20. **禁止：** 密钥写进 `environment.json` / Issue / PR；把「白名单 22」当 Cloud Agent 部署通道；Save 前不经 draft build + 新 agent 验 `ECS_OK`。
 
 ```text
-派发点名示例：经验 §3 §17 §22 §80 §90 · 工具 grok-sandbox-exec · grok-preview-proxy · tip-pin · ssh-ecs
+派发点名示例：经验 §3 §17 §22 §80 §90 · 工具 grok-sandbox-exec · grok-preview-proxy · pr-ci-ready · tip-pin · ssh-ecs
 ```
