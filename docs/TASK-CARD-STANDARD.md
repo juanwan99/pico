@@ -15,7 +15,7 @@ SUPERSEDES: 四行短卡当派发形态
 
 点 **New Issue** 选「执行卡」或贴 **标准任务卡**（#627 体例）。卡必须自含【已锁事实】【IN】【验收】——执行窗零记忆，总管聊天里的调查它看不见。
 
-派给本窗时：派发条可贴合同 Issue（`## 派发`），执行者就是业主正在说话的这扇 Grok 沙箱。ECS 只部。禁止 spawn-executor / Cursor 云 Task。模板 [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)。卡别拆太细。
+派给本窗时：派发条可贴合同 Issue（`## 派发`），执行者就是业主正在说话的这扇 Grok 沙箱。ECS 只部。禁止 spawn-executor / Cursor 云 Task（入口已断）。合前 `pr-ci-ready` 一眼，禁止窗里轮询 CI。模板 [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)。卡别拆太细。
 
 ## 卡面（Issue 合同）
 
