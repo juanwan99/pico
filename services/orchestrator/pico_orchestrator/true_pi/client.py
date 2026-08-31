@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pico_orchestrator.ask_user import AskTimedOut
 from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinking_level, pi_bin
 
 logger = logging.getLogger(__name__)
@@ -92,26 +93,15 @@ def plan_choice_pending(value: str) -> bool:
         return True
     return value.strip() == "确认执行"
 
-# Isolated PI_CODING_AGENT_DIR filename. Pi 0.84 still has no --context CLI flag;
-# the window is models.json contextWindow (see packages/coding-agent/docs/models.md).
 PI_MODELS_JSON = "models.json"
 PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
 
 
 def official_compaction_settings(max_context: int) -> dict[str, Any]:
-    """Pi official compaction knobs only. Trigger: used > window - reserveTokens.
-
-    Do not invent a compressor. Windows stay 128k/256k. Raise reserveTokens so a
-    same-conversation long office run (several turns, tens of thousands of
-    tokens) actually fires; keepRecentTokens stays large enough that current
-    files and the last turn survive. One-shot short office stays under the line.
-    """
     window = int(max_context) or 256_000
     if window >= 200_000:
-        # deep 256k: fire when used > 64k (256k - 192k).
         reserve, keep = 192_000, 20_000
     else:
-        # fast 128k: fire when used > 56k (128k - 72k).
         reserve, keep = 72_000, 16_000
     return {
         "compaction": {
@@ -123,7 +113,6 @@ def official_compaction_settings(max_context: int) -> dict[str, Any]:
 
 
 def true_pi_windows_from_caps(caps: Any | None) -> tuple[int, int]:
-    """Lane windows: context window, output cap. Never treat them as the same."""
     thinking = bool(getattr(caps, "thinking_on", False)) if caps is not None else False
     context = int(getattr(caps, "max_context", 0) or 0) if caps is not None else 0
     output = int(getattr(caps, "max_tokens", 0) or 0) if caps is not None else 0
@@ -144,7 +133,6 @@ def true_pi_models_document(
     base_url: str = "",
     api: str = "",
 ) -> dict[str, Any]:
-    """Pi 0.84 models.json overlay. Official path, not an invented CLI flag."""
     from pico_orchestrator.vision import model_accepts_image
 
     name = (provider or "deepseek").strip() or "deepseek"
@@ -176,7 +164,6 @@ def true_pi_models_document(
         provider_entry["api"] = kind
         model_entry["api"] = kind
         if kind == "openai-responses":
-            # Owner: medium reasoning on Codex-class gpt-*. Official Pi map.
             model_entry["thinkingLevelMap"] = {
                 "off": "medium",
                 "minimal": "medium",
@@ -202,8 +189,6 @@ class RpcEvent:
 
 
 class TruePiTransport(ABC):
-    """Abstract peer for RPC JSONL."""
-
     @abstractmethod
     async def start(self) -> None: ...
 
@@ -224,8 +209,6 @@ class TruePiTransport(ABC):
 
 @dataclass
 class FakeTransport(TruePiTransport):
-    """Deterministic transport for unit tests without a real pi binary."""
-
     scripted: list[dict[str, Any]] = field(default_factory=list)
     sent: list[dict[str, Any]] = field(default_factory=list)
     assistant_text: str = "已写入 notes.md，请从产物列表下载。"
@@ -280,9 +263,8 @@ class FakeTransport(TruePiTransport):
         return raw
 
 
+@dataclass
 class SubprocessTransport(TruePiTransport):
-    """Spawn ``pi --mode rpc`` with isolated session dir and no built-in tools."""
-
     def __init__(
         self,
         *,
@@ -342,6 +324,7 @@ class SubprocessTransport(TruePiTransport):
         self.plan_execute_pending = False
         self.plan_agent_ends = 0
         self.plan_stayed = False
+        self.plan_ask_timed_out = False
         self._proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task[None] | None = None
         self._queue: asyncio.Queue[RpcEvent | None] = asyncio.Queue()
@@ -359,7 +342,6 @@ class SubprocessTransport(TruePiTransport):
         )
 
     def prepare_agent_home(self, home: Path | None = None) -> Path:
-        """Write isolated models.json so Pi compaction/requests see the lane window."""
         dest = home or (self.session_dir / "pi-agent")
         dest.mkdir(parents=True, exist_ok=True)
         payload = self.models_document()
@@ -367,8 +349,6 @@ class SubprocessTransport(TruePiTransport):
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-        # Official Pi compaction settings (docs/compaction.md). Not a self-built
-        # compressor: keepRecentTokens / reserveTokens are Pi's own knobs.
         settings = official_compaction_settings(self.max_context)
         settings_text = json.dumps(settings, ensure_ascii=False, indent=2) + "\n"
         (dest / "settings.json").write_text(settings_text, encoding="utf-8")
@@ -377,8 +357,6 @@ class SubprocessTransport(TruePiTransport):
         (project_pi / "settings.json").write_text(settings_text, encoding="utf-8")
         system_text = (self.system_prompt_text or "").strip()
         if system_text:
-            # Pi-native SYSTEM.md (not a user prompt weld). Agent home = global;
-            # .pi/SYSTEM.md = project replace. --no-context-files still skips AGENTS.md.
             system_body = system_text + "\n"
             (dest / "SYSTEM.md").write_text(system_body, encoding="utf-8")
             (project_pi / "SYSTEM.md").write_text(system_body, encoding="utf-8")
@@ -386,12 +364,6 @@ class SubprocessTransport(TruePiTransport):
         return dest
 
     def spawn_command(self) -> list[str]:
-        """Build the pi spawn argv (exposed for unit tests / F1 lock).
-
-        Dual-mode contract: the true_pi kernel must receive the lane's
-        thinking flag and the policy model — never a global hardcoded off.
-        Context window is not a CLI flag in pi 0.84; see prepare_agent_home.
-        """
         cmd = [
             self.binary,
             "--mode",
@@ -408,8 +380,6 @@ class SubprocessTransport(TruePiTransport):
             "--thinking",
             normalize_pi_thinking_level(self.thinking_level, thinking=self.thinking),
         ]
-        # Pin the conversation jsonl. ``--continue`` is most-recent-in-dir and
-        # can resume an empty sibling after compact/kill. Official ``--session``.
         if self.session_file is not None:
             cmd.extend(["--session", str(self.session_file)])
         elif self.continue_session:
@@ -456,7 +426,6 @@ class SubprocessTransport(TruePiTransport):
         asyncio.create_task(self._read_stderr())
 
     async def _reply_extension_ui(self, raw: dict[str, Any]) -> None:
-        """RPC dialogs: HITL park when teacher asked for plan; else auto-select."""
         method = str(raw.get("method") or "")
         req_id = raw.get("id")
         if method not in {"select", "confirm", "input", "editor"}:
@@ -468,6 +437,11 @@ class SubprocessTransport(TruePiTransport):
                 question = PLAN_NEXT_QUESTION
                 try:
                     picked = await self.ui_select(question, shown)
+                except AskTimedOut:
+                    self.plan_ask_timed_out = True
+                    self.plan_execute_pending = False
+                    self.plan_stayed = False
+                    return
                 except Exception:
                     logger.exception("plan HITL select failed run_id=%s", self.run_id)
                     picked = ""
@@ -532,15 +506,6 @@ class SubprocessTransport(TruePiTransport):
                         if t == "extension_ui_request":
                             await self._reply_extension_ui(obj)
                         if t == "message_update":
-                            # Streaming deltas carry the FULL accumulated content
-                            # (up to ~40KB incl. the tool-call args while the
-                            # model streams a large HTML body token-by-token) and
-                            # arrive at ~100-400/sec (O(n²) over tokens).
-                            # Enqueueing them bloats the RPC queue + the
-                            # wait_response pending buffer, buries agent_end
-                            # behind the flood, and balloons memory. Nothing
-                            # consumes them (map_event + _consume skip them too),
-                            # so drop at the source.
                             continue
                         await self._queue.put(RpcEvent(obj))
         finally:
@@ -617,8 +582,6 @@ class SubprocessTransport(TruePiTransport):
                 proc.stdin.close()
             except Exception as exc:  # noqa: BLE001
                 logger.debug("true_pi stdin close: %s", type(exc).__name__)
-        # Flush the official session jsonl before SIGTERM so the next turn's
-        # ``--session`` still has the compacted tree + current files/question.
         if proc.returncode is None:
             try:
                 await asyncio.wait_for(proc.wait(), timeout=2.0)
@@ -652,8 +615,6 @@ class SubprocessTransport(TruePiTransport):
 
 
 class TruePiRpcClient:
-    """High-level prompt / abort helpers over a transport."""
-
     def __init__(self, transport: TruePiTransport) -> None:
         self.transport = transport
 
@@ -707,11 +668,6 @@ class TruePiRpcClient:
 
 
 def scripted_open_domain_success() -> list[dict[str, Any]]:
-    """Minimal happy-path event script for matrix tests.
-
-    Mirrors pi 0.73.x: terminal signal is agent_end (willRetry false),
-    not always agent_settled.
-    """
     return [
         {"type": "agent_start"},
         {"type": "turn_start"},
