@@ -57,7 +57,7 @@ def test_spawn_command_fast_lane_thinking_off() -> None:
 
 
 def test_spawn_command_deep_lane_thinking_on() -> None:
-    """F1: pico-deep → --thinking on · model deepseek-reasoner."""
+    """F1: pico-deep → --thinking medium (0.84; 0.73 'on' is invalid)."""
     t = SubprocessTransport(
         session_dir=Path("/tmp/tp-sess"),
         tool_url="http://127.0.0.1:1",
@@ -70,7 +70,7 @@ def test_spawn_command_deep_lane_thinking_on() -> None:
     assert "--model" in cmd
     assert cmd[cmd.index("--model") + 1] == "deepseek-reasoner"
     assert "--thinking" in cmd
-    assert cmd[cmd.index("--thinking") + 1] == "on"
+    assert cmd[cmd.index("--thinking") + 1] == "medium"
 
 
 def test_c1_true_pi_fast_context_128k_output_still_8k(tmp_path: Path) -> None:
@@ -142,7 +142,7 @@ def test_c2_true_pi_deep_context_256k_output_still_32k(tmp_path: Path) -> None:
     assert overlay["maxTokens"] == 32_000
     assert overlay["maxTokens"] != 256_000
     cmd = t.spawn_command()
-    assert cmd[cmd.index("--thinking") + 1] == "on"
+    assert cmd[cmd.index("--thinking") + 1] == "medium"
 
 
 def test_openai_responses_models_json_overlay(tmp_path: Path) -> None:
@@ -204,7 +204,8 @@ def test_spawn_command_no_hardcoded_off_only_path() -> None:
         )
         cmd = t.spawn_command()
         value = cmd[cmd.index("--thinking") + 1]
-        assert value in {"on", "off"}
+        assert value in {"off", "minimal", "low", "medium", "high", "xhigh", "max"}
+        assert value == ("medium" if thinking else "off")
 
 
 @pytest.mark.asyncio
