@@ -15,7 +15,12 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import FakeTransport, RpcEvent, SubprocessTransport
 from pico_orchestrator.true_pi.config import persist_session_file
-from pico_orchestrator.true_pi.events import COMPACTION_HUMAN, EventMapState, map_event
+from pico_orchestrator.true_pi.events import (
+    COMPACTION_END_HUMAN,
+    COMPACTION_HUMAN,
+    EventMapState,
+    map_event,
+)
 from pico_orchestrator.true_pi.runtime import _compose_prompt, run_true_pi_agent
 
 
@@ -114,6 +119,7 @@ async def test_compaction_keeps_current_files_and_does_not_settle() -> None:
     begin = next(p for k, p in events if k == "compaction.begin")
     end = next(p for k, p in events if k == "compaction.end")
     assert begin["text"] == COMPACTION_HUMAN
+    assert end["text"] == COMPACTION_END_HUMAN
     assert end["modifiedFiles"] == ["家长会通知.docx"]
     assert end["firstKeptEntryId"] == "kept-1"
     assert end["will_retry"] is True

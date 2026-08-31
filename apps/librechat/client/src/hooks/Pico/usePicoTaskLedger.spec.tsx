@@ -94,6 +94,40 @@ describe('workbench Chinese progress (T-AGENT-FACE-V1)', () => {
     ).toBe('在整理上文');
   });
 
+  it('labels compaction.end as 已压缩 and ui.prompt as 在等你选', () => {
+    expect(
+      lastProcessStep([
+        {
+          id: 'e1',
+          run_id: 'r1',
+          seq: 1,
+          type: 'compaction.end',
+          payload: { text: '已压缩', source: 'true-pi' },
+        },
+      ]),
+    ).toBe('已压缩');
+    expect(
+      lastProcessStep([
+        {
+          id: 'e2',
+          run_id: 'r1',
+          seq: 2,
+          type: 'ui.prompt.begin',
+          payload: { text: '在等你选', source: 'true-pi' },
+        },
+      ]),
+    ).toBe('在等你选');
+  });
+
+  it('does not paint cancel_requested succeeded as 成功', () => {
+    const hint = composeProcessHint(
+      { id: 'r1', task_id: 't1', status: 'succeeded', cancel_requested: true },
+      [],
+    );
+    expect(hint).toMatch(/已停止/);
+    expect(hint).not.toMatch(/成功/);
+  });
+
   it('shows Chinese image failure on the process strip while running', () => {
     expect(
       lastProcessStep([

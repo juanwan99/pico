@@ -12,6 +12,9 @@ const VISIBLE_EVENT_TYPES = new Set([
   'artifact.created',
   'compaction.begin',
   'compaction.end',
+  'compaction.failed',
+  'ui.prompt.begin',
+  'ui.prompt.end',
   'agent.step',
   'run.status',
   'run.error',
@@ -111,9 +114,33 @@ export function describePicoRunEvent(
       detail: links.map((item) => item.title).join(' · '),
     };
   }
-  if (event.type === 'compaction.begin' || event.type === 'compaction.end') {
+  if (event.type === 'compaction.begin') {
     return {
       title: textValue(payload, 'text') || '在整理上文',
+      detail: null,
+    };
+  }
+  if (event.type === 'compaction.end') {
+    return {
+      title: textValue(payload, 'text') || '已压缩',
+      detail: null,
+    };
+  }
+  if (event.type === 'compaction.failed') {
+    return {
+      title: textValue(payload, 'text') || '压缩失败',
+      detail: null,
+    };
+  }
+  if (event.type === 'ui.prompt.begin') {
+    return {
+      title: textValue(payload, 'text') || '在等你选',
+      detail: '模型在等你，不是还在跑',
+    };
+  }
+  if (event.type === 'ui.prompt.end') {
+    return {
+      title: textValue(payload, 'text') || '已选',
       detail: null,
     };
   }

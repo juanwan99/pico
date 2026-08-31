@@ -26,6 +26,9 @@ from pico_orchestrator.workbench_progress import (
 EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 COMPACTION_HUMAN = "在整理上文"
+COMPACTION_END_HUMAN = "已压缩"
+COMPACTION_FAIL_HUMAN = "压缩失败"
+UI_WAIT_HUMAN = "在等你选"
 _PLAN_INTERNAL_CUSTOM = frozenset(
     {"plan-todo-list", "plan-complete", "plan-mode-execute", "plan-execution-context"}
 )
@@ -279,10 +282,18 @@ async def map_event(
         # Streaming deltas — do not accumulate monologue into final_parts.
         return
 
-    if kind in {"compaction_start", "compaction_end"}:
-        phase = "begin" if kind.endswith("start") else "end"
+    if kind in {"compaction_start", "compaction_end", "compaction_failed"}:
+        if kind.endswith("failed"):
+            phase = "failed"
+            text = COMPACTION_FAIL_HUMAN
+        elif kind.endswith("start"):
+            phase = "begin"
+            text = COMPACTION_HUMAN
+        else:
+            phase = "end"
+            text = COMPACTION_END_HUMAN
         state.event_kinds.append(f"compaction.{phase}")
-        payload = {**tag, "source": "true-pi", "text": COMPACTION_HUMAN}
+        payload = {**tag, "source": "true-pi", "text": text}
         if raw.get("reason"):
             payload["reason"] = raw.get("reason")
         result = raw.get("result") if isinstance(raw.get("result"), dict) else {}
@@ -298,8 +309,24 @@ async def map_event(
         if "willRetry" in raw:
             payload["will_retry"] = bool(raw.get("willRetry"))
         await emit(f"compaction.{phase}", payload)
-        # Process strip / timeline already show 在整理上文. Do not write it into
-        # message.delta — that becomes the product bubble and looks like amnesia.
+        # Process strip / timeline already show 在整理上文 / 已压缩. Do not write
+        # it into message.delta — that becomes the product bubble and looks like amnesia.
+        return
+
+    if kind in {"ui_prompt_start", "ui_prompt_end"}:
+        waiting = kind.endswith("start")
+        phase = "begin" if waiting else "end"
+        state.event_kinds.append(f"ui.prompt.{phase}")
+        payload = {
+            **tag,
+            "source": "true-pi",
+            "waiting": waiting,
+            "text": UI_WAIT_HUMAN if waiting else "已选",
+        }
+        for key in ("method", "promptId", "prompt_id"):
+            if raw.get(key):
+                payload[key] = str(raw.get(key))[:80]
+        await emit(f"ui.prompt.{phase}", payload)
         return
 
     if kind == "extension_ui_request":

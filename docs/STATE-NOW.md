@@ -1,13 +1,13 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-08-30
+DATE: 2026-08-31
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #806 T-PI-KERNEL-BUMP
+在飞: #810 T-PROCESS-VISIBLE
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main
-阻塞: #748 合部完不关 · 记忆 OS 挂→#807
+阻塞: #806 DEPLOYED 等老师手 · #748 合部完不关 · 记忆 OS 挂→#807
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · 记忆 OS 仍挂起→#807
@@ -80,8 +80,9 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#785](https://github.com/juanwan99/pico/issues/785) · [#786](https://github.com/juanwan99/pico/pull/786) | T-UI-CHROME · 业主 PASS @ tip `9d14329c…` |
 | 已收口 | [#788](https://github.com/juanwan99/pico/issues/788) | T-POINTS-FACE 对话积分门脸 · 业主关 |
 | 规划 | [#805](https://github.com/juanwan99/pico/issues/805) | 活核+记忆+问清+计划+过程可见 · 六刀指针 · 不派 |
-| 在飞 | [#806](https://github.com/juanwan99/pico/issues/806) | T-PI-KERNEL-BUMP 0.73.1→@earendil-works 0.84.4 |
-| 排队 | [#807](https://github.com/juanwan99/pico/issues/807)–[#811](https://github.com/juanwan99/pico/issues/811) | 记忆 / 问清 / 计划 / 过程 / 收常驻 · 升核过后再 stamp |
+| DEPLOYED 等老师手 | [#806](https://github.com/juanwan99/pico/issues/806) | T-PI-KERNEL-BUMP 0.84.4 已部 tip `63bb9e4b…` · 过门未签 |
+| 在飞 | [#810](https://github.com/juanwan99/pico/issues/810) | T-PROCESS-VISIBLE 压缩/停止/等你选 露到侧栏 |
+| 排队 | [#807](https://github.com/juanwan99/pico/issues/807)–[#809](https://github.com/juanwan99/pico/issues/809) [#811](https://github.com/juanwan99/pico/issues/811) | 记忆 / 问清 / 计划 / 收常驻 · #810 过后再 stamp |
 | 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
 | 挂起 | 记忆 OS | 人视角薄层已部（#736）；完整记忆 OS 仍挂 · 禁自研 · 排队 #807 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |

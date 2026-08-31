@@ -194,6 +194,36 @@ describe('RunTimeline', () => {
     expect(screen.getByText('在整理上文')).toBeInTheDocument();
   });
 
+  it('shows 已压缩 for compaction.end and 压缩失败 for failed', () => {
+    const { rerender } = render(
+      <RunTimeline
+        run={run('running')}
+        events={[event('compact-end', 1, 'compaction.end', { text: '已压缩', source: 'true-pi' })]}
+      />,
+    );
+    expect(screen.getByText('已压缩')).toBeInTheDocument();
+    rerender(
+      <RunTimeline
+        run={run('running')}
+        events={[
+          event('compact-fail', 1, 'compaction.failed', { text: '压缩失败', source: 'true-pi' }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('压缩失败')).toBeInTheDocument();
+  });
+
+  it('shows 在等你选 for ui.prompt.begin (not still-running green)', () => {
+    render(
+      <RunTimeline
+        run={run('running')}
+        events={[event('wait', 1, 'ui.prompt.begin', { text: '在等你选', source: 'true-pi' })]}
+      />,
+    );
+    expect(screen.getByText('在等你选')).toBeInTheDocument();
+    expect(screen.getByText('模型在等你，不是还在跑')).toBeInTheDocument();
+  });
+
   it('renders clickable search sources and honest miss copy', () => {
     const { rerender } = render(
       <RunTimeline

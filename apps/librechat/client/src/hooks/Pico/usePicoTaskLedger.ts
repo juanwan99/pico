@@ -202,12 +202,32 @@ function describeSearchOrTool(event: PicoRunEvent): string | null {
     }
     return workbenchToolResultLine(tool, ok);
   }
-  if (event.type === 'compaction.begin' || event.type === 'compaction.end') {
+  if (event.type === 'compaction.begin') {
     const text = event.payload?.text;
     if (typeof text === 'string' && text.trim()) {
       return text.trim();
     }
     return '在整理上文';
+  }
+  if (event.type === 'compaction.end') {
+    const text = event.payload?.text;
+    if (typeof text === 'string' && text.trim()) {
+      return text.trim();
+    }
+    return '已压缩';
+  }
+  if (event.type === 'compaction.failed') {
+    const text = event.payload?.text;
+    if (typeof text === 'string' && text.trim()) {
+      return text.trim();
+    }
+    return '压缩失败';
+  }
+  if (event.type === 'ui.prompt.begin') {
+    return '在等你选';
+  }
+  if (event.type === 'ui.prompt.end') {
+    return '已选';
   }
   return null;
 }
@@ -259,12 +279,12 @@ export function composeProcessHint(run: PicoRun | null, events: PicoRunEvent[]):
     return null;
   }
   const terminal =
-    run?.status === 'succeeded'
-      ? '终态 · 成功'
-      : run?.status === 'failed'
-        ? '终态 · 失败'
-        : run?.status === 'cancelled'
-          ? '终态 · 已停止'
+    run?.status === 'cancelled' || (run?.cancel_requested && run?.status === 'succeeded')
+      ? '终态 · 已停止'
+      : run?.status === 'succeeded'
+        ? '终态 · 成功'
+        : run?.status === 'failed'
+          ? '终态 · 失败'
           : null;
   const settledStep = step && step.includes('正在') ? null : step;
   const bits = [runtime ? `运行时 · ${runtime}` : null, settledStep, terminal].filter(Boolean);
@@ -285,7 +305,7 @@ export function computeRunStatusLabel(
     return '正在停止';
   }
   // Terminal first — never mask failure/cancel behind local stream flags.
-  if (run?.status === 'cancelled') {
+  if (run?.status === 'cancelled' || (run?.cancel_requested && run?.status === 'succeeded')) {
     return '已停止';
   }
   if (run?.status === 'failed') {
