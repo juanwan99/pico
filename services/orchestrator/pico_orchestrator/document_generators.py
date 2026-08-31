@@ -411,6 +411,11 @@ def html_script_syntax_reason(doc: str) -> str | None:
 def _require_marker(marker: str) -> str:
     value = (marker or "").strip()
     if not value:
+        # Marker is an internal traceability tag. Auto-generate one when the
+        # model omits it — hard-failing here made the true-Pi agent retry the
+        # same tool call forever (message_update flood → OOM). A unique tag
+        # keeps deliveries traceable without requiring the model to know the
+        # internal field.
         import uuid
 
         value = f"pico-{uuid.uuid4().hex[:12]}"
@@ -451,6 +456,7 @@ def _html_body_paragraphs(body: str | None, *, marker: str) -> str:
         chunks = [f"Pico HTML deliverable · {marker}"]
     parts: list[str] = []
     for chunk in chunks:
+        # Single newlines inside a paragraph become <br/>; still fully escaped.
         lines = [html.escape(line) for line in chunk.split("\n")]
         parts.append("<p>" + "<br />\n".join(lines) + "</p>")
     return "\n  ".join(parts)
@@ -463,16 +469,23 @@ def _looks_like_full_html_document(raw: str) -> bool:
         return False
     if s.startswith(("<!doctype html", "<html")):
         return True
+    # Fragment that is already a self-contained interactive page shell.
     return "<html" in s[:500] and ("</html>" in s or "<body" in s)
 
 
 def _looks_like_html_markup(raw: str) -> bool:
-    """True when body is HTML markup (full page or fragment) — must not escape to a tag wall."""
+    """True when body is HTML markup (full page or fragment) — must not escape to a tag wall.
+
+    #399 R2: models often pass ``<h2>…</h2><button>…`` without doctype/html.
+    Escaping those tags into ``&lt;h2&gt;`` makes downloads open as a source/tag wall.
+    Plain prose without tags still uses the safe paragraph shell.
+    """
     if _looks_like_full_html_document(raw):
         return True
     s = (raw or "").strip()
     if not s or "<" not in s:
         return False
+    # Structural / interactive tags ⇒ treat as markup to preserve.
     if re.search(
         r"<\s*(?:button|input|table|thead|tbody|tr|td|th|form|script|style|"
         r"div|section|article|nav|header|footer|main|h[1-6]|ul|ol|li|a|span|"
@@ -481,6 +494,7 @@ def _looks_like_html_markup(raw: str) -> bool:
         flags=re.IGNORECASE,
     ):
         return True
+    # ≥2 generic tags is almost never pure prose.
     tags = re.findall(r"<\s*/?\s*[a-zA-Z][a-zA-Z0-9]*\b", s)
     return len(tags) >= 2
 
@@ -668,6 +682,7 @@ def _inject_marker_into_html(doc: str, *, marker: str, title: str) -> str:
             )
         else:
             doc = meta + "\n" + doc
+    # Prefer caller title when document title is empty/generic.
     if title and re.search(r"<title>\s*</title>", doc, flags=re.IGNORECASE):
         doc = re.sub(
             r"<title>\s*</title>",
@@ -676,6 +691,8 @@ def _inject_marker_into_html(doc: str, *, marker: str, title: str) -> str:
             count=1,
             flags=re.IGNORECASE,
         )
+    # Interactive local pages need inline script. Replace the whole CSP meta
+    # (values contain quotes; a [^\"]* capture truncates and glues leftover CDN).
     return _force_interactive_csp(doc)
 
 
@@ -685,23 +702,36 @@ def build_html_document(
     marker: str,
     body: str | None = None,
 ) -> bytes:
+    """HTML bytes with unique marker.
+
+    - Prose body → safe escaped paragraphs inside a shell (no script).
+    - Full HTML document body → kept as interactive page (CDN/engine fail-closed).
+      This prevents H-CODEDUMP where agents pass real UI source only to see it
+      escaped into a source wall.
+    """
     marker = _require_marker(marker)
     safe_title = html.escape((title or "Pico HTML").strip() or "Pico HTML")
     raw_body = require_doc_body_max((body or "").strip(), what="这份 HTML")
+
     page_title = (title or "").strip() or "Pico HTML"
     if _looks_like_full_html_document(raw_body):
         doc = _require_offline_html(raw_body)
         doc = _inject_marker_into_html(doc, marker=marker, title=page_title)
         if "data-pico-marker=" not in doc:
+            # Extremely broken fragment — fall through to markup/prose paths.
             pass
         else:
             return doc.encode("utf-8")
+
+    # #399 R2: HTML fragments keep real tags (wrap shell); only pure prose is escaped.
     if raw_body and _looks_like_html_markup(raw_body) and not _looks_like_full_html_document(
         raw_body
     ):
         doc = _wrap_html_fragment(raw_body, title=page_title, marker=marker)
         return doc.encode("utf-8")
+
     body_html = _html_body_paragraphs(raw_body or None, marker=marker)
+    # Prose shell: CSP blocks scripts (static reading page).
     doc = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -730,10 +760,12 @@ def build_docx_document(
     marker: str,
     body: str | None = None,
 ) -> bytes:
+    """python-docx Word with the caller body. Does not pad 套话 to hit a quota."""
     marker = _require_marker(marker)
     heading = _display_title(title, "Pico DOCX")
     from pico_orchestrator.office.render import render_spec
     from pico_orchestrator.office.spec import spec_from_plain
+
     return render_spec(
         spec_from_plain(kind="docx", title=heading, marker=marker, body=body)
     )
@@ -745,10 +777,12 @@ def build_xlsx_legacy_xml(
     marker: str,
     body: str | None = None,
 ) -> bytes:
+    """Hand-written XLSX XML — test fixture only. Teacher path uses openpyxl."""
     marker = _require_marker(marker)
     cell = escape((body or "").strip() or KNOWN_CALC_CELL)
     marker_xml = escape(marker)
     heading = escape((title or "Pico XLSX").strip() or "Pico XLSX")
+
     content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -819,8 +853,10 @@ def build_xlsx_document(
     marker: str,
     body: str | None = None,
 ) -> bytes:
+    """openpyxl Excel. A1 is the caller body (or night-calc marker)."""
     from pico_orchestrator.office.render import render_spec
     from pico_orchestrator.office.spec import spec_from_plain
+
     marker = _require_marker(marker)
     heading = _display_title(title, "Pico XLSX")
     return render_spec(
@@ -862,10 +898,12 @@ def build_pptx_document(
     marker: str,
     body: str | None = None,
 ) -> bytes:
+    """python-pptx deck from caller slides. Does not pad empty 说明 pages."""
     marker = _require_marker(marker)
     heading = _display_title(title, "Pico PPTX")
     from pico_orchestrator.office.render import render_spec
     from pico_orchestrator.office.spec import spec_from_plain
+
     return render_spec(
         spec_from_plain(kind="pptx", title=heading, marker=marker, body=body)
     )
