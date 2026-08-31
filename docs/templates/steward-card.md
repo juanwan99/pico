@@ -18,7 +18,7 @@ ECS：只是部署机 · ssh-ecs=Tailscale ops@aliyun-hy · 禁公网22
 合/部：本窗做 · 合了未部关卡=打回 OPEN
 PASS：live tip=origin/main 且结果句公网可见 → 主管自签关 · CI/API 不算 · 业主抽检不对开新卡
 人留：目标 · 黄红争议 · PASS
-工具：只认 TOOLING-CATALOG · grok-sandbox-exec · ssh-ecs 只部 · spawn-executor 退役
+工具：只认 TOOLING-CATALOG · grok-sandbox-exec · grok-preview-proxy · ssh-ecs 只部 · spawn-executor 退役
 证据：贴本卡 Issue · 禁证据进 PR · 禁 Closes 部前关卡
 北极星：用法=Grok · 薄适配·禁自研核 · 禁 mailbox/第二账本
 不补：MCP店 · 子Agent舰队 · host bash · LSP · 插件市场当主路径 · 自研 Memory OS/压缩器
