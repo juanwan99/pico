@@ -25,7 +25,9 @@ PPTX_SLIDES_TOO_FEW = (
     "系统不会垫页。"
 )
 # Interactive HTML must run with no network (school offline / CSP). Do not
-# allowlist jsdelivr. Full Three.js cannot fit the 50k body cap.
+# allowlist jsdelivr. Do not vendor Three.js. Body over DOC_BODY_MAX fails
+# closed — never silent-slice a draft (#829).
+DOC_BODY_MAX = 200_000
 HTML_INTERACTIVE_CSP = (
     "default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
     "script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; "
@@ -211,12 +213,31 @@ def _require_marker(marker: str) -> str:
     return value
 
 
+def require_doc_body_max(raw: str | None, *, what: str = "正文") -> str:
+    """Fail closed when the draft is too long. Never slice."""
+    text = raw or ""
+    if len(text) > DOC_BODY_MAX:
+        raise ValueError(
+            f"{what}超过 {DOC_BODY_MAX} 字。请缩短后再交，系统不会截断。"
+        )
+    return text
+
+
+def _html_marker_meta(marker: str) -> str:
+    """Ledger marker as hidden meta — not a visible 「标记：」 chrome bar."""
+    safe = html.escape(marker)
+    return (
+        f'<meta name="pico-marker" content="{safe}" '
+        f'data-pico-marker="{safe}" />'
+    )
+
+
 def _html_body_paragraphs(body: str | None, *, marker: str) -> str:
     """Escape body into one or more <p> blocks (blank-line separated)."""
-    raw = (body or "").strip() or f"Pico HTML deliverable · {marker}"
-    # Cap runaway agent output while still allowing full lesson pages.
-    if len(raw) > 50_000:
-        raw = raw[:50_000]
+    raw = require_doc_body_max(
+        (body or "").strip() or f"Pico HTML deliverable · {marker}",
+        what="这份 HTML",
+    )
     chunks = [part.strip() for part in raw.replace("\r\n", "\n").split("\n\n") if part.strip()]
     if not chunks:
         chunks = [f"Pico HTML deliverable · {marker}"]
@@ -397,7 +418,6 @@ def _force_interactive_csp(doc: str) -> str:
 def _wrap_html_fragment(raw_body: str, *, title: str, marker: str) -> str:
     """Wrap an HTML fragment in a minimal interactive document shell (tags kept)."""
     safe_title = html.escape((title or "Pico HTML").strip() or "Pico HTML")
-    safe_marker = html.escape(marker)
     body = _CSP_META_RE.sub("", _require_offline_html(raw_body))
     csp = HTML_INTERACTIVE_CSP
     return f"""<!DOCTYPE html>
@@ -406,15 +426,14 @@ def _wrap_html_fragment(raw_body: str, *, title: str, marker: str) -> str:
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="{csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {_html_marker_meta(marker)}
   <title>{safe_title}</title>
   <style>
     body {{ font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.5; max-width: 48rem; }}
     h1, h2, h3 {{ line-height: 1.25; }}
-    .marker {{ font-family: ui-monospace, monospace; background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }}
   </style>
 </head>
 <body>
-  <p data-pico-marker-line="1">标记：<span class="marker" data-pico-marker="{safe_marker}">{safe_marker}</span></p>
   {body}
 </body>
 </html>
@@ -423,22 +442,26 @@ def _wrap_html_fragment(raw_body: str, *, title: str, marker: str) -> str:
 
 def _inject_marker_into_html(doc: str, *, marker: str, title: str) -> str:
     """Ensure marker is present; do not wrap interactive markup as escaped prose."""
-    safe_marker = html.escape(marker)
-    marker_html = (
-        f'<p data-pico-marker-line="1">标记：'
-        f'<span class="marker" data-pico-marker="{safe_marker}">{safe_marker}</span></p>'
-    )
     if "data-pico-marker=" not in doc:
-        if re.search(r"<body\b[^>]*>", doc, flags=re.IGNORECASE):
+        meta = _html_marker_meta(marker)
+        if re.search(r"<head\b", doc, flags=re.IGNORECASE):
             doc = re.sub(
-                r"(<body\b[^>]*>)",
-                r"\1\n  " + marker_html,
+                r"(<head\b[^>]*>)",
+                r"\1\n  " + meta,
+                doc,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        elif re.search(r"<html\b", doc, flags=re.IGNORECASE):
+            doc = re.sub(
+                r"(<html\b[^>]*>)",
+                rf"\1\n<head>\n  {meta}\n</head>",
                 doc,
                 count=1,
                 flags=re.IGNORECASE,
             )
         else:
-            doc = marker_html + "\n" + doc
+            doc = meta + "\n" + doc
     # Prefer caller title when document title is empty/generic.
     if title and re.search(r"<title>\s*</title>", doc, flags=re.IGNORECASE):
         doc = re.sub(
@@ -468,10 +491,7 @@ def build_html_document(
     """
     marker = _require_marker(marker)
     safe_title = html.escape((title or "Pico HTML").strip() or "Pico HTML")
-    safe_marker = html.escape(marker)
-    raw_body = (body or "").strip()
-    if len(raw_body) > 50_000:
-        raw_body = raw_body[:50_000]
+    raw_body = require_doc_body_max((body or "").strip(), what="这份 HTML")
 
     page_title = (title or "").strip() or "Pico HTML"
     if _looks_like_full_html_document(raw_body):
@@ -499,15 +519,14 @@ def build_html_document(
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{safe_title}</title>
+  {_html_marker_meta(marker)}
   <style>
     body {{ font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.5; max-width: 48rem; }}
     h1 {{ font-size: 1.5rem; }}
-    .marker {{ font-family: ui-monospace, monospace; background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }}
   </style>
 </head>
 <body>
   <h1>{safe_title}</h1>
-  <p>标记：<span class="marker" data-pico-marker="{safe_marker}">{safe_marker}</span></p>
   {body_html}
 </body>
 </html>
