@@ -189,7 +189,7 @@ function Sidebar({
         <button
           type="button"
           onClick={onNewTask}
-          className="mt-2 flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--pico-ink)] text-white transition-colors hover:bg-[color:var(--pico-ink-2)]"
+          className="mt-2 flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--pico-cta-bg)] text-[color:var(--pico-cta-fg)] transition-colors hover:opacity-90"
           aria-label="新对话"
           data-testid="nav-new"
         >
@@ -224,7 +224,7 @@ function Sidebar({
             type="button"
             data-testid="new-chat-button"
             onClick={onNewTask}
-            className="pico-type-sidebar pico-type-medium flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--pico-ink)] text-white shadow-sm transition hover:bg-[color:var(--pico-ink-2)]"
+            className="pico-type-sidebar pico-type-medium flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--pico-cta-bg)] text-[color:var(--pico-cta-fg)] shadow-sm transition hover:opacity-90"
           >
             <PicoIcon name="plus" size="sm" />
             新对话

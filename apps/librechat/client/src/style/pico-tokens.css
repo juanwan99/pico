@@ -36,6 +36,8 @@ html.dark .pico-app {
   --pico-ink: #f4f4f2;
   --pico-ink-2: #d5d6d3;
   --pico-ink-3: #b8bab6;
+  --pico-cta-bg: var(--pico-shell);
+  --pico-cta-fg: var(--pico-ink);
   --pico-line: #3f403e;
   --pico-line-2: #4a4b49;
   --pico-mint-wash: #16352c;
@@ -63,6 +65,8 @@ html.dark .pico-app {
   --pico-ink: #171817;
   --pico-ink-2: #5f6461;
   --pico-ink-3: #969b98;
+  --pico-cta-bg: var(--pico-ink);
+  --pico-cta-fg: var(--pico-shell);
   --pico-line: #e6e7e4;
   --pico-line-2: #d9dcd8;
   --pico-mint: #28c99a;
