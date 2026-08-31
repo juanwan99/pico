@@ -89,7 +89,7 @@ def _fake_runtime(
         "case \"${*: -1}\" in\n"
         "  */health) printf '{\"ok\":true,\"git_sha\":\"%s\","
         "\"true_pi_binary_available\":true,"
-        "\"true_pi_package_pin\":\"@mariozechner/pi-coding-agent@0.73.1\"}' "
+        "\"true_pi_package_pin\":\"@earendil-works/pi-coding-agent@0.84.4\"}' "
         "\"$PICO_GIT_SHA\" ;;\n"
         "  */kb/reindex-all)\n"
         "    if [ -n \"$out_file\" ]; then printf '%s' '"

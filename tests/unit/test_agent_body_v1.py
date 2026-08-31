@@ -16,6 +16,7 @@ from app.openai_compat import _sidebar_chat_only, _workbench_tool_step_line
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import FakeTransport, RpcEvent, SubprocessTransport
 from pico_orchestrator.true_pi.config import (
+    PINNED_PI_PACKAGE,
     persist_session_dir,
     persist_session_file,
     plan_mode_extension_path,
@@ -68,6 +69,46 @@ def test_official_plan_mode_is_vendored() -> None:
     assert "PLAN_MODE_TOOLS" in text
     assert "workspace_write_file" in text
     assert "extractTodoItems" in text
+
+
+def test_pinned_package_is_earendil_0844() -> None:
+    assert PINNED_PI_PACKAGE == "@earendil-works/pi-coding-agent@0.84.4"
+
+
+def test_spawn_thinking_on_maps_to_medium() -> None:
+    t = SubprocessTransport(
+        session_dir=Path("/tmp/tp-sess"),
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r1",
+        thinking=True,
+    )
+    cmd = t.spawn_command()
+    assert cmd[cmd.index("--thinking") + 1] == "medium"
+
+
+def test_spawn_thinking_off_stays_off() -> None:
+    t = SubprocessTransport(
+        session_dir=Path("/tmp/tp-sess"),
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r1",
+        thinking=False,
+    )
+    cmd = t.spawn_command()
+    assert cmd[cmd.index("--thinking") + 1] == "off"
+
+
+def test_spawn_thinking_official_level_passthrough() -> None:
+    t = SubprocessTransport(
+        session_dir=Path("/tmp/tp-sess"),
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r1",
+        thinking_level="high",
+    )
+    cmd = t.spawn_command()
+    assert cmd[cmd.index("--thinking") + 1] == "high"
 
 
 def test_spawn_workbench_tree_flags() -> None:

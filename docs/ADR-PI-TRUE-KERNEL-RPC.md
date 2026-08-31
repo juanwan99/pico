@@ -8,7 +8,7 @@ STATUS: Accepted
 Issue: #431 P1 · #433 P2 · #435 CUTOVER · #436 HYGIENE
 调查: docs/INVESTIGATE-PI-TRUE-KERNEL-2026-08-10.md · #430（superseded for phase plan）
 计划: docs/PLAN-PI-TRUE-KERNEL-2PHASE.md（superseded · 阶段完成）
-钉版: @mariozechner/pi-coding-agent@0.73.1
+钉版: @earendil-works/pi-coding-agent@0.84.4
 CLAIM-WB: NO
 ```
 

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pico_orchestrator.true_pi.config import extension_path, pi_bin
+from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinking_level, pi_bin
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def choose_plan_select(options: list[Any] | None) -> tuple[str, bool]:
         return opts[0], False
     return "", False
 
-# Isolated PI_CODING_AGENT_DIR filename. Pi 0.73.1 has no --context CLI flag;
+# Isolated PI_CODING_AGENT_DIR filename. Pi 0.84 still has no --context CLI flag;
 # the window is models.json contextWindow (see packages/coding-agent/docs/models.md).
 PI_MODELS_JSON = "models.json"
 PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
@@ -100,7 +100,7 @@ def true_pi_models_document(
     base_url: str = "",
     api: str = "",
 ) -> dict[str, Any]:
-    """Pi 0.73.1 models.json overlay. Official path, not a invented CLI flag."""
+    """Pi 0.84 models.json overlay. Official path, not an invented CLI flag."""
     from pico_orchestrator.vision import model_accepts_image
 
     name = (provider or "deepseek").strip() or "deepseek"
@@ -343,7 +343,7 @@ class SubprocessTransport(TruePiTransport):
 
         Dual-mode contract: the true_pi kernel must receive the lane's
         thinking flag and the policy model — never a global hardcoded off.
-        Context window is not a CLI flag in pi 0.73.1; see prepare_agent_home.
+        Context window is not a CLI flag in pi 0.84; see prepare_agent_home.
         """
         cmd = [
             self.binary,
@@ -359,7 +359,7 @@ class SubprocessTransport(TruePiTransport):
             "--model",
             self.model,
             "--thinking",
-            self.thinking_level or ("on" if self.thinking else "off"),
+            normalize_pi_thinking_level(self.thinking_level, thinking=self.thinking),
         ]
         # Pin the conversation jsonl. ``--continue`` is most-recent-in-dir and
         # can resume an empty sibling after compact/kill. Official ``--session``.

@@ -18,7 +18,7 @@ Thin Node extension for **phase-1 true Pi RPC** (`#431`).
 ## Pin
 
 ```text
-@mariozechner/pi-coding-agent@0.73.1
+@earendil-works/pi-coding-agent@0.84.4
 ```
 
 Phase-1 default production image does **not** require this binary; shadow/bypass only.

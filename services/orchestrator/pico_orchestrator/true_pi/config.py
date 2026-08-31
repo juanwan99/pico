@@ -32,9 +32,22 @@ TRUE_PI_SESSION_ROOT_ENV = "PICO_TRUE_PI_SESSION_ROOT"
 TRUE_PI_HISTORY_N_ENV = "PICO_TRUE_PI_HISTORY_N"
 
 # npm pin for deploy notes
-PINNED_PI_PACKAGE = "@mariozechner/pi-coding-agent@0.73.1"
+PINNED_PI_PACKAGE = "@earendil-works/pi-coding-agent@0.84.4"
 RUNTIME_LABEL = "pi-true"
 HOSTED_RUNTIME_LABEL = "pi-agent"
+
+# 0.84 CLI: off | minimal | low | medium | high | xhigh | max  (not 0.73 "on")
+PI_THINKING_LEVELS = frozenset({"off", "minimal", "low", "medium", "high", "xhigh", "max"})
+
+
+def normalize_pi_thinking_level(raw: str, *, thinking: bool) -> str:
+    """Map 0.73 on/off aliases onto 0.84 official levels."""
+    token = (raw or "").strip().lower()
+    if token in PI_THINKING_LEVELS:
+        return token
+    if token in {"on", "true", "yes", "1"}:
+        return "medium"
+    return "medium" if thinking else "off"
 
 # Thin bridge allowlist — execute ceiling (still no shell).
 # Pi-visible default is CORE_VISIBLE_TOOLS in capability_loading.py, not this full set.
