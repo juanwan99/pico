@@ -71,7 +71,7 @@ def test_html_multi_paragraph_body_for_courseware() -> None:
     body = "分离定律：一对相对性状。\n\n自由组合：两对独立遗传。"
     raw = build_html_document(title="mendel.html", marker=marker, body=body)
     text = raw.decode("utf-8")
-    assert text.count("<p>") >= 3  # marker line + 2 body paragraphs
+    assert text.count("<p>") >= 2  # two body paragraphs; marker is hidden meta
     assert "分离定律" in text
     assert "自由组合" in text
     assert "<script" not in text.lower()

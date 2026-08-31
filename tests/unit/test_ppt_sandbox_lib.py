@@ -158,6 +158,9 @@ def test_import_and_dunder_denied() -> None:
     with pytest.raises(ToolError) as ei:
         assert_pptx_lib_source("Presentation.__class__")
     assert ei.value.code == "sandbox.exec_denied"
+    with pytest.raises(ToolError) as ei:
+        assert_pptx_lib_source("from io import open\nprs = Presentation()\nsave_deck(prs)")
+    assert ei.value.code == "sandbox.exec_denied"
     assert_pptx_lib_source(
         "from pptx import Presentation\nprs = Presentation()\nsave_deck(prs)"
     )
@@ -546,8 +549,8 @@ if __name__ == "__main__":
 
 
 def test_source_cap_allows_gpt_length() -> None:
-    assert PPTX_LIB_MAX_SOURCE == 80_000
-    pad = "# pad\n" * 4_000
+    assert PPTX_LIB_MAX_SOURCE == 200_000
+    pad = "# pad\n" * 15_000
     source = (
         "from pptx import Presentation\n"
         "prs = Presentation()\n"
@@ -556,11 +559,11 @@ def test_source_cap_allows_gpt_length() -> None:
         + pad
         + "save_deck(prs)\n"
     )
-    assert len(source) > 20_000
+    assert len(source) > 80_000
     assert_pptx_lib_source(source)
     raw = run_pptx_lib_source(source)
     outline = inspect_office_bytes(raw, ".pptx")
     assert int(outline["slides"]) >= 1
     with pytest.raises(ToolError) as ei:
-        assert_pptx_lib_source("prs = Presentation()\n" + ("# x\n" * 50_000))
+        assert_pptx_lib_source("prs = Presentation()\n" + ("# x\n" * 60_000))
     assert ei.value.code == "tool.invalid_arguments"

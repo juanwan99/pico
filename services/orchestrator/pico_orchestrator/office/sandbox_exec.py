@@ -1,9 +1,9 @@
 """Isolated python-pptx subprocess entry. Copied into a temp dir.
 
 Not a second Office OS. User source runs with an allowlisted import
-hook: pptx / pptx_helpers plus a pathlib stub. Presentation.save always
-lands on the ledger OUTPUT_PATH so naked GPT `prs.save("/tmp/…")` still
-books. Host open/eval/os stay denied.
+hook: pptx / pptx_helpers plus a pathlib stub and stdlib without host
+IO. Presentation.save always lands on the ledger OUTPUT_PATH so naked
+GPT `prs.save("/tmp/…")` still books. Host open/eval/os stay denied.
 """
 
 from __future__ import annotations
@@ -144,6 +144,61 @@ def _pathlib_stub() -> types.ModuleType:
 
 _PATHLIB = _pathlib_stub()
 
+# Keep in sync with office/sandbox_lib.py STDLIB_OK.
+STDLIB_OK = frozenset(
+    {
+        "copy",
+        "math",
+        "datetime",
+        "collections",
+        "itertools",
+        "functools",
+        "typing",
+        "dataclasses",
+        "enum",
+        "re",
+        "json",
+        "uuid",
+        "statistics",
+        "decimal",
+        "numbers",
+        "operator",
+        "string",
+        "textwrap",
+        "heapq",
+        "bisect",
+        "array",
+        "contextlib",
+        "abc",
+        "warnings",
+        "time",
+        "random",
+        "base64",
+        "struct",
+        "io",
+        "calendar",
+        "fractions",
+    }
+)
+
+
+def _io_stub() -> types.ModuleType:
+    """In-memory buffers only. io.open would bypass the denied builtin open."""
+    import io as real_io
+
+    mod = types.ModuleType("io")
+    mod.BytesIO = real_io.BytesIO
+    mod.StringIO = real_io.StringIO
+
+    def _deny(*args: Any, **kwargs: Any) -> None:
+        raise PermissionError("sandbox io cannot open host files")
+
+    mod.open = _deny  # type: ignore[method-assign]
+    return mod
+
+
+_IO = _io_stub()
+
 
 def _sandbox_import(
     name: Any,
@@ -160,6 +215,12 @@ def _sandbox_import(
         if text != "pathlib":
             raise ImportError("denied import " + text)
         return _PATHLIB
+    if root == "io":
+        if text != "io":
+            raise ImportError("denied import " + text)
+        return _IO
+    if root in STDLIB_OK:
+        return __import__(name, globals, locals, fromlist, level)
     if root not in ("pptx", "pptx_helpers"):
         raise ImportError("denied import " + text)
     mod = __import__(name, globals, locals, fromlist, level)

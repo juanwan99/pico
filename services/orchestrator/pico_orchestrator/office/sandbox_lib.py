@@ -6,7 +6,9 @@ returns OOXML bytes. Empty shells fail closed.
 
 Thin adapters vs naked GPT python-pptx: pathlib is a stub (mkdir
 ignored), Presentation.save always books to OUTPUT_PATH, source cap
-is PPTX_LIB_MAX_SOURCE. os / open / eval stay denied.
+is PPTX_LIB_MAX_SOURCE. os / open / eval stay denied. Stdlib without
+host IO (copy/math/datetime/io.BytesIO) is allowed so naked GPT drafts
+are not sent back to stock layouts (#829).
 """
 
 from __future__ import annotations
@@ -28,11 +30,48 @@ from pico_orchestrator.document_generators import office_shell_reason
 from pico_orchestrator.gateway import ToolError
 
 _TIMEOUT_S = 45.0
-PPTX_LIB_MAX_SOURCE = 80_000
+PPTX_LIB_MAX_SOURCE = 200_000
 _MAX_SOURCE = PPTX_LIB_MAX_SOURCE
 _DENIED_CALLS = frozenset({"exec", "eval", "compile", "open", "__import__"})
+# Keep in sync with office/sandbox_exec.py STDLIB_OK.
+STDLIB_OK = frozenset(
+    {
+        "copy",
+        "math",
+        "datetime",
+        "collections",
+        "itertools",
+        "functools",
+        "typing",
+        "dataclasses",
+        "enum",
+        "re",
+        "json",
+        "uuid",
+        "statistics",
+        "decimal",
+        "numbers",
+        "operator",
+        "string",
+        "textwrap",
+        "heapq",
+        "bisect",
+        "array",
+        "contextlib",
+        "abc",
+        "warnings",
+        "time",
+        "random",
+        "base64",
+        "struct",
+        "io",
+        "calendar",
+        "fractions",
+    }
+)
+_IO_FROM_OK = frozenset({"BytesIO", "StringIO"})
 # Upstream python-pptx. os / subprocess stay denied. pathlib is a stub (mkdir only).
-_ALLOWED_IMPORT_ROOTS = frozenset({"pptx", "pptx_helpers", "pathlib"})
+_ALLOWED_IMPORT_ROOTS = frozenset({"pptx", "pptx_helpers", "pathlib"}) | STDLIB_OK
 
 
 def _import_root(node: ast.AST) -> str | None:
@@ -63,6 +102,17 @@ def _pathlib_import_ok(node: ast.AST) -> bool:
     return False
 
 
+def _io_import_ok(node: ast.AST) -> bool:
+    """Allow `import io` / `from io import BytesIO, StringIO`. Not io.open."""
+    if isinstance(node, ast.Import):
+        return all(alias.name == "io" for alias in node.names)
+    if isinstance(node, ast.ImportFrom):
+        if node.level or node.module != "io":
+            return False
+        return bool(node.names) and all(alias.name in _IO_FROM_OK for alias in node.names)
+    return False
+
+
 def assert_pptx_lib_source(source: str) -> None:
     text = (source or "").strip()
     if not text:
@@ -81,10 +131,16 @@ def assert_pptx_lib_source(source: str) -> None:
                     "sandbox.exec_denied",
                     "pathlib 只允许 import pathlib 或 from pathlib import Path；禁止 pathlib.abc / 宿主文件。",
                 )
+            if root == "io" and not _io_import_ok(node):
+                raise ToolError(
+                    "sandbox.exec_denied",
+                    "io 只允许 BytesIO/StringIO，禁止 io.open / 宿主文件。",
+                )
             if root not in _ALLOWED_IMPORT_ROOTS:
                 raise ToolError(
                     "sandbox.exec_denied",
-                    "禁止 import os/宿主库。python-pptx 可用 from pptx import Presentation, Inches, Pt。",
+                    "禁止 import os/宿主库。python-pptx 可用 from pptx import Presentation, Inches, Pt。"
+                    "copy/math/datetime/io.BytesIO 可用。",
                 )
         if (
             isinstance(node, ast.Call)
