@@ -12,13 +12,14 @@
 对齐：先和业主把需求谈清 · 四行写进 Issue 才 stamp · 没对齐不开卡
 在飞：无 stamp-ok 不领 · 同域第二张 stamp-ok=废派 · 卡别拆太细（同层薄适配并一张）
 合同：卡面四行（结果/不准/过门/部署）· 过门=公网能看见结果句 · 禁控件清单 · 禁焊提示词/定向场景
-环：主管自驱动闭环 · 本窗改测合部 · OPEN→CI→合→部→tip-pin→自签 PASS
+环：主管自驱动闭环 · 本窗改测合部 · OPEN→PR→订CI→pr-ci-ready一眼→合→部→tip-pin→自签 PASS
+等CI：subscribe-ci · 禁轮询 check-runs · 未绿不准合 · 等 CI ≠ 卡死
 执行者：业主正在说话的这扇 Grok 沙箱 · 禁 spawn 子 agent · 禁 Cursor 云 Task · 禁 ECS grok
 ECS：只是部署机 · ssh-ecs=Tailscale ops@aliyun-hy · 禁公网22
-合/部：本窗做 · 合了未部关卡=打回 OPEN
+合/部：本窗做 · 合前 `scripts/pr-ci-ready.sh --pr N` · 合了未部关卡=打回 OPEN
 PASS：live tip=origin/main 且结果句公网可见 → 主管自签关 · CI/API 不算 · 业主抽检不对开新卡
 人留：目标 · 黄红争议 · PASS
-工具：只认 TOOLING-CATALOG · grok-sandbox-exec · grok-preview-proxy · ssh-ecs 只部 · spawn-executor 退役
+工具：只认 TOOLING-CATALOG · grok-sandbox-exec · grok-preview-proxy · pr-ci-ready · ssh-ecs 只部 · spawn-executor/ecs-grok-exec 入口已断
 证据：贴本卡 Issue · 禁证据进 PR · 禁 Closes 部前关卡
 北极星：用法=Grok · 薄适配·禁自研核 · 禁 mailbox/第二账本
 不补：MCP店 · 子Agent舰队 · host bash · LSP · 插件市场当主路径 · 自研 Memory OS/压缩器
