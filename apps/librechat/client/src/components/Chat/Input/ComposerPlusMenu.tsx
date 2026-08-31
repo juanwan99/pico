@@ -21,7 +21,7 @@ export function ComposerModeSwitch({
       role="group"
       aria-label="回复深度"
       data-testid="composer-mode-switch"
-      className="mb-0.5 inline-flex shrink-0 self-end rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-0.5"
+      className="inline-flex shrink-0 self-end rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-0.5"
     >
       {PLUS_MODE_ITEMS.map((item) => {
         const active = value === item.id;
@@ -32,7 +32,7 @@ export function ComposerModeSwitch({
             data-testid={`composer-plus-mode-${item.id}`}
             aria-pressed={active}
             className={cn(
-              'pico-type-aux h-7 rounded px-2 transition-colors',
+              'pico-type-aux h-8 rounded px-2 transition-colors',
               active
                 ? 'bg-[color:var(--pico-surface-2)] font-medium text-[color:var(--pico-ink)]'
                 : 'text-[color:var(--pico-ink-3)] hover:text-[color:var(--pico-ink)]',
@@ -61,7 +61,7 @@ export function ComposerPlanToggle({
       aria-pressed={on}
       aria-label="先计划"
       className={cn(
-        'pico-type-aux mb-0.5 h-7 shrink-0 self-end rounded-md border border-[color:var(--pico-line)] px-2 transition-colors',
+        'pico-type-aux h-8 shrink-0 self-end rounded-md border border-[color:var(--pico-line)] px-2 transition-colors',
         on
           ? 'bg-[color:var(--pico-surface-2)] font-medium text-[color:var(--pico-ink)]'
           : 'bg-[color:var(--pico-surface)] text-[color:var(--pico-ink-3)] hover:text-[color:var(--pico-ink)]',

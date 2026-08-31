@@ -71,11 +71,11 @@ export default function PicoIcon({
     <svg
       className={cn('pico-icon', sizeClass, className)}
       viewBox="0 0 24 24"
-      width={size === 'sm' ? 16 : size === 'lg' ? 23 : 20}
-      height={size === 'sm' ? 16 : size === 'lg' ? 23 : 20}
+      width={size === 'sm' ? 16 : size === 'lg' ? 24 : 20}
+      height={size === 'sm' ? 16 : size === 'lg' ? 24 : 20}
       fill="none"
       stroke="currentColor"
-      strokeWidth={size === 'sm' ? 2 : 1.8}
+      strokeWidth={1.8}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden={title ? undefined : true}

@@ -8,9 +8,21 @@
   --pico-font: 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans SC', 'Noto Sans SC',
     'Microsoft YaHei', 'Heiti SC', system-ui, sans-serif;
   --pico-fs-aux: 13px;
-  --pico-fs-sidebar: 15px;
+  --pico-fs-sidebar: 14px;
   --pico-fs-body: 16px;
-  --pico-fs-title: 22px;
+  --pico-fs-title: 24px;
+  --pico-lh-aux: 1.35;
+  --pico-lh-sidebar: 1.4;
+  --pico-lh-body: 1.55;
+  --pico-lh-title: 1.2;
+  --pico-space-1: 4px;
+  --pico-space-2: 8px;
+  --pico-space-3: 12px;
+  --pico-space-4: 16px;
+  --pico-icon-size-sm: 16px;
+  --pico-icon-size-md: 20px;
+  --pico-icon-size-lg: 24px;
+  --pico-control-h: 32px;
   --pico-fw: 400;
   --pico-fw-medium: 560;
 }
@@ -75,9 +87,21 @@ html.dark .pico-app {
   --pico-font: 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans SC', 'Noto Sans SC',
     'Microsoft YaHei', 'Heiti SC', system-ui, sans-serif;
   --pico-fs-aux: 13px;
-  --pico-fs-sidebar: 15px;
+  --pico-fs-sidebar: 14px;
   --pico-fs-body: 16px;
-  --pico-fs-title: 22px;
+  --pico-fs-title: 24px;
+  --pico-lh-aux: 1.35;
+  --pico-lh-sidebar: 1.4;
+  --pico-lh-body: 1.55;
+  --pico-lh-title: 1.2;
+  --pico-space-1: 4px;
+  --pico-space-2: 8px;
+  --pico-space-3: 12px;
+  --pico-space-4: 16px;
+  --pico-icon-size-sm: 16px;
+  --pico-icon-size-md: 20px;
+  --pico-icon-size-lg: 24px;
+  --pico-control-h: 32px;
   --pico-fw: 400;
   --pico-fw-medium: 560;
   --font-size-base: 16px;
@@ -92,6 +116,7 @@ html.dark .pico-app {
 .pico-app .pico-type-sidebar,
 .pico-app .pico-wb-sidebar {
   font-size: var(--pico-fs-sidebar);
+  line-height: var(--pico-lh-sidebar);
   font-weight: var(--pico-fw);
   font-family: var(--pico-font);
 }
@@ -101,6 +126,7 @@ html.dark .pico-app {
 .pico-app #pico-wb-home-input,
 .pico-app .markdown {
   font-size: var(--pico-fs-body);
+  line-height: var(--pico-lh-body);
   font-weight: var(--pico-fw);
   font-family: var(--pico-font);
 }
@@ -111,13 +137,14 @@ html.dark .pico-app {
 }
 .pico-app .pico-type-aux {
   font-size: var(--pico-fs-aux);
+  line-height: var(--pico-lh-aux);
   font-weight: var(--pico-fw);
 }
 .pico-app .pico-type-title {
   font-size: var(--pico-fs-title);
   font-weight: var(--pico-fw-medium);
   font-family: var(--pico-font);
-  line-height: 1.25;
+  line-height: var(--pico-lh-title);
 }
 .pico-app .pico-type-medium {
   font-weight: var(--pico-fw-medium);
@@ -231,12 +258,16 @@ html.dark .pico-app {
   color: inherit;
 }
 .pico-icon-sm {
-  width: 16px;
-  height: 16px;
+  width: var(--pico-icon-size-sm);
+  height: var(--pico-icon-size-sm);
+}
+.pico-icon:not(.pico-icon-sm):not(.pico-icon-lg) {
+  width: var(--pico-icon-size-md);
+  height: var(--pico-icon-size-md);
 }
 .pico-icon-lg {
-  width: 23px;
-  height: 23px;
+  width: var(--pico-icon-size-lg);
+  height: var(--pico-icon-size-lg);
 }
 .pico-icon-sprite {
   position: absolute !important;
