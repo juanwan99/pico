@@ -373,6 +373,14 @@ router.post('/v1/runs/:runId/retry', (req, res) => {
     return res.status(400).json({ error: 'bad_request', message: e.message });
   }
 });
+router.post('/v1/runs/:runId/ask-answer', (req, res) => {
+  try {
+    assertId(req.params.runId, 'runId');
+    return proxy(req, res, `/v1/runs/${req.params.runId}/ask-answer`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
 router.get('/v1/artifacts', (req, res) => proxy(req, res, '/v1/artifacts'));
 router.get('/v1/artifacts/:artifactId/content', (req, res) => {
   try {

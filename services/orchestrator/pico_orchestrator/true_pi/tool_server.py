@@ -31,6 +31,7 @@ class ToolServer:
     token: str = field(default_factory=lambda: secrets.token_urlsafe(24))
     host: str = "127.0.0.1"
     port: int = 0
+    emit: Any = None
     _server: asyncio.AbstractServer | None = None
     invocations: list[tuple[str, dict[str, Any], bool]] = field(default_factory=list)
 
@@ -154,6 +155,18 @@ class ToolServer:
                     "error": f"tool denied by true-pi bridge: {name}",
                 },
             )
+            return
+        if name == "ask_user":
+            from pico_orchestrator.ask_user import park as park_ask
+
+            self.invocations.append((name, args, True))
+            parked = await park_ask(
+                self.run_id,
+                str(args.get("question") or ""),
+                args.get("options"),
+                self.emit,
+            )
+            await self._write(writer, 200, {"ok": True, "tool": name, "result": parked})
             return
         token = bind_usage_context(
             school_id=self.principal.school_id,

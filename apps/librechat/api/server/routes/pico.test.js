@@ -304,6 +304,25 @@ describe('Pico proxy routes', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('forwards ask-answer to Pico API', async () => {
+    const response = await request(app)
+      .post('/api/pico/v1/runs/run-1/ask-answer')
+      .send({ answer: '解释一下' });
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/runs/run-1/ask-answer',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ answer: '解释一下' }),
+        headers: expect.objectContaining({
+          Authorization: expect.stringMatching(/^Bearer /),
+          'X-Pico-Membership-Id': 'member-123',
+        }),
+      }),
+    );
+  });
+
   it('forwards the read-only skill catalog request to Pico API', async () => {
     const response = await request(app).get('/api/pico/v1/skills/catalog');
 

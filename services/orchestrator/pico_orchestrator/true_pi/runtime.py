@@ -206,6 +206,7 @@ async def run_true_pi_agent(
                 gateway=gateway,
                 run_id=rid,
                 conversation_id=conversation_id,
+                emit=emit,
             )
             tool_url = await tool_server.start()
             persist_dir = (

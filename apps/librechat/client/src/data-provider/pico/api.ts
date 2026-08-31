@@ -257,6 +257,13 @@ export async function retryPicoRun(runId: string) {
   });
 }
 
+export async function answerPicoAsk(runId: string, answer: string) {
+  return picoFetch<{ ok: boolean; run_id: string }>(`/v1/runs/${runId}/ask-answer`, {
+    method: 'POST',
+    body: JSON.stringify({ answer }),
+  });
+}
+
 export async function listPicoWorkspaces() {
   return picoFetch<{ workspaces: PicoWorkspace[] }>(`/v1/workspaces`);
 }

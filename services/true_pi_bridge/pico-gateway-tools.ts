@@ -37,6 +37,7 @@ const ALLOWED = [
   "web_search",
   "web_fetch",
   "kb_search",
+  "ask_user",
   "sandbox_preview_inspect",
   "sandbox_workspace_exec",
   "sandbox_browser_open",
@@ -364,6 +365,18 @@ export default function (pi: ExtensionAPI) {
       {
         query: Type.String(),
         limit: Type.Optional(Type.Number()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "ask_user",
+    "When the teacher's request is ambiguous, ask a short multiple-choice question (2–5 options) and wait. After they pick, continue the same turn. Do not call this when the request is already clear. Do not invent a goal.",
+    Type.Object(
+      {
+        question: Type.String(),
+        options: Type.Array(Type.String()),
       },
       { additionalProperties: true },
     ),

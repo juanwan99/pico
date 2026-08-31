@@ -38,6 +38,7 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "web_search",
     "web_fetch",
     "kb_search",
+    "ask_user",
 )
 
 # Same gateway, not registered unless a hung skill lists them.
