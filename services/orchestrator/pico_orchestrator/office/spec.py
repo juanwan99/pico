@@ -142,7 +142,7 @@ def parse_spec(raw: Any, *, default_kind: Kind | None = None) -> OfficeSpec:
         heading = str(raw.get("title") or "").strip()
         if heading or Theme.from_raw(raw.get("theme")) is not None:
             blocks_raw = [{"type": "slide", "title": heading or title}]
-        if not isinstance(blocks_raw, list) or not blocks_raw:
+    if not isinstance(blocks_raw, list) or not blocks_raw:
         raise ValueError("spec.blocks 不能为空。" if kind != "xlsx" else "Excel spec 需要 sheets 或 blocks。")
     blocks = tuple(_parse_block(item, kind=kind) for item in blocks_raw)  # type: ignore[misc]
     return OfficeSpec(
