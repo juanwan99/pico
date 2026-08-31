@@ -602,12 +602,12 @@ const ChatForm = memo(function ChatForm({
               />
               <div
                 className={cn(
-                'pico-wb-composer-row relative flex w-full items-end gap-2 px-2 py-2',
+                  'pico-wb-composer-row relative flex w-full items-center gap-2 px-2 py-2',
                   isRTL ? 'flex-row-reverse' : 'flex-row',
                 )}
                 data-testid="composer-one-row"
               >
-                <div className="relative z-50 shrink-0 self-end">
+                <div className="relative z-50 shrink-0">
                   {attach.input}
                   <button
                     type="button"
@@ -676,7 +676,7 @@ const ChatForm = memo(function ChatForm({
                 </div>
                 <ComposerModeSwitch value={picoMode} onChange={applyPicoMode} />
                 <ComposerPlanToggle on={picoPlanOn} onChange={applyPicoPlan} />
-                <div className="shrink-0 self-end">
+                <div className="shrink-0">
                   {isSubmitting && showStopButton && !answerMode.active ? (
                     duringRunSlot
                   ) : (

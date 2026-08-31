@@ -52,11 +52,11 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
 
   return (
     <div className="mb-2 w-full text-left" data-testid="archive-folder-bar">
-      <label className="pico-type-body flex items-center gap-2 text-[color:var(--pico-ink)] dark:text-text-primary">
+      <label className="pico-type-body flex items-center gap-2 text-[color:var(--pico-ink)]">
         <span className="shrink-0 text-[color:var(--pico-ink-2)]">存档位置</span>
-        <span className="relative inline-flex min-w-0">
+        <span className="relative inline-flex min-w-0 flex-1">
           <select
-            className="pico-type-body max-w-full cursor-pointer appearance-none rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] py-1 pl-2 pr-7 text-[color:var(--pico-ink)] shadow-sm outline-none hover:bg-[color:var(--pico-surface-2)]"
+            className="pico-type-body h-8 w-full max-w-full min-w-0 cursor-pointer appearance-none rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] pl-2 pr-7 text-[color:var(--pico-ink)] shadow-sm outline-none hover:bg-[color:var(--pico-surface-2)]"
             value={folderId}
             data-testid="archive-folder-select"
             aria-label="存档位置"

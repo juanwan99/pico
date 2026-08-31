@@ -70,9 +70,13 @@ export function PointsMeterProvider({
   }, []);
 
   useEffect(() => {
-    const quote = inflightQuote;
     const mid = latestAssistantMessageId;
-    if (!quote || !mid) {
+    if (!mid) {
+      return;
+    }
+    const quote = inflightQuote;
+    const actual = runId ? settledByRunRef.current[runId] || null : null;
+    if (!quote && !actual) {
       return;
     }
     setTurns((prev) => {
@@ -83,7 +87,6 @@ export function PointsMeterProvider({
       if (runId) {
         boundRef.current.runId = runId;
       }
-      const actual = (runId && settledByRunRef.current[runId]) || null;
       return {
         ...prev,
         [mid]: {

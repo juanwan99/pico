@@ -149,10 +149,10 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
               setFilesLoading={setFilesLoading}
             />
             <div
-              className="pico-wb-composer-row relative flex items-end gap-2 px-2 py-2"
+              className="pico-wb-composer-row relative flex items-center gap-2 px-2 py-2"
               data-testid="composer-one-row"
             >
-              <div className="relative z-50 shrink-0 self-end">
+              <div className="relative z-50 shrink-0">
                 {attach.input}
                 <button
                   type="button"
@@ -185,7 +185,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                 type="button"
                 data-testid="send-button"
                 className={cn(
-                  'inline-flex h-8 w-8 shrink-0 items-center justify-center self-end rounded-md transition-colors',
+                  'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors',
                   text.trim()
                     ? 'text-[color:var(--pico-ink)] hover:bg-black/[0.04]'
                     : 'text-[color:var(--pico-ink-3)]',

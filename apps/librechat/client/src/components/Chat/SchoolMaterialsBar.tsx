@@ -161,25 +161,27 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   const groups = useMemo(() => groupSchoolTree(fields, items), [fields, items]);
 
   return (
-    <div ref={rootRef} className="mb-1 w-full text-left" data-testid="school-materials-bar">
-      <button
-        type="button"
-        className="pico-type-body inline-flex items-center gap-1.5 rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-2 py-1 text-[color:var(--pico-ink)] shadow-sm hover:bg-[color:var(--pico-surface-2)] dark:text-text-primary"
-        data-testid="school-materials-toggle"
-        aria-expanded={open}
-        aria-haspopup="true"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span>学校材料</span>
-        {named.length ? (
-          <span className="pico-type-aux text-[color:var(--pico-ink-2)]">{named.length}</span>
-        ) : (
-          <span className="pico-type-aux text-[color:var(--pico-ink-3)]">未勾选不读正文</span>
-        )}
-        <span aria-hidden className="pico-type-aux text-[color:var(--pico-ink-3)]">
-          {open ? '▴' : '▾'}
-        </span>
-      </button>
+    <div ref={rootRef} className="mb-2 w-full text-left" data-testid="school-materials-bar">
+      <div className="flex items-center gap-2">
+        <span className="pico-type-body shrink-0 text-[color:var(--pico-ink-2)]">学校材料</span>
+        <button
+          type="button"
+          className="pico-type-body inline-flex h-8 min-w-0 flex-1 items-center justify-between gap-1.5 rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-2 text-left text-[color:var(--pico-ink)] shadow-sm hover:bg-[color:var(--pico-surface-2)]"
+          data-testid="school-materials-toggle"
+          aria-expanded={open}
+          aria-haspopup="true"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {named.length ? (
+            <span className="pico-type-aux text-[color:var(--pico-ink-2)]">{named.length}</span>
+          ) : (
+            <span className="pico-type-aux text-[color:var(--pico-ink-3)]">未勾选不读正文</span>
+          )}
+          <span aria-hidden className="pico-type-aux text-[color:var(--pico-ink-3)]">
+            {open ? '▴' : '▾'}
+          </span>
+        </button>
+      </div>
       {open ? (
         <div className="mt-1" data-testid="school-materials-tree">
           {error ? (
