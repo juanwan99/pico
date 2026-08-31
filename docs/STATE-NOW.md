@@ -4,13 +4,13 @@
 DATE: 2026-08-31
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #807 T-MEMORY-UPSTREAM
+在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main
-阻塞: #806/#810/#808 DEPLOYED 等主管 PASS · #748 合部完不关 · #807 在飞
+阻塞: #806/#810/#808/#807 DEPLOYED 等主管 PASS · #748 合部完不关 · 下一张 #809
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
-PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · 记忆 OS 仍挂起→#807
+PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · 文件型记忆 #807 已部等 PASS
 经验: docs/EXPERIENCE.md（唯一 · 按域）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 北极星: DIRECTION-NOW §0-star · 用法 = Grok
@@ -27,8 +27,8 @@ juanwan99/oneflow: 不当真源（已 Archive）
 3. **过门 = 公网能看见结果句。** 主管自签 PASS。业主抽检不对开新卡。写 1px 轨/选择器 = 退回。
 4. **1 卡 1 PR。** CI/测/部的修补走原 PR。同卡续只在业主说还差。卡别拆太细：同层薄适配并一张。
 5. **聊天默认易失。** 约束下一窗的结论必须落 Issue 评论或本页/`EXPERIENCE`/`TOOLING-CATALOG`。
-6. **合与部默认执行窗。** 执行窗挂死，主管才代合代部。主管窗不写业务码。
-7. **自循环。** 总线=合同 Issue（`## 派发`/`CANDIDATE`/`DEPLOYED`/五句）。执行者=云端沙箱（Grok 或 Cursor，额度谁还有用谁）。1 卡 1 家；额度尽同一分支续派另一家。ECS 只部（ssh-ecs），禁 ECS grok 当执行者。禁 mailbox / 第二账本。合了未部关卡打回。
+6. **合与部默认本窗。** 执行者 = 业主正在说话的这扇 Grok 沙箱。禁 spawn 子 agent / Cursor 云 Task / ECS grok。
+7. **自循环。** 总线=合同 Issue（`## 派发`/`CANDIDATE`/`DEPLOYED`/五句）。执行者=本窗 Grok 沙箱。ECS 只部（ssh-ecs）。禁 mailbox / 第二账本。合了未部关卡打回。
 
 失真 = 证据 PR / 合了报 DONE / 过门写控件 / 拆 PR / 凭聊天当真源。总管打回。
 
@@ -38,7 +38,7 @@ juanwan99/oneflow: 不当真源（已 Archive）
 2. 同域第二张 `stamp-ok` = 废派。
 3. **`juanwan99/oneflow` 不当真源（已 Archive）。**
 4. **不改卡面四行形状**（结果/不准/过门/部署）。现况三行可刷。
-5. **流程以 2026-08-31 业主钉为准**（#634）：双云端沙箱执行者 · ECS 只部 · 主管闭环自签 PASS。旧「老师手过门 / ECS grok 执行者 / 禁 Cursor 执行者」作废。
+5. **流程以 EXPERIENCE §80–89 为准**（#634）：执行者=本窗 Grok 沙箱 · ECS 只部 · 主管闭环自签 PASS。旧「双沙箱额度切换 / Cursor 云 Task 执行者 / ECS grok 执行者」作废。
 
 ## 架构法律（BINDING）
 
@@ -83,12 +83,12 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 规划 | [#805](https://github.com/juanwan99/pico/issues/805) | 活核+记忆+问清+计划+过程可见 · 六刀指针 · 不派 |
 | DEPLOYED 等主管 PASS | [#806](https://github.com/juanwan99/pico/issues/806) | T-PI-KERNEL-BUMP 0.84.4 已部 tip `63bb9e4b…` |
 | DEPLOYED 等主管 PASS | [#810](https://github.com/juanwan99/pico/issues/810) | T-PROCESS-VISIBLE 已部 tip `63c9f165…` |
-| 在飞 | [#807](https://github.com/juanwan99/pico/issues/807) | 文件型 Pi 记忆 · grok 主管代执行 |
+| DEPLOYED 等主管 PASS | [#807](https://github.com/juanwan99/pico/issues/807) | T-MEMORY-UPSTREAM 已部 tip `df6b3905…` |
 | 排队 | [#809](https://github.com/juanwan99/pico/issues/809) [#811](https://github.com/juanwan99/pico/issues/811) | 计划 / 收常驻 |
 | 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
-| 挂起 | 记忆 OS | 人视角薄层已部（#736）；完整记忆 OS 仍挂 · 禁自研 · 排队 #807 |
+| 挂起 | 自研记忆 OS | 禁 · 文件型上游 #807 已部 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
-| 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面四行冻到 9/7 · 流程 2026-08-31 业主钉 |
+| 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面四行冻到 9/7 · 流程 EXPERIENCE §80–89 |
 | 运行线程 | [#475](https://github.com/juanwan99/pico/issues/475) | controller-bot · 长期开 |
 
 **不当现况：** `#646`（已关）· `#671`（已关）· `DAY-TASK-*` · 任何 HANDOFF 长文 · 聊天 SHA。
