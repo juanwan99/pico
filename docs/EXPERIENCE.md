@@ -63,6 +63,12 @@ DATE: 2026-08-31
 87. **装机一次，自检每次。** 钥落到目录（chmod 700 目录、600 文件）后跑仓内 install / ssh-up；自检发现钥齐但 ssh 死，允许自动再 probe 一次。钥禁止进聊天、Issue、PR。两台机器磁盘不通，不要等总管窗「把钥传过来」。
 88. **切窗只复制现行总管卡。** 仓内模板改了不等于 Issue 钉文改了——接窗抄的是钉评。正源链接不要指向落后的 origin/main。
 89. **高质量执行清单（开卡后不等人喊开工）：** 自检真绿（含 ssh）→ CLAIM → 改+单测 → PR 叠 live → CI 绿立刻 squash 合 → 有差才部 → 五句回执。合了未部关卡=打回。证据贴本卡 Issue，不进 PR。部前禁 Closes。
+90. **右侧不是 iframe 现网。** Grok 只展示沙箱 8080。现网几乎都有 `X-Frame-Options: SAMEORIGIN`，嵌 `pico.aivia.asia` 会白屏。要看见真站：在 8080 反代现网（`scripts/grok-preview-proxy.mjs`）。
+91. **反代要改四样，缺一样就不稳：** 请求 Host / Origin / Referer 改成现网；响应删 `X-Frame-Options` 和 CSP；`Location` 从 `https://pico.aivia.asia/...` 改成相对路径；`Set-Cookie` 去掉 Domain，SameSite=Lax。
+92. **开发路径不要进反代。** `/__grok`、`/@`、`/src`、`/node_modules`、`/auth/popup` 留给 Vite。其余 `/` 和 `/api` 走现网。不要在 8080 再起一套本地产品 SPA 冒充现网。
+93. **自检打预览源，不打公网 URL。** 看标题是不是真站；再 POST 登录过预览。过了才叫右侧稳住。Playwright 也走 `127.0.0.1:8080`。
+94. **抽测 = 预览里点老师路径。** 不要只 curl 公网 API。预览源和公网源 cookie 不同；API 200 不等于右侧能开。
+95. **8080 断了右侧就黑。** startup 先探活再起。上游挂了返回人话 502，不要空转。
 
 ## D · Cloud Agent
 
@@ -71,5 +77,5 @@ DATE: 2026-08-31
 20. **禁止：** 密钥写进 `environment.json` / Issue / PR；把「白名单 22」当 Cloud Agent 部署通道；Save 前不经 draft build + 新 agent 验 `ECS_OK`。
 
 ```text
-派发点名示例：经验 §3 §17 §22 §80 · 工具 grok-sandbox-exec · tip-pin · ssh-ecs
+派发点名示例：经验 §3 §17 §22 §80 §90 · 工具 grok-sandbox-exec · grok-preview-proxy · tip-pin · ssh-ecs
 ```

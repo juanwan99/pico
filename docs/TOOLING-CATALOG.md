@@ -44,8 +44,9 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 | **subscribe-ci** | 订分支 CI 终态 | Cursor `subscribe_github_ci` | 执行窗已推分支 | 未知名分支空订 | — |
 | **subscribe-timer** | 兜底读合同评论 | Cursor `subscribe_timer` | Issue 评论无原生订约时 | ECS cron 自驱 agent | — |
 | **grok-sandbox-exec** | 本窗执行（改/测/PR/合/回执） | 业主正在说话的这扇 Grok 沙箱 | 需求已对齐、卡已 stamp | spawn 空转子 agent；Cursor 云 Task；SSH ECS grok 当执行者 | 无 |
+| **grok-preview-proxy** | 右侧 8080 反代现网 | `scripts/grok-preview-proxy.mjs` · EXPERIENCE §90–95 | 要在 Grok 预览看见 pico.aivia.asia | iframe 现网；8080 再起一套本地 SPA；只 curl 公网 API 当过门 | `PICO_PREVIEW_HOST` · `PICO_PREVIEW_PORT` |
 
-**说明：** `visual-gate` / `tip-pin` 以仓内脚本为准；`tool-status` 对缺失报 `ok:false`。`spawn-executor`（含 Cursor Cloud Agent 与 `scripts/spawn-executor.sh` SSH ecs grok）**退役当执行者**。默认工具 = **grok-sandbox-exec** + **ssh-ecs**（只部）。
+**说明：** `visual-gate` / `tip-pin` 以仓内脚本为准；`tool-status` 对缺失报 `ok:false`。`spawn-executor`（含 Cursor Cloud Agent 与 `scripts/spawn-executor.sh` SSH ecs grok）**退役当执行者**。默认工具 = **grok-sandbox-exec** + **grok-preview-proxy** + **ssh-ecs**（只部）。
 
 ---
 
@@ -99,7 +100,7 @@ missing 非空或 blocked_for_visual_gate → 卡内 BLOCKED，禁止写场景�
 - 审查必须读图；只读表 = 审查无效
 
 【工具合同 · TOOLING-CATALOG】
-批准 id：visual-gate · tip-pin · remote-health · gh-git · subscribe-pr · subscribe-ci · subscribe-timer · grok-sandbox-exec · ssh-ecs · prod-update · playwright-mcp · chrome-devtools-mcp · pytest-ruff
+批准 id：visual-gate · tip-pin · remote-health · gh-git · subscribe-pr · subscribe-ci · subscribe-timer · grok-sandbox-exec · grok-preview-proxy · ssh-ecs · prod-update · playwright-mcp · chrome-devtools-mcp · pytest-ruff
 回执：bash scripts/tool-status.sh --json（无密）；missing 非空 = BLOCKED（视觉卡）
 禁止：Cool/Keel/mailbox · 第二 E2E · 无图 Ready · 公网22当部署通道 · ECS grok 当执行者 · Cursor 云 Task 当执行者 · spawn-executor
 CLAIM-WB: 不代签 · 以 STATE-NOW 为准
