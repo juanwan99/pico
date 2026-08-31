@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AlertCircle, CheckCircle2, Circle, FileText, Wrench } from 'lucide-react';
 import { answerPicoAsk, type PicoRun, type PicoRunEvent } from '~/data-provider/pico/api';
+import { askOptionLabels, liveAskEvent } from '~/utils/picoAskPrompt';
 import { workbenchToolResultLine, workbenchToolStepLine } from '~/utils/picoWorkbenchProgress';
 
 const VISIBLE_EVENT_TYPES = new Set([
@@ -68,9 +69,6 @@ export function describePicoRunEvent(
     const tool = textValue(payload, 'tool', 'name') || '';
     const code = textValue(payload, 'code', 'error_code');
     const userMessage = textValue(payload, 'user_message');
-    // P2 status-truth: a tool step that failed but the run still succeeded was
-    // recovered — label it as such instead of a bare red-ish「失败」that
-    // contradicts the terminal success.
     const detail = ok
       ? '成功'
       : runSucceeded
@@ -254,30 +252,6 @@ function EventIcon({ type }: { type: string }) {
   return <Circle className="h-3.5 w-3.5" />;
 }
 
-function liveAskEvent(events: PicoRunEvent[]): PicoRunEvent | null {
-  let last: PicoRunEvent | null = null;
-  for (const event of events) {
-    if (event.type === 'ui.prompt.begin') {
-      last = event;
-    }
-    if (event.type === 'ui.prompt.end') {
-      last = null;
-    }
-  }
-  return last;
-}
-
-function askOptionLabels(payload: Record<string, unknown> | undefined): string[] {
-  const raw = payload?.options;
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-  return raw
-    .filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
-    .map((item) => item.trim())
-    .slice(0, 6);
-}
-
 export default function RunTimeline({
   events,
   run,
@@ -315,11 +289,6 @@ export default function RunTimeline({
     });
   }
 
-  // P2-E4 badge truth: recover whether the run ended successfully from the run
-  // object OR the run's own terminal event. Some surfaces render a timeline
-  // without the `run` prop (e.g. the automation page); deriving success from
-  // the event stream keeps recovered tool steps labeled 「失败 · 已恢复」 instead
-  // of a bare 「失败」 that contradicts the terminal success.
   const runSucceeded =
     run?.status === 'succeeded' ||
     allEvents.some(
