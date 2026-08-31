@@ -227,6 +227,77 @@ async def test_hitl_select_maps_execute_and_stays_on_empty() -> None:
 
 
 @pytest.mark.asyncio
+async def test_hitl_timeout_is_not_a_stay_choice() -> None:
+    from pico_orchestrator.ask_user import AskTimedOut
+
+    t = SubprocessTransport(
+        session_dir=Path("/tmp/tp-sess"),
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r-hitl-timeout",
+        plan_flag=True,
+        plan_hitl=True,
+    )
+    t.send = AsyncMock()
+
+    async def boom(_q: str, _opts: list[str]) -> str:
+        raise AskTimedOut("计划好了，下一步？")
+
+    t.ui_select = boom
+    await t._reply_extension_ui(
+        {
+            "method": "select",
+            "id": 9,
+            "options": [
+                "Execute the plan (track progress)",
+                "Stay in plan mode",
+            ],
+        }
+    )
+    assert t.plan_ask_timed_out is True
+    t.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_plan_ask_timeout_fails_run_not_succeeded() -> None:
+    from pico_orchestrator.true_pi.client import FakeTransport
+
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        events.append((k, p))
+
+    async def not_cancelled() -> bool:
+        return False
+
+    transport = FakeTransport(
+        scripted=[
+            {"type": "agent_start"},
+            {
+                "type": "message_end",
+                "message": {"role": "assistant", "content": "计划（14 步）"},
+            },
+            {"type": "agent_end", "willRetry": False},
+        ],
+        assistant_text="计划（14 步）",
+    )
+    transport.plan_flag = True
+    transport.plan_ask_timed_out = True
+    result = await run_true_pi_agent(
+        prompt="开始",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=not_cancelled,
+        caps=RunCaps(plan_on=True, min_artifacts=0, max_seconds=8),
+        transport=transport,
+    )
+    assert result.status == "failed"
+    assert "超时未选" in (result.error or "")
+    codes = [p.get("code") for k, p in events if k in {"run.error", "run.status"}]
+    assert "ask.timeout" in codes
+
+
+@pytest.mark.asyncio
 async def test_t3_plan_off_first_end_lands() -> None:
     from pico_orchestrator.true_pi.client import FakeTransport
 
