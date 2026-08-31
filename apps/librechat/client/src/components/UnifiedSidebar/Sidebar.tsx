@@ -204,7 +204,7 @@ function Sidebar({
 
   return (
     <div className="pico-wb-sidebar flex h-full w-full min-w-0 flex-col bg-[color:var(--pico-sidebar)] text-[color:var(--pico-ink)] dark:bg-surface-primary-alt dark:text-text-primary">
-      <div className="flex items-start justify-between px-4 pb-1 pt-4">
+      <div className="flex items-start justify-between px-4 pb-2 pt-4">
         <div className="min-w-0">
           <div className="pico-type-body pico-type-medium leading-tight tracking-tight">Pico</div>
         </div>
@@ -218,8 +218,8 @@ function Sidebar({
         </button>
       </div>
 
-      <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="px-2.5 pb-1">
+      <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="px-3 pb-1">
           <button
             type="button"
             data-testid="new-chat-button"
@@ -230,12 +230,12 @@ function Sidebar({
             新对话
           </button>
         </div>
-        <nav className="mt-1 flex shrink-0 flex-col gap-0.5 px-2.5" aria-label="主导航">
+        <nav className="mt-1 flex shrink-0 flex-col gap-1 px-3" aria-label="主导航">
           {navButtons(false)}
         </nav>
 
         <div
-          className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-[color:var(--pico-line)] pt-2"
+          className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-[color:var(--pico-line)] pt-3"
           data-testid={
             filesDirectory
               ? 'sidebar-files-directory'

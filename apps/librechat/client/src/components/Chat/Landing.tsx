@@ -149,7 +149,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
               setFilesLoading={setFilesLoading}
             />
             <div
-              className="pico-wb-composer-row relative flex items-end gap-0.5 px-1 py-1"
+              className="pico-wb-composer-row relative flex items-end gap-2 px-2 py-2"
               data-testid="composer-one-row"
             >
               <div className="relative z-50 shrink-0 self-end">
@@ -177,7 +177,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                 }}
                 placeholder={PLACEHOLDER}
                 rows={1}
-                className="pico-type-body min-h-8 min-w-0 flex-1 resize-none border-0 bg-transparent py-2 leading-[1.55] text-[color:var(--pico-ink)] outline-none placeholder:text-[color:var(--pico-ink-3)]"
+                className="pico-type-body min-h-8 min-w-0 flex-1 resize-none border-0 bg-transparent py-1 text-[color:var(--pico-ink)] outline-none placeholder:text-[color:var(--pico-ink-3)]"
               />
               <ComposerModeSwitch value={model} onChange={applyModel} />
               <ComposerPlanToggle on={planOn} onChange={applyPlan} />

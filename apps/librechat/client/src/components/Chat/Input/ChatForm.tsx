@@ -491,7 +491,7 @@ const ChatForm = memo(function ChatForm({
   const baseClasses = useMemo(
     () =>
       cn(
-        'pico-type-body m-0 w-full resize-none bg-transparent py-2 px-1 placeholder-[color:var(--pico-ink-3)]',
+        'pico-type-body m-0 w-full resize-none bg-transparent py-1 px-1 placeholder-[color:var(--pico-ink-3)]',
         isCollapsed ? 'max-h-[52px]' : 'max-h-[45vh] md:max-h-[55vh]',
       ),
     [isCollapsed],
@@ -602,7 +602,7 @@ const ChatForm = memo(function ChatForm({
               />
               <div
                 className={cn(
-                  'pico-wb-composer-row relative flex w-full items-end gap-0.5 px-1 py-1',
+                'pico-wb-composer-row relative flex w-full items-end gap-2 px-2 py-2',
                   isRTL ? 'flex-row-reverse' : 'flex-row',
                 )}
                 data-testid="composer-one-row"
