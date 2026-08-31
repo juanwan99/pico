@@ -7,7 +7,7 @@ DATE: 2026-08-31
 派发条只点名编号（最多 3 条）。过期删（总管同轮删/并）。
 工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
 北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok
-按域检索: A 派发 · B 产品 · C 部署/ECS · D Cloud Agent
+按域检索: A 派发 · B 产品 · C 部署/ECS/执行者 · D Cloud Agent
 ```
 
 ## A · 派发 / 收口
@@ -21,9 +21,9 @@ DATE: 2026-08-31
 7. **同域一张 `stamp-ok`。** 残债同卡。禁 `T-*-DEBT`。
 8. **卡面四行合同。** 已锁事实写 Issue 评论，禁止把手册/315 贴进卡。
 9. **聊天默认易失。** 约束下一窗 → Issue 评论或 `STATE-NOW` / 本文 / `TOOLING-CATALOG`。回复用 `§编号` / `Issue#`，禁「上次我们说」。
-10. **合与部默认执行窗。** 执行窗挂死，主管才代合代部。主管窗不写业务码。主管做：对齐需求·派发·两问戳·现况三行·经验/工具入库·结果可见则自签 PASS。
+10. **合与部默认本窗。** 执行者 = 业主正在说话的这扇 Grok 沙箱。不要 spawn 子 agent / Cursor 云 Task / SSH 调 ECS grok。主管做：对齐需求·开卡·合·部·结果可见则自签 PASS。
 21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / 把 ECS 当第二账本 / 聊天当真源。
-22. **总管环（自驱动闭环）：** 对齐需求 → stamp → 派发条贴本卡 `## 派发` → **spawn-executor**（Grok 云端沙箱 或 Cursor 云端沙箱；额度谁还有用谁）→ 盯 PR/CI → 合 → 部（ssh-ecs / prod-update）→ tip-pin → 结果可见则自签 PASS → 刷 STATE-NOW/#634。1 卡 1 执行者；额度尽同一分支续派另一家。ECS 只部，禁 ECS grok 当执行者。合了未部关卡=打回 OPEN。禁止 mailbox。卡别拆太细。
+22. **总管环（自驱动闭环）：** 对齐需求 → stamp → 本窗改+测+PR（叠 live）→ CI 绿立刻 squash 合 → 有差才部（ssh-ecs / prod-update）→ tip-pin → 结果可见则自签 PASS → 刷 STATE-NOW/#634。ECS 只部。合了未部关卡=打回 OPEN。禁止 mailbox。卡别拆太细。禁止拉 Cursor 云 Task 当执行者。
 23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审（不开新卡）· `CLEAR` tip=main + 主管 PASS。人只留：目标 · 黄红争议 · PASS。同域第二张 stamp-ok=废派。
 
 ## B · 现网 / 产品
@@ -47,11 +47,22 @@ DATE: 2026-08-31
 37. **聊天回形针 = 老师唯一上传口。** 图和文档同一回形针：图本轮进 Pi `images[]`；文档落 `POST /v1/files`，抽出失败也落盘，AI 用 `workspace_read_file` 按文件名读。LibreChat 本地仓不是老师柜。ingest HTTP 失败不得假装已传。「我的文件」是生成物柜，不是第二本地上传口。禁目的地三选 / VectorStore / 转到学校当上传。禁第二套文件 OS。
 38. **HTML 交互页断网。** `generate_html_document` 禁 CDN / `import https` / `//cdn` / Three.js / Chart.js；外链引擎与 `window.THREE` 空舞台失败闭合，不剥成空舞台再报成功。校验同样扫 import/src/href/引擎全局。禁放行 jsdelivr。#780 业主 PASS 2026-08-29 @ tip `e9e032b3…`。
 
-## C · 部署 / ECS
+## C · 部署 / ECS / 执行者
 
 15. **GIT SHA 不当 Docker build-arg。** 当 ARG 会让每次部重下 torch（#658/#659）。SHA 只进 compose `.env`。
 16. **部署真源：** `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`；证伪用 **tip-pin** + **remote-health**（见 TOOLING-CATALOG）。公网 tip 与 ECS loopback 必须同 SHA。
 17. **SSH 进机：只用 Tailscale MagicDNS。** Host 别名 `ecs` / `pico-prod` → `aliyun-hy`，用户 `ops`。禁止拿 Cloud Agent 公网 egress IP 去开安全组 22（IP 漂移 = 假通路）。
+
+80. **执行者 = 业主正在说话的这扇 Grok 沙箱。** 不要再 SSH 调 ECS grok，不要拉 Cursor 云 Task。ECS 只部。跨机传话会丢。
+81. **开窗先自检，假红当事故。** 密钥根可以是目录（`/root/.edu-secrets` 或 `$HOME/.edu-secrets`），一钥一文件；私钥文件可以叫 `ecs_ops`。不要用 `[[ -f 目录 ]]` 判断「无钥」——目录不是文件，会假红。无钥才 BLOCKED；钥齐但 ssh 不通才是真红。自检一边 BLOCKED 一边 exit 0 = 撒谎。
+82. **不要 sudo bash 写密钥或跑装机脚本。** sudo 会清掉环境变量，看起来像没钥。tailscaled 需要提权就在脚本里对那一条 sudo，整段不要包。
+83. **Tailscale 主机名按这台沙箱的 hostname，前面加仓前缀（`pico-…`）。** 禁止设成对面仓的固定名（如 `cursor-edu-core`）——会把另一扇窗踢下线。两窗不要抢同一个 Tailscale 节点。
+84. **沙箱没有 Docker。** 改和测在沙箱；部在 ECS（`ssh ecs` 再跑仓内 prod-update）。不要为了「本地起全栈」在沙箱装 Docker。
+85. **对齐现网 SHA，不要默认把落后的 origin/main 合进现网。** main 落后 tip 时，PR 叠在 live 那根树上。合入 main 后再部。DONE 认公网 tip = 本卡 SHA（合后 tip 应等于 origin/main）。
+86. **抽测走用户能看见的那条路。** Grok 沙箱右侧预览必须是现网反代，禁止 iframe 套一套假站。禁止只打 API 当过门。过门仍是公网看得见结果句；CI 绿 ≠ 过门。
+87. **装机一次，自检每次。** 钥落到目录（chmod 700 目录、600 文件）后跑仓内 install / ssh-up；自检发现钥齐但 ssh 死，允许自动再 probe 一次。钥禁止进聊天、Issue、PR。两台机器磁盘不通，不要等总管窗「把钥传过来」。
+88. **切窗只复制现行总管卡。** 仓内模板改了不等于 Issue 钉文改了——接窗抄的是钉评。正源链接不要指向落后的 origin/main。
+89. **高质量执行清单（开卡后不等人喊开工）：** 自检真绿（含 ssh）→ CLAIM → 改+单测 → PR 叠 live → CI 绿立刻 squash 合 → 有差才部 → 五句回执。合了未部关卡=打回。证据贴本卡 Issue，不进 PR。部前禁 Closes。
 
 ## D · Cloud Agent
 
@@ -60,5 +71,5 @@ DATE: 2026-08-31
 20. **禁止：** 密钥写进 `environment.json` / Issue / PR；把「白名单 22」当 Cloud Agent 部署通道；Save 前不经 draft build + 新 agent 验 `ECS_OK`。
 
 ```text
-派发点名示例：经验 §3 §17 §22 · 工具 spawn-executor · tip-pin · ssh-ecs
+派发点名示例：经验 §3 §17 §22 §80 · 工具 grok-sandbox-exec · tip-pin · ssh-ecs
 ```
