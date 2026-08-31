@@ -730,9 +730,7 @@ def _request_plan_on(body: ChatCompletionRequest, header: str | None = None) -> 
     if bool(getattr(body, "pico_plan", False)):
         return True
     meta = body.metadata if isinstance(body.metadata, dict) else None
-    if meta and bool(meta.get("pico_plan")):
-        return True
-    return False
+    return bool(meta and meta.get("pico_plan"))
 
 
 def _caps_with_plan(caps: Any, plan_on: bool) -> Any:

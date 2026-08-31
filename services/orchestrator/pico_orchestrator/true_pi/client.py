@@ -90,9 +90,7 @@ def plan_choice_pending(value: str) -> bool:
     low = (value or "").strip().lower()
     if low.startswith("execute"):
         return True
-    if value.strip() == "确认执行":
-        return True
-    return False
+    return value.strip() == "确认执行"
 
 # Isolated PI_CODING_AGENT_DIR filename. Pi 0.84 still has no --context CLI flag;
 # the window is models.json contextWindow (see packages/coding-agent/docs/models.md).

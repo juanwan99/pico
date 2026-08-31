@@ -145,7 +145,7 @@ async def maybe_write_plan_artifact(
         return await artifact_store.write(
             principal, title=title, content=text.strip(), kind="plan"
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — plan chrome must not fail the turn
         return None
 
 
