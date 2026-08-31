@@ -22,7 +22,14 @@ from pico_orchestrator.true_pi.config import (
     plan_mode_extension_path,
     session_segment,
 )
-from pico_orchestrator.true_pi.events import COMPACTION_HUMAN, EventMapState, map_event
+from pico_orchestrator.true_pi.events import (
+    COMPACTION_END_HUMAN,
+    COMPACTION_FAIL_HUMAN,
+    COMPACTION_HUMAN,
+    UI_WAIT_HUMAN,
+    EventMapState,
+    map_event,
+)
 from pico_orchestrator.true_pi.runtime import _compose_prompt, run_true_pi_agent
 
 
@@ -260,8 +267,30 @@ async def test_compaction_end_emits_human_line() -> None:
     compact_payloads = [p for k, p in events if k.startswith("compaction.")]
     assert compact_payloads
     assert COMPACTION_HUMAN == "在整理上文"
-    assert all(p.get("text") == COMPACTION_HUMAN for p in compact_payloads)
+    assert COMPACTION_END_HUMAN == "已压缩"
+    by_kind = {k: p for k, p in events if k.startswith("compaction.")}
+    assert by_kind["compaction.begin"]["text"] == COMPACTION_HUMAN
+    assert by_kind["compaction.end"]["text"] == COMPACTION_END_HUMAN
     # Product bubble stays the current answer, not the process line.
+    assert not any(k == "message.delta" for k, _ in events)
+
+
+@pytest.mark.asyncio
+async def test_compaction_failed_and_ui_prompt_are_process_not_bubble() -> None:
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        events.append((k, p))
+
+    state = EventMapState()
+    await map_event(RpcEvent({"type": "compaction_failed", "reason": "error"}), emit=emit, state=state)
+    await map_event(RpcEvent({"type": "ui_prompt_start", "method": "select"}), emit=emit, state=state)
+    await map_event(RpcEvent({"type": "ui_prompt_end", "method": "select"}), emit=emit, state=state)
+    by_kind = {k: p for k, p in events}
+    assert by_kind["compaction.failed"]["text"] == COMPACTION_FAIL_HUMAN
+    assert by_kind["ui.prompt.begin"]["text"] == UI_WAIT_HUMAN
+    assert by_kind["ui.prompt.begin"]["waiting"] is True
+    assert by_kind["ui.prompt.end"]["waiting"] is False
     assert not any(k == "message.delta" for k, _ in events)
 
 

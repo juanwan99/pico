@@ -1664,10 +1664,25 @@ async def chat_completions(
                 text = str(payload.get("text") or "")
                 if text:
                     await q.put(("delta", text))
-            elif event_type in {"compaction.begin", "compaction.end"}:
-                # Process chrome only. 在整理上文 must not become the product bubble.
-                text = str(payload.get("text") or "").strip() or "在整理上文"
-                await q.put(("status", f"{text}\n"))
+            elif event_type in {
+                "compaction.begin",
+                "compaction.end",
+                "compaction.failed",
+                "ui.prompt.begin",
+                "ui.prompt.end",
+            }:
+                # Process chrome only. 在整理上文 / 已压缩 / 在等你选 must not become the bubble.
+                text = str(payload.get("text") or "").strip()
+                if not text:
+                    text = {
+                        "compaction.begin": "在整理上文",
+                        "compaction.end": "已压缩",
+                        "compaction.failed": "压缩失败",
+                        "ui.prompt.begin": "在等你选",
+                        "ui.prompt.end": "已选",
+                    }.get(event_type, "")
+                if text:
+                    await q.put(("status", f"{text}\n"))
             elif event_type == "plan.progress":
                 from pico_orchestrator.human_package import public_progress_delta
 
