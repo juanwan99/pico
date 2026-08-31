@@ -173,7 +173,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_html_document",
-    "Create a real .html Artifact (Pico gateway). Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images (use data: URLs), no window.THREE / new Chart / echarts.init. The tool fails closed if the page still needs the network or those engines — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished.",
+    "Create a real .html Artifact (Pico gateway). Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images (use data: URLs), no window.THREE / new Chart / echarts.init. The tool fails closed if the page still needs the network or those engines, or if an inline script has unmatched brackets — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
@@ -226,7 +226,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_xlsx_document",
-    "Create a real .xlsx Artifact (Pico gateway). Result includes an observation of what landed. ok is not finished.",
+    "Create a real .xlsx Artifact (Pico gateway). Markdown/TSV tables in body become sheets and rows (sibling of Word paragraphs / PPT --- slides). spec.sheets is the structured path. A whole draft in one cell is not a spreadsheet. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
