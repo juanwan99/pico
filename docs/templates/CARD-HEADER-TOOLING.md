@@ -32,7 +32,8 @@ missing 非空 或 blocked_for_visual_gate=true → BLOCKED，禁止场景视觉
   第二 E2E 栈 · Browser Use/Stagehand 当 Ready · Percy 替主气泡
   闭源 Computer Use 当验收真源 · 无图 Ready · 只读表审查
   Cloud Agent 公网 22 / egress 白名单当部署通道（用 ssh-ecs）
-  Cursor Cloud Agent / @cursor 当执行者（执行者 = ECS grok）
+  ECS grok CLI 当执行者（ECS 只部）
+  主管窗写业务码
 
 CLAIM-WB: 不代签（以 STATE-NOW 为准）· 视觉 Ready：默认未过（直至 #384 帧齐且审查读图）
 ```
