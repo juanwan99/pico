@@ -44,6 +44,28 @@ async def test_park_resolves_on_answer() -> None:
     assert pending("run-ask") is None
 
 
+async def test_park_timeout_is_error_not_answer() -> None:
+    events: list[tuple[str, dict]] = []
+
+    async def emit(kind: str, payload: dict) -> None:
+        events.append((kind, payload))
+
+    out = await park(
+        "run-to",
+        "计划好了，下一步？",
+        ["确认执行", "先不执行"],
+        emit,
+        timeout=0.05,
+    )
+    assert out["ok"] is False
+    assert out["error"] == "timeout"
+    kinds = [item[0] for item in events]
+    assert "ui.prompt.begin" in kinds
+    assert events[-1][0] == "ui.prompt.end"
+    assert events[-1][1]["text"] == "超时未选"
+    assert pending("run-to") is None
+
+
 async def test_park_rejects_one_option() -> None:
     out = await park("run-bad", "?", ["only"], None)
     assert out["ok"] is False
