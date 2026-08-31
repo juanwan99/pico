@@ -212,6 +212,205 @@ def test_search_green_library_maps_membership_items(monkeypatch) -> None:
     asyncio.run(_run())
 
 
+def test_inject_includes_workspace_file_when_excerpt_present() -> None:
+    out = inject_named_school_materials(
+        "请看表",
+        [
+            {
+                "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                "title": "课时表",
+                "excerpt": "高一语文 5 节",
+                "workspace_title": "课时表.xlsx",
+                "workspace_artifact_id": "art-1",
+            }
+        ],
+    )
+    assert "高一语文 5 节" in out
+    assert "本轮工作区文件名：课时表.xlsx" in out
+    assert "art-1" in out
+
+
+def test_named_item_text_reads_slices_and_nested() -> None:
+    from app.edu_school import _named_item_bytes, _named_item_text
+
+    assert _named_item_text({"slices": [{"excerpt": "三月开学"}]}) == "三月开学"
+    assert _named_item_text({"item": {"body": "正文"}}) == "正文"
+    assert _named_item_text({"excerpt": ""}) == ""
+    blob = "A" * 80 + "=="
+    assert _named_item_text({"content": blob}) == ""
+    assert _named_item_bytes({"content": blob}) is not None
+
+
+def test_promote_named_bind_copies_landing_ids(client) -> None:
+    import asyncio
+
+    from app.db import session_factory
+    from app.edu_school import load_named_ids, promote_named_bind, remember_named_ids
+
+    item = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+
+    async def _run() -> None:
+        from app.db import init_db
+
+        await init_db()
+        factory = session_factory()
+        async with factory() as session:
+            await remember_named_ids(session, "school-a", "m-edu", "", [item], "")
+            got = await promote_named_bind(session, "school-a", "m-edu", "c-real")
+            assert got == [item]
+            assert await load_named_ids(session, "school-a", "m-edu", "c-real") == [item]
+
+    asyncio.run(_run())
+
+
+def test_excerpts_fill_from_item_when_bulk_excerpt_empty(client, monkeypatch) -> None:
+    import asyncio
+
+    from app import edu_school as mod
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.edu_school import excerpts_for_conversation, remember_named_ids
+
+    item = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+
+    async def fake_post(principal, path, *, body=None, settings=None):
+        _ = principal, body, settings
+        assert path == "/v1/pico/membership/excerpts"
+        return {"items": [{"id": item, "title": "课时表", "excerpt": ""}]}
+
+    async def fake_get(principal, path, *, params=None, settings=None):
+        _ = principal, params, settings
+        assert path.endswith(item)
+        return {"id": item, "title": "课时表", "text": "一年级 42 人"}
+
+    monkeypatch.setattr(mod, "_edu_post", fake_post)
+    monkeypatch.setattr(mod, "_edu_get", fake_get)
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=9999999999,
+        raw={},
+    )
+
+    async def _run() -> None:
+        from app.db import init_db
+
+        await init_db()
+        factory = session_factory()
+        async with factory() as session:
+            await remember_named_ids(session, "school-a", "m-edu", "c-real", [item], "")
+            rows = await excerpts_for_conversation(principal, "c-real", session)
+        assert len(rows) == 1
+        assert "一年级 42 人" in rows[0]["excerpt"]
+        assert rows[0]["unread"] is False
+        injected = inject_named_school_materials("请看", rows)
+        assert "一年级 42 人" in injected
+
+    asyncio.run(_run())
+
+
+def test_excerpts_office_bytes_go_through_file_pipeline(client, monkeypatch) -> None:
+    import asyncio
+    import base64
+
+    from app import edu_school as mod
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.edu_school import excerpts_for_conversation, remember_named_ids
+
+    item = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    payload = base64.b64encode("班,人数\n一班,42\n".encode()).decode("ascii")
+
+    async def fake_post(principal, path, *, body=None, settings=None):
+        _ = principal, path, body, settings
+        return {"items": [{"id": item, "title": "人数表", "excerpt": ""}]}
+
+    async def fake_get(principal, path, *, params=None, settings=None):
+        _ = principal, path, params, settings
+        return {
+            "id": item,
+            "title": "人数表",
+            "filename": "人数表.csv",
+            "content_b64": payload,
+        }
+
+    monkeypatch.setattr(mod, "_edu_post", fake_post)
+    monkeypatch.setattr(mod, "_edu_get", fake_get)
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=9999999999,
+        raw={},
+    )
+
+    async def _run() -> None:
+        from app.db import init_db
+
+        await init_db()
+        factory = session_factory()
+        async with factory() as session:
+            await remember_named_ids(session, "school-a", "m-edu", "c-csv", [item], "")
+            rows = await excerpts_for_conversation(principal, "c-csv", session)
+        assert rows[0]["workspace_title"] == "人数表.csv"
+        assert rows[0]["workspace_artifact_id"]
+        injected = inject_named_school_materials("请看", rows)
+        assert "人数表.csv" in injected
+        assert "artifact_id" in injected
+
+    asyncio.run(_run())
+
+
+def test_excerpts_still_lists_named_when_excerpts_http_fails(client, monkeypatch) -> None:
+    import asyncio
+
+    from app import edu_school as mod
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.edu_school import excerpts_for_conversation, remember_named_ids
+    from fastapi import HTTPException
+
+    item = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+
+    async def fake_post(principal, path, *, body=None, settings=None):
+        _ = principal, path, body, settings
+        raise HTTPException(status_code=502, detail="down")
+
+    async def fake_get(principal, path, *, params=None, settings=None):
+        _ = principal, params, settings
+        return {"id": item, "title": "课时表", "body": "全文明细"}
+
+    monkeypatch.setattr(mod, "_edu_post", fake_post)
+    monkeypatch.setattr(mod, "_edu_get", fake_get)
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=9999999999,
+        raw={},
+    )
+
+    async def _run() -> None:
+        from app.db import init_db
+
+        await init_db()
+        factory = session_factory()
+        async with factory() as session:
+            await remember_named_ids(session, "school-a", "m-edu", "", [item], "")
+            rows = await excerpts_for_conversation(principal, "c-from-landing", session)
+        assert rows[0]["id"] == item
+        assert "全文明细" in rows[0]["excerpt"]
+
+    asyncio.run(_run())
+
+
 def test_materials_without_edu_base_does_not_dump(client) -> None:
     res = client.get(
         "/v1/edu/materials",

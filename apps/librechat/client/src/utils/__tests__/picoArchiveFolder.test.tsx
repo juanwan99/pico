@@ -25,13 +25,23 @@ describe('ArchiveFolderBar', () => {
 
   it('defaults to 我的文件 and can pick a self-made folder', async () => {
     render(<ArchiveFolderBar conversationId="c1" />);
-    expect(await screen.findByRole('option', { name: '备课' })).toBeInTheDocument();
-    expect(screen.getByTestId('archive-folder-select')).toHaveValue('');
+    expect(screen.getByTestId('archive-folder-select')).toHaveTextContent('我的文件');
     expect(screen.getByText('存档位置')).toBeInTheDocument();
     expect(screen.queryByText('落到哪一场')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByTestId('archive-folder-select'), { target: { value: 'fold-1' } });
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('archive-folder-select'));
+    expect(await screen.findByRole('option', { name: '备课' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: '备课' }));
     await waitFor(() => {
       expect(mockPut).toHaveBeenCalledWith('c1', 'fold-1');
     });
+  });
+
+  it('uses one custom caret and no native select arrow', async () => {
+    render(<ArchiveFolderBar conversationId="c1" />);
+    const toggle = screen.getByTestId('archive-folder-select');
+    expect(toggle.tagName).toBe('BUTTON');
+    expect(toggle.querySelectorAll('.pico-chrome-caret')).toHaveLength(1);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 });

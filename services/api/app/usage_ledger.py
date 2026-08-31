@@ -603,22 +603,11 @@ async def list_usage_events_for_run(
     return list(result.scalars().all())
 
 
-async def settle_points_for_run(
-    session: AsyncSession,
-    principal: Principal,
-    run_id: str,
-) -> dict[str, Any] | None:
-    """Same number edu should debit. No wallet. Unknown ≠ 0."""
+def _points_view_from_rows(run_id: str, rows: list[UsageEventRow]) -> dict[str, Any]:
     from app.points_meter import points_from_tokens, tokens_from_row
-    from app.run_service import get_run_for_principal
 
-    run = await get_run_for_principal(session, run_id, principal)
-    if run is None:
-        return None
-    rows = await list_usage_events_for_run(session, principal, run_id)
     known = 0
     saw_known = False
-    saw_unknown = False
     for row in rows:
         token_n = tokens_from_row(
             tokens_unknown=bool(row.tokens_unknown),
@@ -627,7 +616,6 @@ async def settle_points_for_run(
             completion_tokens=row.completion_tokens,
         )
         if token_n is None:
-            saw_unknown = True
             continue
         saw_known = True
         known += token_n
@@ -638,19 +626,108 @@ async def settle_points_for_run(
             "wallet": False,
             "run_id": run_id,
         }
-    if saw_unknown or not rows:
-        return {
-            "phase": "pending",
-            "points": None,
-            "wallet": False,
-            "run_id": run_id,
-        }
     return {
         "phase": "pending",
         "points": None,
         "wallet": False,
         "run_id": run_id,
     }
+
+
+async def _backfill_run_tokens(
+    session: AsyncSession,
+    principal: Principal,
+    run_id: str,
+    run: Any,
+    rows: list[UsageEventRow],
+) -> list[UsageEventRow]:
+    """If events missed tokens, copy native usage from the run blob into the ledger."""
+    try:
+        blob = json.loads(getattr(run, "token_usage_json", None) or "{}")
+    except json.JSONDecodeError:
+        blob = None
+    fields = extract_token_fields(blob if isinstance(blob, dict) else None)
+    if fields.tokens_unknown:
+        return rows
+    llm_row = next((row for row in rows if (row.kind or "") == "llm"), None)
+    if llm_row is None:
+        found = (
+            await session.execute(
+                select(UsageEventRow).where(UsageEventRow.idempotency_key == f"llm:{run_id}")
+            )
+        ).scalar_one_or_none()
+        if found is not None:
+            llm_row = found
+    if llm_row is not None and not llm_row.tokens_unknown and llm_row.run_id == run_id:
+        return rows
+    if llm_row is not None:
+        llm_row.tokens_unknown = 0
+        llm_row.estimated = 0
+        llm_row.prompt_tokens = fields.prompt_tokens
+        llm_row.completion_tokens = fields.completion_tokens
+        llm_row.total_tokens = fields.total_tokens
+        llm_row.run_id = run_id
+        await session.commit()
+        return await list_usage_events_for_run(session, principal, run_id)
+    await record_usage_event(
+        school_id=principal.school_id,
+        membership_id=principal.membership_id,
+        kind="llm",
+        prompt_tokens=fields.prompt_tokens,
+        completion_tokens=fields.completion_tokens,
+        total_tokens=fields.total_tokens,
+        tokens_unknown=False,
+        estimated=False,
+        task_id=getattr(run, "task_id", None),
+        run_id=run_id,
+        source="settle-backfill",
+        idempotency_key=f"llm:{run_id}",
+    )
+    return await list_usage_events_for_run(session, principal, run_id)
+
+
+async def settle_points_for_run(
+    session: AsyncSession,
+    principal: Principal,
+    run_id: str,
+) -> dict[str, Any] | None:
+    """Same number edu should debit. No wallet. Unknown ≠ 0."""
+    from app.run_service import get_run_for_principal
+
+    run = await get_run_for_principal(session, run_id, principal)
+    if run is None:
+        return None
+    rows = await list_usage_events_for_run(session, principal, run_id)
+    view = _points_view_from_rows(run_id, rows)
+    if view["phase"] == "settled":
+        return view
+    rows = await _backfill_run_tokens(session, principal, run_id, run, rows)
+    return _points_view_from_rows(run_id, rows)
+
+
+async def settle_points_for_conversation(
+    session: AsyncSession,
+    principal: Principal,
+    conversation_id: str,
+) -> list[dict[str, Any]]:
+    """Oldest-first settled/pending views for this conversation's runs."""
+    from app.run_service import list_runs_for_task, list_tasks
+
+    cid = (conversation_id or "").strip()
+    if not cid or cid.lower() in {"new", "search"}:
+        return []
+    tasks = await list_tasks(session, principal, conversation_id=cid)
+    runs: list[Any] = []
+    for task in tasks:
+        runs.extend(await list_runs_for_task(session, task.id))
+    runs.sort(key=lambda row: (getattr(row, "created_at", None) is None, getattr(row, "created_at", None)))
+    out: list[dict[str, Any]] = []
+    for run in runs:
+        view = await settle_points_for_run(session, principal, run.id)
+        if view is None:
+            continue
+        out.append(view)
+    return out
 
 
 async def get_usage_event_for_principal(

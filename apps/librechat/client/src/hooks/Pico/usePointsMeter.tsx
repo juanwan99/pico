@@ -8,16 +8,24 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { getPicoRunPoints, quotePicoPoints } from '~/data-provider/pico/api';
+import { getPicoConversationPoints, getPicoRunPoints, quotePicoPoints } from '~/data-provider/pico/api';
 import {
   formatComposerQuote,
   formatPointsLabel,
   formatTurnPointsLabel,
+  migrateTurnMessageId,
+  zipRunsToAssistantMessages,
   type PointsBarPhase,
   type PointsTurnRecord,
 } from '~/hooks/Pico/formatPointsLabel';
 
-export { formatComposerQuote, formatPointsLabel, formatTurnPointsLabel };
+export {
+  formatComposerQuote,
+  formatPointsLabel,
+  formatTurnPointsLabel,
+  migrateTurnMessageId,
+  zipRunsToAssistantMessages,
+};
 export type { PointsBarPhase, PointsTurnRecord };
 
 export type PointsMeterValue = {
@@ -38,12 +46,16 @@ export function PointsMeterProvider({
   runId,
   runStatus,
   latestAssistantMessageId,
+  assistantMessageIds,
+  conversationId,
   isSubmitting,
 }: {
   children: ReactNode;
   runId?: string | null;
   runStatus?: string | null;
   latestAssistantMessageId?: string | null;
+  assistantMessageIds?: string[] | null;
+  conversationId?: string | null;
   isSubmitting?: boolean;
 }) {
   const [inflightQuote, setInflightQuote] = useState<string | null>(null);
@@ -57,6 +69,10 @@ export function PointsMeterProvider({
   const latestAssistantRef = useRef<string | null>(latestAssistantMessageId ?? null);
   latestAssistantRef.current = latestAssistantMessageId ?? null;
   const settledByRunRef = useRef<Record<string, string>>({});
+  const assistantIds = assistantMessageIds ?? [];
+  const assistantKey = assistantIds.join('|');
+  const assistantIdsRef = useRef(assistantIds);
+  assistantIdsRef.current = assistantIds;
 
   const quoteFromChars = useCallback((n: number) => {
     boundRef.current = { runId: null, messageId: null };
@@ -74,21 +90,18 @@ export function PointsMeterProvider({
     if (!mid) {
       return;
     }
-    const quote = inflightQuote;
-    const actual = runId ? settledByRunRef.current[runId] || null : null;
-    if (!quote && !actual) {
-      return;
-    }
     setTurns((prev) => {
-      if (prev[mid]) {
-        return prev;
+      const moved = migrateTurnMessageId(prev, boundRef.current.messageId, mid);
+      if (moved[mid]) {
+        return moved === prev ? prev : moved;
       }
-      boundRef.current.messageId = mid;
-      if (runId) {
-        boundRef.current.runId = runId;
+      const quote = inflightQuote;
+      const actual = runId ? settledByRunRef.current[runId] || null : null;
+      if (!quote && !actual) {
+        return moved;
       }
       return {
-        ...prev,
+        ...moved,
         [mid]: {
           messageId: mid,
           runId: runId ?? null,
@@ -97,13 +110,17 @@ export function PointsMeterProvider({
         },
       };
     });
+    boundRef.current.messageId = mid;
+    if (runId) {
+      boundRef.current.runId = runId;
+    }
   }, [inflightQuote, latestAssistantMessageId, runId]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
-    const mid = boundRef.current.messageId;
+    const mid = boundRef.current.messageId || latestAssistantRef.current;
     if (!mid) {
       return;
     }
@@ -122,6 +139,52 @@ export function PointsMeterProvider({
   }, [runId]);
 
   useEffect(() => {
+    const cid = (conversationId || '').trim();
+    if (!cid || cid === 'new' || !assistantKey) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const view = await getPicoConversationPoints(cid);
+        if (cancelled) {
+          return;
+        }
+        const zipped = zipRunsToAssistantMessages(assistantIdsRef.current, view.turns || []);
+        if (!zipped.length) {
+          return;
+        }
+        setTurns((prev) => {
+          let changed = false;
+          const next = { ...prev };
+          for (const row of zipped) {
+            if (row.actual) {
+              settledByRunRef.current[row.runId || ''] = row.actual;
+            }
+            const cur = next[row.messageId];
+            if (cur?.actual) {
+              continue;
+            }
+            changed = true;
+            next[row.messageId] = {
+              messageId: row.messageId,
+              runId: row.runId ?? cur?.runId ?? null,
+              quote: cur?.quote ?? null,
+              actual: row.actual,
+            };
+          }
+          return changed ? next : prev;
+        });
+      } catch {
+        /* keep 预计 until tokens land */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, assistantKey]);
+
+  useEffect(() => {
     if (!runId || !runStatus || !TERMINAL.has(runStatus)) {
       return;
     }
@@ -130,27 +193,36 @@ export function PointsMeterProvider({
 
     const applyActual = (points: string) => {
       settledByRunRef.current[rid] = points;
+      const preferredMid = latestAssistantRef.current || boundRef.current.messageId;
       setTurns((prev) => {
         const entry = Object.values(prev).find((t) => t.runId === rid);
-        const mid = entry?.messageId || boundRef.current.messageId || latestAssistantRef.current;
+        const mid = preferredMid || entry?.messageId;
         if (!mid) {
           return prev;
         }
-        const cur = prev[mid];
-        if (cur?.actual === points && cur.runId === rid) {
+        const cur = prev[mid] || (entry ? prev[entry.messageId] : undefined);
+        if (cur?.actual === points && cur.runId === rid && prev[mid]) {
           return prev;
         }
-        return {
-          ...prev,
-          [mid]: {
-            messageId: mid,
-            runId: rid,
-            quote: cur?.quote ?? inflightQuoteRef.current,
-            actual: points,
-          },
+        const next = { ...prev };
+        if (entry && entry.messageId !== mid) {
+          delete next[entry.messageId];
+        }
+        next[mid] = {
+          messageId: mid,
+          runId: rid,
+          quote: cur?.quote ?? inflightQuoteRef.current,
+          actual: points,
         };
+        return next;
       });
-      if (boundRef.current.runId === rid) {
+      const shouldClearQuote =
+        !boundRef.current.runId || boundRef.current.runId === rid;
+      if (preferredMid) {
+        boundRef.current.messageId = preferredMid;
+      }
+      boundRef.current.runId = rid;
+      if (shouldClearQuote) {
         setInflightQuote(null);
       }
     };
@@ -208,7 +280,7 @@ export function PointsMeterProvider({
           messageId,
           runId: runId ?? null,
           quote: inflightQuote,
-          actual: null,
+          actual: runId ? settledByRunRef.current[runId] || null : null,
         };
       }
       return null;

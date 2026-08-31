@@ -31,6 +31,44 @@ export function formatTurnPointsLabel(
   return null;
 }
 
+export function migrateTurnMessageId(
+  turns: Record<string, PointsTurnRecord>,
+  fromId: string | null | undefined,
+  toId: string | null | undefined,
+): Record<string, PointsTurnRecord> {
+  if (!toId || fromId === toId) {
+    return turns;
+  }
+  if (turns[toId]) {
+    return turns;
+  }
+  if (fromId && turns[fromId]) {
+    const next = { ...turns, [toId]: { ...turns[fromId], messageId: toId } };
+    delete next[fromId];
+    return next;
+  }
+  return turns;
+}
+
+export function zipRunsToAssistantMessages(
+  messageIds: string[],
+  runs: Array<{ run_id?: string | null; points?: string | null; phase?: string | null }>,
+): PointsTurnRecord[] {
+  const settled = runs.filter((row) => row.phase === 'settled' && row.points && row.run_id);
+  const n = Math.min(messageIds.length, settled.length);
+  if (n <= 0) {
+    return [];
+  }
+  const ids = messageIds.slice(messageIds.length - n);
+  const slice = settled.slice(settled.length - n);
+  return ids.map((id, i) => ({
+    messageId: id,
+    runId: slice[i].run_id ?? null,
+    quote: null,
+    actual: slice[i].points ?? null,
+  }));
+}
+
 export function formatPointsLabel(phase: PointsBarPhase, points: string | null): string | null {
   if (phase === 'idle') {
     return null;

@@ -616,19 +616,24 @@ async def usage_points_quote(
 
 @app.get("/v1/usage/points")
 async def usage_points_settle(
-    run_id: str,
+    run_id: str = "",
+    conversation_id: str = "",
     principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    from app.usage_ledger import settle_points_for_run
+    from app.usage_ledger import settle_points_for_conversation, settle_points_for_run
 
     rid = (run_id or "").strip()
-    if not rid:
-        raise HTTPException(status_code=400, detail="run_id required")
-    out = await settle_points_for_run(session, principal, rid)
-    if out is None:
-        raise HTTPException(status_code=404, detail="run not found")
-    return out
+    cid = (conversation_id or "").strip()
+    if rid:
+        out = await settle_points_for_run(session, principal, rid)
+        if out is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        return out
+    if cid:
+        turns = await settle_points_for_conversation(session, principal, cid)
+        return {"turns": turns, "wallet": False}
+    raise HTTPException(status_code=400, detail="run_id or conversation_id required")
 
 
 @app.get("/v1/usage")

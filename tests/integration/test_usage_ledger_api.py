@@ -469,3 +469,92 @@ async def test_points_quote_hides_scale_and_settle_uses_ledger(client: AsyncClie
     assert missing.status_code == 404
 
 
+async def test_points_settle_backfills_from_run_blob_and_conversation(client: AsyncClient):
+    import json
+
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.run_service import create_task
+
+    headers = await _auth(client)
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=0,
+        raw={},
+    )
+    factory = session_factory()
+    async with factory() as session:
+        task, run = await create_task(session, principal, "t", "hello")
+        task.conversation_id = "convo-points"
+        run.status = "succeeded"
+        run.token_usage_json = json.dumps(
+            {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10}
+        )
+        await session.commit()
+        run_id = run.id
+
+    pending = await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})
+    assert pending.status_code == 200, pending.text
+    body = pending.json()
+    assert body["phase"] == "settled"
+    assert body["points"] == "0.030"
+    assert body["wallet"] is False
+
+    convo = await client.get(
+        "/v1/usage/points", headers=headers, params={"conversation_id": "convo-points"}
+    )
+    assert convo.status_code == 200, convo.text
+    turns = convo.json()["turns"]
+    assert len(turns) == 1
+    assert turns[0]["run_id"] == run_id
+    assert turns[0]["phase"] == "settled"
+    assert turns[0]["points"] == "0.030"
+
+
+async def test_points_settle_updates_unknown_event_when_run_blob_has_tokens(client: AsyncClient):
+    import json
+
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.run_service import create_task
+
+    headers = await _auth(client)
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=0,
+        raw={},
+    )
+    factory = session_factory()
+    async with factory() as session:
+        _task, run = await create_task(session, principal, "t2", "hello")
+        run.status = "succeeded"
+        run.token_usage_json = json.dumps(
+            {"input_tokens": 20, "output_tokens": 10, "total_tokens": 30}
+        )
+        await session.commit()
+        run_id = run.id
+
+    await record_usage_event(
+        school_id="school-a",
+        membership_id="m1",
+        kind="llm",
+        tokens_unknown=True,
+        estimated=False,
+        run_id=run_id,
+        source="openai_compat",
+        idempotency_key=f"llm:{run_id}",
+    )
+    settled = await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})
+    assert settled.status_code == 200, settled.text
+    assert settled.json()["phase"] == "settled"
+    assert settled.json()["points"] == "0.090"
+
+

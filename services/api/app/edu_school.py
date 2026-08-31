@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
 from typing import Any
 
@@ -24,6 +25,7 @@ from app.edu_sso import sanitize_named_ids
 from app.settings import Settings, get_settings
 
 router = APIRouter(tags=["edu-school"])
+logger = logging.getLogger(__name__)
 
 _CONV_RE = re.compile(r"^[A-Za-z0-9._:-]{0,128}$")
 NAMED_HINT = "只用下面「已点名」的学校材料。未勾选的学校文件不算已读，禁止装作读过整校。"
@@ -85,6 +87,83 @@ def _conversation_key(raw: str | None) -> str:
     return value[:128]
 
 
+_OFFICE_EXT = {".xlsx", ".xls", ".docx", ".doc", ".csv"}
+
+
+def _looks_b64_blob(val: str) -> bool:
+    compact = "".join((val or "").split())
+    if len(compact) < 80:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9+/]+=*", compact[:240]))
+
+
+def _named_item_text(row: dict[str, Any] | None) -> str:
+    if not isinstance(row, dict):
+        return ""
+    for key in ("excerpt", "text", "body", "body_text", "content", "html", "body_html", "preview"):
+        val = row.get(key)
+        if isinstance(val, str) and val.strip() and not _looks_b64_blob(val):
+            return val.strip()
+    slices = row.get("slices")
+    if isinstance(slices, list):
+        bits = []
+        for slice_row in slices:
+            if not isinstance(slice_row, dict):
+                continue
+            piece = str(slice_row.get("excerpt") or slice_row.get("text") or "").strip()
+            if piece:
+                bits.append(piece)
+        if bits:
+            return "\n".join(bits)
+    for key in ("item", "document", "material", "file"):
+        nested = row.get(key)
+        if isinstance(nested, dict):
+            got = _named_item_text(nested)
+            if got:
+                return got
+    return ""
+
+
+def _named_item_bytes(row: dict[str, Any] | None) -> bytes | None:
+    if not isinstance(row, dict):
+        return None
+    for key in ("content_b64", "contentBase64", "file_b64", "bytes_b64"):
+        val = row.get(key)
+        if isinstance(val, str) and val.strip():
+            try:
+                return base64.b64decode(val, validate=False)
+            except (ValueError, TypeError):
+                continue
+    raw = row.get("content")
+    if isinstance(raw, (bytes, bytearray)) and raw:
+        return bytes(raw)
+    if isinstance(raw, str) and _looks_b64_blob(raw):
+        try:
+            return base64.b64decode(raw, validate=False)
+        except (ValueError, TypeError):
+            pass
+    for key in ("item", "document", "material", "file"):
+        nested = row.get(key)
+        if isinstance(nested, dict):
+            got = _named_item_bytes(nested)
+            if got:
+                return got
+    return None
+
+
+def _named_item_filename(row: dict[str, Any]) -> str:
+    for key in ("filename", "title", "name"):
+        val = str(row.get(key) or "").strip()
+        if val:
+            return val[:180]
+    return str(row.get("id") or "材料")[:180]
+
+
+def _looks_office(filename: str) -> bool:
+    name = (filename or "").strip().lower()
+    return any(name.endswith(ext) for ext in _OFFICE_EXT)
+
+
 def inject_named_school_materials(prompt: str, items: list[dict[str, Any]] | None) -> str:
     """Attach named excerpts to the user prompt. Empty list → prompt unchanged (no dump)."""
     named = [row for row in (items or []) if isinstance(row, dict)]
@@ -95,11 +174,21 @@ def inject_named_school_materials(prompt: str, items: list[dict[str, Any]] | Non
         title = str(row.get("title") or "").strip() or str(row.get("id") or "材料")
         item_id = str(row.get("id") or "")
         excerpt = str(row.get("excerpt") or "").strip()[:4000]
-        if row.get("unread"):
+        workspace_title = str(row.get("workspace_title") or "").strip()
+        workspace_id = str(row.get("workspace_artifact_id") or "").strip()
+        workspace_note = ""
+        if workspace_title:
+            workspace_note = f"本轮工作区文件名：{workspace_title}"
+            if workspace_id:
+                workspace_note += f"（artifact_id {workspace_id}）"
+        if row.get("unread") and not excerpt:
             lines.append(f"- 《{title}》（{item_id}）未读懂")
             continue
         if excerpt:
-            lines.append(f"- 《{title}》（{item_id}）\n{excerpt}")
+            extra = f"\n{workspace_note}" if workspace_note else ""
+            lines.append(f"- 《{title}》（{item_id}）{extra}\n{excerpt}")
+        elif workspace_note:
+            lines.append(f"- 《{title}》（{item_id}）\n{workspace_note}")
         else:
             lines.append(f"- 《{title}》（{item_id}）")
     return "\n".join(lines) + "\n\n" + str(prompt or "")
@@ -208,6 +297,38 @@ async def load_named_field_id(
     if row is None:
         return ""
     return sanitize_field_id(getattr(row, "field_id", "") or "")
+
+
+async def promote_named_bind(
+    session: AsyncSession,
+    school_id: str,
+    membership_id: str,
+    conversation_id: str,
+) -> list[str]:
+    """Copy landing (`new`/empty) named ids onto the real conversation so checks survive."""
+    key = _conversation_key(conversation_id)
+    if not key:
+        return await load_named_ids(session, school_id, membership_id, conversation_id)
+    key_row = (
+        await session.execute(
+            select(EduNamedBindRow).where(
+                EduNamedBindRow.school_id == school_id,
+                EduNamedBindRow.membership_id == membership_id,
+                EduNamedBindRow.conversation_id == key,
+            )
+        )
+    ).scalar_one_or_none()
+    if key_row is not None:
+        return await load_named_ids(session, school_id, membership_id, key)
+    landing_ids = await load_named_ids(session, school_id, membership_id, "")
+    if not landing_ids:
+        return []
+    field_id = await load_named_field_id(session, school_id, membership_id, "")
+    await remember_named_ids(session, school_id, membership_id, key, landing_ids, field_id)
+    archive = await load_archive_folder_id(session, school_id, membership_id, "")
+    if archive:
+        await remember_archive_folder_id(session, school_id, membership_id, key, archive)
+    return landing_ids
 
 
 def sanitize_folder_id(raw: str | None) -> str:
@@ -435,20 +556,141 @@ async def search_green_library(
     }
 
 
+async def _fetch_membership_item(
+    principal: Principal,
+    item_id: str,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    if not item_id:
+        return {}
+    try:
+        data = await _edu_get(
+            principal, f"/v1/pico/membership/items/{item_id}", settings=settings
+        )
+    except HTTPException as exc:
+        logger.warning(
+            "membership item %s failed: %s", item_id, getattr(exc, "status_code", "?")
+        )
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    nested = data.get("item") if isinstance(data.get("item"), dict) else None
+    return nested or data
+
+
+async def _workspace_named_file(
+    principal: Principal,
+    *,
+    filename: str,
+    data: bytes,
+    conversation_id: str,
+) -> dict[str, Any]:
+    from app.edu_files import extract_for_kb, persist_edu_file
+
+    extract = extract_for_kb(filename, data)
+    file_id = await persist_edu_file(
+        principal,
+        filename=filename,
+        data=data,
+        extract=extract,
+        conversation_id=conversation_id,
+    )
+    text = str(extract.get("text") or "").strip()
+    unread = extract.get("status") == "unread" and not text
+    return {
+        "excerpt": text,
+        "unread": unread,
+        "workspace_title": filename,
+        "workspace_artifact_id": file_id,
+    }
+
+
+async def _fill_named_material(
+    principal: Principal,
+    row: dict[str, Any],
+    conversation_id: str,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    filled = dict(row)
+    item_id = str(filled.get("id") or "").strip()
+    title = str(filled.get("title") or "").strip() or item_id or "材料"
+    filled["title"] = title
+    text = _named_item_text(filled)
+    filename = _named_item_filename(filled)
+    need_item = (not text) or filled.get("unread") is True
+    need_file = _looks_office(filename) and (not text or len(text) < 40)
+    if (need_item or need_file) and item_id:
+        extra = await _fetch_membership_item(principal, item_id, settings)
+        if extra:
+            if not filled.get("title") or filled.get("title") == item_id:
+                extra_title = str(extra.get("title") or extra.get("filename") or "").strip()
+                if extra_title:
+                    filled["title"] = extra_title
+            if not str(filled.get("filename") or "").strip() and extra.get("filename"):
+                filled["filename"] = extra.get("filename")
+            filename = _named_item_filename(filled)
+            if not text:
+                text = _named_item_text(extra)
+            raw = _named_item_bytes(extra) or _named_item_bytes(filled)
+            if raw and (need_file or not text):
+                try:
+                    parked = await _workspace_named_file(
+                        principal,
+                        filename=filename,
+                        data=raw,
+                        conversation_id=conversation_id,
+                    )
+                    filled.update({k: v for k, v in parked.items() if v})
+                    if parked.get("excerpt"):
+                        text = str(parked["excerpt"])
+                except Exception:
+                    logger.exception("named school file pipeline failed for %s", item_id)
+    if text:
+        filled["excerpt"] = text[:20000]
+        filled["unread"] = False
+    elif filled.get("unread") is not True:
+        filled["unread"] = False
+    return filled
+
+
 async def excerpts_for_conversation(
     principal: Principal,
     conversation_id: str,
     session: AsyncSession,
     settings: Settings | None = None,
 ) -> list[dict[str, Any]]:
-    ids = await load_named_ids(session, principal.school_id, principal.membership_id, conversation_id)
+    await promote_named_bind(
+        session, principal.school_id, principal.membership_id, conversation_id
+    )
+    ids = await load_named_ids(
+        session, principal.school_id, principal.membership_id, conversation_id
+    )
     if not ids:
         return []
-    data = await _edu_post(principal, "/v1/pico/membership/excerpts", body={"ids": ids}, settings=settings)
-    items = data.get("items")
-    if not isinstance(items, list):
-        return []
-    return [row for row in items if isinstance(row, dict)]
+    by_id: dict[str, dict[str, Any]] = {}
+    try:
+        data = await _edu_post(
+            principal, "/v1/pico/membership/excerpts", body={"ids": ids}, settings=settings
+        )
+        items = data.get("items") if isinstance(data, dict) else None
+        if isinstance(items, list):
+            for row in items:
+                if isinstance(row, dict) and row.get("id"):
+                    by_id[str(row["id"])] = dict(row)
+    except HTTPException as exc:
+        logger.warning(
+            "membership excerpts failed: %s", getattr(exc, "status_code", "?")
+        )
+    out: list[dict[str, Any]] = []
+    for item_id in ids[:12]:
+        row = dict(by_id.get(item_id) or {"id": item_id})
+        row["id"] = item_id
+        try:
+            out.append(await _fill_named_material(principal, row, conversation_id, settings))
+        except Exception:
+            logger.exception("named school material fill failed for %s", item_id)
+            out.append(row)
+    return out
 
 
 @router.get("/v1/edu/materials")

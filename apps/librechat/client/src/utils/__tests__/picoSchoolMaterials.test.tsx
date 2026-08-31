@@ -53,6 +53,14 @@ describe('SchoolMaterialsBar venue folder tree', () => {
     });
   });
 
+  it('uses the shared chrome row and a single caret', () => {
+    render(<SchoolMaterialsBar conversationId="c1" />);
+    const toggle = screen.getByTestId('school-materials-toggle');
+    expect(toggle.tagName).toBe('BUTTON');
+    expect(toggle.querySelectorAll('.pico-chrome-caret')).toHaveLength(1);
+    expect(screen.getByText('学校材料')).toBeInTheDocument();
+  });
+
   it('opens into venue folders without materials fan-out; docs load on expand', async () => {
     render(<SchoolMaterialsBar conversationId="c1" />);
     fireEvent.click(screen.getByTestId('school-materials-toggle'));

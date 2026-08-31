@@ -670,6 +670,12 @@ describe('Pico proxy routes', () => {
       'http://127.0.0.1:18765/v1/usage/points?run_id=run_abc-1',
       expect.objectContaining({ method: 'GET' }),
     );
+
+    await request(app).get('/api/pico/v1/usage/points?conversation_id=c-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/usage/points?conversation_id=c-1',
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 
   it('forbids teacher role from the gateway admin snapshot', async () => {
