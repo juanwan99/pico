@@ -2,8 +2,8 @@
 
 ```text
 DOC: docs/ONEFLOW.md
-STATUS: BINDING v2.1 — 2026-08-23
-EXEC: 2026-08-24 三刀 BINDING（卡面不改）
+STATUS: BINDING v2.2 — 2026-08-31
+EXEC: 2026-08-31 业主钉：双沙箱执行者 · ECS 只部 · 主管闭环 PASS
 REPO: juanwan99/pico ONLY
 ALIGN: edu-core TASK-DISPATCH v2（派发条 + 合同在 Issue）
 NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
@@ -12,8 +12,8 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 ```text
 执行三刀（开窗先看）
 1. 证据贴 Issue 评论。禁止 docs PR 专贴截图。
-2. 无 ECS / 不能 prod-update = 拒领。DONE 必须 curl tip = origin/main。
-3. 过门 = 老师手。写控件清单 = 退回调查，禁开工。
+2. 无 ECS SSH / 不能 prod-update = 拒领部。DONE 必须 curl tip = origin/main。
+3. 过门 = 公网能看见结果句。主管自签 PASS。写控件清单 = 退回。
 现况: docs/STATE-NOW.md
 ```
 
@@ -33,17 +33,18 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 
 ```text
 一句人话目标
-  → 一张卡（四行）或直接 PR
+  → 和业主对齐（没对齐不开卡）
+  → 一张卡（四行；同层薄适配并一张，别拆太细）或直接 PR
   → 一分支一 PR
   → CI 绿
-  → 合 main
-  → 有差才 prod-update.sh 一次
+  → 合 main（默认执行窗；挂死主管代）
+  → 有差才 prod-update.sh 一次（ECS 只部）
   → live tip == origin/main
   → 回执五句
-  → 总管：结果句老师手已点则自签卡 PASS 关；未点不签。业主发现问题开新卡小口
+  → 主管：结果句公网可见则自签 PASS 关；CI/API 不算。业主抽检不对开新卡
 ```
 
-未 MERGED 不算做完。合了没部署 = 用户看不见。CI/API 200 不算老师手。CLAIM-WB / 全球 PASS 仍只业主签。
+未 MERGED 不算做完。合了没部署 = 用户看不见。CI/API 200 不算过门。CLAIM-WB / 全球 PASS 仍只业主签。
 
 ## 2. 合同在 Issue，派发条在卡评
 
@@ -51,12 +52,14 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 
 ```text
 总管调查 → 写入 Issue 标准任务卡（已锁事实 / IN / 验收）
-         → stamp-ok
+         → stamp-ok（需求已对齐）
          → 派发条贴合同 Issue（## 派发）
-         → 总管 spawn-executor（SSH ecs grok · 首条=派发条）；无 ssh-ecs 拒领
+         → 总管 spawn-executor（Grok 云端沙箱 或 Cursor 云端沙箱；额度谁还有用谁）
 执行窗只认：派发条 + 合同 Issue
-总管环：订 PR/CI + timer 读 ## CANDIDATE/DEPLOYED/DONE → tip-pin → CLEAR
-         合了未部关卡=打回 OPEN · 总管不合不部
+总管环：自驱动盯 CANDIDATE/CI → 合 → 部 → tip-pin → 自签 PASS
+         1卡1执行者 · 额度尽同一分支续派另一家
+         合了未部关卡=打回 OPEN · 默认执行窗合部 · 挂死主管代
+         ECS 只部 · 禁 ECS grok 当执行者 · 主管窗不写业务码
 ```
 
 **Issue 合同**用标准任务卡体例（#627：锁定句 / 已锁事实 / IN / OUT / 验收 / CLAIM / 回写）。四行（结果 / 不准 / 过门 / 部署）是骨架，嵌在卡里，**禁止用四行短卡替代合同**——无状态窗会丢已锁事实。
@@ -80,9 +83,9 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
 
 | 谁 | 做什么 | 禁止 |
 |----|--------|------|
-| 业主 | 开卡（一句人话）；用产品；发现问题开新卡小口 | 盯合、盯部、签卡 PASS、当执行窗闹钟 |
-| 总管 | 调查写入 Issue；打章；`## 派发`；spawn-executor（SSH ecs grok）；订约读回执；刷现况；条件满足自签卡 PASS 关 | 未点结果句就自签；请业主签卡 PASS；合 main；prod-update；代合代部；当执行窗写业务码（应急/开工除外）；用 Cursor Agent / `@cursor` 当执行者 |
-| 写入 | 改、测、PR、部、五句回执贴合同 | 自签/关卡；直推 main；写 edu-core 业务 |
+| 业主 | 对齐需求；用产品；PASS 后抽检；不对开新卡 | 盯合、盯部、当执行窗闹钟 |
+| 主管 | 对齐后开卡；打章；`## 派发`；起云端沙箱执行者；盯回执；tip-pin；结果可见则自签 PASS 关；执行窗挂死才代合部 | 没对齐就 stamp；CI 绿当 PASS；请业主签卡 PASS；本窗写业务码；mailbox |
+| 执行者 | Grok 或 Cursor **云端沙箱**（额度谁还有用谁）：改、测、PR、部、五句回执 | 自签/关卡；直推 main；写 edu-core；当 ECS 机上 grok CLI |
 
 ## 4. 发布
 

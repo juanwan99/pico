@@ -2,7 +2,7 @@
 
 ```text
 仓: juanwan99/pico ONLY
-DATE: 2026-08-29
+DATE: 2026-08-31
 用法: 开窗读本文。禁止把正文贴进卡或对业主聊天。
 派发条只点名编号（最多 3 条）。过期删（总管同轮删/并）。
 工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
@@ -17,14 +17,14 @@ DATE: 2026-08-29
 3. **无部署权拒领。** 不能 `PICO_DEPLOY_SHA=… bash /opt/pico/scripts/prod-update.sh` = 不 stamp。DONE 必须 `curl -fsS https://pico.aivia.asia/api/pico/tip` = origin/main。合了未部 = 没完。
 4. **禁止 PR 写 `Closes #<卡>`。** 部前关卡 = 失真。合了未部要打回 OPEN。
 5. **证据贴本卡 Issue 评论。** 禁止截图 docs PR。UI 卡：执行窗合部后把过门截图贴合同 Issue **回执**（图跟五句一起）。Cloud Agent 本机无浏览器 ≠ 免过门；派发条写明「截图写回执」。
-6. **过门是老师手。** 写 1px 轨 / 词表 / 选择器 = 退回。禁开工。
+6. **过门是公网结果句。** 主管见 live tip=main 且结果句可见则自签 PASS。业主抽检不对开新卡。写 1px 轨 / 词表 / 选择器 = 退回。禁开工。禁焊提示词/定向场景。
 7. **同域一张 `stamp-ok`。** 残债同卡。禁 `T-*-DEBT`。
 8. **卡面四行合同。** 已锁事实写 Issue 评论，禁止把手册/315 贴进卡。
 9. **聊天默认易失。** 约束下一窗 → Issue 评论或 `STATE-NOW` / 本文 / `TOOLING-CATALOG`。回复用 `§编号` / `Issue#`，禁「上次我们说」。
-10. **合与部只归执行窗。** 总管 / 主管窗 / 本类 Cloud Agent：**不合 main、不跑 prod-update**。总管做：派发·两问戳·黄红审戳·现况三行·经验/工具入库。P0 止血可调查、起候选 PR，**合与部仍交执行窗**（有 stamp 才领）。禁止「总管代合代部」当常态。
-21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / 把 ECS Grok 当第二账本 / 聊天当真源。
-22. **总管环（不合不部）：** stamp → 派发条贴本卡 `## 派发` → **spawn-executor**（SSH `ecs` → 机上 grok CLI；隔离 checkout `/home/ops/pico-wt/issue-N`；禁写 `/opt/pico` 开发树）→ 订 PR/CI → timer 读评 → tip-pin → 刷 STATE-NOW/#634 → CLEAR。无 `ssh ecs` = 拒领。禁止 Cursor Cloud Agent / `@cursor` 当执行者。合了未部关卡=打回 OPEN。禁止 mailbox / 第二账本。禁止总管代合代部（含「应急改+部」）。
-23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审/过门（不开新卡）· `CLEAR` tip=main + 五句后停或下一张。人只留：目标 · 黄红争议 · 老师手 · PASS。同域第二张 stamp-ok=废派。
+10. **合与部默认执行窗。** 执行窗挂死，主管才代合代部。主管窗不写业务码。主管做：对齐需求·派发·两问戳·现况三行·经验/工具入库·结果可见则自签 PASS。
+21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / 把 ECS 当第二账本 / 聊天当真源。
+22. **总管环（自驱动闭环）：** 对齐需求 → stamp → 派发条贴本卡 `## 派发` → **spawn-executor**（Grok 云端沙箱 或 Cursor 云端沙箱；额度谁还有用谁）→ 盯 PR/CI → 合 → 部（ssh-ecs / prod-update）→ tip-pin → 结果可见则自签 PASS → 刷 STATE-NOW/#634。1 卡 1 执行者；额度尽同一分支续派另一家。ECS 只部，禁 ECS grok 当执行者。合了未部关卡=打回 OPEN。禁止 mailbox。卡别拆太细。
+23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审（不开新卡）· `CLEAR` tip=main + 主管 PASS。人只留：目标 · 黄红争议 · PASS。同域第二张 stamp-ok=废派。
 
 ## B · 现网 / 产品
 

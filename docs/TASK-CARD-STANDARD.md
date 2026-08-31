@@ -5,7 +5,7 @@ DOC: docs/TASK-CARD-STANDARD.md
 STATUS: BINDING v2.2 — 2026-08-24
 FROZEN 卡面 — 禁止改本文件形状、复活 315
 EXEC 三刀 BINDING:
-  证据贴 Issue 评论 · 无 ECS 拒领 · 过门=老师手 · DONE=curl tip=main
+  证据贴 Issue 评论 · 无 ECS SSH 拒领部 · 过门=公网结果句 · DONE=curl tip=main · 主管自签 PASS
 SUPERSEDES: 四行短卡当派发形态
 真源: docs/ONEFLOW.md v2.1 · 现况: docs/STATE-NOW.md
 模板: .github/ISSUE_TEMPLATE/ · docs/templates/card-build.md · docs/templates/dispatch-slip.md
@@ -15,7 +15,7 @@ SUPERSEDES: 四行短卡当派发形态
 
 点 **New Issue** 选「执行卡」或贴 **标准任务卡**（#627 体例）。卡必须自含【已锁事实】【IN】【验收】——执行窗零记忆，总管聊天里的调查它看不见。
 
-派给执行窗时：派发条贴合同 Issue（`## 派发`），总管再 `spawn-executor --issue N`（SSH ecs grok）。无 ssh-ecs 拒领。禁止 `@cursor` 当执行者。模板 [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)。卡上无 `## 派发` = 没派。
+派给执行窗时：派发条贴合同 Issue（`## 派发`），总管再 `spawn-executor`（Grok 云端沙箱 **或** Cursor 云端沙箱；额度谁还有用谁）。1 卡 1 家。ECS 只部。主管窗不写业务码。模板 [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)。卡上无 `## 派发` = 没派。卡别拆太细。
 
 ## 卡面（Issue 合同）
 
