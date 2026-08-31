@@ -268,6 +268,19 @@ export async function listPicoWorkspaces() {
   return picoFetch<{ workspaces: PicoWorkspace[] }>(`/v1/workspaces`);
 }
 
+export type PicoMemoryFile = { name: string; text: string };
+
+export async function listPicoMemory() {
+  return picoFetch<{ files: PicoMemoryFile[] }>(`/v1/memory`);
+}
+
+export async function deletePicoMemory(name: string) {
+  return picoFetch<{ ok: boolean; name: string }>(
+    `/v1/memory?name=${encodeURIComponent(name)}`,
+    { method: 'DELETE' },
+  );
+}
+
 export async function listPicoSkillCatalog() {
   return picoFetch<{ skills: PicoSkillPolicy[] }>(`/v1/skills/catalog`);
 }

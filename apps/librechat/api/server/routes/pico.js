@@ -394,6 +394,18 @@ router.get('/v1/artifacts/:artifactId/content', (req, res) => {
   }
 });
 router.get('/v1/workspaces', (req, res) => proxy(req, res, '/v1/workspaces'));
+router.get('/v1/memory', (req, res) => {
+  const name = typeof req.query.name === 'string' ? req.query.name : '';
+  const suffix = name ? `?name=${encodeURIComponent(name)}` : '';
+  return proxy(req, res, `/v1/memory${suffix}`);
+});
+router.delete('/v1/memory', (req, res) => {
+  const name = typeof req.query.name === 'string' ? req.query.name : '';
+  if (!name || name.includes('..')) {
+    return res.status(400).json({ error: 'bad_request', message: 'name required' });
+  }
+  return proxy(req, res, `/v1/memory?name=${encodeURIComponent(name)}`);
+});
 router.post('/v1/usage/points/quote', (req, res) => proxy(req, res, '/v1/usage/points/quote'));
 router.get('/v1/usage/points', (req, res) => proxy(req, res, '/v1/usage/points'));
 router.get('/v1/skills/catalog', (req, res) => proxy(req, res, '/v1/skills/catalog'));

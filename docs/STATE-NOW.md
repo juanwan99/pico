@@ -4,10 +4,10 @@
 DATE: 2026-08-31
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #808 T-ASK-USER
+在飞: #807 T-MEMORY-UPSTREAM
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main
-阻塞: #806/#810 DEPLOYED 等主管 PASS · #748 合部完不关 · 记忆 OS 挂→#807
+阻塞: #806/#810/#808 DEPLOYED 等主管 PASS · #748 合部完不关 · #807 在飞
 ────────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · 记忆 OS 仍挂起→#807
@@ -83,8 +83,8 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 规划 | [#805](https://github.com/juanwan99/pico/issues/805) | 活核+记忆+问清+计划+过程可见 · 六刀指针 · 不派 |
 | DEPLOYED 等主管 PASS | [#806](https://github.com/juanwan99/pico/issues/806) | T-PI-KERNEL-BUMP 0.84.4 已部 tip `63bb9e4b…` |
 | DEPLOYED 等主管 PASS | [#810](https://github.com/juanwan99/pico/issues/810) | T-PROCESS-VISIBLE 已部 tip `63c9f165…` |
-| 在飞 | [#808](https://github.com/juanwan99/pico/issues/808) | 问清 · 过门=含糊就问 · grok 主管代执行 |
-| 排队 | [#807](https://github.com/juanwan99/pico/issues/807) [#809](https://github.com/juanwan99/pico/issues/809) [#811](https://github.com/juanwan99/pico/issues/811) | 记忆 / 计划 / 收常驻 |
+| 在飞 | [#807](https://github.com/juanwan99/pico/issues/807) | 文件型 Pi 记忆 · grok 主管代执行 |
+| 排队 | [#809](https://github.com/juanwan99/pico/issues/809) [#811](https://github.com/juanwan99/pico/issues/811) | 计划 / 收常驻 |
 | 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
 | 挂起 | 记忆 OS | 人视角薄层已部（#736）；完整记忆 OS 仍挂 · 禁自研 · 排队 #807 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |

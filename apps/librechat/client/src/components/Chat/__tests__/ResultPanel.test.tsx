@@ -24,6 +24,8 @@ jest.mock('~/data-provider/pico/api', () => ({
   openPicoSandboxBrowser: jest.fn(),
   openPicoSandboxDocument: jest.fn(),
   focusPicoSandboxWindow: jest.fn(),
+  listPicoMemory: jest.fn().mockResolvedValue({ files: [] }),
+  deletePicoMemory: jest.fn(),
 }));
 jest.mock('~/utils', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),

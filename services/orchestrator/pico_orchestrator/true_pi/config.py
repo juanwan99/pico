@@ -29,6 +29,7 @@ HOSTED_LOOP_ENV = "PICO_HOSTED_LOOP"
 TRUE_PI_BIN_ENV = "PICO_TRUE_PI_BIN"
 TRUE_PI_PACKAGE_ENV = "PICO_TRUE_PI_PACKAGE"
 TRUE_PI_SESSION_ROOT_ENV = "PICO_TRUE_PI_SESSION_ROOT"
+TRUE_PI_MEMORY_ROOT_ENV = "PICO_TRUE_PI_MEMORY_ROOT"
 TRUE_PI_HISTORY_N_ENV = "PICO_TRUE_PI_HISTORY_N"
 
 # npm pin for deploy notes
@@ -141,6 +142,67 @@ def session_segment(raw: str, *, max_len: int = 80) -> str:
     return safe
 
 
+def memory_root() -> Path:
+    """Durable membership memory (not /tmp session jsonl)."""
+    raw = os.environ.get(TRUE_PI_MEMORY_ROOT_ENV, "").strip()
+    if raw:
+        return Path(raw)
+    data = Path("/app/data")
+    if data.is_dir():
+        return data / "pi-memory"
+    return session_root() / "_memory"
+
+
+def persist_memory_dir(*, school_id: str, membership_id: str) -> Path | None:
+    """One MEMORY.md tree per membership. Missing either side → None."""
+    school = (school_id or "").strip()
+    member = (membership_id or "").strip()
+    if not school or not member:
+        return None
+    path = memory_root() / session_segment(school) / session_segment(member)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def list_memory_files(root: Path) -> list[dict[str, str]]:
+    """Teacher-visible files under a membership memory dir."""
+    out: list[dict[str, str]] = []
+    if not root.is_dir():
+        return out
+    for name in ("MEMORY.md", "SCRATCHPAD.md"):
+        file = root / name
+        if file.is_file():
+            text = file.read_text(encoding="utf-8", errors="replace")[:4000]
+            out.append({"name": name, "text": text})
+    daily = root / "daily"
+    if daily.is_dir():
+        for file in sorted(daily.glob("*.md"), reverse=True)[:8]:
+            text = file.read_text(encoding="utf-8", errors="replace")[:2000]
+            out.append({"name": f"daily/{file.name}", "text": text})
+    notes = root / "notes"
+    if notes.is_dir():
+        for file in sorted(notes.glob("*.md"))[:8]:
+            text = file.read_text(encoding="utf-8", errors="replace")[:2000]
+            out.append({"name": f"notes/{file.name}", "text": text})
+    return out
+
+
+def delete_memory_file(root: Path, name: str) -> bool:
+    """Delete one relative file. No `..`, no absolute paths."""
+    rel = (name or "").strip().replace("\\", "/")
+    if not rel or rel.startswith("/") or ".." in rel.split("/"):
+        return False
+    target = (root / rel).resolve()
+    try:
+        target.relative_to(root.resolve())
+    except ValueError:
+        return False
+    if not target.is_file():
+        return False
+    target.unlink()
+    return True
+
+
 # Official Pi ``--session`` file for one workbench conversation. Not a second tree.
 PERSIST_SESSION_FILE = "pico.jsonl"
 
@@ -198,6 +260,15 @@ def plan_mode_extension_path() -> Path:
         / "plan-mode"
         / "index.ts"
     )
+
+
+def memory_extension_path() -> Path:
+    """Vendored @askjo/pi-mem 1.2.0 thin adapter."""
+    override = os.environ.get("PICO_TRUE_PI_MEMORY_EXT", "").strip()
+    if override:
+        return Path(override)
+    here = Path(__file__).resolve()
+    return here.parents[3] / "true_pi_bridge" / "vendor" / "pi-mem-1.2.0" / "index.ts"
 
 
 def true_pi_available() -> bool:

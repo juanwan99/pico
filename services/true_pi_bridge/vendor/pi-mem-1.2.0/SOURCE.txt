@@ -1,0 +1,10 @@
+SOURCE: @askjo/pi-mem@1.2.0
+PATH: lib.ts + tools from index.ts
+LICENSE: MIT (upstream)
+
+Pico thin adapter (LAW-NO-SELF-BUILD):
+- Keep upstream file layout: MEMORY.md / SCRATCHPAD.md / daily / notes.
+- PI_MEMORY_DIR is membership-scoped (Pico sets it). Never share ~/.pi/agent/memory.
+- Drop TUI dashboard, Last-24h LLM summary, git autocommit, session scanner.
+- RPC has no pi-tui; compact notify is a no-op without ctx.hasUI.
+- Do not invent a vector Memory OS.

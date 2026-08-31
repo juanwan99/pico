@@ -1207,6 +1207,36 @@ class CreateWorkspaceRequest(BaseModel):
     kind: str = "managed"
 
 
+@app.get("/v1/memory")
+async def list_membership_memory(
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> dict:
+    from pico_orchestrator.true_pi.config import list_memory_files, persist_memory_dir
+
+    root = persist_memory_dir(
+        school_id=principal.school_id,
+        membership_id=principal.membership_id,
+    )
+    files = list_memory_files(root) if root is not None else []
+    return {"files": files}
+
+
+@app.delete("/v1/memory")
+async def delete_membership_memory(
+    name: str,
+    principal: Principal = Depends(require_scope("ai:run")),
+) -> dict:
+    from pico_orchestrator.true_pi.config import delete_memory_file, persist_memory_dir
+
+    root = persist_memory_dir(
+        school_id=principal.school_id,
+        membership_id=principal.membership_id,
+    )
+    if root is None or not delete_memory_file(root, name):
+        raise HTTPException(status_code=404, detail="memory file not found")
+    return {"ok": True, "name": name}
+
+
 @app.get("/v1/workspaces")
 async def list_workspaces(
     principal: Principal = Depends(require_scope("ai:read")),
