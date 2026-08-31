@@ -68,6 +68,13 @@ def test_request_plan_on_never_defaults() -> None:
     )
     assert _request_plan_on(off) is True
     assert _request_plan_on(ChatCompletionRequest(messages=[{"role": "user", "content": "x"}]), "1") is True
+    # FastAPI Header() default is a params object; missing header must stay off.
+    from fastapi.params import Header as HeaderParam
+
+    blank = ChatCompletionRequest(messages=[{"role": "user", "content": "hi"}])
+    sentinel = HeaderParam(default=None, alias="X-Pico-Plan")
+    assert _request_plan_on(blank, sentinel) is False  # type: ignore[arg-type]
+    assert _request_plan_on(blank, None) is False
 
 
 def test_caps_with_plan_is_opt_in() -> None:

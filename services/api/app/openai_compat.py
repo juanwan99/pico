@@ -724,7 +724,8 @@ def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
 
 def _request_plan_on(body: ChatCompletionRequest, header: str | None = None) -> bool:
     """Teacher 先计划 toggle. Header / body / metadata; never default on."""
-    raw = (header or "").strip().lower()
+    # Direct calls (integration tests) pass FastAPI's Header() sentinel, not a str.
+    raw = header.strip().lower() if isinstance(header, str) else ""
     if raw in {"1", "true", "yes", "on"}:
         return True
     if bool(getattr(body, "pico_plan", False)):
