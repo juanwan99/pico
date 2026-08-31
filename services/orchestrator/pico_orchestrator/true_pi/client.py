@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pico_orchestrator.ask_user import AskTimedOut
 from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinking_level, pi_bin
 
 logger = logging.getLogger(__name__)
@@ -342,6 +343,7 @@ class SubprocessTransport(TruePiTransport):
         self.plan_execute_pending = False
         self.plan_agent_ends = 0
         self.plan_stayed = False
+        self.plan_ask_timed_out = False
         self._proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task[None] | None = None
         self._queue: asyncio.Queue[RpcEvent | None] = asyncio.Queue()
@@ -468,6 +470,13 @@ class SubprocessTransport(TruePiTransport):
                 question = PLAN_NEXT_QUESTION
                 try:
                     picked = await self.ui_select(question, shown)
+                except AskTimedOut:
+                    # Unanswered park is not "Stay in plan mode". Leave the
+                    # select unanswered and let the runtime fail the run.
+                    self.plan_ask_timed_out = True
+                    self.plan_execute_pending = False
+                    self.plan_stayed = False
+                    return
                 except Exception:
                     logger.exception("plan HITL select failed run_id=%s", self.run_id)
                     picked = ""

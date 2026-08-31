@@ -25,6 +25,16 @@ def test_timeout():
     assert "再跑一次" in msg
 
 
+def test_ask_timeout_is_not_run_budget():
+    msg = user_message_for_error(
+        "超时未选，没有执行。请再发一次并选「确认执行」。",
+        code="ask.timeout",
+    )
+    assert "超时未选" in msg
+    assert "15 分钟" not in msg
+    assert "确认执行" in msg
+
+
 def test_max_steps_mentions_retry():
     msg = user_message_for_error("Kimi Agent reached the step limit", code="kimi.max_steps")
     assert "步骤" in msg

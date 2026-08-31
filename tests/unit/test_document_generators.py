@@ -261,3 +261,79 @@ def _thin_docx_zip(title: str, marker: str, body: str) -> bytes:
         )
         zf.writestr("word/document.xml", document)
     return buf.getvalue()
+
+
+def test_xlsx_plain_markdown_tables_become_real_sheets() -> None:
+    """Plain body is a document adapter, not one A1 blob. No scene-word tables."""
+    from pico_orchestrator.office.inspect import inspect_office_bytes
+
+    body = (
+        "# 均分\n"
+        "|科目|分|\n"
+        "|---|---|\n"
+        "|语文|99.1|\n"
+        "|数学|80|\n"
+        "\n"
+        "# 名单\n"
+        "|名|到|\n"
+        "|---|---|\n"
+        "|甲||\n"
+        "|乙|是|\n"
+    )
+    raw = build_xlsx_document(title="data.xlsx", marker="XLSX_TABLES", body=body)
+    outline = inspect_office_bytes(raw, ".xlsx")
+    names = [u["name"] for u in outline["units"] if u.get("kind") == "sheet"]
+    assert names == ["均分", "名单"]
+    first = outline["units"][0]
+    assert first["headers"][:2] == ["科目", "分"]
+    assert "99.1" in " ".join(str(v) for row in first["preview"] for v in row)
+    assert "99.0999" not in str(first)
+    packed = b"".join(
+        zipfile.ZipFile(io.BytesIO(raw)).read(n)
+        for n in zipfile.ZipFile(io.BytesIO(raw)).namelist()
+    ).decode("utf-8", "ignore")
+    assert "|科目|分|" not in packed
+    assert "---|---" not in packed
+
+
+def test_xlsx_plain_tsv_and_duplicate_titles() -> None:
+    from pico_orchestrator.office.inspect import inspect_office_bytes
+
+    body = (
+        "# 表\n"
+        "科目\t分\n"
+        "语文\t99.1\n"
+        "\n---\n\n"
+        "# 表\n"
+        "名\t到\n"
+        "甲\t是\n"
+    )
+    raw = build_xlsx_document(title="data.xlsx", marker="XLSX_TSV", body=body)
+    outline = inspect_office_bytes(raw, ".xlsx")
+    names = [u["name"] for u in outline["units"] if u.get("kind") == "sheet"]
+    assert names == ["表", "表_2"]
+    first = outline["units"][0]
+    assert "99.1" in " ".join(str(v) for row in first["preview"] for v in row)
+
+
+def test_xlsx_plain_adapter_has_no_scene_words() -> None:
+    import inspect
+
+    src = (
+        inspect.getsource(_mod.xlsx_plain_sheets)
+        + inspect.getsource(_mod._parse_markdown_tables)
+        + inspect.getsource(_mod._heading_sheet_name)
+    )
+    for word in ("家长会", "分数练习", "练习台", "工作表"):
+        assert word not in src
+
+
+def test_xlsx_plain_scalar_still_lands_known_cell() -> None:
+    raw = build_xlsx_document(title="scores.xlsx", marker="m", body=KNOWN_CALC_CELL)
+    blob = zipfile.ZipFile(io.BytesIO(raw)).read(
+        "xl/worksheets/sheet1.xml"
+    ).decode("utf-8", "ignore")
+    assert KNOWN_CALC_CELL in blob or KNOWN_CALC_CELL in zipfile.ZipFile(
+        io.BytesIO(raw)
+    ).read("xl/sharedStrings.xml").decode("utf-8", "ignore")
+

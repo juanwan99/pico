@@ -77,6 +77,10 @@ def test_system_names_office_ceiling_without_scene_words() -> None:
     assert "课件" not in body
     assert "精美" not in body
     assert "通知" not in body
+    assert "家长会" not in body
+    assert "分数练习" not in body
+    assert "unmatched brackets" in body
+    assert "markdown/TSV tables become sheets" in body
     assert "If `publish_html_page` is listed this turn" in body
     assert "Do not name or call publish tools that are not listed" in body
     assert "same title replaces the file the teacher opens" in body.lower()

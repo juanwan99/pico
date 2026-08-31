@@ -40,6 +40,12 @@ HTML_REMOTE_ENGINE_ERROR = (
     "不要 Three.js/Chart.js/ECharts/KaTeX CDN，不要 import 或 script src 外链，"
     "也不要假定 window.THREE 已经加载。"
 )
+HTML_SCRIPT_SYNTAX_ERROR = (
+    "这份 HTML 的脚本括号不配对，打开后不能运行。"
+    "请修好 <script> 后再调用 generate_html_document。"
+    "系统不会改你的稿，也不会把坏脚本当成成品。"
+)
+KNOWN_CALC_CELL = "NIGHT-P4-CELL-ALPHA"
 # Protocol-relative //cdn… and https?:// — teacher HTML is srcDoc/file, no host.
 _REMOTE_URL = r"(?:https?:)?//[A-Za-z0-9]"
 _CSP_META_RE = re.compile(
@@ -193,6 +199,213 @@ def _pptx_slides(body: str | None, *, title: str, marker: str) -> list[tuple[str
         slide_body = f"标记：{marker}\n{chunk}" if index == 0 else chunk
         slides.append((first, slide_body))
     return slides[:20]
+
+
+_MD_TABLE_LINE = re.compile(r"^\s*\|.+\|\s*$")
+_INLINE_SCRIPT = re.compile(
+    r"<script\b([^>]*)>(.*?)</script>",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _md_table_cells(line: str) -> tuple[str, ...]:
+    text = line.strip().removeprefix("|").removesuffix("|")
+    return tuple(part.strip() for part in text.split("|"))
+
+
+def _md_sep_row(line: str) -> bool:
+    cells = _md_table_cells(line)
+    if not cells:
+        return False
+    return all(re.fullmatch(r":?-{3,}:?", cell.replace(" ", "")) is not None for cell in cells if cell)
+
+
+def _heading_sheet_name(line: str, fallback: str) -> str:
+    text = (line or "").strip()
+    text = re.sub(r"^#{1,6}\s+", "", text)
+    if len(text) >= 2 and text.startswith("【") and text.endswith("】"):
+        text = text[1:-1].strip()
+    text = re.sub(r"[:\\/?*\[\]]+", "", text).strip()
+    return (text or fallback)[:31]
+
+
+def _dedupe_sheet_titles(
+    sheets: list[tuple[str, tuple[str, ...], tuple[tuple[str, ...], ...]]],
+) -> list[tuple[str, tuple[str, ...], tuple[tuple[str, ...], ...]]]:
+    used: set[str] = set()
+    out: list[tuple[str, tuple[str, ...], tuple[tuple[str, ...], ...]]] = []
+    for name, headers, rows in sheets:
+        base = (name or "Sheet")[:31] or "Sheet"
+        title = base
+        n = 2
+        while title in used:
+            suf = f"_{n}"
+            title = base[: 31 - len(suf)] + suf
+            n += 1
+        used.add(title)
+        out.append((title, headers, rows))
+    return out
+
+
+def _parse_markdown_tables(text: str) -> list[tuple[str, tuple[str, ...], tuple[tuple[str, ...], ...]]]:
+    """Generic GFM tables → (sheet name, headers, rows). No scene words."""
+    lines = (text or "").splitlines()
+    out: list[tuple[str, tuple[str, ...], tuple[tuple[str, ...], ...]]] = []
+    i = 0
+    pending_title = ""
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped:
+            i += 1
+            continue
+        if (
+            i + 1 < len(lines)
+            and _MD_TABLE_LINE.match(stripped)
+            and _md_sep_row(lines[i + 1])
+        ):
+            headers = _md_table_cells(stripped)
+            i += 2
+            rows: list[tuple[str, ...]] = []
+            while i < len(lines) and _MD_TABLE_LINE.match(lines[i].strip()):
+                if _md_sep_row(lines[i]):
+                    i += 1
+                    continue
+                rows.append(_md_table_cells(lines[i]))
+                i += 1
+            name = _heading_sheet_name(pending_title, f"Sheet{len(out) + 1}")
+            pending_title = ""
+            out.append((name, headers, tuple(rows)))
+            continue
+        if "\t" in line and i + 1 < len(lines) and "\t" in lines[i + 1]:
+            block = [line.split("\t")]
+            i += 1
+            while i < len(lines) and "\t" in lines[i]:
+                block.append(lines[i].split("\t"))
+                i += 1
+            headers = tuple(c.strip() for c in block[0])
+            rows = tuple(tuple(c.strip() for c in row) for row in block[1:])
+            name = _heading_sheet_name(pending_title, f"Sheet{len(out) + 1}")
+            pending_title = ""
+            out.append((name, headers, rows))
+            continue
+        if not _MD_TABLE_LINE.match(stripped):
+            pending_title = stripped
+        i += 1
+    return out
+
+
+def xlsx_plain_sheets(
+    body: str | None,
+    *,
+    title: str,
+    marker: str,
+) -> list[tuple[str, tuple[str, ...], tuple[tuple[str, ...], ...]]]:
+    """Plain Excel body → spec sheets. Sibling of _pptx_slides / _docx_body_paragraphs.
+
+    Markdown tables and TSV become real rows. Several tables become several
+    sheets. A scalar (night-calc marker) stays one cell. Never dump a whole
+    draft into A1.
+    """
+    heading = (title or "").strip() or "Pico XLSX"
+    text = (body or "").strip() or KNOWN_CALC_CELL
+    parts = [text]
+    if "\n---\n" in f"\n{text}\n":
+        split = [p.strip() for p in text.split("\n---\n") if p.strip()]
+        if split:
+            parts = split
+    sheets: list[tuple[str, tuple[str, ...], tuple[tuple[str, ...], ...]]] = []
+    for part in parts:
+        found = _parse_markdown_tables(part)
+        if found:
+            sheets.extend(found)
+            continue
+        lines = [ln.strip() for ln in part.splitlines() if ln.strip()]
+        if len(lines) <= 1:
+            cell = lines[0] if lines else text
+            sheets.append(
+                (
+                    heading[:31] if not sheets else f"Sheet{len(sheets) + 1}",
+                    (),
+                    ((cell,), (heading,), (f"marker:{marker}",)),
+                )
+            )
+            continue
+        name = _heading_sheet_name(lines[0], f"Sheet{len(sheets) + 1}")
+        rows = tuple((ln,) for ln in lines[1:] or lines)
+        sheets.append((name, (), rows))
+    return _dedupe_sheet_titles(
+        sheets
+        or [(heading[:31], (), ((text,), (heading,), (f"marker:{marker}",)))]
+    )
+
+
+def _js_skip_quoted(src: str, start: int) -> int:
+    quote = src[start]
+    i = start + 1
+    n = len(src)
+    while i < n:
+        ch = src[i]
+        if ch == "\\":
+            i += 2
+            continue
+        if ch == quote:
+            return i + 1
+        if quote != "`" and ch == "\n":
+            return -1
+        i += 1
+    return -1
+
+
+def js_delimiters_balanced(src: str) -> bool:
+    """Cheap script gate. Not a JS engine. Strings/comments are skipped."""
+    i = 0
+    n = len(src or "")
+    stack: list[str] = []
+    pair = {"(": ")", "[": "]", "{": "}"}
+    while i < n:
+        ch = src[i]
+        nxt = src[i + 1] if i + 1 < n else ""
+        if ch == "/" and nxt == "/":
+            nl = src.find("\n", i)
+            if nl < 0:
+                break
+            i = nl + 1
+            continue
+        if ch == "/" and nxt == "*":
+            end = src.find("*/", i + 2)
+            if end < 0:
+                return False
+            i = end + 2
+            continue
+        if ch in "'\"`":
+            nxt_i = _js_skip_quoted(src, i)
+            if nxt_i < 0:
+                return False
+            i = nxt_i
+            continue
+        if ch in pair:
+            stack.append(pair[ch])
+        elif ch in ")]}":
+            if not stack or stack[-1] != ch:
+                return False
+            stack.pop()
+        i += 1
+    return not stack
+
+
+def html_script_syntax_reason(doc: str) -> str | None:
+    """None when inline scripts look balanced. Reason when they cannot run."""
+    for match in _INLINE_SCRIPT.finditer(doc or ""):
+        attrs = match.group(1) or ""
+        body = match.group(2) or ""
+        if re.search(r"\bsrc\s*=", attrs, re.IGNORECASE):
+            continue
+        if not body.strip():
+            continue
+        if not js_delimiters_balanced(body):
+            return HTML_SCRIPT_SYNTAX_ERROR
+    return None
 
 
 def _require_marker(marker: str) -> str:
@@ -369,6 +582,8 @@ def html_engine_violations(doc: str) -> tuple[str, ...]:
         add("echarts_global")
     if re.search(r"\bkatex\s*\.\s*render", text, re.IGNORECASE):
         add("katex_global")
+    if html_script_syntax_reason(text):
+        add("script_syntax")
     return tuple(hits)
 
 
@@ -383,10 +598,15 @@ def _strip_remote_script_src(doc: str) -> str:
 
 
 def _require_offline_html(doc: str) -> str:
-    """Fail closed if the page still needs the network or a CDN engine."""
+    """Fail closed if the page still needs the network, a CDN engine, or broken JS."""
     cleaned = _strip_remote_stylesheets(doc)
-    if html_remote_violations(cleaned) or html_engine_violations(cleaned):
+    remote = html_remote_violations(cleaned)
+    engine = tuple(h for h in html_engine_violations(cleaned) if h != "script_syntax")
+    if remote or engine:
         raise ValueError(HTML_REMOTE_ENGINE_ERROR)
+    syntax = html_script_syntax_reason(cleaned)
+    if syntax:
+        raise ValueError(syntax)
     return cleaned
 
 
@@ -549,9 +769,6 @@ def build_docx_document(
     return render_spec(
         spec_from_plain(kind="docx", title=heading, marker=marker, body=body)
     )
-
-
-KNOWN_CALC_CELL = "NIGHT-P4-CELL-ALPHA"
 
 
 def build_xlsx_legacy_xml(
