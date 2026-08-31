@@ -8,9 +8,9 @@ DATE: 2026-08-31
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main
 阻塞: #806/#810/#808/#807/#809 DEPLOYED 等主管 PASS · #748 合部完不关 · 下一张 #811
-────────────────────────────────────
+──────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
-PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · 文件型记忆 #807 已部等 PASS
+PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · #824 T-UI-C-POLISH 业主 PASS @ tip `af3e8ad0…` · 文件型记忆 #807 已部等 PASS
 经验: docs/EXPERIENCE.md（唯一 · 按域）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 北极星: DIRECTION-NOW §0-star · 用法 = Grok
@@ -80,6 +80,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#780](https://github.com/juanwan99/pico/issues/780) · [#781](https://github.com/juanwan99/pico/pull/781) · [#782](https://github.com/juanwan99/pico/pull/782) | T-HTML-OFFLINE-ENGINE · 业主 PASS @ tip `e9e032b3…` |
 | 已收口 | [#785](https://github.com/juanwan99/pico/issues/785) · [#786](https://github.com/juanwan99/pico/pull/786) | T-UI-CHROME · 业主 PASS @ tip `9d14329c…` |
 | 已收口 | [#788](https://github.com/juanwan99/pico/issues/788) | T-POINTS-FACE 对话积分门脸 · 业主关 |
+| 已收口 | [#824](https://github.com/juanwan99/pico/issues/824) · [#825](https://github.com/juanwan99/pico/pull/825) · [#826](https://github.com/juanwan99/pico/pull/826) · [#827](https://github.com/juanwan99/pico/pull/827) | T-UI-C-POLISH 方案C · 业主 PASS @ tip `af3e8ad0…` |
 | 规划 | [#805](https://github.com/juanwan99/pico/issues/805) | 活核+记忆+问清+计划+过程可见 · 六刀指针 · 不派 |
 | DEPLOYED 等主管 PASS | [#806](https://github.com/juanwan99/pico/issues/806) | T-PI-KERNEL-BUMP 0.84.4 已部 tip `63bb9e4b…` |
 | DEPLOYED 等主管 PASS | [#810](https://github.com/juanwan99/pico/issues/810) | T-PROCESS-VISIBLE 已部 tip `63c9f165…` |
