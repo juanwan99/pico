@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pico_orchestrator.true_pi.config import extension_path, pi_bin
+from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinking_level, pi_bin
 
 logger = logging.getLogger(__name__)
 
@@ -359,7 +359,7 @@ class SubprocessTransport(TruePiTransport):
             "--model",
             self.model,
             "--thinking",
-            self.thinking_level or ("on" if self.thinking else "off"),
+            normalize_pi_thinking_level(self.thinking_level, thinking=self.thinking),
         ]
         # Pin the conversation jsonl. ``--continue`` is most-recent-in-dir and
         # can resume an empty sibling after compact/kill. Official ``--session``.

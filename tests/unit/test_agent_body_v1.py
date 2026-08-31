@@ -75,6 +75,42 @@ def test_pinned_package_is_earendil_0844() -> None:
     assert PINNED_PI_PACKAGE == "@earendil-works/pi-coding-agent@0.84.4"
 
 
+def test_spawn_thinking_on_maps_to_medium() -> None:
+    t = SubprocessTransport(
+        session_dir=Path("/tmp/tp-sess"),
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r1",
+        thinking=True,
+    )
+    cmd = t.spawn_command()
+    assert cmd[cmd.index("--thinking") + 1] == "medium"
+
+
+def test_spawn_thinking_off_stays_off() -> None:
+    t = SubprocessTransport(
+        session_dir=Path("/tmp/tp-sess"),
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r1",
+        thinking=False,
+    )
+    cmd = t.spawn_command()
+    assert cmd[cmd.index("--thinking") + 1] == "off"
+
+
+def test_spawn_thinking_official_level_passthrough() -> None:
+    t = SubprocessTransport(
+        session_dir=Path("/tmp/tp-sess"),
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r1",
+        thinking_level="high",
+    )
+    cmd = t.spawn_command()
+    assert cmd[cmd.index("--thinking") + 1] == "high"
+
+
 def test_spawn_workbench_tree_flags() -> None:
     extra = Path("/tmp/plan-mode/index.ts")
     session_file = Path("/tmp/tp-sess/pico.jsonl")
