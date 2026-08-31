@@ -92,9 +92,9 @@ def test_nav_layout_type_and_school_docs() -> None:
     index_html = (ROOT / "apps/librechat/client/index.html").read_text()
     routes = (ROOT / "apps/librechat/client/src/routes/index.tsx").read_text()
     assert "--pico-fs-aux: 13px" in tokens
-    assert "--pico-fs-sidebar: 15px" in tokens
+    assert "--pico-fs-sidebar: 14px" in tokens
     assert "--pico-fs-body: 16px" in tokens
-    assert "--pico-fs-title: 22px" in tokens
+    assert "--pico-fs-title: 24px" in tokens
     assert "pico-type-title" in landing
     assert "text-[30px]" not in landing
     assert "text-[34px]" not in landing
