@@ -49,6 +49,16 @@ _CANCEL_POLL = 0.05
 _PLAN_FIRST_END_GRACE = 1.0
 
 
+def want_plan_mode_extension(*, plan_on: bool) -> bool:
+    """Load vendor plan-mode only when this spawn's plan_on is true.
+
+    The extension's session_start restores persisted ``plan-mode`` enabled
+    even without ``--plan``. Attaching it on every tree session made a
+    leftover HITL after a plain greeting.
+    """
+    return bool(plan_on)
+
+
 def plan_settle_hold(
     *,
     event_type: str,
@@ -239,7 +249,7 @@ async def run_true_pi_agent(
             if mem_dir is not None and mem_path.is_file():
                 extra_ext.append(mem_path)
             plan_path = plan_mode_extension_path()
-            if plan_path.is_file() and (use_tree or plan_on):
+            if plan_path.is_file() and want_plan_mode_extension(plan_on=plan_on):
                 extra_ext.append(plan_path)
             transport = SubprocessTransport(
                 session_dir=sess,

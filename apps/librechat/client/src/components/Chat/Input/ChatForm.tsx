@@ -52,7 +52,6 @@ import EditBadges from './EditBadges';
 import Mention from './Mention';
 import {
   getPicoModelMode,
-  getPicoPlanOn,
   normalizePicoModelMode,
   patchConversationModel,
   patchConversationPlan,
@@ -138,7 +137,9 @@ const ChatForm = memo(function ChatForm({
    */
   const quotesEnabled = useMemo(() => !isAssistantsEndpoint(endpoint), [endpoint]);
   const picoMode = normalizePicoModelMode(conversation?.model || getPicoModelMode());
-  const picoPlanOn = conversation?.pico_plan ?? getPicoPlanOn();
+  // T-PLAN-WIRE T3: 先计划 is this composer only. Never seed from pico:planOn
+  // localStorage — that made a leftover toggle send pico_plan on every later "hi".
+  const picoPlanOn = Boolean(conversation?.pico_plan);
   const applyPicoMode = useCallback(
     (raw: string) => {
       const id = normalizePicoModelMode(raw);
@@ -155,8 +156,13 @@ const ChatForm = memo(function ChatForm({
     [setConversation],
   );
 
+  const prevConversationIdRef = useRef(conversationId);
   useEffect(() => {
-    applyPicoPlan(getPicoPlanOn());
+    const prev = prevConversationIdRef.current;
+    prevConversationIdRef.current = conversationId;
+    if (conversationId === Constants.NEW_CONVO && prev !== Constants.NEW_CONVO) {
+      applyPicoPlan(false);
+    }
   }, [conversationId, applyPicoPlan]);
 
   const isRTL = useMemo(

@@ -66,7 +66,7 @@ jest.mock('~/components/ui/pico-icons', () => ({
 jest.mock('~/utils/picoModelPref', () => ({
   consumePendingModel: () => null,
   getPicoModelMode: () => 'pico-fast',
-  getPicoPlanOn: () => false,
+  getPicoPlanOn: () => true,
   labelForPicoModel: (id: string) => id,
   normalizePicoModelMode: (id: string) => id,
   PICO_DUAL_MODELS: [{ id: 'pico-fast', label: '快速' }],
@@ -116,6 +116,11 @@ describe('Landing composer chrome', () => {
     expect(screen.queryByTestId('composer-plus-menu')).not.toBeInTheDocument();
     expect(screen.queryByText('默认权限')).not.toBeInTheDocument();
     expect(screen.queryByText(/工作空间/)).not.toBeInTheDocument();
+  });
+
+  it('T3: leftover pico:planOn storage does not press 先计划 on a new home', () => {
+    render(<Landing centerFormOnLanding />);
+    expect(screen.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('先计划 is a pressable toggle next to 快速/深度', () => {
