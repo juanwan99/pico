@@ -721,4 +721,20 @@ describe('Pico proxy routes', () => {
     const badId = await request(app).post('/api/pico/v1/admin/gateway/accounts/0/refresh');
     expect(badId.status).toBe(400);
   });
+
+  it('forwards memory list and delete to Pico API', async () => {
+    const listed = await request(app).get('/api/pico/v1/memory');
+    expect(listed.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/memory',
+      expect.objectContaining({ method: 'GET' }),
+    );
+
+    const deleted = await request(app).delete('/api/pico/v1/memory?name=MEMORY.md');
+    expect(deleted.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/memory?name=MEMORY.md',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
 });

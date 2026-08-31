@@ -38,6 +38,7 @@ import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
 import { collectPicoOfficeContentBox, collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
+import MemoryStrip from './MemoryStrip';
 import SandboxWebPane from './SandboxWebPane';
 import PaneZoomBar, { usePaneZoom } from './PaneZoomBar';
 
@@ -1085,6 +1086,7 @@ export default function ResultPanel({
               </div>
             ) : null}
 
+            <MemoryStrip />
             <RunTimeline events={runEvents} run={run} />
 
             {artifacts.length === 0 ? (

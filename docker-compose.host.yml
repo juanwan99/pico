@@ -78,6 +78,7 @@ services:
       # Upstream of that channel is AIProxy Responses (`…/openai/responses`, no /v1).
       PICO_KIMI_WORKDIR_BASE: /app/data/kimi-work
       PICO_PI_WORKDIR_BASE: /app/data/pi-work
+      PICO_TRUE_PI_MEMORY_ROOT: /app/data/pi-memory
       # True-Pi cutover (env_file wins when set; listed for ops visibility)
       # DEFAULT multi-step = pi-true when PICO_TRUE_PI_DEFAULT=1
       # Accident rollback: PICO_HOSTED_LOOP=1 only (see docs/OPS-TRUE-PI-ROLLBACK.md)

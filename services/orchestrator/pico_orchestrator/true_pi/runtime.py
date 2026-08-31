@@ -30,6 +30,8 @@ from pico_orchestrator.true_pi.client import (
 )
 from pico_orchestrator.true_pi.config import (
     RUNTIME_LABEL,
+    memory_extension_path,
+    persist_memory_dir,
     persist_session_dir,
     persist_session_file,
     plan_mode_extension_path,
@@ -228,6 +230,13 @@ async def run_true_pi_agent(
                 else None
             )
             extra_ext: list[Path] = []
+            mem_dir = persist_memory_dir(
+                school_id=str(getattr(principal, "school_id", "") or ""),
+                membership_id=str(getattr(principal, "membership_id", "") or ""),
+            )
+            mem_path = memory_extension_path()
+            if mem_dir is not None and mem_path.is_file():
+                extra_ext.append(mem_path)
             plan_path = plan_mode_extension_path()
             if use_tree and plan_path.is_file():
                 extra_ext.append(plan_path)
@@ -262,6 +271,14 @@ async def run_true_pi_agent(
                     if pi_provider != "deepseek"
                     else "",
                     "PICO_TRUE_PI_VISIBLE_TOOLS": visible_tools_env(allowed),
+                    **(
+                        {
+                            "PI_MEMORY_DIR": str(mem_dir),
+                            "PI_AUTOCOMMIT": "0",
+                        }
+                        if mem_dir is not None
+                        else {}
+                    ),
                 },
             )
 
