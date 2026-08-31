@@ -47,6 +47,32 @@ export function ComposerModeSwitch({
   );
 }
 
+export function ComposerPlanToggle({
+  on,
+  onChange,
+}: {
+  on: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid="composer-plan-toggle"
+      aria-pressed={on}
+      aria-label="先计划"
+      className={cn(
+        'pico-type-aux mb-0.5 h-7 shrink-0 self-end rounded-md border border-[color:var(--pico-line)] px-2 transition-colors',
+        on
+          ? 'bg-[color:var(--pico-surface-2)] font-medium text-[color:var(--pico-ink)]'
+          : 'bg-[color:var(--pico-surface)] text-[color:var(--pico-ink-3)] hover:text-[color:var(--pico-ink)]',
+      )}
+      onClick={() => onChange(!on)}
+    >
+      先计划
+    </button>
+  );
+}
+
 export function useComposerAttachInput({
   conversation,
   files,

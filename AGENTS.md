@@ -4,7 +4,7 @@
 
 ```text
 现况: docs/STATE-NOW.md · 冻结令 #634
-在飞: 只认 STATE-NOW 三行（禁止凭记忆）· 现 无
+在飞: 只认 STATE-NOW 三行（禁止凭记忆）· 现 #809
 经验: docs/EXPERIENCE.md（唯一 · 按域 · 禁止贴进卡）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 执行: 证据贴 Issue · 无 ECS/ssh-ecs 拒领 · 过门=老师手 · 1卡1PR

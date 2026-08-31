@@ -538,13 +538,18 @@ export function getOpenAILLMConfig({
     reasoning_context,
     verbosity,
     web_search,
+    pico_plan,
     promptCache,
     promptCacheTtl,
     frequency_penalty,
     presence_penalty,
     ...modelOptions
   } = cleanedModelOptions as Partial<
-    t.OpenAIParameters & { promptCache?: boolean; promptCacheTtl?: '5m' | '1h' }
+    t.OpenAIParameters & {
+      promptCache?: boolean;
+      promptCacheTtl?: '5m' | '1h';
+      pico_plan?: boolean;
+    }
   >;
 
   const llmConfig = Object.assign(
@@ -573,6 +578,11 @@ export function getOpenAILLMConfig({
     llmConfig.verbosity = verbosity;
   } else if (verbosity != null && verbosity !== '') {
     modelKwargs.verbosity = verbosity;
+    hasModelKwargs = true;
+  }
+
+  if (pico_plan === true) {
+    modelKwargs.pico_plan = true;
     hasModelKwargs = true;
   }
 

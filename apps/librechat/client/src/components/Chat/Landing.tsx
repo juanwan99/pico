@@ -10,6 +10,7 @@ import useSubmitMessage from '~/hooks/Messages/useSubmitMessage';
 import FileFormChat from '~/components/Chat/Input/Files/FileFormChat';
 import {
   ComposerModeSwitch,
+  ComposerPlanToggle,
   useComposerAttachInput,
 } from '~/components/Chat/Input/ComposerPlusMenu';
 import { cn } from '~/utils';
@@ -20,9 +21,12 @@ import { usePointsMeter } from '~/hooks/Pico/usePointsMeter';
 import {
   consumePendingModel,
   getPicoModelMode,
+  getPicoPlanOn,
   normalizePicoModelMode,
   patchConversationModel,
+  patchConversationPlan,
   setPicoModelMode,
+  setPicoPlanOn,
 } from '~/utils/picoModelPref';
 
 const PLACEHOLDER = '发消息';
@@ -38,6 +42,13 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
       return normalizePicoModelMode(getPicoModelMode());
     } catch {
       return 'pico-fast';
+    }
+  });
+  const [planOn, setPlanOn] = useState(() => {
+    try {
+      return getPicoPlanOn();
+    } catch {
+      return false;
     }
   });
   const chatCtx = useOptionalChatContext();
@@ -61,6 +72,11 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     setPicoModelMode(id);
     setConversationRef.current?.((prev) => patchConversationModel(prev, id) ?? prev);
   }, []);
+  const applyPlan = useCallback((on: boolean) => {
+    setPlanOn((prev) => (prev === on ? prev : on));
+    setPicoPlanOn(on);
+    setConversationRef.current?.((prev) => patchConversationPlan(prev, on) ?? prev);
+  }, []);
 
   const syncForm = useCallback(
     (value: string) => {
@@ -73,6 +89,8 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
   syncFormRef.current = syncForm;
   const applyModelRef = useRef(applyModel);
   applyModelRef.current = applyModel;
+  const applyPlanRef = useRef(applyPlan);
+  applyPlanRef.current = applyPlan;
 
   const sendTask = useCallback(() => {
     const value = text.trim();
@@ -93,6 +111,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
       if (pendingModel) {
         applyModelRef.current(pendingModel);
       }
+      applyPlanRef.current(getPicoPlanOn());
       const pre = sessionStorage.getItem('pico:pendingPrompt');
       if (pre) {
         sessionStorage.removeItem('pico:pendingPrompt');
@@ -167,6 +186,7 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
                 className="pico-type-body min-h-8 min-w-0 flex-1 resize-none border-0 bg-transparent py-2 leading-[1.55] text-[color:var(--pico-ink)] outline-none placeholder:text-[color:var(--pico-ink-3)]"
               />
               <ComposerModeSwitch value={model} onChange={applyModel} />
+              <ComposerPlanToggle on={planOn} onChange={applyPlan} />
               <button
                 type="button"
                 data-testid="send-button"

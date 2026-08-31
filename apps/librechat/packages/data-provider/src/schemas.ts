@@ -1003,6 +1003,8 @@ export const tConversationSchema = z.object({
   thinkingDisplay: eThinkingDisplaySchema.optional().nullable(),
   /* OpenAI Responses API / Anthropic API / Google API */
   web_search: z.boolean().optional(),
+  /* Pico: teacher 先计划 this turn only. Never default on. */
+  pico_plan: z.boolean().optional(),
   /* Google API: URL Context tool (+ native YouTube video understanding) */
   url_context: z.boolean().optional(),
   /* disable streaming */
@@ -1119,6 +1121,8 @@ export const tQueryParamsSchema = tConversationSchema
     useResponsesApi: true,
     /** @endpoints openAI, anthropic, google */
     web_search: true,
+    /** @endpoints openAI (Pico 先计划) */
+    pico_plan: true,
     /** @endpoints google */
     url_context: true,
     /** @endpoints openAI, custom, azureOpenAI */
@@ -1433,6 +1437,7 @@ export const openAIBaseSchema = tConversationSchema.pick({
   verbosity: true,
   useResponsesApi: true,
   web_search: true,
+  pico_plan: true,
   disableStreaming: true,
   fileTokenLimit: true,
 });

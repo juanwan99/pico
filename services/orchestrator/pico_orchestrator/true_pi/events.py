@@ -114,6 +114,41 @@ def _text_from_message(message: Any) -> str:
     return ""
 
 
+def plan_artifact_title(text: str) -> str:
+    """Clickable ledger name. .md so the pane opens as text, not a download."""
+    n = sum(1 for line in (text or "").splitlines() if "☐" in line or "☑" in line)
+    if n <= 0:
+        return "计划.md"
+    return f"计划（{n} 步）.md"
+
+
+async def maybe_write_plan_artifact(
+    raw: dict[str, Any],
+    *,
+    artifact_store: Any | None,
+    principal: Any | None,
+) -> dict[str, Any] | None:
+    """Persist official plan-todo-list as Artifact kind=plan. Not a prompt weld."""
+    if artifact_store is None or principal is None:
+        return None
+    msg = raw.get("message") if isinstance(raw.get("message"), dict) else raw
+    if not isinstance(msg, dict):
+        return None
+    custom = str(msg.get("customType") or raw.get("customType") or "")
+    if custom != "plan-todo-list":
+        return None
+    text = _text_from_message(msg)
+    if not text.strip():
+        return None
+    title = plan_artifact_title(text)
+    try:
+        return await artifact_store.write(
+            principal, title=title, content=text.strip(), kind="plan"
+        )
+    except Exception:
+        return None
+
+
 def _result_dict(raw: Any) -> dict[str, Any]:
     if isinstance(raw, dict):
         # Extension may nest {"content":[{"type":"text","text":"{...json...}"}]}
@@ -147,6 +182,8 @@ async def map_event(
     emit: EventEmitter,
     state: EventMapState,
     shadow: bool = False,
+    artifact_store: Any | None = None,
+    principal: Any | None = None,
 ) -> None:
     """Emit Pico ledger events for one Pi RPC event."""
     kind = event.type
@@ -273,6 +310,10 @@ async def map_event(
             if custom in {"plan-todo-list", "plan-complete", "plan-mode-execute"} and text:
                 state.event_kinds.append("plan.progress")
                 await emit("plan.progress", {"text": text, "customType": custom, **tag})
+                if custom == "plan-todo-list":
+                    await maybe_write_plan_artifact(
+                        raw, artifact_store=artifact_store, principal=principal
+                    )
         _record_assistant_turn(
             state, msg=msg if isinstance(msg, dict) else {}, raw=raw
         )
