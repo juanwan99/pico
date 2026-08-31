@@ -173,7 +173,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_html_document",
-    "Create a real .html Artifact (Pico gateway). Page must run offline: inline CSS/JS/canvas only. No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images (use data: URLs), no window.THREE / new Chart / echarts.init. The tool fails closed if the page still needs the network or those engines. Result includes an observation of what landed. ok is not finished.",
+    "Create a real .html Artifact (Pico gateway). Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images (use data: URLs), no window.THREE / new Chart / echarts.init. The tool fails closed if the page still needs the network or those engines — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.String(),
@@ -407,7 +407,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_pptx_lib",
-    "Isolated python-pptx (not host bash, not a second Office OS). Sibling of generate_pptx_document — not the only PPT path. from pptx import Presentation, Inches, Pt, RGBColor is allowed (Inches/Pt also on pptx). add_shape and RGBColor color blocks are this tool. from pathlib import Path is a stub (mkdir ignored; no host files). prs.save is routed to the ledger (same as save_deck). Do not import os. add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first picture. Must add slides then save_deck(prs) or prs.save. Empty Presentation();save_deck fails — do not send a placeholder. A missing image_artifact_ids entry is skipped.",
+    "Isolated python-pptx (not host bash, not a second Office OS). Sibling of generate_pptx_document — not the only PPT path. from pptx import Presentation, Inches, Pt, RGBColor is allowed (Inches/Pt also on pptx). add_shape and RGBColor color blocks are this tool. from pathlib import Path is a stub (mkdir ignored; no host files). prs.save is routed to the ledger (same as save_deck). Do not import os. copy / math / datetime / from io import BytesIO are allowed. add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first picture. Must add slides then save_deck(prs) or prs.save. Empty Presentation();save_deck fails — do not send a placeholder. A missing image_artifact_ids entry is skipped.",
     Type.Object(
       {
         source: Type.String(),
