@@ -103,7 +103,7 @@ function artifactGlyphKind(name: string, kind: string): ArtifactItem['kind'] {
   if (/(?:\.html?|html)/.test(value)) {
     return 'html';
   }
-  return /(?:\.txt|\.md|text|markdown)/.test(value) ? 'txt' : 'file';
+  return /(?:\.txt|\.md|text|markdown|plan)/.test(value) ? 'txt' : 'file';
 }
 
 function inlineArtifactBlob(body: string, name?: string): Blob {

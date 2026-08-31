@@ -369,6 +369,32 @@ describe('getOpenAILLMConfig', () => {
       expect(result.tools).toContainEqual({ type: 'web_search' });
     });
 
+    it('sends pico_plan only as modelKwargs extra body, never a constructor field', () => {
+      const result = getOpenAILLMConfig({
+        apiKey: 'test-api-key',
+        streaming: true,
+        modelOptions: {
+          model: 'pico-fast',
+          pico_plan: true,
+        } as Partial<t.OpenAIParameters>,
+      });
+
+      expect(result.llmConfig.modelKwargs).toMatchObject({ pico_plan: true });
+      expect(result.llmConfig).not.toHaveProperty('pico_plan');
+    });
+
+    it('omits pico_plan when the teacher did not toggle 先计划', () => {
+      const result = getOpenAILLMConfig({
+        apiKey: 'test-api-key',
+        streaming: true,
+        modelOptions: {
+          model: 'pico-fast',
+        },
+      });
+
+      expect(result.llmConfig.modelKwargs ?? {}).not.toHaveProperty('pico_plan');
+    });
+
     it('should handle web search with OpenRouter', () => {
       const result = getOpenAILLMConfig({
         apiKey: 'test-api-key',

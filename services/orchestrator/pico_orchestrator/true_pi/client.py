@@ -48,6 +48,50 @@ def choose_plan_select(options: list[Any] | None) -> tuple[str, bool]:
         return opts[0], False
     return "", False
 
+
+PLAN_NEXT_QUESTION = "计划好了，下一步？"
+_PLAN_OPTION_ZH: tuple[tuple[str, str], ...] = (
+    ("execute the plan (track progress)", "确认执行"),
+    ("execute the plan", "确认执行"),
+    ("stay in plan mode", "先不执行"),
+    ("refine the plan", "再改计划"),
+)
+
+
+def is_plan_select(options: list[Any] | None) -> bool:
+    """True when this select is official plan-mode Execute / Stay."""
+    joined = " ".join(str(item).lower() for item in (options or []) if str(item).strip())
+    return "execute" in joined and "stay" in joined
+
+
+def display_plan_options(options: list[Any] | None) -> tuple[list[str], dict[str, str]]:
+    """Chinese labels for the teacher; reverse map back to official strings."""
+    reverse: dict[str, str] = {}
+    shown: list[str] = []
+    for raw in options or []:
+        key = str(raw).strip()
+        if not key:
+            continue
+        low = key.lower()
+        label = key
+        for english, zh in _PLAN_OPTION_ZH:
+            if low == english or low.startswith(english):
+                label = zh
+                break
+        if label in reverse:
+            continue
+        shown.append(label)
+        reverse[label] = key
+    return shown, reverse
+
+
+def plan_choice_pending(value: str) -> bool:
+    """Execute with todos starts a second turn. Empty Execute still triggers."""
+    low = (value or "").strip().lower()
+    if low.startswith("execute"):
+        return True
+    return value.strip() == "确认执行"
+
 # Isolated PI_CODING_AGENT_DIR filename. Pi 0.84 still has no --context CLI flag;
 # the window is models.json contextWindow (see packages/coding-agent/docs/models.md).
 PI_MODELS_JSON = "models.json"
@@ -258,6 +302,7 @@ class SubprocessTransport(TruePiTransport):
         continue_session: bool = False,
         session_file: Path | None = None,
         plan_flag: bool = False,
+        plan_hitl: bool = False,
         spawn_cwd: Path | None = None,
         system_prompt_text: str = "",
         accept_image: bool = False,
@@ -286,6 +331,8 @@ class SubprocessTransport(TruePiTransport):
         self.continue_session = bool(continue_session)
         self.session_file = Path(session_file) if session_file is not None else None
         self.plan_flag = bool(plan_flag)
+        self.plan_hitl = bool(plan_hitl)
+        self.ui_select: Callable[..., Any] | None = None
         self.spawn_cwd = spawn_cwd or session_dir
         self.system_prompt_text = str(system_prompt_text or "")
         self.accept_image = bool(accept_image)
@@ -409,13 +456,35 @@ class SubprocessTransport(TruePiTransport):
         asyncio.create_task(self._read_stderr())
 
     async def _reply_extension_ui(self, raw: dict[str, Any]) -> None:
-        """RPC dialogs: auto-execute official plan-mode; never hang the agent."""
+        """RPC dialogs: HITL park when teacher asked for plan; else auto-select."""
         method = str(raw.get("method") or "")
         req_id = raw.get("id")
         if method not in {"select", "confirm", "input", "editor"}:
             return
         if method == "select":
-            value, execute_pending = choose_plan_select(raw.get("options") or [])
+            options = raw.get("options") or []
+            if self.plan_hitl and is_plan_select(options) and self.ui_select is not None:
+                shown, reverse = display_plan_options(options)
+                question = PLAN_NEXT_QUESTION
+                try:
+                    picked = await self.ui_select(question, shown)
+                except Exception:
+                    logger.exception("plan HITL select failed run_id=%s", self.run_id)
+                    picked = ""
+                value = reverse.get(str(picked or "").strip(), str(picked or "").strip())
+                if not value:
+                    stay = next(
+                        (item for item in reverse.values() if item.lower().startswith("stay")),
+                        "Stay in plan mode",
+                    )
+                    value = stay
+                self.plan_execute_pending = plan_choice_pending(value)
+                self.plan_stayed = not self.plan_execute_pending
+                await self.send(
+                    {"type": "extension_ui_response", "id": req_id, "value": value}
+                )
+                return
+            value, execute_pending = choose_plan_select(options)
             self.plan_execute_pending = bool(execute_pending)
             self.plan_stayed = not execute_pending
             await self.send(

@@ -1,10 +1,13 @@
 import {
   consumePendingModel,
   getPicoModelMode,
+  getPicoPlanOn,
   normalizePicoModelMode,
   patchConversationModel,
+  patchConversationPlan,
   queuePendingModel,
   setPicoModelMode,
+  setPicoPlanOn,
 } from '../picoModelPref';
 
 describe('picoModelPref dual-mode (#637 React #185)', () => {
@@ -43,5 +46,16 @@ describe('picoModelPref dual-mode (#637 React #185)', () => {
     const next = patchConversationModel(prev, 'pico-fast');
     expect(next).not.toBe(prev);
     expect(next?.model).toBe('pico-fast');
+  });
+
+  it('plan toggle is off by default and patches pico_plan without a new identity when unchanged', () => {
+    expect(getPicoPlanOn()).toBe(false);
+    setPicoPlanOn(true);
+    expect(getPicoPlanOn()).toBe(true);
+    const prev = { conversationId: 'new', pico_plan: true };
+    expect(patchConversationPlan(prev, true)).toBe(prev);
+    const next = patchConversationPlan(prev, false);
+    expect(next).not.toBe(prev);
+    expect(next?.pico_plan).toBe(false);
   });
 });

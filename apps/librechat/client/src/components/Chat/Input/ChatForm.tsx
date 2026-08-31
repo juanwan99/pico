@@ -27,6 +27,7 @@ import useAskAnswerMode from '~/hooks/Input/useAskAnswerMode';
 import AskUserQuestionPopover from './AskUserQuestionPopover';
 import {
   ComposerModeSwitch,
+  ComposerPlanToggle,
   useComposerAttachInput,
 } from './ComposerPlusMenu';
 import { PicoIcon } from '~/components/ui/pico-icons';
@@ -51,9 +52,12 @@ import EditBadges from './EditBadges';
 import Mention from './Mention';
 import {
   getPicoModelMode,
+  getPicoPlanOn,
   normalizePicoModelMode,
   patchConversationModel,
+  patchConversationPlan,
   setPicoModelMode,
+  setPicoPlanOn,
 } from '~/utils/picoModelPref';
 import store from '~/store';
 
@@ -134,6 +138,7 @@ const ChatForm = memo(function ChatForm({
    */
   const quotesEnabled = useMemo(() => !isAssistantsEndpoint(endpoint), [endpoint]);
   const picoMode = normalizePicoModelMode(conversation?.model || getPicoModelMode());
+  const picoPlanOn = conversation?.pico_plan ?? getPicoPlanOn();
   const applyPicoMode = useCallback(
     (raw: string) => {
       const id = normalizePicoModelMode(raw);
@@ -142,6 +147,17 @@ const ChatForm = memo(function ChatForm({
     },
     [setConversation],
   );
+  const applyPicoPlan = useCallback(
+    (on: boolean) => {
+      setPicoPlanOn(on);
+      setConversation?.((prev) => patchConversationPlan(prev, on) ?? prev);
+    },
+    [setConversation],
+  );
+
+  useEffect(() => {
+    applyPicoPlan(getPicoPlanOn());
+  }, [conversationId, applyPicoPlan]);
 
   const isRTL = useMemo(
     () => (chatDirection != null ? chatDirection?.toLowerCase() === 'rtl' : false),
@@ -653,6 +669,7 @@ const ChatForm = memo(function ChatForm({
                   </div>
                 </div>
                 <ComposerModeSwitch value={picoMode} onChange={applyPicoMode} />
+                <ComposerPlanToggle on={picoPlanOn} onChange={applyPicoPlan} />
                 <div className="shrink-0 self-end">
                   {isSubmitting && showStopButton && !answerMode.active ? (
                     duringRunSlot
@@ -716,6 +733,7 @@ function ChatFormWrapper({ index = 0, placeholder }: { index?: number; placehold
       conversation?.spec,
       conversation?.useResponsesApi,
       conversation?.model,
+      conversation?.pico_plan,
       conversation?.maxContextTokens,
       hasMessages,
     ],

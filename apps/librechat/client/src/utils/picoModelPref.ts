@@ -13,6 +13,7 @@ export const PICO_DUAL_MODELS: ReadonlyArray<{ id: PicoModelMode; label: string 
 const STORAGE = 'pico:modelMode';
 const PENDING = 'pico:pendingModel';
 const EXPERT_KEY = 'pico:activeExpert';
+const PLAN_STORAGE = 'pico:planOn';
 
 /** Map legacy SKU / Auto / display name → dual-mode id. */
 export function normalizePicoModelMode(raw: string | null | undefined): PicoModelMode {
@@ -83,6 +84,35 @@ export function patchConversationModel<
     return prev;
   }
   return { ...prev, endpoint, model: id };
+}
+
+export function getPicoPlanOn(): boolean {
+  try {
+    return localStorage.getItem(PLAN_STORAGE) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setPicoPlanOn(on: boolean): void {
+  try {
+    localStorage.setItem(PLAN_STORAGE, on ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+export function patchConversationPlan<T extends { pico_plan?: boolean | null }>(
+  prev: T | null | undefined,
+  on: boolean,
+): T | null | undefined {
+  if (!prev) {
+    return prev;
+  }
+  if (Boolean(prev.pico_plan) === Boolean(on)) {
+    return prev;
+  }
+  return { ...prev, pico_plan: on };
 }
 
 export function getPicoModelMode(): PicoModelMode {

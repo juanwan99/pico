@@ -40,6 +40,8 @@ class RunCaps:
     # Dual-mode (Pico 快速 / Pico 深度): deep lane runs thinking-on and arms the
     # no-progress circuit breaker; fast lane keeps thinking off and no breaker.
     thinking_on: bool = False
+    # Teacher-toggled plan-mode for this turn only. Never default --plan.
+    plan_on: bool = False
     # Lane labels for receipts. ui_model is pico-fast/pico-deep; backend_model
     # is the DeepSeek id actually spawned (flash vs reasoner).
     ui_model: str = ""

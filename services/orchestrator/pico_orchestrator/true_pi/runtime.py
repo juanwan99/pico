@@ -148,6 +148,7 @@ async def run_true_pi_agent(
     # empty/no-tool-progress loop any more than the hosted kernel. Only the
     # thinking-on lane (Pico 深度) arms it; fast lane never trips.
     thinking_on = bool(getattr(caps, "thinking_on", False))
+    plan_on = bool(getattr(caps, "plan_on", False))
     openai_responses_brain = False
     breaker_seconds = max(1, int(getattr(caps, "no_progress_seconds", 180) or 180))
     last_tool_ok_wall: float | None = None
@@ -238,7 +239,7 @@ async def run_true_pi_agent(
             if mem_dir is not None and mem_path.is_file():
                 extra_ext.append(mem_path)
             plan_path = plan_mode_extension_path()
-            if use_tree and plan_path.is_file():
+            if plan_path.is_file() and (use_tree or plan_on):
                 extra_ext.append(plan_path)
             transport = SubprocessTransport(
                 session_dir=sess,
@@ -253,10 +254,9 @@ async def run_true_pi_agent(
                 extra_extensions=extra_ext,
                 continue_session=use_tree and session_file is None,
                 session_file=session_file,
-                # Official plan-mode stays loaded. Do not force --plan on every
-                # workbench turn: that waits a second agent_end that may never
-                # land (T-AGENT-PLAIN-V1 live hang).
-                plan_flag=False,
+                # --plan only when the teacher toggled 先计划 this turn.
+                plan_flag=plan_on,
+                plan_hitl=plan_on,
                 spawn_cwd=sess,
                 system_prompt_text=system_text,
                 accept_image=bool(images),
@@ -289,6 +289,25 @@ async def run_true_pi_agent(
             pass
 
         client = TruePiRpcClient(transport)
+        if plan_on:
+            from pico_orchestrator.ask_user import park as park_ask
+            from pico_orchestrator.true_pi.client import PLAN_NEXT_QUESTION
+
+            async def _plan_select(question: str, options: list[Any]) -> str:
+                labels = [str(item).strip() for item in options if str(item).strip()]
+                parked = await park_ask(
+                    rid,
+                    question or PLAN_NEXT_QUESTION,
+                    labels,
+                    emit,
+                )
+                if parked.get("ok"):
+                    return str(parked.get("answer") or "").strip()
+                return ""
+
+            transport.ui_select = _plan_select
+            if hasattr(transport, "plan_hitl"):
+                transport.plan_hitl = True
         await client.start()
         await emit(
             "run.model",
@@ -340,7 +359,14 @@ async def run_true_pi_agent(
                 if stop.is_set() or timed_out.is_set() or await is_cancelled():
                     break
                 prev_tool_oks = state.tool_oks
-                await map_event(event, emit=emit, state=state, shadow=shadow)
+                await map_event(
+                    event,
+                    emit=emit,
+                    state=state,
+                    shadow=shadow,
+                    artifact_store=artifact_store,
+                    principal=principal,
+                )
                 # Official plan-mode: hold the first end only while auto-Execute
                 # actually started a second turn. Never wait for a 3rd end
                 # (live hang: pending stayed True and unset the 2nd settle).

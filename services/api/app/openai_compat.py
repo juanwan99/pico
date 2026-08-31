@@ -61,6 +61,7 @@ class ChatCompletionRequest(BaseModel):
     user: str | None = None  # LibreChat may pass conversation id
     metadata: dict[str, Any] | None = None
     web_search: bool = False
+    pico_plan: bool = False
     tools: list[Any] | None = None
     allowed_tools: list[str] | None = None
 
@@ -721,6 +722,26 @@ def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
     return _dc_replace(caps, **fields)
 
 
+def _request_plan_on(body: ChatCompletionRequest, header: str | None = None) -> bool:
+    """Teacher 先计划 toggle. Header / body / metadata; never default on."""
+    # Direct calls (integration tests) pass FastAPI's Header() sentinel, not a str.
+    raw = header.strip().lower() if isinstance(header, str) else ""
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if bool(getattr(body, "pico_plan", False)):
+        return True
+    meta = body.metadata if isinstance(body.metadata, dict) else None
+    return bool(meta and meta.get("pico_plan"))
+
+
+def _caps_with_plan(caps: Any, plan_on: bool) -> Any:
+    from dataclasses import replace as _dc_replace
+
+    if not plan_on:
+        return caps
+    return _dc_replace(caps, plan_on=True)
+
+
 def _instruction_with_delivery(
     skill_snapshot: dict[str, Any] | None,
     prompt: str,
@@ -1005,6 +1026,7 @@ async def _run_and_collect(
     conversation_id: str | None = None,
     images: list[dict[str, Any]] | None = None,
     day_use: str = "",
+    plan_on: bool = False,
 ) -> Any:
     from pico_orchestrator.runtime import run_agent_runtime
 
@@ -1029,6 +1051,7 @@ async def _run_and_collect(
     )
     # Dual-mode: Pico 快速 / Pico 深度 set their own steps/tokens/thinking.
     caps = _caps_with_dual_mode(caps, model)
+    caps = _caps_with_plan(caps, plan_on)
     caps = _caps_with_images(caps, images)
     # Landing gate: force min_artifacts into Pi so chat-only "done" cannot succeed.
     caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)
@@ -1156,6 +1179,7 @@ async def chat_completions(
     x_pico_membership_id: str | None = Header(default=None, alias="X-Pico-Membership-Id"),
     x_pico_display_name: str | None = Header(default=None, alias="X-Pico-Display-Name"),
     x_pico_output: str | None = Header(default=None, alias="X-Pico-Output"),
+    x_pico_plan: str | None = Header(default=None, alias="X-Pico-Plan"),
     settings: Settings = Depends(get_settings),
 ):
     import re
@@ -1197,6 +1221,7 @@ async def chat_completions(
     request_tools = _normalize_allowed_tools(body.allowed_tools)
     if request_tools is None:
         request_tools = _normalize_allowed_tools(body.tools)
+    plan_on = _request_plan_on(body, x_pico_plan)
     conversation_id = _conversation_id_from(body, x_conversation_id)
     turn_images = merge_images(turn_images, conversation_images(conversation_id))
     workspace_id = _workspace_id_from(body, x_workspace_id)
@@ -1446,6 +1471,7 @@ async def chat_completions(
                 conversation_id=conversation_id,
                 images=turn_images,
                 day_use=day_use_block,
+                plan_on=plan_on,
             )
             text = result.final_text or result.error or "(empty)"
             await _finalize_run(
@@ -1737,6 +1763,7 @@ async def chat_completions(
                     )
                 # Stream path must apply the same dual-mode policy as non-stream.
                 caps = _caps_with_dual_mode(caps, model)
+                caps = _caps_with_plan(caps, plan_on)
                 caps = _caps_with_images(caps, turn_images)
                 # Stream path must apply the same landing min as non-stream.
                 caps = _caps_with_landing_min(caps, delivery_plan, skill_snapshot)

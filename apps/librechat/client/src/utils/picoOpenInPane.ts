@@ -87,7 +87,7 @@ export function classifyArtifactPreview(
     return 'image';
   }
   if (
-    /(?:\.txt|\.md|\.json|\.csv|\.log|text|markdown|plain|json)/.test(value) ||
+    /(?:\.txt|\.md|\.json|\.csv|\.log|text|markdown|plain|json|plan)/.test(value) ||
     /text|json|markdown|plain|csv/i.test(blobType)
   ) {
     return 'text';
