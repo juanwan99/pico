@@ -13,6 +13,14 @@ _MAX_Q = 400
 _MAX_OPT = 80
 _MAX_OPTS = 6
 
+
+class AskTimedOut(Exception):
+    """HITL park expired with no answer. This is not a teacher choice."""
+
+    def __init__(self, question: str = "") -> None:
+        super().__init__("ask timeout")
+        self.question = question or ""
+
 _PENDING: dict[str, asyncio.Future[str]] = {}
 _QUESTIONS: dict[str, dict[str, Any]] = {}
 
