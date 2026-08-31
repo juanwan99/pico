@@ -47,6 +47,7 @@ DATE: 2026-08-31
 37. **聊天回形针 = 老师唯一上传口。** 图和文档同一回形针：图本轮进 Pi `images[]`；文档落 `POST /v1/files`，抽出失败也落盘，AI 用 `workspace_read_file` 按文件名读。LibreChat 本地仓不是老师柜。ingest HTTP 失败不得假装已传。「我的文件」是生成物柜，不是第二本地上传口。禁目的地三选 / VectorStore / 转到学校当上传。禁第二套文件 OS。
 38. **HTML 交互页断网。** `generate_html_document` 禁 CDN / `import https` / `//cdn` / Three.js / Chart.js；外链引擎与 `window.THREE` 空舞台失败闭合，不剥成空舞台再报成功。校验同样扫 import/src/href/引擎全局。禁放行 jsdelivr。#780 业主 PASS 2026-08-29 @ tip `e9e032b3…`。
 39. **别残稿（#829）。** 门可以关，稿不能改。HTML/办公正文与 PPT 沙箱 source 上限对齐账本 20 万，超限人话失败、禁止静默切。HTML 标记只进 meta/`data-pico-marker`，禁止页顶「标记：」灰条。SYSTEM 禁止教模型失败后改成土 canvas。PPT 沙箱放行无 IO 标准库（copy/math/datetime/io.BytesIO）；os/open/eval 仍拒。断网门（#780）不动。
+40. **假绿门补基础，不补场景。** 先计划 HITL 超时未选 = 跑失败，禁止映射成 Stay 再标 succeeded。Excel `body` 走与 Word/PPT 同类的 plain→spec：markdown/TSV 表落成真实 sheet/行，禁止整段进 A1；小数当原文，禁止 `float` 脏值。HTML 交互页除 CDN 门外，内联 script 括号不配对失败闭合，禁止落坏脚本再当成品。禁词表/家长会/分数练习特判。
 
 ## C · 部署 / ECS / 执行者
 
