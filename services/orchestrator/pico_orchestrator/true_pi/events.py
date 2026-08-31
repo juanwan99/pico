@@ -326,6 +326,9 @@ async def map_event(
         for key in ("method", "promptId", "prompt_id"):
             if raw.get(key):
                 payload[key] = str(raw.get(key))[:80]
+        options = raw.get("options") or raw.get("choices")
+        if isinstance(options, list):
+            payload["options"] = [str(item).strip()[:80] for item in options if str(item).strip()][:6]
         await emit(f"ui.prompt.{phase}", payload)
         return
 

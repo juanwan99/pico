@@ -224,6 +224,23 @@ describe('RunTimeline', () => {
     expect(screen.getByText('模型在等你，不是还在跑')).toBeInTheDocument();
   });
 
+  it('renders ask_user options on a live ui.prompt.begin', () => {
+    render(
+      <RunTimeline
+        run={run('running')}
+        events={[
+          event('wait', 1, 'ui.prompt.begin', {
+            text: '你想做什么？',
+            options: ['解释一下', '改文件', '先列计划'],
+            source: 'true-pi',
+          }),
+        ]}
+      />,
+    );
+    const buttons = screen.getAllByTestId('pico-ask-option');
+    expect(buttons.map((btn) => btn.textContent)).toEqual(['解释一下', '改文件', '先列计划']);
+  });
+
   it('renders clickable search sources and honest miss copy', () => {
     const { rerender } = render(
       <RunTimeline

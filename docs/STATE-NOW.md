@@ -4,7 +4,7 @@
 DATE: 2026-08-31
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: 无
+在飞: #808 T-ASK-USER
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main
 阻塞: #806/#810 DEPLOYED 等主管 PASS · #748 合部完不关 · 记忆 OS 挂→#807
@@ -83,7 +83,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 规划 | [#805](https://github.com/juanwan99/pico/issues/805) | 活核+记忆+问清+计划+过程可见 · 六刀指针 · 不派 |
 | DEPLOYED 等主管 PASS | [#806](https://github.com/juanwan99/pico/issues/806) | T-PI-KERNEL-BUMP 0.84.4 已部 tip `63bb9e4b…` |
 | DEPLOYED 等主管 PASS | [#810](https://github.com/juanwan99/pico/issues/810) | T-PROCESS-VISIBLE 已部 tip `63c9f165…` |
-| 下一张 | [#808](https://github.com/juanwan99/pico/issues/808) | 问清 · 过门=含糊就问 · 禁 Word 定向题 · 未 stamp |
+| 在飞 | [#808](https://github.com/juanwan99/pico/issues/808) | 问清 · 过门=含糊就问 · grok 主管代执行 |
 | 排队 | [#807](https://github.com/juanwan99/pico/issues/807) [#809](https://github.com/juanwan99/pico/issues/809) [#811](https://github.com/juanwan99/pico/issues/811) | 记忆 / 计划 / 收常驻 |
 | 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
 | 挂起 | 记忆 OS | 人视角薄层已部（#736）；完整记忆 OS 仍挂 · 禁自研 · 排队 #807 |

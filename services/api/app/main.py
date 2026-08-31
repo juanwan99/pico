@@ -1834,8 +1834,11 @@ async def cancel_run(
     principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    from pico_orchestrator.ask_user import cancel as cancel_ask
+
     from app.db import append_event
 
+    cancel_ask(run_id)
     run = await run_service.get_run_for_principal(session, run_id, principal)
     if not run:
         raise HTTPException(status_code=404, detail="run not found")
@@ -1876,6 +1879,8 @@ async def cancel_task_active_runs(
     principal: Principal = Depends(require_scope("ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    from pico_orchestrator.ask_user import cancel as cancel_ask
+
     from app.db import append_event
 
     task = await run_service.get_task_for_principal(session, task_id, principal)
@@ -1888,6 +1893,7 @@ async def cancel_task_active_runs(
         # sequence collision, so never serialize result.run after event writes.
         run_payload = _run_dict(result.run)
         cancelled_run_id = run_payload["id"]
+        cancel_ask(cancelled_run_id)
         if result.request_recorded:
             await append_event(
                 session,
@@ -1904,6 +1910,30 @@ async def cancel_task_active_runs(
             )
         runs.append(run_payload)
     return {"runs": runs, "cancelled": len(runs)}
+
+
+class AskAnswerBody(BaseModel):
+    answer: str = Field(min_length=1, max_length=400)
+
+
+@app.post("/v1/runs/{run_id}/ask-answer")
+async def answer_ask_user(
+    run_id: str,
+    body: AskAnswerBody,
+    principal: Principal = Depends(require_scope("ai:run")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from pico_orchestrator.ask_user import answer as resolve_ask
+    from pico_orchestrator.ask_user import pending as pending_ask
+
+    run = await run_service.get_run_for_principal(session, run_id, principal)
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
+    if not pending_ask(run_id):
+        raise HTTPException(status_code=409, detail="no pending question")
+    if not resolve_ask(run_id, body.answer):
+        raise HTTPException(status_code=409, detail="no pending question")
+    return {"ok": True, "run_id": run_id}
 
 
 @app.post("/v1/runs/{run_id}/retry")

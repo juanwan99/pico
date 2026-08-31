@@ -32,7 +32,7 @@ def test_core_and_extended_partition_gateway():
     assert set(CORE_VISIBLE_TOOLS) & set(EXTENDED_TOOLS) == set()
     assert "bash" not in CORE_VISIBLE_TOOLS
     assert "bash" not in EXTENDED_TOOLS
-    assert len(CORE_VISIBLE_TOOLS) == 17
+    assert len(CORE_VISIBLE_TOOLS) == 18
     assert len(EXTENDED_TOOLS) == 10
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
@@ -43,6 +43,7 @@ def test_core_and_extended_partition_gateway():
     assert "sandbox_browser_open" in EXTENDED_TOOLS
     assert "publish_html_page" in EXTENDED_TOOLS
     assert "kb_search" in CORE_VISIBLE_TOOLS
+    assert "ask_user" in CORE_VISIBLE_TOOLS
     assert ppt_siblings_honest(CORE_VISIBLE_TOOLS)
 
 
