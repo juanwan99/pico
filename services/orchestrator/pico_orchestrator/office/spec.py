@@ -142,7 +142,7 @@ def parse_spec(raw: Any, *, default_kind: Kind | None = None) -> OfficeSpec:
         heading = str(raw.get("title") or "").strip()
         if heading or Theme.from_raw(raw.get("theme")) is not None:
             blocks_raw = [{"type": "slide", "title": heading or title}]
-    if not isinstance(blocks_raw, list) or not blocks_raw:
+        if not isinstance(blocks_raw, list) or not blocks_raw:
         raise ValueError("spec.blocks 不能为空。" if kind != "xlsx" else "Excel spec 需要 sheets 或 blocks。")
     blocks = tuple(_parse_block(item, kind=kind) for item in blocks_raw)  # type: ignore[misc]
     return OfficeSpec(
@@ -168,17 +168,19 @@ def spec_from_plain(
     from pico_orchestrator.document_generators import _docx_body_paragraphs, _pptx_slides
 
     if kind == "xlsx":
-        from pico_orchestrator.document_generators import KNOWN_CALC_CELL
+        from pico_orchestrator.document_generators import xlsx_plain_sheets
 
-        cell = (body or "").strip() or KNOWN_CALC_CELL
         heading = title.strip() or "Pico XLSX"
-        rows = ((cell,), (heading,), (f"marker:{marker}",))
+        sheets = xlsx_plain_sheets(body, title=heading, marker=marker)
         return OfficeSpec(
             schema=SCHEMA,
             kind="xlsx",
             title=heading,
             marker=marker,
-            blocks=(Block(type="sheet", title="Sheet1", rows=rows),),
+            blocks=tuple(
+                Block(type="sheet", title=name[:31], headers=headers, rows=rows)
+                for name, headers, rows in sheets
+            ),
         )
     if kind == "docx":
         blocks = [Block(type="heading", text=title, level=0)]
