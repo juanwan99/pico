@@ -2,7 +2,7 @@
  * Chat archive location: default 我的文件 root. Pick a self-made folder.
  * School transfer is not here.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getMyArchiveFolder,
   listMyFolders,
@@ -10,12 +10,15 @@ import {
   type PicoPersonalFolder,
 } from '~/data-provider/pico/api';
 import { folderLabelPath } from '~/utils/picoPersonalFolderTree';
+import ComposerChromeRow from '~/components/Chat/ComposerChromeRow';
 
 export default function ArchiveFolderBar({ conversationId }: { conversationId?: string | null }) {
   const convo = conversationId && conversationId !== 'new' ? conversationId : '';
   const [folders, setFolders] = useState<PicoPersonalFolder[]>([]);
   const [folderId, setFolderId] = useState('');
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -36,9 +39,33 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (rootRef.current && target && !rootRef.current.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
   const pick = useCallback(
     async (nextId: string) => {
       setFolderId(nextId);
+      setOpen(false);
       try {
         const row = await putMyArchiveFolder(convo, nextId);
         setFolderId(typeof row.folder_id === 'string' ? row.folder_id : nextId);
@@ -50,35 +77,62 @@ export default function ArchiveFolderBar({ conversationId }: { conversationId?: 
     [convo],
   );
 
+  const currentLabel = folderId ? folderLabelPath(folders, folderId) || '我的文件' : '我的文件';
+
   return (
-    <div className="mb-2 w-full text-left" data-testid="archive-folder-bar">
-      <label className="pico-type-body flex items-center gap-2 text-[color:var(--pico-ink)]">
-        <span className="shrink-0 text-[color:var(--pico-ink-2)]">存档位置</span>
-        <span className="relative inline-flex min-w-0 flex-1">
-          <select
-            className="pico-type-body h-8 w-full max-w-full min-w-0 cursor-pointer appearance-none rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] pl-2 pr-7 text-[color:var(--pico-ink)] shadow-sm outline-none hover:bg-[color:var(--pico-surface-2)]"
-            value={folderId}
-            data-testid="archive-folder-select"
-            aria-label="存档位置"
-            onChange={(e) => void pick(e.target.value)}
-          >
-            <option value="">我的文件</option>
-            {folders.map((folder) =>
-              folder.id ? (
-                <option key={folder.id} value={folder.id}>
-                  {folderLabelPath(folders, folder.id)}
-                </option>
-              ) : null,
-            )}
-          </select>
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[color:var(--pico-ink-3)]"
-          >
+    <div ref={rootRef} className="w-full text-left" data-testid="archive-folder-bar">
+      <ComposerChromeRow label="存档位置">
+        <button
+          type="button"
+          className="pico-type-body pico-chrome-control"
+          data-testid="archive-folder-select"
+          aria-label="存档位置"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className="min-w-0 truncate">{currentLabel}</span>
+          <span aria-hidden className="pico-type-aux pico-chrome-caret">
             ▾
           </span>
-        </span>
-      </label>
+        </button>
+      </ComposerChromeRow>
+      {open ? (
+        <ul
+          className="mb-2 max-h-48 overflow-y-auto rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] py-1"
+          role="listbox"
+          aria-label="存档位置"
+          data-testid="archive-folder-list"
+        >
+          <li>
+            <button
+              type="button"
+              role="option"
+              aria-selected={folderId === ''}
+              className="pico-type-body w-full px-2 py-1 text-left text-[color:var(--pico-ink)] hover:bg-[color:var(--pico-surface-2)]"
+              onClick={() => void pick('')}
+            >
+              我的文件
+            </button>
+          </li>
+          {folders.map((folder) =>
+            folder.id ? (
+              <li key={folder.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={folderId === folder.id}
+                  className="pico-type-body w-full px-2 py-1 text-left text-[color:var(--pico-ink)] hover:bg-[color:var(--pico-surface-2)]"
+                  data-testid={`archive-folder-option-${folder.id}`}
+                  onClick={() => void pick(folder.id)}
+                >
+                  {folderLabelPath(folders, folder.id)}
+                </button>
+              </li>
+            ) : null,
+          )}
+        </ul>
+      ) : null}
       {error ? (
         <p className="pico-type-aux mt-0.5 text-[#b42318]" role="status">
           {error}

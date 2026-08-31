@@ -694,3 +694,15 @@ export async function quotePicoPoints(inputChars: number): Promise<PicoPointsVie
 export async function getPicoRunPoints(runId: string): Promise<PicoPointsView> {
   return picoFetch<PicoPointsView>(`/v1/usage/points?run_id=${encodeURIComponent(runId)}`);
 }
+
+export async function getPicoConversationPoints(conversationId: string): Promise<{
+  turns?: PicoPointsView[];
+}> {
+  const cid = (conversationId || '').trim();
+  if (!cid || cid === 'new') {
+    return { turns: [] };
+  }
+  return picoFetch<{ turns?: PicoPointsView[] }>(
+    `/v1/usage/points?conversation_id=${encodeURIComponent(cid)}`,
+  );
+}

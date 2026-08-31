@@ -133,15 +133,18 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const taskTitle = !isUnnamedConvoTitle(chatHelpers.conversation?.title)
     ? chatHelpers.conversation?.title
     : undefined;
-  const latestAssistantMessageId = useMemo(() => {
-    const msgs = flatMessages ?? [];
-    for (let i = msgs.length - 1; i >= 0; i -= 1) {
-      if (msgs[i] && !msgs[i].isCreatedByUser && msgs[i].messageId) {
-        return msgs[i].messageId;
+  const assistantMessageIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const msg of flatMessages ?? []) {
+      if (msg && !msg.isCreatedByUser && msg.messageId) {
+        ids.push(msg.messageId);
       }
     }
-    return null;
+    return ids;
   }, [flatMessages]);
+  const latestAssistantMessageId = assistantMessageIds.length
+    ? assistantMessageIds[assistantMessageIds.length - 1]
+    : null;
   const ledger = usePicoTaskLedger(conversationId, isSubmitting);
   const cancellableRunId = ['queued', 'running', 'preparing'].includes(ledger.run?.status || '')
     ? ledger.run?.id
@@ -206,6 +209,8 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
             runId={ledger.run?.id}
             runStatus={ledger.run?.status}
             latestAssistantMessageId={latestAssistantMessageId}
+            assistantMessageIds={assistantMessageIds}
+            conversationId={conversationId}
             isSubmitting={isSubmitting}
           >
           <Presentation>

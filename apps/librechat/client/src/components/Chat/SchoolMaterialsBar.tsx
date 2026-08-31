@@ -16,6 +16,7 @@ import {
   loadSchoolFields,
 } from '~/utils/picoSchoolTree';
 import { cn } from '~/utils';
+import ComposerChromeRow from '~/components/Chat/ComposerChromeRow';
 
 function asNamedIds(row: { ids?: string[] }) {
   return {
@@ -161,27 +162,30 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   const groups = useMemo(() => groupSchoolTree(fields, items), [fields, items]);
 
   return (
-    <div ref={rootRef} className="mb-2 w-full text-left" data-testid="school-materials-bar">
-      <div className="flex items-center gap-2">
-        <span className="pico-type-body shrink-0 text-[color:var(--pico-ink-2)]">学校材料</span>
+    <div ref={rootRef} className="w-full text-left" data-testid="school-materials-bar">
+      <ComposerChromeRow label="学校材料">
         <button
           type="button"
-          className="pico-type-body inline-flex h-8 min-w-0 flex-1 items-center justify-between gap-1.5 rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-2 text-left text-[color:var(--pico-ink)] shadow-sm hover:bg-[color:var(--pico-surface-2)]"
+          className="pico-type-body pico-chrome-control"
           data-testid="school-materials-toggle"
           aria-expanded={open}
           aria-haspopup="true"
           onClick={() => setOpen((v) => !v)}
         >
           {named.length ? (
-            <span className="pico-type-aux text-[color:var(--pico-ink-2)]">{named.length}</span>
+            <span className="pico-type-aux min-w-0 truncate text-[color:var(--pico-ink-2)]">
+              {named.length}
+            </span>
           ) : (
-            <span className="pico-type-aux text-[color:var(--pico-ink-3)]">未勾选不读正文</span>
+            <span className="pico-type-aux min-w-0 truncate text-[color:var(--pico-ink-3)]">
+              未勾选不读正文
+            </span>
           )}
-          <span aria-hidden className="pico-type-aux text-[color:var(--pico-ink-3)]">
-            {open ? '▴' : '▾'}
+          <span aria-hidden className="pico-type-aux pico-chrome-caret">
+            ▾
           </span>
         </button>
-      </div>
+      </ComposerChromeRow>
       {open ? (
         <div className="mt-1" data-testid="school-materials-tree">
           {error ? (

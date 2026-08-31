@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -42,6 +43,7 @@ from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
 
 router = APIRouter(tags=["openai-compat"])
+logger = logging.getLogger(__name__)
 
 
 class ChatMessage(BaseModel):
@@ -1244,8 +1246,8 @@ async def chat_completions(
                     principal, conversation_id or "", named_session, settings
                 )
             prompt = inject_named_school_materials(prompt, named_items)
-        except Exception:  # noqa: BLE001,S110 — unnamed school files must not leak; missing named is ok
-            pass
+        except Exception:
+            logger.exception("named school materials inject failed")
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 12000) or 12000)
     # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
     # marker is explicit so this must not 400 a legal affordance table.

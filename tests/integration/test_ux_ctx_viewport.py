@@ -77,6 +77,8 @@ def test_history_and_chrome_source_locks() -> None:
     assert "convo-menu-folder" in convo
     # 2026-08 业主指示：主栏要有成品打开/下载入口（旧锁解除，成品条挂回 ChatView）。
     assert "MainDeliveryStrip" in chat_view
+    assert "assistantMessageIds" in chat_view
+    assert "getPicoConversationPoints" not in chat_view
     assert "composer-plus" in chat_form
     assert "默认权限" not in chat_form
     assert "result-view-menu" not in result
@@ -88,6 +90,8 @@ def test_nav_layout_type_and_school_docs() -> None:
     tokens = (ROOT / "apps/librechat/client/src/style/pico-tokens.css").read_text()
     landing = (ROOT / "apps/librechat/client/src/components/Chat/Landing.tsx").read_text()
     bar = (ROOT / "apps/librechat/client/src/components/Chat/SchoolMaterialsBar.tsx").read_text()
+    archive = (ROOT / "apps/librechat/client/src/components/Chat/ArchiveFolderBar.tsx").read_text()
+    chat_form = (ROOT / "apps/librechat/client/src/components/Chat/Input/ChatForm.tsx").read_text()
     main = (ROOT / "apps/librechat/client/src/main.jsx").read_text()
     index_html = (ROOT / "apps/librechat/client/index.html").read_text()
     routes = (ROOT / "apps/librechat/client/src/routes/index.tsx").read_text()
@@ -109,6 +113,14 @@ def test_nav_layout_type_and_school_docs() -> None:
     assert "school-land-field" not in bar
     assert "text-[11px]" not in bar
     assert "text-[12px]" not in bar
+    assert "ComposerChromeRow" in bar
+    assert "ComposerChromeRow" in archive
+    assert "<select" not in archive
+    assert "pico-chrome-caret" in archive
+    assert "pico-chrome-caret" in bar
+    assert "sm:px-2" not in chat_form
+    assert "pico-composer-chrome-row" in tokens
+    assert "-webkit-appearance: none" in tokens
     sidebar = (ROOT / "apps/librechat/client/src/components/UnifiedSidebar/Sidebar.tsx").read_text()
     assert "FilesDirectoryPanel" in sidebar
     assert "SchoolFilesDirectory" in sidebar
