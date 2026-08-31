@@ -121,7 +121,7 @@ def test_display_plan_options_are_chinese() -> None:
             "Refine the plan",
         ]
     )
-    assert shown == ["硪4认执行", "先不执行", "再改计划"]
+    assert shown == ["确认执行", "先不执行", "再改计划"]
     assert reverse["确认执行"].startswith("Execute")
     assert reverse["先不执行"].startswith("Stay")
     assert is_plan_select(["Execute the plan", "Stay in plan mode"])
