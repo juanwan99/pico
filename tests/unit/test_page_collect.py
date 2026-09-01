@@ -14,7 +14,6 @@ from app.edu_school import LandBody, build_land_payload, land_generated_artifact
 from app.page_collect import attach_page_collect, sanitize_collect_fields, sanitize_uuid_list
 from app.settings import get_settings
 
-
 ITEM_A = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 ITEM_B = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
 ART = "cccccccc-dddd-4eee-8fff-000000000000"
