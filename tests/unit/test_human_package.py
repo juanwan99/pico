@@ -365,6 +365,7 @@ def test_strips_backend_model_self_id_keeps_pico() -> None:
     out = sanitize_user_facing_text("我是 DeepSeek 开发的助手，可以帮你改这份表。", artifact_titles=[])
     assert "DeepSeek" not in out
     assert "Pico" in out
+    assert "开发的助手" not in out
     assert "改这份表" in out
     out_en = sanitize_user_facing_text("I am GPT-5.6 and I can help.", artifact_titles=[])
     assert "GPT" not in out_en

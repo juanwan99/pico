@@ -27,6 +27,8 @@ _MODEL_SELF_INLINE = re.compile(
     rf"(?i)(?:我是|我叫|本模型是|底层模型是|I'm|I am|I['’]m)\s+"
     rf"(?:一个?)?{_MODEL_BRAND}\b"
 )
+_PICO_ID_FLUFF_ZH = re.compile(r"我是 Pico\s*(?:开发的)?(?:助手|大模型|语言模型)")
+_PICO_ID_FLUFF_EN = re.compile(r"(?i)I am Pico(?:\s+language model|\s+AI assistant|\s+assistant)")
 
 # Machine fields / review jargon that must not appear in the main bubble.
 _JARGON_LINE = re.compile(
@@ -239,7 +241,9 @@ def _strip_model_identity(text: str) -> str:
     raw = text or ""
     if not raw.strip():
         return raw
-    return _MODEL_SELF_INLINE.sub(_pico_self_repl, raw)
+    out = _MODEL_SELF_INLINE.sub(_pico_self_repl, raw)
+    out = _PICO_ID_FLUFF_ZH.sub("我是 Pico", out)
+    return _PICO_ID_FLUFF_EN.sub("I am Pico", out)
 
 
 def _strip_jargon(text: str) -> str:
