@@ -4,7 +4,7 @@
 DATE: 2026-09-01
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: 无
+在飞: #850 T-LEDGER-BINARY-BUS
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 产品 SHA `8912c11ef3f82daba778265ae9d4ce43a44dc69e` = origin/main（#848 已部）
       → docs-only 合入不 prod-update，产品 SHA 未变
@@ -104,7 +104,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已关 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未过 · 不续债卫生关 |
 | 已关 | [#794](https://github.com/juanwan99/pico/issues/794) | T-SUB2API-FACE · 业主 PASS @ `c2a2e439…` |
 | 挂起 | [#778](https://github.com/juanwan99/pico/issues/778) | 出图链 · 不在三行 · 要做另开 |
-| 挂起 | [#850](https://github.com/juanwan99/pico/issues/850) | 二进制不进脑 · 业主令先停 · CI 红未合 |
+| 在飞 | [#850](https://github.com/juanwan99/pico/issues/850) | T-LEDGER-BINARY-BUS 二进制不进脑 · 业主令重开 |
 | 挂起 | 自研记忆 OS | 禁 · 文件型上游 #807 已部 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面四行冻到 9/7 · 流程 EXPERIENCE §80–89 |
