@@ -4,14 +4,14 @@
 DATE: 2026-09-01
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #836 T-USAGE-THROUGH-PI
+在飞: #838 T-POINTS-THIS-TURN
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 产品 SHA `e5f840ef67487214ebda6fe2675cfdd44fdf01cc`（#811 已部）
+      → 产品 SHA `adaca179393945edd03d042c71979579cd2fd2c8`（#836 已部）
       → docs-only 合入不 prod-update
 阻塞: #748 合部完不关 · 勿关 #821/#806/#808/#807/#809/#810/#748/#449/#316
 ────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
-PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · #824 T-UI-C-POLISH 业主 PASS @ tip `af3e8ad0…` · #829 T-UNMAIM-DRAFT 主管 PASS @ tip `c4953f2e…` · #834 T-FOUNDATION-GATES 业主 PASS @ tip `6236489f…` · #811 T-RESIDENT-SHRINK 主管 PASS @ tip `e5f840ef…` · #821/#806/#808/#809/#807/#810 业主 PASS 不关
+PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · #824 T-UI-C-POLISH 业主 PASS @ tip `af3e8ad0…` · #829 T-UNMAIM-DRAFT 主管 PASS @ tip `c4953f2e…` · #834 T-FOUNDATION-GATES 业主 PASS @ tip `6236489f…` · #811 T-RESIDENT-SHRINK 主管 PASS @ tip `e5f840ef…` · #836 T-USAGE-THROUGH-PI 主管 PASS @ tip `adaca179…` · #821/#806/#808/#809/#807/#810 业主 PASS 不关
 经验: docs/EXPERIENCE.md（唯一 · 按域）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 北极星: DIRECTION-NOW §0-star · 用法 = Grok
@@ -92,7 +92,8 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 业主 PASS 不关 | [#808](https://github.com/juanwan99/pico/issues/808) | T-ASK-USER |
 | 业主 PASS 不关 | [#821](https://github.com/juanwan99/pico/issues/821) | T-P0-ASK-IN-MAIN |
 | 已收口 | [#811](https://github.com/juanwan99/pico/issues/811) · [#835](https://github.com/juanwan99/pico/pull/835) | T-RESIDENT-SHRINK 收常驻 · 主管 PASS @ tip `e5f840ef…` |
-| 在飞 | [#836](https://github.com/juanwan99/pico/issues/836) | T-USAGE-THROUGH-PI 真 Pi 用量进唯一账本 |
+| 已收口 | [#836](https://github.com/juanwan99/pico/issues/836) · [#837](https://github.com/juanwan99/pico/pull/837) | T-USAGE-THROUGH-PI 真 Pi 用量进唯一账本 · 主管 PASS @ tip `adaca179…` |
+| 在飞 | [#838](https://github.com/juanwan99/pico/issues/838) | T-POINTS-THIS-TURN 积分只计本轮说话 · 常驻说明书不进积分 |
 | 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
 | 挂起 | 自研记忆 OS | 禁 · 文件型上游 #807 已部 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |

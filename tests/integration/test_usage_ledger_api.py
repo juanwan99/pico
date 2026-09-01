@@ -98,7 +98,7 @@ async def test_cross_account_cannot_read_detail(client: AsyncClient):
     row = next(e for e in body["events"] if e["id"] == event_id)
     assert row["kind"] == "llm"
     assert row["model"] == "gpt-5.6-sol"
-    assert row["points"] == "0.060"
+    assert row["points"] == "0.024"
     assert "prompt_tokens" not in row
     assert "completion_tokens" not in row
     assert "total_tokens" not in row
@@ -320,6 +320,7 @@ async def test_emit_provider_usage_is_native_not_estimated(client: AsyncClient):
             "cached_tokens": 8,
             "reasoning_tokens": 12,
         },
+        prompt="hello",
         source="openai_compat",
         school_id="school-a",
         membership_id="m1",
@@ -334,9 +335,10 @@ async def test_emit_provider_usage_is_native_not_estimated(client: AsyncClient):
     assert "completion_tokens" not in row
     assert "total_tokens" not in row
     assert row["model"] == "gpt-5.6-sol"
-    assert row["points"] == "0.300"
+    assert row["points"] == "0.072"
     assert "cached_tokens" not in (row.get("extra") or {})
     assert "reasoning_tokens" not in (row.get("extra") or {})
+    assert "user_chars" not in (row.get("extra") or {})
     assert "price" not in (row.get("extra") or {})
     assert "token" not in r.text.lower()
 
@@ -352,7 +354,8 @@ async def test_emit_provider_usage_is_native_not_estimated(client: AsyncClient):
     assert meter["prompt_tokens"] == 80
     assert meter["completion_tokens"] == 20
     assert meter["total_tokens"] == 100
-    assert meter["points"] == "0.300"
+    assert meter["points"] == "0.072"
+    assert (meter.get("extra") or {}).get("user_chars") == 5
     assert (meter.get("extra") or {}).get("cached_tokens") == 8
     assert (meter.get("extra") or {}).get("reasoning_tokens") == 12
     assert "rate" not in (meter.get("extra") or {})
@@ -474,7 +477,7 @@ async def test_points_quote_hides_scale_and_settle_uses_ledger(client: AsyncClie
     )
     factory = session_factory()
     async with factory() as session:
-        _task, run = await create_task(session, principal, "t", "hello")
+        _task, run = await create_task(session, principal, "t", "")
         run_id = run.id
 
     await record_usage_event(
@@ -495,7 +498,7 @@ async def test_points_quote_hides_scale_and_settle_uses_ledger(client: AsyncClie
     assert settled.status_code == 200, settled.text
     sbody = settled.json()
     assert sbody["phase"] == "settled"
-    assert sbody["points"] == "3.000"
+    assert sbody["points"] == "1.800"
     assert sbody["wallet"] is False
     assert "token" not in settled.text.lower()
 
@@ -535,7 +538,7 @@ async def test_points_settle_backfills_from_run_blob_and_conversation(client: As
     assert pending.status_code == 200, pending.text
     body = pending.json()
     assert body["phase"] == "settled"
-    assert body["points"] == "0.030"
+    assert body["points"] == "0.012"
     assert body["wallet"] is False
 
     convo = await client.get(
@@ -546,7 +549,7 @@ async def test_points_settle_backfills_from_run_blob_and_conversation(client: As
     assert len(turns) == 1
     assert turns[0]["run_id"] == run_id
     assert turns[0]["phase"] == "settled"
-    assert turns[0]["points"] == "0.030"
+    assert turns[0]["points"] == "0.012"
 
 
 async def test_points_settle_updates_unknown_event_when_run_blob_has_tokens(client: AsyncClient):
@@ -589,7 +592,7 @@ async def test_points_settle_updates_unknown_event_when_run_blob_has_tokens(clie
     settled = await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})
     assert settled.status_code == 200, settled.text
     assert settled.json()["phase"] == "settled"
-    assert settled.json()["points"] == "0.090"
+    assert settled.json()["points"] == "0.042"
 
 
 async def test_emit_true_pi_aliases_fills_ledger_and_hides_formula(client: AsyncClient):
@@ -621,6 +624,7 @@ async def test_emit_true_pi_aliases_fills_ledger_and_hides_formula(client: Async
             "reasoning": 12,
             "cost": {"input": 0.01, "output": 0.02, "total": 0.03},
         },
+        prompt="hello",
         source="true_pi",
         school_id="school-a",
         membership_id="m1",
@@ -629,9 +633,10 @@ async def test_emit_true_pi_aliases_fills_ledger_and_hides_formula(client: Async
     headers = await _auth(client)
     teacher = await client.get("/v1/usage/events", headers=headers, params={"kind": "llm"})
     row = next(e for e in teacher.json()["events"] if e["run_id"] == run_id)
-    assert row["points"] == "3.000"
+    assert row["points"] == "1.812"
     assert "prompt_tokens" not in row
     assert "cached_tokens" not in (row.get("extra") or {})
+    assert "user_chars" not in (row.get("extra") or {})
     assert "cost" not in (row.get("extra") or {})
     assert "token" not in teacher.text.lower()
     assert "×" not in teacher.text
@@ -639,7 +644,7 @@ async def test_emit_true_pi_aliases_fills_ledger_and_hides_formula(client: Async
 
     settled = await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})
     assert settled.json()["phase"] == "settled"
-    assert settled.json()["points"] == "3.000"
+    assert settled.json()["points"] == "1.812"
     assert "token" not in settled.text.lower()
 
     hook = {"Authorization": "Bearer hook-secret-token"}
@@ -651,18 +656,130 @@ async def test_emit_true_pi_aliases_fills_ledger_and_hides_formula(client: Async
     meter = next(e for e in exported.json()["events"] if e["run_id"] == run_id)
     assert meter["tokens_unknown"] is False
     assert meter["total_tokens"] == 1000
-    assert meter["points"] == "3.000"
+    assert meter["points"] == "1.812"
     assert (meter.get("extra") or {}).get("cached_tokens") == 50
     assert (meter.get("extra") or {}).get("reasoning_tokens") == 12
+    assert (meter.get("extra") or {}).get("user_chars") == 5
     assert "cost" not in (meter.get("extra") or {})
     assert "rate" not in (meter.get("extra") or {})
     assert "formula" not in meter
     html = await client.get("/v1/usage", headers=headers)
     assert html.status_code == 200
-    assert "3.000" in html.text
+    assert "1.812" in html.text
     assert "积分" in html.text
     assert "token" not in html.text.lower()
     assert "×" not in html.text
     assert "÷" not in html.text
+
+
+async def test_this_turn_points_ignore_suitcase_and_match_footer(client: AsyncClient):
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.run_service import create_task
+
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=0,
+        raw={},
+    )
+    prompt = "hi  nishi shui"
+    factory = session_factory()
+    async with factory() as session:
+        _task, run = await create_task(session, principal, "t", prompt)
+        run_id = run.id
+
+    await emit_llm_usage_after_run(
+        run_id,
+        token_usage={
+            "input": 8393,
+            "output": 25,
+            "totalTokens": 8418,
+        },
+        prompt=prompt,
+        source="true_pi",
+        school_id="school-a",
+        membership_id="m1",
+        model="gpt-5.6-sol",
+    )
+    headers = await _auth(client)
+    teacher = await client.get("/v1/usage/events", headers=headers, params={"kind": "llm"})
+    row = next(e for e in teacher.json()["events"] if e["run_id"] == run_id)
+    assert row["points"] == "0.099"
+    assert "prompt_tokens" not in row
+    assert "user_chars" not in (row.get("extra") or {})
+    assert "token" not in teacher.text.lower()
+    assert "未结算" not in teacher.text
+
+    quoted = await client.post(
+        "/v1/usage/points/quote",
+        headers=headers,
+        json={"input_chars": len(prompt)},
+    )
+    assert quoted.status_code == 200
+    assert quoted.json()["points"] == "0.024"
+    assert quoted.json()["points"].startswith("0.")
+    assert row["points"].startswith("0.")
+
+    settled = await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})
+    assert settled.json()["points"] == "0.099"
+    assert settled.json()["phase"] == "settled"
+
+    hook = {"Authorization": "Bearer hook-secret-token"}
+    exported = await client.get(
+        "/v1/internal/usage/export",
+        headers=hook,
+        params={"school_id": "school-a", "limit": 50},
+    )
+    meter = next(e for e in exported.json()["events"] if e["run_id"] == run_id)
+    assert meter["prompt_tokens"] == 8393
+    assert meter["completion_tokens"] == 25
+    assert meter["total_tokens"] == 8418
+    assert meter["points"] == "0.099"
+    assert (meter.get("extra") or {}).get("user_chars") == 14
+    assert "rate" not in (meter.get("extra") or {})
+    assert "formula" not in (meter.get("extra") or {})
+
+
+async def test_settle_pins_teacher_chars_on_old_suitcase_row(client: AsyncClient):
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.run_service import create_task
+
+    headers = await _auth(client)
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=0,
+        raw={},
+    )
+    factory = session_factory()
+    async with factory() as session:
+        _task, run = await create_task(session, principal, "t", "hi  nishi shui")
+        run_id = run.id
+
+    await record_usage_event(
+        school_id="school-a",
+        membership_id="m1",
+        kind="llm",
+        model="gpt-5.6-sol",
+        prompt_tokens=8393,
+        completion_tokens=25,
+        total_tokens=8418,
+        tokens_unknown=False,
+        estimated=False,
+        run_id=run_id,
+        source="test",
+        idempotency_key=f"llm:{run_id}:old",
+    )
+    settled = await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})
+    assert settled.status_code == 200, settled.text
+    assert settled.json()["points"] == "0.099"
 
 
