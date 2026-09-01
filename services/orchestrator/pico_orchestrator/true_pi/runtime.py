@@ -49,6 +49,13 @@ _CANCEL_POLL = 0.05
 _PLAN_FIRST_END_GRACE = 1.0
 
 
+def _hitl_ask_timed_out(transport: Any) -> bool:
+    return bool(
+        getattr(transport, "plan_ask_timed_out", False)
+        or getattr(transport, "ask_timed_out", False)
+    )
+
+
 def want_plan_mode_extension(*, plan_on: bool) -> bool:
     """Load vendor plan-mode only when this spawn's plan_on is true.
 
@@ -292,6 +299,13 @@ async def run_true_pi_agent(
                 },
             )
 
+        if tool_server is not None:
+
+            def _mark_ask_timeout() -> None:
+                transport.ask_timed_out = True
+
+            tool_server.ask_timeout_hook = _mark_ask_timeout
+
         # Fake transport still needs a tool server if it will not invoke tools
         # via HTTP — matrix tests inject tool_results via scripted events.
         if isinstance(transport, FakeTransport) and tool_server is None:
@@ -410,12 +424,12 @@ async def run_true_pi_agent(
         consumer = asyncio.create_task(_consume())
         try:
             while not state.settled and not stop.is_set():
-                if getattr(transport, "plan_ask_timed_out", False):
+                if _hitl_ask_timed_out(transport):
                     await client.abort()
                     return await _failed(
                         emit,
                         code="ask.timeout",
-                        reason="超时未选，没有执行。请再发一次并选「确认执行」。",
+                        reason="超时未选，没有继续。请再发一次。",
                         state=state,
                         principal=principal,
                         tag=tag,
@@ -498,12 +512,12 @@ async def run_true_pi_agent(
                 with suppress(Exception):
                     consumer.result()
 
-        if getattr(transport, "plan_ask_timed_out", False):
+        if _hitl_ask_timed_out(transport):
             await client.abort()
             return await _failed(
                 emit,
                 code="ask.timeout",
-                reason="超时未选，没有执行。请再发一次并选「确认执行」。",
+                reason="超时未选，没有继续。请再发一次。",
                 state=state,
                 principal=principal,
                 tag=tag,

@@ -18,6 +18,16 @@ _PLAN_STATUS_CHROME = re.compile(r"(?i)(?:⏸\s*plan|📋\s*\d+/\d+|plan mode)")
 # Titles that are bookkeeping, not user downloads.
 _BOOKKEEPING = frozenset({"回复摘要", "summary", "run summary"})
 
+# Teacher-facing identity is Pico. Strip first-person backend-model claims.
+_MODEL_BRAND = (
+    r"(?:GPT-?[\w.]*|ChatGPT|Claude[\w.-]*|DeepSeek[\w.-]*|Gemini[\w.-]*|"
+    r"Kimi|通义千问|通义|豆包|Qwen[\w.-]*|GLM-?[\w.]*)"
+)
+_MODEL_SELF_INLINE = re.compile(
+    rf"(?i)(?:我是|我叫|本模型是|底层模型是|I'm|I am|I['’]m)\s+"
+    rf"(?:一个?)?{_MODEL_BRAND}\b"
+)
+
 # Machine fields / review jargon that must not appear in the main bubble.
 _JARGON_LINE = re.compile(
     r"(?im)^[ \t]*(?:"
@@ -217,6 +227,21 @@ def _strip_html_dumps(text: str) -> str:
     return text
 
 
+def _pico_self_repl(match: re.Match[str]) -> str:
+    lead = match.group(0)
+    if re.search(r"(?i)\bi(?:\s+am|['’]m)\b", lead):
+        return "I am Pico"
+    return "我是 Pico"
+
+
+def _strip_model_identity(text: str) -> str:
+    """Swap first-person backend-model claims to Pico. Leave third-party mentions."""
+    raw = text or ""
+    if not raw.strip():
+        return raw
+    return _MODEL_SELF_INLINE.sub(_pico_self_repl, raw)
+
+
 def _strip_jargon(text: str) -> str:
     text = _MARKDOWN_TABLE_L0.sub("", text)
     text = _PROCESS_INLINE.sub("", text)
@@ -376,6 +401,7 @@ def sanitize_user_facing_text(
 
     stripped = _strip_html_dumps(raw)
     stripped = _strip_jargon(stripped)
+    stripped = _strip_model_identity(stripped)
 
     had_html_dump = bool(_HTML_DOC.search(raw) or _FENCED_HTML.search(raw))
     # If model only pasted source / jargon and we have files → replace with card.

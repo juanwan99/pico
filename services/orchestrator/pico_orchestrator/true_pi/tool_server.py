@@ -32,6 +32,8 @@ class ToolServer:
     host: str = "127.0.0.1"
     port: int = 0
     emit: Any = None
+    ask_timeout_hook: Any = None
+    ask_timed_out: bool = False
     _server: asyncio.AbstractServer | None = None
     invocations: list[tuple[str, dict[str, Any], bool]] = field(default_factory=list)
 
@@ -166,6 +168,17 @@ class ToolServer:
                 args.get("options"),
                 self.emit,
             )
+            if str(parked.get("error") or "") == "timeout":
+                self.ask_timed_out = True
+                hook = self.ask_timeout_hook
+                if callable(hook):
+                    hook()
+                await self._write(
+                    writer,
+                    409,
+                    {"ok": False, "code": "ask.timeout", "error": "超时未选", "tool": name},
+                )
+                return
             await self._write(writer, 200, {"ok": True, "tool": name, "result": parked})
             return
         token = bind_usage_context(

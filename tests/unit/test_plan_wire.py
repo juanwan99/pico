@@ -298,6 +298,45 @@ async def test_plan_ask_timeout_fails_run_not_succeeded() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ask_user_timeout_fails_run_not_succeeded() -> None:
+    from pico_orchestrator.true_pi.client import FakeTransport
+
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        events.append((k, p))
+
+    async def not_cancelled() -> bool:
+        return False
+
+    transport = FakeTransport(
+        scripted=[
+            {"type": "agent_start"},
+            {
+                "type": "message_end",
+                "message": {"role": "assistant", "content": "我先问一下"},
+            },
+            {"type": "agent_end", "willRetry": False},
+        ],
+        assistant_text="我先问一下",
+    )
+    transport.ask_timed_out = True
+    result = await run_true_pi_agent(
+        prompt="帮我看看",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=not_cancelled,
+        caps=RunCaps(plan_on=False, min_artifacts=0, max_seconds=8),
+        transport=transport,
+    )
+    assert result.status == "failed"
+    assert "超时未选" in (result.error or "")
+    codes = [p.get("code") for k, p in events if k in {"run.error", "run.status"}]
+    assert "ask.timeout" in codes
+    assert not any(p.get("status") == "succeeded" for k, p in events if k == "run.status")
+
+
+@pytest.mark.asyncio
 async def test_t3_plan_off_first_end_lands() -> None:
     from pico_orchestrator.true_pi.client import FakeTransport
 

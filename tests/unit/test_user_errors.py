@@ -27,12 +27,12 @@ def test_timeout():
 
 def test_ask_timeout_is_not_run_budget():
     msg = user_message_for_error(
-        "超时未选，没有执行。请再发一次并选「确认执行」。",
+        "超时未选，没有继续。请再发一次。",
         code="ask.timeout",
     )
     assert "超时未选" in msg
     assert "15 分钟" not in msg
-    assert "确认执行" in msg
+    assert "确认执行" not in msg
 
 
 def test_max_steps_mentions_retry():

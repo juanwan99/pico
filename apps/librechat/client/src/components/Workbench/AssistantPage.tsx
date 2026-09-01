@@ -13,7 +13,7 @@ const ASSISTANTS = [
     id: 'pico-default',
     name: 'Pico 本地助理',
     desc: '默认任务执行者。Pi + Pico 编排，产物进账本与结果区。',
-    model: 'DeepSeek / Pi',
+    model: 'Pico',
     ready: true,
   },
   {
