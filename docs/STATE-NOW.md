@@ -4,14 +4,15 @@
 DATE: 2026-09-01
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #848 T-HTML-PICO-CSS
+在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 产品 SHA `cbc0000aeac963267302d6f6af28fda5f6cdcba0`（#846 已部）
-      → docs-only 合入不 prod-update
-阻塞: #748 合部完不关 · 勿关 #821/#806/#808/#807/#809/#810/#748/#449/#316
+      → 产品 SHA `8912c11ef3f82daba778265ae9d4ce43a44dc69e` = origin/main（#848 已部）
+      → docs-only 合入不 prod-update，产品 SHA 未变
+阻塞: 无
+白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
-PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #449/#316 勿关 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · #824 T-UI-C-POLISH 业主 PASS @ tip `af3e8ad0…` · #829 T-UNMAIM-DRAFT 主管 PASS @ tip `c4953f2e…` · #834 T-FOUNDATION-GATES 业主 PASS @ tip `6236489f…` · #811 T-RESIDENT-SHRINK 主管 PASS @ tip `e5f840ef…` · #836 T-USAGE-THROUGH-PI 主管 PASS @ tip `adaca179…` · #821/#806/#808/#809/#807/#810 业主 PASS 不关
+PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · #824 T-UI-C-POLISH 业主 PASS @ tip `af3e8ad0…` · #829 T-UNMAIM-DRAFT 主管 PASS @ tip `c4953f2e…` · #834 T-FOUNDATION-GATES 业主 PASS @ tip `6236489f…` · #811 T-RESIDENT-SHRINK 主管 PASS @ tip `e5f840ef…` · #836 T-USAGE-THROUGH-PI 主管 PASS @ tip `adaca179…` · #821/#806/#808/#809/#807/#810 业主 PASS 已关 · #794 业主 PASS 已关
 经验: docs/EXPERIENCE.md（唯一 · 按域）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 北极星: DIRECTION-NOW §0-star · 用法 = Grok
@@ -50,7 +51,7 @@ juanwan99/oneflow: 不当真源（已 Archive）
 
 ```text
 STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
-→ 有 stamp-ok 才领 · 无在飞则讨论不开卡
+→ 三行≠tip 先刷三行 · 有 stamp-ok 才领 · 无在飞则讨论不开卡 · 无收尾不准派下一张
 ```
 
 ## 当前活动主线
@@ -75,8 +76,8 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#709](https://github.com/juanwan99/pico/issues/709) · [#712](https://github.com/juanwan99/pico/pull/712) | T-PPT-IMAGE-IN-DECK · 业主 PASS · tip `97e421c6…` |
 | 已收口 | [#710](https://github.com/juanwan99/pico/issues/710) · [#714](https://github.com/juanwan99/pico/pull/714) | T-PPT-SANDBOX-LIB · 业主 PASS · tip `97e421c6…` |
 | 已收口 | [#733](https://github.com/juanwan99/pico/issues/733) | T-NIGHT-CORE-3 · 业主 PASS @ tip `a6bc83df…` |
-| 已收口 | [#752](https://github.com/juanwan99/pico/issues/752) | T-OFFICE-THICK · 业主 PASS @ tip `0c7943ac…` · 不关卡 |
-| 已收口 | [#740](https://github.com/juanwan99/pico/issues/740) | T-PPT-CONTRACT · 业主 PASS @ tip `2e668686…` · 不关卡 |
+| 已关 | [#752](https://github.com/juanwan99/pico/issues/752) | T-OFFICE-THICK · 业主 PASS @ tip `0c7943ac…` · 卫生关 |
+| 已关 | [#740](https://github.com/juanwan99/pico/issues/740) | T-PPT-CONTRACT · 业主 PASS @ tip `2e668686…` · 卫生关 |
 | 已收口 | [#776](https://github.com/juanwan99/pico/issues/776) · [#775](https://github.com/juanwan99/pico/pull/775) | T-SANDBOX-OFFICE-BOX · 业主 PASS @ tip `812360f6…` |
 | 已收口 | [#780](https://github.com/juanwan99/pico/issues/780) · [#781](https://github.com/juanwan99/pico/pull/781) · [#782](https://github.com/juanwan99/pico/pull/782) | T-HTML-OFFLINE-ENGINE · 业主 PASS @ tip `e9e032b3…` |
 | 已收口 | [#785](https://github.com/juanwan99/pico/issues/785) · [#786](https://github.com/juanwan99/pico/pull/786) | T-UI-CHROME · 业主 PASS @ tip `9d14329c…` |
@@ -85,21 +86,25 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#829](https://github.com/juanwan99/pico/issues/829) · [#830](https://github.com/juanwan99/pico/pull/830) | T-UNMAIM-DRAFT 别残模型稿 · 主管 PASS @ tip `c4953f2e…` |
 | 已收口 | [#834](https://github.com/juanwan99/pico/issues/834) · [#833](https://github.com/juanwan99/pico/pull/833) | T-FOUNDATION-GATES 假绿门补基础 · 业主 PASS @ tip `6236489f…` |
 | 规划 | [#805](https://github.com/juanwan99/pico/issues/805) | 活核+记忆+问清+计划+过程可见 · 六刀指针 · 不派 |
-| 业主 PASS 不关 | [#806](https://github.com/juanwan99/pico/issues/806) | T-PI-KERNEL-BUMP 0.84.4 |
-| 业主 PASS 不关 | [#810](https://github.com/juanwan99/pico/issues/810) | T-PROCESS-VISIBLE |
-| 业主 PASS 不关 | [#807](https://github.com/juanwan99/pico/issues/807) | T-MEMORY-UPSTREAM |
-| 业主 PASS 不关 | [#809](https://github.com/juanwan99/pico/issues/809) | T-PLAN-WIRE |
-| 业主 PASS 不关 | [#808](https://github.com/juanwan99/pico/issues/808) | T-ASK-USER |
-| 业主 PASS 不关 | [#821](https://github.com/juanwan99/pico/issues/821) | T-P0-ASK-IN-MAIN |
+| 规划 | [#744](https://github.com/juanwan99/pico/issues/744) | 北极星升 v1.3 · DIRECTION-NOW 仍 v1.2 · 留开 |
+| 已关 | [#806](https://github.com/juanwan99/pico/issues/806) | T-PI-KERNEL-BUMP 0.84.4 · 业主 PASS 卫生关 |
+| 已关 | [#810](https://github.com/juanwan99/pico/issues/810) | T-PROCESS-VISIBLE · 业主 PASS 卫生关 |
+| 已关 | [#807](https://github.com/juanwan99/pico/issues/807) | T-MEMORY-UPSTREAM · 业主 PASS 卫生关 |
+| 已关 | [#809](https://github.com/juanwan99/pico/issues/809) | T-PLAN-WIRE · 业主 PASS 卫生关 |
+| 已关 | [#808](https://github.com/juanwan99/pico/issues/808) | T-ASK-USER · 业主 PASS 卫生关 |
+| 已关 | [#821](https://github.com/juanwan99/pico/issues/821) | T-P0-ASK-IN-MAIN · 业主 PASS 卫生关 |
 | 已收口 | [#811](https://github.com/juanwan99/pico/issues/811) · [#835](https://github.com/juanwan99/pico/pull/835) | T-RESIDENT-SHRINK 收常驻 · 主管 PASS @ tip `e5f840ef…` |
 | 已收口 | [#836](https://github.com/juanwan99/pico/issues/836) · [#837](https://github.com/juanwan99/pico/pull/837) | T-USAGE-THROUGH-PI 真 Pi 用量进唯一账本 · 主管 PASS @ tip `adaca179…` |
 | 已收口 | [#838](https://github.com/juanwan99/pico/issues/838) · [#839](https://github.com/juanwan99/pico/pull/839) | T-POINTS-THIS-TURN 精确 token 列 + 加权换算 · 业主令先收 · 已部 tip `c4390454…` |
-| 已收口 | [#840](https://github.com/juanwan99/pico/issues/840) · [#841](https://github.com/juanwan99/pico/pull/841) | T-ASK-HONEST 等选不假跑 · 已部 tip `c7b6a6a5…` |
+| 已关 | [#840](https://github.com/juanwan99/pico/issues/840) · [#841](https://github.com/juanwan99/pico/pull/841) | T-ASK-HONEST 等选不假跑 · 已部 tip `c7b6a6a5…` · 卫生关 |
 | 已收口 | [#842](https://github.com/juanwan99/pico/issues/842) · [#843](https://github.com/juanwan99/pico/pull/843) | T-PAGE-COLLECT-LAND land 带 @ 材料 id · 主管 PASS @ tip `d206b70c…` |
 | 已收口 | [#844](https://github.com/juanwan99/pico/issues/844) · [#845](https://github.com/juanwan99/pico/pull/845) | T-SCHOOL-FIELDS-SPLIT 聊天学校材料左管右订 · 主管 PASS @ tip `16d0c7fa…` |
 | 已收口 | [#846](https://github.com/juanwan99/pico/issues/846) · [#847](https://github.com/juanwan99/pico/pull/847) | T-ASK-FAIL-PICO-FACE 问选超时失败 · 身份只叫 Pico · 主管 PASS @ tip `cbc0000a…` |
-| 在飞 | [#848](https://github.com/juanwan99/pico/issues/848) | T-HTML-PICO-CSS 语义页接上游 Pico CSS classless |
-| 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
+| 已关 | [#848](https://github.com/juanwan99/pico/issues/848) | T-HTML-PICO-CSS · 已部 tip `8912c11e…` |
+| 已关 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未过 · 不续债卫生关 |
+| 已关 | [#794](https://github.com/juanwan99/pico/issues/794) | T-SUB2API-FACE · 业主 PASS @ `c2a2e439…` |
+| 挂起 | [#778](https://github.com/juanwan99/pico/issues/778) | 出图链 · 不在三行 · 要做另开 |
+| 挂起 | [#850](https://github.com/juanwan99/pico/issues/850) | 二进制不进脑 · 业主令先停 · CI 红未合 |
 | 挂起 | 自研记忆 OS | 禁 · 文件型上游 #807 已部 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面四行冻到 9/7 · 流程 EXPERIENCE §80–89 |

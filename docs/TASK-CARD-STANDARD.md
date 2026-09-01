@@ -47,6 +47,7 @@ SHA：live = origin/main =
 过门：T1 过/不过 · 证据
 剩下：无
 PASS：未签 / 总管已签
+收尾：三行已刷 · 本卡已关（白名单除外） · 同域 PR 已清 · 主管自签卫生
 ```
 
 ## 从 315 留下的（纪律，不填表）
@@ -63,7 +64,7 @@ PASS：未签 / 总管已签
 | 执行窗零记忆 | 调查写进 Issue 已锁事实；派发条点名必读 + ≤3 坑 |
 | 生产认 40 位 SHA | `curl -fsS https://pico.aivia.asia/api/pico/tip` |
 | 合了没装 = 没做完 | live tip 对不上 origin/main 不算过 |
-| 卡 PASS 总管签 | live tip=main 且结果句老师手已点 → 总管自签关。执行窗不签。CLAIM-WB / 全球 PASS 仍不代签 |
+| 卡 PASS 总管签 | live tip=main 且结果句可见 → 总管自签关（白名单 #316 #449 #170 #634 #475 除外才留开）。执行窗不签。CLAIM-WB / 全球 PASS 仍不代签 |
 | 同域一张在飞 | 两问第一句 |
 | 视觉默认关 | 过门用 API/SHA；非业主点名不开浏览器 |
 

@@ -2,7 +2,7 @@
 
 ```text
 仓: juanwan99/pico ONLY
-DATE: 2026-08-31
+DATE: 2026-09-01
 用法: 开窗读本文。禁止把正文贴进卡或对业主聊天。
 派发条只点名编号（最多 3 条）。过期删（总管同轮删/并）。
 工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
@@ -25,6 +25,7 @@ DATE: 2026-08-31
 21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / 把 ECS 当第二账本 / 聊天当真源。
 22. **总管环（自驱动闭环）：** 对齐需求 → stamp → 本窗改+测+PR（叠 live）→ 订 subscribe-ci（禁止在窗里轮询 check-runs / sleep 等绿）→ 合前本窗跑 `scripts/pr-ci-ready.sh --pr N` 一眼（0 才合 · 1 停着再订 · 2 回原分支补）→ CI 绿再 squash 合 → 有差才部（ssh-ecs / prod-update）→ tip-pin → 结果可见则自签 PASS → 刷 STATE-NOW/#634。等 CI ≠ 卡死。ECS 只部。合了未部关卡=打回 OPEN。禁止 mailbox。卡别拆太细。禁止拉 Cursor 云 Task 当执行者。禁止 SSH 调 ECS grok。
 23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审（不开新卡）· `CLEAR` tip=main + 主管 PASS。人只留：目标 · 黄红争议 · PASS。同域第二张 stamp-ok=废派。
+42. **收尾。** 合了、部了、公网对了还没收尾=没完。产品 PASS（结果句可见）与卫生收尾分开；卫生必须主管自签。六步：①刷三行=curl tip=main ②关本卡（白名单 #316 #449 #170 #634 #475 除外）③关同域 PR ④关已派讨论母卡 ⑤扫开 PR 超 24h 无主则关（禁止合尸 PR）⑥评 `收尾 PASS · 主管`。无⑥不准派下一张。禁止把「业主 PASS」扩成第二白名单。
 
 ## B · 现网 / 产品
 

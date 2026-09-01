@@ -16,6 +16,7 @@
 经验：docs/EXPERIENCE.md · 点名 <最多3个编号>
 工具：docs/TOOLING-CATALOG.md · 点名 <最多3个 id>（需要碰机时必含 tip-pin 或 ssh-ecs；合前必含 pr-ci-ready）
 回执：评论 #<N> · live SHA=main · 1卡1PR · 结果句公网可见由主管自签关
+      收尾：三行已刷 · 本卡已关 · 同域 PR 已清 · 主管自签卫生
       UI 卡：过门截图贴本回执（不进 PR）
 起窗：本窗 Grok 沙箱（业主正在说话的窗）= 执行者
       禁 spawn-executor / Cursor 云 Task / ECS grok（入口已断）
