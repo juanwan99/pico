@@ -93,7 +93,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 业主 PASS 不关 | [#821](https://github.com/juanwan99/pico/issues/821) | T-P0-ASK-IN-MAIN |
 | 已收口 | [#811](https://github.com/juanwan99/pico/issues/811) · [#835](https://github.com/juanwan99/pico/pull/835) | T-RESIDENT-SHRINK 收常驻 · 主管 PASS @ tip `e5f840ef…` |
 | 已收口 | [#836](https://github.com/juanwan99/pico/issues/836) · [#837](https://github.com/juanwan99/pico/pull/837) | T-USAGE-THROUGH-PI 真 Pi 用量进唯一账本 · 主管 PASS @ tip `adaca179…` |
-| 在飞 | [#838](https://github.com/juanwan99/pico/issues/838) | T-POINTS-THIS-TURN 积分只计本轮说话 · 常驻说明书不进积分 |
+| 在飞 | [#838](https://github.com/juanwan99/pico/issues/838) | T-POINTS-THIS-TURN 精确 token 列 + 加权换算（常驻仍进账；原「只计本轮说话」已废） |
 | 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
 | 挂起 | 自研记忆 OS | 禁 · 文件型上游 #807 已部 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |

@@ -63,12 +63,12 @@ Token 规则：
 - 有提供方 usage（Responses `response.completed` / chat `include_usage` / **真 Pi** `agent_end.messages[].usage` 与 compaction usage）→ 记整数，`estimated=0`。
 - 无 usage → 三字段 null 且 `tokens_unknown=1`。**禁止**用用户可见正文做 char/4 冒充 token。
 - **禁止写入 `estimated=1`。** 历史 char/4 行在启动时 scrub 成 unknown（§8）。
-- `extra.ui_model` = 档位；`extra.cached_tokens` / `extra.reasoning_tokens` 可选（已折进提供方 total 则随 `points`；导出给 edu，老师面不回）。
+- `extra.ui_model` = 档位；`extra.cached_tokens` / `extra.cache_write_tokens` / `extra.reasoning_tokens` 可选。`prompt_tokens` 必须是**完整输入**（含 cache 命中）；提供方把 cache 从 prompt 拆出去时，写入路径要把 cache 加回 prompt，列不能混。reasoning 是输出的子集，不另加一遍。导出给 edu，老师面不回 token。
 - 禁止用 `0` 假装「没用量」。
 - `model` 禁止长期留 `pico-fast` / `pico-deep`；档位只进 `extra.ui_model`。
 - **禁止**把 Pi `cost`、倍率、公式写入账本或 extra。
 
-**积分（派生，#788 / #836 / #838）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py`。表上不增加积分/余额列。**积分 = 提供方全量 token**（系统提示词、工具 schema、本轮说话都算；`total`，缺则 prompt+completion）。unknown 仍 `points=null`（不是 0）。老师面只见积分，**禁止** token / × / ÷ / 公式。作曲栏「预计」必须盖上常驻包（本会话最近一次提供方合计，没有则地板），禁止只报老师字数把 0.024 装成账单。edu 导出 token 列 + 已换好的 `points`（与门脸同数），禁止再乘、禁止倍率字段。search/sandbox/image 无提供方 token 则 `points=null`（不是 0），不另造单价表。每一轮钉在该条回复末尾：有积分显示「实际」；晚到则该轮继续显示「预计」，不改成「未结算」、不清理上一轮。省 token / 收常驻体积后期另做。
+**积分（派生，#788 / #836 / #838）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py`。表上不增加积分/余额列。token 列记提供方桶（系统提示词、工具 schema、本轮说话都在输入里）。**积分不是 total×一口价**：新鲜输入 1×、缓存命中 0.1×、缓存写入 1.25×、输出 6×（1000 新鲜输入 = 3.000；模型系数默认 1；`pico-fast`/`pico-deep` 是档位不是计费型号）。reasoning 已含在输出里，禁止再加。缺 I/O 只剩 `total` 时按 1× 兜底。unknown 仍 `points=null`（不是 0）。老师面只见积分，**禁止** token / × / ÷ / 公式。作曲栏「预计」必须盖上常驻包（本会话最近一次加权积分，没有则地板），禁止只报老师字数把 0.024 装成账单。edu 导出诚实 token 列 + 已换好的 `points`（与门脸同数），禁止再乘、禁止倍率字段。search/sandbox/image 无提供方 token 则 `points=null`（不是 0），不另造单价表。每一轮钉在该条回复末尾：有积分显示「实际」；晚到则该轮继续显示「预计」，不改成「未结算」、不清理上一轮。省 token / 收常驻体积后期另做。
 
 ---
 
