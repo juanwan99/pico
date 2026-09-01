@@ -395,6 +395,9 @@ async def transfer_my_artifact(
         content=content,
         field_id=field_id,
         conversation_id=convo,
+        artifact_id=artifact.id,
+        task_id=str(artifact.task_id or ""),
+        session=session,
     )
     moved = False
     if school.get("landed") is True and mode == "move":

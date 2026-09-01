@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pico.local/schemas/page-collect.schema.json",
+  "title": "PicoPageCollectLand",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["source_item_ids"],
+  "properties": {
+    "schema": { "type": "string", "const": "pico.page-collect.v1" },
+    "source_item_ids": {
+      "type": "array",
+      "maxItems": 12,
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "pico_artifact_id": { "type": "string", "format": "uuid" },
+    "pico_task_id": { "type": "string", "format": "uuid" },
+    "collect_fields": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "value_kind"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "ref": { "type": "string", "format": "uuid" },
+          "value_kind": {
+            "type": "string",
+            "enum": ["string", "string[]", "number", "bool"]
+          }
+        }
+      }
+    }
+  }
+}

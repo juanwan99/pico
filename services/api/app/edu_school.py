@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import Principal, issue_edu_read_token, issue_edu_write_token, require_any_scope
 from app.db import EduNamedBindRow, get_session, new_id
 from app.edu_sso import sanitize_named_ids
+from app.page_collect import attach_page_collect, sanitize_uuid, sanitize_uuid_list
 from app.settings import Settings, get_settings
 
 router = APIRouter(tags=["edu-school"])
@@ -46,6 +47,9 @@ class LandBody(BaseModel):
     kind: str = ""
     body_html: str = ""
     content_b64: str = ""
+    pico_artifact_id: str = ""
+    pico_task_id: str = ""
+    collect_fields: list[dict[str, Any]] = Field(default_factory=list)
 
 
 _UUID_RE = re.compile(
@@ -764,7 +768,7 @@ async def post_edu_land(
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     payload = await build_land_payload(principal, body, session)
-    return await _edu_call(
+    result = await _edu_call(
         principal,
         "POST",
         "/v1/pico/membership/land",
@@ -772,6 +776,15 @@ async def post_edu_land(
         settings=settings,
         write=True,
     )
+    if isinstance(result, dict):
+        result.setdefault("source_item_ids", list(payload.get("source_item_ids") or []))
+        if payload.get("pico_artifact_id"):
+            result.setdefault("pico_artifact_id", payload["pico_artifact_id"])
+        if payload.get("pico_task_id"):
+            result.setdefault("pico_task_id", payload["pico_task_id"])
+        if payload.get("collect_fields"):
+            result.setdefault("collect_fields", payload["collect_fields"])
+    return result
 
 
 async def build_land_payload(
@@ -798,11 +811,24 @@ async def build_land_payload(
         payload["body_html"] = body.body_html
     if body.content_b64:
         payload["content_b64"] = body.content_b64
+    named = await load_named_ids(
+        session, principal.school_id, principal.membership_id, body.conversation_id
+    )
+    attach_page_collect(
+        payload,
+        source_item_ids=named,
+        pico_artifact_id=body.pico_artifact_id,
+        pico_task_id=body.pico_task_id,
+        collect_fields=body.collect_fields,
+    )
     return payload
 
 
-def _school_land_copy(result: dict[str, Any] | None) -> dict[str, Any]:
+def _school_land_copy(
+    result: dict[str, Any] | None, *, sent: dict[str, Any] | None = None
+) -> dict[str, Any]:
     data = result if isinstance(result, dict) else {}
+    sent = sent or {}
     landed = data.get("landed") is True and data.get("ok") is not False
     green = data.get("green") is True
     if green:
@@ -816,7 +842,10 @@ def _school_land_copy(result: dict[str, Any] | None) -> dict[str, Any]:
     if landed:
         kind = str(data.get("kind") or "")
         where = "展示页灰稿" if kind == "page" else "资料"
-        return {
+        source_ids = sanitize_uuid_list(
+            data.get("source_item_ids") if data.get("source_item_ids") is not None else sent.get("source_item_ids")
+        )
+        out = {
             "ok": True,
             "landed": True,
             "green": False,
@@ -826,8 +855,13 @@ def _school_land_copy(result: dict[str, Any] | None) -> dict[str, Any]:
             "title": data.get("title") or "",
             "publish_state": data.get("publish_state") or "draft",
             "zone": data.get("zone") or "draft",
+            "source_item_ids": source_ids,
             "user_message": f"已转到学校那场{where}。刷新学校能看见。",
         }
+        artifact = sanitize_uuid(data.get("pico_artifact_id") or sent.get("pico_artifact_id"))
+        if artifact:
+            out["pico_artifact_id"] = artifact
+        return out
     message = str(data.get("error") or data.get("message") or "学校没写上")
     return {
         "ok": False,
@@ -846,6 +880,9 @@ async def land_generated_artifact(
     field_id: str = "",
     conversation_id: str | None = None,
     item_id: str = "",
+    artifact_id: str = "",
+    task_id: str = "",
+    session: AsyncSession | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     """Explicit school write through membership/land. Never pretend it landed."""
@@ -888,6 +925,17 @@ async def land_generated_artifact(
     else:
         raw = content if isinstance(content, bytes) else str(content).encode("utf-8")
         payload["content_b64"] = base64.b64encode(raw).decode("ascii")
+    named: list[str] = []
+    if session is not None:
+        named = await load_named_ids(
+            session, principal.school_id, principal.membership_id, convo
+        )
+    attach_page_collect(
+        payload,
+        source_item_ids=named,
+        pico_artifact_id=artifact_id,
+        pico_task_id=task_id,
+    )
     try:
         data = await _edu_call(
             principal,
@@ -911,11 +959,15 @@ async def land_generated_artifact(
             "user_message": f"学校没写上：{message}这份还留在我的文件。",
         }
     if data.get("configured") is False:
-        return {
+        out = {
             "ok": False,
             "landed": False,
             "code": "edu.unconfigured",
             "error": "学校材料口还没接通",
             "user_message": "学校材料口还没接通。这份还留在我的文件。",
+            "source_item_ids": list(payload.get("source_item_ids") or []),
         }
-    return _school_land_copy(data)
+        if payload.get("pico_artifact_id"):
+            out["pico_artifact_id"] = payload["pico_artifact_id"]
+        return out
+    return _school_land_copy(data, sent=payload)
