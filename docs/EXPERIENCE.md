@@ -49,6 +49,7 @@ DATE: 2026-09-01
 38. **HTML 交互页断网。** `generate_html_document` 禁 CDN / `import https` / `//cdn` / Three.js / Chart.js；外链引擎与 `window.THREE` 空舞台失败闭合，不剥成空舞台再报成功。校验同样扫 import/src/href/引擎全局。禁放行 jsdelivr。#780 业主 PASS 2026-08-29 @ tip `e9e032b3…`。
 39. **别残稿（#829）。** 门可以关，稿不能改。HTML/办公正文与 PPT 沙箱 source 上限对齐账本 20 万，超限人话失败、禁止静默切。HTML 标记只进 meta/`data-pico-marker`，禁止页顶「标记：」灰条。SYSTEM 禁止教模型失败后改成土 canvas。PPT 沙箱放行无 IO 标准库（copy/math/datetime/io.BytesIO）；os/open/eval 仍拒。断网门（#780）不动。
 40. **假绿门补基础，不补场景。** 先计划 HITL 超时未选 = 跑失败，禁止映射成 Stay 再标 succeeded。Excel `body` 走与 Word/PPT 同类的 plain→spec：markdown/TSV 表落成真实 sheet/行，禁止整段进 A1；小数当原文，禁止 `float` 脏值。HTML 交互页除 CDN 门外，内联 script 括号不配对失败闭合，禁止落坏脚本再当成品。禁词表/家长会/分数练习特判。
+41. **二进制不进脑（#850）。** 像素/办公包只走账本；脑只说 id。HTML 嵌图 = `src="pico-artifact:<id>"`（或 `image_artifact_ids` + `pico-artifact:0`），工具写盘时内联 data:；缺 id 跳过该图 + observation 诚实，不毁整页。作者 `body` 仍 20 万；内联后的页可以更大。`workspace_read_file` 对 png/jpg/office/pdf 只回 id/标题/体积/kind，禁止 content_base64。流死（`stream_read_error` / eof / soft_errors）人话失败，已落盘成品仍可见。禁焊课件管道、禁 CDN、禁把模型当 U 盘。
 
 ## C · 部署 / ECS / 执行者
 

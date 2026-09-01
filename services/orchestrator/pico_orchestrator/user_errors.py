@@ -27,6 +27,19 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return (
             "模型中转等首包超时。长思考必须走流式；请再试一次，不要关流。"
         )
+    if (
+        "stream_read_error" in low
+        or "stream ended abnormally" in low
+        or "soft_errors" in low
+        or (
+            c == "true_pi.assistant_error"
+            and ("eof" in low or "bad_response" in low)
+        )
+    ):
+        return (
+            "模型中转的流中断了。已经生成的文件还在，可以直接打开；"
+            "需要的话再发一次。"
+        )
     if c == "timeout" or "timeout" in low or "timed out" in low:
         return (
             "处理超时。可点「再跑一次」继续生成，"

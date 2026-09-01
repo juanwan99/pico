@@ -149,7 +149,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "workspace_read_file",
-    "Read one Artifact by id or title from the Pico ledger (including this-turn chat paperclip documents).",
+    "Read one Artifact by id or title from the Pico ledger (including this-turn chat paperclip documents). Text comes back as content. png/jpg/office/pdf are binary: only id, title, kind, size — no pixels. Pass the artifact id to a document tool to embed.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),
@@ -173,12 +173,13 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_html_document",
-    "Create a real .html Artifact (Pico gateway). A semantic classless visual base is already inlined — write header/main/article/nav/table/form; extra CSS only for one accent. Do not name the stylesheet to the teacher. Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images (use data: URLs), no window.THREE / new Chart / echarts.init. The tool fails closed if the page still needs the network or those engines, or if an inline script has unmatched brackets — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished. If they also asked to collect answers, follow with publish_html_page rather than asking which cloud to use.",
+    "Create a real .html Artifact (Pico gateway). A semantic classless visual base is already inlined — write header/main/article/nav/table/form; extra CSS only for one accent. Do not name the stylesheet to the teacher. Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images, no window.THREE / new Chart / echarts.init. To embed a ledger picture, set img src to pico-artifact:<artifact_id> (or pico-artifact:0 with image_artifact_ids). The tool inlines data: URLs. Do not paste base64. A missing id skips that picture; the page still lands. The tool fails closed if the page still needs the network or those engines, or if an inline script has unmatched brackets — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished. If they also asked to collect answers, follow with publish_html_page rather than asking which cloud to use.",
     Type.Object(
       {
         title: Type.String(),
         marker: Type.Optional(Type.String()),
         body: Type.Optional(Type.String()),
+        image_artifact_ids: Type.Optional(Type.Array(Type.String())),
       },
       { additionalProperties: true },
     ),
@@ -332,7 +333,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_image",
-    "Create one png/jpg via the configured HTTPS image API. To place it inside Word/PPT, pass the returned artifact id as image_artifact_id on spec. Do not also hand it to the teacher as a separate download when it is already inside the file. Never invent pixels on failure.",
+    "Create one png/jpg via the configured HTTPS image API. To place it inside Word/PPT, pass the returned artifact id as image_artifact_id on spec. To place it inside HTML, set img src to pico-artifact:<id>. Do not paste base64. Do not also hand it to the teacher as a separate download when it is already inside the file. Never invent pixels on failure.",
     Type.Object(
       {
         prompt: Type.String(),
