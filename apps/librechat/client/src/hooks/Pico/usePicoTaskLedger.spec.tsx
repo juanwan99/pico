@@ -94,6 +94,48 @@ describe('workbench Chinese progress (T-AGENT-FACE-V1)', () => {
     ).toBe('在整理上文');
   });
 
+  it('keeps parked ask_user as 在等你选 even if a later tool.call exists', () => {
+    expect(
+      lastProcessStep([
+        {
+          id: 'e1',
+          run_id: 'r1',
+          seq: 1,
+          type: 'ui.prompt.begin',
+          payload: { text: '在等你选', options: ['A', 'B'] },
+        },
+        {
+          id: 'e2',
+          run_id: 'r1',
+          seq: 2,
+          type: 'tool.call',
+          payload: { tool: 'ask_user' },
+        },
+      ]),
+    ).toBe('在等你选');
+  });
+
+  it('labels an active run parked on ask_user, not 云端继续中', () => {
+    const events = [
+      {
+        id: 'e1',
+        run_id: 'r1',
+        seq: 1,
+        type: 'ui.prompt.begin',
+        payload: { text: '在线数据提交到哪里?', options: ['HTTPS', '暂无'] },
+      },
+    ];
+    expect(composeProcessHint({ id: 'r1', task_id: 't1', status: 'running' }, events)).toBe(
+      '在等你选',
+    );
+    expect(
+      computeRunStatusLabel({ id: 'r1', task_id: 't1', status: 'running' }, true, [], events),
+    ).toBe('在等你选');
+    expect(
+      computeRunStatusLabel({ id: 'r1', task_id: 't1', status: 'succeeded' }, true, [], events),
+    ).toBe('已完成');
+  });
+
   it('labels compaction.end as 已压缩 and ui.prompt as 在等你选', () => {
     expect(
       lastProcessStep([

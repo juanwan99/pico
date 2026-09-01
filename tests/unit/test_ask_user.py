@@ -19,6 +19,15 @@ def test_ask_user_is_core_visible() -> None:
     assert "ask_user" in ALLOWED_GATEWAY_TOOLS
 
 
+def test_pi_ask_user_does_not_quiz_collect_backend() -> None:
+    ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "Do not use this to quiz about a third-party form backend" in ts
+    assert "试卷" not in ts
+    assert "Supabase" not in ts
+
+
 async def test_park_resolves_on_answer() -> None:
     events: list[tuple[str, dict]] = []
 

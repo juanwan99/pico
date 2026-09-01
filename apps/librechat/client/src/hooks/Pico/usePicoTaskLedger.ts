@@ -14,6 +14,7 @@ import {
   type PicoTask,
 } from '~/data-provider/pico/api';
 import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
+import { liveAskEvent } from '~/utils/picoAskPrompt';
 import { workbenchToolResultLine, workbenchToolStepLine } from '~/utils/picoWorkbenchProgress';
 
 export type PicoLedgerState = {
@@ -233,6 +234,9 @@ function describeSearchOrTool(event: PicoRunEvent): string | null {
 }
 
 export function lastProcessStep(events: PicoRunEvent[]): string | null {
+  if (liveAskEvent(events)) {
+    return '在等你选';
+  }
   let latestTool: string | null = null;
   let latestAgent: string | null = null;
   for (let i = events.length - 1; i >= 0; i -= 1) {
@@ -266,6 +270,9 @@ export function composeProcessHint(run: PicoRun | null, events: PicoRunEvent[]):
     return ['停止请求已提交', runtime, step].filter(Boolean).join(' · ');
   }
   if (isActiveRun(run)) {
+    if (liveAskEvent(events)) {
+      return '在等你选';
+    }
     // Package B: job lives on the server; tab close does not stop it.
     const cloud = '云端继续中';
     if (step) {
@@ -327,6 +334,9 @@ export function computeRunStatusLabel(
       base = `${base} · ${artN} 个可下载文件`;
     }
     return runtime ? `${base} · ${runtime}` : base;
+  }
+  if (liveAskEvent(events) && (isActiveRun(run) || isSubmitting)) {
+    return '在等你选';
   }
   if (isSubmitting) {
     return '等待模型响应';

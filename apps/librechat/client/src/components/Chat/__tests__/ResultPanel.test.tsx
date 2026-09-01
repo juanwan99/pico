@@ -1146,3 +1146,27 @@ describe('ResultPanel sandbox web pane', () => {
     expect(screen.getByTestId('sandbox-web-text')).toBeInTheDocument();
   });
 });
+
+describe('ResultPanel parked ask_user', () => {
+  it('does not show 执行中 file spinner while the run is waiting for a pick', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={{ id: 'run-1', task_id: 'task-1', status: 'running' }}
+          runStatusLabel="在等你选"
+          runEvents={[
+            {
+              id: 'wait',
+              run_id: 'run-1',
+              seq: 1,
+              type: 'ui.prompt.begin',
+              payload: { text: '在线数据提交到哪里?', options: ['HTTPS', '暂无'] },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText('执行中，云端继续准备产物')).not.toBeInTheDocument();
+    expect(screen.getByText('点主栏选项继续。这时不是在准备文件。')).toBeInTheDocument();
+  });
+});

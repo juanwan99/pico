@@ -36,6 +36,7 @@ import {
 } from '~/utils/picoOpenInPane';
 import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
 import { collectPicoOfficeContentBox, collectPicoSandboxSession } from '~/utils/picoSandboxSession';
+import { isAskUserWaiting } from '~/utils/picoAskPrompt';
 import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
 import MemoryStrip from './MemoryStrip';
@@ -66,6 +67,31 @@ type ArtifactAction = {
 const UNNAMED_ARTIFACT = '未命名产物';
 const UNNAMED_ATTACHMENT = '未命名附件';
 const UNKNOWN_KIND = '类型未知';
+
+/** 「在等你选」contains 等待 — do not treat parked HITL as still generating files. */
+function showFilesPreparingSpinner(
+  label: string | undefined,
+  waitingAsk: boolean,
+): boolean {
+  if (waitingAsk) {
+    return false;
+  }
+  const text = label || '';
+  if (
+    !text ||
+    text.startsWith('失败') ||
+    text.startsWith('已停止') ||
+    text.startsWith('在等你选')
+  ) {
+    return false;
+  }
+  return (
+    text.includes('等待模型') ||
+    text.includes('云端运行') ||
+    text.includes('仍在处理') ||
+    text.includes('正在准备')
+  );
+}
 
 function artifactActionError(action: ArtifactAction['type'], error: unknown): string {
   return humanArtifactActionError(action, error);
@@ -1069,9 +1095,7 @@ export default function ResultPanel({
                 <p className="mb-2 text-[12px] font-medium tracking-normal text-[#8c8c8c]">
                   可下载文件
                 </p>
-                {runStatusLabel?.includes('等待') &&
-                !runStatusLabel?.startsWith('失败') &&
-                !runStatusLabel?.startsWith('已停止') ? (
+                {showFilesPreparingSpinner(runStatusLabel, isAskUserWaiting(run, runEvents)) ? (
                   <div className="flex flex-1 flex-col justify-center gap-3 rounded-xl border border-black/[0.06] bg-[#fafafa] px-5 py-10 dark:border-border-light dark:bg-surface-tertiary">
                     <RunLoadingIndicator
                       label="执行中，云端继续准备产物"
@@ -1089,14 +1113,20 @@ export default function ResultPanel({
                     <p className="text-[13px] font-medium text-[#6b6b6b]">
                       {runStatusLabel?.startsWith('失败') || runStatusLabel?.startsWith('已停止')
                         ? '本次未产出文件'
-                        : '暂无产物'}
+                        : runStatusLabel?.startsWith('在等你选') ||
+                            isAskUserWaiting(run, runEvents)
+                          ? '还没有产物'
+                          : '暂无产物'}
                     </p>
                     <p className="max-w-[15rem] text-center text-[11px] leading-relaxed text-[#b0b0b0]">
                       {runStatusLabel?.startsWith('失败')
                         ? '可点击上方「重新运行」再试；过程步骤见上方时间线'
                         : runStatusLabel?.startsWith('已停止')
                           ? '已停止。需要结果时可重新发起任务'
-                          : '任务完成后，文件产物会列在这里供打开/下载'}
+                          : runStatusLabel?.startsWith('在等你选') ||
+                              isAskUserWaiting(run, runEvents)
+                            ? '点主栏选项继续。这时不是在准备文件。'
+                            : '任务完成后，文件产物会列在这里供打开/下载'}
                     </p>
                   </div>
                 )}

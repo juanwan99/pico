@@ -110,6 +110,8 @@ def test_system_md_slim_and_catalog_not_scene_weld():
     assert "generate_diagram" in body
     assert "If `publish_html_page` is listed this turn" in body
     assert "public_url" in body
+    assert "third-party form backend" in body
+    assert "page collect path" in body
     assert "`skill-deliverable`:" in body
     assert "本轮交付真实文件" not in body
     assert "Engineering delivery" not in body

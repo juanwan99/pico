@@ -1,4 +1,4 @@
-import { askOptionLabels, liveAskEvent, liveAskForRun } from '../picoAskPrompt';
+import { askOptionLabels, isAskUserWaiting, liveAskEvent, liveAskForRun } from '../picoAskPrompt';
 import type { PicoRun, PicoRunEvent } from '~/data-provider/pico/api';
 
 function event(id: string, seq: number, type: string, payload: Record<string, unknown> = {}): PicoRunEvent {
@@ -47,5 +47,12 @@ describe('picoAskPrompt', () => {
     });
     expect(liveAskForRun(run('succeeded'), events)).toBeNull();
     expect(liveAskForRun(run('running'), [event('wait', 1, 'ui.prompt.begin', { text: 'x' })])).toBeNull();
+  });
+
+  it('treats an open ui.prompt.begin on an active run as waiting for a pick', () => {
+    const events = [event('wait', 1, 'ui.prompt.begin', { text: '在等你选', options: ['A', 'B'] })];
+    expect(isAskUserWaiting(run('running'), events)).toBe(true);
+    expect(isAskUserWaiting(run('succeeded'), events)).toBe(false);
+    expect(isAskUserWaiting(run('running'), [])).toBe(false);
   });
 });
