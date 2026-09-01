@@ -98,14 +98,21 @@ async def test_cross_account_cannot_read_detail(client: AsyncClient):
     row = next(e for e in body["events"] if e["id"] == event_id)
     assert row["kind"] == "llm"
     assert row["model"] == "gpt-5.6-sol"
-    assert row["prompt_tokens"] == 12
-    assert row["completion_tokens"] == 8
-    assert row["tokens_unknown"] is False
+    assert row["points"] == "0.060"
+    assert "prompt_tokens" not in row
+    assert "completion_tokens" not in row
+    assert "total_tokens" not in row
+    assert "tokens_unknown" not in row
     assert "price" not in row
     assert "currency" not in row
     assert "price" not in (row.get("extra") or {})
     assert "currency" not in (row.get("extra") or {})
     assert (row.get("extra") or {}).get("query_count") == 1
+    blob = mine.text.lower()
+    assert "token" not in blob
+    assert "×" not in mine.text
+    assert "÷" not in mine.text
+    assert "未结算" not in mine.text
 
     other_list = await client.get("/v1/usage/events", headers=other)
     assert other_list.status_code == 200
@@ -151,10 +158,9 @@ async def test_honest_unknown_tokens_and_summary(client: AsyncClient):
     r = await client.get("/v1/usage/events", headers=headers)
     assert r.status_code == 200
     row = next(e for e in r.json()["events"] if e["run_id"] == "run-unk")
-    assert row["tokens_unknown"] is True
-    assert row["prompt_tokens"] is None
-    assert row["completion_tokens"] is None
-    assert row["total_tokens"] is None
+    assert row["points"] is None
+    assert "prompt_tokens" not in row
+    assert "tokens_unknown" not in row
 
     summary = await client.get("/v1/usage/summary", headers=headers)
     assert summary.status_code == 200
@@ -162,11 +168,15 @@ async def test_honest_unknown_tokens_and_summary(client: AsyncClient):
     assert body["billing"] is False
     assert "price" not in body
     assert "currency" not in body
-    assert any(d["kind"] == "llm" and d["unknown_count"] >= 1 for d in body["days"])
+    assert "token" not in summary.text.lower()
+    assert any(d["kind"] == "llm" and d["event_count"] >= 1 for d in body["days"])
     for day_row in body["days"]:
         assert "price" not in day_row
         assert "currency" not in day_row
         assert "cost" not in day_row
+        assert "prompt_tokens" not in day_row
+        assert "total_tokens" not in day_row
+        assert "unknown_count" not in day_row
 
 
 async def test_idempotent_retry_does_not_duplicate(client: AsyncClient):
@@ -211,6 +221,11 @@ async def test_my_usage_page_is_readonly_html(client: AsyncClient):
     assert "暂无用量记录" in r.text or "llm" in r.text
     assert "¥" not in r.text
     assert "price" not in r.text.lower()
+    assert "token" not in r.text.lower()
+    assert "×" not in r.text
+    assert "÷" not in r.text
+    assert "未结算" not in r.text
+    assert "积分" in r.text
 
 
 async def test_search_kind_can_be_written_for_later_cards(client: AsyncClient):
@@ -272,10 +287,9 @@ async def test_emit_after_run_is_idempotent_and_unknown_without_provider(client:
     r = await client.get("/v1/usage/events", headers=headers, params={"kind": "llm"})
     matches = [e for e in r.json()["events"] if e["run_id"] == run_id]
     assert len(matches) == 1
-    assert matches[0]["tokens_unknown"] is True
-    assert matches[0]["estimated"] is False
-    assert matches[0]["prompt_tokens"] is None
-    assert matches[0]["completion_tokens"] is None
+    assert matches[0]["points"] is None
+    assert "prompt_tokens" not in matches[0]
+    assert "tokens_unknown" not in matches[0]
 
 
 async def test_emit_provider_usage_is_native_not_estimated(client: AsyncClient):
@@ -314,16 +328,36 @@ async def test_emit_provider_usage_is_native_not_estimated(client: AsyncClient):
     headers = await _auth(client)
     r = await client.get("/v1/usage/events", headers=headers, params={"kind": "llm"})
     row = next(e for e in r.json()["events"] if e["run_id"] == run_id)
-    assert row["estimated"] is False
-    assert row["tokens_unknown"] is False
-    assert row["prompt_tokens"] == 80
-    assert row["completion_tokens"] == 20
-    assert row["total_tokens"] == 100
+    assert "estimated" not in row
+    assert "tokens_unknown" not in row
+    assert "prompt_tokens" not in row
+    assert "completion_tokens" not in row
+    assert "total_tokens" not in row
     assert row["model"] == "gpt-5.6-sol"
     assert row["points"] == "0.300"
-    assert (row.get("extra") or {}).get("cached_tokens") == 8
-    assert (row.get("extra") or {}).get("reasoning_tokens") == 12
+    assert "cached_tokens" not in (row.get("extra") or {})
+    assert "reasoning_tokens" not in (row.get("extra") or {})
     assert "price" not in (row.get("extra") or {})
+    assert "token" not in r.text.lower()
+
+    hook = {"Authorization": "Bearer hook-secret-token"}
+    exported = await client.get(
+        "/v1/internal/usage/export",
+        headers=hook,
+        params={"school_id": "school-a", "limit": 50},
+    )
+    assert exported.status_code == 200
+    meter = next(e for e in exported.json()["events"] if e["run_id"] == run_id)
+    assert meter["tokens_unknown"] is False
+    assert meter["prompt_tokens"] == 80
+    assert meter["completion_tokens"] == 20
+    assert meter["total_tokens"] == 100
+    assert meter["points"] == "0.300"
+    assert (meter.get("extra") or {}).get("cached_tokens") == 8
+    assert (meter.get("extra") or {}).get("reasoning_tokens") == 12
+    assert "rate" not in (meter.get("extra") or {})
+    assert "formula" not in (meter.get("extra") or {})
+    assert "millipoints" not in (meter.get("extra") or {})
 
 
 async def test_edu_export_is_service_token_only_and_paginates(client: AsyncClient):
@@ -400,9 +434,9 @@ async def test_image_kind_can_be_written(client: AsyncClient):
     r = await client.get("/v1/usage/events", headers=headers, params={"kind": "image"})
     assert r.status_code == 200
     hit = next(e for e in r.json()["events"] if e["run_id"] == "run-i")
-    assert hit["tokens_unknown"] is True
-    assert hit["model"] == "gemini-3.1-flash-image"
     assert hit["points"] is None
+    assert hit["model"] == "gemini-3.1-flash-image"
+    assert "tokens_unknown" not in hit
     assert (hit.get("extra") or {}).get("bytes") == 12
 
 
@@ -556,5 +590,79 @@ async def test_points_settle_updates_unknown_event_when_run_blob_has_tokens(clie
     assert settled.status_code == 200, settled.text
     assert settled.json()["phase"] == "settled"
     assert settled.json()["points"] == "0.090"
+
+
+async def test_emit_true_pi_aliases_fills_ledger_and_hides_formula(client: AsyncClient):
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.run_service import create_task
+
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=0,
+        raw={},
+    )
+    factory = session_factory()
+    async with factory() as session:
+        _task, run = await create_task(session, principal, "t", "hello")
+        run_id = run.id
+
+    await emit_llm_usage_after_run(
+        run_id,
+        token_usage={
+            "input": 400,
+            "output": 600,
+            "totalTokens": 1000,
+            "cacheRead": 50,
+            "reasoning": 12,
+            "cost": {"input": 0.01, "output": 0.02, "total": 0.03},
+        },
+        source="true_pi",
+        school_id="school-a",
+        membership_id="m1",
+        model="gpt-5.6-sol",
+    )
+    headers = await _auth(client)
+    teacher = await client.get("/v1/usage/events", headers=headers, params={"kind": "llm"})
+    row = next(e for e in teacher.json()["events"] if e["run_id"] == run_id)
+    assert row["points"] == "3.000"
+    assert "prompt_tokens" not in row
+    assert "cached_tokens" not in (row.get("extra") or {})
+    assert "cost" not in (row.get("extra") or {})
+    assert "token" not in teacher.text.lower()
+    assert "×" not in teacher.text
+    assert "÷" not in teacher.text
+
+    settled = await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})
+    assert settled.json()["phase"] == "settled"
+    assert settled.json()["points"] == "3.000"
+    assert "token" not in settled.text.lower()
+
+    hook = {"Authorization": "Bearer hook-secret-token"}
+    exported = await client.get(
+        "/v1/internal/usage/export",
+        headers=hook,
+        params={"school_id": "school-a", "limit": 50},
+    )
+    meter = next(e for e in exported.json()["events"] if e["run_id"] == run_id)
+    assert meter["tokens_unknown"] is False
+    assert meter["total_tokens"] == 1000
+    assert meter["points"] == "3.000"
+    assert (meter.get("extra") or {}).get("cached_tokens") == 50
+    assert (meter.get("extra") or {}).get("reasoning_tokens") == 12
+    assert "cost" not in (meter.get("extra") or {})
+    assert "rate" not in (meter.get("extra") or {})
+    assert "formula" not in meter
+    html = await client.get("/v1/usage", headers=headers)
+    assert html.status_code == 200
+    assert "3.000" in html.text
+    assert "积分" in html.text
+    assert "token" not in html.text.lower()
+    assert "×" not in html.text
+    assert "÷" not in html.text
 
 

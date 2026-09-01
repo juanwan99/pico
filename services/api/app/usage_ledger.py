@@ -44,7 +44,45 @@ BILLING_COLUMN_NAMES = frozenset(
         "invoice",
     }
 )
-_FORBIDDEN_EXTRA_KEYS = BILLING_COLUMN_NAMES
+_FORMULA_EXTRA_KEYS = frozenset(
+    {
+        "millipoints",
+        "rate",
+        "scale",
+        "formula",
+        "per_token",
+        "multiplier",
+        "per_token_milli",
+        "tokens_per_point",
+    }
+)
+_FORBIDDEN_EXTRA_KEYS = BILLING_COLUMN_NAMES | _FORMULA_EXTRA_KEYS
+_TEACHER_HIDDEN_EVENT_KEYS = frozenset(
+    {
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "tokens_unknown",
+        "estimated",
+    }
+)
+_TEACHER_EXTRA_DROP = frozenset(
+    {
+        "cached_tokens",
+        "reasoning_tokens",
+        "cacheRead",
+        "cacheWrite",
+        "cache_read",
+        "cache_write",
+        "totalTokens",
+        "input_tokens",
+        "output_tokens",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+    }
+)
+_PUBLIC_RUN_USAGE_KEEP = frozenset({"skill_snapshot", "durable_checkpoint"})
 
 
 @dataclass(frozen=True)
@@ -132,6 +170,27 @@ def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
         "billing": False,
         "schema": USAGE_EXPORT_SCHEMA,
     }
+
+
+def teacher_usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
+    """Teacher-facing row: derived points only. No token columns, no formula keys."""
+    body = usage_event_dict(row)
+    for key in _TEACHER_HIDDEN_EVENT_KEYS:
+        body.pop(key, None)
+    extra = body.get("extra") if isinstance(body.get("extra"), dict) else {}
+    body["extra"] = {
+        k: v
+        for k, v in extra.items()
+        if str(k) not in _TEACHER_EXTRA_DROP and str(k).lower() not in _FORBIDDEN_EXTRA_KEYS
+    }
+    return body
+
+
+def public_run_usage_blob(raw: dict[str, Any] | None) -> dict[str, Any]:
+    """Run JSON for teachers: keep skill/checkpoint, never token/cost meter fields."""
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items() if k in _PUBLIC_RUN_USAGE_KEEP}
 
 
 def schema_has_billing_columns() -> bool:
@@ -514,6 +573,25 @@ def _day_bounds(day: str) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=1)
 
 
+def _points_from_sum(
+    *,
+    total_tokens: Any,
+    prompt_tokens: Any,
+    completion_tokens: Any,
+) -> str | None:
+    from app.points_meter import points_from_tokens, tokens_from_row
+
+    token_n = tokens_from_row(
+        tokens_unknown=False,
+        total_tokens=_int_or_none(total_tokens),
+        prompt_tokens=_int_or_none(prompt_tokens),
+        completion_tokens=_int_or_none(completion_tokens),
+    )
+    if token_n is None:
+        return None
+    return points_from_tokens(token_n)
+
+
 async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
     """School-blind today rollup for the owner gateway page. No membership ids."""
     today = datetime.now(UTC).date().isoformat()
@@ -536,6 +614,11 @@ async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
             "event_count": int(r.event_count or 0),
             "total_tokens": int(r.total_tokens) if r.total_tokens is not None else None,
             "unknown_count": int(r.unknown_count or 0),
+            "points": _points_from_sum(
+                total_tokens=r.total_tokens,
+                prompt_tokens=None,
+                completion_tokens=None,
+            ),
         }
         for r in rows
     ]
@@ -785,12 +868,11 @@ async def summarize_usage(
             "day": r.day,
             "kind": r.kind,
             "event_count": int(r.event_count or 0),
-            "prompt_tokens": int(r.prompt_tokens) if r.prompt_tokens is not None else None,
-            "completion_tokens": (
-                int(r.completion_tokens) if r.completion_tokens is not None else None
+            "points": _points_from_sum(
+                total_tokens=r.total_tokens,
+                prompt_tokens=r.prompt_tokens,
+                completion_tokens=r.completion_tokens,
             ),
-            "total_tokens": int(r.total_tokens) if r.total_tokens is not None else None,
-            "unknown_count": int(r.unknown_count or 0),
         }
         for r in rows
     ]

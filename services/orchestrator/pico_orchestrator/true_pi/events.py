@@ -192,12 +192,10 @@ async def map_event(
     if shadow:
         tag["shadow"] = True
 
-    from pico_orchestrator.usage_parse import add_usage, parse_usage_blob
+    from pico_orchestrator.usage_parse import add_usage, usage_blobs_from_rpc_event
 
-    nested = raw.get("usage") if isinstance(raw, dict) else None
-    piece = parse_usage_blob(raw) or parse_usage_blob(nested)
-    if piece:
-        state.token_usage = add_usage(state.token_usage, piece)
+    for blob in usage_blobs_from_rpc_event(kind, raw):
+        state.token_usage = add_usage(state.token_usage, blob)
 
     if kind == "agent_start":
         state.started = True
