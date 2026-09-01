@@ -19,7 +19,7 @@ PARENT: docs/USAGE-LEDGER.md
 
 Pico **must not** grow price/currency/wallet columns. edu **must not** persist a parallel Task/Run tree for product AI.
 
-`points` on each event is Pico's already-converted meter (three decimals). edu debits that number as-is. **Do not multiply again.** null `points` is unknown, not zero. Conversion lives only in Pico (`points_meter.py`). **Which units:** this-turn teacher text (`extra.user_chars`, same units as the composer quote) plus this-turn `completion_tokens`. Provider `prompt_tokens` / `total_tokens` stay on the row for ops (always-on suitcase) and **must not** be re-multiplied. Export must not include rate / scale / formula fields. Teacher-facing Pico JSON omits token columns and `user_chars`.
+`points` on each event is Pico's already-converted meter (three decimals). edu debits that number as-is. **Do not multiply again.** null `points` is unknown, not zero. Conversion lives only in Pico (`points_meter.py`). **Which units:** provider `total_tokens` (system + tools + this turn). Missing total falls back to prompt+completion. Export must not include rate / scale / formula fields. Teacher-facing Pico JSON omits token columns. Composer 预计 covers the resident package so it is the same order of magnitude as 实际.
 
 ## Event (one row)
 
@@ -33,8 +33,7 @@ Same shape as `GET /v1/usage/events` plus `schema: pico.usage.v1`.
 | `tokens_unknown` | Provider did not return usage (agent/Pi often). **Do not treat as zero.** |
 | `estimated` | Always `false` after scrub. Pico no longer writes char/4. **Do not bill.** |
 | `extra.ui_model` | Lane alias `pico-fast` / `pico-deep` when applicable |
-| `extra.cached_tokens` / `extra.reasoning_tokens` | Optional ops fields. Suitcase — **not** billed into `points`. |
-| `extra.user_chars` | Optional. Teacher text length this turn. Used by Pico `points`; not a token column. |
+| `extra.cached_tokens` / `extra.reasoning_tokens` | Optional ops fields. Already in provider `total` when billed. |
 | `points` | String `N.NNN` or `null`. **edu debits this as-is.** Do not rescale. |
 | `billing` | Always `false` |
 

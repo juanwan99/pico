@@ -63,12 +63,12 @@ Token 规则：
 - 有提供方 usage（Responses `response.completed` / chat `include_usage` / **真 Pi** `agent_end.messages[].usage` 与 compaction usage）→ 记整数，`estimated=0`。
 - 无 usage → 三字段 null 且 `tokens_unknown=1`。**禁止**用用户可见正文做 char/4 冒充 token。
 - **禁止写入 `estimated=1`。** 历史 char/4 行在启动时 scrub 成 unknown（§8）。
-- `extra.ui_model` = 档位；`extra.cached_tokens` / `extra.reasoning_tokens` 可选（运维看；**不进积分**）。`extra.user_chars` = 本轮老师原文长度（不是 token 列）。
+- `extra.ui_model` = 档位；`extra.cached_tokens` / `extra.reasoning_tokens` 可选（已折进提供方 total 则随 `points`；导出给 edu，老师面不回）。
 - 禁止用 `0` 假装「没用量」。
 - `model` 禁止长期留 `pico-fast` / `pico-deep`；档位只进 `extra.ui_model`。
 - **禁止**把 Pi `cost`、倍率、公式写入账本或 extra。
 
-**积分（派生，#788 / #836 / #838）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py`。表上不增加积分/余额列。**积分只计本轮说话**：本轮 `completion_tokens` + 老师原文（`extra.user_chars`，与作曲栏「预计」同一单位）。提供方 `prompt_tokens` / `total_tokens` 仍记全量（常驻系统/工具说明书在里面），**不进积分**。unknown 仍 `points=null`（不是 0）。老师面（`/v1/usage` HTML · `/v1/usage/events` · `/v1/usage/points` · LibreChat 回复末尾）只见积分，**禁止** token / × / ÷ / 公式 / `user_chars`。edu 导出可带 token 列（提供方全量）+ 已换好的 `points`（本轮说话），禁止再乘、禁止倍率字段。search/sandbox/image 无提供方 token 则 `points=null`（不是 0），不另造单价表。每一轮钉在该条回复末尾：有积分显示「实际」；晚到则该轮继续显示「预计」，不改成「未结算」、不清理上一轮。
+**积分（派生，#788 / #836 / #838）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py`。表上不增加积分/余额列。**积分 = 提供方全量 token**（系统提示词、工具 schema、本轮说话都算；`total`，缺则 prompt+completion）。unknown 仍 `points=null`（不是 0）。老师面只见积分，**禁止** token / × / ÷ / 公式。作曲栏「预计」必须盖上常驻包（最近一次 `prompt_tokens`，没有则用地板），禁止只报老师字数把 0.024 装成账单。edu 导出 token 列 + 已换好的 `points`（与门脸同数），禁止再乘、禁止倍率字段。search/sandbox/image 无提供方 token 则 `points=null`（不是 0），不另造单价表。每一轮钉在该条回复末尾：有积分显示「实际」；晚到则该轮继续显示「预计」，不改成「未结算」、不清理上一轮。省 token / 收常驻体积后期另做。
 
 ---
 

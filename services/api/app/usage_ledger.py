@@ -80,7 +80,6 @@ _TEACHER_EXTRA_DROP = frozenset(
         "prompt_tokens",
         "completion_tokens",
         "total_tokens",
-        "user_chars",
     }
 )
 _PUBLIC_RUN_USAGE_KEEP = frozenset({"skill_snapshot", "durable_checkpoint"})
@@ -150,7 +149,6 @@ def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
         total_tokens=row.total_tokens,
         prompt_tokens=row.prompt_tokens,
         completion_tokens=row.completion_tokens,
-        extra=extra,
     )
     return {
         "id": row.id,
@@ -492,7 +490,6 @@ async def emit_llm_usage_after_run(
     tid = task_id
     usage = token_usage
     backend_from_event: str | None = None
-    text_prompt = prompt
     try:
         factory = session_factory()
         async with factory() as session:
@@ -504,8 +501,6 @@ async def emit_llm_usage_after_run(
                 ui_model = (run.model or "").strip() or None
                 model_id = model_id or ui_model
                 backend_from_event = await _backend_model_from_events(session, rid)
-                if not (text_prompt or "").strip():
-                    text_prompt = getattr(run, "prompt", None)
                 if usage is None:
                     try:
                         parsed = json.loads(run.token_usage_json or "{}")
@@ -526,14 +521,11 @@ async def emit_llm_usage_after_run(
         return
     usage_dict = usage if isinstance(usage, dict) else None
     fields = extract_token_fields(usage_dict)
-    _ = completion, estimate_if_missing
+    _ = prompt, completion, estimate_if_missing
     billed = billed_model_id(model_id, backend_from_event)
     extra = usage_extra_bits(usage_dict)
     if ui_model and is_ui_lane(ui_model):
         extra.setdefault("ui_model", ui_model)
-    from app.points_meter import extra_user_chars
-
-    extra.update(extra_user_chars(text_prompt))
     await record_usage_event(
         school_id=school,
         membership_id=member,
@@ -564,6 +556,44 @@ def _tenant_filter(principal: Principal, membership_id: str | None) -> tuple[str
             detail={"code": "usage.forbidden", "message": "cannot read another account"},
         )
     return school, want
+
+
+async def last_known_prompt_tokens(
+    session: AsyncSession,
+    principal: Principal,
+) -> int | None:
+    """Latest native prompt count for this teacher. Not a guess write."""
+    school, member = _tenant_filter(principal, None)
+    q = (
+        select(UsageEventRow.prompt_tokens)
+        .where(
+            UsageEventRow.school_id == school,
+            UsageEventRow.membership_id == member,
+            UsageEventRow.kind == "llm",
+            UsageEventRow.tokens_unknown == 0,
+            UsageEventRow.prompt_tokens.is_not(None),
+        )
+        .order_by(UsageEventRow.created_at.desc())
+        .limit(1)
+    )
+    raw = (await session.execute(q)).scalar_one_or_none()
+    n = _int_or_none(raw)
+    if n is None or n <= 0:
+        return None
+    return n
+
+
+async def quote_points_for_principal(
+    session: AsyncSession,
+    principal: Principal,
+    input_chars: int,
+) -> str:
+    """Composer 预计: resident package + this-turn text. Not a ledger write."""
+    from app.points_meter import quote_points_from_input_len, resident_quote_floor
+
+    last = await last_known_prompt_tokens(session, principal)
+    floor = last if last is not None else resident_quote_floor()
+    return quote_points_from_input_len(input_chars, resident_tokens=floor)
 
 
 def _day_bounds(day: str) -> tuple[datetime, datetime]:
@@ -609,7 +639,6 @@ async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
             UsageEventRow.kind,
             func.count().label("event_count"),
             func.sum(UsageEventRow.total_tokens).label("total_tokens"),
-            func.sum(UsageEventRow.completion_tokens).label("completion_tokens"),
             func.sum(UsageEventRow.tokens_unknown).label("unknown_count"),
         )
         .where(UsageEventRow.created_at >= start, UsageEventRow.created_at < end)
@@ -624,9 +653,9 @@ async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
             "total_tokens": int(r.total_tokens) if r.total_tokens is not None else None,
             "unknown_count": int(r.unknown_count or 0),
             "points": _points_from_sum(
-                total_tokens=None,
+                total_tokens=r.total_tokens,
                 prompt_tokens=None,
-                completion_tokens=r.completion_tokens,
+                completion_tokens=None,
             ),
         }
         for r in rows
@@ -695,41 +724,6 @@ async def list_usage_events_for_run(
     return list(result.scalars().all())
 
 
-def _row_extra(row: UsageEventRow) -> dict[str, Any]:
-    try:
-        extra = json.loads(row.extra_json or "{}")
-    except json.JSONDecodeError:
-        extra = {}
-    return extra if isinstance(extra, dict) else {}
-
-
-async def _ensure_user_chars(
-    session: AsyncSession,
-    principal: Principal,
-    run_id: str,
-    run: Any,
-    rows: list[UsageEventRow],
-) -> list[UsageEventRow]:
-    """Pin this-turn teacher length on existing rows. Not a token-column write."""
-    from app.points_meter import extra_user_chars
-
-    chars = extra_user_chars(getattr(run, "prompt", None))
-    if not chars:
-        return rows
-    changed = False
-    for row in rows:
-        extra = _row_extra(row)
-        if extra.get("user_chars") is not None:
-            continue
-        extra.update(chars)
-        row.extra_json = json.dumps(extra, ensure_ascii=False)
-        changed = True
-    if not changed:
-        return rows
-    await session.commit()
-    return await list_usage_events_for_run(session, principal, run_id)
-
-
 def _points_view_from_rows(run_id: str, rows: list[UsageEventRow]) -> dict[str, Any]:
     from app.points_meter import points_from_tokens, tokens_from_row
 
@@ -741,7 +735,6 @@ def _points_view_from_rows(run_id: str, rows: list[UsageEventRow]) -> dict[str, 
             total_tokens=row.total_tokens,
             prompt_tokens=row.prompt_tokens,
             completion_tokens=row.completion_tokens,
-            extra=_row_extra(row),
         )
         if token_n is None:
             continue
@@ -770,8 +763,6 @@ async def _backfill_run_tokens(
     rows: list[UsageEventRow],
 ) -> list[UsageEventRow]:
     """If events missed tokens, copy native usage from the run blob into the ledger."""
-    from app.points_meter import extra_user_chars
-
     try:
         blob = json.loads(getattr(run, "token_usage_json", None) or "{}")
     except json.JSONDecodeError:
@@ -789,13 +780,6 @@ async def _backfill_run_tokens(
         if found is not None:
             llm_row = found
     if llm_row is not None and not llm_row.tokens_unknown and llm_row.run_id == run_id:
-        extra = _row_extra(llm_row)
-        chars = extra_user_chars(getattr(run, "prompt", None))
-        if chars and extra.get("user_chars") is None:
-            extra.update(chars)
-            llm_row.extra_json = json.dumps(extra, ensure_ascii=False)
-            await session.commit()
-            return await list_usage_events_for_run(session, principal, run_id)
         return rows
     if llm_row is not None:
         llm_row.tokens_unknown = 0
@@ -804,12 +788,8 @@ async def _backfill_run_tokens(
         llm_row.completion_tokens = fields.completion_tokens
         llm_row.total_tokens = fields.total_tokens
         llm_row.run_id = run_id
-        extra = _row_extra(llm_row)
-        extra.update(extra_user_chars(getattr(run, "prompt", None)))
-        llm_row.extra_json = json.dumps(extra, ensure_ascii=False)
         await session.commit()
         return await list_usage_events_for_run(session, principal, run_id)
-
     await record_usage_event(
         school_id=principal.school_id,
         membership_id=principal.membership_id,
@@ -822,7 +802,6 @@ async def _backfill_run_tokens(
         task_id=getattr(run, "task_id", None),
         run_id=run_id,
         source="settle-backfill",
-        extra=extra_user_chars(getattr(run, "prompt", None)) or None,
         idempotency_key=f"llm:{run_id}",
     )
     return await list_usage_events_for_run(session, principal, run_id)
@@ -840,7 +819,6 @@ async def settle_points_for_run(
     if run is None:
         return None
     rows = await list_usage_events_for_run(session, principal, run_id)
-    rows = await _ensure_user_chars(session, principal, run_id, run, rows)
     view = _points_view_from_rows(run_id, rows)
     if view["phase"] == "settled":
         return view
@@ -929,8 +907,8 @@ async def summarize_usage(
             "kind": r.kind,
             "event_count": int(r.event_count or 0),
             "points": _points_from_sum(
-                total_tokens=None,
-                prompt_tokens=None,
+                total_tokens=r.total_tokens,
+                prompt_tokens=r.prompt_tokens,
                 completion_tokens=r.completion_tokens,
             ),
         }

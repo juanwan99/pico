@@ -1,20 +1,20 @@
-"""Teacher-facing points derived from this-turn work, not the toolbox.
+"""Teacher-facing points derived from usage_events tokens.
 
 Scale lives in this module only. Never import from LibreChat client code.
 Never persist quote guesses onto usage_events token columns.
 Never store a wallet or balance.
-Provider prompt/total stay on the ledger for ops; they are the always-on
-system+tools suitcase and must not become 积分.
+
+积分 = 提供方全量（系统提示词 / 工具 schema / 本轮说话都算 token）。
+预计 must cover the always-on resident package, not just teacher chars.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-# Millipoints (0.001 积分) per billable unit. Keep out of UI payloads.
+# Millipoints (0.001 积分) per provider token. Keep out of UI payloads.
 _PER_TOKEN_MILLI = 3
 _QUOTE_INPUT_CAP = 200_000
-_EXTRA_USER_CHARS = "user_chars"
+# UX floor only — not a token-column write. Live CORE+SYSTEM first-turn ~8393.
+_RESIDENT_QUOTE_FLOOR = 8000
 
 
 def format_millipoints(milli: int) -> str:
@@ -26,55 +26,54 @@ def points_from_tokens(tokens: int) -> str:
     return format_millipoints(max(0, int(tokens)) * _PER_TOKEN_MILLI)
 
 
+def tokens_from_row(
+    *,
+    tokens_unknown: bool,
+    total_tokens: int | None,
+    prompt_tokens: int | None,
+    completion_tokens: int | None,
+) -> int | None:
+    """Billable units: provider total (suitcase included). Unknown stays None."""
+    if tokens_unknown:
+        return None
+    if total_tokens is not None:
+        return max(0, int(total_tokens))
+    if prompt_tokens is None and completion_tokens is None:
+        return None
+    return max(0, int(prompt_tokens or 0) + int(completion_tokens or 0))
+
+
 def quote_units_from_input_len(n: int) -> int:
-    """Same units as the composer 预计. Not a token-column write."""
+    """Teacher-text units only. Not a token-column write."""
     n = max(0, min(int(n or 0), _QUOTE_INPUT_CAP))
     if n <= 0:
         return 0
     return max(1, (n + 3) // 4) * 2
 
 
-def quote_points_from_input_len(n: int) -> str:
-    """UX quote only. Not a ledger write. Factors stay here."""
-    n = max(0, min(int(n or 0), _QUOTE_INPUT_CAP))
-    if n <= 0:
-        return format_millipoints(0)
-    return points_from_tokens(quote_units_from_input_len(n))
+def quote_units_with_resident(n: int, resident_tokens: int) -> int:
+    return max(0, int(resident_tokens or 0)) + quote_units_from_input_len(n)
 
 
-def extra_user_chars(prompt: str | None) -> dict[str, int]:
-    n = len(prompt or "")
-    if n <= 0:
-        return {}
-    return {_EXTRA_USER_CHARS: n}
-
-
-def tokens_from_row(
+def quote_points_from_input_len(
+    n: int,
     *,
-    tokens_unknown: bool,
-    total_tokens: int | None = None,
-    prompt_tokens: int | None = None,
-    completion_tokens: int | None = None,
-    extra: dict[str, Any] | None = None,
-) -> int | None:
-    """Billable units for 积分.
+    resident_tokens: int | None = None,
+) -> str:
+    """UX quote only. Not a ledger write. Factors stay here.
 
-    Unknown stays None (not 0). Provider prompt/total are ignored — they
-    include the always-on suitcase. This-turn work = model output + teacher
-    text (same units as 预计).
+    Default resident floor covers the always-on package so 预计 is the
+    same order of magnitude as 实际. Pass resident_tokens=0 to quote
+    teacher text alone (tests).
     """
-    del total_tokens, prompt_tokens
-    if tokens_unknown:
-        return None
-    if completion_tokens is None:
-        return None
-    work = max(0, int(completion_tokens))
-    blob = extra if isinstance(extra, dict) else {}
-    raw_chars = blob.get(_EXTRA_USER_CHARS)
-    try:
-        chars = int(raw_chars) if raw_chars is not None else 0
-    except (TypeError, ValueError):
-        chars = 0
-    if chars > 0:
-        work += quote_units_from_input_len(chars)
-    return work
+    n = max(0, min(int(n or 0), _QUOTE_INPUT_CAP))
+    if resident_tokens is None:
+        resident = _RESIDENT_QUOTE_FLOOR
+    else:
+        resident = max(0, int(resident_tokens))
+    units = quote_units_with_resident(n, resident)
+    return points_from_tokens(units)
+
+
+def resident_quote_floor() -> int:
+    return _RESIDENT_QUOTE_FLOOR
