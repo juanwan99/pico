@@ -14,7 +14,7 @@
 在飞：无 stamp-ok 不领 · 同域第二张 stamp-ok=废派 · 卡别拆太细
 合同：卡面四行（结果/不准/过门/部署）· 过门=公网能看见结果句
 环：本窗改测合部 · OPEN→PR→pr-ci-ready一眼→合→有差才部→tip-pin
-等CI：subscribe-ci · 禁轮询 · 未绿不准合
+等CI：subscribe-ci · 禁轮询 · 未绿不准合 · docs-only 无检查项可合
 执行者：业主正在说话的这扇 Grok 沙箱 · 禁 spawn / 云 Task / ECS grok
 ECS：只是部署机 · ssh-ecs=Tailscale ops@aliyun-hy
 PASS：live tip=origin/main 且结果句可见 → 主管自签关（白名单除外）
