@@ -363,7 +363,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "web_search",
-    "Search the public web via DeepSeek official web_search (Pico gateway). Returns sources or honest 未检索.",
+    "Search the public web via the Pico gateway. Returns sources or honest 未检索.",
     Type.Object(
       {
         query: Type.String(),

@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-ASK_TIMEOUT_SEC = 600.0
+ASK_TIMEOUT_SEC = 180.0
 _MAX_Q = 400
 _MAX_OPT = 80
 _MAX_OPTS = 6
