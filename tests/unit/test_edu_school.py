@@ -137,6 +137,7 @@ def test_land_without_edu_base_does_not_pretend(client) -> None:
     assert body.get("configured") is False
     assert body.get("landed") is False
     assert body.get("dumped") is False
+    assert body.get("source_item_ids") == []
 
 
 def test_search_green_library_unconfigured_is_honest(monkeypatch) -> None:

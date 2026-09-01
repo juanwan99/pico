@@ -25,6 +25,7 @@ Freeze the **shape** of identity, tools, AI facts, and change handoff so:
 | [`contracts/ai-facts.md`](contracts/ai-facts.md) | Task/Run/Event/Artifact ownership + event types |
 | [`contracts/change-handoff.md`](contracts/change-handoff.md) | Propose → confirm → edu Review/Commit boundary |
 | [`contracts/usage-export.md`](contracts/usage-export.md) | Pico meter → edu bill (no money in Pico) |
+| [`contracts/page-collect.md`](contracts/page-collect.md) | Land join keys (`source_item_ids`) · answers land in edu |
 | [`../packages/contracts/schemas/`](../packages/contracts/schemas/) | JSON Schema (machine-readable) |
 
 ## Non-goals (Phase 2)
@@ -54,3 +55,4 @@ Breaking changes require:
 |-----|------|------|
 | 1.0 | 2026-07-29 | Initial freeze from Phase 1 realized shapes |
 | 1.0+usage | 2026-08-29 | Additive: usage-export (Pico meters, edu bills). Does not rewrite 1.0 fields |
+| 1.0+page-collect | 2026-09-01 | Additive: land envelope `source_item_ids` / `pico_artifact_id`. Does not rewrite 1.0 fields |
