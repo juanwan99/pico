@@ -308,6 +308,44 @@ def _optional_int(args: dict[str, Any], key: str, *, default: int | None = None)
         raise ToolError("tool.invalid_arguments", f"{key} 必须是整数") from exc
 
 
+_BINARY_READ_KINDS = frozenset(
+    {
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "gif",
+        "pptx",
+        "docx",
+        "xlsx",
+        "pdf",
+        "bin",
+    }
+)
+
+
+def _read_file_for_model(row: dict[str, Any]) -> dict[str, Any]:
+    """Ledger metadata only for binaries. Pixels never re-enter the model."""
+    out = dict(row)
+    kind = str(out.get("kind") or "").strip().lower().lstrip(".")
+    encoding = str(out.get("content_encoding") or "").strip().lower()
+    binary = kind in _BINARY_READ_KINDS or encoding == "base64"
+    if not binary:
+        body = out.get("content")
+        if isinstance(body, str) and len(body) > MAX_CONTENT_CHARS:
+            out["content"] = body[:MAX_CONTENT_CHARS]
+            out["truncated"] = True
+        return out
+    out.pop("content", None)
+    out.pop("content_base64", None)
+    out["binary"] = True
+    out["user_message"] = (
+        "这是二进制文件，不能当正文读。"
+        "要用时把 artifact_id 交给文档工具。"
+    )
+    return out
+
+
 def _artifact_bytes(row: dict[str, Any]) -> bytes:
     b64 = row.get("content_base64")
     if isinstance(b64, str) and b64.strip():
@@ -484,11 +522,7 @@ def _workspace_handlers(
         )
         if result is None:
             raise ToolError("artifact.not_found", "Artifact not found")
-        body = result.get("content")
-        if isinstance(body, str) and len(body) > MAX_CONTENT_CHARS:
-            result = dict(result)
-            result["content"] = body[:MAX_CONTENT_CHARS]
-            result["truncated"] = True
+        result = _read_file_for_model(result)
         return {"artifact": result}
 
     async def list_files(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -665,8 +699,39 @@ def _workspace_handlers(
         title = _ensure_extension(_artifact_title(args), ".html")
         marker = _marker_arg(args)
         body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
+        from pico_orchestrator.html_ledger_images import (
+            collect_pico_artifact_refs,
+            image_data_url,
+            parse_image_artifact_ids,
+            rewrite_pico_artifact_srcs,
+        )
+
         try:
-            raw = build_html_document(title=title, marker=marker, body=body)
+            index_ids = parse_image_artifact_ids(args.get("image_artifact_ids"))
+        except ValueError as exc:
+            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        resolved: dict[str, str] = {}
+        for aid in collect_pico_artifact_refs(body or "", index_ids):
+            row = await store.read(principal, artifact_id=aid, title=None)
+            if row is None:
+                continue
+            try:
+                blob = _artifact_bytes(row)
+            except ToolError:
+                continue
+            url = image_data_url(blob)
+            if url:
+                resolved[aid] = url
+        body, images_meta = rewrite_pico_artifact_srcs(
+            body or "", resolved=resolved, index_ids=index_ids
+        )
+        try:
+            raw = build_html_document(
+                title=title,
+                marker=marker,
+                body=body,
+                enforce_body_max=False,
+            )
         except ValueError as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         # Store HTML as UTF-8 text so verify_html + human open can read it.
@@ -690,6 +755,11 @@ def _workspace_handlers(
         result = _attach_write_observation(
             result, kind="html", title=title, raw=content
         )
+        if images_meta.get("landed") or images_meta.get("skipped"):
+            result["images"] = images_meta
+            obs = result.get("observation")
+            if isinstance(obs, dict):
+                obs["images"] = images_meta
         run_id = current_run_id(principal, store) or result.get("run_id")
         if isinstance(content, str):
             materialize_workspace_html(
@@ -1192,8 +1262,9 @@ def _workspace_handlers(
             )
             result["format"] = ext
             result["user_message"] = (
-                "图已生成。要放进 PPT/Word 时把 artifact id 写入 image_artifact_id，"
-                "不要单独当成品交给老师。"
+                "图已生成。要放进文档时把 artifact id 交给文档工具"
+                "（PPT/Word：image_artifact_id；HTML：src=\"pico-artifact:<id>\"）。"
+                "已经嵌进文件的不要再单独交一份。"
             )
             await emit_image_usage(
                 principal,
@@ -1992,7 +2063,12 @@ def build_default_gateway(
     gw.register(
         ToolSpec(
             name="workspace_read_file",
-            description="Read one Artifact owned by the current membership by id or title.",
+            description=(
+                "Read one Artifact owned by the current membership by id or title. "
+                "Text comes back as content. png/jpg/office/pdf are binary: "
+                "only id, title, kind, size — no pixels or base64. "
+                "Pass the artifact id to a document tool to embed."
+            ),
             handler=read_file,
             school_scoped=False,
         )
@@ -2026,10 +2102,14 @@ def build_default_gateway(
                 "Create a real .html Artifact that must run offline: inline CSS/JS "
                 "and canvas only. A semantic classless visual base is already inlined. "
                 "No CDN, no import/script-src of Three.js / Chart.js / "
-                "ECharts / KaTeX, no https or //cdn images (use data: URLs), no "
-                "window.THREE / new Chart / echarts.init. The tool fails if the page "
-                "still needs the network or those engines. Result includes an "
-                "observation of what landed. ok is not finished. Args: title, marker, body?"
+                "ECharts / KaTeX, no https or //cdn images, no "
+                "window.THREE / new Chart / echarts.init. To embed a ledger picture, "
+                "set img src to pico-artifact:<artifact_id> (or pico-artifact:0 with "
+                "image_artifact_ids). The tool inlines data: URLs. Do not paste base64. "
+                "A missing id skips that picture; the page still lands. "
+                "The tool fails if the page still needs the network or those engines. "
+                "Result includes an observation of what landed. ok is not finished. "
+                "Args: title, marker, body?, image_artifact_ids?"
             ),
             handler=generate_html,
             school_scoped=False,
@@ -2292,8 +2372,9 @@ def build_default_gateway(
                 "Create one downloadable png/jpg via Zhipu glm-image HTTPS API. "
                 "On missing key, timeout, or 4xx: honest Chinese failure; never invent pixels. "
                 "To place it in Word/PPT, pass the returned artifact id as "
-                "image_artifact_id on spec. Do not also hand it to the teacher as a "
-                "separate download when it is already inside the file. "
+                "image_artifact_id on spec. To place it in HTML, set img src to "
+                "pico-artifact:<id>. Do not paste base64. Do not also hand it to the "
+                "teacher as a separate download when it is already inside the file. "
                 "Args: prompt, title?"
             ),
             handler=generate_image,
@@ -2485,6 +2566,14 @@ def openai_tool_schemas(
                     "description": "Unique visible marker string required in the HTML body",
                 },
                 "body": {"type": "string", "description": "Optional extra body text"},
+                "image_artifact_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Ledger png/jpg ids. In body use src=\"pico-artifact:0\" "
+                        "or src=\"pico-artifact:<id>\". Missing id skips that picture."
+                    ),
+                },
             },
             "required": ["title", "marker"],
         },

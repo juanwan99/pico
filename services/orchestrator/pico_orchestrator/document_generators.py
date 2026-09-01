@@ -745,6 +745,7 @@ def build_html_document(
     title: str,
     marker: str,
     body: str | None = None,
+    enforce_body_max: bool = True,
 ) -> bytes:
     """HTML bytes with unique marker.
 
@@ -752,10 +753,13 @@ def build_html_document(
     - Full HTML document body → kept as interactive page (CDN/engine fail-closed).
       This prevents H-CODEDUMP where agents pass real UI source only to see it
       escaped into a source wall.
+    - ``enforce_body_max`` is for the model-authored body. After Pico inlines
+      ledger pictures as data: URLs, pass False — those bytes are not prompt.
     """
     marker = _require_marker(marker)
     safe_title = html.escape((title or "Pico HTML").strip() or "Pico HTML")
-    raw_body = require_doc_body_max((body or "").strip(), what="这份 HTML")
+    raw = (body or "").strip()
+    raw_body = require_doc_body_max(raw, what="这份 HTML") if enforce_body_max else raw
 
     page_title = (title or "").strip() or "Pico HTML"
     if _looks_like_full_html_document(raw_body):

@@ -4,9 +4,9 @@
 DATE: 2026-09-01
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #848 T-HTML-PICO-CSS
+在飞: #850 T-LEDGER-BINARY-BUS
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 产品 SHA `cbc0000aeac963267302d6f6af28fda5f6cdcba0`（#846 已部）
+      → 产品 SHA `8912c11ef3f82daba778265ae9d4ce43a44dc69e`（#848 已部）
       → docs-only 合入不 prod-update
 阻塞: #748 合部完不关 · 勿关 #821/#806/#808/#807/#809/#810/#748/#449/#316
 ────────────────────────────────
