@@ -69,6 +69,7 @@ _TEACHER_HIDDEN_EVENT_KEYS = frozenset(
 _TEACHER_EXTRA_DROP = frozenset(
     {
         "cached_tokens",
+        "cache_write_tokens",
         "reasoning_tokens",
         "cacheRead",
         "cacheWrite",
@@ -134,21 +135,24 @@ def _strip_money_keys(extra: dict[str, Any] | None) -> dict[str, Any]:
     return {k: v for k, v in extra.items() if str(k).lower() not in _FORBIDDEN_EXTRA_KEYS}
 
 
-def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
+def _row_extra(row: UsageEventRow) -> dict[str, Any]:
     try:
         extra = json.loads(row.extra_json or "{}")
     except json.JSONDecodeError:
         extra = {}
-    if not isinstance(extra, dict):
-        extra = {}
-    extra = _strip_money_keys(extra)
-    from app.points_meter import points_from_tokens, tokens_from_row
+    return extra if isinstance(extra, dict) else {}
 
-    token_n = tokens_from_row(
+
+def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
+    extra = _strip_money_keys(_row_extra(row))
+    from app.points_meter import points_from_row
+
+    points = points_from_row(
         tokens_unknown=bool(row.tokens_unknown),
         total_tokens=row.total_tokens,
         prompt_tokens=row.prompt_tokens,
         completion_tokens=row.completion_tokens,
+        extra=extra,
     )
     return {
         "id": row.id,
@@ -166,7 +170,7 @@ def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
         "source": row.source,
         "extra": extra,
         "created_at": row.created_at.isoformat() if row.created_at else None,
-        "points": None if token_n is None else points_from_tokens(token_n),
+        "points": points,
         "billing": False,
         "schema": USAGE_EXPORT_SCHEMA,
     }
@@ -388,6 +392,24 @@ async def _record_usage_event_inner(
         total_tokens = None
         tokens_unknown = True
         estimated = False
+    if not tokens_unknown:
+        from app.points_meter import normalize_token_counts
+
+        norm = normalize_token_counts(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cached_tokens=extra_clean.get("cached_tokens"),
+            cache_write_tokens=extra_clean.get("cache_write_tokens")
+            or extra_clean.get("cacheWrite"),
+        )
+        prompt_tokens = norm["prompt_tokens"]
+        completion_tokens = norm["completion_tokens"]
+        total_tokens = norm["total_tokens"]
+        if norm["cached_tokens"]:
+            extra_clean["cached_tokens"] = norm["cached_tokens"]
+        if norm["cache_write_tokens"]:
+            extra_clean["cache_write_tokens"] = norm["cache_write_tokens"]
     factory = session_factory()
     last_err: Exception | None = None
     for attempt in range(5):
@@ -558,6 +580,68 @@ def _tenant_filter(principal: Principal, membership_id: str | None) -> tuple[str
     return school, want
 
 
+async def last_known_billable_milli(
+    session: AsyncSession,
+    principal: Principal,
+    conversation_id: str | None = None,
+) -> int | None:
+    """Latest weighted millipoints for this conversation. New chats do not borrow."""
+    from app.points_meter import milli_from_row
+
+    school, member = _tenant_filter(principal, None)
+    cid = (conversation_id or "").strip()
+    if not cid or cid.lower() in {"new", "search"}:
+        return None
+    q = (
+        select(
+            UsageEventRow.total_tokens,
+            UsageEventRow.prompt_tokens,
+            UsageEventRow.completion_tokens,
+            UsageEventRow.extra_json,
+        )
+        .join(TaskRow, UsageEventRow.task_id == TaskRow.id)
+        .where(
+            UsageEventRow.school_id == school,
+            UsageEventRow.membership_id == member,
+            UsageEventRow.kind == "llm",
+            UsageEventRow.tokens_unknown == 0,
+            TaskRow.conversation_id == cid,
+        )
+        .order_by(UsageEventRow.created_at.desc())
+        .limit(1)
+    )
+    row = (await session.execute(q)).first()
+    if row is None:
+        return None
+    extra: dict[str, Any] = {}
+    try:
+        extra = json.loads(row.extra_json or "{}")
+    except json.JSONDecodeError:
+        extra = {}
+    if not isinstance(extra, dict):
+        extra = {}
+    return milli_from_row(
+        tokens_unknown=False,
+        total_tokens=row.total_tokens,
+        prompt_tokens=row.prompt_tokens,
+        completion_tokens=row.completion_tokens,
+        extra=extra,
+    )
+
+
+async def quote_points_for_principal(
+    session: AsyncSession,
+    principal: Principal,
+    input_chars: int,
+    conversation_id: str | None = None,
+) -> str:
+    """Composer 预计: this conversation's last weighted bill, else resident floor."""
+    from app.points_meter import quote_points_from_input_len
+
+    last = await last_known_billable_milli(session, principal, conversation_id)
+    return quote_points_from_input_len(input_chars, resident_milli=last)
+
+
 def _day_bounds(day: str) -> tuple[datetime, datetime]:
     try:
         # Naive UTC calendar day — matches db._utcnow() (tzinfo stripped).
@@ -579,17 +663,14 @@ def _points_from_sum(
     prompt_tokens: Any,
     completion_tokens: Any,
 ) -> str | None:
-    from app.points_meter import points_from_tokens, tokens_from_row
+    from app.points_meter import points_from_row
 
-    token_n = tokens_from_row(
+    return points_from_row(
         tokens_unknown=False,
         total_tokens=_int_or_none(total_tokens),
         prompt_tokens=_int_or_none(prompt_tokens),
         completion_tokens=_int_or_none(completion_tokens),
     )
-    if token_n is None:
-        return None
-    return points_from_tokens(token_n)
 
 
 async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
@@ -600,6 +681,8 @@ async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
         select(
             UsageEventRow.kind,
             func.count().label("event_count"),
+            func.sum(UsageEventRow.prompt_tokens).label("prompt_tokens"),
+            func.sum(UsageEventRow.completion_tokens).label("completion_tokens"),
             func.sum(UsageEventRow.total_tokens).label("total_tokens"),
             func.sum(UsageEventRow.tokens_unknown).label("unknown_count"),
         )
@@ -616,8 +699,8 @@ async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
             "unknown_count": int(r.unknown_count or 0),
             "points": _points_from_sum(
                 total_tokens=r.total_tokens,
-                prompt_tokens=None,
-                completion_tokens=None,
+                prompt_tokens=r.prompt_tokens,
+                completion_tokens=r.completion_tokens,
             ),
         }
         for r in rows
@@ -687,25 +770,26 @@ async def list_usage_events_for_run(
 
 
 def _points_view_from_rows(run_id: str, rows: list[UsageEventRow]) -> dict[str, Any]:
-    from app.points_meter import points_from_tokens, tokens_from_row
+    from app.points_meter import format_millipoints, milli_from_row
 
     known = 0
     saw_known = False
     for row in rows:
-        token_n = tokens_from_row(
+        milli = milli_from_row(
             tokens_unknown=bool(row.tokens_unknown),
             total_tokens=row.total_tokens,
             prompt_tokens=row.prompt_tokens,
             completion_tokens=row.completion_tokens,
+            extra=_row_extra(row),
         )
-        if token_n is None:
+        if milli is None:
             continue
         saw_known = True
-        known += token_n
+        known += milli
     if saw_known:
         return {
             "phase": "settled",
-            "points": points_from_tokens(known),
+            "points": format_millipoints(known),
             "wallet": False,
             "run_id": run_id,
         }

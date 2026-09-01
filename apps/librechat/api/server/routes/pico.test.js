@@ -665,6 +665,17 @@ describe('Pico proxy routes', () => {
       }),
     );
 
+    await request(app)
+      .post('/api/pico/v1/usage/points/quote')
+      .send({ input_chars: 14, conversation_id: 'convo-hi' });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/usage/points/quote',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ input_chars: 14, conversation_id: 'convo-hi' }),
+      }),
+    );
+
     await request(app).get('/api/pico/v1/usage/points?run_id=run_abc-1');
     expect(global.fetch).toHaveBeenCalledWith(
       'http://127.0.0.1:18765/v1/usage/points?run_id=run_abc-1',

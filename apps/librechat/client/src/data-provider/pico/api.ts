@@ -684,10 +684,20 @@ export type PicoPointsView = {
   run_id?: string;
 };
 
-export async function quotePicoPoints(inputChars: number): Promise<PicoPointsView> {
+export async function quotePicoPoints(
+  inputChars: number,
+  conversationId?: string | null,
+): Promise<PicoPointsView> {
+  const cid = (conversationId || '').trim();
+  const body: { input_chars: number; conversation_id?: string } = {
+    input_chars: Math.max(0, Math.floor(inputChars) || 0),
+  };
+  if (cid && cid.toLowerCase() !== 'new' && cid.toLowerCase() !== 'search') {
+    body.conversation_id = cid;
+  }
   return picoFetch<PicoPointsView>('/v1/usage/points/quote', {
     method: 'POST',
-    body: JSON.stringify({ input_chars: Math.max(0, Math.floor(inputChars) || 0) }),
+    body: JSON.stringify(body),
   });
 }
 

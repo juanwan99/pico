@@ -32,6 +32,11 @@ jest.mock(
 
 jest.mock('~/Providers', () => ({
   useChatContext: () => ({ conversation: mockConversation }),
+  useOptionalChatContext: () => ({
+    conversation: mockConversation,
+    setConversation: jest.fn(),
+  }),
+  useOptionalChatFormContext: () => ({ setValue: jest.fn() }),
   useAgentsMapContext: () => mockAgentsMap,
   useAssistantsMapContext: () => mockAssistantMap,
 }));
@@ -94,6 +99,31 @@ jest.mock('~/utils', () => ({
 }));
 
 jest.mock('~/components/Endpoints/ConvoIcon', () => () => <span data-testid="convo-icon" />);
+
+jest.mock('~/hooks/Pico/usePointsMeter', () => ({
+  usePointsMeter: () => ({
+    phase: 'idle',
+    points: null,
+    quoteFromChars: jest.fn(),
+    turnForMessage: () => null,
+    composerLive: false,
+  }),
+}));
+
+jest.mock('~/components/Chat/PointsBar', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
+jest.mock('~/components/Chat/SchoolMaterialsBar', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
+jest.mock('~/components/Chat/ArchiveFolderBar', () => ({
+  __esModule: true,
+  default: () => null,
+}));
 
 describe('Landing agent contact', () => {
   beforeEach(() => {

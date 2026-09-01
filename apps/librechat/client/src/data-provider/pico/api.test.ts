@@ -12,6 +12,7 @@ import {
   listMyFolders,
   createMyFolder,
   transferMyArtifact,
+  quotePicoPoints,
 } from './api';
 
 jest.mock('librechat-data-provider', () => ({
@@ -236,6 +237,59 @@ describe('edu school materials client', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ field_id: 'field-1', mode: 'copy' }),
+      }),
+    );
+  });
+});
+
+describe('quotePicoPoints', () => {
+  const originalFetch = global.fetch;
+  let fetchMock: jest.Mock;
+
+  beforeEach(() => {
+    fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    mockGetTokenHeader.mockReturnValue('Bearer browser-jwt');
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('posts teacher chars without borrowing a placeholder conversation', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ phase: 'quote', points: '25.224', wallet: false }),
+    });
+    await expect(quotePicoPoints(14, 'new')).resolves.toEqual({
+      phase: 'quote',
+      points: '25.224',
+      wallet: false,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/pico/v1/usage/points/quote',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ input_chars: 14 }),
+      }),
+    );
+  });
+
+  it('passes this conversation so 预计 can cover the last bill', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ phase: 'quote', points: '25.278', wallet: false }),
+    });
+    await expect(quotePicoPoints(14, 'convo-hi')).resolves.toEqual({
+      phase: 'quote',
+      points: '25.278',
+      wallet: false,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/pico/v1/usage/points/quote',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ input_chars: 14, conversation_id: 'convo-hi' }),
       }),
     );
   });

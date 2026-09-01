@@ -34,6 +34,7 @@ _ATTR_USAGE_KEYS = (
     "input",
     "output",
     "cached_tokens",
+    "cache_write_tokens",
     "reasoning_tokens",
     "cacheRead",
     "cacheWrite",
@@ -139,8 +140,9 @@ def parse_usage_blob(raw: Any) -> dict[str, Any] | None:
 
     Canonical keys:
       prompt_tokens, completion_tokens, total_tokens
-      cached_tokens, reasoning_tokens (optional extras for edu weights)
+      cached_tokens, cache_write_tokens, reasoning_tokens (extras)
       estimated (bool)
+    prompt_tokens is full input (cache reads included) when we can tell.
     All-zero without estimated → None (honest unknown, not a fake free turn).
     """
     blob = _from_mapping(raw)
@@ -176,6 +178,16 @@ def parse_usage_blob(raw: Any) -> dict[str, Any] | None:
             "cache_read_input_tokens",
             "cacheRead",
         )
+    cache_write = int_or_none(blob.get("cache_write_tokens"))
+    if cache_write is None:
+        cache_write = int_or_none(blob.get("cacheWrite"))
+    if cache_write is None:
+        cache_write = _details_int(
+            blob.get("input_tokens_details") or blob.get("prompt_tokens_details"),
+            "cache_write_tokens",
+            "cache_write",
+            "cache_creation_input_tokens",
+        )
     reasoning = int_or_none(blob.get("reasoning_tokens"))
     if reasoning is None:
         reasoning = int_or_none(blob.get("reasoning"))
@@ -190,6 +202,10 @@ def parse_usage_blob(raw: Any) -> dict[str, Any] | None:
         return None
     if not estimated and (prompt or 0) == 0 and (completion or 0) == 0 and (total or 0) == 0:
         return None
+    if prompt is not None and cached and prompt < cached and total is not None:
+        reconstructed = prompt + cached + (completion or 0)
+        if abs(reconstructed - total) <= 1:
+            prompt = prompt + cached
     if total is None and prompt is not None and completion is not None:
         total = prompt + completion
     out: dict[str, Any] = {}
@@ -203,6 +219,8 @@ def parse_usage_blob(raw: Any) -> dict[str, Any] | None:
         out["total_tokens"] = total
     if cached is not None:
         out["cached_tokens"] = cached
+    if cache_write is not None:
+        out["cache_write_tokens"] = cache_write
     if reasoning is not None:
         out["reasoning_tokens"] = reasoning
     if estimated:
@@ -223,6 +241,7 @@ def add_usage(acc: dict[str, Any] | None, piece: dict[str, Any] | None) -> dict[
         "completion_tokens",
         "total_tokens",
         "cached_tokens",
+        "cache_write_tokens",
         "reasoning_tokens",
         "input_tokens",
         "output_tokens",
@@ -270,7 +289,7 @@ def usage_extra_bits(usage: dict[str, Any] | None) -> dict[str, Any]:
         return {}
     extra: dict[str, Any] = {}
     parsed = parse_usage_blob(usage) or {}
-    for key in ("cached_tokens", "reasoning_tokens"):
+    for key in ("cached_tokens", "cache_write_tokens", "reasoning_tokens"):
         val = parsed.get(key)
         if val is None or val == "":
             continue

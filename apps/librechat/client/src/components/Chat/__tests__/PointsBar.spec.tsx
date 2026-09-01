@@ -14,13 +14,13 @@ describe('PointsBar', () => {
   it('renders live quote above the composer without token words', () => {
     usePointsMeter.mockReturnValue({
       phase: 'quote',
-      points: '0.048',
+      points: '25.224',
       quoteFromChars: jest.fn(),
       turnForMessage: () => null,
       composerLive: true,
     });
     render(<PointsBar />);
-    expect(screen.getByTestId('pico-points-bar')).toHaveTextContent('预计 0.048 积分');
+    expect(screen.getByTestId('pico-points-bar')).toHaveTextContent('预计 25.224 积分');
     expect(screen.queryByText(/token/i)).not.toBeInTheDocument();
     expect(screen.queryByText('未结算')).not.toBeInTheDocument();
   });

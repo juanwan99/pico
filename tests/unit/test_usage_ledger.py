@@ -83,6 +83,18 @@ def test_extract_token_fields_provider_and_openai_aliases() -> None:
     assert pi.total_tokens == 15
     assert pi.estimated is False
 
+    split = extract_token_fields(
+        {
+            "prompt_tokens": 1058,
+            "completion_tokens": 78,
+            "total_tokens": 8816,
+            "cached_tokens": 7680,
+        }
+    )
+    assert split.prompt_tokens == 8738
+    assert split.completion_tokens == 78
+    assert split.total_tokens == 8816
+
 
 def test_extract_token_fields_estimated_flag_is_unknown() -> None:
     fields = extract_token_fields(

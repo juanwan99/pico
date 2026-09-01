@@ -443,6 +443,10 @@ const ChatForm = memo(function ChatForm({
   const textValue = useWatch({ control: methods.control, name: 'text' });
 
   useEffect(() => {
+    quoteFromChars(typeof textValue === 'string' ? textValue.length : 0);
+  }, [textValue, quoteFromChars]);
+
+  useEffect(() => {
     if (textAreaRef.current) {
       const style = window.getComputedStyle(textAreaRef.current);
       const lineHeight = parseFloat(style.lineHeight);

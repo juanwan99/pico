@@ -48,6 +48,22 @@ def test_parse_responses_details() -> None:
     assert parsed["prompt_tokens"] == 100
 
 
+def test_parse_expands_prompt_when_provider_excludes_cache() -> None:
+    parsed = parse_usage_blob(
+        {
+            "prompt_tokens": 1058,
+            "completion_tokens": 78,
+            "total_tokens": 8816,
+            "cached_tokens": 7680,
+        }
+    )
+    assert parsed is not None
+    assert parsed["prompt_tokens"] == 8738
+    assert parsed["cached_tokens"] == 7680
+    assert parsed["completion_tokens"] == 78
+    assert parsed["total_tokens"] == 8816
+
+
 def test_parse_true_pi_aliases_and_strips_cost() -> None:
     parsed = parse_usage_blob(
         {
@@ -65,6 +81,7 @@ def test_parse_true_pi_aliases_and_strips_cost() -> None:
     assert parsed["completion_tokens"] == 7
     assert parsed["total_tokens"] == 15
     assert parsed["cached_tokens"] == 3
+    assert parsed["cache_write_tokens"] == 1
     assert parsed["reasoning_tokens"] == 4
     assert "cost" not in parsed
     assert parse_usage_blob({"input": 0, "output": 0, "totalTokens": 0}) is None
@@ -78,12 +95,14 @@ def test_parse_true_pi_aliases_and_strips_cost() -> None:
             "output": 7,
             "totalTokens": 15,
             "cacheRead": 3,
+            "cacheWrite": 1,
             "reasoning": 4,
             "cost": {"total": 1},
             "ui_model": "pico-fast",
         }
     )
     assert extra["cached_tokens"] == 3
+    assert extra["cache_write_tokens"] == 1
     assert extra["reasoning_tokens"] == 4
     assert extra["ui_model"] == "pico-fast"
     assert "cost" not in extra

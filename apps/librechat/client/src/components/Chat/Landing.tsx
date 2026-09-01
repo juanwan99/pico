@@ -71,6 +71,10 @@ export default function Landing({ centerFormOnLanding: _c }: { centerFormOnLandi
     setConversationRef.current?.((prev) => patchConversationPlan(prev, on) ?? prev);
   }, []);
 
+  useEffect(() => {
+    quoteFromChars(text.length);
+  }, [text, quoteFromChars]);
+
   const syncForm = useCallback(
     (value: string) => {
       setText(value);
