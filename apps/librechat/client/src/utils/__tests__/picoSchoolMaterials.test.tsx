@@ -38,7 +38,7 @@ describe('SchoolMaterialsBar venue folder tree', () => {
     mockListEduFields.mockResolvedValue({
       fields: [
         { id: 'field-1', name: '本学期排课' },
-        { id: 'field-2', name: '一年级语文' },
+        { id: 'field-2', name: '一年级语文', followed: true },
       ],
     });
     mockPutEduNamedIds.mockResolvedValue({ ids: [] });
@@ -66,7 +66,8 @@ describe('SchoolMaterialsBar venue folder tree', () => {
     fireEvent.click(screen.getByTestId('school-materials-toggle'));
 
     expect(await screen.findByTestId('school-field-folder-field-1')).toBeInTheDocument();
-    expect(screen.getByTestId('school-field-folder-field-2')).toBeInTheDocument();
+    expect(screen.queryByTestId('school-field-folder-field-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('school-follow-folder-field-2')).not.toBeInTheDocument();
     expect(screen.queryByTestId('school-material-doc-1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('school-materials-q')).not.toBeInTheDocument();
     expect(screen.queryByText('搜')).not.toBeInTheDocument();
@@ -104,12 +105,29 @@ describe('SchoolMaterialsBar venue folder tree', () => {
     render(<SchoolMaterialsBar conversationId="c1" />);
     fireEvent.click(screen.getByTestId('school-materials-toggle'));
     fireEvent.click(await screen.findByTestId('school-field-toggle-field-1'));
-    fireEvent.click(await screen.findByTestId('school-field-toggle-field-2'));
+    fireEvent.click(await screen.findByTestId('school-followed-toggle'));
+    fireEvent.click(await screen.findByTestId('school-follow-toggle-field-2'));
     fireEvent.click(await screen.findByTestId('school-material-doc-1'));
     fireEvent.click(await screen.findByTestId('school-material-doc-2'));
 
     await waitFor(() => {
       expect(mockPutEduNamedIds).toHaveBeenCalledWith('c1', ['doc-1', 'doc-2'], '');
     });
+  });
+
+  it('splits manage left and followed right; followed stays folded', async () => {
+    render(<SchoolMaterialsBar conversationId="c1" />);
+    fireEvent.click(screen.getByTestId('school-materials-toggle'));
+
+    expect(await screen.findByTestId('school-materials-mine')).toBeInTheDocument();
+    expect(screen.getByText('我负责的')).toBeInTheDocument();
+    expect(await screen.findByTestId('school-field-folder-field-1')).toBeInTheDocument();
+    expect(screen.getByTestId('school-followed-toggle')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('school-follow-folder-field-2')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('school-followed-toggle'));
+    expect(screen.getByTestId('school-followed-toggle')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('school-follow-folder-field-2')).toBeInTheDocument();
+    expect(screen.queryByTestId('school-field-folder-field-2')).not.toBeInTheDocument();
   });
 });

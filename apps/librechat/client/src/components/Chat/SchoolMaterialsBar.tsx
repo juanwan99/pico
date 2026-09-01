@@ -1,6 +1,6 @@
 /**
  * Chat school materials: venue folder tree. Open = see folders; documents lazy on expand.
- * No landing destination, no search-first, no venue dropdown, no N× field_id on open.
+ * Left = I manage; right = I follow (collapsed). No landing destination.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -11,9 +11,10 @@ import {
 } from '~/data-provider/pico/api';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import {
-  groupSchoolTree,
   loadSchoolFieldItems,
   loadSchoolFields,
+  splitSchoolGroups,
+  type SchoolFieldGroup,
 } from '~/utils/picoSchoolTree';
 import { cn } from '~/utils';
 import ComposerChromeRow from '~/components/Chat/ComposerChromeRow';
@@ -22,6 +23,95 @@ function asNamedIds(row: { ids?: string[] }) {
   return {
     ids: Array.isArray(row.ids) ? row.ids : [],
   };
+}
+
+function FieldFolderList({
+  groups,
+  expanded,
+  loadingFields,
+  loadedFields,
+  named,
+  testPrefix,
+  onToggleField,
+  onToggleItem,
+}: {
+  groups: SchoolFieldGroup[];
+  expanded: Record<string, boolean>;
+  loadingFields: Record<string, boolean>;
+  loadedFields: Record<string, boolean>;
+  named: string[];
+  testPrefix: string;
+  onToggleField: (fieldKey: string) => void;
+  onToggleItem: (id: string) => void;
+}) {
+  return (
+    <>
+      {groups.map((group) => {
+        const fieldKey = group.field.id || 'other';
+        const isOpen = !!expanded[fieldKey];
+        const isLoading = !!loadingFields[fieldKey];
+        const hasLoaded = !!loadedFields[fieldKey] || fieldKey === 'other';
+        return (
+          <section key={fieldKey} className="py-0.5" data-testid={`${testPrefix}-folder-${fieldKey}`}>
+            <button
+              type="button"
+              className="pico-type-sidebar flex w-full items-center gap-1 py-0.5 text-left text-[color:var(--pico-ink)]"
+              aria-expanded={isOpen}
+              data-testid={`${testPrefix}-toggle-${fieldKey}`}
+              onClick={() => onToggleField(fieldKey)}
+            >
+              <span className="w-4 shrink-0 text-[color:var(--pico-ink-2)]">{isOpen ? '▾' : '▸'}</span>
+              <PicoIcon
+                name={isOpen ? 'folder-open' : 'folder'}
+                size="sm"
+                className="shrink-0 text-[color:var(--pico-ink-2)]"
+              />
+              <span>{group.field.name || group.field.id}</span>
+            </button>
+            {isOpen ? (
+              isLoading || !hasLoaded ? (
+                <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">正在列出文档…</p>
+              ) : group.items.length === 0 ? (
+                <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">这场没有文档</p>
+              ) : (
+                <ul className="pl-5">
+                  {group.items.map((row) => {
+                    const id = row.id;
+                    if (!id) return null;
+                    const checked = named.includes(id);
+                    return (
+                      <li key={id} className="flex items-start gap-2 py-0.5">
+                        <input
+                          type="checkbox"
+                          className="mt-1.5"
+                          checked={checked}
+                          onChange={() => onToggleItem(id)}
+                          data-testid={`school-material-${id}`}
+                        />
+                        <PicoIcon
+                          name="file"
+                          size="sm"
+                          className="mt-0.5 shrink-0 text-[color:var(--pico-ink-2)]"
+                        />
+                        <span
+                          className={cn(
+                            'pico-type-body min-w-0',
+                            checked ? 'text-[color:var(--pico-ink)]' : 'text-[color:var(--pico-ink-2)]',
+                          )}
+                        >
+                          {row.title || id}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )
+            ) : null}
+          </section>
+        );
+      })}
+    </>
+  );
 }
 
 export default function SchoolMaterialsBar({ conversationId }: { conversationId?: string | null }) {
@@ -33,6 +123,7 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   const [named, setNamed] = useState<string[]>([]);
   const [fields, setFields] = useState<EduSchoolField[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [followOpen, setFollowOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inflight = useRef<Record<string, Promise<void>>>({});
@@ -82,6 +173,7 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
         setItemsByField({});
         setLoadedFields({});
         setExpanded({});
+        setFollowOpen(false);
         if (fieldsRow.configured === false) {
           setError('学校材料口还没接通');
         }
@@ -159,7 +251,18 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   );
 
   const items = useMemo(() => Object.values(itemsByField).flat(), [itemsByField]);
-  const groups = useMemo(() => groupSchoolTree(fields, items), [fields, items]);
+  const { mine: mineGroups, followed: followGroups } = useMemo(
+    () => splitSchoolGroups(fields, items),
+    [fields, items],
+  );
+  const folderProps = {
+    expanded,
+    loadingFields,
+    loadedFields,
+    named,
+    onToggleField: toggleField,
+    onToggleItem: (id: string) => void toggle(id),
+  };
 
   return (
     <div ref={rootRef} className="w-full text-left" data-testid="school-materials-bar">
@@ -193,76 +296,38 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
               {error}
             </p>
           ) : null}
-          {busy && groups.length === 0 ? (
+          {busy && mineGroups.length === 0 && followGroups.length === 0 ? (
             <p className="pico-type-aux text-[color:var(--pico-ink-3)]">正在列出有权的场…</p>
           ) : null}
-          {groups.map((group) => {
-            const fieldKey = group.field.id || 'other';
-            const isOpen = !!expanded[fieldKey];
-            const isLoading = !!loadingFields[fieldKey];
-            const hasLoaded = !!loadedFields[fieldKey] || fieldKey === 'other';
-            return (
-              <section key={fieldKey} className="py-0.5" data-testid={`school-field-folder-${fieldKey}`}>
-                <button
-                  type="button"
-                  className="pico-type-sidebar flex w-full items-center gap-1 py-0.5 text-left text-[color:var(--pico-ink)]"
-                  aria-expanded={isOpen}
-                  data-testid={`school-field-toggle-${fieldKey}`}
-                  onClick={() => toggleField(fieldKey)}
-                >
-                  <span className="w-4 shrink-0 text-[color:var(--pico-ink-2)]">{isOpen ? '▾' : '▸'}</span>
-                  <PicoIcon
-                    name={isOpen ? 'folder-open' : 'folder'}
-                    size="sm"
-                    className="shrink-0 text-[color:var(--pico-ink-2)]"
-                  />
-                  <span>{group.field.name || group.field.id}</span>
-                </button>
-                {isOpen ? (
-                  isLoading || !hasLoaded ? (
-                    <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">正在列出文档…</p>
-                  ) : group.items.length === 0 ? (
-                    <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">这场没有文档</p>
-                  ) : (
-                    <ul className="pl-5">
-                      {group.items.map((row) => {
-                        const id = row.id;
-                        if (!id) return null;
-                        const checked = named.includes(id);
-                        return (
-                          <li key={id} className="flex items-start gap-2 py-0.5">
-                            <input
-                              type="checkbox"
-                              className="mt-1.5"
-                              checked={checked}
-                              onChange={() => void toggle(id)}
-                              data-testid={`school-material-${id}`}
-                            />
-                            <PicoIcon
-                              name="file"
-                              size="sm"
-                              className="mt-0.5 shrink-0 text-[color:var(--pico-ink-2)]"
-                            />
-                            <span
-                              className={cn(
-                                'pico-type-body min-w-0',
-                                checked ? 'text-[color:var(--pico-ink)]' : 'text-[color:var(--pico-ink-2)]',
-                              )}
-                            >
-                              {row.title || id}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )
-                ) : null}
-              </section>
-            );
-          })}
-          {!busy && groups.length === 0 && !error ? (
-            <p className="pico-type-body text-[color:var(--pico-ink-2)]">还没有有权的场</p>
-          ) : null}
+          <div className="grid grid-cols-2 gap-3">
+            <div data-testid="school-materials-mine">
+              <p className="pico-type-aux py-0.5 text-[color:var(--pico-ink-2)]">我负责的</p>
+              <FieldFolderList groups={mineGroups} testPrefix="school-field" {...folderProps} />
+              {!busy && mineGroups.length === 0 && !error ? (
+                <p className="pico-type-body text-[color:var(--pico-ink-2)]">还没有负责的场</p>
+              ) : null}
+            </div>
+            <div data-testid="school-materials-followed">
+              <button
+                type="button"
+                className="pico-type-aux flex w-full items-center gap-1 py-0.5 text-left text-[color:var(--pico-ink-2)]"
+                aria-expanded={followOpen}
+                data-testid="school-followed-toggle"
+                onClick={() => setFollowOpen((v) => !v)}
+              >
+                <span className="w-4 shrink-0">{followOpen ? '▾' : '▸'}</span>
+                <span>订阅</span>
+              </button>
+              {followOpen ? (
+                <>
+                  <FieldFolderList groups={followGroups} testPrefix="school-follow" {...folderProps} />
+                  {followGroups.length === 0 && !error ? (
+                    <p className="pico-type-body text-[color:var(--pico-ink-2)]">还没有订阅的场</p>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

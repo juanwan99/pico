@@ -80,6 +80,46 @@ export async function loadSchoolFieldTree(): Promise<{
   return { fields, items, configured };
 }
 
+/** Producer / manage / write vs follow-only. Missing `followed` stays mine. */
+export function splitSchoolFields(fields: EduSchoolField[]): {
+  mine: EduSchoolField[];
+  followed: EduSchoolField[];
+} {
+  const mine: EduSchoolField[] = [];
+  const followed: EduSchoolField[] = [];
+  const seen = new Set<string>();
+  for (const field of fields) {
+    if (!field.id || seen.has(field.id)) continue;
+    seen.add(field.id);
+    if (field.followed === true) {
+      followed.push(field);
+    } else {
+      mine.push(field);
+    }
+  }
+  return { mine, followed };
+}
+
+export function splitSchoolGroups(
+  fields: EduSchoolField[],
+  items: EduSchoolMaterial[],
+): { mine: SchoolFieldGroup[]; followed: SchoolFieldGroup[] } {
+  const split = splitSchoolFields(fields);
+  const followIds = new Set(split.followed.map((field) => field.id));
+  const followItems = items.filter((item) => {
+    const fid = materialFieldId(item);
+    return Boolean(fid && followIds.has(fid));
+  });
+  const mineItems = items.filter((item) => {
+    const fid = materialFieldId(item);
+    return !fid || !followIds.has(fid);
+  });
+  return {
+    mine: groupSchoolTree(split.mine, mineItems),
+    followed: groupSchoolTree(split.followed, followItems),
+  };
+}
+
 export function groupSchoolTree(
   fields: EduSchoolField[],
   items: EduSchoolMaterial[],
