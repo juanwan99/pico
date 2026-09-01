@@ -36,9 +36,6 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_pptx_document",
             "sandbox_pptx_lib",
             "generate_xlsx_document",
-            "edit_docx_document",
-            "edit_pptx_document",
-            "edit_xlsx_document",
             "render_document",
             "inspect_document",
             "verify_document",
@@ -59,6 +56,7 @@ _POLICIES: dict[str, SkillPolicy] = {
         risk="low",
         instruction=(
             "老师要真实文件或改已有文件。工具已挂载，你自己决定调哪个。"
+            "改已有 Word/PPT/Excel 用 generate_*（artifact_id + 段/页/格），不要另找 edit 菜单。"
             "工具返回 ok 不算完：读 observation（落地了什么），不对就再调。"
             "禁止空壳、禁止编造文件。不要向用户复读机读字段或 Artifact ID。"
             "HTML 必须断网可开：页内 CSS/JS/SVG，禁止 CDN / Three.js / Chart.js / ECharts 外链，禁止假定 window.THREE。"
@@ -78,9 +76,6 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_pptx_document",
             "sandbox_pptx_lib",
             "generate_xlsx_document",
-            "edit_docx_document",
-            "edit_pptx_document",
-            "edit_xlsx_document",
             "render_document",
             "inspect_document",
             "verify_document",

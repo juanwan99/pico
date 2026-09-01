@@ -82,14 +82,14 @@ LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 
 ---
 
-## 5. 现况缺口（本页不改代码）
+## 5. 现况缺口
 
-- 桥上常驻工具已偏多，schema 每轮全挂。  
+- 常驻 CORE 已收（#811）：办公 generate_* 兼 patch；`edit_*` 只留执行别名（EXTENDED）。天花板 `sandbox_pptx_lib` 仍常驻。不要再加调度器 / tool_search。  
 - `skill-deliverable` 只留何时用 + 观察回执，禁止再灌交付剧本。  
 - 仓内已有场景 Skill 苗头（教案/出题）；须保持「不自动套用」，禁止再铺成默认工作流。  
 - 写/改/打开工具回 `observation`（事实，不是评分）。禁自研反思核。门脸不编课堂文件。
 
-收口另开实现切片，遵守本页，不另造核。
+收口走任务卡，遵守本页，不另造核。
 
 ---
 

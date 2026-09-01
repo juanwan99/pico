@@ -17,6 +17,8 @@ from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
 # Always-on: teacher-said verbs. Do not add a scheduler / tool_search.
 # Office ceiling (sandbox_pptx_lib) stays visible — hiding it in EXTENDED is a picker.
+# generate_* also patches (artifact_id + paragraph/slide/cell). edit_* stay
+# execute aliases on EXTENDED so hung skills / old names still run.
 # Programming sandbox stays extended until T-CODE-SANDBOX (S3).
 # Hung skills may narrow, but must not expose generate_pptx_document without
 # its sibling sandbox_pptx_lib (see ppt_siblings_honest).
@@ -29,9 +31,6 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "generate_pptx_document",
     "sandbox_pptx_lib",
     "generate_xlsx_document",
-    "edit_docx_document",
-    "edit_pptx_document",
-    "edit_xlsx_document",
     "inspect_document",
     "generate_image",
     "generate_diagram",
@@ -43,6 +42,9 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
 
 # Same gateway, not registered unless a hung skill lists them.
 EXTENDED_TOOLS: tuple[str, ...] = (
+    "edit_docx_document",
+    "edit_pptx_document",
+    "edit_xlsx_document",
     "sandbox_browser_open",
     "sandbox_document_open",
     "publish_html_page",

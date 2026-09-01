@@ -186,12 +186,17 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_docx_document",
-    "Create a real .docx Artifact (Pico gateway). Result includes an observation of what landed. ok is not finished.",
+    "Create a real .docx Artifact (Pico gateway), or patch an existing one. To change an uploaded file, pass artifact_id plus paragraph_index/text, comment, or values — do not look for a separate edit tool. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
-        title: Type.String(),
+        title: Type.Optional(Type.String()),
         marker: Type.Optional(Type.String()),
         body: Type.Optional(Type.String()),
+        artifact_id: Type.Optional(Type.String()),
+        paragraph_index: Type.Optional(Type.Number()),
+        text: Type.Optional(Type.String()),
+        comment: Type.Optional(Type.String()),
+        output_title: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),
@@ -199,12 +204,16 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_pptx_document",
-    "Create a real .pptx Artifact via spec/blocks on stock python-pptx layouts (title, bullets, table, theme colors). Sibling of sandbox_pptx_lib (isolated python-pptx) — pick from the teacher's ask, not a scene word. Free shapes / color blocks / full-bleed geometry are not this tool; write python-pptx in sandbox_pptx_lib. Same title replaces the file the teacher opens. Read observation.outline.images after. A missing image_artifact_id skips that picture; the file still lands. blocks[].type cover/content/title/page (or omitted) are slides — not a new spec field. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. Pictures already inside the file are not separate downloads. ok is not finished.",
+    "Create a real .pptx Artifact via spec/blocks on stock python-pptx layouts (title, bullets, table, theme colors). Sibling of sandbox_pptx_lib (isolated python-pptx) — pick from the teacher's ask, not a scene word. Free shapes / color blocks / full-bleed geometry are not this tool; write python-pptx in sandbox_pptx_lib. Same title replaces the file the teacher opens. To patch an existing deck, pass artifact_id plus slide_index/new_title or values — do not look for a separate edit tool. Read observation.outline.images after. A missing image_artifact_id skips that picture; the file still lands. blocks[].type cover/content/title/page (or omitted) are slides — not a new spec field. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. Pictures already inside the file are not separate downloads. ok is not finished.",
     Type.Object(
       {
-        title: Type.String(),
+        title: Type.Optional(Type.String()),
         marker: Type.Optional(Type.String()),
         body: Type.Optional(Type.String()),
+        artifact_id: Type.Optional(Type.String()),
+        slide_index: Type.Optional(Type.Number()),
+        new_title: Type.Optional(Type.String()),
+        output_title: Type.Optional(Type.String()),
         spec: Type.Optional(Type.Object({}, { additionalProperties: true })),
         blocks: Type.Optional(
           Type.Array(
@@ -226,12 +235,17 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_xlsx_document",
-    "Create a real .xlsx Artifact (Pico gateway). Markdown/TSV tables in body become sheets and rows (sibling of Word paragraphs / PPT --- slides). spec.sheets is the structured path. A whole draft in one cell is not a spreadsheet. Result includes an observation of what landed. ok is not finished.",
+    "Create a real .xlsx Artifact (Pico gateway), or patch an existing sheet. Markdown/TSV tables in body become sheets and rows (sibling of Word paragraphs / PPT --- slides). spec.sheets is the structured path. A whole draft in one cell is not a spreadsheet. To change an uploaded file, pass artifact_id plus cell/value or values — do not look for a separate edit tool. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
-        title: Type.String(),
+        title: Type.Optional(Type.String()),
         marker: Type.Optional(Type.String()),
         body: Type.Optional(Type.String()),
+        artifact_id: Type.Optional(Type.String()),
+        cell: Type.Optional(Type.String()),
+        value: Type.Optional(Type.String()),
+        sheet: Type.Optional(Type.String()),
+        output_title: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),
@@ -292,7 +306,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "inspect_document",
-    "Read paragraph/slide/sheet/comment indexes of a ledger Word/PPT/Excel. Embedded pictures are kept so the teacher's next question can see them. Call before edit.",
+    "Read paragraph/slide/sheet/comment indexes of a ledger Word/PPT/Excel. Embedded pictures are kept so the teacher's next question can see them. Call before generate_* patch.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),

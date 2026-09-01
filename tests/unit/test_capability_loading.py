@@ -32,12 +32,18 @@ def test_core_and_extended_partition_gateway():
     assert set(CORE_VISIBLE_TOOLS) & set(EXTENDED_TOOLS) == set()
     assert "bash" not in CORE_VISIBLE_TOOLS
     assert "bash" not in EXTENDED_TOOLS
-    assert len(CORE_VISIBLE_TOOLS) == 18
-    assert len(EXTENDED_TOOLS) == 10
+    assert len(CORE_VISIBLE_TOOLS) == 15
+    assert len(EXTENDED_TOOLS) == 13
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_pptx_lib" in CORE_VISIBLE_TOOLS
     assert "sandbox_pptx_lib" not in EXTENDED_TOOLS
+    assert "edit_docx_document" not in CORE_VISIBLE_TOOLS
+    assert "edit_pptx_document" not in CORE_VISIBLE_TOOLS
+    assert "edit_xlsx_document" not in CORE_VISIBLE_TOOLS
+    assert "edit_docx_document" in EXTENDED_TOOLS
+    assert "edit_pptx_document" in EXTENDED_TOOLS
+    assert "edit_xlsx_document" in EXTENDED_TOOLS
     assert "sandbox_workspace_exec" in EXTENDED_TOOLS
     assert "sandbox_workspace_exec" not in CORE_VISIBLE_TOOLS
     assert "sandbox_browser_open" in EXTENDED_TOOLS
@@ -52,6 +58,7 @@ def test_default_visible_is_core_not_full_allowlist():
     assert visible == list(CORE_VISIBLE_TOOLS)
     assert "sandbox_pptx_lib" in visible
     assert "generate_pptx_document" in visible
+    assert "edit_docx_document" not in visible
     assert "sandbox_workspace_exec" not in visible
     assert "verify_html_document" not in visible
     assert "generate_docx_document" in visible
