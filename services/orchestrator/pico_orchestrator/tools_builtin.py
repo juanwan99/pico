@@ -747,7 +747,39 @@ def _workspace_handlers(
             return blocks
         return None
 
+    def _has_new_office_content(args: dict[str, Any]) -> bool:
+        return any(args.get(key) is not None for key in ("body", "spec", "blocks"))
+
+    def _docx_is_patch(args: dict[str, Any]) -> bool:
+        if _has_new_office_content(args):
+            return False
+        if args.get("paragraph_index") is not None:
+            return True
+        if str(args.get("comment") or "").strip():
+            return True
+        if args.get("values") is not None:
+            return True
+        return bool(str(args.get("text") or "").strip())
+
+    def _pptx_is_patch(args: dict[str, Any]) -> bool:
+        if _has_new_office_content(args):
+            return False
+        if str(args.get("new_title") or "").strip():
+            return True
+        if args.get("values") is not None:
+            return True
+        return args.get("slide_index") is not None
+
+    def _xlsx_is_patch(args: dict[str, Any]) -> bool:
+        if _has_new_office_content(args):
+            return False
+        if str(args.get("cell") or args.get("address") or "").strip():
+            return True
+        return args.get("values") is not None
+
     async def generate_docx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        if _docx_is_patch(args):
+            return await edit_docx(principal, args)
         title = _ensure_extension(_artifact_title(args), ".docx")
         marker = _marker_arg(args)
         spec_raw = _spec_arg(args)
@@ -787,6 +819,8 @@ def _workspace_handlers(
         return _attach_write_observation(result, kind="docx", title=title, raw=raw)
 
     async def generate_pptx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        if _pptx_is_patch(args):
+            return await edit_pptx(principal, args)
         title = _ensure_extension(_artifact_title(args), ".pptx")
         marker = _marker_arg(args)
         spec_raw = _spec_arg(args)
@@ -826,6 +860,8 @@ def _workspace_handlers(
         return _attach_write_observation(result, kind="pptx", title=title, raw=raw)
 
     async def generate_xlsx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        if _xlsx_is_patch(args):
+            return await edit_xlsx(principal, args)
         title = _ensure_extension(_artifact_title(args), ".xlsx")
         marker = _marker_arg(args)
         spec_raw = _spec_arg(args)
@@ -2069,9 +2105,13 @@ def build_default_gateway(
         ToolSpec(
             name="generate_docx_document",
             description=(
-                "Create a real OOXML .docx. Result includes an observation of "
+                "Create a real OOXML .docx, or patch an existing one. "
+                "To change an uploaded file, pass artifact_id|title plus "
+                "paragraph_index/text, comment, or values — do not look for a "
+                "separate edit tool. Result includes an observation of "
                 "what landed (counts, preview — not a score). ok is not finished. "
-                "Args: title, marker, body? | spec? | blocks?"
+                "Args: title, marker, body? | spec? | blocks? | artifact_id? "
+                "paragraph_index? text? comment? values? output_title?"
             ),
             handler=generate_docx,
             school_scoped=False,
@@ -2093,7 +2133,10 @@ def build_default_gateway(
                 "are slides. To embed a picture, pass generate_image/"
                 "generate_diagram artifact id as image_artifact_id on the slide "
                 "in spec/blocks. [image:…] in body does not embed. ok is not "
-                "finished. Args: title, marker, body? | spec? | blocks?"
+                "finished. To patch an existing deck, pass artifact_id|title plus "
+                "slide_index/new_title or values — do not look for a separate edit tool. "
+                "Args: title, marker, body? | spec? | blocks? | artifact_id? "
+                "slide_index? new_title? values? output_title?"
             ),
             handler=generate_pptx,
             school_scoped=False,
@@ -2126,9 +2169,15 @@ def build_default_gateway(
         ToolSpec(
             name="generate_xlsx_document",
             description=(
-                "Create a real OOXML .xlsx. Result includes an observation of "
-                "what landed. ok is not finished. "
-                "Args: title, marker, body? | spec? | blocks?"
+                "Create a real OOXML .xlsx, or patch an existing sheet. "
+                "Markdown/TSV tables in body become sheets and rows "
+                "(sibling of Word paragraphs / PPT --- slides). "
+                "A whole draft in one cell is not a spreadsheet. "
+                "To change an uploaded file, pass artifact_id|title plus cell/value "
+                "or values — do not look for a separate edit tool. "
+                "Result includes an observation of what landed. ok is not finished. "
+                "Args: title, marker, body? | spec? | blocks? | artifact_id? "
+                "cell? value? sheet? values? output_title?"
             ),
             handler=generate_xlsx,
             school_scoped=False,
@@ -2192,7 +2241,8 @@ def build_default_gateway(
                 "Read structure of an uploaded .docx/.pptx/.xlsx: paragraph/slide/cell "
                 "indexes, tables, comments, leftover {{key}}. Embedded pictures are "
                 "remembered so the teacher's next question can see the pixels. "
-                "Call before edit_*. Old .doc/.ppt/.xls fail in Chinese. "
+                "Call before generate_* patch (paragraph_index / slide_index / cell). "
+                "Old .doc/.ppt/.xls fail in Chinese. "
                 "Args: artifact_id|title, kind?"
             ),
             handler=inspect_document,

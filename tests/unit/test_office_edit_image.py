@@ -666,21 +666,35 @@ def test_sidebar_chat_has_no_edit_or_image_tools() -> None:
     assert chat is not None
     assert chat["tools"] == []
     assert openai_tool_schemas(build_default_gateway(), allowed_tools=[]) == []
-    forbidden = {
+    chat_forbidden = {
+        "edit_docx_document",
+        "edit_pptx_document",
+        "generate_image",
+        "generate_diagram",
+        "generate_docx_document",
+    }
+    assert chat_forbidden.isdisjoint(chat["tools"])
+    deliver = snapshot_for_skill("skill-deliverable")
+    assert deliver is not None
+    assert {
+        "generate_docx_document",
+        "generate_pptx_document",
+        "generate_image",
+        "generate_diagram",
+        "sandbox_pptx_lib",
+    } <= set(deliver["tools"])
+    assert "edit_docx_document" not in deliver["tools"]
+    aliases = {
         "edit_docx_document",
         "edit_pptx_document",
         "generate_image",
         "generate_diagram",
     }
-    assert forbidden.isdisjoint(chat["tools"])
-    deliver = snapshot_for_skill("skill-deliverable")
-    assert deliver is not None
-    assert forbidden <= set(deliver["tools"])
-    assert forbidden <= ALLOWED_GATEWAY_TOOLS
+    assert aliases <= ALLOWED_GATEWAY_TOOLS
     gw_names = set(build_default_gateway().tools)
-    assert forbidden <= gw_names
+    assert aliases <= gw_names
     ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
     )
-    for name in forbidden:
+    for name in aliases:
         assert f'"{name}"' in ts
