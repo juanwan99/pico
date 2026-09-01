@@ -58,7 +58,7 @@ else
     echo "本机无 gh，且未设 PR_CI_READY_JSON" >&2
     exit 3
   fi
-  json="$(gh pr view "$PR" --repo "$REPO" --json statusCheckRollup,mergeStateStatus,state 2>/dev/null || true)"
+  json="$(gh pr view "$PR" --repo "$REPO" --json statusCheckRollup,mergeStateStatus,state,files 2>/dev/null || true)"
   if [[ -z "$json" ]]; then
     echo "读不到 PR #${PR}（${REPO}）" >&2
     exit 3
@@ -148,6 +148,21 @@ if any_bad:
     sys.exit(2)
 
 if not rollup:
+    files = data.get("files") or []
+    paths = []
+    if isinstance(files, list):
+        for item in files:
+            if isinstance(item, dict) and item.get("path"):
+                paths.append(str(item["path"]))
+            elif isinstance(item, str):
+                paths.append(item)
+
+    def is_docs_path(p: str) -> bool:
+        return p.startswith("docs/") or p.endswith(".md")
+
+    if paths and all(is_docs_path(p) for p in paths):
+        print(f"绿 PR #{pr} docs-only 无检查项（paths-ignore）")
+        sys.exit(0)
     print(f"未出齐 PR #{pr} 无检查项", file=sys.stderr)
     sys.exit(1)
 

@@ -47,6 +47,14 @@ run "pending-empty" 1 \
   '{"state":"OPEN","mergeStateStatus":"UNKNOWN","statusCheckRollup":[]}' \
   --pr 5
 
+run "green-docs-only-empty" 0 \
+  '{"state":"OPEN","mergeStateStatus":"CLEAN","statusCheckRollup":[],"files":[{"path":"docs/STATE-NOW.md"},{"path":"docs/templates/steward-card.md"},{"path":"README.md"}]}' \
+  --pr 17
+
+run "pending-empty-mixed-files" 1 \
+  '{"state":"OPEN","mergeStateStatus":"CLEAN","statusCheckRollup":[],"files":[{"path":"docs/STATE-NOW.md"},{"path":"scripts/pr-ci-ready.sh"}]}' \
+  --pr 18
+
 run "pending-queued" 1 \
   '{"state":"OPEN","statusCheckRollup":[{"name":"a","status":"QUEUED"}]}' \
   --pr 6
