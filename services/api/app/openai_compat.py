@@ -296,21 +296,11 @@ def _effective_max_tokens(requested: int | None, cap: int) -> int:
 def _compat_usage_payload(
     prompt: str, completion: str, provider_usage: dict[str, Any] | None
 ) -> dict[str, int] | None:
-    """OpenAI-compat ``usage`` for the shell. Native provider numbers only.
+    """OpenAI-compat shell must not expose token numbers to teachers.
 
-    Missing usage → omit the field. Never char/4.
+    Native usage still lands on the Pico ledger. Formula stays in points_meter.
     """
-    del prompt, completion
-    if isinstance(provider_usage, dict):
-        from pico_orchestrator.usage_parse import parse_usage_blob
-
-        parsed = parse_usage_blob(provider_usage)
-        if parsed and not parsed.get("estimated"):
-            return {
-                "prompt_tokens": int(parsed.get("prompt_tokens") or 0),
-                "completion_tokens": int(parsed.get("completion_tokens") or 0),
-                "total_tokens": int(parsed.get("total_tokens") or 0),
-            }
+    del prompt, completion, provider_usage
     return None
 
 
@@ -846,6 +836,22 @@ async def _finalize_run(
         if token_usage:
             snapshot = usage.get("skill_snapshot")
             usage.update({k: v for k, v in token_usage.items() if k != "skill_snapshot"})
+            for key in list(usage):
+                if str(key).lower() in {
+                    "cost",
+                    "price",
+                    "currency",
+                    "charge",
+                    "amount",
+                    "billing",
+                    "millipoints",
+                    "rate",
+                    "scale",
+                    "formula",
+                    "per_token",
+                    "multiplier",
+                }:
+                    usage.pop(key, None)
             if isinstance(snapshot, dict):
                 usage["skill_snapshot"] = snapshot
             run.token_usage_json = json.dumps(usage, ensure_ascii=False)

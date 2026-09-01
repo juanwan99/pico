@@ -86,6 +86,23 @@ def _merge_token_usage(
 ) -> str:
     merged = _json_dict(existing)
     merged.update(usage or {})
+    for key in list(merged):
+        low = str(key).lower()
+        if low in {
+            "cost",
+            "price",
+            "currency",
+            "charge",
+            "amount",
+            "billing",
+            "millipoints",
+            "rate",
+            "scale",
+            "formula",
+            "per_token",
+            "multiplier",
+        }:
+            merged.pop(key, None)
     if skill_snapshot:
         merged["skill_snapshot"] = skill_snapshot
     return json.dumps(merged, ensure_ascii=False)

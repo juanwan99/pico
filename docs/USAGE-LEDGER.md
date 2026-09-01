@@ -60,14 +60,15 @@ schema 与 JSON 合同禁止 money 字段
 
 Token 规则：
 
-- 有提供方 usage（Responses `response.completed` / chat `include_usage` / Pi RPC 若带）→ 记整数，`estimated=0`。
-- 无 usage（现网 Pi 主路径常见）→ 三字段 null 且 `tokens_unknown=1`。**禁止**用用户可见正文做 char/4 冒充 token（现网曾把 prompt=1 写成「用量」）。
+- 有提供方 usage（Responses `response.completed` / chat `include_usage` / **真 Pi** `agent_end.messages[].usage` 与 compaction usage）→ 记整数，`estimated=0`。
+- 无 usage → 三字段 null 且 `tokens_unknown=1`。**禁止**用用户可见正文做 char/4 冒充 token。
 - **禁止写入 `estimated=1`。** 历史 char/4 行在启动时 scrub 成 unknown（§8）。
-- `extra.ui_model` = 档位；`extra.cached_tokens` / `extra.reasoning_tokens` 可选，edu 自己加权。
+- `extra.ui_model` = 档位；`extra.cached_tokens` / `extra.reasoning_tokens` 可选（已折进 Pico `points`；导出给 edu，老师面不回）。
 - 禁止用 `0` 假装「没用量」。
 - `model` 禁止长期留 `pico-fast` / `pico-deep`；档位只进 `extra.ui_model`。
+- **禁止**把 Pi `cost`、倍率、公式写入账本或 extra。
 
-**积分（派生，#788）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算只在 `app/points_meter.py`。表上不增加积分/余额列。预计报价不写 token 列。账上 `null` = 未知 token，不是 0。老师面每一轮钉在该条回复末尾：有 token 显示「实际」；晚到则该轮继续显示「预计」，不改成「未结算」、不清理上一轮。
+**积分（派生，#788 / #836）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py`。表上不增加积分/余额列。老师面（`/v1/usage` HTML · `/v1/usage/events` · `/v1/usage/points` · LibreChat 回复末尾）只见积分，**禁止** token / × / ÷ / 公式。账上 `null` = 未知 token，不是 0。edu 导出可带 token 列 + 已换好的 `points`，禁止再乘、禁止倍率字段。search/sandbox/image 无提供方 token 则 `points=null`（不是 0），不另造单价表。每一轮钉在该条回复末尾：有积分显示「实际」；晚到则该轮继续显示「预计」，不改成「未结算」、不清理上一轮。
 
 ---
 
@@ -96,9 +97,9 @@ REST `/v1/tasks` 在 `_execute_run` **commit 之后** 记账。
 - 提供方未回 usage：**记 unknown**，不要用 prompt+completion 字符估数当默认（估数会让 edu 收到 prompt_tokens=1 这种脏数）。
 - **失败可重试、不得打断 Run**：写入吞掉异常；SQLite lock 最多 5 次；重复 `idempotency_key` 视为成功。
 
-true_pi / hosted Pi 不另开第二账本：走上述终态钩子。Pi RPC 暂无 usage 时记 **诚实 unknown**。
+true_pi / hosted Pi **不另开第二账本**：走上述终态钩子。真 Pi 本轮用量只从 `agent_end.messages[].usage` 与 `compaction_end` 入账；**禁止**对 `message_update` 累计值逐条加，**禁止**把会话 jsonl / `get_session_stats` 当本轮。Pi `cost` 剥掉。提供方未回 usage 仍记 **诚实 unknown**。
 
-LibreChat 气泡 TokenUsage **不是** 本账。
+LibreChat 气泡 TokenUsage **不是** 本账；老师壳 `chat.completion` **不回** usage token 字段。
 
 ---
 
@@ -160,7 +161,7 @@ await record_usage_event(
 
 查询参数：`kind` · `day=YYYY-MM-DD` · `limit` · `offset` · `membership_id`（仅 admin 且必须同校）。
 
-响应 **无** 金额字段。`billing: false` 明示本账不是收费系统。
+响应 **无** 金额字段。`billing: false` 明示本账不是收费系统。老师 JSON **无** token 列；导出才有 token 列 + `points`。
 
 ---
 

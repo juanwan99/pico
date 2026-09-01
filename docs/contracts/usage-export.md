@@ -19,7 +19,7 @@ PARENT: docs/USAGE-LEDGER.md
 
 Pico **must not** grow price/currency/wallet columns. edu **must not** persist a parallel Task/Run tree for product AI.
 
-`points` on each event is Pico's already-converted meter (three decimals). edu debits that number as-is. **Do not multiply again.** null `points` is unknown, not zero. Conversion lives only in Pico (`points_meter.py`).
+`points` on each event is Pico's already-converted meter (three decimals). edu debits that number as-is. **Do not multiply again.** null `points` is unknown, not zero. Conversion lives only in Pico (`points_meter.py`). Export must not include rate / scale / formula fields. Teacher-facing Pico JSON omits token columns.
 
 ## Event (one row)
 

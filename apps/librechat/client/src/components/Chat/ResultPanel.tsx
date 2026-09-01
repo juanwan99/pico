@@ -149,33 +149,8 @@ function formatSize(n?: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-function tokenCount(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0
-    ? Math.round(value)
-    : null;
-}
-
-export function formatRunTokenUsage(run?: PicoRun | null): string | null {
-  const usage = run?.token_usage;
-  if (!usage) {
-    return null;
-  }
-  // Provider-native usage may use input/output or OpenAI-style prompt/completion.
-  const input = tokenCount(usage.input_tokens) ?? tokenCount(usage.prompt_tokens);
-  const output = tokenCount(usage.output_tokens) ?? tokenCount(usage.completion_tokens);
-  const total =
-    tokenCount(usage.total_tokens) ?? (input != null && output != null ? input + output : null);
-  const format = (value: number) => value.toLocaleString('zh-CN');
-  // Stage #265 T04: always mark token usage as estimate (no billing meters).
-  const prefix = '用量（估算）';
-  if (input != null && output != null) {
-    return `${prefix} · 输入 ${format(input)} · 输出 ${format(output)}${
-      total != null ? ` · 共 ${format(total)} tokens` : ''
-    }`;
-  }
-  if (total != null) {
-    return `${prefix} · ${format(total)} tokens`;
-  }
+export function formatRunTokenUsage(_run?: PicoRun | null): string | null {
+  // Teacher face is TurnPointsFooter 积分. Never show token counts here.
   return null;
 }
 

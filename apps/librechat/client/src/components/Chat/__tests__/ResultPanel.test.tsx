@@ -54,16 +54,16 @@ function run(tokenUsage?: Record<string, unknown>): PicoRun {
 }
 
 describe('ResultPanel token usage', () => {
-  it('formats total-only and detailed token usage', () => {
-    expect(formatRunTokenUsage(run({ total_tokens: 1234 }))).toBe('用量（估算） · 1,234 tokens');
+  it('never formats token counts for teachers', () => {
+    expect(formatRunTokenUsage(run({ total_tokens: 1234 }))).toBeNull();
     expect(
       formatRunTokenUsage(run({ input_tokens: 1000, output_tokens: 234, total_tokens: 1234 })),
-    ).toBe('用量（估算） · 输入 1,000 · 输出 234 · 共 1,234 tokens');
+    ).toBeNull();
     expect(
       formatRunTokenUsage(
         run({ prompt_tokens: 10, completion_tokens: 5, total_tokens: 15, estimated: true }),
       ),
-    ).toBe('用量（估算） · 输入 10 · 输出 5 · 共 15 tokens');
+    ).toBeNull();
     expect(formatRunTokenUsage(run({ skill_snapshot: { id: 'analysis' } }))).toBeNull();
   });
 

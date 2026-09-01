@@ -485,19 +485,14 @@ def _usage_html(principal: Principal, summary: dict, events: list[dict]) -> str:
 
     rows = []
     for ev in events:
-        tok = (
-            "unknown"
-            if ev.get("tokens_unknown")
-            else str(ev.get("total_tokens") if ev.get("total_tokens") is not None else "—")
-        )
-        if ev.get("estimated") and tok != "unknown":
-            tok = f"{tok} (est.)"
+        pts = ev.get("points")
+        pts_label = str(pts) if isinstance(pts, str) and pts else "—"
         rows.append(
             "<tr>"
             f"<td>{html_lib.escape(str(ev.get('created_at') or ''))}</td>"
             f"<td>{html_lib.escape(str(ev.get('kind') or ''))}</td>"
             f"<td>{html_lib.escape(str(ev.get('model') or '—'))}</td>"
-            f"<td>{html_lib.escape(tok)}</td>"
+            f"<td>{html_lib.escape(pts_label)}</td>"
             f"<td>{html_lib.escape(str(ev.get('run_id') or '—'))}</td>"
             "</tr>"
         )
@@ -506,10 +501,12 @@ def _usage_html(principal: Principal, summary: dict, events: list[dict]) -> str:
     )
     day_bits = []
     for d in summary.get("days") or []:
+        pts = d.get("points")
+        pts_label = str(pts) if isinstance(pts, str) and pts else "—"
         day_bits.append(
             f"<li>{html_lib.escape(str(d.get('day')))} · {html_lib.escape(str(d.get('kind')))} · "
-            f"{int(d.get('event_count') or 0)} 次 · tokens="
-            f"{html_lib.escape(str(d.get('total_tokens') if d.get('total_tokens') is not None else 'unknown'))}"
+            f"{int(d.get('event_count') or 0)} 次 · 积分 "
+            f"{html_lib.escape(pts_label)}"
             f"</li>"
         )
     days_html = "\n".join(day_bits) or "<li>暂无汇总</li>"
@@ -529,7 +526,7 @@ th, td {{ border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; }}
 <ul>{days_html}</ul>
 <h2>明细</h2>
 <table>
-<thead><tr><th>时间</th><th>kind</th><th>模型</th><th>tokens</th><th>run</th></tr></thead>
+<thead><tr><th>时间</th><th>kind</th><th>模型</th><th>积分</th><th>run</th></tr></thead>
 <tbody>
 {body_rows}
 </tbody>
@@ -563,7 +560,7 @@ async def usage_events(
     principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    from app.usage_ledger import list_usage_events, usage_event_dict
+    from app.usage_ledger import list_usage_events, teacher_usage_event_dict
 
     rows = await list_usage_events(
         session,
@@ -577,7 +574,7 @@ async def usage_events(
     return {
         "billing": False,
         "school_id": principal.school_id,
-        "events": [usage_event_dict(r) for r in rows],
+        "events": [teacher_usage_event_dict(r) for r in rows],
     }
 
 
@@ -587,12 +584,12 @@ async def usage_event_detail(
     principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    from app.usage_ledger import get_usage_event_for_principal, usage_event_dict
+    from app.usage_ledger import get_usage_event_for_principal, teacher_usage_event_dict
 
     row = await get_usage_event_for_principal(session, event_id, principal)
     if row is None:
         raise HTTPException(status_code=404, detail="usage event not found")
-    return {"billing": False, "event": usage_event_dict(row)}
+    return {"billing": False, "event": teacher_usage_event_dict(row)}
 
 
 class PointsQuoteRequest(BaseModel):
@@ -641,11 +638,11 @@ async def my_usage_page(
     principal: Principal = Depends(require_scope("ai:read")),
     session: AsyncSession = Depends(get_session),
 ) -> HTMLResponse:
-    from app.usage_ledger import list_usage_events, summarize_usage, usage_event_dict
+    from app.usage_ledger import list_usage_events, summarize_usage, teacher_usage_event_dict
 
     summary = await summarize_usage(session, principal)
     rows = await list_usage_events(session, principal, limit=50, offset=0)
-    html = _usage_html(principal, summary, [usage_event_dict(r) for r in rows])
+    html = _usage_html(principal, summary, [teacher_usage_event_dict(r) for r in rows])
     return HTMLResponse(html)
 
 
@@ -1460,6 +1457,12 @@ def _task_dict(t) -> dict:
 
 
 def _run_dict(r) -> dict:
+    from app.usage_ledger import public_run_usage_blob
+
+    try:
+        raw_usage = json.loads(r.token_usage_json or "{}")
+    except json.JSONDecodeError:
+        raw_usage = {}
     return {
         "id": r.id,
         "task_id": r.task_id,
@@ -1470,7 +1473,7 @@ def _run_dict(r) -> dict:
         "cancel_requested": bool(r.cancel_requested),
         "started_at": r.started_at.isoformat() if r.started_at else None,
         "ended_at": r.ended_at.isoformat() if r.ended_at else None,
-        "token_usage": json.loads(r.token_usage_json or "{}"),
+        "token_usage": public_run_usage_blob(raw_usage if isinstance(raw_usage, dict) else {}),
     }
 
 

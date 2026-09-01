@@ -1,4 +1,4 @@
-"""OpenAI-compat shell usage is native-only — never char/4."""
+"""OpenAI-compat shell never exposes token numbers to teachers."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 from app.openai_compat import _compat_usage_payload, _title_completion_payload
 
 
-def test_compat_usage_omits_char4_when_provider_silent() -> None:
+def test_compat_usage_omits_all_counts_from_teacher_shell() -> None:
     assert _compat_usage_payload("你好", "世界", None) is None
     assert _compat_usage_payload("你好", "世界", {}) is None
     assert (
@@ -23,15 +23,22 @@ def test_compat_usage_omits_char4_when_provider_silent() -> None:
         )
         is None
     )
-
-
-def test_compat_usage_keeps_native_provider_counts() -> None:
-    got = _compat_usage_payload(
-        "x",
-        "y",
-        {"prompt_tokens": 80, "completion_tokens": 20, "total_tokens": 100},
+    assert (
+        _compat_usage_payload(
+            "x",
+            "y",
+            {"prompt_tokens": 80, "completion_tokens": 20, "total_tokens": 100},
+        )
+        is None
     )
-    assert got == {"prompt_tokens": 80, "completion_tokens": 20, "total_tokens": 100}
+    assert (
+        _compat_usage_payload(
+            "x",
+            "y",
+            {"input": 8, "output": 2, "totalTokens": 10, "cost": {"total": 0.01}},
+        )
+        is None
+    )
 
 
 def test_title_payload_has_no_usage() -> None:

@@ -15,6 +15,8 @@ from pico_orchestrator.usage_parse import (
     billed_model_id,
     is_ui_lane,
     parse_usage_blob,
+    usage_blobs_from_rpc_event,
+    usage_extra_bits,
 )
 
 
@@ -44,6 +46,82 @@ def test_parse_responses_details() -> None:
     assert parsed["cached_tokens"] == 20
     assert parsed["reasoning_tokens"] == 30
     assert parsed["prompt_tokens"] == 100
+
+
+def test_parse_true_pi_aliases_and_strips_cost() -> None:
+    parsed = parse_usage_blob(
+        {
+            "input": 8,
+            "output": 7,
+            "cacheRead": 3,
+            "cacheWrite": 1,
+            "totalTokens": 15,
+            "reasoning": 4,
+            "cost": {"input": 0.01, "output": 0.02, "total": 0.03},
+        }
+    )
+    assert parsed is not None
+    assert parsed["prompt_tokens"] == 8
+    assert parsed["completion_tokens"] == 7
+    assert parsed["total_tokens"] == 15
+    assert parsed["cached_tokens"] == 3
+    assert parsed["reasoning_tokens"] == 4
+    assert "cost" not in parsed
+    assert parse_usage_blob({"input": 0, "output": 0, "totalTokens": 0}) is None
+    assert parse_usage_blob({"totalTokens": 42}) is not None
+    assert parse_usage_blob({"totalTokens": 42})["total_tokens"] == 42
+    # models.json modalities — list-valued input is not a token count
+    assert parse_usage_blob({"input": ["text", "image"], "output": ["text"]}) is None
+    extra = usage_extra_bits(
+        {
+            "input": 8,
+            "output": 7,
+            "totalTokens": 15,
+            "cacheRead": 3,
+            "reasoning": 4,
+            "cost": {"total": 1},
+            "ui_model": "pico-fast",
+        }
+    )
+    assert extra["cached_tokens"] == 3
+    assert extra["reasoning_tokens"] == 4
+    assert extra["ui_model"] == "pico-fast"
+    assert "cost" not in extra
+
+
+def test_usage_blobs_from_rpc_event_only_terminal_kinds() -> None:
+    pi_usage = {"input": 8, "output": 2, "totalTokens": 10, "cost": {"total": 0}}
+    streaming = {
+        "type": "message_update",
+        "message": {"role": "assistant", "usage": pi_usage},
+        "usage": pi_usage,
+    }
+    assert usage_blobs_from_rpc_event("message_update", streaming) == []
+    assert usage_blobs_from_rpc_event("message_end", {"message": {"usage": pi_usage}}) == []
+    agent = {
+        "messages": [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "usage": pi_usage},
+            {
+                "role": "assistant",
+                "usage": {"input": 3, "output": 1, "totalTokens": 4},
+            },
+        ]
+    }
+    blobs = usage_blobs_from_rpc_event("agent_end", agent)
+    assert len(blobs) == 2
+    merged = None
+    for blob in blobs:
+        merged = add_usage(merged, blob)
+    assert merged is not None
+    assert merged["total_tokens"] == 14
+    compact = usage_blobs_from_rpc_event(
+        "compaction_end", {"result": {"usage": {"input": 20, "output": 5, "totalTokens": 25}}}
+    )
+    assert len(compact) == 1
+    parsed = parse_usage_blob(compact[0])
+    assert parsed is not None
+    assert parsed["total_tokens"] == 25
 
 
 def test_add_usage_sums_calls() -> None:
