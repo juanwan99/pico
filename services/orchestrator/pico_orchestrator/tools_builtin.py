@@ -2024,7 +2024,8 @@ def build_default_gateway(
             name="generate_html_document",
             description=(
                 "Create a real .html Artifact that must run offline: inline CSS/JS "
-                "and canvas only. No CDN, no import/script-src of Three.js / Chart.js / "
+                "and canvas only. A semantic classless visual base is already inlined. "
+                "No CDN, no import/script-src of Three.js / Chart.js / "
                 "ECharts / KaTeX, no https or //cdn images (use data: URLs), no "
                 "window.THREE / new Chart / echarts.init. The tool fails if the page "
                 "still needs the network or those engines. Result includes an "

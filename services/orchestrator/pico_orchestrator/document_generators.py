@@ -10,6 +10,8 @@ import html
 import io
 import re
 import zipfile
+from functools import lru_cache
+from pathlib import Path
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
@@ -46,6 +48,15 @@ HTML_SCRIPT_SYNTAX_ERROR = (
     "系统不会改你的稿，也不会把坏脚本当成成品。"
 )
 KNOWN_CALC_CELL = "NIGHT-P4-CELL-ALPHA"
+# Upstream @picocss/pico classless, vendored. Injected inline — never a CDN.
+PICO_CSS_ATTR = 'data-pico-css="classless"'
+_PICOCSS_FILE = (
+    Path(__file__).resolve().parent
+    / "agent_assets"
+    / "vendor"
+    / "picocss"
+    / "pico.classless.min.css"
+)
 # Protocol-relative //cdn… and https?:// — teacher HTML is srcDoc/file, no host.
 _REMOTE_URL = r"(?:https?:)?//[A-Za-z0-9]"
 _CSP_META_RE = re.compile(
@@ -436,6 +447,42 @@ def require_doc_body_max(raw: str | None, *, what: str = "正文") -> str:
     return text
 
 
+@lru_cache(maxsize=1)
+def picocss_classless_text() -> str:
+    """Pinned @picocss/pico classless CSS. Fail closed if the vendor file is gone."""
+    text = _PICOCSS_FILE.read_text(encoding="utf-8")
+    if "</style" in text.lower():
+        raise RuntimeError("vendored Pico CSS contains </style")
+    if "--pico-font-family" not in text:
+        raise RuntimeError("vendored Pico CSS missing --pico- tokens")
+    return text
+
+
+def html_picocss_style_tag() -> str:
+    return f"<style {PICO_CSS_ATTR}>\n{picocss_classless_text()}\n</style>"
+
+
+def inject_picocss_classless(doc: str) -> str:
+    """Add the classless base at the start of <head>. Later model styles win."""
+    text = doc or ""
+    if PICO_CSS_ATTR in text:
+        return text
+    block = html_picocss_style_tag()
+
+    def _into_head(match: re.Match[str]) -> str:
+        return f"{match.group(0)}\n  {block}"
+
+    if re.search(r"<head\b", text, flags=re.IGNORECASE):
+        return re.sub(r"<head\b[^>]*>", _into_head, text, count=1, flags=re.IGNORECASE)
+    if re.search(r"<html\b", text, flags=re.IGNORECASE):
+
+        def _into_html(match: re.Match[str]) -> str:
+            return f"{match.group(0)}\n<head>\n  {block}\n</head>"
+
+        return re.sub(r"<html\b[^>]*>", _into_html, text, count=1, flags=re.IGNORECASE)
+    return f"<head>\n  {block}\n</head>\n{text}"
+
+
 def _html_marker_meta(marker: str) -> str:
     """Ledger marker as hidden meta — not a visible 「标记：」 chrome bar."""
     safe = html.escape(marker)
@@ -648,10 +695,7 @@ def _wrap_html_fragment(raw_body: str, *, title: str, marker: str) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   {_html_marker_meta(marker)}
   <title>{safe_title}</title>
-  <style>
-    body {{ font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.5; max-width: 48rem; }}
-    h1, h2, h3 {{ line-height: 1.25; }}
-  </style>
+  {html_picocss_style_tag()}
 </head>
 <body>
   {body}
@@ -721,7 +765,7 @@ def build_html_document(
             # Extremely broken fragment — fall through to markup/prose paths.
             pass
         else:
-            return doc.encode("utf-8")
+            return inject_picocss_classless(doc).encode("utf-8")
 
     # #399 R2: HTML fragments keep real tags (wrap shell); only pure prose is escaped.
     if raw_body and _looks_like_html_markup(raw_body) and not _looks_like_full_html_document(
@@ -740,10 +784,7 @@ def build_html_document(
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{safe_title}</title>
   {_html_marker_meta(marker)}
-  <style>
-    body {{ font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.5; max-width: 48rem; }}
-    h1 {{ font-size: 1.5rem; }}
-  </style>
+  {html_picocss_style_tag()}
 </head>
 <body>
   <h1>{safe_title}</h1>
