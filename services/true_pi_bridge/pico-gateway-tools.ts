@@ -173,7 +173,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_html_document",
-    "Create a real .html Artifact (Pico gateway). Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images (use data: URLs), no window.THREE / new Chart / echarts.init. The tool fails closed if the page still needs the network or those engines, or if an inline script has unmatched brackets — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished. If they also asked to collect answers, follow with publish_html_page rather than asking which cloud to use.",
+    "Create a real .html Artifact (Pico gateway). A semantic classless visual base is already inlined — write header/main/article/nav/table/form; extra CSS only for one accent. Do not name the stylesheet to the teacher. Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images (use data: URLs), no window.THREE / new Chart / echarts.init. The tool fails closed if the page still needs the network or those engines, or if an inline script has unmatched brackets — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished. If they also asked to collect answers, follow with publish_html_page rather than asking which cloud to use.",
     Type.Object(
       {
         title: Type.String(),

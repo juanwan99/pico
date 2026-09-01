@@ -4,9 +4,9 @@
 DATE: 2026-09-01
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #846 T-ASK-FAIL-PICO-FACE
+在飞: #848 T-HTML-PICO-CSS
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 产品 SHA `16d0c7fa005b635624a7dd368ac03e136f4b79f1`（#844 已部）
+      → 产品 SHA `cbc0000aeac963267302d6f6af28fda5f6cdcba0`（#846 已部）
       → docs-only 合入不 prod-update
 阻塞: #748 合部完不关 · 勿关 #821/#806/#808/#807/#809/#810/#748/#449/#316
 ────────────────────────────────
@@ -97,7 +97,8 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已收口 | [#840](https://github.com/juanwan99/pico/issues/840) · [#841](https://github.com/juanwan99/pico/pull/841) | T-ASK-HONEST 等选不假跑 · 已部 tip `c7b6a6a5…` |
 | 已收口 | [#842](https://github.com/juanwan99/pico/issues/842) · [#843](https://github.com/juanwan99/pico/pull/843) | T-PAGE-COLLECT-LAND land 带 @ 材料 id · 主管 PASS @ tip `d206b70c…` |
 | 已收口 | [#844](https://github.com/juanwan99/pico/issues/844) · [#845](https://github.com/juanwan99/pico/pull/845) | T-SCHOOL-FIELDS-SPLIT 聊天学校材料左管右订 · 主管 PASS @ tip `16d0c7fa…` |
-| 在飞 | [#846](https://github.com/juanwan99/pico/issues/846) | T-ASK-FAIL-PICO-FACE 问选超时失败 · 身份只叫 Pico |
+| 已收口 | [#846](https://github.com/juanwan99/pico/issues/846) · [#847](https://github.com/juanwan99/pico/pull/847) | T-ASK-FAIL-PICO-FACE 问选超时失败 · 身份只叫 Pico · 主管 PASS @ tip `cbc0000a…` |
+| 在飞 | [#848](https://github.com/juanwan99/pico/issues/848) | T-HTML-PICO-CSS 语义页接上游 Pico CSS classless |
 | 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
 | 挂起 | 自研记忆 OS | 禁 · 文件型上游 #807 已部 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
