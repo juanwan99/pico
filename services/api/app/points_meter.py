@@ -14,7 +14,7 @@ from __future__ import annotations
 _PER_TOKEN_MILLI = 3
 _QUOTE_INPUT_CAP = 200_000
 # UX floor only — not a token-column write. Live CORE+SYSTEM first-turn ~8393.
-_RESIDENT_QUOTE_FLOOR = 8000
+_RESIDENT_QUOTE_FLOOR = 8400
 
 
 def format_millipoints(milli: int) -> str:
@@ -33,14 +33,21 @@ def tokens_from_row(
     prompt_tokens: int | None,
     completion_tokens: int | None,
 ) -> int | None:
-    """Billable units: provider total (suitcase included). Unknown stays None."""
+    """Billable units: provider total (suitcase included). Unknown stays None.
+
+    Coverage: never bill less than prompt+completion when those landed.
+    """
     if tokens_unknown:
         return None
+    summed: int | None = None
+    if prompt_tokens is not None or completion_tokens is not None:
+        summed = max(0, int(prompt_tokens or 0) + int(completion_tokens or 0))
     if total_tokens is not None:
-        return max(0, int(total_tokens))
-    if prompt_tokens is None and completion_tokens is None:
-        return None
-    return max(0, int(prompt_tokens or 0) + int(completion_tokens or 0))
+        billed = max(0, int(total_tokens))
+        if summed is not None:
+            return max(billed, summed)
+        return billed
+    return summed
 
 
 def quote_units_from_input_len(n: int) -> int:

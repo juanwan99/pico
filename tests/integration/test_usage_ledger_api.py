@@ -242,7 +242,9 @@ async def test_search_kind_can_be_written_for_later_cards(client: AsyncClient):
     headers = await _auth(client)
     r = await client.get("/v1/usage/events", headers=headers, params={"kind": "search"})
     assert r.status_code == 200
-    assert any(e["kind"] == "search" for e in r.json()["events"])
+    hit = next(e for e in r.json()["events"] if e["run_id"] == "run-s")
+    assert hit["kind"] == "search"
+    assert hit["points"] is None
 
 
 async def test_emit_after_run_is_idempotent_and_unknown_without_provider(client: AsyncClient):
@@ -458,11 +460,12 @@ async def test_points_quote_hides_scale_and_settle_uses_ledger(client: AsyncClie
     assert isinstance(qbody["points"], str)
     assert qbody["points"].count(".") == 1
     assert len(qbody["points"].split(".")[1]) == 3
-    assert qbody["points"] == "24.120"
+    assert qbody["points"] == "25.320"
     blob = quoted.text.lower()
     assert "token" not in blob
     assert "1000" not in blob
     assert "8000" not in quoted.text
+    assert "8400" not in quoted.text
     assert "×" not in quoted.text
 
     principal = Principal(
@@ -668,7 +671,7 @@ async def test_emit_true_pi_aliases_fills_ledger_and_hides_formula(client: Async
     assert "÷" not in html.text
 
 
-async def test_honest_points_cover_suitcase_and_quote_tracks_last_prompt(
+async def test_honest_points_cover_suitcase_and_quote_tracks_last_billable(
     client: AsyncClient,
 ):
     from app.auth import Principal
@@ -683,8 +686,9 @@ async def test_honest_points_cover_suitcase_and_quote_tracks_last_prompt(
         json={"input_chars": len(prompt)},
     )
     assert first.status_code == 200, first.text
-    assert first.json()["points"] == "24.024"
+    assert first.json()["points"] == "25.224"
     assert "8000" not in first.text
+    assert "8400" not in first.text
     assert "token" not in first.text.lower()
 
     principal = Principal(
@@ -698,8 +702,11 @@ async def test_honest_points_cover_suitcase_and_quote_tracks_last_prompt(
     )
     factory = session_factory()
     async with factory() as session:
-        _task, run = await create_task(session, principal, "t", prompt)
+        task, run = await create_task(session, principal, "t", prompt)
+        task.conversation_id = "convo-hi"
+        await session.commit()
         run_id = run.id
+        task_id = task.id
 
     await record_usage_event(
         school_id="school-a",
@@ -711,6 +718,7 @@ async def test_honest_points_cover_suitcase_and_quote_tracks_last_prompt(
         total_tokens=8418,
         tokens_unknown=False,
         estimated=False,
+        task_id=task_id,
         run_id=run_id,
         source="true_pi",
         extra={"cached_tokens": 0, "reasoning_tokens": 0},
@@ -730,13 +738,29 @@ async def test_honest_points_cover_suitcase_and_quote_tracks_last_prompt(
     quoted = await client.post(
         "/v1/usage/points/quote",
         headers=headers,
-        json={"input_chars": len(prompt)},
+        json={"input_chars": len(prompt), "conversation_id": "convo-hi"},
     )
     assert quoted.status_code == 200
-    assert quoted.json()["points"] == "25.203"
+    assert quoted.json()["points"] == "25.278"
     assert quoted.json()["points"].startswith("25.")
     assert "8393" not in quoted.text
+    assert "8418" not in quoted.text
     assert "token" not in quoted.text.lower()
+
+    fresh = await client.post(
+        "/v1/usage/points/quote",
+        headers=headers,
+        json={"input_chars": len(prompt), "conversation_id": "convo-new"},
+    )
+    assert fresh.json()["points"] == "25.224"
+
+    for cid in ("new", "search", "NEW"):
+        placeholder = await client.post(
+            "/v1/usage/points/quote",
+            headers=headers,
+            json={"input_chars": len(prompt), "conversation_id": cid},
+        )
+        assert placeholder.json()["points"] == "25.224", cid
 
     hook = {"Authorization": "Bearer hook-secret-token"}
     exported = await client.get(

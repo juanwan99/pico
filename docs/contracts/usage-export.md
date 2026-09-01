@@ -19,7 +19,7 @@ PARENT: docs/USAGE-LEDGER.md
 
 Pico **must not** grow price/currency/wallet columns. edu **must not** persist a parallel Task/Run tree for product AI.
 
-`points` on each event is Pico's already-converted meter (three decimals). edu debits that number as-is. **Do not multiply again.** null `points` is unknown, not zero. Conversion lives only in Pico (`points_meter.py`). **Which units:** provider `total_tokens` (system + tools + this turn). Missing total falls back to prompt+completion. Export must not include rate / scale / formula fields. Teacher-facing Pico JSON omits token columns. Composer 预计 covers the resident package so it is the same order of magnitude as 实际.
+`points` on each event is Pico's already-converted meter (three decimals). edu debits that number as-is. **Do not multiply again.** null `points` is unknown, not zero. Conversion lives only in Pico (`points_meter.py`). **Which units:** provider `total_tokens` (system + tools + this turn). Missing total falls back to prompt+completion. Export must not include rate / scale / formula fields. Teacher-facing Pico JSON omits token columns. Composer 预计 covers the resident package (this conversation's last provider total, else a floor) so it is the same order of magnitude as 实际.
 
 ## Event (one row)
 

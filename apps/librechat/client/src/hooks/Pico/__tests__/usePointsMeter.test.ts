@@ -12,20 +12,20 @@ describe('formatPointsLabel', () => {
   });
 
   it('shows quote and settled without token words', () => {
-    expect(formatPointsLabel('quote', '0.048')).toBe('预计 0.048 积分');
-    expect(formatPointsLabel('settled', '3.000')).toBe('实际 3.000 积分');
+    expect(formatPointsLabel('quote', '25.224')).toBe('预计 25.224 积分');
+    expect(formatPointsLabel('settled', '25.254')).toBe('实际 25.254 积分');
   });
 
   it('keeps 预计 while pending instead of 未结算', () => {
-    expect(formatPointsLabel('pending', '0.018')).toBe('预计 0.018 积分');
+    expect(formatPointsLabel('pending', '25.224')).toBe('预计 25.224 积分');
     expect(formatPointsLabel('pending', null)).toBeNull();
   });
 
   it('never mentions tokens or scale in the label', () => {
     const labels = [
-      formatPointsLabel('quote', '0.048'),
-      formatPointsLabel('settled', '3.000'),
-      formatPointsLabel('pending', '0.018'),
+      formatPointsLabel('quote', '25.224'),
+      formatPointsLabel('settled', '25.254'),
+      formatPointsLabel('pending', '25.224'),
     ].join(' ');
     expect(labels.toLowerCase()).not.toMatch(/token/);
     expect(labels).not.toMatch(/×|÷|1000|未结算/);
@@ -34,11 +34,11 @@ describe('formatPointsLabel', () => {
 
 describe('formatTurnPointsLabel', () => {
   it('pins 实际 at the end of a round when tokens landed', () => {
-    expect(formatTurnPointsLabel({ quote: '0.018', actual: '0.042' })).toBe('实际 0.042 积分');
+    expect(formatTurnPointsLabel({ quote: '25.224', actual: '25.254' })).toBe('实际 25.254 积分');
   });
 
   it('keeps 预计 on that round until 实际 arrives', () => {
-    expect(formatTurnPointsLabel({ quote: '0.018', actual: null })).toBe('预计 0.018 积分');
+    expect(formatTurnPointsLabel({ quote: '25.224', actual: null })).toBe('预计 25.224 积分');
   });
 
   it('does not invent a wipe/empty 未结算 state', () => {
@@ -101,8 +101,8 @@ describe('zipRunsToAssistantMessages', () => {
 
 describe('formatComposerQuote', () => {
   it('shows live 预计 only', () => {
-    expect(formatComposerQuote(true, '0.018')).toBe('预计 0.018 积分');
-    expect(formatComposerQuote(false, '0.018')).toBeNull();
+    expect(formatComposerQuote(true, '25.224')).toBe('预计 25.224 积分');
+    expect(formatComposerQuote(false, '25.224')).toBeNull();
     expect(formatComposerQuote(true, null)).toBeNull();
   });
 });

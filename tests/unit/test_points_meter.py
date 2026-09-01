@@ -45,8 +45,8 @@ def test_unknown_row_has_no_tokens() -> None:
 def test_quote_covers_resident_even_when_empty() -> None:
     empty = quote_points_from_input_len(0)
     short = quote_points_from_input_len(14)
-    assert empty == "24.000"
-    assert short == "24.024"
+    assert empty == "25.200"
+    assert short == "25.224"
     assert empty.count(".") == 1
     assert len(short.split(".")[1]) == 3
 
@@ -87,10 +87,21 @@ def test_prompt_plus_completion_when_total_missing() -> None:
     assert points_from_tokens(n) == "25.254"
 
 
-def test_quote_with_last_prompt_matches_actual_order() -> None:
-    quoted = quote_points_from_input_len(14, resident_tokens=8393)
+def test_never_bill_less_than_prompt_plus_completion() -> None:
+    n = tokens_from_row(
+        tokens_unknown=False,
+        prompt_tokens=8393,
+        completion_tokens=25,
+        total_tokens=1000,
+    )
+    assert n == 8418
+    assert points_from_tokens(n) == "25.254"
+
+
+def test_quote_with_last_billable_total_matches_actual_order() -> None:
+    quoted = quote_points_from_input_len(14, resident_tokens=8418)
     actual = points_from_tokens(8418)
-    assert quoted == "25.203"
+    assert quoted == "25.278"
     assert actual == "25.254"
     assert quoted.startswith("25.")
     assert actual.startswith("25.")

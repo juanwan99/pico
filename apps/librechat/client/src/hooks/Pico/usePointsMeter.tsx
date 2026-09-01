@@ -74,16 +74,29 @@ export function PointsMeterProvider({
   const assistantIdsRef = useRef(assistantIds);
   assistantIdsRef.current = assistantIds;
 
+  const quoteSeqRef = useRef(0);
   const quoteFromChars = useCallback((n: number) => {
     boundRef.current = { runId: null, messageId: null };
-    void quotePicoPoints(n)
+    const chars = Math.max(0, Math.floor(n) || 0);
+    const seq = ++quoteSeqRef.current;
+    if (chars <= 0) {
+      setInflightQuote(null);
+      return;
+    }
+    void quotePicoPoints(chars, conversationId)
       .then((view) => {
+        if (seq !== quoteSeqRef.current) {
+          return;
+        }
         setInflightQuote(typeof view.points === 'string' ? view.points : null);
       })
       .catch(() => {
+        if (seq !== quoteSeqRef.current) {
+          return;
+        }
         setInflightQuote(null);
       });
-  }, []);
+  }, [conversationId]);
 
   useEffect(() => {
     const mid = latestAssistantMessageId;

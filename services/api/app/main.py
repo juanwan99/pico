@@ -594,6 +594,7 @@ async def usage_event_detail(
 
 class PointsQuoteRequest(BaseModel):
     input_chars: int = Field(default=0, ge=0, le=200_000)
+    conversation_id: str | None = None
 
 
 @app.post("/v1/usage/points/quote")
@@ -606,7 +607,12 @@ async def usage_points_quote(
 
     return {
         "phase": "quote",
-        "points": await quote_points_for_principal(session, principal, body.input_chars),
+        "points": await quote_points_for_principal(
+            session,
+            principal,
+            body.input_chars,
+            conversation_id=body.conversation_id,
+        ),
         "wallet": False,
     }
 

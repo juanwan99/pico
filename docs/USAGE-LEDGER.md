@@ -68,7 +68,7 @@ Token 规则：
 - `model` 禁止长期留 `pico-fast` / `pico-deep`；档位只进 `extra.ui_model`。
 - **禁止**把 Pi `cost`、倍率、公式写入账本或 extra。
 
-**积分（派生，#788 / #836 / #838）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py`。表上不增加积分/余额列。**积分 = 提供方全量 token**（系统提示词、工具 schema、本轮说话都算；`total`，缺则 prompt+completion）。unknown 仍 `points=null`（不是 0）。老师面只见积分，**禁止** token / × / ÷ / 公式。作曲栏「预计」必须盖上常驻包（最近一次 `prompt_tokens`，没有则用地板），禁止只报老师字数把 0.024 装成账单。edu 导出 token 列 + 已换好的 `points`（与门脸同数），禁止再乘、禁止倍率字段。search/sandbox/image 无提供方 token 则 `points=null`（不是 0），不另造单价表。每一轮钉在该条回复末尾：有积分显示「实际」；晚到则该轮继续显示「预计」，不改成「未结算」、不清理上一轮。省 token / 收常驻体积后期另做。
+**积分（派生，#788 / #836 / #838）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py`。表上不增加积分/余额列。**积分 = 提供方全量 token**（系统提示词、工具 schema、本轮说话都算；`total`，缺则 prompt+completion）。unknown 仍 `points=null`（不是 0）。老师面只见积分，**禁止** token / × / ÷ / 公式。作曲栏「预计」必须盖上常驻包（本会话最近一次提供方合计，没有则地板），禁止只报老师字数把 0.024 装成账单。edu 导出 token 列 + 已换好的 `points`（与门脸同数），禁止再乘、禁止倍率字段。search/sandbox/image 无提供方 token 则 `points=null`（不是 0），不另造单价表。每一轮钉在该条回复末尾：有积分显示「实际」；晚到则该轮继续显示「预计」，不改成「未结算」、不清理上一轮。省 token / 收常驻体积后期另做。
 
 ---
 

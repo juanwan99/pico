@@ -558,40 +558,56 @@ def _tenant_filter(principal: Principal, membership_id: str | None) -> tuple[str
     return school, want
 
 
-async def last_known_prompt_tokens(
+async def last_known_billable_tokens(
     session: AsyncSession,
     principal: Principal,
+    conversation_id: str | None = None,
 ) -> int | None:
-    """Latest native prompt count for this teacher. Not a guess write."""
+    """Latest native bill for this conversation. New chats do not borrow another thread."""
+    from app.points_meter import tokens_from_row
+
     school, member = _tenant_filter(principal, None)
+    cid = (conversation_id or "").strip()
+    if not cid or cid.lower() in {"new", "search"}:
+        return None
     q = (
-        select(UsageEventRow.prompt_tokens)
+        select(
+            UsageEventRow.total_tokens,
+            UsageEventRow.prompt_tokens,
+            UsageEventRow.completion_tokens,
+        )
+        .join(TaskRow, UsageEventRow.task_id == TaskRow.id)
         .where(
             UsageEventRow.school_id == school,
             UsageEventRow.membership_id == member,
             UsageEventRow.kind == "llm",
             UsageEventRow.tokens_unknown == 0,
-            UsageEventRow.prompt_tokens.is_not(None),
+            TaskRow.conversation_id == cid,
         )
         .order_by(UsageEventRow.created_at.desc())
         .limit(1)
     )
-    raw = (await session.execute(q)).scalar_one_or_none()
-    n = _int_or_none(raw)
-    if n is None or n <= 0:
+    row = (await session.execute(q)).first()
+    if row is None:
         return None
-    return n
+    return tokens_from_row(
+        tokens_unknown=False,
+        total_tokens=row.total_tokens,
+        prompt_tokens=row.prompt_tokens,
+        completion_tokens=row.completion_tokens,
+    )
 
 
 async def quote_points_for_principal(
     session: AsyncSession,
     principal: Principal,
     input_chars: int,
+    conversation_id: str | None = None,
 ) -> str:
-    """Composer 预计: resident package + this-turn text. Not a ledger write."""
+    """Composer 预计: this conversation's last bill, else resident floor. Not a ledger write."""
     from app.points_meter import quote_points_from_input_len, resident_quote_floor
 
-    last = await last_known_prompt_tokens(session, principal)
+    last = await last_known_billable_tokens(session, principal, conversation_id)
     floor = last if last is not None else resident_quote_floor()
     return quote_points_from_input_len(input_chars, resident_tokens=floor)
 

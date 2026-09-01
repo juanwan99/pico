@@ -78,7 +78,28 @@ jest.mock('~/utils/picoModelPref', () => ({
   setPicoPlanOn: jest.fn(),
 }));
 
+jest.mock('~/hooks/Pico/usePointsMeter', () => ({
+  usePointsMeter: jest.fn(),
+}));
+
+const { usePointsMeter } = jest.requireMock('~/hooks/Pico/usePointsMeter') as {
+  usePointsMeter: jest.Mock;
+};
+
 describe('Landing composer chrome', () => {
+  const quoteFromChars = jest.fn();
+
+  beforeEach(() => {
+    quoteFromChars.mockReset();
+    usePointsMeter.mockReturnValue({
+      phase: 'idle',
+      points: null,
+      quoteFromChars,
+      turnForMessage: () => null,
+      composerLive: false,
+    });
+  });
+
   it('U1: idle composer is one input + plus, no 调用技能与指令 second layer', () => {
     render(<Landing centerFormOnLanding />);
     const input = screen.getByTestId('text-input');
@@ -135,5 +156,12 @@ describe('Landing composer chrome', () => {
     render(<Landing centerFormOnLanding />);
     expect(screen.getByTestId('composer-plus-file-input')).toBeInTheDocument();
     expect(screen.queryByTestId('composer-plus-attach')).not.toBeInTheDocument();
+  });
+
+  it('quotes while typing, not only on submit', () => {
+    render(<Landing centerFormOnLanding />);
+    const input = screen.getByTestId('text-input');
+    fireEvent.change(input, { target: { value: 'hi nishi shui' } });
+    expect(quoteFromChars).toHaveBeenCalledWith('hi nishi shui'.length);
   });
 });
