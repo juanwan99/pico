@@ -1,7 +1,5 @@
-import { useState } from 'react';
 import { AlertCircle, CheckCircle2, Circle, FileText, Wrench } from 'lucide-react';
-import { answerPicoAsk, type PicoRun, type PicoRunEvent } from '~/data-provider/pico/api';
-import { askOptionLabels, liveAskEvent } from '~/utils/picoAskPrompt';
+import type { PicoRun, PicoRunEvent } from '~/data-provider/pico/api';
 import { workbenchToolResultLine, workbenchToolStepLine } from '~/utils/picoWorkbenchProgress';
 
 const VISIBLE_EVENT_TYPES = new Set([
@@ -134,9 +132,7 @@ export function describePicoRunEvent(
   if (event.type === 'ui.prompt.begin') {
     return {
       title: textValue(payload, 'text') || '在等你选',
-      detail: Array.isArray(payload.options) && payload.options.length
-        ? null
-        : '模型在等你，不是还在跑',
+      detail: '点主栏选项继续，不是还在跑',
     };
   }
   if (event.type === 'ui.prompt.end') {
@@ -259,7 +255,6 @@ export default function RunTimeline({
   events?: PicoRunEvent[] | null;
   run?: PicoRun | null;
 }) {
-  const [busyOption, setBusyOption] = useState<string | null>(null);
   const allEvents = events || [];
   const visible = allEvents
     .filter((event) => {
@@ -294,18 +289,6 @@ export default function RunTimeline({
     allEvents.some(
       (event) => event.type === 'run.status' && event.payload?.status === 'succeeded',
     );
-  const liveAsk = liveAskEvent(allEvents);
-  const runActive = ['queued', 'preparing', 'running'].includes(String(run?.status || ''));
-
-  const pickOption = (label: string) => {
-    if (!run?.id || busyOption) {
-      return;
-    }
-    setBusyOption(label);
-    void answerPicoAsk(run.id, label).catch(() => {
-      setBusyOption(null);
-    });
-  };
 
   return (
     <section className="mb-3" aria-label="执行步骤">
@@ -319,10 +302,6 @@ export default function RunTimeline({
           {visible.map((event) => {
             const description = describePicoRunEvent(event, runSucceeded);
             const links = searchSourceLinks(event);
-            const options =
-              liveAsk && event.id === liveAsk.id && runActive
-                ? askOptionLabels(event.payload)
-                : [];
             return (
               <li
                 key={event.id}
@@ -353,22 +332,6 @@ export default function RunTimeline({
                     <p className="mt-0.5 truncate text-[11px] text-[#8c8c8c]">
                       {description.detail}
                     </p>
-                  ) : null}
-                  {options.length > 0 ? (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {options.map((label) => (
-                        <button
-                          key={label}
-                          type="button"
-                          data-testid="pico-ask-option"
-                          disabled={Boolean(busyOption)}
-                          onClick={() => pickOption(label)}
-                          className="rounded-md border border-black/10 bg-white px-2 py-1 text-[12px] text-[#1f1f1f] hover:bg-[#f0f0f0] disabled:opacity-50 dark:border-border-light dark:bg-surface-primary dark:text-text-primary"
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
                   ) : null}
                 </div>
               </li>

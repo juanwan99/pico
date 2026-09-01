@@ -39,7 +39,7 @@ import store from '~/store';
 import { usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
 import { PointsMeterProvider } from '~/hooks/Pico/usePointsMeter';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
-import { liveAskEvent } from '~/utils/picoAskPrompt';
+import { isAskUserWaiting } from '~/utils/picoAskPrompt';
 import {
   latestUserOpenOfficeIntent,
   latestUserOpenWebsiteIntent,
@@ -152,6 +152,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   // Show task-bar「停止任务」whenever stream is live or ledger run is active.
   // Distinct from input-bar「停止生成」(screen-only).
   const canCancelTask = Boolean(cancellableRunId) || isSubmitting;
+  const waitingAsk = isAskUserWaiting(ledger.run, ledger.events);
   const runStatusLabel = ledger.statusLabel ?? (isSubmitting ? '仍在处理…' : undefined);
   const showResultPanel = resultOpen && !isLandingPage && conversationId !== Constants.SEARCH;
 
@@ -241,13 +242,12 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     rerunning={ledger.rerunning}
                     onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
                     processHint={
-                      ledger.processHint ||
-                      (liveAskEvent(ledger.events)
+                      waitingAsk
                         ? '在等你选'
-                        : isSubmitting
-                          ? '正在检索或作答'
-                          : null)
+                        : ledger.processHint ||
+                          (isSubmitting ? '正在检索或作答' : null)
                     }
+                    waitingAsk={waitingAsk}
                   />
                   {ledger.error ? (
                     <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
@@ -314,12 +314,10 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     taskTitle={taskTitle || ledger.task?.title}
                     runStatusLabel={runStatusLabel}
                     processHint={
-                      ledger.processHint ||
-                      (liveAskEvent(ledger.events)
+                      waitingAsk
                         ? '在等你选'
-                        : isSubmitting
-                          ? '正在检索或作答'
-                          : null)
+                        : ledger.processHint ||
+                          (isSubmitting ? '正在检索或作答' : null)
                     }
                     picoArtifacts={ledger.artifacts}
                     runEvents={ledger.events}

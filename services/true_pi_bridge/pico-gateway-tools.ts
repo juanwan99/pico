@@ -173,7 +173,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_html_document",
-    "Create a real .html Artifact (Pico gateway). Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images (use data: URLs), no window.THREE / new Chart / echarts.init. The tool fails closed if the page still needs the network or those engines, or if an inline script has unmatched brackets — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished.",
+    "Create a real .html Artifact (Pico gateway). Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images (use data: URLs), no window.THREE / new Chart / echarts.init. The tool fails closed if the page still needs the network or those engines, or if an inline script has unmatched brackets — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished. If they also asked to collect answers, follow with publish_html_page rather than asking which cloud to use.",
     Type.Object(
       {
         title: Type.String(),
@@ -386,7 +386,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "ask_user",
-    "When the teacher's request is ambiguous, ask a short multiple-choice question (2–5 options) and wait. After they pick, continue the same turn. Do not call this when the request is already clear. Do not invent a goal.",
+    "When the teacher's request is ambiguous, ask a short multiple-choice question (2–5 options) and wait. After they pick, continue the same turn. Do not call this when the request is already clear. Do not invent a goal. Do not use this to quiz about a third-party form backend when Pico collect exists; if they asked for HTML plus data collection, generate_html_document then publish_html_page.",
     Type.Object(
       {
         question: Type.String(),
@@ -482,7 +482,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "publish_html_page",
-    "Publish an existing HTML artifact to a public URL. Visitors can open it without login. Forms may POST JSON to the page collect path; entries land in the publisher archive.",
+    "Publish an existing HTML artifact to a public URL. Visitors can open it without login. Forms may POST JSON to the page collect path; entries land in the publisher archive. Use this after generate_html_document when they asked to collect answers — do not ask which cloud to use unless they named an external endpoint.",
     Type.Object(
       {
         artifact_id: Type.String(),

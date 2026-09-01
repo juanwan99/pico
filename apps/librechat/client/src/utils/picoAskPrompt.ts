@@ -52,3 +52,11 @@ export function liveAskForRun(
   }
   return { question: askQuestionText(live.payload), options };
 }
+
+/** Parked on ask_user: the run is still `running`, but the model is not generating. */
+export function isAskUserWaiting(
+  run: PicoRun | null | undefined,
+  events: PicoRunEvent[] | null | undefined,
+): boolean {
+  return Boolean(run?.id && ACTIVE_RUN.has(String(run.status || '')) && liveAskEvent(events));
+}

@@ -4,9 +4,9 @@
 DATE: 2026-09-01
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #838 T-POINTS-THIS-TURN
+在飞: #840 T-ASK-HONEST
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 产品 SHA `adaca179393945edd03d042c71979579cd2fd2c8`（#836 已部）
+      → 产品 SHA `c439045428370733e5b5bd54147d903cea89b720`（#839 已部）
       → docs-only 合入不 prod-update
 阻塞: #748 合部完不关 · 勿关 #821/#806/#808/#807/#809/#810/#748/#449/#316
 ────────────────────────────────
@@ -93,7 +93,8 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 业主 PASS 不关 | [#821](https://github.com/juanwan99/pico/issues/821) | T-P0-ASK-IN-MAIN |
 | 已收口 | [#811](https://github.com/juanwan99/pico/issues/811) · [#835](https://github.com/juanwan99/pico/pull/835) | T-RESIDENT-SHRINK 收常驻 · 主管 PASS @ tip `e5f840ef…` |
 | 已收口 | [#836](https://github.com/juanwan99/pico/issues/836) · [#837](https://github.com/juanwan99/pico/pull/837) | T-USAGE-THROUGH-PI 真 Pi 用量进唯一账本 · 主管 PASS @ tip `adaca179…` |
-| 在飞 | [#838](https://github.com/juanwan99/pico/issues/838) | T-POINTS-THIS-TURN 精确 token 列 + 加权换算（常驻仍进账；原「只计本轮说话」已废） |
+| 已收口 | [#838](https://github.com/juanwan99/pico/issues/838) · [#839](https://github.com/juanwan99/pico/pull/839) | T-POINTS-THIS-TURN 精确 token 列 + 加权换算 · 业主令先收 · 已部 tip `c4390454…` |
+| 在飞 | [#840](https://github.com/juanwan99/pico/issues/840) | T-ASK-HONEST 等选不假跑 · 选择卡能点 |
 | 合部完 | [#748](https://github.com/juanwan99/pico/issues/748) | T-LOAD-HONEST · D 过 · 产品尺未关 · 不续债 |
 | 挂起 | 自研记忆 OS | 禁 · 文件型上游 #807 已部 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |

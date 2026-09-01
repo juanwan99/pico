@@ -20,6 +20,7 @@ function TaskRunBar({
   rerunning,
   onRerun,
   processHint,
+  waitingAsk,
 }: {
   title?: string | null;
   isSubmitting: boolean;
@@ -27,6 +28,7 @@ function TaskRunBar({
   model?: string | null;
   statusLabel?: string | null;
   processHint?: string | null;
+  waitingAsk?: boolean;
   canCancel?: boolean;
   cancelling?: boolean;
   onCancel?: () => void;
@@ -59,13 +61,40 @@ function TaskRunBar({
           {displayTitle}
         </p>
         {model ? <p className="truncate text-[11px] text-[#8c8c8c]">模型 {model}</p> : null}
-        {processHint && !showFailed && !showCancelled && !completedLabel?.startsWith('已完成') ? (
+        {processHint &&
+        !waitingAsk &&
+        !showFailed &&
+        !showCancelled &&
+        !completedLabel?.startsWith('已完成') ? (
           <p className="truncate text-[11px] text-[#3b6fd9]" data-testid="task-process-hint">
             {processHint}
           </p>
         ) : null}
       </div>
-      {canCancel ? (
+      {canCancel && waitingAsk ? (
+        <>
+          <span
+            role="status"
+            data-testid="task-waiting-ask"
+            className="inline-flex items-center rounded-full bg-[#e8f1ff] px-2.5 py-1 text-[12px] font-medium text-[#1a3a7a]"
+          >
+            在等你选
+          </span>
+          <button
+            type="button"
+            data-testid="task-stop-button"
+            title="取消云端任务（真停止，与输入区「停止生成」不同）"
+            aria-label="停止云端任务"
+            className="relative z-[230] inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.08] bg-white px-2.5 py-1.5 text-[12px] font-medium text-[#6b3f3f] hover:bg-[#fdeeee] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-surface-secondary"
+            onClick={onCancel}
+            disabled={cancelling}
+            aria-busy={cancelling || undefined}
+          >
+            <PicoIcon name="stop" size="sm" />
+            {cancelling ? '停止中' : '停止任务'}
+          </button>
+        </>
+      ) : canCancel ? (
         <>
           <RunLoadingIndicator className="rounded-full bg-[#edf1f4] px-2.5 py-1 text-[12px] font-medium text-[#3d3d3d]" />
           <button
