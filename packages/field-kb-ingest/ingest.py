@@ -14,6 +14,9 @@ MAX_EXCERPT = 800
 MAX_SLICES = 8
 DEFAULT_ARTIFACTS = "/opt/docling-models"
 PDF_RENDER_SCALE = 2.5
+PDF_VISION_SCALE = 1.25
+MAX_PDF_VISION_PAGES = 8
+MAX_PDF_PAGE_PNG = 6 * 1024 * 1024
 
 _CONVERTER = None
 _OCR = None
@@ -249,6 +252,62 @@ def _ocr_pdf_pages(path: Path) -> str:
         if callable(close_doc):
             close_doc()
     return "\n\n".join(parts)
+
+
+def _png_bytes(pil) -> bytes:
+    from io import BytesIO
+
+    image = pil.convert("RGB")
+    buf = BytesIO()
+    image.save(buf, format="PNG", optimize=True)
+    raw = buf.getvalue()
+    if len(raw) <= MAX_PDF_PAGE_PNG:
+        return raw
+    width, height = image.size
+    scale = (MAX_PDF_PAGE_PNG / max(len(raw), 1)) ** 0.5
+    nxt = max(32, int(width * scale)), max(32, int(height * scale))
+    image = image.resize(nxt)
+    buf = BytesIO()
+    image.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()[:MAX_PDF_PAGE_PNG]
+
+
+def render_pdf_page_pngs(data: bytes, *, max_pages: int = MAX_PDF_VISION_PAGES) -> list[bytes]:
+    """Raster PDF pages with pypdfium2 (same renderer as scan OCR). Not a Pico PDF kernel."""
+    if not data:
+        return []
+    try:
+        import pypdfium2 as pdfium
+    except Exception:
+        return []
+    doc = None
+    out: list[bytes] = []
+    try:
+        doc = pdfium.PdfDocument(data)
+        limit = min(len(doc), max(1, int(max_pages or MAX_PDF_VISION_PAGES)))
+        for i in range(limit):
+            page = doc[i]
+            bitmap = page.render(scale=PDF_VISION_SCALE)
+            try:
+                pil = bitmap.to_pil()
+            finally:
+                close = getattr(bitmap, "close", None)
+                if callable(close):
+                    close()
+            png = _png_bytes(pil)
+            if png.startswith(b"\x89PNG"):
+                out.append(png)
+            close_page = getattr(page, "close", None)
+            if callable(close_page):
+                close_page()
+    except Exception:
+        return out
+    finally:
+        if doc is not None:
+            close_doc = getattr(doc, "close", None)
+            if callable(close_doc):
+                close_doc()
+    return out
 
 
 def _extract(path: Path, suffix: str) -> tuple[str, str, list[str]]:

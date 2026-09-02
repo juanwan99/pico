@@ -313,6 +313,8 @@ def test_system_tells_pi_to_read_paperclip_documents() -> None:
     ).read_text(encoding="utf-8")
     assert "Documents attached this turn" in system
     assert "workspace_read_file" in system
+    assert "this-turn images" in system
+    assert "do not say you cannot read the file" in system
     bridge = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
     )
@@ -347,6 +349,28 @@ def test_inject_conversation_uploads_cites_excerpt() -> None:
     assert "art-pdf-1" in out
     assert out.endswith(prompt)
     assert "学校库" in out
+
+
+def test_inject_scan_pdf_does_not_weld_unreadable() -> None:
+    from app.edu_files import inject_conversation_uploads
+
+    out = inject_conversation_uploads(
+        "这是什么",
+        [
+            {
+                "id": "art-scan-1",
+                "title": "地理答案（XLM1）含补充说明.pdf",
+                "excerpt": "",
+                "error": "没抽出正文",
+                "page_count": 8,
+            }
+        ],
+    )
+    assert "地理答案" in out
+    assert "直接看图" in out
+    assert "把相关页截图上传" not in out
+    assert "另存为能复制文字" not in out
+    assert "没抽出正文" not in out
 
 
 def test_inject_conversation_uploads_legacy_doc_is_honest() -> None:
@@ -459,3 +483,113 @@ def test_legacy_doc_lands_unread_not_dropped(client: TestClient) -> None:
     injected = inject_conversation_uploads("看看这是什么", rows)
     assert "另存为" in injected
     assert "教师教学计划.doc" in injected
+
+
+def _visible_scan_pdf(token: str) -> bytes:
+    from io import BytesIO
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    img = Image.new("RGB", (800, 1000), "white")
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 40)
+    except OSError:
+        font = ImageFont.load_default()
+    draw.text((40, 80), token, fill=(0, 0, 0), font=font)
+    buf = BytesIO()
+    img.save(buf, format="PDF", resolution=72.0)
+    return buf.getvalue()
+
+
+def test_scan_pdf_paperclip_pages_go_to_vision(client: TestClient) -> None:
+    import asyncio
+    import json
+
+    import pytest
+    from sqlalchemy import select
+
+    pytest.importorskip("pypdfium2")
+    pytest.importorskip("PIL")
+
+    from app.auth import Principal
+    from app.db import ArtifactRow, session_factory
+    from app.edu_files import (
+        ensure_paperclip_pdf_pages,
+        inject_conversation_uploads,
+        uploads_for_conversation,
+    )
+    from pico_orchestrator.vision import clear_conversation_images, conversation_images
+
+    token_text = "PICO860-GEO-SCAN"
+    raw = _visible_scan_pdf(token_text)
+    token = _token()
+    cid = "convo-scan-pdf"
+    clear_conversation_images(cid)
+    res = client.post(
+        "/v1/files",
+        headers={
+            "authorization": f"Bearer {token}",
+            "X-Conversation-Id": cid,
+        },
+        json={
+            "filename": "地理答案（XLM1）含补充说明.pdf",
+            "content_b64": base64.b64encode(raw).decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["id"]
+    assert body.get("page_count") == 1
+    assert "page_pngs" not in body
+    pending = conversation_images(cid)
+    assert pending
+    assert pending[0].get("source") == "pdf-page"
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="test",
+        aud="test",
+        exp=0,
+        raw={},
+    )
+
+    async def _round() -> tuple[list, dict]:
+        factory = session_factory()
+        async with factory() as session:
+            rows = await uploads_for_conversation(session, principal, cid)
+            excerpt = (
+                await session.execute(
+                    select(ArtifactRow).where(ArtifactRow.kind == "edu_excerpt")
+                )
+            ).scalars().first()
+            sidecar = json.loads(excerpt.inline) if excerpt and excerpt.inline else {}
+        return rows, sidecar
+
+    rows, sidecar = asyncio.run(_round())
+    assert "page_pngs" not in sidecar
+    assert sidecar.get("page_count") == 1
+    assert len(json.dumps(sidecar)) < 20_000
+    injected = inject_conversation_uploads("这是什么", rows)
+    assert "直接看图" in injected
+    assert "把相关页截图上传" not in injected
+    assert "没抽出正文" not in injected
+
+    clear_conversation_images(cid)
+    assert conversation_images(cid) == []
+
+    async def _ensure() -> list:
+        factory = session_factory()
+        async with factory() as session:
+            items = await uploads_for_conversation(session, principal, cid)
+            await ensure_paperclip_pdf_pages(session, principal, cid, items)
+            return items
+
+    items = asyncio.run(_ensure())
+    assert conversation_images(cid)
+    assert conversation_images(cid)[0].get("source") == "pdf-page"
+    assert int(items[0].get("page_count") or 0) >= 1
+    injected_again = inject_conversation_uploads("这是什么", items)
+    assert "直接看图" in injected_again
+    clear_conversation_images(cid)
