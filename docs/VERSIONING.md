@@ -11,7 +11,7 @@ RELATED: AGENTS.md 文首 · docs/ONEFLOW.md
 1. 生产线 = origin/main。旁支不是版本，不准部。
 2. 现网 = curl https://pico.aivia.asia/api/pico/tip
 3. 可部 SHA = origin/main 上的提交（通常是 tip；回滚必须仍是 main 祖先）
-4. 长分叉只移植，禁止整枝 merge
+4. 长分叉只移植，禁止整枝 merge。合入只 squash（仓库只开 squash）
 5. 写码树 /home/ops/pico ≠ 生产树 /opt/pico（只 prod-update）
 6. STATE-NOW / 聊天 / 本地 HEAD 都不是现网版本
 ```

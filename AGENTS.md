@@ -12,8 +12,11 @@
 工位: 写码 /home/ops/pico · 生产 /opt/pico 只 prod-update（干净+detached）
 环:   从 origin/main 开枝 → 改+测 → PR → CI绿 → squash 合 main
       → 必须 prod-update → curl tip = origin/main。业主靠现网看效果。
+合:   GitHub 只开 squash；合完自动删头枝。写仓回 main，删本任务本地枝。不攒着清。
 禁止: 主管/执行者两套编制 · mailbox · 在 /opt/pico 改业务 · docker compose 当发布
-      旁支部 live · 整枝合长分叉 · 直推 main · 合了不部 · Closes部前关卡 · docs-only 不部
+      旁支部 live · 整枝合长分叉 · 直推 main · 合了不部 · docs-only 不部
+      PR/commit 正文写 GitHub 关卡关键字（Closes / Fixes / close #数字）
+      「Do not close #数字」也会被当成关卡。过门后手关 Issue。
 新窗: curl tip + GitHub 在飞最多 1。无在飞则讨论。
 ```
 
