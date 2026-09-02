@@ -51,6 +51,7 @@ DATE: 2026-09-02
 40. **假绿门补基础，不补场景。** 先计划 HITL 超时未选 = 跑失败，禁止映射成 Stay 再标 succeeded。Excel `body` 走与 Word/PPT 同类的 plain→spec：markdown/TSV 表落成真实 sheet/行，禁止整段进 A1；小数当原文，禁止 `float` 脏值。HTML 交互页除 CDN 门外，内联 script 括号不配对失败闭合，禁止落坏脚本再当成品。禁词表/家长会/分数练习特判。
 41. **二进制不进脑（#850）。** 像素只走账本；脑只说 id。HTML 嵌图 = `src="pico-artifact:<id>"`（或 `image_artifact_ids` + `pico-artifact:0`）；账本存 id，打开/下载时内联 data:。GET 任务列表不夹带大段 utf8（结果区 2s 轮询）。缺 id 跳过该图 + observation 诚实，不毁整页。作者 `body` 仍 20 万。流死人话失败，已落盘成品仍可见。禁焊课件管道、禁 CDN、禁把模型当 U 盘。
 43. **厚桥四层绝对禁止（#865 · 业主 2026-09-02）。** 本地 PDF 阅读器、办公投影器、交件监工、硬帽截窗 = 违法。回形针进本轮只挂**文件名 + 账本 id**，禁止把抽文/OCR/渲页焊进 user 或自动灌 `images[]`。Pi 无 DocumentContent ≠ 允许自研 PDF 核。compaction 只准 Pi 官方钮、禁止把 reserve 抬到让 256k 窗 64k 就压。问「这是什么」不交件。该留：租户 · SSRF · 密钥 · 禁 bash · 假绿 · 未勾选不读学校库。
+44. **最高要求（#867）。** 绝对禁止自己搞一套体系。绝对禁止做重体系。只允许薄适配。开窗先读 LAW §0-supreme 与 AGENTS.md 文首。任务卡便利压不过这一条。
 
 ## C · 部署 / ECS / 执行者
 

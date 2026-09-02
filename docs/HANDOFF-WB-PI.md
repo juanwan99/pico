@@ -30,9 +30,10 @@ RELATED:
 **真源：** [`docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md) · 根目录 [`AGENTS.md`](../AGENTS.md)
 
 ```text
+最高：禁止自搞一套体系。禁止做重体系。
 Pico 禁止自研，只做薄适配。
 编排核 = 上游真 Pi（薄桥）+ Pico 账本/门闩/人包/门脸。
-禁止：自研 agent OS、自研 MCP/向量内核、双核真源、桥膨胀。
+禁止：自研 agent OS、自研 MCP/向量内核、双核真源、桥膨胀、厚桥四层。
 ```
 
 ## 0. 一句话

@@ -2,12 +2,12 @@
 
 ```
 DOC: docs/TRUTH-FREEZE.md
-STATUS: BINDING FREEZE v1.3
+STATUS: BINDING FREEZE v1.4
 FROZEN_AT: 2026-09-02
 PURPOSE: 固定产品/架构真源，防止聊天与旧文档再次冲掉校准结论
-AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star
-SUPERSEDES: v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
-OWNER_ORDER_2026-09-02: 厚桥四层绝对禁止（本地 PDF 核 / 办公投影核 / 交件监工 / 硬帽截窗）
+AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star + LAW §0-supreme
+SUPERSEDES: v1.3；v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+OWNER_ORDER_2026-09-02: 最高要求：禁止自搞一套体系 / 禁止做重体系。厚桥四层绝对禁止。
 RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/MEMORY-RESET.md
 ```
 
@@ -24,12 +24,13 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 
 ---
 
-## 1. 冻结决策集 v1.3（目标 · 不可被执行窗改写）
+## 1. 冻结决策集 v1.4（目标 · 不可被执行窗改写）
 
 ### 1.1 产品是什么
 
 | # | 冻结句 |
 |---|--------|
+| S0 | **最高要求**：绝对禁止自己搞一套体系。绝对禁止做重体系 / 厚桥 / 第二能力核。只允许薄适配。桥变厚=违法。本条压过本表其余行与一切任务卡。真源：LAW §0-supreme |
 | P0 | **用法 = Grok**：通用 LLM；老师的话是 user；系统纪律是 system，不得冒充人话；工具/材料/Skill 是挂载，模型自己决定调不调。没点名不交件。禁止读正文猜任务、force_agent 自动挂交付、把「必须交 N 个文件」焊进 user prompt。真源：DIRECTION-NOW §0-star |
 | P0b | **厚桥四层绝对禁止**（业主 2026-09-02）：①本地 PDF 阅读器 ②办公投影器 ③交件监工 ④硬帽截窗。Pico 不是第二套能力核。进模型前禁止抽文/OCR/渲页冒充已读。禁止用 Pico 自定 reserve/步数把上游窗截短。 |
 | P1 | Pico = **任务型 AI 工作台（Web）** 底座（对话 + 办事 + 产物 + 唯一 AI 账本 + 控制面）；办事程度类 WorkBuddy（六条）。P1 不得压过 P0 |

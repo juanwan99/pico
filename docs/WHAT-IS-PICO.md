@@ -3,7 +3,7 @@
 ```
 DOC: docs/WHAT-IS-PICO.md
 STATUS: BINDING · 覆盖一切冲突的产品口述与旧文档金句
-FREEZE: docs/TRUTH-FREEZE.md v1.1 · HANDOFF-WB-PI（默认 Pi + DeepSeek）
+FREEZE: docs/TRUTH-FREEZE.md v1.4 · LAW §0-supreme · HANDOFF-WB-PI（默认 Pi + DeepSeek）
 OWNER: 业主目标 + 总管落盘
 TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可更新「现状」；不可偷偷改「目标」
 ```
@@ -15,6 +15,8 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 **Pico 的用法 = Grok 的用法。** 通用 LLM。老师的话是 user；系统纪律是 system，不得冒充人话。工具 / 材料 / Skill 是挂载，模型看老师的话决定用不用。问「这是什么」就解释；说「做成 Word」才交文件。
 
 工作台（LibreChat + Pico 账本）是壳和控制面，**不是**读正文猜任务的定向工作流。
+
+**最高禁止：** 自己搞一套体系、做重体系、厚桥、第二能力核。只允许薄适配。
 
 **禁止：** force_agent 自动挂交付 Skill、把「本轮必须交 N 个文件」焊进 user prompt、用课件/通知/模块词表定向。
 
@@ -128,5 +130,5 @@ Kimi HTTPS 密钥                                   ⚠️ 可选后备 · 非�
 ## 7. 三句记忆
 
 1. Pico 是 AI 工作台底座（壳 + 账本 + 控制面 + 模型 API），不是网盘/教务。  
-2. **目标默认：Pi 编排 + DeepSeek 模型**（TRUTH-FREEZE v1.1）；Kimi Agent 是遗产回滚，不是产品唯一目标。  
-3. 自研工具环与双核并列真源均禁止；实现现状以 tip/STATE-NOW 为准，禁止假称完成。
+2. **目标默认：Pi 编排 + DeepSeek 模型**（TRUTH-FREEZE v1.4）；Kimi Agent 是遗产回滚，不是产品唯一目标。  
+3. **最高：禁止自搞一套体系、禁止做重体系。** 自研工具环与双核并列真源均禁止；实现现状以 tip/STATE-NOW 为准，禁止假称完成。
