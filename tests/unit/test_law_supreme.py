@@ -25,6 +25,8 @@ def test_agents_md_opens_with_supreme_ban() -> None:
     assert "只开 squash" in head
     assert "关卡关键字" in head
     assert "删本任务本地枝" in head
+    assert "旧窗摘要" in head
+    assert "已合头枝不是在飞" in head
 
 
 def test_law_supreme_section_exists() -> None:
