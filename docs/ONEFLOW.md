@@ -41,7 +41,7 @@ NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
   → 公网看得见再关
 ```
 
-未合进 main 不算做完。合了没部署 = 用户看不见（docs-only 必须写明不部）。CI/API 200 不算过门。CLAIM-WB 仍只业主签。
+未合进 main 不算做完。合了没部署 = 用户看不见 = 没完。CI/API 200 不算过门。CLAIM-WB 仍只业主签。
 
 ## 2. 合同
 
@@ -71,7 +71,7 @@ curl -fsS https://pico.aivia.asia/api/pico/tip
 - 假装已有 GHCR 全自动发布
 - 用聊天当账本
 - 绿档以外无第二双眼睛就合黄/红
-- 合 main 不部署却声称用户已用上（docs-only 须写明不部）
+- 合 main 不部署（业主看不见效果）
 - 把 edu 的 315 卡面抄进 pico
 - 把调查留在聊天、不写进 Issue
 - 造 mailbox、把 ECS 磁盘当第二账本

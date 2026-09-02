@@ -6,7 +6,7 @@ DATE: 2026-09-02
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
 在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 产品 SHA 仍 bedce3a0…（docs-only 不部）
+      → 必须 = origin/main（合了必须部）
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
@@ -26,7 +26,7 @@ juanwan99/oneflow: 不当真源（已 Archive）
 卡面四行。**怎么跟业主说话不限。**
 
 1. **证据禁止进 PR。** 只贴 Issue 评论。
-2. **无部署权拒领。** DONE 必须 live SHA = origin/main（docs-only 写明不部）。合了未部 = 没完。禁 `Closes` 部前关卡。
+2. **无部署权拒领。** DONE 必须 live SHA = origin/main。合了不部 = 没完。禁 `Closes` 部前关卡。禁 docs-only 不部。
 3. **过门 = 公网能看见结果句。** 本窗对账后关。业主抽检不对开新卡。写 1px 轨/选择器 = 退回。
 4. **1 卡 1 PR。** CI/测/部的修补走原 PR。同卡续只在业主说还差。卡别拆太细：同层薄适配并一张。
 5. **聊天默认易失。** 约束下一窗必须落 Issue 评论或本页/`EXPERIENCE`/`TOOLING-CATALOG`。

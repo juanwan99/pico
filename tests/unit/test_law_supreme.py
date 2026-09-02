@@ -20,6 +20,8 @@ def test_agents_md_opens_with_supreme_ban() -> None:
     assert "主管/执行者两套编制" in head
     assert "只有 origin/main 是生产线" in head
     assert "旁支不准部" in head
+    assert "必须 prod-update" in head
+    assert "docs-only 不部" in head
 
 
 def test_law_supreme_section_exists() -> None:
