@@ -170,20 +170,17 @@ async def consume_edu_sso(
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     ticket = await consume_web_ticket(body.ticket, session, settings)
-    if ticket.named_ids:
-        from app.edu_school import remember_named_ids
+    # Ticket may still carry named_ids for audit. Do not pre-check school
+    # materials (本场成员 included). Teacher must tick them this turn.
+    from app.edu_school import remember_named_ids
 
-        await remember_named_ids(
-            session,
-            ticket.school_id,
-            ticket.membership_id,
-            "",
-            list(ticket.named_ids),
-        )
+    await remember_named_ids(
+        session, ticket.school_id, ticket.membership_id, "", [], ""
+    )
     return {
         "ok": True,
         "school_id": ticket.school_id,
         "membership_id": ticket.membership_id,
         "display_name": ticket.display_name,
-        "named_ids": list(ticket.named_ids),
+        "named_ids": [],
     }

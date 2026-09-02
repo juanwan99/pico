@@ -253,16 +253,6 @@ async def load_named_ids(
             )
         )
     ).scalar_one_or_none()
-    if row is None and key:
-        row = (
-            await session.execute(
-                select(EduNamedBindRow).where(
-                    EduNamedBindRow.school_id == school_id,
-                    EduNamedBindRow.membership_id == membership_id,
-                    EduNamedBindRow.conversation_id == "",
-                )
-            )
-        ).scalar_one_or_none()
     if row is None:
         return []
     try:
@@ -288,16 +278,6 @@ async def load_named_field_id(
             )
         )
     ).scalar_one_or_none()
-    if row is None and key:
-        row = (
-            await session.execute(
-                select(EduNamedBindRow).where(
-                    EduNamedBindRow.school_id == school_id,
-                    EduNamedBindRow.membership_id == membership_id,
-                    EduNamedBindRow.conversation_id == "",
-                )
-            )
-        ).scalar_one_or_none()
     if row is None:
         return ""
     return sanitize_field_id(getattr(row, "field_id", "") or "")
@@ -332,6 +312,8 @@ async def promote_named_bind(
     archive = await load_archive_folder_id(session, school_id, membership_id, "")
     if archive:
         await remember_archive_folder_id(session, school_id, membership_id, key, archive)
+    # Staging is this turn only. Next /c/new starts unchecked.
+    await remember_named_ids(session, school_id, membership_id, "", [], field_id)
     return landing_ids
 
 
@@ -733,6 +715,9 @@ async def get_named(
     principal: Principal = Depends(require_any_scope("ai:read", "ai:run")),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
+    await promote_named_bind(
+        session, principal.school_id, principal.membership_id, conversation_id
+    )
     ids = await load_named_ids(
         session, principal.school_id, principal.membership_id, conversation_id
     )

@@ -115,6 +115,26 @@ describe('SchoolMaterialsBar venue folder tree', () => {
     });
   });
 
+  it('does not default-check 本场成员 documents', async () => {
+    mockListEduFields.mockResolvedValue({
+      fields: [{ id: 'field-venue', name: '本场成员' }],
+    });
+    mockSearch.mockImplementation(async (_q: string, fieldId = '') => {
+      if (fieldId === 'field-venue') {
+        return { items: [{ id: 'member-doc', title: '名单.xlsx', fieldId: 'field-venue' }] };
+      }
+      return { items: [] };
+    });
+
+    render(<SchoolMaterialsBar conversationId="new" />);
+    expect(screen.getByText('未勾选不读正文')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('school-materials-toggle'));
+    fireEvent.click(await screen.findByTestId('school-field-toggle-field-venue'));
+    const box = await screen.findByTestId('school-material-member-doc');
+    expect(box).not.toBeChecked();
+    expect(mockGetEduNamedIds).toHaveBeenCalledWith('');
+  });
+
   it('splits manage left and followed right; followed stays folded', async () => {
     render(<SchoolMaterialsBar conversationId="c1" />);
     fireEvent.click(screen.getByTestId('school-materials-toggle'));

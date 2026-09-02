@@ -202,3 +202,42 @@ def test_consume_http_replay_fails(tmp_path, monkeypatch) -> None:
         assert api.json()["detail"]["code"] == "auth.aud_mismatch"
     dbmod._engine = None
     dbmod._Session = None
+
+
+def test_consume_http_does_not_precheck_named_ids(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path}/edu-sso-named.db")
+    import asyncio
+
+    import app.db as dbmod
+    from app.edu_school import load_named_ids, remember_named_ids
+    from app.edu_sso import router
+    from app.settings import get_settings
+
+    dbmod._engine = None
+    dbmod._Session = None
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_settings] = lambda: _settings()
+    item = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    leftover = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
+
+    async def _seed() -> None:
+        await dbmod.init_db()
+        async with dbmod.session_factory()() as session:
+            await remember_named_ids(session, SCHOOL, MEMBER, "", [leftover], "")
+
+    asyncio.run(_seed())
+    token = _web_token(jti="no-precheck", extra={"named_ids": [item]})
+    with TestClient(app) as client:
+        first = client.post("/v1/edu-sso/consume", json={"ticket": token})
+        assert first.status_code == 200, first.text
+        body = first.json()
+        assert body["named_ids"] == []
+
+    async def _check() -> None:
+        async with dbmod.session_factory()() as session:
+            assert await load_named_ids(session, SCHOOL, MEMBER, "") == []
+
+    asyncio.run(_check())
+    dbmod._engine = None
+    dbmod._Session = None

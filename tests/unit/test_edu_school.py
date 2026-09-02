@@ -277,8 +277,75 @@ def test_promote_named_bind_copies_landing_ids(client) -> None:
             got = await promote_named_bind(session, "school-a", "m-edu", "c-real")
             assert got == [item]
             assert await load_named_ids(session, "school-a", "m-edu", "c-real") == [item]
+            assert await load_named_ids(session, "school-a", "m-edu", "") == []
 
     asyncio.run(_run())
+
+
+def test_load_named_ids_does_not_inherit_landing_without_promote(client) -> None:
+    import asyncio
+
+    from app.db import session_factory
+    from app.edu_school import load_named_ids, remember_named_ids
+
+    item = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+
+    async def _run() -> None:
+        from app.db import init_db
+
+        await init_db()
+        factory = session_factory()
+        async with factory() as session:
+            await remember_named_ids(session, "school-a", "m-edu", "", [item], "")
+            assert await load_named_ids(session, "school-a", "m-edu", "c-other") == []
+
+    asyncio.run(_run())
+
+
+def test_get_named_promotes_landing_once(client) -> None:
+    item = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    headers = {
+        "Authorization": f"Bearer {_token()}",
+        "X-Pico-Membership-Id": "school-a:m-edu",
+    }
+    put = client.put(
+        "/v1/edu/named",
+        json={"conversation_id": "", "ids": [item]},
+        headers=headers,
+    )
+    assert put.status_code == 200, put.text
+    got = client.get(
+        "/v1/edu/named",
+        params={"conversation_id": "c-real"},
+        headers=headers,
+    )
+    assert got.status_code == 200, got.text
+    assert got.json()["ids"] == [item]
+    landing = client.get("/v1/edu/named", headers=headers)
+    assert landing.json()["ids"] == []
+
+
+def test_named_empty_conversation_defaults_unchecked(client) -> None:
+    item = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    headers = {
+        "Authorization": f"Bearer {_token()}",
+        "X-Pico-Membership-Id": "school-a:m-edu",
+    }
+    client.put(
+        "/v1/edu/named",
+        json={"conversation_id": "c-old", "ids": [item]},
+        headers=headers,
+    )
+    got = client.get("/v1/edu/named", headers=headers)
+    assert got.status_code == 200, got.text
+    assert got.json()["ids"] == []
+    got_new = client.get(
+        "/v1/edu/named",
+        params={"conversation_id": "new"},
+        headers=headers,
+    )
+    assert got_new.status_code == 200
+    assert got_new.json()["ids"] == []
 
 
 def test_excerpts_fill_from_item_when_bulk_excerpt_empty(client, monkeypatch) -> None:
