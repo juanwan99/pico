@@ -3,7 +3,7 @@
 ```
 DOC: docs/WHAT-IS-PICO.md
 STATUS: BINDING · 覆盖一切冲突的产品口述与旧文档金句
-FREEZE: docs/TRUTH-FREEZE.md v1.4 · LAW §0-supreme · HANDOFF-WB-PI（默认 Pi + DeepSeek）
+FREEZE: docs/TRUTH-FREEZE.md v1.5 · LAW §0-supreme · AGENTS 文首工作法 · HANDOFF-WB-PI（默认 Pi + DeepSeek）
 OWNER: 业主目标 + 总管落盘
 TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可更新「现状」；不可偷偷改「目标」
 ```

@@ -5,13 +5,18 @@
 ```text
 最高: 禁止自搞一套体系。禁止做重体系 / 厚桥 / 第二能力核。
       只允许薄适配。桥变厚=违法。详见 docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md §0-supreme
-现况: docs/STATE-NOW.md · 冻结令 #634
-在飞: 只认 STATE-NOW 三行（禁止凭记忆）· 现 无
+真源: GitHub Issue/PR/SHA/CI + 公网 tip。聊天/磁盘/STATE-NOW 都不是第二账本。
+人:   本窗合一。不设主管/执行者编制。业主抽检与 CLAIM-WB 不代签。
+工位: 写码 /home/ops/pico · 生产 /opt/pico 只 prod-update（必须干净+detached）
+环:   开窗对账 → 一卡一PR → CI绿再合 → 有差才部 → 公网结果句 → 收工对账
+      卫生=对账，不是第二人。无收尾不准下一张。
+在飞: GitHub 执行卡最多 1 张 · 现以 Issue 为准
 经验: docs/EXPERIENCE.md（唯一 · 按域 · 禁止贴进卡）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
-执行: 证据贴 Issue · 无 ECS/ssh-ecs 拒领 · 过门=老师手 · 1卡1PR
-禁止: 改卡贴 315 · 证据 PR · 合了未部报 DONE · 第二张 stamp-ok · Closes 部前关卡 · oneflow 当真源 · 公网22当 Cloud Agent 通道
-新窗: STATE-NOW → EXPERIENCE → curl tip。无在飞则讨论，不开卡。
+禁止: 主管/执行者两套编制 · mailbox · ECS当账本 · 在 /opt/pico 改业务
+      docker compose 当发布 · 证据进PR · 合了未部报DONE · Closes部前关卡
+      第二张 stamp-ok · 只改 STATE-NOW 独立PR · 复活315 · oneflow仓当真源
+新窗: curl tip + GitHub 在飞。无在飞则讨论，不开卡。
 ```
 
 
@@ -58,39 +63,28 @@ PR 必须能回答：适配哪段？上游是谁？升级是否只改适配层�
 
 ---
 
-## Execution workflow (binding) — **OneFlow adapted from edu**
+## Execution workflow (binding) — **本窗合一 · GitHub 唯一真源**
 
-**OneFlow (end-to-end OS + closed loops):** [`docs/ONEFLOW.md`](docs/ONEFLOW.md)  
-**3-day push (when active):** [`docs/SPRINT-3DAY-PUSH.md`](docs/SPRINT-3DAY-PUSH.md)  
-**Parallel sprint (BINDING-v2 · N1+):** [`docs/PARALLEL-SPRINT-PLAN.md`](docs/PARALLEL-SPRINT-PLAN.md) · Skill ADR: [`docs/ADR-SKILL-CATALOG.md`](docs/ADR-SKILL-CATALOG.md)  
-**Windows / risk / review detail:** [`docs/WORKFLOW.md`](docs/WORKFLOW.md) · **Versioning:** [`docs/VERSIONING.md`](docs/VERSIONING.md)  
-**Why/what absorbed:** [`docs/WORKFLOW-COMPARE-EDU.md`](docs/WORKFLOW-COMPARE-EDU.md)  
-**Helper (not authority):** `bash scripts/oneflow-status.sh`
-
-### OneFlow closed loop (must not skip)
+形状指针：[`docs/ONEFLOW.md`](docs/ONEFLOW.md)（机械门留下；主管/执行者编制已废）。  
+节奏：[`docs/FAST-PATH.md`](docs/FAST-PATH.md)。版本：[`docs/VERSIONING.md`](docs/VERSIONING.md)。  
+Helper（非真源）：`bash scripts/oneflow-status.sh`
 
 ```text
-goal → one PR → CANDIDATE+SHA → CI green → review(if Y/R) → MERGED main
-  → stage-A deploy → health.git_sha match → DEPLOYED comment → CLEAR
+对齐 → 一张卡（或小改直接 PR）→ 一分支一 PR → CI 绿再合
+  → 有差才 prod-update（/opt/pico）→ tip == origin/main
+  → 公网结果句 → 收工对账 → 关卡
 ```
 
-- **CI red ⇒ no merge.** Writer `VERDICT_AUTHORITY: NONE` (no self-PASS).
-- **Controller** merges after gates; writer does not self-merge yellow/red.
-- GitHub Issue/PR/SHA/CI/Deploy comments = only durable facts.
-
-| Rule | |
-|------|---|
-| Isolation | One slice → one writer → one branch → one PR |
-| Window states | `OPEN` / `KEEP` / `CLEAR` / `WAIT` |
-| Roles | `Grok-Pico写入` / `调查` / `审查` |
-| After push | **`CANDIDATE` + full 40-char SHA + evidence map** |
-| Gates | CI ∥ independent review ∥ UI QA when UI |
-| Verdict | Writer `VERDICT_AUTHORITY: NONE` — **no self-PASS** |
-| Merge | **Controller** after CI (+ review if Y/R); no unattended / no merge on red CI |
-| Facts | GitHub Issue/PR/SHA/CI only — no parallel status system |
-| Review | Exact SHA; writer cannot issue independent `PASS` |
-| Risk | Green CI+self; Yellow/Red **independent exact-SHA review** |
-| Version | Full 40-char SHA; no parallel VERSION-MAP; see VERSIONING.md |
+| 门 | |
+|----|---|
+| 真源 | GitHub Issue/PR/SHA/CI + `curl -fsS https://pico.aivia.asia/api/pico/tip` |
+| 人 | 本窗合一：开卡、改、测、合、部、收尾同一窗。不设主管/执行者编制 |
+| 隔离 | 1 卡 1 分支 1 PR。CI/测/部翻车回原 PR |
+| 绿档 | CI 绿即可合（本窗） |
+| 黄/红 | 另一双眼睛、exact SHA；换核/密钥/租户业主抽检。CLAIM-WB 不代签 |
+| 工位 | 写码 `/home/ops/pico`；生产 `/opt/pico` 只 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh` |
+| 过门 | 公网看得见结果句。CI/API 200 不算过门 |
+| 卫生 | 开窗/收工对账。卫生不是第二人。无收尾不准下一张 |
 
 Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
@@ -105,23 +99,23 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 
 **Truth freeze:** [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md)  
 **What is Pico:** [`docs/WHAT-IS-PICO.md`](docs/WHAT-IS-PICO.md)  
-**Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — **唯一现况**（三行 · 在飞 无 · #634）。下面目录不当现况。  
+**Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — **开窗索引**（三行）。对不上以 GitHub 执行卡 + 公网 tip 为准。  
 **Memory reset:** [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md) — **本周 ≤3 坑**，禁止加长。  
 **Stage package:** [`docs/STAGE-PACKAGE-MODE.md`](docs/STAGE-PACKAGE-MODE.md) — 单窗阶段包（废默认多窗碎卡）。  
-**Task card format:** [`docs/ONEFLOW.md`](docs/ONEFLOW.md) + [`docs/TASK-CARD-STANDARD.md`](docs/TASK-CARD-STANDARD.md) — Issue 用标准任务卡；对执行窗只贴 [`docs/templates/dispatch-slip.md`](docs/templates/dispatch-slip.md)。禁止 315。禁止用四行短卡当已派。  
-**开工先读：** [`docs/EXPERIENCE.md`](docs/EXPERIENCE.md)。派发条点名编号，不抄全文。执行窗零记忆，调查必须写进 Issue。  
+**Task card format:** [`docs/ONEFLOW.md`](docs/ONEFLOW.md) + [`docs/TASK-CARD-STANDARD.md`](docs/TASK-CARD-STANDARD.md) — Issue 用标准任务卡。禁止 315。禁止用四行短卡当已派。  
+**开工先读：** [`docs/EXPERIENCE.md`](docs/EXPERIENCE.md)。派发条点名编号，不抄全文。调查写进 Issue。  
 **Doc index (truth order):** [`docs/README.md`](docs/README.md) — prefer GitHub over prose.
 
 **Context policy:** [`docs/CONTEXT-POLICY.md`](docs/CONTEXT-POLICY.md)（默认不清理上下文）  
-**Controller bot (7x24):** [`docs/CONTROLLER-BOT.md`](docs/CONTROLLER-BOT.md) — 机制说明；**派工以总管任务卡 + STATE-NOW 为准**  
-**Controller poll:** [`docs/CONTROLLER-POLL.md`](docs/CONTROLLER-POLL.md)  
+**Controller bot (7x24):** [`docs/CONTROLLER-BOT.md`](docs/CONTROLLER-BOT.md) — 考古/机制；**派工只认 GitHub 执行卡**  
+**Controller poll:** [`docs/CONTROLLER-POLL.md`](docs/CONTROLLER-POLL.md) — 非真源  
 **Execution queue:** [`docs/EXECUTION-QUEUE.md`](docs/EXECUTION-QUEUE.md) — **SUPERSEDED** 自动 E1/E2/E3；勿当现行派工  
 **Validation queue:** [`docs/VALIDATION-QUEUE.md`](docs/VALIDATION-QUEUE.md)  
 **FAST sprint:** [`docs/SPRINT-FAST.md`](docs/SPRINT-FAST.md)  
 **P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
 **Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
 **24h Standalone AI:** [`docs/STANDALONE-AI-24H.md`](docs/STANDALONE-AI-24H.md) (historical baseline)  
-**Current dispatch:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) · 在飞 **无**（#740 业主 PASS @ `2e668686…` · #752 PASS @ `0c7943ac…`）。`DAY-TASK-*` / #310 / #627 / 已关 #646 **不当现况**。   
+**Current dispatch:** GitHub 执行卡（最多 1）· [`docs/STATE-NOW.md`](docs/STATE-NOW.md) 三行只是索引。`DAY-TASK-*` / #310 / #627 / 已关 #646 **不当现况**。   
 **Kimi legacy:** [`docs/KIMI-AGENT-GAP.md`](docs/KIMI-AGENT-GAP.md) 仅考古/回滚；**产品默认 = Pi**  
 **KA-4:** soft historical [`docs/KA4-SOFT.md`](docs/KA4-SOFT.md) **superseded** · ops: [`docs/OPS-RUNBOOK-STABILIZE.md`](docs/OPS-RUNBOOK-STABILIZE.md)  
 **Skill ADR:** [`docs/ADR-SKILL-CATALOG.md`](docs/ADR-SKILL-CATALOG.md).  
@@ -131,7 +125,7 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 `HANDOFF-NEW-WINDOW-2026-08-23.md` 当现况。
 
 ## Product rules
-- **Org:** default **single-window SOLO** — [docs/STAGE-PACKAGE-MODE.md](docs/STAGE-PACKAGE-MODE.md). Old windows 1/2/4 are **duty aliases**, not parallel staffing. See [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md).
+- **Org:** **本窗合一**（写/合/部/收尾同一窗）。旧窗1/2/4 与主管/执行者是历史别名，不是编制。见 [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md)。
 - **Ship steps:** [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. **One window** runs the chain; no multi-issue process OS.
 - **Product goal:** Web WorkBuddy degree — [docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star。用法 = Grok。
 - **Default runtime:** **Pi** + **DeepSeek**. Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted** (never the goal).
@@ -143,12 +137,12 @@ Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 
 
 ## Speed vs safety
 
-**Default org:** stage package + **SOLO** ([STAGE-PACKAGE-MODE](docs/STAGE-PACKAGE-MODE.md)).  
-**Default tech rhythm:** [docs/FAST-PATH.md](docs/FAST-PATH.md) steps inside one window.
+**Default org:** 本窗合一 + 阶段包 ([STAGE-PACKAGE-MODE](docs/STAGE-PACKAGE-MODE.md))。  
+**Default tech rhythm:** [docs/FAST-PATH.md](docs/FAST-PATH.md) 同一窗串行。
 
 **KEEP:** secrets out of git; allowlist tools; exact-SHA deploy; CI green; no fake global / WB CLAIM; no dual-run; **Pi + DeepSeek default**.
 
-**CUT:** multi-window daily dispatch, multi-card ceremonies, auto E1 queue, per-gap micro-issues, Kimi-as-only-goal memory, Dify-as-product, scene-exam-as-WB.
+**CUT:** 主管/执行者编制、多窗日常派、碎卡仪式、auto E1、mailbox、把 ECS 当账本、Kimi-as-only-goal、Dify-as-product、scene-exam-as-WB。
 
 PRs stay (one writer / one branch / CI). Do **not** split one theme into many waiting rounds or many windows.
 

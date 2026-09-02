@@ -2,12 +2,12 @@
 
 ```
 DOC: docs/TRUTH-FREEZE.md
-STATUS: BINDING FREEZE v1.4
+STATUS: BINDING FREEZE v1.5
 FROZEN_AT: 2026-09-02
 PURPOSE: 固定产品/架构真源，防止聊天与旧文档再次冲掉校准结论
-AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star + LAW §0-supreme
-SUPERSEDES: v1.3；v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
-OWNER_ORDER_2026-09-02: 最高要求：禁止自搞一套体系 / 禁止做重体系。厚桥四层绝对禁止。
+AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star + LAW §0-supreme + AGENTS 文首工作法
+SUPERSEDES: v1.4；v1.3；v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；主管/执行者编制；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+OWNER_ORDER_2026-09-02: 最高要求：禁止自搞一套体系 / 禁止做重体系。厚桥四层绝对禁止。工作法：人合一 · GitHub 唯一真源 · 工位分开。
 RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/MEMORY-RESET.md
 ```
 
@@ -24,7 +24,7 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 
 ---
 
-## 1. 冻结决策集 v1.4（目标 · 不可被执行窗改写）
+## 1. 冻结决策集 v1.5（目标 · 不可被本窗改写）
 
 ### 1.1 产品是什么
 
@@ -77,10 +77,11 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 
 | # | 冻结句 |
 |---|--------|
+| W0 | **工作法**：本窗合一。GitHub Issue/PR/SHA/CI + 公网 tip = 唯一真源。写码树 `/home/ops/pico` ≠ 生产树 `/opt/pico`（只 prod-update）。卫生=对账。禁止主管/执行者日常编制、mailbox、ECS 第二账本。真源：AGENTS 文首 |
 | W1 | 只写 `juanwan99/pico`（产品主仓） |
 | W2 | 禁 PROXY=1；禁打印密钥 |
-| W3 | **单窗 SOLO** 端到端（STAGE-PACKAGE）；旧窗1/2/4 仅职责别名；无自动 E1 派工 |
-| W4 | 不自 PASS；DEPLOYED ≠ 产品 PASS；禁假绿 CLAIM |
+| W3 | 本窗端到端（STAGE-PACKAGE）；旧窗1/2/4 与主管/执行者仅历史别名；无自动 E1 派工 |
+| W4 | CLAIM-WB / 全球产品 PASS 不代签；DEPLOYED ≠ 产品 PASS；禁假绿 CLAIM。绿档本窗对账后关卡 |
 | W5 | aivia-workbench = 非产品主仓；Dify/场景卷 ≠ WB 程度完成 |
 
 ### 1.6 多仓（只读认知 · 不写 edu）
@@ -101,8 +102,8 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | **T0** | **HANDOFF-WB-PI.md** | 产品目标与六条（2026-08-06 业主拍板） |
 | **T1** | **TRUTH-FREEZE.md**（本页） | 目标冻结清单 |
 | **T2** | **WHAT-IS-PICO.md** | 产品定义 |
-| **T3** | **STATE-NOW.md** | 运行快照：SHA、门禁、派发 |
-| **T4** | **AGENTS.md** | 执行 HARD |
+| **T3** | **STATE-NOW.md** | 开窗索引（对不上以 GitHub + tip 为准） |
+| **T4** | **AGENTS.md** | 执行 HARD · 文首工作法 |
 
 ---
 
