@@ -9,7 +9,12 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pico_orchestrator.meili_kb import PARSE_EXT, parse_office_bytes, project_material_artifact, render_pdf_page_pngs
+from pico_orchestrator.meili_kb import (
+    PARSE_EXT,
+    parse_office_bytes,
+    project_material_artifact,
+    render_pdf_page_pngs,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -198,8 +203,6 @@ def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None)
                 f"- 《{title}》{id_note} 没有文字层。前 {page_count} 页已作为图片附在本轮，"
                 "直接看图读题，不要说读不了或让用户再截图。"
             )
-        elif "已作为图片" in error:
-            lines.append(f"- 《{title}》{id_note} {error}")
         elif error:
             lines.append(f"- 《{title}》{id_note} {error}")
         else:
@@ -309,9 +312,9 @@ async def ensure_paperclip_pdf_pages(
     named = [row for row in (items or []) if isinstance(row, dict)]
     if not named:
         return
-    from app.artifact_store import decode_artifact_payload
-    from pico_orchestrator.meili_kb import render_pdf_page_pngs
     from pico_orchestrator.vision import conversation_images, remember_conversation_png
+
+    from app.artifact_store import decode_artifact_payload
 
     if any(str(img.get("source") or "") == "pdf-page" for img in conversation_images(cid)):
         return
@@ -337,7 +340,8 @@ async def ensure_paperclip_pdf_pages(
             continue
         try:
             raw = decode_artifact_payload(src.inline, src.content_encoding)
-        except Exception:  # noqa: BLE001 — unread stays honest
+        except Exception as exc:  # noqa: BLE001 — unread stays honest
+            logger.warning("paperclip pdf decode failed: %s", type(exc).__name__)
             continue
         if not isinstance(raw, bytes) or not raw:
             continue
