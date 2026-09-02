@@ -5,18 +5,16 @@
 ```text
 最高: 禁止自搞一套体系。禁止做重体系 / 厚桥 / 第二能力核。
       只允许薄适配。桥变厚=违法。详见 docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md §0-supreme
-真源: GitHub Issue/PR/SHA/CI + 公网 tip。聊天/磁盘/STATE-NOW 都不是第二账本。
+真源: GitHub Issue/PR/SHA/CI + 公网 tip。聊天/磁盘/STATE-NOW 都不是账本。
 人:   本窗合一。不设主管/执行者编制。业主抽检与 CLAIM-WB 不代签。
-工位: 写码 /home/ops/pico · 生产 /opt/pico 只 prod-update（必须干净+detached）
-环:   开窗对账 → 一卡一PR → CI绿再合 → 有差才部 → 公网结果句 → 收工对账
-      卫生=对账，不是第二人。无收尾不准下一张。
-在飞: GitHub 执行卡最多 1 张 · 现以 Issue 为准
-经验: docs/EXPERIENCE.md（唯一 · 按域 · 禁止贴进卡）
-工具: docs/TOOLING-CATALOG.md（派发只认 ID）
-禁止: 主管/执行者两套编制 · mailbox · ECS当账本 · 在 /opt/pico 改业务
-      docker compose 当发布 · 证据进PR · 合了未部报DONE · Closes部前关卡
-      第二张 stamp-ok · 只改 STATE-NOW 独立PR · 复活315 · oneflow仓当真源
-新窗: curl tip + GitHub 在飞。无在飞则讨论，不开卡。
+版本: 只有 origin/main 是生产线。旁支不准部。长分叉只移植、禁止整枝合。
+      live = curl tip，必须是 origin/main 上的 SHA。GitHub 旁支头不是版本。
+工位: 写码 /home/ops/pico · 生产 /opt/pico 只 prod-update（干净+detached）
+环:   从 origin/main 开枝 → 改+测 → PR → CI绿 → squash 合 main
+      → 产品有差才部 → curl tip。小改可无卡。卫生=对账，不是第二人。
+禁止: 主管/执行者两套编制 · mailbox · 在 /opt/pico 改业务 · docker compose 当发布
+      旁支部 live · 整枝合长分叉 · 直推 main · 合了未部报DONE · Closes部前关卡
+新窗: curl tip + GitHub 在飞最多 1。无在飞则讨论。
 ```
 
 
@@ -70,21 +68,22 @@ PR 必须能回答：适配哪段？上游是谁？升级是否只改适配层�
 Helper（非真源）：`bash scripts/oneflow-status.sh`
 
 ```text
-对齐 → 一张卡（或小改直接 PR）→ 一分支一 PR → CI 绿再合
-  → 有差才 prod-update（/opt/pico）→ tip == origin/main
-  → 公网结果句 → 收工对账 → 关卡
+从 origin/main 开枝 → 改+测 → PR → CI 绿 → squash 合 main
+  → 产品有差才 prod-update（/opt/pico）→ curl tip 在 main 上
+  → 公网看得见再关。小改可无卡。
 ```
 
 | 门 | |
 |----|---|
 | 真源 | GitHub Issue/PR/SHA/CI + `curl -fsS https://pico.aivia.asia/api/pico/tip` |
-| 人 | 本窗合一：开卡、改、测、合、部、收尾同一窗。不设主管/执行者编制 |
-| 隔离 | 1 卡 1 分支 1 PR。CI/测/部翻车回原 PR |
-| 绿档 | CI 绿即可合（本窗） |
+| 版本 | 只部 `origin/main` 上的 SHA。旁支不是 live。长分叉只移植 |
+| 人 | 本窗合一：改、测、合、部同一窗 |
+| 隔离 | 一件事一分支一 PR。翻车回原 PR |
+| 绿档 | CI 绿即可合 |
 | 黄/红 | 另一双眼睛、exact SHA；换核/密钥/租户业主抽检。CLAIM-WB 不代签 |
 | 工位 | 写码 `/home/ops/pico`；生产 `/opt/pico` 只 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh` |
 | 过门 | 公网看得见结果句。CI/API 200 不算过门 |
-| 卫生 | 开窗/收工对账。卫生不是第二人。无收尾不准下一张 |
+| 卫生 | 开窗 curl tip；收工 tip 该对齐已对齐、写码树干净。不是第二人 |
 
 Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
@@ -142,7 +141,7 @@ Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 
 
 **KEEP:** secrets out of git; allowlist tools; exact-SHA deploy; CI green; no fake global / WB CLAIM; no dual-run; **Pi + DeepSeek default**.
 
-**CUT:** 主管/执行者编制、多窗日常派、碎卡仪式、auto E1、mailbox、把 ECS 当账本、Kimi-as-only-goal、Dify-as-product、scene-exam-as-WB。
+**CUT:** 主管/执行者编制、stamp-ok/派发条/收尾六步/CANDIDATE 总线、多窗日常派、碎卡、mailbox、旁支部 live、整枝合长分叉、把 ECS 当账本、Kimi-as-only-goal、Dify-as-product。
 
 PRs stay (one writer / one branch / CI). Do **not** split one theme into many waiting rounds or many windows.
 
