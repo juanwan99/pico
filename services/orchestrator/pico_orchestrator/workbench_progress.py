@@ -50,6 +50,7 @@ _DOING: dict[str, str] = {
     "kb_search": "正在查材料",
     "publish_html_page": "正在发布网页",
     "unpublish_html_page": "正在撤回网页",
+    "ask_user": "在等你选",
 }
 
 _DONE: dict[str, str] = {
@@ -75,6 +76,7 @@ _DONE: dict[str, str] = {
     "kb_search": "已查到材料",
     "publish_html_page": "已发布网页",
     "unpublish_html_page": "已撤回网页",
+    "ask_user": "已选",
 }
 
 _FAIL: dict[str, str] = {
@@ -100,6 +102,7 @@ _FAIL: dict[str, str] = {
     "kb_search": "没查到材料",
     "publish_html_page": "没发布成网页",
     "unpublish_html_page": "没撤回网页",
+    "ask_user": "超时未选",
 }
 
 FALLBACK_DOING = "正在调工具"

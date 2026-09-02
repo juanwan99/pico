@@ -29,9 +29,18 @@ def test_pi_ask_user_does_not_quiz_collect_backend() -> None:
         encoding="utf-8"
     )
     assert "Do not use this to quiz about a third-party form backend" in ts
+    assert "already named what to make" in ts
     assert "试卷" not in ts
     assert "Supabase" not in ts
     assert "DeepSeek official" not in ts
+
+
+def test_ask_user_progress_is_waiting_not_generic_tool() -> None:
+    from pico_orchestrator.workbench_progress import workbench_tool_step_line
+
+    assert workbench_tool_step_line("ask_user") == "在等你选"
+    src = (ROOT / "services/api/app/openai_compat.py").read_text(encoding="utf-8")
+    assert 'if tool == "ask_user"' in src
 
 
 def test_system_identity_is_pico_never_backend_model() -> None:

@@ -387,7 +387,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "ask_user",
-    "When the teacher's request is ambiguous, ask a short multiple-choice question (2–5 options) and wait. After they pick, continue the same turn. Do not call this when the request is already clear. Do not invent a goal. Do not use this to quiz about a third-party form backend when Pico collect exists; if they asked for HTML plus data collection, generate_html_document then publish_html_page.",
+    "When the teacher's request is ambiguous, ask a short multiple-choice question (2–5 options) and wait. After they pick, continue the same turn. Do not call this when the request is already clear: if they already named what to make (a picture, a page, a file, or several of those), do that work instead of asking. Do not invent a goal. Do not use this to quiz about a third-party form backend when Pico collect exists; if they asked for HTML plus data collection, generate_html_document then publish_html_page.",
     Type.Object(
       {
         question: Type.String(),
