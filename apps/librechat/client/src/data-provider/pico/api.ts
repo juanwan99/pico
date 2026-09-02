@@ -232,6 +232,16 @@ export async function getPicoTask(taskId: string) {
   return picoFetch<{ task: PicoTask; artifacts: PicoArtifact[] }>(`/v1/tasks/${taskId}`);
 }
 
+/** All files on this chat, not only the latest task/run. */
+export async function listPicoConversationArtifacts(conversationId: string) {
+  const cid = conversationId.trim();
+  if (!cid) {
+    return { count: 0, artifacts: [] as PicoArtifact[] };
+  }
+  const params = new URLSearchParams({ conversation_id: cid });
+  return picoFetch<{ count?: number; artifacts?: PicoArtifact[] }>(`/v1/artifacts?${params}`);
+}
+
 export async function listPicoTaskRuns(taskId: string) {
   return picoFetch<{ runs: PicoRun[] }>(`/v1/tasks/${taskId}/runs`);
 }

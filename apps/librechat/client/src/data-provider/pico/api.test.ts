@@ -9,6 +9,7 @@ import {
   putEduNamedIds,
   listEduFields,
   listMyPicoArtifacts,
+  listPicoConversationArtifacts,
   listMyFolders,
   createMyFolder,
   transferMyArtifact,
@@ -205,6 +206,24 @@ describe('edu school materials client', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/pico/v1/artifacts?mine=true',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('lists conversation artifacts for the result rail', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        count: 1,
+        artifacts: [{ id: 'art-c', title: '春天来了.html', kind: 'html' }],
+      }),
+    });
+    await expect(listPicoConversationArtifacts('convo-1')).resolves.toEqual({
+      count: 1,
+      artifacts: [{ id: 'art-c', title: '春天来了.html', kind: 'html' }],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/pico/v1/artifacts?conversation_id=convo-1',
       expect.objectContaining({ credentials: 'include' }),
     );
   });

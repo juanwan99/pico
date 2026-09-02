@@ -11,6 +11,7 @@ import * as picoApi from '~/data-provider/pico/api';
 jest.mock('~/data-provider/pico/api', () => ({
   listPicoTasks: jest.fn(),
   getPicoTask: jest.fn(),
+  listPicoConversationArtifacts: jest.fn(),
   listPicoTaskRuns: jest.fn(),
   listPicoRunEvents: jest.fn(),
   cancelPicoRun: jest.fn(),
@@ -62,6 +63,7 @@ function setupDefaults() {
     ],
   });
   mockedApi.listPicoRunEvents.mockResolvedValue({ events: [] });
+  mockedApi.listPicoConversationArtifacts.mockResolvedValue({ artifacts: [] });
 }
 
 describe('usePicoTaskLedger — terminal artifacts refresh (#461 PR-A2)', () => {

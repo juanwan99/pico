@@ -26,6 +26,33 @@ from pico_orchestrator.delivery_policy import (
 from pico_orchestrator.document_generators import office_shell_reason
 
 
+async def _prior_user_artifact_count(session: Any, run: Any) -> int:
+    """User files already on this chat (other runs/tasks), not this run."""
+    from sqlalchemy import select as sql_select
+
+    from app.db import ArtifactRow, TaskRow
+
+    task = await session.get(TaskRow, run.task_id)
+    if task is None:
+        return 0
+    cid = str(getattr(task, "conversation_id", "") or "").strip()
+    stmt = (
+        sql_select(ArtifactRow.kind, ArtifactRow.title, ArtifactRow.byte_size)
+        .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+        .where(
+            ArtifactRow.run_id != run.id,
+            TaskRow.school_id == task.school_id,
+            TaskRow.membership_id == task.membership_id,
+        )
+    )
+    if cid:
+        stmt = stmt.where(TaskRow.conversation_id == cid)
+    else:
+        stmt = stmt.where(ArtifactRow.task_id == task.id)
+    rows = list((await session.execute(stmt)).all())
+    return count_user_artifacts(list(rows))
+
+
 def _office_shell_failure(art_list: list[tuple[Any, ...]]) -> str | None:
     """If every docx or every pptx on this run is an empty shell, fail closed."""
     from app.artifact_store import decode_artifact_payload
@@ -93,6 +120,7 @@ async def apply_delivery_gate(
     user_art_count = count_user_artifacts(
         [(kind, title, byte_size) for kind, title, byte_size, _inline, _enc in art_list]
     )
+    prior_artifact_count = await _prior_user_artifact_count(session, run)
 
     status = run.status
     if status in ("succeeded", "failed", "cancelled"):
@@ -111,7 +139,7 @@ async def apply_delivery_gate(
                 "runnable_html": False,
                 "implicit_package": False,
                 "structure_item_count": 0,
-                "prior_artifact_count": 0,
+                "prior_artifact_count": prior_artifact_count,
                 "ok": status == "succeeded",
                 "human_titles": titles[:40],
                 "note": (
@@ -125,11 +153,13 @@ async def apply_delivery_gate(
             commit=False,
         )
 
-    # Fail-closed only when the assistant claimed a file landed and none did.
-    # Do not read 课件/通知/Word tables out of the user prompt.
+    # Fail-closed only when the assistant claimed a file landed and none did
+    # on this conversation. Restating files from an earlier turn on the same
+    # chat is not fake-green (结果区 would otherwise go empty + 假红).
     if (
         status == "succeeded"
         and user_art_count == 0
+        and prior_artifact_count == 0
         and looks_like_delivery_claim(final_text or "")
         and not looks_like_clarification(final_text or "")
     ):
