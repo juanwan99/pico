@@ -172,6 +172,22 @@ async function shot(page, filePath, opts = {}) {
   return filePath;
 }
 
+async function productBubbleText(page, raw) {
+  // Thinking chain lives in the assistant row but is not the product bubble.
+  // Strip it so #384 monologue scan and settle detection do not treat
+  // 「正在思考」as a main-bubble strike or an infinite stream.
+  const chain = page.getByTestId('pico-thinking-chain');
+  const n = await chain.count();
+  let text = raw || '';
+  for (let i = 0; i < Math.min(n, 8); i++) {
+    const t = await chain.nth(i).innerText().catch(() => '');
+    if (t && text.includes(t)) {
+      text = text.replace(t, '');
+    }
+  }
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 async function mainBubbleText(page) {
   // Prefer assistant message bubbles only — NOT the right engineer sidebar
   // (tool names there are expected; #384 veto is main-bubble only).
@@ -322,9 +338,13 @@ async function waitSettled(page, timeoutMs) {
   let stableSince = Date.now();
 
   while (Date.now() - start < timeoutMs) {
-    const text = await mainBubbleText(page);
+    const raw = await mainBubbleText(page);
+    const text = await productBubbleText(page, raw);
+    const thinkLive =
+      (await page.getByTestId('pico-thinking-chain').getAttribute('data-submitting')) ===
+      'true';
     const streaming =
-      /生成中|思考中|正在|Stop|停止生成|Typing/i.test(text) ||
+      thinkLive ||
       (await page.getByRole('button', { name: /Stop|停止/i }).count()) > 0;
 
     if (streaming) {
@@ -342,7 +362,12 @@ async function waitSettled(page, timeoutMs) {
     lastText = text;
     await page.waitForTimeout(800);
   }
-  return { sawStreaming, text: await mainBubbleText(page), timedOut: true };
+  const rawEnd = await mainBubbleText(page);
+  return {
+    sawStreaming,
+    text: await productBubbleText(page, rawEnd),
+    timedOut: true,
+  };
 }
 
 async function inspectHtmlHumanPage(page) {
@@ -550,14 +575,16 @@ Env: DEMO_EMAIL DEMO_PASSWORD (or PICO_E2E_*) PICO_PUBLIC_BASE
     const v1Deadline = Date.now() + Math.min(args.timeoutMs, 90000);
     while (Date.now() < v1Deadline && !v1Taken) {
       const t = await mainBubbleText(page);
+      const product = await productBubbleText(page, t);
       const mid =
         t.length > args.prompt.length + 10 ||
-        /生成|思考|工具|Stop|停止|…|\.\.\./i.test(t);
+        /生成|思考|工具|Stop|停止|…|\.\.\./i.test(t) ||
+        (await page.getByTestId('pico-thinking-chain').count()) > 0;
       if (mid) {
         frames.V1 = await shot(page, path.join(outDir, 'V1-process-main.png'), {
           fullPage: true,
         });
-        monologueHits = scanMonologue(t);
+        monologueHits = scanMonologue(product);
         v1Taken = true;
         break;
       }
@@ -572,7 +599,8 @@ Env: DEMO_EMAIL DEMO_PASSWORD (or PICO_E2E_*) PICO_PUBLIC_BASE
 
     const settled = await waitSettled(page, args.timeoutMs);
     frames.V2 = await shot(page, path.join(outDir, 'V2-final.png'), { fullPage: true });
-    const finalText = settled.text || (await mainBubbleText(page));
+    const finalRaw = settled.text || (await mainBubbleText(page));
+    const finalText = await productBubbleText(page, finalRaw);
     monologueHits = [...new Set([...monologueHits, ...scanMonologue(finalText)])];
 
     if (!args.skipProduct) {

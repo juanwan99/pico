@@ -17,6 +17,7 @@ from pico_orchestrator.sandbox_session_event import (
 )
 from pico_orchestrator.true_pi.client import RpcEvent
 from pico_orchestrator.true_pi.config import RUNTIME_LABEL
+from pico_orchestrator.true_pi.thinking import thinking_from_message
 from pico_orchestrator.user_errors import user_message_for_error
 from pico_orchestrator.workbench_progress import (
     tool_result_failed,
@@ -48,6 +49,7 @@ class EventMapState:
     # Upstream Pi/OpenAI turn failure (stopReason=error / errorMessage).
     # Must not be painted as succeeded + empty bubble.
     provider_error: str | None = None
+    thinking_emitted: bool = False
 
 
 def assistant_turn_error(blob: Any) -> str:
@@ -299,6 +301,14 @@ async def map_event(
                 )
         return
 
+    if kind == "thinking_delta":
+        text = str(raw.get("delta") or raw.get("text") or "")
+        if text:
+            state.thinking_emitted = True
+            state.event_kinds.append("thinking.delta")
+            await emit("thinking.delta", {"text": text, **tag})
+        return
+
     if kind in {"message_end", "message"}:
         msg = raw.get("message") if isinstance(raw.get("message"), dict) else raw
         custom = ""
@@ -312,6 +322,12 @@ async def map_event(
                     await maybe_write_plan_artifact(
                         raw, artifact_store=artifact_store, principal=principal
                     )
+            if not state.thinking_emitted:
+                thought = thinking_from_message(msg)
+                if thought:
+                    state.thinking_emitted = True
+                    state.event_kinds.append("thinking.delta")
+                    await emit("thinking.delta", {"text": thought, **tag})
         _record_assistant_turn(
             state, msg=msg if isinstance(msg, dict) else {}, raw=raw
         )
@@ -401,6 +417,12 @@ async def map_event(
             for item in packed:
                 if isinstance(item, dict):
                     _record_assistant_turn(state, msg=item, raw=item)
+                    if not state.thinking_emitted:
+                        thought = thinking_from_message(item)
+                        if thought:
+                            state.thinking_emitted = True
+                            state.event_kinds.append("thinking.delta")
+                            await emit("thinking.delta", {"text": thought, **tag})
         err = assistant_turn_error(raw)
         if err:
             state.provider_error = err
