@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import base64
 import copy
+import logging
 import os
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 NATIVE_EXTS = (".pdf", ".docx", ".xlsx", ".pptx")
 LEGACY_EXTS = (".doc", ".ppt", ".xls")
@@ -74,6 +77,12 @@ def remember_turn_files(run_id: str, files: list[NativeFile]) -> None:
     kept = [item for item in files if isinstance(item, NativeFile)][:MAX_FILES]
     if kept:
         _TURN[rid] = kept
+        logger.info(
+            "llm-pass remember run_id=%s n=%s bytes=%s",
+            rid,
+            len(kept),
+            sum(len(item.data) for item in kept),
+        )
     else:
         _TURN.pop(rid, None)
 

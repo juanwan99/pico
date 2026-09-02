@@ -255,6 +255,27 @@ async def test_read_file_legacy_doc_is_honest_unread() -> None:
     assert "另存为" in art["user_message"]
 
 
+@pytest.mark.asyncio
+async def test_read_file_excerpt_sidecar_is_unread_not_extracted() -> None:
+    store = MemoryArtifactStore()
+    gw = build_default_gateway(store)
+    owner = P("s1", "m1", ["ai:run"])
+    saved = await store.write(
+        owner,
+        title="地理答案.pdf",
+        content='{"status":"unread","text":"","error":"没抽出正文"}',
+        kind="edu_excerpt",
+    )
+    got = await gw.invoke(
+        owner, "workspace_read_file", {"artifact_id": saved["artifact_id"]}
+    )
+    art = got["artifact"]
+    assert art.get("extracted") is not True
+    assert art.get("unread") is True
+    assert "没抽出正文" not in str(art.get("content") or "")
+    assert "content_base64" not in art
+
+
 def test_canonicalize_index_alias() -> None:
     from pico_orchestrator.html_ledger_images import canonicalize_pico_artifact_refs
 

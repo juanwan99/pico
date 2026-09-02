@@ -316,6 +316,7 @@ class LedgerArtifactStore:
             statement = (
                 self._owned_artifacts(principal)
                 .where(ArtifactRow.title == title)
+                .where(ArtifactRow.kind.notin_(("edu_excerpt", "kb_text")))
                 .order_by(ArtifactRow.created_at.desc())
             )
         async with self._factory() as session:

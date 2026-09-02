@@ -243,6 +243,58 @@ def test_unread_pdf_still_lands_in_cabinet(client: TestClient) -> None:
     assert "kb_text" not in kinds
 
 
+def test_read_by_title_skips_unread_excerpt(client: TestClient) -> None:
+    """Title lookup must hit edu_office, not the later unread JSON sidecar."""
+    import asyncio
+
+    from app.artifact_store import LedgerArtifactStore
+    from app.auth import Principal
+    from app.db import ArtifactRow, session_factory
+    from sqlalchemy import select
+
+    token = _token()
+    title = "地理答案（XLM1）含补充说明.pdf"
+    res = client.post(
+        "/v1/files",
+        headers={
+            "authorization": f"Bearer {token}",
+            "X-Conversation-Id": "convo-geo",
+        },
+        json={
+            "filename": title,
+            "content_b64": base64.b64encode(b"%PDF-1.4\n%scan").decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    office_id = res.json()["id"]
+
+    async def _check() -> None:
+        factory = session_factory()
+        async with factory() as session:
+            kinds = {
+                str(row.kind)
+                for row in (await session.execute(select(ArtifactRow))).scalars().all()
+            }
+        assert "edu_office" in kinds
+        assert "edu_excerpt" in kinds
+        store = LedgerArtifactStore(factory, conversation_id="convo-geo")
+        principal = Principal(
+            school_id="school-a",
+            membership_id="m-edu",
+            scopes=["ai:run", "ai:read"],
+            iss="test",
+            aud="test",
+            exp=0,
+            raw={},
+        )
+        got = await store.read(principal, artifact_id=None, title=title)
+        assert got is not None
+        assert got["kind"] == "edu_office"
+        assert got["artifact_id"] == office_id
+
+    asyncio.run(_check())
+
+
 def test_upload_into_folder_via_multipart(client: TestClient) -> None:
     token = _token()
     headers = {"authorization": f"Bearer {token}"}
@@ -314,12 +366,16 @@ def test_system_tells_pi_to_read_paperclip_documents() -> None:
     assert "Documents attached this turn" in system
     assert "workspace_read_file" in system
     assert "this-turn images" in system
+    assert "model file channel" in system
+    assert "are rastered into this-turn images" not in system
     assert "do not say you cannot read the file" not in system
     assert "没抽出正文" not in system
     bridge = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
     )
     assert "this-turn chat paperclip documents" in bridge
+    assert "model file channel" in bridge
+    assert "already on this-turn images" not in bridge
     assert "do not say the file is unreadable" not in bridge
 
 

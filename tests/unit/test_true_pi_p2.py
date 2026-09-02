@@ -226,6 +226,69 @@ async def test_default_dispatches_true_pi_when_flag(
     assert calls == ["true"]
 
 
+@pytest.mark.asyncio
+async def test_runtime_forwards_ledger_run_id_to_true_pi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(TRUE_PI_DEFAULT_ENV, "1")
+    monkeypatch.delenv(HOSTED_LOOP_ENV, raising=False)
+    monkeypatch.setattr(
+        "pico_orchestrator.true_pi.config.true_pi_available",
+        lambda: True,
+    )
+    seen: list[dict[str, Any]] = []
+
+    async def true_impl(**k: Any) -> RunResult:
+        seen.append(k)
+        return RunResult(status="succeeded", final_text="true")
+
+    monkeypatch.setattr(
+        "pico_orchestrator.true_pi.runtime.run_true_pi_agent",
+        true_impl,
+    )
+    import pico_orchestrator.runtime as rt
+
+    monkeypatch.setattr(rt, "_PI_IMPL", None)
+    result = await run_agent_runtime(
+        use_pi_agent=True,
+        pi_agent_allow_all=True,
+        principal=Principal(),
+        prompt="hello",
+        emit=_noop_emit,
+        is_cancelled=_not_cancelled,
+        run_id="ledger-run-1",
+    )
+    assert result.final_text == "true"
+    assert seen[0].get("run_id") == "ledger-run-1"
+
+
+@pytest.mark.asyncio
+async def test_hosted_rollback_does_not_receive_run_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(TRUE_PI_DEFAULT_ENV, "1")
+    monkeypatch.setenv(HOSTED_LOOP_ENV, "1")
+    seen: list[dict[str, Any]] = []
+
+    async def hosted(**k: Any) -> RunResult:
+        seen.append(k)
+        return RunResult(status="succeeded", final_text="hosted")
+
+    import pico_orchestrator.runtime as rt
+
+    monkeypatch.setattr(rt, "_PI_IMPL", hosted)
+    await run_agent_runtime(
+        use_pi_agent=True,
+        pi_agent_allow_all=True,
+        principal=Principal(),
+        prompt="hello",
+        emit=_noop_emit,
+        is_cancelled=_not_cancelled,
+        run_id="ledger-run-1",
+    )
+    assert "run_id" not in seen[0]
+
+
 def test_health_fields_phase2(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(HOSTED_LOOP_ENV, raising=False)
     monkeypatch.setenv(TRUE_PI_DEFAULT_ENV, "1")

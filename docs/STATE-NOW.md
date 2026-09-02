@@ -108,7 +108,7 @@ curl tip + GitHub 在飞 → EXPERIENCE（点名≤3）
 | 已关 | [#794](https://github.com/juanwan99/pico/issues/794) | T-SUB2API-FACE · 业主 PASS @ `c2a2e439…` |
 | 挂起 | [#778](https://github.com/juanwan99/pico/issues/778) | 出图链 · 不在三行 · 要做另开 |
 | 已关 | [#850](https://github.com/juanwan99/pico/issues/850) | T-LEDGER-BINARY-BUS 二进制不进脑 · 已部 @ `ed994bd6…` |
-| 在飞 | [#860](https://github.com/juanwan99/pico/issues/860) | T-WORKBENCH-READ-ATTACH 回形针正文进本轮 · 同卡续停焊读不了 |
+| 已关 | [#860](https://github.com/juanwan99/pico/issues/860) | T-WORKBENCH-READ-ATTACH 回形针进本轮只挂名+id |
 | 挂起 | 自研记忆 OS | 禁 · 文件型上游 #807 已部 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面四行冻到 9/7 · 流程 EXPERIENCE §80–89 |

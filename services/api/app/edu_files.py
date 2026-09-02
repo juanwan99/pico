@@ -33,7 +33,9 @@ TEXT_KINDS = frozenset({"md", "txt", "json", "csv", "tsv", "html", "htm"})
 RESERVED_CONVO = frozenset({"new", "search"})
 EDU_READ_PREFIX = "edu-read ·"
 PIXEL_KINDS = frozenset({"png", "jpg", "jpeg", "webp", "gif"})
-PAPERCLIP_HINT = "本轮回形针文件（聊天上传，不是学校库）："
+PAPERCLIP_HINT = (
+    "本轮回形针文件（聊天上传，不是学校库；原件已随本轮交给模型文件口）："
+)
 _MAX_UPLOAD_INJECT = 8
 _MAX_UPLOAD_EXCERPT = 32_000
 _MAX_UPLOAD_BLOCK = 80_000
@@ -421,6 +423,8 @@ async def native_files_from_rows(
             continue
         src = await session.get(ArtifactRow, art_id)
         if src is None:
+            continue
+        if str(src.kind or "") in {KIND_EXCERPT, "kb_text", *PIXEL_KINDS}:
             continue
         try:
             raw = decode_artifact_payload(src.inline, src.content_encoding)
