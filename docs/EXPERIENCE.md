@@ -21,8 +21,8 @@ DATE: 2026-09-02
 9. **聊天默认易失。** 约束下一窗 → Issue 评论或本文。禁「上次我们说」。
 10. **本窗合一。** 改、测、合、部是同一窗。不要 spawn 子 agent / Cursor 云 Task。不设主管/执行者编制。
 21. **GitHub 就是总线。** Issue/PR/SHA/CI。不要 CANDIDATE/DEPLOYED/五句/stamp-ok/派发条当第二套状态机。禁止 mailbox。
-22. **工作环：** 开窗 `curl tip` → 从 `origin/main` 开枝 → 改+测 → PR → CI 绿 → squash 合 → **必须** `prod-update` → 再 curl tip = origin/main。合了不部 = 没完。业主靠现网看效果。
-42. **收工。** curl tip = origin/main + 关本卡本 PR + 写码树干净。不是第二人，不搞六步勾表。
+22. **工作环：** 开窗 `curl tip` → 从 `origin/main` 开枝 → 改+测 → PR → CI 绿 → squash 合 → **必须** `prod-update` → 再 curl tip = origin/main。合了不部 = 没完。业主靠现网看效果。合完 GitHub 删头枝（仓库设置）。写仓回 `main`，删本任务本地枝。
+42. **收工。** curl tip = origin/main + 关本卡本 PR + 写码树干净（本地只留 `main`）。不是第二人，不搞六步勾表。PR/commit 正文不要写 Closes/Fixes/close #n（「Do not close」也会关卡）。过门后手关 Issue。
 45. **工作法。** 人合一、GitHub 唯一真源、工位分开、版本只认 main。改了必须合必须部。开窗先读 AGENTS.md 文首。
 46. **现网版本 = curl tip，必须等于 origin/main。** 不是 STATE-NOW，不是工作树 HEAD。禁止 docs-only 不部。改了必须合必须部，否则业主看不见效果。
 
@@ -67,7 +67,7 @@ DATE: 2026-09-02
 86. **抽测走用户能看见的那条路。** Grok 沙箱右侧预览必须是现网反代，禁止 iframe 套一套假站。禁止只打 API 当过门。过门仍是公网看得见结果句；CI 绿 ≠ 过门。
 87. **装机一次，自检每次。** 钥落到目录（chmod 700 目录、600 文件）后跑仓内 install / ssh-up；自检发现钥齐但 ssh 死，允许自动再 probe 一次。钥禁止进聊天、Issue、PR。两台机器磁盘不通，不要等另一窗「把钥传过来」。
 88. **切窗只复制现行合同卡。** 仓内模板改了不等于 Issue 钉文改了——接窗抄的是钉评。正源链接不要指向落后的 origin/main。
-89. **高质量执行清单（开卡后不等人喊开工）：** 开窗 curl tip → 改+单测（写码树）→ PR → `pr-ci-ready` 一眼（0 才合）→ CI 绿 squash 合 → **必须** prod-update → curl tip = origin/main。合了不部=打回。证据贴 Issue，不进 PR。部前禁 Closes。
+89. **高质量执行清单（开卡后不等人喊开工）：** 开窗 curl tip → 改+单测（写码树）→ PR → `pr-ci-ready` 一眼（0 才合）→ CI 绿 squash 合 → **必须** prod-update → curl tip = origin/main。合了不部=打回。证据贴 Issue，不进 PR。PR 正文禁止 GitHub 关卡关键字；过门后手关 Issue。写仓回 main，删本任务本地枝。
 90. **右侧不是 iframe 现网。** Grok 只展示沙箱 8080。现网几乎都有 `X-Frame-Options: SAMEORIGIN`，嵌 `pico.aivia.asia` 会白屏。要看见真站：在 8080 反代现网（`scripts/grok-preview-proxy.mjs`）。
 91. **反代要改四样，缺一样就不稳：** 请求 Host / Origin / Referer 改成现网；响应删 `X-Frame-Options` 和 CSP；`Location` 从 `https://pico.aivia.asia/...` 改成相对路径；`Set-Cookie` 去掉 Domain，SameSite=Lax。
 92. **开发路径不要进反代。** `/__grok`、`/@`、`/src`、`/node_modules`、`/auth/popup` 留给 Vite。其余 `/` 和 `/api` 走现网。不要在 8080 再起一套本地产品 SPA 冒充现网。

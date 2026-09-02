@@ -22,6 +22,9 @@ def test_agents_md_opens_with_supreme_ban() -> None:
     assert "旁支不准部" in head
     assert "必须 prod-update" in head
     assert "docs-only 不部" in head
+    assert "只开 squash" in head
+    assert "关卡关键字" in head
+    assert "删本任务本地枝" in head
 
 
 def test_law_supreme_section_exists() -> None:

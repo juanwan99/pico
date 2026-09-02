@@ -30,6 +30,8 @@ STAGE_PACKAGE: docs/STAGE-PACKAGE-MODE.md — BINDING 单窗阶段包
 | 工具 **AllowlistGateway**；危险 host 工具关断证明 | 学校场景底线 |
 | `prod-update` **exact SHA** + health.git_sha 对齐 | 防假部署 |
 | CI 绿再合 main（lint/test） | 防直接推坏 main |
+| GitHub 只 squash；合完自动删头枝 | 防整枝合、防死枝当在飞。仓库设置，不另做清理器 |
+| PR/commit 不写 Closes / Fixes / close #n | GitHub 会关 Issue；「Do not close #n」也会关。过门后手关 |
 | 窗4 对用户路径：login / 真聊 / 停 至少各一次（改动碰运行时/UI 时） | 防「合了但不能用」 |
 | 禁 edu-cloud 写仓；禁 PROXY=1 进应用；禁 Plan B 换核 | 真源红线 |
 | 禁宣称「WB 程度 / CLAIM-WB-DEGREE-WEB」除非六条+GitHub 证据 | 防假完成 |
