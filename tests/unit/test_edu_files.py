@@ -243,6 +243,60 @@ def test_unread_pdf_still_lands_in_cabinet(client: TestClient) -> None:
     assert "kb_text" not in kinds
 
 
+def test_paperclip_png_stores_pixel_kind_and_images(client: TestClient) -> None:
+    import asyncio
+
+    from app.artifact_store import decode_artifact_payload
+    from app.auth import Principal
+    from app.db import ArtifactRow, session_factory
+    from app.edu_files import images_from_upload_rows, uploads_for_conversation
+
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02"
+        b"\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
+        b"\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    token = _token()
+    res = client.post(
+        "/v1/files",
+        headers={
+            "authorization": f"Bearer {token}",
+            "X-Conversation-Id": "convo-png",
+        },
+        json={
+            "filename": "口令图.png",
+            "content_b64": base64.b64encode(png).decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    file_id = res.json()["id"]
+
+    async def _check() -> None:
+        factory = session_factory()
+        principal = Principal(
+            school_id="school-a",
+            membership_id="m-edu",
+            scopes=["ai:run", "ai:read"],
+            iss="test",
+            aud="test",
+            exp=0,
+            raw={},
+        )
+        async with factory() as session:
+            src = await session.get(ArtifactRow, file_id)
+            assert src is not None
+            assert src.kind == "png"
+            raw = decode_artifact_payload(src.inline, src.content_encoding)
+            assert raw.startswith(b"\x89PNG")
+            items = await uploads_for_conversation(session, principal, "convo-png")
+            assert any(row["id"] == file_id for row in items)
+            images = await images_from_upload_rows(session, items)
+        assert images and images[0]["mimeType"] == "image/png"
+
+    asyncio.run(_check())
+
+
 def test_read_by_title_skips_unread_excerpt(client: TestClient) -> None:
     """Title lookup must hit edu_office, not the later unread JSON sidecar."""
     import asyncio

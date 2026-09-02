@@ -1299,13 +1299,21 @@ async def chat_completions(
             upload_items = await uploads_for_conversation(
                 named_session, principal, conversation_id or ""
             )
-            from app.edu_files import ensure_paperclip_pdf_pages, native_files_from_rows
+            from app.edu_files import (
+                ensure_paperclip_pdf_pages,
+                images_from_upload_rows,
+                native_files_from_rows,
+            )
 
             await ensure_paperclip_pdf_pages(
                 named_session, principal, conversation_id or "", upload_items
             )
             native_files = await native_files_from_rows(
                 named_session, list(upload_items) + list(named_items or [])
+            )
+            turn_images = merge_images(
+                turn_images,
+                await images_from_upload_rows(named_session, upload_items),
             )
         if not edu_sidebar:
             prompt = inject_named_school_materials(prompt, named_items)

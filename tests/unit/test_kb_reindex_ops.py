@@ -24,9 +24,8 @@ from app.main import _ops_reindex_peer_allowed, app, kb_reindex_all
         ("127.0.0.1", True),
         ("::1", True),
         ("localhost", True),
-        ("172.20.109.183", True),  # host-network hairpin eth0
-        ("10.0.0.8", True),
-        ("192.168.1.9", True),
+        ("::ffff:127.0.0.1", True),
+        ("172.20.109.183", False),
         ("8.8.8.8", False),
         ("evil.example", False),
         ("", False),
@@ -36,7 +35,9 @@ def test_ops_reindex_peer_allowed(host: str, allowed: bool) -> None:
     assert _ops_reindex_peer_allowed(host) is allowed
 
 
-def test_reindex_all_allows_private_hairpin(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reindex_all_allows_eth0_hairpin_on_loopback_socket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     rebuild = AsyncMock(return_value={"ok": True, "indexed": 2, "skipped": 1, "total": 3})
     monkeypatch.setattr("app.main.rebuild_materials", rebuild)
 
@@ -44,7 +45,9 @@ def test_reindex_all_allows_private_hairpin(monkeypatch: pytest.MonkeyPatch) -> 
         host = "172.20.109.183"
 
     class _Req:
-        client = _Client()
+        def __init__(self) -> None:
+            self.client = _Client()
+            self.scope = {"server": ("127.0.0.1", 18765)}
 
     out = asyncio.run(kb_reindex_all(_Req()))  # type: ignore[arg-type]
     assert out["ok"] is True
@@ -52,7 +55,9 @@ def test_reindex_all_allows_private_hairpin(monkeypatch: pytest.MonkeyPatch) -> 
     rebuild.assert_awaited_once_with(None)
 
 
-def test_reindex_all_rejects_public_peer(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reindex_all_rejects_public_peer_on_open_socket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     rebuild = AsyncMock(return_value={"ok": True})
     monkeypatch.setattr("app.main.rebuild_materials", rebuild)
 
@@ -60,7 +65,9 @@ def test_reindex_all_rejects_public_peer(monkeypatch: pytest.MonkeyPatch) -> Non
         host = "8.8.8.8"
 
     class _Req:
-        client = _Client()
+        def __init__(self) -> None:
+            self.client = _Client()
+            self.scope = {"server": ("0.0.0.0", 18765)}
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(kb_reindex_all(_Req()))  # type: ignore[arg-type]
