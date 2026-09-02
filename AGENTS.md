@@ -11,9 +11,9 @@
       live = curl tip，必须是 origin/main 上的 SHA。GitHub 旁支头不是版本。
 工位: 写码 /home/ops/pico · 生产 /opt/pico 只 prod-update（干净+detached）
 环:   从 origin/main 开枝 → 改+测 → PR → CI绿 → squash 合 main
-      → 产品有差才部 → curl tip。小改可无卡。卫生=对账，不是第二人。
+      → 必须 prod-update → curl tip = origin/main。业主靠现网看效果。
 禁止: 主管/执行者两套编制 · mailbox · 在 /opt/pico 改业务 · docker compose 当发布
-      旁支部 live · 整枝合长分叉 · 直推 main · 合了未部报DONE · Closes部前关卡
+      旁支部 live · 整枝合长分叉 · 直推 main · 合了不部 · Closes部前关卡 · docs-only 不部
 新窗: curl tip + GitHub 在飞最多 1。无在飞则讨论。
 ```
 
@@ -69,8 +69,8 @@ Helper（非真源）：`bash scripts/oneflow-status.sh`
 
 ```text
 从 origin/main 开枝 → 改+测 → PR → CI 绿 → squash 合 main
-  → 产品有差才 prod-update（/opt/pico）→ curl tip 在 main 上
-  → 公网看得见再关。小改可无卡。
+  → 必须 prod-update（/opt/pico）→ curl tip = origin/main
+  → 公网看得见再关。业主靠现网看效果。小改可无卡，但合了仍必须部。
 ```
 
 | 门 | |
@@ -83,7 +83,7 @@ Helper（非真源）：`bash scripts/oneflow-status.sh`
 | 黄/红 | 另一双眼睛、exact SHA；换核/密钥/租户业主抽检。CLAIM-WB 不代签 |
 | 工位 | 写码 `/home/ops/pico`；生产 `/opt/pico` 只 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh` |
 | 过门 | 公网看得见结果句。CI/API 200 不算过门 |
-| 卫生 | 开窗 curl tip；收工 tip 该对齐已对齐、写码树干净。不是第二人 |
+| 卫生 | 开窗 curl tip；收工 tip = origin/main、写码树干净。不是第二人 |
 
 Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
