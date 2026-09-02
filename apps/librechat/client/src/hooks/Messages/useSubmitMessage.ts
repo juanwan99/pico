@@ -10,6 +10,7 @@ import store from '~/store';
 import { workspaceContextPrefix } from '~/components/Chat/Input/WorkspaceSelector';
 import { expertSystemLine } from '~/utils/picoModelPref';
 import { picoPromptUserMarker } from '~/utils/picoMembership';
+import { ensurePendingConvoId, markPendingRebind } from '~/utils/picoPendingConvo';
 
 type ProjectConversation = {
   conversationId?: string | null;
@@ -135,34 +136,11 @@ export default function useSubmitMessage() {
       }
 
       let convoId = conversation?.conversationId;
-      // First message: LibreChat still has "new" — mint pending id for ledger binding
+      // First message: LibreChat still has "new" — reuse the paperclip draft id.
       if (!convoId || convoId === 'new') {
-        try {
-          const existing = sessionStorage.getItem('pico:pendingConvo');
-          if (existing && existing.startsWith('pending_')) {
-            convoId = existing;
-          } else {
-            const id =
-              typeof crypto !== 'undefined' && crypto.randomUUID
-                ? `pending_${crypto.randomUUID()}`
-                : `pending_${Date.now()}`;
-            sessionStorage.setItem('pico:pendingConvo', id);
-            convoId = id;
-          }
-        } catch {
-          convoId = `pending_${Date.now()}`;
-        }
-      } else if (convoId !== 'new') {
-        try {
-          const pending = sessionStorage.getItem('pico:pendingConvo');
-          if (pending && pending.startsWith('pending_') && pending !== convoId) {
-            sessionStorage.setItem('pico:rebindFrom', pending);
-            sessionStorage.setItem('pico:rebindTo', convoId);
-            sessionStorage.removeItem('pico:pendingConvo');
-          }
-        } catch {
-          /* ignore */
-        }
+        convoId = ensurePendingConvoId();
+      } else {
+        markPendingRebind(convoId);
       }
       const picoUser = picoPromptUserMarker(
         user as { id?: string; _id?: string; eduId?: string; eduSchoolId?: string } | undefined,

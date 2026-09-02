@@ -118,6 +118,7 @@ const mockValidateFiles = jest.requireMock('~/utils').validateFiles;
 describe('useFileHandling', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    sessionStorage.clear();
     mockProcessFileForUpload.mockImplementation(async (file: File) => file);
     mockConversation = {};
     mockIsTemporary = false;
@@ -322,7 +323,7 @@ describe('useFileHandling', () => {
       expect(mockMutate).toHaveBeenCalledTimes(1);
       const formData: FormData = mockMutate.mock.calls[0][0];
       expect(formData.get('endpoint')).toBe('default');
-      expect(formData.get('conversationId')).toBeNull();
+      expect(String(formData.get('conversationId') || '')).toMatch(/^pending_/);
     });
 
     it('sends temporary flag for temporary chat uploads', async () => {

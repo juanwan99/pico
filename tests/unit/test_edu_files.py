@@ -779,6 +779,48 @@ def test_unbound_new_chat_paperclip_is_claimed(client: TestClient) -> None:
     clear_conversation_images(cid)
 
 
+def test_pending_draft_paperclip_is_claimed(client: TestClient) -> None:
+    """/c/new upload bound to pending_* must ride the first real conversation."""
+    import asyncio
+
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.edu_files import uploads_for_conversation
+
+    token = _token()
+    pending = "pending_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    res = client.post(
+        "/v1/files",
+        headers={
+            "authorization": f"Bearer {token}",
+            "X-Conversation-Id": pending,
+        },
+        json={
+            "filename": "本轮草稿.pdf",
+            "content_b64": base64.b64encode(b"%PDF-1.4 draft").decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="test",
+        aud="test",
+        exp=0,
+        raw={},
+    )
+
+    async def _claim() -> list:
+        factory = session_factory()
+        async with factory() as session:
+            return await uploads_for_conversation(session, principal, "convo-after-new")
+
+    items = asyncio.run(_claim())
+    assert items
+    assert items[0]["title"] == "本轮草稿.pdf"
+
+
 def test_stale_unbound_paperclip_is_not_stolen(client: TestClient) -> None:
     """A leftover /c/new upload from 10 minutes ago must not ride into this chat."""
     import asyncio

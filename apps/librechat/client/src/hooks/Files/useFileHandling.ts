@@ -17,6 +17,7 @@ import type { EModelEndpoint, TEndpointsConfig, TError } from 'librechat-data-pr
 import type { TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter } from '~/common';
 import { logger, validateFiles, cachePreview, getCachedPreview, removePreviewEntry } from '~/utils';
+import { ensurePendingConvoId } from '~/utils/picoPendingConvo';
 import { useGetFileConfig, useUploadFileMutation } from '~/data-provider';
 import useLocalize, { TranslationKeys } from '~/hooks/useLocalize';
 import { useDelayedUploadToast } from './useDelayedUploadToast';
@@ -196,12 +197,12 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
     formData.append('endpointType', endpointType ?? '');
     formData.append('file', extendedFile.file as File, encodeURIComponent(filename));
     formData.append('file_id', extendedFile.file_id);
-    if (
-      isConversationUpload &&
-      conversation?.conversationId &&
-      conversation.conversationId !== Constants.NEW_CONVO
-    ) {
-      formData.append('conversationId', conversation.conversationId);
+    if (isConversationUpload && conversation?.conversationId) {
+      if (conversation.conversationId !== Constants.NEW_CONVO) {
+        formData.append('conversationId', conversation.conversationId);
+      } else if (!isTemporary) {
+        formData.append('conversationId', ensurePendingConvoId());
+      }
     }
     if (isTemporary && isConversationUpload) {
       formData.append('isTemporary', 'true');

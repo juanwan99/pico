@@ -75,28 +75,46 @@ export function PointsMeterProvider({
   assistantIdsRef.current = assistantIds;
 
   const quoteSeqRef = useRef(0);
+  const quoteTimerRef = useRef<number | null>(null);
   const quoteFromChars = useCallback((n: number) => {
     boundRef.current = { runId: null, messageId: null };
     const chars = Math.max(0, Math.floor(n) || 0);
-    const seq = ++quoteSeqRef.current;
+    if (quoteTimerRef.current != null) {
+      window.clearTimeout(quoteTimerRef.current);
+      quoteTimerRef.current = null;
+    }
     if (chars <= 0) {
+      quoteSeqRef.current += 1;
       setInflightQuote(null);
       return;
     }
-    void quotePicoPoints(chars, conversationId)
-      .then((view) => {
-        if (seq !== quoteSeqRef.current) {
-          return;
-        }
-        setInflightQuote(typeof view.points === 'string' ? view.points : null);
-      })
-      .catch(() => {
-        if (seq !== quoteSeqRef.current) {
-          return;
-        }
-        setInflightQuote(null);
-      });
+    quoteTimerRef.current = window.setTimeout(() => {
+      quoteTimerRef.current = null;
+      const seq = ++quoteSeqRef.current;
+      void quotePicoPoints(chars, conversationId)
+        .then((view) => {
+          if (seq !== quoteSeqRef.current) {
+            return;
+          }
+          setInflightQuote(typeof view.points === 'string' ? view.points : null);
+        })
+        .catch(() => {
+          if (seq !== quoteSeqRef.current) {
+            return;
+          }
+          setInflightQuote(null);
+        });
+    }, 300);
   }, [conversationId]);
+
+  useEffect(
+    () => () => {
+      if (quoteTimerRef.current != null) {
+        window.clearTimeout(quoteTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const mid = latestAssistantMessageId;

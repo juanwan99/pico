@@ -297,9 +297,9 @@ async def uploads_for_conversation(
 ) -> list[dict[str, Any]]:
     """Paperclip /v1/files rows for this conversation. Not generated deliverables.
 
-    LibreChat /c/new omits X-Conversation-Id (reserved ``new``). Those rows land
-    with empty conversation_id. Claim only the latest unbound burst (3 min window,
-    90 s cluster) so a leftover from an earlier /c/new does not steal into this chat.
+    LibreChat /c/new used to omit X-Conversation-Id (reserved ``new``). Uploads now
+    bind to ``pending_*`` when the client mints a draft id. Empty rows still use the
+    latest unbound burst (3 min window, 90 s cluster) as a leftover fallback.
     """
     cid = str(conversation_id or "").strip()
     if not cid or cid in RESERVED_CONVO:
@@ -317,6 +317,10 @@ async def uploads_for_conversation(
                 or_(
                     TaskRow.conversation_id == cid,
                     and_(
+                        TaskRow.conversation_id.startswith("pending_", autoescape=True),
+                        ArtifactRow.created_at >= cutoff,
+                    ),
+                    and_(
                         or_(
                             TaskRow.conversation_id.is_(None),
                             TaskRow.conversation_id == "",
@@ -330,24 +334,39 @@ async def uploads_for_conversation(
         )
     ).scalars().all()
     bound: list[ArtifactRow] = []
+    pending: list[tuple[str, ArtifactRow]] = []
     unbound: list[ArtifactRow] = []
     for src in src_rows:
         task = await session.get(TaskRow, src.task_id)
         convo = str(task.conversation_id or "").strip() if task is not None else ""
         if convo == cid:
             bound.append(src)
+        elif convo.startswith("pending_"):
+            pending.append((convo, src))
         elif not convo:
             unbound.append(src)
-    cluster: list[ArtifactRow] = []
-    if unbound:
-        newest_at = max((row.created_at for row in unbound if row.created_at), default=None)
-        if newest_at is not None:
-            cluster = [
-                row
-                for row in unbound
-                if row.created_at is not None and newest_at - row.created_at <= _UNBOUND_CLUSTER
-            ]
-    candidates = bound if bound else cluster
+
+    def _newest_cluster(rows: list[ArtifactRow]) -> list[ArtifactRow]:
+        newest_at = max((row.created_at for row in rows if row.created_at), default=None)
+        if newest_at is None:
+            return []
+        return [
+            row
+            for row in rows
+            if row.created_at is not None and newest_at - row.created_at <= _UNBOUND_CLUSTER
+        ]
+
+    if bound:
+        candidates = bound
+    elif pending:
+        dated = [(key, row) for key, row in pending if row.created_at is not None]
+        if not dated:
+            candidates = []
+        else:
+            draft_key, _newest = max(dated, key=lambda item: item[1].created_at)
+            candidates = [row for key, row in pending if key == draft_key]
+    else:
+        candidates = _newest_cluster(unbound)
     seen_titles: set[str] = set()
     picked: list[ArtifactRow] = []
     for src in candidates:
@@ -365,7 +384,10 @@ async def uploads_for_conversation(
     if not bound:
         for src in picked:
             task = await session.get(TaskRow, src.task_id)
-            if task is not None and not str(task.conversation_id or "").strip():
+            if task is None:
+                continue
+            current = str(task.conversation_id or "").strip()
+            if not current or current.startswith("pending_"):
                 task.conversation_id = cid
                 claimed = True
     if claimed:
