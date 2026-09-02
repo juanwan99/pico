@@ -6,6 +6,7 @@ import base64
 import binascii
 import json
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -16,7 +17,7 @@ from pico_orchestrator.meili_kb import (
     render_pdf_page_pngs,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal, require_any_scope
@@ -37,6 +38,7 @@ PAPERCLIP_HINT = "本轮回形针文件（聊天上传，不是学校库）："
 _MAX_UPLOAD_INJECT = 6
 _MAX_UPLOAD_EXCERPT = 2000
 _MAX_UPLOAD_BLOCK = 6000
+_UNBOUND_UPLOAD_WINDOW = timedelta(minutes=30)
 
 
 class FileJsonIn(BaseModel):
@@ -236,10 +238,16 @@ async def uploads_for_conversation(
     principal: Principal,
     conversation_id: str,
 ) -> list[dict[str, Any]]:
-    """Paperclip /v1/files rows for this conversation. Not generated deliverables."""
+    """Paperclip /v1/files rows for this conversation. Not generated deliverables.
+
+    LibreChat /c/new omits X-Conversation-Id (reserved ``new``). Those rows land
+    with empty conversation_id; claim them onto this chat so scan pages can
+    enter this-turn vision.
+    """
     cid = str(conversation_id or "").strip()
     if not cid or cid in RESERVED_CONVO:
         return []
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - _UNBOUND_UPLOAD_WINDOW
     src_rows = (
         await session.execute(
             select(ArtifactRow)
@@ -247,9 +255,18 @@ async def uploads_for_conversation(
             .where(
                 TaskRow.school_id == principal.school_id,
                 TaskRow.membership_id == principal.membership_id,
-                TaskRow.conversation_id == cid,
                 TaskRow.title.startswith(EDU_READ_PREFIX),
                 ArtifactRow.kind.notin_((KIND_EXCERPT, "kb_text", *PIXEL_KINDS)),
+                or_(
+                    TaskRow.conversation_id == cid,
+                    and_(
+                        or_(
+                            TaskRow.conversation_id.is_(None),
+                            TaskRow.conversation_id == "",
+                        ),
+                        ArtifactRow.created_at >= cutoff,
+                    ),
+                ),
             )
             .order_by(ArtifactRow.created_at.desc())
             .limit(_MAX_UPLOAD_INJECT * 3)
@@ -271,6 +288,14 @@ async def uploads_for_conversation(
             break
     if not picked:
         return []
+    claimed = False
+    for src in picked:
+        task = await session.get(TaskRow, src.task_id)
+        if task is not None and not str(task.conversation_id or "").strip():
+            task.conversation_id = cid
+            claimed = True
+    if claimed:
+        await session.commit()
     task_ids = [row.task_id for row in picked]
     excerpt_rows = (
         await session.execute(

@@ -593,3 +593,65 @@ def test_scan_pdf_paperclip_pages_go_to_vision(client: TestClient) -> None:
     injected_again = inject_conversation_uploads("这是什么", items)
     assert "直接看图" in injected_again
     clear_conversation_images(cid)
+
+
+def test_unbound_new_chat_paperclip_is_claimed(client: TestClient) -> None:
+    """LibreChat /c/new omits X-Conversation-Id; first send must still see the file."""
+    import asyncio
+
+    import pytest
+
+    pytest.importorskip("pypdfium2")
+    pytest.importorskip("PIL")
+
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.edu_files import (
+        ensure_paperclip_pdf_pages,
+        inject_conversation_uploads,
+        uploads_for_conversation,
+    )
+    from pico_orchestrator.vision import clear_conversation_images, conversation_images
+
+    raw = _visible_scan_pdf("PICO860-CLAIM-NEW")
+    token = _token()
+    res = client.post(
+        "/v1/files",
+        headers={"authorization": f"Bearer {token}"},
+        json={
+            "filename": "地理答案扫描.pdf",
+            "content_b64": base64.b64encode(raw).decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert res.json().get("page_count") == 1
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="test",
+        aud="test",
+        exp=0,
+        raw={},
+    )
+    cid = "convo-after-new"
+    clear_conversation_images(cid)
+
+    async def _claim() -> list:
+        factory = session_factory()
+        async with factory() as session:
+            items = await uploads_for_conversation(session, principal, cid)
+            await ensure_paperclip_pdf_pages(session, principal, cid, items)
+            other = await uploads_for_conversation(session, principal, "convo-other-tab")
+        return items, other
+
+    items, other = asyncio.run(_claim())
+    assert items
+    assert items[0]["title"] == "地理答案扫描.pdf"
+    assert int(items[0].get("page_count") or 0) >= 1
+    assert other == []
+    assert conversation_images(cid)
+    injected = inject_conversation_uploads("这份里面写了什么", items)
+    assert "直接看图" in injected
+    assert "把相关页截图上传" not in injected
+    clear_conversation_images(cid)
