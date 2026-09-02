@@ -73,6 +73,29 @@ def extract_images_from_content(content: Any) -> list[dict[str, Any]]:
     return out
 
 
+def image_bytes_to_chat(raw: bytes, *, filename: str = "") -> dict[str, Any] | None:
+    """Keep real raster bytes. No fetch / no OCR kernel."""
+    del filename
+    if not raw or len(raw) > _MAX_IMAGE_BYTES:
+        return None
+    mime = ""
+    if raw.startswith(_PNG_MAGIC):
+        mime = "image/png"
+    elif raw[:3] == b"\xff\xd8\xff":
+        mime = "image/jpeg"
+    elif raw[:6] in {b"GIF87a", b"GIF89a"}:
+        mime = "image/gif"
+    elif len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        mime = "image/webp"
+    if not mime.startswith("image/"):
+        return None
+    return {
+        "type": "image",
+        "data": base64.b64encode(raw).decode("ascii"),
+        "mimeType": mime,
+    }
+
+
 def png_bytes_to_image(raw: bytes, *, mime: str = "image/png") -> dict[str, Any] | None:
     """Keep real raster bytes. Refuse non-PNG / oversize. No HTTP fetch."""
     if not raw or not raw.startswith(_PNG_MAGIC) or len(raw) > _MAX_IMAGE_BYTES:

@@ -24,6 +24,7 @@ from pico_orchestrator.vision import (
     conversation_images,
     extract_images_from_content,
     hosted_user_content,
+    image_bytes_to_chat,
     last_user_images,
     merge_images,
     pi_rpc_images,
@@ -160,6 +161,14 @@ def test_png_bytes_and_merge_and_conversation_remember() -> None:
     assert conversation_images("other") == []
     clear_conversation_images("c-vis-1")
     assert conversation_images("c-vis-1") == []
+
+
+def test_image_bytes_to_chat_accepts_jpeg_magic() -> None:
+    jpeg = b"\xff\xd8\xff" + b"\x00" * 16
+    item = image_bytes_to_chat(jpeg, filename="口令.jpg")
+    assert item is not None
+    assert item["mimeType"] == "image/jpeg"
+    assert image_bytes_to_chat(b"%PDF-1.4", filename="a.png") is None
 
 
 def test_merge_images_cap_is_32() -> None:

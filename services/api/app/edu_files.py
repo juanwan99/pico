@@ -26,7 +26,7 @@ from app.office_extract import extract_office
 router = APIRouter(tags=["edu-files"])
 logger = logging.getLogger(__name__)
 
-MAX_BYTES = 8 * 1024 * 1024
+MAX_BYTES = 12 * 1024 * 1024
 KIND_SRC = "edu_office"
 KIND_EXCERPT = "edu_excerpt"
 TEXT_KINDS = frozenset({"md", "txt", "json", "csv", "tsv", "html", "htm"})
@@ -313,7 +313,7 @@ async def uploads_for_conversation(
                 TaskRow.school_id == principal.school_id,
                 TaskRow.membership_id == principal.membership_id,
                 TaskRow.title.startswith(EDU_READ_PREFIX),
-                ArtifactRow.kind.notin_((KIND_EXCERPT, "kb_text", *PIXEL_KINDS)),
+                ArtifactRow.kind.notin_((KIND_EXCERPT, "kb_text")),
                 or_(
                     TaskRow.conversation_id == cid,
                     and_(
@@ -332,9 +332,6 @@ async def uploads_for_conversation(
     bound: list[ArtifactRow] = []
     unbound: list[ArtifactRow] = []
     for src in src_rows:
-        kind = str(src.kind or "").strip().lower()
-        if kind in PIXEL_KINDS:
-            continue
         task = await session.get(TaskRow, src.task_id)
         convo = str(task.conversation_id or "").strip() if task is not None else ""
         if convo == cid:
@@ -439,6 +436,52 @@ async def native_files_from_rows(
     return out
 
 
+def _row_is_pixel(title: str, kind: str) -> bool:
+    token = (kind or "").strip().lower().lstrip(".")
+    if token in PIXEL_KINDS:
+        return True
+    name = (title or "").strip().lower()
+    return any(name.endswith(f".{ext}") for ext in PIXEL_KINDS)
+
+
+async def images_from_upload_rows(
+    session: AsyncSession,
+    rows: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """This-turn paperclip rasters for Pi images[]. Not a Pico vision kernel."""
+    from pico_orchestrator.vision import image_bytes_to_chat
+
+    from app.artifact_store import decode_artifact_payload
+
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        art_id = str(row.get("id") or row.get("workspace_artifact_id") or "").strip()
+        title = str(
+            row.get("title") or row.get("workspace_title") or row.get("filename") or "file"
+        )
+        if not art_id or art_id in seen:
+            continue
+        src = await session.get(ArtifactRow, art_id)
+        if src is None:
+            continue
+        if not _row_is_pixel(str(src.title or title), str(src.kind or "")):
+            continue
+        try:
+            raw = decode_artifact_payload(src.inline, src.content_encoding)
+        except Exception as exc:  # noqa: BLE001 — unread stays honest
+            logger.warning("paperclip image decode skipped id=%s err=%s", art_id, type(exc).__name__)
+            continue
+        item = image_bytes_to_chat(raw, filename=str(src.title or title))
+        if item is None:
+            continue
+        seen.add(art_id)
+        out.append(item)
+    return out
+
+
 async def ensure_paperclip_pdf_pages(
     session: AsyncSession,
     principal: Principal,
@@ -490,9 +533,15 @@ async def persist_edu_file(
         convo = None
     kind = str(extract.get("kind") or "").strip().lower()
     text_body = str(extract.get("text") or "")
+    suffix = ""
+    if "." in (filename or ""):
+        suffix = (filename or "").rsplit(".", 1)[-1].strip().lower()
     if kind in TEXT_KINDS and text_body:
         stored, encoding, byte_size, digest = encode_artifact_payload(text_body)
         artifact_kind = "file"
+    elif kind in PIXEL_KINDS or suffix in PIXEL_KINDS:
+        stored, encoding, byte_size, digest = encode_artifact_payload(data)
+        artifact_kind = kind if kind in PIXEL_KINDS else suffix
     else:
         stored, encoding, byte_size, digest = encode_artifact_payload(data)
         artifact_kind = KIND_SRC
