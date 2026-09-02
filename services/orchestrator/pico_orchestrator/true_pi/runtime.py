@@ -219,6 +219,11 @@ async def run_true_pi_agent(
             pi_provider = "openai" if openai_brain or provider.name != "deepseek" else "deepseek"
             pi_base = provider.base_url if openai_brain else ""
             pi_api = "openai-responses" if openai_brain else ""
+            if openai_brain and rid:
+                from pico_orchestrator.llm_file_pass import has_turn_files, pass_base_url
+
+                if has_turn_files(rid):
+                    pi_base = pass_base_url(rid)
             # Owner: gpt-5.6-sol medium. Pi official levels, not on/off.
             pi_thinking_level = "medium" if openai_brain else ""
             tool_server = ToolServer(
@@ -669,6 +674,9 @@ async def run_true_pi_agent(
             tag=tag,
         )
     finally:
+        from pico_orchestrator.llm_file_pass import forget_turn_files
+
+        forget_turn_files(rid)
         stop.set()
         watcher.cancel()
         with suppress(asyncio.CancelledError):

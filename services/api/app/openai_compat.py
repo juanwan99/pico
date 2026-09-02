@@ -1071,11 +1071,14 @@ async def _run_and_collect(
     images: list[dict[str, Any]] | None = None,
     day_use: str = "",
     plan_on: bool = False,
+    native_files: list | None = None,
 ) -> Any:
+    from pico_orchestrator.llm_file_pass import remember_turn_files
     from pico_orchestrator.runtime import run_agent_runtime
 
     from app.artifact_store import LedgerArtifactStore
 
+    remember_turn_files(run_id, list(native_files or []))
     factory = session_factory()
 
     async def emit(event_type: str, payload: dict[str, Any]) -> None:
@@ -1263,6 +1266,7 @@ async def chat_completions(
             or body.metadata.get("skillId")
         )
     json_only = is_json_only_propose(raw_prompt_with_skill, output_header=x_pico_output)
+    native_files: list = []
     client_system = _client_system_from_messages(body.messages)
     edu_sidebar = _is_edu_sidebar_system(client_system)
     request_tools = _normalize_allowed_tools(body.allowed_tools)
@@ -1277,35 +1281,38 @@ async def chat_completions(
     m_proj = re.search(r"【项目指令：([^】]+)】", raw_prompt)
     project_instruction = m_proj.group(1).strip() if m_proj else ""
     prompt = _strip_pico_markers(raw_prompt).strip() or raw_prompt
-    if not edu_sidebar:
-        try:
-            # Use the module-level session_factory. A local `from app.db import
-            # session_factory` here makes it a cell of chat_completions; the
-            # nested event_stream then NameErrors on edu sidebar (this import
-            # is skipped) when the Pi path calls session_factory().
-            from app.edu_school import excerpts_for_conversation, inject_named_school_materials
+    try:
+        # Use the module-level session_factory. A local `from app.db import
+        # session_factory` here makes it a cell of chat_completions; the
+        # nested event_stream then NameErrors on edu sidebar (this import
+        # is skipped) when the Pi path calls session_factory().
+        from app.edu_school import excerpts_for_conversation, inject_named_school_materials
 
-            factory = session_factory()
-            async with factory() as named_session:
-                named_items = await excerpts_for_conversation(
-                    principal, conversation_id or "", named_session, settings
-                )
-                from app.edu_files import uploads_for_conversation
+        factory = session_factory()
+        async with factory() as named_session:
+            named_items = await excerpts_for_conversation(
+                principal, conversation_id or "", named_session, settings
+            )
+            from app.edu_files import uploads_for_conversation
 
-                upload_items = await uploads_for_conversation(
-                    named_session, principal, conversation_id or ""
-                )
-                from app.edu_files import ensure_paperclip_pdf_pages
+            upload_items = await uploads_for_conversation(
+                named_session, principal, conversation_id or ""
+            )
+            from app.edu_files import ensure_paperclip_pdf_pages, native_files_from_rows
 
-                await ensure_paperclip_pdf_pages(
-                    named_session, principal, conversation_id or "", upload_items
-                )
+            await ensure_paperclip_pdf_pages(
+                named_session, principal, conversation_id or "", upload_items
+            )
+            native_files = await native_files_from_rows(
+                named_session, list(upload_items) + list(named_items or [])
+            )
+        if not edu_sidebar:
             prompt = inject_named_school_materials(prompt, named_items)
             from app.edu_files import inject_conversation_uploads
 
             prompt = inject_conversation_uploads(prompt, upload_items)
-        except Exception:
-            logger.exception("named school materials inject failed")
+    except Exception:
+        logger.exception("named school materials inject failed")
     turn_images = merge_images(turn_images, conversation_images(conversation_id))
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 100000) or 100000)
     # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
@@ -1447,6 +1454,8 @@ async def chat_completions(
     use_direct = chat_only or (
         model not in {"pico-agent", "pico"} and not model.startswith("pico-")
     )
+    if native_files and not json_only:
+        use_direct = False
     token_ceiling = (
         settings.pico_run_short_max_tokens if use_direct else settings.pico_run_max_tokens
     )
@@ -1533,6 +1542,7 @@ async def chat_completions(
                 images=turn_images,
                 day_use=day_use_block,
                 plan_on=plan_on,
+                native_files=native_files,
             )
             text = result.final_text or result.error or "(empty)"
             await _finalize_run(
@@ -1594,6 +1604,8 @@ async def chat_completions(
         use_direct = chat_only or (
             model not in {"pico-agent", "pico"} and not model.startswith("pico-")
         )
+        if native_files and not json_only:
+            use_direct = False
         if use_direct:
             from pico_orchestrator.provider import stream_chat
 
@@ -1868,6 +1880,9 @@ async def chat_completions(
                         "policy": "client_is_subscriber",
                     },
                 )
+                from pico_orchestrator.llm_file_pass import remember_turn_files
+
+                remember_turn_files(run_id, native_files)
                 result = await run_agent_runtime(
                     use_pi_agent=settings.pico_pi_agent_runtime,
                     pi_agent_canary_principals=settings.pi_agent_canary_principal_set,
