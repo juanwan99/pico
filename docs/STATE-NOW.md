@@ -4,9 +4,9 @@
 DATE: 2026-09-02
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #860 T-WORKBENCH-READ-ATTACH（同卡续 · 扫描 PDF 进 vision）
+在飞: #860 T-WORKBENCH-READ-ATTACH（同卡续 · /c/new 认领扫描页图）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 产品 SHA `cc03f5fe677e24c9ef2e765b4cbbfceb205d2a5e` = origin/main（#861 已部；扫描页图未部）
+      → 产品 SHA `2b0e7f391c515b4507ec8abdc3b2126d99e5d071` = origin/main（#862 已部；/c/new 未绑会话则页图未进本轮）
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
