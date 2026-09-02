@@ -14,15 +14,36 @@ from app.settings import Settings, get_settings
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _HOP = {"host", "content-length", "connection", "transfer-encoding"}
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
 def _upstream_v1(settings: Settings) -> str:
     return (settings.deepseek_base_url or "http://127.0.0.1:3000/v1").rstrip("/")
 
 
+def _is_loopback_host(host: str) -> bool:
+    h = (host or "").strip().lower().strip("[]")
+    if h in _LOOPBACK_HOSTS:
+        return True
+    if h.startswith("::ffff:"):
+        return _is_loopback_host(h.rsplit(":", 1)[-1])
+    return False
+
+
 def _loopback(request: Request) -> bool:
-    host = (request.client.host if request.client else "") or ""
-    return host in {"127.0.0.1", "::1", "localhost"}
+    """Allow only traffic that arrived on the loopback socket.
+
+    Do not trust client.host alone: uvicorn proxy-headers and this host's
+    eth0/Tailscale source make local Pi look like 172.x / 100.x.
+    Port 18765 is bound to 127.0.0.1; if that bind ever opens, client.host
+    must still be loopback.
+    """
+    if request.client and _is_loopback_host(request.client.host):
+        return True
+    server = request.scope.get("server")
+    if isinstance(server, (list, tuple)) and server:
+        return _is_loopback_host(str(server[0] or ""))
+    return False
 
 
 @router.api_route(
@@ -31,6 +52,12 @@ def _loopback(request: Request) -> bool:
 )
 async def llm_pass(run_id: str, path: str, request: Request) -> Response:
     if not _loopback(request):
+        client = request.client.host if request.client else ""
+        logger.warning(
+            "llm-pass denied client=%s server=%s",
+            client,
+            request.scope.get("server"),
+        )
         return Response(status_code=403, content=b"loopback only")
     settings = get_settings()
     target = f"{_upstream_v1(settings)}/{path}"
