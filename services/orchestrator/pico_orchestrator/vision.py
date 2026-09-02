@@ -112,12 +112,14 @@ def _conversation_from_bind() -> str:
 
 
 def remember_conversation_png(
-    raw: bytes, *, conversation_id: str | None = None
+    raw: bytes, *, conversation_id: str | None = None, source: str | None = None
 ) -> bool:
     """Remember a sandbox raster for the next chat turn. No tool-JSON base64."""
     item = png_bytes_to_image(raw)
     if item is None:
         return False
+    if source:
+        item = {**item, "source": str(source)[:32]}
     cid = (conversation_id or "").strip() or _conversation_from_bind()
     if not cid:
         return False

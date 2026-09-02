@@ -354,7 +354,7 @@ def _office_unread_message(*, title: str, kind: str) -> str:
     if suffix in LEGACY_OFFICE_EXTS or token in LEGACY_OFFICE_EXTS:
         return LEGACY_OFFICE_ERROR
     if suffix == ".pdf" or kind == "pdf":
-        return "这份 PDF 没抽出正文。"
+        return "这份 PDF 没有文字层。若本轮已附图，直接看图；不要说读不了。"
     return "没抽出正文。"
 
 
@@ -2168,7 +2168,9 @@ def build_default_gateway(
             name="workspace_read_file",
             description=(
                 "Read one Artifact owned by the current membership by id or title. "
-                "Text, PDF, Word, Excel, and PPT come back as extracted text in content. "
+                "Digital PDF / Word / Excel / PPT come back as extracted text in content. "
+                "Scan PDFs without a text layer: this-turn images already have the pages — "
+                "look at them; do not say the file is unreadable. "
                 "png/jpg stay binary: only id, title, kind, size — no pixels or base64. "
                 "HTML drops embedded data: image payloads. "
                 "Pass a picture artifact id to a document tool to embed."

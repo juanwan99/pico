@@ -38,11 +38,56 @@ def make_image_only_pdf() -> bytes:
     return b"".join(parts)
 
 
+def make_visible_scan_pdf(token: str = "PICO860-GEO-SCAN") -> bytes:
+    """Image-only PDF with painted glyphs (no text layer). Requires PIL + fpdf2."""
+    from io import BytesIO
+
+    from fpdf import FPDF
+    from PIL import Image, ImageDraw, ImageFont
+
+    img = Image.new("RGB", (800, 1000), "white")
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 40)
+    except OSError:
+        font = ImageFont.load_default()
+    draw.text((40, 80), token, fill=(0, 0, 0), font=font)
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    pdf = FPDF(unit="pt", format=(800, 1000))
+    pdf.set_auto_page_break(False)
+    pdf.add_page()
+    pdf.image(buf, x=0, y=0, w=800, h=1000)
+    return bytes(pdf.output())
+
+
 def test_scan_pdf_fixture_has_no_text_layer():
     raw = make_image_only_pdf()
     assert raw.startswith(b"%PDF")
     assert b"/Font" not in raw
     assert b"/Subtype/Image" in raw or b"/Subtype /Image" in raw
+
+
+def test_render_pdf_page_pngs_returns_png_magic() -> None:
+    import pytest
+
+    pytest.importorskip("pypdfium2")
+    pytest.importorskip("PIL")
+    from ingest import _pdf_text_layer, render_pdf_page_pngs
+
+    token = "PICO860-GEO-SCAN"
+    raw = make_visible_scan_pdf(token)
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
+        Path(tmp.name).write_bytes(raw)
+        assert _pdf_text_layer(Path(tmp.name)).strip() == ""
+    pages = render_pdf_page_pngs(raw)
+    assert pages
+    assert pages[0].startswith(b"\x89PNG")
+    assert len(pages[0]) > 1000
 
 
 def test_pdf_ocr_settings_full_page():

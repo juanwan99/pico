@@ -1256,12 +1256,18 @@ async def chat_completions(
                 upload_items = await uploads_for_conversation(
                     named_session, principal, conversation_id or ""
                 )
+                from app.edu_files import ensure_paperclip_pdf_pages
+
+                await ensure_paperclip_pdf_pages(
+                    named_session, principal, conversation_id or "", upload_items
+                )
             prompt = inject_named_school_materials(prompt, named_items)
             from app.edu_files import inject_conversation_uploads
 
             prompt = inject_conversation_uploads(prompt, upload_items)
         except Exception:
             logger.exception("named school materials inject failed")
+    turn_images = merge_images(turn_images, conversation_images(conversation_id))
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 12000) or 12000)
     # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
     # marker is explicit so this must not 400 a legal affordance table.

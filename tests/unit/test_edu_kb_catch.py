@@ -20,9 +20,30 @@ def test_extract_for_kb_pdf_unread_when_empty(monkeypatch) -> None:
     from app import edu_files as mod
 
     monkeypatch.setattr(mod, "parse_office_bytes", lambda **_k: "")
+    monkeypatch.setattr(mod, "render_pdf_page_pngs", lambda *_a, **_k: [])
     out = extract_for_kb("空.pdf", b"%PDF-1.4")
     assert out["status"] == "unread"
     assert out["text"] == ""
+    assert not out.get("page_pngs")
+
+
+def test_extract_for_kb_scan_pdf_attaches_page_pngs(monkeypatch) -> None:
+    from app import edu_files as mod
+
+    png = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+        b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    monkeypatch.setattr(mod, "parse_office_bytes", lambda **_k: "")
+    monkeypatch.setattr(mod, "render_pdf_page_pngs", lambda *_a, **_k: [png])
+    out = extract_for_kb("地理答案.pdf", b"%PDF-1.4 scan")
+    assert out["status"] == "unread"
+    assert out["text"] == ""
+    assert out.get("page_count") == 1
+    assert out["page_pngs"][0].startswith(b"\x89PNG")
+    assert "已作为图片" in str(out.get("error") or "")
+    assert "读不了" not in str(out.get("error") or "")
 
 
 def test_extract_for_kb_docx_falls_back_when_ingest_empty(monkeypatch) -> None:
@@ -103,6 +124,7 @@ def test_extract_for_kb_pdf_unread_when_docling_missing(monkeypatch) -> None:
             "error": "这种格式抽不出正文",
         },
     )
+    monkeypatch.setattr(mod, "render_pdf_page_pngs", lambda *_a, **_k: [])
     out = extract_for_kb("空.pdf", b"%PDF-1.4")
     assert out["status"] == "unread"
     assert out["text"] == ""

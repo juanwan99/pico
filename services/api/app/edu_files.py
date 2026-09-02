@@ -9,7 +9,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pico_orchestrator.meili_kb import PARSE_EXT, parse_office_bytes, project_material_artifact
+from pico_orchestrator.meili_kb import PARSE_EXT, parse_office_bytes, project_material_artifact, render_pdf_page_pngs
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -125,6 +125,24 @@ def extract_for_kb(filename: str, data: bytes) -> dict[str, Any]:
         office = extract_office(filename, data)
         if office.get("status") == "ok" and str(office.get("text") or "").strip():
             return office
+        pages: list[bytes] = []
+        if ext == "pdf":
+            pages = render_pdf_page_pngs(data)
+        if pages:
+            n = len(pages)
+            return {
+                "filename": (filename or "file")[:180],
+                "kind": ext,
+                "status": "unread",
+                "headline": f"没有文字层，{n} 页已附图",
+                "rows": None,
+                "cols": None,
+                "sheets": [],
+                "text": "",
+                "error": f"没有文字层。前 {n} 页已作为图片附在本轮，直接看图。",
+                "page_count": n,
+                "page_pngs": pages,
+            }
         return {
             "filename": (filename or "file")[:180],
             "kind": ext,
@@ -152,6 +170,7 @@ def _payload(file_id: str | None, extract: dict[str, Any]) -> dict[str, Any]:
         "sheets": extract.get("sheets") or [],
         "text": extract.get("text") or "",
         "error": extract.get("error"),
+        "page_count": int(extract.get("page_count") or 0) or None,
     }
 
 
@@ -167,8 +186,20 @@ def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None)
         error = str(row.get("error") or "").strip()
         art_id = str(row.get("id") or row.get("artifact_id") or "").strip()
         id_note = f"（artifact_id {art_id}）" if art_id else ""
+        page_count = 0
+        try:
+            page_count = int(row.get("page_count") or 0)
+        except (TypeError, ValueError):
+            page_count = 0
         if excerpt:
             lines.append(f"- 《{title}》{id_note}\n{excerpt}")
+        elif page_count > 0:
+            lines.append(
+                f"- 《{title}》{id_note} 没有文字层。前 {page_count} 页已作为图片附在本轮，"
+                "直接看图读题，不要说读不了或让用户再截图。"
+            )
+        elif "已作为图片" in error:
+            lines.append(f"- 《{title}》{id_note} {error}")
         elif error:
             lines.append(f"- 《{title}》{id_note} {error}")
         else:
@@ -179,18 +210,22 @@ def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None)
     return block + "\n\n" + str(prompt or "")
 
 
-def _excerpt_from_sidecar(row: ArtifactRow | None) -> tuple[str, str]:
+def _excerpt_from_sidecar(row: ArtifactRow | None) -> tuple[str, str, int]:
     if row is None or not row.inline:
-        return "", ""
+        return "", "", 0
     try:
         parsed = json.loads(row.inline)
     except json.JSONDecodeError:
-        return "", ""
+        return "", "", 0
     if not isinstance(parsed, dict):
-        return "", ""
+        return "", "", 0
     text = str(parsed.get("text") or "").strip()
     error = str(parsed.get("error") or "").strip()
-    return text, error
+    try:
+        page_count = int(parsed.get("page_count") or 0)
+    except (TypeError, ValueError):
+        page_count = 0
+    return text, error, page_count
 
 
 async def uploads_for_conversation(
@@ -245,7 +280,7 @@ async def uploads_for_conversation(
     excerpt_by_task = {row.task_id: row for row in excerpt_rows}
     out: list[dict[str, Any]] = []
     for src in picked:
-        text, error = _excerpt_from_sidecar(excerpt_by_task.get(src.task_id))
+        text, error, page_count = _excerpt_from_sidecar(excerpt_by_task.get(src.task_id))
         if not text and (src.content_encoding or "utf8") != "base64":
             text = str(src.inline or "").strip()[:_MAX_UPLOAD_EXCERPT]
         out.append(
@@ -255,9 +290,64 @@ async def uploads_for_conversation(
                 "kind": src.kind,
                 "excerpt": text[:_MAX_UPLOAD_EXCERPT],
                 "error": error,
+                "page_count": page_count,
             }
         )
     return out
+
+
+async def ensure_paperclip_pdf_pages(
+    session: AsyncSession,
+    principal: Principal,
+    conversation_id: str,
+    items: list[dict[str, Any]] | None,
+) -> None:
+    """Re-render unread paperclip PDFs into this-turn vision. Upload worker ≠ chat worker."""
+    cid = str(conversation_id or "").strip()
+    if not cid or cid in RESERVED_CONVO:
+        return
+    named = [row for row in (items or []) if isinstance(row, dict)]
+    if not named:
+        return
+    from app.artifact_store import decode_artifact_payload
+    from pico_orchestrator.meili_kb import render_pdf_page_pngs
+    from pico_orchestrator.vision import conversation_images, remember_conversation_png
+
+    if any(str(img.get("source") or "") == "pdf-page" for img in conversation_images(cid)):
+        return
+    for row in named:
+        title = str(row.get("title") or "")
+        if not title.lower().endswith(".pdf"):
+            continue
+        if str(row.get("excerpt") or "").strip():
+            continue
+        art_id = str(row.get("id") or "").strip()
+        if not art_id:
+            continue
+        src = await session.get(ArtifactRow, art_id)
+        if src is None:
+            continue
+        task = await session.get(TaskRow, src.task_id)
+        if (
+            task is None
+            or task.school_id != principal.school_id
+            or task.membership_id != principal.membership_id
+            or str(task.conversation_id or "") != cid
+        ):
+            continue
+        try:
+            raw = decode_artifact_payload(src.inline, src.content_encoding)
+        except Exception:  # noqa: BLE001 — unread stays honest
+            continue
+        if not isinstance(raw, bytes) or not raw:
+            continue
+        pages = render_pdf_page_pngs(raw)
+        if not pages:
+            continue
+        row["page_count"] = len(pages)
+        row["error"] = f"没有文字层。前 {len(pages)} 页已作为图片附在本轮，直接看图。"
+        for png in pages:
+            remember_conversation_png(png, conversation_id=cid, source="pdf-page")
 
 
 async def resolve_owned_folder_id(principal: Principal, raw: str | None) -> str:
@@ -354,15 +444,17 @@ async def persist_edu_file(
             except Exception as exc:  # noqa: BLE001
                 logger.warning("meili project kb_text failed: %s", type(exc).__name__)
         if artifact_kind == KIND_SRC:
+            sidecar = {k: v for k, v in extract.items() if k != "page_pngs"}
+            sidecar_json = json.dumps(sidecar, ensure_ascii=False)
             excerpt = ArtifactRow(
                 id=new_id(),
                 task_id=task.id,
                 kind=KIND_EXCERPT,
                 title=filename[:512],
-                inline=json.dumps(extract, ensure_ascii=False),
+                inline=sidecar_json,
                 content_encoding="utf8",
                 content_sha256="",
-                byte_size=len(json.dumps(extract, ensure_ascii=False).encode("utf-8")),
+                byte_size=len(sidecar_json.encode("utf-8")),
             )
             session.add(excerpt)
         await session.commit()
@@ -445,6 +537,7 @@ async def post_edu_file(
     filename, data, folder_raw = await _read_upload(request)
     folder_id = await resolve_owned_folder_id(principal, folder_raw)
     extract = extract_for_kb(filename, data)
+    pages = [p for p in (extract.get("page_pngs") or []) if isinstance(p, bytes)]
     file_id = await persist_edu_file(
         principal,
         filename=filename,
@@ -453,6 +546,12 @@ async def post_edu_file(
         conversation_id=x_conversation_id,
         folder_id=folder_id,
     )
+    cid = (x_conversation_id or "").strip()
+    if cid and cid not in RESERVED_CONVO:
+        from pico_orchestrator.vision import remember_conversation_png
+
+        for png in pages:
+            remember_conversation_png(png, conversation_id=cid, source="pdf-page")
     return _payload(file_id, extract)
 
 

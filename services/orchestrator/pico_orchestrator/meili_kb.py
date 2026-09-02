@@ -262,6 +262,28 @@ def parse_office_bytes(*, filename: str, data: bytes) -> str:
     return "\n".join(p for p in parts if p).strip()
 
 
+def render_pdf_page_pngs(data: bytes, *, max_pages: int = 8) -> list[bytes]:
+    """Thin call into field-kb-ingest pypdfium2 raster. Not a Pico PDF kernel."""
+    import sys
+    from pathlib import Path
+
+    pkg = Path("/app/packages/field-kb-ingest")
+    if not pkg.exists():
+        pkg = Path(__file__).resolve().parents[3] / "packages" / "field-kb-ingest"
+    if str(pkg) not in sys.path:
+        sys.path.insert(0, str(pkg))
+    try:
+        from ingest import render_pdf_page_pngs as _render
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("pdf page render unavailable: %s", type(exc).__name__)
+        return []
+    try:
+        return list(_render(data, max_pages=max_pages) or [])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("pdf page render failed: %s", type(exc).__name__)
+        return []
+
+
 def document_from_artifact(
     *,
     artifact_id: str,
