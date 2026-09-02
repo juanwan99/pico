@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import {
   cancelPicoRun,
   getPicoTask,
+  listPicoConversationArtifacts,
   listPicoRunEvents,
   listPicoTaskRuns,
   listPicoTasks,
@@ -23,6 +24,7 @@ import {
 jest.mock('~/data-provider/pico/api', () => ({
   cancelPicoRun: jest.fn(),
   getPicoTask: jest.fn(),
+  listPicoConversationArtifacts: jest.fn(),
   listPicoRunEvents: jest.fn(),
   listPicoTaskRuns: jest.fn(),
   listPicoTasks: jest.fn(),
@@ -32,6 +34,7 @@ jest.mock('~/data-provider/pico/api', () => ({
 
 const mockedListTasks = jest.mocked(listPicoTasks);
 const mockedGetTask = jest.mocked(getPicoTask);
+const mockedListConvoArts = jest.mocked(listPicoConversationArtifacts);
 const mockedListRuns = jest.mocked(listPicoTaskRuns);
 const mockedListEvents = jest.mocked(listPicoRunEvents);
 const mockedCancelRun = jest.mocked(cancelPicoRun);
@@ -348,6 +351,7 @@ describe('usePicoTaskLedger', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     sessionStorage.clear();
+    mockedListConvoArts.mockResolvedValue({ artifacts: [] });
   });
 
   it('loads the selected historical conversation run and its timeline', async () => {
@@ -761,6 +765,35 @@ describe('usePicoTaskLedger', () => {
     await act(async () => result.current.cancelRun('run-rendered'));
 
     expect(mockedCancelRun).toHaveBeenCalledWith('run-rendered');
+    unmount();
+  });
+
+  it('keeps conversation files in 结果区 when the latest task has none', async () => {
+    mockedListTasks.mockResolvedValue({
+      tasks: [{ id: 'task-followup', title: '做完了吗', conversation_id: 'c-keep' }],
+    });
+    mockedGetTask.mockResolvedValue({
+      task: { id: 'task-followup', title: '做完了吗' },
+      artifacts: [],
+    });
+    mockedListRuns.mockResolvedValue({
+      runs: [{ id: 'run-followup', task_id: 'task-followup', status: 'succeeded' }],
+    });
+    mockedListEvents.mockResolvedValue({ events: [] });
+    mockedListConvoArts.mockResolvedValue({
+      artifacts: [
+        { id: 'html-1', kind: 'html', title: '春天来了.html' },
+        { id: 'ppt-1', kind: 'pptx', title: '春天来了.pptx' },
+      ],
+    });
+
+    const { result, unmount } = renderHook(() => usePicoTaskLedger('c-keep', false));
+    await waitFor(() => expect(result.current.artifacts).toHaveLength(2));
+    expect(result.current.artifacts.map((a) => a.title)).toEqual([
+      '春天来了.html',
+      '春天来了.pptx',
+    ]);
+    expect(mockedListConvoArts).toHaveBeenCalledWith('c-keep');
     unmount();
   });
 });

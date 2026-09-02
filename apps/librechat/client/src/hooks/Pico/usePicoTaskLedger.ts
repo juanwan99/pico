@@ -3,6 +3,7 @@ import {
   cancelPicoRun,
   cancelPicoTaskActiveRuns,
   getPicoTask,
+  listPicoConversationArtifacts,
   listPicoRunEvents,
   listPicoTaskRuns,
   listPicoTasks,
@@ -88,6 +89,20 @@ export function pickPreferredTaskRuns(
     runs: chosen.runs,
     run: pickPreferredRun(chosen.runs),
   };
+}
+
+async function mergeConversationArtifacts(
+  conversationId: string,
+  taskArtifacts: PicoArtifact[],
+): Promise<PicoArtifact[]> {
+  let convo: PicoArtifact[] = [];
+  try {
+    const listed = await listPicoConversationArtifacts(conversationId);
+    convo = listed.artifacts || [];
+  } catch {
+    /* keep this-task chips */
+  }
+  return latestArtifactsByFilename([...(taskArtifacts || []), ...convo]);
 }
 
 export function recoveryTaskCandidates(
@@ -684,7 +699,14 @@ export function usePicoTaskLedger(
 
         setTask(preferred.task);
         taskRef.current = preferred.task;
-        setArtifacts(latestArtifactsByFilename(detail.artifacts || []));
+        const merged = await mergeConversationArtifacts(
+          conversationId,
+          detail.artifacts || [],
+        );
+        if (cancelled) {
+          return;
+        }
+        setArtifacts(merged);
         const nextRun = mergePolledRun(runRef.current, preferred.run);
         runRef.current = nextRun;
         setRun(nextRun);
