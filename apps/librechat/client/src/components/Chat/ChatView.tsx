@@ -40,6 +40,7 @@ import { usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
 import { PointsMeterProvider } from '~/hooks/Pico/usePointsMeter';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 import { isAskUserWaiting } from '~/utils/picoAskPrompt';
+import { resolveLedgerConversationId } from '~/utils/picoLedgerConvo';
 import {
   latestUserOpenOfficeIntent,
   latestUserOpenWebsiteIntent,
@@ -145,7 +146,11 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const latestAssistantMessageId = assistantMessageIds.length
     ? assistantMessageIds[assistantMessageIds.length - 1]
     : null;
-  const ledger = usePicoTaskLedger(conversationId, isSubmitting);
+  const ledgerConversationId = resolveLedgerConversationId(
+    conversationId,
+    chatHelpers.conversation?.conversationId,
+  );
+  const ledger = usePicoTaskLedger(ledgerConversationId, isSubmitting);
   const cancellableRunId = ['queued', 'running', 'preparing'].includes(ledger.run?.status || '')
     ? ledger.run?.id
     : undefined;
