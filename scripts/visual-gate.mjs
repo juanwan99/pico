@@ -344,7 +344,9 @@ async function waitSettled(page, timeoutMs) {
     const thinkLive =
       (await chain.count()) > 0 &&
       (await chain.first().getAttribute('data-submitting')) === 'true';
-    const askOpt = page.getByTestId('pico-ask-option');
+    const askOpt = page.locator(
+      '[data-testid="pico-ask-option"], [data-testid="pico-ask-main"] button',
+    );
     if ((await askOpt.count()) > 0) {
       // Teacher path: the run is parked on ask_user. Clicking continues it.
       sawStreaming = true;

@@ -2,12 +2,15 @@ import type { PicoRun, PicoRunEvent } from '~/data-provider/pico/api';
 
 const ACTIVE_RUN = new Set(['queued', 'preparing', 'running']);
 
-/** Last unanswered ui.prompt.begin in ledger order. */
+/** Last unanswered ui.prompt.begin that actually has choices. */
 export function liveAskEvent(events: PicoRunEvent[] | null | undefined): PicoRunEvent | null {
   let last: PicoRunEvent | null = null;
   for (const event of events || []) {
     if (event.type === 'ui.prompt.begin') {
-      last = event;
+      // A later chrome-only begin (no options) must not hide the real pick.
+      if (askOptionLabels(event.payload).length >= 2) {
+        last = event;
+      }
     }
     if (event.type === 'ui.prompt.end') {
       last = null;

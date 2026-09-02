@@ -49,6 +49,18 @@ describe('picoAskPrompt', () => {
     expect(liveAskForRun(run('running'), [event('wait', 1, 'ui.prompt.begin', { text: 'x' })])).toBeNull();
   });
 
+  it('does not let a chrome-only begin hide a real multiple-choice ask', () => {
+    const events = [
+      event('ask', 1, 'ui.prompt.begin', {
+        text: '计划好了，下一步？',
+        options: ['确认执行', '先不执行'],
+      }),
+      event('chrome', 2, 'ui.prompt.begin', { text: '在等你选', source: 'true-pi' }),
+    ];
+    expect(liveAskEvent(events)?.id).toBe('ask');
+    expect(liveAskForRun(run('running'), events)?.options).toEqual(['确认执行', '先不执行']);
+  });
+
   it('treats an open ui.prompt.begin on an active run as waiting for a pick', () => {
     const events = [event('wait', 1, 'ui.prompt.begin', { text: '在等你选', options: ['A', 'B'] })];
     expect(isAskUserWaiting(run('running'), events)).toBe(true);
