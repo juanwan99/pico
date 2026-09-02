@@ -194,14 +194,33 @@ def test_prod_update_refuses_preview_refspec_even_when_tip_matches(tmp_path: Pat
     assert "[pico] done" not in result.stdout
 
 
-def test_prod_update_refuses_requested_sha_behind_fetched_main(tmp_path: Path) -> None:
+def test_prod_update_allows_older_main_sha_as_rollback(tmp_path: Path) -> None:
     production, old_sha = _production_checkout(tmp_path)
     new_sha = _advance_origin_main(tmp_path, production)
     result = _run_prod_update(production, old_sha, _fake_runtime(tmp_path))
+    assert result.returncode == 0, result.stderr
+    assert "deploying older main SHA (rollback)" in result.stderr
+    assert f"requested={old_sha} origin/main={new_sha}" in result.stderr
+    assert "[pico] done" in result.stdout
+
+
+def test_prod_update_refuses_sha_not_on_main(tmp_path: Path) -> None:
+    production, _ = _production_checkout(tmp_path)
+    updater = tmp_path / "side"
+    origin = _run("git", "remote", "get-url", "origin", cwd=production).stdout.strip()
+    _run("git", "clone", "--branch", "main", origin, str(updater), cwd=tmp_path)
+    _run("git", "config", "user.email", "ci@pico.local", cwd=updater)
+    _run("git", "config", "user.name", "Pico CI", cwd=updater)
+    _run("git", "checkout", "-b", "feat/side", cwd=updater)
+    (updater / "side.txt").write_text("not on main\n")
+    _run("git", "add", "side.txt", cwd=updater)
+    _run("git", "commit", "-m", "side", cwd=updater)
+    side_sha = _run("git", "rev-parse", "HEAD", cwd=updater).stdout.strip()
+    _run("git", "push", "origin", "feat/side", cwd=updater)
+    _run("git", "fetch", "origin", "feat/side", cwd=production)
+    result = _run_prod_update(production, side_sha, _fake_runtime(tmp_path))
     assert result.returncode == 3
-    assert "requested SHA is not the current origin/main tip" in result.stderr
-    assert f"requested={old_sha}" in result.stderr
-    assert f"origin/main={new_sha}" in result.stderr
+    assert "requested SHA is not on origin/main" in result.stderr
     assert "[pico] done" not in result.stdout
 
 
