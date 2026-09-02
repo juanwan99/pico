@@ -495,8 +495,8 @@ const ChatForm = memo(function ChatForm({
   const baseClasses = useMemo(
     () =>
       cn(
-        'pico-type-body m-0 w-full resize-none bg-transparent py-1 px-1 placeholder-[color:var(--pico-ink-3)]',
-        isCollapsed ? 'max-h-[52px]' : 'max-h-[45vh] md:max-h-[55vh]',
+        'pico-type-body m-0 w-full resize-none overflow-y-auto bg-transparent py-1 px-1 placeholder-[color:var(--pico-ink-3)]',
+        isCollapsed ? 'max-h-[52px]' : 'max-h-[9.3rem]',
       ),
     [isCollapsed],
   );
@@ -606,7 +606,7 @@ const ChatForm = memo(function ChatForm({
               />
               <div
                 className={cn(
-                  'pico-wb-composer-row relative flex w-full items-center gap-2 px-2 py-2',
+                  'pico-wb-composer-row relative flex w-full items-end gap-2 px-2 py-2',
                   isRTL ? 'flex-row-reverse' : 'flex-row',
                 )}
                 data-testid="composer-one-row"
@@ -659,6 +659,7 @@ const ChatForm = memo(function ChatForm({
                     data-testid="text-input"
                     rows={1}
                     minRows={1}
+                    maxRows={6}
                     onFocus={handleTextareaFocus}
                     onBlur={handleTextareaBlur}
                     aria-label={localize('com_ui_message_input')}

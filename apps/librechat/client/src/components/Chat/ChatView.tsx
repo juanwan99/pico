@@ -199,7 +199,12 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   } else if (!isLandingPage) {
     content = <MessagesView messagesTree={messagesTree} />;
   } else {
-    content = <Landing centerFormOnLanding={centerFormOnLanding} />;
+    content = (
+      <Landing centerFormOnLanding={centerFormOnLanding}>
+        {isProjectLandingPage && project ? <ProjectLandingChip project={project} /> : null}
+        <PicoAskBar run={ledger.run} events={ledger.events} />
+      </Landing>
+    );
   }
 
   const chatFormPlaceholder =
@@ -225,7 +230,6 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                 <>
                   <Header />
                   <TaskRunBar
-                    title={taskTitle || ledger.task?.title}
                     isSubmitting={isSubmitting}
                     model={ledger.run?.model}
                     statusLabel={ledger.statusLabel}
@@ -267,14 +271,14 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   className={cn(
                     'flex min-w-0 flex-1 flex-col',
                     isLandingPage
-                      ? 'pico-wb-stage items-center justify-center gap-3 overflow-y-auto bg-[color:var(--pico-shell)] py-6'
+                      ? 'pico-wb-stage h-full min-h-0 items-stretch bg-[color:var(--pico-shell)]'
                       : 'h-full overflow-hidden bg-[color:var(--pico-shell)]',
                   )}
                 >
                   <div
                     className={cn(
                       'flex min-h-0 w-full flex-1 flex-col',
-                      !isLandingPage && 'overflow-y-auto',
+                      isLandingPage ? 'pico-wb-landing-fill h-full min-h-0' : 'overflow-y-auto',
                     )}
                   >
                     {content}
@@ -283,25 +287,15 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     conversationId !== Constants.SEARCH ? (
                       <MainDeliveryStrip
                         artifacts={ledger.artifacts}
+                        runId={ledger.run?.id}
                         runEvents={ledger.events}
                         messages={flatMessages}
                         onOpenResultPanel={() => setResultOpen(true)}
                       />
                     ) : null}
                   </div>
-                  <div
-                    className={cn(
-                      'w-full shrink-0',
-                      isLandingPage &&
-                        'relative z-10 w-full max-w-[797px] px-4 transition-all duration-200',
-                      !isLandingPage && 'bg-transparent',
-                    )}
-                  >
-                    {isProjectLandingPage && project && <ProjectLandingChip project={project} />}
-                    {/* Single submit path: Landing uses useSubmitMessage; ChatForm only when chatting */}
-                    {isLandingPage ? (
-                      <PicoAskBar run={ledger.run} events={ledger.events} />
-                    ) : (
+                  {!isLandingPage ? (
+                    <div className="w-full shrink-0 bg-transparent">
                       <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">
                         <SchoolMaterialsBar conversationId={conversationId} />
                         <ArchiveFolderBar conversationId={conversationId} />
@@ -309,8 +303,8 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                         <PicoAskBar run={ledger.run} events={ledger.events} />
                         <ChatForm index={index} placeholder={chatFormPlaceholder} />
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
                 {showResultPanel ? (
                   <ResultPanel

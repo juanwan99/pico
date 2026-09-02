@@ -4,11 +4,9 @@
 import { memo } from 'react';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import { cn } from '~/utils';
-import { isUnnamedConvoTitle } from '~/utils/picoConvoTitle';
 import RunLoadingIndicator from './RunLoadingIndicator';
 
 function TaskRunBar({
-  title,
   isSubmitting,
   completedLabel,
   model,
@@ -22,7 +20,6 @@ function TaskRunBar({
   processHint,
   waitingAsk,
 }: {
-  title?: string | null;
   isSubmitting: boolean;
   completedLabel?: string | null;
   model?: string | null;
@@ -36,7 +33,6 @@ function TaskRunBar({
   rerunning?: boolean;
   onRerun?: () => void;
 }) {
-  const displayTitle = !isUnnamedConvoTitle(title) ? title : '当前任务';
   const failed = Boolean(statusLabel?.startsWith('失败') || completedLabel?.startsWith('失败'));
   const cancelled = Boolean(
     statusLabel?.startsWith('已停止') ||
@@ -53,13 +49,14 @@ function TaskRunBar({
 
   return (
     <div
-      className="relative z-[210] mt-[52px] flex min-h-11 shrink-0 items-center gap-2 overflow-hidden border-b border-black/[0.06] bg-[color:var(--pico-surface)] px-3 py-1 text-[color:var(--pico-ink)] dark:border-[color:var(--pico-line)] sm:px-4"
+      className="relative z-[210] mt-[52px] flex min-h-11 shrink-0 items-center justify-center overflow-hidden border-b border-black/[0.06] bg-[color:var(--pico-surface)] py-1 text-[color:var(--pico-ink)] dark:border-[color:var(--pico-line)]"
       data-testid="task-run-bar"
     >
+      <div
+        className="flex w-full max-w-[797px] items-center gap-2 px-2 sm:px-0"
+        data-testid="task-run-column"
+      >
       <div className="min-w-0 flex-1 overflow-hidden">
-        <p className="truncate text-[13px] font-medium text-[color:var(--pico-ink)]">
-          {displayTitle}
-        </p>
         {model ? <p className="truncate text-[11px] text-[#8c8c8c]">模型 {model}</p> : null}
         {processHint &&
         !waitingAsk &&
@@ -167,6 +164,7 @@ function TaskRunBar({
           就绪
         </span>
       )}
+      </div>
     </div>
   );
 }

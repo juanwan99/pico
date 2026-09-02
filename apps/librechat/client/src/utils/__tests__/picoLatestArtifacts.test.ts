@@ -1,4 +1,37 @@
-import { latestArtifactsByFilename, primaryDeliverables } from '../picoLatestArtifacts';
+import {
+  artifactsForRun,
+  latestArtifactsByFilename,
+  primaryDeliverables,
+} from '../picoLatestArtifacts';
+
+describe('artifactsForRun', () => {
+  it('keeps only files from the given run', () => {
+    const out = artifactsForRun(
+      [
+        { id: 'a', run_id: 'run-1' },
+        { id: 'b', run_id: 'run-2' },
+        { id: 'c', run_id: 'run-1' },
+      ],
+      'run-1',
+    );
+    expect(out.map((item) => item.id)).toEqual(['a', 'c']);
+  });
+
+  it('returns the full list when no run id is given', () => {
+    const items = [{ id: 'a', run_id: 'run-1' }];
+    expect(artifactsForRun(items, null).map((item) => item.id)).toEqual(['a']);
+  });
+
+  it('keeps unlabeled files when the ledger has no run_id yet', () => {
+    const out = artifactsForRun([{ id: 'a' }, { id: 'b' }], 'run-1');
+    expect(out.map((item) => item.id)).toEqual(['a', 'b']);
+  });
+
+  it('hides other-run files when the latest run produced none', () => {
+    const out = artifactsForRun([{ id: 'old', run_id: 'run-old' }], 'run-new');
+    expect(out).toEqual([]);
+  });
+});
 
 describe('latestArtifactsByFilename', () => {
   it('keeps the newest chip when the same filename repeats', () => {

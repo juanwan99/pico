@@ -13,7 +13,6 @@ describe('TaskRunBar parked ask', () => {
   it('shows a static 在等你选 badge instead of the generating spinner', () => {
     render(
       <TaskRunBar
-        title="减数分裂测试"
         isSubmitting
         canCancel
         waitingAsk
@@ -26,8 +25,14 @@ describe('TaskRunBar parked ask', () => {
   });
 
   it('still spins 等待模型响应 when the model is actually generating', () => {
-    render(<TaskRunBar title="当前任务" isSubmitting canCancel />);
+    render(<TaskRunBar isSubmitting canCancel />);
     expect(screen.getByRole('status')).toHaveTextContent('等待模型响应');
     expect(screen.queryByTestId('task-waiting-ask')).not.toBeInTheDocument();
+  });
+
+  it('does not repeat the conversation title', () => {
+    render(<TaskRunBar isSubmitting={false} completedLabel="已完成" />);
+    expect(screen.queryByText('当前任务')).not.toBeInTheDocument();
+    expect(screen.getByTestId('task-run-column').className).toContain('max-w-[797px]');
   });
 });

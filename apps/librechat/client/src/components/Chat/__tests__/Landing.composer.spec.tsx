@@ -164,4 +164,13 @@ describe('Landing composer chrome', () => {
     fireEvent.change(input, { target: { value: 'hi nishi shui' } });
     expect(quoteFromChars).toHaveBeenCalledWith('hi nishi shui'.length);
   });
+
+  it('docks the composer at the bottom of the landing column', () => {
+    const { container } = render(<Landing centerFormOnLanding />);
+    const landing = container.querySelector('.pico-wb-landing');
+    expect(landing?.className).toMatch(/h-full/);
+    const dock = screen.getByTestId('pico-wb-home-composer-dock');
+    expect(dock.className).toMatch(/shrink-0/);
+    expect(dock).toContainElement(screen.getByTestId('pico-wb-home-composer'));
+  });
 });
