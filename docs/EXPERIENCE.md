@@ -4,10 +4,10 @@
 仓: juanwan99/pico ONLY
 DATE: 2026-09-02
 用法: 开窗读本文。禁止把正文贴进卡或对业主聊天。
-派发条只点名编号（最多 3 条）。过期删（总管同轮删/并）。
+派发条只点名编号（最多 3 条）。过期删（本窗同轮删/并）。
 工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
 北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok
-按域检索: A 派发 · B 产品 · C 部署/ECS/执行者 · D Cloud Agent
+按域检索: A 派发 · B 产品 · C 部署/ECS/工位 · D Cloud Agent
 ```
 
 ## A · 派发 / 收口
@@ -16,16 +16,17 @@ DATE: 2026-09-02
 2. **1 卡 1 PR。** CI 红、测炸、部翻车，都在**原 PR 原分支**补。禁止为修测/修部/修 Dockerfile/改文档新开第二张 PR（同卡续 = 业主说还差）。**禁止只改 STATE-NOW / 现况三行的独立 PR。** PASS 与现况写 Issue 评论；现况三行跟同轮改码 PR 顺手刷，或只评不 PR。
 3. **无部署权拒领。** 不能 `PICO_DEPLOY_SHA=… bash /opt/pico/scripts/prod-update.sh` = 不 stamp。DONE 必须 `curl -fsS https://pico.aivia.asia/api/pico/tip` = origin/main。合了未部 = 没完。
 4. **禁止 PR 写 `Closes #<卡>`。** 部前关卡 = 失真。合了未部要打回 OPEN。
-5. **证据贴本卡 Issue 评论。** 禁止截图 docs PR。UI 卡：执行窗合部后把过门截图贴合同 Issue **回执**（图跟五句一起）。Cloud Agent 本机无浏览器 ≠ 免过门；派发条写明「截图写回执」。
-6. **过门是公网结果句。** 主管见 live tip=main 且结果句可见则自签 PASS。业主抽检不对开新卡。写 1px 轨 / 词表 / 选择器 = 退回。禁开工。禁焊提示词/定向场景。
+5. **证据贴本卡 Issue 评论。** 禁止截图 docs PR。UI 卡：本窗合部后把过门截图贴合同 Issue **回执**（图跟五句一起）。Cloud Agent 本机无浏览器 ≠ 免过门；派发条写明「截图写回执」。
+6. **过门是公网结果句。** live tip=main（或写明不部）且结果句可见 → 本窗对账后关。业主抽检不对开新卡。写 1px 轨 / 词表 / 选择器 = 退回。禁焊提示词/定向场景。
 7. **同域一张 `stamp-ok`。** 残债同卡。禁 `T-*-DEBT`。
 8. **卡面四行合同。** 已锁事实写 Issue 评论，禁止把手册/315 贴进卡。
 9. **聊天默认易失。** 约束下一窗 → Issue 评论或 `STATE-NOW` / 本文 / `TOOLING-CATALOG`。回复用 `§编号` / `Issue#`，禁「上次我们说」。
-10. **合与部默认本窗。** 执行者 = 业主正在说话的这扇 Grok 沙箱。不要 spawn 子 agent / Cursor 云 Task / SSH 调 ECS grok。主管做：对齐需求·开卡·合·部·结果可见则自签 PASS。
+10. **本窗合一。** 开卡、改、测、合、部、收尾是同一窗。不要 spawn 子 agent / Cursor 云 Task。不设主管/执行者编制。
 21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / 把 ECS 当第二账本 / 聊天当真源。
-22. **总管环（自驱动闭环）：** 对齐需求 → stamp → 本窗改+测+PR（叠 live）→ 订 subscribe-ci（禁止在窗里轮询 check-runs / sleep 等绿）→ 合前本窗跑 `scripts/pr-ci-ready.sh --pr N` 一眼（0 才合 · 1 停着再订 · 2 回原分支补）→ CI 绿再 squash 合 → 有差才部（ssh-ecs / prod-update）→ tip-pin → 结果可见则自签 PASS → 刷 STATE-NOW/#634。等 CI ≠ 卡死。ECS 只部。合了未部关卡=打回 OPEN。禁止 mailbox。卡别拆太细。禁止拉 Cursor 云 Task 当执行者。禁止 SSH 调 ECS grok。
-23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审（不开新卡）· `CLEAR` tip=main + 主管 PASS。人只留：目标 · 黄红争议 · PASS。同域第二张 stamp-ok=废派。
-42. **收尾。** 合了、部了、公网对了还没收尾=没完。产品 PASS（结果句可见）与卫生收尾分开；卫生必须主管自签。六步：①刷三行=curl tip=main ②关本卡（白名单 #316 #449 #170 #634 #475 除外）③关同域 PR ④关已派讨论母卡 ⑤扫开 PR 超 24h 无主则关（禁止合尸 PR）⑥评 `收尾 PASS · 主管`。无⑥不准派下一张。禁止把「业主 PASS」扩成第二白名单。**docs-only 且 CI `paths-ignore` = 可合**，禁止空等检查项堆尸 PR。
+22. **工作法环：** 开窗对账（GitHub 在飞最多 1 · 写码树干净或只脏本卡 · 生产树干净+detached · curl tip）→ stamp → 本窗改+测+PR（叠 live）→ 订 subscribe-ci（禁止窗里轮询 check-runs / sleep 等绿）→ 合前 `scripts/pr-ci-ready.sh --pr N` 一眼（0 才合 · 1 停着再订 · 2 回原 PR 补）→ CI 绿再 squash 合 → 有差才部（只 `prod-update`）→ tip-pin → 公网结果句 → 收工对账。等 CI ≠ 卡死。合了未部关卡=打回 OPEN。禁止 mailbox。卡别拆太细。
+23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审（不开新卡）· `CLEAR` tip 该对齐已对齐 + 收工对账完。人只留：目标 · 黄红争议 · 业主 PASS。同域第二张 stamp-ok=废派。
+42. **收尾。** 合了、部了、公网对了还没收尾=没完。产品过门（结果句可见）与卫生对账分开；卫生不是第二人。六步：①刷三行=curl tip（该变则=main，不该变则写明不部）②关本卡（白名单 #316 #449 #170 #634 #475 除外）③关同域 PR ④关已派讨论母卡 ⑤扫开 PR 超 24h 无主则关（禁止合尸 PR）⑥评 `卫生勾完`。无⑥不准下一张。禁止把「业主 PASS」扩成第二白名单。**docs-only 且 CI `paths-ignore` = 可合**，禁止空等检查项堆尸 PR。
+45. **工作法（#869）。** 人合一、GitHub 唯一真源、工位分开。写码 `/home/ops/pico`；生产 `/opt/pico` 只 prod-update。STATE-NOW 是索引。开窗先读 AGENTS.md 文首。
 
 ## B · 现网 / 产品
 
@@ -53,22 +54,22 @@ DATE: 2026-09-02
 43. **厚桥四层绝对禁止（#865 · 业主 2026-09-02）。** 本地 PDF 阅读器、办公投影器、交件监工、硬帽截窗 = 违法。回形针进本轮只挂**文件名 + 账本 id**，禁止把抽文/OCR/渲页焊进 user 或自动灌 `images[]`。Pi 无 DocumentContent ≠ 允许自研 PDF 核。compaction 只准 Pi 官方钮、禁止把 reserve 抬到让 256k 窗 64k 就压。问「这是什么」不交件。该留：租户 · SSRF · 密钥 · 禁 bash · 假绿 · 未勾选不读学校库。
 44. **最高要求（#867）。** 绝对禁止自己搞一套体系。绝对禁止做重体系。只允许薄适配。开窗先读 LAW §0-supreme 与 AGENTS.md 文首。任务卡便利压不过这一条。
 
-## C · 部署 / ECS / 执行者
+## C · 部署 / ECS / 工位
 
 15. **GIT SHA 不当 Docker build-arg。** 当 ARG 会让每次部重下 torch（#658/#659）。SHA 只进 compose `.env`。
 16. **部署真源：** `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`；证伪用 **tip-pin** + **remote-health**（见 TOOLING-CATALOG）。公网 tip 与 ECS loopback 必须同 SHA。
 17. **SSH 进机：只用 Tailscale MagicDNS。** Host 别名 `ecs` / `pico-prod` → `aliyun-hy`，用户 `ops`。禁止拿 Cloud Agent 公网 egress IP 去开安全组 22（IP 漂移 = 假通路）。
 
-80. **执行者 = 业主正在说话的这扇 Grok 沙箱。** 不要再 SSH 调 ECS grok，不要拉 Cursor 云 Task。ECS 只部。跨机传话会丢。`scripts/spawn-executor.sh` / `scripts/ecs-grok-exec.sh` **入口已断**（一跑就退）。业主点名 Codex 的卡仍走业主点名，不当默认。
+80. **本窗在 ECS，工位仍两处。** 写码只动 `/home/ops/pico`。生产 `/opt/pico` 必须 detached、必须干净，只跑 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`。禁止在生产树开功能分支或改业务。禁止 `docker compose up` 当发布。不要拉 Cursor 云 Task。`scripts/spawn-executor.sh` / `scripts/ecs-grok-exec.sh` **入口已断**。业主点名 Codex 的卡仍走业主点名，不当默认。
 81. **开窗先自检，假红当事故。** 密钥根可以是目录（`/root/.edu-secrets` 或 `$HOME/.edu-secrets`），一钥一文件；私钥文件可以叫 `ecs_ops`。不要用 `[[ -f 目录 ]]` 判断「无钥」——目录不是文件，会假红。无钥才 BLOCKED；钥齐但 ssh 不通才是真红。自检一边 BLOCKED 一边 exit 0 = 撒谎。
 82. **不要 sudo bash 写密钥或跑装机脚本。** sudo 会清掉环境变量，看起来像没钥。tailscaled 需要提权就在脚本里对那一条 sudo，整段不要包。
 83. **Tailscale 主机名按这台沙箱的 hostname，前面加仓前缀（`pico-…`）。** 禁止设成对面仓的固定名（如 `cursor-edu-core`）——会把另一扇窗踢下线。两窗不要抢同一个 Tailscale 节点。
 84. **沙箱没有 Docker。** 改和测在沙箱；部在 ECS（`ssh ecs` 再跑仓内 prod-update）。不要为了「本地起全栈」在沙箱装 Docker。
 85. **对齐现网 SHA，不要默认把落后的 origin/main 合进现网。** main 落后 tip 时，PR 叠在 live 那根树上。合入 main 后再部。DONE 认公网 tip = 本卡 SHA（合后 tip 应等于 origin/main）。
 86. **抽测走用户能看见的那条路。** Grok 沙箱右侧预览必须是现网反代，禁止 iframe 套一套假站。禁止只打 API 当过门。过门仍是公网看得见结果句；CI 绿 ≠ 过门。
-87. **装机一次，自检每次。** 钥落到目录（chmod 700 目录、600 文件）后跑仓内 install / ssh-up；自检发现钥齐但 ssh 死，允许自动再 probe 一次。钥禁止进聊天、Issue、PR。两台机器磁盘不通，不要等总管窗「把钥传过来」。
-88. **切窗只复制现行总管卡。** 仓内模板改了不等于 Issue 钉文改了——接窗抄的是钉评。正源链接不要指向落后的 origin/main。
-89. **高质量执行清单（开卡后不等人喊开工）：** 自检真绿（含 ssh）→ CLAIM → 改+单测 → PR 叠 live → 订 subscribe-ci → `pr-ci-ready` 一眼（0 才合；未绿不准合、不空转）→ CI 绿再 squash 合 → 有差才部 → 五句回执。合了未部关卡=打回。证据贴本卡 Issue，不进 PR。部前禁 Closes。
+87. **装机一次，自检每次。** 钥落到目录（chmod 700 目录、600 文件）后跑仓内 install / ssh-up；自检发现钥齐但 ssh 死，允许自动再 probe 一次。钥禁止进聊天、Issue、PR。两台机器磁盘不通，不要等另一窗「把钥传过来」。
+88. **切窗只复制现行合同卡。** 仓内模板改了不等于 Issue 钉文改了——接窗抄的是钉评。正源链接不要指向落后的 origin/main。
+89. **高质量执行清单（开卡后不等人喊开工）：** 开窗对账 → CLAIM → 改+单测（写码树）→ PR 叠 live → 订 subscribe-ci → `pr-ci-ready` 一眼（0 才合；未绿不准合、不空转）→ CI 绿再 squash 合 → 有差才部（生产树 prod-update）→ 五句回执 + 卫生勾完。合了未部关卡=打回。证据贴本卡 Issue，不进 PR。部前禁 Closes。
 90. **右侧不是 iframe 现网。** Grok 只展示沙箱 8080。现网几乎都有 `X-Frame-Options: SAMEORIGIN`，嵌 `pico.aivia.asia` 会白屏。要看见真站：在 8080 反代现网（`scripts/grok-preview-proxy.mjs`）。
 91. **反代要改四样，缺一样就不稳：** 请求 Host / Origin / Referer 改成现网；响应删 `X-Frame-Options` 和 CSP；`Location` 从 `https://pico.aivia.asia/...` 改成相对路径；`Set-Cookie` 去掉 Domain，SameSite=Lax。
 92. **开发路径不要进反代。** `/__grok`、`/@`、`/src`、`/node_modules`、`/auth/popup` 留给 Vite。其余 `/` 和 `/api` 走现网。不要在 8080 再起一套本地产品 SPA 冒充现网。

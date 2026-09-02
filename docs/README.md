@@ -1,4 +1,4 @@
-> **FROZEN until 2026-09-07。现况只认 [`STATE-NOW.md`](./STATE-NOW.md) 三行 + [#634](https://github.com/juanwan99/pico/issues/634)。本页其余 = 索引，不当现况。**
+> **FROZEN until 2026-09-07。真源 = GitHub Issue/PR/SHA/CI + 公网 tip。[`STATE-NOW.md`](./STATE-NOW.md) 三行与 [#634](https://github.com/juanwan99/pico/issues/634) 是索引。本页其余 = 目录。**
 
 **项目最高法律（禁止自搞一套 / 禁止重体系 / 只允许薄适配）：** [LAW-NO-SELF-BUILD-THIN-ADAPTER.md](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md) §0-supreme
 
@@ -6,8 +6,8 @@
 
 ```
 STATUS: BINDING navigation · 现况不在本页
-TRUTH: code + tests + GitHub (PR/SHA/CI/DEPLOY comments) outrank all prose
-NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
+TRUTH: GitHub (Issue/PR/SHA/CI/DEPLOY) + 公网 tip outrank all prose
+NOW: GitHub 执行卡（最多 1）· docs/STATE-NOW.md 是索引
 ```
 
 ## Do not
@@ -24,7 +24,7 @@ NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
 
 | Priority | Path | Role |
 |----------|------|------|
-| **NOW** | **[STATE-NOW.md](./STATE-NOW.md)** | **唯一现况三行**（冻结到 9/7） |
+| **NOW** | **[STATE-NOW.md](./STATE-NOW.md)** | **开窗索引三行**（对不上以 GitHub + tip 为准） |
 | **NOW** | **[#634](https://github.com/juanwan99/pico/issues/634)** | **冻结令** · 可钉现况三行评论 |
 | 0 | **[DIRECTION-NOW.md](./DIRECTION-NOW.md)** | 北极星 §0-star · 用法 = Grok |
 | 0 | **[LAW-NO-SELF-BUILD-THIN-ADAPTER.md](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)** | 禁止自研 |
@@ -35,12 +35,12 @@ NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
 | — | [MEMORY-RESET.md](./MEMORY-RESET.md) | 考古错误记忆 · 不当经验真源 |
 | — | [HANDOFF-NEW-WINDOW-2026-08-23.md](./HANDOFF-NEW-WINDOW-2026-08-23.md) | **SUPERSEDED** · 不当现况 |
 | — | [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md) | 卡面冻结 · 禁改形状 |
-| — | [templates/dispatch-slip.md](./templates/dispatch-slip.md) | 对执行窗只贴这一段 |
+| — | [templates/dispatch-slip.md](./templates/dispatch-slip.md) | 派发条 |
 | — | [ONEFLOW.md](./ONEFLOW.md) | 仓内适配 · 形状冻结 |
 | — | GitHub PR/Issue/Actions | Task state & evidence |
 | — | [AGENTS.md](../AGENTS.md) | 顶上冻结框为准；余为索引 |
 
-下表旧文件全部 **索引/考古**，不当派工。TRUTH-FREEZE / WHAT-IS-PICO / FAST-PATH / VISUAL-GATE 仍可查，冲突时 **STATE-NOW 赢**。
+下表旧文件全部 **索引/考古**，不当派工。TRUTH-FREEZE / WHAT-IS-PICO / FAST-PATH / VISUAL-GATE 仍可查，冲突时 **GitHub + 公网 tip 赢**。
 
 ## Historical (do not dispatch from)
 
@@ -55,7 +55,7 @@ NOW: docs/STATE-NOW.md · issue #634 · 在飞只认 STATE-NOW 三行
 
 ## Hygiene rule
 
-禁止新交接长文。禁止把本索引当现况。现况只改 [`STATE-NOW.md`](./STATE-NOW.md) 三行（并可在 #634 钉同文评论）。
+禁止新交接长文。禁止把本索引当现况。三行跟本卡 PR 顺手刷，禁止只改 STATE-NOW 的独立 PR。
 
 ## Owner entry (2026-08-26)
 

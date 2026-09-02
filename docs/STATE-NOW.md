@@ -3,20 +3,21 @@
 ```text
 DATE: 2026-09-02
 仓: juanwan99/pico ONLY
-── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #867 T-LAW-SUPREME-THIN（最高要求：禁止自搞一套 / 禁止重体系）
+── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
+在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → docs-only 合入不 prod-update，产品 SHA 未变
+      → 产品 SHA 仍 bedce3a0…（docs-only 不部）
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
-PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · #824 T-UI-C-POLISH 业主 PASS @ tip `af3e8ad0…` · #829 T-UNMAIM-DRAFT 主管 PASS @ tip `c4953f2e…` · #834 T-FOUNDATION-GATES 业主 PASS @ tip `6236489f…` · #811 T-RESIDENT-SHRINK 主管 PASS @ tip `e5f840ef…` · #836 T-USAGE-THROUGH-PI 主管 PASS @ tip `adaca179…` · #821/#806/#808/#809/#807/#810 业主 PASS 已关 · #794 业主 PASS 已关
+PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · #824 T-UI-C-POLISH 业主 PASS @ tip `af3e8ad0…` · #829 T-UNMAIM-DRAFT 本窗 PASS @ tip `c4953f2e…` · #834 T-FOUNDATION-GATES 业主 PASS @ tip `6236489f…` · #811 T-RESIDENT-SHRINK 本窗 PASS @ tip `e5f840ef…` · #836 T-USAGE-THROUGH-PI 本窗 PASS @ tip `adaca179…` · #821/#806/#808/#809/#807/#810 业主 PASS 已关 · #794 业主 PASS 已关
 经验: docs/EXPERIENCE.md（唯一 · 按域）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 最高: LAW §0-supreme · 禁止自搞一套 / 禁止重体系
+工作法: 本窗合一 · GitHub 唯一真源 · 写码树/生产树分开 · AGENTS 文首
 北极星: DIRECTION-NOW §0-star · 用法 = Grok
-真源优先级: 本页三行 + #634 > 任何 HANDOFF-*.md > 聊天
+真源: GitHub Issue/PR/SHA/CI + 公网 tip。本页三行是索引。
 juanwan99/oneflow: 不当真源（已 Archive）
 ```
 
@@ -25,14 +26,15 @@ juanwan99/oneflow: 不当真源（已 Archive）
 卡面四行。**怎么跟业主说话不限。**
 
 1. **证据禁止进 PR。** 只贴 Issue 评论。
-2. **无部署权拒领。** DONE 必须 live SHA = origin/main。合了未部 = 没完。禁 `Closes` 部前关卡。
-3. **过门 = 公网能看见结果句。** 主管自签 PASS。业主抽检不对开新卡。写 1px 轨/选择器 = 退回。
+2. **无部署权拒领。** DONE 必须 live SHA = origin/main（docs-only 写明不部）。合了未部 = 没完。禁 `Closes` 部前关卡。
+3. **过门 = 公网能看见结果句。** 本窗对账后关。业主抽检不对开新卡。写 1px 轨/选择器 = 退回。
 4. **1 卡 1 PR。** CI/测/部的修补走原 PR。同卡续只在业主说还差。卡别拆太细：同层薄适配并一张。
-5. **聊天默认易失。** 约束下一窗的结论必须落 Issue 评论或本页/`EXPERIENCE`/`TOOLING-CATALOG`。
-6. **合与部默认本窗。** 执行者 = 业主正在说话的这扇 Grok 沙箱。禁 spawn 子 agent / Cursor 云 Task / ECS grok。
-7. **自循环。** 总线=合同 Issue（`## 派发`/`CANDIDATE`/`DEPLOYED`/五句）。执行者=本窗 Grok 沙箱。ECS 只部（ssh-ecs）。禁 mailbox / 第二账本。合了未部关卡打回。
+5. **聊天默认易失。** 约束下一窗必须落 Issue 评论或本页/`EXPERIENCE`/`TOOLING-CATALOG`。
+6. **本窗合一。** 开卡、改、测、合、部、收尾同一窗。禁主管/执行者两套编制。禁 spawn 子 agent / Cursor 云 Task。
+7. **工位分开。** 写码 `/home/ops/pico`。生产 `/opt/pico` 只 `prod-update`。禁在生产树改业务、禁 `docker compose` 当发布。
+8. **真源 = GitHub。** 总线=合同 Issue（`## 派发`/`CANDIDATE`/`DEPLOYED`/五句）。禁 mailbox / 把 ECS 当第二账本。合了未部关卡打回。
 
-失真 = 证据 PR / 合了报 DONE / 过门写控件 / 拆 PR / 凭聊天当真源。总管打回。
+失真 = 证据 PR / 合了报 DONE / 过门写控件 / 拆 PR / 凭聊天或磁盘当真源。
 
 ## 冻结令（卡面 · 仍有效至 2026-09-07）
 
@@ -40,7 +42,7 @@ juanwan99/oneflow: 不当真源（已 Archive）
 2. 同域第二张 `stamp-ok` = 废派。
 3. **`juanwan99/oneflow` 不当真源（已 Archive）。**
 4. **不改卡面四行形状**（结果/不准/过门/部署）。现况三行可刷。
-5. **流程以 EXPERIENCE §80–89 为准**（#634）：执行者=本窗 Grok 沙箱 · ECS 只部 · 主管闭环自签 PASS。旧「双沙箱额度切换 / Cursor 云 Task 执行者 / ECS grok 执行者」作废。
+5. **流程以 AGENTS 文首 + EXPERIENCE §45 §80 为准**：本窗合一 · GitHub 唯一真源 · 写码树/生产树分开。旧「主管/执行者编制 / 双沙箱 / Cursor 云 Task / ECS grok 执行者」作废。
 
 ## 架构法律（BINDING）
 
@@ -50,8 +52,9 @@ juanwan99/oneflow: 不当真源（已 Archive）
 ## 开窗顺序
 
 ```text
-STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
-→ 三行≠tip 先刷三行 · 有 stamp-ok 才领 · 无在飞则讨论不开卡 · 无收尾不准派下一张
+curl tip + GitHub 在飞 → EXPERIENCE（点名≤3）
+→ 三行≠tip/Issue 先刷三行（跟本卡 PR，禁止独立 PR）
+→ 无在飞则讨论不开卡 · 无收尾不准下一张
 ```
 
 ## 当前活动主线

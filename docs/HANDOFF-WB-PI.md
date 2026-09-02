@@ -16,7 +16,7 @@ RELATED:
 并行参考（非产品主仓）: https://github.com/juanwan99/aivia-workbench
 ```
 
-> **新窗总管 / 执行窗：先读本文全文，再读 TRUTH-FREEZE / STATE-NOW，再动手。**  
+> **新窗本窗合一：先读本文全文，再读 TRUTH-FREEZE / AGENTS 文首，再动手。STATE-NOW 是索引。**  
 > **宏观目标错了 = 整窗作废。**  
 > 本文是 **业主 2026-08-06 纠偏后的产品与架构交接**；与旧「Kimi 唯一核 / Dify 主门脸」冲突时，**以本文目标段为准，并尽快落 TRUTH-FREEZE v1.1**。
 

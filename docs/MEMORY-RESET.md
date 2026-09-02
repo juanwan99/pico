@@ -26,3 +26,6 @@
 | Pico 是本地 PDF 阅读器 / 办公投影器 / 交件监工 | **否** · 厚桥四层绝对禁止（#865 · LAW §2.9–12） |
 | 可以自搞一套体系 / 做重体系只要能跑 | **否** · 项目最高要求（#867 · LAW §0-supreme） |
 | 256k 窗 64k 就压是官方 compaction | **否** · 那是 Pico 把 reserve 抬到 192k 的硬帽 · 违法 |
+| 日常还要主管窗 + 执行窗 | **否** · 本窗合一（#869 · AGENTS 文首） |
+| STATE-NOW 压过 GitHub | **否** · 真源 = Issue/PR/SHA/CI + 公网 tip；STATE-NOW 是索引 |
+| 人在 ECS 就可以在 /opt/pico 改业务 | **否** · 写码 `/home/ops/pico`；生产树只 prod-update |
