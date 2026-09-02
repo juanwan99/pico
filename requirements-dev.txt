@@ -5,3 +5,5 @@ pytest-asyncio>=0.24,<1
 ruff==0.16.1
 # Sidecar B2 (#522): unit tests may launch headless Chromium when browsers are installed.
 playwright==1.52.0
+# PDF text-layer tests (#857). Same pin as requirements-ingest.txt.
+pypdfium2==5.13.0

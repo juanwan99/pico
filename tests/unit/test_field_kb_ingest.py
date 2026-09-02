@@ -63,6 +63,7 @@ def test_classify_convert_error_codes():
 def test_empty_convert_does_not_use_filename(monkeypatch):
     import ingest as mod
 
+    monkeypatch.setattr(mod, "_pdf_text_layer", lambda path: "")
     monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: "")
     title = "关于组织开展株洲市中小学教师人工智能素养市级培训的通知(1).pdf"
     out = ingest_bytes(filename=title, data=make_image_only_pdf(), title=title)
@@ -75,12 +76,51 @@ def test_empty_convert_does_not_use_filename(monkeypatch):
 def test_scan_pdf_route_is_page_ocr(monkeypatch):
     import ingest as mod
 
+    monkeypatch.setattr(mod, "_pdf_text_layer", lambda path: "")
     monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: "生成式AI赋能的教学设计")
     monkeypatch.setattr(mod, "_convert_path", lambda path: "SHOULD_NOT")
     out = ingest_bytes(filename="scan.pdf", data=make_image_only_pdf(), title="通知")
     assert out["ok"] is True
     assert out["engine"] == "rapidocr"
     assert "生成式AI" in out["slices"][0]["excerpt"]
+
+
+def test_pdf_text_layer_skips_ocr(monkeypatch):
+    import ingest as mod
+
+    called = {"ocr": 0}
+    monkeypatch.setattr(mod, "_pdf_text_layer", lambda path: "TOKEN HELLO PDF BODY")
+    monkeypatch.setattr(
+        mod, "_ocr_pdf_pages", lambda path: called.__setitem__("ocr", 1) or "OCR-HIT"
+    )
+    out = ingest_bytes(filename="notice.pdf", data=b"%PDF-1.3 x", title="notice.pdf")
+    assert called["ocr"] == 0
+    assert out["ok"] is True
+    assert out["engine"] == "pdfium-text"
+    blob = " ".join(s["excerpt"] for s in out["slices"])
+    assert "HELLO PDF BODY" in blob
+
+
+def test_pdf_text_layer_fixture_without_ocr(monkeypatch):
+    import pytest
+
+    pytest.importorskip("pypdfium2")
+    import ingest as mod
+
+    fixture = ROOT / "packages" / "field-kb-ingest" / "fixtures" / "text-layer.pdf"
+    if not fixture.is_file():
+        pytest.skip("text-layer.pdf fixture missing")
+    monkeypatch.setattr(
+        mod,
+        "_ocr_pdf_pages",
+        lambda path: (_ for _ in ()).throw(RuntimeError("OCR must not run")),
+    )
+    out = ingest_bytes(filename="text-layer.pdf", data=fixture.read_bytes(), title="text-layer.pdf")
+    assert out["ok"] is True
+    assert out["engine"] == "pdfium-text"
+    blob = " ".join(s["excerpt"] for s in out["slices"])
+    assert "PICO857-LANTERN-ORANGE-20260902" in blob
+    assert "PDF body" in blob
 
 
 def test_slices_headers_and_paragraphs():

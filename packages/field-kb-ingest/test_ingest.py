@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from ingest import (
     classify_convert_error,
     pdf_ocr_settings,
@@ -59,6 +61,7 @@ def test_classify_ocr_and_hf():
 def test_ingest_bytes_empty_md_does_not_use_filename(monkeypatch):
     import ingest as mod
 
+    monkeypatch.setattr(mod, "_pdf_text_layer", lambda path: "")
     monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: "")
     out = mod.ingest_bytes(
         filename="通知.pdf",
@@ -77,6 +80,7 @@ def test_ingest_bytes_title_only_markdown_is_unread(monkeypatch):
     import ingest as mod
 
     title = "通知.pdf"
+    monkeypatch.setattr(mod, "_pdf_text_layer", lambda path: "")
     monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: title)
     out = mod.ingest_bytes(filename=title, data=b"%PDF-1.3 x", title=title)
     assert out["ok"] is False
@@ -87,7 +91,7 @@ def test_ingest_bytes_title_only_markdown_is_unread(monkeypatch):
 def test_pdf_uses_page_ocr_not_docling(monkeypatch):
     import ingest as mod
 
-    called = {"ocr": 0, "docling": 0}
+    called = {"ocr": 0, "docling": 0, "layer": 0}
 
     def fake_ocr(path):
         called["ocr"] += 1
@@ -97,15 +101,58 @@ def test_pdf_uses_page_ocr_not_docling(monkeypatch):
         called["docling"] += 1
         return "SHOULD_NOT"
 
+    def fake_layer(path):
+        called["layer"] += 1
+        return ""
+
+    monkeypatch.setattr(mod, "_pdf_text_layer", fake_layer)
     monkeypatch.setattr(mod, "_ocr_pdf_pages", fake_ocr)
     monkeypatch.setattr(mod, "_convert_path", fake_docling)
     out = mod.ingest_bytes(filename="scan.pdf", data=b"%PDF-1.3 x", title="通知")
-    assert called == {"ocr": 1, "docling": 0}
+    assert called == {"ocr": 1, "docling": 0, "layer": 1}
     assert out["ok"] is True
     assert out["engine"] == "rapidocr"
     blob = " ".join(s["excerpt"] for s in out["slices"])
     assert "人工智能素养" in blob
     assert all("rapidocr" in (s.get("tags") or []) for s in out["slices"])
+
+
+def test_pdf_text_layer_skips_ocr(monkeypatch):
+    import ingest as mod
+
+    called = {"ocr": 0}
+
+    monkeypatch.setattr(mod, "_pdf_text_layer", lambda path: "TOKEN HELLO PDF BODY")
+    monkeypatch.setattr(
+        mod, "_ocr_pdf_pages", lambda path: called.__setitem__("ocr", 1) or "OCR-HIT"
+    )
+    out = mod.ingest_bytes(filename="notice.pdf", data=b"%PDF-1.3 x", title="notice.pdf")
+    assert called["ocr"] == 0
+    assert out["ok"] is True
+    assert out["engine"] == "pdfium-text"
+    blob = " ".join(s["excerpt"] for s in out["slices"])
+    assert "HELLO PDF BODY" in blob
+    assert "OCR-HIT" not in blob
+    assert all("pdfium" in (s.get("tags") or []) for s in out["slices"])
+
+
+def test_pdf_text_layer_fixture_without_ocr(monkeypatch):
+    import pytest
+
+    pytest.importorskip("pypdfium2")
+    import ingest as mod
+
+    fixture = Path(__file__).resolve().parent / "fixtures" / "text-layer.pdf"
+    raw = fixture.read_bytes()
+    monkeypatch.setattr(
+        mod, "_ocr_pdf_pages", lambda path: (_ for _ in ()).throw(RuntimeError("OCR must not run"))
+    )
+    out = mod.ingest_bytes(filename="text-layer.pdf", data=raw, title="text-layer.pdf")
+    assert out["ok"] is True
+    assert out["engine"] == "pdfium-text"
+    blob = " ".join(s["excerpt"] for s in out["slices"])
+    assert "PICO857-LANTERN-ORANGE-20260902" in blob
+    assert "PDF body" in blob
 
 
 def test_office_still_docling(monkeypatch):
