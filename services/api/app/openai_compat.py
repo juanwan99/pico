@@ -1251,7 +1251,15 @@ async def chat_completions(
                 named_items = await excerpts_for_conversation(
                     principal, conversation_id or "", named_session, settings
                 )
+                from app.edu_files import uploads_for_conversation
+
+                upload_items = await uploads_for_conversation(
+                    named_session, principal, conversation_id or ""
+                )
             prompt = inject_named_school_materials(prompt, named_items)
+            from app.edu_files import inject_conversation_uploads
+
+            prompt = inject_conversation_uploads(prompt, upload_items)
         except Exception:
             logger.exception("named school materials inject failed")
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 12000) or 12000)

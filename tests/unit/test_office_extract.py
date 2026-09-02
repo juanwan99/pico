@@ -134,3 +134,17 @@ def test_bad_xlsx() -> None:
 def test_unsupported_xls() -> None:
     got = extract_office("old.xls", b"abcd")
     assert got["status"] == "unsupported"
+    assert "另存为" in (got.get("error") or "")
+
+
+def test_legacy_doc_asks_resave() -> None:
+    got = extract_office("计划.doc", b"OLE")
+    assert got["status"] == "unsupported"
+    assert "另存为" in (got.get("error") or "")
+    assert ".docx" in (got.get("error") or "")
+
+
+def test_pdf_fallback_is_unread_not_resave_docx() -> None:
+    got = extract_office("扫描.pdf", b"%PDF-1.4")
+    assert got["status"] == "unread"
+    assert "PDF" in (got.get("error") or "")

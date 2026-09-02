@@ -25,9 +25,12 @@ function picoKey() {
 
 const INGEST_EXT = new Set([
   '.docx',
+  '.doc',
   '.pdf',
   '.pptx',
+  '.ppt',
   '.xlsx',
+  '.xls',
   '.md',
   '.txt',
   '.csv',

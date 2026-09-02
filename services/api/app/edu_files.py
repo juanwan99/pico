@@ -11,6 +11,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pico_orchestrator.meili_kb import PARSE_EXT, parse_office_bytes, project_material_artifact
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal, require_any_scope
 from app.db import ArtifactRow, TaskRow, new_id, session_factory
@@ -24,6 +26,12 @@ KIND_SRC = "edu_office"
 KIND_EXCERPT = "edu_excerpt"
 TEXT_KINDS = frozenset({"md", "txt", "json", "csv", "tsv", "html", "htm"})
 RESERVED_CONVO = frozenset({"new", "search"})
+EDU_READ_PREFIX = "edu-read ·"
+PIXEL_KINDS = frozenset({"png", "jpg", "jpeg", "webp", "gif"})
+PAPERCLIP_HINT = "本轮回形针文件（聊天上传，不是学校库）："
+_MAX_UPLOAD_INJECT = 6
+_MAX_UPLOAD_EXCERPT = 2000
+_MAX_UPLOAD_BLOCK = 6000
 
 
 class FileJsonIn(BaseModel):
@@ -145,6 +153,111 @@ def _payload(file_id: str | None, extract: dict[str, Any]) -> dict[str, Any]:
         "text": extract.get("text") or "",
         "error": extract.get("error"),
     }
+
+
+def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None) -> str:
+    """Put this-conversation paperclip extracts on the user turn. Empty → unchanged."""
+    named = [row for row in (items or []) if isinstance(row, dict)]
+    if not named:
+        return prompt
+    lines = [PAPERCLIP_HINT]
+    for row in named[:_MAX_UPLOAD_INJECT]:
+        title = str(row.get("title") or row.get("filename") or "文件").strip() or "文件"
+        excerpt = str(row.get("excerpt") or "").strip()[:_MAX_UPLOAD_EXCERPT]
+        error = str(row.get("error") or "").strip()
+        art_id = str(row.get("id") or row.get("artifact_id") or "").strip()
+        id_note = f"（artifact_id {art_id}）" if art_id else ""
+        if excerpt:
+            lines.append(f"- 《{title}》{id_note}\n{excerpt}")
+        elif error:
+            lines.append(f"- 《{title}》{id_note} {error}")
+        else:
+            lines.append(f"- 《{title}》{id_note} 没抽出正文。")
+    block = "\n".join(lines)
+    if len(block) > _MAX_UPLOAD_BLOCK:
+        block = block[:_MAX_UPLOAD_BLOCK].rstrip() + "…"
+    return block + "\n\n" + str(prompt or "")
+
+
+def _excerpt_from_sidecar(row: ArtifactRow | None) -> tuple[str, str]:
+    if row is None or not row.inline:
+        return "", ""
+    try:
+        parsed = json.loads(row.inline)
+    except json.JSONDecodeError:
+        return "", ""
+    if not isinstance(parsed, dict):
+        return "", ""
+    text = str(parsed.get("text") or "").strip()
+    error = str(parsed.get("error") or "").strip()
+    return text, error
+
+
+async def uploads_for_conversation(
+    session: AsyncSession,
+    principal: Principal,
+    conversation_id: str,
+) -> list[dict[str, Any]]:
+    """Paperclip /v1/files rows for this conversation. Not generated deliverables."""
+    cid = str(conversation_id or "").strip()
+    if not cid or cid in RESERVED_CONVO:
+        return []
+    src_rows = (
+        await session.execute(
+            select(ArtifactRow)
+            .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+            .where(
+                TaskRow.school_id == principal.school_id,
+                TaskRow.membership_id == principal.membership_id,
+                TaskRow.conversation_id == cid,
+                TaskRow.title.startswith(EDU_READ_PREFIX),
+                ArtifactRow.kind.notin_((KIND_EXCERPT, "kb_text", *PIXEL_KINDS)),
+            )
+            .order_by(ArtifactRow.created_at.desc())
+            .limit(_MAX_UPLOAD_INJECT * 3)
+        )
+    ).scalars().all()
+    seen_titles: set[str] = set()
+    picked: list[ArtifactRow] = []
+    for src in src_rows:
+        title = str(src.title or "").strip()
+        kind = str(src.kind or "").strip().lower()
+        if kind in PIXEL_KINDS:
+            continue
+        key = title.lower() or src.id
+        if key in seen_titles:
+            continue
+        seen_titles.add(key)
+        picked.append(src)
+        if len(picked) >= _MAX_UPLOAD_INJECT:
+            break
+    if not picked:
+        return []
+    task_ids = [row.task_id for row in picked]
+    excerpt_rows = (
+        await session.execute(
+            select(ArtifactRow).where(
+                ArtifactRow.task_id.in_(task_ids),
+                ArtifactRow.kind == KIND_EXCERPT,
+            )
+        )
+    ).scalars().all()
+    excerpt_by_task = {row.task_id: row for row in excerpt_rows}
+    out: list[dict[str, Any]] = []
+    for src in picked:
+        text, error = _excerpt_from_sidecar(excerpt_by_task.get(src.task_id))
+        if not text and (src.content_encoding or "utf8") != "base64":
+            text = str(src.inline or "").strip()[:_MAX_UPLOAD_EXCERPT]
+        out.append(
+            {
+                "id": src.id,
+                "title": str(src.title or "文件"),
+                "kind": src.kind,
+                "excerpt": text[:_MAX_UPLOAD_EXCERPT],
+                "error": error,
+            }
+        )
+    return out
 
 
 async def resolve_owned_folder_id(principal: Principal, raw: str | None) -> str:

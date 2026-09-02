@@ -59,8 +59,15 @@ def extract_office(filename: str, data: bytes) -> dict:
         return _extract_docx(name, data)
     if ext == "pptx":
         return _extract_pptx(name, data)
-    if ext in {"xls", "doc", "pdf"}:
-        return _fail(name, ext, "unsupported", "这种格式抽不出正文，请另存 xlsx 或 docx")
+    if ext in {"xls", "doc", "ppt"}:
+        return _fail(
+            name,
+            ext,
+            "unsupported",
+            "旧版 .doc/.ppt/.xls 打不开也转不了。请另存为 .docx/.pptx/.xlsx 再试。",
+        )
+    if ext == "pdf":
+        return _fail(name, ext, "unread", "这份 PDF 没抽出正文。")
     return _fail(name, ext or "bin", "unsupported", "不支持这种文件")
 
 
