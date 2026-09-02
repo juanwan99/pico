@@ -14,7 +14,6 @@ from pico_orchestrator.meili_kb import (
     PARSE_EXT,
     parse_office_bytes,
     project_material_artifact,
-    render_pdf_page_pngs,
 )
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
@@ -135,24 +134,7 @@ def extract_for_kb(filename: str, data: bytes) -> dict[str, Any]:
         office = extract_office(filename, data)
         if office.get("status") == "ok" and str(office.get("text") or "").strip():
             return office
-        pages: list[bytes] = []
-        if ext == "pdf":
-            pages = render_pdf_page_pngs(data)
-        if pages:
-            n = len(pages)
-            return {
-                "filename": (filename or "file")[:180],
-                "kind": ext,
-                "status": "unread",
-                "headline": f"{n} 页",
-                "rows": None,
-                "cols": None,
-                "sheets": [],
-                "text": "",
-                "error": None,
-                "page_count": n,
-                "page_pngs": pages,
-            }
+        # LAW #865: do not raster PDF into a Pico reader. Ledger keeps the bytes.
         return {
             "filename": (filename or "file")[:180],
             "kind": ext,
@@ -185,11 +167,10 @@ def _payload(file_id: str | None, extract: dict[str, Any]) -> dict[str, Any]:
 
 
 def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None) -> str:
-    """Put this-conversation paperclip extracts on the user turn. Empty → unchanged.
+    """Paperclip names + ledger ids only. Never a local PDF/office reader.
 
-    Filename + real excerpt only. Never weld 没抽出 / 读不了 / 请截图 into the
-    teacher turn. Scan pages travel on images[]; legacy .doc honesty stays on
-    the read-tool observation, not here.
+    LAW #865: no excerpt, no OCR, no 「没抽出」weld. The model sees that a file
+    arrived; it decides whether to open it. Empty → unchanged.
     """
     named = [row for row in (items or []) if isinstance(row, dict)]
     if not named:
@@ -197,13 +178,9 @@ def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None)
     lines = [PAPERCLIP_HINT]
     for row in named[:_MAX_UPLOAD_INJECT]:
         title = str(row.get("title") or row.get("filename") or "文件").strip() or "文件"
-        excerpt = str(row.get("excerpt") or "").strip()[:_MAX_UPLOAD_EXCERPT]
         art_id = str(row.get("id") or row.get("artifact_id") or "").strip()
         id_note = f"（artifact_id {art_id}）" if art_id else ""
-        if excerpt:
-            lines.append(f"- 《{title}》{id_note}\n{excerpt}")
-        else:
-            lines.append(f"- 《{title}》{id_note}")
+        lines.append(f"- 《{title}》{id_note}")
     block = "\n".join(lines)
     if len(block) > _MAX_UPLOAD_BLOCK:
         block = block[:_MAX_UPLOAD_BLOCK].rstrip() + "…"
@@ -301,27 +278,14 @@ def iter_native_file_parts(messages: list[Any]) -> list[dict[str, Any]]:
 
 
 def images_from_native_pdf_parts(messages: list[Any]) -> list[dict[str, Any]]:
-    """Raster LibreChat native PDF parts onto Pi images[]. Not a Pico PDF kernel.
+    """Forbidden thick bridge: do not raster PDF into Pi images[].
 
-    Pi 0.84.4 prompt() has no DocumentContent; application/pdf as ImageContent
-    is dropped. Pages go through the existing vision channel.
+    LAW #865: local PDF reader is illegal. Pi 0.84.4 has no DocumentContent;
+    that is an upstream gap, not a license to invent a Pico PDF kernel.
+    Filenames stay on the user turn via _content_text / inject.
     """
-    from pico_orchestrator.vision import MAX_CHAT_IMAGES, png_bytes_to_image
-
-    out: list[dict[str, Any]] = []
-    for part in iter_native_file_parts(messages):
-        name = _part_filename(part)
-        data = _file_data_bytes(part)
-        if not data or not _looks_pdf_part(part, name, data):
-            continue
-        for png in render_pdf_page_pngs(data):
-            item = png_bytes_to_image(png)
-            if item is None:
-                continue
-            out.append({**item, "source": "pdf-page"})
-            if len(out) >= MAX_CHAT_IMAGES:
-                return out
-    return out
+    del messages
+    return []
 
 
 async def uploads_for_conversation(
@@ -441,53 +405,8 @@ async def ensure_paperclip_pdf_pages(
     conversation_id: str,
     items: list[dict[str, Any]] | None,
 ) -> None:
-    """Re-render unread paperclip PDFs into this-turn vision. Upload worker ≠ chat worker."""
-    cid = str(conversation_id or "").strip()
-    if not cid or cid in RESERVED_CONVO:
-        return
-    named = [row for row in (items or []) if isinstance(row, dict)]
-    if not named:
-        return
-    from pico_orchestrator.vision import conversation_images, remember_conversation_png
-
-    from app.artifact_store import decode_artifact_payload
-
-    if any(str(img.get("source") or "") == "pdf-page" for img in conversation_images(cid)):
-        return
-    for row in named:
-        title = str(row.get("title") or "")
-        if not title.lower().endswith(".pdf"):
-            continue
-        if str(row.get("excerpt") or "").strip():
-            continue
-        art_id = str(row.get("id") or "").strip()
-        if not art_id:
-            continue
-        src = await session.get(ArtifactRow, art_id)
-        if src is None:
-            continue
-        task = await session.get(TaskRow, src.task_id)
-        if (
-            task is None
-            or task.school_id != principal.school_id
-            or task.membership_id != principal.membership_id
-            or str(task.conversation_id or "") != cid
-        ):
-            continue
-        try:
-            raw = decode_artifact_payload(src.inline, src.content_encoding)
-        except Exception as exc:  # noqa: BLE001 — unread stays honest
-            logger.warning("paperclip pdf decode failed: %s", type(exc).__name__)
-            continue
-        if not isinstance(raw, bytes) or not raw:
-            continue
-        pages = render_pdf_page_pngs(raw)
-        if not pages:
-            continue
-        row["page_count"] = len(pages)
-        row["error"] = ""
-        for png in pages:
-            remember_conversation_png(png, conversation_id=cid, source="pdf-page")
+    """LAW #865: no local PDF reader. Kept as a no-op so callers stay stable."""
+    del session, principal, conversation_id, items
 
 
 async def resolve_owned_folder_id(principal: Principal, raw: str | None) -> str:
@@ -677,7 +596,6 @@ async def post_edu_file(
     filename, data, folder_raw = await _read_upload(request)
     folder_id = await resolve_owned_folder_id(principal, folder_raw)
     extract = extract_for_kb(filename, data)
-    pages = [p for p in (extract.get("page_pngs") or []) if isinstance(p, bytes)]
     file_id = await persist_edu_file(
         principal,
         filename=filename,
@@ -686,12 +604,6 @@ async def post_edu_file(
         conversation_id=x_conversation_id,
         folder_id=folder_id,
     )
-    cid = (x_conversation_id or "").strip()
-    if cid and cid not in RESERVED_CONVO:
-        from pico_orchestrator.vision import remember_conversation_png
-
-        for png in pages:
-            remember_conversation_png(png, conversation_id=cid, source="pdf-page")
     return _payload(file_id, extract)
 
 

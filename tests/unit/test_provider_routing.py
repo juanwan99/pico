@@ -106,25 +106,21 @@ def test_owned_by_is_honest() -> None:
 
 
 def test_runtime_policy_dual_mode_contract() -> None:
-    """Pico 快速 = flash; Pico 深度 = reasoner; thinking differs."""
+    """Pico 快速 = flash; Pico 深度 = reasoner. LAW #865: no Pico window cap."""
     fast = runtime_policy_for_model("pico-fast")
     deep = runtime_policy_for_model("pico-deep")
     assert fast["ui_model"] == "pico-fast"
     assert deep["ui_model"] == "pico-deep"
     assert fast["backend_model"] == "deepseek-v4-flash"
     assert deep["backend_model"] == "deepseek-reasoner"
-    # fast: thinking off, tighter budget; deep: thinking on, breaker armed.
+    # Flash thinking-off is a DeepSeek empty-200 quirk, not a 12-step/128k cap.
     assert fast["thinking"] is False
     assert deep["thinking"] is True
-    assert fast["max_steps"] < deep["max_steps"]
-    assert fast["max_tokens"] < deep["max_tokens"]
-    assert fast["max_context"] == 128000
-    assert deep["max_context"] == 256000
-    assert fast["max_tokens"] != 128000
-    assert deep["max_tokens"] != 256000
+    assert fast["max_steps"] == deep["max_steps"] == 24
+    assert fast["max_tokens"] == deep["max_tokens"] == 32000
+    assert fast["max_context"] == deep["max_context"] == 256000
     assert fast["fallback"] == "deepseek-v4-flash"
     assert deep["fallback"] == "deepseek-reasoner"
-    # Direct HTTPS must send this: v4-flash thinks by default and can return 200 empty.
     assert thinking_extra_body("pico-fast") == {"thinking": {"type": "disabled"}}
     assert thinking_extra_body("pico-deep") == {"thinking": {"type": "enabled"}}
     assert thinking_extra_body("pico-deep", thinking=False) == {

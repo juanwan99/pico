@@ -76,7 +76,9 @@ def test_short_tier_stays_fast() -> None:
     delivery = caps_for_tier("delivery")
     assert short.max_seconds == SHORT_MAX_SECONDS == 120
     assert short.max_seconds < delivery.max_seconds
-    assert short.max_tokens < delivery.max_tokens
+    # LAW #865: short is a wall-clock lane, not a smaller model window.
+    assert short.max_tokens == delivery.max_tokens == 32_000
+    assert short.max_context == delivery.max_context == 256_000
 
 
 def test_settings_delivery_and_short_caps() -> None:
@@ -133,6 +135,7 @@ def test_spend_caps_public_shape() -> None:
 
 
 def test_c1_fast_context_is_128k_not_output() -> None:
+    """#865: fast/short use the real 256k window. Tokens ≠ context."""
     short = caps_for_tier("short")
     fast = spend_caps_public(
         delivery_seconds=900,
@@ -140,14 +143,13 @@ def test_c1_fast_context_is_128k_not_output() -> None:
         delivery_steps=24,
         delivery_retries=2,
         short_seconds=120,
-        short_tokens=8000,
+        short_tokens=32000,
     )["fast"]
-    assert short.max_context == 128_000
-    assert fast["max_context"] == 128_000
-    assert short.max_tokens == 8_000
-    assert fast["max_tokens"] == 8_000
-    assert short.max_tokens != 128_000
-    assert short.max_context != short.max_tokens
+    assert short.max_context == 256_000
+    assert fast["max_context"] == 256_000
+    assert short.max_tokens == 32_000
+    assert fast["max_tokens"] == 32_000
+    assert short.max_tokens != short.max_context
 
 
 def test_c2_deep_context_is_256k_not_output() -> None:

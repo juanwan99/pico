@@ -728,8 +728,7 @@ def _caps_with_images(caps: Any, images: list[dict[str, Any]] | None) -> Any:
 def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
     """Apply the dual-mode runtime policy onto RunCaps (Pico 快速 / Pico 深度).
 
-    - pico-fast: deepseek-v4-flash, thinking off, tighter steps/tokens.
-    - pico-deep: deepseek-reasoner, thinking on + circuit breaker armed.
+    LAW #865: lanes do not hard-cap the upstream window. GPT brain thinks.
     """
     from dataclasses import replace as _dc_replace
 

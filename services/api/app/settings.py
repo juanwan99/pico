@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     pico_run_max_retries: int = 2
     # Short / direct-model chat: keep snappy day-use turns.
     pico_run_short_max_seconds: int = 120
-    pico_run_short_max_tokens: int = 8000
+    pico_run_short_max_tokens: int = 32_000
     # Durable long jobs (package B): wall cap for staged jobs / long agent when detach on.
     # Must pair with detach+checkpoint — never “only raise this to 8h.”
     pico_run_durable_max_seconds: int = 3600
@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     pico_chat_max_concurrent: int = 2
     # Reject (do not silent-truncate) user prompts longer than this many chars.
     # 12k was a DeepSeek-era cost cap; GPT via New API has a 128k–256k window.
-    pico_chat_max_prompt_chars: int = 100000
+    pico_chat_max_prompt_chars: int = 256000
     pico_allowed_models: str = ""
 
     pico_api_host: str = "0.0.0.0"

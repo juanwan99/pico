@@ -4,7 +4,7 @@
 DATE: 2026-09-02
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #860 T-WORKBENCH-READ-ATTACH（同卡续 · 停焊读不了 · 原件接线）
+在飞: #865 T-FORBID-THICK-BRIDGE（禁止本地 PDF 核 / 办公投影核 / 交件监工 / 硬帽截窗）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 产品 SHA 以 curl tip 为准（磁盘三行随本 PR 刷）
 阻塞: 无

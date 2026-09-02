@@ -23,3 +23,5 @@
 | CI 红就新开 PR | **否** · 原 PR 补 |
 | Cloud Agent 靠公网 22 / egress 白名单进 ECS | **否** · Tailscale MagicDNS · `ssh ecs`（ops@aliyun-hy）· EXPERIENCE §17–19 |
 | 出图还靠硅基流动 / 再要 SILICONFLOW 出图钥 | **否** · 业主已否决 · 真源 = New API 反代多 Gemini 账户（§28 · #752） · Pico 只打一个网关口 |
+| Pico 是本地 PDF 阅读器 / 办公投影器 / 交件监工 | **否** · 厚桥四层绝对禁止（#865 · LAW §2.9–12） |
+| 256k 窗 64k 就压是官方 compaction | **否** · 那是 Pico 把 reserve 抬到 192k 的硬帽 · 违法 |
