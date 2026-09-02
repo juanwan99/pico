@@ -39,10 +39,9 @@ def make_image_only_pdf() -> bytes:
 
 
 def make_visible_scan_pdf(token: str = "PICO860-GEO-SCAN") -> bytes:
-    """Image-only PDF with painted glyphs (no text layer). Requires PIL + fpdf2."""
+    """Image-only PDF with painted glyphs (no text layer). Pillow PDF encoder, not fpdf."""
     from io import BytesIO
 
-    from fpdf import FPDF
     from PIL import Image, ImageDraw, ImageFont
 
     img = Image.new("RGB", (800, 1000), "white")
@@ -53,13 +52,8 @@ def make_visible_scan_pdf(token: str = "PICO860-GEO-SCAN") -> bytes:
         font = ImageFont.load_default()
     draw.text((40, 80), token, fill=(0, 0, 0), font=font)
     buf = BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    pdf = FPDF(unit="pt", format=(800, 1000))
-    pdf.set_auto_page_break(False)
-    pdf.add_page()
-    pdf.image(buf, x=0, y=0, w=800, h=1000)
-    return bytes(pdf.output())
+    img.save(buf, format="PDF", resolution=72.0)
+    return buf.getvalue()
 
 
 def test_scan_pdf_fixture_has_no_text_layer():

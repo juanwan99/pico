@@ -488,7 +488,6 @@ def test_legacy_doc_lands_unread_not_dropped(client: TestClient) -> None:
 def _visible_scan_pdf(token: str) -> bytes:
     from io import BytesIO
 
-    from fpdf import FPDF
     from PIL import Image, ImageDraw, ImageFont
 
     img = Image.new("RGB", (800, 1000), "white")
@@ -499,13 +498,8 @@ def _visible_scan_pdf(token: str) -> bytes:
         font = ImageFont.load_default()
     draw.text((40, 80), token, fill=(0, 0, 0), font=font)
     buf = BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    pdf = FPDF(unit="pt", format=(800, 1000))
-    pdf.set_auto_page_break(False)
-    pdf.add_page()
-    pdf.image(buf, x=0, y=0, w=800, h=1000)
-    return bytes(pdf.output())
+    img.save(buf, format="PDF", resolution=72.0)
+    return buf.getvalue()
 
 
 def test_scan_pdf_paperclip_pages_go_to_vision(client: TestClient) -> None:
@@ -517,7 +511,6 @@ def test_scan_pdf_paperclip_pages_go_to_vision(client: TestClient) -> None:
 
     pytest.importorskip("pypdfium2")
     pytest.importorskip("PIL")
-    pytest.importorskip("fpdf")
 
     from app.auth import Principal
     from app.db import ArtifactRow, session_factory
