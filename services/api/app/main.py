@@ -49,6 +49,7 @@ from app.edu_sso import router as edu_sso_router
 from app.gateway_status import account_soft_action, gateway_status
 from app.html_pages import router as html_pages_router
 from app.kb_rebuild import rebuild_materials
+from app.llm_pass_router import router as llm_pass_router
 from app.my_files import router as my_files_router
 from app.openai_compat import router as openai_compat_router
 from app.rate_limit import ChatRateLimitMiddleware
@@ -150,6 +151,7 @@ app.include_router(edu_sso_router)
 app.include_router(edu_school_router)
 app.include_router(my_files_router)
 app.include_router(html_pages_router)
+app.include_router(llm_pass_router)
 
 
 # ----- meta / auth -----

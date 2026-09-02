@@ -399,6 +399,42 @@ async def uploads_for_conversation(
     return out
 
 
+async def native_files_from_rows(
+    session: AsyncSession,
+    rows: list[dict[str, Any]] | None,
+) -> list[Any]:
+    """Ledger originals for GPT input_file. Skip legacy Office and empty bytes."""
+    from pico_orchestrator.llm_file_pass import NativeFile, accept_native
+
+    from app.artifact_store import decode_artifact_payload
+
+    out: list[NativeFile] = []
+    seen: set[str] = set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        art_id = str(row.get("id") or row.get("workspace_artifact_id") or "").strip()
+        title = str(
+            row.get("title") or row.get("workspace_title") or row.get("filename") or "file"
+        )
+        if not art_id or art_id in seen:
+            continue
+        src = await session.get(ArtifactRow, art_id)
+        if src is None:
+            continue
+        try:
+            raw = decode_artifact_payload(src.inline, src.content_encoding)
+        except Exception as exc:  # noqa: BLE001 — unread stays honest
+            logger.warning("native file decode skipped id=%s err=%s", art_id, type(exc).__name__)
+            continue
+        item = accept_native(str(src.title or title), raw)
+        if item is None:
+            continue
+        seen.add(art_id)
+        out.append(item)
+    return out
+
+
 async def ensure_paperclip_pdf_pages(
     session: AsyncSession,
     principal: Principal,
