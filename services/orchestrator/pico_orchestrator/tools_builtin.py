@@ -337,9 +337,20 @@ def _read_file_for_model(row: dict[str, Any]) -> dict[str, Any]:
     )
     if not binary:
         body = out.get("content")
-        if isinstance(body, str) and len(body) > MAX_CONTENT_CHARS:
-            out["content"] = body[:MAX_CONTENT_CHARS]
-            out["truncated"] = True
+        if isinstance(body, str):
+            title = str(out.get("title") or "")
+            if (
+                kind in {"html", "htm", "page"}
+                or title.lower().endswith((".html", ".htm"))
+                or "data:image/" in body
+            ):
+                from pico_orchestrator.html_ledger_images import strip_embedded_data_urls
+
+                body = strip_embedded_data_urls(body)
+                out["content"] = body
+            if len(body) > MAX_CONTENT_CHARS:
+                out["content"] = body[:MAX_CONTENT_CHARS]
+                out["truncated"] = True
         return out
     out.pop("content", None)
     out.pop("content_base64", None)
@@ -705,31 +716,36 @@ def _workspace_handlers(
         marker = _marker_arg(args)
         body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
         from pico_orchestrator.html_ledger_images import (
+            canonicalize_pico_artifact_refs,
             collect_pico_artifact_refs,
-            image_data_url,
+            is_image_bytes,
             parse_image_artifact_ids,
-            rewrite_pico_artifact_srcs,
         )
 
         try:
             index_ids = parse_image_artifact_ids(args.get("image_artifact_ids"))
         except TypeError as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
-        resolved: dict[str, str] = {}
-        for aid in collect_pico_artifact_refs(body or "", index_ids):
+        # Keep pico-artifact:<id> on the ledger. Inlining data: at write turned
+        # six PNGs into a 12MB utf8 row; GET /v1/tasks then froze 结果区 chips.
+        body = canonicalize_pico_artifact_refs(body or "", index_ids)
+        landed: list[str] = []
+        skipped: list[str] = []
+        for aid in collect_pico_artifact_refs(body, []):
             row = await store.read(principal, artifact_id=aid, title=None)
             if row is None:
+                skipped.append(aid)
                 continue
             try:
                 blob = _artifact_bytes(row)
             except ToolError:
+                skipped.append(aid)
                 continue
-            url = image_data_url(blob)
-            if url:
-                resolved[aid] = url
-        body, images_meta = rewrite_pico_artifact_srcs(
-            body or "", resolved=resolved, index_ids=index_ids
-        )
+            if is_image_bytes(blob):
+                landed.append(aid)
+            else:
+                skipped.append(aid)
+        images_meta = {"landed": landed, "skipped": skipped}
         try:
             raw = build_html_document(
                 title=title,
@@ -2072,6 +2088,7 @@ def build_default_gateway(
                 "Read one Artifact owned by the current membership by id or title. "
                 "Text comes back as content. png/jpg/office/pdf are binary: "
                 "only id, title, kind, size — no pixels or base64. "
+                "HTML drops embedded data: image payloads. "
                 "Pass the artifact id to a document tool to embed."
             ),
             handler=read_file,
@@ -2110,7 +2127,8 @@ def build_default_gateway(
                 "ECharts / KaTeX, no https or //cdn images, no "
                 "window.THREE / new Chart / echarts.init. To embed a ledger picture, "
                 "set img src to pico-artifact:<artifact_id> (or pico-artifact:0 with "
-                "image_artifact_ids). The tool inlines data: URLs. Do not paste base64. "
+                "image_artifact_ids). Pico inlines data: URLs when the page is opened "
+                "or downloaded. Do not paste base64. "
                 "A missing id skips that picture; the page still lands. "
                 "The tool fails if the page still needs the network or those engines. "
                 "Result includes an observation of what landed. ok is not finished. "

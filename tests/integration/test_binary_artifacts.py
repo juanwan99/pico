@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import sys
@@ -150,6 +151,10 @@ def test_generate_and_download_bytes_safe(
     assert art["content_sha256"] == result["content_sha256"]
     if result["content_encoding"] == "base64":
         assert art["inline"] is None
+    elif ext == ".html":
+        # Vendored Pico CSS already exceeds the task-list inline cap.
+        assert art["inline"] is None
+        assert int(art.get("byte_size") or 0) > 8192
 
 
 def test_office_preview_returns_content_box_html(client) -> None:
@@ -201,3 +206,70 @@ def test_text_workspace_write_still_utf8(client) -> None:
         headers=headers,
     )
     assert content.content == b"hello-utf8"
+
+
+TINY_PNG = (
+    b"\x89PNG\r\n\x1a\n"
+    b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02"
+    b"\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
+    b"\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+def test_html_open_inlines_png_task_list_stays_small(client) -> None:
+    from app.artifact_store import LedgerArtifactStore
+    from app.auth import Principal
+    from app.db import session_factory
+
+    headers = _headers(client)
+    principal = Principal(
+        school_id="school-a",
+        membership_id="member-a",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=9999999999,
+        raw={},
+    )
+
+    async def _png() -> dict:
+        store = LedgerArtifactStore(session_factory())
+        return await store.write(
+            principal, title="cover.png", content=TINY_PNG, kind="png"
+        )
+
+    pic = asyncio.run(_png())
+    aid = pic["artifact_id"]
+    created = _invoke(
+        client,
+        headers,
+        "generate_html_document",
+        {
+            "title": "deck.html",
+            "marker": "LEDGER-IMG",
+            "body": (
+                "<!DOCTYPE html><html><body>"
+                f'<img src="pico-artifact:{aid}" alt="cover" />'
+                "<button type='button'>ok</button>"
+                "</body></html>"
+            ),
+        },
+    )
+    assert created.status_code == 200, created.text
+    result = created.json()["result"]
+    html_id = result["artifact_id"]
+    assert result["images"]["landed"] == [aid]
+
+    task = client.get(f"/v1/tasks/{result['task_id']}", headers=headers)
+    assert task.status_code == 200, task.text
+    listed = next(item for item in task.json()["artifacts"] if item["id"] == html_id)
+    assert listed["inline"] is None
+    assert int(listed["byte_size"] or 0) > 8192
+
+    opened = client.get(f"/v1/artifacts/{html_id}/content", headers=headers)
+    assert opened.status_code == 200, opened.text
+    body = opened.text
+    assert "data:image/png;base64," in body
+    assert f"pico-artifact:{aid}" not in body
+    assert "jsdelivr" not in body
+    assert "https://cdn" not in body
