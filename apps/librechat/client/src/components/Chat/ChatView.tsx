@@ -226,55 +226,55 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
           >
           <Presentation>
             <div className="relative flex h-full w-full flex-col">
-              {!isLandingPage && (
-                <>
-                  <Header />
-                  <TaskRunBar
-                    isSubmitting={isSubmitting}
-                    model={ledger.run?.model}
-                    statusLabel={ledger.statusLabel}
-                    completedLabel={
-                      // Terminal ledger labels always surface (even if stream isSubmitting).
-                      ledger.statusLabel &&
-                      (ledger.statusLabel.startsWith('已完成') ||
-                        ledger.statusLabel.startsWith('失败') ||
-                        ledger.statusLabel.startsWith('已停止'))
-                        ? ledger.statusLabel
-                        : null
-                    }
-                    canCancel={canCancelTask}
-                    cancelling={ledger.cancelling}
-                    onCancel={() => void ledger.cancelRun(cancellableRunId)}
-                    canRerun={['failed', 'succeeded', 'cancelled'].includes(
-                      ledger.run?.status || '',
-                    )}
-                    rerunning={ledger.rerunning}
-                    onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
-                    processHint={
-                      waitingAsk
-                        ? '在等你选'
-                        : ledger.processHint ||
-                          (isSubmitting ? '正在检索或作答' : null)
-                    }
-                    waitingAsk={waitingAsk}
-                  />
-                  {ledger.error ? (
-                    <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
-                      账本：{ledger.error}
-                    </div>
-                  ) : null}
-                  <ChangeConfirmBanner taskId={ledger.task?.id} onChanged={ledger.refresh} />
-                </>
-              )}
               <div className="flex min-h-0 flex-1 flex-row">
                 <div
                   className={cn(
-                    'flex min-w-0 flex-1 flex-col',
+                    'relative flex min-w-0 flex-1 flex-col',
                     isLandingPage
                       ? 'pico-wb-stage h-full min-h-0 items-stretch bg-[color:var(--pico-shell)]'
                       : 'h-full overflow-hidden bg-[color:var(--pico-shell)]',
                   )}
                 >
+                  {!isLandingPage && (
+                    <>
+                      <Header />
+                      <TaskRunBar
+                        isSubmitting={isSubmitting}
+                        model={ledger.run?.model}
+                        statusLabel={ledger.statusLabel}
+                        completedLabel={
+                          // Terminal ledger labels always surface (even if stream isSubmitting).
+                          ledger.statusLabel &&
+                          (ledger.statusLabel.startsWith('已完成') ||
+                            ledger.statusLabel.startsWith('失败') ||
+                            ledger.statusLabel.startsWith('已停止'))
+                            ? ledger.statusLabel
+                            : null
+                        }
+                        canCancel={canCancelTask}
+                        cancelling={ledger.cancelling}
+                        onCancel={() => void ledger.cancelRun(cancellableRunId)}
+                        canRerun={['failed', 'succeeded', 'cancelled'].includes(
+                          ledger.run?.status || '',
+                        )}
+                        rerunning={ledger.rerunning}
+                        onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
+                        processHint={
+                          waitingAsk
+                            ? '在等你选'
+                            : ledger.processHint ||
+                              (isSubmitting ? '正在检索或作答' : null)
+                        }
+                        waitingAsk={waitingAsk}
+                      />
+                      {ledger.error ? (
+                        <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[12px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+                          账本：{ledger.error}
+                        </div>
+                      ) : null}
+                      <ChangeConfirmBanner taskId={ledger.task?.id} onChanged={ledger.refresh} />
+                    </>
+                  )}
                   <div
                     className={cn(
                       'flex min-h-0 w-full flex-1 flex-col',
