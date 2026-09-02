@@ -340,9 +340,10 @@ async function waitSettled(page, timeoutMs) {
   while (Date.now() - start < timeoutMs) {
     const raw = await mainBubbleText(page);
     const text = await productBubbleText(page, raw);
+    const chain = page.getByTestId('pico-thinking-chain');
     const thinkLive =
-      (await page.getByTestId('pico-thinking-chain').getAttribute('data-submitting')) ===
-      'true';
+      (await chain.count()) > 0 &&
+      (await chain.first().getAttribute('data-submitting')) === 'true';
     const streaming =
       thinkLive ||
       (await page.getByRole('button', { name: /Stop|停止/i }).count()) > 0;
