@@ -372,11 +372,18 @@ async def map_event(
         waiting = kind.endswith("start")
         phase = "begin" if waiting else "end"
         state.event_kinds.append(f"ui.prompt.{phase}")
+        prompt_text = str(
+            raw.get("message") or raw.get("prompt") or raw.get("text") or ""
+        ).strip()[:400]
+        if waiting:
+            text = prompt_text or UI_WAIT_HUMAN
+        else:
+            text = prompt_text or "已选"
         payload = {
             **tag,
             "source": "true-pi",
             "waiting": waiting,
-            "text": UI_WAIT_HUMAN if waiting else "已选",
+            "text": text,
         }
         for key in ("method", "promptId", "prompt_id"):
             if raw.get(key):
