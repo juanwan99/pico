@@ -18,7 +18,11 @@ from app.openai_compat import (
     _resolve_allowed_tools,
     _sidebar_chat_only,
 )
-from pico_orchestrator.edu_sidebar import SIDEBAR_WORKBENCH_HINT, edu_sidebar_tool_ceiling
+from pico_orchestrator.edu_sidebar import (
+    EDU_SIDEBAR_DEFAULT_TOOLS,
+    SIDEBAR_WORKBENCH_HINT,
+    edu_sidebar_tool_ceiling,
+)
 
 
 def test_edu_sidebar_mark_detects_accessory() -> None:
@@ -32,11 +36,17 @@ def test_sidebar_json_only_skips_agent() -> None:
     assert _sidebar_chat_only(edu_sidebar=False, json_only=False) is False
 
 
-def test_edu_sidebar_tool_ceiling_strips_office() -> None:
-    assert edu_sidebar_tool_ceiling(None) == []
-    assert edu_sidebar_tool_ceiling([]) == []
-    assert edu_sidebar_tool_ceiling(["generate_html_document", "web_search"]) == ["web_search"]
-    assert edu_sidebar_tool_ceiling(["workspace_list_files", "kb_search"]) == []
+def test_edu_sidebar_tool_ceiling_keeps_read_strips_office() -> None:
+    default = list(EDU_SIDEBAR_DEFAULT_TOOLS)
+    assert edu_sidebar_tool_ceiling(None) == default
+    assert edu_sidebar_tool_ceiling([]) == default
+    kept = edu_sidebar_tool_ceiling(["generate_html_document", "web_search"])
+    assert kept == default
+    assert "generate_html_document" not in kept
+    assert "workspace_read_file" in kept
+    assert "workspace_list_files" in kept
+    assert "kb_search" in kept
+    assert "inspect_document" in kept
 
 
 def test_empty_allowed_tools_is_ceiling() -> None:
@@ -110,7 +120,7 @@ def test_true_pi_compose_uses_edu_system_override() -> None:
 if __name__ == "__main__":
     test_edu_sidebar_mark_detects_accessory()
     test_sidebar_json_only_skips_agent()
-    test_edu_sidebar_tool_ceiling_strips_office()
+    test_edu_sidebar_tool_ceiling_keeps_read_strips_office()
     test_empty_allowed_tools_is_ceiling()
     test_client_system_from_first_system_message()
     test_normalize_allowed_tools_names_and_openai_shape()

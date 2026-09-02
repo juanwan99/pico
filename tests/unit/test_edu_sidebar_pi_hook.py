@@ -82,6 +82,7 @@ def test_boot_patches_openai_compat_sidebar_route() -> None:
     ]
 
     from app.edu_sidebar_pi import EDU_SIDEBAR_PI
+    from pico_orchestrator.edu_sidebar import EDU_SIDEBAR_DEFAULT_TOOLS
 
     token = EDU_SIDEBAR_PI.set(True)
     try:
@@ -89,10 +90,13 @@ def test_boot_patches_openai_compat_sidebar_route() -> None:
         assert skill is None
         assert plan.force_agent is False
         assert plan.min_artifacts == 0
-        assert oc._normalize_allowed_tools(None) == []
-        assert oc._normalize_allowed_tools(["generate_html_document", "web_search"]) == [
-            "web_search"
-        ]
+        default = list(EDU_SIDEBAR_DEFAULT_TOOLS)
+        assert oc._normalize_allowed_tools(None) == default
+        kept = oc._normalize_allowed_tools(["generate_html_document", "web_search"])
+        assert kept == default
+        assert "generate_html_document" not in kept
+        assert "workspace_read_file" in kept
+        assert "web_search" in kept
     finally:
         EDU_SIDEBAR_PI.reset(token)
 

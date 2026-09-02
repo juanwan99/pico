@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.edu_sidebar import (
+    EDU_SIDEBAR_DEFAULT_TOOLS,
     HONEST_MISS_SUMMARY,
     JSON_ONLY_OUTPUT,
     SIDEBAR_WORKBENCH_HINT,
@@ -99,10 +100,16 @@ def test_sidebar_web_hits_inject_and_honest_miss() -> None:
 def test_sidebar_enters_pi_helpers() -> None:
     assert sidebar_chat_only(edu_sidebar=True, json_only=False) is False
     assert sidebar_chat_only(edu_sidebar=True, json_only=True) is True
-    assert edu_sidebar_tool_ceiling(None) == []
-    assert edu_sidebar_tool_ceiling([]) == []
-    assert edu_sidebar_tool_ceiling(["generate_html_document", "web_search"]) == ["web_search"]
-    assert edu_sidebar_tool_ceiling(["workspace_list_files", "kb_search"]) == []
+    default = list(EDU_SIDEBAR_DEFAULT_TOOLS)
+    assert edu_sidebar_tool_ceiling(None) == default
+    assert edu_sidebar_tool_ceiling([]) == default
+    kept = edu_sidebar_tool_ceiling(["generate_html_document", "web_search"])
+    assert kept == default
+    assert "generate_html_document" not in kept
+    assert "workspace_read_file" in kept
+    assert "inspect_document" in kept
+    assert edu_sidebar_tool_ceiling(["workspace_list_files", "kb_search"]) == default
     hinted = with_sidebar_workbench_hint("附属，不是用户要求")
     assert SIDEBAR_WORKBENCH_HINT in hinted
+    assert "可读" in hinted
     assert with_sidebar_workbench_hint(hinted) == hinted

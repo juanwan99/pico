@@ -17,12 +17,21 @@ SIDEBAR_WEB_SYSTEM = (
     "有来源：标明来自网。"
 )
 SIDEBAR_WORKBENCH_HINT = (
-    "侧栏只填当前页。改已有 Word/PPT 或出图，请去 Pico 工作台。"
+    "侧栏可读当前页和已点名/本轮回形针里的办公文件正文（PDF / Word / Excel / PPT）。"
+    "改已有文件、出图、落盘请去 Pico 工作台。"
     "本侧栏不得调用 generate_* / edit_* / 出图，不得落 Artifact。"
 )
 
-# Sidebar may enter Pi. Never inherit office CORE. Later page verbs join this set.
-EDU_SIDEBAR_ALLOWED_TOOLS = frozenset({"web_search", "web_fetch"})
+# Sidebar may enter Pi. File *read* stays. Never inherit office CORE writes.
+EDU_SIDEBAR_DEFAULT_TOOLS: tuple[str, ...] = (
+    "workspace_list_files",
+    "workspace_read_file",
+    "inspect_document",
+    "kb_search",
+    "web_search",
+    "web_fetch",
+)
+EDU_SIDEBAR_ALLOWED_TOOLS = frozenset(EDU_SIDEBAR_DEFAULT_TOOLS)
 
 
 def sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
@@ -35,10 +44,9 @@ def sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
 
 
 def edu_sidebar_tool_ceiling(request_tools: list[str] | None) -> list[str]:
-    """Empty list = Pi with no tools. None must not fall through to CORE office tools."""
-    if not request_tools:
-        return []
-    return [t for t in request_tools if t in EDU_SIDEBAR_ALLOWED_TOOLS]
+    """Always the read+web set. Request cannot add generate_* / edit_* / writes."""
+    del request_tools
+    return list(EDU_SIDEBAR_DEFAULT_TOOLS)
 
 
 def with_sidebar_workbench_hint(system: str | None) -> str:

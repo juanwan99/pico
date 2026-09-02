@@ -149,7 +149,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "workspace_read_file",
-    "Read one Artifact by id or title from the Pico ledger (including this-turn chat paperclip documents). Text comes back as content. png/jpg/office/pdf are binary: only id, title, kind, size — no pixels. Pass the artifact id to a document tool to embed.",
+    "Read one Artifact by id or title from the Pico ledger (including this-turn chat paperclip documents). Text, PDF, Word, Excel, and PPT come back as extracted text. png/jpg stay metadata only — no pixels. Pass a picture artifact id to a document tool to embed.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),

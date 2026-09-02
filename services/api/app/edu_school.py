@@ -57,7 +57,7 @@ _UUID_RE = re.compile(
     re.IGNORECASE,
 )
 _PAGE_EXT = {"html", "htm"}
-_MATERIAL_EXT = {"docx", "doc", "xlsx", "xls"}
+_MATERIAL_EXT = {"docx", "doc", "xlsx", "xls", "pdf"}
 _SKIP_EXT = {"pptx", "ppt", "png", "jpg", "jpeg", "gif", "webp"}
 _BOOKKEEPING = {"回复摘要", "summary", "run summary", "工具产物"}
 
@@ -75,7 +75,7 @@ def classify_land_kind(filename: str, kind: str = "") -> str | None:
     k = str(kind or "").strip().lower()
     if k in {"page", "html", "htm"} or ext in _PAGE_EXT:
         return "page"
-    if k in {"material", "docx", "doc", "xlsx", "xls"} or ext in _MATERIAL_EXT:
+    if k in {"material", "docx", "doc", "xlsx", "xls", "pdf"} or ext in _MATERIAL_EXT:
         return "material"
     if k in _SKIP_EXT or ext in _SKIP_EXT:
         return "skip"
@@ -91,7 +91,7 @@ def _conversation_key(raw: str | None) -> str:
     return value[:128]
 
 
-_OFFICE_EXT = {".xlsx", ".xls", ".docx", ".doc", ".csv"}
+_OFFICE_EXT = {".xlsx", ".xls", ".docx", ".doc", ".csv", ".pdf"}
 
 
 def _looks_b64_blob(val: str) -> bool:
@@ -897,8 +897,8 @@ async def land_generated_artifact(
             "ok": False,
             "landed": False,
             "code": "kind_skip",
-            "error": "这份不进学校场（只网页/Word/Excel）",
-            "user_message": "这份不进学校场（只网页/Word/Excel）。还留在我的文件。",
+            "error": "这份不进学校场（只网页/Word/Excel/PDF）",
+            "user_message": "这份不进学校场（只网页/Word/Excel/PDF）。还留在我的文件。",
         }
     target_field = sanitize_field_id(field_id)
     if not target_field:

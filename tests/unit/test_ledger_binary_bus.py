@@ -181,7 +181,7 @@ async def test_read_file_strips_png_keeps_text() -> None:
     assert "content" not in art or art.get("content") in (None, "")
     assert "content_base64" not in art
     assert art["binary"] is True
-    assert "二进制" in art["user_message"]
+    assert "不能当正文读" in art["user_message"]
     assert art["kind"] == "png"
     text = await gw.invoke(
         owner, "workspace_read_file", {"artifact_id": note["artifact_id"]}
@@ -216,6 +216,42 @@ async def test_read_file_strips_data_urls_from_html() -> None:
     body = got["artifact"]["content"]
     assert "data:image/omitted" in body
     assert b64 not in body
+
+
+@pytest.mark.asyncio
+async def test_read_file_extracts_office_text_not_base64() -> None:
+    from pico_orchestrator.document_generators import build_docx_document
+
+    store = MemoryArtifactStore()
+    gw = build_default_gateway(store)
+    owner = P("s1", "m1", ["ai:run"])
+    raw = build_docx_document(title="通知.docx", marker="READ-OFFICE", body="三年级二班春游")
+    saved = await store.write(owner, title="通知.docx", content=raw, kind="docx")
+    got = await gw.invoke(
+        owner, "workspace_read_file", {"artifact_id": saved["artifact_id"]}
+    )
+    art = got["artifact"]
+    assert "content_base64" not in art
+    assert art.get("binary") is not True
+    assert "三年级二班春游" in (art.get("content") or "")
+    assert art.get("extracted") is True
+
+
+@pytest.mark.asyncio
+async def test_read_file_legacy_doc_is_honest_unread() -> None:
+    store = MemoryArtifactStore()
+    gw = build_default_gateway(store)
+    owner = P("s1", "m1", ["ai:run"])
+    saved = await store.write(
+        owner, title="旧稿.doc", content=b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1junk", kind="bin"
+    )
+    got = await gw.invoke(
+        owner, "workspace_read_file", {"artifact_id": saved["artifact_id"]}
+    )
+    art = got["artifact"]
+    assert "content_base64" not in art
+    assert art.get("unread") is True
+    assert "另存为" in art["user_message"]
 
 
 def test_canonicalize_index_alias() -> None:
