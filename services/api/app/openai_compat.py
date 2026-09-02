@@ -52,6 +52,8 @@ class ChatMessage(BaseModel):
     # LibreChat AgentClient may put vision parts on the message instead of
     # (or as well as) content[]. Extra fields were previously dropped.
     image_urls: list[Any] | None = None
+    files: list[Any] | None = None
+    attachments: list[Any] | None = None
 
 
 class ChatCompletionRequest(BaseModel):
@@ -71,19 +73,51 @@ class ChatCompletionRequest(BaseModel):
 EDU_SIDEBAR_MARK = "附属，不是用户要求"
 
 
+def _part_filename(part: dict[str, Any]) -> str:
+    nested = part.get("file") if isinstance(part.get("file"), dict) else {}
+    return str(
+        part.get("filename") or nested.get("filename") or part.get("name") or ""
+    ).strip()[:180]
+
+
 def _content_text(content: str | list[Any] | None) -> str:
     if content is None:
         return ""
     if isinstance(content, str):
         return content
-    # Text only. Image parts are kept via last_user_images → RunCaps.images.
+    # Keep text. File / input_file parts were dropped (LibreChat native PDF
+    # encode); harvest filenames so the model sees the attachment arrived.
+    # Image parts stay via last_user_images → RunCaps.images.
     parts: list[str] = []
     for p in content:
-        if isinstance(p, dict) and p.get("type") == "text":
-            parts.append(str(p.get("text") or ""))
-        elif isinstance(p, str):
+        if isinstance(p, str):
             parts.append(p)
+            continue
+        if not isinstance(p, dict):
+            continue
+        if p.get("type") == "text":
+            parts.append(str(p.get("text") or ""))
+            continue
+        name = _part_filename(p)
+        if name:
+            parts.append(name)
     return "\n".join(parts)
+
+
+def _sibling_file_names(message: ChatMessage) -> str:
+    names: list[str] = []
+    seen: set[str] = set()
+    for blob in (message.files, message.attachments):
+        if not isinstance(blob, list):
+            continue
+        for part in blob:
+            if not isinstance(part, dict):
+                continue
+            name = _part_filename(part)
+            if name and name not in seen:
+                seen.add(name)
+                names.append(name)
+    return "\n".join(names)
 
 
 def _client_system_from_messages(messages: list[ChatMessage] | None) -> str:
@@ -442,6 +476,9 @@ def _last_user_prompt(messages: list[ChatMessage]) -> str:
     for m in reversed(messages):
         if m.role == "user":
             t = _content_text(m.content).strip()
+            extra = _sibling_file_names(m)
+            if extra:
+                t = f"{t}\n{extra}".strip() if t else extra
             if t:
                 return t
     return "\n".join(
@@ -1200,6 +1237,9 @@ async def chat_completions(
     )
 
     turn_images = last_user_images(body.messages)
+    from app.edu_files import images_from_native_pdf_parts
+
+    turn_images = merge_images(turn_images, images_from_native_pdf_parts(body.messages))
     raw_for_user = _last_user_prompt(body.messages)
     m_user = re.search(r"【Pico-User:([^】]+)】", raw_for_user)
     marker_membership = m_user.group(1).strip() if m_user else None
@@ -1268,7 +1308,7 @@ async def chat_completions(
         except Exception:
             logger.exception("named school materials inject failed")
     turn_images = merge_images(turn_images, conversation_images(conversation_id))
-    max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 12000) or 12000)
+    max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 100000) or 100000)
     # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
     # marker is explicit so this must not 400 a legal affordance table.
     length_basis = prompt

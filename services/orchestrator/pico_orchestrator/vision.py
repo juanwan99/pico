@@ -15,7 +15,8 @@ from typing import Any
 from pico_orchestrator.run_types import RunCaps
 
 DEFAULT_DEEPSEEK_VISION = "deepseek-v4-flash-vision-exp"
-_MAX_IMAGES = 8
+MAX_CHAT_IMAGES = 32
+_MAX_IMAGES = MAX_CHAT_IMAGES
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
 _MAX_CONVOS = 64
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -82,7 +83,7 @@ def png_bytes_to_image(raw: bytes, *, mime: str = "image/png") -> dict[str, Any]
 
 
 def merge_images(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Stable merge. User-turn pixels first; drop duplicates; cap 8."""
+    """Stable merge. User-turn pixels first; drop duplicates; cap MAX_CHAT_IMAGES."""
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for group in groups:

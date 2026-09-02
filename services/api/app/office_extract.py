@@ -10,9 +10,9 @@ from xml.etree import ElementTree as ET
 NS_SS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
-MAX_TEXT = 8000
-MAX_ROWS = 200
-MAX_SHEETS = 3
+MAX_TEXT = 100_000
+MAX_ROWS = 2000
+MAX_SHEETS = 20
 
 
 def _tag(ns: str, name: str) -> str:
@@ -67,7 +67,7 @@ def extract_office(filename: str, data: bytes) -> dict:
             "旧版 .doc/.ppt/.xls 打不开也转不了。请另存为 .docx/.pptx/.xlsx 再试。",
         )
     if ext == "pdf":
-        return _fail(name, ext, "unread", "这份 PDF 没抽出正文。")
+        return _fail(name, ext, "unread", "PDF")
     return _fail(name, ext or "bin", "unsupported", "不支持这种文件")
 
 

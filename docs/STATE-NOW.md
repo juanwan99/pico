@@ -4,9 +4,9 @@
 DATE: 2026-09-02
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #860 T-WORKBENCH-READ-ATTACH（同卡续 · /c/new 认领扫描页图）
+在飞: #860 T-WORKBENCH-READ-ATTACH（同卡续 · 停焊读不了 · 原件接线）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 产品 SHA `2b0e7f391c515b4507ec8abdc3b2126d99e5d071` = origin/main（#862 已部；/c/new 未绑会话则页图未进本轮）
+      → 产品 SHA 以 curl tip 为准（磁盘三行随本 PR 刷）
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
@@ -104,7 +104,7 @@ STATE-NOW（本页三行）→ EXPERIENCE（点名≤3）→ curl tip
 | 已关 | [#794](https://github.com/juanwan99/pico/issues/794) | T-SUB2API-FACE · 业主 PASS @ `c2a2e439…` |
 | 挂起 | [#778](https://github.com/juanwan99/pico/issues/778) | 出图链 · 不在三行 · 要做另开 |
 | 已关 | [#850](https://github.com/juanwan99/pico/issues/850) | T-LEDGER-BINARY-BUS 二进制不进脑 · 已部 @ `ed994bd6…` |
-| 在飞 | [#860](https://github.com/juanwan99/pico/issues/860) | T-WORKBENCH-READ-ATTACH 回形针正文进本轮 |
+| 在飞 | [#860](https://github.com/juanwan99/pico/issues/860) | T-WORKBENCH-READ-ATTACH 回形针正文进本轮 · 同卡续停焊读不了 |
 | 挂起 | 自研记忆 OS | 禁 · 文件型上游 #807 已部 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面四行冻到 9/7 · 流程 EXPERIENCE §80–89 |

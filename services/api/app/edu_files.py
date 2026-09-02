@@ -35,10 +35,13 @@ RESERVED_CONVO = frozenset({"new", "search"})
 EDU_READ_PREFIX = "edu-read ·"
 PIXEL_KINDS = frozenset({"png", "jpg", "jpeg", "webp", "gif"})
 PAPERCLIP_HINT = "本轮回形针文件（聊天上传，不是学校库）："
-_MAX_UPLOAD_INJECT = 6
-_MAX_UPLOAD_EXCERPT = 2000
-_MAX_UPLOAD_BLOCK = 6000
-_UNBOUND_UPLOAD_WINDOW = timedelta(minutes=30)
+_MAX_UPLOAD_INJECT = 8
+_MAX_UPLOAD_EXCERPT = 32_000
+_MAX_UPLOAD_BLOCK = 80_000
+_MAX_EXTRACT_TEXT = 100_000
+_UNBOUND_UPLOAD_WINDOW = timedelta(minutes=3)
+_UNBOUND_CLUSTER = timedelta(seconds=90)
+_FILE_PART_TYPES = frozenset({"file", "input_file", "document"})
 
 
 class FileJsonIn(BaseModel):
@@ -126,7 +129,7 @@ def extract_for_kb(filename: str, data: bytes) -> dict[str, Any]:
                 "rows": None,
                 "cols": None,
                 "sheets": [],
-                "text": text[:20000],
+                "text": text[:_MAX_EXTRACT_TEXT],
                 "error": None,
             }
         office = extract_office(filename, data)
@@ -141,12 +144,12 @@ def extract_for_kb(filename: str, data: bytes) -> dict[str, Any]:
                 "filename": (filename or "file")[:180],
                 "kind": ext,
                 "status": "unread",
-                "headline": f"没有文字层，{n} 页已附图",
+                "headline": f"{n} 页",
                 "rows": None,
                 "cols": None,
                 "sheets": [],
                 "text": "",
-                "error": f"没有文字层。前 {n} 页已作为图片附在本轮，直接看图。",
+                "error": None,
                 "page_count": n,
                 "page_pngs": pages,
             }
@@ -154,12 +157,12 @@ def extract_for_kb(filename: str, data: bytes) -> dict[str, Any]:
             "filename": (filename or "file")[:180],
             "kind": ext,
             "status": "unread",
-            "headline": "没抽出正文",
+            "headline": filename[:80],
             "rows": None,
             "cols": None,
             "sheets": [],
             "text": "",
-            "error": "没抽出正文",
+            "error": None,
         }
     return extract_office(filename, data)
 
@@ -182,7 +185,12 @@ def _payload(file_id: str | None, extract: dict[str, Any]) -> dict[str, Any]:
 
 
 def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None) -> str:
-    """Put this-conversation paperclip extracts on the user turn. Empty → unchanged."""
+    """Put this-conversation paperclip extracts on the user turn. Empty → unchanged.
+
+    Filename + real excerpt only. Never weld 没抽出 / 读不了 / 请截图 into the
+    teacher turn. Scan pages travel on images[]; legacy .doc honesty stays on
+    the read-tool observation, not here.
+    """
     named = [row for row in (items or []) if isinstance(row, dict)]
     if not named:
         return prompt
@@ -190,25 +198,12 @@ def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None)
     for row in named[:_MAX_UPLOAD_INJECT]:
         title = str(row.get("title") or row.get("filename") or "文件").strip() or "文件"
         excerpt = str(row.get("excerpt") or "").strip()[:_MAX_UPLOAD_EXCERPT]
-        error = str(row.get("error") or "").strip()
         art_id = str(row.get("id") or row.get("artifact_id") or "").strip()
         id_note = f"（artifact_id {art_id}）" if art_id else ""
-        page_count = 0
-        try:
-            page_count = int(row.get("page_count") or 0)
-        except (TypeError, ValueError):
-            page_count = 0
         if excerpt:
             lines.append(f"- 《{title}》{id_note}\n{excerpt}")
-        elif page_count > 0:
-            lines.append(
-                f"- 《{title}》{id_note} 没有文字层。前 {page_count} 页已作为图片附在本轮，"
-                "直接看图读题，不要说读不了或让用户再截图。"
-            )
-        elif error:
-            lines.append(f"- 《{title}》{id_note} {error}")
         else:
-            lines.append(f"- 《{title}》{id_note} 没抽出正文。")
+            lines.append(f"- 《{title}》{id_note}")
     block = "\n".join(lines)
     if len(block) > _MAX_UPLOAD_BLOCK:
         block = block[:_MAX_UPLOAD_BLOCK].rstrip() + "…"
@@ -233,6 +228,102 @@ def _excerpt_from_sidecar(row: ArtifactRow | None) -> tuple[str, str, int]:
     return text, error, page_count
 
 
+def _part_filename(part: dict[str, Any]) -> str:
+    nested = part.get("file") if isinstance(part.get("file"), dict) else {}
+    return str(
+        part.get("filename") or nested.get("filename") or part.get("name") or ""
+    ).strip()[:180]
+
+
+def _file_data_bytes(part: dict[str, Any]) -> bytes | None:
+    nested = part.get("file") if isinstance(part.get("file"), dict) else {}
+    raw = part.get("file_data") or nested.get("file_data") or part.get("data")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    payload = raw.strip()
+    if payload.lower().startswith("data:") and "," in payload:
+        payload = payload.split(",", 1)[1]
+    try:
+        data = base64.b64decode("".join(payload.split()), validate=False)
+    except (binascii.Error, ValueError):
+        return None
+    if not data or len(data) > MAX_BYTES:
+        return None
+    return data
+
+
+def _looks_pdf_part(part: dict[str, Any], name: str, data: bytes) -> bool:
+    mime = str(
+        part.get("mime") or part.get("mimeType") or part.get("media_type") or ""
+    ).lower()
+    nested = part.get("file") if isinstance(part.get("file"), dict) else {}
+    mime = mime or str(nested.get("mime") or nested.get("mime_type") or "").lower()
+    return (
+        name.lower().endswith(".pdf")
+        or "pdf" in mime
+        or data[:5] == b"%PDF-"
+    )
+
+
+def iter_native_file_parts(messages: list[Any]) -> list[dict[str, Any]]:
+    """LibreChat file / input_file parts on the latest user turn."""
+    last: Any = None
+    for item in reversed(messages or []):
+        role = getattr(item, "role", None)
+        if role is None and isinstance(item, dict):
+            role = item.get("role")
+        if role == "user":
+            last = item
+            break
+    if last is None:
+        return []
+    out: list[dict[str, Any]] = []
+    content = getattr(last, "content", None)
+    if content is None and isinstance(last, dict):
+        content = last.get("content")
+    if isinstance(content, list):
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if (
+                part.get("type") in _FILE_PART_TYPES
+                or isinstance(part.get("file"), dict)
+                or part.get("file_data")
+            ):
+                out.append(part)
+    for key in ("files", "attachments"):
+        extra = getattr(last, key, None)
+        if extra is None and isinstance(last, dict):
+            extra = last.get(key)
+        if isinstance(extra, list):
+            out.extend(p for p in extra if isinstance(p, dict))
+    return out
+
+
+def images_from_native_pdf_parts(messages: list[Any]) -> list[dict[str, Any]]:
+    """Raster LibreChat native PDF parts onto Pi images[]. Not a Pico PDF kernel.
+
+    Pi 0.84.4 prompt() has no DocumentContent; application/pdf as ImageContent
+    is dropped. Pages go through the existing vision channel.
+    """
+    from pico_orchestrator.vision import MAX_CHAT_IMAGES, png_bytes_to_image
+
+    out: list[dict[str, Any]] = []
+    for part in iter_native_file_parts(messages):
+        name = _part_filename(part)
+        data = _file_data_bytes(part)
+        if not data or not _looks_pdf_part(part, name, data):
+            continue
+        for png in render_pdf_page_pngs(data):
+            item = png_bytes_to_image(png)
+            if item is None:
+                continue
+            out.append({**item, "source": "pdf-page"})
+            if len(out) >= MAX_CHAT_IMAGES:
+                return out
+    return out
+
+
 async def uploads_for_conversation(
     session: AsyncSession,
     principal: Principal,
@@ -241,8 +332,8 @@ async def uploads_for_conversation(
     """Paperclip /v1/files rows for this conversation. Not generated deliverables.
 
     LibreChat /c/new omits X-Conversation-Id (reserved ``new``). Those rows land
-    with empty conversation_id; claim them onto this chat so scan pages can
-    enter this-turn vision.
+    with empty conversation_id. Claim only the latest unbound burst (3 min window,
+    90 s cluster) so a leftover from an earlier /c/new does not steal into this chat.
     """
     cid = str(conversation_id or "").strip()
     if not cid or cid in RESERVED_CONVO:
@@ -272,13 +363,32 @@ async def uploads_for_conversation(
             .limit(_MAX_UPLOAD_INJECT * 3)
         )
     ).scalars().all()
-    seen_titles: set[str] = set()
-    picked: list[ArtifactRow] = []
+    bound: list[ArtifactRow] = []
+    unbound: list[ArtifactRow] = []
     for src in src_rows:
-        title = str(src.title or "").strip()
         kind = str(src.kind or "").strip().lower()
         if kind in PIXEL_KINDS:
             continue
+        task = await session.get(TaskRow, src.task_id)
+        convo = str(task.conversation_id or "").strip() if task is not None else ""
+        if convo == cid:
+            bound.append(src)
+        elif not convo:
+            unbound.append(src)
+    cluster: list[ArtifactRow] = []
+    if unbound:
+        newest_at = max((row.created_at for row in unbound if row.created_at), default=None)
+        if newest_at is not None:
+            cluster = [
+                row
+                for row in unbound
+                if row.created_at is not None and newest_at - row.created_at <= _UNBOUND_CLUSTER
+            ]
+    candidates = bound if bound else cluster
+    seen_titles: set[str] = set()
+    picked: list[ArtifactRow] = []
+    for src in candidates:
+        title = str(src.title or "").strip()
         key = title.lower() or src.id
         if key in seen_titles:
             continue
@@ -289,11 +399,12 @@ async def uploads_for_conversation(
     if not picked:
         return []
     claimed = False
-    for src in picked:
-        task = await session.get(TaskRow, src.task_id)
-        if task is not None and not str(task.conversation_id or "").strip():
-            task.conversation_id = cid
-            claimed = True
+    if not bound:
+        for src in picked:
+            task = await session.get(TaskRow, src.task_id)
+            if task is not None and not str(task.conversation_id or "").strip():
+                task.conversation_id = cid
+                claimed = True
     if claimed:
         await session.commit()
     task_ids = [row.task_id for row in picked]
@@ -374,7 +485,7 @@ async def ensure_paperclip_pdf_pages(
         if not pages:
             continue
         row["page_count"] = len(pages)
-        row["error"] = f"没有文字层。前 {len(pages)} 页已作为图片附在本轮，直接看图。"
+        row["error"] = ""
         for png in pages:
             remember_conversation_png(png, conversation_id=cid, source="pdf-page")
 
@@ -551,7 +662,7 @@ async def load_edu_file(principal: Principal, file_id: str) -> dict[str, Any] | 
                 "rows": None,
                 "cols": None,
                 "sheets": [],
-                "text": text[:20000],
+                "text": text[:_MAX_EXTRACT_TEXT],
                 "error": None,
             },
         )

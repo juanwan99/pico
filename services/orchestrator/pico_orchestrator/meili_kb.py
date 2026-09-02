@@ -262,7 +262,7 @@ def parse_office_bytes(*, filename: str, data: bytes) -> str:
     return "\n".join(p for p in parts if p).strip()
 
 
-def render_pdf_page_pngs(data: bytes, *, max_pages: int = 8) -> list[bytes]:
+def render_pdf_page_pngs(data: bytes, *, max_pages: int = 32) -> list[bytes]:
     """Thin call into field-kb-ingest pypdfium2 raster. Not a Pico PDF kernel."""
     import sys
     from pathlib import Path

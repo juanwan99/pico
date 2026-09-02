@@ -243,3 +243,29 @@ def test_chat_message_no_longer_drops_image_urls() -> None:
     )
     assert msg.image_urls
     assert last_user_images([msg])
+
+
+def test_chat_message_keeps_native_file_parts() -> None:
+    from app.openai_compat import _content_text, _last_user_prompt
+
+    msg = ChatMessage.model_validate(
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "这份是什么"},
+                {
+                    "type": "file",
+                    "file": {
+                        "filename": "地理答案.pdf",
+                        "file_data": "data:application/pdf;base64,JVBERi0=",
+                    },
+                },
+            ],
+            "files": [{"filename": "补充说明.docx", "file_data": "AAA="}],
+        }
+    )
+    assert msg.files
+    assert "地理答案.pdf" in _content_text(msg.content)
+    prompt = _last_user_prompt([msg])
+    assert "地理答案.pdf" in prompt
+    assert "补充说明.docx" in prompt

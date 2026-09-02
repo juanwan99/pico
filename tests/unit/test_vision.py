@@ -162,6 +162,16 @@ def test_png_bytes_and_merge_and_conversation_remember() -> None:
     assert conversation_images("c-vis-1") == []
 
 
+def test_merge_images_cap_is_32() -> None:
+    from pico_orchestrator.vision import MAX_CHAT_IMAGES
+
+    assert MAX_CHAT_IMAGES == 32
+    group = [
+        {"type": "image", "data": f"img-{i}", "mimeType": "image/png"} for i in range(40)
+    ]
+    assert len(merge_images(group)) == 32
+
+
 @pytest.mark.asyncio
 async def test_true_pi_prompt_forwards_images() -> None:
     transport = FakeTransport()

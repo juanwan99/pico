@@ -314,11 +314,13 @@ def test_system_tells_pi_to_read_paperclip_documents() -> None:
     assert "Documents attached this turn" in system
     assert "workspace_read_file" in system
     assert "this-turn images" in system
-    assert "do not say you cannot read the file" in system
+    assert "do not say you cannot read the file" not in system
+    assert "没抽出正文" not in system
     bridge = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
     )
     assert "this-turn chat paperclip documents" in bridge
+    assert "do not say the file is unreadable" not in bridge
 
 
 def test_inject_conversation_uploads_noop_when_empty() -> None:
@@ -367,10 +369,14 @@ def test_inject_scan_pdf_does_not_weld_unreadable() -> None:
         ],
     )
     assert "地理答案" in out
-    assert "直接看图" in out
+    assert "art-scan-1" in out
+    assert "直接看图" not in out
+    assert "没有文字层" not in out
     assert "把相关页截图上传" not in out
     assert "另存为能复制文字" not in out
     assert "没抽出正文" not in out
+    assert "读不了" not in out
+    assert out.endswith("这是什么")
 
 
 def test_inject_conversation_uploads_legacy_doc_is_honest() -> None:
@@ -388,7 +394,8 @@ def test_inject_conversation_uploads_legacy_doc_is_honest() -> None:
         ],
     )
     assert "教师教学计划.doc" in out
-    assert "另存为" in out
+    assert "另存为" not in out
+    assert "没抽出正文" not in out
     assert "没收到" not in out
 
 
@@ -481,8 +488,9 @@ def test_legacy_doc_lands_unread_not_dropped(client: TestClient) -> None:
     assert rows
     assert rows[0]["title"] == "教师教学计划.doc"
     injected = inject_conversation_uploads("看看这是什么", rows)
-    assert "另存为" in injected
     assert "教师教学计划.doc" in injected
+    assert "另存为" not in injected
+    assert "没抽出正文" not in injected
 
 
 def _visible_scan_pdf(token: str) -> bytes:
@@ -572,9 +580,12 @@ def test_scan_pdf_paperclip_pages_go_to_vision(client: TestClient) -> None:
     assert sidecar.get("page_count") == 1
     assert len(json.dumps(sidecar)) < 20_000
     injected = inject_conversation_uploads("这是什么", rows)
-    assert "直接看图" in injected
+    assert "地理答案" in injected
+    assert "直接看图" not in injected
+    assert "没有文字层" not in injected
     assert "把相关页截图上传" not in injected
     assert "没抽出正文" not in injected
+    assert "读不了" not in injected
 
     clear_conversation_images(cid)
     assert conversation_images(cid) == []
@@ -591,7 +602,9 @@ def test_scan_pdf_paperclip_pages_go_to_vision(client: TestClient) -> None:
     assert conversation_images(cid)[0].get("source") == "pdf-page"
     assert int(items[0].get("page_count") or 0) >= 1
     injected_again = inject_conversation_uploads("这是什么", items)
-    assert "直接看图" in injected_again
+    assert "地理答案" in injected_again
+    assert "直接看图" not in injected_again
+    assert "没抽出正文" not in injected_again
     clear_conversation_images(cid)
 
 
@@ -652,6 +665,95 @@ def test_unbound_new_chat_paperclip_is_claimed(client: TestClient) -> None:
     assert other == []
     assert conversation_images(cid)
     injected = inject_conversation_uploads("这份里面写了什么", items)
-    assert "直接看图" in injected
+    assert "地理答案扫描.pdf" in injected
+    assert "直接看图" not in injected
     assert "把相关页截图上传" not in injected
+    assert "没抽出正文" not in injected
     clear_conversation_images(cid)
+
+
+def test_stale_unbound_paperclip_is_not_stolen(client: TestClient) -> None:
+    """A leftover /c/new upload from 10 minutes ago must not ride into this chat."""
+    import asyncio
+    from datetime import UTC, datetime, timedelta
+
+    from app.auth import Principal
+    from app.db import ArtifactRow, session_factory
+    from app.edu_files import inject_conversation_uploads, uploads_for_conversation
+
+    token = _token()
+    leftover = client.post(
+        "/v1/files",
+        headers={"authorization": f"Bearer {token}"},
+        json={
+            "filename": "geo-scan-xlm1.pdf",
+            "content_b64": base64.b64encode(b"%PDF-1.4 leftover").decode("ascii"),
+        },
+    )
+    assert leftover.status_code == 200, leftover.text
+    leftover_id = leftover.json()["id"]
+    fresh = client.post(
+        "/v1/files",
+        headers={"authorization": f"Bearer {token}"},
+        json={
+            "filename": "地理答案本轮.md",
+            "content_b64": base64.b64encode("本轮正文 PICO860-FRESH\n".encode()).decode(
+                "ascii"
+            ),
+        },
+    )
+    assert fresh.status_code == 200, fresh.text
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="test",
+        aud="test",
+        exp=0,
+        raw={},
+    )
+
+    async def _age_and_claim() -> list:
+        factory = session_factory()
+        async with factory() as session:
+            row = await session.get(ArtifactRow, leftover_id)
+            assert row is not None
+            row.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=10)
+            await session.commit()
+            return await uploads_for_conversation(session, principal, "convo-fresh-turn")
+
+    items = asyncio.run(_age_and_claim())
+    titles = [str(row.get("title") or "") for row in items]
+    assert "地理答案本轮.md" in titles
+    assert "geo-scan-xlm1.pdf" not in titles
+    injected = inject_conversation_uploads("这份里面写了什么", items)
+    assert "PICO860-FRESH" in injected
+    assert "geo-scan-xlm1.pdf" not in injected
+
+
+def test_native_input_file_pdf_rasters_to_images() -> None:
+    import pytest
+
+    pytest.importorskip("pypdfium2")
+    pytest.importorskip("PIL")
+
+    from app.edu_files import images_from_native_pdf_parts
+    from app.openai_compat import ChatMessage, _content_text, _last_user_prompt
+
+    raw = _visible_scan_pdf("PICO860-NATIVE")
+    payload = base64.b64encode(raw).decode("ascii")
+    parts = [
+        {"type": "text", "text": "这份是什么"},
+        {
+            "type": "input_file",
+            "filename": "地理答案（XLM1）含补充说明.pdf",
+            "file_data": f"data:application/pdf;base64,{payload}",
+        },
+    ]
+    assert "地理答案（XLM1）含补充说明.pdf" in _content_text(parts)
+    msg = ChatMessage.model_validate({"role": "user", "content": parts})
+    assert "地理答案" in _last_user_prompt([msg])
+    images = images_from_native_pdf_parts([msg])
+    assert images
+    assert images[0].get("mimeType") == "image/png"
+    assert images[0].get("source") == "pdf-page"

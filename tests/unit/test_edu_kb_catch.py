@@ -25,6 +25,7 @@ def test_extract_for_kb_pdf_unread_when_empty(monkeypatch) -> None:
     assert out["status"] == "unread"
     assert out["text"] == ""
     assert not out.get("page_pngs")
+    assert not out.get("error")
 
 
 def test_extract_for_kb_scan_pdf_attaches_page_pngs(monkeypatch) -> None:
@@ -42,7 +43,8 @@ def test_extract_for_kb_scan_pdf_attaches_page_pngs(monkeypatch) -> None:
     assert out["text"] == ""
     assert out.get("page_count") == 1
     assert out["page_pngs"][0].startswith(b"\x89PNG")
-    assert "已作为图片" in str(out.get("error") or "")
+    assert not out.get("error")
+    assert "没抽出" not in str(out.get("headline") or "")
     assert "读不了" not in str(out.get("error") or "")
 
 
@@ -128,4 +130,4 @@ def test_extract_for_kb_pdf_unread_when_docling_missing(monkeypatch) -> None:
     out = extract_for_kb("空.pdf", b"%PDF-1.4")
     assert out["status"] == "unread"
     assert out["text"] == ""
-    assert out.get("error")
+    assert not out.get("error")
