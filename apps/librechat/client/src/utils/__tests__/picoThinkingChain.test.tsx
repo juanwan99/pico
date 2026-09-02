@@ -6,6 +6,10 @@ describe('PicoThinkingChain', () => {
   it('shows a live placeholder while submitting with no text', () => {
     render(<PicoThinkingChain isSubmitting />);
     expect(screen.getByTestId('pico-thinking-chain')).toHaveTextContent('正在思考…');
+    expect(screen.getByTestId('pico-thinking-chain')).toHaveAttribute(
+      'data-submitting',
+      'true',
+    );
     expect(screen.getByTestId('pico-thinking-chain-body').className).toMatch(/line-clamp-3/);
   });
 

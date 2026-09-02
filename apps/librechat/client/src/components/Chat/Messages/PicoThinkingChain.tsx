@@ -42,6 +42,7 @@ export default function PicoThinkingChain({
       type="button"
       data-testid="pico-thinking-chain"
       data-expanded={expanded ? 'true' : 'false'}
+      data-submitting={isSubmitting ? 'true' : 'false'}
       aria-expanded={canExpand ? expanded : undefined}
       onClick={onToggle}
       className={cn(
