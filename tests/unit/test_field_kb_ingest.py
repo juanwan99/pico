@@ -102,9 +102,14 @@ def test_pdf_text_layer_skips_ocr(monkeypatch):
 
 
 def test_pdf_text_layer_fixture_without_ocr(monkeypatch):
+    import pytest
+
+    pytest.importorskip("pypdfium2")
     import ingest as mod
 
     fixture = ROOT / "packages" / "field-kb-ingest" / "fixtures" / "text-layer.pdf"
+    if not fixture.is_file():
+        pytest.skip("text-layer.pdf fixture missing")
     monkeypatch.setattr(
         mod,
         "_ocr_pdf_pages",
