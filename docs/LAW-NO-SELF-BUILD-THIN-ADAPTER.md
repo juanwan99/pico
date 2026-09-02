@@ -2,12 +2,27 @@
 
 ```text
 DOC: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
-STATUS: BINDING · 项目法律 · 全体执行窗/总管强制
+STATUS: BINDING · 项目最高法律 · 全体执行窗/总管强制
 DATE: 2026-08-11
-OWNER_ORDER: Pico 禁止自研，只做薄适配
+UPDATED: 2026-09-02 · 业主：绝对禁止自搞一套体系 / 做重体系
+OWNER_ORDER: Pico 禁止自研，只做薄适配。禁止自搞一套。禁止做重体系。
 REPO: juanwan99/pico ONLY
 CLAIM-WB: NO
 ```
+
+---
+
+## 0-supreme. 最高要求（压过本文件其余条款、压过一切任务卡便利）
+
+```text
+Pico 绝对禁止自己搞一套体系。
+绝对禁止做重体系 / 厚桥 / 第二能力核 / 第二编排真源。
+只允许对成熟上游做薄适配：接线、白名单、账本、门闩、人包、门脸。
+桥变厚 = 违法 = 必须拆。
+上游缺口（例如 Pi 无文件口）≠ 许可证去自研补核。
+```
+
+本条压过：HANDOFF、TRUTH-FREEZE 其余条、EXPERIENCE 便利、任务卡「先能跑」。
 
 ---
 
@@ -17,6 +32,7 @@ CLAIM-WB: NO
 Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 只允许对成熟上游做「薄适配」：接线、白名单、账本、门闩、人包、门脸。
 桥一旦变厚 = 违法 = 必须拆或 REVISE。
+禁止自搞一套体系。禁止做重体系。
 ```
 
 ---
@@ -78,7 +94,11 @@ PR 出现下列信号 → 默认 REVISE：
 ## 5. 冲突优先级
 
 ```text
-本 LAW ≥ HANDOFF / TRUTH-FREEZE 架构条 ≥ 任务卡便利
+最高句（禁止自搞一套 / 禁止重体系）
+  ≥ 本 LAW 其余条款
+  ≥ TRUTH-FREEZE / HANDOFF 架构条
+  ≥ EXPERIENCE 便利
+  ≥ 任务卡「先能跑」
 与业主当次书面指令冲突：书面指令 > 本文，但必须改本文或出豁免 Issue
 ```
 

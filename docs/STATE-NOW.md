@@ -4,9 +4,9 @@
 DATE: 2026-09-02
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗先对；禁止凭记忆）──
-在飞: #865 T-FORBID-THICK-BRIDGE（禁止本地 PDF 核 / 办公投影核 / 交件监工 / 硬帽截窗）
+在飞: #867 T-LAW-SUPREME-THIN（最高要求：禁止自搞一套 / 禁止重体系）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
-      → 产品 SHA 以 curl tip 为准（磁盘三行随本 PR 刷）
+      → docs-only 合入不 prod-update，产品 SHA 未变
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
@@ -14,6 +14,7 @@ CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 t
 PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · #824 T-UI-C-POLISH 业主 PASS @ tip `af3e8ad0…` · #829 T-UNMAIM-DRAFT 主管 PASS @ tip `c4953f2e…` · #834 T-FOUNDATION-GATES 业主 PASS @ tip `6236489f…` · #811 T-RESIDENT-SHRINK 主管 PASS @ tip `e5f840ef…` · #836 T-USAGE-THROUGH-PI 主管 PASS @ tip `adaca179…` · #821/#806/#808/#809/#807/#810 业主 PASS 已关 · #794 业主 PASS 已关
 经验: docs/EXPERIENCE.md（唯一 · 按域）
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
+最高: LAW §0-supreme · 禁止自搞一套 / 禁止重体系
 北极星: DIRECTION-NOW §0-star · 用法 = Grok
 真源优先级: 本页三行 + #634 > 任何 HANDOFF-*.md > 聊天
 juanwan99/oneflow: 不当真源（已 Archive）

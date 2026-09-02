@@ -1,6 +1,6 @@
 > **FROZEN until 2026-09-07。现况只认 [`STATE-NOW.md`](./STATE-NOW.md) 三行 + [#634](https://github.com/juanwan99/pico/issues/634)。本页其余 = 索引，不当现况。**
 
-**项目法律（禁止自研·薄适配）：** [LAW-NO-SELF-BUILD-THIN-ADAPTER.md](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)
+**项目最高法律（禁止自搞一套 / 禁止重体系 / 只允许薄适配）：** [LAW-NO-SELF-BUILD-THIN-ADAPTER.md](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md) §0-supreme
 
 # Pico documentation index
 
