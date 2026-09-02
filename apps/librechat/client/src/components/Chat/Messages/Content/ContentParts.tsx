@@ -11,6 +11,8 @@ import { mapAttachments, filterAttachmentsForPart, groupSequentialToolCalls } fr
 import { ParallelContentRenderer, type PartWithIndex } from './ParallelContent';
 import { MessageContext, SearchContext } from '~/Providers';
 import PendingSkillCall from './Parts/PendingSkillCall';
+import PicoThinkingChain from '~/components/Chat/Messages/PicoThinkingChain';
+import { collectThinkText } from '~/utils/picoThinking';
 import { EditTextPart, EmptyText } from './Parts';
 import ApprovalProvider from './ApprovalContext';
 import MemoryArtifacts from './MemoryArtifacts';
@@ -302,13 +304,16 @@ const ContentParts = memo(function ContentParts({
     ],
   );
 
+  const thinkText = useMemo(() => collectThinkText(content), [content]);
+  const showThinkChain = !isCreatedByUser && (Boolean(thinkText) || effectiveIsSubmitting);
+
   const sequentialParts = useMemo<PartWithIndex[]>(() => {
     if (!content) {
       return [];
     }
     const result: PartWithIndex[] = [];
     content.forEach((part, idx) => {
-      if (part) {
+      if (part && part.type !== ContentTypes.THINK) {
         result.push({ part, idx });
       }
     });
@@ -332,8 +337,8 @@ const ContentParts = memo(function ContentParts({
     [sequentialParts, attachmentMap, fallbackScope],
   );
 
-  // Early return: no content to render AND no pending skill cards
-  if (!content && !hasPendingSkills) {
+  // Early return: no content to render AND no pending skill cards / thinking
+  if (!content && !hasPendingSkills && !showThinkChain) {
     return null;
   }
 
@@ -379,8 +384,11 @@ const ContentParts = memo(function ContentParts({
   }
 
   const safeContent = content ?? [];
-  const showEmptyCursor = safeContent.length === 0 && effectiveIsSubmitting;
+  const showEmptyCursor = safeContent.length === 0 && effectiveIsSubmitting && !showThinkChain;
   const lastContentIdx = safeContent.length - 1;
+  const thinkingChain = showThinkChain ? (
+    <PicoThinkingChain text={thinkText} isSubmitting={effectiveIsSubmitting} />
+  ) : null;
 
   // Parallel content: use dedicated renderer with columns (TMessageContentParts includes ContentMetadata)
   const hasParallelContent = safeContent.some((part) => part?.groupId != null);
@@ -388,6 +396,7 @@ const ContentParts = memo(function ContentParts({
     return (
       <ApprovalProvider>
         {renderPendingSkills()}
+        {thinkingChain}
         <ParallelContentRenderer
           content={content}
           messageId={messageId}
@@ -408,6 +417,7 @@ const ContentParts = memo(function ContentParts({
       <SearchContext.Provider value={{ searchResults }}>
         <MemoryArtifacts attachments={attachments} />
         {renderPendingSkills()}
+        {thinkingChain}
         {showEmptyCursor && (
           <Container>
             <EmptyText />

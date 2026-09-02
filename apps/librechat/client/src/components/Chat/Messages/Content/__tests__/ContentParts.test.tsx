@@ -59,6 +59,15 @@ jest.mock('../ParallelContent', () => ({
   ParallelContentRenderer: () => <div data-testid="parallel-renderer" />,
 }));
 
+jest.mock('~/components/Chat/Messages/PicoThinkingChain', () => ({
+  __esModule: true,
+  default: ({ text, isSubmitting }: { text?: string; isSubmitting?: boolean }) => (
+    <div data-testid="pico-thinking-chain" data-submitting={String(Boolean(isSubmitting))}>
+      {text}
+    </div>
+  ),
+}));
+
 import ContentParts from '../ContentParts';
 
 const baseProps = {
@@ -107,6 +116,22 @@ describe('ContentParts — interim skill cards', () => {
   it('renders pending skill cards even when content is undefined', () => {
     render(<ContentParts {...baseProps} content={undefined} manualSkills={['pptx']} />);
     expect(screen.getAllByTestId('pending-skill-call')).toHaveLength(1);
+  });
+
+  it('shows the thinking chain on the latest assistant turn while submitting', () => {
+    render(<ContentParts {...baseProps} isSubmitting isLatestMessage />);
+    expect(screen.getByTestId('pico-thinking-chain')).toHaveAttribute('data-submitting', 'true');
+  });
+
+  it('keeps THINK parts out of the product column', () => {
+    const content: TMessageContentParts[] = [
+      { type: ContentTypes.THINK, think: 'secret plan' } as unknown as TMessageContentParts,
+      { type: ContentTypes.TEXT, text: 'answer' } as unknown as TMessageContentParts,
+    ];
+    render(<ContentParts {...baseProps} content={content} />);
+    expect(screen.getByTestId('pico-thinking-chain')).toHaveTextContent('secret plan');
+    expect(screen.queryByTestId('real-part-think')).toBeNull();
+    expect(screen.getByTestId('real-part-text')).toBeTruthy();
   });
 
   it('renders pending skill cards above parallel content', () => {

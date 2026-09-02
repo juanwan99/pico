@@ -149,3 +149,14 @@ def test_source_filter_guard_present():
     client = (root / "services/orchestrator/pico_orchestrator/true_pi/client.py").read_text()
     assert 'event.type == "message_update"' in runtime
     assert 't == "message_update"' in client
+    assert "thinking_delta_from_rpc" in client
+    assert 'RpcEvent({"type": "thinking_delta"' in client or "thinking_delta" in client
+
+
+def test_runtime_consume_keeps_thinking_delta():
+    """Slim thinking_delta must reach map_event; full message_update must not."""
+    sent, _ = _fake_consume(
+        ["message_update", "thinking_delta", "agent.end"],
+        drop_message_update=True,
+    )
+    assert sent == ["thinking_delta", "agent.end"]

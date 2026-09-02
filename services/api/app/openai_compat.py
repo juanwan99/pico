@@ -1751,6 +1751,12 @@ async def chat_completions(
         q: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
 
         async def emit(event_type: str, payload: dict[str, Any]) -> None:
+            if event_type == "thinking.delta":
+                # Token-level thoughts: stream only. Do not flood the ledger.
+                text = str(payload.get("text") or "")
+                if text:
+                    await q.put(("think", text))
+                return
             async with factory() as session:
                 await append_event(session, run_id, event_type, payload)
                 # Checkpoint survives client detach (package B).
@@ -2006,6 +2012,16 @@ async def chat_completions(
                     pending_status.clear()
                     last_wire = time.monotonic()
                     yield chunk({"content": str(payload)})
+                elif kind == "think":
+                    # Official Pi thinking_delta → OpenAI reasoning_content.
+                    # Must not become the product bubble (`content`).
+                    last_wire = time.monotonic()
+                    yield chunk(
+                        {
+                            "reasoning_content": str(payload),
+                            "reasoning": str(payload),
+                        }
+                    )
                 elif kind == "status":
                     # Buffer status chrome; only flush on the failure path where
                     # no product text ever arrives (user still sees progress).
