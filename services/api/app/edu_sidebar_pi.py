@@ -2,7 +2,8 @@
 
 MCP cannot ship that 78KB file intact. This hook is the thin adapter:
 json_only stays one-shot chat; the 附属 marker enters Pi with a tool ceiling.
-Never force_agent. Never inherit office CORE. Never land Artifact.
+Never force_agent. Never inherit office CORE writes. File read stays.
+Never land Artifact.
 """
 
 from __future__ import annotations

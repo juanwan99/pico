@@ -49,7 +49,7 @@ DATE: 2026-09-02
 38. **HTML 交互页断网。** `generate_html_document` 禁 CDN / `import https` / `//cdn` / Three.js / Chart.js；外链引擎与 `window.THREE` 空舞台失败闭合，不剥成空舞台再报成功。校验同样扫 import/src/href/引擎全局。禁放行 jsdelivr。#780 业主 PASS 2026-08-29 @ tip `e9e032b3…`。
 39. **别残稿（#829）。** 门可以关，稿不能改。HTML/办公正文与 PPT 沙箱 source 上限对齐账本 20 万，超限人话失败、禁止静默切。HTML 标记只进 meta/`data-pico-marker`，禁止页顶「标记：」灰条。SYSTEM 禁止教模型失败后改成土 canvas。PPT 沙箱放行无 IO 标准库（copy/math/datetime/io.BytesIO）；os/open/eval 仍拒。断网门（#780）不动。
 40. **假绿门补基础，不补场景。** 先计划 HITL 超时未选 = 跑失败，禁止映射成 Stay 再标 succeeded。Excel `body` 走与 Word/PPT 同类的 plain→spec：markdown/TSV 表落成真实 sheet/行，禁止整段进 A1；小数当原文，禁止 `float` 脏值。HTML 交互页除 CDN 门外，内联 script 括号不配对失败闭合，禁止落坏脚本再当成品。禁词表/家长会/分数练习特判。
-41. **二进制不进脑（#850）。** 像素/办公包只走账本；脑只说 id。HTML 嵌图 = `src="pico-artifact:<id>"`（或 `image_artifact_ids` + `pico-artifact:0`）；账本存 id，打开/下载时内联 data:。GET 任务列表不夹带大段 utf8（结果区 2s 轮询）。缺 id 跳过该图 + observation 诚实，不毁整页。作者 `body` 仍 20 万。`workspace_read_file` 对 png/jpg/office/pdf/html 不回像素 / data:。流死（`stream_read_error` / eof / soft_errors）人话失败，已落盘成品仍可见。追问「做完了吗」复述已有文件名不是假绿：结果区按对话柜留文件，不因最新一轮 0 产物清空。禁焊课件管道、禁 CDN、禁把模型当 U 盘。
+41. **二进制不进脑（#850）。** 像素只走账本；脑只说 id。HTML 嵌图 = `src="pico-artifact:<id>"`（或 `image_artifact_ids` + `pico-artifact:0`）；账本存 id，打开/下载时内联 data:。GET 任务列表不夹带大段 utf8（结果区 2s 轮询）。缺 id 跳过该图 + observation 诚实，不毁整页。作者 `body` 仍 20 万。`workspace_read_file` 对 png/jpg 不回像素；对 pdf/docx/xlsx/pptx 回抽出正文（不是 base64）；HTML 剥 data:。edu 侧栏要读文件（#857）：天花板含 `workspace_read_file`，仍禁 generate/edit/出图/落盘。流死（`stream_read_error` / eof / soft_errors）人话失败，已落盘成品仍可见。追问「做完了吗」复述已有文件名不是假绿：结果区按对话柜留文件，不因最新一轮 0 产物清空。禁焊课件管道、禁 CDN、禁把模型当 U 盘。
 
 ## C · 部署 / ECS / 执行者
 

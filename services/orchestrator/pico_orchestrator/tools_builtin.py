@@ -39,10 +39,19 @@ from pico_orchestrator.gateway import (
 )
 from pico_orchestrator.image_generate import IMAGE_TIMEOUT_S, generate_image_bytes
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
-from pico_orchestrator.meili_kb import extract_index_text, meili_configured, search_materials
+from pico_orchestrator.meili_kb import (
+    extract_index_text,
+    extract_office_text,
+    meili_configured,
+    search_materials,
+)
 from pico_orchestrator.office.extract import extract_embedded_images
 from pico_orchestrator.office.inspect import inspect_office_bytes
-from pico_orchestrator.office.legacy import guess_office_ext
+from pico_orchestrator.office.legacy import (
+    LEGACY_OFFICE_ERROR,
+    LEGACY_OFFICE_EXTS,
+    guess_office_ext,
+)
 from pico_orchestrator.office.qa import verify_office_bytes
 from pico_orchestrator.office.render import render_spec
 from pico_orchestrator.office.sandbox_lib import (
@@ -308,49 +317,122 @@ def _optional_int(args: dict[str, Any], key: str, *, default: int | None = None)
         raise ToolError("tool.invalid_arguments", f"{key} 必须是整数") from exc
 
 
-_BINARY_READ_KINDS = frozenset(
-    {
-        "png",
-        "jpg",
-        "jpeg",
-        "webp",
-        "gif",
-        "pptx",
-        "docx",
-        "xlsx",
-        "pdf",
-        "bin",
-    }
+_PIXEL_READ_KINDS = frozenset({"png", "jpg", "jpeg", "webp", "gif"})
+_PIXEL_READ_EXTS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif"})
+_OFFICE_READ_KINDS = frozenset({"pdf", "docx", "xlsx", "pptx", "edu_office"})
+_OFFICE_READ_EXTS = frozenset(
+    {".pdf", ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt"}
 )
 _TEXT_READ_KINDS = frozenset(
     {"html", "file", "doc", "json", "outline", "text", "md", "markdown"}
 )
 
 
+def _row_suffix(title: str) -> str:
+    name = str(title or "").strip()
+    if "." not in name:
+        return ""
+    return "." + name.rsplit(".", 1)[-1].lower()
+
+
+def _optional_row_bytes(row: dict[str, Any]) -> bytes | None:
+    b64 = row.get("content_base64")
+    if isinstance(b64, str) and b64.strip():
+        try:
+            return base64.b64decode(b64.encode("ascii"), validate=False)
+        except Exception:  # noqa: BLE001 — unread is honest; do not raise into the model
+            return None
+    body = row.get("content")
+    if isinstance(body, bytes) and body:
+        return body
+    return None
+
+
+def _office_unread_message(*, title: str, kind: str) -> str:
+    suffix = _row_suffix(title)
+    token = f".{kind}" if kind and not kind.startswith(".") else kind
+    if suffix in LEGACY_OFFICE_EXTS or token in LEGACY_OFFICE_EXTS:
+        return LEGACY_OFFICE_ERROR
+    if suffix == ".pdf" or kind == "pdf":
+        return "这份 PDF 没抽出正文。"
+    return "没抽出正文。"
+
+
+def _clip_text(body: str) -> tuple[str, bool]:
+    if len(body) > MAX_CONTENT_CHARS:
+        return body[:MAX_CONTENT_CHARS], True
+    return body, False
+
+
 def _read_file_for_model(row: dict[str, Any]) -> dict[str, Any]:
-    """Ledger metadata only for binaries. Pixels never re-enter the model."""
+    """Pixels stay metadata. Office/PDF return extracted text, never base64."""
     out = dict(row)
     kind = str(out.get("kind") or "").strip().lower().lstrip(".")
+    title = str(out.get("title") or "")
+    suffix = _row_suffix(title)
     encoding = str(out.get("content_encoding") or "").strip().lower()
-    binary = kind in _BINARY_READ_KINDS or (
-        encoding == "base64" and kind not in _TEXT_READ_KINDS
-    )
+
+    if (
+        kind in {"html", "htm", "page"}
+        or suffix in {".html", ".htm"}
+        or (isinstance(out.get("content"), str) and "data:image/" in out["content"])
+    ):
+        body = out.get("content")
+        if isinstance(body, str):
+            from pico_orchestrator.html_ledger_images import strip_embedded_data_urls
+
+            body = strip_embedded_data_urls(body)
+            body, truncated = _clip_text(body)
+            out["content"] = body
+            if truncated:
+                out["truncated"] = True
+        out.pop("content_base64", None)
+        return out
+
+    if kind in _PIXEL_READ_KINDS or suffix in _PIXEL_READ_EXTS:
+        out.pop("content", None)
+        out.pop("content_base64", None)
+        out["binary"] = True
+        out["user_message"] = (
+            "这是图片，不能当正文读。像素已在账本；要用时把 artifact_id 交给文档工具。"
+        )
+        return out
+
+    if kind in _OFFICE_READ_KINDS or suffix in _OFFICE_READ_EXTS:
+        raw = _optional_row_bytes(out)
+        text = extract_index_text(
+            title=title or "file",
+            kind=kind,
+            content=out.get("content") if isinstance(out.get("content"), str) else None,
+            raw=raw,
+        )
+        if (not text or not text.strip()) and raw:
+            text = extract_office_text(filename=title or "file", data=raw)
+        out.pop("content_base64", None)
+        if text and text.strip():
+            body, truncated = _clip_text(text.strip())
+            out["content"] = body
+            out["extracted"] = True
+            out.pop("binary", None)
+            if truncated:
+                out["truncated"] = True
+            return out
+        out.pop("content", None)
+        out["unread"] = True
+        out["user_message"] = _office_unread_message(title=title, kind=kind)
+        return out
+
+    binary = encoding == "base64" and kind not in _TEXT_READ_KINDS and kind != "bin"
+    if encoding == "base64" and kind == "bin" and suffix not in _OFFICE_READ_EXTS:
+        binary = True
     if not binary:
         body = out.get("content")
         if isinstance(body, str):
-            title = str(out.get("title") or "")
-            if (
-                kind in {"html", "htm", "page"}
-                or title.lower().endswith((".html", ".htm"))
-                or "data:image/" in body
-            ):
-                from pico_orchestrator.html_ledger_images import strip_embedded_data_urls
-
-                body = strip_embedded_data_urls(body)
-                out["content"] = body
-            if len(body) > MAX_CONTENT_CHARS:
-                out["content"] = body[:MAX_CONTENT_CHARS]
+            body, truncated = _clip_text(body)
+            out["content"] = body
+            if truncated:
                 out["truncated"] = True
+        out.pop("content_base64", None)
         return out
     out.pop("content", None)
     out.pop("content_base64", None)
@@ -2086,10 +2168,10 @@ def build_default_gateway(
             name="workspace_read_file",
             description=(
                 "Read one Artifact owned by the current membership by id or title. "
-                "Text comes back as content. png/jpg/office/pdf are binary: "
-                "only id, title, kind, size — no pixels or base64. "
+                "Text, PDF, Word, Excel, and PPT come back as extracted text in content. "
+                "png/jpg stay binary: only id, title, kind, size — no pixels or base64. "
                 "HTML drops embedded data: image payloads. "
-                "Pass the artifact id to a document tool to embed."
+                "Pass a picture artifact id to a document tool to embed."
             ),
             handler=read_file,
             school_scoped=False,

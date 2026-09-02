@@ -119,6 +119,7 @@ def test_named_bind_stores_field_id(client) -> None:
 def test_classify_land_kind_routes_html_and_office() -> None:
     assert classify_land_kind("页.html") == "page"
     assert classify_land_kind("报告.docx") == "material"
+    assert classify_land_kind("通知.pdf") == "material"
     assert classify_land_kind("表.xlsx") == "material"
     assert classify_land_kind("图.png") == "skip"
     assert classify_land_kind("笔记.txt") is None
