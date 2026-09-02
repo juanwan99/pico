@@ -42,6 +42,10 @@ Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 6. 用自研补丁冒充「已经是上游生态」（名实造假）
 7. 复制 edu-core 栈进 Pico 当第二产品
 8. **定向工作流冒充用户**：读正文猜任务、force_agent 自动挂交付 Skill、把 skill/Landing requirement/「必须交 N 个文件」焊进 user prompt（北极星 DIRECTION-NOW §0-star；用法 = Grok）
+9. **本地 PDF 阅读器当能力核**：进模型前用 pypdfium2/RapidOCR/渲页/抽文冒充「已经读了 PDF」。原件走账本；Pi 无文件口 ≠ 允许自研 PDF 核
+10. **办公投影器当能力核**：把 Office 抽成摘录/spec 条目墙再喂模型，或把 spec 投影当天花板。生成走模型+沙箱库；预览门脸不是阅读核
+11. **交件监工**：min_artifacts / force_agent / 词表自动挂交付 Skill / 把「本轮必须交 N 个文件」焊进 user
+12. **硬帽截窗**：用 Pico 自定 reserve/步数/字数把上游窗口截短（例如 256k 窗 64k 就压）。只认上游窗与安全门（租户/SSRF/密钥/禁 bash/假绿）
 
 ---
 

@@ -2,11 +2,12 @@
 
 ```
 DOC: docs/TRUTH-FREEZE.md
-STATUS: BINDING FREEZE v1.2
-FROZEN_AT: 2026-08-24
+STATUS: BINDING FREEZE v1.3
+FROZEN_AT: 2026-09-02
 PURPOSE: 固定产品/架构真源，防止聊天与旧文档再次冲掉校准结论
 AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star
-SUPERSEDES: v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+SUPERSEDES: v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+OWNER_ORDER_2026-09-02: 厚桥四层绝对禁止（本地 PDF 核 / 办公投影核 / 交件监工 / 硬帽截窗）
 RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/MEMORY-RESET.md
 ```
 
@@ -23,13 +24,14 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 
 ---
 
-## 1. 冻结决策集 v1.2（目标 · 不可被执行窗改写）
+## 1. 冻结决策集 v1.3（目标 · 不可被执行窗改写）
 
 ### 1.1 产品是什么
 
 | # | 冻结句 |
 |---|--------|
 | P0 | **用法 = Grok**：通用 LLM；老师的话是 user；系统纪律是 system，不得冒充人话；工具/材料/Skill 是挂载，模型自己决定调不调。没点名不交件。禁止读正文猜任务、force_agent 自动挂交付、把「必须交 N 个文件」焊进 user prompt。真源：DIRECTION-NOW §0-star |
+| P0b | **厚桥四层绝对禁止**（业主 2026-09-02）：①本地 PDF 阅读器 ②办公投影器 ③交件监工 ④硬帽截窗。Pico 不是第二套能力核。进模型前禁止抽文/OCR/渲页冒充已读。禁止用 Pico 自定 reserve/步数把上游窗截短。 |
 | P1 | Pico = **任务型 AI 工作台（Web）** 底座（对话 + 办事 + 产物 + 唯一 AI 账本 + 控制面）；办事程度类 WorkBuddy（六条）。P1 不得压过 P0 |
 | P2 | **不是** 网盘 / 教务 SaaS / 成绩主库 / 自托管大模型默认 / Dify 门脸终局 / 场景考卷对标 / 定向猜任务的办公机器人 |
 | P3 | 用户成功 = 公网登录 → 开放派活 → 多步过程可见 → 真产物 → 能停、能找回、同会话可改 → 状态诚实 |
@@ -68,6 +70,7 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 | C5 | MCP / KB = 接入现成组件（分期） | 默认开放 Host Shell/任意脚本 |
 | C6 | S7：业务变更需确认 | AI 直接改正式成绩 |
 | C7 | WorkBuddy **Web 六条** | 桌面 exe / 像素 1:1 / 固定场景考卷冒充完成 |
+| C8 | 原件挂账本；模型自己调工具 | 本地 PDF 阅读器 / 办公投影器 / 交件监工 / 硬帽截窗 |
 
 ### 1.5 协作与仓
 

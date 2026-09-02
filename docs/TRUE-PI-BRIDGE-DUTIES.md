@@ -65,3 +65,7 @@ v6（#703 T-UNMASK-PI）：`prompt()` 可带 `images[]`；`models.json` 在 visi
 - 无 live 冒烟强制切主
 - 密钥写入日志 / Issue
 - 删除 `pi_runtime.py`（回滚必须保留）
+- **本地 PDF 阅读器**（抽文/OCR/渲页进 chat user 或 images[] 冒充已读）
+- **办公投影器**（摘录/spec 条目墙当模型输入或天花板）
+- **交件监工**（force_agent / min_artifacts 词表 / 焊「必须交 N 个文件」）
+- **硬帽截窗**（把 Pi/模型窗口用 Pico reserve/步数截短）

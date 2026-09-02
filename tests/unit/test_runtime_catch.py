@@ -95,10 +95,10 @@ def test_prepare_agent_home_writes_official_compaction_settings(tmp_path: Path) 
     for blob in (agent_settings, project_settings):
         compact = blob["compaction"]
         assert compact["enabled"] is True
-        # Fast 128k lane: trigger at 56k used (128k - 72k). Short one-shot stays under.
-        assert compact["keepRecentTokens"] == 16000
-        assert compact["reserveTokens"] == 72000
-        assert 128_000 - compact["reserveTokens"] == 56_000
+        # LAW #865: do not fire at 56k. Reserve stays small vs the real window.
+        assert compact["keepRecentTokens"] == 20_000
+        assert compact["reserveTokens"] == 20_000
+        assert 128_000 - compact["reserveTokens"] == 108_000
 
 
 def test_prepare_agent_home_deep_lane_compaction_fires_on_long_office(tmp_path: Path) -> None:
@@ -115,13 +115,11 @@ def test_prepare_agent_home_deep_lane_compaction_fires_on_long_office(tmp_path: 
     home = t.prepare_agent_home()
     compact = json.loads((home / "settings.json").read_text(encoding="utf-8"))["compaction"]
     assert compact["enabled"] is True
-    assert compact["keepRecentTokens"] == 20000
-    assert compact["reserveTokens"] == 192000
+    assert compact["keepRecentTokens"] == 20_000
+    assert compact["reserveTokens"] == 20_000
     trigger_at = 256_000 - compact["reserveTokens"]
-    assert trigger_at == 64_000
-    # One-shot office (~20k) stays quiet; multi-turn long run crosses 64k.
-    assert trigger_at > 30_000
-    # After compact, last turn + current files stay (not a collapsed window).
+    assert trigger_at == 236_000
+    assert trigger_at > 200_000
     assert compact["keepRecentTokens"] >= 16_000
     assert official_compaction_settings(256_000)["compaction"] == compact
 

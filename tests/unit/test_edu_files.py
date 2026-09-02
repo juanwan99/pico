@@ -333,6 +333,7 @@ def test_inject_conversation_uploads_noop_when_empty() -> None:
 
 
 def test_inject_conversation_uploads_cites_excerpt() -> None:
+    """#865: names + ids only. Excerpt stays off the teacher turn."""
     from app.edu_files import inject_conversation_uploads
 
     prompt = "这是什么"
@@ -347,7 +348,7 @@ def test_inject_conversation_uploads_cites_excerpt() -> None:
         ],
     )
     assert "生物答案.pdf" in out
-    assert "PICO860-LANTERN" in out
+    assert "PICO860-LANTERN" not in out
     assert "art-pdf-1" in out
     assert out.endswith(prompt)
     assert "学校库" in out
@@ -441,7 +442,8 @@ def test_paperclip_pdf_injects_into_this_conversation(client: TestClient) -> Non
     assert other == []
     assert any("三年级二班" in str(row.get("excerpt") or "") for row in mine)
     injected = inject_conversation_uploads("这是什么", mine)
-    assert "三年级二班" in injected
+    assert "班情.md" in injected
+    assert "三年级二班" not in injected
     assert injected.endswith("这是什么")
 
 
@@ -548,11 +550,9 @@ def test_scan_pdf_paperclip_pages_go_to_vision(client: TestClient) -> None:
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["id"]
-    assert body.get("page_count") == 1
     assert "page_pngs" not in body
     pending = conversation_images(cid)
-    assert pending
-    assert pending[0].get("source") == "pdf-page"
+    assert pending == []
     principal = Principal(
         school_id="school-a",
         membership_id="m-edu",
@@ -577,7 +577,6 @@ def test_scan_pdf_paperclip_pages_go_to_vision(client: TestClient) -> None:
 
     rows, sidecar = asyncio.run(_round())
     assert "page_pngs" not in sidecar
-    assert sidecar.get("page_count") == 1
     assert len(json.dumps(sidecar)) < 20_000
     injected = inject_conversation_uploads("这是什么", rows)
     assert "地理答案" in injected
@@ -598,9 +597,8 @@ def test_scan_pdf_paperclip_pages_go_to_vision(client: TestClient) -> None:
             return items
 
     items = asyncio.run(_ensure())
-    assert conversation_images(cid)
-    assert conversation_images(cid)[0].get("source") == "pdf-page"
-    assert int(items[0].get("page_count") or 0) >= 1
+    assert conversation_images(cid) == []
+    assert items
     injected_again = inject_conversation_uploads("这是什么", items)
     assert "地理答案" in injected_again
     assert "直接看图" not in injected_again
@@ -637,7 +635,7 @@ def test_unbound_new_chat_paperclip_is_claimed(client: TestClient) -> None:
         },
     )
     assert res.status_code == 200, res.text
-    assert res.json().get("page_count") == 1
+    assert res.json().get("id")
     principal = Principal(
         school_id="school-a",
         membership_id="m-edu",
@@ -661,9 +659,8 @@ def test_unbound_new_chat_paperclip_is_claimed(client: TestClient) -> None:
     items, other = asyncio.run(_claim())
     assert items
     assert items[0]["title"] == "地理答案扫描.pdf"
-    assert int(items[0].get("page_count") or 0) >= 1
     assert other == []
-    assert conversation_images(cid)
+    assert conversation_images(cid) == []
     injected = inject_conversation_uploads("这份里面写了什么", items)
     assert "地理答案扫描.pdf" in injected
     assert "直接看图" not in injected
@@ -727,16 +724,13 @@ def test_stale_unbound_paperclip_is_not_stolen(client: TestClient) -> None:
     assert "地理答案本轮.md" in titles
     assert "geo-scan-xlm1.pdf" not in titles
     injected = inject_conversation_uploads("这份里面写了什么", items)
-    assert "PICO860-FRESH" in injected
+    assert "地理答案本轮.md" in injected
+    assert "PICO860-FRESH" not in injected
     assert "geo-scan-xlm1.pdf" not in injected
 
 
 def test_native_input_file_pdf_rasters_to_images() -> None:
-    import pytest
-
-    pytest.importorskip("pypdfium2")
-    pytest.importorskip("PIL")
-
+    """#865: native PDF parts are names, not a Pico raster reader."""
     from app.edu_files import images_from_native_pdf_parts
     from app.openai_compat import ChatMessage, _content_text, _last_user_prompt
 
@@ -754,6 +748,4 @@ def test_native_input_file_pdf_rasters_to_images() -> None:
     msg = ChatMessage.model_validate({"role": "user", "content": parts})
     assert "地理答案" in _last_user_prompt([msg])
     images = images_from_native_pdf_parts([msg])
-    assert images
-    assert images[0].get("mimeType") == "image/png"
-    assert images[0].get("source") == "pdf-page"
+    assert images == []

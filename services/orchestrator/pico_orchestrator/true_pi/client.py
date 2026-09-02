@@ -102,18 +102,16 @@ PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
 def official_compaction_settings(max_context: int) -> dict[str, Any]:
     """Pi official compaction knobs only. Trigger: used > window - reserveTokens.
 
-    Do not invent a compressor. Windows stay 128k/256k. Raise reserveTokens so a
-    same-conversation long office run (several turns, tens of thousands of
-    tokens) actually fires; keepRecentTokens stays large enough that current
-    files and the last turn survive. One-shot short office stays under the line.
+    LAW #865: Pico must not hard-cap the upstream window. A 256k model keeps
+    ~256k. reserveTokens stays small so compaction fires near the real end,
+    not at 64k. Do not invent a compressor.
     """
     window = int(max_context) or 256_000
-    if window >= 200_000:
-        # deep 256k: fire when used > 64k (256k - 192k).
-        reserve, keep = 192_000, 20_000
-    else:
-        # fast 128k: fire when used > 56k (128k - 72k).
-        reserve, keep = 72_000, 16_000
+    # Fire when about 20k tokens remain. keepRecent survives the last turn.
+    reserve, keep = 20_000, 20_000
+    if window < 40_000:
+        reserve = max(4_000, window // 8)
+        keep = reserve
     return {
         "compaction": {
             "enabled": True,

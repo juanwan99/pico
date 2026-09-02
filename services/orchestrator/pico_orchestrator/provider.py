@@ -225,51 +225,27 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
 
 
 def runtime_policy_for_model(model: str | None) -> dict[str, object]:
-    """Return the Pico product policy for a selected model.
+    """Lane labels only. LAW #865: Pico does not hard-cap the upstream window.
 
-    fast: deepseek-v4-flash with thinking off (easy / short)
-    deep: deepseek-reasoner with thinking on (hard / multi-step office)
+    GPT / OpenAI Responses brain: thinking on, 256k, 24 steps.
+    DeepSeek flash: thinking off is a provider quirk (empty HTTP 200), not a
+    Pico window cap — steps/tokens/context still match the upstream lane.
     """
     requested = (model or "").strip()
     low = requested.lower()
-    if low == "pico-fast":
-        return {
-            "ui_model": low,
-            "backend_model": product_backend_model(deep=False),
-            "thinking": False,
-            "max_steps": 12,
-            "max_tokens": 8000,
-            "max_context": 128000,
-            "fallback": product_backend_model(deep=False),
-        }
-    if low == "pico-deep":
-        return {
-            "ui_model": low,
-            "backend_model": product_backend_model(deep=True),
-            "thinking": True,
-            "max_steps": 24,
-            "max_tokens": 32000,
-            "max_context": 256000,
-            "fallback": product_backend_model(deep=True),
-        }
-    if low in {"pico-agent", "pico"}:
-        return {
-            "ui_model": "pico-agent",
-            "backend_model": product_backend_model(deep=True),
-            "thinking": True,
-            "max_steps": 24,
-            "max_tokens": 32000,
-            "max_context": 256000,
-            "fallback": product_backend_model(deep=True),
-        }
+    cfg = resolve_provider()
+    gpt_brain = cfg is not None and uses_openai_responses_brain(cfg)
+    deep = low in {"pico-deep", "pico-agent", "pico"}
+    ui = "pico-agent" if low in {"pico-agent", "pico"} else (low or "pico-fast")
+    thinking = bool(gpt_brain or deep)
     return {
-        "ui_model": requested or "pico-fast",
-        "backend_model": product_backend_model(deep=False),
-        "thinking": False,
-        "max_steps": 12,
-        "max_tokens": 8000,
-        "max_context": 128000,
-        "fallback": product_backend_model(deep=False),
+        "ui_model": ui if ui.startswith("pico-") else (low or "pico-fast"),
+        "backend_model": product_backend_model(deep=deep),
+        "thinking": thinking,
+        "max_steps": 24,
+        "max_tokens": 32000,
+        "max_context": 256000,
+        "fallback": product_backend_model(deep=bool(gpt_brain or deep)),
     }
 
 
