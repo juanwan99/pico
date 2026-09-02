@@ -344,6 +344,15 @@ async function waitSettled(page, timeoutMs) {
     const thinkLive =
       (await chain.count()) > 0 &&
       (await chain.first().getAttribute('data-submitting')) === 'true';
+    const askOpt = page.getByTestId('pico-ask-option');
+    if ((await askOpt.count()) > 0) {
+      // Teacher path: the run is parked on ask_user. Clicking continues it.
+      sawStreaming = true;
+      await askOpt.first().click({ timeout: 3000 }).catch(() => {});
+      stableSince = Date.now();
+      await page.waitForTimeout(600);
+      continue;
+    }
     const streaming =
       thinkLive ||
       (await page.getByRole('button', { name: /Stop|停止/i }).count()) > 0;
