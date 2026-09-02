@@ -53,6 +53,15 @@ function isOffice(a: PicoArtifact): boolean {
   return /\.(docx?|pptx?|xlsx?|odt|odp|ods)$/i.test(name) || /docx|pptx|xlsx/i.test(a.kind || '');
 }
 
+function isPdf(a: PicoArtifact): boolean {
+  const name = displayName(a);
+  return /\.pdf$/i.test(name) || /pdf/i.test(a.kind || '');
+}
+
+function opensInResultPane(a: PicoArtifact): boolean {
+  return isOffice(a) || isHtml(a) || isImage(a) || isPdf(a);
+}
+
 export default function MainDeliveryStrip({
   artifacts,
   runEvents,
@@ -88,7 +97,7 @@ export default function MainDeliveryStrip({
     setPreviewHtml(null);
     setPreviewImage(null);
     try {
-      if (onOpenResultPanel && (isOffice(a) || isHtml(a) || isImage(a))) {
+      if (onOpenResultPanel && opensInResultPane(a)) {
         stashPendingPreviewId(a.id);
         onOpenResultPanel();
         return;

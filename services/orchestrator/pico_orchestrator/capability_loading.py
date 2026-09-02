@@ -22,6 +22,8 @@ from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 # Programming sandbox stays extended until T-CODE-SANDBOX (S3).
 # Hung skills may narrow, but must not expose generate_pptx_document without
 # its sibling sandbox_pptx_lib (see ppt_siblings_honest).
+# sandbox_browser_open / sandbox_document_open are the existing pane doors
+# (isolated site + Office content-box). Not a PDF kernel. Screenshot/exec stay EXTENDED.
 CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "workspace_list_files",
     "workspace_read_file",
@@ -38,6 +40,8 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "web_fetch",
     "kb_search",
     "ask_user",
+    "sandbox_browser_open",
+    "sandbox_document_open",
 )
 
 # Same gateway, not registered unless a hung skill lists them.
@@ -45,8 +49,6 @@ EXTENDED_TOOLS: tuple[str, ...] = (
     "edit_docx_document",
     "edit_pptx_document",
     "edit_xlsx_document",
-    "sandbox_browser_open",
-    "sandbox_document_open",
     "publish_html_page",
     "unpublish_html_page",
     "render_document",
