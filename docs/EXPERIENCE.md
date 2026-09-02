@@ -4,29 +4,27 @@
 仓: juanwan99/pico ONLY
 DATE: 2026-09-02
 用法: 开窗读本文。禁止把正文贴进卡或对业主聊天。
-派发条只点名编号（最多 3 条）。过期删（本窗同轮删/并）。
 工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
 北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok
-按域检索: A 派发 · B 产品 · C 部署/ECS/工位 · D Cloud Agent
+按域检索: A 版本/收口 · B 产品 · C 部署/ECS/工位 · D Cloud Agent
 ```
 
-## A · 派发 / 收口
+## A · 版本 / 收口
 
 1. **只改 pico。** 禁写 edu-core / edu-cloud。
-2. **1 卡 1 PR。** CI 红、测炸、部翻车，都在**原 PR 原分支**补。禁止为修测/修部/修 Dockerfile/改文档新开第二张 PR（同卡续 = 业主说还差）。**禁止只改 STATE-NOW / 现况三行的独立 PR。** PASS 与现况写 Issue 评论；现况三行跟同轮改码 PR 顺手刷，或只评不 PR。
-3. **无部署权拒领。** 不能 `PICO_DEPLOY_SHA=… bash /opt/pico/scripts/prod-update.sh` = 不 stamp。DONE 必须 `curl -fsS https://pico.aivia.asia/api/pico/tip` = origin/main。合了未部 = 没完。
-4. **禁止 PR 写 `Closes #<卡>`。** 部前关卡 = 失真。合了未部要打回 OPEN。
-5. **证据贴本卡 Issue 评论。** 禁止截图 docs PR。UI 卡：本窗合部后把过门截图贴合同 Issue **回执**（图跟五句一起）。Cloud Agent 本机无浏览器 ≠ 免过门；派发条写明「截图写回执」。
-6. **过门是公网结果句。** live tip=main（或写明不部）且结果句可见 → 本窗对账后关。业主抽检不对开新卡。写 1px 轨 / 词表 / 选择器 = 退回。禁焊提示词/定向场景。
-7. **同域一张 `stamp-ok`。** 残债同卡。禁 `T-*-DEBT`。
-8. **卡面四行合同。** 已锁事实写 Issue 评论，禁止把手册/315 贴进卡。
-9. **聊天默认易失。** 约束下一窗 → Issue 评论或 `STATE-NOW` / 本文 / `TOOLING-CATALOG`。回复用 `§编号` / `Issue#`，禁「上次我们说」。
-10. **本窗合一。** 开卡、改、测、合、部、收尾是同一窗。不要 spawn 子 agent / Cursor 云 Task。不设主管/执行者编制。
-21. **自循环总线 = 合同 Issue 评论标题。** 只认 `## 派发` / `## CANDIDATE` / `## DEPLOYED` / 五句 `DONE`。禁止 mailbox / 把 ECS 当第二账本 / 聊天当真源。
-22. **工作法环：** 开窗对账（GitHub 在飞最多 1 · 写码树干净或只脏本卡 · 生产树干净+detached · curl tip）→ stamp → 本窗改+测+PR（叠 live）→ 订 subscribe-ci（禁止窗里轮询 check-runs / sleep 等绿）→ 合前 `scripts/pr-ci-ready.sh --pr N` 一眼（0 才合 · 1 停着再订 · 2 回原 PR 补）→ CI 绿再 squash 合 → 有差才部（只 `prod-update`）→ tip-pin → 公网结果句 → 收工对账。等 CI ≠ 卡死。合了未部关卡=打回 OPEN。禁止 mailbox。卡别拆太细。
-23. **三态：** `OPEN` 有 stamp 在飞 · `WAIT` 等人/审（不开新卡）· `CLEAR` tip 该对齐已对齐 + 收工对账完。人只留：目标 · 黄红争议 · 业主 PASS。同域第二张 stamp-ok=废派。
-42. **收尾。** 合了、部了、公网对了还没收尾=没完。产品过门（结果句可见）与卫生对账分开；卫生不是第二人。六步：①刷三行=curl tip（该变则=main，不该变则写明不部）②关本卡（白名单 #316 #449 #170 #634 #475 除外）③关同域 PR ④关已派讨论母卡 ⑤扫开 PR 超 24h 无主则关（禁止合尸 PR）⑥评 `卫生勾完`。无⑥不准下一张。禁止把「业主 PASS」扩成第二白名单。**docs-only 且 CI `paths-ignore` = 可合**，禁止空等检查项堆尸 PR。
-45. **工作法（#869）。** 人合一、GitHub 唯一真源、工位分开。写码 `/home/ops/pico`；生产 `/opt/pico` 只 prod-update。STATE-NOW 是索引。开窗先读 AGENTS.md 文首。
+2. **1 件事 1 PR。** CI 红、测炸、部翻车，都在**原 PR 原分支**补。禁止为修测/修部/修 Dockerfile 新开第二张 PR。**禁止只改 STATE-NOW 的独立 PR。**
+3. **生产线只有 `origin/main`。** 旁支不准部。长分叉只移植，禁止整枝 merge。GitHub 上几百条 feat/cursor/grok 头不是版本。
+4. **禁止 PR 写 `Closes #<卡>`。** 部前关卡 = 合了未部也变关。
+5. **证据贴 Issue 评论。** 禁止截图 docs PR。
+6. **过门是公网结果句。** live tip 在 `origin/main` 上（docs-only 写明不部）且结果句可见 → 关。CI/API 200 不算过门。
+8. **有卡就把事实写在 Issue。** 小改可无卡直接 PR。禁止把手册贴进卡。
+9. **聊天默认易失。** 约束下一窗 → Issue 评论或本文。禁「上次我们说」。
+10. **本窗合一。** 改、测、合、部是同一窗。不要 spawn 子 agent / Cursor 云 Task。不设主管/执行者编制。
+21. **GitHub 就是总线。** Issue/PR/SHA/CI。不要 CANDIDATE/DEPLOYED/五句/stamp-ok/派发条当第二套状态机。禁止 mailbox。
+22. **工作环：** 开窗 `curl tip` → 从 `origin/main` 开枝 → 改+测 → PR → CI 绿 → squash 合 → 产品有差才 `prod-update` → 再 curl tip。合了未部 = main 走了 live 没走，必须说清楚。
+42. **收工。** curl tip（该变则在 main 上，不该变则写明不部）+ 关本卡本 PR + 写码树干净。不是第二人，不搞六步勾表。
+45. **工作法。** 人合一、GitHub 唯一真源、工位分开、版本只认 main。开窗先读 AGENTS.md 文首。
+46. **现网版本 = curl tip，不是 STATE-NOW，不是工作树 HEAD。** docs-only 合进 main 可以不部；此时 tip 落后 main 是诚实 gap，禁止把 STATE-NOW 写成 live=main。
 
 ## B · 现网 / 产品
 

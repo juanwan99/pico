@@ -65,11 +65,21 @@ if [ "$FETCH_TRACKS_MAIN" -ne 1 ]; then
   exit 3
 fi
 
-if [ "$DEPLOY_SHA" != "$MAIN_SHA" ]; then
-  echo "[pico] BLOCKED: requested SHA is not the current origin/main tip" >&2
+if ! git cat-file -e "${DEPLOY_SHA}^{commit}" 2>/dev/null; then
+  echo "[pico] BLOCKED: requested SHA is not in this clone after fetching main" >&2
+  echo "[pico] requested=$DEPLOY_SHA" >&2
+  exit 3
+fi
+if ! git merge-base --is-ancestor "$DEPLOY_SHA" "$MAIN_SHA"; then
+  echo "[pico] BLOCKED: requested SHA is not on origin/main" >&2
+  echo "[pico] 旁支不准部。先 squash 合进 origin/main。" >&2
   echo "[pico] requested=$DEPLOY_SHA" >&2
   echo "[pico] origin/main=$MAIN_SHA" >&2
   exit 3
+fi
+if [ "$DEPLOY_SHA" != "$MAIN_SHA" ]; then
+  echo "[pico] NOTE: deploying older main SHA (rollback), not tip" >&2
+  echo "[pico] requested=$DEPLOY_SHA origin/main=$MAIN_SHA" >&2
 fi
 
 # Detached checkout prevents a server-local branch from becoming a second release source.

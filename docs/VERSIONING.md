@@ -2,11 +2,21 @@
 
 ```
 DOC: docs/VERSIONING.md
-STATUS: BINDING v1.0
-SOURCE: edu-cloud AGENTS + SYSTEM-REQUIREMENT 中「版本/交付」内核
-ADAPTED: docs/ONEFLOW.md（Pico OneFlow）；未抄 edu 19080/mcu/ECS
-RELATED: docs/WORKFLOW.md · AGENTS.md · docs/MVP-3DAY.md
+STATUS: BINDING v1.1 — 日常只认文首；下文历史细节不当日常门禁
+RELATED: AGENTS.md 文首 · docs/ONEFLOW.md
 ```
+
+```text
+日常版本（只认这 6 行）
+1. 生产线 = origin/main。旁支不是版本，不准部。
+2. 现网 = curl https://pico.aivia.asia/api/pico/tip
+3. 可部 SHA = origin/main 上的提交（通常是 tip；回滚必须仍是 main 祖先）
+4. 长分叉只移植，禁止整枝 merge
+5. 写码树 /home/ops/pico ≠ 生产树 /opt/pico（只 prod-update）
+6. STATE-NOW / 聊天 / 本地 HEAD 都不是现网版本
+```
+
+> 下面是历史吸收表。CANDIDATE / 值守合 / 写入不自签 已废为日常编制。绿档：CI 绿本窗合。
 
 ## 0. 先答：吸收了没有？
 
