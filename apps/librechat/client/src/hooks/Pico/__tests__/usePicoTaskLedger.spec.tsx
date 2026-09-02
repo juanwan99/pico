@@ -5,7 +5,7 @@
  * visible right after completion.
  */
 import { renderHook, act } from '@testing-library/react';
-import { usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
+import { ledgerPollMode, usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
 import * as picoApi from '~/data-provider/pico/api';
 
 jest.mock('~/data-provider/pico/api', () => ({
@@ -66,9 +66,34 @@ function setupDefaults() {
   mockedApi.listPicoConversationArtifacts.mockResolvedValue({ artifacts: [] });
 }
 
+describe('ledgerPollMode', () => {
+  it('polls only while submitting or the run is live', () => {
+    expect(
+      ledgerPollMode({ isSubmitting: true, activeRun: false, recovering: false, hasRun: false }),
+    ).toBe('live');
+    expect(
+      ledgerPollMode({ isSubmitting: false, activeRun: true, recovering: false, hasRun: true }),
+    ).toBe('live');
+  });
+
+  it('does not 2s-poll a finished chat during the recovery window', () => {
+    expect(
+      ledgerPollMode({ isSubmitting: false, activeRun: false, recovering: true, hasRun: true }),
+    ).toBe('tail');
+  });
+
+  it('recovers only when the ledger has not bound a run yet', () => {
+    expect(
+      ledgerPollMode({ isSubmitting: false, activeRun: false, recovering: true, hasRun: false }),
+    ).toBe('recover');
+  });
+});
+
 describe('usePicoTaskLedger — terminal artifacts refresh (#461 PR-A2)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    sessionStorage.clear();
+    mockedApi.rebindConversation.mockResolvedValue({ updated: 0, from: '', to: '' });
     setupDefaults();
   });
 
@@ -91,15 +116,17 @@ describe('usePicoTaskLedger — terminal artifacts refresh (#461 PR-A2)', () => 
     });
     expect(result.current.artifacts).toHaveLength(5);
 
-    // wait past the 30 s recovery window + a couple of 500 ms terminal polls
+    const afterLoad = mockedApi.getPicoTask.mock.calls.length;
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 32_500));
+      await new Promise((r) => setTimeout(r, 1600));
     });
-    // artifacts must remain fully rendered after the terminal refresh window
     expect(result.current.artifacts).toHaveLength(5);
     expect(result.current.run?.status).toBe('succeeded');
-    // the terminal refresh path must have hit getPicoTask more than the initial
-    // load alone (recovery 2 s polls + immediate + 500 ms polls)
-    expect(mockedApi.getPicoTask.mock.calls.length).toBeGreaterThan(1);
-  }, 60_000);
+    const afterTail = mockedApi.getPicoTask.mock.calls.length;
+    expect(afterTail).toBeGreaterThan(afterLoad);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 2500));
+    });
+    expect(mockedApi.getPicoTask.mock.calls.length).toBe(afterTail);
+  }, 15_000);
 });

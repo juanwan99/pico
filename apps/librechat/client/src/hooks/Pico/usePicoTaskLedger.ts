@@ -39,6 +39,25 @@ const ACTIVE_RUN_STATUSES = new Set(['queued', 'running', 'preparing']);
 /** How many newest tasks to inspect when recovering an active Run after reload. */
 const ACTIVE_RUN_SCAN_LIMIT = 5;
 const RECOVERY_WINDOW_MS = 30_000;
+const LIVE_POLL_MS = 2000;
+const TAIL_POLL_MS = 500;
+const TAIL_POLL_TIMES = 2;
+
+/** Ledger HTTP: live SSE/run only. Do not 2s-poll a finished chat for 30s. */
+export function ledgerPollMode(opts: {
+  isSubmitting: boolean;
+  activeRun: boolean;
+  recovering: boolean;
+  hasRun: boolean;
+}): 'live' | 'recover' | 'tail' {
+  if (opts.isSubmitting || opts.activeRun) {
+    return 'live';
+  }
+  if (opts.recovering && !opts.hasRun) {
+    return 'recover';
+  }
+  return 'tail';
+}
 
 function isActiveRun(run: PicoRun | null | undefined): run is PicoRun {
   return Boolean(run && ACTIVE_RUN_STATUSES.has(run.status));
@@ -404,6 +423,7 @@ export function usePicoTaskLedger(
   const [recovering, setRecovering] = useState(true);
   const [tick, setTick] = useState(0);
   const activeRun = isActiveRun(run);
+  const hasRun = Boolean(run);
   const runRef = useRef(run);
   const taskRef = useRef(task);
   const recoveryDeadlineRef = useRef(0);
@@ -570,7 +590,7 @@ export function usePicoTaskLedger(
     [],
   );
 
-  // Rebind pending_* → real conversation id once LibreChat assigns one
+  // Rebind pending_* → real id once. Do not POST on every ledger tick.
   useEffect(() => {
     if (!conversationId || conversationId === 'new' || conversationId.startsWith('pending_')) {
       return;
@@ -581,14 +601,14 @@ export function usePicoTaskLedger(
         let from = sessionStorage.getItem('pico:rebindFrom');
         const to = sessionStorage.getItem('pico:rebindTo') || conversationId;
         if (!from) {
-          const pending = sessionStorage.getItem('pico:pendingConvo');
-          if (pending && pending.startsWith('pending_') && pending !== conversationId) {
+          const pending = readPendingId();
+          if (pending && pending !== conversationId) {
             from = pending;
           }
         }
         if (from && from.startsWith('pending_') && to && to !== from) {
-          const result = await rebindConversation(from, to);
-          if (!cancelled && result.updated > 0) {
+          await rebindConversation(from, to);
+          if (!cancelled) {
             sessionStorage.removeItem('pico:rebindFrom');
             sessionStorage.removeItem('pico:rebindTo');
             sessionStorage.removeItem('pico:pendingConvo');
@@ -596,13 +616,13 @@ export function usePicoTaskLedger(
           }
         }
       } catch {
-        /* retry on next tick */
+        /* next conversation change or refresh() retries */
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [conversationId, tick]);
+  }, [conversationId]);
 
   useEffect(() => {
     setTask(null);
@@ -752,31 +772,32 @@ export function usePicoTaskLedger(
     };
   }, [conversationId, tick, isSubmitting]);
 
-  // The ledger is the source of truth after reload: keep polling an active Run
-  // even when LibreChat no longer has the original in-memory submitting state.
+  // Live run: poll. Finished chat: short artifact tail. Not 30s of 2s traffic.
   useEffect(() => {
     if (!conversationId || conversationId === 'new') {
       return;
     }
-    if (isSubmitting || activeRun || recovering) {
-      const id = window.setInterval(() => setTick((n) => n + 1), 2000);
+    const mode = ledgerPollMode({
+      isSubmitting,
+      activeRun,
+      recovering,
+      hasRun,
+    });
+    if (mode === 'live' || mode === 'recover') {
+      const id = window.setInterval(() => setTick((n) => n + 1), LIVE_POLL_MS);
       return () => window.clearInterval(id);
     }
-    // After the ledger reaches a terminal state, refresh a few times for artifacts.
-    // #461 PR-A2: trigger immediately + tighter poll so multi-file chips (e.g.
-    // C2 5 files) render in ~1s instead of lagging 4×1.5s after settle — avoids
-    // "ledger green but UI shows fewer files" on first paint after completion.
     let n = 0;
     setTick((t) => t + 1);
     const id = window.setInterval(() => {
       n += 1;
       setTick((t) => t + 1);
-      if (n >= 6) {
+      if (n >= TAIL_POLL_TIMES) {
         window.clearInterval(id);
       }
-    }, 500);
+    }, TAIL_POLL_MS);
     return () => window.clearInterval(id);
-  }, [isSubmitting, conversationId, activeRun, recovering]);
+  }, [isSubmitting, conversationId, activeRun, recovering, hasRun]);
 
   return {
     task,
