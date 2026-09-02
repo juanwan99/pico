@@ -483,6 +483,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             ),
             conversation_id=conversation_id,
             persist_pi_session=True,
+            run_id=run_id,
         )
     except Exception as exc:  # noqa: BLE001 — persist failure on any crash
         async with factory() as session:

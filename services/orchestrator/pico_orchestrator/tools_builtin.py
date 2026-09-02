@@ -388,6 +388,14 @@ def _read_file_for_model(row: dict[str, Any]) -> dict[str, Any]:
         out.pop("content_base64", None)
         return out
 
+    if kind in {"edu_excerpt", "kb_text"}:
+        out.pop("content_base64", None)
+        if kind == "edu_excerpt":
+            out.pop("content", None)
+            out["unread"] = True
+            out["user_message"] = _office_unread_message(title=title, kind=kind)
+        return out
+
     if kind in _PIXEL_READ_KINDS or suffix in _PIXEL_READ_EXTS:
         out.pop("content", None)
         out.pop("content_base64", None)
@@ -2168,8 +2176,9 @@ def build_default_gateway(
             name="workspace_read_file",
             description=(
                 "Read one Artifact owned by the current membership by id or title. "
-                "Digital PDF / Word / Excel / PPT come back as extracted text in content. "
-                "Scan PDF pages, when present, are already on this-turn images. "
+                "PDF/docx/xlsx/pptx originals are on this turn's model file channel; "
+                "this tool returns ledger extract text when present. "
+                "Unread office is not missing — do not ask the teacher to re-upload. "
                 "png/jpg stay binary: only id, title, kind, size — no pixels or base64. "
                 "HTML drops embedded data: image payloads. "
                 "Pass a picture artifact id to a document tool to embed."

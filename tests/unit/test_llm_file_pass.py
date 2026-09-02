@@ -63,3 +63,11 @@ def test_remember_and_pass_url() -> None:
     assert "/internal/llm-pass/run-1/v1" in pass_base_url("run-1", port="18765")
     forget_turn_files("run-1")
     assert not has_turn_files("run-1")
+
+
+def test_turn_files_key_is_exact_run_id() -> None:
+    pdf = NativeFile(filename="a.pdf", data=b"%PDF")
+    remember_turn_files("ledger-run", [pdf])
+    assert has_turn_files("ledger-run")
+    assert not has_turn_files("tp-abc")
+    forget_turn_files("ledger-run")

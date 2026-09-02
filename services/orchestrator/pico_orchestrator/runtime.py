@@ -201,6 +201,9 @@ async def run_agent_runtime(
     # Hosted pi_runtime / kimi do not take these; true-pi session tree does.
     persist_pi_session = bool(kwargs.pop("persist_pi_session", False))
     conversation_id = kwargs.pop("conversation_id", None)
+    # Hosted pi_runtime rejects this kwarg. true_pi needs the ledger run_id
+    # so llm-pass remember/has_turn_files use the same key (not a fresh tp-*).
+    run_id = kwargs.pop("run_id", None)
 
     use_pi = should_use_pi_agent(
         use_pi_agent=use_pi_agent,
@@ -241,6 +244,7 @@ async def run_agent_runtime(
                 **kwargs,
                 persist_pi_session=persist_pi_session,
                 conversation_id=conversation_id,
+                run_id=run_id,
             )
 
         if _PI_IMPL is not None:

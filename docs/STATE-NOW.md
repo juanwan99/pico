@@ -4,7 +4,7 @@
 DATE: 2026-09-02
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
-在飞: 无
+在飞: #878 T-GPT-FILE-PASS-WIRE
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
 阻塞: 无
@@ -108,7 +108,7 @@ curl tip + GitHub 在飞 → EXPERIENCE（点名≤3）
 | 已关 | [#794](https://github.com/juanwan99/pico/issues/794) | T-SUB2API-FACE · 业主 PASS @ `c2a2e439…` |
 | 挂起 | [#778](https://github.com/juanwan99/pico/issues/778) | 出图链 · 不在三行 · 要做另开 |
 | 已关 | [#850](https://github.com/juanwan99/pico/issues/850) | T-LEDGER-BINARY-BUS 二进制不进脑 · 已部 @ `ed994bd6…` |
-| 在飞 | [#860](https://github.com/juanwan99/pico/issues/860) | T-WORKBENCH-READ-ATTACH 回形针正文进本轮 · 同卡续停焊读不了 |
+| 在飞 | [#878](https://github.com/juanwan99/pico/issues/878) | T-GPT-FILE-PASS-WIRE 回形针原件进 GPT 文件口 |
 | 挂起 | 自研记忆 OS | 禁 · 文件型上游 #807 已部 |
 | HOLD | [#170](https://github.com/juanwan99/pico/issues/170) | 须业主书面 · **勿关** |
 | 冻结钉 | [#634](https://github.com/juanwan99/pico/issues/634) | 卡面四行冻到 9/7 · 流程 EXPERIENCE §80–89 |

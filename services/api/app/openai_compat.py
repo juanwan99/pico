@@ -1153,6 +1153,7 @@ async def _run_and_collect(
         ),
         conversation_id=conversation_id,
         persist_pi_session=True,
+        run_id=run_id,
     )
     return result
 
@@ -1907,6 +1908,7 @@ async def chat_completions(
                     ),
                     conversation_id=conversation_id,
                     persist_pi_session=True,
+                    run_id=run_id,
                 )
                 await _finalize_run(
                     run_id,

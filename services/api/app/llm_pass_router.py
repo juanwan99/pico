@@ -46,9 +46,16 @@ async def llm_pass(run_id: str, path: str, request: Request) -> Response:
 
             payload = json.loads(raw.decode("utf-8") or "{}")
             if isinstance(payload, dict):
-                payload = splice_responses_body(payload, turn_files(run_id))
+                files = turn_files(run_id)
+                payload = splice_responses_body(payload, files)
                 raw = json.dumps(payload).encode("utf-8")
                 headers["content-type"] = "application/json"
+                logger.info(
+                    "llm-pass splice run_id=%s n=%s bytes=%s",
+                    run_id,
+                    len(files),
+                    sum(len(item.data) for item in files),
+                )
         except Exception:
             logger.exception("llm-pass splice skipped run_id=%s", run_id)
     timeout = httpx.Timeout(600.0, connect=10.0)
