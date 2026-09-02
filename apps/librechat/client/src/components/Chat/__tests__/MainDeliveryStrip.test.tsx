@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { PicoArtifact, PicoRunEvent } from '~/data-provider/pico/api';
 import MainDeliveryStrip from '../MainDeliveryStrip';
 
@@ -72,5 +72,17 @@ describe('MainDeliveryStrip column', () => {
     expect(screen.getByText('办公尺752.pptx')).toBeInTheDocument();
     expect(screen.queryByText('决策会封面图.jpg')).not.toBeInTheDocument();
     expect(screen.getByText('成品 · 可下载文件（1）')).toBeInTheDocument();
+  });
+
+  it('opens PDF in the result pane instead of downloading', () => {
+    const onOpenResultPanel = jest.fn();
+    render(
+      <MainDeliveryStrip
+        artifacts={[{ id: 'pdf-1', title: '通知.pdf', kind: 'pdf' }]}
+        onOpenResultPanel={onOpenResultPanel}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('main-delivery-open'));
+    expect(onOpenResultPanel).toHaveBeenCalledTimes(1);
   });
 });

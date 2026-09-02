@@ -80,7 +80,7 @@ def test_core_is_shorter_and_keeps_office_ceiling() -> None:
     visible = resolve_visible_tools(None)
     assert visible == list(CORE_VISIBLE_TOOLS)
     assert len(visible) < 18
-    assert len(visible) == 15
+    assert len(visible) == 17
     assert "sandbox_pptx_lib" in visible
     assert "generate_pptx_document" in visible
     assert ppt_siblings_honest(visible)
