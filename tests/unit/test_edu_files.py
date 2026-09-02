@@ -317,3 +317,145 @@ def test_system_tells_pi_to_read_paperclip_documents() -> None:
         encoding="utf-8"
     )
     assert "this-turn chat paperclip documents" in bridge
+
+
+def test_inject_conversation_uploads_noop_when_empty() -> None:
+    from app.edu_files import inject_conversation_uploads
+
+    prompt = "这是什么"
+    assert inject_conversation_uploads(prompt, []) == prompt
+    assert inject_conversation_uploads(prompt, None) == prompt
+    assert "回形针" not in inject_conversation_uploads(prompt, [])
+
+
+def test_inject_conversation_uploads_cites_excerpt() -> None:
+    from app.edu_files import inject_conversation_uploads
+
+    prompt = "这是什么"
+    out = inject_conversation_uploads(
+        prompt,
+        [
+            {
+                "id": "art-pdf-1",
+                "title": "生物答案.pdf",
+                "excerpt": "口令 PICO860-LANTERN 这是 PDF 正文",
+            }
+        ],
+    )
+    assert "生物答案.pdf" in out
+    assert "PICO860-LANTERN" in out
+    assert "art-pdf-1" in out
+    assert out.endswith(prompt)
+    assert "学校库" in out
+
+
+def test_inject_conversation_uploads_legacy_doc_is_honest() -> None:
+    from app.edu_files import inject_conversation_uploads
+
+    out = inject_conversation_uploads(
+        "看看这是什么",
+        [
+            {
+                "id": "art-doc-1",
+                "title": "教师教学计划.doc",
+                "excerpt": "",
+                "error": "旧版 .doc/.ppt/.xls 打不开也转不了。请另存为 .docx/.pptx/.xlsx 再试。",
+            }
+        ],
+    )
+    assert "教师教学计划.doc" in out
+    assert "另存为" in out
+    assert "没收到" not in out
+
+
+def test_paperclip_pdf_injects_into_this_conversation(client: TestClient) -> None:
+    import asyncio
+
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.edu_files import inject_conversation_uploads, uploads_for_conversation
+
+    token = _token()
+    body_text = "年级：三年级二班。人数：42。\n"
+    res = client.post(
+        "/v1/files",
+        headers={
+            "authorization": f"Bearer {token}",
+            "X-Conversation-Id": "convo-paperclip",
+        },
+        json={
+            "filename": "班情.md",
+            "content_b64": base64.b64encode(body_text.encode("utf-8")).decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="test",
+        aud="test",
+        exp=0,
+        raw={},
+    )
+
+    async def _load() -> list:
+        factory = session_factory()
+        async with factory() as session:
+            mine = await uploads_for_conversation(session, principal, "convo-paperclip")
+            other = await uploads_for_conversation(session, principal, "convo-other")
+        return mine, other
+
+    mine, other = asyncio.run(_load())
+    assert other == []
+    assert any("三年级二班" in str(row.get("excerpt") or "") for row in mine)
+    injected = inject_conversation_uploads("这是什么", mine)
+    assert "三年级二班" in injected
+    assert injected.endswith("这是什么")
+
+
+def test_legacy_doc_lands_unread_not_dropped(client: TestClient) -> None:
+    import asyncio
+
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.edu_files import inject_conversation_uploads, uploads_for_conversation
+
+    token = _token()
+    res = client.post(
+        "/v1/files",
+        headers={
+            "authorization": f"Bearer {token}",
+            "X-Conversation-Id": "convo-legacy-doc",
+        },
+        json={
+            "filename": "教师教学计划.doc",
+            "content_b64": base64.b64encode(b"OLE-not-ooxml").decode("ascii"),
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["id"]
+    assert body["status"] != "ok"
+    assert "另存为" in str(body.get("error") or body.get("headline") or "")
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="test",
+        aud="test",
+        exp=0,
+        raw={},
+    )
+
+    async def _load() -> list:
+        factory = session_factory()
+        async with factory() as session:
+            return await uploads_for_conversation(session, principal, "convo-legacy-doc")
+
+    rows = asyncio.run(_load())
+    assert rows
+    assert rows[0]["title"] == "教师教学计划.doc"
+    injected = inject_conversation_uploads("看看这是什么", rows)
+    assert "另存为" in injected
+    assert "教师教学计划.doc" in injected
