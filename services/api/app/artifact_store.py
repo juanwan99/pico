@@ -15,7 +15,28 @@ from app.db import ArtifactRow, PersonalFolderRow, RunRow, TaskRow, append_event
 
 ENCODING_UTF8 = "utf8"
 ENCODING_BASE64 = "base64"
+# GET /v1/tasks/{id} is polled every 2s. Vendored Pico CSS alone is ~71KiB;
+# six inlined PNGs became ~12MiB and froze the result-area chips.
+TASK_LIST_INLINE_MAX_BYTES = 8_192
 logger = logging.getLogger(__name__)
+
+
+def artifact_inline_for_list(
+    *,
+    encoding: str | None,
+    inline: str | None,
+    byte_size: int,
+) -> str | None:
+    """Metadata chips only. Open/download uses GET …/content."""
+    enc = (encoding or ENCODING_UTF8).strip().lower() or ENCODING_UTF8
+    if enc != ENCODING_UTF8:
+        return None
+    size = int(byte_size or 0)
+    if size <= 0 and isinstance(inline, str):
+        size = len(inline.encode("utf-8"))
+    if size > TASK_LIST_INLINE_MAX_BYTES:
+        return None
+    return inline
 
 
 def encode_artifact_payload(content: str | bytes) -> tuple[str, str, int, str]:

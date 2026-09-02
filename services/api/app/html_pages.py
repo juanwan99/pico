@@ -227,6 +227,14 @@ async def public_html_page(page_id: str) -> Response:
                 artifact.inline, getattr(artifact, "content_encoding", None)
             )
             html = raw.decode("utf-8", errors="replace")
+            from app.html_ledger_serve import inline_html_ledger_images
+
+            html = await inline_html_ledger_images(
+                html,
+                session,
+                school_id=page.school_id,
+                membership_id=page.membership_id,
+            )
             body = prepare_public_html(html)
             return Response(
                 content=body.encode("utf-8"),

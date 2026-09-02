@@ -1564,8 +1564,11 @@ async def get_task(
         encoding = getattr(a, "content_encoding", None) or "utf8"
         byte_size = int(getattr(a, "byte_size", 0) or 0)
         sha = getattr(a, "content_sha256", None) or ""
-        # Never embed base64 binary into the task JSON as fake text.
-        inline_value = a.inline if encoding == "utf8" else None
+        from app.artifact_store import artifact_inline_for_list
+
+        inline_value = artifact_inline_for_list(
+            encoding=encoding, inline=a.inline, byte_size=byte_size
+        )
         if not byte_size and encoding == "utf8":
             byte_size = len((a.inline or "").encode("utf-8"))
         artifacts_out.append(
@@ -1704,6 +1707,18 @@ async def get_artifact_content(
         raw = decode_artifact_payload(artifact.inline, encoding)
     except Exception as exc:
         raise HTTPException(status_code=500, detail="artifact payload corrupt") from exc
+
+    if ext in {".html", ".htm"}:
+        from app.html_ledger_serve import inline_html_ledger_images
+
+        html_text = raw.decode("utf-8", errors="replace")
+        html_text = await inline_html_ledger_images(
+            html_text,
+            session,
+            school_id=principal.school_id,
+            membership_id=principal.membership_id,
+        )
+        raw = html_text.encode("utf-8")
 
     # Fail-closed: never serve renamed text as legitimate Office packages.
     if ext in {".docx", ".pptx"}:

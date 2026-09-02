@@ -23,6 +23,11 @@ _URL_RE = re.compile(
 )
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 JPEG_MAGIC = b"\xff\xd8\xff"
+# Long data: payloads only — keep short placeholders like data:image/omitted.
+_DATA_IMAGE_RE = re.compile(
+    r"data:image/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]{80,}",
+    re.IGNORECASE,
+)
 
 
 def parse_image_artifact_ids(raw: Any) -> list[str]:
@@ -71,8 +76,19 @@ def _ref_to_id(ref: str, index_ids: list[str]) -> str | None:
     return token
 
 
-def image_data_url(raw: bytes) -> str | None:
+def is_image_bytes(raw: bytes) -> bool:
     if not raw:
+        return False
+    return bool(
+        raw.startswith(PNG_MAGIC)
+        or raw[:3] == JPEG_MAGIC
+        or (raw[:4] == b"RIFF" and raw[8:12] == b"WEBP")
+        or raw[:6] in (b"GIF87a", b"GIF89a")
+    )
+
+
+def image_data_url(raw: bytes) -> str | None:
+    if not is_image_bytes(raw):
         return None
     if raw.startswith(PNG_MAGIC):
         mime = "image/png"
@@ -80,11 +96,33 @@ def image_data_url(raw: bytes) -> str | None:
         mime = "image/jpeg"
     elif raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
         mime = "image/webp"
-    elif raw[:6] in (b"GIF87a", b"GIF89a"):
-        mime = "image/gif"
     else:
-        return None
+        mime = "image/gif"
     return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+
+
+def canonicalize_pico_artifact_refs(text: str, index_ids: list[str]) -> str:
+    """Map pico-artifact:0 → pico-artifact:<id>. Missing aliases stay."""
+
+    def _src(match: re.Match[str]) -> str:
+        aid = _ref_to_id(match.group("ref"), index_ids)
+        if not aid:
+            return match.group(0)
+        return f"{match.group('attr')}{match.group('q')}pico-artifact:{aid}{match.group('q')}"
+
+    def _css(match: re.Match[str]) -> str:
+        aid = _ref_to_id(match.group("ref"), index_ids)
+        if not aid:
+            return match.group(0)
+        return f"url(pico-artifact:{aid})"
+
+    out = _SRC_RE.sub(_src, text or "")
+    return _URL_RE.sub(_css, out)
+
+
+def strip_embedded_data_urls(text: str) -> str:
+    """Drop pixel payloads from HTML the model might read. Ids stay."""
+    return _DATA_IMAGE_RE.sub("data:image/omitted", text or "")
 
 
 def rewrite_pico_artifact_srcs(

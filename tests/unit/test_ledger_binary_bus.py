@@ -98,7 +98,7 @@ class MemoryArtifactStore:
 
 
 @pytest.mark.asyncio
-async def test_html_inlines_pico_artifact_id() -> None:
+async def test_html_keeps_pico_artifact_id_on_ledger() -> None:
     store = MemoryArtifactStore()
     gw = build_default_gateway(store)
     owner = P("s1", "m1", ["ai:run"])
@@ -123,9 +123,14 @@ async def test_html_inlines_pico_artifact_id() -> None:
     assert page["images"]["skipped"] == []
     stored = await store.read(owner, artifact_id=page["artifact_id"], title=None)
     html = stored["content"]
-    assert "pico-artifact:" not in html
-    assert "data:image/png;base64," in html
+    assert f"pico-artifact:{aid}" in html
+    assert "data:image/png;base64," not in html
     assert "https://" not in html.split("<img")[1].split(">")[0]
+    inlined, meta = rewrite_pico_artifact_srcs(
+        html, resolved={aid: image_data_url(TINY_PNG) or ""}, index_ids=[]
+    )
+    assert "data:image/png;base64," in inlined
+    assert meta["landed"] == [aid]
 
 
 @pytest.mark.asyncio
@@ -153,7 +158,8 @@ async def test_html_index_alias_and_missing_id_skips() -> None:
     assert "missing-id" in page["images"]["skipped"]
     stored = await store.read(owner, artifact_id=page["artifact_id"], title=None)
     html = stored["content"]
-    assert html.count("data:image/png;base64,") == 1
+    assert f'pico-artifact:{pic["artifact_id"]}' in html
+    assert "data:image/png;base64," not in html
     assert 'src="pico-artifact:missing-id"' in html
 
 
@@ -184,6 +190,45 @@ async def test_read_file_strips_png_keeps_text() -> None:
     assert text["artifact"].get("binary") is not True
 
 
+@pytest.mark.asyncio
+async def test_read_file_strips_data_urls_from_html() -> None:
+    store = MemoryArtifactStore()
+    gw = build_default_gateway(store)
+    owner = P("s1", "m1", ["ai:run"])
+    b64 = "A" * 120
+    page = await gw.invoke(
+        owner,
+        "generate_html_document",
+        {
+            "title": "pix.html",
+            "marker": "PX",
+            "body": (
+                "<!DOCTYPE html><html><body>"
+                f'<img src="data:image/png;base64,{b64}" alt="x" />'
+                "<button type='button'>ok</button>"
+                "</body></html>"
+            ),
+        },
+    )
+    got = await gw.invoke(
+        owner, "workspace_read_file", {"artifact_id": page["artifact_id"]}
+    )
+    body = got["artifact"]["content"]
+    assert "data:image/omitted" in body
+    assert b64 not in body
+
+
+def test_canonicalize_index_alias() -> None:
+    from pico_orchestrator.html_ledger_images import canonicalize_pico_artifact_refs
+
+    out = canonicalize_pico_artifact_refs(
+        '<img src="pico-artifact:0"><img src="pico-artifact:missing">',
+        ["abc"],
+    )
+    assert 'src="pico-artifact:abc"' in out
+    assert 'src="pico-artifact:missing"' in out
+
+
 def test_rewrite_helper_index() -> None:
     url = image_data_url(TINY_PNG)
     assert url and url.startswith("data:image/png;base64,")
@@ -194,6 +239,18 @@ def test_rewrite_helper_index() -> None:
     )
     assert url in html
     assert meta["landed"] == ["abc"]
+
+
+def test_task_list_omits_large_utf8_inline() -> None:
+    sys.path.insert(0, str(ROOT / "services" / "api"))
+    from app.artifact_store import artifact_inline_for_list
+
+    assert artifact_inline_for_list(encoding="utf8", inline="ok", byte_size=2) == "ok"
+    assert (
+        artifact_inline_for_list(encoding="utf8", inline="y" * 9000, byte_size=9000)
+        is None
+    )
+    assert artifact_inline_for_list(encoding="base64", inline="aaa", byte_size=3) is None
 
 
 def test_stream_read_error_is_human() -> None:
@@ -234,14 +291,11 @@ async def test_html_https_image_still_fail_closed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_html_inlined_page_may_exceed_author_body_max() -> None:
-    """Inlined data: URLs are ledger bytes, not prompt — must not fail closed."""
+async def test_html_ledger_stays_small_when_picture_is_fat() -> None:
+    """Pixels stay on the png row. HTML row must not balloon past author body max."""
     store = MemoryArtifactStore()
     gw = build_default_gateway(store)
     owner = P("s1", "m1", ["ai:run"])
-    fat = b"\x89PNG\r\n\x1a\n" + (b"\x00" * 80_000)
-    # Not a valid PNG body, so write as jpeg-looking? image_data_url needs magic.
-    # Use a large PNG-prefixed blob so inline exceeds 200k after base64.
     fat = TINY_PNG + (b"X" * 160_000)
     pic = await store.write(owner, title="fat.png", content=fat, kind="png")
     page = await gw.invoke(
@@ -258,5 +312,12 @@ async def test_html_inlined_page_may_exceed_author_body_max() -> None:
         },
     )
     stored = await store.read(owner, artifact_id=page["artifact_id"], title=None)
-    assert len(stored["content"]) > 200_000
-    assert "data:image/png;base64," in stored["content"]
+    assert len(stored["content"]) < 200_000
+    assert f'pico-artifact:{pic["artifact_id"]}' in stored["content"]
+    assert "data:image/png;base64," not in stored["content"]
+    url = image_data_url(fat)
+    inlined, _meta = rewrite_pico_artifact_srcs(
+        stored["content"], resolved={pic["artifact_id"]: url or ""}, index_ids=[]
+    )
+    assert len(inlined) > 200_000
+    assert "data:image/png;base64," in inlined
