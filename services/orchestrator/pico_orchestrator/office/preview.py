@@ -7,6 +7,7 @@ Codex-style: page/slide canvas only — no Writer/Impress chrome.
 from __future__ import annotations
 
 import base64
+import hashlib
 import html
 import io
 from collections.abc import Callable, Iterator
@@ -22,6 +23,8 @@ _MAX_XLSX_ROWS = 40
 _MAX_XLSX_COLS = 16
 
 _OOXML_MISS = (AttributeError, ValueError, TypeError, KeyError, NotImplementedError)
+_PREVIEW_HTML_CACHE: dict[str, str] = {}
+_PREVIEW_HTML_CACHE_MAX = 16
 
 
 def _opt(call: Callable[[], Any], default: Any = None) -> Any:
@@ -34,15 +37,24 @@ def _opt(call: Callable[[], Any], default: Any = None) -> Any:
 
 def preview_office_html(raw: bytes, ext: str) -> str:
     suffix = require_supported_office_ext(ext)
+    key = f"{hashlib.sha256(raw).hexdigest()}:{suffix}"
+    cached = _PREVIEW_HTML_CACHE.get(key)
+    if cached is not None:
+        return cached
     if suffix == ".pptx" or suffix == ".ppt":
         if not is_valid_ooxml_package(raw, ".pptx"):
             raise ValueError("不是真 PPT（OOXML）。")
-        return _pptx_html(raw)
-    if suffix == ".xlsx" or suffix == ".xls":
-        return _xlsx_html(raw)
-    if not is_valid_ooxml_package(raw, ".docx"):
-        raise ValueError("不是真 Word（OOXML）。")
-    return _docx_html(raw)
+        html_doc = _pptx_html(raw)
+    elif suffix == ".xlsx" or suffix == ".xls":
+        html_doc = _xlsx_html(raw)
+    else:
+        if not is_valid_ooxml_package(raw, ".docx"):
+            raise ValueError("不是真 Word（OOXML）。")
+        html_doc = _docx_html(raw)
+    if len(_PREVIEW_HTML_CACHE) >= _PREVIEW_HTML_CACHE_MAX:
+        _PREVIEW_HTML_CACHE.pop(next(iter(_PREVIEW_HTML_CACHE)))
+    _PREVIEW_HTML_CACHE[key] = html_doc
+    return html_doc
 
 
 def _css() -> str:

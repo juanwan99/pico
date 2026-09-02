@@ -3074,9 +3074,14 @@ html:not(.dark) .pico-wb-composer textarea::placeholder {
 .pico-wb-stage {
   min-height: 0;
 }
-/* Keep home stack: title then form, never reverse */
+/* Greeting scrolls; composer docks at the bottom of the stage. */
 .pico-wb-stage > * {
   flex-shrink: 0;
+}
+.pico-wb-stage > .pico-wb-landing-fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
 }
 
 /* One-row composer — do not force a second empty toolbar band */

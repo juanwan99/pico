@@ -69,7 +69,6 @@ function CancelHarness() {
   return (
     <>
       <TaskRunBar
-        title={ledger.task?.title}
         isSubmitting={false}
         statusLabel={ledger.statusLabel}
         completedLabel={completedLabel}
@@ -106,7 +105,7 @@ describe('Pico cancel button integration', () => {
     global.fetch = fetchMock as unknown as typeof fetch;
 
     render(<CancelHarness />);
-    expect(screen.getByTestId('task-run-bar')).toHaveClass('mt-[52px]', 'z-20');
+    expect(screen.getByTestId('task-run-bar')).toHaveClass('mt-[52px]', 'z-[210]');
     fireEvent.click(await screen.findByRole('button', { name: /停止(任务|云端任务|中)/ }));
 
     expect(screen.getByRole('button', { name: '停止中' })).toBeDisabled();

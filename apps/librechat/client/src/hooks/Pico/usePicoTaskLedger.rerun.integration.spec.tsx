@@ -93,7 +93,6 @@ function RerunHarness() {
   return (
     <>
       <TaskRunBar
-        title={ledger.task?.title}
         isSubmitting={false}
         statusLabel={ledger.statusLabel}
         completedLabel={ledger.run?.status === 'failed' ? ledger.statusLabel : null}

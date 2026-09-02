@@ -9,7 +9,7 @@ import {
   type PicoArtifact,
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
-import { primaryDeliverables } from '~/utils/picoLatestArtifacts';
+import { artifactsForRun, primaryDeliverables } from '~/utils/picoLatestArtifacts';
 import { stashPendingPreviewId } from '~/utils/picoOpenInPane';
 import { cn } from '~/utils';
 import PicoSearchSources from './PicoSearchSources';
@@ -19,6 +19,7 @@ const BOOKKEEPING = new Set(['回复摘要', 'summary', 'run summary']);
 
 type Props = {
   artifacts?: PicoArtifact[] | null;
+  runId?: string | null;
   runEvents?: PicoRunEvent[] | null;
   messages?: PicoSourceMessage[] | null;
   onOpenResultPanel?: () => void;
@@ -64,14 +65,19 @@ function opensInResultPane(a: PicoArtifact): boolean {
 
 export default function MainDeliveryStrip({
   artifacts,
+  runId,
   runEvents,
   messages,
   onOpenResultPanel,
 }: Props) {
   const items = useMemo(
-    () => primaryDeliverables(artifacts).filter((a) => a?.id && !isBookkeeping(a)),
-    [artifacts],
+    () =>
+      primaryDeliverables(artifactsForRun(artifacts, runId)).filter(
+        (a) => a?.id && !isBookkeeping(a),
+      ),
+    [artifacts, runId],
   );
+  const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
@@ -171,14 +177,23 @@ export default function MainDeliveryStrip({
     >
       {sourcesBlock}
       <div className="rounded-xl border border-[#cfe0ff] bg-[#f5f9ff] px-3 py-2.5 shadow-[0_1px_2px_rgba(59,111,217,0.08)] dark:border-border-light dark:bg-surface-secondary">
-        <div className="mb-1.5 flex items-center justify-between gap-2">
-          <p className="text-[12px] font-semibold text-[#1a3a7a] dark:text-text-primary">
-            成品 · 可下载文件（{items.length}）
-          </p>
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            className="min-w-0 flex-1 text-left text-[12px] font-semibold text-[#1a3a7a] dark:text-text-primary"
+            data-testid="main-delivery-toggle"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((open) => !open)}
+          >
+            成品 · {items.length}
+            <span className="ml-2 text-[11px] font-medium text-[#3b6fd9]">
+              {expanded ? '收起' : '展开'}
+            </span>
+          </button>
           {onOpenResultPanel ? (
             <button
               type="button"
-              className="text-[11px] font-medium text-[#3b6fd9] underline-offset-2 hover:underline"
+              className="shrink-0 text-[11px] font-medium text-[#3b6fd9] underline-offset-2 hover:underline"
               onClick={onOpenResultPanel}
               data-testid="main-delivery-open-panel"
             >
@@ -186,7 +201,9 @@ export default function MainDeliveryStrip({
             </button>
           ) : null}
         </div>
-        <ul className="space-y-1.5">
+        {expanded ? (
+          <>
+        <ul className="mt-1.5 space-y-1.5">
           {items.map((a) => {
             const name = displayName(a);
             const opening = busy?.id === a.id && busy.type === 'open';
@@ -295,6 +312,8 @@ export default function MainDeliveryStrip({
           <p className="mt-1.5 text-[11px] text-red-700" role="alert">
             {error}
           </p>
+        ) : null}
+          </>
         ) : null}
       </div>
     </div>

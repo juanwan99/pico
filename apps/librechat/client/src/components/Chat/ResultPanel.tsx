@@ -671,6 +671,11 @@ export default function ResultPanel({
         await applyBlobPreview(artifact, await response.blob());
         return;
       }
+      const kind = classifyArtifactPreview(artifact.name, artifact.kindLabel);
+      if (artifact.picoArtifact && (kind === 'office' || isOfficeArtifact(artifact))) {
+        await applyBlobPreview(artifact, new Blob());
+        return;
+      }
       const blob = await readArtifactBlob(artifact, false);
       await applyBlobPreview(artifact, blob);
     } catch (openError) {

@@ -1,4 +1,23 @@
 /** Newest-first list: keep the first chip per filename. Observe loops must not stack identical names. */
+export function artifactsForRun<T extends { run_id?: string | null }>(
+  items: T[] | null | undefined,
+  runId?: string | null,
+): T[] {
+  if (!items?.length) {
+    return [];
+  }
+  const want = (runId || '').trim();
+  if (!want) {
+    return [...items];
+  }
+  const scoped = items.filter((item) => (item.run_id || '').trim() === want);
+  if (scoped.length) {
+    return scoped;
+  }
+  const anyRun = items.some((item) => (item.run_id || '').trim());
+  return anyRun ? [] : [...items];
+}
+
 export function latestArtifactsByFilename<
   T extends { id: string; title?: string; user_label?: string },
 >(items: T[] | null | undefined): T[] {

@@ -391,16 +391,13 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
 
   it('T4/F2: opening docx shows the content box, not LibreOffice chrome', async () => {
     const user = userEvent.setup();
-    const zipBlob = new Blob([new Uint8Array([80, 75, 3, 4])], {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    });
     const htmlBlob = new Blob(
       [
         '<!doctype html><html><body><article class="page"><h1>报告</h1><p>正文</p></article></body></html>',
       ],
       { type: 'text/html' },
     );
-    mockGetPicoArtifactContent.mockResolvedValueOnce(zipBlob).mockResolvedValueOnce(htmlBlob);
+    mockGetPicoArtifactContent.mockResolvedValueOnce(htmlBlob);
     renderPanel([{ id: 'art-docx', title: '报告.docx', kind: 'docx' }]);
     await user.click(screen.getByRole('button', { name: '打开' }));
     const pane = await screen.findByTestId('artifact-pane-preview');
@@ -408,22 +405,20 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(await screen.findByTestId('artifact-office-iframe')).toBeInTheDocument();
     expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
     expect(screen.queryByTestId('artifact-office-download')).not.toBeInTheDocument();
-    expect(mockGetPicoArtifactContent).toHaveBeenNthCalledWith(2, 'art-docx', false, {
+    expect(mockGetPicoArtifactContent).toHaveBeenCalledTimes(1);
+    expect(mockGetPicoArtifactContent).toHaveBeenCalledWith('art-docx', false, {
       preview: true,
     });
   });
 
   it('sandbox_document_open shows the content box in 沙箱, not a LibreOffice screenshot', async () => {
-    const zipBlob = new Blob([new Uint8Array([80, 75, 3, 4])], {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    });
     const htmlBlob = new Blob(
       [
         '<!doctype html><html><body><article class="page"><h1>报告</h1><p>正文</p></article></body></html>',
       ],
       { type: 'text/html' },
     );
-    mockGetPicoArtifactContent.mockResolvedValueOnce(zipBlob).mockResolvedValueOnce(htmlBlob);
+    mockGetPicoArtifactContent.mockResolvedValueOnce(htmlBlob);
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
@@ -456,7 +451,8 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(screen.getByTestId('artifact-pane-preview')).toHaveAttribute('data-kind', 'office');
     expect(screen.queryByTestId('sandbox-web-pane')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sandbox-web-viewport')).not.toBeInTheDocument();
-    expect(mockGetPicoArtifactContent).toHaveBeenNthCalledWith(2, 'art-docx', false, {
+    expect(mockGetPicoArtifactContent).toHaveBeenCalledTimes(1);
+    expect(mockGetPicoArtifactContent).toHaveBeenCalledWith('art-docx', false, {
       preview: true,
     });
   });
@@ -711,16 +707,13 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
   });
 
   it('opens the generated Word in the content box after 打开一个测试word', async () => {
-    const zipBlob = new Blob([new Uint8Array([80, 75, 3, 4])], {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    });
     const htmlBlob = new Blob(
       [
         '<!doctype html><html><body><article class="page"><h1>测试</h1><p>正文</p></article></body></html>',
       ],
       { type: 'text/html' },
     );
-    mockGetPicoArtifactContent.mockResolvedValueOnce(zipBlob).mockResolvedValueOnce(htmlBlob);
+    mockGetPicoArtifactContent.mockResolvedValueOnce(htmlBlob);
     const userTurn = {
       messageId: 'u1',
       conversationId: 'c1',
@@ -760,7 +753,8 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(await screen.findByTestId('artifact-office-iframe')).toBeInTheDocument();
     expect(screen.queryByText(/没有可打开的文件/)).not.toBeInTheDocument();
     expect(screen.queryByText(/无法在结果区展开内容框/)).not.toBeInTheDocument();
-    expect(mockGetPicoArtifactContent).toHaveBeenNthCalledWith(2, 'art-docx', false, {
+    expect(mockGetPicoArtifactContent).toHaveBeenCalledTimes(1);
+    expect(mockGetPicoArtifactContent).toHaveBeenCalledWith('art-docx', false, {
       preview: true,
     });
   });

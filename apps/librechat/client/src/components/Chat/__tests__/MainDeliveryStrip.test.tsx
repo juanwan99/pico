@@ -42,6 +42,7 @@ describe('MainDeliveryStrip column', () => {
 
   it('keeps files and sources in one column', () => {
     render(<MainDeliveryStrip runEvents={[searchEvent()]} artifacts={[artifact()]} />);
+    fireEvent.click(screen.getByTestId('main-delivery-toggle'));
     const strip = screen.getByTestId('main-delivery-strip');
     expect(strip).toContainElement(screen.getByTestId('pico-search-sources'));
     expect(strip).toContainElement(screen.getByTestId('main-delivery-item'));
@@ -55,8 +56,9 @@ describe('MainDeliveryStrip column', () => {
       kind: 'pptx',
     }));
     render(<MainDeliveryStrip artifacts={dupes} />);
+    fireEvent.click(screen.getByTestId('main-delivery-toggle'));
     expect(screen.getAllByTestId('main-delivery-item')).toHaveLength(1);
-    expect(screen.getByText('成品 · 可下载文件（1）')).toBeInTheDocument();
+    expect(screen.getByTestId('main-delivery-toggle')).toHaveTextContent('成品 · 1');
   });
 
   it('does not list sidecar cover images next to a pptx', () => {
@@ -68,10 +70,11 @@ describe('MainDeliveryStrip column', () => {
         ]}
       />,
     );
+    fireEvent.click(screen.getByTestId('main-delivery-toggle'));
     expect(screen.getAllByTestId('main-delivery-item')).toHaveLength(1);
     expect(screen.getByText('办公尺752.pptx')).toBeInTheDocument();
     expect(screen.queryByText('决策会封面图.jpg')).not.toBeInTheDocument();
-    expect(screen.getByText('成品 · 可下载文件（1）')).toBeInTheDocument();
+    expect(screen.getByTestId('main-delivery-toggle')).toHaveTextContent('成品 · 1');
   });
 
   it('opens PDF in the result pane instead of downloading', () => {
@@ -82,7 +85,32 @@ describe('MainDeliveryStrip column', () => {
         onOpenResultPanel={onOpenResultPanel}
       />,
     );
+    fireEvent.click(screen.getByTestId('main-delivery-toggle'));
     fireEvent.click(screen.getByTestId('main-delivery-open'));
     expect(onOpenResultPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays collapsed until the teacher expands it', () => {
+    render(<MainDeliveryStrip artifacts={[artifact()]} />);
+    expect(screen.getByTestId('main-delivery-toggle')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('main-delivery-item')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('main-delivery-toggle'));
+    expect(screen.getByTestId('main-delivery-item')).toBeInTheDocument();
+  });
+
+  it('lists only the latest run files', () => {
+    render(
+      <MainDeliveryStrip
+        runId="run-new"
+        artifacts={[
+          { id: 'old', title: '旧教案.docx', kind: 'docx', run_id: 'run-old' },
+          { id: 'now', title: '新教案.docx', kind: 'docx', run_id: 'run-new' },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('main-delivery-toggle'));
+    expect(screen.getAllByTestId('main-delivery-item')).toHaveLength(1);
+    expect(screen.getByText('新教案.docx')).toBeInTheDocument();
+    expect(screen.queryByText('旧教案.docx')).not.toBeInTheDocument();
   });
 });
