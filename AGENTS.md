@@ -5,7 +5,7 @@
 ```text
 最高: 禁止自搞一套体系。禁止做重体系 / 厚桥 / 第二能力核。
       只允许薄适配。桥变厚=违法。详见 docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md §0-supreme
-真源: GitHub Issue/PR/SHA/CI + 公网 tip。聊天/磁盘/STATE-NOW 都不是账本。
+真源: GitHub Issue/PR/SHA/CI + 公网 tip。聊天/磁盘/STATE-NOW/旧窗摘要都不是账本。
 人:   本窗合一。不设主管/执行者编制。业主抽检与 CLAIM-WB 不代签。
 版本: 只有 origin/main 是生产线。旁支不准部。长分叉只移植、禁止整枝合。
       live = curl tip，必须是 origin/main 上的 SHA。GitHub 旁支头不是版本。
@@ -17,7 +17,8 @@
       旁支部 live · 整枝合长分叉 · 直推 main · 合了不部 · docs-only 不部
       PR/commit 正文写 GitHub 关卡关键字（Closes / Fixes / close #数字）
       「Do not close #数字」也会被当成关卡。过门后手关 Issue。
-新窗: curl tip + GitHub 在飞最多 1。无在飞则讨论。
+      为卫生自建清理器或第二套记忆账本
+新窗: curl tip + 开 PR 最多 1。无在飞则讨论。已合头枝不是在飞。
 ```
 
 
@@ -86,7 +87,7 @@ Helper（非真源）：`bash scripts/oneflow-status.sh`
 | 黄/红 | 另一双眼睛、exact SHA；换核/密钥/租户业主抽检。CLAIM-WB 不代签 |
 | 工位 | 写码 `/home/ops/pico`；生产 `/opt/pico` 只 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh` |
 | 过门 | 公网看得见结果句。CI/API 200 不算过门 |
-| 卫生 | 开窗 curl tip；收工 tip = origin/main、写码树干净。不是第二人 |
+| 卫生 | 开窗 curl tip + 开 PR≤1。收工 tip=origin/main、写仓 `main` 干净、本任务本地枝已删。GitHub 合完删头枝。禁止自建清理器 |
 
 Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
 
@@ -96,6 +97,8 @@ Do **not** route Cool/Keel/supervisor/mailbox/relay/self-drive. Visual Ready sti
 ---
 
 ## Corrected goals snapshot
+
+开场只读文首 + `docs/EXPERIENCE.md` 点名段。下面是索引；SUPERSEDED / 考古不当现况。
 
 Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 
@@ -130,7 +133,7 @@ Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 
 - **Org:** **本窗合一**（写/合/部/收尾同一窗）。旧窗1/2/4 与主管/执行者是历史别名，不是编制。见 [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md)。
 - **Ship steps:** [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. **One window** runs the chain; no multi-issue process OS.
 - **Product goal:** Web WorkBuddy degree — [docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star。用法 = Grok。
-- **Default runtime:** **Pi** + **DeepSeek**. Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted** (never the goal).
+- **Default runtime:** true Pi (`health.default_runtime=pi-true`). Chat brain = New API `openai-responses`（现网模型见 EXPERIENCE §34，不是「DeepSeek 聊天核」）。Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted**.
 - **Prod flags:** `PICO_PI_AGENT_RUNTIME=1` default; legacy Kimi only if emergency. Do **not** claim `CLAIM-WB-DEGREE-WEB` until six bars + GitHub evidence.
 - **KA-4 HARD:** `run_agent_loop` / `runner.py` **removed**. Rollback multi-step = redeploy prior tip or legacy flag — not revive loop.
 - **Speed:** deploy + smoke beat new process docs; see `docs/VELOCITY-CLEAN.md`.
@@ -142,7 +145,7 @@ Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 
 **Default org:** 本窗合一 + 阶段包 ([STAGE-PACKAGE-MODE](docs/STAGE-PACKAGE-MODE.md))。  
 **Default tech rhythm:** [docs/FAST-PATH.md](docs/FAST-PATH.md) 同一窗串行。
 
-**KEEP:** secrets out of git; allowlist tools; exact-SHA deploy; CI green; no fake global / WB CLAIM; no dual-run; **Pi + DeepSeek default**.
+**KEEP:** secrets out of git; allowlist tools; exact-SHA deploy; CI green; no fake global / WB CLAIM; no dual-run; **true-Pi default**.
 
 **CUT:** 主管/执行者编制、stamp-ok/派发条/收尾六步/CANDIDATE 总线、多窗日常派、碎卡、mailbox、旁支部 live、整枝合长分叉、把 ECS 当账本、Kimi-as-only-goal、Dify-as-product。
 

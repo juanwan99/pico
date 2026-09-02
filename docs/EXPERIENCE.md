@@ -13,8 +13,8 @@ DATE: 2026-09-02
 
 1. **只改 pico。** 禁写 edu-core / edu-cloud。
 2. **1 件事 1 PR。** CI 红、测炸、部翻车，都在**原 PR 原分支**补。禁止为修测/修部/修 Dockerfile 新开第二张 PR。**禁止只改 STATE-NOW 的独立 PR。**
-3. **生产线只有 `origin/main`。** 旁支不准部。长分叉只移植，禁止整枝 merge。GitHub 上几百条 feat/cursor/grok 头不是版本。
-4. **禁止 PR 写 `Closes #<卡>`。** 部前关卡 = 合了未部也变关。
+3. **生产线只有 `origin/main`。** 旁支不准部。长分叉只移植，禁止整枝 merge。合完 GitHub 自动删头枝（仓库设置），origin 只应剩 `main`。旁支头不是版本。已合头枝不是在飞。
+4. **禁止 PR/commit 写 GitHub 关卡关键字**（`Closes` / `Fixes` / `close #n`）。「Do not close #n」也会关卡。过门后手关 Issue。
 5. **证据贴 Issue 评论。** 禁止截图 docs PR。
 6. **过门是公网结果句。** live tip = `origin/main` 且结果句可见 → 关。CI/API 200 不算过门。合了不部 = 没完。
 8. **有卡就把事实写在 Issue。** 小改可无卡直接 PR。禁止把手册贴进卡。
@@ -25,6 +25,7 @@ DATE: 2026-09-02
 42. **收工。** curl tip = origin/main + 关本卡本 PR + 写码树干净（本地只留 `main`）。不是第二人，不搞六步勾表。PR/commit 正文不要写 Closes/Fixes/close #n（「Do not close」也会关卡）。过门后手关 Issue。
 45. **工作法。** 人合一、GitHub 唯一真源、工位分开、版本只认 main。改了必须合必须部。开窗先读 AGENTS.md 文首。
 46. **现网版本 = curl tip，必须等于 origin/main。** 不是 STATE-NOW，不是工作树 HEAD。禁止 docs-only 不部。改了必须合必须部，否则业主看不见效果。
+47. **卫生靠 GitHub 原生设置，不靠自建清理器。** 只 squash、合完删头枝、main 规则集（PR + 三门 CI + 线性）。合完写仓回 `main`，只删**本任务**本地枝。不要全库扫枝当仪式。现况只从 GitHub + tip 重建；聊天/旧窗摘要不当账本。
 
 ## B · 现网 / 产品
 
