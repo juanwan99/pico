@@ -9,7 +9,7 @@ always-apply: false
 
 # field-kb-ingest
 
-Engine = **IBM Docling** (MIT). Pico only adapts: accept edu JWT, run this script, return slices. Do not copy the source of record into Pico. Do not build a vector index.
+Engine = **IBM Docling** (MIT) for Office. PDF: **pypdfium2 text layer first**, RapidOCR only when the layer is empty (scans). Pico only adapts. Do not copy the source of record into Pico. Do not build a vector index or a Pico PDF kernel.
 
 Triggers (edu enforces; people do not click「入库」):
 

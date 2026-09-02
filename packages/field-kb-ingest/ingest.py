@@ -9,6 +9,7 @@ from pathlib import Path
 
 ENGINE = "docling"
 ENGINE_PDF = "rapidocr"
+ENGINE_PDF_TEXT = "pdfium-text"
 MAX_EXCERPT = 800
 MAX_SLICES = 8
 DEFAULT_ARTIFACTS = "/opt/docling-models"
@@ -176,6 +177,48 @@ def _rapidocr_engine():
     return _OCR
 
 
+def _pdf_text_layer(path: Path) -> str:
+    """Digital PDF text layer via pypdfium2 (already the scan renderer). Not a Pico PDF kernel."""
+    try:
+        import pypdfium2 as pdfium
+    except Exception:
+        return ""
+    doc = None
+    try:
+        doc = pdfium.PdfDocument(str(path))
+        parts: list[str] = []
+        for i in range(len(doc)):
+            page = doc[i]
+            tp = page.get_textpage()
+            try:
+                text = ""
+                bounded = getattr(tp, "get_text_bounded", None)
+                if callable(bounded):
+                    text = str(bounded() or "")
+                if not text.strip():
+                    ranged = getattr(tp, "get_text_range", None)
+                    if callable(ranged):
+                        text = str(ranged() or "")
+                text = text.replace("\r\n", "\n").strip()
+                if text:
+                    parts.append(text)
+            finally:
+                close_tp = getattr(tp, "close", None)
+                if callable(close_tp):
+                    close_tp()
+                close_page = getattr(page, "close", None)
+                if callable(close_page):
+                    close_page()
+        return "\n\n".join(parts)
+    except Exception:
+        return ""
+    finally:
+        if doc is not None:
+            close_doc = getattr(doc, "close", None)
+            if callable(close_doc):
+                close_doc()
+
+
 def _ocr_pdf_pages(path: Path) -> str:
     """Render each PDF page to an image and OCR. No Docling layout / torch."""
     import numpy as np
@@ -210,6 +253,9 @@ def _ocr_pdf_pages(path: Path) -> str:
 
 def _extract(path: Path, suffix: str) -> tuple[str, str, list[str]]:
     if suffix.lower() == ".pdf":
+        layer = _pdf_text_layer(path)
+        if layer.strip():
+            return layer, ENGINE_PDF_TEXT, ["pdfium"]
         return _ocr_pdf_pages(path), ENGINE_PDF, ["rapidocr"]
     return _convert_path(path), ENGINE, ["docling"]
 
