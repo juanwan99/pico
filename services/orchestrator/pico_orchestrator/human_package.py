@@ -73,6 +73,10 @@ _PROCESS_LINE = re.compile(
 _PROCESS_INLINE = re.compile(
     r"[〔\[](?:调用工具[^〕\]]*|工具完成|步骤\s*\d+|检查点已保存)[〕\]]"
 )
+# Model status headlines that landed as assistant text (**Generating …**).
+_EN_PROCESS_HEADLINE = re.compile(
+    r"(?im)^[ \t]*\*\*(?:Generating|Finalizing|Creating|Writing|Drawing|Building)[^*]{0,80}\*\*[ \t]*$"
+)
 
 # L0 / structure self-check engineer wall (#394 Y1) — main bubble never a lab report.
 # Structural phrases from verify_html honest_note or model paraphrases.
@@ -259,7 +263,7 @@ def _strip_jargon(text: str) -> str:
     for line in text.splitlines():
         if _JARGON_LINE.search(line):
             continue
-        if _PROCESS_LINE.search(line):
+        if _PROCESS_LINE.search(line) or _EN_PROCESS_HEADLINE.search(line):
             continue
         if _L0_SELFCHECK_LINE.search(line):
             continue
@@ -301,6 +305,7 @@ def looks_like_tool_monologue(text: str) -> bool:
         for ln in lines
         if _TOOL_MONOLOGUE_LINE.search(ln)
         or _PROCESS_LINE.search(ln)
+        or _EN_PROCESS_HEADLINE.search(ln)
         or _JARGON_LINE.search(ln)
         or _ENGINEER_EN_LINE.search(ln)
         or _L0_SELFCHECK_LINE.search(ln)

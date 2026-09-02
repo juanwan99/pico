@@ -1809,17 +1809,9 @@ async def chat_completions(
                 if payload.get("step") == 1:
                     await q.put(("status", "正在准备…\n"))
             elif event_type == "tool.call":
-                tool = str(payload.get("tool") or "")
-                if tool == "ask_user":
-                    # HITL is PicoAskBar + ui.prompt.begin. Do not paint
-                    # 「正在调工具」into the product bubble.
-                    pass
-                else:
-                    step = str(payload.get("step_line") or "").strip() or _workbench_tool_step_line(
-                        tool
-                    )
-                    if step:
-                        await q.put(("delta", f"{step}\n"))
+                # Ledger + TaskRunBar / ResultPanel already show 正在画/正在写.
+                # Streaming those lines as content leaves them in the settled bubble.
+                pass
             elif event_type == "tool.result":
                 pass
             elif event_type == "run.heartbeat":

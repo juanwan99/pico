@@ -111,6 +111,20 @@ def test_strips_tool_process_chrome_from_bubble() -> None:
     assert "demo.html" in out
 
 
+def test_strips_english_generating_headlines_from_bubble() -> None:
+    raw = (
+        "**Generating Mermaid diagram**\n"
+        "**Generating offline HTML with accessible segmented buttons**\n"
+        "**Finalizing downloadable filenames and content**\n"
+        "已完成光合作用示意图和离线交互页面。文件：交互页.html\n"
+    )
+    out = sanitize_user_facing_text(raw, artifact_titles=["交互页.html"])
+    assert "Generating" not in out
+    assert "Finalizing" not in out
+    assert "已完成光合作用示意图和离线交互页面" in out
+    assert "交互页.html" in out
+
+
 def test_strips_tool_parameter_monologue() -> None:
     """M3: generate_*/JSON-escape diary must not remain in user bubble."""
     raw = (
