@@ -353,9 +353,8 @@ def _office_unread_message(*, title: str, kind: str) -> str:
     token = f".{kind}" if kind and not kind.startswith(".") else kind
     if suffix in LEGACY_OFFICE_EXTS or token in LEGACY_OFFICE_EXTS:
         return LEGACY_OFFICE_ERROR
-    if suffix == ".pdf" or kind == "pdf":
-        return "这份 PDF 没有文字层。若本轮已附图，直接看图；不要说读不了。"
-    return "没抽出正文。"
+    label = title or "文件"
+    return f"《{label}》在账本。"
 
 
 def _clip_text(body: str) -> tuple[str, bool]:
@@ -394,7 +393,8 @@ def _read_file_for_model(row: dict[str, Any]) -> dict[str, Any]:
         out.pop("content_base64", None)
         out["binary"] = True
         out["user_message"] = (
-            "这是图片，不能当正文读。像素已在账本；要用时把 artifact_id 交给文档工具。"
+            f"图片《{title or 'file'}》在账本。"
+            "像素不进本工具返回；要用时把 artifact_id 交给文档工具。"
         )
         return out
 
@@ -438,7 +438,7 @@ def _read_file_for_model(row: dict[str, Any]) -> dict[str, Any]:
     out.pop("content_base64", None)
     out["binary"] = True
     out["user_message"] = (
-        "这是二进制文件，不能当正文读。"
+        f"二进制《{title or 'file'}》在账本。"
         "要用时把 artifact_id 交给文档工具。"
     )
     return out
@@ -2169,8 +2169,7 @@ def build_default_gateway(
             description=(
                 "Read one Artifact owned by the current membership by id or title. "
                 "Digital PDF / Word / Excel / PPT come back as extracted text in content. "
-                "Scan PDFs without a text layer: this-turn images already have the pages — "
-                "look at them; do not say the file is unreadable. "
+                "Scan PDF pages, when present, are already on this-turn images. "
                 "png/jpg stay binary: only id, title, kind, size — no pixels or base64. "
                 "HTML drops embedded data: image payloads. "
                 "Pass a picture artifact id to a document tool to embed."

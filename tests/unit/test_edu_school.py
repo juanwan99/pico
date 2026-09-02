@@ -25,6 +25,22 @@ def test_inject_named_is_noop_when_nothing_checked() -> None:
     assert "已点名" not in inject_named_school_materials(prompt, [])
 
 
+def test_inject_unread_school_item_does_not_say_unread() -> None:
+    out = inject_named_school_materials(
+        "请看",
+        [
+            {
+                "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                "title": "校历",
+                "unread": True,
+            }
+        ],
+    )
+    assert "校历" in out
+    assert "未读懂" not in out
+    assert "读不了" not in out
+
+
 def test_inject_named_cites_checked_excerpts_only() -> None:
     prompt = "根据学校文件总结"
     out = inject_named_school_materials(

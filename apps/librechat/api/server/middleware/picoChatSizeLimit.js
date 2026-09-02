@@ -1,11 +1,11 @@
 /**
  * Pico stage #265 F1: hard-limit chat message size before heavy agent work.
- * Align with API PICO_CHAT_MAX_PROMPT_CHARS (default 12000). Reject early so
+ * Align with API PICO_CHAT_MAX_PROMPT_CHARS (default 100000). Reject early so
  * LibreChat never burns CPU waiting on a 300k-char model turn.
  */
 const { logger } = require('@librechat/data-schemas');
 
-const DEFAULT_MAX = 12000;
+const DEFAULT_MAX = 100000;
 
 function maxChars() {
   const raw = Number(process.env.PICO_CHAT_MAX_PROMPT_CHARS || DEFAULT_MAX);

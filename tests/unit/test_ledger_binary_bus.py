@@ -181,7 +181,8 @@ async def test_read_file_strips_png_keeps_text() -> None:
     assert "content" not in art or art.get("content") in (None, "")
     assert "content_base64" not in art
     assert art["binary"] is True
-    assert "不能当正文读" in art["user_message"]
+    assert "像素不进" in art["user_message"]
+    assert "不能当正文读" not in art["user_message"]
     assert art["kind"] == "png"
     text = await gw.invoke(
         owner, "workspace_read_file", {"artifact_id": note["artifact_id"]}

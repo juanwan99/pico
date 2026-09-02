@@ -186,7 +186,7 @@ def inject_named_school_materials(prompt: str, items: list[dict[str, Any]] | Non
             if workspace_id:
                 workspace_note += f"（artifact_id {workspace_id}）"
         if row.get("unread") and not excerpt:
-            lines.append(f"- 《{title}》（{item_id}）未读懂")
+            lines.append(f"- 《{title}》（{item_id}）")
             continue
         if excerpt:
             extra = f"\n{workspace_note}" if workspace_note else ""
