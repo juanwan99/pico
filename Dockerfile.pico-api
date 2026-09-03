@@ -23,6 +23,7 @@ RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
 
 COPY services /app/services
 COPY packages /app/packages
+COPY config /app/config
 COPY pyproject.toml /app/pyproject.toml
 
 # Lean image is not the host path (true-pi is). Keep Docling OCR stack aligned anyway.

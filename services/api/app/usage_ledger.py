@@ -81,6 +81,7 @@ _TEACHER_EXTRA_DROP = frozenset(
         "prompt_tokens",
         "completion_tokens",
         "total_tokens",
+        "channel_id",
     }
 )
 _PUBLIC_RUN_USAGE_KEEP = frozenset({"skill_snapshot", "durable_checkpoint"})
@@ -143,17 +144,24 @@ def _row_extra(row: UsageEventRow) -> dict[str, Any]:
     return extra if isinstance(extra, dict) else {}
 
 
+def _row_meter_kwargs(row: UsageEventRow) -> dict[str, Any]:
+    extra = _strip_money_keys(_row_extra(row))
+    return {
+        "tokens_unknown": bool(row.tokens_unknown),
+        "total_tokens": row.total_tokens,
+        "prompt_tokens": row.prompt_tokens,
+        "completion_tokens": row.completion_tokens,
+        "extra": extra,
+        "kind": row.kind,
+        "model": row.model,
+    }
+
+
 def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
     extra = _strip_money_keys(_row_extra(row))
     from app.points_meter import points_from_row
 
-    points = points_from_row(
-        tokens_unknown=bool(row.tokens_unknown),
-        total_tokens=row.total_tokens,
-        prompt_tokens=row.prompt_tokens,
-        completion_tokens=row.completion_tokens,
-        extra=extra,
-    )
+    points = points_from_row(**_row_meter_kwargs(row))
     return {
         "id": row.id,
         "school_id": row.school_id,
@@ -548,6 +556,14 @@ async def emit_llm_usage_after_run(
     extra = usage_extra_bits(usage_dict)
     if ui_model and is_ui_lane(ui_model):
         extra.setdefault("ui_model", ui_model)
+    try:
+        from app.channel_rates import load_rate_card
+
+        rate = load_rate_card().find(kind="llm", model=billed)
+        if rate is not None:
+            extra.setdefault("channel_id", rate.id)
+    except Exception:
+        logger.debug("llm channel_id lookup skipped", exc_info=True)
     await record_usage_event(
         school_id=school,
         membership_id=member,
@@ -593,40 +609,22 @@ async def last_known_billable_milli(
     if not cid or cid.lower() in {"new", "search"}:
         return None
     q = (
-        select(
-            UsageEventRow.total_tokens,
-            UsageEventRow.prompt_tokens,
-            UsageEventRow.completion_tokens,
-            UsageEventRow.extra_json,
-        )
+        select(UsageEventRow)
         .join(TaskRow, UsageEventRow.task_id == TaskRow.id)
         .where(
             UsageEventRow.school_id == school,
             UsageEventRow.membership_id == member,
-            UsageEventRow.kind == "llm",
-            UsageEventRow.tokens_unknown == 0,
             TaskRow.conversation_id == cid,
         )
         .order_by(UsageEventRow.created_at.desc())
-        .limit(1)
+        .limit(20)
     )
-    row = (await session.execute(q)).first()
-    if row is None:
-        return None
-    extra: dict[str, Any] = {}
-    try:
-        extra = json.loads(row.extra_json or "{}")
-    except json.JSONDecodeError:
-        extra = {}
-    if not isinstance(extra, dict):
-        extra = {}
-    return milli_from_row(
-        tokens_unknown=False,
-        total_tokens=row.total_tokens,
-        prompt_tokens=row.prompt_tokens,
-        completion_tokens=row.completion_tokens,
-        extra=extra,
-    )
+    rows = list((await session.execute(q)).scalars().all())
+    for row in rows:
+        milli = milli_from_row(**_row_meter_kwargs(row))
+        if milli is not None:
+            return milli
+    return None
 
 
 async def quote_points_for_principal(
@@ -659,17 +657,21 @@ def _day_bounds(day: str) -> tuple[datetime, datetime]:
 
 def _points_from_sum(
     *,
+    kind: str | None,
     total_tokens: Any,
     prompt_tokens: Any,
     completion_tokens: Any,
 ) -> str | None:
     from app.points_meter import points_from_row
 
+    kind_n = (kind or "llm").strip().lower() or "llm"
     return points_from_row(
         tokens_unknown=False,
         total_tokens=_int_or_none(total_tokens),
         prompt_tokens=_int_or_none(prompt_tokens),
         completion_tokens=_int_or_none(completion_tokens),
+        kind=kind_n,
+        model="gpt-5.6-sol" if kind_n == "llm" else None,
     )
 
 
@@ -698,6 +700,7 @@ async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
             "total_tokens": int(r.total_tokens) if r.total_tokens is not None else None,
             "unknown_count": int(r.unknown_count or 0),
             "points": _points_from_sum(
+                kind=r.kind,
                 total_tokens=r.total_tokens,
                 prompt_tokens=r.prompt_tokens,
                 completion_tokens=r.completion_tokens,
@@ -775,13 +778,7 @@ def _points_view_from_rows(run_id: str, rows: list[UsageEventRow]) -> dict[str, 
     known = 0
     saw_known = False
     for row in rows:
-        milli = milli_from_row(
-            tokens_unknown=bool(row.tokens_unknown),
-            total_tokens=row.total_tokens,
-            prompt_tokens=row.prompt_tokens,
-            completion_tokens=row.completion_tokens,
-            extra=_row_extra(row),
-        )
+        milli = milli_from_row(**_row_meter_kwargs(row))
         if milli is None:
             continue
         saw_known = True
@@ -953,6 +950,7 @@ async def summarize_usage(
             "kind": r.kind,
             "event_count": int(r.event_count or 0),
             "points": _points_from_sum(
+                kind=r.kind,
                 total_tokens=r.total_tokens,
                 prompt_tokens=r.prompt_tokens,
                 completion_tokens=r.completion_tokens,

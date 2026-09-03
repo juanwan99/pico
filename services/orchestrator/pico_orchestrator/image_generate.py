@@ -51,7 +51,7 @@ _429_RETRY_AFTER_CAP_S = IMAGE_TIMEOUT_S
 _429_NON_RETRYABLE_CODES = frozenset({"1113"})
 _flight_lock = asyncio.Lock()
 _glm_lock = asyncio.Lock()
-_inflight: dict[str, asyncio.Future[tuple[bytes, str]]] = {}
+_inflight: dict[str, asyncio.Future[tuple[bytes, str, dict[str, int] | None]]] = {}
 _next_post_mono = 0.0
 _MAX_PROMPT = 2000
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -146,6 +146,15 @@ def gateway_images_url() -> str:
 def gateway_model() -> str:
     raw = (os.environ.get("PICO_IMAGE_GATEWAY_MODEL") or "").strip()
     return raw or gemini_image_model()
+
+
+def billed_image_model() -> str:
+    provider = selected_image_provider()
+    if provider == PROVIDER_ZHIPU:
+        return image_model()
+    if provider == PROVIDER_GEMINI:
+        return gemini_image_model()
+    return gateway_model()
 
 
 def gateway_uses_gemini_native() -> bool:
@@ -410,6 +419,47 @@ def _first_image_payload(body: Any) -> tuple[str | None, str | None]:
     return url_s or None, b64_s or None
 
 
+def usage_from_gemini_body(body: Any) -> dict[str, int] | None:
+    if not isinstance(body, dict):
+        return None
+    meta = body.get("usageMetadata") or body.get("usage_metadata")
+    if not isinstance(meta, dict):
+        usage = body.get("usage")
+        if isinstance(usage, dict):
+            meta = usage
+        else:
+            return None
+    def _n(*keys: str) -> int | None:
+        for key in keys:
+            raw = meta.get(key)
+            if isinstance(raw, bool):
+                continue
+            if isinstance(raw, int) and raw >= 0:
+                return raw
+            if isinstance(raw, float) and raw.is_integer() and raw >= 0:
+                return int(raw)
+        return None
+
+    prompt = _n("promptTokenCount", "prompt_token_count", "prompt_tokens", "input_tokens")
+    completion = _n(
+        "candidatesTokenCount",
+        "candidates_token_count",
+        "completion_tokens",
+        "output_tokens",
+    )
+    total = _n("totalTokenCount", "total_token_count", "total_tokens")
+    if prompt is None and completion is None and total is None:
+        return None
+    out: dict[str, int] = {}
+    if prompt is not None:
+        out["prompt_tokens"] = prompt
+    if completion is not None:
+        out["completion_tokens"] = completion
+    if total is not None:
+        out["total_tokens"] = total
+    return out
+
+
 def _gemini_inline_b64(body: Any) -> str | None:
     if not isinstance(body, dict):
         return None
@@ -439,6 +489,12 @@ def _gemini_inline_b64(body: Any) -> str | None:
 
 async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
     """Return (image_bytes, png|jpg). Never invent pixels on failure."""
+    raw, ext, _usage = await generate_image_with_usage(prompt)
+    return raw, ext
+
+
+async def generate_image_with_usage(prompt: str) -> tuple[bytes, str, dict[str, int] | None]:
+    """Return bytes, format, optional provider usage tokens."""
     text = (prompt or "").strip()
     if not text:
         raise ToolError("tool.invalid_arguments", "请写要画的内容。")
@@ -449,11 +505,19 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
         raise ToolError("image.provider_rejected", REJECTED_PROVIDER_MESSAGE)
     if selected_image_provider() is None:
         raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
+    try:
+        from app.channel_rates import require_rate
+
+        require_rate(kind="image", model=billed_image_model())
+    except ToolError:
+        raise
+    except ImportError:
+        pass
     key = _prompt_key(text)
     async with _flight_lock:
         existing = _inflight.get(key)
         if existing is not None:
-            fut: asyncio.Future[tuple[bytes, str]] = existing
+            fut: asyncio.Future[tuple[bytes, str, dict[str, int] | None]] = existing
             created = False
         else:
             fut = asyncio.get_running_loop().create_future()
@@ -478,7 +542,7 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
                 _inflight.pop(key, None)
 
 
-async def _generate_image_campaign(text: str) -> tuple[bytes, str]:
+async def _generate_image_campaign(text: str) -> tuple[bytes, str, dict[str, int] | None]:
     await _respect_rate_gate()
     rate_tries = 0
     provider_retried = False
@@ -530,14 +594,15 @@ async def _generate_image_campaign(text: str) -> tuple[bytes, str]:
             provider_retried = True
 
 
-async def _generate_image_call(text: str) -> tuple[bytes, str]:
+async def _generate_image_call(text: str) -> tuple[bytes, str, dict[str, int] | None]:
     kind = selected_image_provider()
     if kind == PROVIDER_GEMINI:
         return await _generate_gemini_call(text)
     if kind == PROVIDER_GATEWAY:
         return await _generate_gateway_call(text)
     if kind == PROVIDER_ZHIPU:
-        return await _generate_zhipu_call(text)
+        raw, ext = await _generate_zhipu_call(text)
+        return raw, ext, None
     raise ToolError("image.unconfigured", NO_KEY_MESSAGE)
 
 
@@ -601,7 +666,7 @@ async def _generate_zhipu_call(text: str) -> tuple[bytes, str]:
     return await _bytes_from_openai_image_body(body)
 
 
-async def _generate_gateway_call(text: str) -> tuple[bytes, str]:
+async def _generate_gateway_call(text: str) -> tuple[bytes, str, dict[str, int] | None]:
     if gateway_uses_gemini_native():
         payload = {
             "contents": [{"role": "user", "parts": [{"text": text}]}],
@@ -631,7 +696,8 @@ async def _generate_gateway_call(text: str) -> tuple[bytes, str]:
             raw = base64.b64decode(b64, validate=False)
         except Exception as exc:
             raise ToolError("image.invalid", INVALID_MESSAGE) from exc
-        return _as_png_or_jpeg(raw)
+        png, ext = _as_png_or_jpeg(raw)
+        return png, ext, usage_from_gemini_body(body)
 
     payload = {
         "model": gateway_model(),
@@ -653,10 +719,11 @@ async def _generate_gateway_call(text: str) -> tuple[bytes, str]:
         body = response.json()
     except Exception as exc:
         raise ToolError("image.invalid", INVALID_MESSAGE) from exc
-    return await _bytes_from_openai_image_body(body)
+    raw, ext = await _bytes_from_openai_image_body(body)
+    return raw, ext, usage_from_gemini_body(body)
 
 
-async def _generate_gemini_call(text: str) -> tuple[bytes, str]:
+async def _generate_gemini_call(text: str) -> tuple[bytes, str, dict[str, int] | None]:
     payload = {
         "contents": [{"role": "user", "parts": [{"text": text}]}],
         "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
@@ -682,4 +749,5 @@ async def _generate_gemini_call(text: str) -> tuple[bytes, str]:
         raw = base64.b64decode(b64, validate=False)
     except Exception as exc:
         raise ToolError("image.invalid", INVALID_MESSAGE) from exc
-    return _as_png_or_jpeg(raw)
+    png, ext = _as_png_or_jpeg(raw)
+    return png, ext, usage_from_gemini_body(body)

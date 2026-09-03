@@ -405,6 +405,12 @@ def _search_provider_pref() -> str:
 
 
 async def web_search_handler(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from app.channel_rates import require_rate
+
+        require_rate(kind="search", model="web_search")
+    except ImportError:
+        pass
     query = _required_query(args)
     pref = _search_provider_pref()
     result: dict[str, Any] | None = None
@@ -499,6 +505,12 @@ async def _fetch_once(client: httpx.AsyncClient, url: str) -> httpx.Response:
 
 
 async def web_fetch_handler(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from app.channel_rates import require_rate
+
+        require_rate(kind="search", model="web_fetch")
+    except ImportError:
+        pass
     raw_url = args.get("url")
     if not isinstance(raw_url, str) or not raw_url.strip():
         raise ToolError("tool.invalid_arguments", "url 必须是非空字符串")

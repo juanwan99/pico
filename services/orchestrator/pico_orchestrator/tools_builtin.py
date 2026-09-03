@@ -37,7 +37,10 @@ from pico_orchestrator.gateway import (
     ToolError,
     ToolSpec,
 )
-from pico_orchestrator.image_generate import IMAGE_TIMEOUT_S, generate_image_bytes
+from pico_orchestrator.image_generate import (
+    IMAGE_TIMEOUT_S,
+    generate_image_with_usage,
+)
 from pico_orchestrator.mcp_bridge import mcp_openai_parameters, mcp_tool_specs
 from pico_orchestrator.meili_kb import (
     extract_index_text,
@@ -1352,12 +1355,12 @@ def _workspace_handlers(
         prompt = _required_text(args, "prompt", maximum=2000)
         title_raw = args.get("title")
         title_hint = str(title_raw).strip() if isinstance(title_raw, str) else ""
-        from pico_orchestrator.image_generate import gateway_model, selected_image_provider
+        from pico_orchestrator.image_generate import billed_image_model, selected_image_provider
 
-        image_model = gateway_model()
+        image_model = billed_image_model()
         try:
-            raw, ext = await _run_bounded(
-                generate_image_bytes(prompt),
+            raw, ext, usage = await _run_bounded(
+                generate_image_with_usage(prompt),
                 # F5: one Retry-After rest (≤ image timeout window) + one POST.
                 seconds=_IMAGE_TIMEOUT_S * 2,
                 code="image.timeout",
@@ -1377,16 +1380,19 @@ def _workspace_handlers(
                 "（PPT/Word：image_artifact_id；HTML：src=\"pico-artifact:<id>\"）。"
                 "已经嵌进文件的不要再单独交一份。"
             )
+            extra = {
+                "bytes": len(raw),
+                "format": ext,
+                "provider": selected_image_provider(),
+                "artifact_id": result.get("artifact_id"),
+            }
+            if isinstance(usage, dict):
+                extra.update(usage)
             await emit_image_usage(
                 principal,
                 ok=True,
                 model=image_model,
-                extra={
-                    "bytes": len(raw),
-                    "format": ext,
-                    "provider": selected_image_provider(),
-                    "artifact_id": result.get("artifact_id"),
-                },
+                extra=extra,
             )
             return _attach_write_observation(result, kind=kind, title=title, raw=raw)
         except Exception:

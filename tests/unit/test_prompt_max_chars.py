@@ -20,7 +20,7 @@ def test_chat_rejects_overlong_prompt() -> None:
         _env_file=None,
         pico_env="test",
         pico_openai_proxy_key="pico-dev",
-        pico_allowed_models="kimi-k2.6,pico-agent",
+        pico_allowed_models="pico-fast,pico-agent",
         pico_chat_max_prompt_chars=100,
         pico_accept_test_issuer=True,
     )
@@ -35,7 +35,7 @@ def test_chat_rejects_overlong_prompt() -> None:
                 "X-Pico-Membership-Id": "test-member",
             },
             json={
-                "model": "kimi-k2.6",
+                "model": "pico-fast",
                 "messages": [{"role": "user", "content": long_text}],
                 "stream": False,
             },

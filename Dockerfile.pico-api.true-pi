@@ -67,6 +67,7 @@ RUN set -eux; \
 
 COPY services /app/services
 COPY packages /app/packages
+COPY config /app/config
 COPY pyproject.toml /app/pyproject.toml
 
 ENV DOCLING_ARTIFACTS_PATH=/opt/docling-models \

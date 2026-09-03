@@ -19,7 +19,7 @@ PARENT: docs/USAGE-LEDGER.md
 
 Pico **must not** grow price/currency/wallet columns. edu **must not** persist a parallel Task/Run tree for product AI.
 
-`points` on each event is Pico's already-converted meter (three decimals). edu debits that number as-is. **Do not multiply again.** null `points` is unknown, not zero. Conversion lives only in Pico (`points_meter.py`). **Token columns:** `prompt_tokens` is full input (cache reads included); `completion_tokens` is output; `total_tokens` is the provider total. `extra.cached_tokens` is a subset of prompt, not a second input pile. **Which conversion:** weighted millipoints — fresh input 1×, cache read 0.1×, cache write 1.25×, output 6× (1000 fresh input = 3.000). Reasoning is already in output. Missing I/O with only `total` falls back to 1×. Export must not include rate / scale / formula fields. Teacher-facing Pico JSON omits token columns. Composer 预计 covers the resident package (this conversation's last weighted bill, else a floor) so it is the same order of magnitude as 实际.
+`points` on each event is Pico's already-converted meter (three decimals). edu debits that number as-is. **Do not multiply again.** null `points` is unknown, not zero. Conversion lives only in Pico (`points_meter.py` + `config/channel-rates.json`). **Token columns:** `prompt_tokens` is full input (cache reads included); `completion_tokens` is output; `total_tokens` is the provider total. `extra.cached_tokens` is a subset of prompt, not a second input pile. **Which conversion:** 积分 = 渠道成本(元) × 2.5 × 1000（1 元 = 1000 积分）. Cost comes from the channel price tag × tokens (or per-image / per-search-call). Unpriced channel is locked, not billed as zero. Reasoning is already in output. Export must not include rate / scale / formula / money fields. Teacher-facing Pico JSON omits token columns. Composer 预计 covers the resident package (this conversation's last priced bill, else a floor) so it is the same order of magnitude as 实际.
 
 ## Event (one row)
 
@@ -34,7 +34,7 @@ Same shape as `GET /v1/usage/events` plus `schema: pico.usage.v1`.
 | `estimated` | Always `false` after scrub. Pico no longer writes char/4. **Do not bill.** |
 | `extra.ui_model` | Lane alias `pico-fast` / `pico-deep` when applicable |
 | `extra.cached_tokens` / `extra.cache_write_tokens` / `extra.reasoning_tokens` | Optional ops fields. Cache read is a subset of prompt. Reasoning is a subset of completion. |
-| `points` | String `N.NNN` or `null`. Weighted conversion. **edu debits this as-is.** Do not rescale. |
+| `points` | String `N.NNN` or `null`. Cost × 2.5 × 1000. **edu debits this as-is.** Do not rescale. |
 | `billing` | Always `false` |
 
 No `price` / `currency` / `cost` / `charge` / `amount`.

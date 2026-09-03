@@ -324,11 +324,11 @@ async def test_complex_image_then_sandbox_deck_has_media() -> None:
     gw = build_default_gateway(store)
     owner = P()
 
-    async def fake_image(_prompt: str) -> tuple[bytes, str]:
-        return ONE_PNG, "png"
+    async def fake_image(_prompt: str) -> tuple[bytes, str, None]:
+        return ONE_PNG, "png", None
 
     with patch(
-        "pico_orchestrator.tools_builtin.generate_image_bytes",
+        "pico_orchestrator.tools_builtin.generate_image_with_usage",
         fake_image,
     ):
         pictured = await gw.invoke(owner, "generate_image", {"prompt": "示意图"})

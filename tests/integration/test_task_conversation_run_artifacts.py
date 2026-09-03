@@ -292,7 +292,7 @@ def _complete(
         "/v1/chat/completions",
         headers=headers,
         json={
-            "model": "test-direct-model",
+            "model": "gpt-5.6-sol",
             "stream": stream,
             "messages": [
                 {
@@ -446,7 +446,7 @@ def test_conversation_filter_applies_before_account_task_limit(client) -> None:
 
 def test_proxy_membership_header_is_required_and_cannot_conflict(client, monkeypatch) -> None:
     body = {
-        "model": "test-direct-model",
+        "model": "gpt-5.6-sol",
         "stream": False,
         "messages": [{"role": "user", "content": "【Pico-User:forged】hello"}],
     }
@@ -478,7 +478,7 @@ def test_proxy_membership_header_is_required_and_cannot_conflict(client, monkeyp
             "X-Pico-Membership-Id": "627bcf3a-a9a8-4047-afcc-3d4878e2a7af:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
         },
         json={
-            "model": "test-direct-model",
+            "model": "gpt-5.6-sol",
             "stream": False,
             "messages": [
                 {
@@ -680,7 +680,7 @@ def test_skill_write_s7_records_snapshot_and_existing_change_path(client, monkey
         "/v1/chat/completions",
         headers=owner,
         json={
-            "model": "test-direct-model",
+            "model": "gpt-5.6-sol",
             "stream": False,
             "messages": [
                 {
@@ -753,7 +753,7 @@ async def test_direct_stream_aclose_finalizes_run_as_cancelled(tmp_path, monkeyp
     )
     response = await chat_completions(
         ChatCompletionRequest(
-            model="test-direct-model",
+            model="gpt-5.6-sol",
             stream=True,
             messages=[
                 ChatMessage(
@@ -890,7 +890,7 @@ async def test_finalize_is_idempotent_and_terminal_status_is_sticky(
                 task_id=task_id,
                 status="running",
                 prompt="创建 stable.txt",
-                model="test-direct-model",
+                model="gpt-5.6-sol",
             )
         )
         await session.commit()
@@ -989,7 +989,7 @@ async def test_finalize_cancel_request_wins_over_success_and_artifacts(
                 task_id=task_id,
                 status="running",
                 prompt="创建 should-not-exist.txt",
-                model="test-direct-model",
+                model="gpt-5.6-sol",
                 cancel_requested=1,
             )
         )
@@ -1069,7 +1069,7 @@ async def test_unknown_skill_finalize_creates_no_artifact_or_change(
                 task_id=task_id,
                 status="running",
                 prompt="创建 leaked.txt，内容为 should-not-exist",
-                model="test-direct-model",
+                model="gpt-5.6-sol",
                 token_usage_json=json.dumps({"skill_snapshot": snapshot}),
             )
         )

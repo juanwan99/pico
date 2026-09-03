@@ -107,6 +107,20 @@ async def emit_image_usage(
     payload = dict(extra or {})
     payload["ok"] = bool(ok)
     payload.setdefault("tool", source)
+    tokens_unknown = True
+    prompt_tokens = payload.get("prompt_tokens")
+    completion_tokens = payload.get("completion_tokens")
+    total_tokens = payload.get("total_tokens")
+    if prompt_tokens is not None or completion_tokens is not None or total_tokens is not None:
+        tokens_unknown = False
+    try:
+        from app.channel_rates import load_rate_card
+
+        rate = load_rate_card().find(kind="image", model=model)
+        if rate is not None:
+            payload.setdefault("channel_id", rate.id)
+    except Exception:
+        logger.debug("image channel_id lookup skipped", exc_info=True)
     call_id = (
         (tool_call_id or "").strip()
         or (bind.tool_call_id if bind else "")
@@ -123,7 +137,10 @@ async def emit_image_usage(
         membership_id=str(member),
         kind="image",
         model=(model or "").strip() or None,
-        tokens_unknown=True,
+        prompt_tokens=prompt_tokens if isinstance(prompt_tokens, int) else None,
+        completion_tokens=completion_tokens if isinstance(completion_tokens, int) else None,
+        total_tokens=total_tokens if isinstance(total_tokens, int) else None,
+        tokens_unknown=tokens_unknown,
         task_id=str(task_id) if task_id else None,
         run_id=str(run_id) if run_id else None,
         source=(source or "generate_image")[:64],
@@ -163,6 +180,14 @@ async def emit_search_usage(
     payload = dict(extra or {})
     payload.setdefault("tool", name)
     payload["ok"] = bool(ok)
+    try:
+        from app.channel_rates import load_rate_card
+
+        rate = load_rate_card().find(kind="search", model=name)
+        if rate is not None:
+            payload.setdefault("channel_id", rate.id)
+    except Exception:
+        logger.debug("search channel_id lookup skipped", exc_info=True)
     key = f"search:{run_id or 'norun'}:{name}:{call_id}"
     try:
         from app.usage_ledger import record_usage_event
@@ -173,6 +198,7 @@ async def emit_search_usage(
         school_id=str(school),
         membership_id=str(member),
         kind="search",
+        model=name[:64],
         tokens_unknown=True,
         task_id=str(task_id) if task_id else None,
         run_id=str(run_id) if run_id else None,
