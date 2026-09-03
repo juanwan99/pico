@@ -36,26 +36,21 @@ def test_sidebar_json_only_skips_agent() -> None:
     assert _sidebar_chat_only(edu_sidebar=False, json_only=False) is False
 
 
-def test_edu_sidebar_tool_ceiling_keeps_read_strips_office() -> None:
-    default = list(EDU_SIDEBAR_DEFAULT_TOOLS)
-    assert edu_sidebar_tool_ceiling(None) == default
-    assert edu_sidebar_tool_ceiling([]) == default
-    kept = edu_sidebar_tool_ceiling(["generate_html_document", "web_search"])
-    assert kept == default
-    assert "generate_html_document" not in kept
-    assert "workspace_read_file" in kept
-    assert "workspace_list_files" in kept
-    assert "kb_search" in kept
-    assert "inspect_document" in kept
+def test_edu_sidebar_tool_ceiling_is_workbench_core() -> None:
+    assert edu_sidebar_tool_ceiling(None) is None
+    assert edu_sidebar_tool_ceiling([]) is None
+    assert edu_sidebar_tool_ceiling(["web_search"]) is None
+    assert "generate_html_document" in EDU_SIDEBAR_DEFAULT_TOOLS
+    assert "generate_image" in EDU_SIDEBAR_DEFAULT_TOOLS
+    assert "workspace_write_file" in EDU_SIDEBAR_DEFAULT_TOOLS
 
 
 def test_empty_allowed_tools_is_ceiling() -> None:
     assert _normalize_allowed_tools([]) == []
     skill = {"tools": ["generate_html_document", "workspace_list_files"]}
     assert _resolve_allowed_tools(skill, []) == []
-    assert "工作台" in SIDEBAR_WORKBENCH_HINT
-    assert "generate_*" in SIDEBAR_WORKBENCH_HINT
-    assert "edit_*" in SIDEBAR_WORKBENCH_HINT
+    assert "同一套手" in SIDEBAR_WORKBENCH_HINT
+    assert "不得调用" not in SIDEBAR_WORKBENCH_HINT
 
 
 def test_client_system_from_first_system_message() -> None:
@@ -120,7 +115,7 @@ def test_true_pi_compose_uses_edu_system_override() -> None:
 if __name__ == "__main__":
     test_edu_sidebar_mark_detects_accessory()
     test_sidebar_json_only_skips_agent()
-    test_edu_sidebar_tool_ceiling_keeps_read_strips_office()
+    test_edu_sidebar_tool_ceiling_is_workbench_core()
     test_empty_allowed_tools_is_ceiling()
     test_client_system_from_first_system_message()
     test_normalize_allowed_tools_names_and_openai_shape()

@@ -1,9 +1,9 @@
 """Wire edu-core sidebar onto true Pi without editing openai_compat.py.
 
 MCP cannot ship that 78KB file intact. This hook is the thin adapter:
-json_only stays one-shot chat; the 附属 marker enters Pi with a tool ceiling.
-Never force_agent. Never inherit office CORE writes. File read stays.
-Never land Artifact.
+json_only stays one-shot chat (fill the current page); the 附属 marker enters
+Pi with the same CORE hands as the workbench. Never force_agent from a guess.
+Task tendency is in the system hint, not a smaller tool set.
 """
 
 from __future__ import annotations

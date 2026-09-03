@@ -100,16 +100,14 @@ def test_sidebar_web_hits_inject_and_honest_miss() -> None:
 def test_sidebar_enters_pi_helpers() -> None:
     assert sidebar_chat_only(edu_sidebar=True, json_only=False) is False
     assert sidebar_chat_only(edu_sidebar=True, json_only=True) is True
-    default = list(EDU_SIDEBAR_DEFAULT_TOOLS)
-    assert edu_sidebar_tool_ceiling(None) == default
-    assert edu_sidebar_tool_ceiling([]) == default
-    kept = edu_sidebar_tool_ceiling(["generate_html_document", "web_search"])
-    assert kept == default
-    assert "generate_html_document" not in kept
-    assert "workspace_read_file" in kept
-    assert "inspect_document" in kept
-    assert edu_sidebar_tool_ceiling(["workspace_list_files", "kb_search"]) == default
+    assert edu_sidebar_tool_ceiling(None) is None
+    assert edu_sidebar_tool_ceiling([]) is None
+    assert edu_sidebar_tool_ceiling(["web_search", "web_fetch"]) is None
+    assert "generate_html_document" in EDU_SIDEBAR_DEFAULT_TOOLS
+    assert "generate_image" in EDU_SIDEBAR_DEFAULT_TOOLS
+    assert "generate_pptx_document" in EDU_SIDEBAR_DEFAULT_TOOLS
     hinted = with_sidebar_workbench_hint("附属，不是用户要求")
     assert SIDEBAR_WORKBENCH_HINT in hinted
-    assert "可读" in hinted
+    assert "不得调用" not in hinted
+    assert "同一套手" in hinted
     assert with_sidebar_workbench_hint(hinted) == hinted
