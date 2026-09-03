@@ -2,38 +2,109 @@
   "version": 1,
   "sell_markup": 2.5,
   "points_per_yuan": 1000,
+  "usd_cny": 7.3,
+  "note": "Cost from New API live billing 2026-09-03. Sell = cost x 2.5. 1 yuan = 1000 points.",
   "channels": [
     {
-      "id": "new-api:gpt-5.6-sol",
+      "id": "new-api:aiproxy-openai:gpt-5.6-sol",
       "kind": "llm",
       "model": "gpt-5.6-sol",
-      "input_yuan_per_million": 10,
-      "output_yuan_per_million": 80,
-      "cache_read_yuan_per_million": 1,
-      "cache_write_yuan_per_million": 12.5
+      "input_yuan_per_million": 36.5,
+      "output_yuan_per_million": 219,
+      "cache_read_yuan_per_million": 3.65,
+      "cache_write_yuan_per_million": 45.625
     },
     {
-      "id": "new-api:gemini-3.1-flash-image",
+      "id": "new-api:gemini-vertex-trial:gemini-3.1-flash-image",
       "kind": "image",
       "model": "gemini-3.1-flash-image",
-      "output_yuan_per_million": 430,
-      "per_image_yuan": 0.5
+      "input_yuan_per_million": 3.65,
+      "output_yuan_per_million": 438,
+      "per_image_yuan": 0.489
     },
     {
-      "id": "new-api:gemini-2.5-flash-image",
+      "id": "new-api:gemini-vertex-trial:gemini-2.5-flash-image",
       "kind": "image",
       "model": "gemini-2.5-flash-image",
-      "output_yuan_per_million": 216,
-      "per_image_yuan": 0.28
+      "output_yuan_per_million": 219,
+      "per_image_yuan": 0.285
     },
     {
-      "id": "new-api:web_search",
+      "id": "new-api:gemini-vertex-trial:gemini-2.5-flash-image-preview",
+      "kind": "image",
+      "model": "gemini-2.5-flash-image-preview",
+      "output_yuan_per_million": 219,
+      "per_image_yuan": 0.285
+    },
+    {
+      "id": "new-api:gemini-vertex-trial:gemini-3-pro-image",
+      "kind": "image",
+      "model": "gemini-3-pro-image",
+      "input_yuan_per_million": 14.6,
+      "output_yuan_per_million": 876,
+      "per_image_yuan": 0.978
+    },
+    {
+      "id": "new-api:gemini-vertex-trial:imagen-4.0-generate-001",
+      "kind": "image",
+      "model": "imagen-4.0-generate-001",
+      "per_image_yuan": 0.292
+    },
+    {
+      "id": "new-api:gemini-vertex-trial:imagen-4.0-fast-generate-001",
+      "kind": "image",
+      "model": "imagen-4.0-fast-generate-001",
+      "per_image_yuan": 0.146
+    },
+    {
+      "id": "new-api:gemini-vertex-trial:imagen-3.0-generate-002",
+      "kind": "image",
+      "model": "imagen-3.0-generate-002",
+      "per_image_yuan": 0.219
+    },
+    {
+      "id": "new-api:gemini-vertex-trial:imagen-3.0-fast-generate-001",
+      "kind": "image",
+      "model": "imagen-3.0-fast-generate-001",
+      "per_image_yuan": 0.146
+    },
+    {
+      "id": "new-api:sub2api-loopback:gpt-4o",
+      "kind": "llm",
+      "model": "gpt-4o",
+      "input_yuan_per_million": 18.25,
+      "output_yuan_per_million": 73,
+      "cache_read_yuan_per_million": 9.125
+    },
+    {
+      "id": "new-api:sub2api-loopback:gpt-4.1",
+      "kind": "llm",
+      "model": "gpt-4.1",
+      "input_yuan_per_million": 14.6,
+      "output_yuan_per_million": 58.4
+    },
+    {
+      "id": "new-api:sub2api-loopback:claude-sonnet-4",
+      "kind": "llm",
+      "model": "claude-sonnet-4",
+      "input_yuan_per_million": 21.9,
+      "output_yuan_per_million": 109.5
+    },
+    {
+      "id": "new-api:sub2api-loopback:gemini-2.5-pro",
+      "kind": "llm",
+      "model": "gemini-2.5-pro",
+      "input_yuan_per_million": 9.125,
+      "output_yuan_per_million": 73
+    },
+    {
+      "id": "pico:web_search",
       "kind": "search",
       "model": "web_search",
       "per_call_yuan": 0.02
     },
     {
-      "id": "new-api:web_fetch",
+      "id": "pico:web_fetch",
       "kind": "search",
       "model": "web_fetch",
       "per_call_yuan": 0.02

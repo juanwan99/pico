@@ -90,7 +90,7 @@ def test_unpriced_model_locks() -> None:
 def test_seed_card_thousand_input_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
     reset_rate_card()
-    # Seed: 10 元/百万输入 × 1000 token = 0.01 元成本 × 2.5 = 25.000 积分
+    # Live: 36.5 元/百万输入 × 1000 token = 0.0365 元成本 × 2.5 = 91.250 积分
     assert (
         points_from_row(
             tokens_unknown=False,
@@ -100,7 +100,7 @@ def test_seed_card_thousand_input_tokens(monkeypatch: pytest.MonkeyPatch) -> Non
             kind="llm",
             model="gpt-5.6-sol",
         )
-        == "25.000"
+        == "91.250"
     )
 
 
