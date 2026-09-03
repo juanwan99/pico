@@ -23,7 +23,13 @@ from pico_orchestrator.llm_file_pass import (
 def test_accepts_pdf_docx_rejects_legacy_doc() -> None:
     assert native_ext("通知.pdf") == ".pdf"
     assert native_ext("表.xlsx") == ".xlsx"
+    assert native_ext("计划.doc") == ".docx"
+    assert native_ext("通知.docx") == ".docx"
     assert accept_native("计划.doc", b"OLE") is None
+    converted = accept_native("计划.doc", b"PK\x03\x04ooxml")
+    assert converted is not None
+    assert converted.filename == "计划.docx"
+    assert converted.ext == ".docx"
     assert accept_native("a.pdf", b"%PDF") is not None
     assert accept_native("a.pdf", b"") is None
 

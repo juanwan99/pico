@@ -320,7 +320,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "verify_document",
-    "Fail-closed OOXML check for a ledger Word/PPT/Excel. Old .doc/.ppt/.xls fail honestly.",
+    "Fail-closed OOXML check for a ledger Word/PPT/Excel. Converted .doc/.ppt/.xls bytes are OOXML.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),

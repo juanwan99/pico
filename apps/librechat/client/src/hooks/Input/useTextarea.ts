@@ -18,6 +18,7 @@ import {
   getEntity,
   checkIfScrollable,
   resolveUploadRoute,
+  captureClipboardFiles,
 } from '~/utils';
 import { useAssistantsMapContext } from '~/Providers/AssistantsMapContext';
 import { useLatestMessageMeta } from '~/hooks/Messages/useLatestMessage';
@@ -311,14 +312,11 @@ export default function useTextarea({
       }
 
       const clipboardData = e.clipboardData as DataTransfer | undefined;
-      if (!clipboardData) {
-        return;
-      }
-
-      if (clipboardData.files.length > 0) {
+      const pastedFiles = captureClipboardFiles(clipboardData, () => e.preventDefault());
+      if (pastedFiles && pastedFiles.length > 0) {
         setFilesLoading(true);
         const timestampedFiles: File[] = [];
-        for (const file of clipboardData.files) {
+        for (const file of pastedFiles) {
           const newFile = new File([file], `clipboard_${+new Date()}_${file.name}`, {
             type: file.type,
           });

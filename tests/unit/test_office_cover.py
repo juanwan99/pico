@@ -102,12 +102,11 @@ def test_template_placeholder_fill():
 def test_legacy_formats_fail_closed():
     check = verify_office_bytes(b"PK\x03\x04junk", ".xls")
     assert check["ok"] is False
-    assert "另存为" in str(check["error"])
-    with pytest.raises(ValueError, match="另存为"):
+    with pytest.raises(ValueError, match="OLE"):
         inspect_office_bytes(b"not-ole", ".doc")
-    with pytest.raises(ValueError, match="另存为"):
+    with pytest.raises(ValueError, match="OLE"):
         inspect_office_bytes(b"not-ole", ".ppt")
-    assert LEGACY_OFFICE_ERROR
+    assert "OLE" in LEGACY_OFFICE_ERROR
 
 
 def test_cover_tools_on_pi_allowlist():

@@ -580,7 +580,7 @@ def test_legacy_doc_lands_unread_not_dropped(client: TestClient) -> None:
     body = res.json()
     assert body["id"]
     assert body["status"] != "ok"
-    assert "另存为" in str(body.get("error") or body.get("headline") or "")
+    assert "OLE" in str(body.get("error") or body.get("headline") or "")
     principal = Principal(
         school_id="school-a",
         membership_id="m-edu",

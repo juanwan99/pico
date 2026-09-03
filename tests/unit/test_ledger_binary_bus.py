@@ -252,7 +252,7 @@ async def test_read_file_legacy_doc_is_honest_unread() -> None:
     art = got["artifact"]
     assert "content_base64" not in art
     assert art.get("unread") is True
-    assert "另存为" in art["user_message"]
+    assert "OLE" in art["user_message"]
 
 
 @pytest.mark.asyncio

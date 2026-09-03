@@ -571,8 +571,11 @@ async def _workspace_named_file(
     data: bytes,
     conversation_id: str,
 ) -> dict[str, Any]:
+    from pico_orchestrator.office.convert import convert_legacy_office_bytes
+
     from app.edu_files import extract_for_kb, persist_edu_file
 
+    data = await convert_legacy_office_bytes(filename, data)
     extract = extract_for_kb(filename, data)
     file_id = await persist_edu_file(
         principal,

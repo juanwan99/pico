@@ -8,6 +8,8 @@ import logging
 import os
 from dataclasses import dataclass
 
+from pico_orchestrator.office.legacy import convert_target_from_name, looks_ooxml
+
 logger = logging.getLogger(__name__)
 
 NATIVE_EXTS = (".pdf", ".docx", ".xlsx", ".pptx")
@@ -29,11 +31,7 @@ class NativeFile:
 
     @property
     def ext(self) -> str:
-        name = self.filename.lower()
-        for ext in NATIVE_EXTS:
-            if name.endswith(ext):
-                return ext
-        return ""
+        return native_ext(self.filename) or ""
 
     @property
     def mime(self) -> str:
@@ -48,18 +46,20 @@ def native_ext(filename: str) -> str | None:
     for ext in NATIVE_EXTS:
         if name.endswith(ext):
             return ext
+    mapped = convert_target_from_name(filename)
+    if mapped:
+        return mapped
     return None
 
 
 def is_legacy_office(filename: str) -> bool:
-    name = (filename or "").strip().lower()
-    return any(name.endswith(ext) for ext in LEGACY_EXTS)
+    return convert_target_from_name(filename) is not None
 
 
 def accept_native(filename: str, data: bytes) -> NativeFile | None:
-    if is_legacy_office(filename):
-        return None
     if native_ext(filename) is None:
+        return None
+    if is_legacy_office(filename) and not looks_ooxml(data):
         return None
     if not isinstance(data, (bytes, bytearray)) or not data:
         return None
@@ -67,6 +67,10 @@ def accept_native(filename: str, data: bytes) -> NativeFile | None:
     if len(raw) > MAX_BYTES:
         return None
     title = (filename or "file").strip() or "file"
+    mapped = convert_target_from_name(title)
+    if mapped and looks_ooxml(raw):
+        stem = title.rsplit(".", 1)[0] if "." in title else title
+        title = f"{stem}{mapped}"
     return NativeFile(filename=title[:180], data=raw)
 
 
