@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from sandbox_worker.browser import ENGINE_NAME, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 from sandbox_worker.diagram import mermaid_js_ready, render_diagram
 from sandbox_worker.mermaid_pin import MERMAID_VERSION
+from sandbox_worker.office import convert_legacy_office
 from sandbox_worker.ports import SANDBOX_DEFAULT_PORT, assert_listen_port
 from sandbox_worker.runtime import HUMAN_LOGIN_COPY, RUNTIME, redact_secrets
 
@@ -63,6 +64,11 @@ class FocusBody(BaseModel):
     kind: str = ""
 
 
+class ConvertBody(BaseModel):
+    filename: str = ""
+    document_base64: str = ""
+
+
 def _tool_http(exc: ToolError) -> HTTPException:
     if exc.code == "sandbox.forbidden":
         status = 403
@@ -92,6 +98,41 @@ async def health() -> dict[str, Any]:
         "claim_wb": "NO",
         "mermaid_js": mermaid_js_ready(),
         "mermaid_version": MERMAID_VERSION,
+    }
+
+
+@app.post("/v1/internal/office/convert")
+async def convert_office(
+    body: ConvertBody,
+    x_pico_sandbox_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_token(x_pico_sandbox_token)
+    import base64
+
+    raw_b64 = (body.document_base64 or "").strip()
+    if not raw_b64:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "tool.invalid_arguments", "message": "没有文件内容"},
+        )
+    try:
+        document = base64.b64decode(raw_b64, validate=False)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "tool.invalid_arguments", "message": "document_base64 无效"},
+        ) from exc
+    try:
+        converted = await convert_legacy_office(
+            filename=body.filename, document=document
+        )
+    except ToolError as exc:
+        raise _tool_http(exc) from exc
+    return {
+        "ok": True,
+        "filename": body.filename,
+        "document_base64": base64.b64encode(converted).decode("ascii"),
+        "byte_size": len(converted),
     }
 
 

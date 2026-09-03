@@ -15,6 +15,7 @@ import tempfile
 from pathlib import Path
 
 from pico_orchestrator.gateway import ToolError
+from pico_orchestrator.office.legacy import convert_target_from_name
 
 from sandbox_worker.browser import PNG_MAGIC
 
@@ -211,6 +212,80 @@ async def _wait_visible(display: str, timeout_s: float = 28.0) -> None:
                 return
         await asyncio.sleep(0.4)
     # Still proceed: first-start Writer may be slow; screenshot may already show chrome.
+
+
+_CONVERT_FILTER = {
+    ".docx": "docx:Office Open XML Text",
+    ".pptx": "pptx:Impress Office Open XML",
+    ".xlsx": "xlsx:Calc Office Open XML",
+}
+_CONVERT_TIMEOUT_S = 45.0
+
+
+def convert_target(filename: str) -> str | None:
+    return convert_target_from_name(filename)
+
+
+async def convert_legacy_office(*, filename: str, document: bytes) -> bytes:
+    """Headless soffice OLE → OOXML. Not a Pico office kernel."""
+    if not document:
+        raise ToolError("tool.invalid_arguments", "文档内容为空")
+    if len(document) > 12 * 1024 * 1024:
+        raise ToolError("tool.invalid_arguments", "文档超过 12MB，沙箱拒收")
+    target = convert_target(filename)
+    if target is None:
+        raise ToolError("tool.invalid_arguments", "不是旧版 .doc/.ppt/.xls")
+    soffice = soffice_bin()
+    safe_name = Path(filename or f"document{target}").name or f"document{target}"
+    _DOC_ROOT.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="sbox_conv_", dir=str(_DOC_ROOT)))
+    src = work / safe_name
+    out_dir = work / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    profile = work / "lo-profile"
+    profile.mkdir(parents=True, exist_ok=True)
+    src.write_bytes(document)
+    env = {
+        **os.environ,
+        "HOME": str(work),
+        "LANG": os.environ.get("LANG") or "C.UTF-8",
+        "SAL_USE_VCLPLUGIN": "gen",
+    }
+    filter_name = _CONVERT_FILTER[target]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            soffice,
+            f"-env:UserInstallation=file://{profile}",
+            "--headless",
+            "--nologo",
+            "--norestore",
+            "--nolockcheck",
+            "--nofirststartwizard",
+            "--convert-to",
+            filter_name,
+            "--outdir",
+            str(out_dir),
+            str(src),
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=_CONVERT_TIMEOUT_S)
+        except TimeoutError as exc:
+            if proc.returncode is None:
+                proc.kill()
+            raise ToolError("sandbox.office_unavailable", "旧版文档转换超时") from exc
+        produced = next(out_dir.glob(f"*{target}"), None)
+        if proc.returncode != 0 or produced is None or not produced.is_file():
+            raise ToolError("sandbox.office_unavailable", "旧版文档转不开")
+        converted = produced.read_bytes()
+        if not converted or converted[:2] != b"PK":
+            raise ToolError("sandbox.office_unavailable", "旧版文档转不开")
+        return converted
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 async def open_office(*, kind: str, filename: str, document: bytes) -> OfficeDesktop:

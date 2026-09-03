@@ -424,7 +424,7 @@ async def native_files_from_rows(
     session: AsyncSession,
     rows: list[dict[str, Any]] | None,
 ) -> list[Any]:
-    """Ledger originals for GPT input_file. Skip legacy Office and empty bytes."""
+    """Ledger originals for GPT input_file. Skip unread OLE and empty bytes."""
     from pico_orchestrator.llm_file_pass import NativeFile, accept_native
 
     from app.artifact_store import decode_artifact_payload
@@ -706,6 +706,9 @@ async def post_edu_file(
 ) -> dict[str, Any]:
     filename, data, folder_raw = await _read_upload(request)
     folder_id = await resolve_owned_folder_id(principal, folder_raw)
+    from pico_orchestrator.office.convert import convert_legacy_office_bytes
+
+    data = await convert_legacy_office_bytes(filename, data)
     extract = extract_for_kb(filename, data)
     file_id = await persist_edu_file(
         principal,

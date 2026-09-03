@@ -1178,13 +1178,16 @@ def _workspace_handlers(
         raw = _artifact_bytes(row)
         title_name = str(row.get("title") or args.get("title") or "")
         try:
-            guess_office_ext(kind=ext.lstrip("."), title=title_name)
+            guessed = guess_office_ext(kind=ext.lstrip("."), title=title_name)
         except ValueError as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
-        if not is_valid_ooxml_package(raw, ext):
+        from pico_orchestrator.office.legacy import office_ext_for_bytes
+
+        check_ext = office_ext_for_bytes(guessed, raw)
+        if not is_valid_ooxml_package(raw, check_ext):
             raise ToolError(
                 "artifact.not_ooxml",
-                f"这份不是真 {ext} 原件，不能当改稿保存。",
+                f"这份不是真 {check_ext} 原件，不能当改稿保存。",
             )
         return row, raw
 
@@ -2444,7 +2447,6 @@ def build_default_gateway(
                 "indexes, tables, comments, leftover {{key}}. Embedded pictures are "
                 "remembered so the teacher's next question can see the pixels. "
                 "Call before generate_* patch (paragraph_index / slide_index / cell). "
-                "Old .doc/.ppt/.xls fail in Chinese. "
                 "Args: artifact_id|title, kind?"
             ),
             handler=inspect_document,
@@ -2456,7 +2458,7 @@ def build_default_gateway(
             name="verify_document",
             description=(
                 "Fail-closed OOXML check for a ledger Word/PPT/Excel. "
-                "Old .doc/.ppt/.xls fail in Chinese. Args: artifact_id|title, kind?"
+                "Args: artifact_id|title, kind?"
             ),
             handler=verify_document,
             school_scoped=False,

@@ -87,6 +87,26 @@ async def _embedded_call(
             source=str(body.get("source") or ""),
             kind=str(body.get("kind") or "mermaid"),
         )
+    if method == "POST" and path.rstrip("/").endswith("/office/convert"):
+        body = json_body or {}
+        import base64
+
+        from sandbox_worker.office import convert_legacy_office
+
+        raw_b64 = str(body.get("document_base64") or "").strip()
+        if not raw_b64:
+            raise ToolError("tool.invalid_arguments", "没有文件内容")
+        document = base64.b64decode(raw_b64, validate=False)
+        converted = await convert_legacy_office(
+            filename=str(body.get("filename") or ""),
+            document=document,
+        )
+        return {
+            "ok": True,
+            "filename": body.get("filename") or "",
+            "document_base64": base64.b64encode(converted).decode("ascii"),
+            "byte_size": len(converted),
+        }
     if method == "POST" and path.endswith("/sessions/open"):
         body = json_body or {}
         document = None

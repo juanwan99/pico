@@ -7,11 +7,11 @@ import io
 from pico_orchestrator.artifact_types import is_valid_ooxml_package
 from pico_orchestrator.office.comment import list_docx_comments
 from pico_orchestrator.office.fill import leftover_placeholders
-from pico_orchestrator.office.legacy import require_supported_office_ext
+from pico_orchestrator.office.legacy import office_ext_for_bytes
 
 
 def inspect_office_bytes(raw: bytes, ext: str) -> dict[str, object]:
-    suffix = require_supported_office_ext(ext)
+    suffix = office_ext_for_bytes(ext, raw)
     if suffix == ".docx":
         return _inspect_docx(raw)
     if suffix == ".pptx":
