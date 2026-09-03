@@ -36,6 +36,7 @@ from app import run_service
 from app.auth import (
     Principal,
     issue_test_token,
+    payer_for,
     require_any_scope,
     require_scope,
     require_scoped_principal,
@@ -756,6 +757,8 @@ async def invoke_tool(
         school_id=principal.school_id,
         membership_id=principal.membership_id,
         conversation_id=x_conversation_id,
+        bill_to=payer_for(principal),
+        scopes=principal.scopes,
     )
     try:
         result = await gw.invoke(principal, body.name, dict(body.arguments))
@@ -794,6 +797,8 @@ async def open_sandbox_session(
     token = bind_usage_context(
         school_id=principal.school_id,
         membership_id=principal.membership_id,
+        bill_to=payer_for(principal),
+        scopes=principal.scopes,
     )
     url = (body.url or "").strip()
     kind = (body.kind or "").strip().lower()

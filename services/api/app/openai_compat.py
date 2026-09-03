@@ -37,6 +37,7 @@ from app.auth import (
     Principal,
     decode_token,
     enforce_scope,
+    payer_for,
     prompt_membership_conflicts_header,
     require_billed_identity,
     scope_proxy_principal,
@@ -797,6 +798,7 @@ async def _finalize_run(
     user_prompt: str | None = None,
     change_proposal: dict | None = None,
     token_usage: dict[str, Any] | None = None,
+    bill_to: str | None = None,
 ) -> None:
     from sqlalchemy import case, select, update
 
@@ -1055,6 +1057,7 @@ async def _finalize_run(
         prompt=user_prompt,
         completion=final_text,
         source="openai_compat",
+        bill_to=bill_to,
     )
 
 
@@ -1433,7 +1436,23 @@ async def chat_completions(
                 }
             else:
                 try:
-                    raw_hits = await web_search_handler(principal, {"query": query})
+                    from pico_orchestrator.usage_hook import (
+                        bind_usage_context,
+                        reset_usage_context,
+                    )
+
+                    _search_tok = bind_usage_context(
+                        school_id=principal.school_id,
+                        membership_id=principal.membership_id,
+                        bill_to=payer_for(principal),
+                        scopes=principal.scopes,
+                    )
+                    try:
+                        raw_hits = await web_search_handler(
+                            principal, {"query": query}
+                        )
+                    finally:
+                        reset_usage_context(_search_tok)
                 except Exception as exc:  # noqa: BLE001
                     raw_hits = {
                         "retrieved": False,
@@ -1542,10 +1561,17 @@ async def chat_completions(
                     task_id=task_id,
                     user_prompt=prompt,
                     token_usage=direct_usage or None,
+                    bill_to=payer_for(principal),
                 )
             except Exception as e:  # noqa: BLE001
                 text = f"【错误】{user_message_for_error(str(e))}"
-                await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
+                await _finalize_run(
+                    run_id,
+                    status="failed",
+                    error=str(e),
+                    task_id=task_id,
+                    bill_to=payer_for(principal),
+                )
         else:
             result = await _run_and_collect(
                 prompt,
@@ -1574,6 +1600,7 @@ async def chat_completions(
                 user_prompt=prompt,
                 change_proposal=getattr(result, "change_proposal", None),
                 token_usage=getattr(result, "token_usage", None),
+                bill_to=payer_for(principal),
             )
         payload = {
             "id": completion_id,
@@ -1686,6 +1713,7 @@ async def chat_completions(
                     task_id=task_id,
                     user_prompt=prompt,
                     token_usage=stream_usage or None,
+                    bill_to=payer_for(principal),
                 )
                 finalized = True
             except (asyncio.CancelledError, GeneratorExit):
@@ -1695,13 +1723,20 @@ async def chat_completions(
                         status="cancelled",
                         error="stream disconnected",
                         task_id=task_id,
+                        bill_to=payer_for(principal),
                     )
                 )
                 finalized = True
                 raise
             except Exception as e:  # noqa: BLE001
                 yield chunk({"content": f"【错误】{user_message_for_error(str(e))}"})
-                await _finalize_run(run_id, status="failed", error=str(e), task_id=task_id)
+                await _finalize_run(
+                    run_id,
+                    status="failed",
+                    error=str(e),
+                    task_id=task_id,
+                    bill_to=payer_for(principal),
+                )
                 finalized = True
             finally:
                 if not finalized:
@@ -1711,6 +1746,7 @@ async def chat_completions(
                             status="cancelled",
                             error="stream disconnected",
                             task_id=task_id,
+                            bill_to=payer_for(principal),
                         )
                     )
             yield chunk(
@@ -1942,6 +1978,7 @@ async def chat_completions(
                     user_prompt=prompt,
                     change_proposal=getattr(result, "change_proposal", None),
                     token_usage=getattr(result, "token_usage", None),
+                    bill_to=payer_for(principal),
                 )
                 await q.put(("done", result))
             except asyncio.CancelledError:
@@ -1952,6 +1989,7 @@ async def chat_completions(
                         status="cancelled",
                         error="run cancelled",
                         task_id=task_id,
+                        bill_to=payer_for(principal),
                     )
                 )
                 raise
@@ -1968,6 +2006,7 @@ async def chat_completions(
                         status="cancelled",
                         error=None,
                         task_id=task_id,
+                        bill_to=payer_for(principal),
                     )
                     await q.put(
                         (
@@ -1985,6 +2024,7 @@ async def chat_completions(
                         status="failed",
                         error=str(e),
                         task_id=task_id,
+                        bill_to=payer_for(principal),
                     )
                     await q.put(("error", e))
 

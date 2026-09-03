@@ -174,6 +174,56 @@ async def test_record_drops_estimated_numbers_and_ui_lane(usage_db) -> None:
     extra = __import__("json").loads(dirty.extra_json)
     assert extra.get("ui_model") == "pico-fast"
     assert extra.get("rejected_estimate") is True
+    assert extra.get("bill_to") == "member"
+
+
+@pytest.mark.asyncio
+async def test_bill_to_school_from_arg_not_from_extra_spoof(usage_db) -> None:
+    import json
+
+    spoof = await record_usage_event(
+        school_id="school-a",
+        membership_id="m1",
+        kind="llm",
+        model="gpt-5.6-sol",
+        extra={"bill_to": "school"},
+        idempotency_key="llm:spoof-school",
+    )
+    assert spoof is not None
+    assert json.loads(spoof.extra_json).get("bill_to") == "member"
+
+    school = await record_usage_event(
+        school_id="school-a",
+        membership_id="m1",
+        kind="llm",
+        model="gpt-5.6-sol",
+        extra={"bill_to": "member"},
+        bill_to="school",
+        idempotency_key="llm:explicit-school",
+    )
+    assert school is not None
+    assert json.loads(school.extra_json).get("bill_to") == "school"
+
+    from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
+
+    tok = bind_usage_context(
+        school_id="school-a",
+        membership_id="m1",
+        bill_to="school",
+    )
+    try:
+        bound = await record_usage_event(
+            school_id="school-a",
+            membership_id="m1",
+            kind="search",
+            model="web_search",
+            tokens_unknown=True,
+            idempotency_key="search:bound-school",
+        )
+    finally:
+        reset_usage_context(tok)
+    assert bound is not None
+    assert json.loads(bound.extra_json).get("bill_to") == "school"
 
 
 @pytest.mark.asyncio

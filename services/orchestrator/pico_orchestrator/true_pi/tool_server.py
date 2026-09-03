@@ -186,6 +186,8 @@ class ToolServer:
             membership_id=self.principal.membership_id,
             run_id=self.run_id,
             conversation_id=self.conversation_id,
+            bill_to=getattr(self.principal, "bill_to", None),
+            scopes=getattr(self.principal, "scopes", None),
         )
         try:
             result = await self.gateway.invoke(self.principal, name, args)

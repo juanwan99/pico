@@ -12,7 +12,7 @@ EDU: docs/contracts/usage-export.md（edu-core 拉干净行；钱在 edu）
 > **一本用量账，不是账单。** Pico 按账号记「谁、哪校、哪次任务、哪个**后端模型**、多少 token（或诚实缺）。  
 > 老师看见的**积分**是同一本账的派生（服务端换算，三位小数），不是第二套账、不是点池。  
 > **禁止** 定价、人民币、套餐、扣款、支付、发票、点池/余额列。本表与 API **不得** 出现 `price` / `currency` / `cost` / `charge` / `billing` 列。  
-> **edu-core：** 只拉 [`docs/contracts/usage-export.md`](./contracts/usage-export.md) 上的 `points` 数字扣点；禁止再乘。钱包仍在 edu。
+> **edu-core：** 只拉 [`docs/contracts/usage-export.md`](./contracts/usage-export.md) 上的 `points` 数字扣点；禁止再乘。`extra.bill_to=school` 扣学校额度，否则扣该 `membership_id`。钱包仍在 edu。
 
 与现有概念的边界：
 
@@ -52,7 +52,7 @@ schema 与 JSON 合同禁止 money 字段
 | `task_id` | string \| null | 关联 Task（运行账本） |
 | `run_id` | string \| null | 关联 Run |
 | `source` | string | 写入点：`openai_compat` / `run_service` / 后续卡 |
-| `extra_json` | object | 非钱元数据（时长、查询次数等） |
+| `extra_json` | object | 非钱元数据（时长、查询次数、`bill_to`=`member`\|`school`） |
 | `idempotency_key` | string unique | 失败重试不重复记账 |
 | `created_at` | datetime UTC | 记账时间 |
 

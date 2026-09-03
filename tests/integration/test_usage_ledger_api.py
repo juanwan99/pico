@@ -137,6 +137,7 @@ async def test_cross_account_cannot_read_detail(client: AsyncClient):
     assert "price" not in (row.get("extra") or {})
     assert "currency" not in (row.get("extra") or {})
     assert (row.get("extra") or {}).get("query_count") == 1
+    assert (row.get("extra") or {}).get("bill_to") == "member"
     blob = mine.text.lower()
     assert "token" not in blob
     assert "×" not in mine.text
@@ -909,5 +910,57 @@ async def test_write_path_expands_cache_split_and_bills_weighted(client: AsyncCl
     assert (meter.get("extra") or {}).get("reasoning_tokens") == 12
     assert "rate" not in (meter.get("extra") or {})
     assert "formula" not in (meter.get("extra") or {})
+
+
+async def test_school_bill_to_hidden_from_teacher_visible_in_export(client: AsyncClient):
+    personal_id = await _seed_llm(
+        school="school-a",
+        member="m1",
+        run_id="run-personal-bill",
+        tokens={"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+    )
+    school_row = await record_usage_event(
+        school_id="school-a",
+        membership_id="m1",
+        kind="llm",
+        model="gpt-4o",
+        prompt_tokens=40,
+        completion_tokens=8,
+        total_tokens=48,
+        tokens_unknown=False,
+        task_id="task-1",
+        run_id="run-school-bill",
+        source="test",
+        bill_to="school",
+        idempotency_key="llm:run-school-bill",
+    )
+    assert school_row is not None
+
+    owner = await _auth(client, member="m1")
+    mine = await client.get("/v1/usage/events", headers=owner)
+    assert mine.status_code == 200, mine.text
+    ids = [e["id"] for e in mine.json()["events"]]
+    assert personal_id in ids
+    assert school_row.id not in ids
+
+    school_tok = await _token(
+        client, member="m1", scopes=["ai:run", "ai:read", "ai:school-run"]
+    )
+    assert school_tok
+
+    hook = {"Authorization": "Bearer hook-secret-token"}
+    exported = await client.get(
+        "/v1/internal/usage/export",
+        headers=hook,
+        params={"school_id": "school-a", "limit": 200},
+    )
+    assert exported.status_code == 200, exported.text
+    events = exported.json()["events"]
+    personal = next(e for e in events if e["id"] == personal_id)
+    school = next(e for e in events if e["id"] == school_row.id)
+    assert personal["extra"]["bill_to"] == "member"
+    assert school["extra"]["bill_to"] == "school"
+    assert school["membership_id"] == "m1"
+    assert school["billing"] is False
 
 
