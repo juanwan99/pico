@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pico_orchestrator.capability_loading import CORE_VISIBLE_TOOLS
+
 JSON_ONLY_OUTPUT = "json_only_no_files"
 _JSON_KEY_COMPACT = '"output":"json_only_no_files"'
 _JSON_KEY_SPACED = '"output": "json_only_no_files"'
@@ -17,36 +19,28 @@ SIDEBAR_WEB_SYSTEM = (
     "有来源：标明来自网。"
 )
 SIDEBAR_WORKBENCH_HINT = (
-    "侧栏可读当前页和已点名/本轮回形针里的办公文件正文（PDF / Word / Excel / PPT）。"
-    "改已有文件、出图、落盘请去 Pico 工作台。"
-    "本侧栏不得调用 generate_* / edit_* / 出图，不得落 Artifact。"
+    "侧栏优先操控和填写左边当前页；确认后走学校原命令。"
+    "出文档、出图、改文件、落盘用和 Pico 工作台同一套手，不要因为在侧栏就少工具或推去另一个窗。"
 )
 
-# Sidebar may enter Pi. File *read* stays. Never inherit office CORE writes.
-EDU_SIDEBAR_DEFAULT_TOOLS: tuple[str, ...] = (
-    "workspace_list_files",
-    "workspace_read_file",
-    "inspect_document",
-    "kb_search",
-    "web_search",
-    "web_fetch",
-)
+# Same CORE hands as workbench. Not a second, smaller tool set.
+EDU_SIDEBAR_DEFAULT_TOOLS: tuple[str, ...] = CORE_VISIBLE_TOOLS
 EDU_SIDEBAR_ALLOWED_TOOLS = frozenset(EDU_SIDEBAR_DEFAULT_TOOLS)
 
 
 def sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
     """json_only stays one-shot. Edu sidebar is not chat_only: it enters Pi.
 
-    Still never force_agent / land artifacts: no skill guess, request tool ceiling.
+    Never force_agent from a prompt guess. Hands are CORE, same as workbench.
     """
     del edu_sidebar
     return bool(json_only)
 
 
-def edu_sidebar_tool_ceiling(request_tools: list[str] | None) -> list[str]:
-    """Always the read+web set. Request cannot add generate_* / edit_* / writes."""
+def edu_sidebar_tool_ceiling(request_tools: list[str] | None) -> list[str] | None:
+    """None = CORE (workbench default). Edu empty/web-only lists are not a castration."""
     del request_tools
-    return list(EDU_SIDEBAR_DEFAULT_TOOLS)
+    return None
 
 
 def with_sidebar_workbench_hint(system: str | None) -> str:
