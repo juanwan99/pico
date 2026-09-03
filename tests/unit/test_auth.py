@@ -49,3 +49,14 @@ def test_school_run_scope_tags_bill_to_school() -> None:
     p = decode_token(token, s)
     assert SCHOOL_RUN_SCOPE in p.scopes
     assert p.bill_to == "school"
+
+
+def test_payer_for_accepts_simple_namespace() -> None:
+    from types import SimpleNamespace
+
+    from app.auth import payer_for
+
+    fake = SimpleNamespace(school_id="s", membership_id="m", scopes=["ai:run"])
+    assert payer_for(fake) == "member"
+    school = SimpleNamespace(scopes=["ai:run", "ai:school-run"])
+    assert payer_for(school) == "school"

@@ -34,6 +34,14 @@ def bill_to_from_scopes(scopes: list[str] | None) -> str:
     return BILL_TO_MEMBER
 
 
+def payer_for(principal: Any) -> str:
+    """Works on Principal and test doubles (SimpleNamespace)."""
+    tagged = getattr(principal, "bill_to", None)
+    if tagged in {BILL_TO_SCHOOL, BILL_TO_MEMBER}:
+        return str(tagged)
+    return bill_to_from_scopes(getattr(principal, "scopes", None))
+
+
 @dataclass(frozen=True)
 class Principal:
     # edu-core: school_membership.school_id + school_membership.id (not user_id).

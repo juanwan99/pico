@@ -37,6 +37,7 @@ from app.auth import (
     Principal,
     decode_token,
     enforce_scope,
+    payer_for,
     prompt_membership_conflicts_header,
     require_billed_identity,
     scope_proxy_principal,
@@ -1443,7 +1444,7 @@ async def chat_completions(
                     _search_tok = bind_usage_context(
                         school_id=principal.school_id,
                         membership_id=principal.membership_id,
-                        bill_to=principal.bill_to,
+                        bill_to=payer_for(principal),
                         scopes=principal.scopes,
                     )
                     try:
@@ -1560,7 +1561,7 @@ async def chat_completions(
                     task_id=task_id,
                     user_prompt=prompt,
                     token_usage=direct_usage or None,
-                    bill_to=principal.bill_to,
+                    bill_to=payer_for(principal),
                 )
             except Exception as e:  # noqa: BLE001
                 text = f"【错误】{user_message_for_error(str(e))}"
@@ -1569,7 +1570,7 @@ async def chat_completions(
                     status="failed",
                     error=str(e),
                     task_id=task_id,
-                    bill_to=principal.bill_to,
+                    bill_to=payer_for(principal),
                 )
         else:
             result = await _run_and_collect(
@@ -1599,7 +1600,7 @@ async def chat_completions(
                 user_prompt=prompt,
                 change_proposal=getattr(result, "change_proposal", None),
                 token_usage=getattr(result, "token_usage", None),
-                bill_to=principal.bill_to,
+                bill_to=payer_for(principal),
             )
         payload = {
             "id": completion_id,
@@ -1712,7 +1713,7 @@ async def chat_completions(
                     task_id=task_id,
                     user_prompt=prompt,
                     token_usage=stream_usage or None,
-                    bill_to=principal.bill_to,
+                    bill_to=payer_for(principal),
                 )
                 finalized = True
             except (asyncio.CancelledError, GeneratorExit):
@@ -1722,7 +1723,7 @@ async def chat_completions(
                         status="cancelled",
                         error="stream disconnected",
                         task_id=task_id,
-                        bill_to=principal.bill_to,
+                        bill_to=payer_for(principal),
                     )
                 )
                 finalized = True
@@ -1734,7 +1735,7 @@ async def chat_completions(
                     status="failed",
                     error=str(e),
                     task_id=task_id,
-                    bill_to=principal.bill_to,
+                    bill_to=payer_for(principal),
                 )
                 finalized = True
             finally:
@@ -1745,7 +1746,7 @@ async def chat_completions(
                             status="cancelled",
                             error="stream disconnected",
                             task_id=task_id,
-                            bill_to=principal.bill_to,
+                            bill_to=payer_for(principal),
                         )
                     )
             yield chunk(
@@ -1977,7 +1978,7 @@ async def chat_completions(
                     user_prompt=prompt,
                     change_proposal=getattr(result, "change_proposal", None),
                     token_usage=getattr(result, "token_usage", None),
-                    bill_to=principal.bill_to,
+                    bill_to=payer_for(principal),
                 )
                 await q.put(("done", result))
             except asyncio.CancelledError:
@@ -1988,7 +1989,7 @@ async def chat_completions(
                         status="cancelled",
                         error="run cancelled",
                         task_id=task_id,
-                        bill_to=principal.bill_to,
+                        bill_to=payer_for(principal),
                     )
                 )
                 raise
@@ -2005,7 +2006,7 @@ async def chat_completions(
                         status="cancelled",
                         error=None,
                         task_id=task_id,
-                        bill_to=principal.bill_to,
+                        bill_to=payer_for(principal),
                     )
                     await q.put(
                         (
@@ -2023,7 +2024,7 @@ async def chat_completions(
                         status="failed",
                         error=str(e),
                         task_id=task_id,
-                        bill_to=principal.bill_to,
+                        bill_to=payer_for(principal),
                     )
                     await q.put(("error", e))
 
