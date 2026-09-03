@@ -1,23 +1,23 @@
-"""Teacher-facing points derived from usage_events tokens.
+"""Teacher-facing points derived from usage_events × channel cost.
 
-Scale lives in this module only. Never import from LibreChat client code.
+Scale lives here only. Never import from LibreChat client code.
 Never persist quote guesses onto usage_events token columns.
 Never store a wallet or balance.
 
-Token columns stay provider-accurate (full input includes cache reads).
-积分 is a weighted millipoint conversion — not total×one-price.
+Token columns stay provider-accurate. 积分 = 成本人民币 × 2.5 × 1000
+(1 元 = 1000 积分). Rate card is config/channel-rates.json.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-# Millipoints (0.001 积分) for 1× fresh input. 1000 tokens → 3.000.
-_FRESH_MILLI = 3
-# Cache read 0.1×, cache write 1.25×, output 6×. Integer millipoints.
-_CACHE_READ_NUM, _CACHE_READ_DEN = 3, 10
-_CACHE_WRITE_NUM, _CACHE_WRITE_DEN = 15, 4
-_OUTPUT_MILLI = 18
+from app.channel_rates import (
+    cost_micro_yuan,
+    load_rate_card,
+    sell_millipoints,
+)
+
 _QUOTE_INPUT_CAP = 200_000
 # UX floor only — not a token-column write. Live CORE+SYSTEM first-turn ~8393.
 _RESIDENT_QUOTE_FLOOR = 8400
@@ -29,8 +29,18 @@ def format_millipoints(milli: int) -> str:
 
 
 def points_from_tokens(tokens: int) -> str:
-    """1× fresh-input rate. 1000 → 3.000. Not the row bill."""
-    return format_millipoints(max(0, int(tokens)) * _FRESH_MILLI)
+    """Bill ``tokens`` as llm fresh input on the default chat rate."""
+    milli = milli_from_row(
+        tokens_unknown=False,
+        prompt_tokens=max(0, int(tokens)),
+        completion_tokens=0,
+        total_tokens=max(0, int(tokens)),
+        kind="llm",
+        model="gpt-5.6-sol",
+    )
+    if milli is None:
+        return "0.000"
+    return format_millipoints(milli)
 
 
 def _extra_int(extra: dict[str, Any] | None, *keys: str) -> int:
@@ -110,10 +120,11 @@ def split_billable_buckets(
 
 
 def milli_from_buckets(fresh: int, cache_read: int, cache_write: int, output: int) -> int:
-    milli = max(0, int(fresh)) * _FRESH_MILLI
-    milli += (max(0, int(cache_read)) * _CACHE_READ_NUM) // _CACHE_READ_DEN
-    milli += (max(0, int(cache_write)) * _CACHE_WRITE_NUM) // _CACHE_WRITE_DEN
-    milli += max(0, int(output)) * _OUTPUT_MILLI
+    """Legacy 1×/0.1×/1.25×/6× units. Prefer milli_from_row (rate card)."""
+    milli = max(0, int(fresh)) * 3
+    milli += (max(0, int(cache_read)) * 3) // 10
+    milli += (max(0, int(cache_write)) * 15) // 4
+    milli += max(0, int(output)) * 18
     return milli
 
 
@@ -124,27 +135,36 @@ def milli_from_row(
     prompt_tokens: int | None,
     completion_tokens: int | None,
     extra: dict[str, Any] | None = None,
+    kind: str | None = None,
+    model: str | None = None,
 ) -> int | None:
-    if tokens_unknown:
+    extra = extra if isinstance(extra, dict) else {}
+    kind_n = (kind or str(extra.get("kind") or "") or "llm").strip().lower()
+    model_n = (model or str(extra.get("billed_model") or "")).strip() or None
+    channel_id = str(extra.get("channel_id") or "").strip() or None
+    card = load_rate_card()
+    rate = card.find(kind=kind_n, model=model_n, channel_id=channel_id)
+    if rate is None or not rate.priced():
         return None
-    buckets = split_billable_buckets(
+    cached = _extra_int(extra, "cached_tokens", "cache_read", "cacheRead")
+    write = _extra_int(extra, "cache_write_tokens", "cache_write", "cacheWrite")
+    ok = extra.get("ok")
+    cost = cost_micro_yuan(
+        rate,
+        kind=kind_n,
+        tokens_unknown=bool(tokens_unknown),
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
-        extra=extra,
+        cached_tokens=cached,
+        cache_write_tokens=write,
+        ok=ok is not False,
+        image_count=max(1, _extra_int(extra, "image_count") or 1),
+        call_count=max(1, _extra_int(extra, "query_count") or 1),
     )
-    if buckets is None:
+    if cost is None:
         return None
-    if (
-        prompt_tokens is None
-        and completion_tokens is None
-        and total_tokens is None
-        and not extra
-    ):
-        return None
-    if prompt_tokens is None and completion_tokens is None and total_tokens is not None:
-        return max(0, int(total_tokens)) * _FRESH_MILLI
-    return milli_from_buckets(*buckets)
+    return sell_millipoints(cost)
 
 
 def tokens_from_row(
@@ -183,6 +203,8 @@ def points_from_row(
     prompt_tokens: int | None,
     completion_tokens: int | None,
     extra: dict[str, Any] | None = None,
+    kind: str | None = None,
+    model: str | None = None,
 ) -> str | None:
     milli = milli_from_row(
         tokens_unknown=tokens_unknown,
@@ -190,6 +212,8 @@ def points_from_row(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         extra=extra,
+        kind=kind,
+        model=model,
     )
     if milli is None:
         return None
@@ -216,13 +240,28 @@ def quote_points_from_input_len(
     Pass resident_milli=0 / resident_tokens=0 to quote teacher text alone.
     """
     n = max(0, min(int(n or 0), _QUOTE_INPUT_CAP))
-    extra = quote_units_from_input_len(n) * _FRESH_MILLI
+    extra_units = quote_units_from_input_len(n)
+    extra = milli_from_row(
+        tokens_unknown=False,
+        prompt_tokens=extra_units,
+        completion_tokens=0,
+        total_tokens=extra_units,
+        kind="llm",
+        model="gpt-5.6-sol",
+    ) or 0
     if resident_milli is not None:
         base = max(0, int(resident_milli))
     elif resident_tokens is not None:
-        base = max(0, int(resident_tokens)) * _FRESH_MILLI
+        base = milli_from_row(
+            tokens_unknown=False,
+            prompt_tokens=max(0, int(resident_tokens)),
+            completion_tokens=0,
+            total_tokens=max(0, int(resident_tokens)),
+            kind="llm",
+            model="gpt-5.6-sol",
+        ) or 0
     else:
-        base = _RESIDENT_QUOTE_FLOOR * _FRESH_MILLI
+        base = resident_quote_floor_milli()
     return format_millipoints(base + extra)
 
 
@@ -231,4 +270,11 @@ def resident_quote_floor() -> int:
 
 
 def resident_quote_floor_milli() -> int:
-    return _RESIDENT_QUOTE_FLOOR * _FRESH_MILLI
+    return milli_from_row(
+        tokens_unknown=False,
+        prompt_tokens=_RESIDENT_QUOTE_FLOOR,
+        completion_tokens=0,
+        total_tokens=_RESIDENT_QUOTE_FLOOR,
+        kind="llm",
+        model="gpt-5.6-sol",
+    ) or 0

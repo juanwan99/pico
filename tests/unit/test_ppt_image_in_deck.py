@@ -123,12 +123,12 @@ def _media_names(raw: bytes) -> list[str]:
 async def test_teacher_image_then_pptx_has_real_picture(monkeypatch) -> None:
     """Complex: generate_image fixture → generate_pptx_document → zip + size."""
 
-    async def fake_image(prompt: str) -> tuple[bytes, str]:
+    async def fake_image(prompt: str) -> tuple[bytes, str, None]:
         assert "图" in prompt or prompt
-        return FIXTURE_PNG, "png"
+        return FIXTURE_PNG, "png", None
 
     monkeypatch.setattr(
-        "pico_orchestrator.tools_builtin.generate_image_bytes", fake_image
+        "pico_orchestrator.tools_builtin.generate_image_with_usage", fake_image
     )
     store = MemoryArtifactStore(run_id="run-deck")
     gw = build_default_gateway(store)

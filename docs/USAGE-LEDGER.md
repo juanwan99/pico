@@ -68,7 +68,15 @@ Token 规则：
 - `model` 禁止长期留 `pico-fast` / `pico-deep`；档位只进 `extra.ui_model`。
 - **禁止**把 Pi `cost`、倍率、公式写入账本或 extra。
 
-**积分（派生，#788 / #836 / #838）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py`。表上不增加积分/余额列。token 列记提供方桶（系统提示词、工具 schema、本轮说话都在输入里）。**积分不是 total×一口价**：新鲜输入 1×、缓存命中 0.1×、缓存写入 1.25×、输出 6×（1000 新鲜输入 = 3.000；模型系数默认 1；`pico-fast`/`pico-deep` 是档位不是计费型号）。reasoning 已含在输出里，禁止再加。缺 I/O 只剩 `total` 时按 1× 兜底。unknown 仍 `points=null`（不是 0）。老师面只见积分，**禁止** token / × / ÷ / 公式。作曲栏「预计」必须盖上常驻包（本会话最近一次加权积分，没有则地板），禁止只报老师字数把 0.024 装成账单。edu 导出诚实 token 列 + 已换好的 `points`（与门脸同数），禁止再乘、禁止倍率字段。search/sandbox/image 无提供方 token 则 `points=null`（不是 0），不另造单价表。每一轮钉在该条回复末尾：有积分显示「实际」；晚到则该轮继续显示「预计」，不改成「未结算」、不清理上一轮。省 token / 收常驻体积后期另做。
+**积分（派生 · 业主 2026-09-03）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py` + `config/channel-rates.json`。表上**不增加**人民币列。token 列仍是提供方桶。
+
+```text
+成本 = 该渠道价签 × token（或出图/检索按次）
+售价 = 成本 × 2.5
+积分 = 售价(元) × 1000     # 1 元 = 1000 积分
+```
+
+价签按 **渠道×模型**（同一模型不同渠道必须各有一条）。无价签 → 该渠道锁死，不准调用。钱/钱包在 edu-core；edu 拉 export 的 `points` **禁止再乘**。Pico 不做充值/支付/余额。`pico-fast`/`pico-deep` 是档位不是计费型号。出图优先用提供方 `usageMetadata`；没有则用价签的 `per_image_yuan`。unknown 且无按次价签 → `points=null`（不是 0）。老师面只见积分，禁止 token / 公式。每一轮钉在该条回复末尾：有积分显示「实际」。
 
 ---
 
@@ -79,7 +87,7 @@ Token 规则：
 | `llm` | pico-api：`openai_compat` / `run_service` 终态。优先提供方 usage |
 | `search` | gateway `web_search` / `web_fetch` |
 | `sandbox` | preview / HTML 写入 / browser |
-| `image` | `generate_image`（New API Gemini）。token 常 unknown；extra 记 bytes/provider |
+| `image` | `generate_image`（New API Gemini）。优先 `usageMetadata` token；没有则按张 `per_image_yuan` |
 | `api` | 预留 |
 | `other` | 预留 |
 

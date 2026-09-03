@@ -22,6 +22,7 @@ from pico_orchestrator.edu_sidebar import (
     is_json_only_propose,
     shape_web_hits,
 )
+from pico_orchestrator.gateway import ToolError as ChannelToolError
 from pico_orchestrator.sse_keepalive import (
     SSE_COMMENT_KEEPALIVE,
     SSE_KEEPALIVE_SECONDS,
@@ -37,8 +38,10 @@ from app.auth import (
     decode_token,
     enforce_scope,
     prompt_membership_conflicts_header,
+    require_billed_identity,
     scope_proxy_principal,
 )
+from app.channel_rates import require_rate
 from app.db import RunRow, TaskRow, append_event, new_id, session_factory
 from app.settings import Settings, get_settings
 
@@ -1252,6 +1255,14 @@ async def chat_completions(
         raise HTTPException(status_code=403, detail="proxy membership mismatch")
     principal = scope_proxy_principal(principal, x_pico_membership_id)
     enforce_scope(principal, "ai:run")
+    require_billed_identity(principal, settings)
+    try:
+        require_rate(kind="llm", model=(body.model or "").strip() or "gpt-5.6-sol")
+    except ChannelToolError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": exc.code, "message": str(exc.message)},
+        ) from exc
     day_use_block = await _day_use_system_block(principal, x_pico_display_name)
     raw_prompt_with_skill = _last_user_prompt(body.messages)
     from pico_orchestrator.skill_policy import (

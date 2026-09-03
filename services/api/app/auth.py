@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,7 @@ REGISTERED_SCOPES = frozenset({"ai:read", "ai:run", "ai:confirm", "ai:admin"})
 # Persisted fallback ledger key. Rename only with a data migration; normal
 # LibreChat requests replace it with the authenticated membership header.
 LEGACY_PROXY_MEMBERSHIP_ID = "nextchat-user"
+_MEMBER_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 @dataclass(frozen=True)
@@ -384,6 +386,36 @@ async def require_scoped_principal(
         )
     p = decode_token(creds.credentials, settings)
     return scope_proxy_principal(p, x_pico_membership_id)
+
+
+def billed_identity_ok(principal: Principal, *, production: bool) -> bool:
+    """Edu membership only for metered runs. No LibreChat-local leftover ids."""
+    school = (principal.school_id or "").strip()
+    member = (principal.membership_id or "").strip()
+    if not school or not member:
+        return False
+    if member == LEGACY_PROXY_MEMBERSHIP_ID:
+        return False
+    if not _MEMBER_RE.fullmatch(school) or not _MEMBER_RE.fullmatch(member):
+        return False
+    if production and principal.raw.get("proxy"):
+        return bool(principal.raw.get("joint_header"))
+    return True
+
+
+def require_billed_identity(principal: Principal, settings: Settings | None = None) -> Principal:
+    s = settings or get_settings()
+    env = (s.pico_env or "development").lower()
+    production = env in {"production", "prod"}
+    if billed_identity_ok(principal, production=production):
+        return principal
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "auth.edu_membership_required",
+            "message": "请用学校账号登录后再使用。本地邮箱不能计费。",
+        },
+    )
 
 
 def enforce_scope(principal: Principal, required_scope: str) -> Principal:

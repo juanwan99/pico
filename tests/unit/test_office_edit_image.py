@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import sys
 import zipfile
 from pathlib import Path
@@ -26,6 +27,7 @@ from pico_orchestrator.image_generate import (
     REJECTED_PROVIDER_MESSAGE,
     generate_image_bytes,
     reset_image_generate_runtime,
+    usage_from_gemini_body,
 )
 from pico_orchestrator.office_editors import edit_docx_bytes, edit_pptx_title_bytes
 from pico_orchestrator.skill_policy import snapshot_for_skill
@@ -40,6 +42,35 @@ ONE_PNG = (
 )
 
 
+_IMAGE_RATES = {
+    "sell_markup": 2.5,
+    "points_per_yuan": 1000,
+    "channels": [
+        {"id": "t:glm", "kind": "image", "model": "glm-image", "per_image_yuan": 0.4},
+        {
+            "id": "t:g25",
+            "kind": "image",
+            "model": "gemini-2.5-flash-image",
+            "output_yuan_per_million": 216,
+            "per_image_yuan": 0.28,
+        },
+        {
+            "id": "t:g31",
+            "kind": "image",
+            "model": "gemini-3.1-flash-image",
+            "output_yuan_per_million": 430,
+            "per_image_yuan": 0.5,
+        },
+        {
+            "id": "t:imagen",
+            "kind": "image",
+            "model": "imagen-4.0-generate-001",
+            "per_image_yuan": 0.4,
+        },
+    ],
+}
+
+
 @pytest.fixture(autouse=True)
 def _reset_image_runtime(monkeypatch: pytest.MonkeyPatch):
     reset_image_generate_runtime()
@@ -50,8 +81,26 @@ def _reset_image_runtime(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("PICO_IMAGE_GATEWAY_URL", raising=False)
     monkeypatch.delenv("PICO_IMAGE_GATEWAY_KEY", raising=False)
     monkeypatch.delenv("PICO_IMAGE_GATEWAY_MODEL", raising=False)
+    monkeypatch.setenv("PICO_CHANNEL_RATES", json.dumps(_IMAGE_RATES))
+    from app.channel_rates import reset_rate_card
+
+    reset_rate_card()
     yield
     reset_image_generate_runtime()
+    reset_rate_card()
+
+
+def test_usage_from_gemini_body_reads_usage_metadata() -> None:
+    assert usage_from_gemini_body(
+        {
+            "usageMetadata": {
+                "promptTokenCount": 12,
+                "candidatesTokenCount": 80,
+                "totalTokenCount": 92,
+            }
+        }
+    ) == {"prompt_tokens": 12, "completion_tokens": 80, "total_tokens": 92}
+    assert usage_from_gemini_body({"candidates": []}) is None
 
 
 def _three_para_docx() -> bytes:

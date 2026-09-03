@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "sell_markup": 2.5,
+  "points_per_yuan": 1000,
+  "channels": [
+    {
+      "id": "new-api:gpt-5.6-sol",
+      "kind": "llm",
+      "model": "gpt-5.6-sol",
+      "input_yuan_per_million": 10,
+      "output_yuan_per_million": 80,
+      "cache_read_yuan_per_million": 1,
+      "cache_write_yuan_per_million": 12.5
+    },
+    {
+      "id": "new-api:gemini-3.1-flash-image",
+      "kind": "image",
+      "model": "gemini-3.1-flash-image",
+      "output_yuan_per_million": 430,
+      "per_image_yuan": 0.5
+    },
+    {
+      "id": "new-api:gemini-2.5-flash-image",
+      "kind": "image",
+      "model": "gemini-2.5-flash-image",
+      "output_yuan_per_million": 216,
+      "per_image_yuan": 0.28
+    },
+    {
+      "id": "new-api:web_search",
+      "kind": "search",
+      "model": "web_search",
+      "per_call_yuan": 0.02
+    },
+    {
+      "id": "new-api:web_fetch",
+      "kind": "search",
+      "model": "web_fetch",
+      "per_call_yuan": 0.02
+    }
+  ]
+}
