@@ -159,6 +159,8 @@ def _row_meter_kwargs(row: UsageEventRow) -> dict[str, Any]:
 
 def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
     extra = _strip_money_keys(_row_extra(row))
+    if extra.get("bill_to") not in {"school", "member"}:
+        extra["bill_to"] = "member"
     from app.points_meter import points_from_row
 
     points = points_from_row(**_row_meter_kwargs(row))
@@ -318,6 +320,26 @@ def scrub_dirty_usage_events_sync(conn) -> dict[str, int]:
     return stats
 
 
+def _resolve_bill_to(explicit: str | None) -> str:
+    """school only from school-run bind or explicit emit arg. extra_json cannot raise it."""
+    if (explicit or "").strip().lower() == "school":
+        return "school"
+    try:
+        from pico_orchestrator.usage_hook import current_usage_bind
+    except ImportError:
+        return "member"
+    bind = current_usage_bind()
+    if bind is not None and getattr(bind, "bill_to", None) == "school":
+        return "school"
+    return "member"
+
+
+def _personal_bill_clause():
+    """Teacher/personal reads skip school-billed rows. Missing tag = member (old rows)."""
+    col = func.json_extract(UsageEventRow.extra_json, "$.bill_to")
+    return or_(col.is_(None), col != "school")
+
+
 async def record_usage_event(
     *,
     school_id: str,
@@ -334,6 +356,7 @@ async def record_usage_event(
     source: str = "",
     extra: dict[str, Any] | None = None,
     idempotency_key: str | None = None,
+    bill_to: str | None = None,
 ) -> UsageEventRow | None:
     """Persist one usage row. Never raises to the caller (Run path stays up)."""
     try:
@@ -352,6 +375,7 @@ async def record_usage_event(
             source=source,
             extra=extra,
             idempotency_key=idempotency_key,
+            bill_to=bill_to,
         )
     except Exception:
         logger.exception("usage_events write failed; run path continues")
@@ -374,6 +398,7 @@ async def _record_usage_event_inner(
     source: str,
     extra: dict[str, Any] | None,
     idempotency_key: str | None,
+    bill_to: str | None = None,
 ) -> UsageEventRow | None:
     kind_n = (kind or "").strip().lower()
     if kind_n not in USAGE_KINDS:
@@ -386,6 +411,8 @@ async def _record_usage_event_inner(
         return None
     key = (idempotency_key or "").strip() or f"{kind_n}:{new_id()}"
     extra_clean = _strip_money_keys(extra if isinstance(extra, dict) else None)
+    extra_clean.pop("bill_to", None)
+    extra_clean["bill_to"] = _resolve_bill_to(bill_to)
     model_n = (model or "").strip() or None
     if is_ui_lane(model_n):
         extra_clean.setdefault("ui_model", model_n)
@@ -502,6 +529,7 @@ async def emit_llm_usage_after_run(
     model: str | None = None,
     task_id: str | None = None,
     estimate_if_missing: bool = False,
+    bill_to: str | None = None,
 ) -> None:
     """Best-effort llm event for a finished Run. Safe to call after commit.
 
@@ -579,6 +607,7 @@ async def emit_llm_usage_after_run(
         source=source or "llm",
         extra=extra or None,
         idempotency_key=f"llm:{rid}",
+        bill_to=bill_to,
     )
 
 
@@ -615,6 +644,7 @@ async def last_known_billable_milli(
             UsageEventRow.school_id == school,
             UsageEventRow.membership_id == member,
             TaskRow.conversation_id == cid,
+            _personal_bill_clause(),
         )
         .order_by(UsageEventRow.created_at.desc())
         .limit(20)
@@ -732,6 +762,7 @@ async def list_usage_events(
     q = select(UsageEventRow).where(
         UsageEventRow.school_id == school,
         UsageEventRow.membership_id == member,
+        _personal_bill_clause(),
     )
     if kind:
         kind_n = kind.strip().lower()
@@ -932,6 +963,7 @@ async def summarize_usage(
         .where(
             UsageEventRow.school_id == school,
             UsageEventRow.membership_id == member,
+            _personal_bill_clause(),
         )
         .group_by(day_expr, UsageEventRow.kind)
         .order_by(day_expr.desc(), UsageEventRow.kind)

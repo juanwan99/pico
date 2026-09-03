@@ -756,6 +756,8 @@ async def invoke_tool(
         school_id=principal.school_id,
         membership_id=principal.membership_id,
         conversation_id=x_conversation_id,
+        bill_to=principal.bill_to,
+        scopes=principal.scopes,
     )
     try:
         result = await gw.invoke(principal, body.name, dict(body.arguments))
@@ -794,6 +796,8 @@ async def open_sandbox_session(
     token = bind_usage_context(
         school_id=principal.school_id,
         membership_id=principal.membership_id,
+        bill_to=principal.bill_to,
+        scopes=principal.scopes,
     )
     url = (body.url or "").strip()
     kind = (body.kind or "").strip().lower()

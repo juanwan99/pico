@@ -15,11 +15,23 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.settings import Settings, get_settings
 
 _bearer = HTTPBearer(auto_error=False)
-REGISTERED_SCOPES = frozenset({"ai:read", "ai:run", "ai:confirm", "ai:admin"})
+SCHOOL_RUN_SCOPE = "ai:school-run"
+REGISTERED_SCOPES = frozenset(
+    {"ai:read", "ai:run", "ai:confirm", "ai:admin", SCHOOL_RUN_SCOPE}
+)
+BILL_TO_SCHOOL = "school"
+BILL_TO_MEMBER = "member"
 # Persisted fallback ledger key. Rename only with a data migration; normal
 # LibreChat requests replace it with the authenticated membership header.
 LEGACY_PROXY_MEMBERSHIP_ID = "nextchat-user"
 _MEMBER_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+def bill_to_from_scopes(scopes: list[str] | None) -> str:
+    """Payer tag for usage_events. Token scope only — request body cannot raise to school."""
+    if SCHOOL_RUN_SCOPE in (scopes or []):
+        return BILL_TO_SCHOOL
+    return BILL_TO_MEMBER
 
 
 @dataclass(frozen=True)
@@ -32,6 +44,10 @@ class Principal:
     aud: str
     exp: int
     raw: dict[str, Any]
+
+    @property
+    def bill_to(self) -> str:
+        return bill_to_from_scopes(self.scopes)
 
 
 def issue_test_token(

@@ -42,6 +42,7 @@ SCHEMA: packages/contracts/schemas/delegated-claims.schema.json
 | `ai:run` | Create tasks, start/cancel runs, invoke tools |
 | `ai:confirm` | Confirm change proposals |
 | `ai:admin` | Reserved (platform); not used in school tokens Phase 1 |
+| `ai:school-run` | Additive. With `ai:run`, usage `extra.bill_to=school` (exam card / grading). Shell tickets must not include this. |
 
 Missing `ai:run` → cannot create tasks (403 `auth.forbidden`).
 

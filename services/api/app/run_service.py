@@ -511,6 +511,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                     source="run_service",
                     school_id=principal.school_id,
                     membership_id=principal.membership_id,
+                    bill_to=principal.bill_to,
                 )
                 return
             run.status = "failed"
@@ -540,6 +541,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             source="run_service",
             school_id=principal.school_id,
             membership_id=principal.membership_id,
+            bill_to=principal.bill_to,
         )
         return
 
@@ -661,6 +663,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         membership_id=principal.membership_id,
         model=run.model,
         task_id=run.task_id,
+        bill_to=principal.bill_to,
     )
 
 

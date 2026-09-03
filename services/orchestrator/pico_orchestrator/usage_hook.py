@@ -27,6 +27,15 @@ _SANDBOX_TOOLS = frozenset(
 )
 
 
+def bill_to_from_scopes(scopes: Any) -> str:
+    """Same rule as app.auth: ai:school-run → school, else member."""
+    try:
+        seq = list(scopes or [])
+    except TypeError:
+        seq = []
+    return "school" if "ai:school-run" in seq else "member"
+
+
 @dataclass(frozen=True)
 class UsageBind:
     school_id: str
@@ -35,6 +44,7 @@ class UsageBind:
     task_id: str | None = None
     tool_call_id: str | None = None
     conversation_id: str | None = None
+    bill_to: str = "member"
 
 
 _BIND: ContextVar[UsageBind | None] = ContextVar("pico_usage_bind", default=None)
@@ -48,8 +58,13 @@ def bind_usage_context(
     task_id: str | None = None,
     tool_call_id: str | None = None,
     conversation_id: str | None = None,
+    bill_to: str | None = None,
+    scopes: Any = None,
 ) -> object:
     """Set request-scoped identity for search/fetch emits. Returns a token to reset."""
+    payer = (bill_to or "").strip().lower()
+    if payer not in {"school", "member"}:
+        payer = bill_to_from_scopes(scopes)
     return _BIND.set(
         UsageBind(
             school_id=school_id,
@@ -58,6 +73,7 @@ def bind_usage_context(
             task_id=task_id,
             tool_call_id=tool_call_id,
             conversation_id=(conversation_id or "").strip() or None,
+            bill_to=payer,
         )
     )
 

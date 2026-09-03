@@ -545,6 +545,8 @@ async def run_pi_agent(
                         if store is not None
                         else None
                     ),
+                    bill_to=getattr(principal, "bill_to", None),
+                    scopes=getattr(principal, "scopes", None),
                 )
                 try:
                     result = await gateway.invoke(principal, name, arguments)
