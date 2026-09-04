@@ -89,7 +89,7 @@ export function useComposerAttachInput({
   onPicked?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { handleFileChange } = useFileHandlingNoChatContext(undefined, {
+  const { handleFileChange, handleFiles } = useFileHandlingNoChatContext(undefined, {
     files,
     setFiles,
     setFilesLoading,
@@ -119,5 +119,5 @@ export function useComposerAttachInput({
     />
   );
 
-  return { input, openPicker };
+  return { input, openPicker, handleFiles };
 }

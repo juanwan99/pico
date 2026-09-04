@@ -20,9 +20,14 @@ jest.mock('~/hooks/Messages/useSubmitMessage', () => ({
   default: () => ({ submitMessage: jest.fn() }),
 }));
 
+const mockHandleFiles = jest.fn();
+
 jest.mock('~/hooks', () => ({
   useAuthContext: () => ({ user: { name: '老师' } }),
-  useFileHandlingNoChatContext: () => ({ handleFileChange: jest.fn() }),
+  useFileHandlingNoChatContext: () => ({
+    handleFileChange: jest.fn(),
+    handleFiles: mockHandleFiles,
+  }),
 }));
 
 jest.mock('~/components/Chat/Input/Files/FileFormChat', () => ({
@@ -91,6 +96,7 @@ describe('Landing composer chrome', () => {
 
   beforeEach(() => {
     quoteFromChars.mockReset();
+    mockHandleFiles.mockReset();
     usePointsMeter.mockReturnValue({
       phase: 'idle',
       points: null,
@@ -163,6 +169,23 @@ describe('Landing composer chrome', () => {
     const input = screen.getByTestId('text-input');
     fireEvent.change(input, { target: { value: 'hi nishi shui' } });
     expect(quoteFromChars).toHaveBeenCalledWith('hi nishi shui'.length);
+  });
+
+  it('paste of a document attaches instead of inserting the filename', () => {
+    render(<Landing centerFormOnLanding />);
+    const input = screen.getByTestId('text-input') as HTMLTextAreaElement;
+    const file = new File(['OLE'], '教师教学计划.doc', { type: 'application/msword' });
+    fireEvent.paste(input, {
+      clipboardData: {
+        files: [file],
+        types: ['Files'],
+        items: [{ kind: 'file', type: file.type, getAsFile: () => file }],
+        getData: () => '教师教学计划.doc',
+      },
+    });
+    expect(mockHandleFiles).toHaveBeenCalledTimes(1);
+    expect(mockHandleFiles.mock.calls[0][0][0].name).toMatch(/教师教学计划\.doc$/);
+    expect(input.value).not.toBe('教师教学计划.doc');
   });
 
   it('docks the composer at the bottom of the landing column', () => {

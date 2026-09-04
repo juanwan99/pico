@@ -15,6 +15,7 @@ import {
   useComposerAttachInput,
 } from '~/components/Chat/Input/ComposerPlusMenu';
 import { cn } from '~/utils';
+import { captureClipboardFiles, clipboardPlainText } from '~/utils/pasteFiles';
 import ArchiveFolderBar from '~/components/Chat/ArchiveFolderBar';
 import SchoolMaterialsBar from '~/components/Chat/SchoolMaterialsBar';
 import PointsBar from '~/components/Chat/PointsBar';
@@ -119,6 +120,59 @@ export default function Landing({
     syncForm('');
   }, [text, submitMessage, syncForm, quoteFromChars]);
 
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement> | ClipboardEvent) => {
+      if (e.defaultPrevented) {
+        return;
+      }
+      const pastedFiles = captureClipboardFiles(e.clipboardData, () => {
+        e.preventDefault();
+        const native = 'nativeEvent' in e ? e.nativeEvent : e;
+        native.stopImmediatePropagation?.();
+      });
+      if (pastedFiles && pastedFiles.length > 0) {
+        const timestamped = pastedFiles.map(
+          (file) =>
+            new File([file], `clipboard_${+new Date()}_${file.name}`, { type: file.type }),
+        );
+        void attach.handleFiles(timestamped);
+        return;
+      }
+      if (pastedFiles) {
+        return;
+      }
+      const pasted = clipboardPlainText(e.clipboardData);
+      if (!pasted) {
+        return;
+      }
+      const el = inputRef.current;
+      if (!el) {
+        syncForm(text + pasted);
+        return;
+      }
+      const start = el.selectionStart ?? text.length;
+      const end = el.selectionEnd ?? start;
+      syncForm(text.slice(0, start) + pasted + text.slice(end));
+    },
+    [attach.handleFiles, syncForm, text],
+  );
+
+  useEffect(() => {
+    const onPasteCapture = (ev: ClipboardEvent) => {
+      const el = inputRef.current;
+      if (!el) {
+        return;
+      }
+      const target = ev.target as Node | null;
+      if (target !== el && !(target && el.contains(target))) {
+        return;
+      }
+      handlePaste(ev);
+    };
+    document.addEventListener('paste', onPasteCapture, true);
+    return () => document.removeEventListener('paste', onPasteCapture, true);
+  }, [handlePaste]);
+
   // Expert / skill "summon" prefill from capability hub. Mount-only: applyModel
   // used to write PENDING and depend on chatCtx, which retriggered consume → #185.
   useEffect(() => {
@@ -197,6 +251,7 @@ export default function Landing({
               data-testid="text-input"
               value={text}
               onChange={(e) => syncForm(e.target.value)}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
