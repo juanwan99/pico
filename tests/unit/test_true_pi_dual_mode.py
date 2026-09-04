@@ -189,6 +189,9 @@ def test_true_pi_runtime_source_passes_caps_windows() -> None:
     assert "true_pi_windows_from_caps" in src
     assert "max_context=max_context" in src
     assert "max_tokens=max_out" in src
+    assert 'pi_thinking_level = (' in src
+    assert '"medium" if thinking_on else "off"' in src
+    assert 'pi_thinking_level = "medium" if openai_brain else ""' not in src
 
 
 def test_spawn_command_no_hardcoded_off_only_path() -> None:

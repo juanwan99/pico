@@ -754,6 +754,18 @@ def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
     return _dc_replace(caps, **fields)
 
 
+def _caps_with_sidebar_thinking(caps: Any, *, edu_sidebar: bool) -> Any:
+    """Edu rail only paints `content`. Thinking stays in reasoning_content, so
+    the school placeholder 正在想 never clears. Sidebar turns thinking off;
+    workbench GPT still thinks (LAW #865).
+    """
+    if not edu_sidebar or not getattr(caps, "thinking_on", False):
+        return caps
+    from dataclasses import replace as _dc_replace
+
+    return _dc_replace(caps, thinking_on=False)
+
+
 def _request_plan_on(body: ChatCompletionRequest, header: str | None = None) -> bool:
     """Teacher 先计划 toggle. Header / body / metadata; never default on."""
     # Direct calls (integration tests) pass FastAPI's Header() sentinel, not a str.
@@ -1078,6 +1090,7 @@ async def _run_and_collect(
     day_use: str = "",
     plan_on: bool = False,
     native_files: list | None = None,
+    edu_sidebar: bool = False,
 ) -> Any:
     from pico_orchestrator.llm_file_pass import remember_turn_files
     from pico_orchestrator.runtime import run_agent_runtime
@@ -1104,6 +1117,7 @@ async def _run_and_collect(
     )
     # Dual-mode: Pico 快速 / Pico 深度 set their own steps/tokens/thinking.
     caps = _caps_with_dual_mode(caps, model)
+    caps = _caps_with_sidebar_thinking(caps, edu_sidebar=edu_sidebar)
     caps = _caps_with_plan(caps, plan_on)
     caps = _caps_with_images(caps, images)
     # Landing gate: force min_artifacts into Pi so chat-only "done" cannot succeed.
@@ -1589,6 +1603,7 @@ async def chat_completions(
                 day_use=day_use_block,
                 plan_on=plan_on,
                 native_files=native_files,
+                edu_sidebar=edu_sidebar,
             )
             text = result.final_text or result.error or "(empty)"
             await _finalize_run(
@@ -1896,6 +1911,7 @@ async def chat_completions(
                     )
                 # Stream path must apply the same dual-mode policy as non-stream.
                 caps = _caps_with_dual_mode(caps, model)
+                caps = _caps_with_sidebar_thinking(caps, edu_sidebar=edu_sidebar)
                 caps = _caps_with_plan(caps, plan_on)
                 caps = _caps_with_images(caps, turn_images)
                 # Stream path must apply the same landing min as non-stream.

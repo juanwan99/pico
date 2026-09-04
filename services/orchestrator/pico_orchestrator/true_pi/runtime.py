@@ -225,8 +225,11 @@ async def run_true_pi_agent(
                 if has_turn_files(rid):
                     pi_base = pass_base_url(rid)
                     logger.info("true_pi llm-pass baseUrl run_id=%s", rid)
-            # Owner: gpt-5.6-sol medium. Pi official levels, not on/off.
-            pi_thinking_level = "medium" if openai_brain else ""
+            # Workbench GPT: medium. Caps thinking_on=False (edu sidebar) must
+            # spawn --thinking off so content, not reasoning, hits the rail.
+            pi_thinking_level = (
+                ("medium" if thinking_on else "off") if openai_brain else ""
+            )
             tool_server = ToolServer(
                 principal=principal,
                 gateway=gateway,
