@@ -49,7 +49,21 @@ def test_tool_call_progress_stays_out_of_product_bubble() -> None:
     assert start != -1
     nxt = src.find("elif event_type ==", start + len('elif event_type == "tool.call":'))
     block = src[start:nxt]
-    assert 'q.put(("delta"' not in block
+    # Workbench bubble stays clean. School rail has no TaskRunBar, so
+    # tool process may ride content — only behind edu_sidebar.
+    gated = False
+    saw_delta = False
+    for line in block.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("if edu_sidebar:"):
+            gated = True
+            continue
+        if 'q.put(("delta"' not in stripped:
+            continue
+        saw_delta = True
+        assert gated, "tool.call must not write the workbench bubble"
+    assert gated and saw_delta
+    assert "sidebar_progress_delta" in block
 
 
 def test_system_identity_is_pico_never_backend_model() -> None:
