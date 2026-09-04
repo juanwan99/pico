@@ -106,6 +106,19 @@ def test_spawn_thinking_off_stays_off() -> None:
     assert cmd[cmd.index("--thinking") + 1] == "off"
 
 
+def test_spawn_thinking_off_with_level_off_stays_off() -> None:
+    t = SubprocessTransport(
+        session_dir=Path("/tmp/tp-sess"),
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r1",
+        thinking=False,
+        thinking_level="off",
+    )
+    cmd = t.spawn_command()
+    assert cmd[cmd.index("--thinking") + 1] == "off"
+
+
 def test_spawn_thinking_official_level_passthrough() -> None:
     t = SubprocessTransport(
         session_dir=Path("/tmp/tp-sess"),

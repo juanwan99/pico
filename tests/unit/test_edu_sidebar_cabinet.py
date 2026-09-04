@@ -12,12 +12,14 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from app.openai_compat import (
     EDU_SIDEBAR_MARK,
+    _caps_with_sidebar_thinking,
     _client_system_from_messages,
     _is_edu_sidebar_system,
     _normalize_allowed_tools,
     _resolve_allowed_tools,
     _sidebar_chat_only,
 )
+from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.edu_sidebar import (
     EDU_SIDEBAR_DEFAULT_TOOLS,
     SIDEBAR_WORKBENCH_HINT,
@@ -34,6 +36,15 @@ def test_sidebar_json_only_skips_agent() -> None:
     assert _sidebar_chat_only(edu_sidebar=True, json_only=False) is False
     assert _sidebar_chat_only(edu_sidebar=False, json_only=True) is True
     assert _sidebar_chat_only(edu_sidebar=False, json_only=False) is False
+
+
+def test_edu_sidebar_turns_thinking_off() -> None:
+    """School rail only paints content. Thinking never clears 正在想."""
+    on = RunCaps(thinking_on=True)
+    assert _caps_with_sidebar_thinking(on, edu_sidebar=True).thinking_on is False
+    assert _caps_with_sidebar_thinking(on, edu_sidebar=False).thinking_on is True
+    off = RunCaps(thinking_on=False)
+    assert _caps_with_sidebar_thinking(off, edu_sidebar=True).thinking_on is False
 
 
 def test_edu_sidebar_tool_ceiling_is_workbench_core() -> None:
