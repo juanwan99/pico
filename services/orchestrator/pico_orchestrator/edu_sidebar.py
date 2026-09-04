@@ -23,6 +23,11 @@ SIDEBAR_WORKBENCH_HINT = (
     "出文档、出图、改文件、落盘用和 Pico 工作台同一套手，不要因为在侧栏就少工具或推去另一个窗。"
     "先看手头材料再动手：上传文件用 inspect_document；左边打开的表看 page.table。"
     "工具结果回来后再决定下一手。看不清、对不上、失败了就换手或问一句，不要一轮空口说完。"
+    "学校数据表最多 40 个字段（含隐藏列和右侧空字母列）。"
+    "page.table 只给最多 16 列×12 行，不是全表；真实表往往已经有空列。"
+    "拆「学科 / 姓名」用 fill_cells：原格留学科，右侧已有空列写姓名；c 可以大于 page.table 列数。"
+    "不要靠 insert_col 扩列。insert_col 失败「最多 40 个字段」立刻停插，改填已有空列。"
+    "fill_cells 每条最多约 80 格，多了分多条。没有空列才说明人先删空列，不要再插。"
 )
 
 # Same CORE hands as workbench. Not a second, smaller tool set.
