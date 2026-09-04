@@ -423,6 +423,8 @@ def test_system_tells_pi_to_read_paperclip_documents() -> None:
     assert "model file channel" in system
     assert "are rastered into this-turn images" not in system
     assert "do not say you cannot read the file" not in system
+    assert "Old .doc" in system
+    assert "re-save" in system
     assert "没抽出正文" not in system
     bridge = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
@@ -431,6 +433,7 @@ def test_system_tells_pi_to_read_paperclip_documents() -> None:
     assert "model file channel" in bridge
     assert "already on this-turn images" not in bridge
     assert "do not say the file is unreadable" not in bridge
+    assert "re-save" in bridge
 
 
 def test_inject_conversation_uploads_noop_when_empty() -> None:
@@ -500,7 +503,8 @@ def test_inject_conversation_uploads_legacy_doc_is_honest() -> None:
                 "id": "art-doc-1",
                 "title": "教师教学计划.doc",
                 "excerpt": "",
-                "error": "旧版 .doc/.ppt/.xls 打不开也转不了。请另存为 .docx/.pptx/.xlsx 再试。",
+                "status": "unsupported",
+                "error": "旧版文档转不开",
             }
         ],
     )
@@ -508,6 +512,7 @@ def test_inject_conversation_uploads_legacy_doc_is_honest() -> None:
     assert "另存为" not in out
     assert "没抽出正文" not in out
     assert "没收到" not in out
+    assert "文件口没有" in out
 
 
 def test_paperclip_pdf_injects_into_this_conversation(client: TestClient) -> None:
@@ -557,7 +562,13 @@ def test_paperclip_pdf_injects_into_this_conversation(client: TestClient) -> Non
     assert injected.endswith("这是什么")
 
 
-def test_legacy_doc_lands_unread_not_dropped(client: TestClient) -> None:
+def test_legacy_doc_lands_unread_not_dropped(client: TestClient, monkeypatch) -> None:
+    from pico_orchestrator.gateway import ToolError
+
+    async def boom(*_a, **_k):
+        raise ToolError("sandbox.office_unavailable", "旧版文档转不开")
+
+    monkeypatch.setattr("pico_orchestrator.sandbox_sidecar.sidecar_json", boom)
     import asyncio
 
     from app.auth import Principal
@@ -580,7 +591,8 @@ def test_legacy_doc_lands_unread_not_dropped(client: TestClient) -> None:
     body = res.json()
     assert body["id"]
     assert body["status"] != "ok"
-    assert "OLE" in str(body.get("error") or body.get("headline") or "")
+    err = str(body.get("error") or body.get("headline") or "")
+    assert "OLE" in err or "转不开" in err
     principal = Principal(
         school_id="school-a",
         membership_id="m-edu",
@@ -603,6 +615,8 @@ def test_legacy_doc_lands_unread_not_dropped(client: TestClient) -> None:
     assert "教师教学计划.doc" in injected
     assert "另存为" not in injected
     assert "没抽出正文" not in injected
+    assert "已随本轮交给模型文件口" not in injected
+    assert "文件口没有" in injected
 
 
 def _visible_scan_pdf(token: str) -> bytes:

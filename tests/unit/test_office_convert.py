@@ -42,16 +42,40 @@ def test_inspect_converted_bytes_keeps_teacher_doc_name() -> None:
     assert item.filename.endswith(".docx")
 
 
-def test_convert_skips_when_sidecar_unavailable(monkeypatch) -> None:
+def test_convert_raises_when_sidecar_unavailable(monkeypatch) -> None:
     from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.office.convert import LegacyOfficeConvertError
 
     async def boom(*_a, **_k):
         raise ToolError("sandbox.unavailable", "no sidecar")
 
     monkeypatch.setattr("pico_orchestrator.sandbox_sidecar.sidecar_json", boom)
     ole = b"\xd0\xcf\x11\xe0junk"
-    out = asyncio.run(convert_legacy_office_bytes("计划.doc", ole))
-    assert out == ole
+    try:
+        asyncio.run(convert_legacy_office_bytes("计划.doc", ole))
+    except LegacyOfficeConvertError as err:
+        assert "sidecar" in err.message or "转不开" in err.message
+    else:
+        raise AssertionError("expected LegacyOfficeConvertError")
+
+
+def test_native_files_converts_ole_before_accept(monkeypatch) -> None:
+    import asyncio
+
+    raw = build_docx_document(title="计划.docx", marker="PASS", body="春游")
+
+    async def fake(_method, _path, **kwargs):
+        return {"ok": True, "document_base64": base64.b64encode(raw).decode("ascii")}
+
+    monkeypatch.setattr("pico_orchestrator.sandbox_sidecar.sidecar_json", fake)
+    from pico_orchestrator.llm_file_pass import accept_native
+    from pico_orchestrator.office.convert import convert_legacy_office_bytes
+
+    converted = asyncio.run(convert_legacy_office_bytes("教师教学计划.doc", b"\xd0\xcf\x11\xe0"))
+    item = accept_native("教师教学计划.doc", converted)
+    assert item is not None
+    assert item.ext == ".docx"
+    assert item.filename.endswith(".docx")
 
 
 def test_convert_returns_ooxml_from_sidecar(monkeypatch) -> None:
@@ -64,3 +88,13 @@ def test_convert_returns_ooxml_from_sidecar(monkeypatch) -> None:
     out = asyncio.run(convert_legacy_office_bytes("计划.doc", b"OLE-bytes"))
     assert out[:2] == b"PK"
     assert accept_native("计划.doc", out) is not None
+
+
+def test_sandbox_convert_uses_ascii_temp_name() -> None:
+    import inspect
+
+    from sandbox_worker.office import convert_legacy_office
+
+    src = inspect.getsource(convert_legacy_office)
+    assert "in{source_ext}" in src
+    assert "safe_name" in src

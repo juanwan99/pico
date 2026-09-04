@@ -571,12 +571,21 @@ async def _workspace_named_file(
     data: bytes,
     conversation_id: str,
 ) -> dict[str, Any]:
-    from pico_orchestrator.office.convert import convert_legacy_office_bytes
+    from pico_orchestrator.office.convert import (
+        LegacyOfficeConvertError,
+        convert_legacy_office_bytes,
+    )
 
     from app.edu_files import extract_for_kb, persist_edu_file
 
-    data = await convert_legacy_office_bytes(filename, data)
-    extract = extract_for_kb(filename, data)
+    try:
+        data = await convert_legacy_office_bytes(filename, data)
+        extract = extract_for_kb(filename, data)
+    except LegacyOfficeConvertError as err:
+        extract = extract_for_kb(filename, data)
+        extract["status"] = "unsupported"
+        extract["error"] = err.message
+        extract["text"] = ""
     file_id = await persist_edu_file(
         principal,
         filename=filename,

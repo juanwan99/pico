@@ -24,6 +24,7 @@ ONE_PNG = (
 def test_docx_preview_is_page_not_writer_chrome():
     raw = build_docx_document(title="通知", marker="PREVIEW-DOCX-1", body="第一段\n第二段")
     html = preview_office_html(raw, ".docx")
+    assert "第一段" in preview_office_html(raw, ".doc")
     assert "class='page'" in html or 'class="page"' in html
     assert "LibreOffice" not in html
     assert "Writer" not in html
@@ -79,3 +80,10 @@ def test_preview_rejects_fake_office():
 
     with pytest.raises(ValueError):
         preview_office_html(b"not-zip", ".docx")
+
+
+def test_preview_doc_name_with_ooxml_bytes_renders():
+    raw = build_docx_document(title="计划.docx", marker="DOC-NAME", body="春游名单")
+    html = preview_office_html(raw, ".doc")
+    assert "春游名单" in html
+    assert "class='page'" in html or 'class="page"' in html

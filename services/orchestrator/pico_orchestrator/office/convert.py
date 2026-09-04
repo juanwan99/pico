@@ -11,9 +11,19 @@ from pico_orchestrator.office.legacy import convert_target_from_name, looks_ooxm
 logger = logging.getLogger(__name__)
 
 
+class LegacyOfficeConvertError(Exception):
+    """OLE did not become OOXML. Caller must not pretend the model has the file."""
+
+    def __init__(self, message: str = "旧版文档转不开") -> None:
+        super().__init__(message)
+        self.message = message
+
+
 async def convert_legacy_office_bytes(filename: str, data: bytes) -> bytes:
-    """Return OOXML bytes, or original data when conversion is not needed / unavailable."""
+    """Return OOXML bytes. Raise when a legacy name is still OLE after soffice."""
     if not data:
+        if convert_target_from_name(filename):
+            raise LegacyOfficeConvertError("文档内容为空")
         return data
     if looks_ooxml(data):
         return data
@@ -30,25 +40,25 @@ async def convert_legacy_office_bytes(filename: str, data: bytes) -> bytes:
                 "document_base64": base64.b64encode(data).decode("ascii"),
             },
         )
-    except ToolError as exc:
+    except ToolError as err:
         logger.info(
-            "legacy office convert skipped name=%s code=%s",
+            "legacy office convert failed name=%s code=%s",
             filename,
-            getattr(exc, "code", type(exc).__name__),
+            getattr(err, "code", type(err).__name__),
         )
-        return data
-    except Exception as exc:  # noqa: BLE001 — ingest must not 500 on sidecar gaps
-        logger.info("legacy office convert skipped name=%s err=%s", filename, type(exc).__name__)
-        return data
+        raise LegacyOfficeConvertError(str(getattr(err, "message", None) or err)) from err
+    except Exception as err:
+        logger.info("legacy office convert failed name=%s err=%s", filename, type(err).__name__)
+        raise LegacyOfficeConvertError("旧版文档转不开") from err
     if not isinstance(out, dict):
-        return data
+        raise LegacyOfficeConvertError("旧版文档转不开")
     raw_b64 = str(out.get("document_base64") or "").strip()
     if not raw_b64:
-        return data
+        raise LegacyOfficeConvertError("旧版文档转不开")
     try:
         converted = base64.b64decode(raw_b64, validate=False)
-    except (ValueError, TypeError):
-        return data
+    except (ValueError, TypeError) as err:
+        raise LegacyOfficeConvertError("旧版文档转不开") from err
     if looks_ooxml(converted):
         return converted
-    return data
+    raise LegacyOfficeConvertError("旧版文档转不开")

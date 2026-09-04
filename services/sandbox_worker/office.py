@@ -236,7 +236,10 @@ async def convert_legacy_office(*, filename: str, document: bytes) -> bytes:
     if target is None:
         raise ToolError("tool.invalid_arguments", "不是旧版 .doc/.ppt/.xls")
     soffice = soffice_bin()
-    safe_name = Path(filename or f"document{target}").name or f"document{target}"
+    source_ext = Path(filename or "").suffix.lower() or target.replace("x", "")
+    if source_ext not in {".doc", ".ppt", ".xls"}:
+        source_ext = {".docx": ".doc", ".pptx": ".ppt", ".xlsx": ".xls"}[target]
+    safe_name = f"in{source_ext}"
     _DOC_ROOT.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="sbox_conv_", dir=str(_DOC_ROOT)))
     src = work / safe_name
