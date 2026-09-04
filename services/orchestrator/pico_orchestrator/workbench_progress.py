@@ -118,6 +118,25 @@ def workbench_tool_step_line(tool: str) -> str:
     return _DOING.get(name, FALLBACK_DOING)
 
 
+def sidebar_progress_delta(event_type: str, payload: dict[str, Any] | None) -> str:
+    """School rail has no TaskRunBar. Tool process must ride `content`."""
+    row = payload if isinstance(payload, dict) else {}
+    name = str(row.get("tool") or row.get("name") or "").strip()
+    if event_type == "tool.call":
+        return str(row.get("step_line") or workbench_tool_step_line(name)).strip()
+    if event_type != "tool.result":
+        return ""
+    ok = row.get("ok")
+    if ok is None:
+        result = row.get("result")
+        ok = not tool_result_failed(result) if isinstance(result, dict) else True
+    line = workbench_tool_result_line(name, ok=bool(ok))
+    extra = str(row.get("user_message") or "").strip()
+    if extra and not ok:
+        return f"{line}：{extra}"
+    return line
+
+
 def workbench_tool_result_line(tool: str, *, ok: bool) -> str:
     name = (tool or "").strip()
     if not name:
