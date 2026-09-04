@@ -110,4 +110,32 @@ def test_sidebar_enters_pi_helpers() -> None:
     assert SIDEBAR_WORKBENCH_HINT in hinted
     assert "不得调用" not in hinted
     assert "同一套手" in hinted
+    assert "inspect_document" in hinted
+    assert "工具结果回来后再决定下一手" in hinted
     assert with_sidebar_workbench_hint(hinted) == hinted
+
+
+def test_sidebar_progress_rides_content() -> None:
+    from pico_orchestrator.workbench_progress import sidebar_progress_delta
+
+    assert (
+        sidebar_progress_delta(
+            "tool.call",
+            {"tool": "inspect_document", "step_line": "正在读文档结构"},
+        )
+        == "正在读文档结构"
+    )
+    assert (
+        sidebar_progress_delta("tool.result", {"tool": "inspect_document", "ok": True})
+        == "已读文档结构"
+    )
+    assert "没读成" in sidebar_progress_delta(
+        "tool.result",
+        {"tool": "inspect_document", "ok": False, "user_message": "不是真 Excel"},
+    )
+    assert sidebar_progress_delta("thinking.delta", {"text": "内部"}) == ""
+    src = (ROOT / "services" / "api" / "app" / "openai_compat.py").read_text(
+        encoding="utf-8"
+    )
+    assert "sidebar_progress_delta" in src
+    assert 'if edu_sidebar:' in src

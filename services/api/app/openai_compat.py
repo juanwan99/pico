@@ -1871,11 +1871,25 @@ async def chat_completions(
                 if payload.get("step") == 1:
                     await q.put(("status", "正在准备…\n"))
             elif event_type == "tool.call":
-                # Ledger + TaskRunBar / ResultPanel already show 正在画/正在写.
-                # Streaming those lines as content leaves them in the settled bubble.
-                pass
+                # Workbench: ledger + TaskRunBar. Sidebar rail has neither —
+                # process must ride content so the model can keep looping.
+                if edu_sidebar:
+                    from pico_orchestrator.workbench_progress import (
+                        sidebar_progress_delta,
+                    )
+
+                    text = sidebar_progress_delta(event_type, payload)
+                    if text:
+                        await q.put(("delta", f"{text}\n"))
             elif event_type == "tool.result":
-                pass
+                if edu_sidebar:
+                    from pico_orchestrator.workbench_progress import (
+                        sidebar_progress_delta,
+                    )
+
+                    text = sidebar_progress_delta(event_type, payload)
+                    if text:
+                        await q.put(("delta", f"{text}\n"))
             elif event_type == "run.heartbeat":
                 elapsed = payload.get("elapsed_seconds")
                 if elapsed is not None:

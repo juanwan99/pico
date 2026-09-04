@@ -21,6 +21,8 @@ SIDEBAR_WEB_SYSTEM = (
 SIDEBAR_WORKBENCH_HINT = (
     "侧栏优先操控和填写左边当前页；确认后走学校原命令。"
     "出文档、出图、改文件、落盘用和 Pico 工作台同一套手，不要因为在侧栏就少工具或推去另一个窗。"
+    "先看手头材料再动手：上传文件用 inspect_document；左边打开的表看 page.table。"
+    "工具结果回来后再决定下一手。看不清、对不上、失败了就换手或问一句，不要一轮空口说完。"
 )
 
 # Same CORE hands as workbench. Not a second, smaller tool set.
