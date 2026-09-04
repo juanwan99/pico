@@ -1118,8 +1118,25 @@ def _workspace_handlers(
     async def inspect_document(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         ext = _office_ext_from_args(args)
         row, raw = await _load_office(principal, args, ext=ext)
+        sheet = args.get("sheet")
+        if sheet is not None and sheet != "":
+            try:
+                sheet = int(sheet)
+            except (TypeError, ValueError):
+                sheet = str(sheet).strip()
+        else:
+            sheet = None
+        header_rows = _optional_int(args, "header_rows")
         try:
-            outline = inspect_office_bytes(raw, ext)
+            outline = inspect_office_bytes(
+                raw,
+                ext,
+                sheet=sheet,
+                header_rows=1 if header_rows is None else header_rows,
+                start_row=_optional_int(args, "start_row"),
+                max_rows=_optional_int(args, "max_rows"),
+                max_cols=_optional_int(args, "max_cols"),
+            )
         except (ValueError, TypeError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
         outline["artifact_id"] = row.get("artifact_id")
@@ -2444,10 +2461,14 @@ def build_default_gateway(
             name="inspect_document",
             description=(
                 "Read structure of an uploaded .docx/.pptx/.xlsx: paragraph/slide/cell "
-                "indexes, tables, comments, leftover {{key}}. Embedded pictures are "
-                "remembered so the teacher's next question can see the pixels. "
-                "Call before generate_* patch (paragraph_index / slide_index / cell). "
-                "Args: artifact_id|title, kind?"
+                "indexes, tables (including Word/PPT nested tables), comments, leftover "
+                "{{key}}. Excel reports merges, multi-row headers, and a row window — "
+                "not the whole sheet. Irregular tables stay irregular; unmapped columns "
+                "are left blank, do not guess. Embedded pictures are remembered so the "
+                "teacher's next question can see the pixels. Call before generate_* "
+                "patch (paragraph_index / slide_index / cell). "
+                "Args: artifact_id|title, kind?, sheet?, header_rows?, start_row?, "
+                "max_rows?, max_cols?"
             ),
             handler=inspect_document,
             school_scoped=False,
@@ -2877,6 +2898,25 @@ def openai_tool_schemas(
                 "artifact_id": {"type": "string"},
                 "title": {"type": "string"},
                 "kind": {"type": "string", "description": "docx, pptx, or xlsx"},
+                "sheet": {
+                    "description": "Excel sheet name or 1-based index; omit = all sheets",
+                },
+                "header_rows": {
+                    "type": "integer",
+                    "description": "Header band height (1–5). Use 2 for merged two-row headers.",
+                },
+                "start_row": {
+                    "type": "integer",
+                    "description": "1-based first data row of the preview window",
+                },
+                "max_rows": {
+                    "type": "integer",
+                    "description": "Preview row cap (1–50). leftover_rows reports the rest.",
+                },
+                "max_cols": {
+                    "type": "integer",
+                    "description": "Column cap (1–80). Default 64.",
+                },
             },
         },
         "verify_document": {
