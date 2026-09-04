@@ -1,9 +1,10 @@
 /**
  * Clipboard file paste: stop the browser from inserting the filename as text.
- * Text-only paste is unchanged.
  *
- * Chromium often reports clipboardData.files as empty until preventDefault
- * runs. Detect Files via types/items first, cancel, then read files.
+ * Chromium often leaves clipboardData.types AND .files empty until
+ * preventDefault runs. Cancel first, then read files. Empty File[] means
+ * a file paste with no bytes — do not restore the filename as text.
+ * null means text paste; the caller inserts getData('text/plain').
  */
 function clipboardLooksLikeFiles(clipboardData: DataTransfer): boolean {
   const types = Array.from(clipboardData.types || []);
@@ -45,16 +46,20 @@ export function captureClipboardFiles(
   if (!clipboardData) {
     return null;
   }
-  const looksLikeFiles = clipboardLooksLikeFiles(clipboardData);
-  if (looksLikeFiles) {
-    preventDefault();
-  }
+  preventDefault();
   const files = filesFromClipboard(clipboardData);
-  if (files.length === 0) {
-    return null;
+  if (files.length > 0) {
+    return files;
   }
-  if (!looksLikeFiles) {
-    preventDefault();
+  if (clipboardLooksLikeFiles(clipboardData)) {
+    return [];
   }
-  return files;
+  return null;
+}
+
+export function clipboardPlainText(clipboardData: DataTransfer | null | undefined): string {
+  if (!clipboardData) {
+    return '';
+  }
+  return clipboardData.getData('text/plain') || clipboardData.getData('text') || '';
 }

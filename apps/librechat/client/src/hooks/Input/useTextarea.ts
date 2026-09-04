@@ -19,6 +19,7 @@ import {
   checkIfScrollable,
   resolveUploadRoute,
   captureClipboardFiles,
+  clipboardPlainText,
 } from '~/utils';
 import { useAssistantsMapContext } from '~/Providers/AssistantsMapContext';
 import { useLatestMessageMeta } from '~/hooks/Messages/useLatestMessage';
@@ -306,7 +307,7 @@ export default function useTextarea({
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement> | ClipboardEvent) => {
-      if ('nativeEvent' in e && e.defaultPrevented) {
+      if (e.defaultPrevented) {
         return;
       }
       const textArea = textAreaRef.current;
@@ -358,6 +359,15 @@ export default function useTextarea({
         }
         setFilesLoading(false);
         openModal(timestampedFiles);
+        return;
+      }
+      if (pastedFiles) {
+        return;
+      }
+      const text = clipboardPlainText(clipboardData);
+      if (text) {
+        insertTextAtCursor(textArea, text);
+        forceResize(textArea);
       }
     },
     [
@@ -374,15 +384,19 @@ export default function useTextarea({
   );
 
   useEffect(() => {
-    const el = textAreaRef.current;
-    if (!el) {
-      return;
-    }
     const onPasteCapture = (ev: ClipboardEvent) => {
+      const el = textAreaRef.current;
+      if (!el) {
+        return;
+      }
+      const target = ev.target as Node | null;
+      if (target !== el && !(target && el.contains(target))) {
+        return;
+      }
       handlePaste(ev);
     };
-    el.addEventListener('paste', onPasteCapture, true);
-    return () => el.removeEventListener('paste', onPasteCapture, true);
+    document.addEventListener('paste', onPasteCapture, true);
+    return () => document.removeEventListener('paste', onPasteCapture, true);
   }, [handlePaste, textAreaRef]);
 
   return {
