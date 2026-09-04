@@ -305,14 +305,21 @@ export default function useTextarea({
   };
 
   const handlePaste = useCallback(
-    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    (e: React.ClipboardEvent<HTMLTextAreaElement> | ClipboardEvent) => {
+      if ('nativeEvent' in e && e.defaultPrevented) {
+        return;
+      }
       const textArea = textAreaRef.current;
       if (!textArea) {
         return;
       }
 
       const clipboardData = e.clipboardData as DataTransfer | undefined;
-      const pastedFiles = captureClipboardFiles(clipboardData, () => e.preventDefault());
+      const pastedFiles = captureClipboardFiles(clipboardData, () => {
+        e.preventDefault();
+        const native = 'nativeEvent' in e ? e.nativeEvent : e;
+        native.stopImmediatePropagation?.();
+      });
       if (pastedFiles && pastedFiles.length > 0) {
         setFilesLoading(true);
         const timestampedFiles: File[] = [];
@@ -365,6 +372,18 @@ export default function useTextarea({
       getUploadOptions,
     ],
   );
+
+  useEffect(() => {
+    const el = textAreaRef.current;
+    if (!el) {
+      return;
+    }
+    const onPasteCapture = (ev: ClipboardEvent) => {
+      handlePaste(ev);
+    };
+    el.addEventListener('paste', onPasteCapture, true);
+    return () => el.removeEventListener('paste', onPasteCapture, true);
+  }, [handlePaste, textAreaRef]);
 
   return {
     textAreaRef,
