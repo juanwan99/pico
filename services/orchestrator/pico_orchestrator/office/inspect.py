@@ -2,8 +2,9 @@
 
 School files are often irregular: two-row merged headers, mixed sheets,
 Word/PPT nested tables, fill-blank prose with no table. Inspect reports
-structure (merges, header band, a row window). It does not guess column
-maps or dump the whole workbook into the model.
+structure (merges, header band, a row/col window). leftover_* means more
+remains — advance start_row / start_col. It does not guess column maps
+or dump the whole workbook into the model.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ def inspect_office_bytes(
     sheet: str | int | None = None,
     header_rows: int = 1,
     start_row: int | None = None,
+    start_col: int | None = None,
     max_rows: int | None = None,
     max_cols: int | None = None,
 ) -> dict[str, object]:
@@ -38,6 +40,7 @@ def inspect_office_bytes(
         sheet=sheet,
         header_rows=header_rows,
         start_row=start_row,
+        start_col=start_col,
         max_rows=max_rows,
         max_cols=max_cols,
     )
@@ -54,6 +57,7 @@ def _normalize_window(
     sheet: str | int | None,
     header_rows: int,
     start_row: int | None,
+    start_col: int | None,
     max_rows: int | None,
     max_cols: int | None,
 ) -> dict[str, Any]:
@@ -69,6 +73,9 @@ def _normalize_window(
     start = None if start_row is None else int(start_row)
     if start is not None and start < 1:
         raise ValueError("start_row 必须从 1 起。")
+    col0 = None if start_col is None else int(start_col)
+    if col0 is not None and col0 < 1:
+        raise ValueError("start_col 必须从 1 起。")
     sheet_key: str | int | None
     if sheet is None or sheet == "":
         sheet_key = None
@@ -82,6 +89,7 @@ def _normalize_window(
         "sheet": sheet_key,
         "header_rows": rows,
         "start_row": start,
+        "start_col": col0,
         "max_rows": preview_rows,
         "max_cols": cols,
     }
@@ -101,6 +109,7 @@ def _inspect_docx(raw: bytes, window: dict[str, Any]) -> dict[str, object]:
     max_cols = int(window["max_cols"])
     preview_rows = int(window["max_rows"])
     header_rows = int(window["header_rows"])
+    start_col = int(window["start_col"] or 1)
     for para in document.paragraphs:
         text = str(para.text or "").strip()
         if not text:
@@ -116,7 +125,16 @@ def _inspect_docx(raw: bytes, window: dict[str, Any]) -> dict[str, object]:
         for row in rows:
             for cell in row:
                 leftovers.extend(leftover_placeholders(cell))
-        units.append(_table_unit(table_n, rows, header_rows, preview_rows, max_cols))
+        units.append(
+            _table_unit(
+                table_n,
+                rows,
+                header_rows,
+                preview_rows,
+                max_cols,
+                start_col=start_col,
+            )
+        )
     for rel in document.part.rels.values():
         reltype = str(getattr(rel, "reltype", "") or "")
         if "image" in reltype.lower():
@@ -150,6 +168,7 @@ def _inspect_pptx(raw: bytes, window: dict[str, Any]) -> dict[str, object]:
     max_cols = int(window["max_cols"])
     preview_rows = int(window["max_rows"])
     header_rows = int(window["header_rows"])
+    start_col = int(window["start_col"] or 1)
     for i, slide in enumerate(deck.slides, start=1):
         title = ""
         shape = getattr(slide.shapes, "title", None)
@@ -171,7 +190,14 @@ def _inspect_pptx(raw: bytes, window: dict[str, Any]) -> dict[str, object]:
                     for cell in row:
                         leftovers.extend(leftover_placeholders(cell))
                 slide_tables.append(
-                    _table_unit(table_n, grid, header_rows, preview_rows, max_cols)
+                    _table_unit(
+                        table_n,
+                        grid,
+                        header_rows,
+                        preview_rows,
+                        max_cols,
+                        start_col=start_col,
+                    )
                 )
                 continue
             if getattr(item, "has_text_frame", False):
@@ -222,13 +248,16 @@ def _inspect_xlsx(raw: bytes, window: dict[str, Any]) -> dict[str, object]:
     header_rows = int(window["header_rows"])
     preview_rows = int(window["max_rows"])
     start_row = window["start_row"]
+    start_col = int(window["start_col"] or 1)
     for i, sheet in enumerate(book.worksheets, start=1):
         if wanted is not None and not _sheet_matches(wanted, i, sheet.title):
             continue
         merges = _merge_ranges(sheet)
-        last_col = min(int(sheet.max_column or 0), max_cols)
-        header_band = _header_band(sheet, header_rows, last_col)
-        headers = _flatten_headers(header_band, merges=merges)
+        full_cols = int(sheet.max_column or 0)
+        col0 = min(start_col, max(full_cols, 1))
+        last_col = min(full_cols, col0 + max_cols - 1) if full_cols else 0
+        header_band = _header_band(sheet, header_rows, col0, last_col)
+        headers = _flatten_headers(header_band, merges=merges, start_col=col0)
         blank_headers = sum(1 for h in headers if not str(h).strip())
         data_start = header_rows + 1
         window_start = data_start if start_row is None else max(int(start_row), data_start)
@@ -237,8 +266,9 @@ def _inspect_xlsx(raw: bytes, window: dict[str, Any]) -> dict[str, object]:
         formula_count = 0
         last_row = int(sheet.max_row or 0)
         window_end = min(last_row, window_start + preview_rows - 1) if last_row else 0
+        leftover_cols = max(0, full_cols - last_col) if last_col else 0
         for row_i, row in enumerate(sheet.iter_rows(values_only=False), start=1):
-            cells = row[:last_col]
+            cells = row[col0 - 1 : last_col] if last_col else []
             for cell in cells:
                 raw_val = cell.value
                 if isinstance(raw_val, str):
@@ -250,15 +280,15 @@ def _inspect_xlsx(raw: bytes, window: dict[str, Any]) -> dict[str, object]:
                             sheet_formulas.append(f"{cell.coordinate}:{raw_val}")
             if window_start <= row_i <= window_end:
                 sample.append([_cell_preview(cell.value) for cell in cells])
-        truncated = bool(last_row and window_end < last_row)
-        leftover_rows = max(0, last_row - window_end) if truncated else 0
+        leftover_rows = max(0, last_row - window_end) if last_row else 0
+        truncated = leftover_rows > 0 or leftover_cols > 0
         units.append(
             {
                 "index": i,
                 "kind": "sheet",
                 "name": sheet.title,
                 "rows": last_row,
-                "cols": int(sheet.max_column or 0),
+                "cols": full_cols,
                 "headers": headers,
                 "header_rows": header_band,
                 "merges": merges,
@@ -268,9 +298,12 @@ def _inspect_xlsx(raw: bytes, window: dict[str, Any]) -> dict[str, object]:
                 "window": {
                     "start_row": window_start,
                     "end_row": window_end,
+                    "start_col": col0,
+                    "end_col": last_col,
                     "max_cols": last_col,
                     "truncated": truncated,
                     "leftover_rows": leftover_rows,
+                    "leftover_cols": leftover_cols,
                 },
                 "blank_header_cols": blank_headers,
                 "irregular": bool(merges or header_rows > 1 or blank_headers),
@@ -286,6 +319,7 @@ def _inspect_xlsx(raw: bytes, window: dict[str, Any]) -> dict[str, object]:
         "window": {
             "sheet": wanted,
             "header_rows": header_rows,
+            "start_col": start_col,
             "max_rows": preview_rows,
             "max_cols": max_cols,
         },
@@ -309,12 +343,15 @@ def _merge_ranges(sheet: Any) -> list[str]:
     return out
 
 
-def _header_band(sheet: Any, header_rows: int, max_cols: int) -> list[list[str]]:
-    last_col = min(int(sheet.max_column or 0), max_cols)
+def _header_band(
+    sheet: Any, header_rows: int, start_col: int, end_col: int
+) -> list[list[str]]:
     band: list[list[str]] = []
+    if end_col < start_col:
+        return band
     for row_i in range(1, header_rows + 1):
         values: list[str] = []
-        for col_i in range(1, last_col + 1):
+        for col_i in range(start_col, end_col + 1):
             raw_val = sheet.cell(row_i, col_i).value
             values.append("" if raw_val is None else str(raw_val).strip()[:80])
         band.append(values)
@@ -325,13 +362,14 @@ def _flatten_headers(
     band: list[list[str]],
     *,
     merges: list[str] | None = None,
+    start_col: int = 1,
 ) -> list[str]:
     if not band:
         return []
     width = max(len(row) for row in band)
     filled = [list(row) + [""] * (width - len(row)) for row in band]
     for span in merges or []:
-        _apply_merge_to_band(filled, span)
+        _apply_merge_to_band(filled, span, start_col=start_col)
     headers: list[str] = []
     for col in range(width):
         parts = [row[col] for row in filled if row[col]]
@@ -343,7 +381,9 @@ def _flatten_headers(
     return headers
 
 
-def _apply_merge_to_band(band: list[list[str]], span: str) -> None:
+def _apply_merge_to_band(
+    band: list[list[str]], span: str, *, start_col: int = 1
+) -> None:
     from openpyxl.utils.cell import range_boundaries
 
     try:
@@ -353,8 +393,13 @@ def _apply_merge_to_band(band: list[list[str]], span: str) -> None:
     if min_row < 1 or min_row > len(band):
         return
     width = len(band[0]) if band else 0
-    if min_col < 1 or min_col > width:
+    origin = max(1, int(start_col or 1))
+    min_col = min_col - origin + 1
+    max_col = max_col - origin + 1
+    if max_col < 1 or min_col > width:
         return
+    min_col = max(1, min_col)
+    max_col = min(width, max_col)
     value = ""
     for row_i in range(min_row, min(max_row, len(band)) + 1):
         for col_i in range(min_col, min(max_col, width) + 1):
@@ -378,16 +423,25 @@ def _table_unit(
     header_rows: int,
     preview_rows: int,
     max_cols: int,
+    *,
+    start_col: int = 1,
 ) -> dict[str, object]:
     width = 0
     for row in rows:
         width = max(width, len(row))
-    clipped = [list(row[:max_cols]) + [""] * max(0, min(width, max_cols) - len(row)) for row in rows]
+    col0 = max(1, int(start_col or 1))
+    end_col = min(width, col0 + max_cols - 1) if width else 0
+    span = max(0, end_col - col0 + 1)
+    clipped = [
+        list(row[col0 - 1 : end_col]) + [""] * max(0, span - max(0, len(row) - col0 + 1))
+        for row in rows
+    ]
     band = clipped[:header_rows]
     headers = _flatten_headers(band)
     data_start = header_rows
     preview = clipped[data_start : data_start + preview_rows]
     leftover = max(0, len(clipped) - data_start - len(preview))
+    leftover_cols = max(0, width - end_col)
     return {
         "index": index,
         "kind": "table",
@@ -399,8 +453,11 @@ def _table_unit(
         "window": {
             "start_row": data_start + 1,
             "end_row": data_start + len(preview),
-            "truncated": leftover > 0,
+            "start_col": col0,
+            "end_col": end_col,
+            "truncated": leftover > 0 or leftover_cols > 0,
             "leftover_rows": leftover,
+            "leftover_cols": leftover_cols,
         },
         "irregular": bool(header_rows > 1 or any(not h.strip() for h in headers)),
     }

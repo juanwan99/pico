@@ -116,6 +116,10 @@ def test_sidebar_enters_pi_helpers() -> None:
     assert "fill_cells" in hinted
     assert "不要靠 insert_col 扩列" in hinted
     assert "c 可以大于 page.table 列数" in hinted
+    assert "只认当前页名" in hinted
+    assert "leftover_rows" in hinted
+    assert "leftover_cols" in hinted
+    assert "不要声称已读完全文" in hinted
     assert with_sidebar_workbench_hint(hinted) == hinted
 
 
