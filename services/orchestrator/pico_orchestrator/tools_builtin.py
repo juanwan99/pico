@@ -1134,6 +1134,7 @@ def _workspace_handlers(
                 sheet=sheet,
                 header_rows=1 if header_rows is None else header_rows,
                 start_row=_optional_int(args, "start_row"),
+                start_col=_optional_int(args, "start_col"),
                 max_rows=_optional_int(args, "max_rows"),
                 max_cols=_optional_int(args, "max_cols"),
             )
@@ -2462,13 +2463,15 @@ def build_default_gateway(
             description=(
                 "Read structure of an uploaded .docx/.pptx/.xlsx: paragraph/slide/cell "
                 "indexes, tables (including Word/PPT nested tables), comments, leftover "
-                "{{key}}. Excel reports merges, multi-row headers, and a row window — "
-                "not the whole sheet. Irregular tables stay irregular; unmapped columns "
+                "{{key}}. Excel reports merges, multi-row headers, and a row/col window — "
+                "not the whole sheet. leftover_rows / leftover_cols mean more remains; "
+                "advance start_row / start_col until both are 0. Do not treat one window "
+                "as the full file. Irregular tables stay irregular; unmapped columns "
                 "are left blank, do not guess. Embedded pictures are remembered so the "
                 "teacher's next question can see the pixels. Call before generate_* "
                 "patch (paragraph_index / slide_index / cell). "
                 "Args: artifact_id|title, kind?, sheet?, header_rows?, start_row?, "
-                "max_rows?, max_cols?"
+                "start_col?, max_rows?, max_cols?"
             ),
             handler=inspect_document,
             school_scoped=False,
@@ -2909,13 +2912,17 @@ def openai_tool_schemas(
                     "type": "integer",
                     "description": "1-based first data row of the preview window",
                 },
+                "start_col": {
+                    "type": "integer",
+                    "description": "1-based first column of the preview window",
+                },
                 "max_rows": {
                     "type": "integer",
                     "description": "Preview row cap (1–50). leftover_rows reports the rest.",
                 },
                 "max_cols": {
                     "type": "integer",
-                    "description": "Column cap (1–80). Default 64.",
+                    "description": "Column cap (1–80). leftover_cols reports the rest. Default 64.",
                 },
             },
         },

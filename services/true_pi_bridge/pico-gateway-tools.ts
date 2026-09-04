@@ -307,7 +307,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "inspect_document",
-    "Read paragraph/slide/sheet/table indexes of a ledger Word/PPT/Excel. Excel reports merges, multi-row headers, and a row window. Word/PPT nested tables are tables, not screenshots. Call before generate_* patch.",
+    "Read paragraph/slide/sheet/table indexes of a ledger Word/PPT/Excel. Excel reports merges, multi-row headers, and a row/col window. leftover_rows/leftover_cols mean more remains — advance start_row/start_col until both are 0. Word/PPT nested tables are tables, not screenshots. Call before generate_* patch.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),
@@ -316,6 +316,7 @@ export default function (pi: ExtensionAPI) {
         sheet: Type.Optional(Type.String()),
         header_rows: Type.Optional(Type.Number()),
         start_row: Type.Optional(Type.Number()),
+        start_col: Type.Optional(Type.Number()),
         max_rows: Type.Optional(Type.Number()),
         max_cols: Type.Optional(Type.Number()),
       },

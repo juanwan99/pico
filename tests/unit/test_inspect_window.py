@@ -52,8 +52,42 @@ def test_xlsx_two_row_merged_headers_and_window() -> None:
     assert len(unit["headers"]) == 5
     assert unit["window"]["truncated"] is True
     assert unit["window"]["leftover_rows"] == 15
+    assert unit["window"]["leftover_cols"] == 0
+    assert unit["window"]["start_col"] == 1
     assert len(unit["preview"]) == 5
     assert unit["preview"][0][0] == "S003"
+
+
+def test_xlsx_column_window_reports_leftover_cols() -> None:
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "宽表"
+    for col in range(1, 11):
+        sheet.cell(1, col, f"C{col}")
+        sheet.cell(2, col, col)
+    raw = _xlsx_bytes(book)
+    first = inspect_office_bytes(raw, ".xlsx", max_cols=4, max_rows=8)
+    unit = first["units"][0]
+    assert unit["cols"] == 10
+    assert unit["window"]["start_col"] == 1
+    assert unit["window"]["end_col"] == 4
+    assert unit["window"]["leftover_cols"] == 6
+    assert unit["window"]["truncated"] is True
+    assert unit["headers"] == ["C1", "C2", "C3", "C4"]
+    next_win = inspect_office_bytes(
+        raw, ".xlsx", max_cols=4, start_col=5, max_rows=8
+    )
+    nxt = next_win["units"][0]
+    assert nxt["window"]["start_col"] == 5
+    assert nxt["window"]["end_col"] == 8
+    assert nxt["window"]["leftover_cols"] == 2
+    assert nxt["headers"][0] == "C5"
+    last = inspect_office_bytes(
+        raw, ".xlsx", max_cols=4, start_col=9, max_rows=8
+    )
+    done = last["units"][0]
+    assert done["window"]["leftover_cols"] == 0
+    assert done["window"]["truncated"] is False
 
 
 def test_xlsx_sheet_filter_and_blank_header_not_guessed() -> None:
@@ -201,9 +235,11 @@ async def test_inspect_document_passes_header_window() -> None:
             "kind": "xlsx",
             "header_rows": 2,
             "max_rows": 3,
+            "start_col": 1,
             "sheet": "全部数据",
         },
     )
     unit = outline["units"][0]
     assert "学生 / 学号" in unit["headers"]
     assert unit["window"]["start_row"] == 3
+    assert unit["window"]["leftover_cols"] == 0
