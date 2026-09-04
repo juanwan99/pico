@@ -51,7 +51,8 @@ def test_spec_docx_table_roundtrip():
     assert outline["tables"] == 1
     table = next(u for u in outline["units"] if u["kind"] == "table")
     assert table["rows"] == 3
-    assert "组" in table["preview"]
+    assert "组" in table["headers"]
+    assert any("甲" in [str(c) for c in row] for row in table["preview"])
 
 
 def test_spec_pptx_image_roundtrip():
