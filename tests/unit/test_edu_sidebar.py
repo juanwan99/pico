@@ -112,6 +112,10 @@ def test_sidebar_enters_pi_helpers() -> None:
     assert "同一套手" in hinted
     assert "inspect_document" in hinted
     assert "工具结果回来后再决定下一手" in hinted
+    assert "最多 40 个字段" in hinted
+    assert "fill_cells" in hinted
+    assert "不要靠 insert_col 扩列" in hinted
+    assert "c 可以大于 page.table 列数" in hinted
     assert with_sidebar_workbench_hint(hinted) == hinted
 
 
