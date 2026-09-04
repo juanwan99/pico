@@ -34,7 +34,13 @@ RESERVED_CONVO = frozenset({"new", "search"})
 EDU_READ_PREFIX = "edu-read ·"
 PIXEL_KINDS = frozenset({"png", "jpg", "jpeg", "webp", "gif"})
 PAPERCLIP_HINT = (
+    "本轮回形针文件（聊天上传，不是学校库）："
+)
+PAPERCLIP_HINT_PASSED = (
     "本轮回形针文件（聊天上传，不是学校库；原件已随本轮交给模型文件口）："
+)
+PAPERCLIP_HINT_UNREAD = (
+    "本轮回形针文件（聊天上传，不是学校库；旧版文档未能转成可给模型读的格式，文件口没有这份原件）："
 )
 _MAX_UPLOAD_INJECT = 8
 _MAX_UPLOAD_EXCERPT = 32_000
@@ -168,43 +174,71 @@ def _payload(file_id: str | None, extract: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _row_unread_office(row: dict[str, Any]) -> bool:
+    from pico_orchestrator.office.legacy import convert_target_from_name, looks_ooxml
+
+    title = str(row.get("title") or row.get("filename") or "")
+    if convert_target_from_name(title) is None:
+        return False
+    status = str(row.get("status") or "").strip().lower()
+    if status in {"unsupported", "unread"}:
+        return True
+    error = str(row.get("error") or "")
+    if error:
+        return True
+    raw = row.get("bytes")
+    return isinstance(raw, (bytes, bytearray)) and not looks_ooxml(bytes(raw))
+
+
 def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None) -> str:
     """Paperclip names + ledger ids only. Never a local PDF/office reader.
 
     LAW #865: no excerpt, no OCR, no 「没抽出」weld. The model sees that a file
     arrived; it decides whether to open it. Empty → unchanged.
+    Do not claim the file channel has OLE that never converted.
     """
     named = [row for row in (items or []) if isinstance(row, dict)]
     if not named:
         return prompt
-    lines = [PAPERCLIP_HINT]
+    unread_flags = [_row_unread_office(row) for row in named]
+    any_unread = any(unread_flags)
+    all_unread = bool(unread_flags) and all(unread_flags)
+    if all_unread:
+        header = PAPERCLIP_HINT_UNREAD
+    elif any_unread:
+        header = PAPERCLIP_HINT
+    else:
+        header = PAPERCLIP_HINT_PASSED
+    lines = [header]
     for row in named[:_MAX_UPLOAD_INJECT]:
         title = str(row.get("title") or row.get("filename") or "文件").strip() or "文件"
         art_id = str(row.get("id") or row.get("artifact_id") or "").strip()
         id_note = f"（artifact_id {art_id}）" if art_id else ""
-        lines.append(f"- 《{title}》{id_note}")
+        unread_note = "（未能转成可给模型读的格式）" if _row_unread_office(row) else ""
+        lines.append(f"- 《{title}》{id_note}{unread_note}")
     block = "\n".join(lines)
     if len(block) > _MAX_UPLOAD_BLOCK:
         block = block[:_MAX_UPLOAD_BLOCK].rstrip() + "…"
     return block + "\n\n" + str(prompt or "")
 
 
-def _excerpt_from_sidecar(row: ArtifactRow | None) -> tuple[str, str, int]:
+def _excerpt_from_sidecar(row: ArtifactRow | None) -> tuple[str, str, int, str]:
     if row is None or not row.inline:
-        return "", "", 0
+        return "", "", 0, ""
     try:
         parsed = json.loads(row.inline)
     except json.JSONDecodeError:
-        return "", "", 0
+        return "", "", 0, ""
     if not isinstance(parsed, dict):
-        return "", "", 0
+        return "", "", 0, ""
     text = str(parsed.get("text") or "").strip()
     error = str(parsed.get("error") or "").strip()
+    status = str(parsed.get("status") or "").strip()
     try:
         page_count = int(parsed.get("page_count") or 0)
     except (TypeError, ValueError):
         page_count = 0
-    return text, error, page_count
+    return text, error, page_count, status
 
 
 def _part_filename(part: dict[str, Any]) -> str:
@@ -404,7 +438,9 @@ async def uploads_for_conversation(
     excerpt_by_task = {row.task_id: row for row in excerpt_rows}
     out: list[dict[str, Any]] = []
     for src in picked:
-        text, error, page_count = _excerpt_from_sidecar(excerpt_by_task.get(src.task_id))
+        text, error, page_count, status = _excerpt_from_sidecar(
+            excerpt_by_task.get(src.task_id)
+        )
         if not text and (src.content_encoding or "utf8") != "base64":
             text = str(src.inline or "").strip()[:_MAX_UPLOAD_EXCERPT]
         out.append(
@@ -414,6 +450,7 @@ async def uploads_for_conversation(
                 "kind": src.kind,
                 "excerpt": text[:_MAX_UPLOAD_EXCERPT],
                 "error": error,
+                "status": status,
                 "page_count": page_count,
             }
         )
@@ -450,7 +487,20 @@ async def native_files_from_rows(
         except Exception as exc:  # noqa: BLE001 — unread stays honest
             logger.warning("native file decode skipped id=%s err=%s", art_id, type(exc).__name__)
             continue
-        item = accept_native(str(src.title or title), raw)
+        from pico_orchestrator.office.convert import (
+            LegacyOfficeConvertError,
+            convert_legacy_office_bytes,
+        )
+        from pico_orchestrator.office.legacy import convert_target_from_name, looks_ooxml
+
+        name = str(src.title or title)
+        if convert_target_from_name(name) and not looks_ooxml(raw):
+            try:
+                raw = await convert_legacy_office_bytes(name, raw)
+            except LegacyOfficeConvertError:
+                logger.info("native file still OLE id=%s title=%s", art_id, name)
+                continue
+        item = accept_native(name, raw)
         if item is None:
             continue
         seen.add(art_id)
@@ -706,9 +756,28 @@ async def post_edu_file(
 ) -> dict[str, Any]:
     filename, data, folder_raw = await _read_upload(request)
     folder_id = await resolve_owned_folder_id(principal, folder_raw)
-    from pico_orchestrator.office.convert import convert_legacy_office_bytes
+    from pico_orchestrator.office.convert import (
+        LegacyOfficeConvertError,
+        convert_legacy_office_bytes,
+    )
 
-    data = await convert_legacy_office_bytes(filename, data)
+    try:
+        data = await convert_legacy_office_bytes(filename, data)
+    except LegacyOfficeConvertError as err:
+        logger.info("legacy office ingest convert failed name=%s", filename)
+        extract = extract_for_kb(filename, data)
+        extract["status"] = "unsupported"
+        extract["error"] = err.message
+        extract["text"] = ""
+        file_id = await persist_edu_file(
+            principal,
+            filename=filename,
+            data=data,
+            extract=extract,
+            conversation_id=x_conversation_id,
+            folder_id=folder_id,
+        )
+        return _payload(file_id, extract)
     extract = extract_for_kb(filename, data)
     file_id = await persist_edu_file(
         principal,

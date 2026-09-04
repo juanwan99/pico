@@ -149,7 +149,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "workspace_read_file",
-    "Read one Artifact by id or title from the Pico ledger (including this-turn chat paperclip documents). PDF/docx/xlsx/pptx originals are already on this turn's model file channel; this tool is the ledger copy. Unread office means no local extract — do not ask the teacher to re-upload or send screenshots. png/jpg stay metadata only — no pixels in the tool JSON. Pass a picture artifact id to a document tool to embed.",
+    "Read one Artifact by id or title from the Pico ledger (including this-turn chat paperclip documents). PDF/docx/xlsx/pptx originals are already on this turn's model file channel; this tool is the ledger copy. Old .doc/.ppt/.xls are converted to OOXML first. Unread office means conversion or extract failed — do not ask the teacher to re-upload, re-save, or send screenshots. png/jpg stay metadata only — no pixels in the tool JSON. Pass a picture artifact id to a document tool to embed.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),

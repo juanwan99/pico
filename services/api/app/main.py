@@ -1743,12 +1743,25 @@ async def get_artifact_content(
     # unless this is an owner preview (?preview=1) with CSP sandbox.
     # Owner isolation already applied by get_artifact_for_principal (other accounts 404).
     extra_headers: dict[str, str] = {}
-    office_preview_exts = {".docx", ".pptx", ".xlsx"}
+    office_preview_exts = {".docx", ".pptx", ".xlsx", ".doc", ".ppt", ".xls"}
     if preview and ext in office_preview_exts and not download:
+        from pico_orchestrator.office.convert import (
+            LegacyOfficeConvertError,
+            convert_legacy_office_bytes,
+        )
+        from pico_orchestrator.office.legacy import convert_target_from_name, looks_ooxml
         from pico_orchestrator.office.preview import preview_office_html
 
+        preview_raw = raw
+        preview_ext = ext
+        if convert_target_from_name(filename) and not looks_ooxml(raw):
+            try:
+                preview_raw = await convert_legacy_office_bytes(filename, raw)
+                preview_ext = convert_target_from_name(filename) or ext
+            except LegacyOfficeConvertError as err:
+                raise HTTPException(status_code=415, detail=err.message) from err
         try:
-            html_doc = preview_office_html(raw, ext)
+            html_doc = preview_office_html(preview_raw, preview_ext)
         except Exception as exc:
             raise HTTPException(
                 status_code=415,

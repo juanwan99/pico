@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from pico_orchestrator.artifact_types import is_valid_ooxml_package
-from pico_orchestrator.office.legacy import require_supported_office_ext
+from pico_orchestrator.office.legacy import office_ext_for_bytes
 
 _MAX_SLIDES = 24
 _MAX_IMAGES = 16
@@ -36,7 +36,7 @@ def _opt(call: Callable[[], Any], default: Any = None) -> Any:
 
 
 def preview_office_html(raw: bytes, ext: str) -> str:
-    suffix = require_supported_office_ext(ext)
+    suffix = office_ext_for_bytes(ext, raw)
     key = f"{hashlib.sha256(raw).hexdigest()}:{suffix}"
     cached = _PREVIEW_HTML_CACHE.get(key)
     if cached is not None:
