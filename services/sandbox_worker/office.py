@@ -248,11 +248,11 @@ async def convert_legacy_office(*, filename: str, document: bytes) -> bytes:
     profile = work / "lo-profile"
     profile.mkdir(parents=True, exist_ok=True)
     src.write_bytes(document)
+    # Keep container HOME. Empty HOME + VCL gen makes soffice ask for X11,
+    # return 0, and write no OOXML. Isolation is UserInstallation only.
     env = {
         **os.environ,
-        "HOME": str(work),
         "LANG": os.environ.get("LANG") or "C.UTF-8",
-        "SAL_USE_VCLPLUGIN": "gen",
     }
     filter_name = _CONVERT_FILTER[target]
     try:
@@ -275,13 +275,21 @@ async def convert_legacy_office(*, filename: str, document: bytes) -> bytes:
             start_new_session=True,
         )
         try:
-            await asyncio.wait_for(proc.wait(), timeout=_CONVERT_TIMEOUT_S)
+            _stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=_CONVERT_TIMEOUT_S
+            )
         except TimeoutError as exc:
             if proc.returncode is None:
                 proc.kill()
             raise ToolError("sandbox.office_unavailable", "旧版文档转换超时") from exc
         produced = next(out_dir.glob(f"*{target}"), None)
         if proc.returncode != 0 or produced is None or not produced.is_file():
+            logger.info(
+                "legacy soffice convert failed name=%s rc=%s err=%s",
+                filename,
+                proc.returncode,
+                (stderr or b"")[-400:].decode("utf-8", errors="replace"),
+            )
             raise ToolError("sandbox.office_unavailable", "旧版文档转不开")
         converted = produced.read_bytes()
         if not converted or converted[:2] != b"PK":

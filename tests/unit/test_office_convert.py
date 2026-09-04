@@ -98,3 +98,5 @@ def test_sandbox_convert_uses_ascii_temp_name() -> None:
     src = inspect.getsource(convert_legacy_office)
     assert "in{source_ext}" in src
     assert "safe_name" in src
+    assert '"HOME": str(work)' not in src
+    assert "SAL_USE_VCLPLUGIN" not in src
