@@ -19,12 +19,12 @@ from app.openai_compat import (
     _resolve_allowed_tools,
     _sidebar_chat_only,
 )
-from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.edu_sidebar import (
     EDU_SIDEBAR_DEFAULT_TOOLS,
     SIDEBAR_WORKBENCH_HINT,
     edu_sidebar_tool_ceiling,
 )
+from pico_orchestrator.run_types import RunCaps
 
 
 def test_edu_sidebar_mark_detects_accessory() -> None:
