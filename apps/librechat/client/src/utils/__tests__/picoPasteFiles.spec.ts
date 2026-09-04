@@ -1,11 +1,11 @@
-import { captureClipboardFiles } from '../pasteFiles';
+import { captureClipboardFiles, clipboardPlainText } from '../pasteFiles';
 
 function dt(files: File[], text = '', types?: string[]): DataTransfer {
   return {
     files,
     types: types ?? (files.length ? ['Files', 'text/plain'] : ['text/plain']),
     items: files.map((file) => ({ kind: 'file', type: file.type, getAsFile: () => file })),
-    getData: (type: string) => (type === 'text/plain' ? text : ''),
+    getData: (type: string) => (type === 'text/plain' || type === 'text' ? text : ''),
   } as unknown as DataTransfer;
 }
 
@@ -39,10 +39,47 @@ describe('captureClipboardFiles', () => {
     expect(got?.[0].name).toBe('教师教学计划.doc');
   });
 
-  it('leaves text-only paste alone', () => {
+  it('cancels first when Chromium leaves types empty until preventDefault', () => {
+    const doc = new File(['OLE'], '教师教学计划.doc', { type: 'application/msword' });
+    let cancelled = false;
+    const clipboard = {
+      get types() {
+        return cancelled ? ['Files', 'text/plain'] : [];
+      },
+      get items() {
+        return cancelled ? [{ kind: 'file', type: doc.type, getAsFile: () => doc }] : [];
+      },
+      get files() {
+        return cancelled ? [doc] : [];
+      },
+      getData: () => '教师教学计划.doc',
+    } as unknown as DataTransfer;
+    const got = captureClipboardFiles(clipboard, () => {
+      cancelled = true;
+    });
+    expect(got).toHaveLength(1);
+    expect(got?.[0].name).toBe('教师教学计划.doc');
+  });
+
+  it('does not treat a file paste as text when files stay empty after cancel', () => {
     const preventDefault = jest.fn();
-    expect(captureClipboardFiles(dt([], '计划.docx'), preventDefault)).toBeNull();
-    expect(preventDefault).not.toHaveBeenCalled();
+    const clipboard = {
+      types: ['Files'],
+      items: [{ kind: 'file', type: 'application/msword', getAsFile: () => null }],
+      files: [],
+      getData: () => '教师教学计划.doc',
+    } as unknown as DataTransfer;
+    const got = captureClipboardFiles(clipboard, preventDefault);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(got).toEqual([]);
+  });
+
+  it('cancels text paste so the caller can restore plain text', () => {
+    const preventDefault = jest.fn();
+    const clipboard = dt([], 'hello from clipboard');
+    expect(captureClipboardFiles(clipboard, preventDefault)).toBeNull();
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(clipboardPlainText(clipboard)).toBe('hello from clipboard');
     expect(captureClipboardFiles(null, preventDefault)).toBeNull();
   });
 });
