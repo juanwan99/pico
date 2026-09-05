@@ -1795,6 +1795,18 @@ def test_ensure_gateway_ext_rejects_ancestor_symlink(tmp_path: Path) -> None:
     sidecar_mod.GATEWAY_EXT_SRC = src.parent / ".." / src.parent.name / src.name
     with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
         sidecar_mod._ensure_gateway_ext()
+    sidecar_mod.GATEWAY_EXT_SRC = src
+    sidecar_mod.GATEWAY_EXT = dest
+    hard = dest.parent / "hard.ts"
+    os.link(dest, hard)
+    try:
+        sidecar_mod.GATEWAY_EXT = hard
+        with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
+            sidecar_mod._ensure_gateway_ext()
+    finally:
+        hard.unlink(missing_ok=True)
+    sidecar_mod.GATEWAY_EXT = dest
+    assert sidecar_mod._ensure_gateway_ext() == dest
 
 
 def test_preexec_pdeathsig_sets_sigkill() -> None:
