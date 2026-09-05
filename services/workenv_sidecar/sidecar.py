@@ -360,13 +360,14 @@ def _gateway_oserror(exc: OSError) -> RuntimeError:
 
 def _open_nofollow_file(path: Path) -> tuple[int, os.stat_result]:
     """Open leaf via parent dir_fd. O_NOFOLLOW on both. Same FD for fstat/read."""
-    flags = os.O_RDONLY
-    dir_flags = os.O_RDONLY
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-        dir_flags |= os.O_NOFOLLOW
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise RuntimeError("gateway.ext.tampered")
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    dir_flags = os.O_RDONLY | os.O_NOFOLLOW
     if hasattr(os, "O_DIRECTORY"):
         dir_flags |= os.O_DIRECTORY
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK
     try:
         dir_fd = os.open(str(path.parent), dir_flags)
     except OSError as exc:
@@ -389,18 +390,21 @@ def _read_nofollow_regular(path: Path) -> tuple[bytes, os.stat_result, os.stat_r
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             raise RuntimeError("gateway.ext.tampered")
-        if int(st.st_size) > 2 * 1024 * 1024 or int(st.st_size) <= 0:
+        want = int(st.st_size)
+        if want > 2 * 1024 * 1024 or want <= 0:
             raise RuntimeError("gateway.ext.tampered")
         chunks: list[bytes] = []
         n = 0
-        while n <= int(st.st_size):
-            piece = os.read(fd, 65536)
+        while n < want:
+            piece = os.read(fd, min(65536, want - n))
             if not piece:
-                break
-            n += len(piece)
-            if n > int(st.st_size) + 4096:
                 raise RuntimeError("gateway.ext.tampered")
+            n += len(piece)
             chunks.append(piece)
+        if n != want:
+            raise RuntimeError("gateway.ext.tampered")
+        if os.read(fd, 1):
+            raise RuntimeError("gateway.ext.tampered")
         return b"".join(chunks), st, parent_st
     except OSError as exc:
         raise _gateway_oserror(exc) from exc

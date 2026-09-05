@@ -1783,5 +1783,7 @@ def test_preexec_pdeathsig_sets_sigkill() -> None:
     assert "write_bytes" not in src_ensure
     assert "mkdir" not in src_ensure
     assert "O_NOFOLLOW" in src_open
+    assert "O_NONBLOCK" in src_open
     assert "fstat" in src_read
     assert "_read_nofollow_regular" in src_ensure
+    assert "n != want" in src_read
