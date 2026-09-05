@@ -41,7 +41,7 @@ def test_law_supreme_section_exists() -> None:
 
 def test_truth_freeze_has_s0_and_w0() -> None:
     text = (ROOT / "docs" / "TRUTH-FREEZE.md").read_text(encoding="utf-8")
-    assert "BINDING FREEZE v1.5" in text
+    assert "BINDING FREEZE v1.6" in text
     assert "| S0 |" in text
     assert "| W0 |" in text
     assert "绝对禁止自己搞一套体系" in text
