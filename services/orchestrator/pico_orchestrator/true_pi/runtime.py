@@ -310,14 +310,23 @@ async def run_true_pi_agent(
         if transport is None:
             provider = resolve_provider()
             proxy_key = (os.environ.get("OPENAI_API_KEY") or os.environ.get("PICO_RUN_TOKEN") or "").strip()
-            if workenv_mode == "exec" and not proxy_key:
-                token_path = Path(os.environ.get("PICO_RUN_TOKEN_FILE") or "/tmp/workenv-poc/run.token")
-                if token_path.is_file():
-                    proxy_key = token_path.read_text(encoding="utf-8").strip()
             proxy_base = (os.environ.get("OPENAI_BASE_URL") or os.environ.get("PICO_UPSTREAM_BASE") or "").strip()
-            if workenv_mode == "exec" and provider is None and proxy_key:
+            if workenv_mode == "exec":
+                proxy_key = (os.environ.get("PICO_RUN_TOKEN") or "").strip()
+                if not proxy_key:
+                    token_path = Path(os.environ.get("PICO_RUN_TOKEN_FILE") or "/tmp/workenv-poc/run.token")
+                    if token_path.is_file():
+                        proxy_key = token_path.read_text(encoding="utf-8").strip()
+                proxy_base = (os.environ.get("PICO_UPSTREAM_BASE") or "http://127.0.0.1:18769/v1").strip()
                 from pico_orchestrator.provider import ProviderConfig
 
+                if not proxy_key:
+                    return await _failed(
+                        emit,
+                        code="model.unconfigured",
+                        reason="isolated exec requires PICO_RUN_TOKEN",
+                        tag=tag,
+                    )
                 provider = ProviderConfig(
                     name="openai",
                     api_key=proxy_key,

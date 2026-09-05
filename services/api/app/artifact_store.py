@@ -216,30 +216,39 @@ class LedgerArtifactStore:
                 "download_path": f"/v1/artifacts/{artifact.id}/content?download=true",
                 "folder_id": getattr(artifact, "folder_id", "") or "",
             }
-        try:
-            from pico_orchestrator.meili_kb import project_material_artifact
+        skip_proj = False
+        if self._run_id:
+            async with self._factory() as session:
+                run = await session.get(RunRow, self._run_id)
+                if run is not None and (
+                    run.cancel_requested or run.status in {"cancelled", "cancelling", "failed"}
+                ):
+                    skip_proj = True
+        if not skip_proj:
+            try:
+                from pico_orchestrator.meili_kb import project_material_artifact
 
-            project_material_artifact(
-                principal,
-                artifact_id=str(out["artifact_id"]),
-                title=title,
-                kind=kind,
-                content=content,
-            )
-        except Exception as exc:  # noqa: BLE001 — projection must not block the ledger
-            logger.warning("meili project after write failed: %s", type(exc).__name__)
-        try:
-            from pico_orchestrator.sandbox_persist import persist_office_to_owner_disk
+                project_material_artifact(
+                    principal,
+                    artifact_id=str(out["artifact_id"]),
+                    title=title,
+                    kind=kind,
+                    content=content,
+                )
+            except Exception as exc:  # noqa: BLE001 — projection must not block the ledger
+                logger.warning("meili project after write failed: %s", type(exc).__name__)
+            try:
+                from pico_orchestrator.sandbox_persist import persist_office_to_owner_disk
 
-            persist_office_to_owner_disk(
-                principal.school_id,
-                principal.membership_id,
-                title,
-                kind,
-                content,
-            )
-        except Exception as exc:  # noqa: BLE001 — disk projection must not swallow the ledger
-            logger.warning("owner-disk persist after write failed: %s", type(exc).__name__)
+                persist_office_to_owner_disk(
+                    principal.school_id,
+                    principal.membership_id,
+                    title,
+                    kind,
+                    content,
+                )
+            except Exception as exc:  # noqa: BLE001 — disk projection must not swallow the ledger
+                logger.warning("owner-disk persist after write failed: %s", type(exc).__name__)
         return out
 
     async def delete(self, principal: Principal, *, artifact_id: str) -> None:
@@ -263,6 +272,12 @@ class LedgerArtifactStore:
                 return
             await session.delete(row)
             await session.commit()
+        try:
+            from pico_orchestrator.meili_kb import delete_material
+
+            delete_material(aid)
+        except Exception as exc:  # noqa: BLE001 — projection undo must not raise
+            logger.warning("meili delete after collect rollback failed: %s", type(exc).__name__)
 
     def _owned_artifacts(self, principal: Principal):
         stmt = (

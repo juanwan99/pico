@@ -148,16 +148,18 @@ def _work_dir(workspace_id: str) -> Path:
         resolved = work.resolve()
     except OSError as exc:
         raise ValueError("workspace_id.invalid") from exc
-    if resolved != root_res and root_res not in resolved.parents:
+    if root_res not in resolved.parents:
         raise ValueError("workspace_id.invalid")
     return work
 
 
-def _read_regular_nofollow(path: Path) -> bytes | None:
+def _read_regular_nofollow(path: Path, *, max_bytes: int = 8 * 1024 * 1024) -> bytes | None:
     """Read a regular file. Do not follow a symlink out of /work."""
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK
     try:
         fd = os.open(path, flags)
     except OSError:
@@ -165,6 +167,8 @@ def _read_regular_nofollow(path: Path) -> bytes | None:
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
+            return None
+        if int(st.st_size) > max_bytes:
             return None
         chunks: list[bytes] = []
         remaining = int(st.st_size)
@@ -498,8 +502,18 @@ def collect_files(body: dict[str, Any]) -> dict[str, Any]:
     for pattern in globs:
         if pattern not in allowed_globs:
             continue
+        try:
+            root_res = Path(WORK_ROOT).resolve()
+        except OSError:
+            return {"ok": False, "error": "workspace_id.invalid", "status": 400}
         for path in sorted(work.glob(pattern)):
             if path.is_symlink():
+                continue
+            try:
+                resolved = path.resolve()
+            except OSError:
+                continue
+            if root_res not in resolved.parents:
                 continue
             raw = _read_regular_nofollow(path)
             if raw is None:
