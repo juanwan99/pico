@@ -353,6 +353,8 @@ def _retarget_session_cwd(session: Path, work: Path) -> None:
 
 def _ensure_gateway_ext() -> Path:
     """Official Pico gateway extension. Same -e file as host spawn_command."""
+    if GATEWAY_EXT_SRC.is_symlink() or GATEWAY_EXT.is_symlink() or GATEWAY_EXT.parent.is_symlink():
+        raise RuntimeError("gateway.ext.tampered")
     if not GATEWAY_EXT_SRC.is_file():
         raise RuntimeError("gateway.ext.missing")
     try:
@@ -361,16 +363,31 @@ def _ensure_gateway_ext() -> Path:
         raise RuntimeError("gateway.ext.missing") from exc
     if not src:
         raise RuntimeError("gateway.ext.missing")
-    if GATEWAY_EXT.is_file():
+    try:
+        st = GATEWAY_EXT.lstat()
+    except OSError as exc:
+        raise RuntimeError("gateway.ext.missing") from exc
+    if not stat.S_ISREG(st.st_mode):
+        raise RuntimeError("gateway.ext.tampered")
+    if st.st_mode & 0o002:
+        raise RuntimeError("gateway.ext.tampered")
+    # Overlay bake path only. Tests use tmp dest and skip uid 0.
+    if str(GATEWAY_EXT) == "/bridge/pico-gateway-tools.ts":
+        if st.st_uid != 0 or (st.st_mode & 0o022):
+            raise RuntimeError("gateway.ext.tampered")
         try:
-            current = GATEWAY_EXT.read_bytes()
+            dst = GATEWAY_EXT.parent.lstat()
         except OSError as exc:
             raise RuntimeError("gateway.ext.missing") from exc
-        if current != src:
+        if dst.st_uid != 0 or (dst.st_mode & 0o022) or not stat.S_ISDIR(dst.st_mode):
             raise RuntimeError("gateway.ext.tampered")
-        return GATEWAY_EXT
-    # Overlay image bakes /bridge root-owned. Do not create or replace as 65532.
-    raise RuntimeError("gateway.ext.missing")
+    try:
+        current = GATEWAY_EXT.read_bytes()
+    except OSError as exc:
+        raise RuntimeError("gateway.ext.missing") from exc
+    if current != src:
+        raise RuntimeError("gateway.ext.tampered")
+    return GATEWAY_EXT
 
 
 def _spawn_argv(workspace_id: str) -> list[str]:

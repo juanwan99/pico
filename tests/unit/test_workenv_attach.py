@@ -1718,6 +1718,34 @@ def test_ensure_gateway_ext_fails_when_bridge_not_writable(tmp_path: Path) -> No
     assert not sidecar_mod.GATEWAY_EXT.exists()
 
 
+def test_ensure_gateway_ext_rejects_symlink_and_world_writable(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    src = tmp_path / "official.ts"
+    src.write_text("export default {};\n", encoding="utf-8")
+    dest_dir = tmp_path / "bridge"
+    dest_dir.mkdir()
+    real = dest_dir / "real.ts"
+    real.write_bytes(src.read_bytes())
+    link = dest_dir / "pico-gateway-tools.ts"
+    link.symlink_to(real)
+    sidecar_mod.GATEWAY_EXT = link
+    sidecar_mod.GATEWAY_EXT_SRC = src
+    with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
+        sidecar_mod._ensure_gateway_ext()
+    link.unlink()
+    real.write_bytes(src.read_bytes())
+    sidecar_mod.GATEWAY_EXT = real
+    real.chmod(0o666)
+    try:
+        with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
+            sidecar_mod._ensure_gateway_ext()
+    finally:
+        real.chmod(0o644)
+    real.chmod(0o644)
+    assert sidecar_mod._ensure_gateway_ext() == real
+
+
 def test_preexec_pdeathsig_sets_sigkill() -> None:
     import ctypes
     import signal
