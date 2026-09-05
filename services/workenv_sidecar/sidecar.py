@@ -305,6 +305,7 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
             "run_id": str(body.get("run_id") or workspace_id),
             "mode": mode,
             "proc": None,
+            "pgid": None,
             "ws": None,
             "stdin_lock": threading.Lock(),
         }
@@ -402,6 +403,12 @@ def abort_run(body: dict[str, Any]) -> dict[str, Any]:
     if rec.get("mode") == "workdir" or not wrote:
         if proc is not None:
             _kill_pg(proc, grace=5.0)
+        pgid = rec.get("pgid")
+        if isinstance(pgid, int) and pgid > 0:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
     if ws is not None:
         try:
             send_text(ws, json.dumps({"type": "workenv.abort_ack", "wrote": wrote}))
@@ -506,13 +513,16 @@ def exec_work(body: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": "exec.spawn", "detail": str(exc)[:200]}
     rec["proc"] = proc
     try:
+        rec["pgid"] = os.getpgid(proc.pid)
+    except OSError:
+        rec["pgid"] = proc.pid
+    try:
         stdout_b, stderr_b = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         _kill_pg(proc, grace=2.0)
+        rec["proc"] = None
+        rec["pgid"] = None
         return {"ok": False, "error": "exec.timeout", "timeout": timeout, "executed": False}
-    finally:
-        if rec.get("proc") is proc:
-            rec["proc"] = None
     stdout = (stdout_b or b"")[:8000].decode("utf-8", errors="replace")
     stderr = (stderr_b or b"")[:4000].decode("utf-8", errors="replace")
     return {
@@ -530,7 +540,14 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
     rc = None
     if rec is not None:
         rc = _kill_pg(rec.get("proc"), grace=5.0)
+        pgid = rec.get("pgid")
+        if isinstance(pgid, int) and pgid > 0:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
         rec["proc"] = None
+        rec["pgid"] = None
         rec["ws"] = None
     try:
         work = _work_dir(workspace_id)

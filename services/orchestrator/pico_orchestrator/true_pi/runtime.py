@@ -689,12 +689,26 @@ async def run_true_pi_agent(
         ):
             return await _cancel_run()
         if workenv_gate is not None and artifact_store is not None:
-            collected_n = await _collect_workenv_into_store(
-                workspace_id=rid,
-                principal=principal,
-                store=artifact_store,
-                gate=workenv_gate,
-            )
+            from pico_orchestrator.true_pi.workenv_ledger import WorkenvCollectRejected
+
+            try:
+                collected_n = await _collect_workenv_into_store(
+                    workspace_id=rid,
+                    principal=principal,
+                    store=artifact_store,
+                    gate=workenv_gate,
+                )
+            except WorkenvCollectRejected:
+                if await is_cancelled() or not workenv_gate.collect_allowed():
+                    return await _cancel_run()
+                return await _failed(
+                    emit,
+                    code="sandbox.workenv_collect_rejected",
+                    reason="隔离产物没过关，不能当交件。",
+                    state=state,
+                    principal=principal,
+                    tag=tag,
+                )
             writes = max(writes, collected_n)
 
         # Quota / stream errors fail the run. collected_n must not wipe that.
@@ -995,10 +1009,7 @@ async def _collect_workenv_into_store(
         kept.append(item)
     if not kept:
         return 0
-    try:
-        rows = await gate.ingest_collect(principal, store, kept)
-    except WorkenvCollectRejected:
-        return 0
+    rows = await gate.ingest_collect(principal, store, kept)
     return len(rows)
 
 

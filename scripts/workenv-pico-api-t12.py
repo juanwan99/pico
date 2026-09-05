@@ -247,8 +247,8 @@ def _t1_pass(r1: dict[str, Any], r2: dict[str, Any]) -> bool:
         return False
     d1 = str(x1.get("d2") or "")
     d2 = str(x2.get("d2") or "")
-    formula_ok = "B2" in d1 and "C2" in d1 and ("0.6" in d1 or "60" in d1) and ("0.4" in d1 or "40" in d1)
-    formula2_ok = "B2" in d2 and "C2" in d2 and ("0.6" in d2 or "60" in d2)
+    formula_ok = _formula_40_60(d1)
+    formula2_ok = _formula_40_60(d2)
     title = " ".join(
         [
             str(x2.get("title") or ""),
@@ -261,13 +261,22 @@ def _t1_pass(r1: dict[str, Any], r2: dict[str, Any]) -> bool:
     return bool(formula_ok and formula2_ok and title_ok)
 
 
+def _formula_40_60(d: str) -> bool:
+    text = d.replace(" ", "")
+    if "B2" not in text or "C2" not in text:
+        return False
+    forty = "0.4" in text or "*40%" in text or "40%*" in text or "*0.4" in text
+    sixty = "0.6" in text or "*60%" in text or "60%*" in text or "*0.6" in text
+    return forty and sixty and not ("0.5" in text)
+
+
 def _group_count(text: str, label: str, n: int) -> bool:
     token = str(n)
     pats = (
-        rf"{label}\s*[：:]\s*{token}(?!\d)",
-        rf"{label}\s+{token}(?!\d)",
-        rf"{label}{token}(?!\d)",
-        rf"{token}\s*人?\s*{label}",
+        rf"{re.escape(label)}\s*[：:=]\s*(?<!\d){token}(?!\d)",
+        rf"{re.escape(label)}\s+(?<!\d){token}(?!\d)\s*人",
+        rf"(?<!\d){token}(?!\d)\s*人\s*{re.escape(label)}",
+        rf"{re.escape(label)}(?<!\d){token}(?!\d)人",
     )
     return any(re.search(pat, text) for pat in pats)
 
@@ -293,7 +302,11 @@ def _t2_pass(row: dict[str, Any]) -> bool:
         ]
     )
     counts_ok = _group_count(text, "红", 4) and _group_count(text, "蓝", 3) and _group_count(text, "绿", 3)
-    sheet_ok = ("红" in xtext and "蓝" in xtext and "绿" in xtext)
+    sheet_ok = _group_count(xtext, "红", 4) and _group_count(xtext, "蓝", 3) and _group_count(xtext, "绿", 3)
+    if not sheet_ok:
+        sheet_ok = ("红" in xtext and "4" in xtext and "蓝" in xtext and "绿" in xtext)
+        # Spreadsheet must still not invert the roster; require the 4 near 红.
+        sheet_ok = sheet_ok and bool(re.search(r"红.{0,8}(?<!\d)4(?!\d)|(?<!\d)4(?!\d).{0,8}红", xtext))
     return counts_ok and sheet_ok
 
 

@@ -123,6 +123,8 @@ class WorkenvCancelGate:
                 raise WorkenvCollectRejected("collect-after-cancel discarded")
             kind = ext.lstrip(".") if ext else "file"
             row = await store.write(principal, title=name, content=blob, kind=kind)
+            if not self.collect_allowed():
+                raise WorkenvCollectRejected("collect-after-cancel discarded")
             written.append(row)
             self.artifacts.append(row)
         return written

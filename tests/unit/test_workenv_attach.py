@@ -87,6 +87,46 @@ async def test_collect_rejects_remote_html() -> None:
     assert store.rows == []
 
 
+def test_t12_oracles_reject_false_green() -> None:
+    import importlib.util
+
+    path = ROOT / "scripts" / "workenv-pico-api-t12.py"
+    spec = importlib.util.spec_from_file_location("t12", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod._formula_40_60("=C2*40%+B2*60%") is True
+    assert mod._formula_40_60("=B2*0.6+C2") is False
+    assert mod._formula_40_60("=1") is False
+    assert mod._group_count("红4人 蓝3人 绿3人", "红", 4) is True
+    assert mod._group_count("14人红 13人蓝 13人绿", "红", 4) is False
+    r1 = {
+        "status": "succeeded",
+        "files": [{"xlsx": {"d2": "=C2*40%+B2*60%", "title": "x", "shared": [], "sheets": [], "inline": []}}],
+    }
+    r2_bad = {
+        "status": "succeeded",
+        "files": [{"xlsx": {"d2": "=B2*0.6+C2", "title": "三年二班", "shared": ["三年二班"], "sheets": [], "inline": []}}],
+    }
+    assert mod._t1_pass(r1, r2_bad) is False
+    t2 = {
+        "status": "succeeded",
+        "files": [
+            {"kind": "xlsx", "title": "g.xlsx", "xlsx": {"shared": ["红", "蓝", "绿"], "sheets": [], "inline": []}},
+            {"kind": "docx", "title": "n.docx", "docx_text": "14人红 13人蓝 13人绿"},
+        ],
+    }
+    assert mod._t2_pass(t2) is False
+    t2_ok = {
+        "status": "succeeded",
+        "files": [
+            {"kind": "xlsx", "title": "g.xlsx", "xlsx": {"shared": ["红4", "蓝3", "绿3"], "sheets": ["汇总"], "inline": []}},
+            {"kind": "docx", "title": "n.docx", "docx_text": "红4人，蓝3人，绿3人"},
+        ],
+    }
+    assert mod._t2_pass(t2_ok) is True
+
+
 @pytest.mark.asyncio
 async def test_create_task_keeps_conversation_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from app import db as db_mod
@@ -753,3 +793,57 @@ async def test_overlay_collects_files_but_provider_error_fails_run(
     assert result.status == "failed"
     assert store.rows and store.rows[0]["title"] == "gradebook.xlsx"
     assert "failed" in [p.get("status") for k, p in events if k == "run.status"]
+
+
+@pytest.mark.asyncio
+async def test_remote_html_collect_fails_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    import base64
+
+    from pico_orchestrator.true_pi.client import FakeTransport
+    from pico_orchestrator.true_pi.runtime import run_true_pi_agent
+
+    def make_attach(*_a: Any, **_k: Any) -> FakeTransport:
+        return FakeTransport(
+            scripted=[
+                {"type": "agent_start"},
+                {"type": "turn_start"},
+                {"type": "agent_end", "willRetry": False},
+            ],
+            assistant_text="page ready",
+        )
+
+    monkeypatch.setenv("PICO_WORKENV", "pi")
+    monkeypatch.setattr("pico_orchestrator.true_pi.runtime.AttachTransport", make_attach)
+    monkeypatch.delenv("PICO_WORKENV_FIXTURE_DIR", raising=False)
+    html = b"<!doctype html><script src='https://cdn.example/x.js'></script><body>x</body>"
+
+    async def fake_post(path: str, payload: dict, timeout: float = 30.0) -> dict:
+        del payload, timeout
+        if str(path).endswith("/collect"):
+            return {
+                "ok": True,
+                "files": [
+                    {
+                        "name": "page.html",
+                        "bytes_b64": base64.b64encode(html).decode("ascii"),
+                    }
+                ],
+            }
+        return {"ok": True, "destroyed": True}
+
+    monkeypatch.setattr("pico_orchestrator.true_pi.workenv_http.workenv_post", fake_post)
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        del kind, payload
+
+    result = await run_true_pi_agent(
+        prompt="做网页",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=8),
+        transport=None,
+        artifact_store=MemoryArtifactStore(),
+        run_id="html-cdn",
+    )
+    assert result.status == "failed"
