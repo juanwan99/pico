@@ -106,7 +106,14 @@ def _download(base: str, token: str, artifact_id: str) -> bytes:
 
 
 def _xlsx_d2_and_title(blob: bytes) -> dict[str, Any]:
-    out: dict[str, Any] = {"ok_zip": False, "d2": None, "title": None, "shared": []}
+    out: dict[str, Any] = {
+        "ok_zip": False,
+        "d2": None,
+        "title": None,
+        "shared": [],
+        "sheets": [],
+        "inline": [],
+    }
     if blob[:2] != b"PK":
         return out
     out["ok_zip"] = True
@@ -121,6 +128,16 @@ def _xlsx_d2_and_title(blob: bytes) -> dict[str, Any]:
             out["shared"] = shared
             if shared:
                 out["title"] = shared[0]
+        if "xl/workbook.xml" in names:
+            wb = ET.fromstring(zf.read("xl/workbook.xml"))
+            sheets = [
+                str(s.get("name") or "")
+                for s in wb.findall("m:sheets/m:sheet", NS)
+                if s.get("name")
+            ]
+            out["sheets"] = sheets
+            if sheets and not out["title"]:
+                out["title"] = sheets[0]
         sheet_name = "xl/worksheets/sheet1.xml"
         if sheet_name not in names:
             sheets = [n for n in names if n.startswith("xl/worksheets/sheet") and n.endswith(".xml")]
@@ -128,8 +145,15 @@ def _xlsx_d2_and_title(blob: bytes) -> dict[str, Any]:
         if not sheet_name:
             return out
         sheet = ET.fromstring(zf.read(sheet_name))
+        inline: list[str] = []
         for c in sheet.findall(".//m:c", NS):
             ref = c.get("r") or ""
+            is_el = c.find("m:is", NS)
+            if is_el is not None:
+                texts = [t.text or "" for t in is_el.findall(".//m:t", NS)]
+                joined = "".join(texts)
+                if joined:
+                    inline.append(joined)
             if ref != "D2":
                 continue
             f = c.find("m:f", NS)
@@ -138,7 +162,9 @@ def _xlsx_d2_and_title(blob: bytes) -> dict[str, Any]:
                 out["d2"] = (f.text or "").strip()
             elif v is not None:
                 out["d2"] = (v.text or "").strip()
-            break
+        out["inline"] = inline
+        if not out["title"] and inline:
+            out["title"] = inline[0]
     return out
 
 
@@ -212,7 +238,14 @@ def _t1_pass(r1: dict[str, Any], r2: dict[str, Any]) -> bool:
     d2 = str(x2.get("d2") or "")
     formula_ok = ("B2" in d1 and "C2" in d1 and ("0.6" in d1 or "60" in d1)) or d1.startswith("=")
     formula2_ok = d2.startswith("=") or ("B2" in d2)
-    title = str(x2.get("title") or "") + " " + " ".join(x2.get("shared") or [])
+    title = " ".join(
+        [
+            str(x2.get("title") or ""),
+            " ".join(x2.get("shared") or []),
+            " ".join(x2.get("sheets") or []),
+            " ".join(x2.get("inline") or []),
+        ]
+    )
     title_ok = "三年二班" in title
     return bool(formula_ok and formula2_ok and title_ok)
 
