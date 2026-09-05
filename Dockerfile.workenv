@@ -40,7 +40,14 @@ RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ pip==26.2.1 \
 
 RUN useradd --create-home --uid 65532 --shell /usr/sbin/nologin workenv \
  && mkdir -p /work /session /agent-home /bridge \
- && chown -R 65532:65532 /work /session /agent-home /bridge /app
+ && chown -R 65532:65532 /work /session /agent-home /app \
+ && chown root:root /bridge \
+ && chmod 0755 /bridge
+
+# Official gateway bytes, root-owned. uid 65532 must not replace this file.
+COPY services/true_pi_bridge/pico-gateway-tools.ts /bridge/pico-gateway-tools.ts
+RUN chmod 0644 /bridge/pico-gateway-tools.ts \
+ && chown root:root /bridge/pico-gateway-tools.ts
 
 USER 65532:65532
 WORKDIR /work

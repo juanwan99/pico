@@ -29,6 +29,24 @@ if str(_HERE) not in sys.path:
 
 from pico_workenv_ws import WebSocketConnection, accept_websocket, send_close, send_text
 
+# prctl(2) PR_SET_PDEATHSIG. Direct child dies with sidecar. Not a cgroup.
+_PR_SET_PDEATHSIG = 1
+
+
+def _preexec_pdeathsig() -> None:
+    """Ask the kernel to SIGKILL this process if the sidecar parent dies."""
+    if not sys.platform.startswith("linux"):
+        return
+    import ctypes
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    rc = libc.prctl(_PR_SET_PDEATHSIG, int(signal.SIGKILL), 0, 0, 0)
+    if rc != 0:
+        err = ctypes.get_errno()
+        raise OSError(err, "prctl PR_SET_PDEATHSIG")
+    if os.getppid() == 1:
+        os.kill(os.getpid(), signal.SIGKILL)
+
 LISTEN_HOST = os.environ.get("PICO_WORKENV_BIND", "0.0.0.0")
 LISTEN_PORT = int(os.environ.get("PICO_WORKENV_PORT", "18768"))
 TOKEN = (os.environ.get("PICO_SANDBOX_TOKEN") or "").strip()
@@ -335,7 +353,6 @@ def _ensure_gateway_ext() -> Path:
         raise RuntimeError("gateway.ext.missing") from exc
     if not src:
         raise RuntimeError("gateway.ext.missing")
-    GATEWAY_EXT.parent.mkdir(parents=True, exist_ok=True)
     if GATEWAY_EXT.is_file():
         try:
             current = GATEWAY_EXT.read_bytes()
@@ -343,8 +360,13 @@ def _ensure_gateway_ext() -> Path:
             raise RuntimeError("gateway.ext.missing") from exc
         if current != src:
             raise RuntimeError("gateway.ext.tampered")
-    else:
+        return GATEWAY_EXT
+    # Overlay image bakes /bridge as root-owned. uid 65532 must not create it.
+    try:
+        GATEWAY_EXT.parent.mkdir(parents=True, exist_ok=True)
         GATEWAY_EXT.write_bytes(src)
+    except OSError as exc:
+        raise RuntimeError("gateway.ext.missing") from exc
     if not GATEWAY_EXT.is_file():
         raise RuntimeError("gateway.ext.missing")
     return GATEWAY_EXT
@@ -724,6 +746,7 @@ def exec_work(body: dict[str, Any]) -> dict[str, Any]:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 start_new_session=True,
+                preexec_fn=_preexec_pdeathsig,
             )
         except OSError as exc:
             return {"ok": False, "error": "exec.spawn", "detail": str(exc)[:200]}
@@ -855,6 +878,7 @@ def spawn_pi(workspace_id: str) -> subprocess.Popen[bytes]:
             cwd=str(work),
             env=env,
             start_new_session=True,
+            preexec_fn=_preexec_pdeathsig,
             bufsize=0,
         )
         rec["proc"] = proc

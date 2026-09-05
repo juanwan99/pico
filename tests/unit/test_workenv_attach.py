@@ -1671,3 +1671,68 @@ async def test_remote_html_collect_fails_run(monkeypatch: pytest.MonkeyPatch) ->
         run_id="html-cdn",
     )
     assert result.status == "failed"
+
+
+def test_dockerfile_bridge_is_root_owned() -> None:
+    text = (ROOT / "Dockerfile.workenv").read_text(encoding="utf-8")
+    assert "chown root:root /bridge" in text
+    assert (
+        "COPY services/true_pi_bridge/pico-gateway-tools.ts /bridge/pico-gateway-tools.ts"
+        in text
+    )
+    assert "chown -R 65532:65532 /work /session /agent-home /app" in text
+    assert "chown -R 65532:65532 /work /session /agent-home /bridge /app" not in text
+    compose = (ROOT / "docker-compose.workenv-poc.yml").read_text(encoding="utf-8")
+    for line in compose.splitlines():
+        stripped = line.split("#", 1)[0].strip()
+        if not stripped:
+            continue
+        assert ":/bridge" not in stripped
+        assert stripped.endswith("/bridge") is False or stripped.startswith("chown")
+
+
+def test_ensure_gateway_ext_fails_when_bridge_not_writable(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    src = tmp_path / "official.ts"
+    src.write_text("export default {};\n", encoding="utf-8")
+    dest_dir = tmp_path / "bridge"
+    dest_dir.mkdir()
+    dest_dir.chmod(0o555)
+    sidecar_mod.GATEWAY_EXT = dest_dir / "pico-gateway-tools.ts"
+    sidecar_mod.GATEWAY_EXT_SRC = src
+    try:
+        with pytest.raises(RuntimeError, match="gateway.ext.missing"):
+            sidecar_mod._ensure_gateway_ext()
+        assert not sidecar_mod.GATEWAY_EXT.exists()
+    finally:
+        dest_dir.chmod(0o755)
+
+
+def test_preexec_pdeathsig_sets_sigkill() -> None:
+    import ctypes
+    import signal
+    import subprocess
+
+    import sidecar as sidecar_mod
+
+    child = (
+        "import ctypes, sys\n"
+        "sig = ctypes.c_int()\n"
+        "rc = ctypes.CDLL(None, use_errno=True).prctl(2, ctypes.byref(sig), 0, 0, 0)\n"
+        "sys.stdout.write(str(sig.value) if rc == 0 else 'err')\n"
+    )
+    proc = subprocess.Popen(
+        [sys.executable, "-c", child],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+        preexec_fn=sidecar_mod._preexec_pdeathsig,
+    )
+    out, err = proc.communicate(timeout=5)
+    assert proc.returncode == 0, err.decode("utf-8", errors="replace")
+    assert out.decode("ascii") == str(signal.SIGKILL)
+    src_exec = __import__("inspect").getsource(sidecar_mod.exec_work)
+    src_pi = __import__("inspect").getsource(sidecar_mod.spawn_pi)
+    assert "preexec_fn=_preexec_pdeathsig" in src_exec
+    assert "preexec_fn=_preexec_pdeathsig" in src_pi

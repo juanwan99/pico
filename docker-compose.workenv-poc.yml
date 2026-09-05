@@ -34,6 +34,7 @@ services:
     read_only: false
     ports:
       - "127.0.0.1:18768:18768"
+    # /bridge is in-image, root-owned, not a volume. Never mount it RW for 65532.
     volumes:
       - workenv_work:/work
       - workenv_session:/session
