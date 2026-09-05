@@ -243,6 +243,7 @@ def _start_sidecar(tmp_path: Path, *, pi_bin: str, token: str) -> tuple[Threadin
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["owner_key"] = None
     sidecar_mod.write_agent_home()
     port = _free_port()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), sidecar_mod.Handler)
@@ -465,6 +466,7 @@ def test_create_run_rejects_dotdot(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["owner_key"] = None
     bad = sidecar_mod.create_run({"workspace_id": "../escape", "conversation_id": "c1"})
     assert bad["ok"] is False
     assert bad["error"] == "workspace_id.invalid"
@@ -486,6 +488,7 @@ def test_exec_python_in_work_dir(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["owner_key"] = None
     created = sidecar_mod.create_run(
         {"workspace_id": "exec1", "conversation_id": "c1", "mode": "workdir"}
     )
@@ -519,6 +522,7 @@ def test_collect_skips_symlink(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["owner_key"] = None
     created = sidecar_mod.create_run({"workspace_id": "r1", "conversation_id": "c1"})
     assert created["ok"] is True
     secret = tmp_path / "host-secret.xlsx"
@@ -543,6 +547,7 @@ def test_destroy_ok_matches_destroyed(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["owner_key"] = None
     sidecar_mod.create_run({"workspace_id": "gone", "conversation_id": "c1"})
     body = sidecar_mod.destroy_run({"workspace_id": "gone"})
     assert body["ok"] is True
@@ -750,11 +755,14 @@ def test_destroy_clears_conversation_key(tmp_path: Path) -> None:
 
     sidecar_mod.WORK_ROOT = tmp_path / "work"
     sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.SESSION_ROOT = tmp_path / "session"
+    sidecar_mod.SESSION_ROOT.mkdir()
     sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
     sidecar_mod.write_agent_home()
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["owner_key"] = None
     first = sidecar_mod.create_run({"workspace_id": "r-t1", "conversation_id": "t1-api"})
     assert first["ok"] is True
     mismatch = sidecar_mod.create_run({"workspace_id": "r-t2", "conversation_id": "t2-api"})
@@ -765,6 +773,43 @@ def test_destroy_clears_conversation_key(tmp_path: Path) -> None:
     assert sidecar_mod._state["conversation_key"] is None
     second = sidecar_mod.create_run({"workspace_id": "r-t2", "conversation_id": "t2-api"})
     assert second["ok"] is True
+    session = sidecar_mod.SESSION_ROOT / "pico.jsonl"
+    assert session.exists()
+    assert session.read_text(encoding="utf-8") == ""
+
+
+def test_create_run_rejects_owner_mismatch(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.SESSION_ROOT = tmp_path / "session"
+    sidecar_mod.SESSION_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
+    sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["owner_key"] = None
+    first = sidecar_mod.create_run(
+        {
+            "workspace_id": "r-a",
+            "conversation_id": "c1",
+            "school_id": "school-a",
+            "membership_id": "m1",
+        }
+    )
+    assert first["ok"] is True
+    other = sidecar_mod.create_run(
+        {
+            "workspace_id": "r-b",
+            "conversation_id": "c1",
+            "school_id": "school-b",
+            "membership_id": "m2",
+        }
+    )
+    assert other["ok"] is False
+    assert other["error"] == "box.owner_mismatch"
 
 
 @pytest.mark.asyncio

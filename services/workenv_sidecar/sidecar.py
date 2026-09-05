@@ -44,6 +44,7 @@ _lock = threading.Lock()
 _state: dict[str, Any] = {
     "box_id": "box-1",
     "conversation_key": None,
+    "owner_key": None,
     "runs": {},  # workspace_id -> run record
     "destroyed": set(),
 }
@@ -168,8 +169,22 @@ def _read_regular_nofollow(path: Path) -> bytes | None:
 
 
 def _session_file(_workspace_id: str) -> Path:
-    """One conversation, one official --session file. Destroy-run keeps this."""
+    """One conversation, one official --session file.
+
+    Same conversation may retarget cwd. A cleared conversation binding
+    must not inherit the previous jsonl.
+    """
     return SESSION_ROOT / "pico.jsonl"
+
+
+def _reset_session_file() -> None:
+    path = SESSION_ROOT / "pico.jsonl"
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    SESSION_ROOT.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")
 
 
 def _retarget_session_cwd(session: Path, work: Path) -> None:
@@ -283,17 +298,24 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": "workspace_id.invalid", "status": 400}
     mode = str(body.get("mode") or "pi").strip()
     conv = str(body.get("conversation_id") or body.get("conversation_key") or "poc")
+    owner = (
+        str(body.get("school_id") or "").strip()
+        + ":"
+        + str(body.get("membership_id") or "").strip()
+    )
     write_agent_home()
     with _lock:
         if workspace_id in _state["destroyed"]:
             return {"ok": False, "error": "run.destroyed", "status": 409}
+        if _state["owner_key"] not in {None, owner}:
+            return {"ok": False, "error": "box.owner_mismatch", "status": 409}
         if _state["conversation_key"] in {None, conv}:
             _state["conversation_key"] = conv
         elif _state["conversation_key"] != conv:
             return {"ok": False, "error": "box.conversation_mismatch", "status": 409}
+        _state["owner_key"] = owner
         for rec in _state["runs"].values():
-            proc = rec.get("proc")
-            if rec.get("workspace_id") != workspace_id and proc is not None and proc.poll() is None:
+            if rec.get("workspace_id") != workspace_id:
                 return {"ok": False, "error": "run.conflict", "status": 409}
         work = _work_dir(workspace_id)
         reused = work.exists()
@@ -335,6 +357,8 @@ def attach_files(body: dict[str, Any]) -> dict[str, Any]:
     rec = _run_record(workspace_id)
     if rec is None:
         return {"ok": False, "error": "run.unknown", "status": 404}
+    if rec.get("destroyed") or workspace_id in _state["destroyed"]:
+        return {"ok": False, "error": "run.destroyed", "status": 409}
     try:
         work = _work_dir(workspace_id)
     except ValueError:
@@ -591,6 +615,8 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
             _state["destroyed"].add(workspace_id)
             if not _state["runs"]:
                 _state["conversation_key"] = None
+                _state["owner_key"] = None
+                _reset_session_file()
     return {"ok": gone, "destroyed": gone, "returncode": rc}
 
 
