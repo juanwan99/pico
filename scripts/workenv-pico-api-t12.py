@@ -18,9 +18,15 @@ from xml.etree import ElementTree as ET
 T1_R1 = "把 D2:D7 写成期末40%加平时60%的公式，保存为 xlsx。"
 T1_R2 = "把标题改成「三年二班成绩」，D 列公式别丢。"
 T2 = "用这个 CSV 做两份东西：1) 按组别汇总人数的 xlsx；2) 一页说明 Word，点名各组人数。不要网页。"
+T3 = (
+    "做两份可打开的文件：page.html（断网也能开，不要 CDN）"
+    "和 slides.pptx（至少 3 页，每页标题看得见）。"
+)
 CONVO_T1 = "t1-api"
 CONVO_T2 = "t2-api"
+CONVO_T3 = "t3-api"
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+PPT_NS = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
 
 
 def _req(
@@ -214,6 +220,10 @@ def _run_one(
             item["xlsx"] = _xlsx_d2_and_title(blob)
         if low.endswith(".docx") or kind == "docx":
             item["docx_text"] = _docx_text(blob)[:400]
+        if low.endswith(".html") or low.endswith(".htm") or kind == "html":
+            item["html"] = _html_offline(blob)
+        if low.endswith(".pptx") or kind == "pptx":
+            item["pptx"] = _pptx_slides(blob)
         files.append(item)
     return {
         "run_id": run_id,
@@ -259,12 +269,83 @@ def _t2_pass(row: dict[str, Any]) -> bool:
     return has_xlsx and bool(docx) and len(text) >= 4
 
 
+def _html_offline(blob: bytes) -> dict[str, Any]:
+    text = blob.decode("utf-8", errors="replace")
+    low = text.lower()
+    remote = (
+        "https://" in low
+        or "http://" in low
+        or "//cdn" in low
+        or "jsdelivr" in low
+        or "unpkg.com" in low
+    )
+    return {
+        "n": len(blob),
+        "looks_html": "<html" in low or "<!doctype html" in low or "<body" in low,
+        "remote": remote,
+        "head": text[:120],
+    }
+
+
+def _pptx_slides(blob: bytes) -> dict[str, Any]:
+    out: dict[str, Any] = {"ok_zip": False, "n_slides": 0, "titles": []}
+    if blob[:2] != b"PK":
+        return out
+    out["ok_zip"] = True
+    with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+        slides = sorted(
+            n
+            for n in zf.namelist()
+            if n.startswith("ppt/slides/slide") and n.endswith(".xml")
+        )
+        out["n_slides"] = len(slides)
+        titles: list[str] = []
+        a_ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+        for name in slides[:8]:
+            root = ET.fromstring(zf.read(name))
+            texts = [t.text or "" for t in root.findall(".//a:t", a_ns)]
+            joined = "".join(texts).strip()
+            if joined:
+                titles.append(joined[:80])
+        out["titles"] = titles
+    return out
+
+
+def _t3_pass(row: dict[str, Any]) -> bool:
+    if row.get("status") != "succeeded":
+        return False
+    html = next(
+        (
+            f
+            for f in row.get("files") or []
+            if (f.get("kind") == "html")
+            or str(f.get("title") or "").lower().endswith((".html", ".htm"))
+        ),
+        None,
+    )
+    pptx = next(
+        (
+            f
+            for f in row.get("files") or []
+            if (f.get("kind") == "pptx") or str(f.get("title") or "").lower().endswith(".pptx")
+        ),
+        None,
+    )
+    if not isinstance(html, dict) or not isinstance(pptx, dict):
+        return False
+    h = html.get("html") if isinstance(html.get("html"), dict) else {}
+    p = pptx.get("pptx") if isinstance(pptx.get("pptx"), dict) else {}
+    html_ok = bool(h.get("looks_html")) and not bool(h.get("remote")) and int(h.get("n") or 0) >= 32
+    pptx_ok = bool(p.get("ok_zip")) and int(p.get("n_slides") or 0) >= 3 and len(p.get("titles") or []) >= 1
+    return html_ok and pptx_ok
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="http://127.0.0.1:18775")
     parser.add_argument("--out", default="/tmp/workenv-poc/pico-api-t12.json")
     parser.add_argument("--wall", type=float, default=240)
-    parser.add_argument("--suite", choices=("t1", "t2", "all"), default="all")
+    parser.add_argument("--suite", choices=("t1", "t2", "t3", "all"), default="all")
     args = parser.parse_args()
     base = args.base.rstrip("/")
     code, health, _ = _req("GET", base + "/health", None)
@@ -275,13 +356,17 @@ def main() -> int:
     t1r1: dict[str, Any] | None = None
     t1r2: dict[str, Any] | None = None
     t2: dict[str, Any] | None = None
+    t3: dict[str, Any] | None = None
     if args.suite in {"t1", "all"}:
         t1r1 = _run_one(base, token, title="t1-r1", prompt=T1_R1, convo=CONVO_T1, wall=args.wall)
         t1r2 = _run_one(base, token, title="t1-r2", prompt=T1_R2, convo=CONVO_T1, wall=args.wall)
     if args.suite in {"t2", "all"}:
         t2 = _run_one(base, token, title="t2", prompt=T2, convo=CONVO_T2, wall=args.wall)
+    if args.suite in {"t3", "all"}:
+        t3 = _run_one(base, token, title="t3-files", prompt=T3, convo=CONVO_T3, wall=args.wall)
     t1_ok = _t1_pass(t1r1, t1r2) if t1r1 is not None and t1r2 is not None else None
     t2_ok = _t2_pass(t2) if t2 is not None else None
+    t3_ok = _t3_pass(t3) if t3 is not None else None
     report = {
         "health_workenv": health.get("workenv_mode"),
         "health_sha": health.get("git_sha"),
@@ -289,8 +374,10 @@ def main() -> int:
         "t1r1": t1r1,
         "t1r2": t1r2,
         "t2": t2,
+        "t3": t3,
         "t1_pass": t1_ok,
         "t2_pass": t2_ok,
+        "t3_pass": t3_ok,
     }
     Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     summary: dict[str, Any] = {"suite": args.suite, "workenv": health.get("workenv_mode")}
@@ -301,12 +388,17 @@ def main() -> int:
     if t2 is not None:
         summary["t2"] = {"status": t2.get("status"), "n": t2.get("n_artifacts"), "s": t2.get("seconds")}
         summary["t2_pass"] = t2_ok
+    if t3 is not None:
+        summary["t3"] = {"status": t3.get("status"), "n": t3.get("n_artifacts"), "s": t3.get("seconds")}
+        summary["t3_pass"] = t3_ok
     print(json.dumps(summary, ensure_ascii=False))
     if args.suite == "t1":
         return 0 if t1_ok else 1
     if args.suite == "t2":
         return 0 if t2_ok else 1
-    return 0 if t1_ok and t2_ok else 1
+    if args.suite == "t3":
+        return 0 if t3_ok else 1
+    return 0 if t1_ok and t2_ok and t3_ok else 1
 
 
 if __name__ == "__main__":
