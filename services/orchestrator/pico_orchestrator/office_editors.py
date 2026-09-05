@@ -10,12 +10,18 @@ from pico_orchestrator.office.edit import (
     edit_pptx_title_bytes,
     edit_xlsx_cell_bytes,
 )
-from pico_orchestrator.office.fill import fill_office_bytes
+from pico_orchestrator.office.fill import (
+    FillReceipt,
+    fill_office_bytes,
+    fill_office_with_receipt,
+)
 
 __all__ = [
+    "FillReceipt",
     "comment_docx_bytes",
     "edit_docx_bytes",
     "edit_pptx_title_bytes",
     "edit_xlsx_cell_bytes",
     "fill_office_bytes",
+    "fill_office_with_receipt",
 ]

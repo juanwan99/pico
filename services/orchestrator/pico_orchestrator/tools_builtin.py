@@ -67,7 +67,7 @@ from pico_orchestrator.office_editors import (
     edit_docx_bytes,
     edit_pptx_title_bytes,
     edit_xlsx_cell_bytes,
-    fill_office_bytes,
+    fill_office_with_receipt,
 )
 from pico_orchestrator.sandbox_persist import read_owner_disk_file
 from pico_orchestrator.sandbox_s1 import (
@@ -201,6 +201,22 @@ def _marker_arg(args: dict[str, Any]) -> str:
     if len(value) > _MAX_MARKER:
         raise ToolError("tool.invalid_arguments", f"marker exceeds {_MAX_MARKER} characters")
     return value
+
+
+def _attach_fill_receipt(
+    result: dict[str, Any],
+    receipt: Any | None,
+    leftover: list[str] | None = None,
+) -> None:
+    """Mark filled only when at least one {{key}} actually hit."""
+    if receipt is None:
+        return
+    keys = list(getattr(receipt, "filled_keys", ()) or ())
+    result["filled"] = bool(keys)
+    result["filled_keys"] = keys
+    if leftover is None:
+        leftover = list(getattr(receipt, "leftover", ()) or ())
+    result["leftover"] = leftover
 
 
 def _attach_write_observation(
@@ -1231,18 +1247,20 @@ def _workspace_handlers(
         if (text or comment) and index is None:
             raise ToolError("tool.invalid_arguments", "请指定 paragraph_index（从 1 起）。")
 
-        def _apply() -> bytes:
+        def _apply() -> tuple[bytes, Any | None]:
             edited = raw
+            receipt = None
             if values is not None:
-                edited = fill_office_bytes(edited, ".docx", values)
+                receipt = fill_office_with_receipt(edited, ".docx", values)
+                edited = receipt.data
             if comment:
                 edited = comment_docx_bytes(edited, paragraph_index=index or 1, text=comment)
             if text:
                 edited = edit_docx_bytes(edited, paragraph_index=index or 1, text=text)
-            return edited
+            return edited, receipt
 
         try:
-            edited = await _run_bounded(
+            edited, fill_receipt = await _run_bounded(
                 asyncio.to_thread(_apply),
                 seconds=_EDIT_TIMEOUT_S,
                 code="office.timeout",
@@ -1266,8 +1284,8 @@ def _workspace_handlers(
         result["source_artifact_id"] = row.get("artifact_id")
         if comment:
             result["commented"] = True
-        if values is not None:
-            result["filled"] = True
+        leftover = list(inspect_office_bytes(edited, ".docx").get("placeholders") or [])
+        _attach_fill_receipt(result, fill_receipt, leftover=leftover)
         return _attach_write_observation(result, kind="docx", title=out_title, raw=edited)
 
     async def edit_pptx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1281,25 +1299,27 @@ def _workspace_handlers(
                 "请指定 new_title（改页标题）或 values（套 {{key}}）。",
             )
 
-        def _apply() -> bytes:
+        def _apply() -> tuple[bytes, Any | None]:
             edited = raw
+            receipt = None
             if values is not None:
-                edited = fill_office_bytes(edited, ".pptx", values)
+                receipt = fill_office_with_receipt(edited, ".pptx", values)
+                edited = receipt.data
             if new_title:
                 edited = edit_pptx_title_bytes(
                     edited, slide_index=index, new_title=new_title
                 )
-            return edited
+            return edited, receipt
 
         try:
-            edited = await _run_bounded(
+            edited, fill_receipt = await _run_bounded(
                 asyncio.to_thread(_apply),
                 seconds=_EDIT_TIMEOUT_S,
                 code="office.timeout",
                 message="改文档超时（20 秒）。请换更小的文件或稍后再试。",
             )
-        except ValueError as exc:
-            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        except ValueError as extra:
+            raise ToolError("tool.invalid_arguments", str(extra)) from extra
         out_title = _ensure_extension(
             str(args.get("output_title") or row.get("title") or "已改.pptx"),
             ".pptx",
@@ -1314,8 +1334,8 @@ def _workspace_handlers(
         result["edited"] = True
         result["slide_index"] = index
         result["source_artifact_id"] = row.get("artifact_id")
-        if values is not None:
-            result["filled"] = True
+        leftover = list(inspect_office_bytes(edited, ".pptx").get("placeholders") or [])
+        _attach_fill_receipt(result, fill_receipt, leftover=leftover)
         return _attach_write_observation(result, kind="pptx", title=out_title, raw=edited)
 
     async def edit_xlsx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1330,10 +1350,12 @@ def _workspace_handlers(
                 "请指定 cell（如 D2）和 value，或 values（套 {{key}}）。",
             )
 
-        def _apply() -> bytes:
+        def _apply() -> tuple[bytes, Any | None]:
             edited = raw
+            receipt = None
             if values is not None:
-                edited = fill_office_bytes(edited, ".xlsx", values)
+                receipt = fill_office_with_receipt(edited, ".xlsx", values)
+                edited = receipt.data
             if cell:
                 if value is None:
                     raise ValueError("改格需要 value。")
@@ -1343,17 +1365,17 @@ def _workspace_handlers(
                     value=str(value),
                     sheet=sheet if isinstance(sheet, (str, int)) or sheet is None else str(sheet),
                 )
-            return edited
+            return edited, receipt
 
         try:
-            edited = await _run_bounded(
+            edited, fill_receipt = await _run_bounded(
                 asyncio.to_thread(_apply),
                 seconds=_EDIT_TIMEOUT_S,
                 code="office.timeout",
                 message="改文档超时（20 秒）。请换更小的文件或稍后再试。",
             )
-        except ValueError as exc:
-            raise ToolError("tool.invalid_arguments", str(exc)) from exc
+        except ValueError as extra:
+            raise ToolError("tool.invalid_arguments", str(extra)) from extra
         out_title = _ensure_extension(
             str(args.get("output_title") or row.get("title") or "已改.xlsx"),
             ".xlsx",
@@ -1368,8 +1390,8 @@ def _workspace_handlers(
         result["edited"] = True
         result["cell"] = cell or None
         result["source_artifact_id"] = row.get("artifact_id")
-        if values is not None:
-            result["filled"] = True
+        leftover = list(inspect_office_bytes(edited, ".xlsx").get("placeholders") or [])
+        _attach_fill_receipt(result, fill_receipt, leftover=leftover)
         return _attach_write_observation(result, kind="xlsx", title=out_title, raw=edited)
 
     async def generate_image(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
