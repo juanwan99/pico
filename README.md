@@ -20,7 +20,7 @@
 
 ```text
 最高：禁止自搞一套体系。禁止做重体系。
-目标：Web 上 WorkBuddy 程度（六条）· 用法 = Grok · 能力并列 · 工作环境交成熟上游
+目标：Web 上 WorkBuddy 程度（六条）· 用法 = Grok · 能力并列 · 工作环境交成熟上游（阶段方案 docs/PLAN-WORKENV-UPSTREAM.md）
 方案：回 Pico 整车 + 默认编排核 Pi + DeepSeek
 不做：自研第二套能力核、Dify 门脸终局、场景考卷当对标、双核并列真源
 ```

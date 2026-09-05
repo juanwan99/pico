@@ -27,6 +27,7 @@ NOW: GitHub 执行卡（最多 1）· docs/STATE-NOW.md 是索引
 | **NOW** | **[STATE-NOW.md](./STATE-NOW.md)** | **开窗索引三行**（对不上以 GitHub + tip 为准） |
 | **NOW** | **[#634](https://github.com/juanwan99/pico/issues/634)** | **冻结令** · 可钉现况三行评论 |
 | 0 | **[DIRECTION-NOW.md](./DIRECTION-NOW.md)** | 北极星 §0-star v1.3 · 用法 = Grok · 能力并列 · 工作环境交成熟上游 |
+| — | **[PLAN-WORKENV-UPSTREAM.md](./PLAN-WORKENV-UPSTREAM.md)** | 阶段方案：工作环境交成熟上游 · Pico 薄适配 · 验收看减法 |
 | 0 | **[LAW-NO-SELF-BUILD-THIN-ADAPTER.md](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)** | 禁止自研 |
 | 0 | **[ADR-CAPABILITY-LOADING.md](./ADR-CAPABILITY-LOADING.md)** | 能力加载纪律（少常驻 · Skill 渐进披露 · 禁自研选工具核）· 不当在飞 |
 | 0 | **[EXPERIENCE.md](./EXPERIENCE.md)** | 经验唯一 · 按域 · 派发点名 ≤3 |

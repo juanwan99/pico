@@ -49,6 +49,13 @@ def test_truth_freeze_has_s0_and_w0() -> None:
     assert "唯一真源" in text
 
 
+def test_workenv_stage_plan_exists() -> None:
+    text = (ROOT / "docs" / "PLAN-WORKENV-UPSTREAM.md").read_text(encoding="utf-8")
+    assert "成熟上游" in text
+    assert "B1" in text
+    assert "PICO_WORKENV" in text
+
+
 def test_state_now_is_index_not_second_ledger() -> None:
     text = (ROOT / "docs" / "STATE-NOW.md").read_text(encoding="utf-8")
     assert "在飞: 无" in text
