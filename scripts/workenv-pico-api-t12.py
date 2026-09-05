@@ -394,11 +394,22 @@ def main() -> int:
     parser.add_argument("--out", default="/tmp/workenv-poc/pico-api-t12.json")
     parser.add_argument("--wall", type=float, default=240)
     parser.add_argument("--suite", choices=("t1", "t2", "t3", "all"), default="all")
+    parser.add_argument("--expect-sha", default="")
+    parser.add_argument("--expect-mode", default="", help="pi or exec; empty = either")
     args = parser.parse_args()
     base = args.base.rstrip("/")
     code, health, _ = _req("GET", base + "/health", None)
     if code != 200 or health.get("workenv_mode") not in {"pi", "exec"}:
         print(json.dumps({"error": "health", "code": code, "body": health}, ensure_ascii=False))
+        return 2
+    expect = (args.expect_sha or "").strip()
+    got_sha = str(health.get("git_sha") or "")
+    if expect and not got_sha.startswith(expect):
+        print(json.dumps({"error": "sha", "expect": expect, "got": got_sha}, ensure_ascii=False))
+        return 2
+    expect_mode = (args.expect_mode or "").strip()
+    if expect_mode and health.get("workenv_mode") != expect_mode:
+        print(json.dumps({"error": "mode", "expect": expect_mode, "got": health.get("workenv_mode")}, ensure_ascii=False))
         return 2
     token = _token(base)
     t1r1: dict[str, Any] | None = None
@@ -428,7 +439,11 @@ def main() -> int:
         "t3_pass": t3_ok,
     }
     Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    summary: dict[str, Any] = {"suite": args.suite, "workenv": health.get("workenv_mode")}
+    summary: dict[str, Any] = {
+        "suite": args.suite,
+        "workenv": health.get("workenv_mode"),
+        "sha": health.get("git_sha"),
+    }
     if t1r1 is not None:
         summary["t1r1"] = {"status": t1r1.get("status"), "n": t1r1.get("n_artifacts"), "s": t1r1.get("seconds")}
         summary["t1r2"] = {"status": (t1r2 or {}).get("status"), "n": (t1r2 or {}).get("n_artifacts"), "s": (t1r2 or {}).get("seconds")}
