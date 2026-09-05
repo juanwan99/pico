@@ -4,6 +4,7 @@
 DOC: Pico stage plan · mature upstream takes the work environment
 STATUS: BINDING stage plan · 2026-09-05 · PR-0 (#920) already live; this file is PR-1
 CORRECTED: 2026-09-05 · Codex review of exp SHA eefa8879 — A对照、隔离三层、失败语义；撤回「读容器 /etc = B1 路线失败」
+OWNER-LOCK: 2026-09-06 · 发布不是默认能力；发布需要确认走审批。H3 / PR-4 取消。不把 publish 挪进 CORE。不自研审批核。
 DATE: 2026-09-05
 AUTHOR: Grok (本窗)
 REPO: juanwan99/pico ONLY
@@ -111,7 +112,7 @@ Codex 后来同意主线：成熟上游接走职责 → 验证能否减少 Pico 
 | M5 | 能停：进程停、产物归属清楚、终态可解释 | 单闸 cancelling → abort → SIGTERM → 拒 Artifact → destroy |
 | M6 | 租户 fail-closed | `isolation_key = school_id + membership_id + run_id`；跨账号 404 |
 | M7 | 搜索/问答若是产品能力，默认可见；Skill 不得阉割 | CORE 已含 `web_search`/`web_fetch`/`ask_user`；Skill 只能 ⊆ |
-| M8 | 发布若是产品能力，默认可达 | `publish_html_page` 不得藏到必须先挂 Skill |
+| M8 | **否。** 发布不是默认能力；发布需要确认走审批 | 业主 2026-09-06。`publish_html_page`/`unpublish_html_page` **留 EXTENDED**。默认调发布 → `not_allowlisted` 为预期。H3 / PR-4 **取消**。现网一调用即 `status=live` 公网 URL，**没有**确认闸；本阶段 **不**自研审批核 / 工作流引擎。审批未接线前，不得把发布放进 CORE 让模型直接公网发布 |
 
 ### 本阶段诚实不做（acceptable limits）
 
@@ -719,7 +720,7 @@ B1 箱内 **去掉** `--no-builtin-tools`。A：宿主 Pi **保留** `--no-built
 | `kb_search` | CORE | Pico-latch → 18769 | CORE |
 | `ask_user` | CORE | Pico-latch → 18769 | CORE |
 | `sandbox_browser_open`/`sandbox_document_open` | CORE | Pico-latch（仍打 **生产** 18767 S2，不经 workenv overlay） | CORE |
-| `publish_html_page`/`unpublish_html_page` | EXTENDED | Pico-latch → 18769。T3-publish **观察项**（H3 未合则默认仍 not_allowlisted） | EXTENDED |
+| `publish_html_page`/`unpublish_html_page` | EXTENDED | Pico-latch → 18769。T3-publish **观察项**（业主锁：发布不是默认能力；默认仍 `not_allowlisted`） | EXTENDED |
 | `verify_*`/`render_document`/`edit_*_document` | EXTENDED | **retired 实验** | EXTENDED |
 | `sandbox_workspace_exec` | EXTENDED · `executed=false` | **retired 实验** | EXTENDED |
 | `sandbox_preview_inspect`/`sandbox_browser_screenshot` | EXTENDED | Pico-latch / 观察 | EXTENDED |
@@ -810,7 +811,7 @@ Stop
 **T3 拆分**
 
 - **T3-files（阻塞 Pass）：** 一轮要 `page.html`（断网可开，无 CDN）+ `slides.pptx`（≥3 页，标题可见）。打开字节，不信 `ok`。
-- **T3-publish（观察，默认不阻塞）：** 不挂 Skill 调 `publish_html_page`。H3 未合 → 预期 `not_allowlisted`，记观察，**不**判 B1 Fail。H3 已合 → 发布链可打开。挂 `skill-deliverable` 时 `web_search` 仍应在可见面（H2）；未合则记观察。
+- **T3-publish（观察，默认不阻塞）：** 不挂 Skill 调 `publish_html_page`。业主锁发布不是默认能力 → 预期 `not_allowlisted`，记观察，**不**判 B1 Fail。**不会**因 H3 把发布链打开。挂 `skill-deliverable` 时 `web_search` 仍应在可见面（H2）。发布需要确认走审批；审批闸未接线，禁止本阶段把 publish 放进 CORE。
 
 **T4 — 取消 / destroy**
 
@@ -862,7 +863,7 @@ Stop
 | `sandbox_workspace_exec` | `sandbox_s1.light_exec_source` | 随 L |
 | `sandbox_pptx_lib` 宿主 runner | `office/sandbox_lib.py` | 随 L |
 | Skill 裁剪 search/ask | `skill-deliverable` **与** `skill-engineering-delivery` | H2；不阻塞 B1 Pass |
-| publish 藏 EXTENDED | `capability_loading.py` | H3 / T3-publish 观察 |
+| publish 藏 EXTENDED | `capability_loading.py` | **已锁：保持 EXTENDED。** T3-publish 只观察。H3 取消 |
 
 ---
 
@@ -874,7 +875,7 @@ Stop
 |----|------|----------|----------|
 | H1 | `edit_xlsx`/`edit_docx`/`edit_pptx`：有 `values` 就 `filled=true`，即使 `fill.py` 零命中 | 回执带 `filled_keys` / `leftover`；零命中不得 `filled=true`。`office/inspect.py` 已有 `leftover_placeholders` | 不新增 batch cell API |
 | H2 | `skill-deliverable` **与** `skill-engineering-delivery` 去掉 `web_search`/`web_fetch`/`ask_user` | 两份 `requested_tools` 不得砍 CORE 已承诺能力 | 不新开 Skill 商店 |
-| H3 | 默认 `publish_html_page` → `not_allowlisted` | 若产品承诺「可发布」，将 `publish_html_page`/`unpublish_html_page` 移入 CORE，或默认可见 | 不把发布做成监工自动挂 Skill |
+| H3 | 默认 `publish_html_page` → `not_allowlisted` | **取消。** 业主 2026-09-06：发布不是默认能力；发布需要确认走审批。保持 EXTENDED。不把 publish 挪进 CORE | 不自研审批核 / 工作流引擎；不把发布做成监工自动挂 Skill |
 | H4 | `sandbox_workspace_exec` 恒 `executed=false` | 回执人话写清「只解析未执行」；或对模型隐藏该动词直到箱内真执行 | 不在 pico-api 里做成真 host exec |
 
 H1–H4 各应能独立成 PR、独立回滚。它们修的是假绿与裁剪，不代替 B/A。
@@ -1040,7 +1041,7 @@ PR-0 #920 合 + prod-update + curl tip SHA 在 origin/main
   → PR-7a flag=exec 工作目录 overlay，Pi 仍宿主（A 形，可回滚）
   → PR-7b flag=pi 箱内 Pi（B1）
   → 公网 canary 看见减法 → PR-8 按 L 退役
-H2/H3/H4 不得排在学习（PR-6）前面。H3 需业主认「发布是默认能力」。
+H2/H4 不得排在学习（PR-6）前面。H3 **取消**（业主锁：发布不是默认能力；发布需要确认走审批）。
 ```
 
 | `PICO_WORKENV` | 默认 | 含义 |
@@ -1062,7 +1063,7 @@ H2/H3/H4 不得排在学习（PR-6）前面。H3 需业主认「发布是默认�
 | Q1 | **O1a** | 本机/独立 compose 跑 B/A；禁止生产；结果只写 #919。未跑完不得 spawn 生产箱内 Pi |
 | Q2 | **O2a** | 先量 B1 RSS/墙钟。不够记 Fail 再评估厂商，不签 PO |
 | Q3 | **O3a** | Pass 后 `generate_*` 留别名至少一个版本；SYSTEM 不再写成唯一做法；有退役日期 |
-| Q4 | **O4a** | 实验前最多合 H1。H2/H3/H4 等 PR-6。H3 仍需业主认「发布是默认能力」 |
+| Q4 | **O4a + 业主 2026-09-06** | 实验前最多合 H1。H2/H4 等 PR-6。**H3 取消**：发布不是默认能力；发布需要确认走审批 |
 | Q5 | **O5a** | #920 合完且 tip=main 后单独 docs PR → `docs/PLAN-WORKENV-UPSTREAM.md` |
 
 ### Q1. 实验授权范围？ **锁 O1a**
@@ -1087,7 +1088,7 @@ H2/H3/H4 不得排在学习（PR-6）前面。H3 需业主认「发布是默认�
 
 ### Q4. 卫生何时合？（工程师已收窄） **锁 O4a**
 
-- **O4a（已选）：** 实验前最多合 **H1**。H2/H3/H4 等 PR-6 结论。H3 仍需业主认「发布是默认能力」。
+- **O4a（已选）：** 实验前最多合 **H1**。H2/H4 等 PR-6 结论。**H3 取消**（业主 2026-09-06：发布不是默认能力；发布需要确认走审批。保持 EXTENDED。不自研审批核）。
 - O4b：全部等 B1/A 结论。
 - O4c：四条都先合（否决：挡住学习）。
 
@@ -1129,7 +1130,8 @@ H2/H3/H4 不得排在学习（PR-6）前面。H3 需业主认「发布是默认�
 | D6 | 宿主 `--no-builtin-tools` 永在；B1 箱内去掉；jail=挂载+cap_drop ALL+pico-workenv scoped INPUT/FORWARD，箱不跑 iptables | 不对宿主机开放 bash；禁整机 FORWARD policy drop |
 | D7 | Pass = 藏 L 后 T1 **与** T2 **与** T3-files **与** T4，且安全/生命周期够用；墙钟只记录 | 减法可评分；判定器须核夹具内容 |
 | D8 | 诚实上限：无中途 resume、无代登、无设计师 PPT | 已有调研 |
-| D9 | 实验前最多 H1；H2/H3/H4 不挡 PR-6，也 **不代替** PR-6 纠偏 | 学习优先；卫生不是主线 |
+| D9 | 实验前最多 H1；H2/H4 不挡 PR-6，也 **不代替** PR-6 纠偏。**H3 取消** | 学习优先；卫生不是主线；发布不是默认能力 |
+| D19 | 发布不是默认能力；发布需要确认走审批。`publish_*` 留 EXTENDED。本阶段不把 publish 进 CORE，不自研审批核 | 业主 2026-09-06 书面。现网 `publish_html_page` 无确认闸（一调即 live URL）；审批是产品门闩，未接线前不得默认公网发布 |
 | D10 | 旗 `off\|exec\|pi`；PR-7a 然后 7b；回滚 `off` | 粗布尔无法切对照 |
 | D11 | 不换 Pi/LibreChat；不写 edu；无关卡关键字 | HARD SCOPE |
 | D12 | 读 overlay `/etc` ≠ 宿主机逃逸；A 必须有远端计算机；`collected_n>0` 不得抹掉 provider_error；自写 WS/进程回收不得当生产默认 | Codex 2026-09-05 对 exp `eefa8879`：能力证据保留，路线未失败，实现未达安全/生命周期 |
@@ -1199,11 +1201,12 @@ H2/H3/H4 不得排在学习（PR-6）前面。H3 需业主认「发布是默认�
 - **影响：** `skill_policy.py` 的 `skill-deliverable` **与** `skill-engineering-delivery`
 - **依赖：** PR-6 评论已写（或业主仍要先做卫生）。不得排在 PR-6 前
 
-### PR-4 · H3（实验后 + 业主认发布是默认）
+### PR-4 · H3（**取消**）
 
-- **标题：** `fix: publish_html_page visible without hanging skill`
-- **影响：** `capability_loading.py`
-- **依赖：** Q4 / 业主。T3-publish 在此之前只观察
+- **标题：** 不开。原拟 `fix: publish_html_page visible without hanging skill`
+- **影响：** 无。`publish_html_page`/`unpublish_html_page` **保持 EXTENDED**
+- **依赖：** 业主 2026-09-06：发布不是默认能力；发布需要确认走审批
+- **说明：** T3-publish 永久观察、不阻塞 B1。禁止把发布挪进 CORE。禁止本阶段自研审批工作流；确认/审批未接线前，默认调发布仍 `not_allowlisted` 为正确行为
 
 ### PR-5 · H4（实验后）
 
@@ -1253,7 +1256,7 @@ flowchart TD
   EXP -->|仅实现门闩不够| FIX[减薄/修合同 不算路线失败]
   P7a --> P7b[PR-7b flag=pi]
   P7b --> P8[PR-8 一类一退役]
-  P7b --> H2[可选 H2/H3/H4]
+  P7b --> H2[可选 H2/H4；H3 取消]
 ```
 
 任一节点：其它 PR 必须已合或关闭。实验枝不合 main。无 Pass 则无 7a/7b/8。
