@@ -796,6 +796,61 @@ async def test_overlay_collects_files_but_provider_error_fails_run(
 
 
 @pytest.mark.asyncio
+async def test_exec_mode_uses_run_token_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator.true_pi.client import FakeTransport
+    from pico_orchestrator.true_pi.runtime import run_true_pi_agent
+
+    token = tmp_path / "run.token"
+    token.write_text("tok-isolated\n", encoding="utf-8")
+    monkeypatch.setenv("PICO_WORKENV", "exec")
+    monkeypatch.setenv("PICO_RUN_TOKEN_FILE", str(token))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("PICO_RUN_TOKEN", raising=False)
+    monkeypatch.delenv("PICO_WORKENV_FIXTURE_DIR", raising=False)
+
+    async def fake_post(path: str, payload: dict, timeout: float = 30.0) -> dict:
+        del path, payload, timeout
+        return {"ok": True, "destroyed": True, "files": []}
+
+    monkeypatch.setattr("pico_orchestrator.true_pi.workenv_http.workenv_post", fake_post)
+
+    class CaptureTransport(FakeTransport):
+        last_env: dict[str, str] = {}
+
+        def __init__(self, **kwargs: Any) -> None:
+            CaptureTransport.last_env = dict(kwargs.get("env") or {})
+            super().__init__(
+                scripted=[
+                    {"type": "agent_start"},
+                    {"type": "turn_start"},
+                    {"type": "agent_end", "willRetry": False},
+                ],
+                assistant_text="ok",
+            )
+
+    monkeypatch.setattr("pico_orchestrator.true_pi.runtime.SubprocessTransport", CaptureTransport)
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        del kind, payload
+
+    result = await run_true_pi_agent(
+        prompt="hi",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=8),
+        transport=None,
+        artifact_store=MemoryArtifactStore(),
+        run_id="exec-token",
+        conversation_id="c-exec",
+    )
+    assert result.status == "succeeded"
+    assert CaptureTransport.last_env.get("OPENAI_API_KEY") == "tok-isolated"
+
+
+@pytest.mark.asyncio
 async def test_remote_html_collect_fails_run(monkeypatch: pytest.MonkeyPatch) -> None:
     import base64
 
