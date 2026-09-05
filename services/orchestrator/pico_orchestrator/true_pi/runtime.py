@@ -65,26 +65,33 @@ def advertised_tool_url(bound_url: str, public_url: str) -> str:
     18769 is the model proxy. A mismatched port is not this run's listener.
     Overlay DNAT still has to exist; this only fail-closes the advertisement.
     """
+
+    def _port(parsed: Any) -> int:
+        try:
+            if parsed.port is not None:
+                return int(parsed.port)
+        except ValueError as exc:
+            raise TruePiClientError("tool_url.invalid") from exc
+        if parsed.scheme == "https":
+            return 443
+        if parsed.scheme == "http":
+            return 80
+        raise TruePiClientError("tool_url.invalid")
+
     bound = urlparse((bound_url or "").strip())
-    try:
-        bound_port = bound.port if bound.port is not None else 80
-    except ValueError as exc:
-        raise TruePiClientError("tool_url.invalid") from exc
-    if bound.scheme not in {"http", "https"} or not bound.hostname or int(bound_port) == 18769:
+    bound_port = _port(bound)
+    if bound.scheme not in {"http", "https"} or not bound.hostname or bound_port == 18769:
         raise TruePiClientError("tool_url.invalid: 18769 is the model proxy")
     advertised = (public_url or "").strip()
     if not advertised:
         return bound_url
     parsed = urlparse(advertised)
-    try:
-        public_port = parsed.port if parsed.port is not None else 80
-    except ValueError as exc:
-        raise TruePiClientError("tool_url.invalid") from exc
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise TruePiClientError("tool_url.invalid")
-    if int(public_port) == 18769:
+    public_port = _port(parsed)
+    if public_port == 18769:
         raise TruePiClientError("tool_url.invalid: 18769 is the model proxy")
-    if int(public_port) != int(bound_port):
+    if public_port != bound_port:
         raise TruePiClientError("tool_url.invalid: PUBLIC_URL port is not this run")
     return advertised
 

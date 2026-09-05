@@ -1014,6 +1014,8 @@ def test_advertised_tool_url_rejects_mismatched_port() -> None:
         advertised_tool_url(bound, "http://host-gateway:19999")
     with pytest.raises(TruePiClientError, match="18769"):
         advertised_tool_url("http://127.0.0.1:18769", "")
+    with pytest.raises(TruePiClientError, match="PUBLIC_URL port"):
+        advertised_tool_url("http://127.0.0.1:80", "https://host-gateway")
 
 
 def test_destroy_clears_conversation_key(tmp_path: Path) -> None:
