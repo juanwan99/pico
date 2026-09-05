@@ -224,6 +224,8 @@ async def run_true_pi_agent(
     async def _watcher() -> None:
         while not stop.is_set():
             if await is_cancelled():
+                if workenv_gate is not None:
+                    workenv_gate.begin_cancel()
                 return
             if loop.time() >= deadline:
                 timed_out.set()
@@ -682,6 +684,10 @@ async def run_true_pi_agent(
 
         writes = count_write_tool_successes(state.tool_results)
         collected_n = 0
+        if await is_cancelled() or (
+            workenv_gate is not None and not workenv_gate.collect_allowed()
+        ):
+            return await _cancel_run()
         if workenv_gate is not None and artifact_store is not None:
             collected_n = await _collect_workenv_into_store(
                 workspace_id=rid,

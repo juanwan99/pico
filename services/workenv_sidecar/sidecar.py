@@ -357,9 +357,12 @@ def collect_files(body: dict[str, Any]) -> dict[str, Any]:
         work = _work_dir(workspace_id)
     except ValueError:
         return {"ok": False, "error": "workspace_id.invalid", "status": 400}
-    globs = body.get("glob") or ["*.xlsx", "*.docx", "*.pptx", "*.html", "*.png"]
+    allowed_globs = {"*.xlsx", "*.docx", "*.pptx", "*.html", "*.png"}
+    globs = body.get("glob") or list(allowed_globs)
     files = []
     for pattern in globs:
+        if pattern not in allowed_globs:
+            continue
         for path in sorted(work.glob(pattern)):
             if path.is_symlink():
                 continue
@@ -388,7 +391,7 @@ def abort_run(body: dict[str, Any]) -> dict[str, Any]:
     ws: WebSocketConnection | None = rec.get("ws")
     line = json.dumps({"id": f"a-{int(time.time())}", "type": "abort"}, ensure_ascii=False) + "\n"
     wrote = False
-    if proc is not None and proc.stdin is not None and proc.poll() is None:
+    if rec.get("mode") != "workdir" and proc is not None and proc.stdin is not None and proc.poll() is None:
         with rec["stdin_lock"]:
             try:
                 proc.stdin.write(line.encode("utf-8"))
@@ -396,8 +399,9 @@ def abort_run(body: dict[str, Any]) -> dict[str, Any]:
                 wrote = True
             except Exception:  # noqa: BLE001
                 wrote = False
-    if not wrote and proc is not None:
-        _kill_pg(proc, grace=5.0)
+    if rec.get("mode") == "workdir" or not wrote:
+        if proc is not None:
+            _kill_pg(proc, grace=5.0)
     if ws is not None:
         try:
             send_text(ws, json.dumps({"type": "workenv.abort_ack", "wrote": wrote}))
@@ -490,20 +494,27 @@ def exec_work(body: dict[str, Any]) -> dict[str, Any]:
         "PYTHONDONTWRITEBYTECODE": "1",
     }
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             argv,
             cwd=str(work),
             env=env,
-            capture_output=True,
-            timeout=timeout,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
         )
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "error": "exec.timeout", "timeout": timeout}
     except OSError as exc:
         return {"ok": False, "error": "exec.spawn", "detail": str(exc)[:200]}
-    stdout = (proc.stdout or b"")[:8000].decode("utf-8", errors="replace")
-    stderr = (proc.stderr or b"")[:4000].decode("utf-8", errors="replace")
+    rec["proc"] = proc
+    try:
+        stdout_b, stderr_b = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_pg(proc, grace=2.0)
+        return {"ok": False, "error": "exec.timeout", "timeout": timeout, "executed": False}
+    finally:
+        if rec.get("proc") is proc:
+            rec["proc"] = None
+    stdout = (stdout_b or b"")[:8000].decode("utf-8", errors="replace")
+    stderr = (stderr_b or b"")[:4000].decode("utf-8", errors="replace")
     return {
         "ok": proc.returncode == 0,
         "executed": True,

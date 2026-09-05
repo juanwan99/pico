@@ -64,6 +64,8 @@ def test_workenv_exec_keeps_workspace_and_exec_hides_generate(
     from pico_orchestrator.capability_loading import resolve_visible_tools
 
     monkeypatch.setenv("PICO_WORKENV", "exec")
+    empty = resolve_visible_tools([])
+    assert empty == []
     names = resolve_visible_tools(None)
     assert "workspace_write_file" in names
     assert "workspace_read_file" in names
@@ -71,6 +73,18 @@ def test_workenv_exec_keeps_workspace_and_exec_hides_generate(
     assert "sandbox_workspace_exec" in names
     assert "generate_xlsx_document" not in names
     assert "sandbox_pptx_lib" not in names
+
+
+@pytest.mark.asyncio
+async def test_collect_rejects_remote_html() -> None:
+    gate = WorkenvCancelGate()
+    store = MemoryArtifactStore()
+    html = b"<!doctype html><script src='https://cdn.example/x.js'></script>"
+    with pytest.raises(WorkenvCollectRejected):
+        await gate.ingest_collect(
+            Principal(), store, [{"name": "page.html", "bytes": html}]
+        )
+    assert store.rows == []
 
 
 @pytest.mark.asyncio
@@ -577,6 +591,7 @@ async def test_exec_mode_write_list_read_hit_overlay(
         school_id="school-a",
         membership_id="member-a",
         run_id="run-exec",
+        conversation_id="convo-keep",
     )
     try:
         written = await gw.invoke(
@@ -603,6 +618,9 @@ async def test_exec_mode_write_list_read_hit_overlay(
     assert "/v1/internal/workenv/ls" in paths
     assert "/v1/internal/workenv/read" in paths
     assert "/v1/internal/workenv/exec" in paths
+    created = next(p for p in posted if p["path"].endswith("/create"))
+    assert created["payload"]["conversation_id"] == "convo-keep"
+    assert created["payload"]["workspace_id"] == "run-exec"
 
 
 @pytest.mark.asyncio

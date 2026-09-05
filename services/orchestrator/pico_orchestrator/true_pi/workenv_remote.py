@@ -39,12 +39,20 @@ async def ensure_overlay_run(
     principal: Principal,
     conversation_id: str | None = None,
 ) -> dict[str, Any]:
+    from pico_orchestrator.usage_hook import current_usage_bind
+
+    bind = current_usage_bind()
+    conv = (
+        conversation_id
+        or (bind.conversation_id if bind is not None else None)
+        or workspace_id
+    )
     return await workenv_post(
         "/v1/internal/workenv/create",
         {
             "run_id": workspace_id,
             "workspace_id": workspace_id,
-            "conversation_id": conversation_id or workspace_id,
+            "conversation_id": conv,
             "school_id": str(getattr(principal, "school_id", "") or ""),
             "membership_id": str(getattr(principal, "membership_id", "") or ""),
             "mode": "workdir",

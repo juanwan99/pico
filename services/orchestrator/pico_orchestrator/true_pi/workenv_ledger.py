@@ -110,6 +110,15 @@ class WorkenvCancelGate:
             ext = title_protected_extension(name)
             if ext in {".docx", ".pptx", ".xlsx"} and not is_valid_ooxml_package(blob, ext):
                 raise WorkenvCollectRejected(f"invalid ooxml {name}")
+            if ext in {".html", ".htm"}:
+                from pico_orchestrator.document_generators import (
+                    html_engine_violations,
+                    html_remote_violations,
+                )
+
+                text = blob.decode("utf-8", errors="replace")
+                if html_remote_violations(text) or html_engine_violations(text):
+                    raise WorkenvCollectRejected(f"html not offline {name}")
             if not self.collect_allowed():
                 raise WorkenvCollectRejected("collect-after-cancel discarded")
             kind = ext.lstrip(".") if ext else "file"

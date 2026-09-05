@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -246,8 +247,8 @@ def _t1_pass(r1: dict[str, Any], r2: dict[str, Any]) -> bool:
         return False
     d1 = str(x1.get("d2") or "")
     d2 = str(x2.get("d2") or "")
-    formula_ok = ("B2" in d1 and "C2" in d1 and ("0.6" in d1 or "60" in d1)) or d1.startswith("=")
-    formula2_ok = d2.startswith("=") or ("B2" in d2)
+    formula_ok = "B2" in d1 and "C2" in d1 and ("0.6" in d1 or "60" in d1) and ("0.4" in d1 or "40" in d1)
+    formula2_ok = "B2" in d2 and "C2" in d2 and ("0.6" in d2 or "60" in d2)
     title = " ".join(
         [
             str(x2.get("title") or ""),
@@ -260,15 +261,40 @@ def _t1_pass(r1: dict[str, Any], r2: dict[str, Any]) -> bool:
     return bool(formula_ok and formula2_ok and title_ok)
 
 
+def _group_count(text: str, label: str, n: int) -> bool:
+    token = str(n)
+    pats = (
+        rf"{label}\s*[：:]\s*{token}(?!\d)",
+        rf"{label}\s+{token}(?!\d)",
+        rf"{label}{token}(?!\d)",
+        rf"{token}\s*人?\s*{label}",
+    )
+    return any(re.search(pat, text) for pat in pats)
+
+
 def _t2_pass(row: dict[str, Any]) -> bool:
     if row.get("status") != "succeeded":
         return False
-    has_xlsx = any((f.get("kind") == "xlsx") or str(f.get("title") or "").endswith(".xlsx") for f in row.get("files") or [])
+    xlsx = next(
+        (f for f in row.get("files") or [] if (f.get("kind") == "xlsx") or str(f.get("title") or "").endswith(".xlsx")),
+        None,
+    )
     docx = next((f for f in row.get("files") or [] if (f.get("kind") == "docx") or str(f.get("title") or "").endswith(".docx")), None)
-    text = str((docx or {}).get("docx_text") or "")
-    # roster.csv: 红4 蓝3 绿3
-    counts_ok = ("红" in text and "4" in text) and ("蓝" in text and "3" in text) and ("绿" in text and "3" in text)
-    return has_xlsx and bool(docx) and counts_ok
+    if not isinstance(xlsx, dict) or not isinstance(docx, dict):
+        return False
+    text = str(docx.get("docx_text") or "")
+    xmeta = xlsx.get("xlsx") if isinstance(xlsx.get("xlsx"), dict) else {}
+    xtext = " ".join(
+        [
+            str(xmeta.get("title") or ""),
+            " ".join(xmeta.get("shared") or []),
+            " ".join(xmeta.get("sheets") or []),
+            " ".join(xmeta.get("inline") or []),
+        ]
+    )
+    counts_ok = _group_count(text, "红", 4) and _group_count(text, "蓝", 3) and _group_count(text, "绿", 3)
+    sheet_ok = ("红" in xtext and "蓝" in xtext and "绿" in xtext)
+    return counts_ok and sheet_ok
 
 
 def _html_offline(blob: bytes) -> dict[str, Any]:

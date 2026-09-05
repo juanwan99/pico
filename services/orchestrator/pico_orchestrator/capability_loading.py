@@ -159,11 +159,11 @@ def resolve_visible_tools(allowed_tools: list[str] | tuple[str, ...] | None) -> 
     """None = CORE always-on. Explicit list = that list ∩ gateway (skill may narrow)."""
     if allowed_tools is None:
         names = _intersect_gateway(CORE_VISIBLE_TOOLS)
+        if workenv_mode() == "exec" and "sandbox_workspace_exec" not in names:
+            if "sandbox_workspace_exec" in ALLOWED_GATEWAY_TOOLS:
+                names = list(names) + ["sandbox_workspace_exec"]
     else:
         names = _intersect_gateway(allowed_tools)
-    if workenv_mode() == "exec" and "sandbox_workspace_exec" not in names:
-        if "sandbox_workspace_exec" in ALLOWED_GATEWAY_TOOLS:
-            names = list(names) + ["sandbox_workspace_exec"]
     return hide_workenv_l(names)
 
 
