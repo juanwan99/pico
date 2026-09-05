@@ -1750,6 +1750,30 @@ def test_ensure_gateway_ext_rejects_symlink_and_world_writable(tmp_path: Path) -
         sidecar_mod._ensure_gateway_ext()
 
 
+def test_ensure_gateway_ext_rejects_ancestor_symlink(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    src = real_dir / "official.ts"
+    src.write_text("export default {};\n", encoding="utf-8")
+    dest = real_dir / "pico-gateway-tools.ts"
+    dest.write_bytes(src.read_bytes())
+    alias = tmp_path / "alias"
+    alias.symlink_to(real_dir)
+    sidecar_mod.GATEWAY_EXT_SRC = src
+    sidecar_mod.GATEWAY_EXT = alias / "pico-gateway-tools.ts"
+    with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
+        sidecar_mod._ensure_gateway_ext()
+    sidecar_mod.GATEWAY_EXT = dest
+    sidecar_mod.GATEWAY_EXT_SRC = alias / "official.ts"
+    with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
+        sidecar_mod._ensure_gateway_ext()
+    sidecar_mod.GATEWAY_EXT_SRC = src
+    sidecar_mod.GATEWAY_EXT = dest
+    assert sidecar_mod._ensure_gateway_ext() == dest
+
+
 def test_preexec_pdeathsig_sets_sigkill() -> None:
     import ctypes
     import signal
@@ -1787,3 +1811,5 @@ def test_preexec_pdeathsig_sets_sigkill() -> None:
     assert "fstat" in src_read
     assert "_read_nofollow_regular" in src_ensure
     assert "n != want" in src_read
+    assert "_reject_symlink_prefixes" in src_open
+    assert "S_ISLNK" in __import__("inspect").getsource(sidecar_mod._reject_symlink_prefixes)

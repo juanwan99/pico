@@ -358,10 +358,36 @@ def _gateway_oserror(exc: OSError) -> RuntimeError:
     return RuntimeError("gateway.ext.tampered")
 
 
+def _reject_symlink_prefixes(path: Path) -> None:
+    """lstat each prefix so an ancestor symlink cannot hide behind a final leaf."""
+    raw = os.path.normpath(str(path))
+    parts = Path(raw).parts
+    if not parts or parts[-1] in {"", ".", ".."}:
+        raise RuntimeError("gateway.ext.tampered")
+    acc = Path(parts[0])
+    rest = parts[1:]
+    prefixes = [acc] if acc != Path(".") else []
+    for part in rest:
+        if part in {"", ".", ".."}:
+            raise RuntimeError("gateway.ext.tampered")
+        acc = acc / part
+        prefixes.append(acc)
+    for prefix in prefixes:
+        try:
+            st = os.lstat(prefix)
+        except OSError as exc:
+            if prefix == Path(raw):
+                raise _gateway_oserror(exc) from exc
+            raise RuntimeError("gateway.ext.tampered") from exc
+        if stat.S_ISLNK(st.st_mode):
+            raise RuntimeError("gateway.ext.tampered")
+
+
 def _open_nofollow_file(path: Path) -> tuple[int, os.stat_result]:
     """Open leaf via parent dir_fd. O_NOFOLLOW on both. Same FD for fstat/read."""
     if not hasattr(os, "O_NOFOLLOW"):
         raise RuntimeError("gateway.ext.tampered")
+    _reject_symlink_prefixes(path)
     flags = os.O_RDONLY | os.O_NOFOLLOW
     dir_flags = os.O_RDONLY | os.O_NOFOLLOW
     if hasattr(os, "O_DIRECTORY"):
@@ -415,10 +441,10 @@ def _read_nofollow_regular(path: Path) -> tuple[bytes, os.stat_result, os.stat_r
 def _ensure_gateway_ext() -> Path:
     """Official Pico gateway extension. Same -e file as host spawn_command."""
     src, src_st, src_parent = _read_nofollow_regular(GATEWAY_EXT_SRC)
-    if src_st.st_mode & 0o002:
+    if src_st.st_mode & 0o002 or src_parent.st_mode & 0o002:
         raise RuntimeError("gateway.ext.tampered")
     current, st, parent_st = _read_nofollow_regular(GATEWAY_EXT)
-    if st.st_mode & 0o002:
+    if st.st_mode & 0o002 or parent_st.st_mode & 0o002:
         raise RuntimeError("gateway.ext.tampered")
     dest_resolved = Path(os.path.normpath(str(GATEWAY_EXT)))
     if str(dest_resolved) == "/bridge/pico-gateway-tools.ts":
