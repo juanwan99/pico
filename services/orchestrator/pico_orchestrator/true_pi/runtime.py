@@ -59,6 +59,36 @@ def _hitl_ask_timed_out(transport: Any) -> bool:
     )
 
 
+def advertised_tool_url(bound_url: str, public_url: str) -> str:
+    """PUBLIC_URL may rewrite host, never the bound ToolServer port.
+
+    18769 is the model proxy. A mismatched port is not this run's listener.
+    Overlay DNAT still has to exist; this only fail-closes the advertisement.
+    """
+    bound = urlparse((bound_url or "").strip())
+    try:
+        bound_port = bound.port if bound.port is not None else 80
+    except ValueError as exc:
+        raise TruePiClientError("tool_url.invalid") from exc
+    if bound.scheme not in {"http", "https"} or not bound.hostname or int(bound_port) == 18769:
+        raise TruePiClientError("tool_url.invalid: 18769 is the model proxy")
+    advertised = (public_url or "").strip()
+    if not advertised:
+        return bound_url
+    parsed = urlparse(advertised)
+    try:
+        public_port = parsed.port if parsed.port is not None else 80
+    except ValueError as exc:
+        raise TruePiClientError("tool_url.invalid") from exc
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise TruePiClientError("tool_url.invalid")
+    if int(public_port) == 18769:
+        raise TruePiClientError("tool_url.invalid: 18769 is the model proxy")
+    if int(public_port) != int(bound_port):
+        raise TruePiClientError("tool_url.invalid: PUBLIC_URL port is not this run")
+    return advertised
+
+
 def want_plan_mode_extension(*, plan_on: bool) -> bool:
     """Load vendor plan-mode only when this spawn's plan_on is true.
 
@@ -254,16 +284,10 @@ async def run_true_pi_agent(
                 port=tool_port,
             )
             tool_url = await tool_server.start()
-            public_url = (
-                os.environ.get("PICO_TRUE_PI_TOOL_PUBLIC_URL") or ""
-            ).strip() or tool_url
-            parsed = urlparse(public_url)
-            try:
-                port = parsed.port if parsed.port is not None else 80
-            except ValueError as exc:
-                raise TruePiClientError("tool_url.invalid") from exc
-            if parsed.scheme not in {"http", "https"} or not parsed.hostname or int(port) == 18769:
-                raise TruePiClientError("tool_url.invalid: 18769 is the model proxy")
+            public_url = advertised_tool_url(
+                tool_url,
+                os.environ.get("PICO_TRUE_PI_TOOL_PUBLIC_URL") or "",
+            )
             created = await workenv_post(
                 "/v1/internal/workenv/create",
                 {

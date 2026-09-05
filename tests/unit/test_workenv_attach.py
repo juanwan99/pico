@@ -649,6 +649,38 @@ def test_collect_skips_symlink(tmp_path: Path) -> None:
     assert "leaked.xlsx" not in names
 
 
+def test_collect_skips_when_workspace_is_symlink(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    work_root = tmp_path / "work"
+    work_root.mkdir()
+    sidecar_mod.WORK_ROOT = work_root
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
+    sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
+    sidecar_mod._state["owner_key"] = None
+    created = sidecar_mod.create_run(
+        {"workspace_id": "r1", "conversation_id": "c1", "mode": "workdir"}
+    )
+    assert created["ok"] is True
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "leaked.xlsx").write_bytes(b"PK\x03\x04HOST")
+    alias = work_root / "r1"
+    import shutil
+
+    shutil.rmtree(alias)
+    alias.symlink_to(outside)
+    with pytest.raises(ValueError, match="workspace_id.invalid"):
+        sidecar_mod._work_dir("r1")
+    out = sidecar_mod.collect_files({"workspace_id": "r1", "glob": ["*.xlsx"]})
+    assert out.get("ok") is False
+    assert "leaked.xlsx" not in [f["name"] for f in out.get("files") or []]
+
+
 def test_destroy_keeps_pgids_when_group_still_alive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import sidecar as sidecar_mod
 
@@ -967,6 +999,21 @@ async def test_pi_mode_create_passes_tool_server(
     assert "inspect_document" in vis
     assert "generate_xlsx_document" not in vis
     assert "workspace_write_file" not in vis
+
+
+def test_advertised_tool_url_rejects_mismatched_port() -> None:
+    from pico_orchestrator.true_pi.client import TruePiClientError
+    from pico_orchestrator.true_pi.runtime import advertised_tool_url
+
+    bound = "http://127.0.0.1:18764"
+    assert advertised_tool_url(bound, "") == bound
+    assert advertised_tool_url(bound, "http://host-gateway:18764") == "http://host-gateway:18764"
+    with pytest.raises(TruePiClientError, match="18769"):
+        advertised_tool_url(bound, "http://host-gateway:18769")
+    with pytest.raises(TruePiClientError, match="PUBLIC_URL port"):
+        advertised_tool_url(bound, "http://host-gateway:19999")
+    with pytest.raises(TruePiClientError, match="18769"):
+        advertised_tool_url("http://127.0.0.1:18769", "")
 
 
 def test_destroy_clears_conversation_key(tmp_path: Path) -> None:

@@ -153,16 +153,66 @@ def _work_dir(workspace_id: str) -> Path:
     return work
 
 
-def _read_regular_nofollow(path: Path, *, max_bytes: int = 8 * 1024 * 1024) -> bytes | None:
+def _open_under_root(root: Path, path: Path) -> int | None:
+    """Open path under root without following any symlink component."""
+    try:
+        root_res = root.resolve()
+        rel = path.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    if hasattr(os, "O_DIRECTORY"):
+        dir_flags = flags | os.O_DIRECTORY
+    else:
+        dir_flags = flags
+    try:
+        dir_fd = os.open(root_res, dir_flags)
+    except OSError:
+        return None
+    try:
+        parts = rel.parts
+        if not parts or parts == (".",):
+            os.close(dir_fd)
+            return None
+        for i, part in enumerate(parts):
+            if part in {"", ".", ".."}:
+                os.close(dir_fd)
+                return None
+            last = i == len(parts) - 1
+            open_flags = flags if last else dir_flags
+            if last and hasattr(os, "O_NONBLOCK"):
+                open_flags |= os.O_NONBLOCK
+            try:
+                next_fd = os.open(part, open_flags, dir_fd=dir_fd)
+            except OSError:
+                os.close(dir_fd)
+                return None
+            os.close(dir_fd)
+            dir_fd = next_fd
+        return dir_fd
+    except Exception:
+        os.close(dir_fd)
+        return None
+
+
+def _read_regular_nofollow(path: Path, *, root: Path | None = None, max_bytes: int = 8 * 1024 * 1024) -> bytes | None:
     """Read a regular file. Do not follow a symlink out of /work."""
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     if hasattr(os, "O_NONBLOCK"):
         flags |= os.O_NONBLOCK
-    try:
-        fd = os.open(path, flags)
-    except OSError:
+    fd: int | None
+    if root is not None:
+        fd = _open_under_root(root, path)
+    else:
+        try:
+            fd = os.open(path, flags)
+        except OSError:
+            fd = None
+    if fd is None:
         return None
     try:
         st = os.fstat(fd)
@@ -527,7 +577,7 @@ def collect_files(body: dict[str, Any]) -> dict[str, Any]:
                 continue
             if root_res not in resolved.parents:
                 continue
-            raw = _read_regular_nofollow(path)
+            raw = _read_regular_nofollow(path, root=Path(WORK_ROOT))
             if raw is None:
                 continue
             files.append(
@@ -613,7 +663,7 @@ def read_work_file(body: dict[str, Any]) -> dict[str, Any]:
     path = work / name
     if path.is_symlink():
         return {"ok": False, "error": "file.symlink", "status": 400}
-    raw = _read_regular_nofollow(path)
+    raw = _read_regular_nofollow(path, root=Path(WORK_ROOT))
     if raw is None:
         return {"ok": False, "error": "file.missing", "status": 404}
     return {
