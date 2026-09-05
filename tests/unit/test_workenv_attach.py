@@ -1776,7 +1776,12 @@ def test_preexec_pdeathsig_sets_sigkill() -> None:
     src_exec = __import__("inspect").getsource(sidecar_mod.exec_work)
     src_pi = __import__("inspect").getsource(sidecar_mod.spawn_pi)
     src_ensure = __import__("inspect").getsource(sidecar_mod._ensure_gateway_ext)
+    src_read = __import__("inspect").getsource(sidecar_mod._read_nofollow_regular)
+    src_open = __import__("inspect").getsource(sidecar_mod._open_nofollow_file)
     assert "preexec_fn=_preexec_pdeathsig" in src_exec
     assert "preexec_fn=_preexec_pdeathsig" in src_pi
     assert "write_bytes" not in src_ensure
     assert "mkdir" not in src_ensure
+    assert "O_NOFOLLOW" in src_open
+    assert "fstat" in src_read
+    assert "_read_nofollow_regular" in src_ensure

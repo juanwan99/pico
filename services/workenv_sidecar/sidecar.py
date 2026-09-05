@@ -8,6 +8,7 @@ Bind intent: container :18768 published as host 127.0.0.1:18768.
 from __future__ import annotations
 
 import base64
+import errno
 import hashlib
 import json
 import os
@@ -351,45 +352,79 @@ def _retarget_session_cwd(session: Path, work: Path) -> None:
     session.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _gateway_oserror(exc: OSError) -> RuntimeError:
+    if exc.errno in {errno.ENOENT, errno.ENOTDIR}:
+        return RuntimeError("gateway.ext.missing")
+    return RuntimeError("gateway.ext.tampered")
+
+
+def _open_nofollow_file(path: Path) -> tuple[int, os.stat_result]:
+    """Open leaf via parent dir_fd. O_NOFOLLOW on both. Same FD for fstat/read."""
+    flags = os.O_RDONLY
+    dir_flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+        dir_flags |= os.O_NOFOLLOW
+    if hasattr(os, "O_DIRECTORY"):
+        dir_flags |= os.O_DIRECTORY
+    try:
+        dir_fd = os.open(str(path.parent), dir_flags)
+    except OSError as exc:
+        raise _gateway_oserror(exc) from exc
+    try:
+        parent_st = os.fstat(dir_fd)
+        if not stat.S_ISDIR(parent_st.st_mode):
+            raise RuntimeError("gateway.ext.tampered")
+        fd = os.open(path.name, flags, dir_fd=dir_fd)
+    except OSError as exc:
+        raise _gateway_oserror(exc) from exc
+    finally:
+        os.close(dir_fd)
+    return fd, parent_st
+
+
+def _read_nofollow_regular(path: Path) -> tuple[bytes, os.stat_result, os.stat_result]:
+    fd, parent_st = _open_nofollow_file(path)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise RuntimeError("gateway.ext.tampered")
+        if int(st.st_size) > 2 * 1024 * 1024 or int(st.st_size) <= 0:
+            raise RuntimeError("gateway.ext.tampered")
+        chunks: list[bytes] = []
+        n = 0
+        while n <= int(st.st_size):
+            piece = os.read(fd, 65536)
+            if not piece:
+                break
+            n += len(piece)
+            if n > int(st.st_size) + 4096:
+                raise RuntimeError("gateway.ext.tampered")
+            chunks.append(piece)
+        return b"".join(chunks), st, parent_st
+    except OSError as exc:
+        raise _gateway_oserror(exc) from exc
+    finally:
+        os.close(fd)
+
+
 def _ensure_gateway_ext() -> Path:
     """Official Pico gateway extension. Same -e file as host spawn_command."""
-    if GATEWAY_EXT_SRC.is_symlink() or GATEWAY_EXT.is_symlink() or GATEWAY_EXT.parent.is_symlink():
+    src, src_st, src_parent = _read_nofollow_regular(GATEWAY_EXT_SRC)
+    if src_st.st_mode & 0o002:
         raise RuntimeError("gateway.ext.tampered")
-    if GATEWAY_EXT_SRC.parent.is_symlink():
-        raise RuntimeError("gateway.ext.tampered")
-    if not GATEWAY_EXT_SRC.is_file():
-        raise RuntimeError("gateway.ext.missing")
-    try:
-        src = GATEWAY_EXT_SRC.read_bytes()
-    except OSError as exc:
-        raise RuntimeError("gateway.ext.missing") from exc
-    if not src:
-        raise RuntimeError("gateway.ext.missing")
-    try:
-        st = GATEWAY_EXT.lstat()
-    except OSError as exc:
-        raise RuntimeError("gateway.ext.missing") from exc
-    if not stat.S_ISREG(st.st_mode):
-        raise RuntimeError("gateway.ext.tampered")
+    current, st, parent_st = _read_nofollow_regular(GATEWAY_EXT)
     if st.st_mode & 0o002:
         raise RuntimeError("gateway.ext.tampered")
-    # Overlay bake path only. Tests use tmp dest and skip uid 0.
     dest_resolved = Path(os.path.normpath(str(GATEWAY_EXT)))
     if str(dest_resolved) == "/bridge/pico-gateway-tools.ts":
         if st.st_uid != 0 or (st.st_mode & 0o022):
             raise RuntimeError("gateway.ext.tampered")
-        try:
-            dst = GATEWAY_EXT.parent.lstat()
-        except OSError as exc:
-            raise RuntimeError("gateway.ext.missing") from exc
-        if dst.st_uid != 0 or (dst.st_mode & 0o022) or not stat.S_ISDIR(dst.st_mode):
+        if parent_st.st_uid != 0 or (parent_st.st_mode & 0o022) or not stat.S_ISDIR(parent_st.st_mode):
             raise RuntimeError("gateway.ext.tampered")
-    try:
-        current = GATEWAY_EXT.read_bytes()
-    except OSError as exc:
-        raise RuntimeError("gateway.ext.missing") from exc
     if current != src:
         raise RuntimeError("gateway.ext.tampered")
+    del src_parent
     return GATEWAY_EXT
 
 
