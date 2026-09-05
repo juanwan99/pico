@@ -58,6 +58,9 @@ def test_snapshot_tools_subset_of_gateway():
                 "sandbox_browser_screenshot",
                 "sandbox_document_open",
                 "kb_search",
+                "web_search",
+                "web_fetch",
+                "ask_user",
             ],
             False,
         ),
@@ -85,6 +88,9 @@ def test_snapshot_tools_subset_of_gateway():
                 "sandbox_browser_screenshot",
                 "sandbox_document_open",
                 "kb_search",
+                "web_search",
+                "web_fetch",
+                "ask_user",
             ],
             False,
         ),
@@ -146,7 +152,9 @@ def test_snapshot_tools_subset_of_gateway():
             False,
         ),
     }
-    global_tools = set(build_default_gateway().tools)
+    from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
+
+    global_tools = set(build_default_gateway().tools) | set(ALLOWED_GATEWAY_TOOLS)
 
     for skill_id, (tools, requires_s7) in declared.items():
         snapshot = snapshot_for_skill(skill_id)
@@ -194,6 +202,15 @@ def test_prompt_without_skill_marker_preserves_default_policy():
 
     assert prompt == "普通对话"
     assert snapshot is None
+
+
+def test_deliverable_skills_keep_search_and_ask_user():
+    for skill_id in ("skill-deliverable", "skill-engineering-delivery"):
+        snap = snapshot_for_skill(skill_id)
+        assert snap is not None
+        tools = list(snap["tools"])
+        for name in ("web_search", "web_fetch", "ask_user"):
+            assert name in tools, (skill_id, name)
 
 
 def test_kb_search_only_when_asking_school_materials():

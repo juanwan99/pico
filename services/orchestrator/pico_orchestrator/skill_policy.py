@@ -52,6 +52,9 @@ _POLICIES: dict[str, SkillPolicy] = {
             "sandbox_browser_screenshot",
             "sandbox_document_open",
             "kb_search",
+            "web_search",
+            "web_fetch",
+            "ask_user",
         ),
         risk="low",
         instruction=(
@@ -90,6 +93,9 @@ _POLICIES: dict[str, SkillPolicy] = {
             "sandbox_browser_screenshot",
             "sandbox_document_open",
             "kb_search",
+            "web_search",
+            "web_fetch",
+            "ask_user",
         ),
         risk="low",
         instruction=(
@@ -312,7 +318,12 @@ def skill_id_from_prompt(prompt: str) -> str | None:
 
 
 def _allowed_tools(policy: SkillPolicy) -> list[str]:
-    global_tools = set(build_default_gateway().tools.keys())
+    from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
+
+    # Gateway handlers plus CORE allowlist. ask_user is parked by true_pi,
+    # not registered on build_default_gateway(); hanging a file skill must
+    # not drop CORE search/ask.
+    global_tools = set(build_default_gateway().tools.keys()) | set(ALLOWED_GATEWAY_TOOLS)
     return [tool for tool in policy.requested_tools if tool in global_tools]
 
 

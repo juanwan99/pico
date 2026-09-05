@@ -83,7 +83,9 @@ def test_hung_skill_may_narrow_and_may_include_extended():
     assert "sandbox_pptx_lib" in visible
     assert "verify_html_document" in visible
     assert "generate_diagram" in visible
-    assert "web_search" not in visible
+    assert "web_search" in visible
+    assert "web_fetch" in visible
+    assert "ask_user" in visible
     chat = snapshot_for_skill("skill-chat")
     assert chat is not None
     assert resolve_visible_tools(list(chat["tools"])) == []
