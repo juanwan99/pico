@@ -389,29 +389,45 @@ def _reject_symlink_prefixes(path: Path) -> None:
 
 
 def _open_nofollow_file(path: Path) -> tuple[int, os.stat_result]:
-    """Open leaf via parent dir_fd. O_NOFOLLOW on both. Same FD for fstat/read."""
+    """Walk every component with dir_fd + O_NOFOLLOW. Same FD for fstat/read.
+
+    Intermediate dirs use O_PATH so 0711 prefixes (search-only) still walk.
+    Do not open(path.parent) by string after a separate lstat.
+    """
     if not hasattr(os, "O_NOFOLLOW"):
         raise RuntimeError("gateway.ext.tampered")
     _reject_symlink_prefixes(path)
-    flags = os.O_RDONLY | os.O_NOFOLLOW
-    dir_flags = os.O_RDONLY | os.O_NOFOLLOW
+    raw = os.path.normpath(str(path))
+    parts = Path(raw).parts
+    if parts[:1] != (os.sep,) or len(parts) < 2:
+        raise RuntimeError("gateway.ext.tampered")
+    comps = parts[1:]
+    dir_flags = os.O_NOFOLLOW
+    if hasattr(os, "O_PATH"):
+        dir_flags |= os.O_PATH
+    else:
+        dir_flags |= os.O_RDONLY
     if hasattr(os, "O_DIRECTORY"):
         dir_flags |= os.O_DIRECTORY
+    leaf_flags = os.O_RDONLY | os.O_NOFOLLOW
     if hasattr(os, "O_NONBLOCK"):
-        flags |= os.O_NONBLOCK
+        leaf_flags |= os.O_NONBLOCK
+    dir_fd: int | None = None
     try:
-        dir_fd = os.open(str(path.parent), dir_flags)
-    except OSError as exc:
-        raise _gateway_oserror(exc) from exc
-    try:
+        dir_fd = os.open("/", dir_flags)
+        for part in comps[:-1]:
+            next_fd = os.open(part, dir_flags, dir_fd=dir_fd)
+            os.close(dir_fd)
+            dir_fd = next_fd
         parent_st = os.fstat(dir_fd)
         if not stat.S_ISDIR(parent_st.st_mode):
             raise RuntimeError("gateway.ext.tampered")
-        fd = os.open(path.name, flags, dir_fd=dir_fd)
+        fd = os.open(comps[-1], leaf_flags, dir_fd=dir_fd)
     except OSError as exc:
         raise _gateway_oserror(exc) from exc
     finally:
-        os.close(dir_fd)
+        if dir_fd is not None:
+            os.close(dir_fd)
     return fd, parent_st
 
 

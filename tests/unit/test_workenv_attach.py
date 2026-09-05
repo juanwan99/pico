@@ -1835,4 +1835,6 @@ def test_preexec_pdeathsig_sets_sigkill() -> None:
     assert "_read_nofollow_regular" in src_ensure
     assert "n != want" in src_read
     assert "_reject_symlink_prefixes" in src_open
+    assert "O_PATH" in src_open
+    assert 'os.open("/", dir_flags)' in src_open
     assert "S_ISLNK" in __import__("inspect").getsource(sidecar_mod._reject_symlink_prefixes)
