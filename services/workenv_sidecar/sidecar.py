@@ -29,19 +29,27 @@ if str(_HERE) not in sys.path:
 
 from pico_workenv_ws import WebSocketConnection, accept_websocket, send_close, send_text
 
-# prctl(2) PR_SET_PDEATHSIG. Direct child dies with sidecar. Not a cgroup.
+# prctl(2) PR_SET_PDEATHSIG. Direct child only; fork descendants do not inherit.
+# Not a cgroup. Load libc before fork so preexec_fn does not import.
 _PR_SET_PDEATHSIG = 1
+_LIBC = None
+if sys.platform.startswith("linux"):
+    import ctypes
+
+    try:
+        _LIBC = ctypes.CDLL(None, use_errno=True)
+    except OSError:
+        _LIBC = None
 
 
 def _preexec_pdeathsig() -> None:
-    """Ask the kernel to SIGKILL this process if the sidecar parent dies."""
-    if not sys.platform.startswith("linux"):
-        return
-    import ctypes
-
-    libc = ctypes.CDLL(None, use_errno=True)
-    rc = libc.prctl(_PR_SET_PDEATHSIG, int(signal.SIGKILL), 0, 0, 0)
+    """SIGKILL this process if the sidecar parent dies. Direct child only."""
+    if _LIBC is None:
+        raise OSError("prctl unavailable")
+    rc = _LIBC.prctl(_PR_SET_PDEATHSIG, int(signal.SIGKILL), 0, 0, 0)
     if rc != 0:
+        import ctypes
+
         err = ctypes.get_errno()
         raise OSError(err, "prctl PR_SET_PDEATHSIG")
     if os.getppid() == 1:
@@ -361,15 +369,8 @@ def _ensure_gateway_ext() -> Path:
         if current != src:
             raise RuntimeError("gateway.ext.tampered")
         return GATEWAY_EXT
-    # Overlay image bakes /bridge as root-owned. uid 65532 must not create it.
-    try:
-        GATEWAY_EXT.parent.mkdir(parents=True, exist_ok=True)
-        GATEWAY_EXT.write_bytes(src)
-    except OSError as exc:
-        raise RuntimeError("gateway.ext.missing") from exc
-    if not GATEWAY_EXT.is_file():
-        raise RuntimeError("gateway.ext.missing")
-    return GATEWAY_EXT
+    # Overlay image bakes /bridge root-owned. Do not create or replace as 65532.
+    raise RuntimeError("gateway.ext.missing")
 
 
 def _spawn_argv(workspace_id: str) -> list[str]:
@@ -748,7 +749,7 @@ def exec_work(body: dict[str, Any]) -> dict[str, Any]:
                 start_new_session=True,
                 preexec_fn=_preexec_pdeathsig,
             )
-        except OSError as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             return {"ok": False, "error": "exec.spawn", "detail": str(exc)[:200]}
         rec["proc"] = proc
         try:

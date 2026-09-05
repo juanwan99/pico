@@ -441,7 +441,10 @@ async def test_attach_transport_abort_on_first_tool(tmp_path: Path, monkeypatch:
 
     ext_src = tmp_path / "pico-gateway-tools.ts"
     ext_src.write_text("export default {};\n", encoding="utf-8")
-    sidecar_mod.GATEWAY_EXT = tmp_path / "bridge" / "pico-gateway-tools.ts"
+    dest = tmp_path / "bridge" / "pico-gateway-tools.ts"
+    dest.parent.mkdir()
+    dest.write_bytes(ext_src.read_bytes())
+    sidecar_mod.GATEWAY_EXT = dest
     sidecar_mod.GATEWAY_EXT_SRC = ext_src
     created = await workenv_post(
         "/v1/internal/workenv/create",
@@ -1225,6 +1228,8 @@ def test_pi_spawn_loads_gateway_extension(tmp_path: Path) -> None:
     ext_src = tmp_path / "pico-gateway-tools.ts"
     ext_src.write_text("export default {};\n", encoding="utf-8")
     dest = tmp_path / "bridge" / "pico-gateway-tools.ts"
+    dest.parent.mkdir()
+    dest.write_bytes(ext_src.read_bytes())
     sidecar_mod.GATEWAY_EXT = dest
     sidecar_mod.GATEWAY_EXT_SRC = ext_src
     sidecar_mod._state["runs"] = {}
@@ -1707,6 +1712,10 @@ def test_ensure_gateway_ext_fails_when_bridge_not_writable(tmp_path: Path) -> No
         assert not sidecar_mod.GATEWAY_EXT.exists()
     finally:
         dest_dir.chmod(0o755)
+    dest_dir.chmod(0o755)
+    with pytest.raises(RuntimeError, match="gateway.ext.missing"):
+        sidecar_mod._ensure_gateway_ext()
+    assert not sidecar_mod.GATEWAY_EXT.exists()
 
 
 def test_preexec_pdeathsig_sets_sigkill() -> None:
@@ -1734,5 +1743,8 @@ def test_preexec_pdeathsig_sets_sigkill() -> None:
     assert out.decode("ascii") == str(signal.SIGKILL)
     src_exec = __import__("inspect").getsource(sidecar_mod.exec_work)
     src_pi = __import__("inspect").getsource(sidecar_mod.spawn_pi)
+    src_ensure = __import__("inspect").getsource(sidecar_mod._ensure_gateway_ext)
     assert "preexec_fn=_preexec_pdeathsig" in src_exec
     assert "preexec_fn=_preexec_pdeathsig" in src_pi
+    assert "write_bytes" not in src_ensure
+    assert "mkdir" not in src_ensure
