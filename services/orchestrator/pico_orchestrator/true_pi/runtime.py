@@ -374,7 +374,7 @@ async def run_true_pi_agent(
                 pi_provider = "openai"
                 pi_base = proxy_base or provider.base_url or "http://127.0.0.1:18769/v1"
                 pi_api = "openai-responses"
-            if openai_brain and rid:
+            if openai_brain and rid and workenv_mode != "exec":
                 from pico_orchestrator.llm_file_pass import has_turn_files, pass_base_url
 
                 if has_turn_files(rid):

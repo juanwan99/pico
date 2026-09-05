@@ -275,6 +275,7 @@ async def test_workenv_cancel_stays_running_until_runtime(
         assert result.run.cancel_requested == 1
         assert result.run.status == "running"
         assert result.run.ended_at is None
+        assert result.status_changed is False
 
 
 def test_collect_after_cancel_discards_bytes() -> None:
@@ -1415,6 +1416,9 @@ async def test_exec_mode_ignores_provider_key_uses_run_token(
     monkeypatch.delenv("PICO_RUN_TOKEN", raising=False)
     monkeypatch.delenv("PICO_WORKENV_FIXTURE_DIR", raising=False)
     monkeypatch.delenv("PICO_UPSTREAM_BASE", raising=False)
+    monkeypatch.setattr(
+        "pico_orchestrator.llm_file_pass.has_turn_files", lambda _rid: True
+    )
 
     async def fake_post(path: str, payload: dict, timeout: float = 30.0) -> dict:
         del path, payload, timeout

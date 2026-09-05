@@ -276,10 +276,11 @@ async def request_cancel(session: AsyncSession, run: RunRow) -> CancelResult:
     await session.commit()
     await session.refresh(run)
     if result.rowcount == 1:
+        became_terminal = "status" in values and run.status == "cancelled"
         return CancelResult(
             run=run,
             request_recorded=not request_was_pending,
-            status_changed=True,
+            status_changed=became_terminal,
         )
     if run.status == "cancelled":
         return CancelResult(run=run, request_recorded=False, status_changed=False)
