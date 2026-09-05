@@ -161,10 +161,20 @@ def _xlsx_d2_and_title(blob: bytes) -> dict[str, Any]:
                 joined = "".join(texts)
                 if joined:
                     inline.append(joined)
+            v = c.find("m:v", NS)
+            t = c.get("t") or ""
+            if t == "s" and v is not None and (v.text or "").strip():
+                try:
+                    idx = int(v.text or "0")
+                except ValueError:
+                    idx = -1
+                if 0 <= idx < len(shared):
+                    inline.append(shared[idx])
+            elif t != "s" and v is not None and (v.text or "").strip():
+                inline.append((v.text or "").strip())
             if ref != "D2":
                 continue
             f = c.find("m:f", NS)
-            v = c.find("m:v", NS)
             if f is not None and (f.text or "").strip():
                 out["d2"] = (f.text or "").strip()
             elif v is not None:
@@ -262,12 +272,14 @@ def _t1_pass(r1: dict[str, Any], r2: dict[str, Any]) -> bool:
 
 
 def _formula_40_60(d: str) -> bool:
-    # C2 = 期末 40%, B2 = 平时 60%. Reversed weights are not Pass.
+    # C2 = 期末 40%, B2 = 平时 60%. Exact weighted sum only.
     text = d.replace(" ", "").lstrip("=")
-    c_forty = "C2*40%" in text or "C2*0.4" in text or "40%*C2" in text or "0.4*C2" in text
-    b_sixty = "B2*60%" in text or "B2*0.6" in text or "60%*B2" in text or "0.6*B2" in text
-    reversed_w = "B2*40%" in text or "C2*60%" in text or "B2*0.4" in text or "C2*0.6" in text
-    return bool(c_forty and b_sixty and not reversed_w and "0.5" not in text)
+    return bool(
+        re.fullmatch(
+            r"(C2\*(?:40%|0\.4)\+B2\*(?:60%|0\.6)|B2\*(?:60%|0\.6)\+C2\*(?:40%|0\.4))",
+            text,
+        )
+    )
 
 
 def _group_count(text: str, label: str, n: int) -> bool:

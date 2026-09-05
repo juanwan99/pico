@@ -96,9 +96,7 @@ def main() -> int:
             if ev.get("type") != "tool.call" or abort_at_tool:
                 continue
             tool = (ev.get("payload") or {}).get("tool")
-            if tool in prefer or (tool and not prefer.intersection(
-                {(e.get("payload") or {}).get("tool") for e in events if e.get("type") == "tool.call"}
-            )):
+            if tool in prefer:
                 first_tool = tool
                 abort_at_tool = True
                 cancel_http = _req("POST", f"{base}/v1/runs/{run_id}/cancel", hdr, {})

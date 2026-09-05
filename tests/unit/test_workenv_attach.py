@@ -96,8 +96,11 @@ def test_t12_oracles_reject_false_green() -> None:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert mod._formula_40_60("=C2*40%+B2*60%") is True
+    assert mod._formula_40_60("=B2*0.6+C2*0.4") is True
     assert mod._formula_40_60("=B2*0.6+C2") is False
     assert mod._formula_40_60("=B2*40%+C2*60%") is False
+    assert mod._formula_40_60("=C2*0.49+B2*0.61") is False
+    assert mod._formula_40_60("=C2*40%-B2*60%") is False
     assert mod._formula_40_60("=1") is False
     assert mod._group_count("红4人 蓝3人 绿3人", "红", 4) is True
     assert mod._group_count("14人红 13人蓝 13人绿", "红", 4) is False
@@ -751,6 +754,26 @@ async def test_invalid_ooxml_collect_fails_closed() -> None:
             Principal(),
             store,
             [{"name": "bad.xlsx", "bytes": b"PK\x03\x04not-ooxml"}],
+        )
+    assert store.rows == []
+
+
+@pytest.mark.asyncio
+async def test_empty_xlsx_collect_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator.true_pi.runtime import _collect_workenv_into_store
+
+    async def fake_post(path: str, payload: dict, timeout: float = 30.0) -> dict:
+        del path, payload, timeout
+        return {"ok": True, "files": [{"name": "bad.xlsx", "bytes_b64": ""}]}
+
+    monkeypatch.setattr("pico_orchestrator.true_pi.workenv_http.workenv_post", fake_post)
+    store = MemoryArtifactStore()
+    with pytest.raises(WorkenvCollectRejected):
+        await _collect_workenv_into_store(
+            workspace_id="run-empty",
+            principal=Principal(),
+            store=store,
+            gate=WorkenvCancelGate(),
         )
     assert store.rows == []
 

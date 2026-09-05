@@ -1027,15 +1027,16 @@ async def _collect_workenv_into_store(
     kept: list[dict[str, Any]] = []
     for item in files:
         name = str(item.get("name") or "")
-        blob = item.get("bytes") or b""
-        if not isinstance(blob, (bytes, bytearray)) or not blob:
+        blob = item.get("bytes") if isinstance(item.get("bytes"), (bytes, bytearray)) else b""
+        ext = title_protected_extension(name)
+        if ext in {".docx", ".pptx", ".xlsx"}:
+            if not blob or not is_valid_ooxml_package(bytes(blob), ext):
+                raise WorkenvCollectRejected(f"invalid ooxml {name}")
+        if not blob:
             continue
         digest = hashlib.sha256(blob).hexdigest()
         if skip_sha.get(name) == digest:
             continue
-        ext = title_protected_extension(name)
-        if ext in {".docx", ".pptx", ".xlsx"} and not is_valid_ooxml_package(blob, ext):
-            raise WorkenvCollectRejected(f"invalid ooxml {name}")
         kept.append(item)
     if not kept:
         return 0

@@ -510,25 +510,31 @@ def exec_work(body: dict[str, Any]) -> dict[str, Any]:
         "PYTHONUNBUFFERED": "1",
         "PYTHONDONTWRITEBYTECODE": "1",
     }
-    try:
-        proc = subprocess.Popen(
-            argv,
-            cwd=str(work),
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-        )
-    except OSError as exc:
-        return {"ok": False, "error": "exec.spawn", "detail": str(exc)[:200]}
-    rec["proc"] = proc
-    try:
-        rec["pgid"] = os.getpgid(proc.pid)
-    except OSError:
-        rec["pgid"] = proc.pid
-    pgids = rec.setdefault("pgids", [])
-    if isinstance(rec["pgid"], int) and rec["pgid"] > 0 and rec["pgid"] not in pgids:
-        pgids.append(rec["pgid"])
+    with _lock:
+        rec = _state["runs"].get(workspace_id)
+        if rec is None:
+            return {"ok": False, "error": "run.unknown", "status": 404}
+        if rec.get("destroyed") or workspace_id in _state["destroyed"]:
+            return {"ok": False, "error": "run.destroyed", "status": 409}
+        try:
+            proc = subprocess.Popen(
+                argv,
+                cwd=str(work),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            return {"ok": False, "error": "exec.spawn", "detail": str(exc)[:200]}
+        rec["proc"] = proc
+        try:
+            rec["pgid"] = os.getpgid(proc.pid)
+        except OSError:
+            rec["pgid"] = proc.pid
+        pgids = rec.setdefault("pgids", [])
+        if isinstance(rec["pgid"], int) and rec["pgid"] > 0 and rec["pgid"] not in pgids:
+            pgids.append(rec["pgid"])
     try:
         stdout_b, stderr_b = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -549,6 +555,11 @@ def exec_work(body: dict[str, Any]) -> dict[str, Any]:
 
 def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
     workspace_id = str(body.get("workspace_id") or "").strip()
+    with _lock:
+        rec = _state["runs"].get(workspace_id)
+        if rec is not None:
+            rec["destroyed"] = True
+        _state["destroyed"].add(workspace_id)
     rec = _run_record(workspace_id)
     rc = None
     if rec is not None:
@@ -587,6 +598,8 @@ def spawn_pi(workspace_id: str) -> subprocess.Popen[bytes]:
     rec = _run_record(workspace_id)
     if rec is None:
         raise RuntimeError("run.unknown")
+    if rec.get("destroyed") or workspace_id in _state["destroyed"]:
+        raise RuntimeError("run.destroyed")
     if rec.get("proc") is not None and rec["proc"].poll() is None:
         raise RuntimeError("run.conflict")
     work = _work_dir(workspace_id)
@@ -606,18 +619,29 @@ def spawn_pi(workspace_id: str) -> subprocess.Popen[bytes]:
     env.pop("DEEPSEEK_API_KEY", None)
     env.pop("PICO_SANDBOX_TOKEN", None)
     argv = _spawn_argv(workspace_id)
-    proc = subprocess.Popen(
-        argv,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        cwd=str(work),
-        env=env,
-        start_new_session=True,
-        bufsize=0,
-    )
-    rec["proc"] = proc
-    return proc
+    with _lock:
+        rec = _state["runs"].get(workspace_id)
+        if rec is None or rec.get("destroyed") or workspace_id in _state["destroyed"]:
+            raise RuntimeError("run.destroyed")
+        proc = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=str(work),
+            env=env,
+            start_new_session=True,
+            bufsize=0,
+        )
+        rec["proc"] = proc
+        try:
+            rec["pgid"] = os.getpgid(proc.pid)
+        except OSError:
+            rec["pgid"] = proc.pid
+        pgids = rec.setdefault("pgids", [])
+        if isinstance(rec["pgid"], int) and rec["pgid"] > 0 and rec["pgid"] not in pgids:
+            pgids.append(rec["pgid"])
+        return proc
 
 
 def _pipe_stdout(proc: subprocess.Popen[bytes], ws: WebSocketConnection) -> None:
