@@ -112,7 +112,7 @@ Owner-aligned goals: [`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md).
 **Doc index (truth order):** [`docs/README.md`](docs/README.md) — prefer GitHub over prose.
 
 **Context policy:** [`docs/CONTEXT-POLICY.md`](docs/CONTEXT-POLICY.md)（默认不清理上下文）  
-**Controller bot (7x24):** [`docs/CONTROLLER-BOT.md`](docs/CONTROLLER-BOT.md) — 考古/机制；**派工只认 GitHub 执行卡**  
+**Controller bot:** [`docs/CONTROLLER-BOT.md`](docs/CONTROLLER-BOT.md) — 定时已停；**派工只认 GitHub 执行卡**  
 **Controller poll:** [`docs/CONTROLLER-POLL.md`](docs/CONTROLLER-POLL.md) — 非真源  
 **Execution queue:** [`docs/EXECUTION-QUEUE.md`](docs/EXECUTION-QUEUE.md) — **SUPERSEDED** 自动 E1/E2/E3；勿当现行派工  
 **Validation queue:** [`docs/VALIDATION-QUEUE.md`](docs/VALIDATION-QUEUE.md)  
