@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.artifact_types import is_valid_ooxml_package
 from pico_orchestrator.office.edit import comment_docx_bytes, edit_xlsx_cell_bytes
-from pico_orchestrator.office.fill import fill_office_bytes
+from pico_orchestrator.office.fill import fill_office_bytes, fill_office_with_receipt
 from pico_orchestrator.office.inspect import inspect_office_bytes
 from pico_orchestrator.office.legacy import LEGACY_OFFICE_ERROR
 from pico_orchestrator.office.qa import verify_office_bytes
@@ -97,6 +97,79 @@ def test_template_placeholder_fill():
     paras = [u["text"] for u in after["units"] if u["kind"] in {"para", "heading"}]
     assert any("张三" in t and "2026春" in t and "90" in t for t in paras)
     assert after["placeholders"] == []
+
+
+def test_fill_receipt_zero_hit_is_not_filled():
+    spec = parse_spec(
+        {
+            "kind": "docx",
+            "title": "成绩通知",
+            "blocks": [
+                {"type": "para", "text": "{{姓名}} 同学，{{学期}} 语文 {{语文}} 分。"},
+            ],
+        }
+    )
+    raw = render_spec(spec)
+    miss = fill_office_with_receipt(raw, ".docx", {"班级": "三年二班"})
+    assert miss.filled is False
+    assert miss.filled_keys == ()
+    assert "姓名" in miss.leftover
+    assert "学期" in miss.leftover
+    assert "语文" in miss.leftover
+    hit = fill_office_with_receipt(raw, ".docx", {"姓名": "张三", "学期": "2026春"})
+    assert hit.filled is True
+    assert hit.filled_keys == ("姓名", "学期")
+    assert hit.leftover == ("语文",)
+
+
+def test_fill_receipt_xlsx_and_pptx():
+    xlsx_raw = render_spec(
+        parse_spec(
+            {
+                "kind": "xlsx",
+                "title": "人数",
+                "sheets": [
+                    {
+                        "name": "汇总",
+                        "headers": ["组", "人数"],
+                        "rows": [["红", "{{红组}}"], ["蓝", "{{蓝组}}"]],
+                    }
+                ],
+            }
+        )
+    )
+    xlsx_miss = fill_office_with_receipt(xlsx_raw, ".xlsx", {"绿组": "3"})
+    assert xlsx_miss.filled is False
+    assert xlsx_miss.filled_keys == ()
+    assert "红组" in xlsx_miss.leftover
+    xlsx_hit = fill_office_with_receipt(xlsx_raw, ".xlsx", {"红组": "4", "蓝组": "3"})
+    assert xlsx_hit.filled is True
+    assert xlsx_hit.filled_keys == ("红组", "蓝组")
+    assert xlsx_hit.leftover == ()
+
+    pptx_raw = render_spec(
+        parse_spec(
+            {
+                "kind": "pptx",
+                "title": "封面",
+                "blocks": [
+                    {
+                        "type": "slide",
+                        "title": "{{班名}} 成绩",
+                        "bullets": ["{{学期}}"],
+                    }
+                ],
+            }
+        )
+    )
+    pptx_miss = fill_office_with_receipt(pptx_raw, ".pptx", {"学校": "实验小学"})
+    assert pptx_miss.filled is False
+    pptx_hit = fill_office_with_receipt(
+        pptx_raw, ".pptx", {"班名": "三年二班", "学期": "2026春"}
+    )
+    assert pptx_hit.filled is True
+    assert pptx_hit.filled_keys == ("班名", "学期")
+    assert pptx_hit.leftover == ()
 
 
 def test_legacy_formats_fail_closed():

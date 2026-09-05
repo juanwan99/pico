@@ -145,6 +145,89 @@ async def test_edit_pptx_returns_observation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_edit_fill_zero_hit_must_not_claim_filled() -> None:
+    store = MemoryArtifactStore()
+    gw = build_default_gateway(store)
+    owner = P(school_id="s", membership_id="m", scopes=["*"])
+    made = await gw.invoke(
+        owner,
+        "generate_docx_document",
+        {
+            "title": "通知.docx",
+            "spec": {
+                "kind": "docx",
+                "blocks": [
+                    {"type": "para", "text": "{{姓名}} 同学，{{学期}} 成绩。"},
+                ],
+            },
+        },
+    )
+    miss = await gw.invoke(
+        owner,
+        "edit_docx_document",
+        {"artifact_id": made["artifact_id"], "values": {"班级": "三年二班"}},
+    )
+    assert miss["edited"] is True
+    assert miss["filled"] is False
+    assert miss["filled_keys"] == []
+    assert "姓名" in miss["leftover"]
+    assert "学期" in miss["leftover"]
+
+    hit = await gw.invoke(
+        owner,
+        "edit_docx_document",
+        {
+            "artifact_id": miss["artifact_id"],
+            "values": {"姓名": "张三", "学期": "2026春"},
+        },
+    )
+    assert hit["filled"] is True
+    assert hit["filled_keys"] == ["姓名", "学期"]
+    assert hit["leftover"] == []
+
+
+@pytest.mark.asyncio
+async def test_edit_xlsx_fill_zero_hit_must_not_claim_filled() -> None:
+    store = MemoryArtifactStore()
+    gw = build_default_gateway(store)
+    owner = P(school_id="s", membership_id="m", scopes=["*"])
+    made = await gw.invoke(
+        owner,
+        "generate_xlsx_document",
+        {
+            "title": "人数.xlsx",
+            "spec": {
+                "kind": "xlsx",
+                "sheets": [
+                    {
+                        "name": "汇总",
+                        "headers": ["组", "人数"],
+                        "rows": [["红", "{{红组}}"]],
+                    }
+                ],
+            },
+        },
+    )
+    miss = await gw.invoke(
+        owner,
+        "edit_xlsx_document",
+        {"artifact_id": made["artifact_id"], "values": {"蓝组": "3"}},
+    )
+    assert miss["edited"] is True
+    assert miss["filled"] is False
+    assert miss["filled_keys"] == []
+    assert "红组" in miss["leftover"]
+    hit = await gw.invoke(
+        owner,
+        "edit_xlsx_document",
+        {"artifact_id": miss["artifact_id"], "values": {"红组": "4"}},
+    )
+    assert hit["filled"] is True
+    assert hit["filled_keys"] == ["红组"]
+    assert hit["leftover"] == []
+
+
+@pytest.mark.asyncio
 async def test_document_open_does_not_invent_a_file(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_sidecar(method, path, **kwargs):
         del method, path, kwargs
