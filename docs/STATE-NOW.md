@@ -16,7 +16,7 @@ PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源�
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 最高: LAW §0-supreme · 禁止自搞一套 / 禁止重体系
 工作法: 本窗合一 · GitHub 唯一真源 · 写码树/生产树分开 · AGENTS 文首
-北极星: DIRECTION-NOW §0-star · 用法 = Grok
+北极星: DIRECTION-NOW §0-star v1.3 · 用法 = Grok · 能力并列 · 工作环境交成熟上游
 真源: GitHub Issue/PR/SHA/CI + 公网 tip。本页三行是索引。
 juanwan99/oneflow: 不当真源（已 Archive）
 ```

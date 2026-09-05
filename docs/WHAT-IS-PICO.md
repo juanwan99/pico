@@ -3,7 +3,7 @@
 ```
 DOC: docs/WHAT-IS-PICO.md
 STATUS: BINDING · 覆盖一切冲突的产品口述与旧文档金句
-FREEZE: docs/TRUTH-FREEZE.md v1.5 · LAW §0-supreme · AGENTS 文首工作法 · HANDOFF-WB-PI（默认 Pi + DeepSeek）
+FREEZE: docs/TRUTH-FREEZE.md v1.6 · LAW §0-supreme · AGENTS 文首工作法 · HANDOFF-WB-PI（默认 Pi + DeepSeek）
 OWNER: 业主目标 + 总管落盘
 TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可更新「现状」；不可偷偷改「目标」
 ```
@@ -14,11 +14,13 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 
 **Pico 的用法 = Grok 的用法。** 通用 LLM。老师的话是 user；系统纪律是 system，不得冒充人话。工具 / 材料 / Skill 是挂载，模型看老师的话决定用不用。问「这是什么」就解释；说「做成 Word」才交文件。
 
+能力并列，禁止焊死唯一路径。专用办公动词是捷径，不是天花板。工作环境交给成熟上游隔离执行面；Pico 只薄适配账本、授权、门脸。Skill 只能收窄。
+
 工作台（LibreChat + Pico 账本）是壳和控制面，**不是**读正文猜任务的定向工作流。
 
 **最高禁止：** 自己搞一套体系、做重体系、厚桥、第二能力核。只允许薄适配。
 
-**禁止：** force_agent 自动挂交付 Skill、把「本轮必须交 N 个文件」焊进 user prompt、用课件/通知/模块词表定向。
+**禁止：** force_agent 自动挂交付 Skill、把「本轮必须交 N 个文件」焊进 user prompt、用课件/通知/模块词表定向、把专用动词当能力上限。
 
 详见 [`DIRECTION-NOW.md` §0-star](./DIRECTION-NOW.md)。
 

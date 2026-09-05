@@ -10,7 +10,7 @@ SUPERSEDES: 四行短卡当派发形态
 真源: docs/ONEFLOW.md v2.1 · 现况: docs/STATE-NOW.md
 模板: .github/ISSUE_TEMPLATE/ · docs/templates/card-build.md · docs/templates/dispatch-slip.md
 经验: docs/MEMORY-RESET.md（不进卡面；派发条只点名坑）
-北极星: docs/DIRECTION-NOW.md §0-star · 用法 = Grok · 禁定向猜任务
+北极星: docs/DIRECTION-NOW.md §0-star v1.3 · 用法 = Grok · 能力并列 · 工作环境交成熟上游
 ```
 
 点 **New Issue** 选「执行卡」或贴 **标准任务卡**（#627 体例）。卡必须自含【已锁事实】【IN】【验收】——跨窗零记忆，调查必须写进 Issue。
