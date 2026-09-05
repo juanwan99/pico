@@ -173,6 +173,15 @@ class LedgerArtifactStore:
             session.add(artifact)
             await session.flush()
             if self._run_id:
+                run = await session.get(RunRow, self._run_id)
+                if run is not None and (
+                    run.cancel_requested or run.status in {"cancelled", "cancelling", "failed"}
+                ):
+                    await session.rollback()
+                    from pico_orchestrator.true_pi.workenv_ledger import WorkenvCollectRejected
+
+                    raise WorkenvCollectRejected("collect-after-cancel discarded")
+            if self._run_id:
                 await append_event(
                     session,
                     self._run_id,

@@ -586,13 +586,14 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
         _state["destroyed"].add(workspace_id)
     rec = _run_record(workspace_id)
     rc = None
+    seen: list[int] = []
+    proc = rec.get("proc") if rec is not None else None
     if rec is not None:
-        rc = _kill_pg(rec.get("proc"), grace=5.0)
-        seen: list[int] = []
         for pgid in [rec.get("pgid"), *(rec.get("pgids") or [])]:
-            if not isinstance(pgid, int) or pgid <= 0 or pgid in seen:
-                continue
-            seen.append(pgid)
+            if isinstance(pgid, int) and pgid > 0 and pgid not in seen:
+                seen.append(pgid)
+        rc = _kill_pg(proc, grace=5.0)
+        for pgid in seen:
             try:
                 os.killpg(pgid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError, OSError):
@@ -602,13 +603,20 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
         rec["pgids"] = []
         rec["ws"] = None
         rec["destroyed"] = True
+    alive = bool(proc is not None and proc.poll() is None)
+    for pgid in seen:
+        try:
+            os.killpg(pgid, 0)
+            alive = True
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
     try:
         work = _work_dir(workspace_id)
     except ValueError:
         return {"ok": False, "destroyed": False, "returncode": rc, "error": "workspace_id.invalid"}
     if work.exists():
         shutil.rmtree(work, ignore_errors=True)
-    gone = not work.exists()
+    gone = (not work.exists()) and not alive
     if gone:
         with _lock:
             _state["runs"].pop(workspace_id, None)

@@ -255,18 +255,22 @@ async def request_cancel(session: AsyncSession, run: RunRow) -> CancelResult:
         raise ValueError("run is already terminal")
 
     request_was_pending = bool(run.cancel_requested)
+    from pico_orchestrator.capability_loading import workenv_mode
+
+    values: dict[str, Any] = {"cancel_requested": 1}
+    # Workenv must destroy before the DB row is terminal, otherwise
+    # execute_run discards the runtime result (including destroy-failed).
+    if workenv_mode() not in {"pi", "exec"}:
+        values["status"] = "cancelled"
+        values["ended_at"] = _utcnow()
+        values["error"] = None
     result = await session.execute(
         update(RunRow)
         .where(
             RunRow.id == run.id,
             RunRow.status.in_(("queued", "preparing", "running")),
         )
-        .values(
-            cancel_requested=1,
-            status="cancelled",
-            ended_at=_utcnow(),
-            error=None,
-        )
+        .values(**values)
         .execution_options(synchronize_session=False)
     )
     await session.commit()

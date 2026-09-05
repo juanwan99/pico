@@ -187,6 +187,38 @@ async def test_create_task_keeps_conversation_id(tmp_path: Path, monkeypatch: py
         assert run.task_id == task.id
 
 
+@pytest.mark.asyncio
+async def test_workenv_cancel_stays_running_until_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app import db as db_mod
+    from app.auth import Principal as AuthPrincipal
+    from app.db import RunRow, TaskRow, init_db, new_id
+    from app.run_service import request_cancel
+
+    monkeypatch.setenv("PICO_WORKENV", "exec")
+    db_path = tmp_path / "pico.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    db_mod._engine = None
+    db_mod._Session = None
+    await init_db()
+    factory = db_mod.session_factory()
+    async with factory() as session:
+        task = TaskRow(
+            id=new_id(),
+            school_id="school-a",
+            membership_id="m1",
+            title="t4",
+        )
+        run = RunRow(id=new_id(), task_id=task.id, status="running")
+        session.add_all((task, run))
+        await session.commit()
+        result = await request_cancel(session, run)
+        assert result.run.cancel_requested == 1
+        assert result.run.status == "running"
+        assert result.run.ended_at is None
+
+
 def test_collect_after_cancel_discards_bytes() -> None:
     gate = WorkenvCancelGate()
     store = MemoryArtifactStore()
