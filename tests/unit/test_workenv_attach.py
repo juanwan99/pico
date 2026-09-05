@@ -18,6 +18,9 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 sys.path.insert(0, str(ROOT / "services" / "workenv_sidecar"))
 
+from typing import Any
+
+from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import TruePiRpcClient
 from pico_orchestrator.true_pi.workenv_attach import AttachTransport
 from pico_orchestrator.true_pi.workenv_ledger import (
@@ -32,6 +35,10 @@ class Principal:
     school_id: str = "school-a"
     membership_id: str = "member-a"
     scopes: list[str] | None = None
+
+
+async def _not_cancelled() -> bool:
+    return False
 
 
 def test_workenv_pi_hides_list_l(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -266,3 +273,137 @@ async def test_attach_prefers_prior_collect_over_fixture(
 
     raw = base64.b64decode(files[0]["bytes_b64"])
     assert raw == b"PRIOR-ROUND"
+
+
+def test_provider_error_blocks_success_only_without_collect() -> None:
+    from pico_orchestrator.true_pi.runtime import provider_error_blocks_success
+
+    assert provider_error_blocks_success("没有可用token", collected_n=0) is True
+    assert provider_error_blocks_success("没有可用token", collected_n=1) is False
+    assert provider_error_blocks_success("", collected_n=0) is False
+
+
+@pytest.mark.asyncio
+async def test_collect_keeps_modified_xlsx_skips_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import base64
+    import hashlib
+
+    from pico_orchestrator.true_pi.runtime import _collect_workenv_into_store
+
+    fixture = tmp_path / "fix"
+    fixture.mkdir()
+    frozen = b"PK\x03\x04FIXTURE-BYTES"
+    fixture.joinpath("gradebook.xlsx").write_bytes(frozen)
+    monkeypatch.setenv("PICO_WORKENV_FIXTURE_DIR", str(fixture))
+    xlsx = ROOT / "testdata" / "workenv" / "gradebook.xlsx"
+    changed = xlsx.read_bytes()
+    assert hashlib.sha256(changed).hexdigest() != hashlib.sha256(frozen).hexdigest()
+    posted: list[str] = []
+
+    async def fake_post(path: str, payload: dict, timeout: float = 30.0) -> dict:
+        del payload, timeout
+        posted.append(path)
+        return {
+            "ok": True,
+            "files": [
+                {
+                    "name": "gradebook.xlsx",
+                    "bytes_b64": base64.b64encode(changed).decode("ascii"),
+                }
+            ],
+        }
+
+    monkeypatch.setattr("pico_orchestrator.true_pi.workenv_http.workenv_post", fake_post)
+    store = MemoryArtifactStore()
+    n = await _collect_workenv_into_store(
+        workspace_id="run-1",
+        principal=Principal(),
+        store=store,
+        gate=WorkenvCancelGate(),
+    )
+    assert n == 1
+    assert store.rows[0]["title"] == "gradebook.xlsx"
+    assert posted == ["/v1/internal/workenv/collect"]
+
+
+@pytest.mark.asyncio
+async def test_overlay_lands_collect_despite_token_phrase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import base64
+
+    from pico_orchestrator.true_pi.client import FakeTransport
+    from pico_orchestrator.true_pi.runtime import run_true_pi_agent
+
+    monkeypatch.setattr(
+        "pico_orchestrator.true_pi.runtime.AttachTransport", FakeTransport
+    )
+    monkeypatch.delenv("PICO_WORKENV_FIXTURE_DIR", raising=False)
+    xlsx = (ROOT / "testdata" / "workenv" / "gradebook.xlsx").read_bytes()
+
+    async def fake_post(path: str, payload: dict, timeout: float = 30.0) -> dict:
+        del payload, timeout
+        if str(path).endswith("/collect"):
+            return {
+                "ok": True,
+                "files": [
+                    {
+                        "name": "gradebook.xlsx",
+                        "bytes_b64": base64.b64encode(xlsx).decode("ascii"),
+                    }
+                ],
+            }
+        return {"ok": True, "destroyed": True}
+
+    monkeypatch.setattr("pico_orchestrator.true_pi.workenv_http.workenv_post", fake_post)
+    store = MemoryArtifactStore()
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    transport = FakeTransport(
+        scripted=[
+            {"type": "agent_start"},
+            {"type": "turn_start"},
+            {
+                "type": "tool_execution_start",
+                "toolName": "bash",
+                "toolCallId": "c1",
+                "args": {"command": "python save xlsx"},
+            },
+            {
+                "type": "tool_execution_end",
+                "toolName": "bash",
+                "toolCallId": "c1",
+                "isError": False,
+                "result": {"content": [{"type": "text", "text": "saved"}]},
+            },
+            {
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "content": [],
+                    "stopReason": "error",
+                    "errorMessage": "没有可用token",
+                },
+            },
+            {"type": "agent_end", "willRetry": False},
+        ],
+        assistant_text="",
+    )
+    result = await run_true_pi_agent(
+        prompt="把 D2:D7 写成公式",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=8),
+        transport=transport,
+        artifact_store=store,
+        run_id="t1-token-phrase",
+    )
+    assert result.status == "succeeded"
+    assert store.rows and store.rows[0]["title"] == "gradebook.xlsx"
+    assert "failed" not in [p.get("status") for k, p in events if k == "run.status"]

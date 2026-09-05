@@ -648,17 +648,6 @@ async def run_true_pi_agent(
                     tag=tag,
                 )
 
-        # Upstream said this turn failed (quota / provider). Do not succeed blank.
-        if state.provider_error:
-            return await _failed(
-                emit,
-                code=_provider_fail_code(state.provider_error),
-                reason=state.provider_error,
-                state=state,
-                principal=principal,
-                tag=tag,
-            )
-
         # Pull assistant text if event map did not capture it.
         if not state.final_parts and not isinstance(transport, FakeTransport):
             with suppress(TruePiClientError):
@@ -673,6 +662,7 @@ async def run_true_pi_agent(
             state.final_parts.append(transport.assistant_text)
 
         writes = count_write_tool_successes(state.tool_results)
+        collected_n = 0
         if workenv_gate is not None and artifact_store is not None:
             collected_n = await _collect_workenv_into_store(
                 workspace_id=rid,
@@ -681,6 +671,17 @@ async def run_true_pi_agent(
                 gate=workenv_gate,
             )
             writes = max(writes, collected_n)
+
+        # Quota / stream errors must not discard files already on disk.
+        if provider_error_blocks_success(state.provider_error, collected_n=collected_n):
+            return await _failed(
+                emit,
+                code=_provider_fail_code(state.provider_error),
+                reason=state.provider_error,
+                state=state,
+                principal=principal,
+                tag=tag,
+            )
         write_fail = failed_write_user_message(state.tool_results)
         if write_fail:
             return await _failed(
@@ -783,6 +784,9 @@ async def run_true_pi_agent(
         if tool_server is not None:
             with suppress(Exception):
                 await tool_server.stop()
+        if workenv_gate is not None:
+            with suppress(Exception):
+                await _destroy_workenv_run()
 
 
 def _provider_fail_code(reason: str) -> str:
@@ -790,6 +794,17 @@ def _provider_fail_code(reason: str) -> str:
     if "usage limit" in low or "quota" in low or "insufficient_quota" in low:
         return "model.usage_limit"
     return "true_pi.assistant_error"
+
+
+def provider_error_blocks_success(reason: str | None, *, collected_n: int) -> bool:
+    """True when an upstream turn error must fail the run.
+
+    Overlay writes land via collect. A later assistant/provider phrase such as
+    「没有可用token」 must not drop files already on disk.
+    """
+    if not (reason or "").strip():
+        return False
+    return int(collected_n or 0) <= 0
 
 
 def pico_system_text(*, skill: str = "", system_override: str = "", day_use: str = "") -> str:
@@ -939,14 +954,23 @@ async def _collect_workenv_into_store(
         for path in root.iterdir():
             if path.is_file():
                 skip_sha[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    from pico_orchestrator.artifact_types import is_valid_ooxml_package, title_protected_extension
+
     kept: list[dict[str, Any]] = []
     for item in files:
         name = str(item.get("name") or "")
         blob = item.get("bytes") or b""
+        if not isinstance(blob, (bytes, bytearray)) or not blob:
+            continue
         digest = hashlib.sha256(blob).hexdigest()
         if skip_sha.get(name) == digest:
             continue
+        ext = title_protected_extension(name)
+        if ext in {".docx", ".pptx", ".xlsx"} and not is_valid_ooxml_package(blob, ext):
+            continue
         kept.append(item)
+    if not kept:
+        return 0
     try:
         rows = await gate.ingest_collect(principal, store, kept)
     except WorkenvCollectRejected:
