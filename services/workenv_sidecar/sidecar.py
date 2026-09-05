@@ -355,6 +355,8 @@ def _ensure_gateway_ext() -> Path:
     """Official Pico gateway extension. Same -e file as host spawn_command."""
     if GATEWAY_EXT_SRC.is_symlink() or GATEWAY_EXT.is_symlink() or GATEWAY_EXT.parent.is_symlink():
         raise RuntimeError("gateway.ext.tampered")
+    if GATEWAY_EXT_SRC.parent.is_symlink():
+        raise RuntimeError("gateway.ext.tampered")
     if not GATEWAY_EXT_SRC.is_file():
         raise RuntimeError("gateway.ext.missing")
     try:
@@ -372,7 +374,8 @@ def _ensure_gateway_ext() -> Path:
     if st.st_mode & 0o002:
         raise RuntimeError("gateway.ext.tampered")
     # Overlay bake path only. Tests use tmp dest and skip uid 0.
-    if str(GATEWAY_EXT) == "/bridge/pico-gateway-tools.ts":
+    dest_resolved = Path(os.path.normpath(str(GATEWAY_EXT)))
+    if str(dest_resolved) == "/bridge/pico-gateway-tools.ts":
         if st.st_uid != 0 or (st.st_mode & 0o022):
             raise RuntimeError("gateway.ext.tampered")
         try:

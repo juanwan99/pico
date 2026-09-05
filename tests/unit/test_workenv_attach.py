@@ -1744,6 +1744,10 @@ def test_ensure_gateway_ext_rejects_symlink_and_world_writable(tmp_path: Path) -
         real.chmod(0o644)
     real.chmod(0o644)
     assert sidecar_mod._ensure_gateway_ext() == real
+    sidecar_mod.GATEWAY_EXT = Path("/bridge/../bridge/pico-gateway-tools.ts")
+    # Overlay path after normpath requires uid 0; tmp file is not root-owned.
+    with pytest.raises(RuntimeError, match="gateway.ext.(missing|tampered)"):
+        sidecar_mod._ensure_gateway_ext()
 
 
 def test_preexec_pdeathsig_sets_sigkill() -> None:
