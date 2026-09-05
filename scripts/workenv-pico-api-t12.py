@@ -266,7 +266,9 @@ def _t2_pass(row: dict[str, Any]) -> bool:
     has_xlsx = any((f.get("kind") == "xlsx") or str(f.get("title") or "").endswith(".xlsx") for f in row.get("files") or [])
     docx = next((f for f in row.get("files") or [] if (f.get("kind") == "docx") or str(f.get("title") or "").endswith(".docx")), None)
     text = str((docx or {}).get("docx_text") or "")
-    return has_xlsx and bool(docx) and len(text) >= 4
+    # roster.csv: 红4 蓝3 绿3
+    counts_ok = ("红" in text and "4" in text) and ("蓝" in text and "3" in text) and ("绿" in text and "3" in text)
+    return has_xlsx and bool(docx) and counts_ok
 
 
 def _html_offline(blob: bytes) -> dict[str, Any]:

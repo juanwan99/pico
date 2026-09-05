@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -110,8 +111,59 @@ def write_agent_home() -> None:
     (AGENT_HOME / "SYSTEM.md").write_text(system, encoding="utf-8")
 
 
+def _safe_workspace_id(workspace_id: str) -> str | None:
+    """Single path name under WORK_ROOT. Reject .., slashes, and absolute."""
+    wid = str(workspace_id or "").strip()
+    if not wid or wid in {".", ".."}:
+        return None
+    if "/" in wid or "\\" in wid:
+        return None
+    raw = Path(wid)
+    if raw.is_absolute() or len(raw.parts) != 1 or raw.parts[0] == "..":
+        return None
+    return wid
+
+
 def _work_dir(workspace_id: str) -> Path:
-    return WORK_ROOT / workspace_id
+    wid = _safe_workspace_id(workspace_id)
+    if wid is None:
+        raise ValueError("workspace_id.invalid")
+    root = Path(WORK_ROOT)
+    work = root / wid
+    try:
+        root_res = root.resolve()
+        resolved = work.resolve()
+    except OSError as exc:
+        raise ValueError("workspace_id.invalid") from exc
+    if resolved != root_res and root_res not in resolved.parents:
+        raise ValueError("workspace_id.invalid")
+    return work
+
+
+def _read_regular_nofollow(path: Path) -> bytes | None:
+    """Read a regular file. Do not follow a symlink out of /work."""
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            return None
+        chunks: list[bytes] = []
+        remaining = int(st.st_size)
+        while remaining > 0:
+            chunk = os.read(fd, min(remaining, 1024 * 1024))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
 
 
 def _session_file(_workspace_id: str) -> Path:
@@ -166,11 +218,15 @@ def _spawn_argv(workspace_id: str) -> list[str]:
 
 
 def _kill_pg(proc: subprocess.Popen[bytes] | None, *, grace: float = 5.0) -> int | None:
-    if proc is None or proc.poll() is not None:
-        return None if proc is None else proc.returncode
+    """SIGTERM/SIGKILL the process group even if the parent already exited."""
+    if proc is None:
+        return None
+    parent_rc = proc.poll()
     try:
         os.killpg(proc.pid, signal.SIGTERM)
     except (ProcessLookupError, PermissionError, OSError):
+        if parent_rc is not None:
+            return parent_rc
         try:
             proc.terminate()
         except ProcessLookupError:
@@ -178,18 +234,36 @@ def _kill_pg(proc: subprocess.Popen[bytes] | None, *, grace: float = 5.0) -> int
     deadline = time.time() + grace
     while time.time() < deadline:
         rc = proc.poll()
-        if rc is not None:
+        group_alive = False
+        try:
+            os.killpg(proc.pid, 0)
+            group_alive = True
+        except (ProcessLookupError, PermissionError, OSError):
+            group_alive = False
+        if rc is not None and not group_alive:
             return rc
         time.sleep(0.05)
     try:
         os.killpg(proc.pid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError, OSError):
+        if parent_rc is None:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+    kill_deadline = time.time() + 2
+    while time.time() < kill_deadline:
+        rc = proc.poll()
         try:
-            proc.kill()
-        except ProcessLookupError:
-            pass
+            os.killpg(proc.pid, 0)
+            time.sleep(0.05)
+            continue
+        except (ProcessLookupError, PermissionError, OSError):
+            return parent_rc if parent_rc is not None else rc
+    if parent_rc is not None:
+        return parent_rc
     try:
-        return proc.wait(timeout=2)
+        return proc.wait(timeout=0.2)
     except subprocess.TimeoutExpired:
         return proc.poll()
 
@@ -204,6 +278,8 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
     workspace_id = str(body.get("workspace_id") or body.get("run_id") or "").strip()
     if not workspace_id:
         return {"ok": False, "error": "workspace_id required"}
+    if _safe_workspace_id(workspace_id) is None:
+        return {"ok": False, "error": "workspace_id.invalid", "status": 400}
     mode = str(body.get("mode") or "pi").strip()
     conv = str(body.get("conversation_id") or body.get("conversation_key") or "poc")
     write_agent_home()
@@ -248,7 +324,10 @@ def attach_files(body: dict[str, Any]) -> dict[str, Any]:
     rec = _run_record(workspace_id)
     if rec is None:
         return {"ok": False, "error": "run.unknown", "status": 404}
-    work = _work_dir(workspace_id)
+    try:
+        work = _work_dir(workspace_id)
+    except ValueError:
+        return {"ok": False, "error": "workspace_id.invalid", "status": 400}
     copied = []
     for item in body.get("files") or []:
         if not isinstance(item, dict):
@@ -262,6 +341,8 @@ def attach_files(body: dict[str, Any]) -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             return {"ok": False, "error": "file.b64", "status": 400}
         dest = work / name
+        if dest.is_symlink() or dest.exists():
+            dest.unlink()
         dest.write_bytes(raw)
         copied.append({"name": name, "sha256": hashlib.sha256(raw).hexdigest(), "n": len(raw)})
     return {"ok": True, "copied": copied}
@@ -272,14 +353,19 @@ def collect_files(body: dict[str, Any]) -> dict[str, Any]:
     rec = _run_record(workspace_id)
     if rec is None:
         return {"ok": False, "error": "run.unknown", "status": 404}
-    work = _work_dir(workspace_id)
+    try:
+        work = _work_dir(workspace_id)
+    except ValueError:
+        return {"ok": False, "error": "workspace_id.invalid", "status": 400}
     globs = body.get("glob") or ["*.xlsx", "*.docx", "*.pptx", "*.html", "*.png"]
     files = []
     for pattern in globs:
         for path in sorted(work.glob(pattern)):
-            if not path.is_file():
+            if path.is_symlink():
                 continue
-            raw = path.read_bytes()
+            raw = _read_regular_nofollow(path)
+            if raw is None:
+                continue
             files.append(
                 {
                     "name": path.name,
@@ -296,6 +382,8 @@ def abort_run(body: dict[str, Any]) -> dict[str, Any]:
     rec = _run_record(workspace_id)
     if rec is None:
         return {"ok": False, "error": "run.unknown", "status": 404}
+    if _safe_workspace_id(workspace_id) is None:
+        return {"ok": False, "error": "workspace_id.invalid", "status": 400}
     proc = rec.get("proc")
     ws: WebSocketConnection | None = rec.get("ws")
     line = json.dumps({"id": f"a-{int(time.time())}", "type": "abort"}, ensure_ascii=False) + "\n"
@@ -326,11 +414,14 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
         rc = _kill_pg(rec.get("proc"), grace=5.0)
         rec["proc"] = None
         rec["ws"] = None
-    work = _work_dir(workspace_id)
+    try:
+        work = _work_dir(workspace_id)
+    except ValueError:
+        return {"ok": False, "destroyed": False, "returncode": rc, "error": "workspace_id.invalid"}
     if work.exists():
         shutil.rmtree(work, ignore_errors=True)
     gone = not work.exists()
-    return {"ok": True, "destroyed": gone, "returncode": rc}
+    return {"ok": gone, "destroyed": gone, "returncode": rc}
 
 
 def spawn_pi(workspace_id: str) -> subprocess.Popen[bytes]:

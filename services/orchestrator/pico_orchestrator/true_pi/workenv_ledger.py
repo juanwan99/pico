@@ -100,6 +100,8 @@ class WorkenvCancelGate:
             raise WorkenvCollectRejected("collect-after-cancel discarded")
         written: list[dict[str, Any]] = []
         for item in files:
+            if not self.collect_allowed():
+                raise WorkenvCollectRejected("collect-after-cancel discarded")
             name = str(item.get("name") or "file.bin")
             raw = item.get("bytes")
             if not isinstance(raw, (bytes, bytearray)):
@@ -108,6 +110,8 @@ class WorkenvCancelGate:
             ext = title_protected_extension(name)
             if ext in {".docx", ".pptx", ".xlsx"} and not is_valid_ooxml_package(blob, ext):
                 raise WorkenvCollectRejected(f"invalid ooxml {name}")
+            if not self.collect_allowed():
+                raise WorkenvCollectRejected("collect-after-cancel discarded")
             kind = ext.lstrip(".") if ext else "file"
             row = await store.write(principal, title=name, content=blob, kind=kind)
             written.append(row)
@@ -121,6 +125,8 @@ def files_from_workdir(work: Path, globs: tuple[str, ...] = COLLECT_GLOBS) -> li
         return out
     for pattern in globs:
         for path in sorted(work.glob(pattern)):
+            if path.is_symlink():
+                continue
             if path.is_file():
                 out.append({"name": path.name, "bytes": path.read_bytes()})
     return out

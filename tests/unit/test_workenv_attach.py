@@ -305,12 +305,13 @@ async def test_attach_prefers_prior_collect_over_fixture(
     assert raw == b"PRIOR-ROUND"
 
 
-def test_provider_error_blocks_success_only_without_collect() -> None:
+def test_provider_error_blocks_success_ignores_collected_n() -> None:
     from pico_orchestrator.true_pi.runtime import provider_error_blocks_success
 
     assert provider_error_blocks_success("没有可用token", collected_n=0) is True
-    assert provider_error_blocks_success("没有可用token", collected_n=1) is False
+    assert provider_error_blocks_success("没有可用token", collected_n=1) is True
     assert provider_error_blocks_success("", collected_n=0) is False
+    assert provider_error_blocks_success("", collected_n=4) is False
 
 
 @pytest.mark.asyncio
@@ -358,8 +359,200 @@ async def test_collect_keeps_modified_xlsx_skips_fixture(
     assert posted == ["/v1/internal/workenv/collect"]
 
 
+def test_create_run_rejects_dotdot(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["conversation_key"] = None
+    bad = sidecar_mod.create_run({"workspace_id": "../escape", "conversation_id": "c1"})
+    assert bad["ok"] is False
+    assert bad["error"] == "workspace_id.invalid"
+    nested = sidecar_mod.create_run({"workspace_id": "a/b", "conversation_id": "c1"})
+    assert nested["ok"] is False
+    ok = sidecar_mod.create_run({"workspace_id": "run-ok", "conversation_id": "c1"})
+    assert ok["ok"] is True
+    assert (tmp_path / "work" / "run-ok").is_dir()
+    assert not (tmp_path / "escape").exists()
+
+
+def test_collect_skips_symlink(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    work_root = tmp_path / "work"
+    work_root.mkdir()
+    sidecar_mod.WORK_ROOT = work_root
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["conversation_key"] = None
+    created = sidecar_mod.create_run({"workspace_id": "r1", "conversation_id": "c1"})
+    assert created["ok"] is True
+    secret = tmp_path / "host-secret.xlsx"
+    secret.write_bytes(b"PK\x03\x04HOST")
+    link = work_root / "r1" / "leaked.xlsx"
+    link.symlink_to(secret)
+    real = work_root / "r1" / "ok.xlsx"
+    real.write_bytes(b"PK\x03\x04OK")
+    out = sidecar_mod.collect_files({"workspace_id": "r1", "glob": ["*.xlsx"]})
+    names = [f["name"] for f in out["files"]]
+    assert "ok.xlsx" in names
+    assert "leaked.xlsx" not in names
+
+
+def test_destroy_ok_matches_destroyed(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["conversation_key"] = None
+    sidecar_mod.create_run({"workspace_id": "gone", "conversation_id": "c1"})
+    body = sidecar_mod.destroy_run({"workspace_id": "gone"})
+    assert body["ok"] is True
+    assert body["destroyed"] is True
+    assert not (tmp_path / "work" / "gone").exists()
+
+
+def test_kill_pg_signals_group_after_parent_exit(tmp_path: Path) -> None:
+    import os
+    import signal
+    import subprocess
+    import time
+
+    import sidecar as sidecar_mod
+
+    marker = tmp_path / "child.pid"
+    script = tmp_path / "pg.py"
+    script.write_text(
+        "import os, sys, time\n"
+        "from pathlib import Path\n"
+        "marker = Path(sys.argv[1])\n"
+        "child = os.fork()\n"
+        "if child == 0:\n"
+        "    marker.write_text(str(os.getpid()))\n"
+        "    time.sleep(30)\n"
+        "    raise SystemExit(0)\n"
+        "raise SystemExit(0)\n",
+        encoding="utf-8",
+    )
+    proc = subprocess.Popen(
+        [sys.executable, str(script), str(marker)],
+        start_new_session=True,
+    )
+    deadline = time.time() + 3
+    child = 0
+    while time.time() < deadline:
+        if proc.poll() is not None and marker.is_file():
+            try:
+                child = int(marker.read_text().strip() or "0")
+            except ValueError:
+                child = 0
+            if child:
+                break
+        time.sleep(0.05)
+    assert proc.poll() is not None
+    assert child > 0
+    sidecar_mod._kill_pg(proc, grace=1.0)
+    dead = False
+    deadline = time.time() + 2
+    while time.time() < deadline:
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            dead = True
+            break
+        time.sleep(0.05)
+    if not dead:
+        try:
+            os.kill(child, signal.SIGKILL)
+        except ProcessLookupError:
+            dead = True
+    assert dead
+
+
 @pytest.mark.asyncio
-async def test_overlay_lands_collect_despite_token_phrase(
+async def test_ingest_collect_rechecks_cancel_before_each_write() -> None:
+    gate = WorkenvCancelGate()
+    store = MemoryArtifactStore()
+    xlsx = (ROOT / "testdata" / "workenv" / "gradebook.xlsx").read_bytes()
+
+    class FlipStore(MemoryArtifactStore):
+        async def write(self, principal, *, title, content, kind):  # type: ignore[no-untyped-def]
+            gate.begin_cancel()
+            return await super().write(principal, title=title, content=content, kind=kind)
+
+    flip = FlipStore()
+    with pytest.raises(WorkenvCollectRejected):
+        await gate.ingest_collect(
+            Principal(),
+            flip,
+            [
+                {"name": "a.xlsx", "bytes": xlsx},
+                {"name": "b.xlsx", "bytes": xlsx},
+            ],
+        )
+    assert len(flip.rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_destroy_false_fails_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator.true_pi.client import FakeTransport
+    from pico_orchestrator.true_pi.runtime import run_true_pi_agent
+
+    def make_attach(*_a: Any, **_k: Any) -> FakeTransport:
+        return FakeTransport(
+            scripted=[
+                {"type": "agent_start"},
+                {"type": "turn_start"},
+                {"type": "agent_end", "willRetry": False},
+            ],
+            assistant_text="done",
+        )
+
+    monkeypatch.setenv("PICO_WORKENV", "pi")
+    monkeypatch.setattr("pico_orchestrator.true_pi.runtime.AttachTransport", make_attach)
+    monkeypatch.delenv("PICO_WORKENV_FIXTURE_DIR", raising=False)
+
+    async def fake_post(path: str, payload: dict, timeout: float = 30.0) -> dict:
+        del payload, timeout
+        if str(path).endswith("/collect"):
+            return {"ok": True, "files": []}
+        if str(path).endswith("/destroy-run"):
+            return {"ok": True, "destroyed": False}
+        return {"ok": True}
+
+    monkeypatch.setattr("pico_orchestrator.true_pi.workenv_http.workenv_post", fake_post)
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    result = await run_true_pi_agent(
+        prompt="hi",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=8),
+        transport=None,
+        artifact_store=MemoryArtifactStore(),
+        run_id="destroy-false",
+    )
+    assert result.status == "failed"
+    assert any(
+        p.get("code") == "sandbox.workenv_destroy_failed"
+        for k, p in events
+        if k == "run.error"
+    )
+
+
+@pytest.mark.asyncio
+async def test_overlay_collects_files_but_provider_error_fails_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import base64
@@ -367,9 +560,39 @@ async def test_overlay_lands_collect_despite_token_phrase(
     from pico_orchestrator.true_pi.client import FakeTransport
     from pico_orchestrator.true_pi.runtime import run_true_pi_agent
 
-    monkeypatch.setattr(
-        "pico_orchestrator.true_pi.runtime.AttachTransport", FakeTransport
-    )
+    scripted = [
+        {"type": "agent_start"},
+        {"type": "turn_start"},
+        {
+            "type": "tool_execution_start",
+            "toolName": "bash",
+            "toolCallId": "c1",
+            "args": {"command": "python save xlsx"},
+        },
+        {
+            "type": "tool_execution_end",
+            "toolName": "bash",
+            "toolCallId": "c1",
+            "isError": False,
+            "result": {"content": [{"type": "text", "text": "saved"}]},
+        },
+        {
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "content": [],
+                "stopReason": "error",
+                "errorMessage": "没有可用token",
+            },
+        },
+        {"type": "agent_end", "willRetry": False},
+    ]
+
+    def make_attach(*_a: Any, **_k: Any) -> FakeTransport:
+        return FakeTransport(scripted=scripted, assistant_text="")
+
+    monkeypatch.setenv("PICO_WORKENV", "pi")
+    monkeypatch.setattr("pico_orchestrator.true_pi.runtime.AttachTransport", make_attach)
     monkeypatch.delenv("PICO_WORKENV_FIXTURE_DIR", raising=False)
     xlsx = (ROOT / "testdata" / "workenv" / "gradebook.xlsx").read_bytes()
 
@@ -394,46 +617,16 @@ async def test_overlay_lands_collect_despite_token_phrase(
     async def emit(kind: str, payload: dict[str, Any]) -> None:
         events.append((kind, payload))
 
-    transport = FakeTransport(
-        scripted=[
-            {"type": "agent_start"},
-            {"type": "turn_start"},
-            {
-                "type": "tool_execution_start",
-                "toolName": "bash",
-                "toolCallId": "c1",
-                "args": {"command": "python save xlsx"},
-            },
-            {
-                "type": "tool_execution_end",
-                "toolName": "bash",
-                "toolCallId": "c1",
-                "isError": False,
-                "result": {"content": [{"type": "text", "text": "saved"}]},
-            },
-            {
-                "type": "message_end",
-                "message": {
-                    "role": "assistant",
-                    "content": [],
-                    "stopReason": "error",
-                    "errorMessage": "没有可用token",
-                },
-            },
-            {"type": "agent_end", "willRetry": False},
-        ],
-        assistant_text="",
-    )
     result = await run_true_pi_agent(
         prompt="把 D2:D7 写成公式",
         principal=Principal(),
         emit=emit,
         is_cancelled=_not_cancelled,
         caps=RunCaps(min_artifacts=0, max_seconds=8),
-        transport=transport,
+        transport=None,
         artifact_store=store,
         run_id="t1-token-phrase",
     )
-    assert result.status == "succeeded"
+    assert result.status == "failed"
     assert store.rows and store.rows[0]["title"] == "gradebook.xlsx"
-    assert "failed" not in [p.get("status") for k, p in events if k == "run.status"]
+    assert "failed" in [p.get("status") for k, p in events if k == "run.status"]

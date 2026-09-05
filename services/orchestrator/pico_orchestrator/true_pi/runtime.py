@@ -181,11 +181,15 @@ async def run_true_pi_agent(
         from pico_orchestrator.true_pi.workenv_http import WorkenvHttpError, workenv_post
 
         try:
-            await workenv_post(
+            body = await workenv_post(
                 "/v1/internal/workenv/destroy-run",
                 {"workspace_id": rid},
                 timeout=15.0,
             )
+            destroyed = bool(body.get("destroyed")) and bool(body.get("ok", True))
+            if not destroyed:
+                workenv_gate.fail_destroy()
+                return False
             if workenv_gate.status == "cancelling":
                 workenv_gate.finish_cancel()
             return True
@@ -672,7 +676,7 @@ async def run_true_pi_agent(
             )
             writes = max(writes, collected_n)
 
-        # Quota / stream errors must not discard files already on disk.
+        # Quota / stream errors fail the run. collected_n must not wipe that.
         if provider_error_blocks_success(state.provider_error, collected_n=collected_n):
             return await _failed(
                 emit,
@@ -799,12 +803,11 @@ def _provider_fail_code(reason: str) -> str:
 def provider_error_blocks_success(reason: str | None, *, collected_n: int) -> bool:
     """True when an upstream turn error must fail the run.
 
-    Overlay writes land via collect. A later assistant/provider phrase such as
-    「没有可用token」 must not drop files already on disk.
+    collected_n is ignored. Files already on disk stay in ArtifactStore, but
+    a provider/assistant error must not stamp the run succeeded.
     """
-    if not (reason or "").strip():
-        return False
-    return int(collected_n or 0) <= 0
+    del collected_n
+    return bool((reason or "").strip())
 
 
 def pico_system_text(*, skill: str = "", system_override: str = "", day_use: str = "") -> str:
