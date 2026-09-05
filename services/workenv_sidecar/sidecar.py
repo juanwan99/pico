@@ -114,8 +114,9 @@ def _work_dir(workspace_id: str) -> Path:
     return WORK_ROOT / workspace_id
 
 
-def _session_file(workspace_id: str) -> Path:
-    return SESSION_ROOT / f"pico-{workspace_id}.jsonl"
+def _session_file(_workspace_id: str) -> Path:
+    """One conversation, one official --session file. Destroy-run keeps this."""
+    return SESSION_ROOT / "pico.jsonl"
 
 
 def _spawn_argv(workspace_id: str) -> list[str]:

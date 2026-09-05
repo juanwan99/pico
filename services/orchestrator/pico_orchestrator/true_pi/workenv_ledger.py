@@ -35,10 +35,12 @@ class MemoryArtifactStore:
         raw = content.encode("utf-8") if isinstance(content, str) else content
         row = {
             "id": f"art-{len(self.rows) + 1}",
+            "artifact_id": f"art-{len(self.rows) + 1}",
             "title": title,
             "kind": kind,
             "n": len(raw),
             "sha256": hashlib.sha256(raw).hexdigest(),
+            "content": raw,
         }
         self.rows.append(row)
         return row

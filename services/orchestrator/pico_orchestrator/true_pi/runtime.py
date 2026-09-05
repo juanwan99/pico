@@ -251,7 +251,11 @@ async def run_true_pi_agent(
                 box_id=str(created.get("box_id") or "box-1"),
             )
             workenv_gate = WorkenvCancelGate()
-            await _attach_workenv_fixtures(rid)
+            await _attach_workenv_fixtures(
+                rid,
+                principal=principal,
+                artifact_store=artifact_store,
+            )
         elif isinstance(transport, AttachTransport):
             from pico_orchestrator.true_pi.workenv_ledger import WorkenvCancelGate
 
@@ -807,28 +811,99 @@ def pico_system_text(*, skill: str = "", system_override: str = "", day_use: str
     return body
 
 
-async def _attach_workenv_fixtures(workspace_id: str) -> None:
-    """Copy frozen PoC files into /work/{run}. Overlay does not invent fixtures."""
+def _bytes_from_store_row(row: dict[str, Any]) -> bytes | None:
+    blob = row.get("content")
+    if isinstance(blob, (bytes, bytearray)):
+        return bytes(blob)
+    b64 = row.get("content_base64")
+    if isinstance(b64, str) and b64:
+        import base64
+
+        try:
+            return base64.b64decode(b64)
+        except Exception:  # noqa: BLE001
+            return None
+    text = row.get("content")
+    if isinstance(text, str) and text:
+        return text.encode("utf-8")
+    return None
+
+
+async def _prior_workenv_files(
+    *,
+    principal: Principal,
+    artifact_store: ArtifactStore | None,
+) -> list[dict[str, Any]]:
+    """T1 round 2: previous collect bytes, newest title wins."""
+    import base64
+
+    if artifact_store is None:
+        return []
+    try:
+        rows = await artifact_store.list(principal, limit=50)
+    except Exception as _exc:  # noqa: BLE001
+        del _exc
+        return []
+    files: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        name = Path(str(row.get("title") or "")).name
+        if not name or name in seen:
+            continue
+        art_id = str(row.get("artifact_id") or row.get("id") or "") or None
+        try:
+            full = await artifact_store.read(
+                principal, artifact_id=art_id, title=name if not art_id else None
+            )
+        except Exception as _exc:  # noqa: BLE001
+            del _exc
+            continue
+        if not isinstance(full, dict):
+            continue
+        raw = _bytes_from_store_row(full)
+        if not raw:
+            continue
+        seen.add(name)
+        files.append({"name": name, "bytes_b64": base64.b64encode(raw).decode("ascii")})
+    return files
+
+
+async def _attach_workenv_fixtures(
+    workspace_id: str,
+    *,
+    principal: Principal | None = None,
+    artifact_store: ArtifactStore | None = None,
+) -> None:
+    """Copy frozen PoC files + prior collect into /work/{run}."""
     import base64
 
     from pico_orchestrator.true_pi.workenv_http import workenv_post
 
-    root = Path(os.environ.get("PICO_WORKENV_FIXTURE_DIR") or "")
-    if not root.is_dir():
-        return
     files: list[dict[str, Any]] = []
-    for path in sorted(root.iterdir()):
-        if not path.is_file():
-            continue
-        if path.suffix.lower() not in {".xlsx", ".csv", ".docx", ".pptx", ".html", ".txt"}:
-            continue
-        raw = path.read_bytes()
-        files.append(
-            {
-                "name": path.name,
-                "bytes_b64": base64.b64encode(raw).decode("ascii"),
-            }
+    prior_names: set[str] = set()
+    if principal is not None:
+        prior = await _prior_workenv_files(
+            principal=principal, artifact_store=artifact_store
         )
+        for item in prior:
+            files.append(item)
+            prior_names.add(str(item.get("name") or ""))
+    root = Path(os.environ.get("PICO_WORKENV_FIXTURE_DIR") or "")
+    if root.is_dir():
+        for path in sorted(root.iterdir()):
+            if not path.is_file():
+                continue
+            if path.suffix.lower() not in {".xlsx", ".csv", ".docx", ".pptx", ".html", ".txt"}:
+                continue
+            if path.name in prior_names:
+                continue
+            raw = path.read_bytes()
+            files.append(
+                {
+                    "name": path.name,
+                    "bytes_b64": base64.b64encode(raw).decode("ascii"),
+                }
+            )
     if not files:
         return
     await workenv_post(

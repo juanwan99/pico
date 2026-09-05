@@ -217,3 +217,52 @@ async def test_attach_transport_abort_on_first_tool(tmp_path: Path, monkeypatch:
     assert "tool_execution_start" in seen
     assert abort_ack
     assert "agent_end" in seen or "tool_execution_end" in seen
+    assert (tmp_path / "session" / "pico.jsonl").is_file()
+    assert not (tmp_path / "session" / "pico-t4x.jsonl").exists()
+
+
+def test_sidecar_session_is_conversation_pico_jsonl(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.SESSION_ROOT = tmp_path / "session"
+    sidecar_mod.SESSION_ROOT.mkdir()
+    path = sidecar_mod._session_file("run-uuid-1")
+    assert path == tmp_path / "session" / "pico.jsonl"
+    assert sidecar_mod._session_file("run-uuid-2") == path
+
+
+@pytest.mark.asyncio
+async def test_attach_prefers_prior_collect_over_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pico_orchestrator.true_pi.runtime import _attach_workenv_fixtures
+    from pico_orchestrator.true_pi.workenv_ledger import MemoryArtifactStore
+
+    fixture = tmp_path / "fix"
+    fixture.mkdir()
+    fixture.joinpath("gradebook.xlsx").write_bytes(b"FIXTURE")
+    monkeypatch.setenv("PICO_WORKENV_FIXTURE_DIR", str(fixture))
+    store = MemoryArtifactStore()
+    await store.write(
+        Principal(), title="gradebook.xlsx", content=b"PRIOR-ROUND", kind="xlsx"
+    )
+    posted: list[dict] = []
+
+    async def fake_post(path: str, payload: dict, timeout: float = 30.0) -> dict:
+        del timeout
+        posted.append({"path": path, "payload": payload})
+        return {"ok": True}
+
+    monkeypatch.setattr(
+        "pico_orchestrator.true_pi.workenv_http.workenv_post", fake_post
+    )
+    await _attach_workenv_fixtures(
+        "run-2", principal=Principal(), artifact_store=store
+    )
+    files = posted[0]["payload"]["files"]
+    names = [f["name"] for f in files]
+    assert names.count("gradebook.xlsx") == 1
+    import base64
+
+    raw = base64.b64decode(files[0]["bytes_b64"])
+    assert raw == b"PRIOR-ROUND"
