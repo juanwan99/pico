@@ -5,7 +5,7 @@ DOC: docs/ONEFLOW.md
 STATUS: BINDING v2.4 — 2026-09-02
 EXEC: 本窗合一 · GitHub 唯一真源 · 只有 origin/main 是生产线 · 卫生=对账
 REPO: juanwan99/pico ONLY
-NORTH: docs/DIRECTION-NOW.md §0-star（用法 = Grok · 禁定向猜任务）
+NORTH: docs/DIRECTION-NOW.md §0-star v1.3（用法 = Grok · 能力并列 · 工作环境交成熟上游）
 ```
 
 ```text

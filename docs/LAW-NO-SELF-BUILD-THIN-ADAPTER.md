@@ -57,7 +57,7 @@ Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 5. 公网默认 Host Shell / 任意 bash 当能力卖点
 6. 用自研补丁冒充「已经是上游生态」（名实造假）
 7. 复制 edu-core 栈进 Pico 当第二产品
-8. **定向工作流冒充用户**：读正文猜任务、force_agent 自动挂交付 Skill、把 skill/Landing requirement/「必须交 N 个文件」焊进 user prompt（北极星 DIRECTION-NOW §0-star；用法 = Grok）
+8. **定向工作流冒充用户**：读正文猜任务、force_agent 自动挂交付 Skill、把 skill/Landing requirement/「必须交 N 个文件」焊进 user prompt（北极星 DIRECTION-NOW §0-star v1.3；用法 = Grok）
 9. **本地 PDF 阅读器当能力核**：进模型前用 pypdfium2/RapidOCR/渲页/抽文冒充「已经读了 PDF」。原件走账本；Pi 无文件口 ≠ 允许自研 PDF 核
 10. **办公投影器当能力核**：把 Office 抽成摘录/spec 条目墙再喂模型，或把 spec 投影当天花板。生成走模型+沙箱库；预览门脸不是阅读核
 11. **交件监工**：min_artifacts / force_agent / 词表自动挂交付 Skill / 把「本轮必须交 N 个文件」焊进 user
@@ -75,6 +75,7 @@ Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 | 产品 | 门脸适配、人包、假绿防护、租户隔离 |
 | 接入 | MCP/KB 以后接现成组件（分期），不自写协议内核 |
 | 加载 | 少常驻动词 + Skill 渐进披露；见 [`ADR-CAPABILITY-LOADING.md`](./ADR-CAPABILITY-LOADING.md)。禁自研选工具核 |
+| 工作环境 | 成熟上游隔离执行面（文件/程序/依赖/进程）；Pico 只接线、白名单、账本、门闩。禁 host bash、禁自研沙箱核 |
 
 ---
 
