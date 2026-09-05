@@ -330,6 +330,15 @@ async def run_true_pi_agent(
             pi_provider = "openai" if openai_brain or provider.name != "deepseek" else "deepseek"
             pi_base = provider.base_url if openai_brain else ""
             pi_api = "openai-responses" if openai_brain else ""
+            if workenv_mode == "exec":
+                backend_model = str(
+                    os.environ.get("PICO_MODEL") or provider.model or "gpt-5.6-sol"
+                )
+                openai_brain = True
+                openai_responses_brain = True
+                pi_provider = "openai"
+                pi_base = proxy_base or provider.base_url or "http://127.0.0.1:18769/v1"
+                pi_api = "openai-responses"
             if openai_brain and rid:
                 from pico_orchestrator.llm_file_pass import has_turn_files, pass_base_url
 
