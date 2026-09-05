@@ -37,7 +37,8 @@ SESSION_ROOT = Path(os.environ.get("PICO_WORKENV_SESSION", "/session"))
 AGENT_HOME = Path(os.environ.get("PI_CODING_AGENT_DIR", "/agent-home"))
 MODEL = os.environ.get("PICO_MODEL", "gpt-5.6-sol")
 PI_BIN = os.environ.get("PICO_TRUE_PI_BIN", "pi")
-HOST_GW_TOOLS = os.environ.get("PICO_TRUE_PI_TOOL_URL", "http://host-gateway:18769")
+# 18769 is the model proxy, never a ToolServer. Pi-mode create must pass tool_url.
+HOST_GW_TOOLS = (os.environ.get("PICO_TRUE_PI_TOOL_URL") or "").strip()
 UPSTREAM_BASE = os.environ.get("PICO_UPSTREAM_BASE", "http://host-gateway:18769/v1")
 GATEWAY_EXT = Path(
     os.environ.get("PICO_GATEWAY_EXT", "/bridge/pico-gateway-tools.ts")
@@ -53,6 +54,7 @@ _lock = threading.Lock()
 _state: dict[str, Any] = {
     "box_id": "box-1",
     "conversation_key": None,
+    "session_conversation": None,
     "owner_key": None,
     "runs": {},  # workspace_id -> run record
     "destroyed": set(),
@@ -220,15 +222,17 @@ def _retarget_session_cwd(session: Path, work: Path) -> None:
     session.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _ensure_gateway_ext() -> Path | None:
+def _ensure_gateway_ext() -> Path:
     """Official Pico gateway extension. Same -e file as host spawn_command."""
     if GATEWAY_EXT.is_file():
         return GATEWAY_EXT
     if not GATEWAY_EXT_SRC.is_file():
-        return None
+        raise RuntimeError("gateway.ext.missing")
     GATEWAY_EXT.parent.mkdir(parents=True, exist_ok=True)
     GATEWAY_EXT.write_text(GATEWAY_EXT_SRC.read_text(encoding="utf-8"), encoding="utf-8")
-    return GATEWAY_EXT if GATEWAY_EXT.is_file() else None
+    if not GATEWAY_EXT.is_file():
+        raise RuntimeError("gateway.ext.missing")
+    return GATEWAY_EXT
 
 
 def _spawn_argv(workspace_id: str) -> list[str]:
@@ -256,9 +260,7 @@ def _spawn_argv(workspace_id: str) -> list[str]:
     # Overlay Pi keeps builtins (files/bash in-box). Host spawn uses
     # --no-builtin-tools. B1 still loads the official Pico gateway -e.
     if mode == "pi":
-        ext = _ensure_gateway_ext()
-        if ext is not None:
-            argv.extend(["-e", str(ext)])
+        argv.extend(["-e", str(_ensure_gateway_ext())])
     return argv
 
 
@@ -326,6 +328,11 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
     if _safe_workspace_id(workspace_id) is None:
         return {"ok": False, "error": "workspace_id.invalid", "status": 400}
     mode = str(body.get("mode") or "pi").strip()
+    tool_url = str(body.get("tool_url") or HOST_GW_TOOLS).strip()
+    tool_token = str(body.get("tool_token") or "").strip()
+    visible_tools = str(body.get("visible_tools") or "").strip()
+    if mode == "pi" and (not tool_url or tool_url.rstrip("/").endswith(":18769")):
+        return {"ok": False, "error": "tool_url.invalid", "status": 400}
     conv = str(body.get("conversation_id") or body.get("conversation_key") or "poc")
     owner = (
         str(body.get("school_id") or "").strip()
@@ -339,7 +346,10 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
         if _state["owner_key"] not in {None, owner}:
             return {"ok": False, "error": "box.owner_mismatch", "status": 409}
         if _state["conversation_key"] in {None, conv}:
+            if _state.get("session_conversation") not in {None, conv}:
+                _reset_session_file()
             _state["conversation_key"] = conv
+            _state["session_conversation"] = conv
         elif _state["conversation_key"] != conv:
             return {"ok": False, "error": "box.conversation_mismatch", "status": 409}
         _state["owner_key"] = owner
@@ -369,9 +379,9 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "run.destroyed", "status": 409}
         rec["run_id"] = str(body.get("run_id") or workspace_id)
         rec["mode"] = mode
-        rec["tool_url"] = str(body.get("tool_url") or HOST_GW_TOOLS).strip()
-        rec["tool_token"] = str(body.get("tool_token") or "").strip()
-        rec["visible_tools"] = str(body.get("visible_tools") or "").strip()
+        rec["tool_url"] = tool_url
+        rec["tool_token"] = tool_token
+        rec["visible_tools"] = visible_tools
         rec.setdefault("pgids", [])
         rec["destroyed"] = False
         _state["runs"][workspace_id] = rec
@@ -656,7 +666,8 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
             if not _state["runs"]:
                 _state["conversation_key"] = None
                 _state["owner_key"] = None
-                _reset_session_file()
+                # Keep official --session jsonl for T1 round 2. Wipe only
+                # when create binds a different conversation.
     return {"ok": gone, "destroyed": gone, "returncode": rc}
 
 

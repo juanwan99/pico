@@ -275,6 +275,7 @@ def _start_sidecar(tmp_path: Path, *, pi_bin: str, token: str) -> tuple[Threadin
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
     sidecar_mod._state["owner_key"] = None
     sidecar_mod.write_agent_home()
     port = _free_port()
@@ -330,9 +331,22 @@ async def test_attach_transport_abort_on_first_tool(tmp_path: Path, monkeypatch:
     )
     from pico_orchestrator.true_pi.workenv_http import workenv_post
 
+    import sidecar as sidecar_mod
+
+    ext_src = tmp_path / "pico-gateway-tools.ts"
+    ext_src.write_text("export default {};\n", encoding="utf-8")
+    sidecar_mod.GATEWAY_EXT = tmp_path / "bridge" / "pico-gateway-tools.ts"
+    sidecar_mod.GATEWAY_EXT_SRC = ext_src
     created = await workenv_post(
         "/v1/internal/workenv/create",
-        {"workspace_id": "t4x", "run_id": "t4x", "conversation_id": "c1", "mode": "pi"},
+        {
+            "workspace_id": "t4x",
+            "run_id": "t4x",
+            "conversation_id": "c1",
+            "mode": "pi",
+            "tool_url": "http://host-gateway:18764",
+            "tool_token": "tok",
+        },
     )
     assert created["ok"] is True
     transport = AttachTransport(run_id="t4x", box_id=str(created.get("box_id") or "box-1"))
@@ -498,13 +512,16 @@ def test_create_run_rejects_dotdot(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
     sidecar_mod._state["owner_key"] = None
     bad = sidecar_mod.create_run({"workspace_id": "../escape", "conversation_id": "c1"})
     assert bad["ok"] is False
     assert bad["error"] == "workspace_id.invalid"
     nested = sidecar_mod.create_run({"workspace_id": "a/b", "conversation_id": "c1"})
     assert nested["ok"] is False
-    ok = sidecar_mod.create_run({"workspace_id": "run-ok", "conversation_id": "c1"})
+    ok = sidecar_mod.create_run(
+        {"workspace_id": "run-ok", "conversation_id": "c1", "mode": "workdir"}
+    )
     assert ok["ok"] is True
     assert (tmp_path / "work" / "run-ok").is_dir()
     assert not (tmp_path / "escape").exists()
@@ -520,6 +537,7 @@ def test_exec_python_in_work_dir(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
     sidecar_mod._state["owner_key"] = None
     created = sidecar_mod.create_run(
         {"workspace_id": "exec1", "conversation_id": "c1", "mode": "workdir"}
@@ -554,8 +572,11 @@ def test_collect_skips_symlink(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
     sidecar_mod._state["owner_key"] = None
-    created = sidecar_mod.create_run({"workspace_id": "r1", "conversation_id": "c1"})
+    created = sidecar_mod.create_run(
+        {"workspace_id": "r1", "conversation_id": "c1", "mode": "workdir"}
+    )
     assert created["ok"] is True
     secret = tmp_path / "host-secret.xlsx"
     secret.write_bytes(b"PK\x03\x04HOST")
@@ -579,8 +600,11 @@ def test_destroy_ok_matches_destroyed(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
     sidecar_mod._state["owner_key"] = None
-    sidecar_mod.create_run({"workspace_id": "gone", "conversation_id": "c1"})
+    sidecar_mod.create_run(
+        {"workspace_id": "gone", "conversation_id": "c1", "mode": "workdir"}
+    )
     body = sidecar_mod.destroy_run({"workspace_id": "gone"})
     assert body["ok"] is True
     assert body["destroyed"] is True
@@ -833,6 +857,7 @@ async def test_pi_mode_create_passes_tool_server(
     created = next(p for p in posted if str(p["path"]).endswith("/create"))
     assert created["payload"]["mode"] == "pi"
     assert created["payload"]["tool_url"].startswith("http://127.0.0.1:")
+    assert not created["payload"]["tool_url"].rstrip("/").endswith(":18769")
     assert created["payload"]["tool_token"]
     vis = created["payload"]["visible_tools"]
     assert "inspect_document" in vis
@@ -852,18 +877,34 @@ def test_destroy_clears_conversation_key(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
     sidecar_mod._state["owner_key"] = None
-    first = sidecar_mod.create_run({"workspace_id": "r-t1", "conversation_id": "t1-api"})
+    first = sidecar_mod.create_run(
+        {"workspace_id": "r-t1", "conversation_id": "t1-api", "mode": "workdir"}
+    )
     assert first["ok"] is True
-    mismatch = sidecar_mod.create_run({"workspace_id": "r-t2", "conversation_id": "t2-api"})
+    session = sidecar_mod.SESSION_ROOT / "pico.jsonl"
+    session.write_text('{"type":"session","cwd":"/work/r-t1"}\n', encoding="utf-8")
+    mismatch = sidecar_mod.create_run(
+        {"workspace_id": "r-t2", "conversation_id": "t2-api", "mode": "workdir"}
+    )
     assert mismatch["ok"] is False
     assert mismatch["error"] == "box.conversation_mismatch"
     gone = sidecar_mod.destroy_run({"workspace_id": "r-t1"})
     assert gone["destroyed"] is True
     assert sidecar_mod._state["conversation_key"] is None
-    second = sidecar_mod.create_run({"workspace_id": "r-t2", "conversation_id": "t2-api"})
+    kept = session.read_text(encoding="utf-8")
+    assert '"type"' in kept and "session" in kept
+    same = sidecar_mod.create_run(
+        {"workspace_id": "r-t1b", "conversation_id": "t1-api", "mode": "workdir"}
+    )
+    assert same["ok"] is True
+    assert '{"type"' in session.read_text(encoding="utf-8")
+    sidecar_mod.destroy_run({"workspace_id": "r-t1b"})
+    second = sidecar_mod.create_run(
+        {"workspace_id": "r-t2", "conversation_id": "t2-api", "mode": "workdir"}
+    )
     assert second["ok"] is True
-    session = sidecar_mod.SESSION_ROOT / "pico.jsonl"
     assert session.exists()
     assert session.read_text(encoding="utf-8") == ""
 
@@ -880,6 +921,7 @@ def test_create_run_rejects_owner_mismatch(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
     sidecar_mod._state["owner_key"] = None
     first = sidecar_mod.create_run(
         {
@@ -887,6 +929,7 @@ def test_create_run_rejects_owner_mismatch(tmp_path: Path) -> None:
             "conversation_id": "c1",
             "school_id": "school-a",
             "membership_id": "m1",
+            "mode": "workdir",
         }
     )
     assert first["ok"] is True
@@ -896,6 +939,7 @@ def test_create_run_rejects_owner_mismatch(tmp_path: Path) -> None:
             "conversation_id": "c1",
             "school_id": "school-b",
             "membership_id": "m2",
+            "mode": "workdir",
         }
     )
     assert other["ok"] is False
@@ -919,6 +963,7 @@ def test_pi_spawn_loads_gateway_extension(tmp_path: Path) -> None:
     sidecar_mod._state["runs"] = {}
     sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
     sidecar_mod._state["owner_key"] = None
     created = sidecar_mod.create_run(
         {
@@ -939,6 +984,63 @@ def test_pi_spawn_loads_gateway_extension(tmp_path: Path) -> None:
     assert rec is not None
     assert rec["tool_url"] == "http://host-gateway:18764"
     assert rec["tool_token"] == "tok"
+
+
+def test_pi_create_rejects_model_proxy_tool_url(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.SESSION_ROOT = tmp_path / "session"
+    sidecar_mod.SESSION_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
+    sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
+    sidecar_mod._state["owner_key"] = None
+    bad = sidecar_mod.create_run(
+        {
+            "workspace_id": "r-proxy",
+            "conversation_id": "c1",
+            "mode": "pi",
+            "tool_url": "http://host-gateway:18769",
+        }
+    )
+    assert bad["ok"] is False
+    assert bad["error"] == "tool_url.invalid"
+
+
+def test_pi_spawn_fails_closed_without_gateway_ext(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+    import pytest
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.SESSION_ROOT = tmp_path / "session"
+    sidecar_mod.SESSION_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod.GATEWAY_EXT = tmp_path / "bridge" / "pico-gateway-tools.ts"
+    sidecar_mod.GATEWAY_EXT_SRC = tmp_path / "missing.ts"
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
+    sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
+    sidecar_mod._state["owner_key"] = None
+    created = sidecar_mod.create_run(
+        {
+            "workspace_id": "r-missing",
+            "conversation_id": "c1",
+            "mode": "pi",
+            "tool_url": "http://host-gateway:18764",
+            "tool_token": "tok",
+        }
+    )
+    assert created["ok"] is True
+    with pytest.raises(RuntimeError, match="gateway.ext.missing"):
+        sidecar_mod._spawn_argv("r-missing")
 
 
 @pytest.mark.asyncio

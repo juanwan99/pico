@@ -256,6 +256,8 @@ async def run_true_pi_agent(
             public_url = (
                 os.environ.get("PICO_TRUE_PI_TOOL_PUBLIC_URL") or ""
             ).strip() or tool_url
+            if public_url.rstrip("/").endswith(":18769"):
+                raise TruePiClientError("tool_url.invalid: 18769 is the model proxy")
             created = await workenv_post(
                 "/v1/internal/workenv/create",
                 {
