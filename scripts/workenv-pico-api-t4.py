@@ -12,7 +12,10 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-PROMPT = "把 D2:D7 写成期末40%加平时60%的公式，保存为 xlsx。"
+PROMPT = (
+    "把 D2:D7 写成期末40%加平时60%的公式，保存为 xlsx。"
+    "必须用 workspace_write_file 或 sandbox_workspace_exec 改文件，不要只 inspect。"
+)
 CONVO = "t4-api"
 
 
