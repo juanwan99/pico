@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
@@ -39,6 +40,7 @@ from pico_orchestrator.true_pi.config import (
 )
 from pico_orchestrator.true_pi.events import EventMapState, map_event
 from pico_orchestrator.true_pi.tool_server import ToolServer
+from pico_orchestrator.true_pi.workenv_attach import AttachTransport
 from pico_orchestrator.user_errors import enrich_fail_payload
 from pico_orchestrator.workbench_progress import failed_write_user_message
 
@@ -170,6 +172,50 @@ async def run_true_pi_agent(
     breaker_seconds = max(1, int(getattr(caps, "no_progress_seconds", 180) or 180))
     last_tool_ok_wall: float | None = None
     last_progress_wall = started
+    workenv_mode = (os.environ.get("PICO_WORKENV") or "off").strip().lower()
+    workenv_gate = None
+
+    async def _destroy_workenv_run() -> bool:
+        if workenv_gate is None:
+            return True
+        from pico_orchestrator.true_pi.workenv_http import WorkenvHttpError, workenv_post
+
+        try:
+            await workenv_post(
+                "/v1/internal/workenv/destroy-run",
+                {"workspace_id": rid},
+                timeout=15.0,
+            )
+            if workenv_gate.status == "cancelling":
+                workenv_gate.finish_cancel()
+            return True
+        except WorkenvHttpError:
+            workenv_gate.fail_destroy()
+            return False
+        except Exception:  # noqa: BLE001
+            workenv_gate.fail_destroy()
+            return False
+
+    async def _cancel_run() -> RunResult:
+        assert client is not None
+        if workenv_gate is not None:
+            workenv_gate.begin_cancel()
+            await emit("run.status", {"status": "cancelling", **tag})
+        await client.abort()
+        if workenv_gate is not None:
+            destroyed = await _destroy_workenv_run()
+            if not destroyed or workenv_gate.status == "failed":
+                return await _failed(
+                    emit,
+                    code="sandbox.workenv_destroy_failed",
+                    reason="隔离环境没关掉",
+                    state=state,
+                    principal=principal,
+                    tag=tag,
+                )
+            await emit("sandbox.workenv.destroy", {"workspace_id": rid, **tag})
+        await emit("run.status", {"status": "cancelled", **tag})
+        return _result("cancelled", state, principal=principal)
 
     async def _watcher() -> None:
         while not stop.is_set():
@@ -185,6 +231,30 @@ async def run_true_pi_agent(
 
     watcher = asyncio.create_task(_watcher())
     try:
+        if transport is None and workenv_mode == "pi":
+            from pico_orchestrator.true_pi.workenv_http import workenv_post
+            from pico_orchestrator.true_pi.workenv_ledger import WorkenvCancelGate
+
+            created = await workenv_post(
+                "/v1/internal/workenv/create",
+                {
+                    "run_id": rid,
+                    "workspace_id": rid,
+                    "conversation_id": conversation_id or rid,
+                    "school_id": str(getattr(principal, "school_id", "") or ""),
+                    "membership_id": str(getattr(principal, "membership_id", "") or ""),
+                    "mode": "pi",
+                },
+            )
+            transport = AttachTransport(
+                run_id=rid,
+                box_id=str(created.get("box_id") or "box-1"),
+            )
+            workenv_gate = WorkenvCancelGate()
+        elif isinstance(transport, AttachTransport):
+            from pico_orchestrator.true_pi.workenv_ledger import WorkenvCancelGate
+
+            workenv_gate = WorkenvCancelGate()
         if transport is None:
             provider = resolve_provider()
             if provider is None:
@@ -444,9 +514,7 @@ async def run_true_pi_agent(
                         tag=tag,
                     )
                 if await is_cancelled():
-                    await client.abort()
-                    await emit("run.status", {"status": "cancelled", **tag})
-                    return _result("cancelled", state, principal=principal)
+                    return await _cancel_run()
                 if timed_out.is_set() or loop.time() >= deadline:
                     await client.abort()
                     return await _failed(
@@ -533,9 +601,7 @@ async def run_true_pi_agent(
             )
 
         if await is_cancelled():
-            await client.abort()
-            await emit("run.status", {"status": "cancelled", **tag})
-            return _result("cancelled", state, principal=principal)
+            return await _cancel_run()
 
         if timed_out.is_set() or loop.time() >= deadline:
             await client.abort()
