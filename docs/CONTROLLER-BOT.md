@@ -1,15 +1,14 @@
-# 总管 Bot（7×24 · BINDING）
+# 总管 Bot（已停定时）
 
 ```
 DOC: docs/CONTROLLER-BOT.md
-STATUS: BINDING
-DATE: 2026-07-31
+STATUS: OFF — 定时空转已停；只留 workflow_dispatch
+DATE: 2026-09-05
 ```
 
 ## 1. 解决什么问题
 
-对话里的 Grok **没有后台时钟**；休眠时不会 poll。  
-**Controller Bot** 用 **GitHub Actions 定时**（每 15 分钟）在仓库内轮询并推进，**不依赖业主转贴、不依赖 Grok 对话在线**。
+定时 poll 已停（空转写 #475、黄档默代合）。脚本仍在 `scripts/controller_bot.py`，只许 `workflow_dispatch`，默认 dry_run、不合 PR。
 
 ## 2. 会做什么 / 不会做什么
 
@@ -25,42 +24,17 @@ DATE: 2026-07-31
 
 | 变量 | 含义 |
 |------|------|
-| repo **Variable** `CONTROLLER_AUTO_MERGE` | `true`/`false`，默认 workflow 为 true |
-| `workflow_dispatch` | 手动跑一轮；可 dry_run |
+| `workflow_dispatch` | 手动跑一轮；默认 dry_run、不合 PR |
 | `CONTROLLER_DRY_RUN=1` | 本地只打印 |
 
-关闭自动合：GitHub → Settings → Secrets and variables → Actions → Variables → `CONTROLLER_AUTO_MERGE` = `false`。
+定时已关。需要代合时手动 Run workflow，并显式把 auto_merge 设为 true、dry_run 设为 false。
 
-## 4. 本地 / ECS 也可跑
+## 4. 本地只打印
 
 ```bash
-export GITHUB_TOKEN=ghp_xxx   # 需要 repo 写权限
-export CONTROLLER_AUTO_MERGE=true
+export GITHUB_TOKEN=ghp_xxx
+export CONTROLLER_DRY_RUN=1
 python scripts/controller_bot.py poll
 ```
 
-cron 示例（ECS）：
-
-```cron
-*/15 * * * * cd /path/to/pico && GITHUB_TOKEN=... CONTROLLER_AUTO_MERGE=true python3 scripts/controller_bot.py poll >>/tmp/controller-bot.log 2>&1
-```
-
-## 5. 与对话总管分工
-
-| 角色 | 职责 |
-|------|------|
-| **Controller Bot** | 定时合黄/docs、催 CI/红档、写 poll 日志 |
-| **Grok 对话总管** | 定北星、改队列、红档深审、产品裁决 |
-| **E1/E2/E3** | 实现与部署 |
-| **验证窗** | TEST REPORT |
-
-## 6. context_reset
-
-Bot **不**清理任何人会话。派工字段仍见 `CONTEXT-POLICY.md`。
-
-## 7. 首次启用检查
-
-1. 本 workflow 已在 `main`  
-2. Actions 页能看到 `controller-bot`；可 **Run workflow** 测一轮  
-3. 出现 Issue：`[controller-bot] poll log`  
-4. 需要代合：保持 `CONTROLLER_AUTO_MERGE=true`（或 Variable 显式 true）  
+禁止再挂 ECS cron。需要代合用 GitHub 手动 Run workflow。  

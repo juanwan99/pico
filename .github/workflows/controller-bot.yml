@@ -1,15 +1,13 @@
 name: controller-bot
 
-# 空转也按 1 分钟计费。2 小时一轮；紧急用 workflow_dispatch。
+# 定时空转已停。脚本留着，紧急才手动跑；默认 dry_run、不合 PR。
 on:
-  schedule:
-    - cron: "7 */2 * * *"
   workflow_dispatch:
     inputs:
       auto_merge:
         description: "Merge yellow/FAST + CI green PRs"
         required: false
-        default: "true"
+        default: "false"
         type: choice
         options:
           - "true"
@@ -17,7 +15,7 @@ on:
       dry_run:
         description: "Dry run (no merge/comment)"
         required: false
-        default: "false"
+        default: "true"
         type: choice
         options:
           - "true"
@@ -51,8 +49,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # 默认开启黄档代合；可在 repo Variables 设 CONTROLLER_AUTO_MERGE=false 关闭
-          CONTROLLER_AUTO_MERGE: ${{ github.event_name == 'workflow_dispatch' && inputs.auto_merge || vars.CONTROLLER_AUTO_MERGE || 'true' }}
-          CONTROLLER_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          CONTROLLER_AUTO_MERGE: ${{ inputs.auto_merge || 'false' }}
+          CONTROLLER_DRY_RUN: ${{ inputs.dry_run || 'true' }}
         run: |
           python scripts/controller_bot.py poll

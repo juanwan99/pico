@@ -18,7 +18,7 @@ ROLE: ① 总管
 ## 节奏
 
 - **对话总管限制：** 聊天回合才醒。
-**7×24 已补：** [`docs/CONTROLLER-BOT.md`](./CONTROLLER-BOT.md) + `.github/workflows/controller-bot.yml`（Actions 每 15 分钟 poll）。
+**7×24 已停：** [`docs/CONTROLLER-BOT.md`](./CONTROLLER-BOT.md) 定时空转已关；只留手动 `workflow_dispatch`。
 - 对话仍在时：业主一问或间隙即轮询推进  
 - 目标：被唤醒后 **立即** poll → 合/派/收口  
 - 真源仍是 GitHub，不靠聊天记忆  
