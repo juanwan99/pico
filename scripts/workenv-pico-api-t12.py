@@ -286,7 +286,7 @@ def _group_count(text: str, label: str, n: int) -> bool:
     token = str(n)
     pats = (
         rf"{re.escape(label)}\s*[：:=]\s*(?<!\d){token}(?!\d)",
-        rf"{re.escape(label)}\s+(?<!\d){token}(?!\d)\s*人",
+        rf"{re.escape(label)}\s+(?<!\d){token}(?!\d)(?:\s*人)?",
         rf"(?<!\d){token}(?!\d)\s*人\s*{re.escape(label)}",
         rf"{re.escape(label)}(?<!\d){token}(?!\d)人",
         rf"{re.escape(label)}(?<!\d){token}(?!\d)",

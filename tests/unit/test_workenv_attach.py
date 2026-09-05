@@ -103,6 +103,7 @@ def test_t12_oracles_reject_false_green() -> None:
     assert mod._formula_40_60("=C2*40%-B2*60%") is False
     assert mod._formula_40_60("=1") is False
     assert mod._group_count("红4人 蓝3人 绿3人", "红", 4) is True
+    assert mod._group_count("红 4 蓝 3 绿 3", "红", 4) is True
     assert mod._group_count("14人红 13人蓝 13人绿", "红", 4) is False
     r1 = {
         "status": "succeeded",
@@ -129,6 +130,27 @@ def test_t12_oracles_reject_false_green() -> None:
         ],
     }
     assert mod._t2_pass(t2_ok) is True
+    t2_cells = {
+        "status": "succeeded",
+        "files": [
+            {
+                "kind": "xlsx",
+                "title": "组别人数汇总.xlsx",
+                "xlsx": {
+                    "shared": [],
+                    "sheets": ["组别汇总"],
+                    "inline": ["按组别汇总人数", "组别", "人数", "红", "4", "蓝", "3", "绿", "3", "合计"],
+                    "title": "组别汇总",
+                },
+            },
+            {
+                "kind": "docx",
+                "title": "各组人数说明.docx",
+                "docx_text": "组别人数红4蓝3绿3汇总：红组 4 人，蓝组 3 人，绿组 3 人",
+            },
+        ],
+    }
+    assert mod._t2_pass(t2_cells) is True
 
 
 @pytest.mark.asyncio
