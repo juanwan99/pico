@@ -262,12 +262,12 @@ def _t1_pass(r1: dict[str, Any], r2: dict[str, Any]) -> bool:
 
 
 def _formula_40_60(d: str) -> bool:
-    text = d.replace(" ", "")
-    if "B2" not in text or "C2" not in text:
-        return False
-    forty = "0.4" in text or "*40%" in text or "40%*" in text or "*0.4" in text
-    sixty = "0.6" in text or "*60%" in text or "60%*" in text or "*0.6" in text
-    return forty and sixty and not ("0.5" in text)
+    # C2 = 期末 40%, B2 = 平时 60%. Reversed weights are not Pass.
+    text = d.replace(" ", "").lstrip("=")
+    c_forty = "C2*40%" in text or "C2*0.4" in text or "40%*C2" in text or "0.4*C2" in text
+    b_sixty = "B2*60%" in text or "B2*0.6" in text or "60%*B2" in text or "0.6*B2" in text
+    reversed_w = "B2*40%" in text or "C2*60%" in text or "B2*0.4" in text or "C2*0.6" in text
+    return bool(c_forty and b_sixty and not reversed_w and "0.5" not in text)
 
 
 def _group_count(text: str, label: str, n: int) -> bool:
@@ -277,6 +277,7 @@ def _group_count(text: str, label: str, n: int) -> bool:
         rf"{re.escape(label)}\s+(?<!\d){token}(?!\d)\s*人",
         rf"(?<!\d){token}(?!\d)\s*人\s*{re.escape(label)}",
         rf"{re.escape(label)}(?<!\d){token}(?!\d)人",
+        rf"{re.escape(label)}(?<!\d){token}(?!\d)",
     )
     return any(re.search(pat, text) for pat in pats)
 
@@ -303,10 +304,6 @@ def _t2_pass(row: dict[str, Any]) -> bool:
     )
     counts_ok = _group_count(text, "红", 4) and _group_count(text, "蓝", 3) and _group_count(text, "绿", 3)
     sheet_ok = _group_count(xtext, "红", 4) and _group_count(xtext, "蓝", 3) and _group_count(xtext, "绿", 3)
-    if not sheet_ok:
-        sheet_ok = ("红" in xtext and "4" in xtext and "蓝" in xtext and "绿" in xtext)
-        # Spreadsheet must still not invert the roster; require the 4 near 红.
-        sheet_ok = sheet_ok and bool(re.search(r"红.{0,8}(?<!\d)4(?!\d)|(?<!\d)4(?!\d).{0,8}红", xtext))
     return counts_ok and sheet_ok
 
 

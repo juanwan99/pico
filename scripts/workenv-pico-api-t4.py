@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""T4 against isolated pico-api (PICO_WORKENV=pi). Never live 18765."""
+"""T4 against isolated pico-api (PICO_WORKENV=pi|exec). Never live 18765."""
 
 from __future__ import annotations
 
@@ -39,6 +39,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="http://127.0.0.1:18775")
     parser.add_argument("--out", default="/tmp/workenv-poc/pico-api-t4.json")
+    parser.add_argument("--expect-sha", default="")
     args = parser.parse_args()
     base = args.base.rstrip("/")
 
@@ -46,8 +47,13 @@ def main() -> int:
     if code != 200 or not health.get("ok"):
         print(json.dumps({"error": "health", "code": code, "body": health}, ensure_ascii=False))
         return 2
-    if health.get("workenv_mode") != "pi":
+    if health.get("workenv_mode") not in {"pi", "exec"}:
         print(json.dumps({"error": "workenv_mode", "health": health}, ensure_ascii=False))
+        return 2
+    expect = (args.expect_sha or "").strip()
+    got_sha = str(health.get("git_sha") or "")
+    if expect and not got_sha.startswith(expect):
+        print(json.dumps({"error": "sha", "expect": expect, "got": got_sha}, ensure_ascii=False))
         return 2
 
     code, tok = _req(
@@ -81,31 +87,41 @@ def main() -> int:
     cancel_http = None
     deadline = time.time() + 180
     events: list[dict[str, Any]] = []
+    prefer = {"workspace_write_file", "sandbox_workspace_exec"}
     while time.time() < deadline:
         code, body = _req("GET", f"{base}/v1/runs/{run_id}/events", hdr)
         rows = body.get("events") if isinstance(body, dict) else []
         events = rows if isinstance(rows, list) else []
         for ev in events:
-            if ev.get("type") == "tool.call" and not abort_at_tool:
-                first_tool = (ev.get("payload") or {}).get("tool")
+            if ev.get("type") != "tool.call" or abort_at_tool:
+                continue
+            tool = (ev.get("payload") or {}).get("tool")
+            if tool in prefer or (tool and not prefer.intersection(
+                {(e.get("payload") or {}).get("tool") for e in events if e.get("type") == "tool.call"}
+            )):
+                first_tool = tool
                 abort_at_tool = True
                 cancel_http = _req("POST", f"{base}/v1/runs/{run_id}/cancel", hdr, {})
                 break
         run = _req("GET", f"{base}/v1/runs/{run_id}", hdr)[1]
         status = str((run.get("run") or {}).get("status") or "")
+        kinds = [e.get("type") for e in events]
         if abort_at_tool and status in {"cancelled", "failed", "succeeded"}:
-            break
-        if status in {"cancelled", "failed", "succeeded"} and abort_at_tool:
-            break
+            if "sandbox.workenv.destroy" in kinds or status != "cancelled":
+                break
         if status in {"failed", "succeeded"} and not abort_at_tool:
             break
         time.sleep(0.4)
 
+    time.sleep(1.5)
     run = _req("GET", f"{base}/v1/runs/{run_id}", hdr)[1]
     task_id = str((created.get("task") or {}).get("id") or (run.get("run") or {}).get("task_id") or "")
     arts = _req("GET", f"{base}/v1/tasks/{task_id}", hdr)[1] if task_id else {}
+    ev2 = _req("GET", f"{base}/v1/runs/{run_id}/events", hdr)[1]
+    events = ev2.get("events") if isinstance(ev2, dict) else events
     report = {
         "health_workenv": health.get("workenv_mode"),
+        "health_sha": health.get("git_sha"),
         "health_runtime": health.get("default_runtime"),
         "run_id": run_id,
         "task_id": task_id,
@@ -115,7 +131,7 @@ def main() -> int:
         "cancel_http": cancel_http,
         "run": run.get("run") if isinstance(run, dict) else run,
         "artifacts": arts.get("artifacts") if isinstance(arts, dict) else arts,
-        "event_types": [e.get("type") for e in events],
+        "event_types": [e.get("type") for e in events] if isinstance(events, list) else [],
     }
     Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps({
@@ -125,10 +141,12 @@ def main() -> int:
         "status": (report["run"] or {}).get("status") if isinstance(report["run"], dict) else None,
         "n_artifacts": len(report["artifacts"] or []) if isinstance(report["artifacts"], list) else None,
         "workenv": health.get("workenv_mode"),
+        "destroyed": "sandbox.workenv.destroy" in (report["event_types"] or []),
     }, ensure_ascii=False))
     status = (report["run"] or {}).get("status") if isinstance(report["run"], dict) else ""
     n_art = len(report["artifacts"] or []) if isinstance(report["artifacts"], list) else 99
-    ok = abort_at_tool and status == "cancelled" and n_art == 0
+    destroyed = "sandbox.workenv.destroy" in (report["event_types"] or [])
+    ok = abort_at_tool and status == "cancelled" and n_art == 0 and destroyed
     return 0 if ok else 1
 
 

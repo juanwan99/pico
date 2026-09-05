@@ -233,6 +233,28 @@ class LedgerArtifactStore:
             logger.warning("owner-disk persist after write failed: %s", type(exc).__name__)
         return out
 
+    async def delete(self, principal: Principal, *, artifact_id: str) -> None:
+        """Experiment latch: roll back a collect write if cancel raced the commit."""
+        aid = str(artifact_id or "").strip()
+        if not aid:
+            return
+        async with self._factory() as session:
+            statement = (
+                select(ArtifactRow)
+                .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+                .where(
+                    TaskRow.school_id == principal.school_id,
+                    TaskRow.membership_id == principal.membership_id,
+                    ArtifactRow.id == aid,
+                )
+            )
+            result = await session.execute(statement.limit(1))
+            row = result.scalar_one_or_none()
+            if row is None:
+                return
+            await session.delete(row)
+            await session.commit()
+
     def _owned_artifacts(self, principal: Principal):
         stmt = (
             select(ArtifactRow)

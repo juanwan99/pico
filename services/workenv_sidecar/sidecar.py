@@ -45,6 +45,7 @@ _state: dict[str, Any] = {
     "box_id": "box-1",
     "conversation_key": None,
     "runs": {},  # workspace_id -> run record
+    "destroyed": set(),
 }
 
 
@@ -284,6 +285,8 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
     conv = str(body.get("conversation_id") or body.get("conversation_key") or "poc")
     write_agent_home()
     with _lock:
+        if workspace_id in _state["destroyed"]:
+            return {"ok": False, "error": "run.destroyed", "status": 409}
         if _state["conversation_key"] in {None, conv}:
             _state["conversation_key"] = conv
         elif _state["conversation_key"] != conv:
@@ -306,12 +309,19 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
             "mode": mode,
             "proc": None,
             "pgid": None,
+            "pgids": [],
             "ws": None,
+            "destroyed": False,
             "stdin_lock": threading.Lock(),
         }
+        if rec.get("destroyed"):
+            return {"ok": False, "error": "run.destroyed", "status": 409}
         rec["run_id"] = str(body.get("run_id") or workspace_id)
         rec["mode"] = mode
+        rec.setdefault("pgids", [])
+        rec["destroyed"] = False
         _state["runs"][workspace_id] = rec
+        _state["destroyed"].discard(workspace_id)
     return {
         "ok": True,
         "box_id": _state["box_id"],
@@ -516,6 +526,9 @@ def exec_work(body: dict[str, Any]) -> dict[str, Any]:
         rec["pgid"] = os.getpgid(proc.pid)
     except OSError:
         rec["pgid"] = proc.pid
+    pgids = rec.setdefault("pgids", [])
+    if isinstance(rec["pgid"], int) and rec["pgid"] > 0 and rec["pgid"] not in pgids:
+        pgids.append(rec["pgid"])
     try:
         stdout_b, stderr_b = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -540,15 +553,20 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
     rc = None
     if rec is not None:
         rc = _kill_pg(rec.get("proc"), grace=5.0)
-        pgid = rec.get("pgid")
-        if isinstance(pgid, int) and pgid > 0:
+        seen: list[int] = []
+        for pgid in [rec.get("pgid"), *(rec.get("pgids") or [])]:
+            if not isinstance(pgid, int) or pgid <= 0 or pgid in seen:
+                continue
+            seen.append(pgid)
             try:
                 os.killpg(pgid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError, OSError):
                 pass
         rec["proc"] = None
         rec["pgid"] = None
+        rec["pgids"] = []
         rec["ws"] = None
+        rec["destroyed"] = True
     try:
         work = _work_dir(workspace_id)
     except ValueError:
@@ -556,6 +574,12 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
     if work.exists():
         shutil.rmtree(work, ignore_errors=True)
     gone = not work.exists()
+    if gone:
+        with _lock:
+            _state["runs"].pop(workspace_id, None)
+            _state["destroyed"].add(workspace_id)
+            if not _state["runs"]:
+                _state["conversation_key"] = None
     return {"ok": gone, "destroyed": gone, "returncode": rc}
 
 

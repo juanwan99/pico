@@ -97,6 +97,7 @@ def test_t12_oracles_reject_false_green() -> None:
     spec.loader.exec_module(mod)
     assert mod._formula_40_60("=C2*40%+B2*60%") is True
     assert mod._formula_40_60("=B2*0.6+C2") is False
+    assert mod._formula_40_60("=B2*40%+C2*60%") is False
     assert mod._formula_40_60("=1") is False
     assert mod._group_count("红4人 蓝3人 绿3人", "红", 4) is True
     assert mod._group_count("14人红 13人蓝 13人绿", "红", 4) is False
@@ -215,6 +216,7 @@ def _start_sidecar(tmp_path: Path, *, pi_bin: str, token: str) -> tuple[Threadin
     sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
     sidecar_mod.PI_BIN = pi_bin
     sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
     sidecar_mod.write_agent_home()
     port = _free_port()
@@ -436,6 +438,7 @@ def test_create_run_rejects_dotdot(tmp_path: Path) -> None:
     sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
     sidecar_mod.write_agent_home()
     sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
     bad = sidecar_mod.create_run({"workspace_id": "../escape", "conversation_id": "c1"})
     assert bad["ok"] is False
@@ -456,6 +459,7 @@ def test_exec_python_in_work_dir(tmp_path: Path) -> None:
     sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
     sidecar_mod.write_agent_home()
     sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
     created = sidecar_mod.create_run(
         {"workspace_id": "exec1", "conversation_id": "c1", "mode": "workdir"}
@@ -488,6 +492,7 @@ def test_collect_skips_symlink(tmp_path: Path) -> None:
     sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
     sidecar_mod.write_agent_home()
     sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
     created = sidecar_mod.create_run({"workspace_id": "r1", "conversation_id": "c1"})
     assert created["ok"] is True
@@ -511,6 +516,7 @@ def test_destroy_ok_matches_destroyed(tmp_path: Path) -> None:
     sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
     sidecar_mod.write_agent_home()
     sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
     sidecar_mod._state["conversation_key"] = None
     sidecar_mod.create_run({"workspace_id": "gone", "conversation_id": "c1"})
     body = sidecar_mod.destroy_run({"workspace_id": "gone"})
@@ -597,7 +603,7 @@ async def test_ingest_collect_rechecks_cancel_before_each_write() -> None:
                 {"name": "b.xlsx", "bytes": xlsx},
             ],
         )
-    assert len(flip.rows) == 1
+    assert len(flip.rows) == 0
 
 
 @pytest.mark.asyncio
@@ -712,6 +718,41 @@ async def test_destroy_false_fails_runtime(monkeypatch: pytest.MonkeyPatch) -> N
         for k, p in events
         if k == "run.error"
     )
+
+
+def test_destroy_clears_conversation_key(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
+    sidecar_mod._state["conversation_key"] = None
+    first = sidecar_mod.create_run({"workspace_id": "r-t1", "conversation_id": "t1-api"})
+    assert first["ok"] is True
+    mismatch = sidecar_mod.create_run({"workspace_id": "r-t2", "conversation_id": "t2-api"})
+    assert mismatch["ok"] is False
+    assert mismatch["error"] == "box.conversation_mismatch"
+    gone = sidecar_mod.destroy_run({"workspace_id": "r-t1"})
+    assert gone["destroyed"] is True
+    assert sidecar_mod._state["conversation_key"] is None
+    second = sidecar_mod.create_run({"workspace_id": "r-t2", "conversation_id": "t2-api"})
+    assert second["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_invalid_ooxml_collect_fails_closed() -> None:
+    gate = WorkenvCancelGate()
+    store = MemoryArtifactStore()
+    with pytest.raises(WorkenvCollectRejected):
+        await gate.ingest_collect(
+            Principal(),
+            store,
+            [{"name": "bad.xlsx", "bytes": b"PK\x03\x04not-ooxml"}],
+        )
+    assert store.rows == []
 
 
 @pytest.mark.asyncio

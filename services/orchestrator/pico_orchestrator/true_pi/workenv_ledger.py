@@ -45,6 +45,10 @@ class MemoryArtifactStore:
         self.rows.append(row)
         return row
 
+    async def delete(self, principal: Principal, *, artifact_id: str) -> None:
+        del principal
+        self.rows = [row for row in self.rows if row.get("id") != artifact_id]
+
     async def read(
         self,
         principal: Principal,
@@ -88,7 +92,8 @@ class WorkenvCancelGate:
         self.status = "failed"
 
     def collect_allowed(self) -> bool:
-        return self.status not in {"cancelling", "cancelled"}
+        # failed / cancelling / cancelled must not mint artifacts.
+        return self.status == "running"
 
     async def ingest_collect(
         self,
@@ -124,6 +129,11 @@ class WorkenvCancelGate:
             kind = ext.lstrip(".") if ext else "file"
             row = await store.write(principal, title=name, content=blob, kind=kind)
             if not self.collect_allowed():
+                deleter = getattr(store, "delete", None)
+                if callable(deleter):
+                    aid = str(row.get("id") or row.get("artifact_id") or "")
+                    if aid:
+                        await deleter(principal, artifact_id=aid)
                 raise WorkenvCollectRejected("collect-after-cancel discarded")
             written.append(row)
             self.artifacts.append(row)

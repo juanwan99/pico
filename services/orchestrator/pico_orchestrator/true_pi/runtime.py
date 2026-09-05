@@ -733,7 +733,8 @@ async def run_true_pi_agent(
                     principal=principal,
                     tag=tag,
                 )
-            writes = max(writes, collected_n)
+            # Overlay staging writes are not downloadable ledger rows.
+            writes = collected_n
 
         # Quota / stream errors fail the run. collected_n must not wipe that.
         if provider_error_blocks_success(state.provider_error, collected_n=collected_n):
@@ -810,6 +811,11 @@ async def run_true_pi_agent(
                     tag=tag,
                 )
             await emit("sandbox.workenv.destroy", {"workspace_id": rid, **tag})
+            if await is_cancelled() or workenv_gate.status in {"cancelling", "cancelled"}:
+                if workenv_gate.status == "cancelling":
+                    workenv_gate.finish_cancel()
+                await emit("run.status", {"status": "cancelled", **tag})
+                return _result("cancelled", state, principal=principal)
         await emit("run.status", {"status": "succeeded", **tag})
         return RunResult(status="succeeded", final_text=final_text, token_usage=state.token_usage)
 
@@ -1029,7 +1035,7 @@ async def _collect_workenv_into_store(
             continue
         ext = title_protected_extension(name)
         if ext in {".docx", ".pptx", ".xlsx"} and not is_valid_ooxml_package(blob, ext):
-            continue
+            raise WorkenvCollectRejected(f"invalid ooxml {name}")
         kept.append(item)
     if not kept:
         return 0
