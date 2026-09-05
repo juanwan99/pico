@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "services" / "workenv_sidecar"))
 from typing import Any
 
 from pico_orchestrator.run_types import RunCaps
-from pico_orchestrator.true_pi.client import TruePiRpcClient
+from pico_orchestrator.true_pi.client import TruePiClientError, TruePiRpcClient
 from pico_orchestrator.true_pi.workenv_attach import AttachTransport
 from pico_orchestrator.true_pi.workenv_ledger import (
     MemoryArtifactStore,
@@ -97,23 +97,81 @@ def test_t12_oracles_reject_false_green() -> None:
     spec.loader.exec_module(mod)
     assert mod._formula_40_60("=C2*40%+B2*60%") is True
     assert mod._formula_40_60("=B2*0.6+C2*0.4") is True
+    assert mod._formula_40_60("=C7*40%+B7*60%", row=7) is True
     assert mod._formula_40_60("=B2*0.6+C2") is False
     assert mod._formula_40_60("=B2*40%+C2*60%") is False
     assert mod._formula_40_60("=C2*0.49+B2*0.61") is False
     assert mod._formula_40_60("=C2*40%-B2*60%") is False
     assert mod._formula_40_60("=1") is False
+    assert mod._formula_40_60("=C2*40%+B2*60%", row=3) is False
     assert mod._group_count("红4人 蓝3人 绿3人", "红", 4) is True
     assert mod._group_count("红 4 蓝 3 绿 3", "红", 4) is True
     assert mod._group_count("14人红 13人蓝 13人绿", "红", 4) is False
+    formulas_ok = {f"D{i}": f"=C{i}*40%+B{i}*60%" for i in range(2, 8)}
+    formulas_d2_only = {"D2": "=C2*40%+B2*60%"}
     r1 = {
         "status": "succeeded",
-        "files": [{"xlsx": {"d2": "=C2*40%+B2*60%", "title": "x", "shared": [], "sheets": [], "inline": []}}],
+        "files": [
+            {
+                "xlsx": {
+                    "d2": formulas_ok["D2"],
+                    "d_formulas": formulas_ok,
+                    "title": "x",
+                    "shared": [],
+                    "sheets": [],
+                    "inline": [],
+                }
+            }
+        ],
     }
     r2_bad = {
         "status": "succeeded",
-        "files": [{"xlsx": {"d2": "=B2*0.6+C2", "title": "三年二班", "shared": ["三年二班"], "sheets": [], "inline": []}}],
+        "files": [
+            {
+                "xlsx": {
+                    "d2": "=B2*0.6+C2",
+                    "d_formulas": {"D2": "=B2*0.6+C2"},
+                    "title": "三年二班",
+                    "shared": ["三年二班"],
+                    "sheets": [],
+                    "inline": [],
+                }
+            }
+        ],
     }
     assert mod._t1_pass(r1, r2_bad) is False
+    r2_d2_only = {
+        "status": "succeeded",
+        "files": [
+            {
+                "xlsx": {
+                    "d2": formulas_ok["D2"],
+                    "d_formulas": formulas_d2_only,
+                    "title": "三年二班成绩",
+                    "shared": ["三年二班成绩"],
+                    "sheets": [],
+                    "inline": [],
+                }
+            }
+        ],
+    }
+    assert mod._t1_pass(r1, r2_d2_only) is False
+    r2_ok = {
+        "status": "succeeded",
+        "files": [
+            {
+                "xlsx": {
+                    "d2": formulas_ok["D2"],
+                    "d_formulas": formulas_ok,
+                    "title": "三年二班成绩",
+                    "shared": ["三年二班成绩"],
+                    "sheets": [],
+                    "inline": [],
+                }
+            }
+        ],
+    }
+    assert mod._t1_pass(r1, r2_ok) is True
     t2 = {
         "status": "succeeded",
         "files": [
@@ -588,6 +646,51 @@ def test_collect_skips_symlink(tmp_path: Path) -> None:
     names = [f["name"] for f in out["files"]]
     assert "ok.xlsx" in names
     assert "leaked.xlsx" not in names
+
+
+def test_destroy_keeps_pgids_when_group_still_alive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
+    sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
+    sidecar_mod._state["owner_key"] = None
+    sidecar_mod.create_run(
+        {"workspace_id": "alive", "conversation_id": "c1", "mode": "workdir"}
+    )
+    rec = sidecar_mod._run_record("alive")
+    assert rec is not None
+    rec["pgid"] = 4242
+    rec["pgids"] = [4242]
+
+    def fake_killpg(pgid: int, sig: int) -> None:
+        del sig
+        if pgid == 4242:
+            raise PermissionError("group still live")
+        raise ProcessLookupError()
+
+    monkeypatch.setattr(sidecar_mod.os, "killpg", fake_killpg)
+    monkeypatch.setattr(sidecar_mod, "_kill_pg", lambda *a, **k: None)
+    body = sidecar_mod.destroy_run({"workspace_id": "alive"})
+    assert body["ok"] is False
+    assert body["destroyed"] is False
+    rec2 = sidecar_mod._run_record("alive")
+    assert rec2 is not None
+    assert rec2["pgids"] == [4242]
+
+
+@pytest.mark.asyncio
+async def test_attach_transport_rejects_wss(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PICO_SANDBOX_TOKEN", "tok-test")
+    monkeypatch.setenv("PICO_WORKENV_ATTACH_URL", "wss://127.0.0.1:18768/v1/internal/workenv/attach-rpc")
+    transport = AttachTransport(run_id="wss-x", box_id="box-1")
+    with pytest.raises(TruePiClientError, match="wss is not implemented"):
+        await transport.start()
 
 
 def test_destroy_ok_matches_destroyed(tmp_path: Path) -> None:

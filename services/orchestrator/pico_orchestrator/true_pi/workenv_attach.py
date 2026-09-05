@@ -178,8 +178,12 @@ class AttachTransport(TruePiTransport):
         if not self.token:
             raise TruePiClientError("AttachTransport missing PICO_SANDBOX_TOKEN")
         parsed = urlparse(self.url)
+        if parsed.scheme == "wss":
+            raise TruePiClientError("attach-rpc wss is not implemented; use ws:// on loopback")
+        if parsed.scheme not in {"ws", "http", ""}:
+            raise TruePiClientError(f"attach-rpc scheme invalid: {parsed.scheme}")
         host = parsed.hostname or "127.0.0.1"
-        port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+        port = parsed.port or 80
         path = parsed.path or "/v1/internal/workenv/attach-rpc"
         try:
             reader, writer = await asyncio.wait_for(

@@ -696,11 +696,10 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
         for pgid in seen:
             try:
                 os.killpg(pgid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError, OSError):
+            except ProcessLookupError:
                 pass
-        rec["proc"] = None
-        rec["pgid"] = None
-        rec["pgids"] = []
+            except (PermissionError, OSError):
+                pass
         rec["ws"] = None
         rec["destroyed"] = True
     alive = bool(proc is not None and proc.poll() is None)
@@ -708,8 +707,11 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
         try:
             os.killpg(pgid, 0)
             alive = True
-        except (ProcessLookupError, PermissionError, OSError):
+        except ProcessLookupError:
             pass
+        except (PermissionError, OSError):
+            # PermissionError is not proof the group is gone.
+            alive = True
     try:
         work = _work_dir(workspace_id)
     except ValueError:
@@ -719,6 +721,11 @@ def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
     gone = (not work.exists()) and not alive
     if gone:
         with _lock:
+            rec = _state["runs"].get(workspace_id)
+            if rec is not None:
+                rec["proc"] = None
+                rec["pgid"] = None
+                rec["pgids"] = []
             _state["runs"].pop(workspace_id, None)
             _state["destroyed"].add(workspace_id)
             if not _state["runs"]:

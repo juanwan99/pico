@@ -116,6 +116,7 @@ def _xlsx_d2_and_title(blob: bytes) -> dict[str, Any]:
     out: dict[str, Any] = {
         "ok_zip": False,
         "d2": None,
+        "d_formulas": {},
         "title": None,
         "shared": [],
         "sheets": [],
@@ -172,10 +173,10 @@ def _xlsx_d2_and_title(blob: bytes) -> dict[str, Any]:
                     inline.append(shared[idx])
             elif t != "s" and v is not None and (v.text or "").strip():
                 inline.append((v.text or "").strip())
-            if ref != "D2":
-                continue
             f = c.find("m:f", NS)
-            if f is not None and (f.text or "").strip():
+            if f is not None and (f.text or "").strip() and ref in {f"D{i}" for i in range(2, 8)}:
+                out["d_formulas"][ref] = (f.text or "").strip()
+            if ref == "D2" and f is not None and (f.text or "").strip():
                 out["d2"] = (f.text or "").strip()
         out["inline"] = inline
         if not out["title"] and inline:
@@ -253,10 +254,11 @@ def _t1_pass(r1: dict[str, Any], r2: dict[str, Any]) -> bool:
     x2 = next((f.get("xlsx") for f in r2.get("files") or [] if f.get("xlsx")), None)
     if not isinstance(x1, dict) or not isinstance(x2, dict):
         return False
-    d1 = str(x1.get("d2") or "")
-    d2 = str(x2.get("d2") or "")
-    formula_ok = _formula_40_60(d1)
-    formula2_ok = _formula_40_60(d2)
+    formulas1 = x1.get("d_formulas") if isinstance(x1.get("d_formulas"), dict) else {}
+    formulas2 = x2.get("d_formulas") if isinstance(x2.get("d_formulas"), dict) else {}
+    range_ok = all(_formula_40_60(str(formulas1.get(f"D{i}") or ""), row=i) for i in range(2, 8)) and all(
+        _formula_40_60(str(formulas2.get(f"D{i}") or ""), row=i) for i in range(2, 8)
+    )
     title = " ".join(
         [
             str(x2.get("title") or ""),
@@ -266,15 +268,16 @@ def _t1_pass(r1: dict[str, Any], r2: dict[str, Any]) -> bool:
         ]
     )
     title_ok = "三年二班" in title
-    return bool(formula_ok and formula2_ok and title_ok)
+    return bool(range_ok and title_ok)
 
 
-def _formula_40_60(d: str) -> bool:
-    # C2 = 期末 40%, B2 = 平时 60%. Exact weighted sum only.
+def _formula_40_60(d: str, *, row: int = 2) -> bool:
+    # C{row} = 期末 40%, B{row} = 平时 60%. Exact weighted sum only.
     text = d.replace(" ", "").lstrip("=")
+    n = str(row)
     return bool(
         re.fullmatch(
-            r"(C2\*(?:40%|0\.4)\+B2\*(?:60%|0\.6)|B2\*(?:60%|0\.6)\+C2\*(?:40%|0\.4))",
+            rf"(C{n}\*(?:40%|0\.4)\+B{n}\*(?:60%|0\.6)|B{n}\*(?:60%|0\.6)\+C{n}\*(?:40%|0\.4))",
             text,
         )
     )
