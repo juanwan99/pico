@@ -1,0 +1,47 @@
+# PoC overlay computer. NOT production pico-sandbox:v13.
+# Node 22 + pi@0.84.4 + office PyPI. No Chromium. No host bash.
+# prod-update / docker-compose.host.yml MUST NEVER read this file.
+
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+
+WORKDIR /app
+ARG NODE_VERSION=22.22.0
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PATH="/usr/local/lib/nodejs/bin:${PATH}"
+
+RUN set -eux; \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+      sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+      sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+    elif [ -f /etc/apt/sources.list ]; then \
+      sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+      sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+    fi; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl xz-utils; \
+    curl -fsSL \
+      "https://npmmirror.com/mirrors/node/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+      -o /tmp/node.tar.xz; \
+    mkdir -p /usr/local/lib/nodejs; \
+    tar -xJf /tmp/node.tar.xz -C /usr/local/lib/nodejs --strip-components=1; \
+    rm -f /tmp/node.tar.xz; \
+    npm config set registry https://registry.npmmirror.com; \
+    npm install -g @earendil-works/pi-coding-agent@0.84.4; \
+    pi --version; \
+    apt-get purge -y xz-utils; \
+    apt-get autoremove -y; \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ pip==26.2.1 \
+ && pip install -i https://mirrors.aliyun.com/pypi/simple/ \
+      python-docx python-pptx openpyxl
+
+RUN useradd --create-home --uid 65532 --shell /usr/sbin/nologin workenv \
+ && mkdir -p /work /session /agent-home /bridge \
+ && chown -R 65532:65532 /work /session /agent-home /bridge /app
+
+USER 65532:65532
+WORKDIR /work
+CMD ["sleep", "infinity"]

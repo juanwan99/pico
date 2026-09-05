@@ -1,0 +1,48 @@
+# PoC overlay computer. prod-update NEVER reads this filename.
+# Production pico-sandbox:v13 (18767 Chromium) stays untouched.
+#
+# Host steps (NOT this container; NOT live pico.aivia.asia ECS nft):
+#   docker compose -f docker-compose.workenv-poc.yml up --no-start
+#   HOST_GW=$(docker network inspect pico-workenv -f '{{(index .IPAM.Config 0).Gateway}}')
+#   extra_hosts host-gateway MUST be $HOST_GW, never magic host-gateway:host-gateway (docker0).
+#   nft DNAT $HOST_GW:18769 -> 127.0.0.1:18769 is PoC-host only.
+# Bind 127.0.0.1:18768 only. Never 0.0.0.0. Never join docker-compose.host.yml.
+
+name: pico-workenv-poc
+
+networks:
+  pico-workenv:
+    name: pico-workenv
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-pico-workenv
+
+services:
+  workenv:
+    image: pico-workenv:poc
+    build:
+      context: .
+      dockerfile: Dockerfile.workenv
+    networks: [pico-workenv]
+    extra_hosts:
+      - "host-gateway:${HOST_GW:?set HOST_GW from docker network inspect pico-workenv Gateway}"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    user: "65532:65532"
+    mem_limit: 2g
+    pids_limit: 512
+    read_only: false
+    ports:
+      - "127.0.0.1:18768:18768"
+    volumes:
+      - workenv_work:/work
+      - workenv_session:/session
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=1777
+    environment:
+      HOME: /tmp
+    command: ["sleep", "infinity"]
+
+volumes:
+  workenv_work:
+  workenv_session:
