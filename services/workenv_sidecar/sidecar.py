@@ -119,6 +119,30 @@ def _session_file(_workspace_id: str) -> Path:
     return SESSION_ROOT / "pico.jsonl"
 
 
+def _retarget_session_cwd(session: Path, work: Path) -> None:
+    """Point official session cwd at this run's /work/{run}.
+
+    Destroy-run removes the previous workdir. Pi 0.84.4 then exits with
+    ``Stored session working directory does not exist`` before prompt.
+    Conversation jsonl stays; only the session header cwd moves.
+    """
+    if not session.is_file() or session.stat().st_size == 0:
+        return
+    text = session.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    if not lines:
+        return
+    try:
+        first = json.loads(lines[0])
+    except json.JSONDecodeError:
+        return
+    if not isinstance(first, dict) or first.get("type") != "session":
+        return
+    first["cwd"] = str(work)
+    lines[0] = json.dumps(first, ensure_ascii=False)
+    session.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def _spawn_argv(workspace_id: str) -> list[str]:
     session = _session_file(workspace_id)
     session.parent.mkdir(parents=True, exist_ok=True)
@@ -317,6 +341,7 @@ def spawn_pi(workspace_id: str) -> subprocess.Popen[bytes]:
         raise RuntimeError("run.conflict")
     work = _work_dir(workspace_id)
     work.mkdir(parents=True, exist_ok=True)
+    _retarget_session_cwd(_session_file(workspace_id), work)
     write_agent_home()
     env = os.environ.copy()
     env["PI_CODING_AGENT_DIR"] = str(AGENT_HOME)

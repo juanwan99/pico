@@ -238,6 +238,36 @@ def test_sidecar_session_is_conversation_pico_jsonl(tmp_path: Path) -> None:
     assert sidecar_mod._session_file("run-uuid-2") == path
 
 
+def test_retarget_session_cwd_rewrites_header(tmp_path: Path) -> None:
+    import json
+
+    import sidecar as sidecar_mod
+
+    session = tmp_path / "pico.jsonl"
+    old = tmp_path / "old-run"
+    new = tmp_path / "new-run"
+    session.write_text(
+        json.dumps(
+            {
+                "type": "session",
+                "version": 3,
+                "id": "s1",
+                "cwd": str(old),
+            }
+        )
+        + "\n"
+        + json.dumps({"type": "message", "id": "m1"})
+        + "\n",
+        encoding="utf-8",
+    )
+    sidecar_mod._retarget_session_cwd(session, new)
+    first = json.loads(session.read_text(encoding="utf-8").splitlines()[0])
+    assert first["cwd"] == str(new)
+    assert first["id"] == "s1"
+    second = json.loads(session.read_text(encoding="utf-8").splitlines()[1])
+    assert second["type"] == "message"
+
+
 @pytest.mark.asyncio
 async def test_attach_prefers_prior_collect_over_fixture(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
