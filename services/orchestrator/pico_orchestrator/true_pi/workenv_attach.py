@@ -68,12 +68,16 @@ class _StdlibWs:
             except EOFError:
                 return
             b1, b2 = hdr[0], hdr[1]
+            if not (b1 & 0x80):
+                raise TruePiClientError("attach-rpc fragment not supported")
             opcode = b1 & 0x0F
             n = b2 & 0x7F
             if n == 126:
                 n = int.from_bytes(await self._read_exact(2), "big")
             elif n == 127:
                 n = int.from_bytes(await self._read_exact(8), "big")
+            if n > 1024 * 1024:
+                raise TruePiClientError("attach-rpc frame too large")
             if b2 & 0x80:
                 mask = await self._read_exact(4)
                 payload = await self._read_exact(n)

@@ -13,6 +13,7 @@ OP_TEXT = 0x1
 OP_CLOSE = 0x8
 OP_PING = 0x9
 OP_PONG = 0xA
+MAX_WS_FRAME = 1024 * 1024
 
 
 class WebSocketError(RuntimeError):
@@ -166,6 +167,8 @@ def _read_frame_sock(sock: Any) -> tuple[int | None, bytes]:
     if len(hdr) < 2:
         return None, b""
     b1, b2 = hdr[0], hdr[1]
+    if not (b1 & 0x80):
+        raise WebSocketError("ws fragment not supported")
     opcode = b1 & 0x0F
     masked = bool(b2 & 0x80)
     n = b2 & 0x7F
@@ -179,6 +182,8 @@ def _read_frame_sock(sock: Any) -> tuple[int | None, bytes]:
         if len(ext) < 8:
             return None, b""
         n = struct.unpack("!Q", ext)[0]
+    if n > MAX_WS_FRAME:
+        raise WebSocketError("ws frame too large")
     mask = b""
     if masked:
         mask = _recv_exact(sock, 4)

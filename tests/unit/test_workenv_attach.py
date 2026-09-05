@@ -350,6 +350,27 @@ def _start_sidecar(tmp_path: Path, *, pi_bin: str, token: str) -> tuple[Threadin
     return httpd, port
 
 
+def test_ws_frame_rejects_huge_and_fragment() -> None:
+    import io
+    import struct
+
+    from pico_workenv_ws import MAX_WS_FRAME, WebSocketError, _read_frame_sock
+
+    class FakeSock:
+        def __init__(self, blob: bytes) -> None:
+            self._buf = io.BytesIO(blob)
+
+        def recv(self, n: int) -> bytes:
+            return self._buf.read(n)
+
+    huge = bytes([0x81, 127]) + struct.pack("!Q", MAX_WS_FRAME + 1)
+    with pytest.raises(WebSocketError, match="too large"):
+        _read_frame_sock(FakeSock(huge))
+    frag = bytes([0x01, 0x01, ord("x")])
+    with pytest.raises(WebSocketError, match="fragment"):
+        _read_frame_sock(FakeSock(frag))
+
+
 def test_sidecar_health_aliases(tmp_path: Path) -> None:
     import json
     import urllib.error
