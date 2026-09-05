@@ -14,7 +14,7 @@ from typing import Any
 
 PROMPT = (
     "把 D2:D7 写成期末40%加平时60%的公式，保存为 xlsx。"
-    "必须用 workspace_write_file 或 sandbox_workspace_exec 改文件，不要只 inspect。"
+    "必须真正改工作区文件（write/edit/bash 或 workspace_write_file / sandbox_workspace_exec），不要只 inspect。"
 )
 CONVO = "t4-api"
 
@@ -91,6 +91,9 @@ def main() -> int:
     deadline = time.time() + 180
     events: list[dict[str, Any]] = []
     prefer = {"workspace_write_file", "sandbox_workspace_exec"}
+    if health.get("workenv_mode") == "pi":
+        # Overlay Pi builtins own files. L is hidden; bash/write/edit are the computer.
+        prefer |= {"bash", "write", "edit"}
     while time.time() < deadline:
         code, body = _req("GET", f"{base}/v1/runs/{run_id}/events", hdr)
         rows = body.get("events") if isinstance(body, dict) else []

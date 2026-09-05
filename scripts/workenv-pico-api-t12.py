@@ -288,6 +288,7 @@ def _group_count(text: str, label: str, n: int) -> bool:
         rf"(?<!\d){token}(?!\d)\s*人\s*{re.escape(label)}",
         rf"{re.escape(label)}(?<!\d){token}(?!\d)人",
         rf"{re.escape(label)}(?<!\d){token}(?!\d)",
+        rf"{re.escape(label)}组\s*(?<!\d){token}(?!\d)\s*人?",
     )
     return any(re.search(pat, text) for pat in pats)
 
