@@ -270,7 +270,17 @@ class LedgerArtifactStore:
             row = result.scalar_one_or_none()
             if row is None:
                 return
+            run_id = str(row.run_id or self._run_id or "")
+            title = str(row.title or "")
             await session.delete(row)
+            if run_id:
+                await append_event(
+                    session,
+                    run_id,
+                    "artifact.discarded",
+                    {"artifact_id": aid, "title": title, "reason": "collect-after-cancel"},
+                    commit=False,
+                )
             await session.commit()
         try:
             from pico_orchestrator.meili_kb import delete_material

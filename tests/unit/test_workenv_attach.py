@@ -1230,6 +1230,41 @@ def test_pi_spawn_fails_closed_without_gateway_ext(tmp_path: Path) -> None:
         sidecar_mod._spawn_argv("r-missing")
 
 
+def test_pi_spawn_fails_closed_on_tampered_gateway_ext(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.SESSION_ROOT = tmp_path / "session"
+    sidecar_mod.SESSION_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    src = tmp_path / "official.ts"
+    src.write_text("export default {};\n", encoding="utf-8")
+    dest = tmp_path / "bridge" / "pico-gateway-tools.ts"
+    dest.parent.mkdir()
+    dest.write_text("TAMPERED\n", encoding="utf-8")
+    sidecar_mod.GATEWAY_EXT = dest
+    sidecar_mod.GATEWAY_EXT_SRC = src
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
+    sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
+    sidecar_mod._state["owner_key"] = None
+    created = sidecar_mod.create_run(
+        {
+            "workspace_id": "r-tamper",
+            "conversation_id": "c1",
+            "mode": "pi",
+            "tool_url": "http://host-gateway:18764",
+            "tool_token": "tok",
+        }
+    )
+    assert created["ok"] is True
+    with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
+        sidecar_mod._spawn_argv("r-tamper")
+
+
 @pytest.mark.asyncio
 async def test_invalid_ooxml_collect_fails_closed() -> None:
     gate = WorkenvCancelGate()

@@ -277,12 +277,24 @@ def _retarget_session_cwd(session: Path, work: Path) -> None:
 
 def _ensure_gateway_ext() -> Path:
     """Official Pico gateway extension. Same -e file as host spawn_command."""
-    if GATEWAY_EXT.is_file():
-        return GATEWAY_EXT
     if not GATEWAY_EXT_SRC.is_file():
         raise RuntimeError("gateway.ext.missing")
+    try:
+        src = GATEWAY_EXT_SRC.read_bytes()
+    except OSError as exc:
+        raise RuntimeError("gateway.ext.missing") from exc
+    if not src:
+        raise RuntimeError("gateway.ext.missing")
     GATEWAY_EXT.parent.mkdir(parents=True, exist_ok=True)
-    GATEWAY_EXT.write_text(GATEWAY_EXT_SRC.read_text(encoding="utf-8"), encoding="utf-8")
+    if GATEWAY_EXT.is_file():
+        try:
+            current = GATEWAY_EXT.read_bytes()
+        except OSError as exc:
+            raise RuntimeError("gateway.ext.missing") from exc
+        if current != src:
+            raise RuntimeError("gateway.ext.tampered")
+    else:
+        GATEWAY_EXT.write_bytes(src)
     if not GATEWAY_EXT.is_file():
         raise RuntimeError("gateway.ext.missing")
     return GATEWAY_EXT
