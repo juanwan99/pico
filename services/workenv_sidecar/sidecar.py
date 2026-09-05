@@ -188,6 +188,35 @@ def _session_file(_workspace_id: str) -> Path:
     return SESSION_ROOT / "pico.jsonl"
 
 
+def _session_bind_path() -> Path:
+    return SESSION_ROOT / "bind.json"
+
+
+def _read_session_bind() -> dict[str, str]:
+    path = _session_bind_path()
+    if not path.is_file():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        "conversation": str(raw.get("conversation") or ""),
+        "owner": str(raw.get("owner") or ""),
+    }
+
+
+def _write_session_bind(*, conversation: str, owner: str) -> None:
+    SESSION_ROOT.mkdir(parents=True, exist_ok=True)
+    _session_bind_path().write_text(
+        json.dumps({"conversation": conversation, "owner": owner}, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def _reset_session_file() -> None:
     path = SESSION_ROOT / "pico.jsonl"
     try:
@@ -196,6 +225,26 @@ def _reset_session_file() -> None:
         pass
     SESSION_ROOT.mkdir(parents=True, exist_ok=True)
     path.write_text("", encoding="utf-8")
+    try:
+        _session_bind_path().unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _tool_url_ok(url: str) -> bool:
+    """Reject the model proxy. ToolServer is never :18769."""
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    if not parsed.hostname:
+        return False
+    try:
+        port = parsed.port if parsed.port is not None else (443 if parsed.scheme == "https" else 80)
+    except ValueError:
+        return False
+    if int(port) == 18769:
+        return False
+    return True
 
 
 def _retarget_session_cwd(session: Path, work: Path) -> None:
@@ -328,10 +377,12 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
     if _safe_workspace_id(workspace_id) is None:
         return {"ok": False, "error": "workspace_id.invalid", "status": 400}
     mode = str(body.get("mode") or "pi").strip()
+    if mode not in {"pi", "workdir"}:
+        return {"ok": False, "error": "mode.invalid", "status": 400}
     tool_url = str(body.get("tool_url") or HOST_GW_TOOLS).strip()
     tool_token = str(body.get("tool_token") or "").strip()
     visible_tools = str(body.get("visible_tools") or "").strip()
-    if mode == "pi" and (not tool_url or tool_url.rstrip("/").endswith(":18769")):
+    if mode == "pi" and not _tool_url_ok(tool_url):
         return {"ok": False, "error": "tool_url.invalid", "status": 400}
     conv = str(body.get("conversation_id") or body.get("conversation_key") or "poc")
     owner = (
@@ -345,11 +396,18 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "run.destroyed", "status": 409}
         if _state["owner_key"] not in {None, owner}:
             return {"ok": False, "error": "box.owner_mismatch", "status": 409}
+        bind = _read_session_bind()
+        if bind.get("owner") and bind["owner"] != owner:
+            return {"ok": False, "error": "box.owner_mismatch", "status": 409}
         if _state["conversation_key"] in {None, conv}:
-            if _state.get("session_conversation") not in {None, conv}:
+            bound_conv = bind.get("conversation") or _state.get("session_conversation")
+            if bound_conv and bound_conv != conv:
+                _reset_session_file()
+            elif not bind and (SESSION_ROOT / "pico.jsonl").is_file() and (SESSION_ROOT / "pico.jsonl").stat().st_size:
                 _reset_session_file()
             _state["conversation_key"] = conv
             _state["session_conversation"] = conv
+            _write_session_bind(conversation=conv, owner=owner)
         elif _state["conversation_key"] != conv:
             return {"ok": False, "error": "box.conversation_mismatch", "status": 409}
         _state["owner_key"] = owner
@@ -762,7 +820,7 @@ def _pipe_stderr(proc: subprocess.Popen[bytes]) -> None:
 
 def attach_rpc(ws: WebSocketConnection, workspace_id: str) -> None:
     rec = _run_record(workspace_id)
-    if rec is not None and str(rec.get("mode") or "") == "workdir":
+    if rec is None or str(rec.get("mode") or "") != "pi":
         try:
             send_close(ws)
         except Exception as exc:  # noqa: BLE001

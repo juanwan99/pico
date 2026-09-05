@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from pico_orchestrator.gateway import ArtifactStore, Principal
 from pico_orchestrator.pi_runtime import count_write_tool_successes
@@ -256,7 +257,12 @@ async def run_true_pi_agent(
             public_url = (
                 os.environ.get("PICO_TRUE_PI_TOOL_PUBLIC_URL") or ""
             ).strip() or tool_url
-            if public_url.rstrip("/").endswith(":18769"):
+            parsed = urlparse(public_url)
+            try:
+                port = parsed.port if parsed.port is not None else 80
+            except ValueError as exc:
+                raise TruePiClientError("tool_url.invalid") from exc
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname or int(port) == 18769:
                 raise TruePiClientError("tool_url.invalid: 18769 is the model proxy")
             created = await workenv_post(
                 "/v1/internal/workenv/create",

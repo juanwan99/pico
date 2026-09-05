@@ -909,6 +909,73 @@ def test_destroy_clears_conversation_key(tmp_path: Path) -> None:
     assert session.read_text(encoding="utf-8") == ""
 
 
+def test_orphaned_session_jsonl_is_wiped(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.SESSION_ROOT = tmp_path / "session"
+    sidecar_mod.SESSION_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
+    sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
+    sidecar_mod._state["owner_key"] = None
+    session = sidecar_mod.SESSION_ROOT / "pico.jsonl"
+    session.write_text('{"type":"session","cwd":"/work/old"}\n', encoding="utf-8")
+    created = sidecar_mod.create_run(
+        {
+            "workspace_id": "r-new",
+            "conversation_id": "fresh",
+            "mode": "workdir",
+            "school_id": "s1",
+            "membership_id": "m1",
+        }
+    )
+    assert created["ok"] is True
+    assert session.read_text(encoding="utf-8") == ""
+
+
+def test_session_bind_rejects_other_owner_after_destroy(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.SESSION_ROOT = tmp_path / "session"
+    sidecar_mod.SESSION_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
+    sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["session_conversation"] = None
+    sidecar_mod._state["owner_key"] = None
+    first = sidecar_mod.create_run(
+        {
+            "workspace_id": "r-a",
+            "conversation_id": "c1",
+            "mode": "workdir",
+            "school_id": "school-a",
+            "membership_id": "m1",
+        }
+    )
+    assert first["ok"] is True
+    sidecar_mod.destroy_run({"workspace_id": "r-a"})
+    other = sidecar_mod.create_run(
+        {
+            "workspace_id": "r-b",
+            "conversation_id": "c1",
+            "mode": "workdir",
+            "school_id": "school-b",
+            "membership_id": "m2",
+        }
+    )
+    assert other["ok"] is False
+    assert other["error"] == "box.owner_mismatch"
+
+
 def test_create_run_rejects_owner_mismatch(tmp_path: Path) -> None:
     import sidecar as sidecar_mod
 
@@ -1000,16 +1067,32 @@ def test_pi_create_rejects_model_proxy_tool_url(tmp_path: Path) -> None:
     sidecar_mod._state["conversation_key"] = None
     sidecar_mod._state["session_conversation"] = None
     sidecar_mod._state["owner_key"] = None
-    bad = sidecar_mod.create_run(
+    for url in (
+        "http://host-gateway:18769",
+        "http://host-gateway:18769/v1",
+        "http://host-gateway:18769?x=1",
+        "",
+    ):
+        bad = sidecar_mod.create_run(
+            {
+                "workspace_id": "r-proxy",
+                "conversation_id": "c1",
+                "mode": "pi",
+                "tool_url": url,
+            }
+        )
+        assert bad["ok"] is False, url
+        assert bad["error"] == "tool_url.invalid"
+    weird = sidecar_mod.create_run(
         {
-            "workspace_id": "r-proxy",
+            "workspace_id": "r-pi-case",
             "conversation_id": "c1",
-            "mode": "pi",
-            "tool_url": "http://host-gateway:18769",
+            "mode": "PI",
+            "tool_url": "http://host-gateway:18764",
         }
     )
-    assert bad["ok"] is False
-    assert bad["error"] == "tool_url.invalid"
+    assert weird["ok"] is False
+    assert weird["error"] == "mode.invalid"
 
 
 def test_pi_spawn_fails_closed_without_gateway_ext(tmp_path: Path) -> None:

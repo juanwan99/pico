@@ -177,8 +177,6 @@ def _xlsx_d2_and_title(blob: bytes) -> dict[str, Any]:
             f = c.find("m:f", NS)
             if f is not None and (f.text or "").strip():
                 out["d2"] = (f.text or "").strip()
-            elif v is not None:
-                out["d2"] = (v.text or "").strip()
         out["inline"] = inline
         if not out["title"] and inline:
             out["title"] = inline[0]
