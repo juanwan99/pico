@@ -251,6 +251,7 @@ async def run_true_pi_agent(
                 box_id=str(created.get("box_id") or "box-1"),
             )
             workenv_gate = WorkenvCancelGate()
+            await _attach_workenv_fixtures(rid)
         elif isinstance(transport, AttachTransport):
             from pico_orchestrator.true_pi.workenv_ledger import WorkenvCancelGate
 
@@ -668,6 +669,14 @@ async def run_true_pi_agent(
             state.final_parts.append(transport.assistant_text)
 
         writes = count_write_tool_successes(state.tool_results)
+        if workenv_gate is not None and artifact_store is not None:
+            collected_n = await _collect_workenv_into_store(
+                workspace_id=rid,
+                principal=principal,
+                store=artifact_store,
+                gate=workenv_gate,
+            )
+            writes = max(writes, collected_n)
         write_fail = failed_write_user_message(state.tool_results)
         if write_fail:
             return await _failed(
@@ -721,6 +730,18 @@ async def run_true_pi_agent(
             )
         if final_text:
             await emit("message.delta", {"text": final_text, **tag})
+        if workenv_gate is not None:
+            destroyed = await _destroy_workenv_run()
+            if not destroyed:
+                return await _failed(
+                    emit,
+                    code="sandbox.workenv_destroy_failed",
+                    reason="隔离环境没关掉",
+                    state=state,
+                    principal=principal,
+                    tag=tag,
+                )
+            await emit("sandbox.workenv.destroy", {"workspace_id": rid, **tag})
         await emit("run.status", {"status": "succeeded", **tag})
         return RunResult(status="succeeded", final_text=final_text, token_usage=state.token_usage)
 
@@ -784,6 +805,78 @@ def pico_system_text(*, skill: str = "", system_override: str = "", day_use: str
     if day:
         return f"{body}\n\n{day}"
     return body
+
+
+async def _attach_workenv_fixtures(workspace_id: str) -> None:
+    """Copy frozen PoC files into /work/{run}. Overlay does not invent fixtures."""
+    import base64
+
+    from pico_orchestrator.true_pi.workenv_http import workenv_post
+
+    root = Path(os.environ.get("PICO_WORKENV_FIXTURE_DIR") or "")
+    if not root.is_dir():
+        return
+    files: list[dict[str, Any]] = []
+    for path in sorted(root.iterdir()):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in {".xlsx", ".csv", ".docx", ".pptx", ".html", ".txt"}:
+            continue
+        raw = path.read_bytes()
+        files.append(
+            {
+                "name": path.name,
+                "bytes_b64": base64.b64encode(raw).decode("ascii"),
+            }
+        )
+    if not files:
+        return
+    await workenv_post(
+        "/v1/internal/workenv/attach",
+        {"workspace_id": workspace_id, "files": files},
+    )
+
+
+async def _collect_workenv_into_store(
+    *,
+    workspace_id: str,
+    principal: Principal,
+    store: ArtifactStore,
+    gate: Any,
+) -> int:
+    """Host-side collect → ArtifactStore. Unchanged fixture bytes are not new artifacts."""
+    import hashlib
+
+    from pico_orchestrator.true_pi.workenv_http import decode_collect_files, workenv_post
+    from pico_orchestrator.true_pi.workenv_ledger import WorkenvCollectRejected
+
+    body = await workenv_post(
+        "/v1/internal/workenv/collect",
+        {
+            "workspace_id": workspace_id,
+            "glob": ["*.xlsx", "*.docx", "*.pptx", "*.html", "*.png"],
+        },
+    )
+    files = decode_collect_files(body)
+    skip_sha: dict[str, str] = {}
+    root = Path(os.environ.get("PICO_WORKENV_FIXTURE_DIR") or "")
+    if root.is_dir():
+        for path in root.iterdir():
+            if path.is_file():
+                skip_sha[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    kept: list[dict[str, Any]] = []
+    for item in files:
+        name = str(item.get("name") or "")
+        blob = item.get("bytes") or b""
+        digest = hashlib.sha256(blob).hexdigest()
+        if skip_sha.get(name) == digest:
+            continue
+        kept.append(item)
+    try:
+        rows = await gate.ingest_collect(principal, store, kept)
+    except WorkenvCollectRejected:
+        return 0
+    return len(rows)
 
 
 def _compose_prompt(

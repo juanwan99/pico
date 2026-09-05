@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import mimetypes
+import os
 import re
 import sys
 from contextlib import asynccontextmanager
@@ -236,6 +237,7 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         "edu_mode": settings.pico_edu_mode,
         # Product default multi-step kernel (HANDOFF-WB-PI / true-Pi phase-2)
         "default_runtime": _resolve_default_runtime(settings),
+        "workenv_mode": (os.environ.get("PICO_WORKENV") or "off").strip().lower(),
         "pi_agent_runtime_enabled": settings.pico_pi_agent_runtime,
         "pi_agent_scope": settings.pi_agent_scope,
         "pi_agent_canary_configured": pi_canary > 0,

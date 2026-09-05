@@ -11,6 +11,7 @@ Extended verbs appear only when that snapshot asks for them.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
@@ -59,6 +60,39 @@ EXTENDED_TOOLS: tuple[str, ...] = (
     "sandbox_browser_screenshot",
 )
 
+# Workenv B1 hide-list L (PLAN-WORKENV-UPSTREAM). Flag=pi only.
+WORKENV_HIDDEN_L: frozenset[str] = frozenset(
+    {
+        "workspace_list_files",
+        "workspace_read_file",
+        "workspace_write_file",
+        "generate_html_document",
+        "generate_docx_document",
+        "generate_pptx_document",
+        "generate_xlsx_document",
+        "edit_docx_document",
+        "edit_pptx_document",
+        "edit_xlsx_document",
+        "sandbox_pptx_lib",
+        "sandbox_workspace_exec",
+        "render_document",
+        "verify_document",
+        "verify_html_document",
+    }
+)
+
+
+def workenv_mode() -> str:
+    return (os.environ.get("PICO_WORKENV") or "off").strip().lower()
+
+
+def hide_workenv_l(names: Iterable[str]) -> list[str]:
+    """Drop list L when overlay owns file primitives (PICO_WORKENV=pi)."""
+    if workenv_mode() != "pi":
+        return list(names)
+    return [name for name in names if name not in WORKENV_HIDDEN_L]
+
+
 # Never auto-apply. Catalog may name them; Pico does not hang them from keywords.
 SCENE_SKILL_IDS: frozenset[str] = frozenset(
     {
@@ -105,8 +139,10 @@ def ppt_siblings_honest(names: Iterable[str]) -> bool:
 def resolve_visible_tools(allowed_tools: list[str] | tuple[str, ...] | None) -> list[str]:
     """None = CORE always-on. Explicit list = that list ∩ gateway (skill may narrow)."""
     if allowed_tools is None:
-        return _intersect_gateway(CORE_VISIBLE_TOOLS)
-    return _intersect_gateway(allowed_tools)
+        names = _intersect_gateway(CORE_VISIBLE_TOOLS)
+    else:
+        names = _intersect_gateway(allowed_tools)
+    return hide_workenv_l(names)
 
 
 def visible_tools_env(names: Iterable[str]) -> str:

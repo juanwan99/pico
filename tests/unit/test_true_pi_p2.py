@@ -329,6 +329,7 @@ def test_health_endpoint_default_runtime_true(monkeypatch: pytest.MonkeyPatch) -
     body = TestClient(app).get("/health").json()
     assert body["default_runtime"] == "pi-true"
     assert body["true_pi_default_enabled"] is True
+    assert body.get("workenv_mode", "off") in {"off", "exec", "pi"}
 
 
 def test_health_endpoint_default_stays_hosted_without_flag(

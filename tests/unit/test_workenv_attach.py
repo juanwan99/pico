@@ -34,6 +34,23 @@ class Principal:
     scopes: list[str] | None = None
 
 
+def test_workenv_pi_hides_list_l(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator.capability_loading import (
+        CORE_VISIBLE_TOOLS,
+        WORKENV_HIDDEN_L,
+        resolve_visible_tools,
+    )
+
+    monkeypatch.delenv("PICO_WORKENV", raising=False)
+    core = resolve_visible_tools(None)
+    assert "generate_xlsx_document" in core
+    monkeypatch.setenv("PICO_WORKENV", "pi")
+    hidden = resolve_visible_tools(None)
+    assert not (set(hidden) & WORKENV_HIDDEN_L)
+    expected = [n for n in CORE_VISIBLE_TOOLS if n not in WORKENV_HIDDEN_L]
+    assert hidden == expected
+
+
 def test_collect_after_cancel_discards_bytes() -> None:
     gate = WorkenvCancelGate()
     store = MemoryArtifactStore()

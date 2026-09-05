@@ -26,6 +26,7 @@ def test_health() -> None:
         "key_scope": "membership_or_ip",
     }
     assert body["default_runtime"] == "pi-agent"
+    assert body.get("workenv_mode", "off") in {"off", "exec", "pi"}
     assert body["pi_agent_runtime_enabled"] is True
     assert body["pi_agent_scope"] == "all"
     assert body["kimi_agent_runtime_enabled"] is False

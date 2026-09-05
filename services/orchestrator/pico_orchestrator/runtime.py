@@ -229,7 +229,10 @@ async def run_agent_runtime(
             use_true = False
 
         if use_true and _PI_IMPL is None:
-            if not true_pi_available():
+            from pico_orchestrator.capability_loading import workenv_mode
+
+            # Overlay owns ``pi`` when PICO_WORKENV=pi; host PATH need not have it.
+            if not true_pi_available() and workenv_mode() != "pi":
                 return await _fail_closed_no_loop(
                     emit=emit,
                     reason=(
