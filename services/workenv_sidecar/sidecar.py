@@ -452,7 +452,17 @@ def _read_nofollow_regular(path: Path) -> tuple[bytes, os.stat_result, os.stat_r
             raise RuntimeError("gateway.ext.tampered")
         if os.read(fd, 1):
             raise RuntimeError("gateway.ext.tampered")
-        return b"".join(chunks), st, parent_st
+        st2 = os.fstat(fd)
+        if (
+            not stat.S_ISREG(st2.st_mode)
+            or int(st2.st_size) != want
+            or int(st2.st_nlink) != 1
+            or int(st.st_nlink) != 1
+            or st2.st_ino != st.st_ino
+            or st2.st_dev != st.st_dev
+        ):
+            raise RuntimeError("gateway.ext.tampered")
+        return b"".join(chunks), st2, parent_st
     except OSError as exc:
         raise _gateway_oserror(exc) from exc
     finally:
