@@ -390,7 +390,7 @@ def main() -> int:
     args = parser.parse_args()
     base = args.base.rstrip("/")
     code, health, _ = _req("GET", base + "/health", None)
-    if code != 200 or health.get("workenv_mode") != "pi":
+    if code != 200 or health.get("workenv_mode") not in {"pi", "exec"}:
         print(json.dumps({"error": "health", "code": code, "body": health}, ensure_ascii=False))
         return 2
     token = _token(base)
