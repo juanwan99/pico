@@ -138,15 +138,18 @@ async def create_task(
     title: str,
     prompt: str,
     skill_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> tuple[TaskRow, RunRow]:
     from pico_orchestrator.skill_policy import snapshot_for_skill
 
     skill_snapshot = snapshot_for_skill(skill_id)
+    convo = str(conversation_id or "").strip() or None
     task = TaskRow(
         id=new_id(),
         school_id=principal.school_id,
         membership_id=principal.membership_id,
         title=title or (prompt[:80] if prompt else "untitled"),
+        conversation_id=convo,
     )
     session.add(task)
     await session.flush()

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 PROMPT = "把 D2:D7 写成期末40%加平时60%的公式，保存为 xlsx。"
+CONVO = "t4-api"
 
 
 def _req(method: str, url: str, token: str | None, body: dict[str, Any] | None = None) -> tuple[int, Any]:
@@ -65,7 +66,7 @@ def main() -> int:
         "POST",
         base + "/v1/tasks",
         hdr,
-        {"title": "t4-pico-api", "prompt": PROMPT},
+        {"title": "t4-pico-api", "prompt": PROMPT, "conversation_id": CONVO},
     )
     if code != 200:
         print(json.dumps({"error": "create", "code": code, "body": created}, ensure_ascii=False))
@@ -101,11 +102,14 @@ def main() -> int:
         time.sleep(0.4)
 
     run = _req("GET", f"{base}/v1/runs/{run_id}", hdr)[1]
-    arts = _req("GET", f"{base}/v1/artifacts", hdr)[1]
+    task_id = str((created.get("task") or {}).get("id") or (run.get("run") or {}).get("task_id") or "")
+    arts = _req("GET", f"{base}/v1/tasks/{task_id}", hdr)[1] if task_id else {}
     report = {
         "health_workenv": health.get("workenv_mode"),
         "health_runtime": health.get("default_runtime"),
         "run_id": run_id,
+        "task_id": task_id,
+        "conversation_id": CONVO,
         "first_tool": first_tool,
         "abort_at_tool": abort_at_tool,
         "cancel_http": cancel_http,

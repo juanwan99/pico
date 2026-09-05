@@ -51,6 +51,40 @@ def test_workenv_pi_hides_list_l(monkeypatch: pytest.MonkeyPatch) -> None:
     assert hidden == expected
 
 
+@pytest.mark.asyncio
+async def test_create_task_keeps_conversation_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app import db as db_mod
+    from app.auth import Principal as AuthPrincipal
+    from app.db import init_db
+    from app.run_service import create_task
+
+    db_path = tmp_path / "pico.db"
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    db_mod._engine = None
+    db_mod._Session = None
+    await init_db()
+    principal = AuthPrincipal(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read"],
+        iss="t",
+        aud="pico-api",
+        exp=9999999999,
+        raw={},
+    )
+    factory = db_mod.session_factory()
+    async with factory() as session:
+        task, run = await create_task(
+            session,
+            principal,
+            "t4",
+            "prompt",
+            conversation_id="t4-api",
+        )
+        assert task.conversation_id == "t4-api"
+        assert run.task_id == task.id
+
+
 def test_collect_after_cancel_discards_bytes() -> None:
     gate = WorkenvCancelGate()
     store = MemoryArtifactStore()
