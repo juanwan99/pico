@@ -988,7 +988,7 @@ class Handler(BaseHTTPRequestHandler):
             ws = accept_websocket(self)
             attach_rpc(ws, workspace_id)
             return
-        if path == "/healthz":
+        if path in {"/healthz", "/health"}:
             self._send_json(200, {"ok": True, "service": "workenv-sidecar"})
             return
         self._send_json(404, {"ok": False, "error": "not_found"})

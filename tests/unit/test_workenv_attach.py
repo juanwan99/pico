@@ -350,6 +350,32 @@ def _start_sidecar(tmp_path: Path, *, pi_bin: str, token: str) -> tuple[Threadin
     return httpd, port
 
 
+def test_sidecar_health_aliases(tmp_path: Path) -> None:
+    import json
+    import urllib.error
+    import urllib.request
+
+    fake = _write_fake_pi(tmp_path)
+    token = "tok-health"
+    httpd, port = _start_sidecar(tmp_path, pi_bin=str(fake), token=token)
+    try:
+        for path in ("/healthz", "/health"):
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}{path}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            assert body["ok"] is True
+            assert body["service"] == "workenv-sidecar"
+        bad = urllib.request.Request(f"http://127.0.0.1:{port}/health")
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(bad, timeout=5)
+        assert exc.value.code == 401
+    finally:
+        httpd.shutdown()
+
+
 def _write_fake_pi(tmp_path: Path) -> Path:
     path = tmp_path / "fake-pi"
     path.write_text(
