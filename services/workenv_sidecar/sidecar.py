@@ -360,7 +360,12 @@ def _gateway_oserror(exc: OSError) -> RuntimeError:
 
 def _reject_symlink_prefixes(path: Path) -> None:
     """lstat each prefix so an ancestor symlink cannot hide behind a final leaf."""
-    raw = os.path.normpath(str(path))
+    given = Path(str(path))
+    if not given.is_absolute():
+        raise RuntimeError("gateway.ext.tampered")
+    if ".." in given.parts:
+        raise RuntimeError("gateway.ext.tampered")
+    raw = os.path.normpath(str(given))
     parts = Path(raw).parts
     if not parts or parts[-1] in {"", ".", ".."}:
         raise RuntimeError("gateway.ext.tampered")

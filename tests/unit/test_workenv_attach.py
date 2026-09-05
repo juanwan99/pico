@@ -1772,6 +1772,29 @@ def test_ensure_gateway_ext_rejects_ancestor_symlink(tmp_path: Path) -> None:
     sidecar_mod.GATEWAY_EXT_SRC = src
     sidecar_mod.GATEWAY_EXT = dest
     assert sidecar_mod._ensure_gateway_ext() == dest
+    nested = real_dir / "sub"
+    nested.mkdir()
+    nested_src = nested / "official.ts"
+    nested_src.write_bytes(src.read_bytes())
+    nested_dest = nested / "pico-gateway-tools.ts"
+    nested_dest.write_bytes(src.read_bytes())
+    sidecar_mod.GATEWAY_EXT_SRC = nested_src
+    sidecar_mod.GATEWAY_EXT = alias / "sub" / "pico-gateway-tools.ts"
+    with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
+        sidecar_mod._ensure_gateway_ext()
+    sidecar_mod.GATEWAY_EXT = nested_dest
+    sidecar_mod.GATEWAY_EXT_SRC = alias / "sub" / "official.ts"
+    with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
+        sidecar_mod._ensure_gateway_ext()
+    hide = dest.parent / ".." / dest.parent.name / dest.name
+    sidecar_mod.GATEWAY_EXT_SRC = src
+    sidecar_mod.GATEWAY_EXT = hide
+    with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
+        sidecar_mod._ensure_gateway_ext()
+    sidecar_mod.GATEWAY_EXT = dest
+    sidecar_mod.GATEWAY_EXT_SRC = src.parent / ".." / src.parent.name / src.name
+    with pytest.raises(RuntimeError, match="gateway.ext.tampered"):
+        sidecar_mod._ensure_gateway_ext()
 
 
 def test_preexec_pdeathsig_sets_sigkill() -> None:
