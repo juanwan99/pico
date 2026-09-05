@@ -256,6 +256,8 @@ class LedgerArtifactStore:
         aid = str(artifact_id or "").strip()
         if not aid:
             return
+        run_id = ""
+        title = ""
         async with self._factory() as session:
             statement = (
                 select(ArtifactRow)
@@ -273,15 +275,22 @@ class LedgerArtifactStore:
             run_id = str(row.run_id or self._run_id or "")
             title = str(row.title or "")
             await session.delete(row)
-            if run_id:
-                await append_event(
-                    session,
-                    run_id,
-                    "artifact.discarded",
-                    {"artifact_id": aid, "title": title, "reason": "collect-after-cancel"},
-                    commit=False,
-                )
             await session.commit()
+        if run_id:
+            try:
+                async with self._factory() as session:
+                    await append_event(
+                        session,
+                        run_id,
+                        "artifact.discarded",
+                        {
+                            "artifact_id": aid,
+                            "title": title,
+                            "reason": "collect-after-cancel",
+                        },
+                    )
+            except Exception as exc:  # noqa: BLE001 — row is already gone
+                logger.warning("artifact.discarded event failed: %s", type(exc).__name__)
         try:
             from pico_orchestrator.meili_kb import delete_material
 
