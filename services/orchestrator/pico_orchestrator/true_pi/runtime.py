@@ -241,6 +241,21 @@ async def run_true_pi_agent(
             from pico_orchestrator.true_pi.workenv_http import workenv_post
             from pico_orchestrator.true_pi.workenv_ledger import WorkenvCancelGate
 
+            tool_host = (os.environ.get("PICO_TRUE_PI_TOOL_HOST") or "127.0.0.1").strip()
+            tool_port = int(os.environ.get("PICO_TRUE_PI_TOOL_PORT") or "0")
+            tool_server = ToolServer(
+                principal=principal,
+                gateway=gateway,
+                run_id=rid,
+                conversation_id=conversation_id,
+                emit=emit,
+                host=tool_host,
+                port=tool_port,
+            )
+            tool_url = await tool_server.start()
+            public_url = (
+                os.environ.get("PICO_TRUE_PI_TOOL_PUBLIC_URL") or ""
+            ).strip() or tool_url
             created = await workenv_post(
                 "/v1/internal/workenv/create",
                 {
@@ -250,6 +265,9 @@ async def run_true_pi_agent(
                     "school_id": str(getattr(principal, "school_id", "") or ""),
                     "membership_id": str(getattr(principal, "membership_id", "") or ""),
                     "mode": "pi",
+                    "tool_url": public_url,
+                    "tool_token": tool_server.token,
+                    "visible_tools": visible_tools_env(allowed),
                 },
             )
             transport = AttachTransport(

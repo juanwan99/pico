@@ -39,6 +39,15 @@ MODEL = os.environ.get("PICO_MODEL", "gpt-5.6-sol")
 PI_BIN = os.environ.get("PICO_TRUE_PI_BIN", "pi")
 HOST_GW_TOOLS = os.environ.get("PICO_TRUE_PI_TOOL_URL", "http://host-gateway:18769")
 UPSTREAM_BASE = os.environ.get("PICO_UPSTREAM_BASE", "http://host-gateway:18769/v1")
+GATEWAY_EXT = Path(
+    os.environ.get("PICO_GATEWAY_EXT", "/bridge/pico-gateway-tools.ts")
+)
+GATEWAY_EXT_SRC = Path(
+    os.environ.get(
+        "PICO_GATEWAY_EXT_SRC",
+        "/tmp/pico-t4/services/true_pi_bridge/pico-gateway-tools.ts",
+    )
+)
 
 _lock = threading.Lock()
 _state: dict[str, Any] = {
@@ -211,12 +220,23 @@ def _retarget_session_cwd(session: Path, work: Path) -> None:
     session.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _ensure_gateway_ext() -> Path | None:
+    """Official Pico gateway extension. Same -e file as host spawn_command."""
+    if GATEWAY_EXT.is_file():
+        return GATEWAY_EXT
+    if not GATEWAY_EXT_SRC.is_file():
+        return None
+    GATEWAY_EXT.parent.mkdir(parents=True, exist_ok=True)
+    GATEWAY_EXT.write_text(GATEWAY_EXT_SRC.read_text(encoding="utf-8"), encoding="utf-8")
+    return GATEWAY_EXT if GATEWAY_EXT.is_file() else None
+
+
 def _spawn_argv(workspace_id: str) -> list[str]:
     session = _session_file(workspace_id)
     session.parent.mkdir(parents=True, exist_ok=True)
     if not session.exists():
         session.write_text("", encoding="utf-8")
-    return [
+    argv = [
         PI_BIN,
         "--mode",
         "rpc",
@@ -231,6 +251,15 @@ def _spawn_argv(workspace_id: str) -> list[str]:
         "--thinking",
         "medium",
     ]
+    rec = _run_record(workspace_id)
+    mode = str((rec or {}).get("mode") or "pi")
+    # Overlay Pi keeps builtins (files/bash in-box). Host spawn uses
+    # --no-builtin-tools. B1 still loads the official Pico gateway -e.
+    if mode == "pi":
+        ext = _ensure_gateway_ext()
+        if ext is not None:
+            argv.extend(["-e", str(ext)])
+    return argv
 
 
 def _kill_pg(proc: subprocess.Popen[bytes] | None, *, grace: float = 5.0) -> int | None:
@@ -340,6 +369,9 @@ def create_run(body: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "run.destroyed", "status": 409}
         rec["run_id"] = str(body.get("run_id") or workspace_id)
         rec["mode"] = mode
+        rec["tool_url"] = str(body.get("tool_url") or HOST_GW_TOOLS).strip()
+        rec["tool_token"] = str(body.get("tool_token") or "").strip()
+        rec["visible_tools"] = str(body.get("visible_tools") or "").strip()
         rec.setdefault("pgids", [])
         rec["destroyed"] = False
         _state["runs"][workspace_id] = rec
@@ -644,8 +676,14 @@ def spawn_pi(workspace_id: str) -> subprocess.Popen[bytes]:
     env["PI_CODING_AGENT_DIR"] = str(AGENT_HOME)
     env["HOME"] = "/tmp"
     env["PYTHONUNBUFFERED"] = "1"
-    env["PICO_TRUE_PI_TOOL_URL"] = HOST_GW_TOOLS
+    env["PICO_TRUE_PI_TOOL_URL"] = str(rec.get("tool_url") or HOST_GW_TOOLS)
     env["PICO_TRUE_PI_RUN_ID"] = rec["run_id"]
+    tok_tool = str(rec.get("tool_token") or "").strip()
+    if tok_tool:
+        env["PICO_TRUE_PI_TOOL_TOKEN"] = tok_tool
+    vis = str(rec.get("visible_tools") or "").strip()
+    if vis:
+        env["PICO_TRUE_PI_VISIBLE_TOOLS"] = vis
     tok = (os.environ.get("PICO_RUN_TOKEN") or os.environ.get("OPENAI_API_KEY") or "").strip()
     if tok:
         env["OPENAI_API_KEY"] = tok

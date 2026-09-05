@@ -782,6 +782,64 @@ async def test_destroy_false_fails_runtime(monkeypatch: pytest.MonkeyPatch) -> N
     )
 
 
+@pytest.mark.asyncio
+async def test_pi_mode_create_passes_tool_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pico_orchestrator.true_pi.client import FakeTransport
+    from pico_orchestrator.true_pi.runtime import run_true_pi_agent
+
+    def make_attach(*_a: Any, **_k: Any) -> FakeTransport:
+        return FakeTransport(
+            scripted=[
+                {"type": "agent_start"},
+                {"type": "turn_start"},
+                {"type": "agent_end", "willRetry": False},
+            ],
+            assistant_text="done",
+        )
+
+    monkeypatch.setenv("PICO_WORKENV", "pi")
+    monkeypatch.setattr("pico_orchestrator.true_pi.runtime.AttachTransport", make_attach)
+    monkeypatch.delenv("PICO_WORKENV_FIXTURE_DIR", raising=False)
+    posted: list[dict[str, Any]] = []
+
+    async def fake_post(path: str, payload: dict, timeout: float = 30.0) -> dict:
+        del timeout
+        posted.append({"path": path, "payload": payload})
+        if str(path).endswith("/destroy-run"):
+            return {"ok": True, "destroyed": True}
+        if str(path).endswith("/collect"):
+            return {"ok": True, "files": []}
+        return {"ok": True, "box_id": "box-1"}
+
+    monkeypatch.setattr("pico_orchestrator.true_pi.workenv_http.workenv_post", fake_post)
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    result = await run_true_pi_agent(
+        prompt="hi",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=8),
+        transport=None,
+        artifact_store=MemoryArtifactStore(),
+        run_id="pi-tool",
+    )
+    assert result.status == "succeeded"
+    created = next(p for p in posted if str(p["path"]).endswith("/create"))
+    assert created["payload"]["mode"] == "pi"
+    assert created["payload"]["tool_url"].startswith("http://127.0.0.1:")
+    assert created["payload"]["tool_token"]
+    vis = created["payload"]["visible_tools"]
+    assert "inspect_document" in vis
+    assert "generate_xlsx_document" not in vis
+    assert "workspace_write_file" not in vis
+
+
 def test_destroy_clears_conversation_key(tmp_path: Path) -> None:
     import sidecar as sidecar_mod
 
@@ -842,6 +900,45 @@ def test_create_run_rejects_owner_mismatch(tmp_path: Path) -> None:
     )
     assert other["ok"] is False
     assert other["error"] == "box.owner_mismatch"
+
+
+def test_pi_spawn_loads_gateway_extension(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.SESSION_ROOT = tmp_path / "session"
+    sidecar_mod.SESSION_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    ext_src = tmp_path / "pico-gateway-tools.ts"
+    ext_src.write_text("export default {};\n", encoding="utf-8")
+    dest = tmp_path / "bridge" / "pico-gateway-tools.ts"
+    sidecar_mod.GATEWAY_EXT = dest
+    sidecar_mod.GATEWAY_EXT_SRC = ext_src
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["destroyed"] = set()
+    sidecar_mod._state["conversation_key"] = None
+    sidecar_mod._state["owner_key"] = None
+    created = sidecar_mod.create_run(
+        {
+            "workspace_id": "r-pi",
+            "conversation_id": "c1",
+            "mode": "pi",
+            "tool_url": "http://host-gateway:18764",
+            "tool_token": "tok",
+            "visible_tools": "workspace_write_file",
+        }
+    )
+    assert created["ok"] is True
+    argv = sidecar_mod._spawn_argv("r-pi")
+    assert "--no-extensions" in argv
+    assert "-e" in argv
+    assert str(dest) in argv
+    rec = sidecar_mod._run_record("r-pi")
+    assert rec is not None
+    assert rec["tool_url"] == "http://host-gateway:18764"
+    assert rec["tool_token"] == "tok"
 
 
 @pytest.mark.asyncio
