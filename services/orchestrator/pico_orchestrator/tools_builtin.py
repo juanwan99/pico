@@ -1736,6 +1736,7 @@ def _workspace_handlers(
                     "title": title_text,
                     "h1": h1_text,
                     "workspace_id": ws,
+                    "message": "只解析，未执行。HTML 已写入工作区，没有跑脚本。",
                 }
             elif isinstance(source, str) and source.strip():
                 parsed = await light_exec_with_timeout(source)
@@ -2297,8 +2298,8 @@ def build_default_gateway(
         ToolSpec(
             name="sandbox_workspace_exec",
             description=(
-                "Optional light exec inside the isolated workspace: parse HTML or Python "
-                "(ast only, timeout-killed). Cannot run bash, host shell, or leave the workspace. "
+                "Parse HTML or Python inside the isolated workspace. Receipt is parsed=true, "
+                "executed=false — ast only, not host bash, not a real runner. "
                 "Args: html? | source?"
             ),
             handler=workspace_exec,

@@ -462,7 +462,13 @@ def light_exec_source(source: str) -> dict[str, Any]:
             "__import__",
         }:
             raise ToolError("sandbox.exec_denied", "禁止动态执行或打开宿主文件")
-    return {"ok": True, "parsed": True, "executed": False, "timeout_s": EXEC_TIMEOUT_S}
+    return {
+        "ok": True,
+        "parsed": True,
+        "executed": False,
+        "timeout_s": EXEC_TIMEOUT_S,
+        "message": "只解析，未执行。不是宿主机 bash，没有跑这段代码。",
+    }
 
 
 async def light_exec_with_timeout(source: str) -> dict[str, Any]:

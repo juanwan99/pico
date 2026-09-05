@@ -361,6 +361,8 @@ def test_light_exec_parses_but_denies_host_modules() -> None:
     out = light_exec_source("x = 1 + 2\n")
     assert out["parsed"] is True
     assert out["executed"] is False
+    assert "只解析" in str(out.get("message") or "")
+    assert "未执行" in str(out.get("message") or "")
     with pytest.raises(ToolError) as denied:
         light_exec_source("import os\nos.system('id')\n")
     assert denied.value.code == "sandbox.exec_denied"
@@ -376,6 +378,8 @@ async def test_sandbox_exec_html_and_forbidden_python() -> None:
     assert parsed["title"] == "教案首页"
     assert parsed["h1"] == "第一课"
     assert parsed["executed"] is False
+    assert "只解析" in str(parsed.get("message") or "")
+    assert "未执行" in str(parsed.get("message") or "")
     with pytest.raises(ToolError) as denied:
         await gw.invoke(
             owner,
