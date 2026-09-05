@@ -260,6 +260,21 @@ async def run_true_pi_agent(
                 principal=principal,
                 artifact_store=artifact_store,
             )
+        elif transport is None and workenv_mode == "exec":
+            from pico_orchestrator.true_pi.workenv_ledger import WorkenvCancelGate
+            from pico_orchestrator.true_pi.workenv_remote import ensure_overlay_run
+
+            await ensure_overlay_run(
+                rid,
+                principal=principal,
+                conversation_id=conversation_id or rid,
+            )
+            workenv_gate = WorkenvCancelGate()
+            await _attach_workenv_fixtures(
+                rid,
+                principal=principal,
+                artifact_store=artifact_store,
+            )
         elif isinstance(transport, AttachTransport):
             from pico_orchestrator.true_pi.workenv_ledger import WorkenvCancelGate
 

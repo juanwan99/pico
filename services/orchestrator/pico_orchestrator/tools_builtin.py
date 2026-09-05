@@ -583,9 +583,38 @@ def _workspace_handlers(
 ) -> tuple[Any, ...]:
     async def write_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         from pico_orchestrator.delivery_policy import normalize_artifact_title
+        from pico_orchestrator.true_pi.workenv_remote import (
+            ensure_overlay_run,
+            overlay_exec_on,
+            overlay_workspace_id,
+            overlay_write_file,
+        )
 
         title = _artifact_title(args)
         title, ext_fix = normalize_artifact_title(title)
+        deny_secret_filename(title)
+        if overlay_exec_on():
+            wid = overlay_workspace_id(principal, store)
+            if not wid:
+                raise ToolError("tool.invalid_arguments", "run_id required for overlay write")
+            raw_b64 = args.get("bytes_b64")
+            if isinstance(raw_b64, str) and raw_b64.strip():
+                raw = base64.b64decode(raw_b64)
+            else:
+                content = _required_text(args, "content", maximum=_MAX_ARTIFACT_CONTENT)
+                raw = content.encode("utf-8")
+            await ensure_overlay_run(wid, principal=principal)
+            await overlay_write_file(wid, title, raw)
+            result = {
+                "ok": True,
+                "title": title,
+                "n": len(raw),
+                "workspace_id": wid,
+                "overlay": True,
+            }
+            if ext_fix:
+                result["extension_corrected"] = ext_fix
+            return result
         protected = title_protected_extension(title)
         if protected:
             raise ToolError(
@@ -594,7 +623,6 @@ def _workspace_handlers(
             )
         content = _required_text(args, "content", maximum=_MAX_ARTIFACT_CONTENT)
         assert_content_caps(content)
-        deny_secret_filename(title)
         kind = str(args.get("kind") or "file").strip().lower()
         if kind not in {"doc", "file", "json", "outline", "text"}:
             raise ToolError("tool.invalid_arguments", "unsupported artifact kind")
@@ -613,10 +641,32 @@ def _workspace_handlers(
         return result
 
     async def read_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        from pico_orchestrator.true_pi.workenv_remote import (
+            overlay_exec_on,
+            overlay_read_file,
+            overlay_workspace_id,
+        )
+
         artifact_id = args.get("artifact_id")
-        title = args.get("title")
+        title = args.get("title") or args.get("name")
         artifact_id = str(artifact_id).strip() if artifact_id is not None else None
         title = str(title).strip() if title is not None else None
+        if overlay_exec_on() and title and not artifact_id:
+            wid = overlay_workspace_id(principal, store)
+            if not wid:
+                raise ToolError("tool.invalid_arguments", "run_id required for overlay read")
+            raw = await overlay_read_file(wid, title)
+            text = raw.decode("utf-8", errors="replace") if raw else ""
+            return {
+                "artifact": {
+                    "title": title,
+                    "kind": "file",
+                    "n": len(raw),
+                    "content": text[:8000],
+                    "overlay": True,
+                    "workspace_id": wid,
+                }
+            }
         if not artifact_id and not title:
             raise ToolError(
                 "tool.invalid_arguments", "artifact_id or title is required"
@@ -635,12 +685,28 @@ def _workspace_handlers(
         return {"artifact": result}
 
     async def list_files(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        from pico_orchestrator.true_pi.workenv_remote import (
+            overlay_exec_on,
+            overlay_list_files,
+            overlay_workspace_id,
+        )
+
         try:
             limit = int(args.get("limit") or 20)
         except (TypeError, ValueError) as exc:
             raise ToolError("tool.invalid_arguments", "limit must be an integer") from exc
         if not 1 <= limit <= 100:
             raise ToolError("tool.invalid_arguments", "limit must be between 1 and 100")
+        if overlay_exec_on():
+            wid = overlay_workspace_id(principal, store)
+            if not wid:
+                raise ToolError("tool.invalid_arguments", "run_id required for overlay list")
+            files = await overlay_list_files(wid)
+            artifacts = [
+                {"title": str(item.get("name") or ""), "n": item.get("n"), "overlay": True}
+                for item in files[:limit]
+            ]
+            return {"artifacts": artifacts, "count": len(artifacts), "workspace_id": wid}
         artifacts = await with_io_timeout(
             store.list(principal, limit=limit),
             what="workspace_list_files",
@@ -1691,11 +1757,47 @@ def _workspace_handlers(
             raise
 
     async def workspace_exec(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        """Optional light exec: parse HTML/Python inside the isolation dir. No bash."""
+        """Optional light exec: parse HTML/Python inside the isolation dir. No bash.
+
+        PICO_WORKENV=exec: python runs in overlay /work. Host parse-only is not A.
+        """
+        from pico_orchestrator.true_pi.workenv_remote import (
+            ensure_overlay_run,
+            overlay_exec,
+            overlay_exec_on,
+            overlay_workspace_id,
+        )
+
         started = time.perf_counter()
         source = args.get("source") or args.get("code")
         html = args.get("html")
         run_id = current_run_id(principal, store)
+        if overlay_exec_on():
+            wid = overlay_workspace_id(principal, store) or run_id
+            if not wid:
+                raise ToolError("tool.invalid_arguments", "run_id required for overlay exec")
+            if not (isinstance(source, str) and source.strip()):
+                raise ToolError("tool.invalid_arguments", "source is required")
+            await ensure_overlay_run(str(wid), principal=principal)
+            out = await overlay_exec(str(wid), source=str(source), timeout=30)
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            await emit_sandbox_usage(
+                principal,
+                extra={
+                    "duration_ms": duration_ms,
+                    "workspace_id": wid,
+                    "phase": "exec",
+                    "tool": "sandbox_workspace_exec",
+                    "overlay": True,
+                },
+                ok=bool(out.get("ok")),
+            )
+            return {
+                **out,
+                "workspace_id": wid,
+                "parsed": True,
+                "overlay": True,
+            }
         ws = workspace_id_for(principal.school_id, principal.membership_id, run_id)
         try:
             if isinstance(html, str) and html.strip():

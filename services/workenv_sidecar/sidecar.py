@@ -406,6 +406,113 @@ def abort_run(body: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "wrote": wrote}
 
 
+def list_work_files(body: dict[str, Any]) -> dict[str, Any]:
+    workspace_id = str(body.get("workspace_id") or "").strip()
+    rec = _run_record(workspace_id)
+    if rec is None:
+        return {"ok": False, "error": "run.unknown", "status": 404}
+    try:
+        work = _work_dir(workspace_id)
+    except ValueError:
+        return {"ok": False, "error": "workspace_id.invalid", "status": 400}
+    names: list[dict[str, Any]] = []
+    if work.is_dir():
+        for path in sorted(work.iterdir()):
+            if path.name.startswith("."):
+                continue
+            if path.is_symlink():
+                continue
+            if path.is_file():
+                names.append({"name": path.name, "n": path.stat().st_size})
+    return {"ok": True, "files": names}
+
+
+def read_work_file(body: dict[str, Any]) -> dict[str, Any]:
+    workspace_id = str(body.get("workspace_id") or "").strip()
+    rec = _run_record(workspace_id)
+    if rec is None:
+        return {"ok": False, "error": "run.unknown", "status": 404}
+    name = Path(str(body.get("name") or "")).name
+    if not name or name in {".", ".."}:
+        return {"ok": False, "error": "file.name", "status": 400}
+    try:
+        work = _work_dir(workspace_id)
+    except ValueError:
+        return {"ok": False, "error": "workspace_id.invalid", "status": 400}
+    path = work / name
+    if path.is_symlink():
+        return {"ok": False, "error": "file.symlink", "status": 400}
+    raw = _read_regular_nofollow(path)
+    if raw is None:
+        return {"ok": False, "error": "file.missing", "status": 404}
+    return {
+        "ok": True,
+        "name": name,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "bytes_b64": base64.b64encode(raw).decode("ascii"),
+        "n": len(raw),
+    }
+
+
+def exec_work(body: dict[str, Any]) -> dict[str, Any]:
+    """Run python in /work/{run}. Not a shell. Not a second agent loop."""
+    workspace_id = str(body.get("workspace_id") or "").strip()
+    rec = _run_record(workspace_id)
+    if rec is None:
+        return {"ok": False, "error": "run.unknown", "status": 404}
+    try:
+        work = _work_dir(workspace_id)
+    except ValueError:
+        return {"ok": False, "error": "workspace_id.invalid", "status": 400}
+    timeout = min(max(int(body.get("timeout") or 30), 1), 60)
+    source = body.get("source")
+    argv_in = body.get("argv")
+    argv: list[str]
+    if isinstance(source, str) and source.strip():
+        script = work / "_pico_exec.py"
+        if script.is_symlink() or script.exists():
+            script.unlink()
+        script.write_text(source, encoding="utf-8")
+        argv = ["python3", "-I", str(script)]
+    elif isinstance(argv_in, list) and argv_in:
+        argv = [str(x) for x in argv_in]
+        if not argv or Path(argv[0]).name not in {"python3", "python"}:
+            return {"ok": False, "error": "exec.argv", "status": 400}
+        for item in argv[1:]:
+            if item.startswith("-") and item not in {"-I", "-c", "-u"}:
+                return {"ok": False, "error": "exec.flag", "status": 400}
+    else:
+        return {"ok": False, "error": "exec.source", "status": 400}
+    env = {
+        "HOME": "/tmp",
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+    try:
+        proc = subprocess.run(
+            argv,
+            cwd=str(work),
+            env=env,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "exec.timeout", "timeout": timeout}
+    except OSError as exc:
+        return {"ok": False, "error": "exec.spawn", "detail": str(exc)[:200]}
+    stdout = (proc.stdout or b"")[:8000].decode("utf-8", errors="replace")
+    stderr = (proc.stderr or b"")[:4000].decode("utf-8", errors="replace")
+    return {
+        "ok": proc.returncode == 0,
+        "executed": True,
+        "returncode": proc.returncode,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+
+
 def destroy_run(body: dict[str, Any]) -> dict[str, Any]:
     workspace_id = str(body.get("workspace_id") or "").strip()
     rec = _run_record(workspace_id)
@@ -495,6 +602,17 @@ def _pipe_stderr(proc: subprocess.Popen[bytes]) -> None:
 
 
 def attach_rpc(ws: WebSocketConnection, workspace_id: str) -> None:
+    rec = _run_record(workspace_id)
+    if rec is not None and str(rec.get("mode") or "") == "workdir":
+        try:
+            send_close(ws)
+        except Exception as exc:  # noqa: BLE001
+            del exc
+        try:
+            ws.close()
+        except Exception as exc:  # noqa: BLE001
+            del exc
+        return
     proc = spawn_pi(workspace_id)
     rec = _run_record(workspace_id)
     assert rec is not None
@@ -585,6 +703,9 @@ class Handler(BaseHTTPRequestHandler):
             "/v1/internal/workenv/create": create_run,
             "/v1/internal/workenv/attach": attach_files,
             "/v1/internal/workenv/collect": collect_files,
+            "/v1/internal/workenv/ls": list_work_files,
+            "/v1/internal/workenv/read": read_work_file,
+            "/v1/internal/workenv/exec": exec_work,
             "/v1/internal/workenv/abort": abort_run,
             "/v1/internal/workenv/destroy-run": destroy_run,
         }

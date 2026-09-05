@@ -87,10 +87,29 @@ def workenv_mode() -> str:
 
 
 def hide_workenv_l(names: Iterable[str]) -> list[str]:
-    """Drop list L when overlay owns file primitives (PICO_WORKENV=pi)."""
-    if workenv_mode() != "pi":
-        return list(names)
-    return [name for name in names if name not in WORKENV_HIDDEN_L]
+    """Drop host office verbs when overlay is the computer.
+
+    pi: hide L (generate/edit/workspace/exec) — Pi builtins own files.
+    exec: hide generate/edit/pptx_lib only — workspace_* + sandbox_workspace_exec
+    stay and must hit overlay, not a disarmed host.
+    """
+    mode = workenv_mode()
+    if mode == "pi":
+        return [name for name in names if name not in WORKENV_HIDDEN_L]
+    if mode == "exec":
+        hide = {
+            name
+            for name in WORKENV_HIDDEN_L
+            if name
+            not in {
+                "workspace_list_files",
+                "workspace_read_file",
+                "workspace_write_file",
+                "sandbox_workspace_exec",
+            }
+        }
+        return [name for name in names if name not in hide]
+    return list(names)
 
 
 # Never auto-apply. Catalog may name them; Pico does not hang them from keywords.
@@ -142,6 +161,9 @@ def resolve_visible_tools(allowed_tools: list[str] | tuple[str, ...] | None) -> 
         names = _intersect_gateway(CORE_VISIBLE_TOOLS)
     else:
         names = _intersect_gateway(allowed_tools)
+    if workenv_mode() == "exec" and "sandbox_workspace_exec" not in names:
+        if "sandbox_workspace_exec" in ALLOWED_GATEWAY_TOOLS:
+            names = list(names) + ["sandbox_workspace_exec"]
     return hide_workenv_l(names)
 
 

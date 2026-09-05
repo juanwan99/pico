@@ -58,6 +58,21 @@ def test_workenv_pi_hides_list_l(monkeypatch: pytest.MonkeyPatch) -> None:
     assert hidden == expected
 
 
+def test_workenv_exec_keeps_workspace_and_exec_hides_generate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pico_orchestrator.capability_loading import resolve_visible_tools
+
+    monkeypatch.setenv("PICO_WORKENV", "exec")
+    names = resolve_visible_tools(None)
+    assert "workspace_write_file" in names
+    assert "workspace_read_file" in names
+    assert "workspace_list_files" in names
+    assert "sandbox_workspace_exec" in names
+    assert "generate_xlsx_document" not in names
+    assert "sandbox_pptx_lib" not in names
+
+
 @pytest.mark.asyncio
 async def test_create_task_keeps_conversation_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from app import db as db_mod
@@ -379,6 +394,37 @@ def test_create_run_rejects_dotdot(tmp_path: Path) -> None:
     assert not (tmp_path / "escape").exists()
 
 
+def test_exec_python_in_work_dir(tmp_path: Path) -> None:
+    import sidecar as sidecar_mod
+
+    sidecar_mod.WORK_ROOT = tmp_path / "work"
+    sidecar_mod.WORK_ROOT.mkdir()
+    sidecar_mod.AGENT_HOME = tmp_path / "agent-home"
+    sidecar_mod.write_agent_home()
+    sidecar_mod._state["runs"] = {}
+    sidecar_mod._state["conversation_key"] = None
+    created = sidecar_mod.create_run(
+        {"workspace_id": "exec1", "conversation_id": "c1", "mode": "workdir"}
+    )
+    assert created["ok"] is True
+    (tmp_path / "work" / "exec1" / "n.txt").write_text("ok\n", encoding="utf-8")
+    out = sidecar_mod.exec_work(
+        {
+            "workspace_id": "exec1",
+            "source": "from pathlib import Path\nprint(Path('n.txt').read_text())\n",
+        }
+    )
+    assert out["ok"] is True
+    assert out["executed"] is True
+    assert "ok" in out["stdout"]
+    listed = sidecar_mod.list_work_files({"workspace_id": "exec1"})
+    names = [f["name"] for f in listed["files"]]
+    assert "n.txt" in names
+    read = sidecar_mod.read_work_file({"workspace_id": "exec1", "name": "n.txt"})
+    assert read["ok"] is True
+    assert "ok" in __import__("base64").b64decode(read["bytes_b64"]).decode()
+
+
 def test_collect_skips_symlink(tmp_path: Path) -> None:
     import sidecar as sidecar_mod
 
@@ -498,6 +544,65 @@ async def test_ingest_collect_rechecks_cancel_before_each_write() -> None:
             ],
         )
     assert len(flip.rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_exec_mode_write_list_read_hit_overlay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pico_orchestrator.tools_builtin import build_default_gateway
+    from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
+
+    monkeypatch.setenv("PICO_WORKENV", "exec")
+    posted: list[dict[str, Any]] = []
+
+    async def fake_post(path: str, payload: dict, timeout: float = 30.0) -> dict:
+        del timeout
+        posted.append({"path": path, "payload": payload})
+        if str(path).endswith("/ls"):
+            return {"ok": True, "files": [{"name": "n.txt", "n": 3}]}
+        if str(path).endswith("/read"):
+            return {
+                "ok": True,
+                "name": "n.txt",
+                "bytes_b64": __import__("base64").b64encode(b"ok\n").decode("ascii"),
+            }
+        return {"ok": True}
+
+    monkeypatch.setattr("pico_orchestrator.true_pi.workenv_http.workenv_post", fake_post)
+    store = MemoryArtifactStore()
+    store._run_id = "run-exec"  # type: ignore[attr-defined]
+    gw = build_default_gateway(store)
+    tok = bind_usage_context(
+        school_id="school-a",
+        membership_id="member-a",
+        run_id="run-exec",
+    )
+    try:
+        written = await gw.invoke(
+            Principal(),
+            "workspace_write_file",
+            {"title": "n.txt", "content": "ok\n"},
+        )
+        listed = await gw.invoke(Principal(), "workspace_list_files", {"limit": 10})
+        read = await gw.invoke(Principal(), "workspace_read_file", {"title": "n.txt"})
+        executed = await gw.invoke(
+            Principal(),
+            "sandbox_workspace_exec",
+            {"source": "print(open('n.txt').read())"},
+        )
+    finally:
+        reset_usage_context(tok)
+    assert written.get("overlay") is True
+    assert listed.get("count") == 1
+    assert read["artifact"]["overlay"] is True
+    assert executed.get("overlay") is True
+    paths = [p["path"] for p in posted]
+    assert "/v1/internal/workenv/create" in paths
+    assert "/v1/internal/workenv/attach" in paths
+    assert "/v1/internal/workenv/ls" in paths
+    assert "/v1/internal/workenv/read" in paths
+    assert "/v1/internal/workenv/exec" in paths
 
 
 @pytest.mark.asyncio
