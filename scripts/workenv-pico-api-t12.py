@@ -231,6 +231,7 @@ def main() -> int:
     parser.add_argument("--base", default="http://127.0.0.1:18775")
     parser.add_argument("--out", default="/tmp/workenv-poc/pico-api-t12.json")
     parser.add_argument("--wall", type=float, default=240)
+    parser.add_argument("--suite", choices=("t1", "t2", "all"), default="all")
     args = parser.parse_args()
     base = args.base.rstrip("/")
     code, health, _ = _req("GET", base + "/health", None)
@@ -238,28 +239,41 @@ def main() -> int:
         print(json.dumps({"error": "health", "code": code, "body": health}, ensure_ascii=False))
         return 2
     token = _token(base)
-    t1r1 = _run_one(base, token, title="t1-r1", prompt=T1_R1, convo=CONVO_T1, wall=args.wall)
-    t1r2 = _run_one(base, token, title="t1-r2", prompt=T1_R2, convo=CONVO_T1, wall=args.wall)
-    t2 = _run_one(base, token, title="t2", prompt=T2, convo=CONVO_T2, wall=args.wall)
+    t1r1: dict[str, Any] | None = None
+    t1r2: dict[str, Any] | None = None
+    t2: dict[str, Any] | None = None
+    if args.suite in {"t1", "all"}:
+        t1r1 = _run_one(base, token, title="t1-r1", prompt=T1_R1, convo=CONVO_T1, wall=args.wall)
+        t1r2 = _run_one(base, token, title="t1-r2", prompt=T1_R2, convo=CONVO_T1, wall=args.wall)
+    if args.suite in {"t2", "all"}:
+        t2 = _run_one(base, token, title="t2", prompt=T2, convo=CONVO_T2, wall=args.wall)
+    t1_ok = _t1_pass(t1r1, t1r2) if t1r1 is not None and t1r2 is not None else None
+    t2_ok = _t2_pass(t2) if t2 is not None else None
     report = {
         "health_workenv": health.get("workenv_mode"),
         "health_sha": health.get("git_sha"),
+        "suite": args.suite,
         "t1r1": t1r1,
         "t1r2": t1r2,
         "t2": t2,
-        "t1_pass": _t1_pass(t1r1, t1r2),
-        "t2_pass": _t2_pass(t2),
+        "t1_pass": t1_ok,
+        "t2_pass": t2_ok,
     }
     Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    print(json.dumps({
-        "t1r1": {"status": t1r1.get("status"), "n": t1r1.get("n_artifacts"), "s": t1r1.get("seconds")},
-        "t1r2": {"status": t1r2.get("status"), "n": t1r2.get("n_artifacts"), "s": t1r2.get("seconds")},
-        "t2": {"status": t2.get("status"), "n": t2.get("n_artifacts"), "s": t2.get("seconds")},
-        "t1_pass": report["t1_pass"],
-        "t2_pass": report["t2_pass"],
-        "workenv": health.get("workenv_mode"),
-    }, ensure_ascii=False))
-    return 0 if report["t1_pass"] and report["t2_pass"] else 1
+    summary: dict[str, Any] = {"suite": args.suite, "workenv": health.get("workenv_mode")}
+    if t1r1 is not None:
+        summary["t1r1"] = {"status": t1r1.get("status"), "n": t1r1.get("n_artifacts"), "s": t1r1.get("seconds")}
+        summary["t1r2"] = {"status": (t1r2 or {}).get("status"), "n": (t1r2 or {}).get("n_artifacts"), "s": (t1r2 or {}).get("seconds")}
+        summary["t1_pass"] = t1_ok
+    if t2 is not None:
+        summary["t2"] = {"status": t2.get("status"), "n": t2.get("n_artifacts"), "s": t2.get("seconds")}
+        summary["t2_pass"] = t2_ok
+    print(json.dumps(summary, ensure_ascii=False))
+    if args.suite == "t1":
+        return 0 if t1_ok else 1
+    if args.suite == "t2":
+        return 0 if t2_ok else 1
+    return 0 if t1_ok and t2_ok else 1
 
 
 if __name__ == "__main__":
