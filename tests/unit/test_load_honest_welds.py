@@ -84,6 +84,25 @@ def test_system_names_office_ceiling_without_scene_words() -> None:
     assert "If `publish_html_page` is listed this turn" in body
     assert "Do not name or call publish tools that are not listed" in body
     assert "same title replaces the file the teacher opens" in body.lower()
+    assert "one A1-style address per call" in body
+    assert "not a map of cell addresses" in body
+    assert "edited=false" in body
+
+
+def test_xlsx_values_is_placeholder_fill_on_pi_surfaces() -> None:
+    ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "cell/value or values" not in ts
+    assert "{{key}} template fill only" in ts
+    assert "edited=false" in ts
+    gw = build_default_gateway()
+    xlsx = gw.tools["generate_xlsx_document"].description
+    exec_desc = gw.tools["sandbox_workspace_exec"].description
+    assert "cell+value" in xlsx
+    assert "{{key}} template fill only" in xlsx
+    assert "executed=false" in exec_desc
+    assert "not a real runner" in exec_desc
 
 
 def test_default_core_shows_office_not_programming() -> None:
