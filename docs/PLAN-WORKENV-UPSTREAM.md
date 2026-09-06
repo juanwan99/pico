@@ -1,35 +1,38 @@
-# Pico 阶段方案：成熟上游接管工作环境 · Pico 只做薄适配
+# Pico 阶段方案：办公计算机交成熟上游 · Pico 只做薄适配
 
 ```text
-DOC: Pico stage plan · mature upstream takes the work environment
-STATUS: BINDING stage plan · 2026-09-05 · PR-0 (#920) already live; this file is PR-1
+DOC: Pico stage plan · office computer to mature upstream
+STATUS: BINDING stage plan · 2026-09-06 · 办公主线纠偏
 CORRECTED: 2026-09-05 · Codex review of exp SHA eefa8879 — A对照、隔离三层、失败语义；撤回「读容器 /etc = B1 路线失败」
 OWNER-LOCK: 2026-09-06 · 公开发布不是 Pico 能力。学校页面走 Edu 申请 + 校管批准。H3 / PR-4 取消。不把 publish 挪进 CORE。不自研审批核。禁止 Pico `/p/{id}` 当发布产品。
-OWNER-LOCK: 2026-09-06 · **不要 bash。** 宿主与 overlay **都不**开放 Pi 内建 bash/read/write/edit。B1（箱内 Pi 去掉 `--no-builtin-tools`）**取消**。PR-7b 不开。不自研通用 exec 核。日常办公继续走现网捷径。
-DATE: 2026-09-05
+OWNER-LOCK: 2026-09-06 · **不要 bash。** 宿主与 overlay **都不**开放 Pi 内建 bash/read/write/edit。B1（箱内 Pi 去掉 `--no-builtin-tools`）**取消**。PR-7b 不开。不自研通用 exec 核。
+OWNER-LOCK: 2026-09-06 · **产品主线是办公**（Word / Excel / HTML / PPT）。写代码只够服务办公，不是编程产品。本阶段接办公计算机，不是 Pi bash / overlay 编程环境。
+DATE: 2026-09-06
 AUTHOR: Grok (本窗)
 REPO: juanwan99/pico ONLY
 ISSUE: https://github.com/juanwan99/pico/issues/919 （OPEN 讨论 · 本方案是书面落地，不是再辩论）
-NORTH: docs/DIRECTION-NOW.md §0-star v1.3 · PR #920 MERGED · origin/main + live tip SHA 61d6a9c87157fd896a545f8ef3db646635052bbb
+NORTH: docs/DIRECTION-NOW.md §0-star v1.4 · 办公主线 · 本 Binding PR 升版
 LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md §0-supreme
-FREEZE: docs/TRUTH-FREEZE.md v1.6 已在 origin/main / live（2026-09-05 prod-update）
+FREEZE: docs/TRUTH-FREEZE.md v1.7（本 Binding PR）
 CLAIM-WB: 本方案不改签
-NOT: 采购 E2B · 加 Excel 批改 API · 换 Pi / LibreChat · 自研沙箱核 · 生产改动
+NOT: 采购 E2B · 加 Excel 批改 API · 换 Pi / LibreChat · 自研沙箱核 · 复活 B1 · 本 PR 不实现办公计算机
 ```
 
 ---
 
 ## Overview
 
-**一句话目标：** 把「文件、程序执行、依赖、进程生命周期」从 Pico 自建协议里交还给成熟上游隔离环境；Pi 继续做编排核；Pico 只留身份授权、唯一账本、产品对象、交互与交付门闩。验收看减法，不看再加一个专用动词。
+**一句话目标：** 产品要的是办公能力。把「办公文件、办公库执行、依赖、进程生命周期」从 Pico 专用 `generate_*` 协议里交还给成熟隔离执行面；Pi 继续做编排核；Pico 只留身份授权、唯一账本、产品对象、交互与交付门闩。验收看减法，不看再加一个专用动词。
 
-北极星真源是 DIRECTION-NOW §0-star **v1.3**（PR [#920](https://github.com/juanwan99/pico/pull/920) **MERGED** 2026-09-05，SHA `61d6a9c87157fd896a545f8ef3db646635052bbb` = `origin/main` = 公网 tip）。v1.3 现已是 live Binding。**产品减法尚未发生**：无 overlay、无 `PICO_WORKENV`、无藏 L 后 T1/T2。禁止把北极星升版说成 computer 已迁走。
+北极星真源是 DIRECTION-NOW §0-star **v1.4**（本 Binding PR；v1.3 能力并列 / 捷径不是天花板仍继承）。v1.3 已由 PR [#920](https://github.com/juanwan99/pico/pull/920) 合入。**办公计算机尚未迁走**：现网仍是 `generate_*` + `sandbox_pptx_lib` 在 pico-api 侧。禁止把北极星升版说成 computer 已迁走。禁止把「不要 bash」说成办公能力已齐。
 
-宏观根因已在 #919 调查里钉死：**Pico 借了 Pi 的 loop，没借 Pi 的 computer。** 专用办公动词、Skill 裁剪、TS schema、Python 实现、`SYSTEM.md`、import hook、llm-pass 共同定义了行为。本阶段不修 Excel 批改、不换核、不买厂商。
+宏观根因已在 #919 调查里钉死：**Pico 借了 Pi 的 loop，没借 Pi 的 computer。** 同一颗 GPT 脑，Codex 能做出能改的 Word/Excel/PPT，是因为有工作区 + 真跑办公库 + 文档 skill 工艺。Pico-Pi 现网只有 loop + 专用动词。缺的是办公计算机，不是再加 `batch_edit_xlsx`，也不是 Pi 内建 bash。
 
-**业主 2026-09-06：不要 bash。** 不为「任意文件/脚本」开放 Pi 内建 bash（宿主与 overlay 都不开）。B1（箱内 Pi 去掉 `--no-builtin-tools`）**取消**。PR-6 实验枝保留为学习账，**不合 main、不宣称 Pass、不开 PR-7b**。日常 Word/Excel/PPT 继续走现网 `generate_*` 捷径。若仍迁工作目录，最多 A 形（Pi 仍宿主、`--no-builtin-tools` 永在）；不得用箱内 bash 当计算机。计算机若将来再交成熟上游，必须是成熟执行面，不是自制 bash jail。
+**业主 2026-09-06：产品主线是办公。** Word / Excel / HTML / PPT。写代码只够服务办公（短脚本驱动 python-docx / openpyxl / python-pptx），不是编程产品，不是对标 Codex/Cursor。
 
-**2026-09-05 纠偏（Codex · exp `eefa8879`）：** hide-L 下 T1/T2/T3-files 打开真文件 = 能力证据，**不是**「成熟上游已接走生命周期」。自写 WS 帧、create/attach/collect/abort/destroy、改 session cwd、进程回收，是一次性 PoC 可理解；**不得**默认成为生产方案。读 overlay 容器自己的 `/etc` **不是**宿主机逃逸，**不得**据此宣判 B1 路线失败。未达安全与生命周期要求 → 暂停上线、不合实验枝；**不**等于成熟方案复用失败。H2/H4 卫生不代替这条主线。
+**业主 2026-09-06：不要 bash。** 不为「任意文件/脚本」开放 Pi 内建 bash（宿主与 overlay 都不开）。B1（箱内 Pi 去掉 `--no-builtin-tools`）**取消**。PR-6 实验枝保留为学习账，**不合 main、不宣称 Pass、不开 PR-7b**。不得用箱内 bash 当计算机。不得自制通用 jail 交差。日常快路仍可走 `generate_*`；本阶段要补的是隔离办公 Python，不是把捷径写成终点。
+
+**2026-09-05 纠偏（Codex · exp `eefa8879`）：** hide-L 下 T1/T2/T3-files 打开真文件 = 能力证据，**不是**「成熟上游已接走生命周期」。自写 WS 帧、create/attach/collect/abort/destroy、改 session cwd、进程回收，是一次性 PoC 可理解；**不得**默认成为生产方案。读 overlay 容器自己的 `/etc` **不是**宿主机逃逸，**不得**据此宣判成熟上游路线失败。未达安全与生命周期要求 → 暂停上线、不合实验枝。H2/H4 卫生不代替办公主线。B1 / `PICO_WORKENV=pi` 作为阶段车辆已经作废；下文 B1/overlay 段落只作学习账。
 
 ---
 
@@ -40,7 +43,7 @@ NOT: 采购 E2B · 加 Excel 批改 API · 换 Pi / LibreChat · 自研沙箱核
 | 指针 | SHA / 状态 | 含义 |
 |------|------------|------|
 | 公网 tip（PR-0 部完） | `61d6a9c87157fd896a545f8ef3db646635052bbb` | `curl -fsS https://pico.aivia.asia/api/pico/tip` |
-| `origin/main` | 同 SHA | 生产线。DIRECTION-NOW v1.3 + TRUTH-FREEZE **v1.6** |
+| `origin/main`（写方案时） | 同 SHA | 当时生产线。DIRECTION-NOW v1.3 + TRUTH-FREEZE **v1.6**。v1.4 / v1.7 由本 Binding PR 升 |
 | PR #920 | MERGED 2026-09-05T06:26:17Z | squash。docs + freeze-pin 单测 v1.5→v1.6。无运行时 |
 | 在飞产品 PR | 无（OPEN=0） | 下一步才开 PR-1 方案进仓 |
 
@@ -61,12 +64,11 @@ Pi 描述写 `cell/value or values`（`pico-gateway-tools.ts` `generate_xlsx_doc
 
 **架构一句话：** `true_pi/client.py` `spawn_command()` 固定 `--no-builtin-tools`。公网多租户拿不到 Pi 内建 bash/FS。Pico 用 extension `pico-gateway-tools.ts` 把白名单工具回调到 127.0.0.1 Python gateway。于是「计算机」落在 Pico 适配层，而不是隔离环境。
 
-Codex 后来同意主线：成熟上游接走职责 → 验证能否减少 Pico 自建 → 再决定留什么、退役什么。两条候选接线：
+Codex 后来同意主线：成熟上游接走职责 → 验证能否减少 Pico 自建 → 再决定留什么、退役什么。
 
-- **A（对照）：** Pi 留在现位；工具回调远程执行环境。
-- **B（主假设）：** Pi + 工作文件 + 执行工具同隔离。
+**2026-09-06 阶段车辆已改：** 不再用 B1（箱内 Pi + builtins）或 A 形工作目录 overlay 当本阶段过门。本阶段车辆 = **隔离办公 Python**（只跑 python-docx / openpyxl / python-pptx + 必要标准库；产物回账本）。A/B overlay 段落保留为学习账，不是现行施工单。
 
-业主令：「按你的建议写方案」。本文件就是那份方案。
+业主令：「办公是产品，写代码不是核心追求」。本文件后半把施工单改成这条。
 
 ---
 
@@ -74,16 +76,20 @@ Codex 后来同意主线：成熟上游接走职责 → 验证能否减少 Pico 
 
 ### Goals
 
-1. 把工作环境职责从 Pico 专用协议迁到成熟隔离执行面。复用 S1/S2 **隔离合同**（键、token、destroy、web_guard、非特权）；**计算机进程** = `docker-compose.workenv-poc.yml`，**不是** 生产 `pico-sandbox:v13`。不采购。
-2. 编排继续用上游 Pi：RPC loop、session JSONL、官方 compaction、extension、隔离内文件原语。pico-api 仍跑 `TruePiRpcClient`；只换运输（`AttachTransport` 双工附着）。
-3. 用同一模型、同一冻结夹具验证 **B1**，再用 A 做对照。**Pass = 藏名单 L 后 T1 与 T2 仍能完成。**
-4. 产品承诺与诚实上限写死，避免本阶段被 PPT 设计师级 / 站点代登 / API 重启中途续跑绑架。
-5. 可选 P0 卫生（假绿回执、Skill 只收窄、publish 可达）可独立合，但 **不是** 架构赌注。
+1. **办公计算机：** 老师点名要 Word / Excel / HTML / PPT 时，模型能在隔离面上对真文件用成熟办公库做事（新建、读结构、按地址改、同聊续改），产物打开能用。`generate_*` 留作快路，不是上限。
+2. **工艺形状：** 对标 Claude/Codex 文档 skill（name+description → 读 SKILL.md → 真跑库 → 检查）。Skill 只收窄。不把 Pi 市场包 / 社区 .NET ONLYOFFICE 当办公核。
+3. **隔离合同：** 复用 S1/S2 键、token、destroy、web_guard、非特权。办公 Python 不是 host bash，不是 Pi 内建 bash，不是自制通用 jail。不采购。`PICO_WORKENV` 旗本阶段不开 `pi`。
+4. 编排继续用上游 Pi：RPC loop、session JSONL、官方 compaction、gateway 白名单。宿主 `--no-builtin-tools` 永在。
+5. 产品承诺与诚实上限写死：不是编程产品；设计师级 PPT / 站点代登 / 中途 resume 不做。
+6. 可选卫生（假绿回执、Skill 只收窄）可独立合，但 **不是** 办公主线。
 
 ### Non-Goals（本阶段明确不做）
 
 - 替换 Pi 或 LibreChat。
-- 公网 **宿主机** bash / 任意 FS（B1 箱内 Pi builtins ≠ 本条）。
+- 公网 **宿主机** bash / 任意 FS / Pi 内建 bash（B1 已取消，≠ 本条例外）。
+- 把产品做成编程 Agent；开放 `sandbox_workspace_exec` 当真跑。
+- 再加 `batch_edit_xlsx` / 第三张加厚 spec 卡当进步。
+- 复活 B1 / PR-7b / `PICO_WORKENV=pi`；把 PR-6 overlay 合进 main。
 - PoC 把 18769 绑 `0.0.0.0` 或给 ECS 公网 NIC。loopback 发布走宿主 nft DNAT / socat，见「发布器」。
 - 魔法 `extra_hosts: "host-gateway:host-gateway"`（Engine HostGatewayIP = docker0）。箱内该名必须钉 `pico-workenv` inspect Gateway。
 - 把 `pico_workenv*` nft 装上 live `pico.aivia.asia` ECS，或给宿主 FORWARD 设 **policy drop**（会杀生产 `pico-sandbox` Chromium / 其它 compose NAT）。
@@ -102,7 +108,7 @@ Codex 后来同意主线：成熟上游接走职责 → 验证能否减少 Pico 
 
 ## 产品承诺 vs 诚实上限
 
-对标 WorkBuddy **Web 六条** 仍有效，但本阶段不签 CLAIM-WB。用法 = Grok（DIRECTION-NOW §0-star v1.3）。
+对标 WorkBuddy **Web 六条** 仍有效，但本阶段不签 CLAIM-WB。用法 = Grok（DIRECTION-NOW §0-star v1.4）。产品主线是办公。
 
 ### 必须有（must-have）
 
@@ -126,7 +132,8 @@ Codex 后来同意主线：成熟上游接走职责 → 验证能否减少 Pico 
 | L3 | **设计师级 PPT / SmartArt / VBA / 动画不承诺** | ADR-OFFICE-DOC-PIPELINE：天花板 = Claude/Codex 文档 skill 档，不是 Word 内 Copilot |
 | L4 | **不是一人一机云桌面** | S1/S2：数据租户隔离，不是每校 VM |
 | L5 | **任何地方都不开放** Pi 内建 bash/read/write/edit（宿主 **与** overlay） | 业主 2026-09-06：不要 bash。ADR-PI：`--no-builtin-tools` 永在。B1 箱内 builtins **取消** |
-| L6 | **未完成复用验证前，不认定某一家执行厂商** | TRUTH-FREEZE v1.6 P0d / C1 |
+| L6 | **未完成复用验证前，不认定某一家执行厂商** | TRUTH-FREEZE v1.7 P0d / C1 |
+| L7 | **不是编程产品** | 业主 2026-09-06。短脚本只服务办公文件 |
 
 ---
 
@@ -207,16 +214,17 @@ flowchart LR
 ### 决策骨架（先读 · 工程师已关闭）
 
 ```text
-主假设 **已取消（业主 2026-09-06 不要 bash）**。原 B1 = sidecar 拥有 pi 且去掉 `--no-builtin-tools` → **不开、不合、不当 Pass 目标**。
-对照 A（若仍做）：Pi 留 pico-api；`--no-builtin-tools` 永在；工作目录可在 overlay。A **不得**靠箱内 bash 过题。
-日常办公 = 现网捷径 `generate_*` / inspect / 按地址薄改。不把「藏 L 后靠 bash 过 T1/T2」当本阶段过门。
-原 Pass（藏 L + 箱内 bash + 安全门闩）**作废为本阶段上线门**。PR-6 学习账保留，不宣判成熟上游路线永远失败。
-Fail（产品）= 仍要改 Pico schema/Skill，或文件/会话摆渡，或旧协议删不掉。
-Fail（实现）≠ Fail（路线）：PoC 门闩不够用 → 修合同/减薄，不宣判「复用成熟上游失败」。
+本阶段主假设 = 隔离办公 Python（受限解释器，只 import 办公库 + 白名单标准库）。
+宿主 Pi 永 --no-builtin-tools。不要 bash。不要 Pi 市场办公包。
+原 B1 = sidecar 拥有 pi 且去掉 `--no-builtin-tools` → **不开、不合、不当 Pass 目标**。
+对照 A / overlay 工作目录：可选学习账，**不得**靠箱内 bash 过题，**本阶段不作为过门**。
+日常快路 = 现网捷径 `generate_*` / inspect / 按地址薄改。Pass 后捷径可留别名，SYSTEM 不得再写成唯一做法。
+原 Pass（藏 L + 箱内 bash + 安全门闩）**作废为本阶段上线门**。
+本阶段 Pass（意图，实现另开卡）：同一颗脑、同一份老师材料，隔离办公库能做出/改好真 OOXML，且旧定向协议可开始减法。未实现前不得自签 Pass。
+Fail（产品）= 仍只能靠加 generate_* / 加厚 spec，或必须开放 bash 才能办公。
+Fail（实现）≠ Fail（路线）：门闩不够用 → 修合同/减薄，不宣判「复用成熟上游失败」。
 隔离合同 = S1/S2 键、token、destroy、web_guard、非特权。
-隔离镜像 ≠ 生产 pico-sandbox:v13（512MiB Chromium 共享进程）。
-PoC 用 docker-compose.workenv-poc.yml，prod-update 永不读该文件名。
-禁止笼统「exec」桶；路由名 create/attach/attach-rpc（WS 双工）/abort（糖）/collect/destroy。禁止 unary POST prompt 当主运输。
+PICO_WORKENV 旗本阶段保持文档/测试钉；生产不开 pi。
 ```
 
 否决的 B 变体（避免工程师发明第二运行时）：
@@ -933,7 +941,7 @@ H1–H4 各应能独立成 PR、独立回滚。它们修的是假绿与裁剪，
 给 Excel 加 `cells[]` batch、给 Skill 加剧本、给 SYSTEM.md 加更长说明。
 
 - 利：97s 样本可能立刻变快。
-- 弊：专用动词更像天花板；每类任务加协议；与北极星 v1.3「验收看减法」直接冲突。#919 根因 A 会复制到下一文件类型。
+- 弊：专用动词更像天花板；每类任务加协议；与北极星 v1.4「验收看减法」直接冲突。#919 根因 A 会复制到下一文件类型。
 
 ### 方案 2 — 接线 A 当主路径（降为对照）
 
@@ -954,7 +962,7 @@ Pi 留 pico-api，工具调远程 exec。
 
 ### ADR 冲击（仅 B1 Pass 后改 Accepted 句；未 Pass 不改 ADR）
 
-直到 #920 合入且 `curl tip` 的 SHA 在 `origin/main` 上，DIRECTION-NOW v1.3 / TRUTH-FREEZE v1.6 只是 **intent**，不是 `origin/main` Binding。实验可引用 v1.3 作意图；落地 PR 必须先有 #920 的 tip。
+#920 已合；v1.3 / TRUTH-FREEZE v1.6 已是历史 Binding。v1.4 / v1.7 由本 Binding PR 落地后才是 live。办公计算机实现不得混进本 docs PR。
 
 | 文件 | 今日 Accepted 句 | B1 Pass 后改什么 | 何时改 |
 |------|------------------|------------------|--------|
@@ -1019,12 +1027,13 @@ Pi 留 pico-api，工具调远程 exec。
 
 ```text
 停，如果：
-1. B1 与 A 藏 L 后都不能过 T1 与 T2；
-2. 不改 schema/Skill 完不成 T2；
+1. 办公必须靠 host bash / Pi 内建 bash / 自制 jail 才能做出真文件；
+2. 不改 schema、不加专用动词就做不出日常 Word/Excel/PPT；
 3. 出现宿主机 bash、自研微 VM、或网关工具名 exec；
 4. 未授权却 prod-update / overlay 进 host.yml；
-5. 桥职责越过 TRUE-PI-BRIDGE-DUTIES（含箱写账本）。
-停了只做 H1 或讨论，不开架构卡。
+5. 桥职责越过 TRUE-PI-BRIDGE-DUTIES（含箱写账本）；
+6. 把产品做成编程 Agent，或把 generate_* 焊回天花板。
+停了只讨论，不开实现卡。B1/A 藏 L 过题不再是本阶段停/过门条件。
 ```
 
 ---
@@ -1033,17 +1042,13 @@ Pi 留 pico-api，工具调远程 exec。
 
 ```text
 全序（同时 OPEN PR ≤ 1）：
-PR-0 #920 合 + prod-update + curl tip SHA 在 origin/main
-  → PR-1 本方案 docs（文首重复：v1.3 未进 tip 不得当 live Binding）
-  → 业主 Q1
-  → 可选 PR-2 仅 H1（假绿；可跳过）
-  → PR-6 实验枝 不合 main（compose overlay 文件 prod-update 永不读）
-     先 B1 夹具 → 再 A 夹具 → #919 评论 Pass/Fail
-  → PR-6 学习结束：不合 main、不宣称 Pass（业主不要 bash → B1 过门作废）
-  → **不开 PR-7b**（箱内 Pi + builtins）
-  → PR-7a（仅工作目录 overlay、仍无 bash）**本阶段不自动开**；要开须另一次业主令
-  → 不按 L 退役 `generate_*`（捷径仍是日常计算机）
+PR-0 #920 已合（v1.3）
+  → 本 Binding PR（v1.4 / v1.7 + 本方案纠偏）→ CI 绿 → squash → 必须 prod-update
+  → 业主点头后另开「隔离办公 Python」实现卡（PR-8 形状）
+  → Pass 后再谈捷径减法
+B1 / PR-7b / PICO_WORKENV=pi 取消。PR-6 学习账不合 main。PR-7a 不自动开。
 H2 已合。H3 取消。H4 可选仍不合。
+本 Binding PR 不实现办公计算机。
 ```
 
 | `PICO_WORKENV` | 默认 | 含义 |
@@ -1124,9 +1129,9 @@ H2 已合。H3 取消。H4 可选仍不合。
 
 | # | 决策 | 理由 |
 |---|------|------|
-| D1 | 北极星 = DIRECTION-NOW §0-star v1.3（PR #920）；用法 = Grok；能力并列；专用动词是捷径；工作环境交成熟上游 | 业主 2026-09-05 书面；TRUTH-FREEZE v1.6 P0c/P0d |
-| D2 | 宏观根因不再辩论：借了 Pi 的 loop，没借 computer；adapter 定义行为 | #919 代码证据 A/B/C + 反例 |
-| D3 | **B1 取消**（不要 bash）。日常办公走现网捷径。A 形工作目录 overlay **可选、不挡生产、不得开箱内 bash** | 业主 2026-09-06。日常 Word/PPT 不靠 bash；箱内 builtins = 公网多租户 bash jail，自制达不到生产隔离 |
+| D1 | 北极星 = DIRECTION-NOW §0-star **v1.4**；用法 = Grok；**办公主线**；能力并列；专用动词是捷径；办公计算机交成熟上游 | 业主 2026-09-06 书面；TRUTH-FREEZE v1.7 P0c/P0d/P0e |
+| D2 | 宏观根因不再辩论：借了 Pi 的 loop，没借 computer；adapter 定义行为；缺的是办公计算机不是 bash | #919 代码证据 A/B/C + 业主办公优先 |
+| D3 | **B1 取消**（不要 bash）。日常快路仍可走捷径。本阶段过门 = 隔离办公 Python，不是 overlay 编程环境 | 业主 2026-09-06。Word/PPT 不靠 bash；箱内 builtins = 公网多租户 bash jail |
 | D4 | 复用 S1/S2 **合同**；不复用 `pico-sandbox:v13` 镜像/512MiB 进程。PoC = `docker-compose.workenv-poc.yml` | 生产 sidecar 无 Node/pi |
 | D5 | `TruePiRpcClient` 不变；`AttachTransport` 双工 WS 换 `SubprocessTransport.start` | unary POST 不是 Pi 管道 |
 | D6 | **宿主与 overlay 均** `--no-builtin-tools` 永在。禁止箱内 Pi bash/read/write/edit | 业主 2026-09-06 不要 bash |
@@ -1134,11 +1139,12 @@ H2 已合。H3 取消。H4 可选仍不合。
 | D8 | 诚实上限：无中途 resume、无代登、无设计师 PPT | 已有调研 |
 | D9 | 实验前最多 H1；H2/H4 不挡 PR-6，也 **不代替** PR-6 纠偏。**H3 取消** | 学习优先；卫生不是主线；发布不是默认能力 |
 | D19 | 发布不是默认能力；发布需要确认走审批。`publish_*` 留 EXTENDED。本阶段不把 publish 进 CORE，不自研审批核 | 业主 2026-09-06 书面。现网 `publish_html_page` 无确认闸（一调即 live URL）；审批是产品门闩，未接线前不得默认公网发布 |
-| D20 | **不要 bash。** 取消 B1 / PR-7b。不自研通用 exec。PR-6 枝不合 main。日常办公 = 捷径 | 业主 2026-09-06 书面。老师功能没有一项名叫 bash；真隔离自制达不到标准且违法加厚 |
+| D20 | **不要 bash。** 取消 B1 / PR-7b。不自研通用 exec。PR-6 枝不合 main。快路 = 捷径；主线 = 隔离办公库 | 业主 2026-09-06 书面。老师功能没有一项名叫 bash |
+| D21 | **产品主线是办公。** 写代码是仆人。天花板 = 文档 skill + 隔离真跑办公库。不要 Pi 市场包 / ONLYOFFICE .NET | 业主 2026-09-06 书面 |
 | D10 | 旗默认 `off`。`pi`（箱内 Pi + builtins）**取消**。`exec` 仅工作目录、仍无 bash，**本阶段不作为过门** | 不要 bash；不把自制 overlay 当生产计算机 |
 | D11 | 不换 Pi/LibreChat；不写 edu；无关卡关键字 | HARD SCOPE |
 | D12 | 读 overlay `/etc` ≠ 宿主机逃逸；A 必须有远端计算机；`collected_n>0` 不得抹掉 provider_error；自写 WS/进程回收不得当生产默认 | Codex 2026-09-05 对 exp `eefa8879`：能力证据保留，路线未失败，实现未达安全/生命周期 |
-| D12 | v1.3 在 tip∈main(#920) 前只是 intent | 本工作树是北极星枝 |
+| D12b | v1.4 在本 Binding PR tip=main 前只是 intent | 升版必须合+部 |
 | D13 | jsonl 宿主 bind；create 对 conversation_key 幂等；一会话一 Pi；attach 无 jsonl_b64 | `--session` 非多写 |
 | D14 | 裸模型钥不进箱；受众受限 token 只打 host-gateway:18769（经发布器 DNAT）；控制面钥否 | 18769 代理持上游钥；:3000 不发布 |
 | D15 | collect 字节 → 宿主校验 → `store.write`；箱不写账本 | 第二账本写口违法 |
@@ -1153,9 +1159,9 @@ H2 已合。H3 取消。H4 可选仍不合。
 - 讨论卡：https://github.com/juanwan99/pico/issues/919
 - 北极星 PR：https://github.com/juanwan99/pico/pull/920 （SHA `63d6eefa`）
 - 沙箱长程：https://github.com/juanwan99/pico/issues/505 （OPEN）
-- `docs/DIRECTION-NOW.md` §0-star v1.3
+- `docs/DIRECTION-NOW.md` §0-star v1.4
 - `docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md` §0-supreme
-- `docs/TRUTH-FREEZE.md` v1.6（枝）/ 现网可能 v1.5
+- `docs/TRUTH-FREEZE.md` v1.7
 - `docs/ADR-PI-TRUE-KERNEL-RPC.md`
 - `docs/ADR-CAPABILITY-LOADING.md`
 - `docs/ADR-OFFICE-DOC-PIPELINE.md`
@@ -1177,19 +1183,19 @@ H2 已合。H3 取消。H4 可选仍不合。
 
 每张 PR 独立可审。**同时 OPEN PR ≤ 1。** 验证不是合入 PR。Pass 前不得开 PR-7a/7b。正文禁止 `Closes`/`Fixes`/`close #n`。
 
-### PR-0 · 北极星（已开）
+### PR-0 · 北极星 v1.3（已合）
 
 - **标题：** 已有 PR #920
 - **影响：** `DIRECTION-NOW.md` v1.3 · `TRUTH-FREEZE.md` v1.6
 - **依赖：** 无
-- **说明：** 合后必须 `prod-update`。`curl tip` SHA 必须在 `origin/main`。在飞时不开第二张产品 PR。
+- **说明：** 已 live。能力并列 / 捷径不是天花板仍继承。
 
-### PR-1 · 本方案进仓
+### PR-1 · 本方案进仓（已合） + **本 Binding PR · 办公主线纠偏**
 
-- **标题：** `docs: work environment to mature upstream (stage plan)`
-- **影响：** `docs/PLAN-WORKENV-UPSTREAM.md` + README 一行。只 docs
-- **依赖：** PR-0 已合且 tip=main。否则 O5b 只贴 #919
-- **说明：** **文首重复：** 在 tip SHA 属于 `origin/main` 上的 #920 之前，不得把 v1.3 当 live Binding。保留双 SHA 表。本工作树若仍是 `docs/north-star-v1.3`，本地 `DIRECTION-NOW.md` 不是生产法律。不关 #919。
+- **标题：** `docs: office-first north star v1.4 and office-computer stage plan`
+- **影响：** DIRECTION-NOW v1.4 · TRUTH-FREEZE v1.7 · PLAN-WORKENV-UPSTREAM 阶段车辆 · 指针文档。只 docs + freeze pin 单测
+- **依赖：** PR-0 已合且 tip=main
+- **说明：** 不实现办公计算机。不关 #919 / #744。合后必须 prod-update。
 
 ### PR-2 · 可选且仅 H1（可跳过）
 
@@ -1238,26 +1244,22 @@ H2 已合。H3 取消。H4 可选仍不合。
 - **依赖：** 业主 2026-09-06：不要 bash
 - **说明：** PR-6 实验枝可留作对照，不合 main。不得把自写 WS / 进程回收当生产默认
 
-### PR-8 · canary 后按 L 退役（一次一类）
+### PR-8 · 办公计算机（下一张实现卡 · 须业主点头另开）
 
-- **标题：** `refactor: retire generate_* patch path after workenv pass`（例）
-- **影响：** 名单 L 的一类（先 `generate_*` patch 参数，不是一次拆光 CORE）
-- **依赖：** 公网 `PICO_WORKENV=pi` canary 上 T1/T2 在 L 隐藏下可见
-- **说明：** 别名按 Q3。
+- **标题：** 另议。形状：隔离办公 Python（python-docx / openpyxl / python-pptx）+ 文档 skill 渐进披露；`generate_*` 留快路
+- **影响：** 受限解释器 / 白名单 import；产物回账本；宿主仍 `--no-builtin-tools`
+- **依赖：** 本 Binding PR 已合且 tip=main；业主另开执行卡。黄/红另一双眼睛
+- **说明：** **本 docs PR 不开实现。** 禁止 bash、禁止 Pi 市场包、禁止加厚 spec、禁止自签 Pass。`PICO_WORKENV=pi` 不开。Pass 后再谈按 L 退役捷径补丁路径。
 
 ### 全序（不是扇出）
 
 ```mermaid
 flowchart TD
-  P0[PR-0 #920] --> P1[PR-1 docs]
-  P1 --> Q1[业主 Q1]
-  Q1 --> H1[可选 PR-2 仅 H1]
-  H1 --> EXP[PR-6 实验不合 main]
-  Q1 --> EXP
-  EXP -->|业主不要 bash| STOP[B1/PR-7b 取消 · 捷径仍是日常计算机]
-  EXP -.->|另一次业主令才考虑| P7a[PR-7a 仅工作目录 · 仍无 bash]
-  P7b[PR-7b 箱内 bash] -.-> STOP
-  H2[H2 已合 · H3 取消 · H4 可选不合]
+  P0[PR-0 #920 v1.3 已合] --> P1[本 Binding PR · v1.4 办公主线]
+  P1 --> NEXT[业主点头后 · 隔离办公 Python 实现卡]
+  NEXT --> PASS[Pass 后才谈捷径减法]
+  B1[B1 / PR-7b / PICO_WORKENV=pi] -.-> X[取消 · 不要 bash]
+  P6[PR-6 overlay 学习账] -.-> X
 ```
 
-任一节点：其它 PR 必须已合或关闭。实验枝不合 main。无 Pass 则无 7a/7b/8。
+任一节点：其它 PR 必须已合或关闭。实验枝不合 main。本 docs PR 不实现办公计算机。无业主执行卡则无实现 PR。
