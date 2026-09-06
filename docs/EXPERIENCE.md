@@ -29,7 +29,7 @@ DATE: 2026-09-02
 
 ## B · 现网 / 产品
 
-11. **用法 = Grok。** 禁问句/材料特判、禁词表监工、禁自研压缩器/记忆 OS。只接 Pi 官方 compact。能力并列，禁焊死路径。专用办公动词是捷径，不是天花板。工作环境交成熟上游；Pico 只薄适配。Skill 只能收窄。加一个万能 exec 而旧协议照旧 = 不算进步。
+11. **用法 = Grok。** 禁问句/材料特判、禁词表监工、禁自研压缩器/记忆 OS。只接 Pi 官方 compact。能力并列，禁焊死路径。专用办公动词是捷径，不是天花板。Skill 只能收窄。加一个万能 exec 而旧协议照旧 = 不算进步。**业主 2026-09-06：不要 bash。** 宿主与 overlay 均 `--no-builtin-tools`。B1 / PR-7b 取消。不自研通用 exec。日常办公走 `generate_*` 捷径。工作环境交成熟上游仍有效，但本阶段不靠自制 bash jail 交差。
 12. **CLAIM-WB-DEGREE-WEB 业主 2026-08-26 已签 YES** @ tip `dcb47c00…`（#449/#316 OWNER DECISION）。工程仍禁改口/再代签。记忆 OS 仍挂起；人视角薄层（名+最近文件）#733/#736 已部。
 13. **`juanwan99/oneflow` 不当真源**（已 Archive）。
 14. **改 Python 工具说明 ≠ Pi 看见。** 真路径：`pico-gateway-tools.ts` + `SYSTEM.md`。
