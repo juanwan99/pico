@@ -41,7 +41,7 @@ export function askQuestionText(payload: Record<string, unknown> | undefined): s
 export function liveAskForRun(
   run: PicoRun | null | undefined,
   events: PicoRunEvent[] | null | undefined,
-): { question: string; options: string[] } | null {
+): { question: string; options: string[]; eventId: string } | null {
   if (!run?.id || !ACTIVE_RUN.has(String(run.status || ''))) {
     return null;
   }
@@ -53,7 +53,11 @@ export function liveAskForRun(
   if (options.length < 2) {
     return null;
   }
-  return { question: askQuestionText(live.payload), options };
+  return {
+    question: askQuestionText(live.payload),
+    options,
+    eventId: String(live.id || `seq-${live.seq}`),
+  };
 }
 
 /** Parked on ask_user: the run is still `running`, but the model is not generating. */

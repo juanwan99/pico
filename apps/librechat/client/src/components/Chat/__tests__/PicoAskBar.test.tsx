@@ -75,4 +75,34 @@ describe('PicoAskBar main column', () => {
     );
     expect(screen.queryByTestId('pico-ask-main')).not.toBeInTheDocument();
   });
+
+  it('lets a later question be chosen after cancel on the same mounted bar', () => {
+    const question = '确认把「验收-929.html」公开发布到 pico.aivia.asia 吗？取消则不会生成公开链接。';
+    const options = ['确认发布 ccfd5d3d', '取消'];
+    const { rerender } = render(
+      <PicoAskBar
+        run={run('running')}
+        events={[
+          { id: 'ask-1', run_id: 'run-1', seq: 1, type: 'ui.prompt.begin', payload: { text: question, options } },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(mockAnswerPicoAsk).toHaveBeenCalledWith('run-1', '取消');
+    expect(screen.getByRole('button', { name: '确认发布 ccfd5d3d' })).toBeDisabled();
+
+    rerender(
+      <PicoAskBar
+        run={{ id: 'run-2', task_id: 'task-1', status: 'running' }}
+        events={[
+          { id: 'ask-2', run_id: 'run-2', seq: 1, type: 'ui.prompt.begin', payload: { text: question, options } },
+        ]}
+      />,
+    );
+    const yes = screen.getByRole('button', { name: '确认发布 ccfd5d3d' });
+    expect(yes).not.toBeDisabled();
+    fireEvent.click(yes);
+    expect(mockAnswerPicoAsk).toHaveBeenLastCalledWith('run-2', '确认发布 ccfd5d3d');
+    expect(screen.getByTestId('pico-ask-busy')).toHaveTextContent('已选「确认发布 ccfd5d3d」· 继续中…');
+  });
 });

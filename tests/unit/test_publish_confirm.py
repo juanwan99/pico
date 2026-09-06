@@ -114,6 +114,41 @@ async def test_run_park_cancel_does_not_issue_token(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
+async def test_second_confirm_after_cancel_needs_new_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = P("school-a", "member-a", ["ai:run"])
+    answers = iter(["取消", confirm_options("art-2")[0]])
+
+    async def park(_run_id, _question, _options, _emit):
+        return {"ok": True, "answer": next(answers), "question": "确认吗"}
+
+    monkeypatch.setattr("pico_orchestrator.ask_user.park", park)
+    with pytest.raises(ToolError) as cancelled:
+        await require_teacher_confirm(
+            owner,
+            artifact_id="art-1",
+            title="demo.html",
+            confirm_token="",
+            run_id="run-1",
+            emit=None,
+        )
+    assert cancelled.value.code == "publish.cancelled"
+    token = await require_teacher_confirm(
+        owner,
+        artifact_id="art-2",
+        title="demo.html",
+        confirm_token="",
+        run_id="run-2",
+        emit=None,
+    )
+    assert token
+    with pytest.raises(ToolError) as replay:
+        consume_confirm_token(owner, artifact_id="art-2", token=token)
+    assert replay.value.code == "publish.confirm_replay"
+
+
+@pytest.mark.asyncio
 async def test_run_park_yes_consumes_one_shot(monkeypatch: pytest.MonkeyPatch) -> None:
     owner = P("school-a", "member-a", ["ai:run"])
     parked = {"ok": True, "answer": confirm_options("art-1")[0], "question": "确认吗"}
