@@ -89,6 +89,61 @@ def test_publish_without_confirm_has_no_public_side_effect(client) -> None:
     assert "page.html" in titles
 
 
+def test_html_write_is_new_id_and_publish_reads_that_row(client) -> None:
+    owner = _headers(client, "member-a")
+    first = _invoke(
+        client,
+        owner,
+        "generate_html_document",
+        {"title": "page.html", "marker": "mk-a", "body": PAGE},
+    )
+    assert first.status_code == 200, first.text
+    first_id = first.json()["result"]["artifact_id"]
+    first_sha = first.json()["result"].get("content_sha256")
+    second = _invoke(
+        client,
+        owner,
+        "generate_html_document",
+        {
+            "title": "page.html",
+            "marker": "mk-b",
+            "body": PAGE.replace("demo", "other"),
+        },
+    )
+    assert second.status_code == 200, second.text
+    second_id = second.json()["result"]["artifact_id"]
+    second_sha = second.json()["result"].get("content_sha256")
+    assert second_id != first_id
+    if first_sha and second_sha:
+        assert first_sha != second_sha
+    pub = _invoke(
+        client,
+        owner,
+        "publish_html_page",
+        {
+            "artifact_id": first_id,
+            "confirm_token": _confirm("school-a", "member-a", first_id),
+        },
+    )
+    assert pub.status_code == 200, pub.text
+    page_id = pub.json()["result"]["page_id"]
+    opened = client.get(f"/p/{page_id}")
+    assert opened.status_code == 200
+    assert "<h1>demo</h1>" in opened.text
+    assert "<h1>other</h1>" not in opened.text
+    stolen = _invoke(
+        client,
+        owner,
+        "publish_html_page",
+        {
+            "artifact_id": second_id,
+            "confirm_token": _confirm("school-a", "member-a", first_id),
+        },
+    )
+    assert stolen.status_code == 400
+    assert (stolen.json().get("detail") or {}).get("code") == "publish.confirm_mismatch"
+
+
 def test_publish_collect_unpublish_and_cross_account(client) -> None:
     owner = _headers(client, "member-a")
     other = _headers(client, "member-b")
