@@ -88,9 +88,10 @@ async def test_read_office_skill_returns_body() -> None:
     gw = build_default_gateway()
 
     class P:
-        school_id = "school-a"
-        membership_id = "member-a"
-        scopes = ["ai:run"]
+        def __init__(self) -> None:
+            self.school_id = "school-a"
+            self.membership_id = "member-a"
+            self.scopes = ["ai:run"]
 
     out = await gw.invoke(P(), "read_office_skill", {"id": "docx"})
     assert out["ok"] is True

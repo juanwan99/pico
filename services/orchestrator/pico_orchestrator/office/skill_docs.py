@@ -44,10 +44,7 @@ def normalize_office_skill_id(raw: str | None) -> str | None:
     token = raw.strip().lower()
     if not token:
         return None
-    if token.startswith("office-"):
-        token = token[len("office-") :]
-    if token.startswith("skill-"):
-        token = token[len("skill-") :]
+    token = token.removeprefix("office-").removeprefix("skill-")
     return _ALIASES.get(token)
 
 
