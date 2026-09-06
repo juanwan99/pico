@@ -8,7 +8,7 @@ STATUS: Accepted · 业主令：底子打好，选型要对，后期慢慢追上
 CLAIM-WB: 不改签（已 YES · 本 ADR 不代签）
 REPO: juanwan99/pico ONLY
 LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
-北极星: docs/DIRECTION-NOW.md §0-star v1.3 · 用法 = Grok · spec/generate_* 是捷径不是天花板
+北极星: docs/DIRECTION-NOW.md §0-star v1.4 · 用法 = Grok · 办公主线 · spec/generate_* 是捷径不是天花板
 现况: docs/STATE-NOW.md · 本 ADR 是选型真源，不是在飞卡
 ```
 
@@ -21,7 +21,8 @@ LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 真源 = 结构化中间稿（spec）。
 文件 = 成熟库渲染出的投影。
 检查 = OOXML 合法 + 能打开。
-Pi 只调白名单工具，不写 python-docx，不跑公网 bash。
+Pi 只调白名单工具；不在宿主写 python-docx，不跑公网 bash。
+隔离面上真跑办公库 = 天花板执行层，不是开放编程产品。
 ```
 
 覆盖（Excel / 批注 / 模板）只扩 spec 字段，不换核。**产品只两张卡：核 → 覆盖。**
@@ -46,9 +47,9 @@ Pi 只调白名单工具，不写 python-docx，不跑公网 bash。
 | **改（Pico 自己生成的文件）** | 改 spec → **整份重渲染** | 在投影上东补一刀西补一刀当主路径 |
 | **改（老师上传、无 spec）** | inspect + **按地址薄改**（其余不动） | 假装能还原完整 spec 再重建（丢格式） |
 | **检查** | `is_valid_ooxml` 失败关；沙箱打开 = 内容框预览（`GET …/content?preview=1`），不是 Writer 整窗 | LibreOffice 当排版引擎；坏包装绿 |
-| **Pi 看见** | `pico-gateway-tools.ts` + `SYSTEM.md`；动词少、spec 富 | 给 Pi host bash / 代码执行；MCP 办公室栈 |
+| **Pi 看见** | `pico-gateway-tools.ts` + `SYSTEM.md`；动词少、spec 富 | 给 Pi **宿主** bash / 任意代码执行；MCP 办公室栈；Pi 市场办公包 / .NET ONLYOFFICE |
 | **图** | `generate_image` 产物 **插入** spec（进 Word/PPT） | 图和文档两张皮 |
-| **天花板** | 上游 Pi 官方/成熟文档 skill + 隔离沙箱跑 `python-pptx` | 把 v1 spec 焊成唯一核、加厚自研 DSL |
+| **天花板** | 文档 skill 工艺 + 隔离面真跑 `python-docx` / `python-pptx` / `openpyxl` | 把 v1 spec 焊成唯一核、加厚自研 DSL；用 bash 当办公能力 |
 | **升级** | 只改适配层（spec 字段 + 三个模块） | 桥内再造 Office OS |
 
 ### 两条路径（必须同时成立）
@@ -121,8 +122,8 @@ pico.office.spec/v1
 
 ## 6. 禁区（违法或必落后）
 
-1. 让 Pi / DeepSeek **在宿主机即兴写 python-docx**（Codex 社区已证明文件常坏）。隔离沙箱 + 官方 skill 是后话，不是本 ADR 的矮天花板。  
-2. 公网默认 host bash / 代码执行当办公能力。  
+1. 让 Pi / DeepSeek **在宿主机即兴写 python-docx**（Codex 社区已证明文件常坏）。隔离面真跑办公库是天花板执行层，不是开放编程产品，也不是本 ADR 的矮天花板。  
+2. 公网默认 host bash / Pi 内建 bash / 任意脚本当办公能力。  
 3. 自研 MCP 协议栈或「四十个细工具」办公室服务器。  
 4. 自研 OOXML / 排版引擎 / 第二套账本。  
 5. 只加 `font`/`color` 旋钮、不建 spec——做完仍是旧形态。  
@@ -140,4 +141,4 @@ pico.office.spec/v1
 
 - **现在：** 卡 1 #690 · 卡 2 [#694](https://github.com/juanwan99/pico/issues/694) 均过门 @ 产品 tip `18537f47…`。记忆 / 人视角日用仍挂起。  
 - **禁第三张「加厚 spec」办公卡。** 覆盖已收口。再动办公 = 打开 Pi skill/沙箱，不是再加字段。  
-- **产品承诺：** spec/`generate_*` 是稳妥默认。上限对齐 Claude/Codex **文档 skill**，不是 Word 内 Copilot。#703 拆掉纯文本/三页律等笼子。
+- **产品承诺：** spec/`generate_*` 是稳妥默认 / 快路。上限对齐 Claude/Codex **文档 skill**（工艺 + 隔离真跑办公库），不是 Word 内 Copilot。#703 拆掉纯文本/三页律等笼子。v1.4 不改本 ADR 已 Accepted 的 spec/inspect/render 核；缺的是隔离执行层，不是第三张加厚 spec 卡。

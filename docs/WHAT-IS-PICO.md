@@ -3,7 +3,7 @@
 ```
 DOC: docs/WHAT-IS-PICO.md
 STATUS: BINDING · 覆盖一切冲突的产品口述与旧文档金句
-FREEZE: docs/TRUTH-FREEZE.md v1.6 · LAW §0-supreme · AGENTS 文首工作法 · HANDOFF-WB-PI（默认 Pi + DeepSeek）
+FREEZE: docs/TRUTH-FREEZE.md v1.7 · LAW §0-supreme · AGENTS 文首工作法 · HANDOFF-WB-PI（默认 Pi + DeepSeek）
 OWNER: 业主目标 + 总管落盘
 TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可更新「现状」；不可偷偷改「目标」
 ```
@@ -14,7 +14,7 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 
 **Pico 的用法 = Grok 的用法。** 通用 LLM。老师的话是 user；系统纪律是 system，不得冒充人话。工具 / 材料 / Skill 是挂载，模型看老师的话决定用不用。问「这是什么」就解释；说「做成 Word」才交文件。
 
-能力并列，禁止焊死唯一路径。专用办公动词是捷径，不是天花板。工作环境交给成熟上游隔离执行面；Pico 只薄适配账本、授权、门脸。Skill 只能收窄。
+产品主线是办公（Word / Excel / HTML / PPT）。写代码只够服务办公，不是编程产品。能力并列，禁止焊死唯一路径。专用办公动词是捷径，不是天花板。天花板 = 隔离面上真跑成熟办公库。工作环境交给成熟上游隔离执行面；本阶段接的是办公计算机，不是通用 bash。Pico 只薄适配账本、授权、门脸。Skill 只能收窄。
 
 工作台（LibreChat + Pico 账本）是壳和控制面，**不是**读正文猜任务的定向工作流。
 
@@ -30,7 +30,7 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 
 | 维度 | 定义 |
 |------|------|
-| **品类** | **通用 LLM**（用法对齐 Grok）+ 任务型工作台壳（对话 + 可挂载工具办事 + 产物账本）；办事程度对标 WorkBuddy 六条 |
+| **品类** | **通用 LLM**（用法对齐 Grok）+ 任务型工作台壳（对话 + 可挂载工具办事 + 产物账本）；办事优先 = 办公文件（Word/Excel/HTML/PPT）；办事程度对标 WorkBuddy 六条；**不是**编程产品 |
 | **用户** | 教师/管理者等（学校场景），先独立可试用 |
 | **壳** | **`apps/librechat`（MIT）** 中文工作台；禁止回潮 web/nextchat/workbench；禁止拆闭源 WorkBuddy |
 | **智能** | **云端模型 HTTPS API**（**DeepSeek 为主**，Kimi 可选后备密钥） |
@@ -55,6 +55,7 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 | 读正文猜任务的定向 Agent | **禁止**。特定任务只因老师挂了文件/Skill/工具。见 DIRECTION-NOW §0-star |
 | Live Preview 沙箱端口故事 | 业主主路径是 **公网 HTTPS** |
 | 公开发布通道 | **否**。发布是 Edu 专用申请、校管批准。Pico 不挂 `/p/{id}` 当产品 |
+| 编程 Agent / 代码 IDE | **否**。写代码只为做出/改好办公文件。不要 bash，不要对标 Codex/Cursor |
 
 ---
 

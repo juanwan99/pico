@@ -5,7 +5,7 @@
 DATE: 2026-09-02
 用法: 开窗读本文。禁止把正文贴进卡或对业主聊天。
 工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
-北极星: docs/DIRECTION-NOW.md §0-star v1.3 · 用法 = Grok · 能力并列 · 工作环境交成熟上游
+北极星: docs/DIRECTION-NOW.md §0-star v1.4 · 用法 = Grok · 办公主线 · 能力并列 · 办公计算机交成熟上游
 按域检索: A 版本/收口 · B 产品 · C 部署/ECS/工位 · D Cloud Agent
 ```
 
@@ -29,11 +29,11 @@ DATE: 2026-09-02
 
 ## B · 现网 / 产品
 
-11. **用法 = Grok。** 禁问句/材料特判、禁词表监工、禁自研压缩器/记忆 OS。只接 Pi 官方 compact。能力并列，禁焊死路径。专用办公动词是捷径，不是天花板。Skill 只能收窄。加一个万能 exec 而旧协议照旧 = 不算进步。**业主 2026-09-06：不要 bash。** 宿主与 overlay 均 `--no-builtin-tools`。B1 / PR-7b 取消。不自研通用 exec。日常办公走 `generate_*` 捷径。工作环境交成熟上游仍有效，但本阶段不靠自制 bash jail 交差。
+11. **用法 = Grok。** 禁问句/材料特判、禁词表监工、禁自研压缩器/记忆 OS。只接 Pi 官方 compact。能力并列，禁焊死路径。**产品主线是办公**（Word/Excel/HTML/PPT）；写代码是仆人，不是编程产品。专用办公动词是捷径，不是天花板。天花板 = 隔离面上真跑 python-docx / openpyxl / python-pptx + 文档 skill 工艺。Skill 只能收窄。加一个万能 exec 而旧协议照旧 = 不算进步。**业主 2026-09-06：不要 bash。** 宿主 `--no-builtin-tools` 永在。B1 / PR-7b 取消。不自研通用 exec / 自制 jail。日常快路仍可走 `generate_*`；本阶段要补的是办公计算机，不是再加专用动词，也不是 Pi bash。
 12. **CLAIM-WB-DEGREE-WEB 业主 2026-08-26 已签 YES** @ tip `dcb47c00…`（#449/#316 OWNER DECISION）。工程仍禁改口/再代签。记忆 OS 仍挂起；人视角薄层（名+最近文件）#733/#736 已部。
 13. **`juanwan99/oneflow` 不当真源**（已 Archive）。
 14. **改 Python 工具说明 ≠ Pi 看见。** 真路径：`pico-gateway-tools.ts` + `SYSTEM.md`。
-24. **办公文档 = [ADR-OFFICE-DOC-PIPELINE](./ADR-OFFICE-DOC-PIPELINE.md)。** spec/`generate_*` = **稳妥默认**，不是天花板。卡 1 #690 / 卡 2 #694 已收口。禁再加厚 spec 当天花板（「第三张办公卡」指这个）。上限 = 上游 Pi skill + 沙箱库；禁 host bash、禁自研幻灯 OS。
+24. **办公文档 = [ADR-OFFICE-DOC-PIPELINE](./ADR-OFFICE-DOC-PIPELINE.md)。** spec/`generate_*` = **稳妥默认 / 快路**，不是天花板。卡 1 #690 / 卡 2 #694 已收口。禁再加厚 spec 当天花板（「第三张办公卡」指这个）。上限 = 文档 skill 工艺 + 隔离面真跑办公库。禁 host bash、禁 Pi 内建 bash、禁自研幻灯 OS。Pi 不在宿主写 python-docx；隔离办公 Python ≠ 开放编程产品。
 27. **能力笼子已拆（#703 T-UNMASK-PI）。** 聊天图进 Pi RPC `images`；有图走 vision 模型；上传收 png/jpg；PPT 三页硬律退役（只打空壳）；进度词不再写「课件」。控制面仍留：账本·租户·假绿门·不代登·用法=Grok。贴图实测走 `/v1/chat/completions` 真载荷（`content[]` + 旁路 `image_urls`）。**回形针图同样进本轮 `images[]`**（#881），不能只靠 LibreChat 旁路；账本里的 png/jpg 要接到 Pi，禁止自研 OCR。相对 `/images/` 不拉（禁 SSRF）。沙箱预览/截图 PNG 已可记入下一轮 chat `images[]`（#707）。贴图/拖图全是图且提供商可贴时直送提供商，不弹 LibreChat 三选。回形针无 SharePoint 时一点即传，不弹目的地菜单。
 25. **公开发布不是 Pico 能力。** 学校页面走 **Edu 专用申请通道，校管批准**。Pico 只生成 HTML 产物（老师盘 / 账本），**禁止**再把 `pico.aivia.asia/p/{id}` 做成发布产品、禁止用老师点「确认发布」冒充校管批准、禁止为收口去公网复验 Pico 自挂页。`publish_html_page` 失败闭合 `publish.edu_channel_required`。遗留 `/p/{id}` 只许撤回（404），不许新挂 live。任务卡写「Pico 发布确认」压不过本条。#929 旧路径作废。H3/PR-4 仍取消。禁止自研审批核。
 28. **出图：业主 New API 反代多 Gemini 账户（#752 · 业主 2026-08-28）。** 硅基流动出图已否决，禁止再建议。真源 = New API `PICO_IMAGE_GATEWAY_URL` + `PICO_IMAGE_GATEWAY_KEY`（Pico 不轮询、不直连 Google）。`gemini-*-image` 走网关 `POST …/v1beta/models/{model}:generateContent`（官方 New API 对 `/v1/images/generations` 只映射 imagen）。imagen-* 仍走 `POST …/v1/images/generations`。智谱 glm-image 仅无网关时的退路。禁网页套餐 cookie 反代。禁自研图核。SILICONFLOW 出图路径 fail-closed。**聊天脑同样只打 New API**（`DEEPSEEK_BASE_URL=http://127.0.0.1:3000/v1` · 模型仍 `gpt-5.6-sol` · `api=openai-responses`）。AIProxy 是 New API 的 Custom 渠道上游（`…/openai/responses`，禁止带 `/v1`），不是 Pico 直连。Wei-Shaw/sub2api 只绑 host loopback，作账号登录态；轮询/计费在 New API。禁止把 Sub2API SPA 当老师前端或 cookie 接管 pico.aivia.asia。管理者页 `/admin/gateway`（ADMIN only）面向所有者：薄读 `channel-monitors` 画 7 日/168h 状态盘，软按钮只转发 refresh/test/clear-error/recover-state；硬重登/签合规走独立公网 `https://workbench.aivia.asia`（Sub2API 真页 · 密码 + 谷歌验证器）。禁止挂到 pico.aivia.asia。Pico 不代签合规，不自研账号 OS。机上 `.env` 用 `SUB2API_ADMIN_EMAIL` / `SUB2API_ADMIN_PASSWORD` / `SUB2API_ADMIN_API_KEY`（值不进 git）。业主绑 Google Authenticator 后密码登录返回 `requires_2fa`，Pico 薄读走 `X-API-Key`（不是 Bearer JWT）。Dify 运行面退役；`workbench.aivia.asia` 主机名只给所有者账号台。
