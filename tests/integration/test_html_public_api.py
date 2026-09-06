@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -52,6 +53,39 @@ def _invoke(client: TestClient, headers: dict[str, str], name: str, arguments: d
         headers=headers,
         json={"name": name, "arguments": arguments},
     )
+
+
+def _seed_legacy_live_html_page(
+    artifact_id: str,
+    *,
+    page_id: str,
+    school_id: str,
+    membership_id: str,
+) -> str:
+    """Insert a leftover live /p row. Do not call the banned publish tool."""
+
+    async def _insert() -> str:
+        from app.db import ArtifactRow, HtmlPageRow, session_factory
+
+        factory = session_factory()
+        async with factory() as session:
+            artifact = await session.get(ArtifactRow, artifact_id)
+            assert artifact is not None
+            session.add(
+                HtmlPageRow(
+                    id=page_id,
+                    artifact_id=artifact_id,
+                    school_id=school_id,
+                    membership_id=membership_id,
+                    task_id=artifact.task_id,
+                    folder_id=artifact.folder_id or "",
+                    status="live",
+                )
+            )
+            await session.commit()
+        return page_id
+
+    return asyncio.run(_insert())
 
 
 def test_publish_is_not_a_pico_capability(client) -> None:
@@ -134,3 +168,45 @@ def test_unpublished_page_is_404(client) -> None:
     assert "not available" in missing.text
     assert '{"error":"not_found"}' not in missing.text
     assert client.post("/p/does-not-exist-page/collect", json={"n": "x"}).status_code == 404
+
+
+def test_legacy_live_page_owner_unpublish_and_cross_account_denied(client) -> None:
+    owner = _headers(client, "member-a")
+    other = _headers(client, "member-b")
+    other_school = _headers(client, "member-a", school_id="school-b")
+    created = _invoke(
+        client,
+        owner,
+        "generate_html_document",
+        {"title": "page.html", "marker": "mk-legacy", "body": PAGE},
+    )
+    assert created.status_code == 200, created.text
+    artifact_id = created.json()["result"]["artifact_id"]
+    page_id = _seed_legacy_live_html_page(
+        artifact_id,
+        page_id="legacy-live-page-01",
+        school_id="school-a",
+        membership_id="member-a",
+    )
+
+    opened = client.get(f"/p/{page_id}")
+    assert opened.status_code == 200, opened.text
+    assert "<h1>demo</h1>" in opened.text
+
+    stolen = _invoke(client, other, "unpublish_html_page", {"page_id": page_id})
+    assert stolen.status_code == 400, stolen.text
+    assert (stolen.json().get("detail") or {}).get("code") == "artifact.not_found"
+    foreign = _invoke(client, other_school, "unpublish_html_page", {"page_id": page_id})
+    assert foreign.status_code == 400, foreign.text
+    assert (foreign.json().get("detail") or {}).get("code") == "artifact.not_found"
+    still_live = client.get(f"/p/{page_id}")
+    assert still_live.status_code == 200
+    assert client.post(f"/p/{page_id}/collect", json={"n": "x"}).status_code == 200
+
+    gone = _invoke(client, owner, "unpublish_html_page", {"page_id": page_id})
+    assert gone.status_code == 200, gone.text
+    assert gone.json()["result"]["revoked"] is True
+    missing = client.get(f"/p/{page_id}")
+    assert missing.status_code == 404
+    assert "not available" in missing.text
+    assert client.post(f"/p/{page_id}/collect", json={"n": "x"}).status_code == 404
