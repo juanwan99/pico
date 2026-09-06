@@ -71,6 +71,9 @@ def test_system_names_office_ceiling_without_scene_words() -> None:
     body = pico_system_text()
     assert "sandbox_pptx_lib" in body
     assert "sandbox_office_lib" in body
+    assert "read_office_skill" in body
+    assert "`docx`:" in body
+    assert "from docx import Document" not in body
     assert "siblings" in body
     assert "stock python-pptx layouts" in body
     assert "body bullets (not title-only walls)" not in body
@@ -112,9 +115,11 @@ def test_default_core_shows_office_not_programming() -> None:
     visible = resolve_visible_tools(None)
     assert "sandbox_pptx_lib" in visible
     assert "sandbox_office_lib" in visible
+    assert "read_office_skill" in visible
     assert "sandbox_workspace_exec" not in visible
     assert "sandbox_pptx_lib" in CORE_VISIBLE_TOOLS
     assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS
+    assert "read_office_skill" in CORE_VISIBLE_TOOLS
 
 
 def test_scene_words_do_not_hang_a_skill() -> None:

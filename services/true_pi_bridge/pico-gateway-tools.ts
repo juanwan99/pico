@@ -25,6 +25,7 @@ const ALLOWED = [
   "generate_pptx_document",
   "sandbox_pptx_lib",
   "sandbox_office_lib",
+  "read_office_skill",
   "generate_xlsx_document",
   "edit_docx_document",
   "edit_pptx_document",
@@ -424,6 +425,17 @@ export default function (pi: ExtensionAPI) {
       {
         artifact_id: Type.Optional(Type.String()),
         preview_url: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "read_office_skill",
+    "On-demand office craft (docx / xlsx / pptx). SYSTEM only lists name+when. This returns the full python-docx / openpyxl / python-pptx craft. Not LibreChat Skills. Not bash. After reading, write with sandbox_office_lib (kind matches id). generate_* remains the fast path.",
+    Type.Object(
+      {
+        id: Type.String(),
       },
       { additionalProperties: true },
     ),

@@ -14,6 +14,7 @@ from pico_orchestrator.capability_loading import (
     SCENE_SKILL_IDS,
     SKILL_WHEN,
     office_siblings_honest,
+    office_skill_visible,
     ppt_siblings_honest,
     resolve_visible_tools,
     skill_catalog_block,
@@ -33,7 +34,9 @@ def test_core_and_extended_partition_gateway():
     assert set(CORE_VISIBLE_TOOLS) & set(EXTENDED_TOOLS) == set()
     assert "bash" not in CORE_VISIBLE_TOOLS
     assert "bash" not in EXTENDED_TOOLS
-    assert len(CORE_VISIBLE_TOOLS) == 18
+    assert len(CORE_VISIBLE_TOOLS) == 19
+    assert "read_office_skill" in CORE_VISIBLE_TOOLS
+    assert "read_office_skill" not in EXTENDED_TOOLS
     assert len(EXTENDED_TOOLS) == 11
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
@@ -59,6 +62,7 @@ def test_core_and_extended_partition_gateway():
     assert "ask_user" in CORE_VISIBLE_TOOLS
     assert ppt_siblings_honest(CORE_VISIBLE_TOOLS)
     assert office_siblings_honest(CORE_VISIBLE_TOOLS)
+    assert office_skill_visible(CORE_VISIBLE_TOOLS)
 
 
 def test_default_visible_is_core_not_full_allowlist():
@@ -179,8 +183,10 @@ def test_hung_skills_cannot_hide_office_ceiling():
     for row in skill_catalog():
         tools = list(row.get("tools") or [])
         assert ppt_siblings_honest(tools), row.get("id")
+        assert office_skill_visible(tools), row.get("id")
         visible = resolve_visible_tools(tools)
         assert ppt_siblings_honest(visible), row.get("id")
+        assert office_skill_visible(visible), row.get("id")
     chat = snapshot_for_skill("skill-chat")
     assert chat is not None
     assert chat["tools"] == []

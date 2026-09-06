@@ -93,7 +93,11 @@ def test_system_does_not_steer_canvas_downgrade() -> None:
     ).read_text(encoding="utf-8")
     assert "rewrite the page with canvas drawing" not in system
     assert "dumb the page down" in system
-    assert "copy" in system and "BytesIO" in system
+    assert "read_office_skill" in system
+    ts = (
+        ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts"
+    ).read_text(encoding="utf-8")
+    assert "copy / math / datetime / from io import BytesIO are allowed" in ts
 
 
 def test_gateway_html_tool_does_not_require_canvas_only() -> None:

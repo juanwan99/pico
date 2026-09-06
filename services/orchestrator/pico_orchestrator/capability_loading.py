@@ -33,6 +33,7 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "generate_pptx_document",
     "sandbox_pptx_lib",
     "sandbox_office_lib",
+    "read_office_skill",
     "generate_xlsx_document",
     "inspect_document",
     "generate_image",
@@ -111,6 +112,16 @@ def office_siblings_honest(names: Iterable[str]) -> bool:
     return "sandbox_office_lib" in visible
 
 
+def office_skill_visible(names: Iterable[str]) -> bool:
+    """Office generate_* without on-demand craft is a hidden picker."""
+    visible = set(names)
+    if not visible.intersection(
+        {"generate_docx_document", "generate_xlsx_document", "generate_pptx_document"}
+    ):
+        return True
+    return "read_office_skill" in visible
+
+
 def resolve_visible_tools(allowed_tools: list[str] | tuple[str, ...] | None) -> list[str]:
     """None = CORE always-on. Explicit list = that list ∩ gateway (skill may narrow)."""
     if allowed_tools is None:
@@ -134,3 +145,9 @@ def skill_catalog_block() -> str:
             continue
         lines.append(f"- `{sid}`: {when}")
     return "\n".join(lines)
+
+
+def office_craft_catalog_block() -> str:
+    from pico_orchestrator.office.skill_docs import office_skill_catalog_block
+
+    return office_skill_catalog_block()

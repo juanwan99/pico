@@ -650,7 +650,10 @@ async def run_pi_agent(
 
 
 def _load_system_prompt(skill_block: str, skill_catalog: str = "") -> str:
-    from pico_orchestrator.capability_loading import skill_catalog_block
+    from pico_orchestrator.capability_loading import (
+        office_craft_catalog_block,
+        skill_catalog_block,
+    )
 
     packaged = Path(__file__).resolve().parent / "agent_assets" / "system.md"
     if packaged.is_file():
@@ -658,11 +661,13 @@ def _load_system_prompt(skill_block: str, skill_catalog: str = "") -> str:
     else:
         raw = _DEFAULT_SYSTEM
     catalog = skill_catalog or skill_catalog_block()
+    office_catalog = office_craft_catalog_block()
     # Support $skill_block / $skill_catalog (Template). Leave other braces alone.
-    if "$skill_block" in raw or "$skill_catalog" in raw:
+    if "$skill_block" in raw or "$skill_catalog" in raw or "$office_skill_catalog" in raw:
         return Template(raw).safe_substitute(
             skill_block=skill_block,
             skill_catalog=catalog,
+            office_skill_catalog=office_catalog,
             ROLE_ADDITIONAL="",
         )
     if "{skill_block}" in raw:
