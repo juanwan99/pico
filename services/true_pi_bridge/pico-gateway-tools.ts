@@ -173,7 +173,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_html_document",
-    "Create a real .html Artifact (Pico gateway). A semantic classless visual base is already inlined — write header/main/article/nav/table/form; extra CSS only for one accent. Do not name the stylesheet to the teacher. Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images, no window.THREE / new Chart / echarts.init. To embed a ledger picture, set img src to pico-artifact:<artifact_id> (or pico-artifact:0 with image_artifact_ids). Pico inlines data: URLs when the teacher opens or downloads. Do not paste base64. A missing id skips that picture; the page still lands. The tool fails closed if the page still needs the network or those engines, or if an inline script has unmatched brackets — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished. If they also asked to collect answers, follow with publish_html_page rather than asking which cloud to use.",
+    "Create a real .html Artifact (Pico gateway). A semantic classless visual base is already inlined — write header/main/article/nav/table/form; extra CSS only for one accent. Do not name the stylesheet to the teacher. Page must run offline: inline CSS/JS/SVG (canvas allowed, not required). No CDN, no import or script-src of Three.js/Chart.js/ECharts/KaTeX, no https or //cdn images, no window.THREE / new Chart / echarts.init. To embed a ledger picture, set img src to pico-artifact:<artifact_id> (or pico-artifact:0 with image_artifact_ids). Pico inlines data: URLs when the teacher opens or downloads. Do not paste base64. A missing id skips that picture; the page still lands. The tool fails closed if the page still needs the network or those engines, or if an inline script has unmatched brackets — keep a complete inline page; do not dumb it down on purpose. Result includes an observation of what landed. ok is not finished. Public publishing is not a Pico capability — do not follow with publish_html_page; school pages apply through Edu.",
     Type.Object(
       {
         title: Type.String(),
@@ -395,7 +395,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "ask_user",
-    "When the teacher did not say what they want done, ask a short multiple-choice question (2–5 options) and wait. After they pick, continue the same turn. If they already named what to make (a picture, a page, a file, or several of those), do that work — a missing topic, style, or caption is not a reason to call this; pick a simple default. Picking a default so you can start is not inventing a goal. Do not use this to choose a topic. Do not use this to quiz about a third-party form backend when Pico collect exists; if they asked for HTML plus data collection, generate_html_document then publish_html_page.",
+    "When the teacher did not say what they want done, ask a short multiple-choice question (2–5 options) and wait. After they pick, continue the same turn. If they already named what to make (a picture, a page, a file, or several of those), do that work — a missing topic, style, or caption is not a reason to call this; pick a simple default. Picking a default so you can start is not inventing a goal. Do not use this to choose a topic. Do not use this to quiz about a third-party form backend. Pico cannot hang a public URL; school pages apply through Edu.",
     Type.Object(
       {
         question: Type.String(),
@@ -491,7 +491,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "publish_html_page",
-    "Publish an existing HTML artifact to a public URL after the teacher confirms this exact page. The tool parks until they pick the listed 确认发布 option for this page id, or 取消. Cancel/timeout/no confirm does not create a live URL. Visitors can then open it without login. Forms may POST JSON to the page collect path; entries land in the publisher archive. Use this after generate_html_document when they asked to collect answers — do not ask which cloud to use unless they named an external endpoint.",
+    "Not a Pico capability. Public school pages go through Edu apply + school-admin approval. This tool always fails closed and never creates pico.aivia.asia/p links. Generate HTML instead.",
     Type.Object(
       {
         artifact_id: Type.String(),
@@ -503,7 +503,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "unpublish_html_page",
-    "Revoke a published HTML page. The public URL and collect path return 404.",
+    "Revoke a leftover Pico /p/{id} page if one still exists. Pico does not publish.",
     Type.Object(
       {
         page_id: Type.Optional(Type.String()),

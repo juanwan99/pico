@@ -74,57 +74,21 @@ def test_confirm_answer_requires_this_page_option() -> None:
 
 
 @pytest.mark.asyncio
-async def test_wrong_page_option_does_not_authorize(monkeypatch: pytest.MonkeyPatch) -> None:
-    owner = P("school-a", "member-a", ["ai:run"])
-    page_a = "cafebabe-1111-2222-3333-444444444444"
-    yes_other, _ = confirm_options("deadbeef-1111-2222-3333-444444444444")
-    monkeypatch.setattr(
-        "pico_orchestrator.ask_user.park",
-        AsyncMock(return_value={"ok": True, "answer": yes_other, "question": "确认吗"}),
-    )
-    with pytest.raises(ToolError) as cancelled:
-        await require_teacher_confirm(
-            owner,
-            artifact_id=page_a,
-            title="demo.html",
-            confirm_token="",
-            run_id="run-1",
-            emit=None,
-        )
-    assert cancelled.value.code == "publish.cancelled"
-
-
-@pytest.mark.asyncio
-async def test_run_park_cancel_does_not_issue_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    owner = P("school-a", "member-a", ["ai:run"])
-    parked = {"ok": True, "answer": "取消", "question": "确认吗"}
-    monkeypatch.setattr(
-        "pico_orchestrator.ask_user.park", AsyncMock(return_value=parked)
-    )
-    with pytest.raises(ToolError) as cancelled:
-        await require_teacher_confirm(
-            owner,
-            artifact_id="art-1",
-            title="demo.html",
-            confirm_token="",
-            run_id="run-1",
-            emit=None,
-        )
-    assert cancelled.value.code == "publish.cancelled"
-
-
-@pytest.mark.asyncio
-async def test_second_confirm_after_cancel_needs_new_answer(
+async def test_teacher_confirm_cannot_authorize_pico_public_publish(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     owner = P("school-a", "member-a", ["ai:run"])
-    answers = iter(["取消", confirm_options("art-2")[0]])
-
-    async def park(_run_id, _question, _options, _emit):
-        return {"ok": True, "answer": next(answers), "question": "确认吗"}
-
-    monkeypatch.setattr("pico_orchestrator.ask_user.park", park)
-    with pytest.raises(ToolError) as cancelled:
+    monkeypatch.setattr(
+        "pico_orchestrator.ask_user.park",
+        AsyncMock(
+            return_value={
+                "ok": True,
+                "answer": confirm_options("art-1")[0],
+                "question": "确认吗",
+            }
+        ),
+    )
+    with pytest.raises(ToolError) as denied:
         await require_teacher_confirm(
             owner,
             artifact_id="art-1",
@@ -133,36 +97,15 @@ async def test_second_confirm_after_cancel_needs_new_answer(
             run_id="run-1",
             emit=None,
         )
-    assert cancelled.value.code == "publish.cancelled"
-    token = await require_teacher_confirm(
-        owner,
-        artifact_id="art-2",
-        title="demo.html",
-        confirm_token="",
-        run_id="run-2",
-        emit=None,
-    )
-    assert token
-    with pytest.raises(ToolError) as replay:
-        consume_confirm_token(owner, artifact_id="art-2", token=token)
-    assert replay.value.code == "publish.confirm_replay"
-
-
-@pytest.mark.asyncio
-async def test_run_park_yes_consumes_one_shot(monkeypatch: pytest.MonkeyPatch) -> None:
-    owner = P("school-a", "member-a", ["ai:run"])
-    parked = {"ok": True, "answer": confirm_options("art-1")[0], "question": "确认吗"}
-    monkeypatch.setattr(
-        "pico_orchestrator.ask_user.park", AsyncMock(return_value=parked)
-    )
-    token = await require_teacher_confirm(
-        owner,
-        artifact_id="art-1",
-        title="demo.html",
-        confirm_token="",
-        run_id="run-1",
-        emit=None,
-    )
-    assert token
-    with pytest.raises(ToolError):
-        consume_confirm_token(owner, artifact_id="art-1", token=token)
+    assert denied.value.code == "publish.edu_channel_required"
+    token = issue_confirm_token(owner, artifact_id="art-1")
+    with pytest.raises(ToolError) as still:
+        await require_teacher_confirm(
+            owner,
+            artifact_id="art-1",
+            title="demo.html",
+            confirm_token=token,
+            run_id="run-1",
+            emit=None,
+        )
+    assert still.value.code == "publish.edu_channel_required"

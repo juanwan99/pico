@@ -54,24 +54,9 @@ def _invoke(client: TestClient, headers: dict[str, str], name: str, arguments: d
     )
 
 
-def _confirm(owner_school: str, owner_member: str, artifact_id: str) -> str:
-    from dataclasses import dataclass
-
-    from pico_orchestrator.publish_confirm import issue_confirm_token
-
-    @dataclass
-    class P:
-        school_id: str
-        membership_id: str
-        scopes: list[str]
-
-    return issue_confirm_token(
-        P(owner_school, owner_member, ["ai:run"]), artifact_id=artifact_id
-    )
-
-
-def test_publish_without_confirm_has_no_public_side_effect(client) -> None:
+def test_publish_is_not_a_pico_capability(client) -> None:
     owner = _headers(client, "member-a")
+    other = _headers(client, "member-b")
     created = _invoke(
         client,
         owner,
@@ -83,13 +68,34 @@ def test_publish_without_confirm_has_no_public_side_effect(client) -> None:
     denied = _invoke(client, owner, "publish_html_page", {"artifact_id": artifact_id})
     assert denied.status_code == 400, denied.text
     detail = denied.json().get("detail") or {}
-    assert detail.get("code") == "publish.unconfirmed"
+    assert detail.get("code") == "publish.edu_channel_required"
+    assert "Edu" in str(detail.get("message") or "")
+    from pico_orchestrator.publish_confirm import issue_confirm_token
+
+    class P:
+        school_id = "school-a"
+        membership_id = "member-a"
+        scopes = ["ai:run"]
+
+    still = _invoke(
+        client,
+        owner,
+        "publish_html_page",
+        {
+            "artifact_id": artifact_id,
+            "confirm_token": issue_confirm_token(P(), artifact_id=artifact_id),
+        },
+    )
+    assert still.status_code == 400, still.text
+    assert (still.json().get("detail") or {}).get("code") == "publish.edu_channel_required"
+    stolen = _invoke(client, other, "publish_html_page", {"artifact_id": artifact_id})
+    assert stolen.status_code == 400
     listed = client.get("/v1/artifacts?mine=true", headers=owner)
     titles = {row.get("title") for row in listed.json().get("artifacts", [])}
     assert "page.html" in titles
 
 
-def test_html_write_is_new_id_and_publish_reads_that_row(client) -> None:
+def test_html_write_is_new_id_without_public_url(client) -> None:
     owner = _headers(client, "member-a")
     first = _invoke(
         client,
@@ -116,119 +122,9 @@ def test_html_write_is_new_id_and_publish_reads_that_row(client) -> None:
     assert second_id != first_id
     if first_sha and second_sha:
         assert first_sha != second_sha
-    pub = _invoke(
-        client,
-        owner,
-        "publish_html_page",
-        {
-            "artifact_id": first_id,
-            "confirm_token": _confirm("school-a", "member-a", first_id),
-        },
-    )
-    assert pub.status_code == 200, pub.text
-    page_id = pub.json()["result"]["page_id"]
-    opened = client.get(f"/p/{page_id}")
-    assert opened.status_code == 200
-    assert "<h1>demo</h1>" in opened.text
-    assert "<h1>other</h1>" not in opened.text
-    stolen = _invoke(
-        client,
-        owner,
-        "publish_html_page",
-        {
-            "artifact_id": second_id,
-            "confirm_token": _confirm("school-a", "member-a", first_id),
-        },
-    )
-    assert stolen.status_code == 400
-    assert (stolen.json().get("detail") or {}).get("code") == "publish.confirm_mismatch"
-
-
-def test_publish_collect_unpublish_and_cross_account(client) -> None:
-    owner = _headers(client, "member-a")
-    other = _headers(client, "member-b")
-    created = _invoke(
-        client,
-        owner,
-        "generate_html_document",
-        {"title": "page.html", "marker": "mk-pub", "body": PAGE},
-    )
-    assert created.status_code == 200, created.text
-    artifact_id = created.json()["result"]["artifact_id"]
-
-    pub = _invoke(
-        client,
-        owner,
-        "publish_html_page",
-        {
-            "artifact_id": artifact_id,
-            "confirm_token": _confirm("school-a", "member-a", artifact_id),
-        },
-    )
-    assert pub.status_code == 200, pub.text
-    page_id = pub.json()["result"]["page_id"]
-    assert page_id
-    assert pub.json()["result"]["public_url"].endswith(f"/p/{page_id}")
-    assert "/api/pico/p/" not in pub.json()["result"]["public_url"]
-
-    opened = client.get(f"/p/{page_id}")
-    assert opened.status_code == 200
-    assert "text/html" in opened.headers.get("content-type", "")
-    assert "__PICO_COLLECT__" in opened.text
-    assert "form-action 'self'" in opened.headers.get("content-security-policy", "")
-
-    posted = client.post(f"/p/{page_id}/collect", json={"n": "alice"})
-    assert posted.status_code == 200, posted.text
-    entry_id = posted.json()["id"]
-
-    listed = client.get("/v1/artifacts?mine=true", headers=owner)
-    assert listed.status_code == 200, listed.text
-    titles = {row.get("title") for row in listed.json().get("artifacts", [])}
-    kinds = {row.get("kind") for row in listed.json().get("artifacts", [])}
-    assert any(str(t).startswith("entry-") for t in titles)
-    assert "form_entry" in kinds
-
-    assert client.get("/v1/artifacts?mine=true").status_code in {401, 403}
-
-    other_list = client.get("/v1/artifacts?mine=true", headers=other)
-    assert other_list.status_code == 200
-    other_ids = {row.get("id") for row in other_list.json().get("artifacts", [])}
-    assert entry_id not in other_ids
-
-    stolen = _invoke(client, other, "publish_html_page", {"artifact_id": artifact_id})
-    assert stolen.status_code == 400
-    stolen_un = _invoke(client, other, "unpublish_html_page", {"page_id": page_id})
-    assert stolen_un.status_code == 400
-
-    other_html = _invoke(
-        client,
-        other,
-        "generate_html_document",
-        {"title": "other.html", "marker": "mk-other", "body": PAGE},
-    )
-    assert other_html.status_code == 200, other_html.text
-    other_id = other_html.json()["result"]["artifact_id"]
-    other_pub = _invoke(
-        client,
-        other,
-        "publish_html_page",
-        {
-            "artifact_id": other_id,
-            "confirm_token": _confirm("school-a", "member-b", other_id),
-        },
-    )
-    assert other_pub.status_code == 200, other_pub.text
-    other_page = other_pub.json()["result"]["page_id"]
-    other_post = client.post(f"/p/{other_page}/collect", json={"n": "bob"})
-    assert other_post.status_code == 200, other_post.text
-    owner_after = client.get("/v1/artifacts?mine=true", headers=owner)
-    owner_ids = {row.get("id") for row in owner_after.json().get("artifacts", [])}
-    assert other_post.json()["id"] not in owner_ids
-
-    gone = _invoke(client, owner, "unpublish_html_page", {"page_id": page_id})
-    assert gone.status_code == 200, gone.text
-    assert client.get(f"/p/{page_id}").status_code == 404
-    assert client.post(f"/p/{page_id}/collect", json={"n": "x"}).status_code == 404
+    pub = _invoke(client, owner, "publish_html_page", {"artifact_id": first_id})
+    assert pub.status_code == 400, pub.text
+    assert (pub.json().get("detail") or {}).get("code") == "publish.edu_channel_required"
 
 
 def test_unpublished_page_is_404(client) -> None:

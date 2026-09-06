@@ -52,7 +52,6 @@ def test_snapshot_tools_subset_of_gateway():
                 "workspace_read_file",
                 "verify_html_document",
                 "sandbox_preview_inspect",
-                "publish_html_page",
                 "unpublish_html_page",
                 "sandbox_browser_open",
                 "sandbox_browser_screenshot",
@@ -82,7 +81,6 @@ def test_snapshot_tools_subset_of_gateway():
                 "verify_html_document",
                 "structured_outline",
                 "sandbox_preview_inspect",
-                "publish_html_page",
                 "unpublish_html_page",
                 "sandbox_browser_open",
                 "sandbox_browser_screenshot",
@@ -211,6 +209,7 @@ def test_deliverable_skills_keep_search_and_ask_user():
         tools = list(snap["tools"])
         for name in ("web_search", "web_fetch", "ask_user"):
             assert name in tools, (skill_id, name)
+        assert "publish_html_page" not in tools
 
 
 def test_kb_search_only_when_asking_school_materials():

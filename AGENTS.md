@@ -18,6 +18,7 @@
       PR/commit 正文写 GitHub 关卡关键字（Closes / Fixes / close #数字）
       「Do not close #数字」也会被当成关卡。过门后手关 Issue。
       为卫生自建清理器或第二套记忆账本
+      把 Pico `/p/{id}` 或老师确认条当成发布能力（发布=Edu 申请+校管批准）
 新窗: curl tip + 开 PR 最多 1。无在飞则讨论。已合头枝不是在飞。
 ```
 

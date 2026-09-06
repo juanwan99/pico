@@ -17,7 +17,7 @@ CARD: T-PAGE-COLLECT-LAND #842
 | Attach join keys on `POST /v1/pico/membership/land` | Persist keys on the grey page; public collect later |
 | Unique AI ledger (Task / Artifact) | Business SoT (page / roster / answers) |
 
-Pico does **not** mint exam/question/parent ids. Pico does **not** publish the school page. Pico does **not** store grades.
+Pico does **not** mint exam/question/parent ids. Pico does **not** publish the school page. Pico does **not** store grades. Pico `/p/{id}` is **not** the publish path; live school pages go through Edu apply + school-admin approval.
 
 First period join is **page-level**: which display page came from which `@`'d item ids. Per-question refs are out of this version.
 
