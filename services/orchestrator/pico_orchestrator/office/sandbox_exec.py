@@ -1,9 +1,10 @@
-"""Isolated python-pptx subprocess entry. Copied into a temp dir.
+"""Isolated office-library subprocess entry. Copied into a temp dir.
 
 Not a second Office OS. User source runs with an allowlisted import
-hook: pptx / pptx_helpers plus a pathlib stub and stdlib without host
-IO. Presentation.save always lands on the ledger OUTPUT_PATH so naked
-GPT `prs.save("/tmp/…")` still books. Host open/eval/os stay denied.
+hook: pptx / pptx_helpers / docx / openpyxl plus a pathlib stub and
+stdlib without host IO. Document/Workbook/Presentation.save always land
+on the ledger OUTPUT_PATH so naked GPT `prs.save("/tmp/…")` still books.
+Host open/eval/os stay denied.
 """
 
 from __future__ import annotations
@@ -221,7 +222,7 @@ def _sandbox_import(
         return _IO
     if root in STDLIB_OK:
         return __import__(name, globals, locals, fromlist, level)
-    if root not in ("pptx", "pptx_helpers"):
+    if root not in ("pptx", "pptx_helpers", "docx", "openpyxl"):
         raise ImportError("denied import " + text)
     mod = __import__(name, globals, locals, fromlist, level)
     if root == "pptx":
@@ -321,33 +322,57 @@ def _ledger_save(orig_save: Any, output_path: str) -> Any:
 
 def run_user(cfg: dict[str, Any]) -> None:
     output_path = str(cfg["output"])
+    kind = str(cfg.get("kind") or "pptx").strip().lower()
     orig_save = PresentationClass.save
     PresentationClass.save = _ledger_save(orig_save, output_path)  # type: ignore[method-assign]
+
+    from docx import Document
+    from docx.document import Document as DocumentClass
+    from openpyxl import Workbook
+    from openpyxl.workbook.workbook import Workbook as WorkbookClass
+
+    orig_doc_save = DocumentClass.save
+    DocumentClass.save = _ledger_save(orig_doc_save, output_path)  # type: ignore[method-assign]
+    orig_wb_save = WorkbookClass.save
+    WorkbookClass.save = _ledger_save(orig_wb_save, output_path)  # type: ignore[method-assign]
 
     def save_deck(prs: Any) -> None:
         if not hasattr(prs, "save"):
             raise SystemExit("save_deck 需要 Presentation")
         prs.save(output_path)
 
-    exec(  # noqa: S102 — isolated allowlisted snippet
-        cfg["source"],
-        {
-            "__builtins__": _SAFE_BUILTINS,
-            "Presentation": Presentation,
-            "Inches": Inches,
-            "Emu": Emu,
-            "Pt": Pt,
-            "RGBColor": RGBColor,
-            "Path": _SandboxPath,
-            "add_title_slide": add_title_slide,
-            "add_content_slide": add_content_slide,
-            "add_table": add_table,
-            "save_deck": save_deck,
-            "IMAGE_PATHS": ImagePathMap(cfg.get("images") or {}),
-            "OUTPUT_PATH": output_path,
-            "__name__": "__main__",
-        },
-    )
+    def save_doc(doc: Any) -> None:
+        if not hasattr(doc, "save"):
+            raise SystemExit("save_doc 需要 Document")
+        doc.save(output_path)
+
+    def save_book(wb: Any) -> None:
+        if not hasattr(wb, "save"):
+            raise SystemExit("save_book 需要 Workbook")
+        wb.save(output_path)
+
+    ns: dict[str, Any] = {
+        "__builtins__": _SAFE_BUILTINS,
+        "Presentation": Presentation,
+        "Document": Document,
+        "Workbook": Workbook,
+        "Inches": Inches,
+        "Emu": Emu,
+        "Pt": Pt,
+        "RGBColor": RGBColor,
+        "Path": _SandboxPath,
+        "add_title_slide": add_title_slide,
+        "add_content_slide": add_content_slide,
+        "add_table": add_table,
+        "save_deck": save_deck,
+        "save_doc": save_doc,
+        "save_book": save_book,
+        "IMAGE_PATHS": ImagePathMap(cfg.get("images") or {}),
+        "OUTPUT_PATH": output_path,
+        "KIND": kind,
+        "__name__": "__main__",
+    }
+    exec(cfg["source"], ns)  # noqa: S102 — isolated allowlisted snippet
 
 
 def main() -> None:

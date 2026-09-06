@@ -135,13 +135,15 @@ def test_allowlist_has_ceiling_not_bash() -> None:
     gw = build_default_gateway()
     names = set(gw.tools)
     assert "sandbox_pptx_lib" in names
+    assert "sandbox_office_lib" in names
     assert "generate_pptx_document" in names
     assert "sandbox_pptx_lib" in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in names
     schemas = {s["function"]["name"] for s in openai_tool_schemas(gw)}
     assert "sandbox_pptx_lib" in schemas
-    assert len(ALLOWED_GATEWAY_TOOLS) == 28
+    assert len(ALLOWED_GATEWAY_TOOLS) == 29
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert workbench_tool_step_line("sandbox_pptx_lib") == "正在沙箱排 PPT"
     assert workbench_tool_result_line("sandbox_pptx_lib", ok=True) == "已沙箱排 PPT"

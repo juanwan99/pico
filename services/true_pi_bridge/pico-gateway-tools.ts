@@ -24,6 +24,7 @@ const ALLOWED = [
   "generate_docx_document",
   "generate_pptx_document",
   "sandbox_pptx_lib",
+  "sandbox_office_lib",
   "generate_xlsx_document",
   "edit_docx_document",
   "edit_pptx_document",
@@ -187,7 +188,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_docx_document",
-    "Create a real .docx Artifact (Pico gateway), or patch an existing one. To change an uploaded file, pass artifact_id plus paragraph_index/text, comment, or values ({{key}} fill only). Unmatched values return edited=false. Do not look for a separate edit tool. Result includes an observation of what landed. ok is not finished.",
+    "Create a real .docx Artifact via spec/body (Pico gateway), or patch an existing one. Sibling of sandbox_office_lib kind=docx (isolated python-docx) — pick from the teacher's ask. Free layout that stock paragraphs cannot place: write python-docx in sandbox_office_lib. To change an uploaded file, pass artifact_id plus paragraph_index/text, comment, or values ({{key}} fill only). Unmatched values return edited=false. Do not look for a separate edit tool. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.Optional(Type.String()),
@@ -205,7 +206,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_pptx_document",
-    "Create a real .pptx Artifact via spec/blocks on stock python-pptx layouts (title, bullets, table, theme colors). Sibling of sandbox_pptx_lib (isolated python-pptx) — pick from the teacher's ask, not a scene word. Free shapes / color blocks / full-bleed geometry are not this tool; write python-pptx in sandbox_pptx_lib. Same title replaces the file the teacher opens. To patch an existing deck, pass artifact_id plus slide_index/new_title or values — do not look for a separate edit tool. Read observation.outline.images after. A missing image_artifact_id skips that picture; the file still lands. blocks[].type cover/content/title/page (or omitted) are slides — not a new spec field. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. Pictures already inside the file are not separate downloads. ok is not finished.",
+    "Create a real .pptx Artifact via spec/blocks on stock python-pptx layouts (title, bullets, table, theme colors). Sibling of sandbox_pptx_lib / sandbox_office_lib (isolated office libs) — pick from the teacher's ask, not a scene word. Free shapes / color blocks / full-bleed geometry are not this tool; write python-pptx in sandbox_pptx_lib or sandbox_office_lib kind=pptx. Same title replaces the file the teacher opens. To patch an existing deck, pass artifact_id plus slide_index/new_title or values — do not look for a separate edit tool. Read observation.outline.images after. A missing image_artifact_id skips that picture; the file still lands. blocks[].type cover/content/title/page (or omitted) are slides — not a new spec field. To embed a picture/diagram, first generate_image or generate_diagram, then pass that artifact id as image_artifact_id on the slide in spec/blocks. [image:…] in body does not embed. Pictures already inside the file are not separate downloads. ok is not finished.",
     Type.Object(
       {
         title: Type.Optional(Type.String()),
@@ -236,7 +237,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_xlsx_document",
-    "Create a real .xlsx Artifact (Pico gateway), or patch an existing sheet. Markdown/TSV tables in body become sheets and rows (sibling of Word paragraphs / PPT --- slides). spec.sheets is the structured path. A whole draft in one cell is not a spreadsheet. To change one cell, pass artifact_id plus cell and value (A1-style; =formula). values is {{key}} template fill only — not a map of cell addresses. Unmatched values return edited=false and keep the original file. Do not look for a separate edit tool. Result includes an observation of what landed. ok is not finished.",
+    "Create a real .xlsx Artifact (Pico gateway), or patch an existing sheet. Sibling of sandbox_office_lib kind=xlsx (isolated openpyxl). Markdown/TSV tables in body become sheets and rows (sibling of Word paragraphs / PPT --- slides). spec.sheets is the structured path. Formulas / multi-sheet layout that stock tables cannot place: write openpyxl in sandbox_office_lib. A whole draft in one cell is not a spreadsheet. To change one cell, pass artifact_id plus cell and value (A1-style; =formula). values is {{key}} template fill only — not a map of cell addresses. Unmatched values return edited=false and keep the original file. Do not look for a separate edit tool. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.Optional(Type.String()),
@@ -429,8 +430,22 @@ export default function (pi: ExtensionAPI) {
   );
   registerTool(
     pi,
+    "sandbox_office_lib",
+    "Isolated office Python (python-docx / openpyxl / python-pptx; not host bash, not a second Office OS, not a programming sandbox). Sibling of generate_docx_document / generate_xlsx_document / generate_pptx_document — not the only office path. kind=docx|xlsx|pptx (or infer from title suffix). from docx import Document; from openpyxl import Workbook; from pptx import Presentation, Inches, Pt, RGBColor. save_doc(doc) / save_book(wb) / save_deck(prs) or .save — routed to the ledger. from pathlib import Path is a stub (mkdir ignored; no host files). Do not import os. copy / math / datetime / from io import BytesIO are allowed. Empty shells fail. A missing image_artifact_ids entry is skipped.",
+    Type.Object(
+      {
+        source: Type.String(),
+        kind: Type.Optional(Type.String()),
+        title: Type.Optional(Type.String()),
+        image_artifact_ids: Type.Optional(Type.Array(Type.String())),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
     "sandbox_pptx_lib",
-    "Isolated python-pptx (not host bash, not a second Office OS). Sibling of generate_pptx_document — not the only PPT path. from pptx import Presentation, Inches, Pt, RGBColor is allowed (Inches/Pt also on pptx). add_shape and RGBColor color blocks are this tool. from pathlib import Path is a stub (mkdir ignored; no host files). prs.save is routed to the ledger (same as save_deck). Do not import os. copy / math / datetime / from io import BytesIO are allowed. add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first picture. Must add slides then save_deck(prs) or prs.save. Empty Presentation();save_deck fails — do not send a placeholder. A missing image_artifact_ids entry is skipped.",
+    "Isolated python-pptx (not host bash, not a second Office OS). PPT alias of sandbox_office_lib kind=pptx. Sibling of generate_pptx_document — not the only PPT path. from pptx import Presentation, Inches, Pt, RGBColor is allowed (Inches/Pt also on pptx). add_shape and RGBColor color blocks are this tool. from pathlib import Path is a stub (mkdir ignored; no host files). prs.save is routed to the ledger (same as save_deck). Do not import os. copy / math / datetime / from io import BytesIO are allowed. add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first picture. Must add slides then save_deck(prs) or prs.save. Empty Presentation();save_deck fails — do not send a placeholder. A missing image_artifact_ids entry is skipped. Word/Excel use sandbox_office_lib.",
     Type.Object(
       {
         source: Type.String(),

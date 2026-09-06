@@ -35,6 +35,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_docx_document",
             "generate_pptx_document",
             "sandbox_pptx_lib",
+            "sandbox_office_lib",
             "generate_xlsx_document",
             "render_document",
             "inspect_document",
@@ -77,6 +78,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_docx_document",
             "generate_pptx_document",
             "sandbox_pptx_lib",
+            "sandbox_office_lib",
             "generate_xlsx_document",
             "render_document",
             "inspect_document",
@@ -151,6 +153,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_docx_document",
             "generate_pptx_document",
             "sandbox_pptx_lib",
+            "sandbox_office_lib",
         ),
         risk="low",
         instruction=(
@@ -168,6 +171,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_docx_document",
             "generate_pptx_document",
             "sandbox_pptx_lib",
+            "sandbox_office_lib",
         ),
         risk="low",
         instruction=(
@@ -186,6 +190,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_docx_document",
             "generate_pptx_document",
             "sandbox_pptx_lib",
+            "sandbox_office_lib",
         ),
         risk="low",
         instruction=(
@@ -203,6 +208,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_docx_document",
             "generate_pptx_document",
             "sandbox_pptx_lib",
+            "sandbox_office_lib",
         ),
         risk="low",
         instruction=(
@@ -220,6 +226,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "generate_docx_document",
             "generate_pptx_document",
             "sandbox_pptx_lib",
+            "sandbox_office_lib",
         ),
         risk="low",
         instruction=(

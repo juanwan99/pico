@@ -61,6 +61,7 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "generate_docx_document",
         "generate_pptx_document",
         "sandbox_pptx_lib",
+        "sandbox_office_lib",
         "generate_xlsx_document",
         "edit_docx_document",
         "edit_pptx_document",

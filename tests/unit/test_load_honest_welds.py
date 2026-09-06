@@ -44,6 +44,7 @@ def test_pi_and_hosted_pptx_descriptions_are_siblings() -> None:
         encoding="utf-8"
     )
     assert "Sibling of sandbox_pptx_lib" in ts
+    assert "sandbox_office_lib" in ts
     assert "Sibling of generate_pptx_document" in ts
     assert "Sibling of generate_image" in ts
     assert "they do not veto each other" in ts
@@ -69,6 +70,7 @@ def test_pi_and_hosted_pptx_descriptions_are_siblings() -> None:
 def test_system_names_office_ceiling_without_scene_words() -> None:
     body = pico_system_text()
     assert "sandbox_pptx_lib" in body
+    assert "sandbox_office_lib" in body
     assert "siblings" in body
     assert "stock python-pptx layouts" in body
     assert "body bullets (not title-only walls)" not in body
@@ -109,8 +111,10 @@ def test_xlsx_values_is_placeholder_fill_on_pi_surfaces() -> None:
 def test_default_core_shows_office_not_programming() -> None:
     visible = resolve_visible_tools(None)
     assert "sandbox_pptx_lib" in visible
+    assert "sandbox_office_lib" in visible
     assert "sandbox_workspace_exec" not in visible
     assert "sandbox_pptx_lib" in CORE_VISIBLE_TOOLS
+    assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS
 
 
 def test_scene_words_do_not_hang_a_skill() -> None:
