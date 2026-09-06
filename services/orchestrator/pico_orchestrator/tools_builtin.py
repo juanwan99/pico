@@ -58,7 +58,10 @@ from pico_orchestrator.office.legacy import (
 from pico_orchestrator.office.qa import verify_office_bytes
 from pico_orchestrator.office.render import render_spec
 from pico_orchestrator.office.sandbox_lib import (
+    OFFICE_LIB_MAX_SOURCE,
     PPTX_LIB_MAX_SOURCE,
+    normalize_office_kind,
+    run_office_lib_source_async,
     run_pptx_lib_source_async,
 )
 from pico_orchestrator.office.spec import parse_spec
@@ -319,15 +322,8 @@ async def _observe_document_open(
     return out
 
 
-def _make_sandbox_pptx_lib(store: ArtifactStore):
-    async def sandbox_pptx_lib(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        source = _required_text(args, "source", maximum=PPTX_LIB_MAX_SOURCE)
-        title_raw = args.get("title")
-        title = _ensure_extension(
-            str(title_raw).strip() if isinstance(title_raw, str) and title_raw.strip() else "沙箱上限.pptx",
-            ".pptx",
-        )
-        deny_secret_filename(title)
+def _office_lib_images(store: ArtifactStore, principal: Principal, args: dict[str, Any]):
+    async def _load() -> dict[str, bytes]:
         raw_ids = args.get("image_artifact_ids") or args.get("images") or []
         if raw_ids is None:
             raw_ids = []
@@ -342,6 +338,48 @@ def _make_sandbox_pptx_lib(store: ArtifactStore):
             if row is None:
                 continue
             images[aid] = _artifact_bytes(row)
+        return images
+
+    return _load
+
+
+def _make_sandbox_office_lib(store: ArtifactStore):
+    async def sandbox_office_lib(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        source = _required_text(args, "source", maximum=OFFICE_LIB_MAX_SOURCE)
+        title_raw = args.get("title")
+        title_hint = (
+            str(title_raw).strip()
+            if isinstance(title_raw, str) and title_raw.strip()
+            else ""
+        )
+        kind = normalize_office_kind(args.get("kind"), title=title_hint or None)
+        default_title = {
+            "docx": "沙箱上限.docx",
+            "xlsx": "沙箱上限.xlsx",
+            "pptx": "沙箱上限.pptx",
+        }[kind]
+        title = _ensure_extension(title_hint or default_title, f".{kind}")
+        deny_secret_filename(title)
+        images = await _office_lib_images(store, principal, args)()
+        raw = await run_office_lib_source_async(source, kind=kind, images=images)
+        result = await store.write(principal, title=title, content=raw, kind=kind)
+        result["format"] = kind
+        result["via"] = "sandbox_office_lib"
+        return _attach_write_observation(result, kind=kind, title=title, raw=raw)
+
+    return sandbox_office_lib
+
+
+def _make_sandbox_pptx_lib(store: ArtifactStore):
+    async def sandbox_pptx_lib(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        source = _required_text(args, "source", maximum=PPTX_LIB_MAX_SOURCE)
+        title_raw = args.get("title")
+        title = _ensure_extension(
+            str(title_raw).strip() if isinstance(title_raw, str) and title_raw.strip() else "沙箱上限.pptx",
+            ".pptx",
+        )
+        deny_secret_filename(title)
+        images = await _office_lib_images(store, principal, args)()
         raw = await run_pptx_lib_source_async(source, images=images)
         result = await store.write(principal, title=title, content=raw, kind="pptx")
         result["format"] = "pptx"
@@ -2452,7 +2490,10 @@ def build_default_gateway(
         ToolSpec(
             name="generate_docx_document",
             description=(
-                "Create a real OOXML .docx, or patch an existing one. "
+                "Create a real OOXML .docx via spec/body, or patch an existing one. "
+                "Sibling of sandbox_office_lib kind=docx (isolated python-docx) — "
+                "pick from the teacher's ask. Free layout that stock paragraphs "
+                "cannot place: write python-docx in sandbox_office_lib. "
                 "To change an uploaded file, pass artifact_id|title plus "
                 "paragraph_index/text, comment, or values — do not look for a "
                 "separate edit tool. Result includes an observation of "
@@ -2470,10 +2511,10 @@ def build_default_gateway(
             description=(
                 "Create a real OOXML .pptx via spec/blocks on stock python-pptx "
                 "layouts (title, bullets, table, theme colors). Sibling of "
-                "sandbox_pptx_lib (isolated python-pptx) — pick from the "
+                "sandbox_pptx_lib / sandbox_office_lib (isolated office libs) — pick from the "
                 "teacher's ask, not a scene word. Free shapes / color blocks / "
                 "full-bleed geometry are not this tool; write python-pptx in "
-                "sandbox_pptx_lib. Same title replaces the file the teacher "
+                "sandbox_pptx_lib or sandbox_office_lib kind=pptx. Same title replaces the file the teacher "
                 "opens. Read observation.outline.images. "
                 "A missing image_artifact_id skips that picture; the file still "
                 "lands. blocks[].type cover/content/title/page (or omitted) "
@@ -2491,9 +2532,32 @@ def build_default_gateway(
     )
     gw.register(
         ToolSpec(
+            name="sandbox_office_lib",
+            description=(
+                "Isolated office Python (python-docx / openpyxl / python-pptx; "
+                "not host bash, not a second Office OS, not a programming sandbox). "
+                "Sibling of generate_docx_document / generate_xlsx_document / "
+                "generate_pptx_document — not the only office path. "
+                "kind=docx|xlsx|pptx (or infer from title suffix). "
+                "from docx import Document; from openpyxl import Workbook; "
+                "from pptx import Presentation, Inches, Pt, RGBColor. "
+                "save_doc(doc) / save_book(wb) / save_deck(prs) or .save are routed "
+                "to the ledger. from pathlib import Path is a stub (mkdir ignored; "
+                "no host files). Do not import os. copy / math / datetime / "
+                "from io import BytesIO are allowed. Empty shells fail. "
+                "A missing image_artifact_ids entry is skipped. Args: source, "
+                "kind?, title?, image_artifact_ids?"
+            ),
+            handler=_make_sandbox_office_lib(store),
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
             name="sandbox_pptx_lib",
             description=(
                 "Isolated python-pptx (not host bash, not a second Office OS). "
+                "PPT alias of sandbox_office_lib kind=pptx. "
                 "Sibling of generate_pptx_document — not the only PPT path. "
                 "Result includes an observation of what landed. ok is not finished. "
                 "from pptx import Presentation, Inches, Pt, RGBColor is allowed "
@@ -2505,8 +2569,8 @@ def build_default_gateway(
                 "add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first "
                 "picture. Must add slides then save_deck(prs) or prs.save. Empty "
                 "Presentation();save_deck fails — do not send a placeholder. "
-                "A missing image_artifact_ids entry is skipped. Args: source, "
-                "title?, image_artifact_ids?"
+                "A missing image_artifact_ids entry is skipped. Word/Excel use "
+                "sandbox_office_lib. Args: source, title?, image_artifact_ids?"
             ),
             handler=_make_sandbox_pptx_lib(store),
             school_scoped=False,
@@ -2517,8 +2581,11 @@ def build_default_gateway(
             name="generate_xlsx_document",
             description=(
                 "Create a real OOXML .xlsx, or patch an existing sheet. "
+                "Sibling of sandbox_office_lib kind=xlsx (isolated openpyxl). "
                 "Markdown/TSV tables in body become sheets and rows "
                 "(sibling of Word paragraphs / PPT --- slides). "
+                "Formulas / multi-sheet layout that stock tables cannot place: "
+                "write openpyxl in sandbox_office_lib. "
                 "A whole draft in one cell is not a spreadsheet. "
                 "To change an uploaded file, pass artifact_id|title plus cell+value "
                 "(one A1-style cell per call; value may start with = for a formula). "
@@ -2949,6 +3016,34 @@ def openai_tool_schemas(
                 },
             },
             "required": ["title", "marker"],
+        },
+        "sandbox_office_lib": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "description": (
+                        "Office-lib body. kind=docx uses python-docx; kind=xlsx uses "
+                        "openpyxl; kind=pptx uses python-pptx. from pathlib import Path "
+                        "is a stub. .save is routed to the ledger. Do not import os. "
+                        "Empty shells fail."
+                    ),
+                },
+                "kind": {
+                    "type": "string",
+                    "description": "docx | xlsx | pptx. May also be inferred from title.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Filename, preferably ending with .docx/.xlsx/.pptx",
+                },
+                "image_artifact_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Ledger image ids exposed as IMAGE_PATHS",
+                },
+            },
+            "required": ["source"],
         },
         "sandbox_pptx_lib": {
             "type": "object",

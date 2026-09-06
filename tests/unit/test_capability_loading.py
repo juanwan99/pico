@@ -13,6 +13,7 @@ from pico_orchestrator.capability_loading import (
     EXTENDED_TOOLS,
     SCENE_SKILL_IDS,
     SKILL_WHEN,
+    office_siblings_honest,
     ppt_siblings_honest,
     resolve_visible_tools,
     skill_catalog_block,
@@ -32,12 +33,14 @@ def test_core_and_extended_partition_gateway():
     assert set(CORE_VISIBLE_TOOLS) & set(EXTENDED_TOOLS) == set()
     assert "bash" not in CORE_VISIBLE_TOOLS
     assert "bash" not in EXTENDED_TOOLS
-    assert len(CORE_VISIBLE_TOOLS) == 17
+    assert len(CORE_VISIBLE_TOOLS) == 18
     assert len(EXTENDED_TOOLS) == 11
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_pptx_lib" in CORE_VISIBLE_TOOLS
+    assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS
     assert "sandbox_pptx_lib" not in EXTENDED_TOOLS
+    assert "sandbox_office_lib" not in EXTENDED_TOOLS
     assert "edit_docx_document" not in CORE_VISIBLE_TOOLS
     assert "edit_pptx_document" not in CORE_VISIBLE_TOOLS
     assert "edit_xlsx_document" not in CORE_VISIBLE_TOOLS
@@ -55,6 +58,7 @@ def test_core_and_extended_partition_gateway():
     assert "kb_search" in CORE_VISIBLE_TOOLS
     assert "ask_user" in CORE_VISIBLE_TOOLS
     assert ppt_siblings_honest(CORE_VISIBLE_TOOLS)
+    assert office_siblings_honest(CORE_VISIBLE_TOOLS)
 
 
 def test_default_visible_is_core_not_full_allowlist():

@@ -16,7 +16,7 @@ from collections.abc import Iterable
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
 # Always-on: teacher-said verbs. Do not add a scheduler / tool_search.
-# Office ceiling (sandbox_pptx_lib) stays visible — hiding it in EXTENDED is a picker.
+# Office ceiling (sandbox_pptx_lib / sandbox_office_lib) stays visible — hiding it in EXTENDED is a picker.
 # generate_* also patches (artifact_id + paragraph/slide/cell). edit_* stay
 # execute aliases on EXTENDED so hung skills / old names still run.
 # Programming sandbox stays extended until T-CODE-SANDBOX (S3).
@@ -32,6 +32,7 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "generate_docx_document",
     "generate_pptx_document",
     "sandbox_pptx_lib",
+    "sandbox_office_lib",
     "generate_xlsx_document",
     "inspect_document",
     "generate_image",
@@ -100,6 +101,14 @@ def ppt_siblings_honest(names: Iterable[str]) -> bool:
     if "generate_pptx_document" not in visible:
         return True
     return "sandbox_pptx_lib" in visible
+
+
+def office_siblings_honest(names: Iterable[str]) -> bool:
+    """Spec Word/Excel without isolated office libs is a hidden picker."""
+    visible = set(names)
+    if "generate_docx_document" not in visible and "generate_xlsx_document" not in visible:
+        return True
+    return "sandbox_office_lib" in visible
 
 
 def resolve_visible_tools(allowed_tools: list[str] | tuple[str, ...] | None) -> list[str]:

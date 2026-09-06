@@ -731,6 +731,7 @@ def test_sidebar_chat_has_no_edit_or_image_tools() -> None:
         "generate_image",
         "generate_diagram",
         "sandbox_pptx_lib",
+        "sandbox_office_lib",
     } <= set(deliver["tools"])
     assert "edit_docx_document" not in deliver["tools"]
     aliases = {

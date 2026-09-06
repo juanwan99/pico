@@ -1,14 +1,14 @@
-"""Isolated python-pptx ceiling. Not a second Office OS. No host bash.
+"""Isolated office-library ceiling. Not a second Office OS. No host bash.
 
-Default decks still go through spec / generate_pptx_document.
+Default files still go through spec / generate_*.
 This module runs a tightly allowlisted snippet in a subprocess and
 returns OOXML bytes. Empty shells fail closed.
 
-Thin adapters vs naked GPT python-pptx: pathlib is a stub (mkdir
-ignored), Presentation.save always books to OUTPUT_PATH, source cap
-is PPTX_LIB_MAX_SOURCE. os / open / eval stay denied. Stdlib without
-host IO (copy/math/datetime/io.BytesIO) is allowed so naked GPT drafts
-are not sent back to stock layouts (#829).
+Thin adapters vs naked GPT office libs: pathlib is a stub (mkdir
+ignored), Document/Workbook/Presentation.save always book to OUTPUT_PATH,
+source cap is OFFICE_LIB_MAX_SOURCE. os / open / eval stay denied. Stdlib
+without host IO (copy/math/datetime/io.BytesIO) is allowed so naked GPT
+drafts are not sent back to stock layouts (#829).
 """
 
 from __future__ import annotations
@@ -31,8 +31,10 @@ from pico_orchestrator.gateway import ToolError
 
 _TIMEOUT_S = 45.0
 PPTX_LIB_MAX_SOURCE = 200_000
-_MAX_SOURCE = PPTX_LIB_MAX_SOURCE
+OFFICE_LIB_MAX_SOURCE = PPTX_LIB_MAX_SOURCE
+_MAX_SOURCE = OFFICE_LIB_MAX_SOURCE
 _DENIED_CALLS = frozenset({"exec", "eval", "compile", "open", "__import__"})
+_OFFICE_KINDS = frozenset({"pptx", "docx", "xlsx"})
 # Keep in sync with office/sandbox_exec.py STDLIB_OK.
 STDLIB_OK = frozenset(
     {
@@ -70,8 +72,10 @@ STDLIB_OK = frozenset(
     }
 )
 _IO_FROM_OK = frozenset({"BytesIO", "StringIO"})
-# Upstream python-pptx. os / subprocess stay denied. pathlib is a stub (mkdir only).
-_ALLOWED_IMPORT_ROOTS = frozenset({"pptx", "pptx_helpers", "pathlib"}) | STDLIB_OK
+# Upstream office PyPI. os / subprocess stay denied. pathlib is a stub (mkdir only).
+_ALLOWED_IMPORT_ROOTS = frozenset(
+    {"pptx", "pptx_helpers", "docx", "openpyxl", "pathlib"}
+) | STDLIB_OK
 
 
 def _import_root(node: ast.AST) -> str | None:
@@ -113,16 +117,34 @@ def _io_import_ok(node: ast.AST) -> bool:
     return False
 
 
-def assert_pptx_lib_source(source: str) -> None:
+def normalize_office_kind(kind: str | None, *, title: str | None = None) -> str:
+    token = str(kind or "").strip().lower().lstrip(".")
+    if token in _OFFICE_KINDS:
+        return token
+    name = str(title or "").strip().lower()
+    if name.endswith(".docx"):
+        return "docx"
+    if name.endswith(".xlsx"):
+        return "xlsx"
+    if name.endswith(".pptx"):
+        return "pptx"
+    raise ToolError(
+        "tool.invalid_arguments",
+        "kind 必须是 docx、xlsx 或 pptx（也可从 title 后缀推断）。",
+    )
+
+
+def assert_office_lib_source(source: str, *, kind: str = "pptx") -> None:
     text = (source or "").strip()
     if not text:
-        raise ToolError("tool.invalid_arguments", "source 必须是非空的 python-pptx 脚本。")
+        raise ToolError("tool.invalid_arguments", "source 必须是非空的办公库脚本。")
     if len(text) > _MAX_SOURCE:
         raise ToolError("tool.invalid_arguments", f"source 不能超过 {_MAX_SOURCE} 字。")
+    kind = normalize_office_kind(kind)
     try:
         tree = ast.parse(text)
     except SyntaxError as exc:
-        raise ToolError("sandbox.exec_invalid", "python-pptx 脚本无法解析。") from exc
+        raise ToolError("sandbox.exec_invalid", "办公库脚本无法解析。") from exc
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             root = _import_root(node)
@@ -139,7 +161,7 @@ def assert_pptx_lib_source(source: str) -> None:
             if root not in _ALLOWED_IMPORT_ROOTS:
                 raise ToolError(
                     "sandbox.exec_denied",
-                    "禁止 import os/宿主库。python-pptx 可用 from pptx import Presentation, Inches, Pt。"
+                    "禁止 import os/宿主库。办公库可用 python-docx / openpyxl / python-pptx。"
                     "copy/math/datetime/io.BytesIO 可用。",
                 )
         if (
@@ -154,7 +176,11 @@ def assert_pptx_lib_source(source: str) -> None:
             raise ToolError("sandbox.exec_denied", "禁止访问内部名字。")
 
 
-def _looks_like_pptx_zip(raw: bytes) -> bool:
+def assert_pptx_lib_source(source: str) -> None:
+    assert_office_lib_source(source, kind="pptx")
+
+
+def _looks_like_office_zip(raw: bytes, kind: str) -> bool:
     if not raw or raw[:2] != b"PK":
         return False
     try:
@@ -162,32 +188,64 @@ def _looks_like_pptx_zip(raw: bytes) -> bool:
             names = set(zf.namelist())
     except zipfile.BadZipFile:
         return False
-    return "[Content_Types].xml" in names and "ppt/presentation.xml" in names
+    if "[Content_Types].xml" not in names:
+        return False
+    if kind == "pptx":
+        return "ppt/presentation.xml" in names
+    if kind == "docx":
+        return "word/document.xml" in names
+    if kind == "xlsx":
+        return "xl/workbook.xml" in names
+    return False
+
+
+def _xlsx_has_cell(raw: bytes) -> bool:
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            sheets = [n for n in zf.namelist() if n.startswith("xl/worksheets/")]
+            blob = b"".join(zf.read(n) for n in sheets)
+    except zipfile.BadZipFile:
+        return False
+    return b"<v>" in blob or b"<t>" in blob or b"t=\"inlineStr\"" in blob or b"t='inlineStr'" in blob
+
+
+def _validate_office_bytes(raw: bytes, kind: str) -> bytes:
+    kind = normalize_office_kind(kind)
+    ext = f".{kind}"
+    if not raw:
+        if kind == "pptx":
+            raise ToolError("sandbox.pptx_empty", "沙箱没有写出 PPT。请调用 save_deck(prs) 或 prs.save。")
+        if kind == "docx":
+            raise ToolError("sandbox.docx_empty", "沙箱没有写出 Word。请调用 save_doc(doc) 或 doc.save。")
+        raise ToolError("sandbox.xlsx_empty", "沙箱没有写出 Excel。请调用 save_book(wb) 或 wb.save。")
+    if _looks_like_office_zip(raw, kind):
+        reason = office_shell_reason(raw, ext)
+        if reason:
+            raise ToolError(f"sandbox.{kind}_shell", reason)
+        if kind == "xlsx" and not _xlsx_has_cell(raw):
+            raise ToolError("sandbox.xlsx_shell", "Excel 打开后几乎是空壳。请写入单元格后再交。")
+        if is_valid_ooxml_package(raw, ext):
+            return raw
+    raise ToolError(f"sandbox.{kind}_invalid", f"沙箱写出的不是真 {kind.upper()}（OOXML）。")
 
 
 def _validate_pptx_bytes(raw: bytes) -> bytes:
-    if not raw:
-        raise ToolError("sandbox.pptx_empty", "沙箱没有写出 PPT。请调用 save_deck(prs)。")
-    if _looks_like_pptx_zip(raw):
-        reason = office_shell_reason(raw, ".pptx")
-        if reason:
-            raise ToolError("sandbox.pptx_shell", reason)
-        if is_valid_ooxml_package(raw, ".pptx"):
-            return raw
-    raise ToolError("sandbox.pptx_invalid", "沙箱写出的不是真 PPT（OOXML）。")
+    return _validate_office_bytes(raw, "pptx")
 
 
-def run_pptx_lib_source(
+def run_office_lib_source(
     source: str,
     *,
+    kind: str = "pptx",
     images: dict[str, bytes] | None = None,
     timeout_s: float = _TIMEOUT_S,
 ) -> bytes:
     """Sync runner used by the subprocess and tests."""
-    assert_pptx_lib_source(source)
-    with tempfile.TemporaryDirectory(prefix="pico-pptx-lib-") as tmp:
+    kind = normalize_office_kind(kind)
+    assert_office_lib_source(source, kind=kind)
+    with tempfile.TemporaryDirectory(prefix="pico-office-lib-") as tmp:
         root = Path(tmp)
-        out_path = root / "deck.pptx"
+        out_path = root / f"out.{kind}"
         image_paths: dict[str, str] = {}
         for key, blob in (images or {}).items():
             if not blob:
@@ -204,7 +262,12 @@ def run_pptx_lib_source(
         cfg_path = root / "cfg.json"
         cfg_path.write_text(
             json.dumps(
-                {"output": str(out_path), "images": image_paths, "source": source},
+                {
+                    "output": str(out_path),
+                    "images": image_paths,
+                    "source": source,
+                    "kind": kind,
+                },
                 ensure_ascii=False,
             ),
             encoding="utf-8",
@@ -219,14 +282,37 @@ def run_pptx_lib_source(
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
-            raise ToolError("sandbox.exec_timeout", "沙箱 python-pptx 超时已杀掉。") from exc
+            raise ToolError("sandbox.exec_timeout", "沙箱办公库超时已杀掉。") from exc
         if proc.returncode != 0:
             err = (proc.stderr or b"").decode("utf-8", errors="replace")[:800]
             raise ToolError(
-                "sandbox.pptx_failed",
-                f"隔离 python-pptx 失败：{err or 'exit ' + str(proc.returncode)}",
+                f"sandbox.{kind}_failed",
+                f"隔离办公库失败：{err or 'exit ' + str(proc.returncode)}",
             )
-        return _validate_pptx_bytes(out_path.read_bytes() if out_path.is_file() else b"")
+        return _validate_office_bytes(
+            out_path.read_bytes() if out_path.is_file() else b"", kind
+        )
+
+
+def run_pptx_lib_source(
+    source: str,
+    *,
+    images: dict[str, bytes] | None = None,
+    timeout_s: float = _TIMEOUT_S,
+) -> bytes:
+    return run_office_lib_source(source, kind="pptx", images=images, timeout_s=timeout_s)
+
+
+async def run_office_lib_source_async(
+    source: str,
+    *,
+    kind: str = "pptx",
+    images: dict[str, bytes] | None = None,
+    timeout_s: float = _TIMEOUT_S,
+) -> bytes:
+    return await asyncio.to_thread(
+        run_office_lib_source, source, kind=kind, images=images, timeout_s=timeout_s
+    )
 
 
 async def run_pptx_lib_source_async(
@@ -235,8 +321,8 @@ async def run_pptx_lib_source_async(
     images: dict[str, bytes] | None = None,
     timeout_s: float = _TIMEOUT_S,
 ) -> bytes:
-    return await asyncio.to_thread(
-        run_pptx_lib_source, source, images=images, timeout_s=timeout_s
+    return await run_office_lib_source_async(
+        source, kind="pptx", images=images, timeout_s=timeout_s
     )
 
 
@@ -250,8 +336,9 @@ def _isolated_env() -> dict[str, str]:
 def main() -> None:
     raw = sys.stdin.buffer.read().decode("utf-8")
     body: dict[str, Any] = json.loads(raw or "{}")
-    out = run_pptx_lib_source(
+    out = run_office_lib_source(
         str(body.get("source") or ""),
+        kind=str(body.get("kind") or "pptx"),
         images={
             str(k): bytes(v) if isinstance(v, list) else v
             for k, v in (body.get("images") or {}).items()
