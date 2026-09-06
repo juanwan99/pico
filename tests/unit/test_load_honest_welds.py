@@ -82,6 +82,7 @@ def test_system_names_office_ceiling_without_scene_words() -> None:
     assert "unmatched brackets" in body
     assert "markdown/TSV tables become sheets" in body
     assert "If `publish_html_page` is listed this turn" in body
+    assert "parks until the teacher confirms this exact page" in body
     assert "Do not name or call publish tools that are not listed" in body
     assert "same title replaces the file the teacher opens" in body.lower()
     assert "one A1-style address per call" in body

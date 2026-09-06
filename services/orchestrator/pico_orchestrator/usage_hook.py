@@ -45,6 +45,7 @@ class UsageBind:
     tool_call_id: str | None = None
     conversation_id: str | None = None
     bill_to: str = "member"
+    emit: Any = None
 
 
 _BIND: ContextVar[UsageBind | None] = ContextVar("pico_usage_bind", default=None)
@@ -60,6 +61,7 @@ def bind_usage_context(
     conversation_id: str | None = None,
     bill_to: str | None = None,
     scopes: Any = None,
+    emit: Any = None,
 ) -> object:
     """Set request-scoped identity for search/fetch emits. Returns a token to reset."""
     payer = (bill_to or "").strip().lower()
@@ -74,6 +76,7 @@ def bind_usage_context(
             tool_call_id=tool_call_id,
             conversation_id=(conversation_id or "").strip() or None,
             bill_to=payer,
+            emit=emit,
         )
     )
 

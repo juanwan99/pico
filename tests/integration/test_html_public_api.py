@@ -54,6 +54,41 @@ def _invoke(client: TestClient, headers: dict[str, str], name: str, arguments: d
     )
 
 
+def _confirm(owner_school: str, owner_member: str, artifact_id: str) -> str:
+    from dataclasses import dataclass
+
+    from pico_orchestrator.publish_confirm import issue_confirm_token
+
+    @dataclass
+    class P:
+        school_id: str
+        membership_id: str
+        scopes: list[str]
+
+    return issue_confirm_token(
+        P(owner_school, owner_member, ["ai:run"]), artifact_id=artifact_id
+    )
+
+
+def test_publish_without_confirm_has_no_public_side_effect(client) -> None:
+    owner = _headers(client, "member-a")
+    created = _invoke(
+        client,
+        owner,
+        "generate_html_document",
+        {"title": "page.html", "marker": "mk-pub", "body": PAGE},
+    )
+    assert created.status_code == 200, created.text
+    artifact_id = created.json()["result"]["artifact_id"]
+    denied = _invoke(client, owner, "publish_html_page", {"artifact_id": artifact_id})
+    assert denied.status_code == 400, denied.text
+    detail = denied.json().get("detail") or {}
+    assert detail.get("code") == "publish.unconfirmed"
+    listed = client.get("/v1/artifacts?mine=true", headers=owner)
+    titles = {row.get("title") for row in listed.json().get("artifacts", [])}
+    assert "page.html" in titles
+
+
 def test_publish_collect_unpublish_and_cross_account(client) -> None:
     owner = _headers(client, "member-a")
     other = _headers(client, "member-b")
@@ -66,7 +101,15 @@ def test_publish_collect_unpublish_and_cross_account(client) -> None:
     assert created.status_code == 200, created.text
     artifact_id = created.json()["result"]["artifact_id"]
 
-    pub = _invoke(client, owner, "publish_html_page", {"artifact_id": artifact_id})
+    pub = _invoke(
+        client,
+        owner,
+        "publish_html_page",
+        {
+            "artifact_id": artifact_id,
+            "confirm_token": _confirm("school-a", "member-a", artifact_id),
+        },
+    )
     assert pub.status_code == 200, pub.text
     page_id = pub.json()["result"]["page_id"]
     assert page_id
@@ -109,11 +152,15 @@ def test_publish_collect_unpublish_and_cross_account(client) -> None:
         {"title": "other.html", "marker": "mk-other", "body": PAGE},
     )
     assert other_html.status_code == 200, other_html.text
+    other_id = other_html.json()["result"]["artifact_id"]
     other_pub = _invoke(
         client,
         other,
         "publish_html_page",
-        {"artifact_id": other_html.json()["result"]["artifact_id"]},
+        {
+            "artifact_id": other_id,
+            "confirm_token": _confirm("school-a", "member-b", other_id),
+        },
     )
     assert other_pub.status_code == 200, other_pub.text
     other_page = other_pub.json()["result"]["page_id"]

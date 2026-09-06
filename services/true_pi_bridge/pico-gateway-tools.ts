@@ -491,10 +491,11 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "publish_html_page",
-    "Publish an existing HTML artifact to a public URL. Visitors can open it without login. Forms may POST JSON to the page collect path; entries land in the publisher archive. Use this after generate_html_document when they asked to collect answers — do not ask which cloud to use unless they named an external endpoint.",
+    "Publish an existing HTML artifact to a public URL after the teacher confirms this exact page. The tool parks until they pick 确认发布 or 取消. Cancel/timeout/no confirm does not create a live URL. Visitors can then open it without login. Forms may POST JSON to the page collect path; entries land in the publisher archive. Use this after generate_html_document when they asked to collect answers — do not ask which cloud to use unless they named an external endpoint.",
     Type.Object(
       {
         artifact_id: Type.String(),
+        confirm_token: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),
