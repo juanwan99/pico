@@ -117,6 +117,7 @@ def test_system_md_slim_and_catalog_not_scene_weld():
     assert "Call `kb_search` only when the teacher asks about school materials" in body
     assert "generate_diagram" in body
     assert "If `publish_html_page` is listed this turn" in body
+    assert "parks until the teacher confirms this exact page" in body
     assert "public_url" in body
     assert "third-party form backend" in body
     assert "page collect path" in body

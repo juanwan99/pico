@@ -2113,7 +2113,10 @@ def _workspace_handlers(
         from app.html_pages import publish_html_page as do_publish
 
         artifact_id = str(args.get("artifact_id") or "").strip()
-        return await do_publish(principal, artifact_id=artifact_id)
+        confirm_token = str(args.get("confirm_token") or "").strip()
+        return await do_publish(
+            principal, artifact_id=artifact_id, confirm_token=confirm_token
+        )
 
     async def unpublish_html_page(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         from app.html_pages import unpublish_html_page as do_unpublish
@@ -2617,10 +2620,12 @@ def build_default_gateway(
         ToolSpec(
             name="publish_html_page",
             description=(
-                "Publish an existing HTML artifact to a public URL. "
-                "Visitors can open it without login. Forms may POST JSON to the "
+                "Publish an existing HTML artifact to a public URL after the teacher "
+                "confirms this exact page. The tool parks on ask_user (确认发布 / 取消). "
+                "Cancel, timeout, or a missing confirm_token does not create a live URL. "
+                "Visitors can then open it without login. Forms may POST JSON to the "
                 "page collect path; entries land in the publisher's archive. "
-                "Args: artifact_id."
+                "Args: artifact_id. confirm_token is server-issued, not a model guess."
             ),
             handler=publish_html_page,
             school_scoped=False,
@@ -3065,6 +3070,10 @@ def openai_tool_schemas(
                 "artifact_id": {
                     "type": "string",
                     "description": "Existing HTML artifact to publish",
+                },
+                "confirm_token": {
+                    "type": "string",
+                    "description": "One-shot teacher confirm for this artifact and identity",
                 },
             },
             "required": ["artifact_id"],

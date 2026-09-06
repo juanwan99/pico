@@ -188,6 +188,7 @@ class ToolServer:
             conversation_id=self.conversation_id,
             bill_to=getattr(self.principal, "bill_to", None),
             scopes=getattr(self.principal, "scopes", None),
+            emit=self.emit,
         )
         try:
             result = await self.gateway.invoke(self.principal, name, args)

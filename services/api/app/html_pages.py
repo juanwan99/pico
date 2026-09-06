@@ -136,13 +136,31 @@ async def _factory() -> async_sessionmaker[AsyncSession]:
     return session_factory()
 
 
-async def publish_html_page(principal: Principal, *, artifact_id: str) -> dict[str, Any]:
+async def publish_html_page(
+    principal: Principal,
+    *,
+    artifact_id: str,
+    confirm_token: str = "",
+) -> dict[str, Any]:
     aid = (artifact_id or "").strip()
     if not aid:
         raise ToolError("tool.invalid_arguments", "artifact_id is required")
     factory = await _factory()
     async with factory() as session:
         artifact = await _owned_html(session, principal, aid)
+        from pico_orchestrator.publish_confirm import require_teacher_confirm
+        from pico_orchestrator.sandbox_s1 import current_run_id
+        from pico_orchestrator.usage_hook import current_usage_bind
+
+        bind = current_usage_bind()
+        await require_teacher_confirm(
+            principal,
+            artifact_id=artifact.id,
+            title=str(artifact.title or ""),
+            confirm_token=confirm_token,
+            run_id=current_run_id(principal, None),
+            emit=getattr(bind, "emit", None) if bind else None,
+        )
         live = await session.execute(
             select(HtmlPageRow).where(
                 HtmlPageRow.artifact_id == artifact.id,
