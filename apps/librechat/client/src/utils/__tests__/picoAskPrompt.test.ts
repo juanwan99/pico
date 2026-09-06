@@ -44,6 +44,7 @@ describe('picoAskPrompt', () => {
     expect(liveAskForRun(run('running'), events)).toEqual({
       question: '计划好了，下一步？',
       options: ['确认执行', '先不执行', '再改计划'],
+      eventId: 'wait',
     });
     expect(liveAskForRun(run('succeeded'), events)).toBeNull();
     expect(liveAskForRun(run('running'), [event('wait', 1, 'ui.prompt.begin', { text: 'x' })])).toBeNull();

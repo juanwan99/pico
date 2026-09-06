@@ -130,6 +130,30 @@ async def test_park_rejects_one_option() -> None:
     assert pending("run-bad") is None
 
 
+async def test_second_park_on_new_run_ignores_old_answer() -> None:
+    first = asyncio.create_task(
+        park("run-old", "确认第一页？", ["确认发布 a", "取消"], None, timeout=2)
+    )
+    second = asyncio.create_task(
+        park("run-new", "确认第二页？", ["确认发布 b", "取消"], None, timeout=2)
+    )
+    for _ in range(50):
+        if pending("run-old") and pending("run-new"):
+            break
+        await asyncio.sleep(0.01)
+    assert pending("run-old") is not None
+    assert pending("run-new") is not None
+    assert answer("run-old", "取消") is True
+    assert answer("run-old", "确认发布 b") is False
+    assert pending("run-new") is not None
+    assert answer("run-new", "确认发布 b") is True
+    old, new = await asyncio.gather(first, second)
+    assert old == {"ok": True, "answer": "取消", "question": "确认第一页？"}
+    assert new == {"ok": True, "answer": "确认发布 b", "question": "确认第二页？"}
+    assert pending("run-old") is None
+    assert pending("run-new") is None
+
+
 def test_hitl_timeout_flag_covers_tool_ask() -> None:
     assert _hitl_ask_timed_out(type("T", (), {})()) is False
     assert _hitl_ask_timed_out(type("T", (), {"ask_timed_out": True})()) is True

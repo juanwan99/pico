@@ -14,10 +14,12 @@ export default function PicoAskBar({
   run?: PicoRun | null;
   events?: PicoRunEvent[] | null;
 }) {
-  const [busyOption, setBusyOption] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const ask = liveAskForRun(run, events);
-  if (!ask || !run?.id) {
+  const askIdentity = run?.id && ask?.eventId ? `${run.id}:${ask.eventId}` : null;
+  const [busy, setBusy] = useState<{ identity: string; option: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const busyOption = busy && busy.identity === askIdentity ? busy.option : null;
+  if (!ask || !run?.id || !askIdentity) {
     return null;
   }
 
@@ -26,9 +28,9 @@ export default function PicoAskBar({
       return;
     }
     setError(null);
-    setBusyOption(label);
+    setBusy({ identity: askIdentity, option: label });
     void answerPicoAsk(run.id, label).catch(() => {
-      setBusyOption(null);
+      setBusy((current) => (current?.identity === askIdentity ? null : current));
       setError('没送出去，再点一次');
     });
   };
