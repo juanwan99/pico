@@ -70,20 +70,20 @@ def test_publish_is_not_a_pico_capability(client) -> None:
     detail = denied.json().get("detail") or {}
     assert detail.get("code") == "publish.edu_channel_required"
     assert "Edu" in str(detail.get("message") or "")
+    from types import SimpleNamespace
+
     from pico_orchestrator.publish_confirm import issue_confirm_token
 
-    class P:
-        school_id = "school-a"
-        membership_id = "member-a"
-        scopes = ["ai:run"]
-
+    principal = SimpleNamespace(
+        school_id="school-a", membership_id="member-a", scopes=["ai:run"]
+    )
     still = _invoke(
         client,
         owner,
         "publish_html_page",
         {
             "artifact_id": artifact_id,
-            "confirm_token": issue_confirm_token(P(), artifact_id=artifact_id),
+            "confirm_token": issue_confirm_token(principal, artifact_id=artifact_id),
         },
     )
     assert still.status_code == 400, still.text
