@@ -50,6 +50,10 @@ from pico_orchestrator.meili_kb import (
 )
 from pico_orchestrator.office.extract import extract_embedded_images
 from pico_orchestrator.office.inspect import inspect_office_bytes
+from pico_orchestrator.office.skill_docs import (
+    load_office_skill_body,
+    normalize_office_skill_id,
+)
 from pico_orchestrator.office.legacy import (
     LEGACY_OFFICE_ERROR,
     LEGACY_OFFICE_EXTS,
@@ -341,6 +345,28 @@ def _office_lib_images(store: ArtifactStore, principal: Principal, args: dict[st
         return images
 
     return _load
+
+
+def _make_read_office_skill():
+    async def read_office_skill(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        del principal
+        raw_id = args.get("id") or args.get("skill") or args.get("kind")
+        sid = normalize_office_skill_id(str(raw_id) if raw_id is not None else "")
+        if sid is None:
+            raise ToolError(
+                "office_skill.unknown",
+                "id must be docx, xlsx, or pptx",
+            )
+        body = load_office_skill_body(sid)
+        return {
+            "ok": True,
+            "id": sid,
+            "body": body,
+            "via": "read_office_skill",
+            "execute_with": "sandbox_office_lib",
+        }
+
+    return read_office_skill
 
 
 def _make_sandbox_office_lib(store: ArtifactStore):
@@ -2532,6 +2558,20 @@ def build_default_gateway(
     )
     gw.register(
         ToolSpec(
+            name="read_office_skill",
+            description=(
+                "On-demand office craft (docx / xlsx / pptx). Catalog is one line "
+                "in SYSTEM; this tool returns the full python-docx / openpyxl / "
+                "python-pptx craft. Not LibreChat Skills. Not bash. Not a second "
+                "store. After reading, write with sandbox_office_lib (kind matches "
+                "id). generate_* remains the fast path. Args: id=docx|xlsx|pptx"
+            ),
+            handler=_make_read_office_skill(),
+            school_scoped=False,
+        )
+    )
+    gw.register(
+        ToolSpec(
             name="sandbox_office_lib",
             description=(
                 "Isolated office Python (python-docx / openpyxl / python-pptx; "
@@ -3016,6 +3056,16 @@ def openai_tool_schemas(
                 },
             },
             "required": ["title", "marker"],
+        },
+        "read_office_skill": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "docx | xlsx | pptx",
+                },
+            },
+            "required": ["id"],
         },
         "sandbox_office_lib": {
             "type": "object",

@@ -297,7 +297,7 @@ def test_bridge_allowlist_is_thin() -> None:
     assert "generate_image" in ALLOWED_GATEWAY_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_pptx_lib" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 29
+    assert len(ALLOWED_GATEWAY_TOOLS) == 30
 
 
 def test_shadow_diff_flags_false_green() -> None:
