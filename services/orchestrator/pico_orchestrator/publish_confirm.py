@@ -102,7 +102,7 @@ def is_confirm_answer(answer: str, artifact_id: str) -> bool:
     yes, no = confirm_options(artifact_id)
     if chosen == no or chosen.startswith(_NO):
         return False
-    return chosen == yes or chosen.startswith(_YES)
+    return chosen == yes
 
 
 async def require_teacher_confirm(

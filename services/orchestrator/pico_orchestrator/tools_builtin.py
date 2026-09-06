@@ -2621,7 +2621,8 @@ def build_default_gateway(
             name="publish_html_page",
             description=(
                 "Publish an existing HTML artifact to a public URL after the teacher "
-                "confirms this exact page. The tool parks on ask_user (确认发布 / 取消). "
+                "confirms this exact page. The tool parks on ask_user "
+                "(the listed 确认发布 option for this page, or 取消). "
                 "Cancel, timeout, or a missing confirm_token does not create a live URL. "
                 "Visitors can then open it without login. Forms may POST JSON to the "
                 "page collect path; entries land in the publisher's archive. "

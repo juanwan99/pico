@@ -14,7 +14,9 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.publish_confirm import (
+    confirm_options,
     consume_confirm_token,
+    is_confirm_answer,
     issue_confirm_token,
     require_teacher_confirm,
     reset_confirm_tokens,
@@ -58,6 +60,40 @@ def test_token_binds_identity_and_page() -> None:
     assert replay.value.code == "publish.confirm_replay"
 
 
+def test_confirm_answer_requires_this_page_option() -> None:
+    page_a = "cafebabe-1111-2222-3333-444444444444"
+    page_b = "deadbeef-1111-2222-3333-444444444444"
+    yes_a, no = confirm_options(page_a)
+    yes_b, _ = confirm_options(page_b)
+    assert is_confirm_answer(yes_a, page_a) is True
+    assert is_confirm_answer(yes_b, page_a) is False
+    assert is_confirm_answer("确认发布", page_a) is False
+    assert is_confirm_answer("确认发布取消", page_a) is False
+    assert is_confirm_answer(f"确认发布 {page_a}", page_a) is False
+    assert is_confirm_answer(no, page_a) is False
+
+
+@pytest.mark.asyncio
+async def test_wrong_page_option_does_not_authorize(monkeypatch: pytest.MonkeyPatch) -> None:
+    owner = P("school-a", "member-a", ["ai:run"])
+    page_a = "cafebabe-1111-2222-3333-444444444444"
+    yes_other, _ = confirm_options("deadbeef-1111-2222-3333-444444444444")
+    monkeypatch.setattr(
+        "pico_orchestrator.ask_user.park",
+        AsyncMock(return_value={"ok": True, "answer": yes_other, "question": "确认吗"}),
+    )
+    with pytest.raises(ToolError) as cancelled:
+        await require_teacher_confirm(
+            owner,
+            artifact_id=page_a,
+            title="demo.html",
+            confirm_token="",
+            run_id="run-1",
+            emit=None,
+        )
+    assert cancelled.value.code == "publish.cancelled"
+
+
 @pytest.mark.asyncio
 async def test_run_park_cancel_does_not_issue_token(monkeypatch: pytest.MonkeyPatch) -> None:
     owner = P("school-a", "member-a", ["ai:run"])
@@ -80,7 +116,7 @@ async def test_run_park_cancel_does_not_issue_token(monkeypatch: pytest.MonkeyPa
 @pytest.mark.asyncio
 async def test_run_park_yes_consumes_one_shot(monkeypatch: pytest.MonkeyPatch) -> None:
     owner = P("school-a", "member-a", ["ai:run"])
-    parked = {"ok": True, "answer": "确认发布 art-1", "question": "确认吗"}
+    parked = {"ok": True, "answer": confirm_options("art-1")[0], "question": "确认吗"}
     monkeypatch.setattr(
         "pico_orchestrator.ask_user.park", AsyncMock(return_value=parked)
     )
