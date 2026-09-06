@@ -14,9 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.document_generators import build_pptx_document
+from pico_orchestrator.gateway import ToolError
+from pico_orchestrator.office.inspect import inspect_office_bytes
 from pico_orchestrator.skill_policy import instruction_for_snapshot, snapshot_for_skill
 from pico_orchestrator.tool_observation import observe_write
-from pico_orchestrator.tools_builtin import build_default_gateway
+from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
 
 
 @dataclass
@@ -167,9 +169,11 @@ async def test_edit_fill_zero_hit_must_not_claim_filled() -> None:
         "edit_docx_document",
         {"artifact_id": made["artifact_id"], "values": {"班级": "三年二班"}},
     )
-    assert miss["edited"] is True
+    assert miss["edited"] is False
     assert miss["filled"] is False
     assert miss["filled_keys"] == []
+    assert miss["artifact_id"] == made["artifact_id"]
+    assert "未修改" in str(miss.get("message") or "")
     assert "姓名" in miss["leftover"]
     assert "学期" in miss["leftover"]
 
@@ -177,7 +181,7 @@ async def test_edit_fill_zero_hit_must_not_claim_filled() -> None:
         owner,
         "edit_docx_document",
         {
-            "artifact_id": miss["artifact_id"],
+            "artifact_id": made["artifact_id"],
             "values": {"姓名": "张三", "学期": "2026春"},
         },
     )
@@ -213,18 +217,125 @@ async def test_edit_xlsx_fill_zero_hit_must_not_claim_filled() -> None:
         "edit_xlsx_document",
         {"artifact_id": made["artifact_id"], "values": {"蓝组": "3"}},
     )
-    assert miss["edited"] is True
+    assert miss["edited"] is False
     assert miss["filled"] is False
     assert miss["filled_keys"] == []
+    assert miss["artifact_id"] == made["artifact_id"]
+    assert "未修改" in str(miss.get("message") or "")
     assert "红组" in miss["leftover"]
     hit = await gw.invoke(
         owner,
         "edit_xlsx_document",
-        {"artifact_id": miss["artifact_id"], "values": {"红组": "4"}},
+        {"artifact_id": made["artifact_id"], "values": {"红组": "4"}},
     )
+    assert hit["edited"] is True
     assert hit["filled"] is True
     assert hit["filled_keys"] == ["红组"]
     assert hit["leftover"] == []
+
+
+@pytest.mark.asyncio
+async def test_xlsx_values_cell_map_is_rejected_not_edited() -> None:
+    store = MemoryArtifactStore()
+    gw = build_default_gateway(store)
+    owner = P(school_id="s", membership_id="m", scopes=["*"])
+    made = await gw.invoke(
+        owner,
+        "generate_xlsx_document",
+        {
+            "title": "销量.xlsx",
+            "spec": {
+                "kind": "xlsx",
+                "sheets": [
+                    {
+                        "name": "Sales",
+                        "headers": ["Product", "Quantity", "UnitPrice"],
+                        "rows": [["Alpha", 7, 13], ["Beta", 4, 19], ["Gamma", 9, 11]],
+                    }
+                ],
+            },
+        },
+    )
+    with pytest.raises(ToolError) as denied:
+        await gw.invoke(
+            owner,
+            "generate_xlsx_document",
+            {
+                "artifact_id": made["artifact_id"],
+                "sheet": "Sales",
+                "values": {
+                    "D1": "Revenue",
+                    "D2": "=B2*C2",
+                    "D3": "=B3*C3",
+                    "D4": "=B4*C4",
+                    "A6": "Total",
+                    "D6": "=SUM(D2:D4)",
+                },
+            },
+        )
+    assert denied.value.code == "tool.invalid_arguments"
+    assert "不是单元格映射" in denied.value.message
+    assert len(store.rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_xlsx_cell_edits_keep_source_and_formulas() -> None:
+    store = MemoryArtifactStore()
+    gw = build_default_gateway(store)
+    owner = P(school_id="s", membership_id="m", scopes=["*"])
+    made = await gw.invoke(
+        owner,
+        "generate_xlsx_document",
+        {
+            "title": "销量.xlsx",
+            "spec": {
+                "kind": "xlsx",
+                "sheets": [
+                    {
+                        "name": "Sales",
+                        "headers": ["Product", "Quantity", "UnitPrice"],
+                        "rows": [["Alpha", 7, 13], ["Beta", 4, 19], ["Gamma", 9, 11]],
+                    }
+                ],
+            },
+        },
+    )
+    current = made["artifact_id"]
+    patches = [
+        ("D1", "Revenue"),
+        ("D2", "=B2*C2"),
+        ("D3", "=B3*C3"),
+        ("D4", "=B4*C4"),
+        ("A6", "Total"),
+        ("D6", "=SUM(D2:D4)"),
+    ]
+    for cell, value in patches:
+        out = await gw.invoke(
+            owner,
+            "generate_xlsx_document",
+            {
+                "artifact_id": current,
+                "sheet": "Sales",
+                "cell": cell,
+                "value": value,
+            },
+        )
+        assert out["edited"] is True
+        current = out["artifact_id"]
+    row = await store.read(owner, artifact_id=current, title=None)
+    assert row is not None
+    raw = store.blobs[current]
+    outline = inspect_office_bytes(raw, ".xlsx")
+    assert outline["formulas"] >= 4
+    preview = (outline.get("units") or [{}])[0].get("preview") or []
+    flat = [str(c) for line in preview for c in line]
+    assert any("Alpha" in cell for cell in flat)
+    assert any("7" in cell for cell in flat)
+    assert any("Revenue" in cell or "Total" in cell for cell in flat)
+    schemas = {s["function"]["name"]: s["function"]["parameters"] for s in openai_tool_schemas()}
+    xlsx_props = schemas["generate_xlsx_document"]["properties"]
+    assert "values" in xlsx_props
+    assert "A1" in xlsx_props["values"]["description"] or "cell" in xlsx_props["values"]["description"]
 
 
 @pytest.mark.asyncio

@@ -203,6 +203,9 @@ def _marker_arg(args: dict[str, Any]) -> str:
     return value
 
 
+_CELL_ADDRESS_RE = re.compile(r"^[A-Za-z]+\d+$")
+
+
 def _attach_fill_receipt(
     result: dict[str, Any],
     receipt: Any | None,
@@ -217,6 +220,37 @@ def _attach_fill_receipt(
     if leftover is None:
         leftover = list(getattr(receipt, "leftover", ()) or ())
     result["leftover"] = leftover
+
+
+def _office_edit_receipt(
+    *,
+    kind: str,
+    row: dict[str, Any],
+    raw: bytes,
+    edited: bytes,
+    fill_receipt: Any | None,
+    extra: dict[str, Any],
+    changed: bool,
+) -> dict[str, Any]:
+    """edited=true only when a fill hit or an addressable edit landed."""
+    leftover = list(inspect_office_bytes(edited, f".{kind}").get("placeholders") or [])
+    source_id = row.get("artifact_id")
+    title = str(row.get("title") or extra.get("title") or f"file.{kind}")
+    result: dict[str, Any] = {
+        "ok": True,
+        "format": kind,
+        "edited": changed,
+        "source_artifact_id": source_id,
+        **extra,
+    }
+    _attach_fill_receipt(result, fill_receipt, leftover=leftover)
+    if not changed:
+        result["artifact_id"] = source_id
+        result["title"] = title
+        result["byte_size"] = len(raw)
+        result["message"] = "未修改。没有命中要改的内容，原文件保留。"
+        return _attach_write_observation(result, kind=kind, title=title, raw=raw)
+    return result
 
 
 def _attach_write_observation(
@@ -1230,8 +1264,37 @@ def _workspace_handlers(
         if raw is None:
             return None
         if not isinstance(raw, dict) or not raw:
-            raise ToolError("tool.invalid_arguments", "values 必须是对象，例如 {\"姓名\": \"张三\"}。")
-        return {str(k).strip(): str(v) for k, v in raw.items() if str(k).strip()}
+            raise ToolError(
+                "tool.invalid_arguments",
+                "values 必须是对象，例如 {\"姓名\": \"张三\"}。"
+                "它只替换文中的 {{key}}，不是单元格地址映射。"
+                "改格子请用 cell + value（一次一格）。",
+            )
+        mapped: dict[str, str] = {}
+        cell_like: list[str] = []
+        for key, value in raw.items():
+            name = str(key).strip()
+            if not name:
+                continue
+            if _CELL_ADDRESS_RE.match(name):
+                cell_like.append(name.upper())
+                continue
+            mapped[name] = str(value)
+        if cell_like:
+            shown = ", ".join(cell_like[:6])
+            raise ToolError(
+                "tool.invalid_arguments",
+                "values 不是单元格映射（收到 "
+                f"{shown}）。改格子请用 cell + value，一次一格。"
+                "values 只替换文中的 {{key}}。",
+            )
+        if not mapped:
+            raise ToolError(
+                "tool.invalid_arguments",
+                "values 必须是对象，例如 {\"姓名\": \"张三\"}。"
+                "它只替换文中的 {{key}}，不是单元格地址映射。",
+            )
+        return mapped
 
     async def edit_docx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         row, raw = await _load_office(principal, args, ext=".docx")
@@ -1247,20 +1310,25 @@ def _workspace_handlers(
         if (text or comment) and index is None:
             raise ToolError("tool.invalid_arguments", "请指定 paragraph_index（从 1 起）。")
 
-        def _apply() -> tuple[bytes, Any | None]:
+        def _apply() -> tuple[bytes, Any | None, bool]:
             edited = raw
             receipt = None
+            changed = False
             if values is not None:
                 receipt = fill_office_with_receipt(edited, ".docx", values)
-                edited = receipt.data
+                if receipt.filled:
+                    edited = receipt.data
+                    changed = True
             if comment:
                 edited = comment_docx_bytes(edited, paragraph_index=index or 1, text=comment)
+                changed = True
             if text:
                 edited = edit_docx_bytes(edited, paragraph_index=index or 1, text=text)
-            return edited, receipt
+                changed = True
+            return edited, receipt, changed
 
         try:
-            edited, fill_receipt = await _run_bounded(
+            edited, fill_receipt, changed = await _run_bounded(
                 asyncio.to_thread(_apply),
                 seconds=_EDIT_TIMEOUT_S,
                 code="office.timeout",
@@ -1272,20 +1340,28 @@ def _workspace_handlers(
             str(args.get("output_title") or row.get("title") or "已改.docx"),
             ".docx",
         )
+        extra: dict[str, Any] = {"paragraph_index": index, "title": out_title}
+        if comment:
+            extra["commented"] = True
+        receipt = _office_edit_receipt(
+            kind="docx",
+            row=row,
+            raw=raw,
+            edited=edited,
+            fill_receipt=fill_receipt,
+            extra=extra,
+            changed=changed,
+        )
+        if not receipt["edited"]:
+            return receipt
         result = await store.write(
             principal,
             title=out_title,
             content=edited,
             kind="docx",
         )
-        result["format"] = "docx"
+        result.update(receipt)
         result["edited"] = True
-        result["paragraph_index"] = index
-        result["source_artifact_id"] = row.get("artifact_id")
-        if comment:
-            result["commented"] = True
-        leftover = list(inspect_office_bytes(edited, ".docx").get("placeholders") or [])
-        _attach_fill_receipt(result, fill_receipt, leftover=leftover)
         return _attach_write_observation(result, kind="docx", title=out_title, raw=edited)
 
     async def edit_pptx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1299,43 +1375,54 @@ def _workspace_handlers(
                 "请指定 new_title（改页标题）或 values（套 {{key}}）。",
             )
 
-        def _apply() -> tuple[bytes, Any | None]:
+        def _apply() -> tuple[bytes, Any | None, bool]:
             edited = raw
             receipt = None
+            changed = False
             if values is not None:
                 receipt = fill_office_with_receipt(edited, ".pptx", values)
-                edited = receipt.data
+                if receipt.filled:
+                    edited = receipt.data
+                    changed = True
             if new_title:
                 edited = edit_pptx_title_bytes(
                     edited, slide_index=index, new_title=new_title
                 )
-            return edited, receipt
+                changed = True
+            return edited, receipt, changed
 
         try:
-            edited, fill_receipt = await _run_bounded(
+            edited, fill_receipt, changed = await _run_bounded(
                 asyncio.to_thread(_apply),
                 seconds=_EDIT_TIMEOUT_S,
                 code="office.timeout",
                 message="改文档超时（20 秒）。请换更小的文件或稍后再试。",
             )
-        except ValueError as extra:
-            raise ToolError("tool.invalid_arguments", str(extra)) from extra
+        except ValueError as extra_err:
+            raise ToolError("tool.invalid_arguments", str(extra_err)) from extra_err
         out_title = _ensure_extension(
             str(args.get("output_title") or row.get("title") or "已改.pptx"),
             ".pptx",
         )
+        receipt = _office_edit_receipt(
+            kind="pptx",
+            row=row,
+            raw=raw,
+            edited=edited,
+            fill_receipt=fill_receipt,
+            extra={"slide_index": index, "title": out_title},
+            changed=changed,
+        )
+        if not receipt["edited"]:
+            return receipt
         result = await store.write(
             principal,
             title=out_title,
             content=edited,
             kind="pptx",
         )
-        result["format"] = "pptx"
+        result.update(receipt)
         result["edited"] = True
-        result["slide_index"] = index
-        result["source_artifact_id"] = row.get("artifact_id")
-        leftover = list(inspect_office_bytes(edited, ".pptx").get("placeholders") or [])
-        _attach_fill_receipt(result, fill_receipt, leftover=leftover)
         return _attach_write_observation(result, kind="pptx", title=out_title, raw=edited)
 
     async def edit_xlsx(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1350,12 +1437,15 @@ def _workspace_handlers(
                 "请指定 cell（如 D2）和 value，或 values（套 {{key}}）。",
             )
 
-        def _apply() -> tuple[bytes, Any | None]:
+        def _apply() -> tuple[bytes, Any | None, bool]:
             edited = raw
             receipt = None
+            changed = False
             if values is not None:
                 receipt = fill_office_with_receipt(edited, ".xlsx", values)
-                edited = receipt.data
+                if receipt.filled:
+                    edited = receipt.data
+                    changed = True
             if cell:
                 if value is None:
                     raise ValueError("改格需要 value。")
@@ -1365,33 +1455,41 @@ def _workspace_handlers(
                     value=str(value),
                     sheet=sheet if isinstance(sheet, (str, int)) or sheet is None else str(sheet),
                 )
-            return edited, receipt
+                changed = True
+            return edited, receipt, changed
 
         try:
-            edited, fill_receipt = await _run_bounded(
+            edited, fill_receipt, changed = await _run_bounded(
                 asyncio.to_thread(_apply),
                 seconds=_EDIT_TIMEOUT_S,
                 code="office.timeout",
                 message="改文档超时（20 秒）。请换更小的文件或稍后再试。",
             )
-        except ValueError as extra:
-            raise ToolError("tool.invalid_arguments", str(extra)) from extra
+        except ValueError as extra_err:
+            raise ToolError("tool.invalid_arguments", str(extra_err)) from extra_err
         out_title = _ensure_extension(
             str(args.get("output_title") or row.get("title") or "已改.xlsx"),
             ".xlsx",
         )
+        receipt = _office_edit_receipt(
+            kind="xlsx",
+            row=row,
+            raw=raw,
+            edited=edited,
+            fill_receipt=fill_receipt,
+            extra={"cell": cell or None, "title": out_title},
+            changed=changed,
+        )
+        if not receipt["edited"]:
+            return receipt
         result = await store.write(
             principal,
             title=out_title,
             content=edited,
             kind="xlsx",
         )
-        result["format"] = "xlsx"
+        result.update(receipt)
         result["edited"] = True
-        result["cell"] = cell or None
-        result["source_artifact_id"] = row.get("artifact_id")
-        leftover = list(inspect_office_bytes(edited, ".xlsx").get("placeholders") or [])
-        _attach_fill_receipt(result, fill_receipt, leftover=leftover)
         return _attach_write_observation(result, kind="xlsx", title=out_title, raw=edited)
 
     async def generate_image(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -1736,6 +1834,7 @@ def _workspace_handlers(
                     "title": title_text,
                     "h1": h1_text,
                     "workspace_id": ws,
+                    "message": "只解析，未执行。HTML 已写入工作区，没有跑脚本。",
                 }
             elif isinstance(source, str) and source.strip():
                 parsed = await light_exec_with_timeout(source)
@@ -2297,8 +2396,8 @@ def build_default_gateway(
         ToolSpec(
             name="sandbox_workspace_exec",
             description=(
-                "Optional light exec inside the isolated workspace: parse HTML or Python "
-                "(ast only, timeout-killed). Cannot run bash, host shell, or leave the workspace. "
+                "Parse HTML or Python inside the isolated workspace. Receipt is parsed=true, "
+                "executed=false — ast only, not host bash, not a real runner. "
                 "Args: html? | source?"
             ),
             handler=workspace_exec,
@@ -2418,8 +2517,10 @@ def build_default_gateway(
                 "Markdown/TSV tables in body become sheets and rows "
                 "(sibling of Word paragraphs / PPT --- slides). "
                 "A whole draft in one cell is not a spreadsheet. "
-                "To change an uploaded file, pass artifact_id|title plus cell/value "
-                "or values — do not look for a separate edit tool. "
+                "To change an uploaded file, pass artifact_id|title plus cell+value "
+                "(one A1-style cell per call; value may start with = for a formula). "
+                "values is {{key}} template fill only — not a cell-address map. "
+                "Unmatched values return edited=false and keep the original file. "
                 "Result includes an observation of what landed. ok is not finished. "
                 "Args: title, marker, body? | spec? | blocks? | artifact_id? "
                 "cell? value? sheet? values? output_title?"
@@ -2459,7 +2560,9 @@ def build_default_gateway(
             name="edit_xlsx_document",
             description=(
                 "Edit an already uploaded .xlsx: set one cell (A1-style; =formula) "
-                "or fill {{key}}. Other cells stay. Result includes an observation. "
+                "or fill {{key}} placeholders. values is not a cell-address map. "
+                "Unmatched/no-op returns edited=false and does not write a new file. "
+                "Other cells stay. Result includes an observation. "
                 "ok is not finished. Args: artifact_id|title, cell?, "
                 "value?, sheet?, values?, output_title?"
             ),
@@ -2764,11 +2867,11 @@ def openai_tool_schemas(
             "properties": {
                 "html": {
                     "type": "string",
-                    "description": "HTML to parse inside the isolated workspace",
+                    "description": "HTML to parse only (executed=false; scripts are not run)",
                 },
                 "source": {
                     "type": "string",
-                    "description": "Python source to parse only (no bash, no imports of os/subprocess)",
+                    "description": "Python source to parse only (ast; executed=false; no bash)",
                 },
                 "title": {"type": "string", "description": "Optional workspace filename"},
             },
@@ -2981,6 +3084,15 @@ def openai_tool_schemas(
                 "body": {"type": "string"},
                 "spec": {"type": "object", "description": "pico.office.spec/v1 sheets"},
                 "blocks": {"type": "array", "description": "spec.blocks shortcut (sheet objects)"},
+                "artifact_id": {"type": "string", "description": "Existing sheet to patch"},
+                "cell": {"type": "string", "description": "A1-style address; one cell per call"},
+                "value": {"type": "string", "description": "New cell value; = starts a formula"},
+                "sheet": {"description": "Sheet name or 1-based index"},
+                "values": {
+                    "type": "object",
+                    "description": "{{key}} placeholder replacements, not A1 cell addresses",
+                },
+                "output_title": {"type": "string"},
             },
             "required": ["title", "marker"],
         },
@@ -2994,7 +3106,7 @@ def openai_tool_schemas(
                 "sheet": {"description": "Sheet name or 1-based index"},
                 "values": {
                     "type": "object",
-                    "description": "{{key}} replacements",
+                    "description": "{{key}} placeholder replacements, not A1 cell addresses",
                 },
                 "output_title": {"type": "string"},
             },

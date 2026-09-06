@@ -187,7 +187,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_docx_document",
-    "Create a real .docx Artifact (Pico gateway), or patch an existing one. To change an uploaded file, pass artifact_id plus paragraph_index/text, comment, or values — do not look for a separate edit tool. Result includes an observation of what landed. ok is not finished.",
+    "Create a real .docx Artifact (Pico gateway), or patch an existing one. To change an uploaded file, pass artifact_id plus paragraph_index/text, comment, or values ({{key}} fill only). Unmatched values return edited=false. Do not look for a separate edit tool. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.Optional(Type.String()),
@@ -236,7 +236,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_xlsx_document",
-    "Create a real .xlsx Artifact (Pico gateway), or patch an existing sheet. Markdown/TSV tables in body become sheets and rows (sibling of Word paragraphs / PPT --- slides). spec.sheets is the structured path. A whole draft in one cell is not a spreadsheet. To change an uploaded file, pass artifact_id plus cell/value or values — do not look for a separate edit tool. Result includes an observation of what landed. ok is not finished.",
+    "Create a real .xlsx Artifact (Pico gateway), or patch an existing sheet. Markdown/TSV tables in body become sheets and rows (sibling of Word paragraphs / PPT --- slides). spec.sheets is the structured path. A whole draft in one cell is not a spreadsheet. To change one cell, pass artifact_id plus cell and value (A1-style; =formula). values is {{key}} template fill only — not a map of cell addresses. Unmatched values return edited=false and keep the original file. Do not look for a separate edit tool. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         title: Type.Optional(Type.String()),
@@ -246,6 +246,7 @@ export default function (pi: ExtensionAPI) {
         cell: Type.Optional(Type.String()),
         value: Type.Optional(Type.String()),
         sheet: Type.Optional(Type.String()),
+        values: Type.Optional(Type.Object({}, { additionalProperties: true })),
         output_title: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
@@ -285,7 +286,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "edit_xlsx_document",
-    "Edit an already uploaded .xlsx. Result includes an observation of what landed. ok is not finished.",
+    "Edit an already uploaded .xlsx. Set one A1-style cell with cell+value (=formula ok), or fill {{key}} with values. values is not a cell-address map. Unmatched/no-op returns edited=false and does not write a new file. Result includes an observation of what landed. ok is not finished.",
     Type.Object(
       {
         artifact_id: Type.Optional(Type.String()),
@@ -293,6 +294,7 @@ export default function (pi: ExtensionAPI) {
         cell: Type.Optional(Type.String()),
         value: Type.Optional(Type.String()),
         sheet: Type.Optional(Type.String()),
+        values: Type.Optional(Type.Object({}, { additionalProperties: true })),
         output_title: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
@@ -441,7 +443,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_workspace_exec",
-    "Parse HTML or Python inside this run's isolated workspace. Timeout-killed. No bash.",
+    "Parse HTML or Python inside this run's isolated workspace. Receipt is parsed=true, executed=false — ast only, not host bash, not a real runner. Timeout-killed.",
     Type.Object(
       {
         html: Type.Optional(Type.String()),
