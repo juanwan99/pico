@@ -56,10 +56,10 @@ def test_publish_tools_on_allowlist_and_system_stays_generic():
     assert "学生端" not in body
     assert "教师看板" not in body
     assert "发布并收表" not in body
-    assert "If `publish_html_page` is listed this turn" in body
-    assert "parks until the teacher confirms this exact page" in body
-    assert "public_url" in body
-    assert "third-party form backend" in body
+    assert "`publish_html_page` is not a Pico capability" in body
+    assert "school-admin approval" in body
+    assert "If `publish_html_page` is listed this turn" not in body
+    assert "parks until the teacher confirms this exact page" not in body
     assert "问卷" not in body
 
 

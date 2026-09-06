@@ -2620,13 +2620,11 @@ def build_default_gateway(
         ToolSpec(
             name="publish_html_page",
             description=(
-                "Publish an existing HTML artifact to a public URL after the teacher "
-                "confirms this exact page. The tool parks on ask_user "
-                "(the listed 确认发布 option for this page, or 取消). "
-                "Cancel, timeout, or a missing confirm_token does not create a live URL. "
-                "Visitors can then open it without login. Forms may POST JSON to the "
-                "page collect path; entries land in the publisher's archive. "
-                "Args: artifact_id. confirm_token is server-issued, not a model guess."
+                "Not a Pico capability. Public school pages go through Edu's apply "
+                "channel and school-admin approval. This tool always fails closed "
+                "and never creates pico.aivia.asia/p links. "
+                "Generate HTML with generate_html_document instead. "
+                "Args: artifact_id (ignored)."
             ),
             handler=publish_html_page,
             school_scoped=False,
@@ -2636,8 +2634,8 @@ def build_default_gateway(
         ToolSpec(
             name="unpublish_html_page",
             description=(
-                "Revoke a published HTML page. The public URL and collect path "
-                "return 404. Args: page_id? | artifact_id?"
+                "Revoke a leftover Pico /p/{id} page if one still exists. "
+                "Pico does not publish. Args: page_id? | artifact_id?"
             ),
             handler=unpublish_html_page,
             school_scoped=False,

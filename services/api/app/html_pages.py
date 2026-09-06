@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import secrets
 import time
 from collections import defaultdict, deque
 from datetime import UTC, datetime
@@ -23,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.artifact_store import decode_artifact_payload, encode_artifact_payload
 from app.auth import Principal
-from app.db import ArtifactRow, HtmlPageRow, PersonalFolderRow, TaskRow, new_id
+from app.db import ArtifactRow, HtmlPageRow, new_id
 
 router = APIRouter()
 
@@ -62,14 +61,6 @@ PUBLIC_NOT_FOUND_HTML = (
 )
 
 
-def public_url_for(page_id: str) -> str:
-    return f"https://pico.aivia.asia/p/{page_id}"
-
-
-def new_page_id() -> str:
-    return secrets.token_hex(16)
-
-
 def public_not_found() -> Response:
     return Response(
         content=PUBLIC_NOT_FOUND_HTML.encode("utf-8"),
@@ -77,55 +68,6 @@ def public_not_found() -> Response:
         media_type="text/html; charset=utf-8",
         headers={"Cache-Control": "no-store"},
     )
-
-
-async def _owned_html(
-    session: AsyncSession, principal: Principal, artifact_id: str
-) -> ArtifactRow:
-    result = await session.execute(
-        select(ArtifactRow)
-        .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
-        .where(
-            ArtifactRow.id == artifact_id,
-            TaskRow.school_id == principal.school_id,
-            TaskRow.membership_id == principal.membership_id,
-        )
-    )
-    row = result.scalar_one_or_none()
-    if row is None:
-        raise ToolError("artifact.not_found", "HTML artifact not found")
-    title = (row.title or "").lower()
-    kind = (row.kind or "").lower()
-    if kind not in {"html", "htm"} and not title.endswith((".html", ".htm")):
-        raise ToolError("tool.invalid_arguments", "artifact is not HTML")
-    return row
-
-
-async def _folder_for_page(
-    session: AsyncSession, principal: Principal, title: str
-) -> str:
-    name = (title or "html").strip()[:40] or "html"
-    existing = await session.execute(
-        select(PersonalFolderRow).where(
-            PersonalFolderRow.school_id == principal.school_id,
-            PersonalFolderRow.membership_id == principal.membership_id,
-            PersonalFolderRow.parent_id == "",
-            PersonalFolderRow.name == name,
-        )
-    )
-    folder = existing.scalar_one_or_none()
-    if folder is not None:
-        return folder.id
-    folder = PersonalFolderRow(
-        id=new_id(),
-        school_id=principal.school_id,
-        membership_id=principal.membership_id,
-        parent_id="",
-        name=name,
-    )
-    session.add(folder)
-    await session.flush()
-    return folder.id
 
 
 async def _factory() -> async_sessionmaker[AsyncSession]:
@@ -142,61 +84,12 @@ async def publish_html_page(
     artifact_id: str,
     confirm_token: str = "",
 ) -> dict[str, Any]:
-    aid = (artifact_id or "").strip()
-    if not aid:
-        raise ToolError("tool.invalid_arguments", "artifact_id is required")
-    factory = await _factory()
-    async with factory() as session:
-        artifact = await _owned_html(session, principal, aid)
-        from pico_orchestrator.publish_confirm import require_teacher_confirm
-        from pico_orchestrator.sandbox_s1 import current_run_id
-        from pico_orchestrator.usage_hook import current_usage_bind
-
-        bind = current_usage_bind()
-        await require_teacher_confirm(
-            principal,
-            artifact_id=artifact.id,
-            title=str(artifact.title or ""),
-            confirm_token=confirm_token,
-            run_id=current_run_id(principal, None),
-            emit=getattr(bind, "emit", None) if bind else None,
-        )
-        live = await session.execute(
-            select(HtmlPageRow).where(
-                HtmlPageRow.artifact_id == artifact.id,
-                HtmlPageRow.school_id == principal.school_id,
-                HtmlPageRow.membership_id == principal.membership_id,
-                HtmlPageRow.status == "live",
-            )
-        )
-        page = live.scalar_one_or_none()
-        if page is None:
-            folder_id = artifact.folder_id or await _folder_for_page(
-                session, principal, artifact.title
-            )
-            if not artifact.folder_id:
-                artifact.folder_id = folder_id
-            page = HtmlPageRow(
-                id=new_page_id(),
-                artifact_id=artifact.id,
-                school_id=principal.school_id,
-                membership_id=principal.membership_id,
-                task_id=artifact.task_id,
-                folder_id=folder_id,
-                status="live",
-            )
-            session.add(page)
-            await session.commit()
-        url = public_url_for(page.id)
-        return {
-            "page_id": page.id,
-            "artifact_id": artifact.id,
-            "public_url": url,
-            "public_path": f"/p/{page.id}",
-            "collect_path": f"/p/{page.id}/collect",
-            "folder_id": page.folder_id,
-            "title": artifact.title,
-        }
+    del principal, artifact_id, confirm_token
+    raise ToolError(
+        "publish.edu_channel_required",
+        "公开发布不是 Pico 的能力。学校页面走 Edu 专用申请通道，由校管批准。"
+        "Pico 只生成 HTML 产物，不会挂出 pico.aivia.asia/p 公开链。",
+    )
 
 
 async def unpublish_html_page(

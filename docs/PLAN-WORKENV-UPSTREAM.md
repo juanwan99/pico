@@ -4,7 +4,7 @@
 DOC: Pico stage plan · mature upstream takes the work environment
 STATUS: BINDING stage plan · 2026-09-05 · PR-0 (#920) already live; this file is PR-1
 CORRECTED: 2026-09-05 · Codex review of exp SHA eefa8879 — A对照、隔离三层、失败语义；撤回「读容器 /etc = B1 路线失败」
-OWNER-LOCK: 2026-09-06 · 发布不是默认能力；发布需要确认走审批。H3 / PR-4 取消。不把 publish 挪进 CORE。不自研审批核。
+OWNER-LOCK: 2026-09-06 · 公开发布不是 Pico 能力。学校页面走 Edu 申请 + 校管批准。H3 / PR-4 取消。不把 publish 挪进 CORE。不自研审批核。禁止 Pico `/p/{id}` 当发布产品。
 OWNER-LOCK: 2026-09-06 · **不要 bash。** 宿主与 overlay **都不**开放 Pi 内建 bash/read/write/edit。B1（箱内 Pi 去掉 `--no-builtin-tools`）**取消**。PR-7b 不开。不自研通用 exec 核。日常办公继续走现网捷径。
 DATE: 2026-09-05
 AUTHOR: Grok (本窗)

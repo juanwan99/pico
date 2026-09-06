@@ -81,9 +81,9 @@ def test_system_names_office_ceiling_without_scene_words() -> None:
     assert "分数练习" not in body
     assert "unmatched brackets" in body
     assert "markdown/TSV tables become sheets" in body
-    assert "If `publish_html_page` is listed this turn" in body
-    assert "parks until the teacher confirms this exact page" in body
-    assert "Do not name or call publish tools that are not listed" in body
+    assert "`publish_html_page` is not a Pico capability" in body
+    assert "school-admin approval" in body
+    assert "If `publish_html_page` is listed this turn" not in body
     assert "same title replaces the file the teacher opens" in body.lower()
     assert "one A1-style address per call" in body
     assert "not a map of cell addresses" in body

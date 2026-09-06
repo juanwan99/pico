@@ -114,30 +114,8 @@ async def require_teacher_confirm(
     run_id: str | None,
     emit: Any | None,
 ) -> str:
-    aid = (artifact_id or "").strip()
-    token = (confirm_token or "").strip()
-    if token:
-        consume_confirm_token(principal, artifact_id=aid, token=token)
-        return token
-    if not run_id:
-        raise ToolError(
-            "publish.unconfirmed",
-            "发布需要老师确认具体页面。没有确认，未公开发布。",
-        )
-    from pico_orchestrator.ask_user import park as park_ask
-
-    page_title = (title or "未命名页面").strip() or "未命名页面"
-    question = (
-        f"确认把「{page_title}」公开发布到 pico.aivia.asia 吗？"
-        "取消则不会生成公开链接。"
+    del principal, artifact_id, title, confirm_token, run_id, emit
+    raise ToolError(
+        "publish.edu_channel_required",
+        "公开发布不是 Pico 的能力。学校页面走 Edu 专用申请通道，由校管批准。",
     )
-    parked = await park_ask(run_id, question, confirm_options(aid), emit)
-    if str(parked.get("error") or "") == "timeout":
-        raise ToolError("publish.unconfirmed", "确认超时。未公开发布。")
-    if not parked.get("ok"):
-        raise ToolError("publish.unconfirmed", "没有确认。未公开发布。")
-    if not is_confirm_answer(str(parked.get("answer") or ""), aid):
-        raise ToolError("publish.cancelled", "已取消发布。未生成公开链接。")
-    issued = issue_confirm_token(principal, artifact_id=aid)
-    consume_confirm_token(principal, artifact_id=aid, token=issued)
-    return issued

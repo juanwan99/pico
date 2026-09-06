@@ -54,6 +54,7 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 | 自研「Agent OS」终局品牌 | **目标禁止**；代码里若有薄工具环 = **待归位债务** |
 | 读正文猜任务的定向 Agent | **禁止**。特定任务只因老师挂了文件/Skill/工具。见 DIRECTION-NOW §0-star |
 | Live Preview 沙箱端口故事 | 业主主路径是 **公网 HTTPS** |
+| 公开发布通道 | **否**。发布是 Edu 专用申请、校管批准。Pico 不挂 `/p/{id}` 当产品 |
 
 ---
 

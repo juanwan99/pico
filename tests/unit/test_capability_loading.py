@@ -86,6 +86,7 @@ def test_hung_skill_may_narrow_and_may_include_extended():
     assert "web_search" in visible
     assert "web_fetch" in visible
     assert "ask_user" in visible
+    assert "publish_html_page" not in visible
     chat = snapshot_for_skill("skill-chat")
     assert chat is not None
     assert resolve_visible_tools(list(chat["tools"])) == []
@@ -116,11 +117,10 @@ def test_system_md_slim_and_catalog_not_scene_weld():
     assert "Being listed does **not** mean you must call them" in body
     assert "Call `kb_search` only when the teacher asks about school materials" in body
     assert "generate_diagram" in body
-    assert "If `publish_html_page` is listed this turn" in body
-    assert "parks until the teacher confirms this exact page" in body
-    assert "public_url" in body
-    assert "third-party form backend" in body
-    assert "page collect path" in body
+    assert "`publish_html_page` is not a Pico capability" in body
+    assert "school-admin approval" in body
+    assert "If `publish_html_page` is listed this turn" not in body
+    assert "parks until the teacher confirms this exact page" not in body
     assert "`skill-deliverable`:" in body
     assert "本轮交付真实文件" not in body
     assert "Engineering delivery" not in body
