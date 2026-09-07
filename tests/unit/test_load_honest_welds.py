@@ -116,6 +116,7 @@ def test_default_core_shows_office_not_programming() -> None:
     assert "sandbox_pptx_lib" in visible
     assert "sandbox_office_lib" in visible
     assert "read_office_skill" in visible
+    assert "verify_document" in visible
     assert "sandbox_workspace_exec" not in visible
     assert "sandbox_pptx_lib" in CORE_VISIBLE_TOOLS
     assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS

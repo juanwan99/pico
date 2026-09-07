@@ -432,7 +432,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "read_office_skill",
-    "On-demand office craft (docx / xlsx / pptx). SYSTEM only lists name+when. This returns the full python-docx / openpyxl / python-pptx craft. Not LibreChat Skills. Not bash. After reading, write with sandbox_office_lib (kind matches id). generate_* remains the fast path.",
+    "On-demand office craft (docx / xlsx / pptx). SYSTEM only lists name+when. This returns the full python-docx / openpyxl / python-pptx craft. Not LibreChat Skills. Not bash. After reading, write with sandbox_office_lib (kind matches id). Change an existing file with artifact_id. generate_* is blank-template only, not the edit path.",
     Type.Object(
       {
         id: Type.String(),
@@ -443,12 +443,13 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_office_lib",
-    "Isolated office Python (python-docx / openpyxl / python-pptx; not host bash, not a second Office OS, not a programming sandbox). Sibling of generate_docx_document / generate_xlsx_document / generate_pptx_document — not the only office path. kind=docx|xlsx|pptx (or infer from title suffix). from docx import Document; from openpyxl import Workbook; from pptx import Presentation, Inches, Pt, RGBColor. save_doc(doc) / save_book(wb) / save_deck(prs) or .save — routed to the ledger. from pathlib import Path is a stub (mkdir ignored; no host files). Do not import os. copy / math / datetime / from io import BytesIO are allowed. Empty shells fail. A missing image_artifact_ids entry is skipped.",
+    "Isolated office Python (python-docx / openpyxl / python-pptx; not host bash, not a second Office OS, not a programming sandbox). Sibling of generate_*. To change a file the teacher already has, pass artifact_id and load_doc/load_book/load_deck or Document(INPUT_PATH). generate_* is blank-template only. kind=docx|xlsx|pptx (or infer from title suffix). save_doc/save_book/save_deck or .save route to the ledger. from pathlib import Path is a stub. Do not import os. copy / math / datetime / from io import BytesIO are allowed. Empty shells fail. add_title_slide / add_content_slide / add_table are injected for PPT.",
     Type.Object(
       {
         source: Type.String(),
         kind: Type.Optional(Type.String()),
         title: Type.Optional(Type.String()),
+        artifact_id: Type.Optional(Type.String()),
         image_artifact_ids: Type.Optional(Type.Array(Type.String())),
       },
       { additionalProperties: true },
@@ -457,11 +458,12 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_pptx_lib",
-    "Isolated python-pptx (not host bash, not a second Office OS). PPT alias of sandbox_office_lib kind=pptx. Sibling of generate_pptx_document — not the only PPT path. from pptx import Presentation, Inches, Pt, RGBColor is allowed (Inches/Pt also on pptx). add_shape and RGBColor color blocks are this tool. from pathlib import Path is a stub (mkdir ignored; no host files). prs.save is routed to the ledger (same as save_deck). Do not import os. copy / math / datetime / from io import BytesIO are allowed. add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first picture. Must add slides then save_deck(prs) or prs.save. Empty Presentation();save_deck fails — do not send a placeholder. A missing image_artifact_ids entry is skipped. Word/Excel use sandbox_office_lib.",
+    "Isolated python-pptx (not host bash, not a second Office OS). PPT alias of sandbox_office_lib kind=pptx. Sibling of generate_pptx_document — not the only PPT path. To change an existing deck pass artifact_id and load_deck() or Presentation(INPUT_PATH). generate_pptx_document is blank-template only. add_shape and RGBColor color blocks are this tool. from pathlib import Path is a stub. prs.save is routed to the ledger. Do not import os. copy / math / datetime / from io import BytesIO are allowed. add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first picture. Empty Presentation();save_deck fails. Word/Excel use sandbox_office_lib.",
     Type.Object(
       {
         source: Type.String(),
         title: Type.Optional(Type.String()),
+        artifact_id: Type.Optional(Type.String()),
         image_artifact_ids: Type.Optional(Type.Array(Type.String())),
       },
       { additionalProperties: true },
