@@ -5,9 +5,6 @@ allowed-tools:
   - structured_outline
   - workspace_write_file
   - generate_html_document
-  - generate_docx_document
-  - generate_pptx_document
-  - sandbox_pptx_lib
   - sandbox_office_lib
   - read_office_skill
 disable-model-invocation: true
