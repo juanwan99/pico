@@ -12,7 +12,19 @@ EDU: docs/contracts/usage-export.md（edu-core 拉干净行；钱在 edu）
 > **一本用量账，不是账单。** Pico 按账号记「谁、哪校、哪次任务、哪个**后端模型**、多少 token（或诚实缺）。  
 > 老师看见的**积分**是同一本账的派生（服务端换算，三位小数），不是第二套账、不是点池。  
 > **禁止** 定价、人民币、套餐、扣款、支付、发票、点池/余额列。本表与 API **不得** 出现 `price` / `currency` / `cost` / `charge` / `billing` 列。  
-> **edu-core：** 只拉 [`docs/contracts/usage-export.md`](./contracts/usage-export.md) 上的 `points` 数字扣点；禁止再乘。`extra.bill_to=school` 扣学校额度，否则扣该 `membership_id`。钱包仍在 edu。
+> **edu-core：** 只拉 [`docs/contracts/usage-export.md`](./contracts/usage-export.md) 上的 `points` 数字扣点；禁止再乘。`extra.bill_to=school` 扣学校额度，否则扣该 `membership_id`。钱包仍在 edu。本仓不写 edu。
+
+## 0. 统一上游 = New API（防偏）
+
+```text
+渠道 / 密钥 / 轮询 / 账号管理  →  New API
+模型调用（聊天 · 出图 · 以后要计费的 LLM）→  只打 New API
+产品用量账（谁/校/kind/模型/token）     →  Pico usage_events
+人包积分                                 →  同一本账派生
+钱 / 钱包 / 扣点                         →  edu-core 只认 export.points
+```
+
+禁止：Pico 直连厂牌再造核；Pico 自建点池/余额；edu 另接一套模型调用当第二账；把 Meili 智谱 embedder 缺口扩成第三条产品脑。槽位名 `DEEPSEEK_*` 不是「现网是 DeepSeek」。
 
 与现有概念的边界：
 

@@ -1,13 +1,14 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-09-02
+DATE: 2026-09-08
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
 在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-阻塞: 无
+      写本文时 tip = f22d98422a27f4d7eec22cd1d1d69a305f21470e
+阻塞: 办公快路未减法；老师聊天是否走沙箱未证（#919 OPEN）
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
@@ -17,6 +18,7 @@ PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源�
 最高: LAW §0-supreme · 禁止自搞一套 / 禁止重体系
 工作法: 本窗合一 · GitHub 唯一真源 · 写码树/生产树分开 · AGENTS 文首
 北极星: DIRECTION-NOW §0-star v1.4 · 用法 = Grok · 办公主线 · 能力并列 · 办公计算机交成熟上游 · 阶段方案 docs/PLAN-WORKENV-UPSTREAM.md
+冻结: docs/TRUTH-FREEZE.md v1.8（默认真 Pi · 模型/计量上游 New API · generate_* 是未退役快路 · #942 只证调用面）
 真源: GitHub Issue/PR/SHA/CI + 公网 tip。本页三行是索引。
 juanwan99/oneflow: 不当真源（已 Archive）
 ```
@@ -36,13 +38,14 @@ juanwan99/oneflow: 不当真源（已 Archive）
 
 失真 = 旁支部 live / 整枝合长分叉 / 合了报 DONE / 凭聊天或 STATE-NOW 当真源。
 
-## 冻结令（卡面 · 仍有效至 2026-09-07）
+## 冻结令（卡面形状仍冻 · 日期令 2026-09-07 已过）
 
 1. 禁止复活 315、新 `HANDOFF-NEW-WINDOW-*.md`。
 2. 同域第二张 `stamp-ok` = 废派。
 3. **`juanwan99/oneflow` 不当真源（已 Archive）。**
 4. **不改卡面四行形状**（结果/不准/过门/部署）。现况三行可刷。
 5. **流程以 AGENTS 文首 + EXPERIENCE §45 §80 为准**：本窗合一 · GitHub 唯一真源 · 写码树/生产树分开。旧「主管/执行者编制 / 双沙箱 / Cursor 云 Task / ECS grok 执行者」作废。
+6. 本页不是账本。过期行以 GitHub Issue 状态 + tip 为准。
 
 ## 架构法律（BINDING）
 
@@ -89,7 +92,15 @@ curl tip + GitHub 在飞 → EXPERIENCE（点名≤3）
 | 已收口 | [#829](https://github.com/juanwan99/pico/issues/829) · [#830](https://github.com/juanwan99/pico/pull/830) | T-UNMAIM-DRAFT 别残模型稿 · 主管 PASS @ tip `c4953f2e…` |
 | 已收口 | [#834](https://github.com/juanwan99/pico/issues/834) · [#833](https://github.com/juanwan99/pico/pull/833) | T-FOUNDATION-GATES 假绿门补基础 · 业主 PASS @ tip `6236489f…` |
 | 规划 | [#805](https://github.com/juanwan99/pico/issues/805) | 活核+记忆+问清+计划+过程可见 · 六刀指针 · 不派 |
-| 规划 | [#744](https://github.com/juanwan99/pico/issues/744) | 北极星 v1.3 已合；v1.4 办公主线另走 Binding PR · 留开 |
+| 规划 | [#744](https://github.com/juanwan99/pico/issues/744) | 北极星 v1.4 已合进 DIRECTION-NOW / TRUTH-FREEZE v1.7+ · 留开不派 |
+| 在飞 | [#944](https://github.com/juanwan99/pico/issues/944) | T-ROUTE-LOCK-EVIDENCE · 防偏落地 + 老师聊天选路取证 · 本窗 |
+| 规划 | [#919](https://github.com/juanwan99/pico/issues/919) | 根因调查仍 OPEN：适配层定义行为；老师聊天是否走隔离库 **未证** |
+| 已收口 | [#928](https://github.com/juanwan99/pico/issues/928) | T-OFFICE-CONTRACT-RECEIPT · Excel `values` 假绿 · 已部 |
+| 已收口 | [#929](https://github.com/juanwan99/pico/issues/929) | T-PICO-PUBLISH-BOUNDARY · 发布不是 Pico 能力 · 已部 |
+| 已收口 | [#936](https://github.com/juanwan99/pico/issues/936) | T-OFFICE-COMPUTER · 隔离办公 Python · 调用面已部 |
+| 已收口 | [#938](https://github.com/juanwan99/pico/issues/938) | T-OFFICE-SKILL-VISIBILITY · 文档 skill 渐进披露 · 已部 |
+| 已收口 | [#940](https://github.com/juanwan99/pico/issues/940) | T-KB-INGEST-USAGE · 场库 ingest 进 usage_events · 已部 |
+| 已收口 | [#942](https://github.com/juanwan99/pico/issues/942) · [#943](https://github.com/juanwan99/pico/pull/943) | T-OFFICE-OBJECT-IDENTITY · 原件进隔离库 · 调用面 PASS @ tip `f22d9842…` · **不等于老师聊天已走沙箱** |
 | 已关 | [#806](https://github.com/juanwan99/pico/issues/806) | T-PI-KERNEL-BUMP 0.84.4 · 业主 PASS 卫生关 |
 | 已关 | [#810](https://github.com/juanwan99/pico/issues/810) | T-PROCESS-VISIBLE · 业主 PASS 卫生关 |
 | 已关 | [#807](https://github.com/juanwan99/pico/issues/807) | T-MEMORY-UPSTREAM · 业主 PASS 卫生关 |

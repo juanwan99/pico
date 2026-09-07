@@ -13,9 +13,10 @@ REPO: juanwan99/pico ONLY
 ISSUE: https://github.com/juanwan99/pico/issues/919 （OPEN 讨论 · 本方案是书面落地，不是再辩论）
 NORTH: docs/DIRECTION-NOW.md §0-star v1.4 · 办公主线 · 本 Binding PR 升版
 LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md §0-supreme
-FREEZE: docs/TRUTH-FREEZE.md v1.7（本 Binding PR）
+FREEZE: docs/TRUTH-FREEZE.md v1.8（现行）；本 Binding PR 当时落地的是 v1.7
 CLAIM-WB: 本方案不改签
-NOT: 采购 E2B · 加 Excel 批改 API · 换 Pi / LibreChat · 自研沙箱核 · 复活 B1 · 本 PR 不实现办公计算机
+NOT: 采购 E2B · 加 Excel 批改 API · 换 Pi / LibreChat · 自研沙箱核 · 复活 B1
+CURRENT: 2026-09-08 · 隔离办公 Python 已在 live（#936/#938/#942 调用面）。本文件后半施工单里「尚未迁走」以 Overview 诚实段为准。减法与老师聊天选路另议。
 ```
 
 ---
@@ -24,9 +25,11 @@ NOT: 采购 E2B · 加 Excel 批改 API · 换 Pi / LibreChat · 自研沙箱核
 
 **一句话目标：** 产品要的是办公能力。把「办公文件、办公库执行、依赖、进程生命周期」从 Pico 专用 `generate_*` 协议里交还给成熟隔离执行面；Pi 继续做编排核；Pico 只留身份授权、唯一账本、产品对象、交互与交付门闩。验收看减法，不看再加一个专用动词。
 
-北极星真源是 DIRECTION-NOW §0-star **v1.4**（本 Binding PR；v1.3 能力并列 / 捷径不是天花板仍继承）。v1.3 已由 PR [#920](https://github.com/juanwan99/pico/pull/920) 合入。**办公计算机尚未迁走**：现网仍是 `generate_*` + `sandbox_pptx_lib` 在 pico-api 侧。禁止把北极星升版说成 computer 已迁走。禁止把「不要 bash」说成办公能力已齐。
+北极星真源是 DIRECTION-NOW §0-star **v1.4**（本 Binding PR；v1.3 能力并列 / 捷径不是天花板仍继承）。v1.3 已由 PR [#920](https://github.com/juanwan99/pico/pull/920) 合入。
 
-宏观根因已在 #919 调查里钉死：**Pico 借了 Pi 的 loop，没借 Pi 的 computer。** 同一颗 GPT 脑，Codex 能做出能改的 Word/Excel/PPT，是因为有工作区 + 真跑办公库 + 文档 skill 工艺。Pico-Pi 现网只有 loop + 专用动词。缺的是办公计算机，不是再加 `batch_edit_xlsx`，也不是 Pi 内建 bash。
+**2026-09-08 诚实：** 隔离办公 Python **已在 live**（#936 真跑 · #938 工艺按需 · #942 原件 `artifact_id`/`INPUT_PATH`）。仍在 pico-api 侧受限解释器，不是 sidecar 工作环境，也不是 bash。`generate_*` **仍常驻 CORE，减法未做**。禁止把「库已接线」说成「老师聊天已走这条路」（#919 仍 OPEN）。禁止把北极星升版说成捷径已退役。禁止把「不要 bash」说成办公能力已齐。
+
+宏观根因已在 #919 调查里钉死：**Pico 借了 Pi 的 loop，没借 Pi 的 computer。** 同一颗 GPT 脑，Codex 能做出能改的 Word/Excel/PPT，是因为有工作区 + 真跑办公库 + 文档 skill 工艺。计算机执行层已接；缺的是捷径减法与老师聊天选路证据，不是再加 `batch_edit_xlsx`，也不是 Pi 内建 bash。
 
 **业主 2026-09-06：产品主线是办公。** Word / Excel / HTML / PPT。写代码只够服务办公（短脚本驱动 python-docx / openpyxl / python-pptx），不是编程产品，不是对标 Codex/Cursor。
 

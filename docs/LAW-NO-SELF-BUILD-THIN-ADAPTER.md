@@ -63,6 +63,7 @@ Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 11. **交件监工**：min_artifacts / force_agent / 词表自动挂交付 Skill / 把「本轮必须交 N 个文件」焊进 user
 12. **硬帽截窗**：用 Pico 自定 reserve/步数/字数把上游窗口截短（例如 256k 窗 64k 就压）。只认上游窗与安全门（租户/SSRF/密钥/禁 bash/假绿）
 13. **Pico 自挂公网页冒充发布**：`pico.aivia.asia/p/{id}`、老师点确认、自研发布闸都不是发布能力。发布 = Edu 专用申请 + 校管批准。Pico 只产 HTML。任务卡「发布确认收口」压不过本条。
+14. **第二套模型账 / 绕开网关计费**：聊天/出图等要统计计费的调用直连厂牌，或在 Pico/edu 另建点池、余额、第二账单核。现网上游 = New API。Pico 只记用量；钱在 edu 只认 Pico export。本仓不写 edu。
 
 ---
 
@@ -72,7 +73,7 @@ Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 |----|------|
 | 编排 | 嵌入/旁路真 Pi；Pico 持账本与门闩 |
 | 工具 | 仅白名单回调现有 gateway（扩名单须 ADR，仍禁 shell） |
-| 模型 | DeepSeek 等现成 API |
+| 模型 | 现成网关 API（现网 **New API**）；禁止为厂牌再造直连核；禁止自研计费 OS |
 | 产品 | 门脸适配、人包、假绿防护、租户隔离 |
 | 接入 | MCP/KB 以后接现成组件（分期），不自写协议内核 |
 | 加载 | 少常驻动词 + Skill 渐进披露；见 [`ADR-CAPABILITY-LOADING.md`](./ADR-CAPABILITY-LOADING.md)。禁自研选工具核 |

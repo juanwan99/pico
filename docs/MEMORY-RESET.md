@@ -24,6 +24,11 @@
 | Cloud Agent 靠公网 22 / egress 白名单进 ECS | **否** · Tailscale MagicDNS · `ssh ecs`（ops@aliyun-hy）· EXPERIENCE §17–19 |
 | 出图还靠硅基流动 / 再要 SILICONFLOW 出图钥 | **否** · 业主已否决 · 真源 = New API 反代多 Gemini 账户（§28 · #752） · Pico 只打一个网关口 |
 | Pico 是本地 PDF 阅读器 / 办公投影器 / 交件监工 | **否** · 厚桥四层绝对禁止（#865 · LAW §2.9–12） |
+| 现网默认核 = hosted `pi_runtime` / `pi-agent` | **否** · `health.default_runtime=pi-true`（TRUTH-FREEZE v1.8） |
+| 现网聊天核 = DeepSeek | **否** · New API `openai-responses`（EXPERIENCE §34）；对外只叫 Pico |
+| Pico 或 edu 可再直连厂牌做第二套计费 | **否** · 模型/统计/渠道管理统一 New API；Pico 不做钱；edu 只认 export；本仓不写 edu |
+| spec / `generate_*` 是办公真源或上限 | **否** · 天花板 = 隔离办公库；`generate_*` 是未退役快路 |
+| 隔离库已接线 = 老师聊天已走沙箱 | **否** · #919 仍 OPEN；调用面 PASS 不代替选路 |
 | Pico 能公开发布网页 / 老师确认 = 发布 | **否** · 发布是 Edu 专用申请 + 校管批准。Pico `/p/{id}` 不是发布能力（业主 2026-09-06） |
 | 可以自搞一套体系 / 做重体系只要能跑 | **否** · 项目最高要求（#867 · LAW §0-supreme） |
 | 256k 窗 64k 就压是官方 compaction | **否** · 那是 Pico 把 reserve 抬到 192k 的硬帽 · 违法 |

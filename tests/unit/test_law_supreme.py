@@ -41,12 +41,20 @@ def test_law_supreme_section_exists() -> None:
 
 def test_truth_freeze_has_s0_and_w0() -> None:
     text = (ROOT / "docs" / "TRUTH-FREEZE.md").read_text(encoding="utf-8")
-    assert "BINDING FREEZE v1.7" in text
+    assert "BINDING FREEZE v1.8" in text
     assert "| S0 |" in text
     assert "| W0 |" in text
+    assert "| P0f |" in text
+    assert "New API" in text
     assert "绝对禁止自己搞一套体系" in text
     assert "本窗合一" in text
     assert "唯一真源" in text
+
+
+def test_law_forbids_second_model_ledger() -> None:
+    text = (ROOT / "docs" / "LAW-NO-SELF-BUILD-THIN-ADAPTER.md").read_text(encoding="utf-8")
+    assert "第二套模型账" in text
+    assert "New API" in text
 
 
 def test_workenv_stage_plan_exists() -> None:

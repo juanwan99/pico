@@ -9,8 +9,11 @@ CLAIM-WB: 不改签（已 YES · 本 ADR 不代签）
 REPO: juanwan99/pico ONLY
 LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 北极星: docs/DIRECTION-NOW.md §0-star v1.4 · 用法 = Grok · 办公主线 · spec/generate_* 是捷径不是天花板
-现况: docs/STATE-NOW.md · 本 ADR 是选型真源，不是在飞卡
+现况: docs/STATE-NOW.md · 本 ADR 是选型底子，不是在飞卡
+OVERRIDE: 2026-09-08 · 北极星 v1.4 + TRUTH-FREEZE v1.8 压过下文「spec 是真源」
 ```
+
+**现行（压过 §2「真源 = spec」）：** spec / `generate_*` = 稳妥快路，不是天花板，不是改已有文件的路径。天花板 = 隔离面真跑 `python-docx` / `openpyxl` / `python-pptx` + `read_office_skill`。老师已有文件走 `sandbox_office_lib` + `artifact_id`。禁止第三张加厚 spec 卡。减法未做 ≠ 计算机不存在；调用面 PASS ≠ 老师聊天已走沙箱。
 
 ---
 
@@ -18,8 +21,8 @@ LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 
 ```text
 对标 Claude / Codex 文档 skill 的形态，不是对标 Word 里的 Copilot。
-真源 = 结构化中间稿（spec）。
-文件 = 成熟库渲染出的投影。
+快路 = 结构化中间稿（spec）→ generate_* 渲染。不是天花板。
+天花板 = 隔离面上真跑 python-docx / openpyxl / python-pptx。
 检查 = OOXML 合法 + 能打开。
 Pi 只调白名单工具；不在宿主写 python-docx，不跑公网 bash。
 隔离面上真跑办公库 = 天花板执行层，不是开放编程产品。
@@ -41,7 +44,7 @@ Pi 只调白名单工具；不在宿主写 python-docx，不跑公网 bash。
 
 | 项 | 选定 | 未选（否决） |
 |----|------|----------------|
-| **真源** | 版本化 JSON **spec**（`pico.office.spec/v1` 起） | 纯文本 body 当长期真源；把 `.docx/.pptx` 当可补丁源 |
+| **快路真源（非天花板）** | 版本化 JSON **spec**（`pico.office.spec/v1` 起）仍服务 `generate_*` | 把 spec 焊成唯一核；纯文本 body 当长期真源 |
 | **渲染** | PyPI：`python-docx` · `python-pptx` · **`openpyxl`**（Excel 不再手写 OOXML） | 自研 OOXML 引擎；模型即兴写 Python；COM / Word.exe |
 | **读** | 同库 **inspect** → 地址清单（段/页/表/图/批注） | 模型猜「第 3 段」；OCR 当结构 |
 | **改（Pico 自己生成的文件）** | 改 spec → **整份重渲染** | 在投影上东补一刀西补一刀当主路径 |
@@ -49,20 +52,23 @@ Pi 只调白名单工具；不在宿主写 python-docx，不跑公网 bash。
 | **检查** | `is_valid_ooxml` 失败关；沙箱打开 = 内容框预览（`GET …/content?preview=1`），不是 Writer 整窗 | LibreOffice 当排版引擎；坏包装绿 |
 | **Pi 看见** | `pico-gateway-tools.ts` + `SYSTEM.md`；动词少、spec 富 | 给 Pi **宿主** bash / 任意代码执行；MCP 办公室栈；Pi 市场办公包 / .NET ONLYOFFICE |
 | **图** | `generate_image` 产物 **插入** spec（进 Word/PPT） | 图和文档两张皮 |
-| **天花板** | 文档 skill 工艺 + 隔离面真跑 `python-docx` / `python-pptx` / `openpyxl` | 把 v1 spec 焊成唯一核、加厚自研 DSL；用 bash 当办公能力 |
+| **天花板** | 文档 skill 工艺 + 隔离面真跑 `python-docx` / `python-pptx` / `openpyxl`（`sandbox_office_lib`） | 把 v1 spec 焊成唯一核、加厚自研 DSL；用 bash 当办公能力；`generate_*` 当上限 |
 | **升级** | 只改适配层（spec 字段 + 三个模块） | 桥内再造 Office OS |
 
-### 两条路径（必须同时成立）
+### 两条路径（快路仍成立；天花板是隔离库）
 
 ```text
-A  Pico 写的文件：spec 是真源 → render(spec) → 字节入账本
-                  再改 = 改 spec 再 render（投影可丢）
+快路 A  Pico 用 generate_* 写的库存稿：spec → render(spec) → 字节入账本
+        再改库存稿可以改 spec 再 render（投影可丢）
 
-B  老师丢进来的文件：无 spec → inspect 出地址 → 按地址 edit
-                  不承诺「提取成 spec 再重建仍像素级一样」
+路径 B  老师丢进来的文件：无 spec → 禁止 generate_* 重建冒充改原件
+        现行：sandbox_office_lib + artifact_id / INPUT_PATH
+        inspect + 按地址 edit 是旧捷径，不是天花板
+
+天花板 C  隔离面真跑办公库（新建自由几何 / 改已有 / 同聊续改）
 ```
 
-Codex 社区的教训：**不要把 pptx 当真源去补丁。** 那只适用于路径 A。路径 B 必须诚实。
+Codex 社区的教训：**不要把 pptx 当真源去补丁。** 路径 B/C 必须诚实：其余页/段/格还在。
 
 ## 3. 底子（代码落点 · 未开工也先锁目录）
 
@@ -141,4 +147,4 @@ pico.office.spec/v1
 
 - **现在：** 卡 1 #690 · 卡 2 [#694](https://github.com/juanwan99/pico/issues/694) 均过门 @ 产品 tip `18537f47…`。记忆 / 人视角日用仍挂起。  
 - **禁第三张「加厚 spec」办公卡。** 覆盖已收口。再动办公 = 打开 Pi skill/沙箱，不是再加字段。  
-- **产品承诺：** spec/`generate_*` 是稳妥默认 / 快路。上限对齐 Claude/Codex **文档 skill**（工艺 + 隔离真跑办公库），不是 Word 内 Copilot。#703 拆掉纯文本/三页律等笼子。v1.4 不改本 ADR 已 Accepted 的 spec/inspect/render 核；缺的是隔离执行层，不是第三张加厚 spec 卡。
+- **产品承诺：** spec/`generate_*` 是稳妥默认 / 快路。上限对齐 Claude/Codex **文档 skill**（工艺 + 隔离真跑办公库），不是 Word 内 Copilot。#703 拆掉纯文本/三页律等笼子。v1.4 不改本 ADR 已 Accepted 的 spec/inspect/render **快路**核；隔离执行层 #936/#938/#942 已接线。缺的是捷径减法与老师聊天是否走沙箱（#919），不是第三张加厚 spec 卡。
