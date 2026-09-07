@@ -31,6 +31,12 @@ class IngestIn(BaseModel):
     filename: str | None = Field(default=None, max_length=180)
     content_b64: str | None = None
     text: str | None = None
+    item_id: str | None = Field(default=None, max_length=80)
+
+
+def _content_item_id(raw: str | None, content_sha: str) -> str:
+    value = "".join(ch for ch in str(raw or "") if ch.isalnum() or ch in "-_")[:80]
+    return value or content_sha
 
 
 def _bad(code: str, message: str, status: int = 400) -> HTTPException:
@@ -103,6 +109,8 @@ async def post_kb_ingest(
                 tokens_unknown=True,
                 bill_to=payer_for(principal),
                 idempotency_key=(
-                    f"kb_ingest:{principal.school_id}:{body.kind}:{content_sha}:{content_sha}"
+                    "kb_ingest:"
+                    f"{principal.school_id}:{body.kind}:"
+                    f"{_content_item_id(body.item_id, content_sha)}:{content_sha}"
                 ),
             )

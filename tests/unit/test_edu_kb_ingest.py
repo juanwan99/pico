@@ -207,6 +207,30 @@ def test_ingest_usage_success_and_payer(client, monkeypatch, tmp_path, binary, s
         assert '"price"' not in json.dumps(surface)
 
 
+def test_ingest_usage_distinct_item_ids_same_content(client, monkeypatch, tmp_path):
+    import ingest as ingest_mod
+
+    monkeypatch.setattr(
+        ingest_mod, "ingest_text", lambda **kwargs: {"ok": True, "slices": [{"excerpt": "hello"}]}
+    )
+    headers = {"authorization": f"Bearer {_token()}"}
+    for item_id in ("item-a", "item-b"):
+        response = client.post(
+            "/v1/kb/ingest",
+            headers=headers,
+            json={"kind": "material", "item_id": item_id, "text": "hello"},
+        )
+        assert response.status_code == 200, response.text
+    rows = _usage_rows(tmp_path)
+    assert len(rows) == 2
+    digest = hashlib.sha256(b"hello").hexdigest()
+    keys = {row["idempotency_key"] for row in rows}
+    assert keys == {
+        f"kb_ingest:school-a:material:item-a:{digest}",
+        f"kb_ingest:school-a:material:item-b:{digest}",
+    }
+
+
 @pytest.mark.parametrize(
     "failure,status,code",
     [
