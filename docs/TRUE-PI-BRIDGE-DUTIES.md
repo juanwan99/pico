@@ -49,7 +49,8 @@ v3（#608）：改已有 `.docx`/`.pptx` 走 PyPI `python-docx` / `python-pptx` 
 v10（#857）：侧栏天花板固定读+网（`workspace_list_files` / `workspace_read_file` / `inspect_document` / `kb_search` / `web_search` / `web_fetch`）。禁 generate/edit/出图/落 Artifact。办公/PDF 读抽出正文；像素仍不进脑。旧 `.doc/.ppt/.xls` 人话另存。  
 v4（#646 T-GROK-PATH）：禁止把 Skill / Landing / 历史焊进 `prompt()`。短纪律进 Pi `SYSTEM.md`（通用，无场景 if）。`prompt()` 只留老师原文。工具白名单仍挂载，模型决定调不调。跑后门只认「声称交件却没落盘」，不认正文词表。  
 v5（选型）：办公见 [`docs/ADR-OFFICE-DOC-PIPELINE.md`](./ADR-OFFICE-DOC-PIPELINE.md)。天花板已是隔离库，不是再加 inspect/render/edit 专用动词。禁桥内 bash、禁宿主机即兴 python-docx、禁 MCP 办公室栈。  
-v11（#936/#938/#942）：`sandbox_office_lib` + `read_office_skill` + 已有文件 `artifact_id`。`generate_*` 未退役。DUTIES 本表不再手抄 CORE 名单。  
+v11（#936/#938/#942）：`sandbox_office_lib` + `read_office_skill` + 已有文件 `artifact_id`。  
+v12（#946）：`generate_*` 与 `sandbox_pptx_lib` 退出 CORE，留 EXTENDED 别名。DUTIES 本表不再手抄 CORE 名单。  
 v6（#703 T-UNMASK-PI）：`prompt()` 可带 `images[]`；`models.json` 在 vision 模型上 `input: ["text","image"]`。仍禁 host bash / 任意 FS。spec 不是办公天花板。
 
 ## 禁止在桥内做

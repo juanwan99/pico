@@ -84,9 +84,8 @@ LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 
 ## 5. 现况缺口
 
-- 常驻 CORE **现网 20 个**（`capability_loading.py` 为真源）。ADR 目标仍是少数字；过 15 易乱调。不要再加调度器 / tool_search。  
-- 办公：天花板 `sandbox_office_lib` / `sandbox_pptx_lib` + `read_office_skill` 已常驻。`generate_*` 仍常驻且仍带 patch 语义（网关说明与 SYSTEM 不完全一致）。`edit_*` 在 EXTENDED。这是捷径未减法，不是加载纪律已完成。  
-- `verify_document` 已在 CORE（#942）。再加办公动词 = 打回，除非业主开减法卡把 `generate_*` 降级。  
+- 常驻 CORE **16 个**（`capability_loading.py` 为真源）。办公写路径只常驻 `sandbox_office_lib` + `read_office_skill`。`generate_docx/pptx/xlsx` 与 `sandbox_pptx_lib` 在 EXTENDED。不要再加调度器 / tool_search。  
+- `verify_document` 在 CORE。再加办公动词 = 打回。  
 - `skill-deliverable` 只留何时用 + 观察回执，禁止再灌交付剧本。  
 - 仓内已有场景 Skill 苗头（教案/出题）；须保持「不自动套用」，禁止再铺成默认工作流。  
 - 写/改/打开工具回 `observation`（事实，不是评分）。禁自研反思核。门脸不编课堂文件。

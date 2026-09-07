@@ -13,7 +13,7 @@
 | 产品 | 通用 LLM 工作台（Web）· 用法 = Grok · 主线 = 真 Word/Excel/HTML/PPT · 体验上限 = WorkBuddy 六条 |
 | 模型 | 云端 HTTPS API（现网 New API `openai-responses`，见 EXPERIENCE §34；对外只叫 Pico） |
 | 编排 | **默认 = 真 Pi**（`health.default_runtime=pi-true`）；hosted / Kimi = 遗产回滚 |
-| 办公 | 天花板 = 隔离办公库；`generate_*` = 未退役快路 |
+| 办公 | 天花板 = 隔离 `sandbox_office_lib`；`generate_*` 不在默认常驻 |
 | 账本 | **仅 Pico**（禁止与 edu 双 AI） |
 | 范围 | **只写本仓**；edu 对接后置 |
 | 真源冻结 | **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.8** |

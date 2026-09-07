@@ -2,7 +2,7 @@
 
 Controlled via ``PICO_MCP_ALLOWLIST`` (comma-separated tool names).
 Empty allowlist → no MCP tools registered (fail closed for MCP surface).
-Product default pilot: ``mcp_time,mcp_workspace_stat``.
+Product default: empty allowlist (MCP surface off). Tests may set ``PICO_MCP_ALLOWLIST``.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pico_orchestrator.gateway import ArtifactStore, Principal, ToolError, ToolS
 
 # Safe pilot tools only — never shell/file/web/MCP-market open.
 KNOWN_MCP_TOOLS = frozenset({"mcp_time", "mcp_workspace_stat"})
-DEFAULT_MCP_ALLOWLIST = "mcp_time,mcp_workspace_stat"
+DEFAULT_MCP_ALLOWLIST = ""
 
 
 def parse_mcp_allowlist(raw: str | None = None) -> list[str]:

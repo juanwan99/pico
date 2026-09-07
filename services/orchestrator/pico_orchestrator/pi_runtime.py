@@ -1,7 +1,7 @@
-"""Pi Agent harness — default multi-step orchestration kernel (HANDOFF-WB-PI).
+"""Hosted Pi-inspired loop — rollback kernel only (PICO_HOSTED_LOOP=1).
 
-Minimal tool loop (Pi philosophy): model + allowlisted tools, no self-built OS.
-Model = DeepSeek (primary) via OpenAI-compatible HTTPS. Events enter Pico ledger.
+Product default multi-step is true Pi RPC, not this module.
+Events enter Pico ledger. Do not revive this as the long-term OS.
 """
 
 from __future__ import annotations

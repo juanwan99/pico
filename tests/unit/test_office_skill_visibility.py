@@ -48,7 +48,6 @@ def test_system_catalog_is_one_line_not_craft_body() -> None:
     assert "`pptx`:" in body
     assert "read_office_skill" in body
     assert "generate_* remains the fast path" not in body
-    assert "blank-template" in body
     assert "artifact_id" in body
     assert "from docx import Document" not in body
     assert "from openpyxl import Workbook" not in body

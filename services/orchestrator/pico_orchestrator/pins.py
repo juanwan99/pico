@@ -1,7 +1,8 @@
 """Runtime identity + optional legacy Kimi package pins.
 
-Product default multi-step kernel = Pi (pico_orchestrator.pi_runtime).
-kimi-agent-sdk / kimi-cli pins only matter when legacy Kimi path is enabled.
+Product default multi-step kernel = true Pi (`health.default_runtime=pi-true`).
+hosted `pi_runtime` is rollback only. kimi-agent-sdk / kimi-cli pins only
+matter when the legacy Kimi path is enabled.
 """
 
 from __future__ import annotations
@@ -12,14 +13,14 @@ PINNED_KIMI_AGENT_SDK = "0.0.5"
 PINNED_KIMI_CLI = "1.12.0"
 
 AGENT_PINS = {
-    "default_runtime": "pi-agent",
+    "default_runtime": "pi-true",
     "kimi-agent-sdk": PINNED_KIMI_AGENT_SDK,  # legacy optional
     "kimi-cli": PINNED_KIMI_CLI,  # legacy optional + safety yaml loader
 }
 
 
 def installed_versions() -> dict[str, str | None]:
-    out: dict[str, str | None] = {"default_runtime": "pi-agent"}
+    out: dict[str, str | None] = {"default_runtime": "pi-true"}
     for name in ("kimi-agent-sdk", "kimi-cli"):
         try:
             out[name] = version(name)

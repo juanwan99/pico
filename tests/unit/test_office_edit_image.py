@@ -726,14 +726,13 @@ def test_sidebar_chat_has_no_edit_or_image_tools() -> None:
     deliver = snapshot_for_skill("skill-deliverable")
     assert deliver is not None
     assert {
-        "generate_docx_document",
-        "generate_pptx_document",
         "generate_image",
         "generate_diagram",
-        "sandbox_pptx_lib",
         "sandbox_office_lib",
         "read_office_skill",
     } <= set(deliver["tools"])
+    assert "generate_docx_document" not in deliver["tools"]
+    assert "sandbox_pptx_lib" not in deliver["tools"]
     assert "edit_docx_document" not in deliver["tools"]
     aliases = {
         "edit_docx_document",

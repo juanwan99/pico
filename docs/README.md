@@ -22,7 +22,7 @@ FREEZE: docs/TRUTH-FREEZE.md v1.8
 | 模型 | 聊天/出图统一 New API（`openai-responses` / Gemini 渠道）；对外只叫 Pico | 「DeepSeek 聊天核」当现网；为厂牌再造直连核 |
 | 计量 | New API 管渠道/密钥/统计；Pico 记 `usage_events`→积分；edu 钱包只认 export | Pico 做钱；edu 另接模型第二账 |
 | 办公天花板 | 隔离 `sandbox_office_lib`（python-docx / openpyxl / python-pptx）+ `read_office_skill` | spec / `generate_*` 是真源或上限 |
-| 办公快路 | `generate_*` 仍常驻，**未退役** | 把调用面 PASS 说成老师聊天已走沙箱 |
+| 办公快路 | `generate_*` / `sandbox_pptx_lib` 在 EXTENDED，不是默认常驻 | 把库存 spec 当天花板；常驻再并列 generate |
 | Pico 自己 | 账本、授权、门闩、人包、门脸 | 第二套 Agent OS / 办公 OS / PDF 核 / 发布通道 / 计费 OS |
 | 工作法 | 本窗合一 · 只写 pico · live = origin/main | 主管/执行者编制 · docs-only 不部 |
 

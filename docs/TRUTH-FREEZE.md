@@ -137,7 +137,7 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | 编排默认 | 真 Pi（`health.default_runtime=pi-true` · `PICO_TRUE_PI_DEFAULT=1`）。核以生产 tip 为准 |
 | 模型默认 | New API `openai-responses`（EXPERIENCE §34）。槽位名仍 `DEEPSEEK_*`。出图同一 New API。embedder 现网智谱 = 待统一 |
 | 计量 | Pico `usage_events` + 派生积分；edu 拉 export。渠道管理在 New API。Pico 不做钱 |
-| 办公写路径 | 天花板 = 隔离 `sandbox_office_lib`（python-docx / openpyxl / python-pptx）。`generate_*` / spec = 快路，仍常驻，**减法未做**。老师聊天是否走沙箱 = #919，未证 |
+| 办公写路径 | 天花板 = 隔离 `sandbox_office_lib`。`generate_*` / `sandbox_pptx_lib` = EXTENDED 别名，不在 CORE。老师聊天选路见 #944 |
 | 遗产 | hosted `pi_runtime`、Kimi Agent 模块仍在仓内，flag 开启才走 |
 | 自研环 | 仍删除；不得回流 |
 

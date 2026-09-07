@@ -74,7 +74,8 @@ def test_parse_mcp_allowlist_filters_unknown() -> None:
         "mcp_workspace_stat",
     ]
     assert parse_mcp_allowlist("") == []
-    assert parse_mcp_allowlist(DEFAULT_MCP_ALLOWLIST) == [
+    assert parse_mcp_allowlist(DEFAULT_MCP_ALLOWLIST) == []
+    assert parse_mcp_allowlist("mcp_time,mcp_workspace_stat") == [
         "mcp_time",
         "mcp_workspace_stat",
     ]
@@ -91,8 +92,8 @@ def test_build_gateway_registers_mcp_and_kb() -> None:
     gw = build_default_gateway(_MemStore())
     names = set(gw.tools)
     assert "kb_search" in names
-    assert "mcp_time" in names
-    assert "mcp_workspace_stat" in names
+    assert "mcp_time" not in names
+    assert "mcp_workspace_stat" not in names
 
 
 def test_mcp_tools_respect_empty_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -231,7 +232,8 @@ def test_kb_search_ignores_client_filter(monkeypatch: pytest.MonkeyPatch) -> Non
     asyncio.run(_run())
 
 
-def test_mcp_time_and_workspace_stat() -> None:
+def test_mcp_time_and_workspace_stat(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PICO_MCP_ALLOWLIST", "mcp_time,mcp_workspace_stat")
     store = _MemStore()
     principal = _P()
 
