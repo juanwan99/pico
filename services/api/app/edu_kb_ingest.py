@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import sys
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.auth import Principal, require_any_scope
+from app.auth import Principal, payer_for, require_any_scope
+from app.usage_ledger import record_usage_event
 
 router = APIRouter(tags=["edu-kb-ingest"])
 
@@ -29,6 +31,12 @@ class IngestIn(BaseModel):
     filename: str | None = Field(default=None, max_length=180)
     content_b64: str | None = None
     text: str | None = None
+    item_id: str | None = Field(default=None, max_length=80)
+
+
+def _content_item_id(raw: str | None, content_sha: str) -> str:
+    value = "".join(ch for ch in str(raw or "") if ch.isalnum() or ch in "-_")[:80]
+    return value or content_sha
 
 
 def _bad(code: str, message: str, status: int = 400) -> HTTPException:
@@ -53,32 +61,56 @@ async def post_kb_ingest(
     body: IngestIn,
     principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
 ) -> dict[str, Any]:
-    _ = principal
+    # Invalid base64 still has a stable identity; valid files use decoded bytes.
+    raw = body.content_b64 if body.content_b64 else body.text or ""
+    content_sha = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     try:
-        from ingest import ingest_bytes, ingest_text
-    except Exception as exc:  # pragma: no cover - import surface
-        raise _bad("ingest.unavailable", f"Docling 入库包不可用：{exc}", 503) from exc
-
-    title = (body.title or body.filename or "未命名").strip()
-    try:
+        data = None
         if body.content_b64:
             data = _decode(body.content_b64)
-            result = ingest_bytes(filename=body.filename or "file", data=data, title=title)
-        else:
-            result = ingest_text(text=body.text or "", title=title)
-    except ModuleNotFoundError as exc:
-        raise _bad("ingest.docling_missing", "现网还没装 Docling，不能入库", 503) from exc
-    except Exception as exc:
-        raise _bad("ingest.failed", f"Docling 没抽出内容：{exc}", 422) from exc
-    slices = result.get("slices") or []
-    if not result.get("ok") or not slices:
-        code = str(result.get("code") or "empty")
-        message = str(result.get("error") or "抽出来是空的")
-        status = 503 if code in {"ocr_missing", "hf_offline"} else 400
-        raise _bad(code, message, status)
-    return {
-        "ok": True,
-        "engine": result.get("engine") or "docling",
-        "kind": body.kind,
-        "slices": slices,
-    }
+            content_sha = hashlib.sha256(data).hexdigest()
+        try:
+            from ingest import ingest_bytes, ingest_text
+        except Exception as exc:
+            raise _bad("ingest.unavailable", f"Docling 入库包不可用：{exc}", 503) from exc
+
+        title = (body.title or body.filename or "未命名").strip()
+        try:
+            if data is not None:
+                result = ingest_bytes(filename=body.filename or "file", data=data, title=title)
+            else:
+                result = ingest_text(text=body.text or "", title=title)
+        except HTTPException:
+            raise
+        except ModuleNotFoundError as exc:
+            raise _bad("ingest.docling_missing", "现网还没装 Docling，不能入库", 503) from exc
+        except Exception as exc:
+            raise _bad("ingest.failed", f"Docling 没抽出内容：{exc}", 422) from exc
+        slices = result.get("slices") or []
+        if not result.get("ok") or not slices:
+            code = str(result.get("code") or "empty")
+            message = str(result.get("error") or "抽出来是空的")
+            status = 503 if code in {"ocr_missing", "hf_offline"} else 400
+            raise _bad(code, message, status)
+        return {
+            "ok": True,
+            "engine": result.get("engine") or "docling",
+            "kind": body.kind,
+            "slices": slices,
+        }
+    finally:
+        # Await the fail-open ledger before either a response or an error escapes.
+        if getattr(principal, "school_id", None):
+            await record_usage_event(
+                school_id=principal.school_id,
+                membership_id=principal.membership_id,
+                kind="api",
+                source="kb_ingest",
+                tokens_unknown=True,
+                bill_to=payer_for(principal),
+                idempotency_key=(
+                    "kb_ingest:"
+                    f"{principal.school_id}:{body.kind}:"
+                    f"{_content_item_id(body.item_id, content_sha)}:{content_sha}"
+                ),
+            )

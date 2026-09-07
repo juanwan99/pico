@@ -88,7 +88,7 @@ Token 规则：
 | `search` | gateway `web_search` / `web_fetch` |
 | `sandbox` | preview / HTML 写入 / browser |
 | `image` | `generate_image`（New API Gemini）。优先 `usageMetadata` token；没有则按张 `per_image_yuan` |
-| `api` | 预留 |
+| `api` | edu-core Docling 入库 `POST /v1/kb/ingest` 成功/明确失败：`source=kb_ingest`，token 全 null + unknown。幂等键 `kb_ingest:{school_id}:{item_kind}:{item_id}:{content_sha}`；kind 来自 body，`item_id` 来自 body（edu 原件 id）；缺 item id 时该槽用内容 SHA-256。文件按解码字节、文本按 UTF-8（解码失败按原始 base64）取哈希，不含 attempt。同内容不同 `item_id` 各记一行。`bill_to` 只认 JWT scopes；无价签 `points=null` |
 | `other` | 预留 |
 
 非法 kind 拒绝写入（fail-closed）。
