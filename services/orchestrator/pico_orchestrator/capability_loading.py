@@ -16,25 +16,19 @@ from collections.abc import Iterable
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
 # Always-on: teacher-said verbs. Do not add a scheduler / tool_search.
-# Office ceiling (sandbox_pptx_lib / sandbox_office_lib) stays visible — hiding it in EXTENDED is a picker.
-# generate_* also patches (artifact_id + paragraph/slide/cell). edit_* stay
-# execute aliases on EXTENDED so hung skills / old names still run.
-# Programming sandbox stays extended until T-CODE-SANDBOX (S3).
-# Hung skills may narrow, but must not expose generate_pptx_document without
-# its sibling sandbox_pptx_lib (see ppt_siblings_honest).
-# sandbox_browser_open / sandbox_document_open are the existing pane doors
-# (isolated site + Office content-box). Not a PDF kernel. Screenshot/exec stay EXTENDED.
+# Office ceiling is sandbox_office_lib. Hiding it in EXTENDED is a picker.
+# generate_docx/pptx/xlsx and sandbox_pptx_lib stay execute aliases on EXTENDED
+# (stock template / PPT name). edit_* stay EXTENDED. Programming sandbox stays
+# extended. Hung skills may narrow; if they still list generate_pptx they must
+# also list the isolated lib (ppt_siblings_honest).
+# sandbox_browser_open / sandbox_document_open are pane doors, not a PDF kernel.
 CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "workspace_list_files",
     "workspace_read_file",
     "workspace_write_file",
     "generate_html_document",
-    "generate_docx_document",
-    "generate_pptx_document",
-    "sandbox_pptx_lib",
     "sandbox_office_lib",
     "read_office_skill",
-    "generate_xlsx_document",
     "inspect_document",
     "verify_document",
     "generate_image",
@@ -49,6 +43,10 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
 
 # Same gateway, not registered unless a hung skill lists them.
 EXTENDED_TOOLS: tuple[str, ...] = (
+    "generate_docx_document",
+    "generate_pptx_document",
+    "generate_xlsx_document",
+    "sandbox_pptx_lib",
     "edit_docx_document",
     "edit_pptx_document",
     "edit_xlsx_document",
@@ -101,7 +99,7 @@ def ppt_siblings_honest(names: Iterable[str]) -> bool:
     visible = set(names)
     if "generate_pptx_document" not in visible:
         return True
-    return "sandbox_pptx_lib" in visible
+    return "sandbox_office_lib" in visible or "sandbox_pptx_lib" in visible
 
 
 def office_siblings_honest(names: Iterable[str]) -> bool:
@@ -113,10 +111,16 @@ def office_siblings_honest(names: Iterable[str]) -> bool:
 
 
 def office_skill_visible(names: Iterable[str]) -> bool:
-    """Office generate_* without on-demand craft is a hidden picker."""
+    """Office write without on-demand craft is a hidden picker."""
     visible = set(names)
     if not visible.intersection(
-        {"generate_docx_document", "generate_xlsx_document", "generate_pptx_document"}
+        {
+            "generate_docx_document",
+            "generate_xlsx_document",
+            "generate_pptx_document",
+            "sandbox_office_lib",
+            "sandbox_pptx_lib",
+        }
     ):
         return True
     return "read_office_skill" in visible

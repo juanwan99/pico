@@ -102,7 +102,7 @@ Meili embedder                                    ⚠️ 现网智谱 · 待统�
 计量：Pico usage_events → 积分；edu 认 export       ✅ 合同；本仓不写 edu
 Kimi Agent / hosted pi_runtime                    ⚠️ 遗产回滚 · 非默认
 隔离办公库 sandbox_office_lib                     ✅ 执行层已接线（#936/#942 调用面）
-generate_* 仍常驻 CORE                            ⚠️ 快路未退役 · 不是天花板
+generate_* / sandbox_pptx_lib                     ⚠️ EXTENDED 别名 · 不在 CORE
 老师聊天是否走沙箱                                ❌ 未证 · #919 仍 OPEN
 「目标/长期是自研环」                              ❌ 污染 · 禁止
 「唯一目标仍是 Kimi Agent」                        ❌ 过期 v1.0 · 禁止再写

@@ -79,9 +79,10 @@ class MemoryArtifactStore:
 def test_core_is_shorter_and_keeps_office_ceiling() -> None:
     visible = resolve_visible_tools(None)
     assert visible == list(CORE_VISIBLE_TOOLS)
-    assert len(visible) == 20
-    assert "sandbox_pptx_lib" in visible
-    assert "generate_pptx_document" in visible
+    assert len(visible) == 16
+    assert "sandbox_office_lib" in visible
+    assert "generate_pptx_document" not in visible
+    assert "sandbox_pptx_lib" not in visible
     assert ppt_siblings_honest(visible)
     for name in ("edit_docx_document", "edit_pptx_document", "edit_xlsx_document"):
         assert name not in visible
@@ -96,8 +97,8 @@ def test_no_tool_picker_copy() -> None:
         encoding="utf-8"
     )
     assert "请选工具" not in ts
-    assert "sandbox_pptx_lib" in body
-    assert "generate_pptx_document" in CORE_VISIBLE_TOOLS
+    assert "sandbox_office_lib" in body
+    assert "generate_pptx_document" not in CORE_VISIBLE_TOOLS
 
 
 def test_hung_skill_still_honest_on_pptx_siblings() -> None:

@@ -11,13 +11,13 @@ from pico_orchestrator.pins import AGENT_PINS, assert_pins, installed_versions
 
 
 def test_pins_match_installed() -> None:
-    assert AGENT_PINS["default_runtime"] == "pi-agent"
+    assert AGENT_PINS["default_runtime"] == "pi-true"
     assert AGENT_PINS["kimi-agent-sdk"] == "0.0.5"
     assert AGENT_PINS["kimi-cli"] == "1.12.0"
     # Legacy packages optional on Pi-only deploys; assert_pins only fails on mismatch.
     assert_pins()
     versions = installed_versions()
-    assert versions["default_runtime"] == "pi-agent"
+    assert versions["default_runtime"] == "pi-true"
 
 
 def test_ruff_exact_pin_in_dev_deps() -> None:

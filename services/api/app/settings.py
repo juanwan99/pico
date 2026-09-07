@@ -96,8 +96,8 @@ class Settings(BaseSettings):
     pico_agent_file: str = "services/orchestrator/agents/pico.yaml"
     pico_dangerous_tools_enabled: bool = False
     # P2 MCP allowlist bridge (comma-separated known safe tool names).
-    # Default pilot: mcp_time,mcp_workspace_stat. Empty string disables MCP tools.
-    pico_mcp_allowlist: str = "mcp_time,mcp_workspace_stat"
+    # Empty string disables MCP tools. Default off — not a product surface.
+    pico_mcp_allowlist: str = ""
     # Isolated sandbox sidecar (B2). Empty token allowed in dev; compose may set one.
     pico_sandbox_url: str = "http://127.0.0.1:18767"
     pico_sandbox_token: str = ""

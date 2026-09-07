@@ -1,6 +1,7 @@
-"""True Pi harness bypass (phase-1 shadow / optional bypass).
+"""True Pi harness (default multi-step) + hosted rollback.
 
-Default multi-step path remains hosted ``pi_runtime.run_pi_agent``.
+Default path is ``run_true_pi_agent`` when ``PICO_TRUE_PI_DEFAULT=1``.
+hosted ``pi_runtime.run_pi_agent`` is ``PICO_HOSTED_LOOP=1`` rollback only.
 This package must stay thin: RPC client, tool callback, event map, landing gate.
 """
 

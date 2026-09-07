@@ -34,17 +34,20 @@ def test_core_and_extended_partition_gateway():
     assert set(CORE_VISIBLE_TOOLS) & set(EXTENDED_TOOLS) == set()
     assert "bash" not in CORE_VISIBLE_TOOLS
     assert "bash" not in EXTENDED_TOOLS
-    assert len(CORE_VISIBLE_TOOLS) == 20
+    assert len(CORE_VISIBLE_TOOLS) == 16
     assert "read_office_skill" in CORE_VISIBLE_TOOLS
     assert "verify_document" in CORE_VISIBLE_TOOLS
     assert "verify_document" not in EXTENDED_TOOLS
     assert "read_office_skill" not in EXTENDED_TOOLS
-    assert len(EXTENDED_TOOLS) == 10
+    assert len(EXTENDED_TOOLS) == 14
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
-    assert "sandbox_pptx_lib" in CORE_VISIBLE_TOOLS
     assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS
-    assert "sandbox_pptx_lib" not in EXTENDED_TOOLS
+    assert "sandbox_pptx_lib" not in CORE_VISIBLE_TOOLS
+    assert "sandbox_pptx_lib" in EXTENDED_TOOLS
+    assert "generate_docx_document" in EXTENDED_TOOLS
+    assert "generate_pptx_document" in EXTENDED_TOOLS
+    assert "generate_xlsx_document" in EXTENDED_TOOLS
     assert "sandbox_office_lib" not in EXTENDED_TOOLS
     assert "edit_docx_document" not in CORE_VISIBLE_TOOLS
     assert "edit_pptx_document" not in CORE_VISIBLE_TOOLS
@@ -70,12 +73,13 @@ def test_core_and_extended_partition_gateway():
 def test_default_visible_is_core_not_full_allowlist():
     visible = resolve_visible_tools(None)
     assert visible == list(CORE_VISIBLE_TOOLS)
-    assert "sandbox_pptx_lib" in visible
-    assert "generate_pptx_document" in visible
+    assert "sandbox_office_lib" in visible
+    assert "generate_pptx_document" not in visible
+    assert "sandbox_pptx_lib" not in visible
     assert "edit_docx_document" not in visible
     assert "sandbox_workspace_exec" not in visible
     assert "verify_html_document" not in visible
-    assert "generate_docx_document" in visible
+    assert "generate_docx_document" not in visible
     assert "generate_diagram" in visible
     assert "publish_html_page" not in visible
     assert "unpublish_html_page" not in visible
@@ -91,7 +95,7 @@ def test_hung_skill_may_narrow_and_may_include_extended():
     deliver = snapshot_for_skill("skill-deliverable")
     assert deliver is not None
     visible = resolve_visible_tools(list(deliver["tools"]))
-    assert "sandbox_pptx_lib" in visible
+    assert "sandbox_office_lib" in visible
     assert "verify_html_document" in visible
     assert "generate_diagram" in visible
     assert "web_search" in visible
@@ -136,7 +140,7 @@ def test_system_md_slim_and_catalog_not_scene_weld():
     assert "本轮交付真实文件" not in body
     assert "Engineering delivery" not in body
     assert "Open a public website" not in body
-    assert "sandbox_pptx_lib" in body
+    assert "sandbox_office_lib" in body
     assert "siblings" in body
     assert "课件" not in body
     assert "通知" not in body

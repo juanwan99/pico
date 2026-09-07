@@ -69,14 +69,11 @@ def test_pi_and_hosted_pptx_descriptions_are_siblings() -> None:
 
 def test_system_names_office_ceiling_without_scene_words() -> None:
     body = pico_system_text()
-    assert "sandbox_pptx_lib" in body
     assert "sandbox_office_lib" in body
     assert "read_office_skill" in body
     assert "`docx`:" in body
     assert "from docx import Document" not in body
     assert "siblings" in body
-    assert "stock python-pptx layouts" in body
-    assert "body bullets (not title-only walls)" not in body
     assert "is routed to the ledger" in body
     assert "from pathlib import Path" in body
     assert "课件" not in body
@@ -85,14 +82,10 @@ def test_system_names_office_ceiling_without_scene_words() -> None:
     assert "家长会" not in body
     assert "分数练习" not in body
     assert "unmatched brackets" in body
-    assert "markdown/TSV tables become sheets" in body
     assert "`publish_html_page` is not a Pico capability" in body
     assert "school-admin approval" in body
     assert "If `publish_html_page` is listed this turn" not in body
     assert "same title replaces the file the teacher opens" in body.lower()
-    assert "one A1-style address per call" in body
-    assert "not a map of cell addresses" in body
-    assert "edited=false" in body
 
 
 def test_xlsx_values_is_placeholder_fill_on_pi_surfaces() -> None:
@@ -113,14 +106,15 @@ def test_xlsx_values_is_placeholder_fill_on_pi_surfaces() -> None:
 
 def test_default_core_shows_office_not_programming() -> None:
     visible = resolve_visible_tools(None)
-    assert "sandbox_pptx_lib" in visible
     assert "sandbox_office_lib" in visible
     assert "read_office_skill" in visible
     assert "verify_document" in visible
     assert "sandbox_workspace_exec" not in visible
-    assert "sandbox_pptx_lib" in CORE_VISIBLE_TOOLS
+    assert "generate_pptx_document" not in visible
+    assert "sandbox_pptx_lib" not in visible
     assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS
     assert "read_office_skill" in CORE_VISIBLE_TOOLS
+    assert "sandbox_pptx_lib" not in CORE_VISIBLE_TOOLS
 
 
 def test_scene_words_do_not_hang_a_skill() -> None:
