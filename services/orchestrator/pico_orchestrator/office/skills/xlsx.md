@@ -1,7 +1,9 @@
 # Excel craft (openpyxl)
 
 Use when the teacher asked for a real `.xlsx`. This is craft, not a scene workflow.
-Execute only in `sandbox_office_lib` with `kind=xlsx`. Fast path remains `generate_xlsx_document`.
+Execute only in `sandbox_office_lib` with `kind=xlsx`.
+To change a file the teacher already has, pass `artifact_id` and start with `wb = load_book()` (or `load_workbook(INPUT_PATH)`). Do not rebuild with `generate_xlsx_document`.
+`generate_xlsx_document` is blank-template only.
 Do not import os. Do not use a shell. Empty `Workbook(); save_book(wb)` fails.
 A whole draft dumped in A1 is not a spreadsheet.
 
@@ -13,6 +15,8 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill, numbers
 from openpyxl.utils import get_column_letter
 from openpyxl.chart import BarChart, Reference
 
+# Existing file (artifact_id set):
+# wb = load_book()
 wb = Workbook()
 ws = wb.active
 ws.title = "汇总"
@@ -57,7 +61,7 @@ save_book(wb)
 - Multi-sheet: `wb.create_sheet("名")`. Cross-sheet refs like `=明细!B2` are allowed.
 - Column widths: `ws.column_dimensions["A"].width = …`.
 - Dates: real date objects or ISO text the teacher gave — do not invent.
-- `generate_xlsx_document` cell+value patches one A1-style cell per call. `values` fills `{{key}}` only; unmatched stays `edited=false`.
+- Change existing sheets with `artifact_id` + `load_book()`. `generate_xlsx_document` cell+value is last-resort one-cell patch, not the default.
 - Same title replaces the file the teacher opens.
 - After save, read observation. Cells that should be numbers must not be decoration.
 

@@ -2,7 +2,8 @@
 
 Use when the teacher asked for a real `.pptx`. This is craft, not a scene workflow.
 Execute in `sandbox_office_lib` `kind=pptx` or the PPT alias `sandbox_pptx_lib`.
-Fast path remains `generate_pptx_document` (stock Title-and-Content).
+To change a deck the teacher already has, pass `artifact_id` and start with `prs = load_deck()` (or `Presentation(INPUT_PATH)`). Do not rebuild with `generate_pptx_document`.
+`generate_pptx_document` is blank-template only (stock Title-and-Content).
 Do not import os. Do not use a shell. Empty `Presentation(); save_deck(prs)` fails.
 Stock body bullets are not the ceiling. Free geometry uses shapes + RGBColor.
 

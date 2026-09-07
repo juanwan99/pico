@@ -328,7 +328,7 @@ def run_user(cfg: dict[str, Any]) -> None:
 
     from docx import Document
     from docx.document import Document as DocumentClass
-    from openpyxl import Workbook
+    from openpyxl import Workbook, load_workbook
     from openpyxl.workbook.workbook import Workbook as WorkbookClass
 
     orig_doc_save = DocumentClass.save
@@ -351,6 +351,24 @@ def run_user(cfg: dict[str, Any]) -> None:
             raise SystemExit("save_book 需要 Workbook")
         wb.save(output_path)
 
+    input_path = str(cfg.get("input") or "").strip()
+
+    def _need_input(kind_label: str) -> str:
+        if not input_path:
+            raise ValueError(
+                f"没有原件。改已有{kind_label}请传 artifact_id；新建不要调用 load_*。"
+            )
+        return input_path
+
+    def load_doc() -> Any:
+        return Document(_need_input(" Word"))
+
+    def load_book() -> Any:
+        return load_workbook(_need_input(" Excel"))
+
+    def load_deck() -> Any:
+        return Presentation(_need_input(" PPT"))
+
     ns: dict[str, Any] = {
         "__builtins__": _SAFE_BUILTINS,
         "Presentation": Presentation,
@@ -367,8 +385,12 @@ def run_user(cfg: dict[str, Any]) -> None:
         "save_deck": save_deck,
         "save_doc": save_doc,
         "save_book": save_book,
+        "load_doc": load_doc,
+        "load_book": load_book,
+        "load_deck": load_deck,
         "IMAGE_PATHS": ImagePathMap(cfg.get("images") or {}),
         "OUTPUT_PATH": output_path,
+        "INPUT_PATH": input_path,
         "KIND": kind,
         "__name__": "__main__",
     }

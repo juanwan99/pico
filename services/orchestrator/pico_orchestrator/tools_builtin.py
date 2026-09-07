@@ -347,6 +347,33 @@ def _office_lib_images(store: ArtifactStore, principal: Principal, args: dict[st
     return _load
 
 
+async def _office_lib_input(
+    store: ArtifactStore,
+    principal: Principal,
+    args: dict[str, Any],
+    *,
+    kind: str,
+) -> tuple[bytes | None, str | None, str]:
+    raw_id = args.get("artifact_id")
+    aid = str(raw_id).strip() if raw_id is not None else ""
+    if not aid:
+        return None, None, ""
+    row = await store.read(principal, artifact_id=aid, title=None)
+    if row is None:
+        raise ToolError(
+            "artifact.not_found",
+            "找不到这份文件。请先在工作台上传原件再改。",
+        )
+    raw = _artifact_bytes(row)
+    ext = f".{kind}"
+    if not is_valid_ooxml_package(raw, ext):
+        raise ToolError(
+            "artifact.not_ooxml",
+            f"这份不是真 {kind} 原件，不能当改稿载入。",
+        )
+    return raw, str(row.get("artifact_id") or aid), str(row.get("title") or "")
+
+
 def _make_read_office_skill():
     async def read_office_skill(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         del principal
@@ -387,10 +414,21 @@ def _make_sandbox_office_lib(store: ArtifactStore):
         title = _ensure_extension(title_hint or default_title, f".{kind}")
         deny_secret_filename(title)
         images = await _office_lib_images(store, principal, args)()
-        raw = await run_office_lib_source_async(source, kind=kind, images=images)
+        input_bytes, source_id, loaded_title = await _office_lib_input(
+            store, principal, args, kind=kind
+        )
+        if source_id and not title_hint and loaded_title:
+            title = _ensure_extension(loaded_title, f".{kind}")
+            deny_secret_filename(title)
+        raw = await run_office_lib_source_async(
+            source, kind=kind, images=images, input_bytes=input_bytes
+        )
         result = await store.write(principal, title=title, content=raw, kind=kind)
         result["format"] = kind
         result["via"] = "sandbox_office_lib"
+        result["loaded_existing"] = input_bytes is not None
+        if source_id:
+            result["source_artifact_id"] = source_id
         return _attach_write_observation(result, kind=kind, title=title, raw=raw)
 
     return sandbox_office_lib
@@ -400,16 +438,27 @@ def _make_sandbox_pptx_lib(store: ArtifactStore):
     async def sandbox_pptx_lib(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         source = _required_text(args, "source", maximum=PPTX_LIB_MAX_SOURCE)
         title_raw = args.get("title")
-        title = _ensure_extension(
-            str(title_raw).strip() if isinstance(title_raw, str) and title_raw.strip() else "沙箱上限.pptx",
-            ".pptx",
+        title_hint = (
+            str(title_raw).strip() if isinstance(title_raw, str) and title_raw.strip() else ""
         )
+        title = _ensure_extension(title_hint or "沙箱上限.pptx", ".pptx")
         deny_secret_filename(title)
         images = await _office_lib_images(store, principal, args)()
-        raw = await run_pptx_lib_source_async(source, images=images)
+        input_bytes, source_id, loaded_title = await _office_lib_input(
+            store, principal, args, kind="pptx"
+        )
+        if source_id and not title_hint and loaded_title:
+            title = _ensure_extension(loaded_title, ".pptx")
+            deny_secret_filename(title)
+        raw = await run_pptx_lib_source_async(
+            source, images=images, input_bytes=input_bytes
+        )
         result = await store.write(principal, title=title, content=raw, kind="pptx")
         result["format"] = "pptx"
         result["via"] = "sandbox_pptx_lib"
+        result["loaded_existing"] = input_bytes is not None
+        if source_id:
+            result["source_artifact_id"] = source_id
         return _attach_write_observation(result, kind="pptx", title=title, raw=raw)
 
     return sandbox_pptx_lib
@@ -2564,7 +2613,9 @@ def build_default_gateway(
                 "in SYSTEM; this tool returns the full python-docx / openpyxl / "
                 "python-pptx craft. Not LibreChat Skills. Not bash. Not a second "
                 "store. After reading, write with sandbox_office_lib (kind matches "
-                "id). generate_* remains the fast path. Args: id=docx|xlsx|pptx"
+                "id). To change an existing file pass artifact_id and load_doc / "
+                "load_book / load_deck. generate_* is blank-template only. "
+                "Args: id=docx|xlsx|pptx"
             ),
             handler=_make_read_office_skill(),
             school_scoped=False,
@@ -2585,8 +2636,11 @@ def build_default_gateway(
                 "to the ledger. from pathlib import Path is a stub (mkdir ignored; "
                 "no host files). Do not import os. copy / math / datetime / "
                 "from io import BytesIO are allowed. Empty shells fail. "
-                "A missing image_artifact_ids entry is skipped. Args: source, "
-                "kind?, title?, image_artifact_ids?"
+                "A missing image_artifact_ids entry is skipped. To change an "
+                "existing ledger file pass artifact_id; scripts load via load_doc / "
+                "load_book / load_deck or Document(INPUT_PATH). generate_* is not "
+                "the edit path. Args: source, kind?, title?, artifact_id?, "
+                "image_artifact_ids?"
             ),
             handler=_make_sandbox_office_lib(store),
             school_scoped=False,
@@ -2610,7 +2664,9 @@ def build_default_gateway(
                 "picture. Must add slides then save_deck(prs) or prs.save. Empty "
                 "Presentation();save_deck fails — do not send a placeholder. "
                 "A missing image_artifact_ids entry is skipped. Word/Excel use "
-                "sandbox_office_lib. Args: source, title?, image_artifact_ids?"
+                "sandbox_office_lib. To change an existing deck pass artifact_id "
+                "and load_deck() / Presentation(INPUT_PATH). Args: source, title?, "
+                "artifact_id?, image_artifact_ids?"
             ),
             handler=_make_sandbox_pptx_lib(store),
             school_scoped=False,
@@ -3076,7 +3132,8 @@ def openai_tool_schemas(
                         "Office-lib body. kind=docx uses python-docx; kind=xlsx uses "
                         "openpyxl; kind=pptx uses python-pptx. from pathlib import Path "
                         "is a stub. .save is routed to the ledger. Do not import os. "
-                        "Empty shells fail."
+                        "Empty shells fail. Change an existing file with artifact_id "
+                        "then load_doc/load_book/load_deck or Document(INPUT_PATH)."
                     ),
                 },
                 "kind": {
@@ -3086,6 +3143,13 @@ def openai_tool_schemas(
                 "title": {
                     "type": "string",
                     "description": "Filename, preferably ending with .docx/.xlsx/.pptx",
+                },
+                "artifact_id": {
+                    "type": "string",
+                    "description": (
+                        "Existing ledger OOXML to load as INPUT_PATH. "
+                        "Required when changing a file the teacher already has."
+                    ),
                 },
                 "image_artifact_ids": {
                     "type": "array",
@@ -3106,12 +3170,17 @@ def openai_tool_schemas(
                         "prs.save is routed to the ledger. IMAGE_PATHS[0] is the first "
                         "picture. add_title_slide image= and add_table prs=/rows= aliases. "
                         "Do not import os. Add slides then save_deck or prs.save. "
-                        "Empty shells fail."
+                        "Empty shells fail. Change an existing deck with artifact_id "
+                        "then load_deck() or Presentation(INPUT_PATH)."
                     ),
                 },
                 "title": {
                     "type": "string",
                     "description": "Filename, preferably ending with .pptx",
+                },
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Existing ledger PPT to load as INPUT_PATH.",
                 },
                 "image_artifact_ids": {
                     "type": "array",

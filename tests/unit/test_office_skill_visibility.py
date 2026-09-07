@@ -47,6 +47,9 @@ def test_system_catalog_is_one_line_not_craft_body() -> None:
     assert "`xlsx`:" in body
     assert "`pptx`:" in body
     assert "read_office_skill" in body
+    assert "generate_* remains the fast path" not in body
+    assert "blank-template" in body
+    assert "artifact_id" in body
     assert "from docx import Document" not in body
     assert "from openpyxl import Workbook" not in body
     assert "add_heading" not in body
@@ -71,6 +74,9 @@ def test_office_skill_bodies_have_craft_without_shell() -> None:
         assert "```bash" not in text
         assert "Do not import os" in text
         assert "Do not use a shell" in text
+        assert "Fast path remains" not in text
+        assert "artifact_id" in text
+        assert "load_" in text
         for needle in expected[sid]:
             assert needle in text, (sid, needle)
 

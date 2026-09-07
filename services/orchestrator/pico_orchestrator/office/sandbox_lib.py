@@ -238,14 +238,34 @@ def run_office_lib_source(
     *,
     kind: str = "pptx",
     images: dict[str, bytes] | None = None,
+    input_bytes: bytes | None = None,
     timeout_s: float = _TIMEOUT_S,
 ) -> bytes:
     """Sync runner used by the subprocess and tests."""
     kind = normalize_office_kind(kind)
     assert_office_lib_source(source, kind=kind)
+    if input_bytes is not None:
+        if not isinstance(input_bytes, (bytes, bytearray)) or not input_bytes:
+            raise ToolError(
+                "sandbox.input_invalid",
+                "原件是空的或不是字节，不能载入隔离办公库。",
+            )
+        raw_in = bytes(input_bytes)
+        if not _looks_like_office_zip(raw_in, kind) or not is_valid_ooxml_package(
+            raw_in, f".{kind}"
+        ):
+            raise ToolError(
+                "sandbox.input_invalid",
+                f"原件不是真 {kind.upper()}（OOXML），不能当改稿载入。",
+            )
     with tempfile.TemporaryDirectory(prefix="pico-office-lib-") as tmp:
         root = Path(tmp)
         out_path = root / f"out.{kind}"
+        input_path = ""
+        if input_bytes is not None:
+            in_file = root / f"in.{kind}"
+            in_file.write_bytes(bytes(input_bytes))
+            input_path = str(in_file)
         image_paths: dict[str, str] = {}
         for key, blob in (images or {}).items():
             if not blob:
@@ -264,6 +284,7 @@ def run_office_lib_source(
             json.dumps(
                 {
                     "output": str(out_path),
+                    "input": input_path,
                     "images": image_paths,
                     "source": source,
                     "kind": kind,
@@ -298,9 +319,12 @@ def run_pptx_lib_source(
     source: str,
     *,
     images: dict[str, bytes] | None = None,
+    input_bytes: bytes | None = None,
     timeout_s: float = _TIMEOUT_S,
 ) -> bytes:
-    return run_office_lib_source(source, kind="pptx", images=images, timeout_s=timeout_s)
+    return run_office_lib_source(
+        source, kind="pptx", images=images, input_bytes=input_bytes, timeout_s=timeout_s
+    )
 
 
 async def run_office_lib_source_async(
@@ -308,10 +332,16 @@ async def run_office_lib_source_async(
     *,
     kind: str = "pptx",
     images: dict[str, bytes] | None = None,
+    input_bytes: bytes | None = None,
     timeout_s: float = _TIMEOUT_S,
 ) -> bytes:
     return await asyncio.to_thread(
-        run_office_lib_source, source, kind=kind, images=images, timeout_s=timeout_s
+        run_office_lib_source,
+        source,
+        kind=kind,
+        images=images,
+        input_bytes=input_bytes,
+        timeout_s=timeout_s,
     )
 
 
@@ -319,10 +349,15 @@ async def run_pptx_lib_source_async(
     source: str,
     *,
     images: dict[str, bytes] | None = None,
+    input_bytes: bytes | None = None,
     timeout_s: float = _TIMEOUT_S,
 ) -> bytes:
     return await run_office_lib_source_async(
-        source, kind="pptx", images=images, timeout_s=timeout_s
+        source,
+        kind="pptx",
+        images=images,
+        input_bytes=input_bytes,
+        timeout_s=timeout_s,
     )
 
 

@@ -1,7 +1,9 @@
 # Word craft (python-docx)
 
 Use when the teacher asked for a real `.docx`. This is craft, not a scene workflow.
-Execute only in `sandbox_office_lib` with `kind=docx`. Fast path remains `generate_docx_document`.
+Execute only in `sandbox_office_lib` with `kind=docx`.
+To change a file the teacher already has, pass `artifact_id` and start with `doc = load_doc()` (or `Document(INPUT_PATH)`). Do not rebuild with `generate_docx_document`.
+`generate_docx_document` is blank-template only.
 Do not import os. Do not use a shell. Empty `Document(); save_doc(doc)` fails.
 
 ## Run
@@ -12,6 +14,8 @@ from docx.shared import Pt, Inches, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 
+# Existing file (artifact_id set):
+# doc = load_doc()
 doc = Document()
 section = doc.sections[0]
 section.page_width = Inches(8.27)
@@ -59,7 +63,7 @@ save_doc(doc)
 - Lists: `doc.add_paragraph("项", style="List Bullet")` or `List Number`.
 - East-Asian font: set `w:eastAsia` on the run or Normal style. Latin `font.name` alone will not pick 宋体.
 - Pictures: only `IMAGE_PATHS[i]` from `image_artifact_ids`. Do not invent a host path.
-- Same title replaces the file the teacher opens. To patch stock layout, `generate_docx_document` with `artifact_id` + paragraph_index is enough.
+- Same title replaces the file the teacher opens. Change existing files with `artifact_id` + `load_doc()`, not `generate_docx_document`.
 - After save, the tool observation is what landed. `ok` is not finished.
 
 ## Check
