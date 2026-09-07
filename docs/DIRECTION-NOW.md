@@ -5,7 +5,7 @@ STATUS: BINDING · 业主书面四条 + 阶段 1.5 加线 + 北极星（Grok 用
 DATE: 2026-08-09
 UPDATED: 2026-09-06 · 北极星 v1.4：办公是产品（Word/Excel/HTML/PPT）· 写代码是仆人 · 捷径不是天花板 · 不要 bash
 仓: juanwan99/pico ONLY
-SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.7 · STATE-NOW · #744 · #919
+SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.8 · STATE-NOW · #744 · #919
 CLAIM-WB-DEGREE-WEB: NO
 ```
 
@@ -47,6 +47,9 @@ Pico 只做薄适配：身份授权、唯一账本、产品对象、交互与交
 最高：绝对禁止自己搞一套体系。绝对禁止做重体系。只允许薄适配。
 禁止把 Pico `/p/{id}` 或老师确认条当成发布。发布 = Edu 申请 + 校管批准。
 宿主 Pi 永保持 --no-builtin-tools。不要 bash。不要自制通用 jail 交差。
+模型与计量上游 = New API。聊天/出图等要统计计费的调用只打 New API。
+Pico 记用量、派生积分、不做钱。edu 钱包只认 Pico export，禁止另接模型第二账。
+本仓不写 edu。禁止为厂牌再造直连核。
 ```
 
 | 北极星 | 指什么 | 不指什么 |
@@ -58,12 +61,15 @@ Pico 只做薄适配：身份授权、唯一账本、产品对象、交互与交
 | **捷径** | `generate_*` / inspect / 按地址薄改 = 快路 | 把专用动词当能力上限，每来一种任务加一个工具 |
 | **办公计算机** | 隔离面上真跑成熟办公库；工艺对标文档 skill | 业务机 host bash；Pi 内建 bash；自研沙箱核；未验证就采购某厂 |
 | **写代码** | 仆人：短脚本只为做出/改好办公文件 | 产品主线；开放编程沙箱当卖点 |
+| **New API** | 模型调用 + 渠道统计/管理的统一上游 | Pico 做钱；edu 另接厂牌直连；DeepSeek 聊天核叙事 |
 
 与「办公硬度 / 交得出」冲突时：**先当通用模型，再交件。** 没点名就不交。点了名就要真文件，不能停在捷径墙。  
 与「再补一个专用办公工具」冲突时：**先问隔离办公库能否接走职责。** 接不走再谈捷径，捷径不得变成天花板。  
 与「成熟上游接管整台计算机」冲突时：**终局仍交成熟隔离面；本阶段主线是办公计算机，不是 Pi bash / overlay 编程环境。**
 
 后续加 Skill / 工具先守 [`ADR-CAPABILITY-LOADING.md`](./ADR-CAPABILITY-LOADING.md)：少常驻、目录一行、用到再读全文；有成熟做法不自研。Skill 只能收窄。
+
+**现行诚实（2026-09-08）：** 隔离办公库已在 live 接线。`generate_*` 仍常驻 CORE。老师聊天是否走沙箱未证（#919）。禁止把本节升版说成捷径已退役。聊天/出图已走 New API；Meili embedder 仍智谱 = 待统一。计量：Pico 记用量，edu 钱包合同是 export，本仓不写 edu。
 
 ---
 

@@ -17,7 +17,8 @@ PARENT: docs/USAGE-LEDGER.md
 | Honest `tokens_unknown` / `estimated` | Rate table, 点, SKU |
 | Pull API below | Pull on a schedule; never a second AI run ledger |
 
-Pico **must not** grow price/currency/wallet columns. edu **must not** persist a parallel Task/Run tree for product AI.
+Pico **must not** grow price/currency/wallet columns. edu **must not** persist a parallel Task/Run tree for product AI.  
+Provider traffic for billable chat/image **must** go through **New API** (Pico does not open a second vendor SDK as the product brain). edu **must not** attach its own model-provider bill for the same Pico turns. This repo does not implement edu-core.
 
 `points` on each event is Pico's already-converted meter (three decimals). edu debits that number as-is. **Do not multiply again.** null `points` is unknown, not zero. Conversion lives only in Pico (`points_meter.py` + `config/channel-rates.json`). **Token columns:** `prompt_tokens` is full input (cache reads included); `completion_tokens` is output; `total_tokens` is the provider total. `extra.cached_tokens` is a subset of prompt, not a second input pile. **Which conversion:** 积分 = 渠道成本(元) × 2.5 × 1000（1 元 = 1000 积分）. Cost comes from the channel price tag × tokens (or per-image / per-search-call). Unpriced channel is locked, not billed as zero. Reasoning is already in output. Export must not include rate / scale / formula / money fields. Teacher-facing Pico JSON omits token columns. Composer 预计 covers the resident package (this conversation's last priced bill, else a floor) so it is the same order of magnitude as 实际.
 

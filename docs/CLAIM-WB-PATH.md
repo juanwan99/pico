@@ -53,7 +53,8 @@ Issue: #449 CLAIM 材料 · #316 签章卡
 ☑ CLAIM-WB-DEGREE-WEB: YES（诚实限制内 · 不等于桌面/连接器/MCP栈/跨会话记忆）
 □ 挂起：记忆 · 人视角日用（业主令后面再做）
 □ 黄债知情仍在：Y-w4-src · Y-w5-dense · Y-mono · Y-summary
-□ drain ≠ 零中断 · 7 工具白名单 · 非桌面/非连接器
+□ drain ≠ 零中断 · 非桌面/非连接器
+□ 7 工具白名单 = **2026-08-26 装订时的诚实限制**，不是 2026-09-08 现网 CORE（现网常驻见 `capability_loading.py`）。本 YES 不随 CORE 变多而自动扩大，也不因办公库接线而重签。
 ```
 
 ## 禁止句

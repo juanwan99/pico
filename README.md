@@ -4,24 +4,25 @@
 
 ## 目标（校正）
 
-详见 **[docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md](docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md) §0-supreme**（最高：禁止自搞一套 / 禁止重体系）· **[AGENTS.md](AGENTS.md)** 文首工作法 · **[docs/HANDOFF-WB-PI.md](docs/HANDOFF-WB-PI.md)** · **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.7** · **[docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)**
+详见 **[docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md](docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md) §0-supreme**（最高：禁止自搞一套 / 禁止重体系）· **[AGENTS.md](AGENTS.md)** 文首工作法 · **[docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star** · **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.8** · **[docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)** · 开窗目录 **[docs/README.md](docs/README.md)**
 
 任务进度与证据以 **GitHub PR/SHA/CI** 为准（[OneFlow](docs/ONEFLOW.md)）。
 
 | | |
 |--|--|
-| 产品 | 任务型 AI 工作台（Web）· **WorkBuddy 程度六条** |
-| 模型 | HTTPS API（**DeepSeek 为主**；Kimi 可选后备） |
-| 编排 | **默认 = Pi Agent harness**；Kimi Agent = 遗产回滚 |
+| 产品 | 通用 LLM 工作台（Web）· 用法 = Grok · 主线 = 真 Word/Excel/HTML/PPT · 体验上限 = WorkBuddy 六条 |
+| 模型 | 云端 HTTPS API（现网 New API `openai-responses`，见 EXPERIENCE §34；对外只叫 Pico） |
+| 编排 | **默认 = 真 Pi**（`health.default_runtime=pi-true`）；hosted / Kimi = 遗产回滚 |
+| 办公 | 天花板 = 隔离办公库；`generate_*` = 未退役快路 |
 | 账本 | **仅 Pico**（禁止与 edu 双 AI） |
 | 范围 | **只写本仓**；edu 对接后置 |
-| 真源冻结 | **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.7** |
+| 真源冻结 | **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.8** |
 | 最高法律 | 禁止自搞一套体系 · 禁止做重体系 · 只允许薄适配 |
 
 ```text
 最高：禁止自搞一套体系。禁止做重体系。
 目标：Web 上 WorkBuddy 程度（六条）· 用法 = Grok · 办公主线（Word/Excel/HTML/PPT）· 写代码是仆人 · 能力并列 · 办公计算机交成熟上游（阶段方案 docs/PLAN-WORKENV-UPSTREAM.md）
-方案：回 Pico 整车 + 默认编排核 Pi + DeepSeek
+方案：回 Pico 整车 + 默认真 Pi + New API 脑/计量 + 隔离办公库
 不做：自研第二套能力核、Dify 门脸终局、场景考卷当对标、双核并列真源
 ```
 
