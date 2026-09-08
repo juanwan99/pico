@@ -2,8 +2,7 @@
 
 Use when the teacher asked for a real `.xlsx`. This is craft, not a scene workflow.
 Execute only in `sandbox_office_lib` with `kind=xlsx`.
-To change a file the teacher already has, pass `artifact_id` and start with `wb = load_book()` (or `load_workbook(INPUT_PATH)`). Do not rebuild with `generate_xlsx_document`.
-`generate_xlsx_document` is blank-template only.
+To change a file the teacher already has, pass `artifact_id` and start with `wb = load_book()` (or `load_workbook(INPUT_PATH)`).
 Do not import os. Do not use a shell. Empty `Workbook(); save_book(wb)` fails.
 A whole draft dumped in A1 is not a spreadsheet.
 
@@ -61,7 +60,7 @@ save_book(wb)
 - Multi-sheet: `wb.create_sheet("名")`. Cross-sheet refs like `=明细!B2` are allowed.
 - Column widths: `ws.column_dimensions["A"].width = …`.
 - Dates: real date objects or ISO text the teacher gave — do not invent.
-- Change existing sheets with `artifact_id` + `load_book()`. `generate_xlsx_document` cell+value is last-resort one-cell patch, not the default.
+- Change existing sheets with `artifact_id` + `load_book()`.
 - Same title replaces the file the teacher opens.
 - After save, read observation. Cells that should be numbers must not be decoration.
 

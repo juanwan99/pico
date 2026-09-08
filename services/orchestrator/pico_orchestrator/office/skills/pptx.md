@@ -1,9 +1,8 @@
 # PPT craft (python-pptx)
 
 Use when the teacher asked for a real `.pptx`. This is craft, not a scene workflow.
-Execute in `sandbox_office_lib` `kind=pptx` or the PPT alias `sandbox_pptx_lib`.
-To change a deck the teacher already has, pass `artifact_id` and start with `prs = load_deck()` (or `Presentation(INPUT_PATH)`). Do not rebuild with `generate_pptx_document`.
-`generate_pptx_document` is blank-template only (stock Title-and-Content).
+Execute in `sandbox_office_lib` with `kind=pptx`.
+To change a deck the teacher already has, pass `artifact_id` and start with `prs = load_deck()` (or `Presentation(INPUT_PATH)`).
 Do not import os. Do not use a shell. Empty `Presentation(); save_deck(prs)` fails.
 Stock body bullets are not the ceiling. Free geometry uses shapes + RGBColor.
 
@@ -74,7 +73,7 @@ save_deck(prs)
 - Blank layout index 6 has no `shapes.title`. Do not write `slide.shapes.title.text` on a blank slide.
 - Color blocks: `add_shape` + `fill.solid()` + `RGBColor`. Spec path cannot place these.
 - Helpers `add_title_slide` / `add_content_slide` / `add_table` are injected. Aliases: `image=`, `prs=`, `IMAGE_PATHS[0]`.
-- Pictures: `image_artifact_id` on spec slides, or `IMAGE_PATHS` here. `[image:…]` in body does not embed.
+- Pictures: `IMAGE_PATHS` from `image_artifact_ids`. `[image:…]` in body does not embed.
 - Same title replaces the file the teacher opens.
 - After save, read `observation.outline`. Zero slides or title-only walls are not done.
 

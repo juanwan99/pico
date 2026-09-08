@@ -535,19 +535,20 @@ def test_gateway_allowlist_includes_web_pair() -> None:
     assert "sandbox_browser_open" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_browser_screenshot" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_document_open" in ALLOWED_GATEWAY_TOOLS
-    assert "edit_docx_document" in ALLOWED_GATEWAY_TOOLS
-    assert "edit_pptx_document" in ALLOWED_GATEWAY_TOOLS
-    assert "generate_xlsx_document" in ALLOWED_GATEWAY_TOOLS
-    assert "edit_xlsx_document" in ALLOWED_GATEWAY_TOOLS
-    assert "render_document" in ALLOWED_GATEWAY_TOOLS
-    assert "inspect_document" in ALLOWED_GATEWAY_TOOLS
-    assert "verify_document" in ALLOWED_GATEWAY_TOOLS
+    assert "edit_docx_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "edit_pptx_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "generate_xlsx_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "edit_xlsx_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "render_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "inspect_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "verify_document" not in ALLOWED_GATEWAY_TOOLS
     assert "generate_image" in ALLOWED_GATEWAY_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
-    assert "sandbox_pptx_lib" in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_pptx_lib" not in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
     assert "kb_search" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 30
+    assert len(ALLOWED_GATEWAY_TOOLS) == 20
 
 
 def test_attach_teacher_sources_footer() -> None:

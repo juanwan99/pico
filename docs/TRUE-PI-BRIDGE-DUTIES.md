@@ -33,11 +33,10 @@ v9（观察回执）：写/改/打开工具回 `observation`（落地事实，�
 **不要手抄本表当 CORE。** Pi 默认可见 = `CORE_VISIBLE_TOOLS`（`capability_loading.py`）。执行天花板 = `ALLOWED_GATEWAY_TOOLS`（`true_pi/config.py`）。挂 Skill 只能收窄。
 
 ```text
-现行原则（2026-09-08）：
-- 办公天花板 = sandbox_office_lib（PPT 别名 sandbox_pptx_lib）+ read_office_skill
-- generate_* = 快路，空白模板 / 库存 spec，不是改已有文件的路径
-- inspect_document / verify_document = 读结构 / 查 OOXML，不是投影核
-- edit_* / render_document / publish_* = EXTENDED 或失败关闭，不进默认 CORE
+现行原则（2026-09-08 · #952）：
+- 办公天花板 = sandbox_office_lib + read_office_skill
+- generate_* / sandbox_pptx_lib / inspect / verify / edit / render = 已从网关拆除，不是 EXTENDED 别名
+- publish_* = EXTENDED 失败关闭，不进默认 CORE
 - 禁 bash / 任意 FS / 未登记 MCP / 自研 tool_search
 ```
 

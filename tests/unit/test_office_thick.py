@@ -113,7 +113,7 @@ def test_empty_blocks_without_title_or_theme_still_fail() -> None:
 @pytest.mark.asyncio
 async def test_generate_pptx_sibling_blocks_not_dropped_by_stub_spec() -> None:
     """Live F4 r1/r2: spec={images:[]} + top-level blocks was 不能为空."""
-    gw = build_default_gateway(MemoryArtifactStore())
+    gw = build_default_gateway(MemoryArtifactStore(), register_unregistered_office=True)
     out = await gw.invoke(
         P(),
         "generate_pptx_document",
@@ -147,7 +147,7 @@ async def test_generate_pptx_sibling_blocks_not_dropped_by_stub_spec() -> None:
 @pytest.mark.asyncio
 async def test_generate_pptx_kpi_stub_spec_keeps_sibling_blocks() -> None:
     """Live F4 r1: spec={kpi_table_title} + sibling blocks."""
-    gw = build_default_gateway(MemoryArtifactStore())
+    gw = build_default_gateway(MemoryArtifactStore(), register_unregistered_office=True)
     out = await gw.invoke(
         P(),
         "generate_pptx_document",
@@ -207,7 +207,7 @@ def test_cover_content_aliases_are_slides() -> None:
 @pytest.mark.asyncio
 async def test_generate_pptx_live_cover_content_shape_writes() -> None:
     """Exact first-fail argument shape from run b8763b35 seq 11."""
-    gw = build_default_gateway(MemoryArtifactStore())
+    gw = build_default_gateway(MemoryArtifactStore(), register_unregistered_office=True)
     out = await gw.invoke(
         P(),
         "generate_pptx_document",
@@ -269,7 +269,7 @@ def test_missing_image_id_still_writes_deck() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_pptx_skips_missing_image_id() -> None:
-    gw = build_default_gateway(MemoryArtifactStore())
+    gw = build_default_gateway(MemoryArtifactStore(), register_unregistered_office=True)
     out = await gw.invoke(
         P(),
         "generate_pptx_document",

@@ -13,7 +13,7 @@ from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
 
 def test_sandbox_pptx_lib_allowlist_has_no_bash() -> None:
-    assert "sandbox_pptx_lib" in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_pptx_lib" not in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
     assert "read_office_skill" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS

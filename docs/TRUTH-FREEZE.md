@@ -190,4 +190,4 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 - 正本清源：Pico 禁止自选 Meili embedding 厂牌；知识库只挂载 Meili 关键词；禁止再开 T-EMBED 施工卡
 - 出图只认 New API gateway；删除智谱/直连 Gemini 出图产品路
 - `inspect_document` / `verify_document` 退出 CORE 常驻（办公投影器）
-- `generate_*` / spec 标为待拆污染，禁止再写成快路建设许可证
+- `generate_*` / spec 标为待拆污染，禁止再写成快路建设许可证；模型面拆除走 #952（实现现状，不升冻结版本）

@@ -84,8 +84,8 @@ LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 
 ## 5. 现况缺口
 
-- 常驻 CORE **16 个**（`capability_loading.py` 为真源）。办公写路径只常驻 `sandbox_office_lib` + `read_office_skill`。`generate_docx/pptx/xlsx` 与 `sandbox_pptx_lib` 在 EXTENDED。不要再加调度器 / tool_search。  
-- `verify_document` 在 CORE。再加办公动词 = 打回。  
+- 常驻 CORE **14 个**（`capability_loading.py` 为真源）。办公写路径只常驻 `sandbox_office_lib` + `read_office_skill`。`generate_*` / `sandbox_pptx_lib` / inspect / verify / edit / render 已从网关拆除（#952），不是 EXTENDED 别名。不要再加调度器 / tool_search。  
+- 再加办公动词 = 打回。  
 - `skill-deliverable` 只留何时用 + 观察回执，禁止再灌交付剧本。  
 - 仓内已有场景 Skill 苗头（教案/出题）；须保持「不自动套用」，禁止再铺成默认工作流。  
 - 写/改/打开工具回 `observation`（事实，不是评分）。禁自研反思核。门脸不编课堂文件。

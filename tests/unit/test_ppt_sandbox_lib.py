@@ -134,20 +134,21 @@ def _pptx_bytes(store: MemoryArtifactStore, owner: P, artifact_id: str) -> bytes
 def test_allowlist_has_ceiling_not_bash() -> None:
     gw = build_default_gateway()
     names = set(gw.tools)
-    assert "sandbox_pptx_lib" in names
+    assert "sandbox_pptx_lib" not in names
     assert "sandbox_office_lib" in names
-    assert "generate_pptx_document" in names
-    assert "sandbox_pptx_lib" in ALLOWED_GATEWAY_TOOLS
+    assert "generate_pptx_document" not in names
+    assert "sandbox_pptx_lib" not in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in names
     schemas = {s["function"]["name"] for s in openai_tool_schemas(gw)}
-    assert "sandbox_pptx_lib" in schemas
-    assert len(ALLOWED_GATEWAY_TOOLS) == 30
+    assert "sandbox_pptx_lib" not in schemas
+    assert "sandbox_office_lib" in schemas
+    assert len(ALLOWED_GATEWAY_TOOLS) == 20
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
-    assert workbench_tool_step_line("sandbox_pptx_lib") == "正在沙箱排 PPT"
-    assert workbench_tool_result_line("sandbox_pptx_lib", ok=True) == "已沙箱排 PPT"
-    assert workbench_tool_result_line("sandbox_pptx_lib", ok=False) == "没沙箱排出 PPT"
+    assert workbench_tool_step_line("sandbox_office_lib") == "正在沙箱写办公文件"
+    assert workbench_tool_result_line("sandbox_office_lib", ok=True) == "已沙箱写出办公文件"
+    assert workbench_tool_result_line("sandbox_office_lib", ok=False) == "没沙箱写出办公文件"
 
 
 def test_import_and_dunder_denied() -> None:
@@ -321,7 +322,7 @@ def test_empty_shell_fail_closed() -> None:
 
 @pytest.mark.asyncio
 async def test_complex_image_then_sandbox_deck_has_media() -> None:
-    """Complex task: generate_image → sandbox_pptx_lib → zip media + inspect."""
+    """Complex task: generate_image → sandbox_office_lib kind=pptx → zip media + inspect."""
     store = MemoryArtifactStore()
     gw = build_default_gateway(store)
     owner = P()
@@ -339,15 +340,16 @@ async def test_complex_image_then_sandbox_deck_has_media() -> None:
 
     out = await gw.invoke(
         owner,
-        "sandbox_pptx_lib",
+        "sandbox_office_lib",
         {
+            "kind": "pptx",
             "source": THREE_SLIDE_WITH_IMAGE,
             "title": "上限.pptx",
             "image_artifact_ids": [aid],
         },
     )
     assert out["format"] == "pptx"
-    assert out["via"] == "sandbox_pptx_lib"
+    assert out["via"] == "sandbox_office_lib"
     raw = _pptx_bytes(store, owner, out["artifact_id"])
     assert is_valid_ooxml_package(raw, ".pptx")
     with zipfile.ZipFile(BytesIO(raw)) as zf:
@@ -362,34 +364,45 @@ async def test_complex_image_then_sandbox_deck_has_media() -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_pptx_document_stays_default() -> None:
+async def test_generate_pptx_document_not_on_gateway() -> None:
     gw = build_default_gateway(MemoryArtifactStore())
+    assert "generate_pptx_document" not in gw.tools
+    assert "sandbox_pptx_lib" not in gw.tools
     owner = P()
     one = await gw.invoke(
         owner,
-        "generate_pptx_document",
-        {"title": "日常.pptx", "marker": "M-default", "body": "只有一页"},
+        "sandbox_office_lib",
+        {
+            "kind": "pptx",
+            "title": "日常.pptx",
+            "source": (
+                "from pptx import Presentation\n"
+                "prs = Presentation()\n"
+                "add_title_slide(prs, '只有一页', 'M-default')\n"
+                "save_deck(prs)\n"
+            ),
+        },
     )
     assert one.get("format") == "pptx"
-    assert one.get("via") != "sandbox_pptx_lib"
+    assert one.get("via") == "sandbox_office_lib"
 
 
 @pytest.mark.asyncio
 async def test_tool_rejects_import_and_empty_shell() -> None:
-    gw = build_default_gateway(MemoryArtifactStore())
+    gw = build_default_gateway()
     owner = P()
     with pytest.raises(ToolError) as ei:
         await gw.invoke(
             owner,
-            "sandbox_pptx_lib",
-            {"source": "import os\nprs = Presentation()\nsave_deck(prs)"},
+            "sandbox_office_lib",
+            {"kind": "pptx", "source": "import os\nprs = Presentation()\nsave_deck(prs)"},
         )
     assert ei.value.code == "sandbox.exec_denied"
     with pytest.raises(ToolError) as ei:
         await gw.invoke(
             owner,
-            "sandbox_pptx_lib",
-            {"source": "prs = Presentation()\nsave_deck(prs)"},
+            "sandbox_office_lib",
+            {"kind": "pptx", "source": "prs = Presentation()\nsave_deck(prs)"},
         )
     assert ei.value.code == "sandbox.pptx_shell"
 

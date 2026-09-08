@@ -176,7 +176,7 @@ async def test_inspect_uploaded_pptx_then_next_chat_sees_those_pixels(
     monkeypatch,
 ) -> None:
     store = MemoryArtifactStore(run_id="run-infile")
-    gw = build_default_gateway(store)
+    gw = build_default_gateway(store, register_unregistered_office=True)
     owner = P("school-a", "member-a", ["ai:run"])
     created = await store.write(
         owner, title="带图.pptx", content=_pptx_with_picture(), kind="pptx"

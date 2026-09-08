@@ -131,7 +131,7 @@ async def test_teacher_image_then_pptx_has_real_picture(monkeypatch) -> None:
         "pico_orchestrator.tools_builtin.generate_image_with_usage", fake_image
     )
     store = MemoryArtifactStore(run_id="run-deck")
-    gw = build_default_gateway(store)
+    gw = build_default_gateway(store, register_unregistered_office=True)
     owner = P("school-a", "member-a", ["ai:run"])
     pictured = await gw.invoke(
         owner,

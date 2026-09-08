@@ -122,7 +122,8 @@ def test_xlsx_kind_needs_sheet():
 
 def test_new_tools_on_pi_allowlist():
     for name in ("render_document", "inspect_document", "verify_document"):
-        assert name in ALLOWED_GATEWAY_TOOLS
+        assert name not in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
 
 

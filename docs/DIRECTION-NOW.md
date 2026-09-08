@@ -69,7 +69,7 @@ Pico 记用量、派生积分、不做钱。edu 钱包只认 Pico export，禁�
 
 后续加 Skill / 工具先守 [`ADR-CAPABILITY-LOADING.md`](./ADR-CAPABILITY-LOADING.md)：少常驻、目录一行、用到再读全文；有成熟做法不自研。Skill 只能收窄。
 
-**现行诚实（2026-09-08）：** 隔离办公库已在 live 接线。`generate_*` / `sandbox_pptx_lib` 退出 CORE（#946）。老师聊天选路见 #944。聊天/出图已走 New API。知识库 = Meili 关键词挂载，Pico 不自选 embedding 厂牌。计量：Pico 记用量，edu 钱包合同是 export，本仓不写 edu。
+**现行诚实（2026-09-08）：** 隔离办公库已在 live 接线。`generate_*` / inspect / edit / `sandbox_pptx_lib` 已从网关拆除（#952），不是 EXTENDED 别名。老师聊天选路见 #944。聊天/出图已走 New API。知识库 = Meili 关键词挂载，Pico 不自选 embedding 厂牌。计量：Pico 记用量，edu 钱包合同是 export，本仓不写 edu。
 
 ---
 

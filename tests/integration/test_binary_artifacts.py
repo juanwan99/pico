@@ -75,7 +75,7 @@ def _body_for_tool(tool: str, marker: str) -> str:
 
 
 @pytest.mark.parametrize(
-    "tool,title,marker,ext,mime_part,zip_paths",
+    "tool,title,marker,ext,mime_part,zip_paths,arguments",
     [
         (
             "generate_html_document",
@@ -84,34 +84,60 @@ def _body_for_tool(tool: str, marker: str) -> str:
             ".html",
             "text/html",
             None,
+            None,
         ),
         (
-            "generate_docx_document",
+            "sandbox_office_lib",
             "lesson.docx",
             "P270_I_DOCX",
             ".docx",
             "wordprocessingml",
             ("[Content_Types].xml", "word/document.xml"),
+            {
+                "kind": "docx",
+                "title": "lesson.docx",
+                "source": (
+                    "from docx import Document\n"
+                    "doc = Document()\n"
+                    "doc.add_paragraph('各位家长：本周五召开家长会 P270_I_DOCX，请准时到场并带好材料。')\n"
+                    "doc.add_paragraph('会议内容按顺序进行，会后请在周日晚前反馈作业安排。')\n"
+                    "save_doc(doc)\n"
+                ),
+            },
         ),
         (
-            "generate_pptx_document",
+            "sandbox_office_lib",
             "lesson.pptx",
             "P270_I_PPTX",
             ".pptx",
             "presentationml",
             ("[Content_Types].xml", "ppt/presentation.xml", "ppt/slides/slide1.xml"),
+            {
+                "kind": "pptx",
+                "title": "lesson.pptx",
+                "source": (
+                    "from pptx import Presentation\n"
+                    "prs = Presentation()\n"
+                    "add_title_slide(prs, '开场 P270_I_PPTX', '培训目标')\n"
+                    "add_content_slide(prs, '中段', ['候课', '提问', '收本'])\n"
+                    "add_content_slide(prs, '收尾', ['下周听课'])\n"
+                    "save_deck(prs)\n"
+                ),
+            },
         ),
     ],
 )
 def test_generate_and_download_bytes_safe(
-    client, tool, title, marker, ext, mime_part, zip_paths
+    client, tool, title, marker, ext, mime_part, zip_paths, arguments
 ) -> None:
     headers = _headers(client)
+    if arguments is None:
+        arguments = {"title": title, "marker": marker, "body": _body_for_tool(tool, marker)}
     created = _invoke(
         client,
         headers,
         tool,
-        {"title": title, "marker": marker, "body": _body_for_tool(tool, marker)},
+        arguments,
     )
     assert created.status_code == 200, created.text
     result = created.json()["result"]
@@ -162,11 +188,16 @@ def test_office_preview_returns_content_box_html(client) -> None:
     created = _invoke(
         client,
         headers,
-        "generate_pptx_document",
+        "sandbox_office_lib",
         {
+            "kind": "pptx",
             "title": "preview.pptx",
-            "marker": "PREVIEW-BOX-1",
-            "body": _body_for_tool("generate_pptx_document", "PREVIEW-BOX-1"),
+            "source": (
+                "from pptx import Presentation\n"
+                "prs = Presentation()\n"
+                "add_title_slide(prs, 'PREVIEW-BOX-1', 'preview')\n"
+                "save_deck(prs)\n"
+            ),
         },
     )
     assert created.status_code == 200, created.text

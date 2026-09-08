@@ -86,7 +86,7 @@ def test_core_is_shorter_and_keeps_office_ceiling() -> None:
     assert ppt_siblings_honest(visible)
     for name in ("edit_docx_document", "edit_pptx_document", "edit_xlsx_document"):
         assert name not in visible
-        assert name in EXTENDED_TOOLS
+        assert name not in EXTENDED_TOOLS
 
 
 def test_no_tool_picker_copy() -> None:
@@ -110,26 +110,46 @@ def test_hung_skill_still_honest_on_pptx_siblings() -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_docx_patches_existing_paragraph() -> None:
+async def test_sandbox_office_lib_patches_existing_paragraph() -> None:
     store = MemoryArtifactStore()
     gw = build_default_gateway(store)
     principal = P()
     created = await gw.invoke(
         principal,
-        "generate_docx_document",
+        "sandbox_office_lib",
         {
+            "kind": "docx",
             "title": "通知.docx",
-            "marker": "mk-shrink",
-            "body": "第一段足够长的正文内容。\n第二段也要留下。",
+            "source": (
+                "from docx import Document\n"
+                "doc = Document()\n"
+                "doc.add_paragraph('第一段足够长的正文内容。')\n"
+                "doc.add_paragraph('第二段也要留下。')\n"
+                "save_doc(doc)\n"
+            ),
         },
     )
     aid = created["artifact_id"]
     patched = await gw.invoke(
         principal,
-        "generate_docx_document",
-        {"artifact_id": aid, "paragraph_index": 1, "text": "第一段已改"},
+        "sandbox_office_lib",
+        {
+            "kind": "docx",
+            "title": "通知.docx",
+            "artifact_id": aid,
+            "source": (
+                "from docx import Document\n"
+                "old = load_doc()\n"
+                "kept = [p.text for p in old.paragraphs if p.text.strip()]\n"
+                "doc = Document()\n"
+                "doc.add_paragraph('第一段已改，并保留足够长的正文内容。')\n"
+                "for line in kept[1:]:\n"
+                "    doc.add_paragraph(line)\n"
+                "save_doc(doc)\n"
+            ),
+        },
     )
-    assert patched.get("edited") is True
+    assert patched.get("artifact_id")
     row = await store.read(principal, artifact_id=patched["artifact_id"], title=None)
     assert row is not None
     outline = inspect_office_bytes(row["content"], ".docx")
@@ -138,26 +158,47 @@ async def test_generate_docx_patches_existing_paragraph() -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_xlsx_patches_existing_cell() -> None:
+async def test_sandbox_office_lib_patches_existing_cell() -> None:
     store = MemoryArtifactStore()
     gw = build_default_gateway(store)
     principal = P()
     created = await gw.invoke(
         principal,
-        "generate_xlsx_document",
+        "sandbox_office_lib",
         {
+            "kind": "xlsx",
             "title": "表.xlsx",
-            "marker": "mk-x",
-            "body": "# 表\n|名|分|\n|---|---|\n|张三|90|\n|李四|80|",
+            "source": (
+                "from openpyxl import Workbook\n"
+                "wb = Workbook()\n"
+                "ws = wb.active\n"
+                "ws['A1'] = '名'\n"
+                "ws['B1'] = '分'\n"
+                "ws['A2'] = '张三'\n"
+                "ws['B2'] = 90\n"
+                "ws['A3'] = '李四'\n"
+                "ws['B3'] = 80\n"
+                "save_book(wb)\n"
+            ),
         },
     )
     aid = created["artifact_id"]
     patched = await gw.invoke(
         principal,
-        "generate_xlsx_document",
-        {"artifact_id": aid, "cell": "B2", "value": "95"},
+        "sandbox_office_lib",
+        {
+            "kind": "xlsx",
+            "title": "表.xlsx",
+            "artifact_id": aid,
+            "source": (
+                "wb = load_book()\n"
+                "ws = wb.active\n"
+                "ws['B2'] = 95\n"
+                "save_book(wb)\n"
+            ),
+        },
     )
-    assert patched.get("edited") is True
+    assert patched.get("artifact_id")
     row = await store.read(principal, artifact_id=patched["artifact_id"], title=None)
     assert row is not None
     outline = inspect_office_bytes(row["content"], ".xlsx")

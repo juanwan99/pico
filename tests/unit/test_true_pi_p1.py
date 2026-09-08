@@ -287,17 +287,19 @@ def test_bridge_allowlist_is_thin() -> None:
     assert "sandbox_preview_inspect" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_browser_open" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_document_open" in ALLOWED_GATEWAY_TOOLS
-    assert "edit_docx_document" in ALLOWED_GATEWAY_TOOLS
-    assert "edit_pptx_document" in ALLOWED_GATEWAY_TOOLS
-    assert "generate_xlsx_document" in ALLOWED_GATEWAY_TOOLS
-    assert "edit_xlsx_document" in ALLOWED_GATEWAY_TOOLS
-    assert "render_document" in ALLOWED_GATEWAY_TOOLS
-    assert "inspect_document" in ALLOWED_GATEWAY_TOOLS
-    assert "verify_document" in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
+    assert "read_office_skill" in ALLOWED_GATEWAY_TOOLS
+    assert "edit_docx_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "edit_pptx_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "generate_xlsx_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "edit_xlsx_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "render_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "inspect_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "verify_document" not in ALLOWED_GATEWAY_TOOLS
     assert "generate_image" in ALLOWED_GATEWAY_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
-    assert "sandbox_pptx_lib" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 30
+    assert "sandbox_pptx_lib" not in ALLOWED_GATEWAY_TOOLS
+    assert len(ALLOWED_GATEWAY_TOOLS) == 20
 
 
 def test_shadow_diff_flags_false_green() -> None:
