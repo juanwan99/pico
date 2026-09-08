@@ -71,8 +71,9 @@ def test_state_now_is_index_not_second_ledger() -> None:
     assert "本页三行是索引" in text
     assert "写码 `/home/ops/pico`" in text
     assert "生产 `/opt/pico`" in text
-    assert "7f86403b19de953aa564a5465185396887989416" in text
-    assert "| 已收口 | [#954]" in text or "已收口 | [#954]" in text
+    assert "写本文时 tip = " in text
+    assert "已收口 | [#954]" in text
+    assert "已收口 | [#956]" in text
     direction = (ROOT / "docs" / "DIRECTION-NOW.md").read_text(encoding="utf-8")
     assert "CLAIM-WB-DEGREE-WEB: YES" in direction[:800]
     assert "CLAIM-WB-DEGREE-WEB: NO" not in direction[:800]
