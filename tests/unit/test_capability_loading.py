@@ -34,12 +34,14 @@ def test_core_and_extended_partition_gateway():
     assert set(CORE_VISIBLE_TOOLS) & set(EXTENDED_TOOLS) == set()
     assert "bash" not in CORE_VISIBLE_TOOLS
     assert "bash" not in EXTENDED_TOOLS
-    assert len(CORE_VISIBLE_TOOLS) == 16
+    assert len(CORE_VISIBLE_TOOLS) == 14
     assert "read_office_skill" in CORE_VISIBLE_TOOLS
-    assert "verify_document" in CORE_VISIBLE_TOOLS
-    assert "verify_document" not in EXTENDED_TOOLS
+    assert "inspect_document" not in CORE_VISIBLE_TOOLS
+    assert "verify_document" not in CORE_VISIBLE_TOOLS
+    assert "inspect_document" in EXTENDED_TOOLS
+    assert "verify_document" in EXTENDED_TOOLS
     assert "read_office_skill" not in EXTENDED_TOOLS
-    assert len(EXTENDED_TOOLS) == 14
+    assert len(EXTENDED_TOOLS) == 16
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS
@@ -87,7 +89,8 @@ def test_default_visible_is_core_not_full_allowlist():
     assert "sandbox_document_open" in visible
     assert "sandbox_browser_screenshot" not in visible
     assert "kb_search" in visible
-    assert "verify_document" in visible
+    assert "verify_document" not in visible
+    assert "inspect_document" not in visible
     assert ppt_siblings_honest(visible)
 
 

@@ -7,7 +7,7 @@ DATE: 2026-09-08
 在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-      写本文时 tip = c41b7e0dd030f6418a25f8fb9a678b818d54027d
+      写本文时 tip = d29b978fab5bf562ad97ad7fa113d5f5649badfe
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
@@ -18,7 +18,7 @@ PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源�
 最高: LAW §0-supreme · 禁止自搞一套 / 禁止重体系
 工作法: 本窗合一 · GitHub 唯一真源 · 写码树/生产树分开 · AGENTS 文首
 北极星: DIRECTION-NOW §0-star v1.4 · 用法 = Grok · 办公主线 · 能力并列 · 办公计算机交成熟上游 · 阶段方案 docs/PLAN-WORKENV-UPSTREAM.md
-冻结: docs/TRUTH-FREEZE.md v1.8（默认真 Pi · 模型/计量上游 New API · 办公天花板隔离库 · generate_* 不在 CORE）
+冻结: docs/TRUTH-FREEZE.md v1.9（默认真 Pi · 模型/计量上游 New API · 知识库=Meili 挂载 · 办公天花板隔离库 · generate_*/inspect 不在 CORE）
 真源: GitHub Issue/PR/SHA/CI + 公网 tip。本页三行是索引。
 juanwan99/oneflow: 不当真源（已 Archive）
 ```
@@ -94,7 +94,7 @@ curl tip + GitHub 在飞 → EXPERIENCE（点名≤3）
 | 规划 | [#805](https://github.com/juanwan99/pico/issues/805) | 活核+记忆+问清+计划+过程可见 · 六刀指针 · 不派 |
 | 规划 | [#744](https://github.com/juanwan99/pico/issues/744) | 北极星 v1.4 已合进 DIRECTION-NOW / TRUTH-FREEZE v1.7+ · 留开不派 |
 | 已收口 | [#944](https://github.com/juanwan99/pico/issues/944) · [#945](https://github.com/juanwan99/pico/pull/945) | T-ROUTE-LOCK-EVIDENCE · 选路走沙箱 @ tip `c41b7e0d…` |
-| 在飞 | [#946](https://github.com/juanwan99/pico/issues/946) | T-OFFICE-SUBTRACT · 办公减法 · 本窗 |
+| 在飞 | [#950](https://github.com/juanwan99/pico/issues/950) | T-ZHENGBEN-PURGE · 正本清源 |
 | 规划 | [#919](https://github.com/juanwan99/pico/issues/919) | 根因调查仍 OPEN；选路取证见 #944（走沙箱） |
 | 已收口 | [#928](https://github.com/juanwan99/pico/issues/928) | T-OFFICE-CONTRACT-RECEIPT · Excel `values` 假绿 · 已部 |
 | 已收口 | [#929](https://github.com/juanwan99/pico/issues/929) | T-PICO-PUBLISH-BOUNDARY · 发布不是 Pico 能力 · 已部 |

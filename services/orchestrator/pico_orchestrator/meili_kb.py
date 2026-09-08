@@ -16,18 +16,8 @@ FILTERABLE = ["school_id", "membership_id"]
 SEARCHABLE = ["title", "text"]
 DISPLAYED = ["artifact_id", "title", "text", "school_id", "membership_id", "created_at"]
 MAX_TEXT = 20_000
-SEMANTIC_RATIO = 0.5
-# Prefer SiliconFlow bge-m3 when key present; else Zhipu embedding-3 (same REST
-# shape Meili expects). Never invent a local vector kernel. Images stay Zhipu
-# glm-image only — SF key here is embeddings-only.
-SF_EMBED_MODEL = "BAAI/bge-m3"
-SF_EMBED_URL = "https://api.siliconflow.cn/v1/embeddings"
-ZHIPU_EMBED_MODEL = "embedding-3"
-ZHIPU_EMBED_URL = "https://open.bigmodel.cn/api/paas/v4/embeddings"
-ZHIPU_EMBED_DIMS = 1024
-# Back-compat aliases (tests / older imports).
-EMBED_MODEL = SF_EMBED_MODEL
-EMBED_URL = SF_EMBED_URL
+# Pico does not own an embedder. Meili is a keyword mount of the ledger.
+# Do not PATCH REST embedders (Zhipu / SiliconFlow / New API) from this file.
 
 MATERIAL_KINDS = frozenset(
     {
@@ -96,26 +86,14 @@ def meili_key() -> str:
     return (os.environ.get("MEILI_MASTER_KEY") or "").strip()
 
 
-def siliconflow_embed_key() -> str:
-    return (os.environ.get("SILICONFLOW_API_KEY") or "").strip()
-
-
-def zhipu_embed_key() -> str:
-    return (os.environ.get("ZHIPU_API_KEY") or "").strip()
-
-
 def embedder_provider() -> str | None:
-    """Which external embed REST Meili will call. SF preferred; Zhipu fallback."""
-    if siliconflow_embed_key():
-        return "siliconflow"
-    if zhipu_embed_key():
-        return "zhipu"
+    """Pico never selects an embedding vendor."""
     return None
 
 
 def embedding_api_key() -> str:
-    """Nonempty when hybrid can arm. Prefer SF; else Zhipu (prod has Zhipu)."""
-    return siliconflow_embed_key() or zhipu_embed_key()
+    """Always empty: hybrid is not a Pico product path."""
+    return ""
 
 
 def meili_configured() -> bool:
@@ -141,38 +119,6 @@ def _headers() -> dict[str, str]:
     if key:
         out["Authorization"] = f"Bearer {key}"
     return out
-
-
-def _embedder_settings() -> dict[str, Any] | None:
-    """Meili REST embedder config, or None → keyword-only search."""
-    provider = embedder_provider()
-    if provider == "siliconflow":
-        return {
-            "default": {
-                "source": "rest",
-                "url": SF_EMBED_URL,
-                "apiKey": siliconflow_embed_key(),
-                "documentTemplate": "{{doc.title}}\n{{doc.text}}",
-                "request": {"model": SF_EMBED_MODEL, "input": ["{{text}}"]},
-                "response": {"data": [{"embedding": "{{embedding}}"}]},
-            }
-        }
-    if provider == "zhipu":
-        return {
-            "default": {
-                "source": "rest",
-                "url": ZHIPU_EMBED_URL,
-                "apiKey": zhipu_embed_key(),
-                "documentTemplate": "{{doc.title}}\n{{doc.text}}",
-                "request": {
-                    "model": ZHIPU_EMBED_MODEL,
-                    "input": ["{{text}}"],
-                    "dimensions": ZHIPU_EMBED_DIMS,
-                },
-                "response": {"data": [{"embedding": "{{embedding}}"}]},
-            }
-        }
-    return None
 
 
 def is_material(*, kind: str | None, title: str | None) -> bool:
@@ -341,7 +287,7 @@ class MeiliIndex:
         return isinstance(default, dict) and bool(default.get("source") or default.get("url"))
 
     def ensure(self, *, force: bool = False) -> None:
-        cache_key = f"{meili_url()}|{INDEX}|{embedder_provider() or 'none'}"
+        cache_key = f"{meili_url()}|{INDEX}|keyword"
         if not force and _ENSURE_CACHE.get(cache_key):
             return
         status, _ = self._call("GET", f"/indexes/{INDEX}")
@@ -352,29 +298,24 @@ class MeiliIndex:
                 {"uid": INDEX, "primaryKey": PRIMARY_KEY},
             )
             _ENSURE_CACHE.pop(cache_key, None)
-        want_embedders = _embedder_settings()
         # Skip PATCH when index already matches (stops reindex flooding settingsUpdate).
-        if not force and self._settings_match(want_embedders):
+        if not force and self._settings_match(None):
             _ENSURE_CACHE[cache_key] = True
             return
         settings: dict[str, Any] = {
             "filterableAttributes": FILTERABLE,
             "searchableAttributes": SEARCHABLE,
             "displayedAttributes": DISPLAYED,
+            # Strip leftover REST embedders (Zhipu/SF) so Meili does not keep calling them.
+            "embedders": {"default": None},
         }
-        if want_embedders:
-            settings["embedders"] = want_embedders
         patch_status, patch_body = self._call(
             "PATCH", f"/indexes/{INDEX}/settings", settings, timeout=20.0
         )
         if patch_status < 400 and isinstance(patch_body, dict) and patch_body.get("taskUid") is not None:
             self._wait_task(int(patch_body["taskUid"]), timeout_s=45.0)
-        if want_embedders:
-            # Only cache success when Meili really armed the embedder.
-            if self.live_embedder_armed():
-                _ENSURE_CACHE[cache_key] = True
-            else:
-                _ENSURE_CACHE.pop(cache_key, None)
+        if self.live_embedder_armed():
+            _ENSURE_CACHE.pop(cache_key, None)
         else:
             _ENSURE_CACHE[cache_key] = True
 
@@ -395,7 +336,8 @@ class MeiliIndex:
             want_default = want_embedders.get("default") or {}
             return str(default.get("url") or "") == str(want_default.get("url") or "")
         live = body.get("embedders") if isinstance(body.get("embedders"), dict) else {}
-        return not live
+        default = live.get("default") if isinstance(live, dict) else None
+        return not isinstance(default, dict)
 
     def _wait_task(self, task_uid: int, *, timeout_s: float = 45.0) -> None:
         import time
@@ -445,20 +387,13 @@ class MeiliIndex:
             "highlightPreTag": "",
             "highlightPostTag": "",
         }
-        want_hybrid = bool(_embedder_settings()) and self.live_embedder_armed()
-        if want_hybrid:
-            body["hybrid"] = {"semanticRatio": SEMANTIC_RATIO, "embedder": "default"}
         status, payload = self._call("POST", f"/indexes/{INDEX}/search", body, timeout=12.0)
-        # Embedder key present but index not armed yet → honest keyword fallback.
-        if status >= 400 and body.get("hybrid"):
-            body.pop("hybrid", None)
-            status, payload = self._call("POST", f"/indexes/{INDEX}/search", body, timeout=12.0)
         if status >= 400:
             raise RuntimeError(f"meili search http {status}")
         hits = payload.get("hits") if isinstance(payload, dict) else None
         return {
             "hits": hits if isinstance(hits, list) else [],
-            "hybrid": bool(body.get("hybrid")),
+            "hybrid": False,
             "filter": clause,
         }
 
@@ -536,32 +471,26 @@ def project_material_artifact(
 
 
 def health_fields() -> dict[str, Any]:
-    """Honest Meili tier. hybrid only when index embedder is live; never key-only fake."""
+    """Keyword mount only. Pico does not report vendor embedders as product state."""
     configured = meili_configured()
     reachable = False
-    live_embedder = False
     if configured:
         try:
             idx = MeiliIndex()
             reachable = idx.ping()
-            if reachable:
-                live_embedder = idx.live_embedder_armed()
         except Exception:  # noqa: BLE001
             reachable = False
-            live_embedder = False
-    provider = embedder_provider() if live_embedder else None
-    # Key present but index not armed → keyword, not hybrid (no fake green).
-    if configured and reachable and live_embedder:
-        mode = "hybrid"
-    elif configured and reachable:
+    if configured and reachable:
         mode = "keyword"
+    elif configured:
+        mode = "down"
     else:
-        mode = "scan"
+        mode = "off"
     return {
         "meili_configured": configured,
         "meili_reachable": reachable,
-        "meili_embedder": live_embedder,
-        "meili_embedder_provider": provider or "",
-        "meili_embedder_key_present": bool(embedder_provider()),
+        "meili_embedder": False,
+        "meili_embedder_provider": "",
+        "meili_embedder_key_present": False,
         "kb_mode": mode,
     }

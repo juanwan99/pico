@@ -5,7 +5,7 @@ STATUS: BINDING · 业主书面四条 + 阶段 1.5 加线 + 北极星（Grok 用
 DATE: 2026-08-09
 UPDATED: 2026-09-06 · 北极星 v1.4：办公是产品（Word/Excel/HTML/PPT）· 写代码是仆人 · 捷径不是天花板 · 不要 bash
 仓: juanwan99/pico ONLY
-SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.8 · STATE-NOW · #744 · #919
+SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.9 · STATE-NOW · #744 · #919
 CLAIM-WB-DEGREE-WEB: NO
 ```
 
@@ -69,7 +69,7 @@ Pico 记用量、派生积分、不做钱。edu 钱包只认 Pico export，禁�
 
 后续加 Skill / 工具先守 [`ADR-CAPABILITY-LOADING.md`](./ADR-CAPABILITY-LOADING.md)：少常驻、目录一行、用到再读全文；有成熟做法不自研。Skill 只能收窄。
 
-**现行诚实（2026-09-08）：** 隔离办公库已在 live 接线。`generate_*` / `sandbox_pptx_lib` 退出 CORE（#946）。老师聊天选路见 #944。聊天/出图已走 New API；Meili embedder 仍智谱 = 待统一。计量：Pico 记用量，edu 钱包合同是 export，本仓不写 edu。
+**现行诚实（2026-09-08）：** 隔离办公库已在 live 接线。`generate_*` / `sandbox_pptx_lib` 退出 CORE（#946）。老师聊天选路见 #944。聊天/出图已走 New API。知识库 = Meili 关键词挂载，Pico 不自选 embedding 厂牌。计量：Pico 记用量，edu 钱包合同是 export，本仓不写 edu。
 
 ---
 

@@ -157,7 +157,7 @@ def test_kb_search_hit_and_miss(monkeypatch: pytest.MonkeyPatch) -> None:
     asyncio.run(_run())
 
 
-def test_kb_search_meili_down_falls_back_to_scan(
+def test_kb_search_meili_down_is_honest_miss(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
@@ -179,11 +179,11 @@ def test_kb_search_meili_down_falls_back_to_scan(
         )
         gw = build_default_gateway(store)
         out = await gw.invoke(principal, "kb_search", {"query": "开学"})
-        assert out["honest_miss"] is False
-        assert out["mode"] == "scan"
+        assert out["honest_miss"] is True
+        assert out["mode"] == "down"
         assert out["degraded"] is True
-        assert out["hits"][0]["artifact_id"].startswith("art-")
-        assert out["sources"][0]["artifact_id"]
+        assert out["hits"] == []
+        assert "不能编造" in out["user_message"]
 
     asyncio.run(_run())
 

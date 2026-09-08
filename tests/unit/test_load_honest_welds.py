@@ -108,7 +108,7 @@ def test_default_core_shows_office_not_programming() -> None:
     visible = resolve_visible_tools(None)
     assert "sandbox_office_lib" in visible
     assert "read_office_skill" in visible
-    assert "verify_document" in visible
+    assert "verify_document" not in visible
     assert "sandbox_workspace_exec" not in visible
     assert "generate_pptx_document" not in visible
     assert "sandbox_pptx_lib" not in visible

@@ -112,7 +112,7 @@ services:
       ZHIPU_IMAGE_MODEL: ${ZHIPU_IMAGE_MODEL:-glm-image}
       ZHIPU_IMAGE_SIZE: ${ZHIPU_IMAGE_SIZE:-}
       ZHIPU_IMAGE_QUALITY: ${ZHIPU_IMAGE_QUALITY:-}
-      # Optional Meili embedder only — NOT image gen.
+      # SiliconFlow images REJECTED. Key if present must not arm Meili embedder.
       SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
       SILICONFLOW_IMAGE_MODEL: ${SILICONFLOW_IMAGE_MODEL:-}
       PICO_MEILI_URL: ${PICO_MEILI_URL:-http://127.0.0.1:7700}

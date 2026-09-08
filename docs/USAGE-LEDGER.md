@@ -24,7 +24,7 @@ EDU: docs/contracts/usage-export.md（edu-core 拉干净行；钱在 edu）
 钱 / 钱包 / 扣点                         →  edu-core 只认 export.points
 ```
 
-禁止：Pico 直连厂牌再造核；Pico 自建点池/余额；edu 另接一套模型调用当第二账；把 Meili 智谱 embedder 缺口扩成第三条产品脑。槽位名 `DEEPSEEK_*` 不是「现网是 DeepSeek」。
+禁止：Pico 直连厂牌再造核；Pico 自建点池/余额；edu 另接一套模型调用当第二账；Pico 自建检索/embedding 核。槽位名 `DEEPSEEK_*` 不是「现网是 DeepSeek」。
 
 与现有概念的边界：
 

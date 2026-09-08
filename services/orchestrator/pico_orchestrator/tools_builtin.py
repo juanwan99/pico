@@ -810,70 +810,8 @@ def _workspace_handlers(
         )
         return {"artifacts": artifacts, "count": len(artifacts)}
 
-    async def _scan_kb_hits(
-        principal: Principal, query: str, limit: int
-    ) -> list[dict[str, Any]]:
-        listed = await store.list(principal, limit=min(100, max(limit * 3, 20)))
-        hits: list[dict[str, Any]] = []
-        q_low = query.lower()
-        for meta in listed:
-            title = str(meta.get("title") or "")
-            if title in _SKIP_KB_TITLES:
-                continue
-            art_id = str(meta.get("artifact_id") or meta.get("id") or "")
-            if not art_id:
-                continue
-            full = await store.read(principal, artifact_id=art_id, title=None)
-            if not full:
-                continue
-            content = full.get("content")
-            raw = None
-            b64 = full.get("content_base64")
-            if isinstance(b64, str) and b64:
-                try:
-                    raw = base64.b64decode(b64)
-                except Exception:  # noqa: BLE001
-                    raw = None
-            text = extract_index_text(
-                title=title,
-                kind=str(full.get("kind") or ""),
-                content=content if isinstance(content, str) else None,
-                raw=raw,
-            )
-            if not text:
-                if q_low not in title.lower():
-                    continue
-                hits.append(
-                    {
-                        "artifact_id": art_id,
-                        "title": title,
-                        "kind": full.get("kind"),
-                        "excerpt": f"（材料未能抽出正文，标题命中：{title}）",
-                        "match": "title",
-                    }
-                )
-                continue
-            title_hit = q_low in title.lower()
-            body_hit = q_low in text.lower()
-            if not title_hit and not body_hit:
-                continue
-            hits.append(
-                {
-                    "artifact_id": art_id,
-                    "title": title,
-                    "kind": full.get("kind"),
-                    "excerpt": _excerpt_around(text if body_hit else title, query),
-                    "match": "title+body" if title_hit and body_hit else (
-                        "title" if title_hit else "body"
-                    ),
-                }
-            )
-            if len(hits) >= limit:
-                break
-        return hits
-
     async def kb_search(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        """Search membership materials via Meili projection; scan fallback if Meili is down."""
+        """Search membership materials via Meili keyword mount. No ledger scan."""
         query = _required_text(args, "query", maximum=_MAX_KB_QUERY)
         try:
             limit = int(args.get("limit") or 20)
@@ -884,9 +822,12 @@ def _workspace_handlers(
         # Client filter strings are ignored. Tenant filter is server-injected in Meili.
 
         degraded = False
-        mode = "scan"
+        mode = "keyword"
         hits: list[dict[str, Any]] = []
-        if meili_configured():
+        if not meili_configured():
+            degraded = True
+            mode = "off"
+        else:
             try:
                 result = search_materials(
                     query,
@@ -894,7 +835,7 @@ def _workspace_handlers(
                     membership_id=principal.membership_id,
                     limit=limit,
                 )
-                mode = "hybrid" if result.get("hybrid") else "keyword"
+                mode = "keyword"
                 for row in result.get("hits") or []:
                     if not isinstance(row, dict):
                         continue
@@ -918,12 +859,10 @@ def _workspace_handlers(
                             "match": "index",
                         }
                     )
-            except Exception:  # noqa: BLE001 — Meili down: honest scan fallback
+            except Exception:  # noqa: BLE001 — Meili down: honest miss, not a second index
                 degraded = True
-                mode = "scan"
-                hits = await _scan_kb_hits(principal, query, limit)
-        else:
-            hits = await _scan_kb_hits(principal, query, limit)
+                mode = "down"
+                hits = []
 
         sources = [
             {
@@ -946,16 +885,11 @@ def _workspace_handlers(
                 "sources": [],
                 "user_message": (
                     "未在已入库材料中命中该问题。"
-                    "请先把材料写入账本（可重建进 Meili）后再问，或换关键词。"
+                    if mode == "keyword"
+                    else "材料库暂时不可用，没有查到。不能编造材料内容。"
                 ),
             }
-        engine = (
-            "语义检索"
-            if mode == "hybrid"
-            else "关键词检索" if mode == "keyword" else "账本扫描"
-        )
-        if degraded:
-            engine = "检索降级为账本扫描"
+        engine = "关键词检索"
         return {
             "hits": hits,
             "count": len(hits),
@@ -2808,7 +2742,7 @@ def build_default_gateway(
         ToolSpec(
             name="generate_image",
             description=(
-                "Create one downloadable png/jpg via Zhipu glm-image HTTPS API. "
+                "Create one downloadable png/jpg via the New API image gateway. "
                 "On missing key, timeout, or 4xx: honest Chinese failure; never invent pixels. "
                 "To place it in Word/PPT, pass the returned artifact id as "
                 "image_artifact_id on spec. To place it in HTML, set img src to "

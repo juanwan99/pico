@@ -2,15 +2,16 @@
 
 ```
 DOC: docs/TRUTH-FREEZE.md
-STATUS: BINDING FREEZE v1.8
+STATUS: BINDING FREEZE v1.9
 FROZEN_AT: 2026-09-08
 PURPOSE: 固定产品/架构真源，防止聊天与旧文档再次冲掉校准结论
 AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star + LAW §0-supreme + AGENTS 文首工作法
-SUPERSEDES: v1.7；v1.6；v1.5；v1.4；v1.3；v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；主管/执行者编制；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+SUPERSEDES: v1.8；v1.7；v1.6；v1.5；v1.4；v1.3；v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；主管/执行者编制；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
 OWNER_ORDER_2026-09-02: 最高要求：禁止自搞一套体系 / 禁止做重体系。厚桥四层绝对禁止。工作法：人合一 · GitHub 唯一真源 · 工位分开。
 OWNER_ORDER_2026-09-05: 北极星 v1.3 — 能力并列 · 禁焊死路径 · 专用动词是捷径 · 工作环境交成熟上游（#744 · #919）
 OWNER_ORDER_2026-09-06: 北极星 v1.4 — 产品主线是办公（Word/Excel/HTML/PPT）；写代码是仆人；不要 bash；本阶段接办公计算机，不是通用编程沙箱
-OWNER_ORDER_2026-09-08: 名实 — 默认核 = 真 Pi（`pi-true`），hosted `pi_runtime` 只回滚；聊天脑 = New API `openai-responses`（现网模型见 EXPERIENCE §34），不是「DeepSeek 聊天核」；隔离办公库是天花板，`generate_*` 是未退役快路，不是第二套办公核。Pico 与 edu 的模型调用 / 统计 / 渠道管理终局统一走 New API；Pico 不做钱；edu 钱包只认 Pico export，禁止另接一套模型账。本仓仍禁止写 edu-cloud / edu-core。
+OWNER_ORDER_2026-09-08: 名实 — 默认核 = 真 Pi（`pi-true`），hosted `pi_runtime` 只回滚；聊天脑 = New API `openai-responses`（现网模型见 EXPERIENCE §34），不是「DeepSeek 聊天核」；隔离办公库是天花板。Pico 与 edu 的模型调用 / 统计 / 渠道管理终局统一走 New API；Pico 不做钱；edu 钱包只认 Pico export，禁止另接一套模型账。本仓仍禁止写 edu-cloud / edu-core。
+OWNER_ORDER_2026-09-08b: 正本清源 — 知识库是 Meili 挂载，不是 Pico 检索产品。禁止 Pico 自选 embedding 厂牌，禁止把「待统一」写成施工卡。`generate_*` / inspect 投影是待拆污染，不是快路建设许可证。
 RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/MEMORY-RESET.md
 ```
 
@@ -27,7 +28,7 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 
 ---
 
-## 1. 冻结决策集 v1.8（目标 · 不可被本窗改写）
+## 1. 冻结决策集 v1.9（目标 · 不可被本窗改写）
 
 ### 1.1 产品是什么
 
@@ -37,9 +38,9 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 | P0 | **用法 = Grok**：通用 LLM；老师的话是 user；系统纪律是 system，不得冒充人话；工具/材料/Skill 是挂载，模型自己决定调不调。没点名不交件。禁止读正文猜任务、force_agent 自动挂交付、把「必须交 N 个文件」焊进 user prompt。真源：DIRECTION-NOW §0-star |
 | P0b | **厚桥四层绝对禁止**（业主 2026-09-02）：①本地 PDF 阅读器 ②办公投影器 ③交件监工 ④硬帽截窗。Pico 不是第二套能力核。进模型前禁止抽文/OCR/渲页冒充已读。禁止用 Pico 自定 reserve/步数把上游窗截短。 |
 | P0c | **能力并列 · 禁焊死路径**（#744）：多项能力同时可被模型选用。禁止把「必须真图 / 必须某厂 / 必须某工具」写成唯一主路。先扎实能力，再优化编排。以后多源自动编排仍用上游 Pi，禁止自研第二编排核。 |
-| P0d | **专用动词是捷径，工作环境交成熟上游**（#919）：`generate_*` / inspect / 按地址薄改是快路，不是天花板。Skill 只能收窄，不得当权限裁剪器藏已承诺能力。文件、程序执行、依赖、进程生命周期交给成熟隔离环境薄接入。Pico 保留身份授权、唯一账本、产品对象、交互与交付门闩。新能力先问哪段成熟方案接走职责。加一个万能 exec 而旧定向协议照旧 = 不算进步。未完成复用验证前，不采购/认定某一家执行厂商。 |
+| P0d | **专用动词是捷径，工作环境交成熟上游**（#919）：天花板 = 隔离办公库。`generate_*` / inspect / 按地址薄改是**待拆污染**，禁止再当快路建设、禁止加厚 spec。Skill 只能收窄，不得当权限裁剪器藏已承诺能力。文件、程序执行、依赖、进程生命周期交给成熟隔离环境薄接入。Pico 保留身份授权、唯一账本、产品对象、交互与交付门闩。新能力先问哪段成熟方案接走职责。加一个万能 exec 而旧定向协议照旧 = 不算进步。 |
 | P0e | **产品主线是办公**（业主 2026-09-06）：Word / Excel / HTML / PPT 是产品。写代码只够服务办公（短脚本驱动成熟办公库），不是编程产品，不是对标 Codex/Cursor。天花板 = 隔离面上真跑 python-docx / openpyxl / python-pptx + 文档 skill 工艺，不是再加专用动词。本阶段接走的是办公计算机。宿主 Pi 永 `--no-builtin-tools`。不要 bash。不要自制通用 jail。不要 Pi 市场办公包、不要社区 .NET/ONLYOFFICE 扩展。 |
-| P0f | **模型与计量上游 = New API**（业主 2026-09-08）：聊天、出图、以及后续要统计/计费的模型调用只打 New API（现网 `127.0.0.1:3000`，槽位名可仍是 `DEEPSEEK_*` / `PICO_IMAGE_GATEWAY_*`）。渠道、密钥、轮询、账号管理在 New API。Pico 只记 `usage_events` 并派生积分。钱在 edu-core，只拉 Pico export 的 `points`，禁止再乘，禁止 edu 另接厂牌直连当第二账。禁止为 DeepSeek/Kimi/Claude/Grok 再造直连核。对外身份只叫 Pico。Meili embedder 现网仍智谱 = **待统一缺口**，不是新开第三条直连的许可证。本仓不写 edu。 |
+| P0f | **模型与计量上游 = New API**（业主 2026-09-08）：聊天、出图、以及后续要统计/计费的模型调用只打 New API（现网 `127.0.0.1:3000`，槽位名可仍是 `DEEPSEEK_*` / `PICO_IMAGE_GATEWAY_*`）。渠道、密钥、轮询、账号管理在 New API。Pico 只记 `usage_events` 并派生积分。钱在 edu-core，只拉 Pico export 的 `points`，禁止再乘，禁止 edu 另接厂牌直连当第二账。禁止为 DeepSeek/Kimi/Claude/Grok 再造直连核。对外身份只叫 Pico。知识库 = Meili 关键词挂载；**禁止 Pico 自选 embedding 厂牌**，禁止把「embedder 待统一」写成施工卡。本仓不写 edu。 |
 | P1 | Pico = **任务型 AI 工作台（Web）** 底座（对话 + 办事 + 产物 + 唯一 AI 账本 + 控制面）；办事程度类 WorkBuddy（六条）。P1 不得压过 P0。办事优先 = 办公文件，不是写代码。 |
 | P2 | **不是** 网盘 / 教务 SaaS / 成绩主库 / 自托管大模型默认 / Dify 门脸终局 / 场景考卷对标 / 定向猜任务的办公机器人 / 编程 Agent |
 | P3 | 用户成功 = 公网登录 → 开放派活 → 多步过程可见 → 真产物 → 能停、能找回、同会话可改 → 状态诚实 |
@@ -79,9 +80,9 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 | C6 | S7：业务变更需确认 | AI 直接改正式成绩 |
 | C7 | WorkBuddy **Web 六条** | 桌面 exe / 像素 1:1 / 固定场景考卷冒充完成 |
 | C8 | 原件挂账本；模型自己调工具 | 本地 PDF 阅读器 / 办公投影器 / 交件监工 / 硬帽截窗 |
-| C9 | 专用办公动词作捷径；Skill 只收窄；天花板 = 隔离办公库 | 把专用动词当能力上限；用 Skill 藏已承诺能力；加厚 spec 当天花板 |
+| C9 | 天花板 = 隔离办公库；Skill 只收窄 | 把专用动词当能力上限；用 Skill 藏已承诺能力；加厚 spec；inspect 投影器常驻给模型 |
 | C10 | 办公主线：真 Word/Excel/HTML/PPT；短脚本只服务办公 | 编程产品；host/Pi bash 当办公能力；把 generate_* 当上限 |
-| C11 | 模型调用与计量统一 New API；Pico `usage_events` → 积分；edu 钱包只消费 export | Pico 做钱/点池；edu 另接模型直连第二账；为厂牌再造直连核；把智谱 embedder 缺口扩成第三条产品脑 |
+| C11 | 模型调用与计量统一 New API；Pico `usage_events` → 积分；edu 钱包只消费 export | Pico 做钱/点池；edu 另接模型直连第二账；为厂牌再造直连核；Pico 自建检索/embedding 核 |
 
 ### 1.5 协作与仓
 
@@ -135,9 +136,9 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | 项 | 摘要 |
 |----|------|
 | 编排默认 | 真 Pi（`health.default_runtime=pi-true` · `PICO_TRUE_PI_DEFAULT=1`）。核以生产 tip 为准 |
-| 模型默认 | New API `openai-responses`（EXPERIENCE §34）。槽位名仍 `DEEPSEEK_*`。出图同一 New API。embedder 现网智谱 = 待统一 |
+| 模型默认 | New API `openai-responses`（EXPERIENCE §34）。槽位名仍 `DEEPSEEK_*`。出图同一 New API。Meili = 关键词挂载，Pico 不配 embedder |
 | 计量 | Pico `usage_events` + 派生积分；edu 拉 export。渠道管理在 New API。Pico 不做钱 |
-| 办公写路径 | 天花板 = 隔离 `sandbox_office_lib`。`generate_*` / `sandbox_pptx_lib` = EXTENDED 别名，不在 CORE。老师聊天选路见 #944 |
+| 办公写路径 | 天花板 = 隔离 `sandbox_office_lib`。`generate_*` / inspect = 待拆污染，不在 CORE。老师聊天选路见 #944 |
 | 遗产 | hosted `pi_runtime`、Kimi Agent 模块仍在仓内，flag 开启才走 |
 | 自研环 | 仍删除；不得回流 |
 
@@ -154,6 +155,7 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | **v1.6** | 2026-09-05 | 北极星 v1.3：能力并列 · 捷径/天花板 · 工作环境交成熟上游（P0c/P0d/C9） |
 | **v1.7** | 2026-09-06 | 北极星 v1.4：办公主线（Word/Excel/HTML/PPT）· 写代码是仆人 · 本阶段接办公计算机 · 不要 bash（P0e/C10） |
 | **v1.8** | 2026-09-08 | 名实：A3/O1 默认核 = 真 Pi（hosted 只回滚）；A4/O2/P0f 现网脑与计量上游 = New API（Pico+edu 统一，Pico 不做钱，本仓不写 edu）；办公天花板 = 隔离库，`generate_*` 是未退役快路；#942 只证调用面 |
+| **v1.9** | 2026-09-08 | 正本清源：知识库=Meili 挂载，禁止 Pico embedding 厂牌路由与「待统一」施工卡；inspect 投影器退出 CORE；出图只认 New API gateway；`generate_*` 标待拆污染不是快路建设 |
 
 升版规则：任何 P0–W5 / A1–A4 / O1–O7 / C1–C10 的修改 → **v1.x** 新 PR，标题含 `TRUTH-FREEZE`。
 
@@ -182,3 +184,10 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 - A4 / O2 / P0f / C11：现网聊天脑与出图 = New API。`DEEPSEEK_*` 是槽位名。Pico 与 edu 的统计/计费/渠道管理终局统一走 New API。Pico 只记用量；钱在 edu 只认 export。本仓不写 edu。禁止厂牌直连再造核
 - 办公：隔离库已接线（#936 / #938 / #942 **调用面**）。`generate_*` 未从 CORE 退役。禁止把「库在」说成「老师聊天已走这条路」
 - embedder 现网智谱 = 待统一缺口，不是新开第三条直连的许可证
+
+### v1.9 · 2026-09-08
+
+- 正本清源：Pico 禁止自选 Meili embedding 厂牌；知识库只挂载 Meili 关键词；禁止再开 T-EMBED 施工卡
+- 出图只认 New API gateway；删除智谱/直连 Gemini 出图产品路
+- `inspect_document` / `verify_document` 退出 CORE 常驻（办公投影器）
+- `generate_*` / spec 标为待拆污染，禁止再写成快路建设许可证

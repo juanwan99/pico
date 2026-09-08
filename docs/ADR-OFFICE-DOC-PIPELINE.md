@@ -10,7 +10,7 @@ REPO: juanwan99/pico ONLY
 LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 北极星: docs/DIRECTION-NOW.md §0-star v1.4 · 用法 = Grok · 办公主线 · spec/generate_* 是捷径不是天花板
 现况: docs/STATE-NOW.md · 本 ADR 是选型底子，不是在飞卡
-OVERRIDE: 2026-09-08 · 北极星 v1.4 + TRUTH-FREEZE v1.8 压过下文「spec 是真源」
+OVERRIDE: 2026-09-08 · 北极星 v1.4 + TRUTH-FREEZE v1.9 压过下文「spec 是真源」
 ```
 
 **现行（压过 §2「真源 = spec」）：** spec / `generate_*` = 稳妥快路，不是天花板，不是改已有文件的路径。天花板 = 隔离面真跑 `python-docx` / `openpyxl` / `python-pptx` + `read_office_skill`。老师已有文件走 `sandbox_office_lib` + `artifact_id`。禁止第三张加厚 spec 卡。减法未做 ≠ 计算机不存在；调用面 PASS ≠ 老师聊天已走沙箱。
