@@ -3,10 +3,10 @@
 ```text
 STATUS: BINDING · 业主书面四条 + 阶段 1.5 加线 + 北极星（Grok 用法 · 办公主线 · 能力并列 · 办公计算机交成熟上游）
 DATE: 2026-08-09
-UPDATED: 2026-09-06 · 北极星 v1.4：办公是产品（Word/Excel/HTML/PPT）· 写代码是仆人 · 捷径不是天花板 · 不要 bash
+UPDATED: 2026-09-08 · 页眉 CLAIM 与 STATE-NOW 对齐（业主 YES @ 2026-08-26 · #449/#316）；北极星仍 v1.4
 仓: juanwan99/pico ONLY
 SEE: HANDOFF-WB-PI · TRUTH-FREEZE v1.9 · STATE-NOW · #744 · #919
-CLAIM-WB-DEGREE-WEB: NO
+CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 · 以 STATE-NOW 为准 · 本页不代签）
 ```
 
 > 本页 = **当前阶段目标收窄与优先级**。与旧「先铺 Skill/MCP/连接器」冲突时 **以本页为准**。  

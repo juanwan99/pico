@@ -7,7 +7,7 @@ DATE: 2026-09-08
 在飞: 无
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-      写本文时 tip = d29b978fab5bf562ad97ad7fa113d5f5649badfe
+      写本文时 tip = 7f86403b19de953aa564a5465185396887989416
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
@@ -96,7 +96,8 @@ curl tip + GitHub 在飞 → EXPERIENCE（点名≤3）
 | 已收口 | [#944](https://github.com/juanwan99/pico/issues/944) · [#945](https://github.com/juanwan99/pico/pull/945) | T-ROUTE-LOCK-EVIDENCE · 选路走沙箱 @ tip `c41b7e0d…` |
 | 已收口 | [#950](https://github.com/juanwan99/pico/issues/950) · [#951](https://github.com/juanwan99/pico/pull/951) | T-ZHENGBEN-PURGE · 正本清源 @ tip `1e0e9620…` |
 | 已收口 | [#952](https://github.com/juanwan99/pico/issues/952) · [#953](https://github.com/juanwan99/pico/pull/953) | T-OFFICE-UNREGISTER · 办公第二核从网关拿掉 @ tip `7c5bd50a…` |
-| 在飞 | [#954](https://github.com/juanwan99/pico/issues/954) | T-SEARCH-LATCH · 联网不直连 + 入库不 PDF 核 + CLAIM 诚实（卡 2/2） |
+| 已收口 | [#954](https://github.com/juanwan99/pico/issues/954) · [#955](https://github.com/juanwan99/pico/pull/955) | T-SEARCH-LATCH · 联网不直连 + 入库不 PDF 核 + CLAIM 诚实 @ tip `7f86403b…` |
+| 在飞 | [#956](https://github.com/juanwan99/pico/issues/956) | T-DOCS-HYGIENE · STATE-NOW tip/#954 + DIRECTION CLAIM 页眉 |
 | 规划 | [#919](https://github.com/juanwan99/pico/issues/919) | 根因调查仍 OPEN；选路取证见 #944（走沙箱） |
 | 已收口 | [#928](https://github.com/juanwan99/pico/issues/928) | T-OFFICE-CONTRACT-RECEIPT · Excel `values` 假绿 · 已部 |
 | 已收口 | [#929](https://github.com/juanwan99/pico/issues/929) | T-PICO-PUBLISH-BOUNDARY · 发布不是 Pico 能力 · 已部 |
