@@ -88,7 +88,7 @@ def test_ingest_bytes_title_only_markdown_is_unread(monkeypatch):
     assert out["slices"] == []
 
 
-def test_pdf_uses_page_ocr_not_docling(monkeypatch):
+def test_pdf_empty_layer_does_not_ocr(monkeypatch):
     import ingest as mod
 
     called = {"ocr": 0, "docling": 0, "layer": 0}
@@ -109,12 +109,10 @@ def test_pdf_uses_page_ocr_not_docling(monkeypatch):
     monkeypatch.setattr(mod, "_ocr_pdf_pages", fake_ocr)
     monkeypatch.setattr(mod, "_convert_path", fake_docling)
     out = mod.ingest_bytes(filename="scan.pdf", data=b"%PDF-1.3 x", title="通知")
-    assert called == {"ocr": 1, "docling": 0, "layer": 1}
-    assert out["ok"] is True
-    assert out["engine"] == "rapidocr"
-    blob = " ".join(s["excerpt"] for s in out["slices"])
-    assert "人工智能素养" in blob
-    assert all("rapidocr" in (s.get("tags") or []) for s in out["slices"])
+    assert called == {"ocr": 0, "docling": 0, "layer": 1}
+    assert out["ok"] is False
+    assert out.get("code") == "empty"
+    assert out["slices"] == []
 
 
 def test_pdf_text_layer_skips_ocr(monkeypatch):

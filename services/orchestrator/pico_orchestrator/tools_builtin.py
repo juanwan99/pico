@@ -2620,7 +2620,7 @@ def build_default_gateway(
         ToolSpec(
             name="web_search",
             description=(
-                "Search the public web via DeepSeek official server-side web_search. "
+                "Search the public web via the Pico gateway (Tavily when configured). "
                 "Use for current events, public facts, curriculum names, or anything "
                 "that needs retrieval. Returns sources (title+url+snippet) or honest "
                 "未检索. Args: query. Never invent citations."
@@ -2961,7 +2961,7 @@ def openai_tool_schemas(
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Search query for DeepSeek official web_search",
+                    "description": "Search query for public web retrieval",
                 }
             },
             "required": ["query"],

@@ -9,7 +9,7 @@ always-apply: false
 
 # field-kb-ingest
 
-Engine = **IBM Docling** (MIT) for Office. PDF: **pypdfium2 text layer first**, RapidOCR only when the layer is empty (scans). Pico only adapts. Do not copy the source of record into Pico. Do not build a vector index or a Pico PDF kernel.
+Engine = **IBM Docling** (MIT) for Office. PDF: **pypdfium2 text layer only**. Empty scan PDF is not indexed (no RapidOCR page-render as ingest kernel). Pico only adapts. Do not copy the source of record into Pico. Do not build a vector index or a Pico PDF kernel.
 
 Triggers (edu enforces; people do not click「入库」):
 

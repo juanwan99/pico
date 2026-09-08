@@ -95,7 +95,8 @@ curl tip + GitHub 在飞 → EXPERIENCE（点名≤3）
 | 规划 | [#744](https://github.com/juanwan99/pico/issues/744) | 北极星 v1.4 已合进 DIRECTION-NOW / TRUTH-FREEZE v1.7+ · 留开不派 |
 | 已收口 | [#944](https://github.com/juanwan99/pico/issues/944) · [#945](https://github.com/juanwan99/pico/pull/945) | T-ROUTE-LOCK-EVIDENCE · 选路走沙箱 @ tip `c41b7e0d…` |
 | 已收口 | [#950](https://github.com/juanwan99/pico/issues/950) · [#951](https://github.com/juanwan99/pico/pull/951) | T-ZHENGBEN-PURGE · 正本清源 @ tip `1e0e9620…` |
-| 在飞 | [#952](https://github.com/juanwan99/pico/issues/952) | T-OFFICE-UNREGISTER · 办公第二核从网关拿掉（卡 1/2） |
+| 已收口 | [#952](https://github.com/juanwan99/pico/issues/952) · [#953](https://github.com/juanwan99/pico/pull/953) | T-OFFICE-UNREGISTER · 办公第二核从网关拿掉 @ tip `7c5bd50a…` |
+| 在飞 | [#954](https://github.com/juanwan99/pico/issues/954) | T-SEARCH-LATCH · 联网不直连 + 入库不 PDF 核 + CLAIM 诚实（卡 2/2） |
 | 规划 | [#919](https://github.com/juanwan99/pico/issues/919) | 根因调查仍 OPEN；选路取证见 #944（走沙箱） |
 | 已收口 | [#928](https://github.com/juanwan99/pico/issues/928) | T-OFFICE-CONTRACT-RECEIPT · Excel `values` 假绿 · 已部 |
 | 已收口 | [#929](https://github.com/juanwan99/pico/issues/929) | T-PICO-PUBLISH-BOUNDARY · 发布不是 Pico 能力 · 已部 |
