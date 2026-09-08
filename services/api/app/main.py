@@ -1729,7 +1729,7 @@ async def get_artifact_content(
                 status_code=415,
                 detail=(
                     f"产物不是合法的 {ext} OOXML 包（禁止改后缀文本冒充）。"
-                    "请使用 generate_docx_document / generate_pptx_document 重新生成。"
+                    "请使用 sandbox_office_lib 重新生成。"
                 ),
             )
     # HTML claimed but looks like a ZIP/binary package without text markup → reject as html

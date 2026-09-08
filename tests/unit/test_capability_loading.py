@@ -38,25 +38,25 @@ def test_core_and_extended_partition_gateway():
     assert "read_office_skill" in CORE_VISIBLE_TOOLS
     assert "inspect_document" not in CORE_VISIBLE_TOOLS
     assert "verify_document" not in CORE_VISIBLE_TOOLS
-    assert "inspect_document" in EXTENDED_TOOLS
-    assert "verify_document" in EXTENDED_TOOLS
+    assert "inspect_document" not in EXTENDED_TOOLS
+    assert "verify_document" not in EXTENDED_TOOLS
     assert "read_office_skill" not in EXTENDED_TOOLS
-    assert len(EXTENDED_TOOLS) == 16
+    assert len(EXTENDED_TOOLS) == 6
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS
     assert "sandbox_pptx_lib" not in CORE_VISIBLE_TOOLS
-    assert "sandbox_pptx_lib" in EXTENDED_TOOLS
-    assert "generate_docx_document" in EXTENDED_TOOLS
-    assert "generate_pptx_document" in EXTENDED_TOOLS
-    assert "generate_xlsx_document" in EXTENDED_TOOLS
+    assert "sandbox_pptx_lib" not in EXTENDED_TOOLS
+    assert "generate_docx_document" not in EXTENDED_TOOLS
+    assert "generate_pptx_document" not in EXTENDED_TOOLS
+    assert "generate_xlsx_document" not in EXTENDED_TOOLS
     assert "sandbox_office_lib" not in EXTENDED_TOOLS
     assert "edit_docx_document" not in CORE_VISIBLE_TOOLS
     assert "edit_pptx_document" not in CORE_VISIBLE_TOOLS
     assert "edit_xlsx_document" not in CORE_VISIBLE_TOOLS
-    assert "edit_docx_document" in EXTENDED_TOOLS
-    assert "edit_pptx_document" in EXTENDED_TOOLS
-    assert "edit_xlsx_document" in EXTENDED_TOOLS
+    assert "edit_docx_document" not in EXTENDED_TOOLS
+    assert "edit_pptx_document" not in EXTENDED_TOOLS
+    assert "edit_xlsx_document" not in EXTENDED_TOOLS
     assert "sandbox_workspace_exec" in EXTENDED_TOOLS
     assert "sandbox_workspace_exec" not in CORE_VISIBLE_TOOLS
     assert "sandbox_browser_open" in CORE_VISIBLE_TOOLS

@@ -13,6 +13,7 @@ from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
 def test_image_in_deck_does_not_add_host_bash() -> None:
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
-    assert "generate_pptx_document" in ALLOWED_GATEWAY_TOOLS
+    assert "generate_pptx_document" not in ALLOWED_GATEWAY_TOOLS
+    assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
     assert "generate_image" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_workspace_exec" in ALLOWED_GATEWAY_TOOLS

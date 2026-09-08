@@ -97,7 +97,7 @@ def test_observe_pptx_is_counts_not_a_score() -> None:
 @pytest.mark.asyncio
 async def test_generate_pptx_returns_observation() -> None:
     store = MemoryArtifactStore()
-    gw = build_default_gateway(store)
+    gw = build_default_gateway(store, register_unregistered_office=True)
     owner = P(school_id="s", membership_id="m", scopes=["*"])
     out = await gw.invoke(
         owner,
@@ -119,7 +119,7 @@ async def test_generate_pptx_returns_observation() -> None:
 @pytest.mark.asyncio
 async def test_edit_pptx_returns_observation() -> None:
     store = MemoryArtifactStore()
-    gw = build_default_gateway(store)
+    gw = build_default_gateway(store, register_unregistered_office=True)
     owner = P(school_id="s", membership_id="m", scopes=["*"])
     made = await gw.invoke(
         owner,
@@ -149,7 +149,7 @@ async def test_edit_pptx_returns_observation() -> None:
 @pytest.mark.asyncio
 async def test_edit_fill_zero_hit_must_not_claim_filled() -> None:
     store = MemoryArtifactStore()
-    gw = build_default_gateway(store)
+    gw = build_default_gateway(store, register_unregistered_office=True)
     owner = P(school_id="s", membership_id="m", scopes=["*"])
     made = await gw.invoke(
         owner,
@@ -193,7 +193,7 @@ async def test_edit_fill_zero_hit_must_not_claim_filled() -> None:
 @pytest.mark.asyncio
 async def test_edit_xlsx_fill_zero_hit_must_not_claim_filled() -> None:
     store = MemoryArtifactStore()
-    gw = build_default_gateway(store)
+    gw = build_default_gateway(store, register_unregistered_office=True)
     owner = P(school_id="s", membership_id="m", scopes=["*"])
     made = await gw.invoke(
         owner,
@@ -237,7 +237,7 @@ async def test_edit_xlsx_fill_zero_hit_must_not_claim_filled() -> None:
 @pytest.mark.asyncio
 async def test_xlsx_values_cell_map_is_rejected_not_edited() -> None:
     store = MemoryArtifactStore()
-    gw = build_default_gateway(store)
+    gw = build_default_gateway(store, register_unregistered_office=True)
     owner = P(school_id="s", membership_id="m", scopes=["*"])
     made = await gw.invoke(
         owner,
@@ -281,7 +281,7 @@ async def test_xlsx_values_cell_map_is_rejected_not_edited() -> None:
 @pytest.mark.asyncio
 async def test_xlsx_cell_edits_keep_source_and_formulas() -> None:
     store = MemoryArtifactStore()
-    gw = build_default_gateway(store)
+    gw = build_default_gateway(store, register_unregistered_office=True)
     owner = P(school_id="s", membership_id="m", scopes=["*"])
     made = await gw.invoke(
         owner,
@@ -332,10 +332,10 @@ async def test_xlsx_cell_edits_keep_source_and_formulas() -> None:
     assert any("Alpha" in cell for cell in flat)
     assert any("7" in cell for cell in flat)
     assert any("Revenue" in cell or "Total" in cell for cell in flat)
-    schemas = {s["function"]["name"]: s["function"]["parameters"] for s in openai_tool_schemas()}
-    xlsx_props = schemas["generate_xlsx_document"]["properties"]
-    assert "values" in xlsx_props
-    assert "A1" in xlsx_props["values"]["description"] or "cell" in xlsx_props["values"]["description"]
+    gw_live = build_default_gateway()
+    schema_names = {s["function"]["name"] for s in openai_tool_schemas(gw_live)}
+    assert "generate_xlsx_document" not in schema_names
+    assert "sandbox_office_lib" in schema_names
 
 
 @pytest.mark.asyncio

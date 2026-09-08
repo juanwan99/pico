@@ -19,11 +19,11 @@ from xml.sax.saxutils import escape
 MIN_DOCX_BODY_CHARS = 20
 MIN_PPTX_SLIDES = 1
 DOCX_BODY_TOO_SHORT = (
-    "Word 正文是空的。请写入实际内容再调用 generate_docx_document，"
+    "Word 正文是空的。请写入实际内容再调用 sandbox_office_lib，"
     "系统不会垫字。"
 )
 PPTX_SLIDES_TOO_FEW = (
-    "PPT 没有可渲染的页。请写入至少一页再调用 generate_pptx_document，"
+    "PPT 没有可渲染的页。请写入至少一页再调用 sandbox_office_lib，"
     "系统不会垫页。"
 )
 # Interactive HTML must run with no network (school offline / CSP). Do not
@@ -166,7 +166,7 @@ def office_shell_reason(raw: bytes, ext: str) -> str | None:
         if _visible_len(text) < MIN_DOCX_BODY_CHARS:
             return (
                 "Word 打开后几乎是空壳。"
-                "请用 generate_docx_document 写入实际正文后再交。"
+                "请用 sandbox_office_lib 写入实际正文后再交。"
             )
         return None
     if suffix == ".pptx":
@@ -175,7 +175,7 @@ def office_shell_reason(raw: bytes, ext: str) -> str | None:
         if len(titles) < MIN_PPTX_SLIDES or titled < MIN_PPTX_SLIDES:
             return (
                 "PPT 打开后没有可看的页。"
-                "请用 generate_pptx_document 写出至少一页后再交。"
+                "请用 sandbox_office_lib 写出至少一页后再交。"
             )
         return None
     return None

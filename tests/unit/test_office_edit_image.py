@@ -718,17 +718,25 @@ def test_sidebar_chat_has_no_edit_or_image_tools() -> None:
     assert "generate_docx_document" not in deliver["tools"]
     assert "sandbox_pptx_lib" not in deliver["tools"]
     assert "edit_docx_document" not in deliver["tools"]
-    aliases = {
-        "edit_docx_document",
-        "edit_pptx_document",
+    live = {
         "generate_image",
         "generate_diagram",
+        "sandbox_office_lib",
     }
-    assert aliases <= ALLOWED_GATEWAY_TOOLS
+    gone = {
+        "edit_docx_document",
+        "edit_pptx_document",
+        "generate_docx_document",
+    }
+    assert live <= ALLOWED_GATEWAY_TOOLS
+    assert gone.isdisjoint(ALLOWED_GATEWAY_TOOLS)
     gw_names = set(build_default_gateway().tools)
-    assert aliases <= gw_names
+    assert live <= gw_names
+    assert gone.isdisjoint(gw_names)
     ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
     )
-    for name in aliases:
+    for name in live:
         assert f'"{name}"' in ts
+    for name in gone:
+        assert f'"{name}"' not in ts

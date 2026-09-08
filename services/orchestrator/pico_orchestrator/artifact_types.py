@@ -45,6 +45,5 @@ def is_valid_ooxml_package(raw: bytes, ext: str) -> bool:
 def reject_fake_protected_write_message(ext: str) -> str:
     return (
         f"禁止用 workspace_write_file 写入 {ext}（改后缀文本不算真文件）。"
-        "请使用 generate_html_document / generate_docx_document / "
-        "generate_pptx_document / generate_xlsx_document / render_document。"
+        "请使用 generate_html_document 写网页，或 sandbox_office_lib 写 Word/Excel/PPT。"
     )

@@ -195,13 +195,13 @@ async def test_plan_flag_two_ends_lands_not_third() -> None:
             {"type": "agent_end", "willRetry": False},
             {
                 "type": "tool_execution_start",
-                "toolName": "generate_docx_document",
+                "toolName": "sandbox_office_lib",
                 "toolCallId": "c1",
-                "args": {"title": "教案.docx", "body": "ok"},
+                "args": {"kind": "docx", "title": "教案.docx", "source": "ok"},
             },
             {
                 "type": "tool_execution_end",
-                "toolName": "generate_docx_document",
+                "toolName": "sandbox_office_lib",
                 "toolCallId": "c1",
                 "isError": False,
                 "result": {"content": [{"type": "text", "text": '{"title":"教案.docx"}'}]},

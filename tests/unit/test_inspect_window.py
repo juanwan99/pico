@@ -226,7 +226,7 @@ async def test_inspect_document_passes_header_window() -> None:
     sheet["A3"] = "S001"
     sheet["B3"] = "甲"
     raw = _xlsx_bytes(book)
-    gw = build_default_gateway(Store(raw))
+    gw = build_default_gateway(Store(raw), register_unregistered_office=True)
     outline = await gw.invoke(
         P(),
         "inspect_document",

@@ -39,32 +39,26 @@ def test_three_surfaces_have_no_winner_welds() -> None:
             assert phrase not in text, f"{path.name}: {phrase!r}"
 
 
-def test_pi_and_hosted_pptx_descriptions_are_siblings() -> None:
+def test_pi_and_hosted_office_ceiling_descriptions() -> None:
     ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
     )
-    assert "Sibling of sandbox_pptx_lib" in ts
     assert "sandbox_office_lib" in ts
-    assert "Sibling of generate_pptx_document" in ts
     assert "Sibling of generate_image" in ts
     assert "they do not veto each other" in ts
+    assert "Sibling of sandbox_pptx_lib" not in ts
+    assert "Sibling of generate_pptx_document" not in ts
     gw = build_default_gateway()
-    pptx = gw.tools["generate_pptx_document"].description
-    lib = gw.tools["sandbox_pptx_lib"].description
+    assert "generate_pptx_document" not in gw.tools
+    assert "sandbox_pptx_lib" not in gw.tools
+    office = gw.tools["sandbox_office_lib"].description
     diagram = gw.tools["generate_diagram"].description
-    assert "Sibling of sandbox_pptx_lib" in pptx
-    assert "stock python-pptx layouts" in pptx
-    assert "Free shapes" in pptx
-    assert "Sibling of generate_pptx_document" in lib
-    assert "add_shape and RGBColor color blocks are this tool" in lib
-    assert "from pathlib import Path is a stub" in lib
-    assert "prs.save is routed to the ledger" in lib
+    assert "The office write path" in office
+    assert "from pathlib import Path is a stub" in office
     assert "Sibling of generate_image" in diagram
     assert "veto" in diagram
-    assert "精美" not in lib
-    assert "课件" not in lib
-    assert "精美" not in pptx
-    assert "Same title replaces the file the teacher opens" in pptx
+    assert "精美" not in office
+    assert "课件" not in office
 
 
 def test_system_names_office_ceiling_without_scene_words() -> None:
@@ -93,13 +87,9 @@ def test_xlsx_values_is_placeholder_fill_on_pi_surfaces() -> None:
         encoding="utf-8"
     )
     assert "cell/value or values" not in ts
-    assert "{{key}} template fill only" in ts
-    assert "edited=false" in ts
     gw = build_default_gateway()
-    xlsx = gw.tools["generate_xlsx_document"].description
+    assert "generate_xlsx_document" not in gw.tools
     exec_desc = gw.tools["sandbox_workspace_exec"].description
-    assert "cell+value" in xlsx
-    assert "{{key}} template fill only" in xlsx
     assert "executed=false" in exec_desc
     assert "not a real runner" in exec_desc
 

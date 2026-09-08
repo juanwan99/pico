@@ -102,8 +102,8 @@ Meili                                              ✅ 关键词挂载；Pico �
 计量：Pico usage_events → 积分；edu 认 export       ✅ 合同；本仓不写 edu
 Kimi Agent / hosted pi_runtime                    ⚠️ 遗产回滚 · 非默认
 隔离办公库 sandbox_office_lib                     ✅ 执行层已接线（#936/#942 调用面）
-generate_* / sandbox_pptx_lib                     ⚠️ EXTENDED 别名 · 不在 CORE
-老师聊天是否走沙箱                                ❌ 未证 · #919 仍 OPEN
+generate_* / sandbox_pptx_lib                     ❌ 网关已拆（#952）· 不是 EXTENDED 别名
+老师聊天选路沙箱                                  ✅ #944 已证；写路只 sandbox_office_lib（#952）
 「目标/长期是自研环」                              ❌ 污染 · 禁止
 「唯一目标仍是 Kimi Agent」                        ❌ 过期 v1.0 · 禁止再写
 「hosted pi_runtime 是产品默认」                   ❌ 过期 · 禁止再写

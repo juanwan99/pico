@@ -100,8 +100,22 @@ def test_upload_edit_docx_download(client) -> None:
     edited = _invoke(
         client,
         headers,
-        "edit_docx_document",
-        {"artifact_id": src_id, "paragraph_index": 3, "text": "第三段短"},
+        "sandbox_office_lib",
+        {
+            "kind": "docx",
+            "title": "三段.docx",
+            "artifact_id": src_id,
+            "source": (
+                "from docx import Document\n"
+                "old = load_doc()\n"
+                "texts = [p.text for p in old.paragraphs if p.text.strip()]\n"
+                "doc = Document()\n"
+                "doc.add_paragraph(texts[0])\n"
+                "doc.add_paragraph(texts[1])\n"
+                "doc.add_paragraph('第三段短，并保留足够长的正文内容。')\n"
+                "save_doc(doc)\n"
+            ),
+        },
     )
     assert edited.status_code == 200, edited.text
     result = edited.json()["result"]
@@ -119,7 +133,7 @@ def test_upload_edit_docx_download(client) -> None:
     texts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     assert texts[0] == "第一段保持"
     assert texts[1] == "第二段也在"
-    assert texts[2] == "第三段短"
+    assert texts[2].startswith("第三段短")
 
 
 def test_upload_edit_pptx_download(client) -> None:
@@ -138,8 +152,17 @@ def test_upload_edit_pptx_download(client) -> None:
     edited = _invoke(
         client,
         headers,
-        "edit_pptx_document",
-        {"artifact_id": src_id, "slide_index": 1, "new_title": "课堂导入"},
+        "sandbox_office_lib",
+        {
+            "kind": "pptx",
+            "title": "两页.pptx",
+            "artifact_id": src_id,
+            "source": (
+                "prs = load_deck()\n"
+                "prs.slides[0].shapes.title.text = '课堂导入'\n"
+                "save_deck(prs)\n"
+            ),
+        },
     )
     assert edited.status_code == 200, edited.text
     aid = edited.json()["result"]["artifact_id"]

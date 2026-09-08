@@ -116,20 +116,21 @@ def test_observe_pptx_no_hint_when_embedded() -> None:
     assert "hint" not in seen["outline"]
 
 
-def test_pi_surface_names_image_artifact_id() -> None:
+def test_pi_surface_names_image_artifact_ids() -> None:
     ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
     )
-    start = ts.find('Create a real .pptx Artifact')
-    pptx = ts[start : start + 1600]
-    assert "image_artifact_id" in pptx
-    assert "spec" in pptx
-    assert "[image:" in pptx
+    assert "Create a real .pptx Artifact" not in ts
+    assert "generate_pptx_document" not in ts
+    assert "image_artifact_ids" in ts
+    assert "sandbox_office_lib" in ts
     assert "Pictures: generate_image first when needed" not in ts
-    img = ts[ts.find("Create one png/jpg") : ts.find("Create one png/jpg") + 400]
+    img = ts[ts.find("Create one png/jpg") : ts.find("Create one png/jpg") + 500]
     assert "SiliconFlow" not in img
+    assert "image_artifact_ids" in img
     system = pico_system_text()
-    assert "image_artifact_id" in system
+    assert "image_artifact_ids" in system
+    assert "IMAGE_PATHS" in system
     assert "[image:" in system
 
 
@@ -193,7 +194,7 @@ class _ProdShapedStore:
 async def test_generate_pptx_loads_image_when_store_requires_title() -> None:
     """Live bug: _load_spec_images omitted title= and LedgerArtifactStore TypeError'd."""
     store = _ProdShapedStore()
-    gw = build_default_gateway(store)
+    gw = build_default_gateway(store, register_unregistered_office=True)
     owner = _P("s", "m", ["ai:run"])
     store.rows.append(
         {

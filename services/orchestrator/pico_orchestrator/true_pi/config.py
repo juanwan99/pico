@@ -58,18 +58,8 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "workspace_read_file",
         "workspace_write_file",
         "generate_html_document",
-        "generate_docx_document",
-        "generate_pptx_document",
-        "sandbox_pptx_lib",
         "sandbox_office_lib",
         "read_office_skill",
-        "generate_xlsx_document",
-        "edit_docx_document",
-        "edit_pptx_document",
-        "edit_xlsx_document",
-        "render_document",
-        "inspect_document",
-        "verify_document",
         "generate_image",
         "generate_diagram",
         "verify_html_document",
@@ -84,6 +74,23 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "sandbox_document_open",
         "publish_html_page",
         "unpublish_html_page",
+    }
+)
+
+# Spec/inspect/edit aliases. Handlers may still exist as dead code; not on the
+# product gateway, CORE, EXTENDED, or Pi registerTool list.
+UNREGISTERED_OFFICE_TOOLS: frozenset[str] = frozenset(
+    {
+        "generate_docx_document",
+        "generate_pptx_document",
+        "generate_xlsx_document",
+        "sandbox_pptx_lib",
+        "inspect_document",
+        "verify_document",
+        "edit_docx_document",
+        "edit_pptx_document",
+        "edit_xlsx_document",
+        "render_document",
     }
 )
 

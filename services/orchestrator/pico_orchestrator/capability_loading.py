@@ -16,11 +16,8 @@ from collections.abc import Iterable
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
 # Always-on: teacher-said verbs. Do not add a scheduler / tool_search.
-# Office ceiling is sandbox_office_lib. Hiding it in EXTENDED is a picker.
-# generate_docx/pptx/xlsx and sandbox_pptx_lib stay execute aliases on EXTENDED
-# (stock template / PPT name). edit_* stay EXTENDED. Programming sandbox stays
-# extended. Hung skills may narrow; if they still list generate_pptx they must
-# also list the isolated lib (ppt_siblings_honest).
+# Office ceiling is sandbox_office_lib. generate_*/inspect/edit/render are
+# unregistered (not EXTENDED aliases). Programming sandbox stays extended.
 # sandbox_browser_open / sandbox_document_open are pane doors, not a PDF kernel.
 CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "workspace_list_files",
@@ -41,18 +38,8 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
 
 # Same gateway, not registered unless a hung skill lists them.
 EXTENDED_TOOLS: tuple[str, ...] = (
-    "generate_docx_document",
-    "generate_pptx_document",
-    "generate_xlsx_document",
-    "sandbox_pptx_lib",
-    "inspect_document",
-    "verify_document",
-    "edit_docx_document",
-    "edit_pptx_document",
-    "edit_xlsx_document",
     "publish_html_page",
     "unpublish_html_page",
-    "render_document",
     "verify_html_document",
     "sandbox_preview_inspect",
     "sandbox_workspace_exec",
@@ -113,15 +100,7 @@ def office_siblings_honest(names: Iterable[str]) -> bool:
 def office_skill_visible(names: Iterable[str]) -> bool:
     """Office write without on-demand craft is a hidden picker."""
     visible = set(names)
-    if not visible.intersection(
-        {
-            "generate_docx_document",
-            "generate_xlsx_document",
-            "generate_pptx_document",
-            "sandbox_office_lib",
-            "sandbox_pptx_lib",
-        }
-    ):
+    if "sandbox_office_lib" not in visible:
         return True
     return "read_office_skill" in visible
 

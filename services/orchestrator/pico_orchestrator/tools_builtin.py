@@ -743,7 +743,7 @@ def _static_html_checks(content: str) -> list[dict[str, Any]]:
 
 def _workspace_handlers(
     store: ArtifactStore,
-) -> tuple[Any, ...]:
+) -> dict[str, Any]:
     async def write_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         from pico_orchestrator.delivery_policy import normalize_artifact_title
 
@@ -2174,32 +2174,33 @@ def _workspace_handlers(
             artifact_id=str(args.get("artifact_id") or "").strip(),
         )
 
-    return (
-        write_file,
-        read_file,
-        list_files,
-        kb_search,
-        generate_html,
-        generate_docx,
-        generate_pptx,
-        generate_xlsx,
-        edit_docx,
-        edit_pptx,
-        edit_xlsx,
-        generate_image,
-        generate_diagram,
-        verify_html,
-        inspect_preview,
-        workspace_exec,
-        browser_open,
-        browser_screenshot,
-        document_open,
-        render_document,
-        inspect_document,
-        verify_document,
-        publish_html_page,
-        unpublish_html_page,
-    )
+    return {
+        "workspace_write_file": write_file,
+        "workspace_read_file": read_file,
+        "workspace_list_files": list_files,
+        "kb_search": kb_search,
+        "generate_html_document": generate_html,
+        "generate_docx_document": generate_docx,
+        "generate_pptx_document": generate_pptx,
+        "generate_xlsx_document": generate_xlsx,
+        "edit_docx_document": edit_docx,
+        "edit_pptx_document": edit_pptx,
+        "edit_xlsx_document": edit_xlsx,
+        "generate_image": generate_image,
+        "generate_diagram": generate_diagram,
+        "verify_html_document": verify_html,
+        "sandbox_preview_inspect": inspect_preview,
+        "sandbox_workspace_exec": workspace_exec,
+        "sandbox_browser_open": browser_open,
+        "sandbox_browser_screenshot": browser_screenshot,
+        "sandbox_document_open": document_open,
+        "render_document": render_document,
+        "inspect_document": inspect_document,
+        "verify_document": verify_document,
+        "publish_html_page": publish_html_page,
+        "unpublish_html_page": unpublish_html_page,
+        "sandbox_pptx_lib": _make_sandbox_pptx_lib(store),
+    }
 
 
 def _outline_heading(line: str) -> tuple[int, str] | None:
@@ -2302,35 +2303,28 @@ async def _calculator(_principal: Principal, args: dict[str, Any]) -> dict[str, 
 
 def build_default_gateway(
     artifact_store: ArtifactStore | None = None,
+    *,
+    register_unregistered_office: bool = False,
 ) -> AllowlistGateway:
+    """Product gateway. Dead office handlers stay off unless tests opt in."""
     gw = AllowlistGateway()
     store = artifact_store or _UnavailableArtifactStore()
-    (
-        write_file,
-        read_file,
-        list_files,
-        kb_search,
-        generate_html,
-        generate_docx,
-        generate_pptx,
-        generate_xlsx,
-        edit_docx,
-        edit_pptx,
-        edit_xlsx,
-        generate_image,
-        generate_diagram,
-        verify_html,
-        inspect_preview,
-        workspace_exec,
-        browser_open,
-        browser_screenshot,
-        document_open,
-        render_document,
-        inspect_document,
-        verify_document,
-        publish_html_page,
-        unpublish_html_page,
-    ) = _workspace_handlers(store)
+    h = _workspace_handlers(store)
+    write_file = h["workspace_write_file"]
+    read_file = h["workspace_read_file"]
+    list_files = h["workspace_list_files"]
+    kb_search = h["kb_search"]
+    generate_html = h["generate_html_document"]
+    generate_image = h["generate_image"]
+    generate_diagram = h["generate_diagram"]
+    verify_html = h["verify_html_document"]
+    inspect_preview = h["sandbox_preview_inspect"]
+    workspace_exec = h["sandbox_workspace_exec"]
+    browser_open = h["sandbox_browser_open"]
+    browser_screenshot = h["sandbox_browser_screenshot"]
+    document_open = h["sandbox_document_open"]
+    publish_html_page = h["publish_html_page"]
+    unpublish_html_page = h["unpublish_html_page"]
     gw.register(
         ToolSpec(
             name="pico_echo",
@@ -2497,50 +2491,6 @@ def build_default_gateway(
     )
     gw.register(
         ToolSpec(
-            name="generate_docx_document",
-            description=(
-                "Create a real OOXML .docx via spec/body, or patch an existing one. "
-                "Sibling of sandbox_office_lib kind=docx (isolated python-docx) — "
-                "pick from the teacher's ask. Free layout that stock paragraphs "
-                "cannot place: write python-docx in sandbox_office_lib. "
-                "To change an uploaded file, pass artifact_id|title plus "
-                "paragraph_index/text, comment, or values — do not look for a "
-                "separate edit tool. Result includes an observation of "
-                "what landed (counts, preview — not a score). ok is not finished. "
-                "Args: title, marker, body? | spec? | blocks? | artifact_id? "
-                "paragraph_index? text? comment? values? output_title?"
-            ),
-            handler=generate_docx,
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
-            name="generate_pptx_document",
-            description=(
-                "Create a real OOXML .pptx via spec/blocks on stock python-pptx "
-                "layouts (title, bullets, table, theme colors). Sibling of "
-                "sandbox_pptx_lib / sandbox_office_lib (isolated office libs) — pick from the "
-                "teacher's ask, not a scene word. Free shapes / color blocks / "
-                "full-bleed geometry are not this tool; write python-pptx in "
-                "sandbox_pptx_lib or sandbox_office_lib kind=pptx. Same title replaces the file the teacher "
-                "opens. Read observation.outline.images. "
-                "A missing image_artifact_id skips that picture; the file still "
-                "lands. blocks[].type cover/content/title/page (or omitted) "
-                "are slides. To embed a picture, pass generate_image/"
-                "generate_diagram artifact id as image_artifact_id on the slide "
-                "in spec/blocks. [image:…] in body does not embed. ok is not "
-                "finished. To patch an existing deck, pass artifact_id|title plus "
-                "slide_index/new_title or values — do not look for a separate edit tool. "
-                "Args: title, marker, body? | spec? | blocks? | artifact_id? "
-                "slide_index? new_title? values? output_title?"
-            ),
-            handler=generate_pptx,
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
             name="read_office_skill",
             description=(
                 "On-demand office craft (docx / xlsx / pptx). Catalog is one line "
@@ -2548,7 +2498,7 @@ def build_default_gateway(
                 "python-pptx craft. Not LibreChat Skills. Not bash. Not a second "
                 "store. After reading, write with sandbox_office_lib (kind matches "
                 "id). To change an existing file pass artifact_id and load_doc / "
-                "load_book / load_deck. generate_* is blank-template only. "
+                "load_book / load_deck. "
                 "Args: id=docx|xlsx|pptx"
             ),
             handler=_make_read_office_skill(),
@@ -2561,9 +2511,7 @@ def build_default_gateway(
             description=(
                 "Isolated office Python (python-docx / openpyxl / python-pptx; "
                 "not host bash, not a second Office OS, not a programming sandbox). "
-                "Sibling of generate_docx_document / generate_xlsx_document / "
-                "generate_pptx_document — not the only office path. "
-                "kind=docx|xlsx|pptx (or infer from title suffix). "
+                "The office write path. kind=docx|xlsx|pptx (or infer from title suffix). "
                 "from docx import Document; from openpyxl import Workbook; "
                 "from pptx import Presentation, Inches, Pt, RGBColor. "
                 "save_doc(doc) / save_book(wb) / save_deck(prs) or .save are routed "
@@ -2572,144 +2520,10 @@ def build_default_gateway(
                 "from io import BytesIO are allowed. Empty shells fail. "
                 "A missing image_artifact_ids entry is skipped. To change an "
                 "existing ledger file pass artifact_id; scripts load via load_doc / "
-                "load_book / load_deck or Document(INPUT_PATH). generate_* is not "
-                "the edit path. Args: source, kind?, title?, artifact_id?, "
-                "image_artifact_ids?"
+                "load_book / load_deck or Document(INPUT_PATH). Args: source, kind?, "
+                "title?, artifact_id?, image_artifact_ids?"
             ),
             handler=_make_sandbox_office_lib(store),
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
-            name="sandbox_pptx_lib",
-            description=(
-                "Isolated python-pptx (not host bash, not a second Office OS). "
-                "PPT alias of sandbox_office_lib kind=pptx. "
-                "Sibling of generate_pptx_document — not the only PPT path. "
-                "Result includes an observation of what landed. ok is not finished. "
-                "from pptx import Presentation, Inches, Pt, RGBColor is allowed "
-                "(Inches/Pt also on pptx). add_shape and RGBColor color blocks "
-                "are this tool. from pathlib import Path is a stub (mkdir ignored; "
-                "no host files). prs.save is routed to the ledger (same as save_deck). "
-                "Do not import os. "
-                "add_title_slide(prs, title, subtitle, image=IMAGE_PATHS[0]); "
-                "add_table(prs=prs, rows=grid); IMAGE_PATHS[0] is the first "
-                "picture. Must add slides then save_deck(prs) or prs.save. Empty "
-                "Presentation();save_deck fails — do not send a placeholder. "
-                "A missing image_artifact_ids entry is skipped. Word/Excel use "
-                "sandbox_office_lib. To change an existing deck pass artifact_id "
-                "and load_deck() / Presentation(INPUT_PATH). Args: source, title?, "
-                "artifact_id?, image_artifact_ids?"
-            ),
-            handler=_make_sandbox_pptx_lib(store),
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
-            name="generate_xlsx_document",
-            description=(
-                "Create a real OOXML .xlsx, or patch an existing sheet. "
-                "Sibling of sandbox_office_lib kind=xlsx (isolated openpyxl). "
-                "Markdown/TSV tables in body become sheets and rows "
-                "(sibling of Word paragraphs / PPT --- slides). "
-                "Formulas / multi-sheet layout that stock tables cannot place: "
-                "write openpyxl in sandbox_office_lib. "
-                "A whole draft in one cell is not a spreadsheet. "
-                "To change an uploaded file, pass artifact_id|title plus cell+value "
-                "(one A1-style cell per call; value may start with = for a formula). "
-                "values is {{key}} template fill only — not a cell-address map. "
-                "Unmatched values return edited=false and keep the original file. "
-                "Result includes an observation of what landed. ok is not finished. "
-                "Args: title, marker, body? | spec? | blocks? | artifact_id? "
-                "cell? value? sheet? values? output_title?"
-            ),
-            handler=generate_xlsx,
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
-            name="edit_docx_document",
-            description=(
-                "Edit an already uploaded .docx: replace a paragraph, add a comment, "
-                "or fill {{key}} values. Other content stays. Never create a blank template. "
-                "Result includes an observation of what landed. ok is not finished. "
-                "Args: artifact_id|title, paragraph_index?, text?, comment?, values?, output_title?"
-            ),
-            handler=edit_docx,
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
-            name="edit_pptx_document",
-            description=(
-                "Edit an already uploaded .pptx: change one slide title or fill {{key}}. "
-                "Other slides stay. Never create a blank deck. "
-                "Result includes an observation of what landed. ok is not finished. "
-                "Args: artifact_id|title, slide_index?, new_title?, values?, output_title?"
-            ),
-            handler=edit_pptx,
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
-            name="edit_xlsx_document",
-            description=(
-                "Edit an already uploaded .xlsx: set one cell (A1-style; =formula) "
-                "or fill {{key}} placeholders. values is not a cell-address map. "
-                "Unmatched/no-op returns edited=false and does not write a new file. "
-                "Other cells stay. Result includes an observation. "
-                "ok is not finished. Args: artifact_id|title, cell?, "
-                "value?, sheet?, values?, output_title?"
-            ),
-            handler=edit_xlsx,
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
-            name="render_document",
-            description=(
-                "Create Word/PPT/Excel from pico.office.spec/v1 (docx/pptx/xlsx). "
-                "Tables, images, formulas, comments, {{key}} values go inside the file. "
-                "Args: spec, title?"
-            ),
-            handler=render_document,
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
-            name="inspect_document",
-            description=(
-                "Read structure of an uploaded .docx/.pptx/.xlsx: paragraph/slide/cell "
-                "indexes, tables (including Word/PPT nested tables), comments, leftover "
-                "{{key}}. Excel reports merges, multi-row headers, and a row/col window — "
-                "not the whole sheet. leftover_rows / leftover_cols mean more remains; "
-                "advance start_row / start_col until both are 0. Do not treat one window "
-                "as the full file. Irregular tables stay irregular; unmapped columns "
-                "are left blank, do not guess. Embedded pictures are remembered so the "
-                "teacher's next question can see the pixels. Call before generate_* "
-                "patch (paragraph_index / slide_index / cell). "
-                "Args: artifact_id|title, kind?, sheet?, header_rows?, start_row?, "
-                "start_col?, max_rows?, max_cols?"
-            ),
-            handler=inspect_document,
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
-            name="verify_document",
-            description=(
-                "Fail-closed OOXML check for a ledger Word/PPT/Excel. "
-                "Args: artifact_id|title, kind?"
-            ),
-            handler=verify_document,
             school_scoped=False,
         )
     )
@@ -2745,7 +2559,7 @@ def build_default_gateway(
                 "Create one downloadable png/jpg via the New API image gateway. "
                 "On missing key, timeout, or 4xx: honest Chinese failure; never invent pixels. "
                 "To place it in Word/PPT, pass the returned artifact id as "
-                "image_artifact_id on spec. To place it in HTML, set img src to "
+                "image_artifact_ids on sandbox_office_lib. To place it in HTML, set img src to "
                 "pico-artifact:<id>. Do not paste base64. Do not also hand it to the "
                 "teacher as a separate download when it is already inside the file. "
                 "Args: prompt, title?"
@@ -2764,7 +2578,7 @@ def build_default_gateway(
                 "veto each other. kind defaults to mermaid; d2 is not wired and fails "
                 "honestly. On parse/sandbox failure: honest Chinese failure; never invent "
                 "a diagram. To place it in Word/PPT, pass the returned artifact id as "
-                "image_artifact_id on spec. Args: source, kind?, title?"
+                "image_artifact_ids on sandbox_office_lib. Args: source, kind?, title?"
             ),
             handler=generate_diagram,
             school_scoped=False,
@@ -2830,6 +2644,21 @@ def build_default_gateway(
     # P2 MCP allowlist bridge (safe tools only; empty allowlist → none registered)
     for spec in mcp_tool_specs(store):
         gw.register(spec)
+    if register_unregistered_office:
+        from pico_orchestrator.true_pi.config import UNREGISTERED_OFFICE_TOOLS
+
+        for name in sorted(UNREGISTERED_OFFICE_TOOLS):
+            handler = h.get(name)
+            if handler is None:
+                continue
+            gw.register(
+                ToolSpec(
+                    name=name,
+                    description=f"Unregistered office handler ({name}); test-only.",
+                    handler=handler,
+                    school_scoped=False,
+                )
+            )
     return gw
 
 
@@ -3018,35 +2847,6 @@ def openai_tool_schemas(
                 },
             },
         },
-        "generate_docx_document": {
-            "type": "object",
-            "properties": {
-                "title": {
-                    "type": "string",
-                    "description": "Filename, preferably ending with .docx",
-                },
-                "marker": {
-                    "type": "string",
-                    "description": "Unique visible marker string required in the document",
-                },
-                "body": {
-                    "type": "string",
-                    "description": (
-                        "Document body. Blank lines separate paragraphs. "
-                        "Empty body fails — the tool will not pad filler."
-                    ),
-                },
-                "spec": {
-                    "type": "object",
-                    "description": "pico.office.spec/v1. Use for tables/images. Overrides body.",
-                },
-                "blocks": {
-                    "type": "array",
-                    "description": "spec.blocks shortcut (heading/para/table/image)",
-                },
-            },
-            "required": ["title", "marker"],
-        },
         "read_office_skill": {
             "type": "object",
             "properties": {
@@ -3093,124 +2893,6 @@ def openai_tool_schemas(
             },
             "required": ["source"],
         },
-        "sandbox_pptx_lib": {
-            "type": "object",
-            "properties": {
-                "source": {
-                    "type": "string",
-                    "description": (
-                        "python-pptx body. from pptx import Presentation, Inches, Pt, "
-                        "RGBColor is allowed. from pathlib import Path is a stub. "
-                        "prs.save is routed to the ledger. IMAGE_PATHS[0] is the first "
-                        "picture. add_title_slide image= and add_table prs=/rows= aliases. "
-                        "Do not import os. Add slides then save_deck or prs.save. "
-                        "Empty shells fail. Change an existing deck with artifact_id "
-                        "then load_deck() or Presentation(INPUT_PATH)."
-                    ),
-                },
-                "title": {
-                    "type": "string",
-                    "description": "Filename, preferably ending with .pptx",
-                },
-                "artifact_id": {
-                    "type": "string",
-                    "description": "Existing ledger PPT to load as INPUT_PATH.",
-                },
-                "image_artifact_ids": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Ledger image ids exposed as IMAGE_PATHS",
-                },
-            },
-            "required": ["source"],
-        },
-        "generate_pptx_document": {
-            "type": "object",
-            "properties": {
-                "title": {
-                    "type": "string",
-                    "description": "Filename, preferably ending with .pptx",
-                },
-                "marker": {
-                    "type": "string",
-                    "description": "Unique visible marker string required on the slide",
-                },
-                "body": {
-                    "type": "string",
-                    "description": (
-                        "Text-only slide draft. Separate slides with a blank line or ---. "
-                        "Do not put [image:…] here — it will not embed. "
-                        "Empty deck fails — the tool will not invent slides."
-                    ),
-                },
-                "spec": {
-                    "type": "object",
-                    "description": (
-                        "pico.office.spec/v1 slides. Overrides body. "
-                        "Each slide may set image_artifact_id to a ledger png/jpg id."
-                    ),
-                },
-                "blocks": {
-                    "type": "array",
-                    "description": (
-                        "spec.blocks shortcut. Slide objects: title, bullets, "
-                        "image_artifact_id. type cover/content/title/page (or omitted) "
-                        "are slides."
-                    ),
-                },
-            },
-            "required": ["title", "marker"],
-        },
-        "render_document": {
-            "type": "object",
-            "properties": {
-                "spec": {
-                    "type": "object",
-                    "description": "pico.office.spec/v1 (kind + blocks)",
-                },
-                "title": {"type": "string", "description": "Download filename"},
-            },
-            "required": ["spec"],
-        },
-        "inspect_document": {
-            "type": "object",
-            "properties": {
-                "artifact_id": {"type": "string"},
-                "title": {"type": "string"},
-                "kind": {"type": "string", "description": "docx, pptx, or xlsx"},
-                "sheet": {
-                    "description": "Excel sheet name or 1-based index; omit = all sheets",
-                },
-                "header_rows": {
-                    "type": "integer",
-                    "description": "Header band height (1–5). Use 2 for merged two-row headers.",
-                },
-                "start_row": {
-                    "type": "integer",
-                    "description": "1-based first data row of the preview window",
-                },
-                "start_col": {
-                    "type": "integer",
-                    "description": "1-based first column of the preview window",
-                },
-                "max_rows": {
-                    "type": "integer",
-                    "description": "Preview row cap (1–50). leftover_rows reports the rest.",
-                },
-                "max_cols": {
-                    "type": "integer",
-                    "description": "Column cap (1–80). leftover_cols reports the rest. Default 64.",
-                },
-            },
-        },
-        "verify_document": {
-            "type": "object",
-            "properties": {
-                "artifact_id": {"type": "string"},
-                "title": {"type": "string"},
-                "kind": {"type": "string", "description": "docx, pptx, or xlsx"},
-            },
-        },
         "publish_html_page": {
             "type": "object",
             "properties": {
@@ -3231,91 +2913,6 @@ def openai_tool_schemas(
                 "page_id": {"type": "string"},
                 "artifact_id": {"type": "string"},
             },
-        },
-        "generate_xlsx_document": {
-            "type": "object",
-            "properties": {
-                "title": {"type": "string", "description": "Download filename"},
-                "marker": {"type": "string"},
-                "body": {"type": "string"},
-                "spec": {"type": "object", "description": "pico.office.spec/v1 sheets"},
-                "blocks": {"type": "array", "description": "spec.blocks shortcut (sheet objects)"},
-                "artifact_id": {"type": "string", "description": "Existing sheet to patch"},
-                "cell": {"type": "string", "description": "A1-style address; one cell per call"},
-                "value": {"type": "string", "description": "New cell value; = starts a formula"},
-                "sheet": {"description": "Sheet name or 1-based index"},
-                "values": {
-                    "type": "object",
-                    "description": "{{key}} placeholder replacements, not A1 cell addresses",
-                },
-                "output_title": {"type": "string"},
-            },
-            "required": ["title", "marker"],
-        },
-        "edit_xlsx_document": {
-            "type": "object",
-            "properties": {
-                "artifact_id": {"type": "string"},
-                "title": {"type": "string"},
-                "cell": {"type": "string", "description": "A1-style address"},
-                "value": {"type": "string", "description": "New cell value; = starts a formula"},
-                "sheet": {"description": "Sheet name or 1-based index"},
-                "values": {
-                    "type": "object",
-                    "description": "{{key}} placeholder replacements, not A1 cell addresses",
-                },
-                "output_title": {"type": "string"},
-            },
-        },
-        "edit_docx_document": {
-            "type": "object",
-            "properties": {
-                "artifact_id": {
-                    "type": "string",
-                    "description": "Uploaded .docx artifact id (or title)",
-                },
-                "title": {
-                    "type": "string",
-                    "description": "Uploaded .docx title (or artifact_id)",
-                },
-                "paragraph_index": {
-                    "type": "integer",
-                    "description": "1-based nonempty paragraph to replace or comment",
-                },
-                "text": {"type": "string", "description": "New paragraph text"},
-                "comment": {"type": "string", "description": "Word comment on that paragraph"},
-                "values": {
-                    "type": "object",
-                    "description": "{{key}} replacements",
-                },
-                "output_title": {
-                    "type": "string",
-                    "description": "Optional download filename",
-                },
-            },
-        },
-        "edit_pptx_document": {
-            "type": "object",
-            "properties": {
-                "artifact_id": {
-                    "type": "string",
-                    "description": "Uploaded .pptx artifact id (or title)",
-                },
-                "title": {
-                    "type": "string",
-                    "description": "Uploaded .pptx title (or artifact_id)",
-                },
-                "slide_index": {
-                    "type": "integer",
-                    "description": "1-based slide to edit (default 1)",
-                },
-                "new_title": {"type": "string", "description": "New title for that slide"},
-                "output_title": {
-                    "type": "string",
-                    "description": "Optional download filename",
-                },
-            },
-            "required": ["new_title"],
         },
         "generate_image": {
             "type": "object",
