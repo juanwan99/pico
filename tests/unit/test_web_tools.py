@@ -436,45 +436,32 @@ def test_extracted_url_strips_trailing_backtick() -> None:
 
 
 @pytest.mark.asyncio
-async def test_web_search_uses_deepseek_not_tavily(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+async def test_web_search_uses_tavily_not_deepseek(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test-not-real")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-not-real")
-    monkeypatch.setenv("PICO_SEARCH_PROVIDER", "deepseek")
+    monkeypatch.setenv("PICO_SEARCH_PROVIDER", "deepseek")  # ignored; product path is Tavily
 
     posts: list[str] = []
 
     async def handler(method: str, url: str, kwargs: object) -> object:
         del method
         posts.append(url)
+        assert "tavily.com" in url
         payload = (kwargs or {}).get("json") if isinstance(kwargs, dict) else None
-        tools = (payload or {}).get("tools")
-        assert tools == [{"type": "web_search"}]
-        assert (payload or {}).get("input") == "今日公开新闻"
-        instructions = str((payload or {}).get("instructions") or "")
-        assert "[title](https://...)" in instructions or "markdown" in instructions.lower()
+        assert (payload or {}).get("query") == "今日公开新闻"
+        assert "web_search" not in str(payload)
 
         class FakeResp:
             status_code = 200
 
             def json(self) -> dict[str, Any]:
                 return {
-                    "output_text": "news",
-                    "output": [
+                    "answer": "news",
+                    "results": [
                         {
-                            "type": "message",
-                            "content": [
-                                {
-                                    "type": "output_text",
-                                    "text": "hit",
-                                    "annotations": [
-                                        {
-                                            "type": "url_citation",
-                                            "title": "News",
-                                            "url": "https://www.example.com/n",
-                                        }
-                                    ],
-                                }
-                            ],
+                            "title": "News",
+                            "url": "https://www.example.com/n",
+                            "content": "hit",
                         }
                     ],
                 }
@@ -492,12 +479,46 @@ async def test_web_search_uses_deepseek_not_tavily(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("app.usage_ledger.record_usage_event", fake_record)
     out = await web_search_handler(P(), {"query": "今日公开新闻"})
     assert out["retrieved"] is True
-    assert out["provider"] == "deepseek"
-    assert posts and "responses" in posts[0]
+    assert out["provider"] == "tavily"
+    assert posts and "tavily.com" in posts[0]
     assert captured[0]["kind"] == "search"
     assert captured[0]["source"] == "web_search"
     assert captured[0]["extra"]["query_count"] == 1
-    assert captured[0]["extra"]["provider"] == "deepseek"
+    assert captured[0]["extra"]["provider"] == "tavily"
+
+
+@pytest.mark.asyncio
+async def test_web_search_never_calls_deepseek_official(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-not-real")
+    monkeypatch.setenv("PICO_SEARCH_PROVIDER", "deepseek")
+    posts: list[str] = []
+
+    async def handler(method: str, url: str, kwargs: object) -> object:
+        del method, kwargs
+        posts.append(url)
+
+        class FakeResp:
+            status_code = 200
+
+            def json(self) -> dict[str, Any]:
+                return {}
+
+        return FakeResp()
+
+    monkeypatch.setattr(
+        "pico_orchestrator.web_tools.httpx.AsyncClient", _fake_async_client(handler)
+    )
+
+    async def fake_record(**kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr("app.usage_ledger.record_usage_event", fake_record)
+    out = await web_search_handler(P(), {"query": "今日公开新闻"})
+    assert out["honest_miss"] is True
+    assert out["provider"] == "none"
+    assert posts == []
+    assert "api.deepseek.com" not in "".join(posts)
 
 
 @pytest.mark.asyncio

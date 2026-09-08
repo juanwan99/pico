@@ -30,7 +30,7 @@ CLAIM-WB: NO
 
 ## 2. 工具白名单有限（薄桥 · 7 工具）
 
-**本表是 2026-08-26 CLAIM 装订形状，不是 2026-09-08 现网 CORE。** 现网默认可见工具以 `capability_loading.py` `CORE_VISIBLE_TOOLS` 为准。本页不随 CORE 变多而改写 YES。
+**本表是 2026-08-26 CLAIM 装订形状，不是 2026-09-08 现网 CORE。** 现网默认可见工具以 `capability_loading.py` `CORE_VISIBLE_TOOLS`（14，含 `sandbox_office_lib`）为准；`generate_docx_document` / `generate_pptx_document` 已从网关拆除（#952），不是现网七件套。本页不随 CORE 变多而改写 YES；OWNER YES 不因本句改口。
 
 真 Pi 桥注册工具（v0/v1 · 装订时不可随意放大）：
 

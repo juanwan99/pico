@@ -112,16 +112,20 @@ def test_empty_convert_does_not_use_filename(monkeypatch):
     assert out["slices"] == []
 
 
-def test_scan_pdf_route_is_page_ocr(monkeypatch):
+def test_scan_pdf_empty_layer_is_not_indexed(monkeypatch):
     import ingest as mod
 
+    called = {"ocr": 0}
     monkeypatch.setattr(mod, "_pdf_text_layer", lambda path: "")
-    monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: "生成式AI赋能的教学设计")
+    monkeypatch.setattr(
+        mod, "_ocr_pdf_pages", lambda path: called.__setitem__("ocr", 1) or "生成式AI赋能的教学设计"
+    )
     monkeypatch.setattr(mod, "_convert_path", lambda path: "SHOULD_NOT")
     out = ingest_bytes(filename="scan.pdf", data=make_image_only_pdf(), title="通知")
-    assert out["ok"] is True
-    assert out["engine"] == "rapidocr"
-    assert "生成式AI" in out["slices"][0]["excerpt"]
+    assert called["ocr"] == 0
+    assert out["ok"] is False
+    assert out.get("code") == "empty"
+    assert out["slices"] == []
 
 
 def test_pdf_text_layer_skips_ocr(monkeypatch):

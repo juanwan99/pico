@@ -1,4 +1,4 @@
-"""field-kb-ingest · Office: Docling. Scan PDF: pypdfium2 + RapidOCR ONNX."""
+"""field-kb-ingest · Office: Docling. PDF: pypdfium2 text layer only (no RapidOCR ingest)."""
 
 from __future__ import annotations
 
@@ -312,10 +312,11 @@ def render_pdf_page_pngs(data: bytes, *, max_pages: int = MAX_PDF_VISION_PAGES) 
 
 def _extract(path: Path, suffix: str) -> tuple[str, str, list[str]]:
     if suffix.lower() == ".pdf":
+        # Text layer only. Scan PDF RapidOCR page-render is not a Pico ingest kernel.
         layer = _pdf_text_layer(path)
         if layer.strip():
             return layer, ENGINE_PDF_TEXT, ["pdfium"]
-        return _ocr_pdf_pages(path), ENGINE_PDF, ["rapidocr"]
+        return "", ENGINE_PDF_TEXT, ["pdfium", "empty-layer"]
     return _convert_path(path), ENGINE, ["docling"]
 
 

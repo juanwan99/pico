@@ -1,11 +1,11 @@
-"""Allowlisted web_search (DeepSeek official) + web_fetch (public http(s)).
+"""Allowlisted web_search (Tavily or honest miss) + web_fetch (public http(s)).
 
 Thin adapters only:
-  web_search → DeepSeek Responses API ``tools: [{type: web_search}]``
+  web_search → Tavily when ``TAVILY_API_KEY`` is set; else honest_miss
   web_fetch  → SSRF-guarded GET, truncated text
 
-Optional Tavily is a fallback when ``TAVILY_API_KEY`` is set. Tests and
-green CI must not require it. Never invent sources.
+DeepSeek official ``tools: [{type: web_search}]`` is not a product path.
+Never invent sources.
 """
 
 from __future__ import annotations
@@ -401,7 +401,21 @@ async def _tavily_web_search(query: str) -> dict[str, Any] | None:
 
 
 def _search_provider_pref() -> str:
-    return (os.environ.get("PICO_SEARCH_PROVIDER") or "deepseek").strip().lower()
+    # Product path is Tavily-or-miss. deepseek/auto aliases are ignored.
+    return (os.environ.get("PICO_SEARCH_PROVIDER") or "tavily").strip().lower()
+
+
+def _honest_miss_no_search(query: str) -> dict[str, Any]:
+    return {
+        "query": query,
+        "retrieved": False,
+        "honest_miss": True,
+        "message": "未检索：未配置联网检索密钥（TAVILY_API_KEY）。",
+        "sources": [],
+        "excerpt": "",
+        "provider": "none",
+        "teacher_sources_md": "未检索到可用来源",
+    }
 
 
 async def web_search_handler(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -412,20 +426,14 @@ async def web_search_handler(principal: Principal, args: dict[str, Any]) -> dict
     except ImportError:
         pass
     query = _required_query(args)
-    pref = _search_provider_pref()
     result: dict[str, Any] | None = None
     err: ToolError | None = None
     try:
-        if pref == "tavily":
-            result = await _tavily_web_search(query)
-            if result is None:
-                result = await _deepseek_web_search(query)
-        else:
-            result = await _deepseek_web_search(query)
-            if result.get("honest_miss") and pref in {"auto", "deepseek"}:
-                fallback = await _tavily_web_search(query)
-                if fallback is not None and not fallback.get("honest_miss"):
-                    result = fallback
+        # Product path: Tavily only. DeepSeek official web_search is not called.
+        _ = _search_provider_pref()
+        result = await _tavily_web_search(query)
+        if result is None:
+            result = _honest_miss_no_search(query)
     except ToolError as exc:
         err = exc
         result = {
@@ -435,12 +443,12 @@ async def web_search_handler(principal: Principal, args: dict[str, Any]) -> dict
             "message": exc.message,
             "sources": [],
             "excerpt": "",
-            "provider": "deepseek",
+            "provider": "tavily",
             "teacher_sources_md": "未检索到可用来源",
         }
     assert result is not None
     extra = {
-        "provider": result.get("provider") or "deepseek",
+        "provider": result.get("provider") or "none",
         "tool": "web_search",
         "query_count": 1,
         "source_count": len(result.get("sources") or []),
