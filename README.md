@@ -4,7 +4,7 @@
 
 ## 目标（校正）
 
-详见 **[docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md](docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md) §0-supreme**（最高：禁止自搞一套 / 禁止重体系）· **[AGENTS.md](AGENTS.md)** 文首工作法 · **[docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star** · **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.8** · **[docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)** · 开窗目录 **[docs/README.md](docs/README.md)**
+详见 **[docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md](docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md) §0-supreme**（最高：禁止自搞一套 / 禁止重体系）· **[AGENTS.md](AGENTS.md)** 文首工作法 · **[docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star** · **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.9** · **[docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)** · 开窗目录 **[docs/README.md](docs/README.md)**
 
 任务进度与证据以 **GitHub PR/SHA/CI** 为准（[OneFlow](docs/ONEFLOW.md)）。
 
@@ -16,7 +16,7 @@
 | 办公 | 天花板 = 隔离 `sandbox_office_lib`；`generate_*` 不在默认常驻 |
 | 账本 | **仅 Pico**（禁止与 edu 双 AI） |
 | 范围 | **只写本仓**；edu 对接后置 |
-| 真源冻结 | **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.8** |
+| 真源冻结 | **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.9** |
 | 最高法律 | 禁止自搞一套体系 · 禁止做重体系 · 只允许薄适配 |
 
 ```text

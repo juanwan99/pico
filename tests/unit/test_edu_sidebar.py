@@ -111,15 +111,14 @@ def test_sidebar_enters_pi_helpers() -> None:
     assert SIDEBAR_WORKBENCH_HINT in hinted
     assert "不得调用" not in hinted
     assert "同一套手" in hinted
-    assert "inspect_document" in hinted
+    assert "inspect_document" not in hinted
+    assert "sandbox_office_lib" in hinted
     assert "工具结果回来后再决定下一手" in hinted
     assert "最多 40 个字段" in hinted
     assert "fill_cells" in hinted
     assert "不要靠 insert_col 扩列" in hinted
     assert "c 可以大于 page.table 列数" in hinted
     assert "只认当前页名" in hinted
-    assert "leftover_rows" in hinted
-    assert "leftover_cols" in hinted
     assert "不要声称已读完全文" in hinted
     assert with_sidebar_workbench_hint(hinted) == hinted
 

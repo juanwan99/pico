@@ -35,7 +35,8 @@ def test_office_lib_on_allowlist_not_bash() -> None:
     gw = build_default_gateway()
     assert "sandbox_office_lib" in gw.tools
     assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
-    assert "verify_document" in CORE_VISIBLE_TOOLS
+    assert "verify_document" not in CORE_VISIBLE_TOOLS
+    assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
     assert workbench_tool_step_line("sandbox_office_lib") == "正在沙箱写办公文件"
     assert workbench_tool_result_line("sandbox_office_lib", ok=True) == "已沙箱写出办公文件"

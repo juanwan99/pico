@@ -16,10 +16,10 @@ RELATED:
 并行参考（非产品主仓）: https://github.com/juanwan99/aivia-workbench
 ```
 
-> **新窗本窗合一：先读 LAW + DIRECTION-NOW §0-star + TRUTH-FREEZE v1.8 + AGENTS 文首，再动手。STATE-NOW 是索引。**  
+> **新窗本窗合一：先读 LAW + DIRECTION-NOW §0-star + TRUTH-FREEZE v1.9 + AGENTS 文首，再动手。STATE-NOW 是索引。**  
 > **宏观目标错了 = 整窗作废。**  
 > 本文锁 **产品六条 + 回 Pico 整车 + 禁 Dify/考卷/双核**（业主 2026-08-06）。  
-> 编排/模型/办公计算机的 **现行句** 以 TRUTH-FREEZE **v1.8**、DIRECTION-NOW §0-star **v1.4**、EXPERIENCE §34 为准。  
+> 编排/模型/办公计算机的 **现行句** 以 TRUTH-FREEZE **v1.9**、DIRECTION-NOW §0-star **v1.4**、EXPERIENCE §34 为准。  
 > 本文正文里的「DeepSeek」「`pi_runtime` 默认」**不得当现网**。
 
 ---
