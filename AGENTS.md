@@ -101,7 +101,7 @@ Do **not** route Cool/Keel/supervisor/mailbox/relay/self-drive. Visual Ready sti
 
 开场只读文首 + `docs/EXPERIENCE.md` 点名段。下面是索引；SUPERSEDED / 考古不当现况。
 
-Owner-aligned goals: [`docs/DIRECTION-NOW.md`](docs/DIRECTION-NOW.md) §0-star + [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md) v1.9。[`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md) = 考古，文中 Kimi 优先句已废，**勿当当前目标**。
+Owner-aligned goals: [`docs/DIRECTION-NOW.md`](docs/DIRECTION-NOW.md) §0-star + [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md) v2.0。[`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md) = 考古，文中 Kimi 优先句已废，**勿当当前目标**。
 
 **Truth freeze:** [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md)  
 **What is Pico:** [`docs/WHAT-IS-PICO.md`](docs/WHAT-IS-PICO.md)  

@@ -13,7 +13,9 @@ LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 OVERRIDE: 2026-09-08 · 北极星 v1.4 + TRUTH-FREEZE v1.9 压过下文「spec 是真源」
 ```
 
-**现行（压过 §2「真源 = spec」）：** spec / `generate_*` = 稳妥快路，不是天花板，不是改已有文件的路径。天花板 = 隔离面真跑 `python-docx` / `openpyxl` / `python-pptx` + `read_office_skill`。老师已有文件走 `sandbox_office_lib` + `artifact_id`。禁止第三张加厚 spec 卡。减法未做 ≠ 计算机不存在；调用面 PASS ≠ 老师聊天已走沙箱。
+**现行（压过 §2「真源 = spec」）：** spec / `generate_*` = 已拆（#952）。天花板 = 隔离面真跑 `python-docx` / `openpyxl` / `python-pptx` + `read_office_skill`。老师已有文件走 `sandbox_office_lib` + `artifact_id`。禁止第三张加厚 spec 卡。调用面 PASS ≠ 老师聊天已走沙箱。
+
+**执行面（TRUTH-FREEZE v2.0 · #959 · [`PLAN-OFFICE-COMPUTER-V2.md`](./PLAN-OFFICE-COMPUTER-V2.md)）：** 「隔离面」= `pico-office` 无网容器（同 `pico-sandbox` 镜像 · unix socket · tmpfs · rlimit），箱内完整 Python 3.12 + 办公库 + stdlib + soffice。pico-api 进程内 AST/import 白名单解释器（`office/sandbox_exec.py`）定性为自制 jail，随 #959 删除。本 ADR 下文任何「禁 import os / pathlib 桩 / 只认 save_deck」句子均**作废**。Pico 只留 OOXML 合法、空壳门、租户取件、账本写口。
 
 ---
 
