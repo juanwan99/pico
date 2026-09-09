@@ -114,7 +114,7 @@ Does **not** write school business data.
 ```
 
 If nothing usable: `retrieved=false`, `honest_miss=true`, `sources=[]`, message contains **未检索**.  
-Optional Tavily adapter may run only when `TAVILY_API_KEY` is set; **must not** be required for green / prod.
+`web_search` binds ONE upstream per deployment via `PICO_SEARCH_PROVIDER` (`tavily` default → `TAVILY_API_KEY`; `zhipu` → `ZHIPU_API_KEY`, #973). Missing key = honest 未检索; neither key **must** be required for green / prod. No cross-provider fallback, no routing by question type.
 
 **Usage:** `record_usage_event(..., kind="search", source="web_search")`. Extra may include `query_count` / `source_count` — never price/currency.
 

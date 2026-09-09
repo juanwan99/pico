@@ -1,7 +1,10 @@
-"""Allowlisted web_search (Tavily or honest miss) + web_fetch (public http(s)).
+"""Allowlisted web_search (one provider or honest miss) + web_fetch (public http(s)).
 
 Thin adapters only:
-  web_search → Tavily when ``TAVILY_API_KEY`` is set; else honest_miss
+  web_search → ``PICO_SEARCH_PROVIDER`` picks ONE upstream (#973):
+               tavily (default) needs ``TAVILY_API_KEY``;
+               zhipu needs ``ZHIPU_API_KEY``. Missing key = honest_miss.
+               No cross-provider fallback, no routing by question type.
   web_fetch  → SSRF-guarded GET, truncated text
 
 DeepSeek official ``tools: [{type: web_search}]`` is not a product path.
@@ -400,17 +403,96 @@ async def _tavily_web_search(query: str) -> dict[str, Any] | None:
     }
 
 
+_ZHIPU_SEARCH_URL = "https://open.bigmodel.cn/api/paas/v4/web_search"
+_ZHIPU_ENGINES = {"search_std", "search_pro", "search_pro_sogou", "search_pro_quark"}
+
+
+def _zhipu_engine() -> str:
+    raw = (os.environ.get("PICO_ZHIPU_SEARCH_ENGINE") or "search_std").strip().lower()
+    return raw if raw in _ZHIPU_ENGINES else "search_std"
+
+
+async def _zhipu_web_search(query: str) -> dict[str, Any] | None:
+    """智谱 Web Search API (domestic, per-call priced). None = not configured / failed."""
+    key = os.environ.get("ZHIPU_API_KEY", "").strip()
+    if not key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                _ZHIPU_SEARCH_URL,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "search_engine": _zhipu_engine(),
+                    "search_query": query,
+                    "count": 5,
+                    "content_size": "medium",
+                },
+            )
+    except httpx.HTTPError:
+        logger.info("zhipu search transport failed")
+        return None
+    if resp.status_code >= 400:
+        logger.info("zhipu search http %s", resp.status_code)
+        return None
+    try:
+        body = resp.json()
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    sources: list[dict[str, str]] = []
+    for row in body.get("search_result") or []:
+        if not isinstance(row, dict):
+            continue
+        snippet = str(row.get("content") or "")
+        date = str(row.get("publish_date") or "").strip()
+        media = str(row.get("media") or "").strip()
+        prefix = " ".join(p for p in (media, date) if p)
+        item = _source_item(
+            title=str(row.get("title") or ""),
+            url=str(row.get("link") or row.get("url") or ""),
+            snippet=f"{prefix}：{snippet}" if prefix and snippet else snippet,
+        )
+        if item:
+            sources.append(item)
+    sources = _dedupe_sources(sources)
+    honest_miss = not sources
+    return {
+        "query": query,
+        "retrieved": not honest_miss,
+        "honest_miss": honest_miss,
+        "message": "未检索到可用来源" if honest_miss else f"已检索 {len(sources)} 条来源",
+        "sources": sources,
+        "excerpt": "",
+        "provider": "zhipu",
+        "teacher_sources_md": _teacher_sources_md(sources, honest_miss=honest_miss),
+    }
+
+
+_SEARCH_PROVIDERS = {
+    "tavily": (_tavily_web_search, "TAVILY_API_KEY", "web_search"),
+    "zhipu": (_zhipu_web_search, "ZHIPU_API_KEY", "web_search/zhipu"),
+}
+
+
 def _search_provider_pref() -> str:
-    # Product path is Tavily-or-miss. deepseek/auto aliases are ignored.
-    return (os.environ.get("PICO_SEARCH_PROVIDER") or "tavily").strip().lower()
+    """One primary upstream. Unknown values (deepseek/auto/…) fall back to tavily."""
+    raw = (os.environ.get("PICO_SEARCH_PROVIDER") or "tavily").strip().lower()
+    return raw if raw in _SEARCH_PROVIDERS else "tavily"
 
 
-def _honest_miss_no_search(query: str) -> dict[str, Any]:
+def search_rate_model(provider: str | None = None) -> str:
+    """Rate-card model name for the active provider (config/channel-rates.json)."""
+    return _SEARCH_PROVIDERS[provider or _search_provider_pref()][2]
+
+
+def _honest_miss_no_search(query: str, *, env_name: str) -> dict[str, Any]:
     return {
         "query": query,
         "retrieved": False,
         "honest_miss": True,
-        "message": "未检索：未配置联网检索密钥（TAVILY_API_KEY）。",
+        "message": f"未检索：未配置联网检索密钥（{env_name}）。",
         "sources": [],
         "excerpt": "",
         "provider": "none",
@@ -419,21 +501,23 @@ def _honest_miss_no_search(query: str) -> dict[str, Any]:
 
 
 async def web_search_handler(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+    provider_name = _search_provider_pref()
+    search_fn, env_name, rate_model = _SEARCH_PROVIDERS[provider_name]
+    channel_id: str | None = None
     try:
         from app.channel_rates import require_rate
 
-        require_rate(kind="search", model="web_search")
+        channel_id = require_rate(kind="search", model=rate_model).id
     except ImportError:
         pass
     query = _required_query(args)
     result: dict[str, Any] | None = None
     err: ToolError | None = None
     try:
-        # Product path: Tavily only. DeepSeek official web_search is not called.
-        _ = _search_provider_pref()
-        result = await _tavily_web_search(query)
+        # Exactly one upstream per deployment. DeepSeek official web_search is never called.
+        result = await search_fn(query)
         if result is None:
-            result = _honest_miss_no_search(query)
+            result = _honest_miss_no_search(query, env_name=env_name)
     except ToolError as exc:
         err = exc
         result = {
@@ -443,17 +527,20 @@ async def web_search_handler(principal: Principal, args: dict[str, Any]) -> dict
             "message": exc.message,
             "sources": [],
             "excerpt": "",
-            "provider": "tavily",
+            "provider": provider_name,
             "teacher_sources_md": "未检索到可用来源",
         }
     assert result is not None
-    extra = {
+    extra: dict[str, Any] = {
         "provider": result.get("provider") or "none",
         "tool": "web_search",
         "query_count": 1,
         "source_count": len(result.get("sources") or []),
         "honest_miss": bool(result.get("honest_miss")),
     }
+    if channel_id:
+        # Points derive from the provider's own price tag, not the generic web_search row.
+        extra["channel_id"] = channel_id
     await emit_search_usage(
         principal,
         tool="web_search",

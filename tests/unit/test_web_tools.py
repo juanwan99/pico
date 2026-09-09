@@ -542,6 +542,113 @@ async def test_web_search_no_key_honest_miss_without_tavily(
     assert captured and captured[0]["kind"] == "search"
 
 
+@pytest.mark.asyncio
+async def test_web_search_zhipu_provider_when_selected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#973: PICO_SEARCH_PROVIDER=zhipu → open.bigmodel.cn, priced on its own tag."""
+    monkeypatch.setenv("PICO_SEARCH_PROVIDER", "zhipu")
+    monkeypatch.setenv("ZHIPU_API_KEY", "zp-test-not-real")
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-must-not-be-used")
+    posts: list[tuple[str, dict[str, Any]]] = []
+
+    async def handler(method: str, url: str, kwargs: object) -> object:
+        del method
+        kw = kwargs if isinstance(kwargs, dict) else {}
+        posts.append((url, kw))
+        assert "open.bigmodel.cn" in url
+        assert kw["headers"]["Authorization"] == "Bearer zp-test-not-real"
+        assert kw["json"]["search_engine"] == "search_std"
+        assert kw["json"]["search_query"] == "2022 生物课标"
+
+        class FakeResp:
+            status_code = 200
+
+            def json(self) -> dict[str, Any]:
+                return {
+                    "search_result": [
+                        {
+                            "title": "课标解读",
+                            "link": "https://www.example.edu.cn/kb/1",
+                            "content": "核心素养四条",
+                            "media": "教育部",
+                            "publish_date": "2022-04-21",
+                        },
+                        {"title": "intranet", "link": "http://10.0.0.5/x", "content": "drop"},
+                    ]
+                }
+
+        return FakeResp()
+
+    monkeypatch.setattr(
+        "pico_orchestrator.web_tools.httpx.AsyncClient", _fake_async_client(handler)
+    )
+    captured: list[dict[str, Any]] = []
+
+    async def fake_record(**kwargs: Any) -> None:
+        captured.append(kwargs)
+
+    monkeypatch.setattr("app.usage_ledger.record_usage_event", fake_record)
+    out = await web_search_handler(P(), {"query": "2022 生物课标"})
+    assert out["retrieved"] is True
+    assert out["provider"] == "zhipu"
+    assert [s["url"] for s in out["sources"]] == ["https://www.example.edu.cn/kb/1"]
+    assert out["sources"][0]["snippet"].startswith("教育部 2022-04-21：")
+    assert len(posts) == 1 and "tavily" not in posts[0][0]
+    assert captured[0]["extra"]["provider"] == "zhipu"
+    assert captured[0]["extra"]["channel_id"] == "pico:web_search/zhipu"
+
+
+@pytest.mark.asyncio
+async def test_web_search_zhipu_selected_without_key_is_honest_miss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PICO_SEARCH_PROVIDER", "zhipu")
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-must-not-be-used")
+    posts: list[str] = []
+
+    async def handler(method: str, url: str, kwargs: object) -> object:
+        del method, kwargs
+        posts.append(url)
+        raise AssertionError("no upstream call expected")
+
+    monkeypatch.setattr(
+        "pico_orchestrator.web_tools.httpx.AsyncClient", _fake_async_client(handler)
+    )
+
+    async def fake_record(**kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr("app.usage_ledger.record_usage_event", fake_record)
+    out = await web_search_handler(P(), {"query": "今日公开新闻"})
+    assert out["honest_miss"] is True
+    assert "ZHIPU_API_KEY" in out["message"]
+    assert posts == []
+
+
+def test_search_provider_default_and_rate_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator.web_tools import _search_provider_pref, search_rate_model
+
+    monkeypatch.delenv("PICO_SEARCH_PROVIDER", raising=False)
+    assert _search_provider_pref() == "tavily"
+    assert search_rate_model() == "web_search"
+    monkeypatch.setenv("PICO_SEARCH_PROVIDER", "deepseek")
+    assert _search_provider_pref() == "tavily"
+    monkeypatch.setenv("PICO_SEARCH_PROVIDER", "ZHIPU")
+    assert _search_provider_pref() == "zhipu"
+    assert search_rate_model() == "web_search/zhipu"
+
+
+def test_rate_card_prices_both_search_providers() -> None:
+    from app.channel_rates import load_rate_card
+
+    card = load_rate_card(force=True)
+    tav = card.find(kind="search", model="web_search")
+    zp = card.find(kind="search", model="web_search/zhipu")
+    assert tav is not None and tav.priced() and tav.per_call_yuan > 0
+    assert zp is not None and zp.priced() and zp.per_call_yuan > 0
+    assert zp.per_call_yuan < tav.per_call_yuan
+
+
 def test_gateway_allowlist_includes_web_pair() -> None:
     gw = build_default_gateway()
     names = {t["name"] for t in gw.list_tools()}
