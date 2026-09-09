@@ -44,6 +44,11 @@ def _track_inflight(task: asyncio.Task[Any]) -> None:
     task.add_done_callback(_done)
 
 
+def inflight_run_count() -> int:
+    """Runs still owned by this process. Read by /health so prod-update can wait."""
+    return sum(1 for t in _inflight_run_tasks if not t.done())
+
+
 async def drain_inflight_runs(*, timeout_s: float = 45.0) -> dict[str, int]:
     """Wait for in-process run tasks before process exit (B1 soft drain).
 

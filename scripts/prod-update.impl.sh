@@ -133,6 +133,43 @@ if [ -f .env ]; then
 fi
 
 docker compose -f "$COMPOSE_FILE" build pico-api librechat pico-sandbox pico-office
+
+# Teacher runs live inside the pico-api process; --force-recreate kills them.
+# Owner rule (2026-09-09): deploy may interrupt, but wait first. Poll the live
+# /health inflight_runs (old image without the field, or API down, counts as 0).
+# Past the budget we warn and continue — no drain mode, no cross-process resume.
+inflight_runs_now() {
+  local body
+  body="$(curl -sf --max-time 2 http://127.0.0.1:18765/health 2>/dev/null || true)"
+  [ -z "$body" ] && { echo 0; return; }
+  python3 -c '
+import json, sys
+try:
+    n = json.loads(sys.argv[1]).get("inflight_runs", 0)
+    print(int(n) if isinstance(n, int) and n > 0 else 0)
+except Exception:
+    print(0)
+' "$body"
+}
+
+DRAIN_WAIT_S="${PICO_DEPLOY_DRAIN_WAIT_S:-300}"
+DRAIN_POLL_S=5
+inflight="$(inflight_runs_now)"
+if [ "$inflight" -gt 0 ]; then
+  echo "[pico] inflight_runs=${inflight} — waiting up to ${DRAIN_WAIT_S}s before recreate"
+  waited=0
+  while [ "$inflight" -gt 0 ] && [ "$waited" -lt "$DRAIN_WAIT_S" ]; do
+    sleep "$DRAIN_POLL_S"
+    waited=$((waited + DRAIN_POLL_S))
+    inflight="$(inflight_runs_now)"
+  done
+  if [ "$inflight" -gt 0 ]; then
+    echo "[pico] WARN recreating with inflight_runs=${inflight} after ${waited}s (owner allows interrupt)" >&2
+  else
+    echo "[pico] inflight_runs=0 after ${waited}s — recreating"
+  fi
+fi
+
 docker compose -f "$COMPOSE_FILE" up -d --force-recreate pico-api librechat pico-sandbox pico-office meilisearch
 
 echo "[pico] ps:"

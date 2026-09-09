@@ -64,17 +64,25 @@ def _fake_runtime(
     office_down: bool = False,
     leftover_volumes: tuple[str, ...] = (),
     volume_rm_fails: bool = False,
+    inflight_health_polls: int = 0,
 ) -> Path:
     """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w).
 
     Fake docker branches on the subcommand so the impl's own gates are exercised:
     the pico-office unix-socket probe (``compose exec -T pico-api python3``),
     ``volume ls --filter label=…pico_office_sock`` and ``volume rm``.
+
+    ``inflight_health_polls``: the first N ``/health`` calls report
+    ``inflight_runs=2`` (teacher runs still owned by the old process); later
+    calls report 0. The fake ``sleep`` is a no-op, so the impl's wait loop
+    spins through its budget instantly.
     """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     if office_down:
         (bin_dir / "office-down").write_text("1\n")
+    if inflight_health_polls:
+        (bin_dir / "inflight-polls").write_text(f"{inflight_health_polls}\n")
     if leftover_volumes:
         (bin_dir / "volumes").write_text("".join(f"{v}\n" for v in leftover_volumes))
     if volume_rm_fails:
@@ -133,10 +141,22 @@ def _fake_runtime(
         "  i=$((i + 1))\n"
         "done\n"
         "case \"${*: -1}\" in\n"
-        "  */health) printf '{\"ok\":true,\"git_sha\":\"%s\","
+        "  */health)\n"
+        "    here=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\n"
+        "    inflight_field=\"\"\n"
+        "    if [ -f \"$here/inflight-polls\" ]; then\n"
+        "      read -r left <\"$here/inflight-polls\"\n"
+        "      if [ \"$left\" -gt 0 ]; then\n"
+        "        inflight_field='\"inflight_runs\":2,'\n"
+        "        printf '%s' \"$((left - 1))\" >\"$here/inflight-polls\"\n"
+        "      else\n"
+        "        inflight_field='\"inflight_runs\":0,'\n"
+        "      fi\n"
+        "    fi\n"
+        "    printf '{\"ok\":true,\"git_sha\":\"%s\",%s"
         "\"true_pi_binary_available\":true,"
         "\"true_pi_package_pin\":\"@earendil-works/pi-coding-agent@0.84.4\"}' "
-        "\"$PICO_GIT_SHA\" ;;\n"
+        "\"$PICO_GIT_SHA\" \"$inflight_field\" ;;\n"
         "  */kb/reindex-all)\n"
         "    if [ -n \"$out_file\" ]; then printf '%s' '"
         + reindex_body
@@ -449,6 +469,38 @@ def test_prod_update_generates_sandbox_token_when_missing(tmp_path: Path) -> Non
     assert len(lines) == 1
     assert len(lines[0].split("=", 1)[1]) >= 32
     assert lines[0].split("=", 1)[1] not in result.stdout
+
+
+def test_prod_update_waits_for_inflight_runs_then_recreates(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, inflight_health_polls=3)
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert "inflight_runs=2 — waiting up to 300s before recreate" in result.stdout
+    assert "inflight_runs=0 after" in result.stdout
+    assert "WARN recreating with inflight_runs" not in result.stderr
+    assert "[pico] done" in result.stdout
+
+
+def test_prod_update_warns_and_recreates_when_inflight_runs_outlast_budget(
+    tmp_path: Path,
+) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, inflight_health_polls=10_000)
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert "waiting up to 300s before recreate" in result.stdout
+    assert "WARN recreating with inflight_runs=2 after 300s" in result.stderr
+    assert "[pico] done" in result.stdout
+
+
+def test_prod_update_treats_missing_inflight_field_as_zero(tmp_path: Path) -> None:
+    """Old image without the field, or API down: nothing to wait for."""
+    production, sha = _production_checkout(tmp_path)
+    result = _run_prod_update(production, sha, _fake_runtime(tmp_path))
+    assert result.returncode == 0, result.stderr
+    assert "waiting up to" not in result.stdout
+    assert "[pico] done" in result.stdout
 
 
 def test_prod_update_bootstrap_only_checkouts_then_execs_impl() -> None:
