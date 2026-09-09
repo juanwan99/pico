@@ -438,7 +438,7 @@ def test_pico_office_container_contract_in_compose() -> None:
     assert 'user: "65532:65532"' in svc
     assert "teacher-disks" not in svc
     assert "DEEPSEEK" not in svc and "JWT" not in svc and "MEILI_MASTER_KEY" not in svc
-    assert "pico_office_sock:/run/pico-office" in svc
+    assert "pico-office-sock}:/run/pico-office" in svc
     assert "sandbox_worker.office_runner" in svc
     api = re.search(r"\n  pico-api:\n(.*?)\n  meilisearch:\n", compose, re.DOTALL)
     assert api and "PICO_OFFICE_URL: unix:///run/pico-office/office.sock" in api.group(1)
