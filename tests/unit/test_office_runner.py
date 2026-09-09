@@ -23,6 +23,22 @@ from sandbox_worker.office_runner import (
 )
 
 
+def test_main_refuses_unwritable_sock_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    locked = tmp_path / "sockdir"
+    locked.mkdir()
+    locked.chmod(0o555)
+    if os.access(locked, os.W_OK):
+        pytest.skip("platform still writable after 0555")
+    monkeypatch.setattr(
+        sys, "argv", ["office_runner", "--uds", str(locked / "office.sock")]
+    )
+    from sandbox_worker import office_runner
+
+    with pytest.raises(SystemExit) as exited:
+        office_runner.main()
+    assert exited.value.code == 2
+
+
 def test_kinds_and_bad_args() -> None:
     assert set(OFFICE_KINDS) == {"docx", "xlsx", "pptx"}
     assert run_office_job(kind="pdf", source="x=1")["code"] == "tool.invalid_arguments"

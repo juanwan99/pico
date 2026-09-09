@@ -199,8 +199,9 @@ services:
     tmpfs:
       - /tmp:size=1g
     volumes:
-      # Host bind (prod-update creates it 1777, owned by 65532). A named volume
-      # mounts root-owned and the box cannot create its socket there.
+      # Host bind. Named volume is forbidden (dockerd creates root:755).
+      # prod-update.impl.sh creates the source as 1777 sticky before up.
+      # Host cannot chown 65532 (no CAP_CHOWN); 1777 is the contract.
       - ${PICO_OFFICE_SOCK_HOST:-./data/pico-office-sock}:/run/pico-office
     environment:
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}

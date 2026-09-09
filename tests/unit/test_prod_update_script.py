@@ -7,6 +7,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "prod-update.sh"
+IMPL = ROOT / "scripts" / "prod-update.impl.sh"
+
+
+def _bash_path(path: Path) -> str:
+    # Git bash on Windows treats backslashes as escapes; POSIX path works on both.
+    return path.as_posix()
 
 
 def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -29,6 +35,7 @@ def _production_checkout(tmp_path: Path) -> tuple[Path, str]:
     _run("git", "config", "user.name", "Pico CI", cwd=source)
     (source / "scripts").mkdir()
     shutil.copy2(SCRIPT, source / "scripts" / "prod-update.sh")
+    shutil.copy2(IMPL, source / "scripts" / "prod-update.impl.sh")
     (source / "docker-compose.host.yml").write_text("services: {}\n")
     _run("git", "add", ".", cwd=source)
     _run("git", "commit", "-m", "fixture", cwd=source)
@@ -122,11 +129,11 @@ def _advance_origin_main(tmp_path: Path, production: Path) -> str:
 
 def _run_prod_update(production: Path, sha: str, bin_dir: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["bash", str(production / "scripts" / "prod-update.sh")],
+        ["bash", _bash_path(production / "scripts" / "prod-update.sh")],
         env={
             **os.environ,
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
-            "PICO_ROOT": str(production),
+            "PATH": f"{_bash_path(bin_dir)}{os.pathsep}{os.environ['PATH']}",
+            "PICO_ROOT": _bash_path(production),
             "PICO_DEPLOY_SHA": sha,
         },
         capture_output=True,
@@ -137,7 +144,7 @@ def _run_prod_update(production: Path, sha: str, bin_dir: Path) -> subprocess.Co
 
 def test_prod_update_requires_full_sha(tmp_path: Path) -> None:
     result = subprocess.run(
-        ["bash", str(SCRIPT)],
+        ["bash", _bash_path(SCRIPT)],
         env={**os.environ, "PICO_DEPLOY_SHA": "abc"},
         capture_output=True,
         text=True,
@@ -238,10 +245,10 @@ def test_prod_update_refuses_dirty_worktree(tmp_path: Path) -> None:
     production, sha = _production_checkout(tmp_path)
     (production / "local-note.txt").write_text("do not hide me\n")
     result = subprocess.run(
-        ["bash", str(production / "scripts" / "prod-update.sh")],
+        ["bash", _bash_path(production / "scripts" / "prod-update.sh")],
         env={
             **os.environ,
-            "PICO_ROOT": str(production),
+            "PICO_ROOT": _bash_path(production),
             "PICO_DEPLOY_SHA": sha,
         },
         capture_output=True,
@@ -310,11 +317,11 @@ def test_prod_update_ui_readiness_honors_librechat_url_override(tmp_path: Path) 
     production, sha = _production_checkout(tmp_path)
     bin_dir = _fake_runtime(tmp_path)
     result = subprocess.run(
-        ["bash", str(production / "scripts" / "prod-update.sh")],
+        ["bash", _bash_path(production / "scripts" / "prod-update.sh")],
         env={
             **os.environ,
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
-            "PICO_ROOT": str(production),
+            "PATH": f"{_bash_path(bin_dir)}{os.pathsep}{os.environ['PATH']}",
+            "PICO_ROOT": _bash_path(production),
             "PICO_DEPLOY_SHA": sha,
             "LIBRECHAT_URL": "http://127.0.0.1:19999",
         },
@@ -327,7 +334,49 @@ def test_prod_update_ui_readiness_honors_librechat_url_override(tmp_path: Path) 
 
 
 def test_prod_update_generates_hook_token_when_missing() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
+    text = IMPL.read_text(encoding="utf-8")
     assert "PICO_HOOK_SERVICE_TOKEN generated" in text
     assert "PICO_HOOK_SERVICE_TOKEN=SET" in text
     assert "Do not print the value" in text
+
+
+def test_prod_update_bootstrap_only_checkouts_then_execs_impl() -> None:
+    bootstrap = SCRIPT.read_text(encoding="utf-8")
+    impl = IMPL.read_text(encoding="utf-8")
+    assert "exec bash" in bootstrap
+    assert "prod-update.impl.sh" in bootstrap
+    assert "git checkout --detach" in bootstrap
+    assert "docker compose" not in bootstrap
+    assert "docker compose" in impl
+    assert "prepare_office_sock_bind" in impl
+    assert 'chmod 1777 "$dir"' in impl
+    assert "chown 65532:65532 \"$OFFICE_SOCK\"" not in impl
+    assert "pico_office_sock" in impl
+    assert "exit 11" in impl
+    assert "exit 12" in impl
+
+
+def test_prod_update_runs_impl_from_checked_out_sha(tmp_path: Path) -> None:
+    production, _old_sha = _production_checkout(tmp_path)
+    updater = tmp_path / "updater"
+    origin = _run("git", "remote", "get-url", "origin", cwd=production).stdout.strip()
+    _run("git", "clone", "--branch", "main", origin, str(updater), cwd=tmp_path)
+    _run("git", "config", "user.email", "ci@pico.local", cwd=updater)
+    _run("git", "config", "user.name", "Pico CI", cwd=updater)
+    impl = updater / "scripts" / "prod-update.impl.sh"
+    text = impl.read_text(encoding="utf-8")
+    text = text.replace(
+        "set -euo pipefail\n",
+        'set -euo pipefail\necho "[pico] impl-from-advanced-main"\n',
+        1,
+    )
+    impl.write_text(text, encoding="utf-8")
+    _run("git", "add", "scripts/prod-update.impl.sh", cwd=updater)
+    _run("git", "commit", "-m", "advance impl", cwd=updater)
+    _run("git", "push", "origin", "main", cwd=updater)
+    new_sha = _run("git", "rev-parse", "HEAD", cwd=updater).stdout.strip()
+    result = _run_prod_update(production, new_sha, _fake_runtime(tmp_path))
+    assert result.returncode == 0, result.stderr
+    assert "[pico] exec impl from" in result.stdout
+    assert "[pico] impl-from-advanced-main" in result.stdout
+    assert f"health.git_sha exact match: {new_sha}" in result.stdout

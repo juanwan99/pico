@@ -66,6 +66,9 @@ def test_office_computer_v2_plan_exists() -> None:
     assert "pico-office" in text
     assert "network_mode: none" in text
     assert "sandbox_exec.py" in text
+    assert "pico_office_sock:/run/pico-office" not in text
+    assert "PICO_OFFICE_SOCK_HOST" in text
+    assert "1777" in text
     workenv = (ROOT / "docs" / "PLAN-WORKENV-UPSTREAM.md").read_text(encoding="utf-8")
     assert "PLAN-OFFICE-COMPUTER-V2.md" in workenv[:3000]
 
