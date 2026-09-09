@@ -10,6 +10,11 @@ SCRIPT = ROOT / "scripts" / "prod-update.sh"
 IMPL = ROOT / "scripts" / "prod-update.impl.sh"
 
 
+# Windows: the `bash` on PATH is usually the WSL launcher, which cannot see C:/.
+# Point PICO_TEST_BASH at Git Bash (C:\Program Files\Git\bin\bash.exe). CI is Linux.
+BASH = os.environ.get("PICO_TEST_BASH") or "bash"
+
+
 def _bash_path(path: Path) -> str:
     # Git bash on Windows treats backslashes as escapes; POSIX path works on both.
     return path.as_posix()
@@ -22,6 +27,8 @@ def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
 
@@ -54,11 +61,43 @@ def _fake_runtime(
     login_failures_before_success: int = 0,
     reindex_http: str = "200",
     reindex_body: str = '{"ok":true,"indexed":1,"skipped":0,"total":1}',
+    office_down: bool = False,
+    leftover_volumes: tuple[str, ...] = (),
+    volume_rm_fails: bool = False,
 ) -> Path:
-    """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w)."""
+    """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w).
+
+    Fake docker branches on the subcommand so the impl's own gates are exercised:
+    the pico-office unix-socket probe (``compose exec -T pico-api python3``),
+    ``volume ls --filter label=…pico_office_sock`` and ``volume rm``.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "docker").write_text("#!/usr/bin/env bash\nexit 0\n")
+    if office_down:
+        (bin_dir / "office-down").write_text("1\n")
+    if leftover_volumes:
+        (bin_dir / "volumes").write_text("".join(f"{v}\n" for v in leftover_volumes))
+    if volume_rm_fails:
+        (bin_dir / "volume-rm-fail").write_text("1\n")
+    (bin_dir / "docker").write_text(
+        "#!/usr/bin/env bash\n"
+        'here="$(cd "$(dirname "$0")" && pwd)"\n'
+        'args="$*"\n'
+        'case "$args" in\n'
+        '  *" exec -T pico-api "*)\n'
+        '    if [ -f "$here/office-down" ]; then exit 1; fi\n'
+        "    exit 0 ;;\n"
+        '  "volume ls "*)\n'
+        '    if [ -f "$here/volumes" ]; then cat "$here/volumes"; fi\n'
+        "    exit 0 ;;\n"
+        '  "volume rm "*)\n'
+        '    if [ -f "$here/volume-rm-fail" ]; then exit 1; fi\n'
+        '    printf \'%s\\n\' "${@: -1}"\n'
+        '    : >"$here/volume-removed"\n'
+        "    exit 0 ;;\n"
+        "esac\n"
+        "exit 0\n"
+    )
     (bin_dir / "ss").write_text("#!/usr/bin/env bash\nexit 0\n")
     (bin_dir / "sleep").write_text("#!/usr/bin/env bash\nexit 0\n")
     if login_network_fail:
@@ -129,7 +168,7 @@ def _advance_origin_main(tmp_path: Path, production: Path) -> str:
 
 def _run_prod_update(production: Path, sha: str, bin_dir: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["bash", _bash_path(production / "scripts" / "prod-update.sh")],
+        [BASH, _bash_path(production / "scripts" / "prod-update.sh")],
         env={
             **os.environ,
             "PATH": f"{_bash_path(bin_dir)}{os.pathsep}{os.environ['PATH']}",
@@ -138,16 +177,20 @@ def _run_prod_update(production: Path, sha: str, bin_dir: Path) -> subprocess.Co
         },
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 
 
 def test_prod_update_requires_full_sha(tmp_path: Path) -> None:
     result = subprocess.run(
-        ["bash", _bash_path(SCRIPT)],
+        [BASH, _bash_path(SCRIPT)],
         env={**os.environ, "PICO_DEPLOY_SHA": "abc"},
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     assert result.returncode == 2
@@ -245,7 +288,7 @@ def test_prod_update_refuses_dirty_worktree(tmp_path: Path) -> None:
     production, sha = _production_checkout(tmp_path)
     (production / "local-note.txt").write_text("do not hide me\n")
     result = subprocess.run(
-        ["bash", _bash_path(production / "scripts" / "prod-update.sh")],
+        [BASH, _bash_path(production / "scripts" / "prod-update.sh")],
         env={
             **os.environ,
             "PICO_ROOT": _bash_path(production),
@@ -253,6 +296,8 @@ def test_prod_update_refuses_dirty_worktree(tmp_path: Path) -> None:
         },
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     assert result.returncode == 2
@@ -317,7 +362,7 @@ def test_prod_update_ui_readiness_honors_librechat_url_override(tmp_path: Path) 
     production, sha = _production_checkout(tmp_path)
     bin_dir = _fake_runtime(tmp_path)
     result = subprocess.run(
-        ["bash", _bash_path(production / "scripts" / "prod-update.sh")],
+        [BASH, _bash_path(production / "scripts" / "prod-update.sh")],
         env={
             **os.environ,
             "PATH": f"{_bash_path(bin_dir)}{os.pathsep}{os.environ['PATH']}",
@@ -327,6 +372,8 @@ def test_prod_update_ui_readiness_honors_librechat_url_override(tmp_path: Path) 
         },
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -338,6 +385,70 @@ def test_prod_update_generates_hook_token_when_missing() -> None:
     assert "PICO_HOOK_SERVICE_TOKEN generated" in text
     assert "PICO_HOOK_SERVICE_TOKEN=SET" in text
     assert "Do not print the value" in text
+
+
+def test_prod_update_refuses_when_pico_office_socket_is_dead(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    result = _run_prod_update(production, sha, _fake_runtime(tmp_path, office_down=True))
+    assert result.returncode == 11
+    assert "pico-office unix socket not answering" in result.stderr
+    assert "[pico] done" not in result.stdout
+
+
+def test_prod_update_removes_leftover_office_named_volume(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, leftover_volumes=("pico_pico_office_sock",))
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert "removing leftover named volume pico_pico_office_sock" in result.stdout
+    assert (bin_dir / "volume-removed").exists()
+    assert "[pico] done" in result.stdout
+
+
+def test_prod_update_refuses_when_leftover_volume_cannot_be_removed(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(
+        tmp_path, leftover_volumes=("pico_pico_office_sock",), volume_rm_fails=True
+    )
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 12
+    assert "still in use" in result.stderr
+    assert "[pico] done" not in result.stdout
+
+
+def test_prod_update_refuses_compose_that_declares_office_named_volume(tmp_path: Path) -> None:
+    production, _sha = _production_checkout(tmp_path)
+    updater = tmp_path / "updater"
+    origin = _run("git", "remote", "get-url", "origin", cwd=production).stdout.strip()
+    _run("git", "clone", "--branch", "main", origin, str(updater), cwd=tmp_path)
+    _run("git", "config", "user.email", "ci@pico.local", cwd=updater)
+    _run("git", "config", "user.name", "Pico CI", cwd=updater)
+    (updater / "docker-compose.host.yml").write_text(
+        "services: {}\nvolumes:\n  pico_office_sock:\n"
+    )
+    _run("git", "add", "docker-compose.host.yml", cwd=updater)
+    _run("git", "commit", "-m", "named volume back", cwd=updater)
+    _run("git", "push", "origin", "main", cwd=updater)
+    new_sha = _run("git", "rev-parse", "HEAD", cwd=updater).stdout.strip()
+    result = _run_prod_update(production, new_sha, _fake_runtime(tmp_path))
+    assert result.returncode == 12
+    assert "still declares named volume pico_office_sock" in result.stderr
+    assert "[pico] done" not in result.stdout
+
+
+def test_prod_update_generates_sandbox_token_when_missing(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    (production / ".env").write_text("PICO_SANDBOX_TOKEN=\nKIMI_API_KEY=k\n")
+    # .env is untracked in the fixture; ignore it so the dirty-tree gate stays honest.
+    (production / ".git" / "info" / "exclude").write_text(".env\n")
+    result = _run_prod_update(production, sha, _fake_runtime(tmp_path))
+    assert result.returncode == 0, result.stderr
+    assert "PICO_SANDBOX_TOKEN generated" in result.stdout
+    env = (production / ".env").read_text()
+    lines = [ln for ln in env.splitlines() if ln.startswith("PICO_SANDBOX_TOKEN=")]
+    assert len(lines) == 1
+    assert len(lines[0].split("=", 1)[1]) >= 32
+    assert lines[0].split("=", 1)[1] not in result.stdout
 
 
 def test_prod_update_bootstrap_only_checkouts_then_execs_impl() -> None:
@@ -354,6 +465,7 @@ def test_prod_update_bootstrap_only_checkouts_then_execs_impl() -> None:
     assert "pico_office_sock" in impl
     assert "exit 11" in impl
     assert "exit 12" in impl
+    assert "PICO_SANDBOX_TOKEN generated" in impl
 
 
 def test_prod_update_runs_impl_from_checked_out_sha(tmp_path: Path) -> None:

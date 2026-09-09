@@ -2815,11 +2815,7 @@ def openai_tool_schemas(
             "properties": {
                 "artifact_id": {
                     "type": "string",
-                    "description": "Existing HTML artifact to publish",
-                },
-                "confirm_token": {
-                    "type": "string",
-                    "description": "One-shot teacher confirm for this artifact and identity",
+                    "description": "HTML artifact (ignored: Pico does not publish; Edu channel)",
                 },
             },
             "required": ["artifact_id"],

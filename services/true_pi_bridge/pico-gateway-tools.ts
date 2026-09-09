@@ -343,7 +343,6 @@ export default function (pi: ExtensionAPI) {
     Type.Object(
       {
         artifact_id: Type.String(),
-        confirm_token: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),
