@@ -468,9 +468,18 @@ def main() -> None:
     )
     args = parser.parse_args()
     if args.uds:
-        Path(args.uds).parent.mkdir(parents=True, exist_ok=True)
+        sock = Path(args.uds)
+        parent = sock.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        if not os.access(parent, os.W_OK):
+            print(
+                f"FATAL: {parent} is not writable by uid {os.getuid()}. "
+                "Office sock dir must be a host bind with mode 1777, not a named volume.",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
         try:
-            Path(args.uds).unlink()
+            sock.unlink()
         except FileNotFoundError:
             pass
         uvicorn.run("sandbox_worker.office_runner:app", uds=args.uds, factory=False)

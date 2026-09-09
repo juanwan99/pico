@@ -123,14 +123,18 @@ pico-office:
   tmpfs:
     - /tmp:size=1g                   # 工作目录
   volumes:
-    - pico_office_sock:/run/pico-office   # 只放 unix socket
+    # Host bind. Named volume pico_office_sock is forbidden: dockerd
+    # creates those root:755 and uid 65532 cannot bind the socket.
+    - ${PICO_OFFICE_SOCK_HOST:-./data/pico-office-sock}:/run/pico-office
   mem_limit: 1g                      # 不与 Chromium 共享 512m（PLAN-WORKENV 明令）
   pids_limit: 128
   environment:
     PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
 ```
 
-pico-api 挂同一卷，用 `httpx.AsyncHTTPTransport(uds="/run/pico-office/office.sock")` 调用。**箱没有网卡**，pico-api 靠 unix socket 进去；这是 uvicorn 原生 `--uds`，不是自研运输。
+pico-api 挂同一宿主目录，用 `httpx.AsyncHTTPTransport(uds="/run/pico-office/office.sock")` 调用。**箱没有网卡**，pico-api 靠 unix socket 进去；这是 uvicorn 原生 `--uds`，不是自研运输。
+
+目录合同：`prod-update.impl.sh` 在 `compose up` **之前**建该目录，mode **1777 sticky**（会合点，同类 `/tmp`）。宿主 ops 无 CAP_CHOWN，不能 `chown 65532`，禁止假装已 chown。禁止命名卷；遗留 `pico_*_office_sock` 必须删掉，不能复用。
 
 为什么不直接塞进现有 `pico-sandbox`：那个容器要给 Chromium 出网，且 512 MiB 已被浏览器占；`PLAN-WORKENV-UPSTREAM` 已写「把 Pi/办公塞回同一 512MiB = Fail」。同镜像双服务，成本是一段 compose。
 
@@ -287,7 +291,7 @@ scripts/office-regress.py
 
 | 风险 | 严重度 | 缓解 |
 |------|--------|------|
-| unix socket 卷权限（pico-api 是 host 网络容器，需能读写该卷） | P1 | 卷 `pico_office_sock` 双挂；uds 文件 0660，两容器同 gid 65532；启动探活 `GET /health` |
+| unix socket 目录权限（pico-api 是 host 网络容器，需能读写该目录） | P1 | **禁止命名卷**。宿主绑定 `PICO_OFFICE_SOCK_HOST`；prod-update impl 在 up 前建 1777 sticky；不可写且非空则失败闭合；启动探活 `GET /health`（exit 11） |
 | 冷启动：每次 `python3 -I` + import openpyxl/pptx ≈ 1–2s | P2 | 可接受；远低于今天多轮工具往返。不做常驻解释器池（那是自研） |
 | tmpfs 1g 被大文件撑满 | P2 | `RLIMIT_FSIZE` 200MiB + 上传 20 万字上限 + job 结束必删 |
 | 模型开始 `import pandas` 而镜像没有 | P2 | 首版镜像加 `pandas` `Pillow` `matplotlib`（成熟 PyPI，办公常用；见 §9 Q2）；没有的库让 `ModuleNotFoundError` 原样回模型，它会改写 |
