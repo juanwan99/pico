@@ -1,120 +1,51 @@
-"""Isolated office-library ceiling. Not a second Office OS. No host bash.
+"""Office write path: thin client to the pico-office container.
 
-Default files still go through spec / generate_*.
-This module runs a tightly allowlisted snippet in a subprocess and
-returns OOXML bytes. Empty shells fail closed.
+The script runs in ``pico-office`` (same image as pico-sandbox, ``network_mode:
+none``, tmpfs, rlimit) with a full Python 3 + python-docx / openpyxl /
+python-pptx. Pico keeps no import allowlist and no AST jail here (#959,
+TRUTH-FREEZE v2.0). What stays on this side is the latch: OOXML validity,
+empty-shell refusal, source size, and the ledger write in tools_builtin.
 
-Thin adapters vs naked GPT office libs: pathlib is a stub (mkdir
-ignored), Document/Workbook/Presentation.save always book to OUTPUT_PATH,
-source cap is OFFICE_LIB_MAX_SOURCE. os / open / eval stay denied. Stdlib
-without host IO (copy/math/datetime/io.BytesIO) is allowed so naked GPT
-drafts are not sent back to stock layouts (#829).
+``PICO_OFFICE_URL``:
+  unix:///run/pico-office/office.sock   (default · production)
+  http://127.0.0.1:18769                (dev · tcp)
+  embedded                              (tests · run_office_job in-process)
 """
 
 from __future__ import annotations
 
 import ast
 import asyncio
+import base64
+import contextlib
 import io
-import json
 import os
-import subprocess
-import sys
-import tempfile
 import zipfile
-from pathlib import Path
 from typing import Any
+
+import httpx
 
 from pico_orchestrator.artifact_types import is_valid_ooxml_package
 from pico_orchestrator.document_generators import office_shell_reason
 from pico_orchestrator.gateway import ToolError
 
-_TIMEOUT_S = 45.0
+_TIMEOUT_S = 60.0
 PPTX_LIB_MAX_SOURCE = 200_000
 OFFICE_LIB_MAX_SOURCE = PPTX_LIB_MAX_SOURCE
 _MAX_SOURCE = OFFICE_LIB_MAX_SOURCE
-_DENIED_CALLS = frozenset({"exec", "eval", "compile", "open", "__import__"})
 _OFFICE_KINDS = frozenset({"pptx", "docx", "xlsx"})
-# Keep in sync with office/sandbox_exec.py STDLIB_OK.
-STDLIB_OK = frozenset(
-    {
-        "copy",
-        "math",
-        "datetime",
-        "collections",
-        "itertools",
-        "functools",
-        "typing",
-        "dataclasses",
-        "enum",
-        "re",
-        "json",
-        "uuid",
-        "statistics",
-        "decimal",
-        "numbers",
-        "operator",
-        "string",
-        "textwrap",
-        "heapq",
-        "bisect",
-        "array",
-        "contextlib",
-        "abc",
-        "warnings",
-        "time",
-        "random",
-        "base64",
-        "struct",
-        "io",
-        "calendar",
-        "fractions",
-    }
-)
-_IO_FROM_OK = frozenset({"BytesIO", "StringIO"})
-# Upstream office PyPI. os / subprocess stay denied. pathlib is a stub (mkdir only).
-_ALLOWED_IMPORT_ROOTS = frozenset(
-    {"pptx", "pptx_helpers", "docx", "openpyxl", "pathlib"}
-) | STDLIB_OK
+_DEFAULT_OFFICE_URL = "unix:///run/pico-office/office.sock"
+_RUN_PATH = "/v1/internal/office/run"
 
 
-def _import_root(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Import):
-        roots = {alias.name.split(".")[0] for alias in node.names if alias.name}
-        if len(roots) == 1:
-            return next(iter(roots))
-        return None
-    if isinstance(node, ast.ImportFrom):
-        if node.level:
-            return None
-        mod = node.module or ""
-        return mod.split(".")[0] if mod else None
-    return None
+def office_url() -> str:
+    raw = (os.environ.get("PICO_OFFICE_URL") or "").strip()
+    return raw or _DEFAULT_OFFICE_URL
 
 
-def _pathlib_import_ok(node: ast.AST) -> bool:
-    """Allow `import pathlib` / `from pathlib import Path` only. Not pathlib.abc."""
-    if isinstance(node, ast.Import):
-        return all(alias.name == "pathlib" for alias in node.names)
-    if isinstance(node, ast.ImportFrom):
-        if node.level or node.module != "pathlib":
-            return False
-        allowed = {"Path", "PurePath", "PurePosixPath"}
-        return bool(node.names) and all(
-            alias.name == "*" or alias.name in allowed for alias in node.names
-        )
-    return False
-
-
-def _io_import_ok(node: ast.AST) -> bool:
-    """Allow `import io` / `from io import BytesIO, StringIO`. Not io.open."""
-    if isinstance(node, ast.Import):
-        return all(alias.name == "io" for alias in node.names)
-    if isinstance(node, ast.ImportFrom):
-        if node.level or node.module != "io":
-            return False
-        return bool(node.names) and all(alias.name in _IO_FROM_OK for alias in node.names)
-    return False
+def _office_token() -> dict[str, str]:
+    token = (os.environ.get("PICO_SANDBOX_TOKEN") or "").strip()
+    return {"X-Pico-Sandbox-Token": token} if token else {}
 
 
 def normalize_office_kind(kind: str | None, *, title: str | None = None) -> str:
@@ -135,45 +66,20 @@ def normalize_office_kind(kind: str | None, *, title: str | None = None) -> str:
 
 
 def assert_office_lib_source(source: str, *, kind: str = "pptx") -> None:
+    """Cheap door: non-empty, size cap, parses. Not an allowlist."""
     text = (source or "").strip()
     if not text:
         raise ToolError("tool.invalid_arguments", "source 必须是非空的办公库脚本。")
     if len(text) > _MAX_SOURCE:
         raise ToolError("tool.invalid_arguments", f"source 不能超过 {_MAX_SOURCE} 字。")
-    kind = normalize_office_kind(kind)
+    normalize_office_kind(kind)
     try:
-        tree = ast.parse(text)
+        ast.parse(text)
     except SyntaxError as exc:
-        raise ToolError("sandbox.exec_invalid", "办公库脚本无法解析。") from exc
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            root = _import_root(node)
-            if root == "pathlib" and not _pathlib_import_ok(node):
-                raise ToolError(
-                    "sandbox.exec_denied",
-                    "pathlib 只允许 import pathlib 或 from pathlib import Path；禁止 pathlib.abc / 宿主文件。",
-                )
-            if root == "io" and not _io_import_ok(node):
-                raise ToolError(
-                    "sandbox.exec_denied",
-                    "io 只允许 BytesIO/StringIO，禁止 io.open / 宿主文件。",
-                )
-            if root not in _ALLOWED_IMPORT_ROOTS:
-                raise ToolError(
-                    "sandbox.exec_denied",
-                    "禁止 import os/宿主库。办公库可用 python-docx / openpyxl / python-pptx。"
-                    "copy/math/datetime/io.BytesIO 可用。",
-                )
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id in _DENIED_CALLS
-        ):
-            raise ToolError("sandbox.exec_denied", "禁止动态执行或打开宿主文件。")
-        if isinstance(node, ast.Attribute) and str(node.attr).startswith("__"):
-            raise ToolError("sandbox.exec_denied", "禁止访问内部属性。")
-        if isinstance(node, ast.Name) and str(node.id).startswith("__") and node.id != "__name__":
-            raise ToolError("sandbox.exec_denied", "禁止访问内部名字。")
+        raise ToolError(
+            "sandbox.exec_invalid",
+            f"办公脚本无法解析：第 {exc.lineno} 行 {exc.msg}。",
+        ) from exc
 
 
 def assert_pptx_lib_source(source: str) -> None:
@@ -206,7 +112,7 @@ def _xlsx_has_cell(raw: bytes) -> bool:
             blob = b"".join(zf.read(n) for n in sheets)
     except zipfile.BadZipFile:
         return False
-    return b"<v>" in blob or b"<t>" in blob or b"t=\"inlineStr\"" in blob or b"t='inlineStr'" in blob
+    return b"<v>" in blob or b"<t>" in blob or b't="inlineStr"' in blob or b"t='inlineStr'" in blob
 
 
 def _validate_office_bytes(raw: bytes, kind: str) -> bytes:
@@ -214,10 +120,16 @@ def _validate_office_bytes(raw: bytes, kind: str) -> bytes:
     ext = f".{kind}"
     if not raw:
         if kind == "pptx":
-            raise ToolError("sandbox.pptx_empty", "沙箱没有写出 PPT。请调用 save_deck(prs) 或 prs.save。")
+            raise ToolError(
+                "sandbox.pptx_empty", "沙箱没有写出 PPT。请调用 save_deck(prs) 或 prs.save。"
+            )
         if kind == "docx":
-            raise ToolError("sandbox.docx_empty", "沙箱没有写出 Word。请调用 save_doc(doc) 或 doc.save。")
-        raise ToolError("sandbox.xlsx_empty", "沙箱没有写出 Excel。请调用 save_book(wb) 或 wb.save。")
+            raise ToolError(
+                "sandbox.docx_empty", "沙箱没有写出 Word。请调用 save_doc(doc) 或 doc.save。"
+            )
+        raise ToolError(
+            "sandbox.xlsx_empty", "沙箱没有写出 Excel。请调用 save_book(wb) 或 wb.save。"
+        )
     if _looks_like_office_zip(raw, kind):
         reason = office_shell_reason(raw, ext)
         if reason:
@@ -233,86 +145,106 @@ def _validate_pptx_bytes(raw: bytes) -> bytes:
     return _validate_office_bytes(raw, "pptx")
 
 
+def _check_input(input_bytes: bytes | None, *, kind: str, input_name: str | None) -> None:
+    """Any ledger original may go in. Only a same-kind office name must be real OOXML."""
+    if input_bytes is None:
+        return
+    if not isinstance(input_bytes, (bytes, bytearray)) or not input_bytes:
+        raise ToolError("sandbox.input_invalid", "原件是空的或不是字节，不能载入隔离办公库。")
+    name = str(input_name or "").strip().lower()
+    if (not name or name.endswith(f".{kind}")) and not (
+        _looks_like_office_zip(bytes(input_bytes), kind)
+        and is_valid_ooxml_package(bytes(input_bytes), f".{kind}")
+    ):
+        raise ToolError(
+            "sandbox.input_invalid",
+            f"原件不是真 {kind.upper()}（OOXML），不能当改稿载入。",
+        )
+
+
+def _call_office_box(payload: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
+    base = office_url()
+    if base == "embedded":
+        from sandbox_worker.office_runner import run_office_job
+
+        return run_office_job(
+            kind=payload["kind"],
+            source=payload["source"],
+            input_bytes=base64.b64decode(payload["input_b64"])
+            if payload.get("input_b64")
+            else None,
+            input_name=payload.get("input_name"),
+            images={k: base64.b64decode(v) for k, v in (payload.get("images") or {}).items()},
+            timeout_s=timeout_s,
+        )
+    http_timeout = httpx.Timeout(timeout_s + 15.0, connect=5.0)
+    try:
+        if base.startswith("unix://"):
+            transport = httpx.HTTPTransport(uds=base[len("unix://") :])
+            with httpx.Client(transport=transport, timeout=http_timeout, trust_env=False) as client:
+                resp = client.post(
+                    "http://pico-office" + _RUN_PATH, json=payload, headers=_office_token()
+                )
+        else:
+            with httpx.Client(timeout=http_timeout, trust_env=False) as client:
+                resp = client.post(
+                    base.rstrip("/") + _RUN_PATH, json=payload, headers=_office_token()
+                )
+    except httpx.HTTPError as exc:
+        raise ToolError(
+            "sandbox.unavailable",
+            "隔离办公容器（pico-office）未运行。办公脚本不会在 pico-api 进程里跑。",
+        ) from exc
+    if resp.status_code >= 400:
+        code, message = "sandbox.unavailable", f"隔离办公容器返回 HTTP {resp.status_code}"
+        with contextlib.suppress(Exception):  # error body is optional JSON
+            detail = resp.json().get("detail")
+            if isinstance(detail, dict):
+                code = str(detail.get("code") or code)
+                message = str(detail.get("message") or message)
+        raise ToolError(code, message)
+    try:
+        body = resp.json()
+    except Exception as exc:
+        raise ToolError("sandbox.unavailable", "隔离办公容器返回了无法解析的响应") from exc
+    if not isinstance(body, dict):
+        raise ToolError("sandbox.unavailable", "隔离办公容器返回了无法解析的响应")
+    return body
+
+
 def run_office_lib_source(
     source: str,
     *,
     kind: str = "pptx",
     images: dict[str, bytes] | None = None,
     input_bytes: bytes | None = None,
+    input_name: str | None = None,
     timeout_s: float = _TIMEOUT_S,
 ) -> bytes:
-    """Sync runner used by the subprocess and tests."""
+    """Sync path (tests and to_thread). Bytes come back validated or a ToolError is raised."""
     kind = normalize_office_kind(kind)
     assert_office_lib_source(source, kind=kind)
-    if input_bytes is not None:
-        if not isinstance(input_bytes, (bytes, bytearray)) or not input_bytes:
-            raise ToolError(
-                "sandbox.input_invalid",
-                "原件是空的或不是字节，不能载入隔离办公库。",
-            )
-        raw_in = bytes(input_bytes)
-        if not _looks_like_office_zip(raw_in, kind) or not is_valid_ooxml_package(
-            raw_in, f".{kind}"
-        ):
-            raise ToolError(
-                "sandbox.input_invalid",
-                f"原件不是真 {kind.upper()}（OOXML），不能当改稿载入。",
-            )
-    with tempfile.TemporaryDirectory(prefix="pico-office-lib-") as tmp:
-        root = Path(tmp)
-        out_path = root / f"out.{kind}"
-        input_path = ""
-        if input_bytes is not None:
-            in_file = root / f"in.{kind}"
-            in_file.write_bytes(bytes(input_bytes))
-            input_path = str(in_file)
-        image_paths: dict[str, str] = {}
-        for key, blob in (images or {}).items():
-            if not blob:
-                continue
-            name = f"{key}.png" if blob[:8] == b"\x89PNG\r\n\x1a\n" else f"{key}.jpg"
-            dest = root / name
-            dest.write_bytes(blob)
-            image_paths[str(key)] = str(dest)
-        helpers_src = Path(__file__).with_name("pptx_helpers.py").read_text(encoding="utf-8")
-        (root / "pptx_helpers.py").write_text(helpers_src, encoding="utf-8")
-        exec_src = Path(__file__).with_name("sandbox_exec.py").read_text(encoding="utf-8")
-        wrapper = root / "runner.py"
-        wrapper.write_text(exec_src, encoding="utf-8")
-        cfg_path = root / "cfg.json"
-        cfg_path.write_text(
-            json.dumps(
-                {
-                    "output": str(out_path),
-                    "input": input_path,
-                    "images": image_paths,
-                    "source": source,
-                    "kind": kind,
-                },
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
-        try:
-            proc = subprocess.run(
-                [sys.executable, str(wrapper), str(cfg_path)],
-                cwd=str(root),
-                capture_output=True,
-                timeout=max(1.0, float(timeout_s)),
-                env=_isolated_env(),
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise ToolError("sandbox.exec_timeout", "沙箱办公库超时已杀掉。") from exc
-        if proc.returncode != 0:
-            err = (proc.stderr or b"").decode("utf-8", errors="replace")[:800]
-            raise ToolError(
-                f"sandbox.{kind}_failed",
-                f"隔离办公库失败：{err or 'exit ' + str(proc.returncode)}",
-            )
-        return _validate_office_bytes(
-            out_path.read_bytes() if out_path.is_file() else b"", kind
-        )
+    _check_input(input_bytes, kind=kind, input_name=input_name)
+    payload: dict[str, Any] = {
+        "kind": kind,
+        "source": source,
+        "input_name": input_name or (f"in.{kind}" if input_bytes else None),
+        "input_b64": base64.b64encode(bytes(input_bytes)).decode("ascii") if input_bytes else None,
+        "images": {
+            str(k): base64.b64encode(v).decode("ascii") for k, v in (images or {}).items() if v
+        },
+        "timeout_s": float(timeout_s),
+    }
+    receipt = _call_office_box(payload, timeout_s=float(timeout_s))
+    if not receipt.get("ok"):
+        code = str(receipt.get("code") or f"sandbox.{kind}_failed")
+        message = str(receipt.get("message") or "隔离办公库失败。")
+        stderr = str(receipt.get("stderr_tail") or "").strip()
+        if stderr:
+            message = f"{message}\n{stderr[-1200:]}"
+        raise ToolError(code, message)
+    raw = base64.b64decode(str(receipt.get("output_b64") or ""))
+    return _validate_office_bytes(raw, kind)
 
 
 def run_pptx_lib_source(
@@ -333,6 +265,7 @@ async def run_office_lib_source_async(
     kind: str = "pptx",
     images: dict[str, bytes] | None = None,
     input_bytes: bytes | None = None,
+    input_name: str | None = None,
     timeout_s: float = _TIMEOUT_S,
 ) -> bytes:
     return await asyncio.to_thread(
@@ -341,6 +274,7 @@ async def run_office_lib_source_async(
         kind=kind,
         images=images,
         input_bytes=input_bytes,
+        input_name=input_name,
         timeout_s=timeout_s,
     )
 
@@ -359,28 +293,3 @@ async def run_pptx_lib_source_async(
         input_bytes=input_bytes,
         timeout_s=timeout_s,
     )
-
-
-def _isolated_env() -> dict[str, str]:
-    keep = ("PATH", "PYTHONPATH", "HOME", "LANG", "LC_ALL", "VIRTUAL_ENV")
-    env = {key: os.environ[key] for key in keep if key in os.environ}
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
-    return env
-
-
-def main() -> None:
-    raw = sys.stdin.buffer.read().decode("utf-8")
-    body: dict[str, Any] = json.loads(raw or "{}")
-    out = run_office_lib_source(
-        str(body.get("source") or ""),
-        kind=str(body.get("kind") or "pptx"),
-        images={
-            str(k): bytes(v) if isinstance(v, list) else v
-            for k, v in (body.get("images") or {}).items()
-        },
-    )
-    sys.stdout.buffer.write(out)
-
-
-if __name__ == "__main__":
-    main()

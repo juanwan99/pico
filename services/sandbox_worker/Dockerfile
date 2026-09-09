@@ -27,6 +27,11 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ -r /app/requirements.txt \
     && pip install -i https://mirrors.aliyun.com/pypi/simple/ playwright==1.52.0
 
+# pico-office (same image, second service): office scripts get a full Python.
+# Mature PyPI only; not a science stack. requests is pointless (network none).
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
+      "pandas>=2.2,<3" "Pillow>=10,<12" "matplotlib>=3.8,<4"
+
 # Chromium + OS deps baked into the sidecar image (not host Chrome).
 # Rewrite Debian apt to Aliyun so China ECS can install --with-deps.
 RUN set -eux; \

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
@@ -15,21 +14,12 @@ from pico_orchestrator.document_generators import (
     DOC_BODY_MAX,
     build_html_document,
 )
-from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.office.inspect import inspect_office_bytes
 from pico_orchestrator.office.sandbox_lib import (
-    STDLIB_OK,
     assert_pptx_lib_source,
     run_pptx_lib_source,
 )
 from pico_orchestrator.tools_builtin import build_default_gateway
-
-
-def _stdlib_names(path: Path) -> set[str]:
-    text = path.read_text(encoding="utf-8")
-    match = re.search(r"STDLIB_OK = frozenset\(\s*\{([^}]+)\}", text)
-    assert match, f"STDLIB_OK missing in {path}"
-    return set(re.findall(r'"([A-Za-z0-9_]+)"', match.group(1)))
 
 
 def test_html_marker_is_hidden_not_chrome() -> None:
@@ -41,9 +31,7 @@ def test_html_marker_is_hidden_not_chrome() -> None:
     assert 'data-pico-marker="' + marker + '"' in text
     assert "标记：" not in text
     assert "data-pico-marker-line" not in text
-    prose = build_html_document(title="p.html", marker=marker, body="一段说明。").decode(
-        "utf-8"
-    )
+    prose = build_html_document(title="p.html", marker=marker, body="一段说明。").decode("utf-8")
     assert marker in prose
     assert "标记：" not in prose
 
@@ -60,9 +48,7 @@ def test_html_over_50k_lands_with_tail_script() -> None:
 </body></html>"""
     assert len(body) > 50_000
     assert len(body) < DOC_BODY_MAX
-    text = build_html_document(title="long.html", marker="LONG1", body=body).decode(
-        "utf-8"
-    )
+    text = build_html_document(title="long.html", marker="LONG1", body=body).decode("utf-8")
     assert sentinel in text
     assert "<canvas" in text.lower()
     assert "标记：" not in text
@@ -84,40 +70,45 @@ def test_html_cdn_still_fail_closed() -> None:
 
 def test_system_does_not_steer_canvas_downgrade() -> None:
     system = (
-        ROOT
-        / "services"
-        / "orchestrator"
-        / "pico_orchestrator"
-        / "agent_assets"
-        / "system.md"
+        ROOT / "services" / "orchestrator" / "pico_orchestrator" / "agent_assets" / "system.md"
     ).read_text(encoding="utf-8")
     assert "rewrite the page with canvas drawing" not in system
     assert "dumb the page down" in system
     assert "read_office_skill" in system
-    ts = (
-        ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts"
-    ).read_text(encoding="utf-8")
-    assert "copy / math / datetime / from io import BytesIO are allowed" in ts
+    ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "pico-office" in ts
+    assert "Do not import os" not in ts
+    assert "is a stub" not in ts
 
 
 def test_gateway_html_tool_does_not_require_canvas_only() -> None:
-    ts = (
-        ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts"
-    ).read_text(encoding="utf-8")
+    ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
+        encoding="utf-8"
+    )
     assert "canvas only" not in ts
     assert "canvas allowed, not required" in ts
     assert "do not dumb it down" in ts
 
 
-def test_pptx_stdlib_allowlist_matches_exec() -> None:
-    lib = ROOT / "services/orchestrator/pico_orchestrator/office/sandbox_lib.py"
-    exe = ROOT / "services/orchestrator/pico_orchestrator/office/sandbox_exec.py"
-    names = _stdlib_names(lib)
-    assert names == _stdlib_names(exe)
-    assert names == set(STDLIB_OK)
-    assert "copy" in STDLIB_OK
-    assert "os" not in STDLIB_OK
-    assert "sys" not in STDLIB_OK
+def test_no_interpreter_jail_left_in_repo() -> None:
+    """#959 / LAW §2.15: the office write path keeps no AST/import jail."""
+    lib = (ROOT / "services/orchestrator/pico_orchestrator/office/sandbox_lib.py").read_text(
+        encoding="utf-8"
+    )
+    for needle in (
+        "STDLIB_OK",
+        "_ALLOWED_IMPORT_ROOTS",
+        "_SAFE_BUILTINS",
+        "_sandbox_import",
+        "_DENIED_CALLS",
+    ):
+        assert needle not in lib
+    assert not (ROOT / "services/orchestrator/pico_orchestrator/office/sandbox_exec.py").exists()
+    runner = (ROOT / "services/sandbox_worker/office_runner.py").read_text(encoding="utf-8")
+    assert "__import__" not in runner  # no import hook anywhere
+    assert "_SAFE_BUILTINS" not in runner
 
 
 def test_pptx_naked_gpt_stdlib_lands() -> None:
@@ -149,14 +140,6 @@ save_deck(prs)
     assert "2026-08-31" in blob
 
 
-def test_pptx_io_open_denied() -> None:
-    with pytest.raises(ToolError) as ei:
-        assert_pptx_lib_source(
-            "from io import open\nfrom pptx import Presentation\nsave_deck(Presentation())"
-        )
-    assert ei.value.code == "sandbox.exec_denied"
-
-
 def test_generate_html_tool_accepts_over_50k() -> None:
     import asyncio
     from typing import Any, ClassVar
@@ -175,7 +158,7 @@ def test_generate_html_tool_accepts_over_50k() -> None:
         async def write(
             self, principal: Principal, *, title: str, content: str | bytes, kind: str
         ) -> dict[str, Any]:
-            aid = f"a-{len(self.items)+1}"
+            aid = f"a-{len(self.items) + 1}"
             body = content if isinstance(content, str) else content.decode("utf-8", "replace")
             self.items[aid] = {
                 "artifact_id": aid,

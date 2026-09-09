@@ -90,21 +90,98 @@ save_deck(prs)
     assert int(outline["slides"]) >= 1
 
 
-def test_os_import_denied_for_office_lib() -> None:
+def test_full_python_in_box_no_import_jail() -> None:
+    """v2 (#959): the box is a computer. os / csv / pathlib / subprocess are fine."""
+    source = """
+import os, csv, subprocess, sys
+from pathlib import Path
+from openpyxl import Workbook
+rows = list(csv.reader(["姓名,组别", "甲,A", "乙,A", "丙,B"]))
+counts = {}
+for name, group in rows[1:]:
+    counts[group] = counts.get(group, 0) + 1
+wb = Workbook()
+ws = wb.active
+ws["A1"] = "组别"; ws["B1"] = "人数"
+for i, (g, n) in enumerate(sorted(counts.items()), start=2):
+    ws[f"A{i}"] = g; ws[f"B{i}"] = n
+out = subprocess.run([sys.executable, "-c", "print(6*7)"], capture_output=True, text=True)
+ws["D1"] = int(out.stdout.strip())
+Path("scratch.txt").write_text(os.getcwd())
+wb.save(OUTPUT_PATH)
+"""
+    raw = run_office_lib_source(source, kind="xlsx")
+    ws = load_workbook(BytesIO(raw)).active
+    assert ws["A2"].value == "A" and ws["B2"].value == 2
+    assert ws["A3"].value == "B" and ws["B3"].value == 1
+    assert ws["D1"].value == 42
+
+
+def test_script_error_comes_back_as_stderr_not_jail_code() -> None:
     with pytest.raises(ToolError) as ei:
-        assert_office_lib_source("import os\nprint(os.getcwd())", kind="docx")
-    assert ei.value.code == "sandbox.exec_denied"
+        run_office_lib_source(
+            "from docx import Document\nraise RuntimeError('boom-marker')", kind="docx"
+        )
+    assert ei.value.code == "sandbox.docx_failed"
+    assert "boom-marker" in ei.value.message
+
+
+def test_syntax_error_is_cheap_door() -> None:
     with pytest.raises(ToolError) as ei:
-        run_office_lib_source("import subprocess\nprint(1)", kind="xlsx")
-    assert ei.value.code == "sandbox.exec_denied"
+        assert_office_lib_source("def (:\n", kind="docx")
+    assert ei.value.code == "sandbox.exec_invalid"
+
+
+def test_newest_office_file_is_collected_when_output_path_unused() -> None:
+    source = """
+from docx import Document
+doc = Document()
+doc.add_paragraph("落在工作目录里，不叫 OUTPUT_PATH。")
+doc.save("anything.docx")
+"""
+    raw = run_office_lib_source(source, kind="docx")
+    text = "\n".join(p.text for p in Document(BytesIO(raw)).paragraphs)
+    assert "工作目录" in text
+
+
+def test_no_output_is_honest_failure() -> None:
+    with pytest.raises(ToolError) as ei:
+        run_office_lib_source("x = 1\n", kind="pptx")
+    assert ei.value.code == "sandbox.no_output"
+
+
+def test_csv_original_rides_along_as_input_path() -> None:
+    csv_bytes = "姓名,学号,组别\n甲,1,A\n乙,2,B\n丙,3,A\n".encode()
+    source = """
+import csv
+from openpyxl import Workbook
+with open(INPUT_PATH, encoding="utf-8") as fh:
+    rows = list(csv.DictReader(fh))
+wb = Workbook()
+ws = wb.active
+ws["A1"] = "组别"; ws["B1"] = "人数"
+groups = sorted({r["组别"] for r in rows})
+for i, g in enumerate(groups, start=2):
+    ws[f"A{i}"] = g
+    ws[f"B{i}"] = sum(1 for r in rows if r["组别"] == g)
+save_book(wb)
+"""
+    raw = run_office_lib_source(source, kind="xlsx", input_bytes=csv_bytes, input_name="roster.csv")
+    ws = load_workbook(BytesIO(raw)).active
+    assert (ws["A2"].value, ws["B2"].value) == ("A", 2)
+    assert (ws["A3"].value, ws["B3"].value) == ("B", 1)
 
 
 def test_empty_office_shells_fail() -> None:
     with pytest.raises(ToolError) as ei:
-        run_office_lib_source("from docx import Document\ndoc = Document()\nsave_doc(doc)", kind="docx")
+        run_office_lib_source(
+            "from docx import Document\ndoc = Document()\nsave_doc(doc)", kind="docx"
+        )
     assert ei.value.code == "sandbox.docx_shell"
     with pytest.raises(ToolError) as ei:
-        run_office_lib_source("from openpyxl import Workbook\nwb = Workbook()\nsave_book(wb)", kind="xlsx")
+        run_office_lib_source(
+            "from openpyxl import Workbook\nwb = Workbook()\nsave_book(wb)", kind="xlsx"
+        )
     assert ei.value.code == "sandbox.xlsx_shell"
 
 
@@ -221,12 +298,16 @@ save_deck(prs)
 
 
 def test_bad_input_bytes_fail_closed() -> None:
+    """A same-kind office name that is not real OOXML is refused at the door."""
     with pytest.raises(ToolError) as ei:
         run_office_lib_source(
             "from docx import Document\ndoc = Document()\ndoc.add_paragraph('x')\nsave_doc(doc)",
             kind="docx",
             input_bytes=b"not-a-zip",
         )
+    assert ei.value.code == "sandbox.input_invalid"
+    with pytest.raises(ToolError) as ei:
+        run_office_lib_source("x=1\n", kind="docx", input_bytes=b"", input_name="a.docx")
     assert ei.value.code == "sandbox.input_invalid"
 
 
@@ -260,7 +341,9 @@ class _MemoryStore:
             "title": title,
             "content": content,
             "kind": kind,
-            "byte_size": len(content) if isinstance(content, bytes) else len(content.encode("utf-8")),
+            "byte_size": len(content)
+            if isinstance(content, bytes)
+            else len(content.encode("utf-8")),
         }
         self.rows.append(row)
         return {k: v for k, v in row.items() if k != "content"}
@@ -312,12 +395,7 @@ async def test_office_lib_gateway_loads_artifact_id() -> None:
         {
             "kind": "xlsx",
             "artifact_id": first["artifact_id"],
-            "source": (
-                "wb = load_book()\n"
-                'ws = wb["成绩"]\n'
-                'ws["D1"] = "营收"\n'
-                "save_book(wb)\n"
-            ),
+            "source": ('wb = load_book()\nws = wb["成绩"]\nws["D1"] = "营收"\nsave_book(wb)\n'),
         },
     )
     assert out.get("loaded_existing") is True

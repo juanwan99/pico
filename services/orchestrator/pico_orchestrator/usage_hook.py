@@ -18,7 +18,7 @@ _SEARCH_TOOLS = frozenset({"web_search", "web_fetch"})
 _SANDBOX_TOOLS = frozenset(
     {
         "sandbox_preview_inspect",
-        "sandbox_workspace_exec",
+        "sandbox_office_lib",
         "generate_html_document",
         "sandbox_browser_open",
         "sandbox_browser_screenshot",

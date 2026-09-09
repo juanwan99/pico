@@ -31,7 +31,6 @@ const ALLOWED = [
   "kb_search",
   "ask_user",
   "sandbox_preview_inspect",
-  "sandbox_workspace_exec",
   "sandbox_browser_open",
   "sandbox_browser_screenshot",
   "sandbox_document_open",
@@ -277,7 +276,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "read_office_skill",
-    "On-demand office craft (docx / xlsx / pptx). SYSTEM only lists name+when. This returns the full python-docx / openpyxl / python-pptx craft. Not LibreChat Skills. Not bash. After reading, write with sandbox_office_lib (kind matches id). Change an existing file with artifact_id. The office write path is sandbox_office_lib only.",
+    "On-demand office craft (docx / xlsx / pptx). SYSTEM only lists name+when. This returns the full python-docx / openpyxl / python-pptx craft. Not LibreChat Skills. After reading, write with sandbox_office_lib (kind matches id). Change an existing file with artifact_id. The office write path is sandbox_office_lib only.",
     Type.Object(
       {
         id: Type.String(),
@@ -288,7 +287,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_office_lib",
-    "Isolated office Python (python-docx / openpyxl / python-pptx; not host bash, not a second Office OS, not a programming sandbox). The office write path. To change a file the teacher already has, pass artifact_id and load_doc/load_book/load_deck or Document(INPUT_PATH). kind=docx|xlsx|pptx (or infer from title suffix). save_doc/save_book/save_deck or .save route to the ledger. from pathlib import Path is a stub. Do not import os. copy / math / datetime / from io import BytesIO are allowed. Empty shells fail. add_title_slide / add_content_slide / add_table are injected for PPT.",
+    "The office write path: run a Python script inside the isolated pico-office container (no network, throwaway workdir). Full Python 3.12 with python-docx / openpyxl / python-pptx, the whole standard library (csv, json, re, os, pathlib...), pandas, Pillow, matplotlib, and soffice for legacy conversion. kind=docx|xlsx|pptx (or infer from title suffix). Names already in scope: INPUT_PATH (the artifact_id original, any type: xlsx/docx/pptx/csv/txt/json/png), OUTPUT_PATH, IMAGE_PATHS[i] (from image_artifact_ids), load_doc/load_book/load_deck, save_doc/save_book/save_deck, add_title_slide/add_content_slide/add_table. Write the result to OUTPUT_PATH (or any *.kind in the workdir; the newest is collected). Empty shells fail. On failure you get stderr back — fix the script and call again. One call = one output file.",
     Type.Object(
       {
         source: Type.String(),
@@ -301,18 +300,6 @@ export default function (pi: ExtensionAPI) {
     ),
   );
 
-  registerTool(
-    pi,
-    "sandbox_workspace_exec",
-    "Parse HTML or Python inside this run's isolated workspace. Receipt is parsed=true, executed=false — ast only, not host bash, not a real runner. Timeout-killed.",
-    Type.Object(
-      {
-        html: Type.Optional(Type.String()),
-        source: Type.Optional(Type.String()),
-      },
-      { additionalProperties: true },
-    ),
-  );
   registerTool(
     pi,
     "sandbox_browser_open",

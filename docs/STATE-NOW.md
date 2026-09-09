@@ -4,10 +4,10 @@
 DATE: 2026-09-08
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
-在飞: #959 T-OFFICE-COMPUTER-V2（PR-A docs/冻结 v2.0 → PR-B 换后端删 jail → PR-C 回归门）
+在飞: #959 T-OFFICE-COMPUTER-V2（PR-A #960 已合已部 → PR-B 换后端删 jail → PR-C 回归门）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-      写本文时 tip = 8260475cf53257cbdfd589071c425fce7e649d28
+      写本文时 tip = 002d2db1600540c6ccc6940e927a559c7d08b20d
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────

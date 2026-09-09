@@ -91,6 +91,9 @@ services:
       PICO_SANDBOX_URL: http://127.0.0.1:18767
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
       PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
+      # Office scripts run in the pico-office container (network none) over a
+      # unix socket. Never "embedded" in production (#959).
+      PICO_OFFICE_URL: unix:///run/pico-office/office.sock
       # edu pull GET /v1/internal/usage/export — empty = 503 hook.disabled
       PICO_HOOK_SERVICE_TOKEN: ${PICO_HOOK_SERVICE_TOKEN:-}
       # Image: New API gateway (multi Gemini keys live in New API, not Pico).
@@ -121,9 +124,11 @@ services:
       - pico_data:/app/data
       - ${PICO_SANDBOX_DISK_HOST:-./data/teacher-disks}:/var/lib/pico/teacher-disks
       - ./.env:/app/.env:ro
+      - pico_office_sock:/run/pico-office
     depends_on:
       - mongo
       - meilisearch
+      - pico-office
 
   meilisearch:
     image: getmeili/meilisearch:v1.13.3
@@ -170,6 +175,41 @@ services:
       - ${PICO_SANDBOX_DISK_HOST:-./data/teacher-disks}:/var/lib/pico/teacher-disks
     mem_limit: 512m
     pids_limit: 256
+
+  # pico-office — the office computer (#959 · PLAN-OFFICE-COMPUTER-V2).
+  # Same image as pico-sandbox; runs teacher office scripts with a full Python.
+  # Isolation is this contract, not an interpreter jail: no network at all,
+  # read-only root, tmpfs workdir, no secrets, own memory budget (not the
+  # 512m Chromium box). pico-api reaches it only via the unix socket volume.
+  pico-office:
+    image: pico-sandbox:v13
+    build:
+      context: .
+      dockerfile: services/sandbox_worker/Dockerfile
+    restart: unless-stopped
+    command: ["python", "-m", "sandbox_worker.office_runner", "--uds", "/run/pico-office/office.sock"]
+    network_mode: none
+    privileged: false
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g
+    volumes:
+      - pico_office_sock:/run/pico-office
+    environment:
+      PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
+      PICO_OFFICE_TMP: /tmp
+      PICO_OFFICE_CONCURRENCY: "2"
+      PICO_OFFICE_RLIMIT_NPROC: "64"
+      HOME: /tmp
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    mem_limit: 1g
+    pids_limit: 128
 
   librechat:
     image: pico-librechat:v13
@@ -233,6 +273,7 @@ volumes:
   pico_mongo:
   pico_data:
   pico_meili:
+  pico_office_sock:
   librechat_images:
   librechat_uploads:
   librechat_logs:

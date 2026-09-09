@@ -3,7 +3,7 @@
 Use when the teacher asked for a real `.xlsx`. This is craft, not a scene workflow.
 Execute only in `sandbox_office_lib` with `kind=xlsx`.
 To change a file the teacher already has, pass `artifact_id` and start with `wb = load_book()` (or `load_workbook(INPUT_PATH)`).
-Do not import os. Do not use a shell. Empty `Workbook(); save_book(wb)` fails.
+The script runs in an isolated container with full Python: `csv`, `pandas`, `statistics`, `datetime` are all available; `INPUT_PATH` may be a CSV or another sheet. Empty `Workbook(); save_book(wb)` fails.
 A whole draft dumped in A1 is not a spreadsheet.
 
 ## Run

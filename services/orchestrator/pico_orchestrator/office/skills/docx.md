@@ -3,7 +3,7 @@
 Use when the teacher asked for a real `.docx`. This is craft, not a scene workflow.
 Execute only in `sandbox_office_lib` with `kind=docx`.
 To change a file the teacher already has, pass `artifact_id` and start with `doc = load_doc()` (or `Document(INPUT_PATH)`).
-Do not import os. Do not use a shell. Empty `Document(); save_doc(doc)` fails.
+The script runs in an isolated container with full Python; `INPUT_PATH` may be a CSV / TXT / another Word file. Empty `Document(); save_doc(doc)` fails.
 
 ## Run
 
@@ -61,7 +61,7 @@ save_doc(doc)
 - Header/footer: `section.header` / `section.footer`. Page numbers are footer text unless you attach a PAGE field; do not claim a field you did not add.
 - Lists: `doc.add_paragraph("项", style="List Bullet")` or `List Number`.
 - East-Asian font: set `w:eastAsia` on the run or Normal style. Latin `font.name` alone will not pick 宋体.
-- Pictures: only `IMAGE_PATHS[i]` from `image_artifact_ids`. Do not invent a host path.
+- Pictures: `IMAGE_PATHS[i]` from `image_artifact_ids`, or a PNG you render into the workdir. Do not invent a host path.
 - Same title replaces the file the teacher opens. Change existing files with `artifact_id` + `load_doc()`.
 - After save, the tool observation is what landed. `ok` is not finished.
 

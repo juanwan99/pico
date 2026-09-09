@@ -54,7 +54,9 @@ def test_pi_and_hosted_office_ceiling_descriptions() -> None:
     office = gw.tools["sandbox_office_lib"].description
     diagram = gw.tools["generate_diagram"].description
     assert "The office write path" in office
-    assert "from pathlib import Path is a stub" in office
+    assert "pico-office" in office
+    assert "is a stub" not in office
+    assert "Do not import os" not in office
     assert "Sibling of generate_image" in diagram
     assert "veto" in diagram
     assert "精美" not in office
@@ -68,8 +70,9 @@ def test_system_names_office_ceiling_without_scene_words() -> None:
     assert "`docx`:" in body
     assert "from docx import Document" not in body
     assert "siblings" in body
-    assert "is routed to the ledger" in body
-    assert "from pathlib import Path" in body
+    assert "isolated container" in body
+    assert "OUTPUT_PATH" in body
+    assert "is a stub" not in body
     assert "课件" not in body
     assert "精美" not in body
     assert "通知" not in body
@@ -89,9 +92,11 @@ def test_xlsx_values_is_placeholder_fill_on_pi_surfaces() -> None:
     assert "cell/value or values" not in ts
     gw = build_default_gateway()
     assert "generate_xlsx_document" not in gw.tools
-    exec_desc = gw.tools["sandbox_workspace_exec"].description
-    assert "executed=false" in exec_desc
-    assert "not a real runner" in exec_desc
+    # parse-only fake exec is gone; real execution is sandbox_office_lib (#959)
+    assert "sandbox_workspace_exec" not in gw.tools
+    office_desc = gw.tools["sandbox_office_lib"].description
+    assert "pico-office" in office_desc
+    assert "Do not import os" not in office_desc
 
 
 def test_default_core_shows_office_not_programming() -> None:
