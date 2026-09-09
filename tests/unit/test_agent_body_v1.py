@@ -44,26 +44,33 @@ async def _not_cancelled() -> bool:
     return False
 
 
-def test_session_dir_isolated_by_school_and_convo(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_session_dir_isolated_by_school_member_and_convo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("PICO_TRUE_PI_SESSION_ROOT", str(tmp_path))
-    a = persist_session_dir(school_id="school-a", conversation_id="convo-1")
-    b = persist_session_dir(school_id="school-b", conversation_id="convo-1")
-    c = persist_session_dir(school_id="school-a", conversation_id="convo-2")
-    assert a is not None and b is not None and c is not None
+    a = persist_session_dir(school_id="school-a", membership_id="m-1", conversation_id="convo-1")
+    b = persist_session_dir(school_id="school-b", membership_id="m-1", conversation_id="convo-1")
+    c = persist_session_dir(school_id="school-a", membership_id="m-1", conversation_id="convo-2")
+    # Same school, same page-keyed conversation id, different teacher → different tree.
+    d = persist_session_dir(school_id="school-a", membership_id="m-2", conversation_id="convo-1")
+    assert a is not None and b is not None and c is not None and d is not None
     assert a != b
     assert a != c
-    assert a.parent.name == session_segment("school-a")
-    assert persist_session_dir(school_id="", conversation_id="c") is None
-    assert persist_session_dir(school_id="s", conversation_id=None) is None
-    pinned = persist_session_file(school_id="school-a", conversation_id="convo-1")
+    assert a != d
+    assert a.parent.name == session_segment("m-1")
+    assert a.parent.parent.name == session_segment("school-a")
+    assert persist_session_dir(school_id="", membership_id="m", conversation_id="c") is None
+    assert persist_session_dir(school_id="s", membership_id="", conversation_id="c") is None
+    assert persist_session_dir(school_id="s", membership_id="m", conversation_id=None) is None
+    pinned = persist_session_file(school_id="school-a", membership_id="m-1", conversation_id="convo-1")
     assert pinned == a / "pico.jsonl"
-    assert persist_session_file(school_id="", conversation_id="c") is None
+    assert persist_session_file(school_id="", membership_id="m", conversation_id="c") is None
 
 
 def test_session_segment_blocks_dotdot() -> None:
     seg = session_segment("../etc/passwd")
     assert ".." not in seg
-    p = persist_session_dir(school_id="../etc", conversation_id="x")
+    p = persist_session_dir(school_id="../etc", membership_id="../root", conversation_id="x")
     assert p is not None
     assert ".." not in p.parts
 

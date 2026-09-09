@@ -18,6 +18,7 @@ from app.openai_compat import (
     _normalize_allowed_tools,
     _resolve_allowed_tools,
     _sidebar_chat_only,
+    _use_direct_model,
 )
 from pico_orchestrator.edu_sidebar import (
     EDU_SIDEBAR_DEFAULT_TOOLS,
@@ -36,6 +37,58 @@ def test_sidebar_json_only_skips_agent() -> None:
     assert _sidebar_chat_only(edu_sidebar=True, json_only=False) is False
     assert _sidebar_chat_only(edu_sidebar=False, json_only=True) is True
     assert _sidebar_chat_only(edu_sidebar=False, json_only=False) is False
+
+
+def test_sidebar_enters_pi_whatever_model_edu_sends() -> None:
+    """Same hands must not depend on edu sending a pico-* SKU."""
+    for model in ("gpt-5.6-sol", "deepseek-chat", "pico-fast", "pico-agent"):
+        assert _use_direct_model(model, chat_only=False, edu_sidebar=True, json_only=False) is False
+    # json_only propose stays a one-shot direct chat.
+    assert _use_direct_model("pico-fast", chat_only=True, edu_sidebar=True, json_only=True) is True
+    # Workbench semantics unchanged.
+    assert _use_direct_model("deepseek-chat", chat_only=False, edu_sidebar=False, json_only=False) is True
+    assert _use_direct_model("pico-fast", chat_only=False, edu_sidebar=False, json_only=False) is False
+    assert _use_direct_model("pico-agent", chat_only=False, edu_sidebar=False, json_only=False) is False
+
+
+def test_sidebar_never_gets_day_use_cabinet() -> None:
+    """#761: the edu sidebar SYSTEM must not carry this teacher's workbench cabinet.
+
+    Source-level lock: day_use_block is only fetched when the turn is not a
+    sidebar turn, and the sidebar decision happens before the fetch.
+    """
+    import ast
+
+    src = (ROOT / "services" / "api" / "app" / "openai_compat.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "chat_completions"
+    )
+    day_use_line = None
+    sidebar_line = None
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "day_use_block" for t in node.targets
+        ):
+            day_use_line = node.lineno
+            # Must be the conditional form: "" if edu_sidebar else await …
+            assert isinstance(node.value, ast.IfExp)
+            assert isinstance(node.value.test, ast.Name) and node.value.test.id == "edu_sidebar"
+            assert isinstance(node.value.body, ast.Constant) and node.value.body.value == ""
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "edu_sidebar" for t in node.targets
+        ):
+            sidebar_line = node.lineno
+    assert day_use_line is not None and sidebar_line is not None
+    assert sidebar_line < day_use_line
+
+
+def test_json_only_branch_uses_propose_hint_not_hands_hint() -> None:
+    src = (ROOT / "services" / "api" / "app" / "openai_compat.py").read_text(encoding="utf-8")
+    assert "SIDEBAR_PROPOSE_HINT" in src
+    assert "SIDEBAR_WORKBENCH_HINT" not in src  # Pi path gets it via edu_sidebar_pi._hint_caps
 
 
 def test_edu_sidebar_turns_thinking_off() -> None:

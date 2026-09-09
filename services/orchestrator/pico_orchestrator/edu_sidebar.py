@@ -18,19 +18,33 @@ SIDEBAR_WEB_SYSTEM = (
     "禁止写「我在网上查的」，禁止自报训练截止日期或瞎日期。"
     "有来源：标明来自网。"
 )
-SIDEBAR_WORKBENCH_HINT = (
-    "侧栏优先操控和填写左边当前页；确认后走学校原命令。"
-    "出文档、出图、改文件、落盘用和 Pico 工作台同一套手，不要因为在侧栏就少工具或推去另一个窗。"
+# Shared: how to read the left page. page.table is a viewport, not the ledger.
+_SIDEBAR_READ_HINT = (
     "分级读：人没点名要格子或全文时，只认当前页名/文件名，不要把切片当成全表，不要声称已读完全文。"
-    "人要处理、拆格、填表、对数据时必须读齐：打开的表用当前页切片 + sandbox_office_lib，"
-    "不要把 Pico inspect 投影器当已读全文。"
     "左边打开的表：page.table 只是当前屏切片（学校最多塞 16 列×12 行），不是全量。"
     "切片不够就说明还没读完，不要按切片列数去插列；学校分页口未到之前，先按已见格子+空列填。"
-    "工具结果回来后再决定下一手。看不清、对不上、失败了就换手或问一句，不要一轮空口说完。"
-    "学校数据表最多 40 个字段（含隐藏列和右侧空字母列）。"
+)
+
+# json_only propose: the model has the page's affordances (fill_cells / insert_col …)
+# and no Pico tools. Do not tell it about hands it cannot call.
+SIDEBAR_PROPOSE_HINT = (
+    "侧栏优先操控和填写左边当前页；只提议，确认后走学校原命令。"
+    + _SIDEBAR_READ_HINT
+    + "学校数据表最多 40 个字段（含隐藏列和右侧空字母列）。"
     "拆「学科 / 姓名」用 fill_cells：原格留学科，右侧已有空列写姓名；c 可以大于 page.table 列数。"
     "不要靠 insert_col 扩列。insert_col 失败「最多 40 个字段」立刻停插，改填已有空列。"
     "fill_cells 每条最多约 80 格，多了分多条。没有空列才说明人先删空列，不要再插。"
+)
+
+# Pi run: the model has the workbench CORE hands and (today) no page affordances.
+# Do not name affordance ids it cannot call.
+SIDEBAR_WORKBENCH_HINT = (
+    "你在学校业务页的侧栏里，左边是当前页。"
+    "出文档、出图、改文件、落盘用和 Pico 工作台同一套手，不要因为在侧栏就少工具或推去另一个窗。"
+    + _SIDEBAR_READ_HINT
+    + "人要处理、拆格、填表、对数据时必须先读齐；上传的表用 sandbox_office_lib 读，"
+    "左边网页里的表现在只有 page.table 切片，读不齐就明说还没读完。"
+    "工具结果回来后再决定下一手。看不清、对不上、失败了就换手或问一句，不要一轮空口说完。"
 )
 
 # Same CORE hands as workbench. Not a second, smaller tool set.

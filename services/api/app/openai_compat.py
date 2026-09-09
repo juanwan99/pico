@@ -14,8 +14,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pico_orchestrator.edu_sidebar import (
+    SIDEBAR_PROPOSE_HINT,
     SIDEBAR_WEB_SYSTEM,
-    SIDEBAR_WORKBENCH_HINT,
     asked_from_sidebar_prompt,
     honest_miss_json,
     inject_web_hits,
@@ -138,6 +138,23 @@ def _is_edu_sidebar_system(text: str | None) -> bool:
 def _sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
     """Edu sidebar is Cherry-style chat: never force_agent, never land artifacts."""
     return bool(json_only or edu_sidebar)
+
+
+def _use_direct_model(
+    model: str, *, chat_only: bool, edu_sidebar: bool, json_only: bool
+) -> bool:
+    """Direct (toolless) chat vs Pi run.
+
+    A sidebar turn that is not a json_only propose always runs on Pi with the
+    workbench hands, whatever model id edu sends — same hands is not a side
+    effect of the SKU string (#905).
+    """
+    if chat_only:
+        return True
+    if edu_sidebar and not json_only:
+        return False
+    low = str(model or "")
+    return low not in {"pico-agent", "pico"} and not low.startswith("pico-")
 
 
 def _workbench_tool_step_line(tool: str) -> str:
@@ -1280,7 +1297,13 @@ async def chat_completions(
             status_code=403,
             detail={"code": exc.code, "message": str(exc.message)},
         ) from exc
-    day_use_block = await _day_use_system_block(principal, x_pico_display_name)
+    client_system = _client_system_from_messages(body.messages)
+    edu_sidebar = _is_edu_sidebar_system(client_system)
+    # AI 权 = 人权 on this page: the edu sidebar must not see this teacher's
+    # workbench cabinet (recent ledger titles) — that is another page's context.
+    day_use_block = (
+        "" if edu_sidebar else await _day_use_system_block(principal, x_pico_display_name)
+    )
     raw_prompt_with_skill = _last_user_prompt(body.messages)
     from pico_orchestrator.skill_policy import (
         snapshot_for_skill,
@@ -1296,8 +1319,6 @@ async def chat_completions(
         )
     json_only = is_json_only_propose(raw_prompt_with_skill, output_header=x_pico_output)
     native_files: list = []
-    client_system = _client_system_from_messages(body.messages)
-    edu_sidebar = _is_edu_sidebar_system(client_system)
     request_tools = _normalize_allowed_tools(body.allowed_tools)
     if request_tools is None:
         request_tools = _normalize_allowed_tools(body.tools)
@@ -1432,10 +1453,11 @@ async def chat_completions(
                 '{"summary":"一句话","mutations":[{"affordanceId":"id","params":{},"label":"短标签"}]}'
             )
         if edu_sidebar:
+            # json_only propose has affordances but no Pico tools: page hint only.
             sidebar_system = (
-                f"{sidebar_system}\n{SIDEBAR_WORKBENCH_HINT}"
+                f"{sidebar_system}\n{SIDEBAR_PROPOSE_HINT}"
                 if sidebar_system
-                else SIDEBAR_WORKBENCH_HINT
+                else SIDEBAR_PROPOSE_HINT
             )
         if body.web_search is True:
             from pico_orchestrator.web_tools import web_search_handler
@@ -1503,9 +1525,9 @@ async def chat_completions(
     model = _coerce_default_model(model, settings)
     _assert_model_allowed(model, settings)
     # Direct model = short tier; pico-agent = delivery tier for token ceiling.
-    # json_only / edu sidebar must not enter pi-agent even when the SKU is pico-fast.
-    use_direct = chat_only or (
-        model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+    # json_only must not enter pi-agent even when the SKU is pico-fast.
+    use_direct = _use_direct_model(
+        model, chat_only=chat_only, edu_sidebar=edu_sidebar, json_only=json_only
     )
     if native_files and not json_only:
         use_direct = False
@@ -1663,8 +1685,8 @@ async def chat_completions(
         yield chunk({"role": "assistant"})
 
         # Direct model (moonshot/deepseek/*) → real token stream (GPT-like handfeel)
-        use_direct = chat_only or (
-            model not in {"pico-agent", "pico"} and not model.startswith("pico-")
+        use_direct = _use_direct_model(
+            model, chat_only=chat_only, edu_sidebar=edu_sidebar, json_only=json_only
         )
         if native_files and not json_only:
             use_direct = False

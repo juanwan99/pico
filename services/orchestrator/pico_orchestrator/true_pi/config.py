@@ -217,26 +217,39 @@ def delete_memory_file(root: Path, name: str) -> bool:
 PERSIST_SESSION_FILE = "pico.jsonl"
 
 
-def persist_session_dir(*, school_id: str, conversation_id: str | None) -> Path | None:
-    """Workbench Pi session tree: school_id / conversation_id.
+def persist_session_dir(
+    *, school_id: str, membership_id: str, conversation_id: str | None
+) -> Path | None:
+    """Pi session tree: school_id / membership_id / conversation_id.
 
-    Missing either side → None (caller must use a per-run dir). Cross-tenant
-    reuse is a REVISE.
+    Missing any side → None (caller must use a per-run dir). The conversation
+    id alone is not a trust boundary: the edu sidebar may key it by page, so
+    two teachers on the same page must never share one session file.
     """
     school = (school_id or "").strip()
+    member = (membership_id or "").strip()
     convo = (conversation_id or "").strip()
-    if not school or not convo:
+    if not school or not member or not convo:
         return None
-    return session_root() / session_segment(school) / session_segment(convo)
+    return (
+        session_root()
+        / session_segment(school)
+        / session_segment(member)
+        / session_segment(convo)
+    )
 
 
-def persist_session_file(*, school_id: str, conversation_id: str | None) -> Path | None:
+def persist_session_file(
+    *, school_id: str, membership_id: str, conversation_id: str | None
+) -> Path | None:
     """Stable Pi session jsonl for one conversation.
 
     ``--continue`` is most-recent-in-dir and can pick an empty sibling after a
     compact/kill. Pin the official ``--session`` path instead.
     """
-    root = persist_session_dir(school_id=school_id, conversation_id=conversation_id)
+    root = persist_session_dir(
+        school_id=school_id, membership_id=membership_id, conversation_id=conversation_id
+    )
     if root is None:
         return None
     return root / PERSIST_SESSION_FILE

@@ -47,7 +47,7 @@ v9（观察回执）：写/改/打开工具回 `observation`（落地事实，�
 v1 曾增加：skill_instruction 注入、近 N 条 user/assistant history 文本、skill_snapshot 工具交并集。  
 v2（#507）：DeepSeek 官方 `web_search` 转发 + 网关 `web_fetch`（SSRF 拒绝内网/metadata/管理域）。仍禁 bash / 任意 FS / 浏览器代登。  
 v3（#608）：改已有 `.docx`/`.pptx` 走 PyPI `python-docx` / `python-pptx` 薄适配（禁止 `generate_*` 另造冒充改原件）。出图曾接 SiliconFlow（**业主 2026-08-27 已否决 · 废路径**；现只待智谱 glm-image）。侧栏进 Pi。  
-v10（#857）：侧栏天花板固定读+网（`workspace_list_files` / `workspace_read_file` / `inspect_document` / `kb_search` / `web_search` / `web_fetch`）。禁 generate/edit/出图/落 Artifact。办公/PDF 读抽出正文；像素仍不进脑。旧 `.doc/.ppt/.xls` 人话另存。  
+v10（#857）：侧栏能读办公/PDF 正文；像素仍不进脑。旧 `.doc/.ppt/.xls` 人话另存。**其中「侧栏天花板固定读+网、禁 generate/出图」一句已被 #905（`af0c431b`）推翻：侧栏与工作台同一套 CORE 手，不裁割。** `inspect_document` 已随 #953 下架。侧栏 Pi 会话目录按 `school / membership / conversation` 分，SYSTEM 不带 day-use 柜（#975）。  
 v4（#646 T-GROK-PATH）：禁止把 Skill / Landing / 历史焊进 `prompt()`。短纪律进 Pi `SYSTEM.md`（通用，无场景 if）。`prompt()` 只留老师原文。工具白名单仍挂载，模型决定调不调。跑后门只认「声称交件却没落盘」，不认正文词表。  
 v5（选型）：办公见 [`docs/ADR-OFFICE-DOC-PIPELINE.md`](./ADR-OFFICE-DOC-PIPELINE.md)。天花板已是隔离库，不是再加 inspect/render/edit 专用动词。禁桥内 bash、禁宿主机即兴 python-docx、禁 MCP 办公室栈。  
 v11（#936/#938/#942）：`sandbox_office_lib` + `read_office_skill` + 已有文件 `artifact_id`。  
