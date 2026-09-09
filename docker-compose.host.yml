@@ -110,6 +110,10 @@ services:
       SUB2API_ADMIN_EMAIL: ${SUB2API_ADMIN_EMAIL:-}
       SUB2API_ADMIN_PASSWORD: ${SUB2API_ADMIN_PASSWORD:-}
       SUB2API_ADMIN_API_KEY: ${SUB2API_ADMIN_API_KEY:-}
+      # web_search picks ONE upstream (#973): tavily (default, TAVILY_API_KEY via .env)
+      # or zhipu (ZHIPU_API_KEY). Owner switches here; no routing by question type.
+      PICO_SEARCH_PROVIDER: ${PICO_SEARCH_PROVIDER:-tavily}
+      PICO_ZHIPU_SEARCH_ENGINE: ${PICO_ZHIPU_SEARCH_ENGINE:-search_std}
       ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
       ZHIPU_IMAGES_URL: ${ZHIPU_IMAGES_URL:-}
       ZHIPU_IMAGE_MODEL: ${ZHIPU_IMAGE_MODEL:-glm-image}

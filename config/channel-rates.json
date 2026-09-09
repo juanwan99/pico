@@ -105,6 +105,13 @@
       "note": "Tavily official pay-as-you-go USD 0.008/credit x 7.3; basic search = 1 credit. Free tier 1000/month does not change the tag."
     },
     {
+      "id": "pico:web_search/zhipu",
+      "kind": "search",
+      "model": "web_search/zhipu",
+      "per_call_yuan": 0.01,
+      "note": "Zhipu Web Search search_std official 0.01 yuan/call (pro 0.03, sogou/quark 0.05). Active only when PICO_SEARCH_PROVIDER=zhipu (#973)."
+    },
+    {
       "id": "pico:web_fetch",
       "kind": "search",
       "model": "web_fetch",

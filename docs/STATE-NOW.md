@@ -4,7 +4,7 @@
 DATE: 2026-09-09
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
-在飞: 无（#969 已关 · 待业主：Tavily 钥进 ECS .env → 再部一次）
+在飞: #973 T-SEARCH-DUAL-PROVIDER（web_search 双渠道 · Tavily 默认 · 智谱预置未开 · 待业主 Tavily 钥进 .env）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
       写本文时 tip = aa5f18f0531fb4717abab657b8fdd41bdabf6c86
