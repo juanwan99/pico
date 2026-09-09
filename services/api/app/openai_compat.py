@@ -783,6 +783,33 @@ def _caps_with_sidebar_thinking(caps: Any, *, edu_sidebar: bool) -> Any:
     return _dc_replace(caps, thinking_on=False)
 
 
+def _caps_with_page_hands(
+    caps: Any, page_affordances: list[dict[str, Any]] | None, page_title: str
+) -> Any:
+    """edu page reported affordances → this run may stage left-page proposals."""
+    if not page_affordances:
+        return caps
+    from dataclasses import replace as _dc_replace
+
+    return _dc_replace(
+        caps, page_affordances=list(page_affordances), page_title=str(page_title or "")
+    )
+
+
+def _mutations_envelope(
+    page_affordances: list[dict[str, Any]] | None,
+    mutations: list[dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    """Top-level ``pico_mutations`` for the school shell (edu-core#604 confirm card).
+
+    Present whenever the page brought affordances — an empty list is a real
+    answer (nothing to change), not a missing field.
+    """
+    if not page_affordances:
+        return None
+    return {"pico_mutations": list(mutations or [])}
+
+
 def _request_plan_on(body: ChatCompletionRequest, header: str | None = None) -> bool:
     """Teacher 先计划 toggle. Header / body / metadata; never default on."""
     # Direct calls (integration tests) pass FastAPI's Header() sentinel, not a str.
@@ -1108,6 +1135,8 @@ async def _run_and_collect(
     plan_on: bool = False,
     native_files: list | None = None,
     edu_sidebar: bool = False,
+    page_affordances: list[dict[str, Any]] | None = None,
+    page_title: str = "",
 ) -> Any:
     from pico_orchestrator.llm_file_pass import remember_turn_files
     from pico_orchestrator.runtime import run_agent_runtime
@@ -1143,6 +1172,7 @@ async def _run_and_collect(
         from dataclasses import replace as _dc_replace_sys
 
         caps = _dc_replace_sys(caps, system_prompt=system_prompt)
+    caps = _caps_with_page_hands(caps, page_affordances, page_title)
     if day_use:
         from dataclasses import replace as _dc_replace_day
 
@@ -1331,6 +1361,18 @@ async def chat_completions(
     m_proj = re.search(r"【项目指令：([^】]+)】", raw_prompt)
     project_instruction = m_proj.group(1).strip() if m_proj else ""
     prompt = _strip_pico_markers(raw_prompt).strip() or raw_prompt
+    # Left-page hands (edu-core#604): only a sidebar Pi turn whose page reported
+    # affordances gets propose_page_mutation. json_only keeps its own envelope.
+    page_affordances: list[dict[str, Any]] = []
+    page_title = ""
+    if edu_sidebar and not json_only:
+        from pico_orchestrator.page_mutations import (
+            affordances_from_request,
+            page_title_from_request,
+        )
+
+        page_affordances = affordances_from_request(body.metadata, client_system, prompt)
+        page_title = page_title_from_request(client_system)
     try:
         # Use the module-level session_factory. A local `from app.db import
         # session_factory` here makes it a cell of chat_completions; the
@@ -1626,6 +1668,8 @@ async def chat_completions(
                 plan_on=plan_on,
                 native_files=native_files,
                 edu_sidebar=edu_sidebar,
+                page_affordances=page_affordances,
+                page_title=page_title,
             )
             text = result.final_text or result.error or "(empty)"
             await _finalize_run(
@@ -1661,10 +1705,22 @@ async def chat_completions(
             payload["usage"] = usage
         if sidebar_web_hits is not None:
             payload["pico_web_search"] = sidebar_web_hits
+        envelope = _mutations_envelope(
+            page_affordances,
+            None if use_direct else getattr(result, "page_mutations", None),
+        )
+        if envelope:
+            payload.update(envelope)
         return payload
 
     async def event_stream() -> AsyncIterator[bytes]:
-        def chunk(delta: dict, *, finish: str | None = None, usage: dict | None = None) -> bytes:
+        def chunk(
+            delta: dict,
+            *,
+            finish: str | None = None,
+            usage: dict | None = None,
+            extra: dict[str, Any] | None = None,
+        ) -> bytes:
             body: dict[str, Any] = {
                 "id": completion_id,
                 "object": "chat.completion.chunk",
@@ -1680,6 +1736,8 @@ async def chat_completions(
             }
             if usage:
                 body["usage"] = usage
+            if extra:
+                body.update(extra)
             return _sse_chunk(body).encode()
 
         yield chunk({"role": "assistant"})
@@ -1956,6 +2014,7 @@ async def chat_completions(
                     from dataclasses import replace as _dc_replace_sys_stream
 
                     caps = _dc_replace_sys_stream(caps, system_prompt=client_system)
+                caps = _caps_with_page_hands(caps, page_affordances, page_title)
                 if day_use_block:
                     from dataclasses import replace as _dc_replace_day_stream
 
@@ -2088,6 +2147,7 @@ async def chat_completions(
         saw_text = False
         pending_status: list[str] = []
         native_usage: dict[str, int] | None = None
+        native_mutations: list[dict[str, Any]] | None = None
         detach = settings.pico_run_detach_on_disconnect
         last_wire = time.monotonic()
         try:
@@ -2143,6 +2203,7 @@ async def chat_completions(
                         getattr(result, "final_text", None) or "",
                         getattr(result, "token_usage", None),
                     )
+                    native_mutations = getattr(result, "page_mutations", None)
                     if not saw_text:
                         # final_text is already complete + human-package cleaned;
                         # buffered chrome must NOT be prepended (would re-pollute
@@ -2212,7 +2273,12 @@ async def chat_completions(
             )
             return
 
-        yield chunk({}, finish="stop", usage=native_usage)
+        yield chunk(
+            {},
+            finish="stop",
+            usage=native_usage,
+            extra=_mutations_envelope(page_affordances, native_mutations),
+        )
         yield b"data: [DONE]\n\n"
 
     return StreamingResponse(

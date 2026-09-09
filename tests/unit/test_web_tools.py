@@ -676,7 +676,7 @@ def test_gateway_allowlist_includes_web_pair() -> None:
     assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
     assert "kb_search" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 19
+    assert len(ALLOWED_GATEWAY_TOOLS) == 20
 
 
 def test_attach_teacher_sources_footer() -> None:

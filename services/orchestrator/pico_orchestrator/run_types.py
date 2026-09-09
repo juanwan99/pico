@@ -52,6 +52,10 @@ class RunCaps:
     no_progress_seconds: int = 180
     # Chat-turn images (Pi RPC / hosted vision). Empty = text-only path.
     images: list[dict[str, Any]] | None = None
+    # edu sidebar: the left page's self-reported affordances (edu-core#604).
+    # Non-empty → propose_page_mutation is visible for this run. Never invented.
+    page_affordances: list[dict[str, Any]] | None = None
+    page_title: str = ""
 
 
 @dataclass
@@ -62,6 +66,8 @@ class RunResult:
     token_usage: dict[str, Any] | None = None
     artifact_markdown: str | None = None
     change_proposal: dict[str, Any] | None = None
+    # Staged left-page mutations for the school shell to confirm and run.
+    page_mutations: list[dict[str, Any]] | None = None
 
 
 class CancelledError(Exception):

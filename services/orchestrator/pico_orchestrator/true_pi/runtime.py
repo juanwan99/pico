@@ -144,8 +144,24 @@ async def run_true_pi_agent(
         visible_tools_env,
     )
 
-    gateway = build_default_gateway(artifact_store)
+    # edu sidebar with a page that reported affordances: one extra hand that
+    # only stages proposals against those ids (edu-core#604 · Pico half).
+    from pico_orchestrator.page_mutations import TOOL_NAME as PAGE_TOOL
+    from pico_orchestrator.page_mutations import PageMutationBook
+
+    page_affordances = list(getattr(caps, "page_affordances", None) or [])
+    page_book = (
+        PageMutationBook(
+            affordances=page_affordances,
+            page_title=str(getattr(caps, "page_title", "") or ""),
+        )
+        if page_affordances
+        else None
+    )
+    gateway = build_default_gateway(artifact_store, page_mutations=page_book)
     allowed = resolve_visible_tools(caps.allowed_tools)
+    if page_book is not None and PAGE_TOOL not in allowed:
+        allowed = [*allowed, PAGE_TOOL]
     gateway = gateway.restricted_to(allowed)
     system_text = pico_system_text(
         skill=str(getattr(caps, "skill_instruction", "") or ""),
@@ -357,6 +373,8 @@ async def run_true_pi_agent(
                 "backend_model": str(getattr(caps, "backend_model", "") or "")
                 or str(getattr(transport, "model", "") or "")
                 or None,
+                # Which hands this run could actually call (receipt, not a schema).
+                "visible_tools": list(allowed),
                 **tag,
             },
         )
@@ -660,8 +678,19 @@ async def run_true_pi_agent(
             )
         if final_text:
             await emit("message.delta", {"text": final_text, **tag})
+        if page_book is not None and page_book.mutations:
+            await emit(
+                "page.mutations",
+                {"count": len(page_book.mutations), "page_title": page_book.page_title, **tag},
+            )
         await emit("run.status", {"status": "succeeded", **tag})
-        return RunResult(status="succeeded", final_text=final_text, token_usage=state.token_usage)
+        return RunResult(
+            status="succeeded",
+            final_text=final_text,
+            token_usage=state.token_usage,
+            change_proposal=page_book.change_proposal() if page_book else None,
+            page_mutations=list(page_book.mutations) if page_book else None,
+        )
 
     except TruePiClientError as exc:
         return await _failed(
