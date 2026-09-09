@@ -101,7 +101,8 @@
       "id": "pico:web_search",
       "kind": "search",
       "model": "web_search",
-      "per_call_yuan": 0.02
+      "per_call_yuan": 0.058,
+      "note": "Tavily official pay-as-you-go USD 0.008/credit x 7.3; basic search = 1 credit. Free tier 1000/month does not change the tag."
     },
     {
       "id": "pico:web_fetch",
