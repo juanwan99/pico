@@ -54,6 +54,7 @@ _DOING: dict[str, str] = {
     "publish_html_page": "发布不是 Pico 能力",
     "unpublish_html_page": "正在撤回遗留公开页",
     "ask_user": "在等你选",
+    "propose_page_mutation": "正在拟左边这页的改动",
 }
 
 _DONE: dict[str, str] = {
@@ -82,6 +83,7 @@ _DONE: dict[str, str] = {
     "publish_html_page": "未公开发布",
     "unpublish_html_page": "已撤回遗留公开页",
     "ask_user": "已选",
+    "propose_page_mutation": "已拟一条改动，等你确认",
 }
 
 _FAIL: dict[str, str] = {
@@ -110,6 +112,7 @@ _FAIL: dict[str, str] = {
     "publish_html_page": "发布被拒绝（走 Edu 校管批准）",
     "unpublish_html_page": "没撤回遗留公开页",
     "ask_user": "超时未选",
+    "propose_page_mutation": "这条改动没拟成",
 }
 
 FALLBACK_DOING = "正在调工具"

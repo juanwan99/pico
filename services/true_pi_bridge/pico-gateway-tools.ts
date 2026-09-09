@@ -36,6 +36,7 @@ const ALLOWED = [
   "sandbox_document_open",
   "publish_html_page",
   "unpublish_html_page",
+  "propose_page_mutation",
 ] as const;
 
 type ToolName = (typeof ALLOWED)[number];
@@ -355,6 +356,19 @@ export default function (pi: ExtensionAPI) {
       {
         page_id: Type.Optional(Type.String()),
         artifact_id: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "propose_page_mutation",
+    "Propose one change to the school page open on the left (fill / tick / click). Only ids from this page's affordances are accepted; the teacher confirms in the school shell and the school runs its own command. Nothing is written by this call. Args: affordance_id, params, label.",
+    Type.Object(
+      {
+        affordance_id: Type.String(),
+        params: Type.Optional(Type.Object({}, { additionalProperties: true })),
+        label: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),

@@ -2250,9 +2250,18 @@ def build_default_gateway(
     artifact_store: ArtifactStore | None = None,
     *,
     register_unregistered_office: bool = False,
+    page_mutations: Any | None = None,
 ) -> AllowlistGateway:
-    """Product gateway. Dead office handlers stay off unless tests opt in."""
+    """Product gateway. Dead office handlers stay off unless tests opt in.
+
+    ``page_mutations`` is this run's PageMutationBook (edu sidebar with a page
+    that reported affordances). Without it the hand is registered but fails
+    closed, so the tool contract stays one set across TS / Python / CORE.
+    """
+    from pico_orchestrator.page_mutations import register_propose_page_mutation
+
     gw = AllowlistGateway()
+    register_propose_page_mutation(gw, page_mutations)
     store = artifact_store or _UnavailableArtifactStore()
     h = _workspace_handlers(store)
     write_file = h["workspace_write_file"]

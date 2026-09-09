@@ -56,7 +56,8 @@ Tool `name` MUST match: `^[a-zA-Z][a-zA-Z0-9_]*$`
 |------|------|---------------|-------------|
 | `pico_echo` | local | no | Smoke; echoes text + principal |
 | `fake_edu_list_classes` | edu-read shape | **yes** | Synthetic classes for token school |
-| `pico_propose_change` | local | no | Creates proposal payload (no school write) |
+| `pico_propose_change` | local (legacy, not on true-Pi gateway) | no | Creates proposal payload (no school write) |
+| `propose_page_mutation` | local (sidebar with `affordances[]` only) | no | Stages one left-page change for the school confirm card (no school write) · §4.7 |
 | `web_search` | web (gateway) | no | DeepSeek official server-side search; sources or honest 未检索 |
 | `web_fetch` | web (gateway) | no | Read one public http(s) URL → truncated text |
 
@@ -87,11 +88,20 @@ Workspace generate/verify tools remain registered on the product gateway (see tr
 
 **Phase 3 adapter:** same name/IO; fetch from edu read API; still gateway-enforced cross-school.
 
-### 4.3 `pico_propose_change`
+### 4.3 `pico_propose_change`  (legacy · control-plane / hosted only)
 
 **Arguments:** `{ "title": string, "summary": string, "payload"?: object }`  
 **Result:** `{ "proposal": { "title", "summary", "payload", "school_id", "membership_id", "status": "proposed", "note" } }`  
-Does **not** write school business data.
+Does **not** write school business data. **Not on the true-Pi gateway** (`ALLOWED_GATEWAY_TOOLS`): the product runtime has exactly one proposal hand, §4.7. This name stays only for `/v1/tools/invoke` callers and the hosted/Kimi rollback runtimes.
+
+### 4.7 `propose_page_mutation`  ★ #975 · edu sidebar left-page hand
+
+Pico half of edu-core#604 (壳级拟议层). Visible **only** on a sidebar Pi turn whose request carried the page's `affordances[]` (see [`sidebar-session.md`](./sidebar-session.md)); never in CORE, never on the workbench.
+
+**Arguments:** `{ "affordance_id": string, "params"?: object, "label"?: string }`  
+**Validation (Pico):** `affordance_id` must be one of this request's affordance ids; `writable: false` → `page.affordance_readonly`; unknown → `page.affordance_unknown`; no page → `page.no_affordances`. Pico does not interpret `params`.  
+**Result:** `{ "staged": true, "affordanceId", "label", "count", "note" }`  
+**Side effects:** one row in the Pico ChangeProposal ledger (`status=proposed`, payload `{domain:"page", action:"mutations", mutations[]}`) and the turn's `pico_mutations` envelope. **Nothing is written to the school.** edu shows the confirm card and runs its own command after the teacher confirms.
 
 ### 4.4 `web_search`  ★ #507 · DeepSeek official
 

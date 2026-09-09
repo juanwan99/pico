@@ -37,13 +37,15 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "sandbox_document_open",
 )
 
-# Same gateway, not registered unless a hung skill lists them.
+# Same gateway, not registered unless a hung skill lists them — or, for
+# propose_page_mutation, the edu page in view reported affordances (#975).
 EXTENDED_TOOLS: tuple[str, ...] = (
     "publish_html_page",
     "unpublish_html_page",
     "verify_html_document",
     "sandbox_preview_inspect",
     "sandbox_browser_screenshot",
+    "propose_page_mutation",
 )
 
 # Never auto-apply. Catalog may name them; Pico does not hang them from keywords.

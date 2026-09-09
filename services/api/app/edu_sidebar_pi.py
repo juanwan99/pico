@@ -44,6 +44,11 @@ def _hint_caps(caps: Any) -> Any:
     if mark not in system:
         return caps
     hinted = _sidebar_helpers()[3](system)
+    if getattr(caps, "page_affordances", None):
+        from pico_orchestrator.page_mutations import SIDEBAR_PAGE_HANDS_HINT
+
+        if SIDEBAR_PAGE_HANDS_HINT not in hinted:
+            hinted = f"{hinted}\n{SIDEBAR_PAGE_HANDS_HINT}"
     if hinted == system:
         return caps
     return replace(caps, system_prompt=hinted)

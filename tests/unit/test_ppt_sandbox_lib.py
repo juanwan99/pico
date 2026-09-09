@@ -144,7 +144,7 @@ def test_allowlist_has_ceiling_not_bash() -> None:
     schemas = {s["function"]["name"] for s in openai_tool_schemas(gw)}
     assert "sandbox_pptx_lib" not in schemas
     assert "sandbox_office_lib" in schemas
-    assert len(ALLOWED_GATEWAY_TOOLS) == 19
+    assert len(ALLOWED_GATEWAY_TOOLS) == 20
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert workbench_tool_step_line("sandbox_office_lib") == "正在沙箱写办公文件"
     assert workbench_tool_result_line("sandbox_office_lib", ok=True) == "已沙箱写出办公文件"
