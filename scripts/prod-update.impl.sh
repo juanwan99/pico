@@ -114,6 +114,19 @@ if [ -f .env ]; then
     echo "PICO_HOOK_SERVICE_TOKEN=${HOOK_GEN}" >> .env
     echo "[pico] PICO_HOOK_SERVICE_TOKEN generated"
   fi
+  if grep -q '^PICO_SANDBOX_TOKEN=.\+' .env; then
+    echo "[pico] PICO_SANDBOX_TOKEN=SET"
+  else
+    # Empty token = pico-sandbox / pico-office accept any local caller. The
+    # office socket dir is 1777 on a shared host, so this must never stay empty.
+    # Do not print the value.
+    if grep -q '^PICO_SANDBOX_TOKEN=' .env; then
+      sed -i '/^PICO_SANDBOX_TOKEN=/d' .env
+    fi
+    SANDBOX_GEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+    echo "PICO_SANDBOX_TOKEN=${SANDBOX_GEN}" >> .env
+    echo "[pico] PICO_SANDBOX_TOKEN generated"
+  fi
   if ! grep -q '^PICO_MEILI_URL=' .env; then
     echo "PICO_MEILI_URL=http://127.0.0.1:7700" >> .env
   fi
