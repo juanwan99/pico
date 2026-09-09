@@ -37,7 +37,33 @@ def test_health() -> None:
     assert body["kimi_agent_canary_configured"] is False
     assert body["kimi_agent_canary_membership_count"] == 0
     assert "kimi_agent_canary_batch" not in body
+    assert body["inflight_runs"] == 0
     assert not any("secret" in key or "token" in key for key in body)
+
+
+def test_health_counts_inflight_runs_without_ids() -> None:
+    """Deploy gate reads a count only; no run/tenant ids leak through /health."""
+    import asyncio
+
+    from app import run_service
+
+    async def _hold() -> None:
+        await asyncio.sleep(3600)
+
+    loop = asyncio.new_event_loop()
+    task = loop.create_task(_hold())
+    run_service._track_inflight(task)
+    try:
+        body = TestClient(app).get("/health").json()
+        assert body["inflight_runs"] == 1
+    finally:
+        task.cancel()
+        try:
+            loop.run_until_complete(task)
+        except asyncio.CancelledError:
+            pass
+        loop.close()
+    assert run_service.inflight_run_count() == 0
 
 
 def test_health_exposes_only_non_sensitive_canary_state() -> None:
