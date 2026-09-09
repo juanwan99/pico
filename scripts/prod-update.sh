@@ -109,6 +109,14 @@ mkdir -p "$TEACHER_DISK"
 chmod 1777 "$TEACHER_DISK" 2>/dev/null || true
 chown 65532:65532 "$TEACHER_DISK" 2>/dev/null || true
 
+# pico-office unix socket dir (#959). A named volume mounts root-owned and the
+# box (uid 65532) cannot create the socket there; a host bind we own works.
+OFFICE_SOCK="${PICO_OFFICE_SOCK_HOST:-$ROOT/data/pico-office-sock}"
+mkdir -p "$OFFICE_SOCK"
+chmod 1777 "$OFFICE_SOCK" 2>/dev/null || true
+chown 65532:65532 "$OFFICE_SOCK" 2>/dev/null || true
+rm -f "$OFFICE_SOCK/office.sock" 2>/dev/null || true
+
 if [ -f .env ] && grep -q '^KIMI_API_KEY=.\+' .env; then
   echo "[pico] KIMI_API_KEY=SET"
 else
@@ -170,6 +178,30 @@ if [ "$HEALTH_SHA" != "$CURRENT_SHA" ]; then
   exit 5
 fi
 echo "[pico] health.git_sha exact match: $HEALTH_SHA"
+
+# pico-office must answer over its unix socket, or the office write path is
+# down (pico-api fails closed; it never runs scripts in-process). Fake-green guard.
+echo "[pico] pico-office:"
+office_ready=0
+for _ in $(seq 1 30); do
+  if docker compose -f "$COMPOSE_FILE" exec -T pico-api python3 -c '
+import sys, httpx
+t = httpx.HTTPTransport(uds="/run/pico-office/office.sock")
+r = httpx.Client(transport=t, timeout=3).get("http://pico-office/health")
+body = r.json()
+sys.exit(0 if body.get("ok") and body.get("service") == "pico-office" and body.get("jail") is False else 1)
+' >/dev/null 2>&1; then
+    office_ready=1
+    break
+  fi
+  sleep 1
+done
+if [ "$office_ready" -ne 1 ]; then
+  echo "[pico] FATAL: pico-office unix socket not answering — office write path would be down" >&2
+  docker compose -f "$COMPOSE_FILE" logs --no-log-prefix --tail 20 pico-office >&2 || true
+  exit 11
+fi
+echo "[pico] pico-office socket ok"
 
 echo "[pico] meili:"
 meili_ready=0
