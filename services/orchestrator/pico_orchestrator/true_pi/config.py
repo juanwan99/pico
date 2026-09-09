@@ -68,7 +68,6 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "kb_search",
         "ask_user",
         "sandbox_preview_inspect",
-        "sandbox_workspace_exec",
         "sandbox_browser_open",
         "sandbox_browser_screenshot",
         "sandbox_document_open",
@@ -91,6 +90,8 @@ UNREGISTERED_OFFICE_TOOLS: frozenset[str] = frozenset(
         "edit_pptx_document",
         "edit_xlsx_document",
         "render_document",
+        # parse-only fake exec; real execution is sandbox_office_lib in pico-office (#959)
+        "sandbox_workspace_exec",
     }
 )
 

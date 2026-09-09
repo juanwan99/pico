@@ -41,7 +41,7 @@ def test_core_and_extended_partition_gateway():
     assert "inspect_document" not in EXTENDED_TOOLS
     assert "verify_document" not in EXTENDED_TOOLS
     assert "read_office_skill" not in EXTENDED_TOOLS
-    assert len(EXTENDED_TOOLS) == 6
+    assert len(EXTENDED_TOOLS) == 5
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS
@@ -57,7 +57,7 @@ def test_core_and_extended_partition_gateway():
     assert "edit_docx_document" not in EXTENDED_TOOLS
     assert "edit_pptx_document" not in EXTENDED_TOOLS
     assert "edit_xlsx_document" not in EXTENDED_TOOLS
-    assert "sandbox_workspace_exec" in EXTENDED_TOOLS
+    assert "sandbox_workspace_exec" not in EXTENDED_TOOLS
     assert "sandbox_workspace_exec" not in CORE_VISIBLE_TOOLS
     assert "sandbox_browser_open" in CORE_VISIBLE_TOOLS
     assert "sandbox_document_open" in CORE_VISIBLE_TOOLS

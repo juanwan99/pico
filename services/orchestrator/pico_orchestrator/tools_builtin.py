@@ -87,7 +87,6 @@ from pico_orchestrator.sandbox_s1 import (
     deny_secret_filename,
     extract_title_h1,
     html_from_artifact_row,
-    light_exec_with_timeout,
     materialize_workspace_html,
     safe_segment,
     try_parse_artifact_preview_url,
@@ -365,13 +364,17 @@ async def _office_lib_input(
             "找不到这份文件。请先在工作台上传原件再改。",
         )
     raw = _artifact_bytes(row)
-    ext = f".{kind}"
-    if not is_valid_ooxml_package(raw, ext):
+    if not raw:
+        raise ToolError("artifact.not_found", "这份文件是空的，不能当原件载入。")
+    title = str(row.get("title") or "")
+    # Any ledger original may ride along (csv / txt / json / png / other office
+    # kinds). Only a file that claims to be the same office kind must be real OOXML.
+    if title.lower().endswith(f".{kind}") and not is_valid_ooxml_package(raw, f".{kind}"):
         raise ToolError(
             "artifact.not_ooxml",
             f"这份不是真 {kind} 原件，不能当改稿载入。",
         )
-    return raw, str(row.get("artifact_id") or aid), str(row.get("title") or "")
+    return raw, str(row.get("artifact_id") or aid), title
 
 
 def _make_read_office_skill():
@@ -421,7 +424,11 @@ def _make_sandbox_office_lib(store: ArtifactStore):
             title = _ensure_extension(loaded_title, f".{kind}")
             deny_secret_filename(title)
         raw = await run_office_lib_source_async(
-            source, kind=kind, images=images, input_bytes=input_bytes
+            source,
+            kind=kind,
+            images=images,
+            input_bytes=input_bytes,
+            input_name=loaded_title or None,
         )
         result = await store.write(principal, title=title, content=raw, kind=kind)
         result["format"] = kind
@@ -1857,67 +1864,6 @@ def _workspace_handlers(
             await _emit(False, {"error_code": exc.code, "artifact_id": artifact_id})
             raise
 
-    async def workspace_exec(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        """Optional light exec: parse HTML/Python inside the isolation dir. No bash."""
-        started = time.perf_counter()
-        source = args.get("source") or args.get("code")
-        html = args.get("html")
-        run_id = current_run_id(principal, store)
-        ws = workspace_id_for(principal.school_id, principal.membership_id, run_id)
-        try:
-            if isinstance(html, str) and html.strip():
-                assert_content_caps(html)
-                title_text, h1_text = extract_title_h1(html)
-                materialize_workspace_html(
-                    principal,
-                    run_id=run_id,
-                    title=str(args.get("title") or "exec.html"),
-                    content=html,
-                )
-                out = {
-                    "ok": True,
-                    "parsed": True,
-                    "executed": False,
-                    "title": title_text,
-                    "h1": h1_text,
-                    "workspace_id": ws,
-                    "message": "只解析，未执行。HTML 已写入工作区，没有跑脚本。",
-                }
-            elif isinstance(source, str) and source.strip():
-                parsed = await light_exec_with_timeout(source)
-                out = {**parsed, "workspace_id": ws}
-            else:
-                raise ToolError(
-                    "tool.invalid_arguments",
-                    "source or html is required",
-                )
-            duration_ms = int((time.perf_counter() - started) * 1000)
-            await emit_sandbox_usage(
-                principal,
-                extra={
-                    "duration_ms": duration_ms,
-                    "workspace_id": ws,
-                    "phase": "exec",
-                    "tool": "sandbox_workspace_exec",
-                },
-                ok=True,
-            )
-            return out
-        except ToolError as exc:
-            duration_ms = int((time.perf_counter() - started) * 1000)
-            await emit_sandbox_usage(
-                principal,
-                extra={
-                    "duration_ms": duration_ms,
-                    "workspace_id": ws,
-                    "phase": "exec",
-                    "tool": "sandbox_workspace_exec",
-                    "error_code": exc.code,
-                },
-                ok=False,
-            )
-            raise
-
     async def browser_open(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         """B2: open a public page in the isolated sidecar. Human-in-the-loop login."""
         started = time.perf_counter()
@@ -2190,7 +2136,6 @@ def _workspace_handlers(
         "generate_diagram": generate_diagram,
         "verify_html_document": verify_html,
         "sandbox_preview_inspect": inspect_preview,
-        "sandbox_workspace_exec": workspace_exec,
         "sandbox_browser_open": browser_open,
         "sandbox_browser_screenshot": browser_screenshot,
         "sandbox_document_open": document_open,
@@ -2319,7 +2264,6 @@ def build_default_gateway(
     generate_diagram = h["generate_diagram"]
     verify_html = h["verify_html_document"]
     inspect_preview = h["sandbox_preview_inspect"]
-    workspace_exec = h["sandbox_workspace_exec"]
     browser_open = h["sandbox_browser_open"]
     browser_screenshot = h["sandbox_browser_screenshot"]
     document_open = h["sandbox_document_open"]
@@ -2438,18 +2382,6 @@ def build_default_gateway(
     )
     gw.register(
         ToolSpec(
-            name="sandbox_workspace_exec",
-            description=(
-                "Parse HTML or Python inside the isolated workspace. Receipt is parsed=true, "
-                "executed=false — ast only, not host bash, not a real runner. "
-                "Args: html? | source?"
-            ),
-            handler=workspace_exec,
-            school_scoped=False,
-        )
-    )
-    gw.register(
-        ToolSpec(
             name="sandbox_browser_open",
             description=(
                 "Open a PUBLIC http(s) page in sidecar Chromium (Playwright; not LibreChat). "
@@ -2495,7 +2427,7 @@ def build_default_gateway(
             description=(
                 "On-demand office craft (docx / xlsx / pptx). Catalog is one line "
                 "in SYSTEM; this tool returns the full python-docx / openpyxl / "
-                "python-pptx craft. Not LibreChat Skills. Not bash. Not a second "
+                "python-pptx craft. Not LibreChat Skills. Not a second "
                 "store. After reading, write with sandbox_office_lib (kind matches "
                 "id). To change an existing file pass artifact_id and load_doc / "
                 "load_book / load_deck. "
@@ -2509,19 +2441,18 @@ def build_default_gateway(
         ToolSpec(
             name="sandbox_office_lib",
             description=(
-                "Isolated office Python (python-docx / openpyxl / python-pptx; "
-                "not host bash, not a second Office OS, not a programming sandbox). "
-                "The office write path. kind=docx|xlsx|pptx (or infer from title suffix). "
-                "from docx import Document; from openpyxl import Workbook; "
-                "from pptx import Presentation, Inches, Pt, RGBColor. "
-                "save_doc(doc) / save_book(wb) / save_deck(prs) or .save are routed "
-                "to the ledger. from pathlib import Path is a stub (mkdir ignored; "
-                "no host files). Do not import os. copy / math / datetime / "
-                "from io import BytesIO are allowed. Empty shells fail. "
-                "A missing image_artifact_ids entry is skipped. To change an "
-                "existing ledger file pass artifact_id; scripts load via load_doc / "
-                "load_book / load_deck or Document(INPUT_PATH). Args: source, kind?, "
-                "title?, artifact_id?, image_artifact_ids?"
+                "The office write path: run a Python script inside the isolated "
+                "pico-office container (no network, throwaway workdir). Full Python "
+                "3.12 with python-docx / openpyxl / python-pptx, the whole standard "
+                "library, pandas, Pillow, matplotlib, soffice. kind=docx|xlsx|pptx "
+                "(or infer from title suffix). In scope: INPUT_PATH (artifact_id "
+                "original, any type), OUTPUT_PATH, IMAGE_PATHS[i], load_doc / "
+                "load_book / load_deck, save_doc / save_book / save_deck, "
+                "add_title_slide / add_content_slide / add_table. Write to OUTPUT_PATH "
+                "(or any *.kind in the workdir; newest is collected). Empty shells "
+                "fail. On failure stderr comes back: fix and call again. A missing "
+                "image_artifact_ids entry is skipped. One call = one output file. "
+                "Args: source, kind?, title?, artifact_id?, image_artifact_ids?"
             ),
             handler=_make_sandbox_office_lib(store),
             school_scoped=False,
@@ -2790,20 +2721,6 @@ def openai_tool_schemas(
                     "type": "string",
                     "description": "Signed this-run preview path/URL, not a public site",
                 },
-            },
-        },
-        "sandbox_workspace_exec": {
-            "type": "object",
-            "properties": {
-                "html": {
-                    "type": "string",
-                    "description": "HTML to parse only (executed=false; scripts are not run)",
-                },
-                "source": {
-                    "type": "string",
-                    "description": "Python source to parse only (ast; executed=false; no bash)",
-                },
-                "title": {"type": "string", "description": "Optional workspace filename"},
             },
         },
         "sandbox_browser_open": {

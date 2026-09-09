@@ -144,45 +144,47 @@ def test_allowlist_has_ceiling_not_bash() -> None:
     schemas = {s["function"]["name"] for s in openai_tool_schemas(gw)}
     assert "sandbox_pptx_lib" not in schemas
     assert "sandbox_office_lib" in schemas
-    assert len(ALLOWED_GATEWAY_TOOLS) == 20
+    assert len(ALLOWED_GATEWAY_TOOLS) == 19
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert workbench_tool_step_line("sandbox_office_lib") == "正在沙箱写办公文件"
     assert workbench_tool_result_line("sandbox_office_lib", ok=True) == "已沙箱写出办公文件"
     assert workbench_tool_result_line("sandbox_office_lib", ok=False) == "没沙箱写出办公文件"
 
 
-def test_import_and_dunder_denied() -> None:
-    with pytest.raises(ToolError) as ei:
-        assert_pptx_lib_source("import os\nprs = Presentation()\nsave_deck(prs)")
-    assert ei.value.code == "sandbox.exec_denied"
-    with pytest.raises(ToolError) as ei:
-        assert_pptx_lib_source("eval('1')")
-    assert ei.value.code == "sandbox.exec_denied"
-    with pytest.raises(ToolError) as ei:
-        assert_pptx_lib_source("Presentation.__class__")
-    assert ei.value.code == "sandbox.exec_denied"
-    with pytest.raises(ToolError) as ei:
-        assert_pptx_lib_source("from io import open\nprs = Presentation()\nsave_deck(prs)")
-    assert ei.value.code == "sandbox.exec_denied"
-    assert_pptx_lib_source(
-        "from pptx import Presentation\nprs = Presentation()\nsave_deck(prs)"
-    )
-    assert_pptx_lib_source(
-        "from pathlib import Path\n"
-        "from pptx import Presentation\n"
-        "Path('/tmp/x').mkdir(parents=True, exist_ok=True)\n"
-        "prs = Presentation()\n"
-        "prs.save('/tmp/x/out.pptx')\n"
-    )
-    with pytest.raises(ToolError) as ei:
-        assert_pptx_lib_source("from pathlib.abc import Path")
-    assert ei.value.code == "sandbox.exec_denied"
+def test_source_door_is_syntax_and_size_only() -> None:
+    """v2 (#959): no import / dunder jail. Only empty, oversize, or unparsable is refused."""
+    assert_pptx_lib_source("import os\nprs = Presentation()\nsave_deck(prs)")
+    assert_pptx_lib_source("eval('1')")
+    assert_pptx_lib_source("Presentation.__class__")
+    assert_pptx_lib_source("from pathlib.abc import Path")
     assert_pptx_lib_source(
         "from pptx import Presentation\n"
         "prs = Presentation()\n"
         "if __name__ == '__main__':\n"
         "    prs.save('/tmp/x.pptx')\n"
     )
+    with pytest.raises(ToolError) as ei:
+        assert_pptx_lib_source("   ")
+    assert ei.value.code == "tool.invalid_arguments"
+    with pytest.raises(ToolError) as ei:
+        assert_pptx_lib_source("def (:\n")
+    assert ei.value.code == "sandbox.exec_invalid"
+
+
+def test_real_pathlib_and_local_save_land_in_ledger() -> None:
+    """Naked GPT writes to its own path in the workdir; the newest deck is collected."""
+    source = """
+from pathlib import Path
+from pptx import Presentation
+Path('out/x').mkdir(parents=True, exist_ok=True)
+prs = Presentation()
+slide = prs.slides.add_slide(prs.slide_layouts[0])
+slide.shapes.title.text = '真 pathlib'
+prs.save('out/x/deck.pptx')
+"""
+    raw = run_pptx_lib_source(source)
+    outline = inspect_office_bytes(raw, ".pptx")
+    assert int(outline["slides"]) >= 1
 
 
 def test_blank_layout_go_title_body_writes() -> None:
@@ -210,9 +212,7 @@ save_deck(prs)
     outline = inspect_office_bytes(raw, ".pptx")
     assert int(outline["slides"]) >= 2
     with zipfile.ZipFile(BytesIO(raw)) as zf:
-        xml = b"".join(
-            zf.read(name) for name in zf.namelist() if name.startswith("ppt/slides/")
-        )
+        xml = b"".join(zf.read(name) for name in zf.namelist() if name.startswith("ppt/slides/"))
     blob = xml.decode("utf-8", errors="replace")
     assert "本周经营风险总览" in blob or "市场端询盘下降" in blob
 
@@ -317,7 +317,7 @@ def test_empty_shell_fail_closed() -> None:
     assert "空壳" in ei.value.message or "没有可看" in ei.value.message
     with pytest.raises(ToolError) as ei:
         run_pptx_lib_source("prs = Presentation()")
-    assert ei.value.code == "sandbox.pptx_empty"
+    assert ei.value.code == "sandbox.no_output"
 
 
 @pytest.mark.asyncio
@@ -397,7 +397,8 @@ async def test_tool_rejects_import_and_empty_shell() -> None:
             "sandbox_office_lib",
             {"kind": "pptx", "source": "import os\nprs = Presentation()\nsave_deck(prs)"},
         )
-    assert ei.value.code == "sandbox.exec_denied"
+    # `import os` is fine now; the empty deck is what fails.
+    assert ei.value.code == "sandbox.pptx_shell"
     with pytest.raises(ToolError) as ei:
         await gw.invoke(
             owner,
@@ -408,13 +409,40 @@ async def test_tool_rejects_import_and_empty_shell() -> None:
 
 
 def test_runner_is_python_not_host_bash() -> None:
-    src = (ROOT / "services/orchestrator/pico_orchestrator/office/sandbox_lib.py").read_text(
+    """pico-api never runs the script itself; the runner is python in the box."""
+    client = (ROOT / "services/orchestrator/pico_orchestrator/office/sandbox_lib.py").read_text(
         encoding="utf-8"
     )
-    assert "sys.executable" in src
-    assert "/bin/bash" not in src
-    assert "shell=True" not in src
-    assert "host bash" in src.lower() or "No host bash" in src or "禁止 host bash" in src
+    assert "subprocess" not in client
+    assert "sys.executable" not in client
+    runner = (ROOT / "services/sandbox_worker/office_runner.py").read_text(encoding="utf-8")
+    assert "sys.executable" in runner
+    assert "/bin/bash" not in runner
+    assert "shell=True" not in runner
+
+
+def test_pico_office_container_contract_in_compose() -> None:
+    """The jail is the container, so pin the container: no network, no secrets, no disk."""
+    import re
+
+    compose = (ROOT / "docker-compose.host.yml").read_text(encoding="utf-8")
+    block = re.search(
+        r"\n  pico-office:\n(.*?)(?=\n  [a-z][a-z0-9-]*:\n|\nvolumes:\n)", compose, re.DOTALL
+    )
+    assert block, "pico-office service missing"
+    svc = block.group(1)
+    assert "network_mode: none" in svc
+    assert "read_only: true" in svc
+    assert "- ALL" in svc and "cap_drop" in svc
+    assert "no-new-privileges:true" in svc
+    assert 'user: "65532:65532"' in svc
+    assert "teacher-disks" not in svc
+    assert "DEEPSEEK" not in svc and "JWT" not in svc and "MEILI_MASTER_KEY" not in svc
+    assert "pico_office_sock:/run/pico-office" in svc
+    assert "sandbox_worker.office_runner" in svc
+    api = re.search(r"\n  pico-api:\n(.*?)\n  meilisearch:\n", compose, re.DOTALL)
+    assert api and "PICO_OFFICE_URL: unix:///run/pico-office/office.sock" in api.group(1)
+    assert "PICO_OFFICE_URL: embedded" not in api.group(1)
 
 
 NAKED_STYLE_SOURCE = """
@@ -478,19 +506,23 @@ prs.save("/tmp/pico-sandbox-must-not-write-here/out.pptx")
 """
 
 
-def test_pathlib_stub_prs_save_routes_color_blocks_to_ledger() -> None:
-    leak = Path("/tmp/pico-sandbox-must-not-write-here/out.pptx")
-    if leak.exists():
-        leak.unlink()
-    raw = run_pptx_lib_source(NAKED_STYLE_SOURCE)
+def test_naked_prs_save_to_own_path_is_collected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """v2: the box is a computer — the script may save wherever it likes inside the
+    box; the runner collects the recorded save path. (Embedded mode = the host is the
+    box, so we point the fixture's path at tmp_path.)"""
+    target = tmp_path / "pico-sandbox-must-not-write-here" / "out.pptx"
+    source = NAKED_STYLE_SOURCE.replace(
+        '"/tmp/pico-sandbox-must-not-write-here"', repr(str(target.parent))
+    ).replace('"/tmp/pico-sandbox-must-not-write-here/out.pptx"', repr(str(target)))
+    raw = run_pptx_lib_source(source)
     assert is_valid_ooxml_package(raw, ".pptx")
-    assert not leak.exists(), "prs.save(/tmp/...) must not write the host path"
+    assert target.exists(), "the script's own save path is honoured, not redirected"
     outline = inspect_office_bytes(raw, ".pptx")
     assert int(outline["slides"]) >= 3
     with zipfile.ZipFile(BytesIO(raw)) as zf:
-        xml = b"".join(
-            zf.read(name) for name in zf.namelist() if name.startswith("ppt/slides/")
-        )
+        xml = b"".join(zf.read(name) for name in zf.namelist() if name.startswith("ppt/slides/"))
     blob = xml.decode("utf-8", errors="replace")
     assert "减数分裂" in blob
     assert "同源染色体配对" in blob
@@ -500,36 +532,28 @@ def test_pathlib_stub_prs_save_routes_color_blocks_to_ledger() -> None:
 
 
 def test_naked_gpt_meiosis_fixture_runs_in_sandbox() -> None:
-    source = (ROOT / "tests/fixtures/office/naked_gpt_meiosis.py.txt").read_text(
-        encoding="utf-8"
-    )
+    source = (ROOT / "tests/fixtures/office/naked_gpt_meiosis.py.txt").read_text(encoding="utf-8")
     assert len(source) > 10_000
     raw = run_pptx_lib_source(source)
     assert is_valid_ooxml_package(raw, ".pptx")
     outline = inspect_office_bytes(raw, ".pptx")
     assert int(outline["slides"]) >= 4
     with zipfile.ZipFile(BytesIO(raw)) as zf:
-        xml = b"".join(
-            zf.read(name) for name in zf.namelist() if name.startswith("ppt/slides/")
-        )
+        xml = b"".join(zf.read(name) for name in zf.namelist() if name.startswith("ppt/slides/"))
     blob = xml.decode("utf-8", errors="replace")
     assert "减数分裂" in blob
     assert "srgbClr" in blob
 
 
-def test_pathlib_cannot_read_or_write_host_files() -> None:
+def test_script_errors_surface_as_stderr_not_jail() -> None:
+    """Reading a missing file is a normal Python error the model can fix; no jail code."""
     with pytest.raises(ToolError) as ei:
         run_pptx_lib_source(
-            "from pathlib import Path\nPath('/etc/passwd').read_text()\n"
+            "from pathlib import Path\nPath('/definitely/not/here.txt').read_text()\n"
         )
     assert ei.value.code == "sandbox.pptx_failed"
-    assert "host" in ei.value.message.lower() or "Permission" in ei.value.message
-    with pytest.raises(ToolError) as ei:
-        run_pptx_lib_source(
-            "from pathlib import Path\nPath('/tmp/pico-sandbox-pwn.txt').write_text('x')\n"
-        )
-    assert ei.value.code == "sandbox.pptx_failed"
-    assert not Path("/tmp/pico-sandbox-pwn.txt").exists()
+    assert "FileNotFoundError" in ei.value.message
+    assert "exec_denied" not in ei.value.code
 
 
 def test_dunder_name_main_guard_still_saves() -> None:
@@ -553,12 +577,8 @@ run.font.color.rgb = RGBColor(255, 255, 255)
 if __name__ == "__main__":
     prs.save("/tmp/pico-sandbox-main-guard.pptx")
 """
-    leak = Path("/tmp/pico-sandbox-main-guard.pptx")
-    if leak.exists():
-        leak.unlink()
     raw = run_pptx_lib_source(source)
     assert is_valid_ooxml_package(raw, ".pptx")
-    assert not leak.exists()
     outline = inspect_office_bytes(raw, ".pptx")
     assert int(outline["slides"]) >= 1
 
@@ -570,9 +590,7 @@ def test_source_cap_allows_gpt_length() -> None:
         "from pptx import Presentation\n"
         "prs = Presentation()\n"
         "slide = prs.slides.add_slide(prs.slide_layouts[0])\n"
-        "slide.shapes.title.text = 'cap'\n"
-        + pad
-        + "save_deck(prs)\n"
+        "slide.shapes.title.text = 'cap'\n" + pad + "save_deck(prs)\n"
     )
     assert len(source) > 80_000
     assert_pptx_lib_source(source)

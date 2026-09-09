@@ -23,7 +23,6 @@ from pico_orchestrator.sandbox_s1 import (
     extract_title_h1,
     isolation_dir,
     join_workspace_path,
-    light_exec_source,
     mint_preview_query,
     try_parse_artifact_preview_url,
     verify_preview_sig,
@@ -310,7 +309,9 @@ def test_sandbox_module_does_not_use_8080_or_chrome() -> None:
     assert "webdriver" not in src2.lower()
 
 
-def test_isolation_dirs_do_not_overlap_accounts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_isolation_dirs_do_not_overlap_accounts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("PICO_SANDBOX_ROOT", str(tmp_path))
     a = isolation_dir("school-a", "member-a", "run-1")
     b = isolation_dir("school-a", "member-b", "run-1")
@@ -336,14 +337,17 @@ def test_extract_title_h1_and_preview_token_roundtrip() -> None:
     parsed = try_parse_artifact_preview_url(path)
     assert parsed is not None
     assert parsed["artifact_id"] == "art-9"
-    assert verify_preview_sig(
-        artifact_id="art-9",
-        school_id="school-a",
-        membership_id="member-a",
-        run_id="run-s1",
-        exp=exp,
-        sig=parsed["sig"],
-    ) is None
+    assert (
+        verify_preview_sig(
+            artifact_id="art-9",
+            school_id="school-a",
+            membership_id="member-a",
+            run_id="run-s1",
+            exp=exp,
+            sig=parsed["sig"],
+        )
+        is None
+    )
     assert (
         verify_preview_sig(
             artifact_id="art-9",
@@ -357,48 +361,18 @@ def test_extract_title_h1_and_preview_token_roundtrip() -> None:
     )
 
 
-def test_light_exec_parses_but_denies_host_modules() -> None:
-    out = light_exec_source("x = 1 + 2\n")
-    assert out["parsed"] is True
-    assert out["executed"] is False
-    assert "只解析" in str(out.get("message") or "")
-    assert "未执行" in str(out.get("message") or "")
-    with pytest.raises(ToolError) as denied:
-        light_exec_source("import os\nos.system('id')\n")
-    assert denied.value.code == "sandbox.exec_denied"
-
-
-@pytest.mark.asyncio
-async def test_sandbox_exec_html_and_forbidden_python() -> None:
+def test_fake_exec_verb_is_gone() -> None:
+    """#959: parse-only sandbox_workspace_exec retired; no generic exec verb replaces it."""
     gw = build_default_gateway(MemoryArtifactStore(run_id="run-s1"))
-    owner = P("school-a", "member-a", ["ai:run"])
-    parsed = await gw.invoke(
-        owner, "sandbox_workspace_exec", {"html": PAGE, "title": "v2.html"}
-    )
-    assert parsed["title"] == "教案首页"
-    assert parsed["h1"] == "第一课"
-    assert parsed["executed"] is False
-    assert "只解析" in str(parsed.get("message") or "")
-    assert "未执行" in str(parsed.get("message") or "")
-    source = await gw.invoke(
-        owner, "sandbox_workspace_exec", {"source": "x = 1 + 2\n"}
-    )
-    assert source["parsed"] is True
-    assert source["executed"] is False
-    assert "只解析" in str(source.get("message") or "")
-    with pytest.raises(ToolError) as denied:
-        await gw.invoke(
-            owner,
-            "sandbox_workspace_exec",
-            {"source": "import subprocess\n"},
-        )
-    assert denied.value.code == "sandbox.exec_denied"
+    assert "sandbox_workspace_exec" not in gw.tools
+    for forbidden in ("exec", "bash", "run_python", "shell"):
+        assert forbidden not in gw.tools
 
 
 def test_tool_schemas_include_inspect() -> None:
     names = {s["function"]["name"] for s in openai_tool_schemas()}
     assert "sandbox_preview_inspect" in names
-    assert "sandbox_workspace_exec" in names
+    assert "sandbox_workspace_exec" not in names
     assert "sandbox_browser_open" in names
     assert "sandbox_browser_screenshot" in names
     assert "sandbox_document_open" in names

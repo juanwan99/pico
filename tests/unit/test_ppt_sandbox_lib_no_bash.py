@@ -17,9 +17,12 @@ def test_sandbox_pptx_lib_allowlist_has_no_bash() -> None:
     assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
     assert "read_office_skill" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
-    src = (ROOT / "services/orchestrator/pico_orchestrator/office/sandbox_lib.py").read_text(
+    client = (ROOT / "services/orchestrator/pico_orchestrator/office/sandbox_lib.py").read_text(
         encoding="utf-8"
     )
-    assert "sys.executable" in src
-    assert "shell=True" not in src
+    # pico-api is a client now; the interpreter lives in the pico-office container
+    assert "subprocess" not in client
+    runner = (ROOT / "services/sandbox_worker/office_runner.py").read_text(encoding="utf-8")
+    assert "sys.executable" in runner
+    assert "shell=True" not in runner
     assert run_pptx_lib_source is not None

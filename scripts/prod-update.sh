@@ -140,8 +140,8 @@ if [ -f .env ]; then
   fi
 fi
 
-docker compose -f "$COMPOSE_FILE" build pico-api librechat pico-sandbox
-docker compose -f "$COMPOSE_FILE" up -d --force-recreate pico-api librechat pico-sandbox meilisearch
+docker compose -f "$COMPOSE_FILE" build pico-api librechat pico-sandbox pico-office
+docker compose -f "$COMPOSE_FILE" up -d --force-recreate pico-api librechat pico-sandbox pico-office meilisearch
 
 echo "[pico] ps:"
 docker compose -f "$COMPOSE_FILE" ps

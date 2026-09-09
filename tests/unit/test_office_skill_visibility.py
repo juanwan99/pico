@@ -67,12 +67,12 @@ def test_office_skill_bodies_have_craft_without_shell() -> None:
     for sid in OFFICE_SKILL_IDS:
         text = load_office_skill_body(sid)
         assert "sandbox_office_lib" in text
-        assert "\nimport os" not in text
-        assert "import subprocess" not in text
         assert "pi install" not in text
         assert "```bash" not in text
-        assert "Do not import os" in text
-        assert "Do not use a shell" in text
+        # v2 (#959): the box is a full Python; the craft must not pretend otherwise
+        assert "Do not import os" not in text
+        assert "Do not use a shell" not in text
+        assert "isolated container" in text
         assert "Fast path remains" not in text
         assert "artifact_id" in text
         assert "load_" in text

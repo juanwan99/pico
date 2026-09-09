@@ -16,8 +16,9 @@ from collections.abc import Iterable
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
 # Always-on: teacher-said verbs. Do not add a scheduler / tool_search.
-# Office ceiling is sandbox_office_lib. generate_*/inspect/edit/render are
-# unregistered (not EXTENDED aliases). Programming sandbox stays extended.
+# Office ceiling is sandbox_office_lib (full Python in the pico-office
+# container). generate_*/inspect/edit/render and the parse-only
+# sandbox_workspace_exec are unregistered (not EXTENDED aliases).
 # sandbox_browser_open / sandbox_document_open are pane doors, not a PDF kernel.
 CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "workspace_list_files",
@@ -42,7 +43,6 @@ EXTENDED_TOOLS: tuple[str, ...] = (
     "unpublish_html_page",
     "verify_html_document",
     "sandbox_preview_inspect",
-    "sandbox_workspace_exec",
     "sandbox_browser_screenshot",
 )
 

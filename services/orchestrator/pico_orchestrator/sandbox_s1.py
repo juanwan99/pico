@@ -30,7 +30,6 @@ IO_TIMEOUT_S = 8.0
 EXEC_TIMEOUT_S = 5.0
 MAX_CONTENT_CHARS = 200_000
 MAX_CONTENT_BYTES = 256_000
-MAX_EXEC_SOURCE = 8_000
 
 _SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 _ARTIFACT_IN_PATH = re.compile(
@@ -49,27 +48,6 @@ _SECRET_NAMES = frozenset(
     }
 )
 _SECRET_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
-_FORBIDDEN_EXEC_MODS = frozenset(
-    {
-        "os",
-        "subprocess",
-        "socket",
-        "pathlib",
-        "sys",
-        "ctypes",
-        "shutil",
-        "importlib",
-        "pty",
-        "posix",
-        "signal",
-        "multiprocessing",
-        "webbrowser",
-        "http",
-        "urllib",
-        "requests",
-        "httpx",
-    }
-)
 
 
 def preview_signing_secret() -> bytes:
@@ -424,58 +402,3 @@ def assert_same_run(row: dict[str, Any], run_id: str | None) -> None:
     row_run = str(row.get("run_id") or "").strip()
     if row_run and row_run != str(run_id).strip():
         raise ToolError("sandbox.not_this_run", "只能查看本次 Run 的预览")
-
-
-def light_exec_source(source: str) -> dict[str, Any]:
-    """Optional S1 exec: parse only, never bash, never import host modules."""
-    import ast
-
-    text = (source or "").strip()
-    if not text:
-        raise ToolError("tool.invalid_arguments", "source 必须是非空字符串")
-    if len(text) > MAX_EXEC_SOURCE:
-        raise ToolError(
-            "tool.invalid_arguments",
-            f"source exceeds {MAX_EXEC_SOURCE} characters",
-        )
-    try:
-        tree = ast.parse(text)
-    except SyntaxError as exc:
-        raise ToolError("sandbox.exec_invalid", "工作区内源码无法解析") from exc
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            names: list[str] = []
-            if isinstance(node, ast.Import):
-                names = [a.name.split(".", 1)[0] for a in node.names]
-            elif node.module:
-                names = [node.module.split(".", 1)[0]]
-            if any(n in _FORBIDDEN_EXEC_MODS for n in names):
-                raise ToolError(
-                    "sandbox.exec_denied",
-                    "禁止在工作区执行宿主机/网络模块",
-                )
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {
-            "exec",
-            "eval",
-            "compile",
-            "open",
-            "__import__",
-        }:
-            raise ToolError("sandbox.exec_denied", "禁止动态执行或打开宿主文件")
-    return {
-        "ok": True,
-        "parsed": True,
-        "executed": False,
-        "timeout_s": EXEC_TIMEOUT_S,
-        "message": "只解析，未执行。不是宿主机 bash，没有跑这段代码。",
-    }
-
-
-async def light_exec_with_timeout(source: str) -> dict[str, Any]:
-    try:
-        return await asyncio.wait_for(
-            asyncio.to_thread(light_exec_source, source),
-            timeout=EXEC_TIMEOUT_S,
-        )
-    except TimeoutError as exc:
-        raise ToolError("sandbox.exec_timeout", "工作区执行超时已杀掉") from exc

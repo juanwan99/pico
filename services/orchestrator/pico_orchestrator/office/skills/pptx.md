@@ -3,7 +3,7 @@
 Use when the teacher asked for a real `.pptx`. This is craft, not a scene workflow.
 Execute in `sandbox_office_lib` with `kind=pptx`.
 To change a deck the teacher already has, pass `artifact_id` and start with `prs = load_deck()` (or `Presentation(INPUT_PATH)`).
-Do not import os. Do not use a shell. Empty `Presentation(); save_deck(prs)` fails.
+The script runs in an isolated container with full Python (Pillow / matplotlib can render a chart PNG into the workdir and `add_picture` it). Empty `Presentation(); save_deck(prs)` fails.
 Stock body bullets are not the ceiling. Free geometry uses shapes + RGBColor.
 
 ## Run — stock helpers (fine for a simple talk track)
