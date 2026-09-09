@@ -4,10 +4,10 @@
 DATE: 2026-09-08
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
-在飞: #959 T-OFFICE-COMPUTER-V2（PR-A #960 已合已部 → PR-B 换后端删 jail → PR-C 回归门）
+在飞: #959 T-OFFICE-COMPUTER-V2 PR-C 回归门（#960 A · #961 B · #962 hotfix 已合已部；T1–T4 真模型生产全过）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-      写本文时 tip = 002d2db1600540c6ccc6940e927a559c7d08b20d
+      写本文时 tip = 5e0cfe40f815abc21aa86a3b887f70d07ca63d80
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
@@ -98,7 +98,7 @@ curl tip + GitHub 在飞 → EXPERIENCE（点名≤3）
 | 已收口 | [#952](https://github.com/juanwan99/pico/issues/952) · [#953](https://github.com/juanwan99/pico/pull/953) | T-OFFICE-UNREGISTER · 办公第二核从网关拿掉 @ tip `7c5bd50a…` |
 | 已收口 | [#954](https://github.com/juanwan99/pico/issues/954) · [#955](https://github.com/juanwan99/pico/pull/955) | T-SEARCH-LATCH · 联网不直连 + 入库不 PDF 核 + CLAIM 诚实 @ tip `7f86403b…` |
 | 已收口 | [#956](https://github.com/juanwan99/pico/issues/956) · [#957](https://github.com/juanwan99/pico/pull/957) | T-DOCS-HYGIENE · STATE-NOW tip/#954 + DIRECTION CLAIM @ tip `0d80c819…` |
-| **在飞** | [#959](https://github.com/juanwan99/pico/issues/959) | T-OFFICE-COMPUTER-V2 · 换后端不换合同 · pico-office 无网容器 · 删 pico-api 内 jail · 真模型回归门 · 方案 `PLAN-OFFICE-COMPUTER-V2.md` |
+| **在飞** | [#959](https://github.com/juanwan99/pico/issues/959) · [#960](https://github.com/juanwan99/pico/pull/960) · [#961](https://github.com/juanwan99/pico/pull/961) · [#962](https://github.com/juanwan99/pico/pull/962) | T-OFFICE-COMPUTER-V2 · pico-office 无网容器已 live @ `5e0cfe40…` · jail 已删 · T1–T4 真模型生产全过（`scripts/office-regress.py`）· 方案 `PLAN-OFFICE-COMPUTER-V2.md` |
 | 规划 | [#919](https://github.com/juanwan99/pico/issues/919) | 根因调查仍 OPEN；选路取证见 #944（走沙箱） |
 | 已收口 | [#928](https://github.com/juanwan99/pico/issues/928) | T-OFFICE-CONTRACT-RECEIPT · Excel `values` 假绿 · 已部 |
 | 已收口 | [#929](https://github.com/juanwan99/pico/issues/929) | T-PICO-PUBLISH-BOUNDARY · 发布不是 Pico 能力 · 已部 |
