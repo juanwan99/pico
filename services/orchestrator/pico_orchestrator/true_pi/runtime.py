@@ -238,9 +238,12 @@ async def run_true_pi_agent(
                 emit=emit,
             )
             tool_url = await tool_server.start()
+            school_key = str(getattr(principal, "school_id", "") or "")
+            member_key = str(getattr(principal, "membership_id", "") or "")
             persist_dir = (
                 persist_session_dir(
-                    school_id=str(getattr(principal, "school_id", "") or ""),
+                    school_id=school_key,
+                    membership_id=member_key,
                     conversation_id=conversation_id,
                 )
                 if persist_pi_session
@@ -250,7 +253,8 @@ async def run_true_pi_agent(
             use_tree = persist_dir is not None and session_dir is None
             session_file = (
                 persist_session_file(
-                    school_id=str(getattr(principal, "school_id", "") or ""),
+                    school_id=school_key,
+                    membership_id=member_key,
                     conversation_id=conversation_id,
                 )
                 if use_tree
@@ -258,8 +262,8 @@ async def run_true_pi_agent(
             )
             extra_ext: list[Path] = []
             mem_dir = persist_memory_dir(
-                school_id=str(getattr(principal, "school_id", "") or ""),
-                membership_id=str(getattr(principal, "membership_id", "") or ""),
+                school_id=school_key,
+                membership_id=member_key,
             )
             mem_path = memory_extension_path()
             if mem_dir is not None and mem_path.is_file():
@@ -363,6 +367,7 @@ async def run_true_pi_agent(
         tree_history = history
         if persist_pi_session and persist_session_dir(
             school_id=str(getattr(principal, "school_id", "") or ""),
+            membership_id=str(getattr(principal, "membership_id", "") or ""),
             conversation_id=conversation_id,
         ):
             tree_history = None

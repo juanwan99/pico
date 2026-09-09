@@ -667,7 +667,7 @@ E2B / Daytona / Firecracker 仍不是选型。仅 overlay 合同对但 2GiB 仍�
 | **RPC loop** | `pi --mode rpc` stdin/stdout JSONL | `true_pi/client.py` `spawn_command()` / `TruePiRpcClient` | 真核不变。B1：箱内 spawn，`AttachTransport` 双工搬官方帧（非 unary POST）。A：仍宿主管道 |
 | **禁宿主机内建工具** | `--no-builtin-tools` | argv 硬编码 | **宿主机继续禁（L5）。** B1 箱内去掉该旗；jail=挂载+egress，不是 cwd |
 | **extension** | `-e pico-gateway-tools.ts` | `extension_path()`；`PICO_TRUE_PI_VISIBLE_TOOLS` | B1 箱内 extension **只**门闩工具；A 仍今日 CORE |
-| **session JSONL** | `--session <file>` | `persist_session_file` → `{session_root}/{school}/{conversation}/pico.jsonl` | **已锁定：** jsonl 活在宿主、conversation 键；bind-mount 进 overlay 容器。destroy 卸 `/work` **不**删宿主 jsonl |
+| **session JSONL** | `--session <file>` | `persist_session_file` → `{session_root}/{school}/{membership}/{conversation}/pico.jsonl` | **已锁定：** jsonl 活在宿主、school+membership+conversation 键（#975）；bind-mount 进 overlay 容器。destroy 卸 `/work` **不**删宿主 jsonl |
 | **官方 compaction** | `settings.json` `compaction.reserveTokens/keepRecentTokens` | `official_compaction_settings()`；注释写明不是自研压缩器 | 继续只写官方 knobs。禁止 Pico reserve 截 256k→64k |
 | **SYSTEM.md** | agent home 全局 + `.pi/SYSTEM.md` 项目替换 | `prepare_agent_home()`；`pico_system_text()`；`--no-context-files` 跳过 AGENTS.md | 纪律仍短、通用、无场景 if。工具「怎么改格子」从 SYSTEM 删除，改由箱内原语自己说话 |
 | **abort / 杀进程组** | RPC abort → SIGTERM → SIGKILL | `runtime.py` 轮询 `is_cancelled` → `client.abort()` | B：cancel 必须同时 destroy 箱；不得只杀 RPC 留孤儿进程 |
@@ -744,7 +744,7 @@ Pass 藏名单 **L**（必须同时藏）：`generate_*`（含 patch 参数）�
 
 ### jsonl vs 一 Run 一目录（已锁定，对应 M4）
 
-现网 `persist_session_file` 键是 **school + conversation**，不是 `run_id`。M4 要求第二轮 HTTP 仍走官方 `--session`。
+现网 `persist_session_file` 键是 **school + membership + conversation**（#975 前是 school + conversation），不是 `run_id`。M4 要求第二轮 HTTP 仍走官方 `--session`。
 
 **锁定选项 (1) 修订：** overlay **容器** 按 conversation 活着；**工作目录** 按 `run_id`。宿主 `pico.jsonl` bind-mount `/session/pico.jsonl`。create **对 conversation_key 幂等**：容器活着则复用 `box_id`，只为新 Run mkdir `/work/{workspace_id}`。attach **禁止** `session_jsonl_b64`。
 

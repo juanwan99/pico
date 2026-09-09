@@ -14,6 +14,7 @@ from pico_orchestrator.edu_sidebar import (
     EDU_SIDEBAR_DEFAULT_TOOLS,
     HONEST_MISS_SUMMARY,
     JSON_ONLY_OUTPUT,
+    SIDEBAR_PROPOSE_HINT,
     SIDEBAR_WORKBENCH_HINT,
     asked_from_sidebar_prompt,
     edu_sidebar_tool_ceiling,
@@ -114,13 +115,28 @@ def test_sidebar_enters_pi_helpers() -> None:
     assert "inspect_document" not in hinted
     assert "sandbox_office_lib" in hinted
     assert "工具结果回来后再决定下一手" in hinted
-    assert "最多 40 个字段" in hinted
-    assert "fill_cells" in hinted
-    assert "不要靠 insert_col 扩列" in hinted
-    assert "c 可以大于 page.table 列数" in hinted
     assert "只认当前页名" in hinted
     assert "不要声称已读完全文" in hinted
     assert with_sidebar_workbench_hint(hinted) == hinted
+
+
+def test_sidebar_hints_split_by_path() -> None:
+    """Each path only hears about hands it can actually call."""
+    # Pi run: workbench CORE, no page affordances.
+    assert "fill_cells" not in SIDEBAR_WORKBENCH_HINT
+    assert "insert_col" not in SIDEBAR_WORKBENCH_HINT
+    # json_only propose: page affordances, no Pico tools.
+    assert "fill_cells" in SIDEBAR_PROPOSE_HINT
+    assert "不要靠 insert_col 扩列" in SIDEBAR_PROPOSE_HINT
+    assert "c 可以大于 page.table 列数" in SIDEBAR_PROPOSE_HINT
+    assert "最多 40 个字段" in SIDEBAR_PROPOSE_HINT
+    assert "同一套手" not in SIDEBAR_PROPOSE_HINT
+    assert "sandbox_office_lib" not in SIDEBAR_PROPOSE_HINT
+    assert "确认后走学校原命令" in SIDEBAR_PROPOSE_HINT
+    # Graded read applies to both.
+    for hint in (SIDEBAR_WORKBENCH_HINT, SIDEBAR_PROPOSE_HINT):
+        assert "只认当前页名" in hint
+        assert "16 列×12 行" in hint
 
 
 def test_sidebar_progress_rides_content() -> None:

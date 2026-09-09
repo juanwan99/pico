@@ -2,7 +2,7 @@
 
 ```
 STATUS: BINDING for Pico · REQUIREMENT for edu-core
-VERSION: 1.0
+VERSION: 1.1 (2026-09-09 · #975: inspect_document retired by #953; Pico has no window hand today)
 OWNER_PICO: juanwan99/pico
 OWNER_SCHOOL: juanwan99/edu-core (not implemented in this repo)
 ```
@@ -18,14 +18,16 @@ Has ask → load until leftover_rows = 0 and leftover_cols = 0.
 
 Pico must not invent a second school table SoT. School still owns the left page.
 
-## Pico (this repo · done on the Pico side)
+## Pico (this repo · current state)
 
 | Default | On ask |
 |---------|--------|
-| Sidebar hint: page title / filename only | `inspect_document` windows: `start_row` / `start_col` / `max_rows` / `max_cols` |
-| Do not claim full read from `page.table` | Repeat until `leftover_rows` and `leftover_cols` are 0 |
+| Sidebar hint: page title / filename only | **Uploaded** office files: read with `sandbox_office_lib` (full file, isolated python) |
+| Do not claim full read from `page.table` | **Left-page web table:** Pico has no window hand since `inspect_document` left the gateway (#953). The model must say the table is not fully read and fill only from seen cells + empty columns |
 
-`page.table` from school is a viewport, not the ledger.
+`page.table` from school is a viewport, not the ledger. The window
+(`start_row` / `leftover_rows` …) must come from the school side; Pico will
+not rebuild an inspect projector to page a table it does not own.
 
 ## edu-core must ship (later window · not this PR)
 

@@ -37,9 +37,15 @@ async def _not_cancelled() -> bool:
 
 def test_same_conversation_pins_same_session_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("PICO_TRUE_PI_SESSION_ROOT", str(tmp_path))
-    first = persist_session_file(school_id="school-a", conversation_id="convo-hold")
-    second = persist_session_file(school_id="school-a", conversation_id="convo-hold")
-    other = persist_session_file(school_id="school-a", conversation_id="convo-other")
+    first = persist_session_file(
+        school_id="school-a", membership_id="m-1", conversation_id="convo-hold"
+    )
+    second = persist_session_file(
+        school_id="school-a", membership_id="m-1", conversation_id="convo-hold"
+    )
+    other = persist_session_file(
+        school_id="school-a", membership_id="m-1", conversation_id="convo-other"
+    )
     assert first is not None and second is not None and other is not None
     assert first == second
     assert first.name == "pico.jsonl"
