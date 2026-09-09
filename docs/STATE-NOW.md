@@ -4,10 +4,10 @@
 DATE: 2026-09-08
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
-在飞: 无
+在飞: #959 T-OFFICE-COMPUTER-V2（PR-A docs/冻结 v2.0 → PR-B 换后端删 jail → PR-C 回归门）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-      写本文时 tip = 0d80c819f863636c51b153c2a1a60827c5dcadc1
+      写本文时 tip = 8260475cf53257cbdfd589071c425fce7e649d28
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
@@ -18,7 +18,7 @@ PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源�
 最高: LAW §0-supreme · 禁止自搞一套 / 禁止重体系
 工作法: 本窗合一 · GitHub 唯一真源 · 写码树/生产树分开 · AGENTS 文首
 北极星: DIRECTION-NOW §0-star v1.4 · 用法 = Grok · 办公主线 · 能力并列 · 办公计算机交成熟上游 · 阶段方案 docs/PLAN-WORKENV-UPSTREAM.md
-冻结: docs/TRUTH-FREEZE.md v1.9（默认真 Pi · 模型/计量上游 New API · 知识库=Meili 挂载 · 办公天花板隔离库 · generate_*/inspect 已从网关拆除）
+冻结: docs/TRUTH-FREEZE.md v2.0（默认真 Pi · 模型/计量上游 New API · 知识库=Meili 挂载 · 办公执行面 = pico-office 无网容器完整 Python · 不要 bash = 宿主 shell/宿主 builtins/通用 exec 动词 · generate_*/inspect 已拆）
 真源: GitHub Issue/PR/SHA/CI + 公网 tip。本页三行是索引。
 juanwan99/oneflow: 不当真源（已 Archive）
 ```
@@ -98,6 +98,7 @@ curl tip + GitHub 在飞 → EXPERIENCE（点名≤3）
 | 已收口 | [#952](https://github.com/juanwan99/pico/issues/952) · [#953](https://github.com/juanwan99/pico/pull/953) | T-OFFICE-UNREGISTER · 办公第二核从网关拿掉 @ tip `7c5bd50a…` |
 | 已收口 | [#954](https://github.com/juanwan99/pico/issues/954) · [#955](https://github.com/juanwan99/pico/pull/955) | T-SEARCH-LATCH · 联网不直连 + 入库不 PDF 核 + CLAIM 诚实 @ tip `7f86403b…` |
 | 已收口 | [#956](https://github.com/juanwan99/pico/issues/956) · [#957](https://github.com/juanwan99/pico/pull/957) | T-DOCS-HYGIENE · STATE-NOW tip/#954 + DIRECTION CLAIM @ tip `0d80c819…` |
+| **在飞** | [#959](https://github.com/juanwan99/pico/issues/959) | T-OFFICE-COMPUTER-V2 · 换后端不换合同 · pico-office 无网容器 · 删 pico-api 内 jail · 真模型回归门 · 方案 `PLAN-OFFICE-COMPUTER-V2.md` |
 | 规划 | [#919](https://github.com/juanwan99/pico/issues/919) | 根因调查仍 OPEN；选路取证见 #944（走沙箱） |
 | 已收口 | [#928](https://github.com/juanwan99/pico/issues/928) | T-OFFICE-CONTRACT-RECEIPT · Excel `values` 假绿 · 已部 |
 | 已收口 | [#929](https://github.com/juanwan99/pico/issues/929) | T-PICO-PUBLISH-BOUNDARY · 发布不是 Pico 能力 · 已部 |

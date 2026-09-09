@@ -8,12 +8,12 @@
 STATUS: BINDING navigation · 现况不在本页
 TRUTH: GitHub (Issue/PR/SHA/CI/DEPLOY) + 公网 tip outrank all prose
 NOW: GitHub 执行卡（最多 1）· docs/STATE-NOW.md 是索引
-FREEZE: docs/TRUTH-FREEZE.md v1.9
+FREEZE: docs/TRUTH-FREEZE.md v2.0
 ```
 
 ## 现行层（2026-09-08 · 开窗只认这些句）
 
-冲突时：**LAW ≥ 北极星 v1.4 ≥ TRUTH-FREEZE v1.9 ≥ 本页此表 ≥ 其它 md。** GitHub + tip 压过一切散文。
+冲突时：**LAW ≥ 北极星 v1.4 ≥ TRUTH-FREEZE v2.0 ≥ 本页此表 ≥ 其它 md。** GitHub + tip 压过一切散文。
 
 | 句 | 现行 | 作废（禁止再当现网） |
 |----|------|----------------------|
@@ -21,7 +21,7 @@ FREEZE: docs/TRUTH-FREEZE.md v1.9
 | 编排 | 默认真 Pi（`health.default_runtime=pi-true`） | hosted `pi_runtime` 是默认；Kimi Agent 是唯一核 |
 | 模型 | 聊天/出图统一 New API（`openai-responses` / Gemini 渠道）；对外只叫 Pico | 「DeepSeek 聊天核」当现网；为厂牌再造直连核 |
 | 计量 | New API 管渠道/密钥/统计；Pico 记 `usage_events`→积分；edu 钱包只认 export | Pico 做钱；edu 另接模型第二账 |
-| 办公天花板 | 隔离 `sandbox_office_lib`（python-docx / openpyxl / python-pptx）+ `read_office_skill` | spec / `generate_*` 是真源或上限 |
+| 办公天花板 | 隔离 `sandbox_office_lib`（python-docx / openpyxl / python-pptx）+ `read_office_skill`；执行面 = `pico-office` 无网容器完整 Python（#959 施工中） | spec / `generate_*` 是真源或上限；pico-api 内 AST/import jail 当隔离 |
 | 办公写路 | 只 `sandbox_office_lib`；`generate_*` / inspect / edit 已从网关拆除（#952） | 把库存 spec 当天花板；再挂 generate 别名 |
 | Pico 自己 | 账本、授权、门闩、人包、门脸 | 第二套 Agent OS / 办公 OS / PDF 核 / 发布通道 / 计费 OS |
 | 工作法 | 本窗合一 · 只写 pico · live = origin/main | 主管/执行者编制 · docs-only 不部 |
@@ -45,9 +45,10 @@ FREEZE: docs/TRUTH-FREEZE.md v1.9
 | **NOW** | **[STATE-NOW.md](./STATE-NOW.md)** | **开窗索引三行**（对不上以 GitHub + tip 为准） |
 | **NOW** | **[#634](https://github.com/juanwan99/pico/issues/634)** | **冻结令** · 可钉现况三行评论 |
 | 0 | **[DIRECTION-NOW.md](./DIRECTION-NOW.md)** | 北极星 §0-star v1.4 · 用法 = Grok · 办公主线 · 能力并列 · 办公计算机交成熟上游 |
-| 0 | **[TRUTH-FREEZE.md](./TRUTH-FREEZE.md)** | 目标冻结 v1.9（真 Pi · New API 脑 · 知识库挂载 · generate_* 待拆） |
+| 0 | **[TRUTH-FREEZE.md](./TRUTH-FREEZE.md)** | 目标冻结 v2.0（真 Pi · New API 脑 · 知识库挂载 · 办公执行面 = 无网容器完整 Python · 不要 bash 的边界） |
 | — | **[WHAT-IS-PICO.md](./WHAT-IS-PICO.md)** | 产品定义（§4 实现以 tip 为准） |
-| — | **[PLAN-WORKENV-UPSTREAM.md](./PLAN-WORKENV-UPSTREAM.md)** | 阶段方案：办公计算机交成熟上游 · 不要 bash · Pico 薄适配 · 验收看减法 |
+| — | **[PLAN-OFFICE-COMPUTER-V2.md](./PLAN-OFFICE-COMPUTER-V2.md)** | **现行阶段车辆** · 办公计算机 v2：换后端不换合同 · pico-office 无网容器 · 删解释器 jail · 真模型回归门（#959） |
+| — | [PLAN-WORKENV-UPSTREAM.md](./PLAN-WORKENV-UPSTREAM.md) | 前一阶段方案 · B1 / overlay / nft 段只作学习账 · 阶段车辆已由上行接替 |
 | 0 | **[LAW-NO-SELF-BUILD-THIN-ADAPTER.md](./LAW-NO-SELF-BUILD-THIN-ADAPTER.md)** | 禁止自研 |
 | 0 | **[ADR-CAPABILITY-LOADING.md](./ADR-CAPABILITY-LOADING.md)** | 能力加载纪律（少常驻 · Skill 渐进披露 · 禁自研选工具核）· 不当在飞 |
 | 0 | **[EXPERIENCE.md](./EXPERIENCE.md)** | 经验唯一 · 按域 · 派发点名 ≤3 · 不是产品规格 |

@@ -2,10 +2,12 @@
 
 ```
 PICO_SCOPE: agents work **only** in this repo; edu-cloud is out of band
-STATUS: M3 PICO STUB READY; LIVE EDU INTEGRATION DEFERRED
+STATUS: HISTORICAL (M3 stub era). "LIVE EDU INTEGRATION DEFERRED" is stale.
 PLAN: MVP-3DAY v1.2 §10
 CONTRACTS: Phase 2 FROZEN v1.0 (unchanged field names)
 ```
+
+> **OVERRIDE 2026-09-08：** Pico 侧给 edu 的口已在现网：侧栏 `/v1/chat/completions`（edu 签 JWT · 同一真 Pi · 同 CORE 工具）、`POST /v1/kb/ingest`、`GET /v1/internal/usage/export`、`contracts/*.md`。下文 cutover checklist 与 `PICO_AI_PRIMARY` 状态 **Pico 仓无法证实**，须 edu 侧给「所有调模型入口」清单逐条核。本文其余为考古。
 
 ## Goals
 

@@ -41,7 +41,7 @@ def test_law_supreme_section_exists() -> None:
 
 def test_truth_freeze_has_s0_and_w0() -> None:
     text = (ROOT / "docs" / "TRUTH-FREEZE.md").read_text(encoding="utf-8")
-    assert "BINDING FREEZE v1.9" in text
+    assert "BINDING FREEZE v2.0" in text
     assert "| S0 |" in text
     assert "| W0 |" in text
     assert "| P0f |" in text
@@ -49,6 +49,25 @@ def test_truth_freeze_has_s0_and_w0() -> None:
     assert "绝对禁止自己搞一套体系" in text
     assert "本窗合一" in text
     assert "唯一真源" in text
+    assert "OWNER_ORDER_2026-09-08c" in text
+    assert "不算 bash" in text
+    assert "Pico 不维护 import 白名单" in text
+
+
+def test_law_forbids_interpreter_jail() -> None:
+    text = (ROOT / "docs" / "LAW-NO-SELF-BUILD-THIN-ADAPTER.md").read_text(encoding="utf-8")
+    assert "解释器级沙箱当隔离核" in text
+    assert "__import__" in text
+
+
+def test_office_computer_v2_plan_exists() -> None:
+    text = (ROOT / "docs" / "PLAN-OFFICE-COMPUTER-V2.md").read_text(encoding="utf-8")
+    assert "换后端不换合同" in text
+    assert "pico-office" in text
+    assert "network_mode: none" in text
+    assert "sandbox_exec.py" in text
+    workenv = (ROOT / "docs" / "PLAN-WORKENV-UPSTREAM.md").read_text(encoding="utf-8")
+    assert "PLAN-OFFICE-COMPUTER-V2.md" in workenv[:3000]
 
 
 def test_law_forbids_second_model_ledger() -> None:
@@ -66,7 +85,7 @@ def test_workenv_stage_plan_exists() -> None:
 
 def test_state_now_is_index_not_second_ledger() -> None:
     text = (ROOT / "docs" / "STATE-NOW.md").read_text(encoding="utf-8")
-    assert "在飞: 无" in text
+    assert "在飞: " in text
     assert "GitHub Issue/PR/SHA/CI + 公网 tip" in text
     assert "本页三行是索引" in text
     assert "写码 `/home/ops/pico`" in text

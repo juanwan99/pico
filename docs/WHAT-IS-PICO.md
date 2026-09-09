@@ -3,7 +3,7 @@
 ```
 DOC: docs/WHAT-IS-PICO.md
 STATUS: BINDING · 覆盖一切冲突的产品口述与旧文档金句
-FREEZE: docs/TRUTH-FREEZE.md v1.9 · LAW §0-supreme · AGENTS 文首工作法 · HANDOFF-WB-PI（产品六条）· DIRECTION-NOW §0-star v1.4
+FREEZE: docs/TRUTH-FREEZE.md v2.0 · LAW §0-supreme · AGENTS 文首工作法 · HANDOFF-WB-PI（产品六条）· DIRECTION-NOW §0-star v1.4
 OWNER: 业主目标 + 总管落盘
 TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可更新「现状」；不可偷偷改「目标」
 ```
@@ -73,7 +73,7 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 
 ## 4. 编排 · 目标 vs 现状（彻底诚实）
 
-### 4.1 目标（BINDING · TRUTH-FREEZE v1.9）
+### 4.1 目标（BINDING · TRUTH-FREEZE v2.0）
 
 ```text
 编排 = 上游真 Pi RPC（默认唯一 multi-step）
@@ -89,7 +89,7 @@ hosted pi_runtime / Kimi Agent = 遗产回滚，非产品默认
 
 ### 4.2 实现事实（2026-09-08 · **不是目标** · 以生产 tip 核）
 
-> **真源：** TRUTH-FREEZE **v1.9** + DIRECTION-NOW §0-star v1.4。  
+> **真源：** TRUTH-FREEZE **v2.0** + DIRECTION-NOW §0-star v1.4。  
 > 旧 v1.0「唯一核 = Kimi Agent / 禁 Pi」**已作废**。  
 > 旧「默认 = hosted `pi_runtime` / DeepSeek 聊天核」**不是现网**。  
 > `run_agent_loop` **从未**是产品目标；已移除，**禁止**复活为终局叙事。
@@ -101,7 +101,7 @@ hosted pi_runtime / Kimi Agent = 遗产回滚，非产品默认
 Meili                                              ✅ 关键词挂载；Pico 不自选 embedding 厂牌
 计量：Pico usage_events → 积分；edu 认 export       ✅ 合同；本仓不写 edu
 Kimi Agent / hosted pi_runtime                    ⚠️ 遗产回滚 · 非默认
-隔离办公库 sandbox_office_lib                     ✅ 执行层已接线（#936/#942 调用面）
+隔离办公库 sandbox_office_lib                     ✅ 合同已接线（#936/#942）· 后端仍 pico-api 内 jail → #959 换 pico-office 容器
 generate_* / sandbox_pptx_lib                     ❌ 网关已拆（#952）· 不是 EXTENDED 别名
 老师聊天选路沙箱                                  ✅ #944 已证；写路只 sandbox_office_lib（#952）
 「目标/长期是自研环」                              ❌ 污染 · 禁止
@@ -131,12 +131,16 @@ generate_* / sandbox_pptx_lib                     ❌ 网关已拆（#952）· �
 
 ## 5. 阶段（摘要）
 
+> **OVERRIDE 2026-09-08：** CLAIM-WB-DEGREE-WEB 业主已签 YES（2026-08-26 · #449/#316，以 STATE-NOW 为准）。下表「阶段二不开」是 8 月初句，已过期。现行阶段车辆 = [`PLAN-OFFICE-COMPUTER-V2.md`](./PLAN-OFFICE-COMPUTER-V2.md)（办公计算机换后端 · #959）。
+
 | 阶段 | 状态 |
 |------|------|
-| 公网可跑 / 主链可演示 | 大体具备 |
-| 日用可靠 + 交付语义 | **阶段一主线**（PLAN-TWO-PHASE-WB） |
-| WorkBuddy 程度（六条 · W1–W5） | 阶段二；阶段一全优前不开 |
-| edu / 像素终局 | 后置 |
+| 公网可跑 / 主链可演示 | 具备 |
+| 日用可靠 + 交付语义 | 已收口（假绿门 / 人包 / 续改） |
+| WorkBuddy 程度（六条） | 业主 YES @ 2026-08-26 |
+| 办公计算机（隔离容器完整 Python · 删 jail） | **现行主线** #959 |
+| edu 所有 AI 入口走 Pico（清单核实 · cutover） | 待 edu 侧清单 |
+| 像素终局 | 后置 |
 
 ---
 
@@ -149,5 +153,5 @@ generate_* / sandbox_pptx_lib                     ❌ 网关已拆（#952）· �
 ## 7. 三句记忆
 
 1. Pico 是 AI 工作台底座（壳 + 账本 + 控制面 + 模型 API），不是网盘/教务。  
-2. **目标默认：真 Pi 编排 + 云端 API 脑**（TRUTH-FREEZE v1.9）；hosted / Kimi 是遗产回滚。办公天花板 = 隔离库，不是 `generate_*`。  
+2. **目标默认：真 Pi 编排 + 云端 API 脑**（TRUTH-FREEZE v2.0）；hosted / Kimi 是遗产回滚。办公天花板 = 隔离库，不是 `generate_*`。  
 3. **最高：禁止自搞一套体系、禁止做重体系。** 自研工具环与双核并列真源均禁止；实现现状以 GitHub + tip 为准，禁止假称完成。

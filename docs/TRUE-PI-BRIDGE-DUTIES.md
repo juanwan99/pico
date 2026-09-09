@@ -38,6 +38,8 @@ v9（观察回执）：写/改/打开工具回 `observation`（落地事实，�
 - generate_* / sandbox_pptx_lib / inspect / verify / edit / render = 已从网关拆除，不是 EXTENDED 别名
 - publish_* = EXTENDED 失败关闭，不进默认 CORE
 - 禁 bash / 任意 FS / 未登记 MCP / 自研 tool_search
+- 办公执行后端（v2.0 · #959）= pico-office 无网容器跑完整 Python；桥/网关不注册 bash / exec / run_python；
+  pico-api 内 AST/import jail 待删。sandbox_workspace_exec（parse-only 假执行）随 #959 退出网关
 ```
 
 下列为 **历史累加说明**（v1–v10），不是现行 CORE 抄本。

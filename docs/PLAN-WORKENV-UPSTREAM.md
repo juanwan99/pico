@@ -17,6 +17,7 @@ FREEZE: docs/TRUTH-FREEZE.md v1.8（现行）；本 Binding PR 当时落地的�
 CLAIM-WB: 本方案不改签
 NOT: 采购 E2B · 加 Excel 批改 API · 换 Pi / LibreChat · 自研沙箱核 · 复活 B1
 CURRENT: 2026-09-08 · 隔离办公 Python 已在 live（#936/#938/#942 调用面）。本文件后半施工单里「尚未迁走」以 Overview 诚实段为准。减法与老师聊天选路另议。
+NEXT-STAGE: 2026-09-08 · 阶段车辆改为 docs/PLAN-OFFICE-COMPUTER-V2.md（换后端不换合同 · pico-office 无网容器 · 删 pico-api 内解释器 jail）。本文 B1 / overlay / nft / AttachTransport 段全部只作学习账。
 ```
 
 ---

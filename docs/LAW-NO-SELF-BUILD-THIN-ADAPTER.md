@@ -64,6 +64,7 @@ Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 12. **硬帽截窗**：用 Pico 自定 reserve/步数/字数把上游窗口截短（例如 256k 窗 64k 就压）。只认上游窗与安全门（租户/SSRF/密钥/禁 bash/假绿）
 13. **Pico 自挂公网页冒充发布**：`pico.aivia.asia/p/{id}`、老师点确认、自研发布闸都不是发布能力。发布 = Edu 专用申请 + 校管批准。Pico 只产 HTML。任务卡「发布确认收口」压不过本条。
 14. **第二套模型账 / 绕开网关计费**：聊天/出图等要统计计费的调用直连厂牌，或在 Pico/edu 另建点池、余额、第二账单核。现网上游 = New API。Pico 只记用量；钱在 edu 只认 Pico export。本仓不写 edu。
+15. **解释器级沙箱当隔离核**（业主 2026-09-08c · #959）：AST 白名单、`__import__` 钩子、builtins 白名单、pathlib/io 桩、猴补 `save` 一类「在 pico-api 进程内限制 Python」冒充隔离。隔离交容器 / 成熟上游（无网、无密钥、tmpfs、rlimit）；Pico 只做合同与门闩（OOXML 合法、空壳门、租户取件、账本写口）。Pico 替模型决定「能不能 import」= 适配层定义行为 = 违法。「不要 bash」指宿主 shell / 宿主 Pi builtins / 通用 exec 动词，**不**指隔离容器内的完整 Python。
 
 ---
 
@@ -77,7 +78,7 @@ Pico 禁止自研内核 / 协议栈 / Agent OS / 第二编排真源。
 | 产品 | 门脸适配、人包、假绿防护、租户隔离 |
 | 接入 | MCP/KB 以后接现成组件（分期），不自写协议内核 |
 | 加载 | 少常驻动词 + Skill 渐进披露；见 [`ADR-CAPABILITY-LOADING.md`](./ADR-CAPABILITY-LOADING.md)。禁自研选工具核 |
-| 工作环境 | 成熟上游隔离执行面（文件/程序/依赖/进程）；本阶段接办公计算机（python-docx / openpyxl / python-pptx），不是通用 bash。Pico 只接线、白名单、账本、门闩。禁 host bash、禁 Pi 内建 bash、禁自研沙箱核 / 自制 jail |
+| 工作环境 | 成熟上游隔离执行面（文件/程序/依赖/进程）；本阶段接办公计算机 = `pico-office` 无网容器跑完整 Python + python-docx / openpyxl / python-pptx，不是通用 bash 动词。Pico 只接线、白名单、账本、门闩。禁 host bash、禁 Pi 内建 bash、禁自研沙箱核 / 自制 jail（含进程内受限解释器）。方案 `PLAN-OFFICE-COMPUTER-V2.md` |
 
 ---
 
