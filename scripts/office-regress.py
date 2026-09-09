@@ -226,7 +226,13 @@ def case_t1(pico: Pico, stamp: str) -> CaseResult:
     res = CaseResult(case="T1a/T1b")
     cid = f"regress-t1-{stamp}"
     pico.upload(cid, "gradebook.xlsx", make_gradebook())
-    _, wall = pico.chat(cid, "gradebook.xlsx 在附件里。把 D2:D7 写成期末40%加平时60%的公式，保存为 xlsx。")
+    # Name the column, not just the range: a bare "D2:D7" once made the model stop and
+    # ask whether D was 期末 or 总分 (correct behaviour, but a false negative here).
+    _, wall = pico.chat(
+        cid,
+        "gradebook.xlsx 在附件里。表头是 姓名/平时/期末/总分。"
+        "把总分列 D2:D7 写成期末40%加平时60%的公式，保存为 xlsx。",
+    )
     res.wall_s += wall
     produced = _produced(pico.artifacts(cid))
     res.artifacts = len(produced)
@@ -403,7 +409,11 @@ def case_t4(pico: Pico, stamp: str) -> CaseResult:
     started = time.perf_counter()
     t.start()
     try:
-        pico.chat(cid, "gradebook.xlsx 在附件里。把 D2:D7 写成期末40%加平时60%的公式，再把每个人的评语写成一段话，保存为 xlsx。")
+        pico.chat(
+            cid,
+            "gradebook.xlsx 在附件里。表头是 姓名/平时/期末/总分。"
+            "把总分列 D2:D7 写成期末40%加平时60%的公式，再把每个人的评语写成一段话，保存为 xlsx。",
+        )
     except httpx.HTTPError as exc:
         res.notes.append(f"T4: stream ended with {type(exc).__name__} (acceptable on cancel)")
     t.join(timeout=30)
