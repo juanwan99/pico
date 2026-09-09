@@ -113,7 +113,12 @@ chown 65532:65532 "$TEACHER_DISK" 2>/dev/null || true
 # box (uid 65532) cannot create the socket there; a host bind we own works.
 OFFICE_SOCK="${PICO_OFFICE_SOCK_HOST:-$ROOT/data/pico-office-sock}"
 mkdir -p "$OFFICE_SOCK"
-chmod 1777 "$OFFICE_SOCK" 2>/dev/null || true
+# Docker pre-creates a missing bind source as root:755; chmod would then fail
+# silently and the box restart-loops. If it is not ours and empty, recreate it.
+if [ "$(stat -c %u "$OFFICE_SOCK")" != "$(id -u)" ] && [ -z "$(ls -A "$OFFICE_SOCK" 2>/dev/null)" ]; then
+  rmdir "$OFFICE_SOCK" && mkdir -p "$OFFICE_SOCK"
+fi
+chmod 1777 "$OFFICE_SOCK" || { echo "[pico] FATAL: cannot chmod $OFFICE_SOCK (owner $(stat -c %u "$OFFICE_SOCK"))" >&2; exit 12; }
 chown 65532:65532 "$OFFICE_SOCK" 2>/dev/null || true
 rm -f "$OFFICE_SOCK/office.sock" 2>/dev/null || true
 
