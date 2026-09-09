@@ -1,5 +1,7 @@
 # Pico agent rules (binding)
 
+> 通用真源（唯一）：`/home/ops/agent-policy/TASK-POLICY.md` （https://github.com/juanwan99/agent-policy/blob/main/TASK-POLICY.md）。本文件只补本仓过门，不另立通用职责。默认一窗做到关；不直推默认分支，全部 PR。
+
 > **现况只认下面框。其余当索引不当现况。卡面四行。怎么跟业主说话不限。**
 
 ```text
