@@ -4,10 +4,10 @@
 DATE: 2026-09-09
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
-在飞: #973 T-SEARCH-DUAL-PROVIDER（web_search 双渠道 · Tavily 默认 · 智谱预置未开 · 待业主 Tavily 钥进 .env）
+在飞: #975 STAGE T-SIDEBAR-WIRE（侧栏可信 + 操控左页 · PR-A 已部 · PR-B 合部中 · 剩 edu 成对卡）· #973 T-SEARCH-DUAL-PROVIDER（待业主 Tavily 钥进 .env）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-      写本文时 tip = aa5f18f0531fb4717abab657b8fdd41bdabf6c86
+      写本文时 tip = 215f04f5d0e5fbbd676797f73a0e901fc84fbd3e（PR-A）
 阻塞: 无
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
