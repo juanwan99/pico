@@ -457,6 +457,42 @@ def _failed_page(page: int, exc: BaseException) -> dict[str, Any]:
     return {"page": page, "ok": False, "count": 0, "error": f"{code}: {_preview(str(exc))}"}
 
 
+# Relay/proxy hops in front of the brain reset connections under load (seen live as
+# "upstream error: do request failed" within seconds). Each page/chunk therefore gets a
+# few attempts with a short backoff; ExtractError (configuration) is never retried.
+_RETRY_BACKOFF_SECONDS = (2.0, 6.0, 12.0)
+
+
+async def _complete_with_retry(
+    complete: Completer,
+    messages: list[dict[str, Any]],
+    *,
+    thinking: bool | None,
+    usage: dict[str, Any],
+    model_out: dict[str, Any],
+    attempts: int | None = None,
+    timeout: int | None = None,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> str:
+    tries = attempts or _env_int("PICO_EXAM_EXTRACT_ATTEMPTS", 3)
+    limit = timeout or _env_int("PICO_EXAM_EXTRACT_PAGE_SECONDS", 240)
+    last: BaseException | None = None
+    for n in range(tries):
+        try:
+            return await asyncio.wait_for(
+                complete(messages, thinking=thinking, usage_out=usage, model_out=model_out),
+                timeout=limit,
+            )
+        except ExtractError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — retried, then surfaced by the caller
+            last = exc
+            if n + 1 < tries:
+                await sleep(_RETRY_BACKOFF_SECONDS[min(n, len(_RETRY_BACKOFF_SECONDS) - 1)])
+    assert last is not None
+    raise last
+
+
 async def extract_text(
     text: str,
     *,
@@ -486,9 +522,8 @@ async def extract_text(
             {"role": "user", "content": user},
         ]
         try:
-            out = await asyncio.wait_for(
-                complete(messages, thinking=False, usage_out=usage, model_out=model_out),
-                timeout=_env_int("PICO_EXAM_EXTRACT_PAGE_SECONDS", 240),
+            out = await _complete_with_retry(
+                complete, messages, thinking=False, usage=usage, model_out=model_out
             )
         except ExtractError:
             raise
@@ -518,11 +553,12 @@ async def extract_pages(
     if not pages:
         raise ExtractError("extract.invalid", "pages 是空的")
     tag = subject_tag(subject_code, subject_name)
-    limit = concurrency or _env_int("PICO_EXAM_EXTRACT_CONCURRENCY", 3)
+    # Serial by default: the live relay's proxy resets concurrent image uploads
+    # (3 parallel ~150 KB bodies lost half of them); raise via env once that hop is fixed.
+    limit = concurrency or _env_int("PICO_EXAM_EXTRACT_CONCURRENCY", 1)
     sem = asyncio.Semaphore(limit)
     usage: dict[str, Any] = {}
     model_out: dict[str, Any] = {}
-    page_timeout = _env_int("PICO_EXAM_EXTRACT_PAGE_SECONDS", 240)
 
     async def one(page: dict[str, Any]) -> tuple[int, list[dict[str, Any]], str, dict[str, Any]]:
         number = int(page["page"])
@@ -538,9 +574,8 @@ async def extract_pages(
         ]
         async with sem:
             try:
-                out = await asyncio.wait_for(
-                    complete(messages, thinking=None, usage_out=usage, model_out=model_out),
-                    timeout=page_timeout,
+                out = await _complete_with_retry(
+                    complete, messages, thinking=None, usage=usage, model_out=model_out
                 )
             except ExtractError:
                 raise

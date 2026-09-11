@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import sqlite3
@@ -23,6 +24,11 @@ from app.settings import get_settings
 
 GOLD_SINGLE = ["C", "D", "C", "B", "D", "A", "C", "D", "C", "D", "C", "A"]
 GOLD_MULTI = ["ACD", "AC", "ABC", "BC"]
+
+
+@pytest.fixture(autouse=True)
+def _no_retry_backoff(monkeypatch):
+    monkeypatch.setattr(ex, "_RETRY_BACKOFF_SECONDS", (0.0, 0.0, 0.0))
 
 
 def _gold_items(page: int | None = None, *, rubric: bool = False) -> list[dict]:
@@ -224,9 +230,74 @@ async def test_extract_pages_merges_and_tolerates_one_failed_page():
 
 @pytest.mark.asyncio
 async def test_extract_pages_all_failed_is_model_failed():
+    calls: list = []
     with pytest.raises(ex.ExtractError) as caught:
-        await ex.extract_pages([_page(1)], complete=_stub({1: RuntimeError("boom")}))
+        await ex.extract_pages([_page(1)], complete=_stub({1: RuntimeError("boom")}, calls))
     assert caught.value.code == "model.failed"
+    assert len(calls) == 3, "transient failures get PICO_EXAM_EXTRACT_ATTEMPTS (default 3) tries"
+
+
+@pytest.mark.asyncio
+async def test_page_retry_recovers_from_transient_relay_reset():
+    """Live relay: 'upstream error: do request failed' on the first try, fine on the next."""
+    attempts: list[int] = []
+    slept: list[float] = []
+
+    async def flaky(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("Error code: 500 - upstream error: do request failed")
+        return json.dumps(_gold_items()[:12])
+
+    async def fake_sleep(seconds):
+        slept.append(seconds)
+
+    out = await ex._complete_with_retry(
+        flaky,
+        [{"role": "user", "content": "x"}],
+        thinking=None,
+        usage={},
+        model_out={},
+        sleep=fake_sleep,
+    )
+    assert json.loads(out)[0]["number"] == 1
+    assert len(attempts) == 2 and slept == [0.0]
+
+
+@pytest.mark.asyncio
+async def test_retry_never_repeats_configuration_errors():
+    calls: list = []
+
+    async def unconfigured(messages, **_):
+        calls.append(1)
+        raise ex.ExtractError("model.unconfigured", "no brain")
+
+    with pytest.raises(ex.ExtractError) as caught:
+        await ex._complete_with_retry(
+            unconfigured, [{"role": "user", "content": "x"}], thinking=False, usage={}, model_out={}
+        )
+    assert caught.value.code == "model.unconfigured" and len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_pages_default_to_serial_calls(monkeypatch):
+    monkeypatch.delenv("PICO_EXAM_EXTRACT_CONCURRENCY", raising=False)
+    active = 0
+    peak = 0
+
+    async def slow(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0)
+        active -= 1
+        img = next(p for p in messages[-1]["content"] if p["type"] == "image")
+        page = int(base64.b64decode(img["data_b64"]).decode())
+        return json.dumps([_gold_items()[page - 1]])
+
+    result = await ex.extract_pages([_page(1), _page(2), _page(3)], complete=slow)
+    assert peak == 1
+    assert [q["number"] for q in result["questions"]] == [1, 2, 3]
 
 
 @pytest.mark.asyncio
