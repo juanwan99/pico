@@ -3,7 +3,7 @@ import { ErrorTypes, registerPage } from 'librechat-data-provider';
 import { OpenIDIcon, useToastContext } from '@librechat/client';
 import { useOutletContext, useSearchParams, useLocation } from 'react-router-dom';
 import type { TLoginLayoutContext } from '~/common';
-import { getLoginError, persistRedirectToSession } from '~/utils';
+import { getLoginError, getSsoLoginMessage, persistRedirectToSession } from '~/utils';
 import { ErrorMessage } from '~/components/Auth/ErrorMessage';
 import SocialButton from '~/components/Auth/SocialButton';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -25,6 +25,7 @@ function Login() {
   const disableAutoRedirect = searchParams.get('redirect') === 'false';
 
   const [isAutoRedirectDisabled, setIsAutoRedirectDisabled] = useState(disableAutoRedirect);
+  const [ssoMessage, setSsoMessage] = useState(() => getSsoLoginMessage(searchParams.get('sso')));
 
   useEffect(() => {
     const redirectTo = searchParams.get('redirect_to');
@@ -35,6 +36,14 @@ function Login() {
       if (state?.redirect_to) {
         persistRedirectToSession(state.redirect_to);
       }
+    }
+
+    const ssoReason = searchParams?.get('sso');
+    if (ssoReason) {
+      setSsoMessage(getSsoLoginMessage(ssoReason));
+      const cleared = new URLSearchParams(searchParams);
+      cleared.delete('sso');
+      setSearchParams(cleared, { replace: true });
     }
 
     const oauthError = searchParams?.get('error');
@@ -100,6 +109,7 @@ function Login() {
 
   return (
     <>
+      {ssoMessage ? <ErrorMessage>{ssoMessage}</ErrorMessage> : null}
       {error != null && <ErrorMessage>{localize(getLoginError(error))}</ErrorMessage>}
       {startupConfig?.emailLoginEnabled === true && (
         <LoginForm

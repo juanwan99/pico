@@ -33,6 +33,24 @@ function parentDomainCookie(domain) {
   return typeof domain === 'string' && /(^|\.)weiyuji\.cn$/i.test(String(domain).trim());
 }
 
+/** Map consume failures to /login?sso= — teachers have no Pico password. */
+function ssoFailReason(err) {
+  const code = String(err?.code || '');
+  if (code === 'auth.expired') return 'expired';
+  if (code === 'auth.missing') return 'missing';
+  if (code === 'auth.iss_unknown') return 'upstream';
+  const status = Number(err?.status);
+  if (Number.isFinite(status) && status >= 500) return 'upstream';
+  const msg = String(err?.message || '').toLowerCase();
+  if (msg.includes('already used')) return 'used';
+  if (/fetch|econnrefused|network|enotfound/i.test(msg)) return 'upstream';
+  return 'invalid';
+}
+
+function ssoFailLocation(err) {
+  return `/login?sso=${ssoFailReason(err)}`;
+}
+
 function eduMembershipHeader(user) {
   const eduId = String(user?.eduId || '').trim();
   const schoolId = String(user?.eduSchoolId || '').trim();
@@ -131,7 +149,7 @@ async function eduSsoController(req, res) {
   try {
     if (parentDomainCookie(process.env.COOKIE_DOMAIN)) {
       logger.warn('[edu-sso] refusing parent-domain COOKIE_DOMAIN');
-      return res.redirect(302, '/login');
+      return res.redirect(302, '/login?sso=invalid');
     }
     const query = req.query && typeof req.query === 'object' ? req.query : {};
     for (const key of FORBIDDEN_QS) {
@@ -143,11 +161,11 @@ async function eduSsoController(req, res) {
     const { schoolId, membershipId, displayName } = await consumeTicket(ticket);
     const user = await findOrCreateEduUser({ schoolId, membershipId, displayName });
     const userId = user._id || user.id;
-    await setAuthTokens(userId, res, null, req);
+    await setAuthTokens(userId, res, null, req, { sameSite: 'lax' });
     return res.redirect(302, '/c/new');
   } catch (err) {
     logger.warn('[edu-sso] ticket not accepted', err?.code || err?.message || err);
-    return res.redirect(302, '/login');
+    return res.redirect(302, ssoFailLocation(err));
   }
 }
 
@@ -159,4 +177,6 @@ module.exports = {
   eduMembershipHeader,
   picoApiBase,
   parentDomainCookie,
+  ssoFailReason,
+  ssoFailLocation,
 };

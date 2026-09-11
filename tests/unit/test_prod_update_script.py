@@ -511,6 +511,13 @@ def test_prod_update_bootstrap_only_checkouts_then_execs_impl() -> None:
     assert "git checkout --detach" in bootstrap
     assert "docker compose" not in bootstrap
     assert "docker compose" in impl
+    up_lines = [
+        ln
+        for ln in impl.splitlines()
+        if ln.lstrip().startswith("docker compose") and " up " in ln
+    ]
+    assert up_lines, "impl must still compose-up the host stack"
+    assert all("--force-recreate" not in ln for ln in up_lines)
     assert "prepare_office_sock_bind" in impl
     assert 'chmod 1777 "$dir"' in impl
     assert "chown 65532:65532 \"$OFFICE_SOCK\"" not in impl
