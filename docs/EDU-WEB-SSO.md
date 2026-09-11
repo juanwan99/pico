@@ -6,10 +6,10 @@ School login is the only login the teacher sees. Pico workbench consumes a **one
 |--|--|
 | Ticket | HS256 JWT `aud=pico-web` · `jti` · TTL ≤ 90s · `school_id` + `membership_id` + `display_name` · optional `named_ids` (item UUIDs only) |
 | Consume | `POST /v1/edu-sso/consume` on pico-api (loopback). Replay → 401 |
-| Session | `GET /api/auth/edu-sso?ticket=` on LibreChat → host-only cookies → `/c/new` |
+| Session | `GET /api/auth/edu-sso?ticket=` on LibreChat → host-only cookies, `SameSite=Lax` (cross-site first hop) → `/c/new` |
 | Identity | LibreChat `eduId` = membership. Display name from school staff name (else login). Proxy header `school_id:membership_id` |
 | Materials | Workbench lists/searches via `/v1/edu/materials` as this membership. **Default unchecked** (本场成员 included). Ticket `named_ids` are not pre-checked. Teacher ticks this turn. Unchecked → no school file bodies in the round. |
-| Fail | Invalid/spent ticket → Pico `/login`. Do not take down edu |
+| Fail | Invalid/spent/expired ticket → Pico `/login?sso=used|expired|…` with a human line. Do not dump a password wall. Do not take down edu |
 
 Forbidden: iframe, edu `/pico` subpage, parent-domain `.weiyuji.cn` cookies, field/student/page/material **bodies** on the ticket or jump URL, school-wide service dump, hot-patching a running container. Named item **ids** may ride the one-time ticket for audit only; consume must not persist them as default checks.
 

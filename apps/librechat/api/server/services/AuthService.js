@@ -648,14 +648,19 @@ const setCloudFrontAuthCookies = (req, res, user, options = {}) => {
  * @param {ServerResponse} res
  * @param {ISession | null} [_session=null]
  * @param {ServerRequest | null} [req=null]
+ * @param {{ sameSite?: 'lax' | 'strict' } | null} [options=null]
+ *   `sameSite: 'lax'` is for cross-site top-level jumps (edu → pico). Strict
+ *   cookies are not sent on the first hop after a cross-site 302, so
+ *   silentRefresh lands on /login until the teacher refreshes.
  * @returns
  */
-const setAuthTokens = async (userId, res, _session = null, req = null) => {
+const setAuthTokens = async (userId, res, _session = null, req = null, options = null) => {
   try {
     let session = _session;
     let refreshToken;
     let refreshTokenExpires;
     const expiresIn = math(process.env.REFRESH_TOKEN_EXPIRY, DEFAULT_REFRESH_TOKEN_EXPIRY);
+    const sameSite = options && options.sameSite === 'lax' ? 'lax' : 'strict';
 
     if (session && session._id && session.expiration != null) {
       refreshTokenExpires = session.expiration.getTime();
@@ -675,13 +680,13 @@ const setAuthTokens = async (userId, res, _session = null, req = null) => {
       expires: new Date(refreshTokenExpires),
       httpOnly: true,
       secure: shouldUseSecureCookie(),
-      sameSite: 'strict',
+      sameSite,
     });
     res.cookie('token_provider', 'librechat', {
       expires: new Date(refreshTokenExpires),
       httpOnly: true,
       secure: shouldUseSecureCookie(),
-      sameSite: 'strict',
+      sameSite,
     });
 
     setCloudFrontAuthCookies(req, res, user, { userId: user?._id ?? userId });

@@ -28,7 +28,13 @@ jest.mock(
   { virtual: true },
 );
 
-const { eduSsoController, parentDomainCookie, eduMembershipHeader, eduDisplayName } = require('./eduSso');
+const {
+  eduSsoController,
+  parentDomainCookie,
+  eduMembershipHeader,
+  eduDisplayName,
+  ssoFailReason,
+} = require('./eduSso');
 
 const SCHOOL = '627bcf3a-a9a8-4047-afcc-3d4878e2a7af';
 const MEMBER = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
@@ -70,7 +76,13 @@ describe('edu SSO', () => {
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe('/c/new');
     expect(res.headers.location).not.toMatch(/login/);
-    expect(mockSetAuthTokens).toHaveBeenCalledWith('user-1', expect.anything(), null, expect.anything());
+    expect(mockSetAuthTokens).toHaveBeenCalledWith(
+      'user-1',
+      expect.anything(),
+      null,
+      expect.anything(),
+      { sameSite: 'lax' },
+    );
     expect(mockCreateUser).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: 'edu',
@@ -109,7 +121,24 @@ describe('edu SSO', () => {
     expect(res.headers.location).toBe('/c/new');
     expect(mockCreateUser).not.toHaveBeenCalled();
     expect(mockUpdateUser).toHaveBeenCalledWith('existing', expect.objectContaining({ name: '孙骏博' }));
-    expect(mockSetAuthTokens).toHaveBeenCalledWith('existing', expect.anything(), null, expect.anything());
+    expect(mockSetAuthTokens).toHaveBeenCalledWith(
+      'existing',
+      expect.anything(),
+      null,
+      expect.anything(),
+      { sameSite: 'lax' },
+    );
+  });
+
+  it('sends expired tickets to login with a human sso reason', async () => {
+    global.fetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ detail: { code: 'auth.expired', message: 'ticket expired' } }),
+    });
+    const res = await request(app).get('/api/auth/edu-sso').query({ ticket: 'old' });
+    expect(res.headers.location).toBe('/login?sso=expired');
+    expect(mockSetAuthTokens).not.toHaveBeenCalled();
   });
 
   it('falls back to workbench login when ticket is spent or missing', async () => {
@@ -119,11 +148,11 @@ describe('edu SSO', () => {
       json: async () => ({ detail: { code: 'auth.invalid', message: 'ticket already used' } }),
     });
     const spent = await request(app).get('/api/auth/edu-sso').query({ ticket: 'used' });
-    expect(spent.headers.location).toBe('/login');
+    expect(spent.headers.location).toBe('/login?sso=used');
     expect(mockSetAuthTokens).not.toHaveBeenCalled();
 
     const missing = await request(app).get('/api/auth/edu-sso');
-    expect(missing.headers.location).toBe('/login');
+    expect(missing.headers.location).toBe('/login?sso=missing');
   });
 
   it('strips field/student query and never sets parent-domain cookies', async () => {
@@ -145,7 +174,7 @@ describe('edu SSO', () => {
   it('refuses COOKIE_DOMAIN on parent edu domain', async () => {
     process.env.COOKIE_DOMAIN = '.weiyuji.cn';
     const res = await request(app).get('/api/auth/edu-sso').query({ ticket: 'x' });
-    expect(res.headers.location).toBe('/login');
+    expect(res.headers.location).toBe('/login?sso=invalid');
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -158,8 +187,17 @@ describe('edu SSO', () => {
     const src = readFileSync(join(__dirname, 'eduSso.js'), 'utf8');
     expect(src).not.toMatch(/<iframe/i);
     expect(src).toMatch(/\/c\/new/);
-    expect(src).toMatch(/\/login/);
+    expect(src).toMatch(/\/login\?sso=/);
     expect(src).not.toMatch(/name:\s*['"]学校账号['"]/);
+  });
+
+  it('maps consume errors to human sso query reasons', () => {
+    expect(ssoFailReason({ code: 'auth.expired' })).toBe('expired');
+    expect(ssoFailReason({ code: 'auth.missing' })).toBe('missing');
+    expect(ssoFailReason({ code: 'auth.iss_unknown' })).toBe('upstream');
+    expect(ssoFailReason({ code: 'auth.invalid', message: 'ticket already used' })).toBe('used');
+    expect(ssoFailReason({ status: 502, message: 'bad gateway' })).toBe('upstream');
+    expect(ssoFailReason({ code: 'auth.invalid', message: 'bad jwt' })).toBe('invalid');
   });
 
   it('never uses 学校账号 as the workbench name', () => {

@@ -249,7 +249,7 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         "kimi_agent_canary_membership_count": kimi_canary,
         # KA-4 HARD: transitional self-built loop remains unavailable
         "legacy_loop_unavailable": True,
-        # prod-update waits on this before --force-recreate (single-process runs die with it).
+        # prod-update waits on this before recreate (single-process runs die with it).
         "inflight_runs": run_service.inflight_run_count(),
         "rate_limit": {
             "chat_rpm": settings.pico_chat_rpm,

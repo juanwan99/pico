@@ -134,7 +134,7 @@ fi
 
 docker compose -f "$COMPOSE_FILE" build pico-api librechat pico-sandbox pico-office
 
-# Teacher runs live inside the pico-api process; --force-recreate kills them.
+# Teacher runs live inside the pico-api process; recreating pico-api kills them.
 # Owner rule (2026-09-09): deploy may interrupt, but wait first. Poll the live
 # /health inflight_runs (old image without the field, or API down, counts as 0).
 # Past the budget we warn and continue — no drain mode, no cross-process resume.
@@ -170,7 +170,11 @@ if [ "$inflight" -gt 0 ]; then
   fi
 fi
 
-docker compose -f "$COMPOSE_FILE" up -d --force-recreate pico-api librechat pico-sandbox pico-office meilisearch
+# Recreate only when the image or compose config actually changed.
+# --force-recreate took the public site down 1–3 min on every SHA, including
+# no-op rebuilds. Teacher runs still die if pico-api itself recreates; the
+# inflight wait above stays. Do not invent a drain OS / second proxy.
+docker compose -f "$COMPOSE_FILE" up -d pico-api librechat pico-sandbox pico-office meilisearch
 
 echo "[pico] ps:"
 docker compose -f "$COMPOSE_FILE" ps

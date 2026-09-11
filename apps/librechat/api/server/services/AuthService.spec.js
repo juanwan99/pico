@@ -1332,6 +1332,31 @@ describe('CloudFront cookie integration', () => {
 
       expect(result).toBe('mock-access-token');
     });
+
+    it('keeps SameSite=strict on password login', async () => {
+      const res = mockResponse();
+      await setAuthTokens('user-123', res);
+      expect(res.cookie).toHaveBeenCalledWith(
+        'refreshToken',
+        'mock-refresh-token',
+        expect.objectContaining({ sameSite: 'strict' }),
+      );
+    });
+
+    it('sets SameSite=Lax when edu SSO asks (cross-site first hop)', async () => {
+      const res = mockResponse();
+      await setAuthTokens('user-123', res, null, null, { sameSite: 'lax' });
+      expect(res.cookie).toHaveBeenCalledWith(
+        'refreshToken',
+        'mock-refresh-token',
+        expect.objectContaining({ sameSite: 'lax' }),
+      );
+      expect(res.cookie).toHaveBeenCalledWith(
+        'token_provider',
+        'librechat',
+        expect.objectContaining({ sameSite: 'lax' }),
+      );
+    });
   });
 });
 
