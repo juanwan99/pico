@@ -28,7 +28,7 @@ GOLD_MULTI = ["ACD", "AC", "ABC", "BC"]
 
 @pytest.fixture(autouse=True)
 def _no_retry_backoff(monkeypatch):
-    monkeypatch.setattr(ex, "_RETRY_BACKOFF_SECONDS", (0.0, 0.0, 0.0))
+    monkeypatch.setattr(ex, "_RETRY_BACKOFF_SECONDS", (0.0, 0.0, 0.0, 0.0))
 
 
 def _gold_items(page: int | None = None, *, rubric: bool = False) -> list[dict]:
@@ -234,7 +234,7 @@ async def test_extract_pages_all_failed_is_model_failed():
     with pytest.raises(ex.ExtractError) as caught:
         await ex.extract_pages([_page(1)], complete=_stub({1: RuntimeError("boom")}, calls))
     assert caught.value.code == "model.failed"
-    assert len(calls) == 3, "transient failures get PICO_EXAM_EXTRACT_ATTEMPTS (default 3) tries"
+    assert len(calls) == 5, "transient failures get PICO_EXAM_EXTRACT_ATTEMPTS (default 5) tries"
 
 
 @pytest.mark.asyncio

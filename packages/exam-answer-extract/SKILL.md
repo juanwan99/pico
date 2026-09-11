@@ -115,5 +115,5 @@ always-apply: false
 | 环境变量 | 默认 | 说明 |
 |---|---|---|
 | `PICO_EXAM_EXTRACT_CONCURRENCY` | `1` | 逐页并发。现网中继前面的代理在并发上传页图时会重置连接，先串行；那一跳修好后再调大 |
-| `PICO_EXAM_EXTRACT_ATTEMPTS` | `3` | 单页 / 单块的尝试次数，退避 2s / 6s / 12s；只重试瞬时错误，配置错误（`model.unconfigured`）不重试 |
+| `PICO_EXAM_EXTRACT_ATTEMPTS` | `5` | 单页 / 单块的尝试次数，退避 3s / 8s / 20s / 45s（代理重置成簇出现、单次只耗 ~1 s，拉长跨度比密集重试有效）；只重试瞬时错误，配置错误（`model.unconfigured`）不重试 |
 | `PICO_EXAM_EXTRACT_PAGE_SECONDS` | `240` | 单次模型调用超时 |
