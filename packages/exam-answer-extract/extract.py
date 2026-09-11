@@ -457,10 +457,12 @@ def _failed_page(page: int, exc: BaseException) -> dict[str, Any]:
     return {"page": page, "ok": False, "count": 0, "error": f"{code}: {_preview(str(exc))}"}
 
 
-# Relay/proxy hops in front of the brain reset connections under load (seen live as
-# "upstream error: do request failed" within seconds). Each page/chunk therefore gets a
-# few attempts with a short backoff; ExtractError (configuration) is never retried.
-_RETRY_BACKOFF_SECONDS = (2.0, 6.0, 12.0)
+# Relay/proxy hops in front of the brain reset connections in bursts (seen live as
+# "upstream error: do request failed" within ~1 s, three in a row inside a 10 s window,
+# then the very next request passes). Resets are cheap, so spread attempts across
+# a longer window instead of hammering; ExtractError (configuration) is never retried.
+_RETRY_BACKOFF_SECONDS = (3.0, 8.0, 20.0, 45.0)
+_DEFAULT_ATTEMPTS = 5
 
 
 async def _complete_with_retry(
@@ -474,7 +476,7 @@ async def _complete_with_retry(
     timeout: int | None = None,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> str:
-    tries = attempts or _env_int("PICO_EXAM_EXTRACT_ATTEMPTS", 3)
+    tries = attempts or _env_int("PICO_EXAM_EXTRACT_ATTEMPTS", _DEFAULT_ATTEMPTS)
     limit = timeout or _env_int("PICO_EXAM_EXTRACT_PAGE_SECONDS", 240)
     last: BaseException | None = None
     for n in range(tries):
