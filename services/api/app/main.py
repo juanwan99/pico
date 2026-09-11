@@ -47,6 +47,7 @@ from app.edu_files import router as edu_files_router
 from app.edu_kb_ingest import router as edu_kb_ingest_router
 from app.edu_school import router as edu_school_router
 from app.edu_sso import router as edu_sso_router
+from app.exam_answer_extract import router as exam_answer_extract_router
 from app.gateway_status import account_soft_action, gateway_status
 from app.html_pages import router as html_pages_router
 from app.kb_rebuild import rebuild_materials
@@ -148,6 +149,7 @@ app.add_middleware(
 app.include_router(openai_compat_router)
 app.include_router(edu_files_router)
 app.include_router(edu_kb_ingest_router)
+app.include_router(exam_answer_extract_router)
 app.include_router(edu_sso_router)
 app.include_router(edu_school_router)
 app.include_router(my_files_router)
