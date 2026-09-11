@@ -109,3 +109,11 @@ always-apply: false
 
 - 成功：1–12 `C D C B D A C D C D C A`，13–16 `ACD / AC / ABC / BC`，17–21 有非选择要点；带细则版 17–21 的 `rubric` 非空。
 - 失败对人话：`extract.empty`（模型没抽出题号）、`model.failed`（上游没做成）、`model.unconfigured`（没配脑）。禁止托底。
+
+## 运行参数（适配层，不改语义）
+
+| 环境变量 | 默认 | 说明 |
+|---|---|---|
+| `PICO_EXAM_EXTRACT_CONCURRENCY` | `1` | 逐页并发。现网中继前面的代理在并发上传页图时会重置连接，先串行；那一跳修好后再调大 |
+| `PICO_EXAM_EXTRACT_ATTEMPTS` | `3` | 单页 / 单块的尝试次数，退避 2s / 6s / 12s；只重试瞬时错误，配置错误（`model.unconfigured`）不重试 |
+| `PICO_EXAM_EXTRACT_PAGE_SECONDS` | `240` | 单次模型调用超时 |
