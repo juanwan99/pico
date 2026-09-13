@@ -100,4 +100,30 @@ describe('pico composer ingest (T-AGENT-PLAIN-V1 F2)', () => {
       }),
     ).rejects.toThrow(/没写进账本/);
   });
+
+  it('surfaces the ledger human line on 422 (legacy .doc did not convert)', async () => {
+    const human =
+      '《计划.doc》是旧格式，这次没能转成模型能读的文件，没有附进本轮对话。原件留在「我的文件」。';
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () =>
+        JSON.stringify({
+          detail: { code: 'file.legacy_unconvertible', message: human, user_message: human },
+        }),
+    });
+    let caught;
+    try {
+      await ingestOfficeToPico({
+        req: { user: { id: 'user-lc-1' }, body: {}, headers: {} },
+        filename: '计划.doc',
+        buffer: Buffer.from('OLE'),
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught.message).toBe(human);
+    expect(caught.userErrorStatusCode).toBe(422);
+  });
 });

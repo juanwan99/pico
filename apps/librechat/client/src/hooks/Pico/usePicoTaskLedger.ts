@@ -420,6 +420,9 @@ export function usePicoTaskLedger(
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [rerunError, setRerunError] = useState<string | null>(null);
+  // pending_* → real conversation rebind failed: the paperclip the teacher
+  // attached on /c/new did not follow. Say so instead of swallowing (#985).
+  const [rebindError, setRebindError] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(true);
   const [tick, setTick] = useState(0);
   const activeRun = isActiveRun(run);
@@ -612,11 +615,15 @@ export function usePicoTaskLedger(
             sessionStorage.removeItem('pico:rebindFrom');
             sessionStorage.removeItem('pico:rebindTo');
             sessionStorage.removeItem('pico:pendingConvo');
+            setRebindError(null);
             setTick((n) => n + 1);
           }
         }
       } catch {
-        /* next conversation change or refresh() retries */
+        /* sessionStorage keys stay; the next conversation change or refresh() retries */
+        if (!cancelled) {
+          setRebindError('刚才附的文件没接上这个会话。请重新用回形针传一次，或刷新页面。');
+        }
       }
     })();
     return () => {
@@ -631,6 +638,7 @@ export function usePicoTaskLedger(
     setArtifacts([]);
     setCancelError(null);
     setRerunError(null);
+    setRebindError(null);
     setCancelRequestedRunId(null);
     runRef.current = null;
     taskRef.current = null;
@@ -807,7 +815,7 @@ export function usePicoTaskLedger(
     statusLabel: computeRunStatusLabel(run, isSubmitting, artifacts, events),
     processHint: composeProcessHint(run, events),
     loading,
-    error: rerunError ?? cancelError ?? loadError,
+    error: rerunError ?? cancelError ?? rebindError ?? loadError,
     refresh,
     cancelling:
       cancelRequestInFlight ||

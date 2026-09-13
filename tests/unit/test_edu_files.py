@@ -562,7 +562,13 @@ def test_paperclip_pdf_injects_into_this_conversation(client: TestClient) -> Non
     assert injected.endswith("这是什么")
 
 
-def test_legacy_doc_lands_unread_not_dropped(client: TestClient, monkeypatch) -> None:
+def test_legacy_doc_convert_failure_is_not_a_green_paperclip(
+    client: TestClient, monkeypatch
+) -> None:
+    """#985: OLE that never became OOXML used to answer 200 and ride into the turn
+    behind a green paperclip; the teacher only learned from the model. Now the
+    upload fails with a human line, the original stays in the cabinet, and the
+    conversation does not list it."""
     from pico_orchestrator.gateway import ToolError
 
     async def boom(*_a, **_k):
@@ -573,7 +579,7 @@ def test_legacy_doc_lands_unread_not_dropped(client: TestClient, monkeypatch) ->
 
     from app.auth import Principal
     from app.db import session_factory
-    from app.edu_files import inject_conversation_uploads, uploads_for_conversation
+    from app.edu_files import load_edu_file, uploads_for_conversation
 
     token = _token()
     res = client.post(
@@ -587,12 +593,15 @@ def test_legacy_doc_lands_unread_not_dropped(client: TestClient, monkeypatch) ->
             "content_b64": base64.b64encode(b"OLE-not-ooxml").decode("ascii"),
         },
     )
-    assert res.status_code == 200, res.text
-    body = res.json()
-    assert body["id"]
-    assert body["status"] != "ok"
-    err = str(body.get("error") or body.get("headline") or "")
-    assert "OLE" in err or "转不开" in err
+    assert res.status_code == 422, res.text
+    detail = res.json()["detail"]
+    assert detail["code"] == "file.legacy_unconvertible"
+    assert detail["id"]
+    human = detail["user_message"]
+    assert "教师教学计划.doc" in human
+    assert "没有附进本轮对话" in human
+    assert "我的文件" in human
+    assert "OLE" not in human
     principal = Principal(
         school_id="school-a",
         membership_id="m-edu",
@@ -603,20 +612,16 @@ def test_legacy_doc_lands_unread_not_dropped(client: TestClient, monkeypatch) ->
         raw={},
     )
 
-    async def _load() -> list:
+    async def _load() -> tuple[list, dict | None]:
         factory = session_factory()
         async with factory() as session:
-            return await uploads_for_conversation(session, principal, "convo-legacy-doc")
+            rows = await uploads_for_conversation(session, principal, "convo-legacy-doc")
+        return rows, await load_edu_file(principal, detail["id"])
 
-    rows = asyncio.run(_load())
-    assert rows
-    assert rows[0]["title"] == "教师教学计划.doc"
-    injected = inject_conversation_uploads("看看这是什么", rows)
-    assert "教师教学计划.doc" in injected
-    assert "另存为" not in injected
-    assert "没抽出正文" not in injected
-    assert "已随本轮交给模型文件口" not in injected
-    assert "文件口没有" in injected
+    rows, kept = asyncio.run(_load())
+    assert not [r for r in rows if r.get("title") == "教师教学计划.doc"]
+    assert kept is not None
+    assert kept["status"] != "ok"
 
 
 def _visible_scan_pdf(token: str) -> bytes:

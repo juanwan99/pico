@@ -105,6 +105,27 @@ async function readOfficeBytes({ buffer, filepath, filePath }) {
   return null;
 }
 
+async function humanIngestError(res) {
+  let text = '';
+  try {
+    text = await res.text();
+  } catch {
+    return '';
+  }
+  try {
+    const parsed = JSON.parse(text);
+    const detail = parsed && typeof parsed.detail === 'object' ? parsed.detail : null;
+    const candidate =
+      (detail && (detail.user_message || detail.message)) ||
+      parsed?.user_message ||
+      (typeof parsed?.detail === 'string' ? parsed.detail : '') ||
+      '';
+    return typeof candidate === 'string' ? candidate.slice(0, 300) : '';
+  } catch {
+    return '';
+  }
+}
+
 async function ingestOfficeToPico({ req, filename, filepath, buffer, filePath }) {
   const name = decodeUploadName(filename);
   const ext = path.extname(name).toLowerCase();
@@ -136,7 +157,14 @@ async function ingestOfficeToPico({ req, filename, filepath, buffer, filePath })
   });
   if (!res.ok) {
     logger.warn(`[pico office ingest] HTTP ${res.status}`);
-    throw new Error(`文件没写进账本（${res.status}）`);
+    // Pico answers 4xx with a teacher-facing line (e.g. legacy .doc that never
+    // became OOXML, #985). Surface it instead of a bare status.
+    const human = await humanIngestError(res);
+    const err = new Error(human || `文件没写进账本（${res.status}）`);
+    if (res.status >= 400 && res.status < 500) {
+      err.userErrorStatusCode = res.status;
+    }
+    throw err;
   }
   const json = await res.json();
   if (!json || !json.id) {
