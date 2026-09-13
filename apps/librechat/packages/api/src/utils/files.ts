@@ -7,6 +7,10 @@ const USER_FACING_UPLOAD_ERRORS = [
   'Invalid file format',
   'exceeds token limit',
   'Unable to extract text from',
+  // Pico ledger ingest speaks Chinese to the teacher; let it through (#985).
+  '没写进账本',
+  '没有附进本轮对话',
+  '文件是空的',
 ] as const;
 
 const ASCII_FILENAME_SAFE_PATTERN = /^[a-zA-Z0-9._-]$/;

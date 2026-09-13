@@ -31,6 +31,10 @@ KIND_SRC = "edu_office"
 KIND_EXCERPT = "edu_excerpt"
 TEXT_KINDS = frozenset({"md", "txt", "json", "csv", "tsv", "html", "htm"})
 RESERVED_CONVO = frozenset({"new", "search"})
+# Cabinet-only landing for uploads that must not ride into any turn (legacy
+# OLE that never converted). Not None/"" so the unbound-burst fallback and the
+# per-conversation ledger view both skip it; still owned by the membership.
+CABINET_ONLY_CONVO = "cabinet:unattached"
 EDU_READ_PREFIX = "edu-read ·"
 PIXEL_KINDS = frozenset({"png", "jpg", "jpeg", "webp", "gif"})
 PAPERCLIP_HINT = (
@@ -764,6 +768,10 @@ async def post_edu_file(
     try:
         data = await convert_legacy_office_bytes(filename, data)
     except LegacyOfficeConvertError as err:
+        # #985: a .doc/.xls/.ppt that never became OOXML must not ride into
+        # this turn behind a green paperclip. Keep the original in the cabinet
+        # (not attached to the conversation) and fail the upload with a human
+        # line so the teacher sees it now, not from the model later.
         logger.info("legacy office ingest convert failed name=%s", filename)
         extract = extract_for_kb(filename, data)
         extract["status"] = "unsupported"
@@ -774,10 +782,23 @@ async def post_edu_file(
             filename=filename,
             data=data,
             extract=extract,
-            conversation_id=x_conversation_id,
+            conversation_id=CABINET_ONLY_CONVO,
             folder_id=folder_id,
         )
-        return _payload(file_id, extract)
+        human = (
+            f"《{filename}》是旧格式，这次没能转成模型能读的文件，没有附进本轮对话。"
+            "原件留在「我的文件」；可以把内容粘进对话，或换成 .docx/.xlsx/.pptx 再传。"
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "file.legacy_unconvertible",
+                "message": human,
+                "user_message": human,
+                "id": file_id,
+                "error": err.message,
+            },
+        ) from err
     extract = extract_for_kb(filename, data)
     file_id = await persist_edu_file(
         principal,

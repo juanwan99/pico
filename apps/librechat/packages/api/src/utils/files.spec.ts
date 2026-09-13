@@ -544,6 +544,15 @@ describe('resolveUploadErrorMessage', () => {
     expect(resolveUploadErrorMessage({ message: msg })).toBe(msg);
   });
 
+  test('surfaces Pico ledger ingest lines (Chinese, teacher-facing)', () => {
+    const legacy =
+      '《计划.doc》是旧格式，这次没能转成模型能读的文件，没有附进本轮对话。原件留在「我的文件」。';
+    expect(resolveUploadErrorMessage({ message: legacy })).toBe(legacy);
+    expect(resolveUploadErrorMessage({ message: '文件没写进账本（502）' })).toBe(
+      '文件没写进账本（502）',
+    );
+  });
+
   test('accepts a custom default message', () => {
     expect(resolveUploadErrorMessage(null, 'Custom default')).toBe('Custom default');
   });
