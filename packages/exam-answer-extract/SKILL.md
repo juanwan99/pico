@@ -70,7 +70,7 @@ always-apply: false
   "rubric": "细则：解析、补充说明、评分标准。没有则空字符串。禁止把细则写进 answer。",
   "score": 分值(int) 或 null；没有分值必须 null，禁止默认填 1,
   "options_count": 选择题选项数，默认 4；非选择题 null,
-  "sub_count": 小问数，识别 (1)（1）1) ①；没有小问为 1,
+  "sub_count": 小问数：只数 (1)（1）1) 这一层；①②③ 是同一小问里的多个空，不是小问；没有小问为 1,
   "has_figure": 答案或题目含需要作答的图则为 true,
   "quote": "原文里能定位这题答案的一小段（不超过 40 字）；没有则空字符串"
 }
@@ -80,6 +80,7 @@ always-apply: false
 - 纯答案卷：有什么收什么，rubric 可以为 ""。
 - 详细解析版：answer 只留答案；过程、解析、补充说明、评分标准全部放进 rubric，不要丢。
 - 答案含图 / 作图题：has_figure=true，并给够 sub_count。
+- answer 里保留原卷的小问号 (1)(2) 和空号 ①②，不要抹掉：edu 靠它们把答案落到答题卡的每一行每一空。
 - 选择题：单个字母 → single_choice；多个字母 → multi_choice。字母必须逐题抄进 answer，不要合并成一串。
 - 短填空 → fill_in_blank；要写步骤或作图 → short_answer。
 - 无法判断分值时 score 必须为 null。

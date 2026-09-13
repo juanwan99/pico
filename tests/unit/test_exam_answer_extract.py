@@ -512,3 +512,12 @@ def test_route_empty_and_failed_codes(client: TestClient, monkeypatch, tmp_path)
     rows = _usage_rows(tmp_path)
     # same text twice → one idempotent row; the page request is the second row
     assert len(rows) == 2 and all(r["tokens_unknown"] == 1 for r in rows)
+
+
+def test_prompt_counts_sub_questions_not_circled_blanks():
+    """edu-core#1515: sub_count is the (1)(2) level; ①② are blanks inside one 小问 and must stay in answer."""
+    prompts = ex.load_prompts()
+    system = prompts["system"]
+    assert "只数 (1)（1）1) 这一层" in system
+    assert "①②③ 是同一小问里的多个空，不是小问" in system
+    assert "保留原卷的小问号 (1)(2) 和空号 ①②" in system
