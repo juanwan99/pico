@@ -463,6 +463,7 @@ def _failed_page(page: int, exc: BaseException) -> dict[str, Any]:
 # a longer window instead of hammering; ExtractError (configuration) is never retried.
 _RETRY_BACKOFF_SECONDS = (3.0, 8.0, 20.0, 45.0)
 _DEFAULT_ATTEMPTS = 5
+_DEFAULT_CONCURRENCY = 4
 
 
 async def _complete_with_retry(
@@ -555,9 +556,11 @@ async def extract_pages(
     if not pages:
         raise ExtractError("extract.invalid", "pages 是空的")
     tag = subject_tag(subject_code, subject_name)
-    # Serial by default: the live relay's proxy resets concurrent image uploads
-    # (3 parallel ~150 KB bodies lost half of them); raise via env once that hop is fixed.
-    limit = concurrency or _env_int("PICO_EXAM_EXTRACT_CONCURRENCY", 1)
+    # Pages go out in parallel, bounded. 1 was a workaround while the ECS egress hop
+    # reset concurrent uploads (pico #979); that hop now chains through DMIT
+    # (edu-core#1506) and 3×300 KB / 2×1.5 MB concurrent uploads pass, so a 4-page scan
+    # is one wave. Per-page retry/backoff below still absorbs a stray reset.
+    limit = concurrency or _env_int("PICO_EXAM_EXTRACT_CONCURRENCY", _DEFAULT_CONCURRENCY)
     sem = asyncio.Semaphore(limit)
     usage: dict[str, Any] = {}
     model_out: dict[str, Any] = {}
