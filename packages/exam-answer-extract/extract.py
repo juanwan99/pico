@@ -464,6 +464,16 @@ def _failed_page(page: int, exc: BaseException) -> dict[str, Any]:
 _RETRY_BACKOFF_SECONDS = (3.0, 8.0, 20.0, 45.0)
 _DEFAULT_ATTEMPTS = 5
 _DEFAULT_CONCURRENCY = 4
+# Reasoning effort for one page image. "low" (thinking=False) matched or beat "medium"
+# on every page of the 1092×1648 gold scan (21 runs, edu-core#1506) and returns rubric
+# pages in half the time; the miss-reads came from 524 px pages, not from effort.
+# "medium" (thinking=None → provider default) stays one env flip away.
+_DEFAULT_PAGE_EFFORT = "low"
+
+
+def page_thinking() -> bool | None:
+    effort = (os.environ.get("PICO_EXAM_EXTRACT_PAGE_EFFORT") or _DEFAULT_PAGE_EFFORT).strip().lower()
+    return None if effort == "medium" else False
 
 
 async def _complete_with_retry(
@@ -580,7 +590,7 @@ async def extract_pages(
         async with sem:
             try:
                 out = await _complete_with_retry(
-                    complete, messages, thinking=None, usage=usage, model_out=model_out
+                    complete, messages, thinking=page_thinking(), usage=usage, model_out=model_out
                 )
             except ExtractError:
                 raise
