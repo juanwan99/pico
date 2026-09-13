@@ -320,6 +320,25 @@ async def test_pages_concurrency_is_bounded_by_default(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pages_read_at_low_effort_by_default_medium_by_env(monkeypatch):
+    """edu-core#1506: page images go out with thinking=False (low); env flips to medium (None)."""
+    seen: list = []
+
+    async def spy(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        seen.append(thinking)
+        return json.dumps(_gold_items()[:1])
+
+    monkeypatch.delenv("PICO_EXAM_EXTRACT_PAGE_EFFORT", raising=False)
+    await ex.extract_pages([_page(1)], complete=spy)
+    assert seen == [False]
+    monkeypatch.setenv("PICO_EXAM_EXTRACT_PAGE_EFFORT", "medium")
+    await ex.extract_pages([_page(1)], complete=spy)
+    assert seen == [False, None]
+    monkeypatch.setenv("PICO_EXAM_EXTRACT_PAGE_EFFORT", "nonsense")
+    assert ex.page_thinking() is False, "unknown values fall back to low, never to a slower default"
+
+
+@pytest.mark.asyncio
 async def test_pages_concurrency_env_can_force_serial(monkeypatch):
     monkeypatch.setenv("PICO_EXAM_EXTRACT_CONCURRENCY", "1")
     result, peak = await _run_pages_with_peak([_page(1), _page(2), _page(3)])
