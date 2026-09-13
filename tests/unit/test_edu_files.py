@@ -562,6 +562,20 @@ def test_paperclip_pdf_injects_into_this_conversation(client: TestClient) -> Non
     assert injected.endswith("这是什么")
 
 
+def test_empty_content_b64_is_400_not_500(client: TestClient) -> None:
+    """Live 2026-09-13 (#985): empty content_b64 raised a pydantic traceback → 500."""
+    res = client.post(
+        "/v1/files",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"filename": "空.doc", "content_b64": ""},
+    )
+    assert res.status_code == 400, res.text
+    detail = res.json()["detail"]
+    assert detail["code"] == "file.invalid"
+    assert "没有上传" in detail["message"]
+    assert "ValidationError" not in res.text
+
+
 def test_legacy_doc_convert_failure_is_not_a_green_paperclip(
     client: TestClient, monkeypatch
 ) -> None:

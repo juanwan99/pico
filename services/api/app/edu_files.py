@@ -15,7 +15,7 @@ from pico_orchestrator.meili_kb import (
     parse_office_bytes,
     project_material_artifact,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -106,7 +106,11 @@ async def _read_upload(request: Request) -> tuple[str, bytes, str]:
         payload = await request.json()
     except Exception as exc:
         raise _bad_body("要 JSON 或 multipart 文件") from exc
-    parsed = FileJsonIn.model_validate(payload)
+    try:
+        parsed = FileJsonIn.model_validate(payload)
+    except ValidationError as exc:
+        # Live 2026-09-13: an empty content_b64 was a 500 traceback (#985).
+        raise _bad_body("文件内容为空或字段不对，没有上传") from exc
     return parsed.filename, decode_b64(parsed.content_b64), parsed.folder_id or ""
 
 
