@@ -19,14 +19,29 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         return "服务繁忙，请稍后重试。"
     if code == "token_cap" or "token cap" in low:
         return "本次回答超出长度上限。可点「再跑一次」，或缩短问题后重试。"
+    # New API relay could not reach its upstream (live 2026-09-11/12: the gateway
+    # box inherited a host proxy that reset every call). Not the teacher's input,
+    # not a first-byte timeout — say so, and point the admin at gateway egress.
     if (
-        "524" in low
-        or "aiproxy service is temporarily unavailable" in low
-        or "等首包" in text
+        "do_request_failed" in low
+        or "do request failed" in low
+        or "new_api_error" in low
+        or "upstream error" in low
     ):
+        return (
+            "模型中转这次没连上上游，请再发一次。"
+            "持续出现请管理员检查网关出网，不是你的问题写错。"
+        )
+    if "524" in low or "等首包" in text:
         return (
             "模型中转等首包超时。长思考必须走流式；请再试一次，不要关流。"
         )
+    # AIProxy 503 is「上游不可用」, not a first-byte timeout; do not tell the
+    # teacher to keep the stream open.
+    if "temporarily unavailable" in low or "(503)" in low or "error code: 503" in low:
+        return "模型中转暂时不可用（上游 503）。请稍等再发一次，不是你的问题写错。"
+    if "overloaded" in low or "server_error" in low:
+        return "模型服务繁忙（上游过载）。请稍等再发一次。"
     if (
         "stream_read_error" in low
         or "stream ended abnormally" in low
@@ -70,7 +85,7 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         if c == "image.provider_rejected" or "硅基流动已否决" in text:
             return (
                 "出图提供商硅基流动已否决，不再调用。"
-                "请使用 Gemini 或智谱出图，不能编造图片。"
+                "请走 New API 的 Gemini 渠道出图，不能编造图片。"
             )
         if (
             c == "image.unconfigured"
@@ -79,8 +94,8 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
             or ("gemini_api_key" in low and ("未" in text or "写入" in text))
         ):
             return (
-                "出图尚未接通。请管理员在主机写入 GEMINI_API_KEY"
-                "（或 PICO_IMAGE_GATEWAY_URL + PICO_IMAGE_GATEWAY_KEY）后重试，不能编造图片。"
+                "出图尚未接通。请管理员在主机写入 PICO_IMAGE_GATEWAY_URL + "
+                "PICO_IMAGE_GATEWAY_KEY（New API）后重试，不能编造图片。"
             )
         # image.provider / image.invalid / tool.write_failed with「没能出图」/ etc.
         return "这次没能出图。请稍后重试，不能编造图片。"
@@ -102,7 +117,7 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         or "model.unconfigured" in low
         or c == "model.unconfigured"
     ):
-        return "模型服务未配置或密钥无效。请管理员配置 DEEPSEEK_API_KEY（推荐）或 KIMI_API_KEY 后重试。"
+        return "模型网关未配置或密钥无效。请管理员检查 New API 渠道与网关密钥后重试。"
     if "rate limit" in low or "429" in low or c in ("rate_limit", "concurrency_limit"):
         if c == "concurrency_limit" or "concurrency" in low:
             return "当前对话繁忙（并发已满）。请稍后再试，或关闭其他进行中的任务。"
@@ -181,7 +196,8 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
         or ("no such file" in low and any(x in low for x in ("agent", "yaml", "system.md", "pico-kimi")))
     ):
         return "智能体任务未正常完成，请重试。若持续失败请联系管理员。"
-    if not text:
+    if not text or (low.startswith("error code") and "undefined" in low):
+        # LibreChat shell leaks「Error Code undefined: undefined」when the body is empty.
         return "出了点问题，请重试。若持续失败，请联系管理员。"
     # Keep short; avoid dumping stack traces
     if "traceback" in low or len(text) > 180:

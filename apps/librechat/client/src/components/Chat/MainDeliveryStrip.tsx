@@ -10,7 +10,7 @@ import {
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
 import { artifactsForRun, primaryDeliverables } from '~/utils/picoLatestArtifacts';
-import { stashPendingPreviewId } from '~/utils/picoOpenInPane';
+import { humanArtifactActionError, stashPendingPreviewId } from '~/utils/picoOpenInPane';
 import { cn } from '~/utils';
 import PicoSearchSources from './PicoSearchSources';
 import type { PicoSourceMessage } from '~/utils/picoSearchSources';
@@ -141,7 +141,7 @@ export default function MainDeliveryStrip({
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '打开失败');
+      setError(humanArtifactActionError('open', err));
     } finally {
       setBusy(null);
     }
@@ -161,7 +161,7 @@ export default function MainDeliveryStrip({
       anchor.click();
       anchor.remove();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '下载失败');
+      setError(humanArtifactActionError('download', err));
     } finally {
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);

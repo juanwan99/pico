@@ -1110,7 +1110,7 @@ describe('useResumableSSE', () => {
     expect(mockErrorHandler).toHaveBeenCalledWith(
       expect.objectContaining({
         data: {
-          text: JSON.stringify({ message: 'failed to start' }),
+          text: 'failed to start',
           metadata: { streamStartFailed: true },
         },
         submission,

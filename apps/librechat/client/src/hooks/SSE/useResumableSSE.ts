@@ -144,19 +144,20 @@ const getSSEErrorText = (payload: unknown): string | null => {
   return typeof text === 'string' && text.length > 0 ? text : null;
 };
 
+/** Pico: a failed stream start must never paint raw JSON into the bubble (#985). */
+const STREAM_START_FAILURE_TEXT = '这次回复没能开始。请再发一次；若持续，请刷新页面。';
+
 const getStreamStartFailureText = (errorData?: unknown): string => {
   if (typeof errorData === 'string') {
     const sseErrorData = parseSSEErrorData(errorData);
     if (sseErrorData != null) {
-      return getSSEErrorText(sseErrorData) ?? JSON.stringify(sseErrorData);
+      return getSSEErrorText(sseErrorData) ?? STREAM_START_FAILURE_TEXT;
     }
 
-    return errorData || 'Error connecting to server, try refreshing the page.';
+    return errorData || STREAM_START_FAILURE_TEXT;
   }
 
-  return errorData
-    ? JSON.stringify(errorData)
-    : 'Error connecting to server, try refreshing the page.';
+  return getSSEErrorText(errorData) ?? STREAM_START_FAILURE_TEXT;
 };
 
 const getStreamStartFailureData = (errorData?: unknown): TResData =>

@@ -16,6 +16,7 @@ import {
   type PicoPersonalFolder,
 } from '~/data-provider/pico/api';
 import { PicoIcon } from '~/components/ui/pico-icons';
+import { humanArtifactActionError } from '~/utils/picoOpenInPane';
 import { childrenOf } from '~/utils/picoPersonalFolderTree';
 import { cn } from '~/utils';
 
@@ -169,7 +170,7 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (openError) {
-      setError(openError instanceof Error ? openError.message : '打开失败');
+      setError(humanArtifactActionError('download', openError));
     } finally {
       setBusyId(null);
     }
