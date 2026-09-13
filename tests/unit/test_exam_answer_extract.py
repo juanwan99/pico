@@ -279,23 +279,50 @@ async def test_retry_never_repeats_configuration_errors():
     assert caught.value.code == "model.unconfigured" and len(calls) == 1
 
 
-@pytest.mark.asyncio
-async def test_pages_default_to_serial_calls(monkeypatch):
-    monkeypatch.delenv("PICO_EXAM_EXTRACT_CONCURRENCY", raising=False)
-    active = 0
-    peak = 0
+def _peak_tracker():
+    state = {"active": 0, "peak": 0, "release": asyncio.Event()}
 
     async def slow(messages, *, thinking=None, usage_out=None, model_out=None, **_):
-        nonlocal active, peak
-        active += 1
-        peak = max(peak, active)
-        await asyncio.sleep(0)
-        active -= 1
+        state["active"] += 1
+        state["peak"] = max(state["peak"], state["active"])
+        await state["release"].wait()
+        state["active"] -= 1
         img = next(p for p in messages[-1]["content"] if p["type"] == "image")
         page = int(base64.b64decode(img["data_b64"]).decode())
         return json.dumps([_gold_items()[page - 1]])
 
-    result = await ex.extract_pages([_page(1), _page(2), _page(3)], complete=slow)
+    return state, slow
+
+
+async def _run_pages_with_peak(pages, **kwargs):
+    state, slow = _peak_tracker()
+    task = asyncio.create_task(ex.extract_pages(pages, complete=slow, **kwargs))
+    for _ in range(20):  # let every page coroutine reach the semaphore
+        await asyncio.sleep(0)
+    state["release"].set()
+    return await task, state["peak"]
+
+
+@pytest.mark.asyncio
+async def test_pages_default_to_one_wave_for_a_four_page_scan(monkeypatch):
+    """edu-core#1506: a 4-page scan must not be read page after page; default concurrency 4."""
+    monkeypatch.delenv("PICO_EXAM_EXTRACT_CONCURRENCY", raising=False)
+    result, peak = await _run_pages_with_peak([_page(1), _page(2), _page(3), _page(4)])
+    assert peak == 4
+    assert [q["number"] for q in result["questions"]] == [1, 2, 3, 4]
+
+
+@pytest.mark.asyncio
+async def test_pages_concurrency_is_bounded_by_default(monkeypatch):
+    monkeypatch.delenv("PICO_EXAM_EXTRACT_CONCURRENCY", raising=False)
+    _, peak = await _run_pages_with_peak([_page(n) for n in range(1, 7)])
+    assert peak == ex._DEFAULT_CONCURRENCY == 4, "more pages than the cap still wait their turn"
+
+
+@pytest.mark.asyncio
+async def test_pages_concurrency_env_can_force_serial(monkeypatch):
+    monkeypatch.setenv("PICO_EXAM_EXTRACT_CONCURRENCY", "1")
+    result, peak = await _run_pages_with_peak([_page(1), _page(2), _page(3)])
     assert peak == 1
     assert [q["number"] for q in result["questions"]] == [1, 2, 3]
 
