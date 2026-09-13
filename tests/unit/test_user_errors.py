@@ -152,6 +152,68 @@ def test_image_siliconflow_rejected_copy() -> None:
     assert "SILICONFLOW" not in msg
 
 
+def test_new_api_relay_failure_is_not_blamed_on_teacher_or_first_byte() -> None:
+    """Live 2026-09-11/12 (#985): New API → AIProxy through a host proxy reset every
+    call. Ledger text was the raw 500 body; teachers saw「服务暂时出错」."""
+    raw = (
+        'OpenAI API error (500): {"message":"upstream error: do request failed '
+        '(request id: 2026091208481675W6PHaGlr)","type":"new_api_error","param":"",'
+        '"code":"do_request_failed"}'
+    )
+    msg = user_message_for_error(raw, code="true_pi.assistant_error")
+    assert "中转" in msg
+    assert "再发一次" in msg
+    assert "不是你的问题" in msg
+    assert "首包" not in msg
+    assert "do_request_failed" not in msg
+    assert "request id" not in msg.lower()
+    # Legacy provider path wraps the same body.
+    wrapped = user_message_for_error(
+        "模型调用失败：Error code: 500 - {'error': {'message': 'upstream error: do request "
+        "failed (request id: x)', 'type': 'new_api_error', 'code': 'do_request_failed'}}"
+    )
+    assert "中转" in wrapped
+    assert "Error code" not in wrapped
+
+
+def test_aiproxy_503_is_unavailable_not_524_first_byte() -> None:
+    msg = user_message_for_error(
+        'OpenAI API error (503): {"message":"AIProxy service is temporarily unavailable. '
+        'Please try again later.","type":"api_error","param":"","code":"api_error"}'
+    )
+    assert "503" in msg or "不可用" in msg
+    assert "首包" not in msg
+    assert "不要关流" not in msg
+    assert "temporarily unavailable" not in msg.lower()
+    # A real 524 keeps the first-byte copy.
+    msg524 = user_message_for_error("HTTP 524: AIProxy service is temporarily unavailable")
+    assert "首包" in msg524
+
+
+def test_upstream_overloaded_english_is_human() -> None:
+    msg = user_message_for_error(
+        "server_error: Our servers are currently overloaded. Please try again later.",
+        code="true_pi.assistant_error",
+    )
+    assert "繁忙" in msg or "过载" in msg
+    assert "overloaded" not in msg.lower()
+    assert "server_error" not in msg.lower()
+    assert not msg.startswith("未能完成")
+
+
+def test_key_copy_points_at_new_api_not_legacy_vendors() -> None:
+    msg = user_message_for_error("401 unauthorized", code="model.unconfigured")
+    assert "New API" in msg
+    assert "KIMI_API_KEY" not in msg
+    assert "DEEPSEEK_API_KEY" not in msg
+
+
+def test_shell_undefined_error_code_is_human() -> None:
+    msg = user_message_for_error("Error Code undefined: undefined")
+    assert "undefined" not in msg.lower()
+    assert "重试" in msg
+
+
 def test_enrich_restart_payload_sets_user_message() -> None:
     p = enrich_fail_payload(
         {
