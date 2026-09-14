@@ -104,8 +104,41 @@ def test_normalize_keeps_null_score_and_splits_letters():
     assert essay["score"] == 12
     assert essay["sub_count"] == 2
     assert essay["options_count"] is None
+    assert essay["blanks"] == []
     assert ex.normalize_item({"number": 0, "answer": "A"}, page=1) is None
     assert ex.normalize_item({"answer": "A"}, page=1) is None
+
+
+def test_normalize_keeps_blank_flex_and_does_not_guess():
+    essay = ex.normalize_item(
+        {
+            "number": 17,
+            "type": "short_answer",
+            "answer": "(1) 叶绿体基质 (2) A",
+            "blanks": [
+                {"sub": 1, "text": "叶绿体基质", "flex": "open"},
+                {"sub": 2, "text": "A", "flex": "fixed"},
+                {"sub": 2, "text": "?", "flex": "maybe"},
+            ],
+        },
+        page=1,
+    )
+    assert essay["blanks"] == [
+        {"sub": 1, "text": "叶绿体基质", "flex": "open"},
+        {"sub": 2, "text": "A", "flex": "fixed"},
+    ]
+    choice = ex.normalize_item(
+        {"number": 1, "type": "single_choice", "answer": "A", "blanks": [{"flex": "fixed", "text": "A"}]},
+        page=1,
+    )
+    assert choice["blanks"] == []
+
+
+def test_prompt_asks_for_blank_flex():
+    system = ex.load_prompts()["system"]
+    assert '"flex": "fixed" | "open"' in system or "flex" in system
+    assert "fixed" in system and "open" in system
+    assert "死空" in system or "活空" in system
 
 
 def test_vision_miss_items_are_dropped_not_kept():

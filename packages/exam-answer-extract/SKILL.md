@@ -72,6 +72,9 @@ always-apply: false
   "options_count": 选择题选项数，默认 4；非选择题 null,
   "sub_count": 小问数：只数 (1)（1）1) 这一层；①②③ 是同一小问里的多个空，不是小问；没有小问为 1,
   "has_figure": 答案或题目含需要作答的图则为 true,
+  "blanks": [
+    { "sub": 1, "text": "该空的标准答案", "flex": "fixed" | "open" }
+  ],
   "quote": "原文里能定位这题答案的一小段（不超过 40 字）；没有则空字符串"
 }
 
@@ -83,6 +86,7 @@ always-apply: false
 - answer 里保留原卷的小问号 (1)(2) 和空号 ①②，不要抹掉：edu 靠它们把答案落到答题卡的每一行每一空。
 - 选择题：单个字母 → single_choice；多个字母 → multi_choice。字母必须逐题抄进 answer，不要合并成一串。
 - 短填空 → fill_in_blank；要写步骤或作图 → short_answer。
+- 非选择题每个空标 flex（edu 排版只认这个，不猜）：fixed = 死空，学生几乎只能写这个词/字母/数字（如 A、叶绿体基质）；open = 活空，学生可能写得比标准答案长、还要涂改。选择题不要 blanks。
 - 无法判断分值时 score 必须为 null。
 - 只抽你看得见的内容。看不见、读不清的题不要编；一题都没有就返回 []，不要解释。
 ```
