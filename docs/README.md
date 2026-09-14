@@ -8,12 +8,12 @@
 STATUS: BINDING navigation · 现况不在本页
 TRUTH: GitHub (Issue/PR/SHA/CI/DEPLOY) + 公网 tip outrank all prose
 NOW: GitHub 执行卡（最多 1）· docs/STATE-NOW.md 是索引
-FREEZE: docs/TRUTH-FREEZE.md v2.0
+FREEZE: docs/TRUTH-FREEZE.md v2.1
 ```
 
 ## 现行层（2026-09-08 · 开窗只认这些句）
 
-冲突时：**LAW ≥ 北极星 v1.4 ≥ TRUTH-FREEZE v2.0 ≥ 本页此表 ≥ 其它 md。** GitHub + tip 压过一切散文。
+冲突时：**LAW ≥ 北极星 v1.4 ≥ TRUTH-FREEZE v2.1 ≥ 本页此表 ≥ 其它 md。** GitHub + tip 压过一切散文。
 
 | 句 | 现行 | 作废（禁止再当现网） |
 |----|------|----------------------|
@@ -45,7 +45,7 @@ FREEZE: docs/TRUTH-FREEZE.md v2.0
 | **NOW** | **[STATE-NOW.md](./STATE-NOW.md)** | **开窗索引三行**（对不上以 GitHub + tip 为准） |
 | **NOW** | **[#634](https://github.com/juanwan99/pico/issues/634)** | **冻结令** · 可钉现况三行评论 |
 | 0 | **[DIRECTION-NOW.md](./DIRECTION-NOW.md)** | 北极星 §0-star v1.4 · 用法 = Grok · 办公主线 · 能力并列 · 办公计算机交成熟上游 |
-| 0 | **[TRUTH-FREEZE.md](./TRUTH-FREEZE.md)** | 目标冻结 v2.0（真 Pi · New API 脑 · 知识库挂载 · 办公执行面 = 无网容器完整 Python · 不要 bash 的边界） |
+| 0 | **[TRUTH-FREEZE.md](./TRUTH-FREEZE.md)** | 目标冻结 v2.1（真 Pi · New API 脑 · 知识库挂载 · 扫描件 OCR 兜底进库 · 办公执行面 = 无网容器完整 Python · 不要 bash 的边界） |
 | — | **[WHAT-IS-PICO.md](./WHAT-IS-PICO.md)** | 产品定义（§4 实现以 tip 为准） |
 | — | **[PLAN-OFFICE-COMPUTER-V2.md](./PLAN-OFFICE-COMPUTER-V2.md)** | **现行阶段车辆** · 办公计算机 v2：换后端不换合同 · pico-office 无网容器 · 删解释器 jail · 真模型回归门（#959） |
 | — | [PLAN-WORKENV-UPSTREAM.md](./PLAN-WORKENV-UPSTREAM.md) | 前一阶段方案 · B1 / overlay / nft 段只作学习账 · 阶段车辆已由上行接替 |
@@ -87,5 +87,5 @@ FREEZE: docs/TRUTH-FREEZE.md v2.0
 **在飞:** 无  
 **经验 / 工具:** [EXPERIENCE.md](./EXPERIENCE.md) · [TOOLING-CATALOG.md](./TOOLING-CATALOG.md)  
 **北极星:** [DIRECTION-NOW.md](./DIRECTION-NOW.md) §0-star v1.4  
-**冻结:** [TRUTH-FREEZE.md](./TRUTH-FREEZE.md) v1.9  
+**冻结:** [TRUTH-FREEZE.md](./TRUTH-FREEZE.md) v2.1  
 **不当下一张:** #627 / #628 / #646 / 任何 DAY-TASK · 无业主点头不开办公减法卡
