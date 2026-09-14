@@ -111,10 +111,10 @@ def _fake_runtime(
         '    if [ -f "$here/office-down" ]; then exit 1; fi\n'
         "    exit 0 ;;\n"
         # edu-pico-gw gate: `docker run --rm -i --network edu-core_default alpine/socat… - TCP:edu-pico-gw:18765`
-        '  "run "*" TCP:edu-pico-gw:18765"*)\n'
+        '  "run "*"edu-pico-gw:18765/health"*)\n'
         '    : >"$here/edu-gw-probed"\n'
         '    if [ -f "$here/edu-gw-down" ]; then exit 1; fi\n'
-        '    printf "HTTP/1.0 200 OK\\r\\n"\n'
+        '    printf \'{"ok":true,"git_sha":"%s"}\' "$PICO_GIT_SHA"\n'
         "    exit 0 ;;\n"
         '  "rm -f "*)\n'
         '    printf \'%s\\n\' "${@: -1}" >>"$here/removed"\n'
@@ -667,7 +667,7 @@ def test_prod_update_probes_edu_gateway_from_edu_network(tmp_path: Path) -> None
     result = _run_prod_update(production, sha, bin_dir)
     assert result.returncode == 0, result.stderr
     assert (bin_dir / "edu-gw-probed").exists()
-    assert "[pico] edu-pico-gw ok" in result.stdout
+    assert "[pico] edu-pico-gw ok (sha matches)" in result.stdout
 
 
 def test_prod_update_refuses_when_edu_gateway_is_dead(tmp_path: Path) -> None:
@@ -675,7 +675,7 @@ def test_prod_update_refuses_when_edu_gateway_is_dead(tmp_path: Path) -> None:
     bin_dir = _fake_runtime(tmp_path, edu_gw_down=True)
     result = _run_prod_update(production, sha, bin_dir)
     assert result.returncode == 14
-    assert "edu-pico-gw:18765 does not answer" in result.stderr
+    assert "edu-pico-gw:18765 does not answer /health with this SHA" in result.stderr
 
 
 def test_prod_update_adopts_hand_run_edu_gateway(tmp_path: Path) -> None:

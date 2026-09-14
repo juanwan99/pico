@@ -296,24 +296,32 @@ echo "[pico] pico-office socket ok"
 # edu → Pico bridge must answer from inside edu's network, or edu's sidebar/SSO
 # is silently dead while everything on loopback looks green (2026-09-15).
 echo "[pico] edu-pico-gw:"
+# busybox wget from the same pinned socat image (socat's own STDIO client
+# half-closes on stdin EOF before the reply lands — verified 2026-09-15).
+EDU_GW_IMAGE="$( { grep -oE 'alpine/socat@sha256:[0-9a-f]+' "$COMPOSE_FILE" || true; } | head -1)"
+EDU_GW_IMAGE="${EDU_GW_IMAGE:-alpine/socat@sha256:3d9e7966201dd3a065df591020a09fd3c70845de7e7086e3531ea69db774406b}"
 edu_gw_ready=0
+edu_gw_body=""
 for _ in $(seq 1 20); do
-  if printf 'GET /health HTTP/1.0\r\nHost: edu-pico-gw\r\n\r\n' \
-    | docker run --rm -i --network edu-core_default \
-        alpine/socat@sha256:3d9e7966201dd3a065df591020a09fd3c70845de7e7086e3531ea69db774406b \
-        - TCP:edu-pico-gw:18765,connect-timeout=3 2>/dev/null \
-    | head -1 | grep -q ' 200 '; then
+  edu_gw_body="$(docker run --rm --network edu-core_default --entrypoint wget "$EDU_GW_IMAGE" \
+    -qO- -T 5 http://edu-pico-gw:18765/health 2>/dev/null || true)"
+  if python3 -c '
+import json, sys
+body = json.loads(sys.argv[1])
+sys.exit(0 if body.get("ok") is True and body.get("git_sha") == sys.argv[2] else 1)
+' "$edu_gw_body" "$CURRENT_SHA" 2>/dev/null; then
     edu_gw_ready=1
     break
   fi
   sleep 1
 done
 if [ "$edu_gw_ready" -ne 1 ]; then
-  echo "[pico] FATAL: edu-pico-gw:18765 does not answer /health from edu-core_default — edu → Pico would be down" >&2
+  echo "[pico] FATAL: edu-pico-gw:18765 does not answer /health with this SHA from edu-core_default — edu → Pico would be down" >&2
+  echo "[pico] last body: ${edu_gw_body:-empty}" >&2
   docker compose -f "$COMPOSE_FILE" logs --no-log-prefix --tail 10 edu-pico-gw pico-edu-gw-host >&2 || true
   exit 14
 fi
-echo "[pico] edu-pico-gw ok"
+echo "[pico] edu-pico-gw ok (sha matches)"
 
 echo "[pico] meili:"
 meili_ready=0
