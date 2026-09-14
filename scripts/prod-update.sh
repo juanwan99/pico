@@ -15,6 +15,23 @@ if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   exit 2
 fi
 
+# Single-flight per host. Two windows deploying at once left half-recreated
+# `Created` containers and a compose name conflict (2026-09-13, #994 stage 0).
+# fd 9 is inherited by the exec'd impl, so the lock lives until the deploy ends.
+LOCK_FILE="${PICO_DEPLOY_LOCK:-/tmp/pico-prod-update.lock}"
+if command -v flock >/dev/null 2>&1; then
+  exec 9>>"$LOCK_FILE"
+  if ! flock -n 9; then
+    echo "[pico] BLOCKED: another prod-update is running on this host" >&2
+    echo "[pico] holder: $(cat "$LOCK_FILE" 2>/dev/null || echo unknown)" >&2
+    echo "[pico] 同机两窗同时部会互相打断。等它跑完再来。" >&2
+    exit 5
+  fi
+  echo "pid=$$ sha=$DEPLOY_SHA user=$(id -un 2>/dev/null || echo ?) since=$(date -Is)" >"$LOCK_FILE"
+else
+  echo "[pico] WARN flock not found — no single-flight guard on this host" >&2
+fi
+
 cd "$ROOT"
 echo "[pico] update $(hostname) $(date -Is)"
 echo "[pico] before: $(git rev-parse HEAD 2>/dev/null || echo none)"

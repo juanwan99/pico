@@ -132,6 +132,35 @@ if [ -f .env ]; then
   fi
 fi
 
+# Base images must be resolvable before we spend minutes building. Live
+# 2026-09-13: dockerd sat behind a dead host proxy and the first mirror had
+# started demanding login; build died at FROM after 10 min of output. Fail
+# here, in one line, and name the machine-side cause.
+precheck_base_images() {
+  local df img seen="" missing=""
+  while IFS= read -r df; do
+    [ -n "$df" ] && [ -f "$df" ] || continue
+    while IFS= read -r img; do
+      [ -z "$img" ] && continue
+      case " $seen " in *" $img "*) continue ;; esac
+      seen="$seen $img"
+      if docker image inspect "$img" >/dev/null 2>&1; then
+        continue
+      fi
+      echo "[pico] base image $img not local — pulling"
+      if ! docker pull "$img" >/dev/null 2>&1; then
+        missing="$missing $img"
+      fi
+    done < <(grep -E '^FROM[[:space:]]' "$df" | awk '{for(i=2;i<=NF;i++){if($i !~ /^--/){print $i;break}}}' | grep -E '[:@]')
+  done < <(grep -E '^[[:space:]]+dockerfile:' "$COMPOSE_FILE" | awk '{print $2}' | sort -u)
+  if [ -n "$missing" ]; then
+    echo "[pico] FATAL: base image(s) not local and not pullable:$missing" >&2
+    echo "[pico] 机器层问题，不是代码：dockerd 代理 / 镜像站（见 #985 root 清单、#994 阶段 0）。未碰任何容器。" >&2
+    exit 13
+  fi
+}
+precheck_base_images
+
 docker compose -f "$COMPOSE_FILE" build pico-api librechat pico-sandbox pico-office
 
 # Teacher runs live inside the pico-api process; recreating pico-api kills them.

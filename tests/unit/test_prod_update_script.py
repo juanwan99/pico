@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "prod-update.sh"
 IMPL = ROOT / "scripts" / "prod-update.impl.sh"
@@ -92,6 +94,16 @@ def _fake_runtime(
         'here="$(cd "$(dirname "$0")" && pwd)"\n'
         'args="$*"\n'
         'case "$args" in\n'
+        '  "image inspect "*)\n'
+        '    if [ -f "$here/base-image-missing" ]; then exit 1; fi\n'
+        "    exit 0 ;;\n"
+        '  "pull "*)\n'
+        '    printf \'%s\\n\' "${@: -1}" >>"$here/pulled"\n'
+        '    if [ -f "$here/pull-fails" ]; then exit 1; fi\n'
+        "    exit 0 ;;\n"
+        '  "compose "*" build "*)\n'
+        '    : >"$here/built"\n'
+        "    exit 0 ;;\n"
         '  *" exec -T pico-api "*)\n'
         '    if [ -f "$here/office-down" ]; then exit 1; fi\n'
         "    exit 0 ;;\n"
@@ -186,7 +198,9 @@ def _advance_origin_main(tmp_path: Path, production: Path) -> str:
     return _run("git", "rev-parse", "HEAD", cwd=updater).stdout.strip()
 
 
-def _run_prod_update(production: Path, sha: str, bin_dir: Path) -> subprocess.CompletedProcess[str]:
+def _run_prod_update(
+    production: Path, sha: str, bin_dir: Path, *, extra_env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [BASH, _bash_path(production / "scripts" / "prod-update.sh")],
         env={
@@ -194,6 +208,9 @@ def _run_prod_update(production: Path, sha: str, bin_dir: Path) -> subprocess.Co
             "PATH": f"{_bash_path(bin_dir)}{os.pathsep}{os.environ['PATH']}",
             "PICO_ROOT": _bash_path(production),
             "PICO_DEPLOY_SHA": sha,
+            # Never share the host lock with a real deploy on this machine.
+            "PICO_DEPLOY_LOCK": _bash_path(production.parent / "deploy.lock"),
+            **(extra_env or {}),
         },
         capture_output=True,
         text=True,
@@ -501,6 +518,83 @@ def test_prod_update_treats_missing_inflight_field_as_zero(tmp_path: Path) -> No
     assert result.returncode == 0, result.stderr
     assert "waiting up to" not in result.stdout
     assert "[pico] done" in result.stdout
+
+
+def _with_dockerfile(production: Path, base_image: str) -> str:
+    """Commit a compose service with a Dockerfile so the impl's base-image precheck runs."""
+    updater = production.parent / "updater-df"
+    origin = _run("git", "remote", "get-url", "origin", cwd=production).stdout.strip()
+    _run("git", "clone", "--branch", "main", origin, str(updater), cwd=production.parent)
+    _run("git", "config", "user.email", "ci@pico.local", cwd=updater)
+    _run("git", "config", "user.name", "Pico CI", cwd=updater)
+    (updater / "Dockerfile.fixture").write_text(
+        f"FROM {base_image} AS base\nFROM base AS app\nRUN true\n"
+    )
+    (updater / "docker-compose.host.yml").write_text(
+        "services:\n  pico-api:\n    build:\n      context: .\n      dockerfile: Dockerfile.fixture\n"
+    )
+    _run("git", "add", ".", cwd=updater)
+    _run("git", "commit", "-m", "fixture dockerfile", cwd=updater)
+    _run("git", "push", "origin", "main", cwd=updater)
+    return _run("git", "rev-parse", "HEAD", cwd=updater).stdout.strip()
+
+
+def test_prod_update_pulls_missing_base_image_before_build(tmp_path: Path) -> None:
+    production, _ = _production_checkout(tmp_path)
+    sha = _with_dockerfile(production, "python:3.12-slim-bookworm")
+    bin_dir = _fake_runtime(tmp_path)
+    (bin_dir / "base-image-missing").write_text("1\n")
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert "base image python:3.12-slim-bookworm not local — pulling" in result.stdout
+    assert (bin_dir / "pulled").read_text().strip() == "python:3.12-slim-bookworm"
+    assert (bin_dir / "built").exists()
+
+
+def test_prod_update_fails_closed_when_base_image_unpullable(tmp_path: Path) -> None:
+    """Live 2026-09-13: dockerd behind a dead proxy; build died at FROM after minutes.
+    Now: one FATAL line naming the machine-side cause, before build or any container."""
+    production, _ = _production_checkout(tmp_path)
+    sha = _with_dockerfile(production, "node:24.16.0-alpine")
+    bin_dir = _fake_runtime(tmp_path)
+    (bin_dir / "base-image-missing").write_text("1\n")
+    (bin_dir / "pull-fails").write_text("1\n")
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 13
+    assert "not local and not pullable: node:24.16.0-alpine" in result.stderr
+    assert "dockerd 代理" in result.stderr
+    assert not (bin_dir / "built").exists()
+    assert "health.git_sha" not in result.stdout
+
+
+def test_prod_update_second_deploy_on_same_host_is_blocked(tmp_path: Path) -> None:
+    """Two windows deploying at once left `Created` debris + a compose name conflict."""
+    fcntl = pytest.importorskip("fcntl")
+    if shutil.which("flock") is None:
+        pytest.skip("flock not installed")
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path)
+    lock_path = production.parent / "deploy.lock"
+    lock_path.write_text("pid=1 sha=deadbeef user=other since=now\n")
+    with open(lock_path, "a") as holder:
+        fcntl.flock(holder.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 5
+    assert "another prod-update is running" in result.stderr
+    assert "holder: pid=1 sha=deadbeef" in result.stderr
+    assert "deploying:" not in result.stdout
+
+
+def test_prod_update_lock_is_released_after_deploy(tmp_path: Path) -> None:
+    if shutil.which("flock") is None:
+        pytest.skip("flock not installed")
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path)
+    first = _run_prod_update(production, sha, bin_dir)
+    assert first.returncode == 0, first.stderr
+    second = _run_prod_update(production, sha, bin_dir)
+    assert second.returncode == 0, second.stderr
+    assert f"sha={sha}" in (production.parent / "deploy.lock").read_text()
 
 
 def test_prod_update_bootstrap_only_checkouts_then_execs_impl() -> None:
