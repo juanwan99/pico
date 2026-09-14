@@ -485,6 +485,21 @@ def test_prod_update_refuses_compose_that_declares_office_named_volume(tmp_path:
     assert "[pico] done" not in result.stdout
 
 
+def test_prod_update_bumps_chat_max_concurrent_2_to_4(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    (production / ".env").write_text(
+        "KIMI_API_KEY=k\nPICO_SANDBOX_TOKEN=sandbox-token-at-least-32-bytes!!\n"
+        "PICO_CHAT_MAX_CONCURRENT=2\n"
+    )
+    (production / ".git" / "info" / "exclude").write_text(".env\n")
+    result = _run_prod_update(production, sha, _fake_runtime(tmp_path))
+    assert result.returncode == 0, result.stderr
+    assert "PICO_CHAT_MAX_CONCURRENT 2→4" in result.stdout
+    env = (production / ".env").read_text()
+    assert "PICO_CHAT_MAX_CONCURRENT=4" in env
+    assert "PICO_CHAT_MAX_CONCURRENT=2" not in env
+
+
 def test_prod_update_generates_sandbox_token_when_missing(tmp_path: Path) -> None:
     production, sha = _production_checkout(tmp_path)
     (production / ".env").write_text("PICO_SANDBOX_TOKEN=\nKIMI_API_KEY=k\n")

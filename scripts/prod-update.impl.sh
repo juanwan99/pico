@@ -152,6 +152,12 @@ if [ -f .env ]; then
   if ! grep -q '^PICO_MEILI_URL=' .env; then
     echo "PICO_MEILI_URL=http://127.0.0.1:7700" >> .env
   fi
+  # #1003: one-shot host env bump. Compose interpolates this; Python default
+  # alone would leave live at 2 because /opt/pico/.env already pins it.
+  if grep -q '^PICO_CHAT_MAX_CONCURRENT=2$' .env; then
+    sed -i 's/^PICO_CHAT_MAX_CONCURRENT=2$/PICO_CHAT_MAX_CONCURRENT=4/' .env
+    echo "[pico] PICO_CHAT_MAX_CONCURRENT 2→4 (#1003)"
+  fi
 fi
 
 # Base images must be resolvable before we spend minutes building. Live
