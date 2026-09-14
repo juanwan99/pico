@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import hashlib
@@ -76,10 +77,14 @@ async def post_kb_ingest(
 
         title = (body.title or body.filename or "未命名").strip()
         try:
+            # OCR / Docling are CPU-bound and synchronous: keep them off the
+            # event loop so chat keeps flowing while a scan is read.
             if data is not None:
-                result = ingest_bytes(filename=body.filename or "file", data=data, title=title)
+                result = await asyncio.to_thread(
+                    ingest_bytes, filename=body.filename or "file", data=data, title=title, ocr=True
+                )
             else:
-                result = ingest_text(text=body.text or "", title=title)
+                result = await asyncio.to_thread(ingest_text, text=body.text or "", title=title)
         except HTTPException:
             raise
         except ModuleNotFoundError as exc:

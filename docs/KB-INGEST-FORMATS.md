@@ -24,6 +24,8 @@ edu 侧显示 `detail.message` 原文即可，不要再翻译。
 | `.doc` `.xls` `.ppt` | — | — | — | **不转**。415，提示另存为 OOXML（回形针那条路会经 soffice 转，kb/ingest 不会） |
 | 其它 | — | — | — | 415 |
 
+**OCR 只在显式 `POST /v1/kb/ingest` 跑**（在线程里，不占事件循环；`PICO_KB_OCR_THREADS` 默认 2 核）。账本→Meili 的重投影 / 部署时 `reindex-all` / 回形针 sidecar 一律 `ocr=False`：扫描件在这些路上是快速 miss，标 `ocr-skipped`。现网 2026-09-14 教训：部署 reindex-all 把每份历史扫描件都 OCR 一遍，pico-api 400% CPU、事件循环被堵、health 超时。
+
 OCR 模型：`rapidocr` 轮子自带 PP-OCRv6 det/rec small + cls mobile（中英），零下载；`/opt/docling-models/rapidocr-onnx.json` 若存在则覆盖。
 
 实测（生产镜像 · 2026-09-14）：docx 首次 2s（后端 import），之后 <0.1s；xlsx/pptx <0.1s；单页扫描 PDF 约 4s；单张图约 1.7s；中文行识别完整。
