@@ -88,6 +88,28 @@ OFFICE_SOCK="${PICO_OFFICE_SOCK_HOST:-$ROOT/data/pico-office-sock}"
 prepare_office_sock_bind "$OFFICE_SOCK"
 remove_leftover_office_named_volume
 
+# edu → Pico bridge socket (#995). Same host-bind contract as the office sock.
+EDU_GW_SOCK="${PICO_EDU_GW_SOCK_HOST:-$ROOT/data/pico-edu-gw-sock}"
+mkdir -p "$EDU_GW_SOCK"
+chmod 1777 "$EDU_GW_SOCK" 2>/dev/null || true
+
+# 2026-09-15 the bridge was hand-run (`docker run`) to restore edu after the
+# dockerd restart. Compose owns it from this SHA on: a same-named container
+# without our compose label would make `up` fail with a name conflict, so
+# remove it first. edu loses the gateway for the second compose needs to
+# recreate it — acceptable, and far better than a /tmp orphan.
+adopt_hand_run_edu_gw() {
+  local name project
+  for name in edu-pico-gw pico-edu-gw-host; do
+    project="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$name" 2>/dev/null || true)"
+    if docker inspect "$name" >/dev/null 2>&1 && [ "$project" != "pico" ]; then
+      echo "[pico] adopting hand-run $name into compose (removing the manual container)"
+      docker rm -f "$name" >/dev/null 2>&1 || true
+    fi
+  done
+}
+adopt_hand_run_edu_gw
+
 if [ -f .env ] && grep -q '^KIMI_API_KEY=.\+' .env; then
   echo "[pico] KIMI_API_KEY=SET"
 else
@@ -153,6 +175,20 @@ precheck_base_images() {
       fi
     done < <(grep -E '^FROM[[:space:]]' "$df" | awk '{for(i=2;i<=NF;i++){if($i !~ /^--/){print $i;break}}}' | grep -E '[:@]')
   done < <(grep -E '^[[:space:]]+dockerfile:' "$COMPOSE_FILE" | awk '{print $2}' | sort -u)
+  # Pulled images (no build:) — e.g. the socat bridge. Skip our own pico-* builds.
+  while IFS= read -r img; do
+    [ -z "$img" ] && continue
+    case "$img" in pico-*) continue ;; esac
+    case " $seen " in *" $img "*) continue ;; esac
+    seen="$seen $img"
+    if docker image inspect "$img" >/dev/null 2>&1; then
+      continue
+    fi
+    echo "[pico] image $img not local — pulling"
+    if ! docker pull "$img" >/dev/null 2>&1; then
+      missing="$missing $img"
+    fi
+  done < <(grep -E '^[[:space:]]+image:' "$COMPOSE_FILE" | awk '{print $2}' | grep -E '[:@]' | sort -u)
   if [ -n "$missing" ]; then
     echo "[pico] FATAL: base image(s) not local and not pullable:$missing" >&2
     echo "[pico] 机器层问题，不是代码：dockerd 代理 / 镜像站（见 #985 root 清单、#994 阶段 0）。未碰任何容器。" >&2
@@ -203,7 +239,7 @@ fi
 # --force-recreate took the public site down 1–3 min on every SHA, including
 # no-op rebuilds. Teacher runs still die if pico-api itself recreates; the
 # inflight wait above stays. Do not invent a drain OS / second proxy.
-docker compose -f "$COMPOSE_FILE" up -d pico-api librechat pico-sandbox pico-office meilisearch
+docker compose -f "$COMPOSE_FILE" up -d pico-api librechat pico-sandbox pico-office meilisearch pico-edu-gw-host edu-pico-gw
 
 echo "[pico] ps:"
 docker compose -f "$COMPOSE_FILE" ps
@@ -256,6 +292,28 @@ if [ "$office_ready" -ne 1 ]; then
   exit 11
 fi
 echo "[pico] pico-office socket ok"
+
+# edu → Pico bridge must answer from inside edu's network, or edu's sidebar/SSO
+# is silently dead while everything on loopback looks green (2026-09-15).
+echo "[pico] edu-pico-gw:"
+edu_gw_ready=0
+for _ in $(seq 1 20); do
+  if printf 'GET /health HTTP/1.0\r\nHost: edu-pico-gw\r\n\r\n' \
+    | docker run --rm -i --network edu-core_default \
+        alpine/socat@sha256:3d9e7966201dd3a065df591020a09fd3c70845de7e7086e3531ea69db774406b \
+        - TCP:edu-pico-gw:18765,connect-timeout=3 2>/dev/null \
+    | head -1 | grep -q ' 200 '; then
+    edu_gw_ready=1
+    break
+  fi
+  sleep 1
+done
+if [ "$edu_gw_ready" -ne 1 ]; then
+  echo "[pico] FATAL: edu-pico-gw:18765 does not answer /health from edu-core_default — edu → Pico would be down" >&2
+  docker compose -f "$COMPOSE_FILE" logs --no-log-prefix --tail 10 edu-pico-gw pico-edu-gw-host >&2 || true
+  exit 14
+fi
+echo "[pico] edu-pico-gw ok"
 
 echo "[pico] meili:"
 meili_ready=0

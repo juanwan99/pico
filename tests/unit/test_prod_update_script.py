@@ -67,6 +67,7 @@ def _fake_runtime(
     leftover_volumes: tuple[str, ...] = (),
     volume_rm_fails: bool = False,
     inflight_health_polls: int = 0,
+    edu_gw_down: bool = False,
 ) -> Path:
     """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w).
 
@@ -89,6 +90,8 @@ def _fake_runtime(
         (bin_dir / "volumes").write_text("".join(f"{v}\n" for v in leftover_volumes))
     if volume_rm_fails:
         (bin_dir / "volume-rm-fail").write_text("1\n")
+    if edu_gw_down:
+        (bin_dir / "edu-gw-down").write_text("1\n")
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
         'here="$(cd "$(dirname "$0")" && pwd)"\n'
@@ -106,6 +109,15 @@ def _fake_runtime(
         "    exit 0 ;;\n"
         '  *" exec -T pico-api "*)\n'
         '    if [ -f "$here/office-down" ]; then exit 1; fi\n'
+        "    exit 0 ;;\n"
+        # edu-pico-gw gate: `docker run --rm -i --network edu-core_default alpine/socat… - TCP:edu-pico-gw:18765`
+        '  "run "*" TCP:edu-pico-gw:18765"*)\n'
+        '    : >"$here/edu-gw-probed"\n'
+        '    if [ -f "$here/edu-gw-down" ]; then exit 1; fi\n'
+        '    printf "HTTP/1.0 200 OK\\r\\n"\n'
+        "    exit 0 ;;\n"
+        '  "rm -f "*)\n'
+        '    printf \'%s\\n\' "${@: -1}" >>"$here/removed"\n'
         "    exit 0 ;;\n"
         '  "volume ls "*)\n'
         '    if [ -f "$here/volumes" ]; then cat "$here/volumes"; fi\n'
@@ -645,3 +657,46 @@ def test_prod_update_runs_impl_from_checked_out_sha(tmp_path: Path) -> None:
     assert "[pico] exec impl from" in result.stdout
     assert "[pico] impl-from-advanced-main" in result.stdout
     assert f"health.git_sha exact match: {new_sha}" in result.stdout
+
+
+def test_prod_update_probes_edu_gateway_from_edu_network(tmp_path: Path) -> None:
+    """#995: edu-core reaches Pico only through edu-pico-gw:18765 inside edu-core_default.
+    Loopback health alone is a fake green for edu (live 2026-09-15)."""
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path)
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert (bin_dir / "edu-gw-probed").exists()
+    assert "[pico] edu-pico-gw ok" in result.stdout
+
+
+def test_prod_update_refuses_when_edu_gateway_is_dead(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, edu_gw_down=True)
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 14
+    assert "edu-pico-gw:18765 does not answer" in result.stderr
+
+
+def test_prod_update_adopts_hand_run_edu_gateway(tmp_path: Path) -> None:
+    """A same-named hand-run container (no compose label) is removed before up."""
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path)
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    removed = (bin_dir / "removed").read_text().split()
+    assert "edu-pico-gw" in removed and "pico-edu-gw-host" in removed
+    assert "adopting hand-run edu-pico-gw" in result.stdout
+
+
+def test_compose_declares_edu_gateway_pair() -> None:
+    text = (ROOT / "docker-compose.host.yml").read_text(encoding="utf-8")
+    assert "container_name: edu-pico-gw" in text
+    assert "UNIX-LISTEN:/sock/pico-api.sock" in text
+    assert "UNIX-CONNECT:/sock/pico-api.sock" in text
+    assert "name: edu-core_default" in text
+    # bridge is pinned, not :latest
+    assert "alpine/socat@sha256:" in text
+    assert "alpine/socat:latest" not in text
+    impl = IMPL.read_text(encoding="utf-8")
+    assert "pico-edu-gw-host edu-pico-gw" in impl
