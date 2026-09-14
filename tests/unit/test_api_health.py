@@ -22,7 +22,7 @@ def test_health() -> None:
     assert body["edu_mode"] in {"fake", "live"}
     assert body["rate_limit"] == {
         "chat_rpm": 30,
-        "chat_max_concurrent": 2,
+        "chat_max_concurrent": 4,
         "key_scope": "membership_or_ip",
     }
     assert body["default_runtime"] == "pi-agent"
