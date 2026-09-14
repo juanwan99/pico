@@ -76,7 +76,9 @@ class Settings(BaseSettings):
     # DEPRECATED no-op (KA-4 HARD): previously forced transitional loop.
     pico_legacy_agent_loop_emergency: bool = False
     pico_chat_rpm: int = 30
-    pico_chat_max_concurrent: int = 2
+    # Per membership (not global). #1003 T1: 8 teachers @ cap 2 all ok;
+    # same teacher 4-way was 2×429. Raised 2→4 so two-three tabs don't collide.
+    pico_chat_max_concurrent: int = 4
     # Reject (do not silent-truncate) user prompts longer than this many chars.
     # 12k was a DeepSeek-era cost cap; GPT via New API has a 128k–256k window.
     pico_chat_max_prompt_chars: int = 256000

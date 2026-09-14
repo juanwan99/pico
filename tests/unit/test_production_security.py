@@ -37,7 +37,7 @@ def _valid_production(**overrides: object) -> Settings:
         "pico_model_provider": "deepseek",
         "pico_allowed_models": "pico-fast,pico-deep",
         "pico_chat_rpm": 30,
-        "pico_chat_max_concurrent": 2,
+        "pico_chat_max_concurrent": 4,
         "pico_run_max_tokens": 4096,
         "pico_dangerous_tools_enabled": False,
     }
@@ -129,6 +129,17 @@ async def test_chat_admission_enforces_concurrency_and_rpm() -> None:
     assert await admission.acquire("ip", rpm=2, max_concurrent=1) is None
     await admission.release("ip")
     assert await admission.acquire("ip", rpm=2, max_concurrent=1) == "rate_limit"
+
+
+async def test_chat_admission_allows_four_then_busy() -> None:
+    admission = ChatAdmission()
+    for _ in range(4):
+        assert await admission.acquire("membership:school:m", rpm=30, max_concurrent=4) is None
+    assert (
+        await admission.acquire("membership:school:m", rpm=30, max_concurrent=4)
+        == "concurrency_limit"
+    )
+    assert await admission.acquire("membership:school:other", rpm=30, max_concurrent=4) is None
 
 
 async def test_chat_admission_isolated_by_membership_on_same_ip() -> None:
