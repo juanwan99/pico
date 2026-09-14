@@ -251,6 +251,29 @@ def test_pdf_empty_layer_falls_back_to_ocr(monkeypatch):
     assert "送教培训" in " ".join(s["excerpt"] for s in out["slices"])
 
 
+def test_ocr_false_never_renders_pages(monkeypatch):
+    """Live 2026-09-14: deploy-time reindex-all OCR'd every stored scan → 400% CPU,
+    event loop blocked. Projection/rebuild must pass ocr=False and get a fast miss."""
+    import ingest as mod
+
+    monkeypatch.setattr(mod, "_pdf_text_layer", lambda path: "")
+    monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: (_ for _ in ()).throw(AssertionError("OCR ran")))
+    monkeypatch.setattr(mod, "_ocr_image", lambda path: (_ for _ in ()).throw(AssertionError("OCR ran")))
+    scan = mod.ingest_bytes(filename="scan.pdf", data=b"%PDF-1.3 x", title="通知", ocr=False)
+    assert scan["ok"] is False and scan["code"] == "empty"
+    img = mod.ingest_bytes(filename="板书.png", data=b"\x89PNG", title="板书", ocr=False)
+    assert img["ok"] is False and img["code"] == "empty"
+
+
+def test_ocr_threads_env(monkeypatch):
+    import ingest as mod
+
+    monkeypatch.delenv("PICO_KB_OCR_THREADS", raising=False)
+    assert mod.ocr_threads() == 2
+    monkeypatch.setenv("PICO_KB_OCR_THREADS", "1")
+    assert mod.ocr_threads() == 1
+
+
 def test_pdf_ocr_truncation_is_tagged(monkeypatch):
     import ingest as mod
 

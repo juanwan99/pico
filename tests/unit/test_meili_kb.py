@@ -253,9 +253,11 @@ def test_parse_to_index_uses_field_kb_ingest_not_title(
 
     fake = types.ModuleType("ingest")
 
-    def ingest_bytes(*, filename: str, data: bytes, title: str):
+    def ingest_bytes(*, filename: str, data: bytes, title: str, ocr: bool = True):
         assert filename.endswith((".pdf", ".docx"))
         assert data.startswith(b"%PDF") or data[:2] == b"PK"
+        # Projection never OCRs (live 2026-09-14: reindex-all pegged pico-api).
+        assert ocr is False
         return {"ok": True, "slices": [{"excerpt": "抽出的正文：寒假从一月二十日开始。"}]}
 
     fake.ingest_bytes = ingest_bytes  # type: ignore[attr-defined]

@@ -63,6 +63,15 @@ class UnsupportedFormat(Exception):
         self.suffix = suffix
 
 
+def ocr_threads() -> int:
+    raw = (os.environ.get("PICO_KB_OCR_THREADS") or "").strip()
+    try:
+        n = int(raw) if raw else 2
+    except ValueError:
+        n = 2
+    return max(1, n)
+
+
 def ocr_max_pages() -> int:
     raw = (os.environ.get("PICO_KB_OCR_MAX_PAGES") or "").strip()
     try:
@@ -260,6 +269,9 @@ def _rapidocr_engine():
             "Det.model_path": onnx["det"],
             "Rec.model_path": onnx["rec"],
             "Cls.model_path": onnx["cls"],
+            # Shared host: one OCR job must not take every core (live 400% CPU).
+            "EngineConfig.onnxruntime.intra_op_num_threads": ocr_threads(),
+            "EngineConfig.onnxruntime.inter_op_num_threads": 1,
         }
     )
     return _OCR
@@ -426,12 +438,18 @@ def _pdf_page_count(path: Path) -> int:
         return 0
 
 
-def _extract(path: Path, suffix: str) -> tuple[str, str, list[str]]:
+def _extract(path: Path, suffix: str, *, ocr: bool = True) -> tuple[str, str, list[str]]:
+    """``ocr=False`` (Meili re-projection / paperclip sidecar) never renders pages:
+    a deploy-time reindex-all OCR'ing every stored scan pegged pico-api at 400%
+    CPU and blocked the event loop (live 2026-09-14). OCR runs only on explicit
+    ``/v1/kb/ingest``."""
     low = suffix.lower()
     if low == ".pdf":
         layer = _pdf_text_layer(path)
         if layer.strip():
             return layer, ENGINE_PDF_TEXT, ["pdfium"]
+        if not ocr:
+            return "", ENGINE_PDF_TEXT, ["pdfium", "empty-layer", "ocr-skipped"]
         # Empty text layer = scan. OCR fallback (#994 S2 · owner 2026-09-14).
         tags = ["pdfium", "empty-layer", "ocr"]
         text = _ocr_pdf_pages(path)
@@ -439,6 +457,8 @@ def _extract(path: Path, suffix: str) -> tuple[str, str, list[str]]:
             tags.append("ocr-truncated")
         return text, ENGINE_OCR, tags
     if low in IMAGE_SUFFIXES:
+        if not ocr:
+            return "", ENGINE_OCR, ["image", "ocr-skipped"]
         return _ocr_image(path), ENGINE_OCR, ["image", "ocr"]
     if low in UNSUPPORTED_HINT or low not in OFFICE_BACKENDS:
         raise UnsupportedFormat(low)
@@ -469,7 +489,7 @@ def human_error(code: str, *, suffix: str = "", engine: str = "") -> str:
     return "这份没读出来。换个格式再试；持续失败请把文件名发给管理员。"
 
 
-def ingest_bytes(*, filename: str, data: bytes, title: str) -> dict:
+def ingest_bytes(*, filename: str, data: bytes, title: str, ocr: bool = True) -> dict:
     suffix = Path(filename or "file.bin").suffix or ".bin"
     low = suffix.lower()
     if low == ".pdf":
@@ -482,7 +502,7 @@ def ingest_bytes(*, filename: str, data: bytes, title: str) -> dict:
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / f"src{suffix}"
             dest.write_bytes(data or b"")
-            md, engine, tags = _extract(dest, suffix)
+            md, engine, tags = _extract(dest, suffix, ocr=ocr)
     except Exception as exc:
         code = classify_convert_error(exc)
         return {

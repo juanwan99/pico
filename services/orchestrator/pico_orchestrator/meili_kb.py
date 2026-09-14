@@ -198,7 +198,9 @@ def parse_office_bytes(*, filename: str, data: bytes) -> str:
         logger.warning("field-kb-ingest unavailable: %s", type(exc).__name__)
         return ""
     try:
-        result = ingest_bytes(filename=filename, data=data, title=filename)
+        # Projection / rebuild path: text layers only. OCR is an explicit
+        # /v1/kb/ingest decision, never a side effect of reindex or upload.
+        result = ingest_bytes(filename=filename, data=data, title=filename, ocr=False)
     except Exception as exc:  # noqa: BLE001
         logger.warning("field-kb-ingest failed: %s", type(exc).__name__)
         return ""
