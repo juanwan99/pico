@@ -80,6 +80,10 @@ DATE: 2026-09-02
 94. **抽测 = 预览里点老师路径。** 不要只 curl 公网 API。预览源和公网源 cookie 不同；API 200 不等于右侧能开。
 95. **8080 断了右侧就黑。** startup 先探活再起。上游挂了返回人话 502，不要空转。
 
+96. **生产服务不继承宿主全局代理（#985 · 2026-09-13）。** New API 箱曾被 compose 钉 `HTTP_PROXY=127.0.0.1:7890`，老师聊天核 `superaichao.xin` 直连 200、经代理必 reset，四天失败率过半。哪条渠道要出网，用 New API 渠道级代理单独配。dockerd 同样被 systemd drop-in 钉了代理、镜像站首位 `docker.m.daocloud.io` 已要登录——root 清单在 #985；未修前基础镜像不在本机时 `prod-update` 会在 FROM 处死（现 impl 先预检、一行 FATAL exit 13）。
+97. **同机只能一个 `prod-update` 在跑（#994 阶段 0）。** 两窗同时部会留下 `Created` 临时容器 + compose 名字冲突。bootstrap 现持 `flock`（`PICO_DEPLOY_LOCK`，缺省 `/tmp/pico-prod-update.lock`），第二个直接 exit 5 并打印持有者。开部前仍先 `ps | grep prod-update` 看一眼。
+98. **失败率只看账本，不看感觉。** `scripts/teacher-failure-rate.py`（只读 helper，非真源）在 pico-api 箱里跑，出近 24h/7d 失败率、失败归并、成功 p50。阶段包必贴。9/8 93 轮 0 失败、9/11 56% 全是上游代理——核能稳，翻车在机器层。
+
 ## D · Cloud Agent
 
 18. **环境 Secrets（名 only · 值不进仓）：** `TS_AUTHKEY`（reusable/ephemeral）、`PICO_PROD_SSH_PRIVATE_KEY`；建议 `PICO_PROD_SSH_USER=ops`、`PICO_PROD_SSH_HOST=aliyun-hy`。脚本对错误值 `ps` / 公网 `47.*|139.*|100.*` 会强制改回 ops@aliyun-hy。
