@@ -276,6 +276,49 @@ services:
       - mongo
       - pico-api
 
+  # edu → Pico bridge (#995 stage 0). edu-core containers call
+  # http://edu-pico-gw:18765 (their PICO_BASE_URL). pico-api is host-network
+  # loopback-only and container→host-gateway TCP is firewalled, so the hop is:
+  # edu network TCP → host-bind unix socket → host loopback. Two socat
+  # pass-throughs, nothing else — not a second API surface. Replaces the
+  # 2026-08-16 hand-run python:3.12-slim container whose script lived in /tmp,
+  # got tmpfiles-cleaned, and died on the first dockerd restart (2026-09-15).
+  pico-edu-gw-host:
+    image: alpine/socat@sha256:3d9e7966201dd3a065df591020a09fd3c70845de7e7086e3531ea69db774406b
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - "UNIX-LISTEN:/sock/pico-api.sock,fork,reuseaddr,unlink-early,mode=666"
+      - "TCP:127.0.0.1:18765"
+    volumes:
+      # Host bind, 1777 sticky, created by prod-update.impl.sh before up (same
+      # contract as the office socket; named volumes forbidden).
+      - ${PICO_EDU_GW_SOCK_HOST:-./data/pico-edu-gw-sock}:/sock
+    depends_on:
+      - pico-api
+
+  edu-pico-gw:
+    image: alpine/socat@sha256:3d9e7966201dd3a065df591020a09fd3c70845de7e7086e3531ea69db774406b
+    # Name is the hostname edu-core resolves. Do not rename without edu.
+    container_name: edu-pico-gw
+    restart: unless-stopped
+    command:
+      - "TCP-LISTEN:18765,fork,reuseaddr"
+      - "UNIX-CONNECT:/sock/pico-api.sock"
+    volumes:
+      - ${PICO_EDU_GW_SOCK_HOST:-./data/pico-edu-gw-sock}:/sock
+    networks:
+      - edu_core
+    depends_on:
+      - pico-edu-gw-host
+
+networks:
+  # edu-core's compose network on the same host. External: Pico joins it with
+  # one alias; it never creates or owns it.
+  edu_core:
+    external: true
+    name: edu-core_default
+
 volumes:
   pico_mongo:
   pico_data:
