@@ -2,14 +2,15 @@
 
 ```
 DOC: docs/TRUTH-FREEZE.md
-STATUS: BINDING FREEZE v2.0
-FROZEN_AT: 2026-09-08
+STATUS: BINDING FREEZE v2.1
+FROZEN_AT: 2026-09-14
 PURPOSE: 固定产品/架构真源，防止聊天与旧文档再次冲掉校准结论
 AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star + LAW §0-supreme + AGENTS 文首工作法
-SUPERSEDES: v1.9；v1.8；v1.7；v1.6；v1.5；v1.4；v1.3；v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；主管/执行者编制；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+SUPERSEDES: v2.0；v1.9；v1.8；v1.7；v1.6；v1.5；v1.4；v1.3；v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；主管/执行者编制；多窗日常碎派；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
 OWNER_ORDER_2026-09-02: 最高要求：禁止自搞一套体系 / 禁止做重体系。厚桥四层绝对禁止。工作法：人合一 · GitHub 唯一真源 · 工位分开。
 OWNER_ORDER_2026-09-05: 北极星 v1.3 — 能力并列 · 禁焊死路径 · 专用动词是捷径 · 工作环境交成熟上游（#744 · #919）
 OWNER_ORDER_2026-09-06: 北极星 v1.4 — 产品主线是办公（Word/Excel/HTML/PPT）；写代码是仆人；不要 bash；本阶段接办公计算机，不是通用编程沙箱
+OWNER_ORDER_2026-09-14: 知识库入库（kb/ingest）文字层为空的 PDF 与 png/jpg 走 RapidOCR 渲页兜底进 Meili（#994 阶段 2 · #997）；只此一条路，回形针→模型仍禁抽文/OCR（P0b 不动）。
 OWNER_ORDER_2026-09-08: 名实 — 默认核 = 真 Pi（`pi-true`），hosted `pi_runtime` 只回滚；聊天脑 = New API `openai-responses`（现网模型见 EXPERIENCE §34），不是「DeepSeek 聊天核」；隔离办公库是天花板。Pico 与 edu 的模型调用 / 统计 / 渠道管理终局统一走 New API；Pico 不做钱；edu 钱包只认 Pico export，禁止另接一套模型账。本仓仍禁止写 edu-cloud / edu-core。
 OWNER_ORDER_2026-09-08b: 正本清源 — 知识库是 Meili 挂载，不是 Pico 检索产品。禁止 Pico 自选 embedding 厂牌，禁止把「待统一」写成施工卡。`generate_*` / inspect 投影是待拆污染，不是快路建设许可证。
 OWNER_ORDER_2026-09-08c: 办公计算机 v2 — 「不要 bash」= 不给模型宿主 shell、不开宿主 Pi builtins、不给 Pi 注册通用执行动词。隔离容器内跑完整 Python + 办公库是天花板执行层，不算 bash。Pico 不维护 import 白名单 / AST jail；隔离靠容器合同，不靠解释器。方案 docs/PLAN-OFFICE-COMPUTER-V2.md · #959。
@@ -158,6 +159,7 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | **v1.8** | 2026-09-08 | 名实：A3/O1 默认核 = 真 Pi（hosted 只回滚）；A4/O2/P0f 现网脑与计量上游 = New API（Pico+edu 统一，Pico 不做钱，本仓不写 edu）；办公天花板 = 隔离库，`generate_*` 是未退役快路；#942 只证调用面 |
 | **v1.9** | 2026-09-08 | 正本清源：知识库=Meili 挂载，禁止 Pico embedding 厂牌路由与「待统一」施工卡；inspect 投影器退出 CORE；出图只认 New API gateway；`generate_*` 标待拆污染不是快路建设 |
 | **v2.0** | 2026-09-08 | 办公计算机 v2：「不要 bash」边界钉死（宿主 shell / 宿主 builtins / 通用 exec 动词）；隔离容器内完整 Python 是天花板执行层，不算 bash；pico-api 内解释器 jail 定性为自制 jail 待拆；C1/C9/C10 收窄 |
+| **v2.1** | 2026-09-14 | 文件能读：kb/ingest 文字层为空 → RapidOCR 渲页兜底（轮子自带 ONNX，无 torch）；png/jpg 同口；Office 入库改直调 Docling 格式后端（DocumentConverter 在 no-torch 镜像导入即挂，现网 Office 入库曾 100% 断）；P0b 厚桥四层不动 |
 
 升版规则：任何 P0–W5 / A1–A4 / O1–O7 / C1–C11 的修改 → **v2.x** 新 PR，标题含 `TRUTH-FREEZE`。
 

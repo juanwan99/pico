@@ -18,7 +18,7 @@ PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源�
 最高: LAW §0-supreme · 禁止自搞一套 / 禁止重体系
 工作法: 本窗合一 · GitHub 唯一真源 · 写码树/生产树分开 · AGENTS 文首
 北极星: DIRECTION-NOW §0-star v1.4 · 用法 = Grok · 办公主线 · 能力并列 · 办公计算机交成熟上游 · 阶段方案 docs/PLAN-WORKENV-UPSTREAM.md
-冻结: docs/TRUTH-FREEZE.md v2.0（默认真 Pi · 模型/计量上游 New API · 知识库=Meili 挂载 · 办公执行面 = pico-office 无网容器完整 Python · 不要 bash = 宿主 shell/宿主 builtins/通用 exec 动词 · generate_*/inspect 已拆）
+冻结: docs/TRUTH-FREEZE.md v2.1（默认真 Pi · 模型/计量上游 New API · 知识库=Meili 挂载 · 扫描件/图片 OCR 兜底进库（#997）· 办公执行面 = pico-office 无网容器完整 Python · 不要 bash = 宿主 shell/宿主 builtins/通用 exec 动词 · generate_*/inspect 已拆）
 真源: GitHub Issue/PR/SHA/CI + 公网 tip。本页三行是索引。
 juanwan99/oneflow: 不当真源（已 Archive）
 ```

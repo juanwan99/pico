@@ -84,6 +84,64 @@ def test_ingest_ocr_missing_code(client: TestClient, monkeypatch) -> None:
     assert detail["code"] == "ocr_missing"
 
 
+def test_ingest_unsupported_format_is_415_with_human_line(client: TestClient, monkeypatch) -> None:
+    import ingest as ingest_mod
+
+    def fake_bytes(**kwargs):
+        return {
+            "ok": False,
+            "unread": True,
+            "code": "unsupported_format",
+            "error": "这种格式（.doc）知识库读不了。旧版 .doc 请先另存为 .docx 再入库。",
+            "slices": [],
+        }
+
+    monkeypatch.setattr(ingest_mod, "ingest_bytes", fake_bytes)
+    res = client.post(
+        "/v1/kb/ingest",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={
+            "kind": "material",
+            "title": "老教案",
+            "filename": "老教案.doc",
+            "content_b64": base64.b64encode(b"\xd0\xcf\x11\xe0").decode(),
+        },
+    )
+    assert res.status_code == 415, res.text
+    detail = res.json()["detail"]
+    assert detail["code"] == "unsupported_format"
+    assert ".docx" in detail["message"]
+
+
+def test_ingest_ok_passes_ocr_tags(client: TestClient, monkeypatch) -> None:
+    import ingest as ingest_mod
+
+    monkeypatch.setattr(
+        ingest_mod,
+        "ingest_bytes",
+        lambda **kwargs: {
+            "ok": True,
+            "engine": "rapidocr",
+            "tags": ["pdfium", "empty-layer", "ocr"],
+            "slices": [{"title": "扫描卷", "excerpt": "胰岛素调节血糖", "tags": ["ocr"]}],
+        },
+    )
+    res = client.post(
+        "/v1/kb/ingest",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={
+            "kind": "material",
+            "title": "扫描卷",
+            "filename": "扫描卷.pdf",
+            "content_b64": base64.b64encode(b"%PDF-1.3").decode(),
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["engine"] == "rapidocr"
+    assert "ocr" in body["tags"]
+
+
 def test_ingest_empty_does_not_return_filename(client: TestClient, monkeypatch) -> None:
     import ingest as ingest_mod
 
@@ -237,7 +295,7 @@ def test_ingest_usage_distinct_item_ids_same_content(client, monkeypatch, tmp_pa
         ("empty", 400, "empty"),
         ("ocr_missing", 503, "ocr_missing"),
         ("hf_offline", 503, "hf_offline"),
-        ("docling", 503, "ingest.docling_missing"),
+        ("docling", 503, "docling_missing"),
         ("exception", 422, "ingest.failed"),
         ("http", 422, "extract.invalid"),
         ("decode", 400, "file.invalid"),

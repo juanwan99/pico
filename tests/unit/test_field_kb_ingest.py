@@ -112,7 +112,8 @@ def test_empty_convert_does_not_use_filename(monkeypatch):
     assert out["slices"] == []
 
 
-def test_scan_pdf_empty_layer_is_not_indexed(monkeypatch):
+def test_scan_pdf_empty_layer_is_ocr_indexed(monkeypatch):
+    """#994 S2 · owner 2026-09-14: scan PDF is OCR'd into the index (was: rejected, §29)."""
     import ingest as mod
 
     called = {"ocr": 0}
@@ -122,10 +123,11 @@ def test_scan_pdf_empty_layer_is_not_indexed(monkeypatch):
     )
     monkeypatch.setattr(mod, "_convert_path", lambda path: "SHOULD_NOT")
     out = ingest_bytes(filename="scan.pdf", data=make_image_only_pdf(), title="通知")
-    assert called["ocr"] == 0
-    assert out["ok"] is False
-    assert out.get("code") == "empty"
-    assert out["slices"] == []
+    assert called["ocr"] == 1
+    assert out["ok"] is True
+    assert out["engine"] == "rapidocr"
+    assert "ocr" in out["tags"]
+    assert "教学设计" in out["slices"][0]["excerpt"]
 
 
 def test_pdf_text_layer_skips_ocr(monkeypatch):

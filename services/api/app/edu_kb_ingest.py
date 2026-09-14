@@ -83,18 +83,26 @@ async def post_kb_ingest(
         except HTTPException:
             raise
         except ModuleNotFoundError as exc:
-            raise _bad("ingest.docling_missing", "现网还没装 Docling，不能入库", 503) from exc
+            raise _bad("docling_missing", "文档转换引擎没就位，请管理员看镜像里的 Docling 后端。", 503) from exc
         except Exception as exc:
-            raise _bad("ingest.failed", f"Docling 没抽出内容：{exc}", 422) from exc
+            # ingest_bytes already classifies its own errors; this is the last net.
+            raise _bad("ingest.failed", "这份没读出来。换个格式再试；持续失败请把文件名发给管理员。", 422) from exc
         slices = result.get("slices") or []
         if not result.get("ok") or not slices:
             code = str(result.get("code") or "empty")
-            message = str(result.get("error") or "抽出来是空的")
-            status = 503 if code in {"ocr_missing", "hf_offline"} else 400
+            message = str(result.get("error") or "文件里没读到文字。")
+            # Code table: docs/KB-INGEST-FORMATS.md. edu shows `message` verbatim.
+            if code in {"ocr_missing", "hf_offline", "docling_missing", "ingest.unavailable"}:
+                status = 503
+            elif code == "unsupported_format":
+                status = 415
+            else:
+                status = 400
             raise _bad(code, message, status)
         return {
             "ok": True,
             "engine": result.get("engine") or "docling",
+            "tags": list(result.get("tags") or []),
             "kind": body.kind,
             "slices": slices,
         }
