@@ -63,10 +63,11 @@ def one_chat(
     bytes_out = 0
     err = ""
     try:
-        with httpx.Client(
-            timeout=httpx.Timeout(timeout_s, connect=10.0), trust_env=False
-        ) as client:
-            with client.stream(
+        with (
+            httpx.Client(
+                timeout=httpx.Timeout(timeout_s, connect=10.0), trust_env=False
+            ) as client,
+            client.stream(
                 "POST",
                 f"{base.rstrip('/')}/v1/chat/completions",
                 headers=_headers(key, membership, conv),
@@ -75,21 +76,22 @@ def one_chat(
                     "stream": True,
                     "messages": [{"role": "user", "content": SHORT_PROMPT}],
                 },
-            ) as resp:
-                status = resp.status_code
-                if status == 429:
-                    try:
-                        body = json.loads(resp.read().decode("utf-8", "replace"))
-                    except Exception:
-                        body = {}
-                    detail = body.get("detail") or {}
-                    if isinstance(detail, dict):
-                        code = str(detail.get("code") or "")
-                    else:
-                        code = "http_429"
+            ) as resp,
+        ):
+            status = resp.status_code
+            if status == 429:
+                try:
+                    body = json.loads(resp.read().decode("utf-8", "replace"))
+                except (json.JSONDecodeError, UnicodeError, TypeError, ValueError):
+                    body = {}
+                detail = body.get("detail") or {}
+                if isinstance(detail, dict):
+                    code = str(detail.get("code") or "")
                 else:
-                    for chunk in resp.iter_bytes():
-                        bytes_out += len(chunk)
+                    code = "http_429"
+            else:
+                for chunk in resp.iter_bytes():
+                    bytes_out += len(chunk)
     except httpx.HTTPError as exc:
         err = type(exc).__name__
         status = status or 0
@@ -136,7 +138,7 @@ def _percentile(values: list[float], q: float) -> float:
     if not values:
         return 0.0
     ordered = sorted(values)
-    idx = min(len(ordered) - 1, max(0, int(round(q * (len(ordered) - 1)))))
+    idx = min(len(ordered) - 1, max(0, round(q * (len(ordered) - 1))))
     return ordered[idx]
 
 
@@ -145,8 +147,10 @@ def render_markdown(title: str, summary: dict[str, Any], cap: int | None) -> str
         f"### {title}",
         "",
         f"- cap (health) = `{cap}`" if cap is not None else "- cap (health) = unknown",
-        f"- n={summary['n']} ok={summary['ok']} busy_429={summary['busy_429']} "
-        f"rpm_429={summary['rpm_429']} other_fail={summary['other_fail']}",
+        (
+            f"- n={summary['n']} ok={summary['ok']} busy_429={summary['busy_429']} "
+            f"rpm_429={summary['rpm_429']} other_fail={summary['other_fail']}"
+        ),
         f"- ok p50={summary['p50_s']}s p95={summary['p95_s']}s max={summary['max_s']}s",
         "",
         "| label | status | code | wall_s | ok |",
