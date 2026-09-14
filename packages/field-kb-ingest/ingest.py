@@ -217,16 +217,24 @@ def _convert_path(path: Path) -> str:
     return str(document or "")
 
 
+# RapidOCR 3.x renders this sentinel from to_markdown()/str() when nothing was
+# detected. Live 2026-09-14: a blank PNG came back 200 with this as its "text".
+_RAPIDOCR_NO_TEXT = ("没有检测到任何文本", "No text detected")
+
+
 def _rapidocr_text(out) -> str:
     if out is None:
         return ""
-    txts = getattr(out, "txts", None)
-    if txts:
-        return "\n".join(str(t) for t in txts if t)
+    if hasattr(out, "txts"):
+        txts = getattr(out, "txts", None)
+        # txts is None / () when detection found nothing — never fall through to
+        # the markdown sentinel.
+        return "\n".join(str(t) for t in (txts or ()) if t)
     to_md = getattr(out, "to_markdown", None)
-    if callable(to_md):
-        return str(to_md() or "")
-    return str(out or "")
+    text = str(to_md() or "") if callable(to_md) else str(out or "")
+    if any(text.strip().startswith(s) for s in _RAPIDOCR_NO_TEXT):
+        return ""
+    return text
 
 
 def bundled_rapidocr_onnx_paths() -> dict[str, str]:

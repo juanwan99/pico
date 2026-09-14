@@ -348,3 +348,26 @@ def test_office_still_docling(monkeypatch):
     assert out["ok"] is True
     assert out["engine"] == "docling"
     assert "语文" in out["slices"][0]["excerpt"]
+
+
+def test_rapidocr_no_text_sentinel_is_empty():
+    """Live 2026-09-14: blank PNG → 200 with「没有检测到任何文本。」as the slice."""
+    import ingest as mod
+
+    class NoTxts:
+        txts = None
+
+        def to_markdown(self):
+            return "没有检测到任何文本。"
+
+    class Legacy:
+        def to_markdown(self):
+            return "没有检测到任何文本。"
+
+    class Hit:
+        txts = ("胰岛素", "", "血糖")
+
+    assert mod._rapidocr_text(NoTxts()) == ""
+    assert mod._rapidocr_text(Legacy()) == ""
+    assert mod._rapidocr_text(Hit()) == "胰岛素\n血糖"
+    assert mod._rapidocr_text(None) == ""
