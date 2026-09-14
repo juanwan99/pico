@@ -243,6 +243,11 @@ def normalize_item(raw: dict[str, Any], *, page: int | None) -> dict[str, Any] |
 
     quote = str(raw.get("quote") or "").strip()[:60]
     section = raw.get("section")
+    blanks = (
+        []
+        if qtype in ("single_choice", "multi_choice")
+        else _normalize_blanks(raw.get("blanks"))
+    )
     return {
         "number": number,
         "type": qtype,
@@ -253,8 +258,29 @@ def normalize_item(raw: dict[str, Any], *, page: int | None) -> dict[str, Any] |
         "options_count": options_count,
         "sub_count": sub_count,
         "has_figure": has_figure,
+        "blanks": blanks,
         "source": {"page": page, "quote": quote},
     }
+
+
+def _normalize_blanks(raw: Any) -> list[dict[str, Any]]:
+    """Pass through model-tagged 空. Missing / unknown flex is dropped — never guessed."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for b in raw:
+        if not isinstance(b, dict):
+            continue
+        flex = str(b.get("flex") or "").strip().lower()
+        if flex not in ("fixed", "open"):
+            continue
+        text = "" if b.get("text") is None else str(b.get("text")).strip()
+        try:
+            sub = int(b.get("sub") or 1)
+        except (TypeError, ValueError):
+            sub = 1
+        out.append({"sub": max(sub, 1), "text": text, "flex": flex})
+    return out
 
 
 def items_from_model_text(text: str, *, page: int | None) -> list[dict[str, Any]]:
@@ -307,6 +333,8 @@ def merge_items(batches: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
             merged["rubric"] = _merge_rubric(prev["rubric"], item["rubric"])
             merged["sub_count"] = max(prev["sub_count"], item["sub_count"])
             merged["has_figure"] = prev["has_figure"] or item["has_figure"]
+            if not prev.get("blanks") and item.get("blanks"):
+                merged["blanks"] = item["blanks"]
             by_no[item["number"]] = merged
     return [by_no[n] for n in sorted(by_no)]
 
