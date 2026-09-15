@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pico_orchestrator.meili_kb import search_materials
+from pico_orchestrator.meili_kb import (
+    count_material,
+    documents_from_text,
+    is_noise_title,
+    search_materials,
+    upsert_documents,
+)
 from pydantic import BaseModel, Field
 
 from app.auth import Principal, payer_for, require_any_scope
@@ -39,13 +45,22 @@ class IngestIn(BaseModel):
 class SearchIn(BaseModel):
     query: str = Field(min_length=1, max_length=500)
     limit: int = Field(default=8, ge=1, le=50)
-    # Reserved: school-scope filter lands when ingest writes scope=school.
     scope: str = Field(default="member", max_length=16)
 
 
 def _content_item_id(raw: str | None, content_sha: str) -> str:
     value = "".join(ch for ch in str(raw or "") if ch.isalnum() or ch in "-_")[:80]
     return value or content_sha
+
+
+def _slices_text(slices: list[Any]) -> str:
+    parts: list[str] = []
+    for row in slices:
+        if isinstance(row, dict):
+            parts.append(str(row.get("excerpt") or row.get("text") or ""))
+        elif isinstance(row, str):
+            parts.append(row)
+    return "\n\n".join(p.strip() for p in parts if str(p).strip())
 
 
 def _bad(code: str, message: str, status: int = 400) -> HTTPException:
@@ -112,11 +127,32 @@ async def post_kb_ingest(
             else:
                 status = 400
             raise _bad(code, message, status)
+        item_id = _content_item_id(body.item_id, content_sha)
+        indexed = False
+        chunk_count = 0
+        skip_reason = None
+        if is_noise_title(title):
+            skip_reason = "noise"
+        else:
+            docs = documents_from_text(
+                artifact_id=item_id,
+                title=title,
+                text=_slices_text(slices),
+                school_id=str(principal.school_id or ""),
+                membership_id=str(principal.membership_id or ""),
+                scope="school",
+            )
+            indexed = upsert_documents(docs, replace_artifact=True)
+            chunk_count = len(docs) if indexed else 0
         return {
             "ok": True,
             "engine": result.get("engine") or "docling",
             "tags": list(result.get("tags") or []),
             "kind": body.kind,
+            "item_id": item_id,
+            "indexed": indexed,
+            "chunk_count": chunk_count,
+            "skip_reason": skip_reason,
             "slices": slices,
         }
     finally:
@@ -143,13 +179,14 @@ async def post_kb_search(
     principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
 ) -> dict[str, Any]:
     """Same Meili path as Pi kb_search. Tenant comes from the JWT, not the body."""
-    _ = body.scope  # school-scope filter is a later ingest write; ignore for now.
+    include_school = str(body.scope or "").strip().lower() == "school"
     try:
         result = search_materials(
             body.query,
             school_id=principal.school_id,
             membership_id=principal.membership_id,
             limit=body.limit,
+            include_school=include_school,
         )
     except RuntimeError as exc:
         raise _bad("kb.unavailable", "材料库暂时不可用，没有查到。不能编造材料内容。", 503) from exc
@@ -177,6 +214,28 @@ async def post_kb_search(
         "ok": True,
         "mode": "keyword",
         "hybrid": bool(result.get("hybrid")),
+        "include_school": include_school,
         "count": len(hits),
         "hits": hits,
+    }
+
+
+@router.get("/v1/kb/items/{item_id}")
+async def get_kb_item(
+    item_id: str,
+    principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
+) -> dict[str, Any]:
+    aid = _content_item_id(item_id, "")
+    if not aid:
+        raise _bad("kb.invalid", "没有材料 id")
+    try:
+        n = count_material(aid, school_id=str(principal.school_id or ""), scope="school")
+    except RuntimeError as exc:
+        raise _bad("kb.unavailable", "材料库暂时不可用，没有查到。不能编造材料内容。", 503) from exc
+    return {
+        "ok": True,
+        "item_id": aid,
+        "scope": "school",
+        "chunk_count": n,
+        "ready": n > 0,
     }

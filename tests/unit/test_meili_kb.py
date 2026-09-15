@@ -10,6 +10,7 @@ from pico_orchestrator.meili_kb import (
     MeiliIndex,
     chunk_doc_id,
     collapse_hits_by_artifact,
+    count_material,
     document_from_artifact,
     documents_from_text,
     extract_index_text,
@@ -125,7 +126,12 @@ def test_tenant_filter_is_server_side_and_quoted() -> None:
     clause = tenant_filter("school-a", "member-1")
     assert 'school_id = "school-a"' in clause
     assert 'membership_id = "member-1"' in clause
+    assert 'scope = "member"' in clause
     assert "OR" not in clause
+    school = tenant_filter("school-a", "member-1", include_school=True)
+    assert 'scope = "school"' in school
+    assert "OR" in school
+    assert 'membership_id = "member-1"' in school
     sneaky = quote_filter_value('x" OR school_id = "other')
     assert "OR" in sneaky
     # Quotes inside the value are escaped, so it stays one string token.
@@ -160,6 +166,47 @@ def test_search_injects_principal_filter_not_query(monkeypatch: pytest.MonkeyPat
     assert "hybrid" not in body
     assert out["hits"][0]["artifact_id"] == "a1"
     assert body["limit"] == 48
+
+
+def test_search_school_scope_uses_or_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    http = FakeHttp()
+    http.search_hits = [{"artifact_id": "edu-1", "scope": "school", "text": "培训在景炎"}]
+    search_materials(
+        "培训",
+        school_id="school-a",
+        membership_id="m1",
+        limit=5,
+        include_school=True,
+        client=http,
+    )
+    search_calls = [c for c in http.calls if c[0] == "POST" and str(c[1]).endswith("/search")]
+    body = search_calls[0][2]
+    assert body["filter"] == tenant_filter("school-a", "m1", include_school=True)
+
+
+def test_count_material_filters_item_and_school(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    http = FakeHttp()
+    http.search_status = 200
+
+    def request(method, url, *, json=None, headers=None, timeout=8.0):
+        http.calls.append((method, url, json))
+        if url.endswith("/health"):
+            return 200, {"status": "available"}
+        if url.endswith("/search"):
+            return 200, {"estimatedTotalHits": 3, "hits": [{"chunk_id": "x_0000"}]}
+        return 200, {}
+
+    http.request = request  # type: ignore[method-assign]
+    n = count_material("edu-item", school_id="school-a", scope="school", client=http)
+    assert n == 3
+    filt = http.calls[-1][2]["filter"]
+    assert 'artifact_id = "edu-item"' in filt
+    assert 'scope = "school"' in filt
+    assert 'school_id = "school-a"' in filt
 
 
 def test_search_collapses_same_artifact(monkeypatch: pytest.MonkeyPatch) -> None:

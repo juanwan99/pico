@@ -132,13 +132,29 @@ def quote_filter_value(raw: str) -> str:
     return '"' + str(raw).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def tenant_filter(school_id: str, membership_id: str) -> str:
-    """Server-side tenant clause. Never take a filter string from the client."""
+def tenant_filter(
+    school_id: str,
+    membership_id: str,
+    *,
+    include_school: bool = False,
+) -> str:
+    """Server-side tenant clause. Never take a filter string from the client.
+
+    Personal (default): this school + this member + ``scope = member``.
+    School checkbox: this school AND (``scope = school`` OR own member rows).
+    """
     school = str(school_id or "").strip()
     member = str(membership_id or "").strip()
     if not _ID_SAFE.match(school) or not _ID_SAFE.match(member):
         raise ValueError("invalid tenant keys")
-    return f"school_id = {quote_filter_value(school)} AND membership_id = {quote_filter_value(member)}"
+    school_q = quote_filter_value(school)
+    member_q = quote_filter_value(member)
+    if include_school:
+        return (
+            f"school_id = {school_q} AND "
+            f'(scope = "school" OR (scope = "member" AND membership_id = {member_q}))'
+        )
+    return f"school_id = {school_q} AND membership_id = {member_q} AND scope = \"member\""
 
 
 def _headers() -> dict[str, str]:
@@ -533,8 +549,9 @@ class MeiliIndex:
         school_id: str,
         membership_id: str,
         limit: int,
+        include_school: bool = False,
     ) -> dict[str, Any]:
-        clause = tenant_filter(school_id, membership_id)
+        clause = tenant_filter(school_id, membership_id, include_school=include_school)
         want = max(1, int(limit))
         # Chunks from one file used to fill the whole window (live hit@5 0.333).
         fetch = min(48, max(want * 8, want))
@@ -556,7 +573,39 @@ class MeiliIndex:
             "hits": hits,
             "hybrid": False,
             "filter": clause,
+            "include_school": include_school,
         }
+
+    def count(
+        self,
+        *,
+        school_id: str,
+        artifact_id: str,
+        scope: str = "school",
+    ) -> int:
+        school = str(school_id or "").strip()
+        aid = str(artifact_id or "").strip()
+        sc = str(scope or "").strip()
+        if not _ID_SAFE.match(school) or not aid or sc not in {"school", "member"}:
+            return 0
+        clause = (
+            f"school_id = {quote_filter_value(school)} AND "
+            f"artifact_id = {quote_filter_value(aid)} AND "
+            f"scope = {quote_filter_value(sc)}"
+        )
+        status, payload = self._call(
+            "POST",
+            f"/indexes/{INDEX}/search",
+            {"q": "", "filter": clause, "limit": 1},
+            timeout=8.0,
+        )
+        if status >= 400 or not isinstance(payload, dict):
+            raise RuntimeError(f"meili count http {status}")
+        for key in ("estimatedTotalHits", "totalHits"):
+            if payload.get(key) is not None:
+                return int(payload[key])
+        hits = payload.get("hits")
+        return len(hits) if isinstance(hits, list) else 0
 
 
 def upsert_material(doc: dict[str, Any], *, client: HttpClient | None = None) -> bool:
@@ -605,13 +654,33 @@ def search_materials(
     school_id: str,
     membership_id: str,
     limit: int,
+    include_school: bool = False,
     client: HttpClient | None = None,
 ) -> dict[str, Any]:
     """Search with server-injected tenant filter. Raises if Meili is down."""
     idx = MeiliIndex(client)
     if not meili_configured() or not idx.ping():
         raise RuntimeError("meili unavailable")
-    return idx.search(query, school_id=school_id, membership_id=membership_id, limit=limit)
+    return idx.search(
+        query,
+        school_id=school_id,
+        membership_id=membership_id,
+        limit=limit,
+        include_school=include_school,
+    )
+
+
+def count_material(
+    artifact_id: str,
+    *,
+    school_id: str,
+    scope: str = "school",
+    client: HttpClient | None = None,
+) -> int:
+    idx = MeiliIndex(client)
+    if not meili_configured() or not idx.ping():
+        raise RuntimeError("meili unavailable")
+    return idx.count(school_id=school_id, artifact_id=artifact_id, scope=scope)
 
 
 def collapse_hits_by_artifact(hits: list[Any], limit: int) -> list[dict[str, Any]]:
