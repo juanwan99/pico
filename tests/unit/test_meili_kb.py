@@ -17,14 +17,23 @@ from pico_orchestrator.meili_kb import (
     extract_office_text,
     health_fields,
     is_material,
+    new_api_embedder_spec,
     parse_office_bytes,
     project_material_artifact,
     quote_filter_value,
+    rerank_documents,
     search_materials,
     tenant_filter,
     upsert_documents,
     upsert_material,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_new_api_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Vendor keys / leftover Meili URLs must not inherit a box DEEPSEEK_* slot.
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
 
 
 class FakeHttp:
@@ -241,6 +250,126 @@ def test_search_never_hybrid_even_with_vendor_keys(
     body = next(c[2] for c in http.calls if str(c[1]).endswith("/search"))
     assert "hybrid" not in body
     assert out["hybrid"] is False
+    assert out["reranked"] is False
+
+
+def test_search_hybrid_when_new_api_embedder(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setattr(
+        "pico_orchestrator.meili_kb.rerank_documents",
+        lambda query, texts: list(range(len(texts))),
+    )
+    http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
+    http.search_hits = [
+        {"artifact_id": "a1", "text": "甲"},
+        {"artifact_id": "a2", "text": "乙"},
+    ]
+    out = search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)
+    body = next(c[2] for c in http.calls if str(c[1]).endswith("/search"))
+    assert body["hybrid"] == {"semanticRatio": 0.5, "embedder": "default"}
+    assert body["limit"] == 30
+    assert out["hybrid"] is True
+    assert out["reranked"] is True
+    assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a2"]
+
+
+def test_search_rerank_reorders_then_collapses(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setattr(
+        "pico_orchestrator.meili_kb.rerank_documents",
+        lambda query, texts: [2, 0, 1],
+    )
+    http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
+    http.search_hits = [
+        {"artifact_id": "a1", "text": "甲"},
+        {"artifact_id": "a2", "text": "乙"},
+        {"artifact_id": "a3", "text": "丙"},
+    ]
+    out = search_materials("x", school_id="s1", membership_id="m1", limit=2, client=http)
+    assert [h["artifact_id"] for h in out["hits"]] == ["a3", "a1"]
+    assert out["reranked"] is True
+
+
+def test_search_rerank_fail_keeps_meili_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", lambda query, texts: None)
+    http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
+    http.search_hits = [
+        {"artifact_id": "a1", "text": "甲"},
+        {"artifact_id": "a2", "text": "乙"},
+    ]
+    out = search_materials("x", school_id="s1", membership_id="m1", limit=5, client=http)
+    assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a2"]
+    assert out["hybrid"] is True
+    assert out["reranked"] is False
+
+
+def test_new_api_spec_rejects_vendor_and_official_deepseek(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-x")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+    assert new_api_embedder_spec() is None
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    assert new_api_embedder_spec() is None
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    spec = new_api_embedder_spec()
+    assert spec is not None
+    assert spec["url"] == "http://127.0.0.1:3000/v1/embeddings"
+    assert spec["request"]["model"] == "embedding-3"
+    assert "open.bigmodel" not in json.dumps(spec)
+    assert "siliconflow" not in json.dumps(spec).lower()
+
+
+def test_ensure_arms_new_api_not_vendor(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pico_orchestrator.meili_kb as mk
+
+    mk._ENSURE_CACHE.clear()
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setenv("ZHIPU_API_KEY", "zk-zhipu")
+    http = FakeHttp()
+    http.embedders_armed = False
+    MeiliIndex(http).ensure(force=True)
+    patch = next(c[2] for c in http.calls if c[0] == "PATCH")
+    default = patch["embedders"]["default"]
+    assert default["url"] == "http://127.0.0.1:3000/v1/embeddings"
+    assert default["request"]["model"] == "embedding-3"
+    dumped = json.dumps(patch)
+    assert "open.bigmodel.cn" not in dumped
+    assert "siliconflow" not in dumped.lower()
+
+
+def test_rerank_documents_parses_jina_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+
+    class _RerankHttp:
+        def request(self, method, url, *, json=None, headers=None, timeout=8.0):
+            assert method == "POST"
+            assert url == "http://127.0.0.1:3000/v1/rerank"
+            assert json["model"] == "rerank"
+            assert json["documents"] == ["甲", "乙"]
+            return 200, {"results": [{"index": 1, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.1}]}
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.HttpxClient", lambda: _RerankHttp())
+    assert rerank_documents("q", ["甲", "乙"]) == [1, 0]
 
 
 def test_search_keyword_when_key_but_embedder_not_armed(
@@ -534,11 +663,32 @@ def test_health_fields_honest_tiers(monkeypatch: pytest.MonkeyPatch) -> None:
         def live_embedder_armed(self) -> bool:
             return True
 
+        def embedder_is_new_api(self) -> bool:
+            return False
+
     monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _UpHybridLeftover())
     leftover = health_fields()
     assert leftover["meili_embedder"] is False
     assert leftover["kb_mode"] == "keyword"
     assert leftover["meili_embedder_provider"] == ""
+
+    class _UpNewApi:
+        def ping(self) -> bool:
+            return True
+
+        def embedder_is_new_api(self) -> bool:
+            return True
+
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _UpNewApi())
+    hybrid = health_fields()
+    assert hybrid["meili_embedder"] is True
+    assert hybrid["kb_mode"] == "hybrid"
+    assert hybrid["meili_embedder_provider"] == "new-api"
+    assert hybrid["meili_embedder_key_present"] is True
+    assert "zhipu" not in hybrid["meili_embedder_provider"]
+    assert "silicon" not in hybrid["meili_embedder_provider"]
 
     monkeypatch.setattr("pico_orchestrator.meili_kb.MeiliIndex", lambda: _Down())
     no_fake = health_fields()
