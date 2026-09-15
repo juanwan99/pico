@@ -371,11 +371,12 @@ def test_ingest_ledger_failure_does_not_break_success(client, monkeypatch):
 def test_search_uses_principal_not_body_and_returns_chunks(client, monkeypatch) -> None:
     captured: dict = {}
 
-    def fake_search(query, *, school_id, membership_id, limit, client=None):
+    def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None):
         captured["query"] = query
         captured["school_id"] = school_id
         captured["membership_id"] = membership_id
         captured["limit"] = limit
+        captured["include_school"] = include_school
         _ = client
         return {
             "hybrid": False,
@@ -409,3 +410,92 @@ def test_search_uses_principal_not_body_and_returns_chunks(client, monkeypatch) 
     assert body["hits"][0]["heading"] == "培训安排"
     assert body["hits"][0]["page"] == 2
     assert body["mode"] == "keyword"
+    assert captured["include_school"] is True
+    assert body["include_school"] is True
+
+
+def test_ingest_writes_school_chunks(client: TestClient, monkeypatch) -> None:
+    import ingest as ingest_mod
+    from app import edu_kb_ingest as kb
+
+    captured: dict = {}
+
+    monkeypatch.setattr(
+        ingest_mod,
+        "ingest_text",
+        lambda **kwargs: {
+            "ok": True,
+            "engine": "text",
+            "slices": [{"title": "通知", "excerpt": "培训在景炎初级中学。"}],
+        },
+    )
+
+    def fake_upsert(docs, *, client=None, replace_artifact=True):
+        captured["docs"] = docs
+        captured["replace"] = replace_artifact
+        _ = client
+        return True
+
+    monkeypatch.setattr(kb, "upsert_documents", fake_upsert)
+    res = client.post(
+        "/v1/kb/ingest",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"title": "通知", "text": "培训在景炎初级中学。", "item_id": "edu-item-1"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["item_id"] == "edu-item-1"
+    assert body["indexed"] is True
+    assert body["chunk_count"] >= 1
+    assert captured["replace"] is True
+    assert captured["docs"][0]["scope"] == "school"
+    assert captured["docs"][0]["artifact_id"] == "edu-item-1"
+    assert captured["docs"][0]["school_id"] == "school-a"
+
+
+def test_ingest_skips_noise_title(client: TestClient, monkeypatch) -> None:
+    import ingest as ingest_mod
+    from app import edu_kb_ingest as kb
+
+    called = {"n": 0}
+
+    monkeypatch.setattr(
+        ingest_mod,
+        "ingest_text",
+        lambda **kwargs: {
+            "ok": True,
+            "engine": "text",
+            "slices": [{"title": "回复摘要", "excerpt": "不该进库"}],
+        },
+    )
+
+    def boom(*args, **kwargs):
+        called["n"] += 1
+        return True
+
+    monkeypatch.setattr(kb, "upsert_documents", boom)
+    res = client.post(
+        "/v1/kb/ingest",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"title": "回复摘要", "text": "不该进库", "item_id": "noise-1"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["indexed"] is False
+    assert res.json()["skip_reason"] == "noise"
+    assert called["n"] == 0
+
+
+def test_kb_item_status(client: TestClient, monkeypatch) -> None:
+    from app import edu_kb_ingest as kb
+
+    monkeypatch.setattr(kb, "count_material", lambda *a, **k: 4)
+    res = client.get(
+        "/v1/kb/items/edu-item-1",
+        headers={"authorization": f"Bearer {_token()}"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["item_id"] == "edu-item-1"
+    assert body["chunk_count"] == 4
+    assert body["ready"] is True
+    assert body["scope"] == "school"
