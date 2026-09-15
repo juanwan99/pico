@@ -63,6 +63,7 @@ def _fake_runtime(
     login_failures_before_success: int = 0,
     reindex_http: str = "200",
     reindex_body: str = '{"ok":true,"indexed":1,"skipped":0,"total":1}',
+    meili_docs: int = 1,
     office_down: bool = False,
     leftover_volumes: tuple[str, ...] = (),
     volume_rm_fails: bool = False,
@@ -188,6 +189,12 @@ def _fake_runtime(
         "    printf '%s' '"
         + reindex_http
         + "'\n"
+        "    ;;\n"
+        "  */indexes/pico_materials/stats)\n"
+        "    if [ -n \"$out_file\" ]; then printf '%s' '{\"numberOfDocuments\":"
+        + str(int(meili_docs))
+        + "}' >\"$out_file\"; fi\n"
+        "    printf '200'\n"
         "    ;;\n"
         + login_body
         + "esac\n"
@@ -394,6 +401,15 @@ def test_prod_update_refuses_kb_reindex_failure(tmp_path: Path) -> None:
     result = _run_prod_update(production, sha, bin_dir)
     assert result.returncode == 10
     assert "kb reindex-all failed" in result.stderr
+    assert "[pico] done" not in result.stdout
+
+
+def test_prod_update_refuses_empty_meili_after_reindex(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, meili_docs=0)
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 10
+    assert "Meili has 0 documents after reindex" in result.stderr
     assert "[pico] done" not in result.stdout
 
 

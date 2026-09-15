@@ -381,7 +381,7 @@ def test_search_uses_principal_not_body_and_returns_chunks(client, monkeypatch) 
             "hybrid": False,
             "hits": [
                 {
-                    "chunk_id": "art-1:0000",
+                    "chunk_id": "art-1_0000",
                     "artifact_id": "art-1",
                     "material_id": "art-1",
                     "title": "通知.pdf",
