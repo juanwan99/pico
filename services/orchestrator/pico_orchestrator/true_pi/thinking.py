@@ -8,20 +8,32 @@ from typing import Any
 _MAX_DELTA = 4000
 
 
+def _ame_delta(obj: Mapping[str, Any] | None, want: str) -> str:
+    if not isinstance(obj, Mapping):
+        return ""
+    ame = obj.get("assistantMessageEvent")
+    if not isinstance(ame, dict):
+        return ""
+    if str(ame.get("type") or "") != want:
+        return ""
+    return str(ame.get("delta") or "")[:_MAX_DELTA]
+
+
 def thinking_delta_from_rpc(obj: Mapping[str, Any] | None) -> str:
     """Return the official ``thinking_delta`` chunk, or empty.
 
     Full ``message_update`` payloads stay dropped (OOM). Only this small
     delta is allowed back onto the RPC queue.
     """
-    if not isinstance(obj, Mapping):
-        return ""
-    ame = obj.get("assistantMessageEvent")
-    if not isinstance(ame, dict):
-        return ""
-    if str(ame.get("type") or "") != "thinking_delta":
-        return ""
-    return str(ame.get("delta") or "")[:_MAX_DELTA]
+    return _ame_delta(obj, "thinking_delta")
+
+
+def text_delta_from_rpc(obj: Mapping[str, Any] | None) -> str:
+    """Return the official ``text_delta`` chunk, or empty.
+
+    Same flood rule as thinking: never enqueue the accumulated message body.
+    """
+    return _ame_delta(obj, "text_delta")
 
 
 def thinking_from_message(msg: Mapping[str, Any] | None) -> str:

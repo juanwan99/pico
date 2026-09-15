@@ -1899,6 +1899,13 @@ async def chat_completions(
                 if text:
                     await q.put(("think", text))
                 return
+            if event_type == "message.stream":
+                # Official Pi text_delta. Stream only — token ledger flood
+                # is the OOM we already banned on message_update.
+                text = str(payload.get("text") or "")
+                if text:
+                    await q.put(("delta", text))
+                return
             async with factory() as session:
                 await append_event(session, run_id, event_type, payload)
                 # Checkpoint survives client detach (package B).
@@ -1918,7 +1925,7 @@ async def chat_completions(
                     )
             if event_type == "message.delta":
                 text = str(payload.get("text") or "")
-                if text:
+                if text and not payload.get("ledger_only"):
                     await q.put(("delta", text))
             elif event_type in {
                 "compaction.begin",

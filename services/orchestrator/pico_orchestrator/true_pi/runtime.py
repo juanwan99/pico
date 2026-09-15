@@ -677,7 +677,12 @@ async def run_true_pi_agent(
                 tag=tag,
             )
         if final_text:
-            await emit("message.delta", {"text": final_text, **tag})
+            payload = {"text": final_text, **tag}
+            if state.text_streamed:
+                # Live SSE already got token deltas. Ledger the cleaned
+                # answer once; do not dump the whole bubble again.
+                payload["ledger_only"] = True
+            await emit("message.delta", payload)
         if page_book is not None and page_book.mutations:
             await emit(
                 "page.mutations",

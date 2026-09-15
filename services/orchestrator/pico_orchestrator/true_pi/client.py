@@ -20,7 +20,7 @@ from typing import Any
 
 from pico_orchestrator.ask_user import AskTimedOut
 from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinking_level, pi_bin
-from pico_orchestrator.true_pi.thinking import thinking_delta_from_rpc
+from pico_orchestrator.true_pi.thinking import text_delta_from_rpc, thinking_delta_from_rpc
 
 logger = logging.getLogger(__name__)
 
@@ -547,12 +547,17 @@ class SubprocessTransport(TruePiTransport):
                             # Enqueueing them bloats the RPC queue + the
                             # wait_response pending buffer, buries agent_end
                             # behind the flood, and balloons memory.
-                            # Official thinking_delta is a small chunk — keep
-                            # only that, still drop the accumulated payload.
+                            # Official thinking_delta / text_delta are small
+                            # chunks — keep only those, still drop the body.
                             think = thinking_delta_from_rpc(obj)
                             if think:
                                 await self._queue.put(
                                     RpcEvent({"type": "thinking_delta", "delta": think})
+                                )
+                            piece = text_delta_from_rpc(obj)
+                            if piece:
+                                await self._queue.put(
+                                    RpcEvent({"type": "text_delta", "delta": piece})
                                 )
                             continue
                         await self._queue.put(RpcEvent(obj))

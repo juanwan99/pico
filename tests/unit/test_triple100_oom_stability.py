@@ -150,7 +150,9 @@ def test_source_filter_guard_present():
     assert 'event.type == "message_update"' in runtime
     assert 't == "message_update"' in client
     assert "thinking_delta_from_rpc" in client
+    assert "text_delta_from_rpc" in client
     assert 'RpcEvent({"type": "thinking_delta"' in client or "thinking_delta" in client
+    assert '"text_delta"' in client
 
 
 def test_runtime_consume_keeps_thinking_delta():
@@ -160,3 +162,11 @@ def test_runtime_consume_keeps_thinking_delta():
         drop_message_update=True,
     )
     assert sent == ["thinking_delta", "agent.end"]
+
+
+def test_runtime_consume_keeps_text_delta():
+    sent, _ = _fake_consume(
+        ["message_update", "text_delta", "agent.end"],
+        drop_message_update=True,
+    )
+    assert sent == ["text_delta", "agent.end"]
