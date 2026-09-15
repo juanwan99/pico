@@ -9,6 +9,8 @@ STATUS: BINDING · 2026-09-14（#994 阶段 2 · #997 · 对仓 #990）
 
 edu 侧显示 `detail.message` 原文即可，不要再翻译。
 
+Pico 索引是 **chunk 级**（标题/章节/页 + 300–500 字段），不是一材料一条。`回复摘要` 与只剩文件名的旧 `.doc` 不进索引。`POST /v1/kb/search` 与 Pi `kb_search` 同一路。hybrid / rerank 等 New API 渠道 live（#1005）。
+
 ## 支持矩阵
 
 | 后缀 | 引擎 | `engine` | `tags` | 说明 |
@@ -52,5 +54,5 @@ OCR 模型：`rapidocr` 轮子自带 PP-OCRv6 det/rec small + cls mobile（中�
 ## 不做
 
 - 不装 torch / docling 全家桶；不接 Docling PDF 管线（布局/表格模型）。
-- 不把 OCR 接进回形针→模型那条路（#865 厚桥四层）。
+- 不把 OCR 焊成 Pico 自建 PDF 阅读器。回形针原件优先；读不了才随行文本（#1005）。
 - 不做手写识别承诺；RapidOCR 对手写基本不识。

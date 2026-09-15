@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
+
+from pico_orchestrator.kb_chunker import chunk_text
+
+
+def test_sections_become_parents_and_children_keep_heading() -> None:
+    text = (
+        "# 一、培训对象\n\n"
+        "各县市区本级人工智能讲师团全体成员。\n\n"
+        "局直属各学校遴选的骨干教师。\n\n"
+        "# 二、培训安排\n\n"
+        "2026年7月8日：荷塘区、局直属各学校，地点株洲景炎初级中学。\n"
+    )
+    chunks = chunk_text(text, title="培训通知.pdf")
+    assert [c.heading for c in chunks] == ["一、培训对象", "二、培训安排"]
+    assert chunks[0].parent_seq == 0 and chunks[1].parent_seq == 1
+    assert "景炎" in chunks[1].text
+    assert chunks[1].parent_text.startswith("二、培训安排")
+
+
+def test_long_paragraph_splits_on_sentence_and_stays_under_limit() -> None:
+    para = "".join(f"第{i}句话，内容是一些说明文字。" for i in range(80))
+    chunks = chunk_text(para, title="长文", child_max=300)
+    assert len(chunks) > 3
+    # A trailing sliver may be merged into its predecessor (child_min slack).
+    assert all(len(c.text) <= 300 + 120 for c in chunks)
+    assert "".join(c.text for c in chunks).replace("\n", "") == para
+
+
+def test_page_breaks_yield_page_numbers() -> None:
+    text = "第一页的内容。\n\x0c\n第二页的内容。\n\x0c\n第三页的内容。"
+    chunks = chunk_text(text, title="扫描件.pdf", child_max=12, child_min=1)
+    pages = [c.page for c in chunks]
+    assert pages == [1, 2, 3]
+    assert all("\x0c" not in c.text for c in chunks)
+
+
+def test_no_page_marker_means_page_is_none() -> None:
+    chunks = chunk_text("只有一段。", title="x.docx")
+    assert len(chunks) == 1
+    assert chunks[0].page is None
+    assert chunks[0].parent_text == "只有一段。"
+
+
+def test_table_rows_are_kept_together_and_split_by_size() -> None:
+    rows = "\n".join(f"| 学生{i} | {60 + i % 40} | 优 |" for i in range(60))
+    chunks = chunk_text("| 姓名 | 分数 | 等级 |\n|---|---|---|\n" + rows, title="成绩.xlsx", child_max=400)
+    assert len(chunks) >= 3
+    assert all(c.text.lstrip().startswith("|") for c in chunks)
+
+
+def test_empty_and_cap() -> None:
+    assert chunk_text("", title="空") == []
+    many = "\n\n".join(f"段落{i}。" * 10 for i in range(1000))
+    assert len(chunk_text(many, title="多", max_chunks=50)) == 50

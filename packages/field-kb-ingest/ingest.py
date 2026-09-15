@@ -25,6 +25,9 @@ ENGINE_PDF_TEXT = "pdfium-text"
 ENGINE_OCR = "rapidocr"
 MAX_EXCERPT = 800
 MAX_SLICES = 8
+# Page boundary inside extracted PDF text (form feed). Whitespace to every
+# line-based consumer; the chunker turns it into a page number for citations.
+PAGE_BREAK = "\n\x0c\n"
 DEFAULT_ARTIFACTS = "/opt/docling-models"
 PDF_RENDER_SCALE = 2.5
 PDF_VISION_SCALE = 1.25
@@ -319,8 +322,9 @@ def _pdf_text_layer(path: Path) -> str:
                     if callable(ranged):
                         text = str(ranged() or "")
                 text = text.replace("\r\n", "\n").strip()
-                if text:
-                    parts.append(text)
+                # Keep the page boundary (form feed) so chunks can cite a page.
+                # Empty pages still advance the counter.
+                parts.append(text)
             finally:
                 close_tp = getattr(tp, "close", None)
                 if callable(close_tp):
@@ -328,7 +332,7 @@ def _pdf_text_layer(path: Path) -> str:
                 close_page = getattr(page, "close", None)
                 if callable(close_page):
                     close_page()
-        return "\n\n".join(parts)
+        return PAGE_BREAK.join(parts).strip()
     except Exception:
         return ""
     finally:
@@ -363,8 +367,7 @@ def _ocr_pdf_pages(path: Path, *, max_pages: int | None = None) -> str:
                     close()
             arr = np.asarray(pil.convert("RGB"))
             text = _rapidocr_text(engine(arr)).strip()
-            if text:
-                parts.append(text)
+            parts.append(text)
             close_page = getattr(page, "close", None)
             if callable(close_page):
                 close_page()
@@ -372,7 +375,7 @@ def _ocr_pdf_pages(path: Path, *, max_pages: int | None = None) -> str:
         close_doc = getattr(doc, "close", None)
         if callable(close_doc):
             close_doc()
-    return "\n\n".join(parts)
+    return PAGE_BREAK.join(parts).strip()
 
 
 def _png_bytes(pil) -> bytes:
@@ -534,7 +537,8 @@ def ingest_bytes(*, filename: str, data: bytes, title: str, ocr: bool = True) ->
             "error": human_error("empty", suffix=low, engine=engine),
             "slices": [],
         }
-    return {"ok": True, "engine": engine, "tags": tags, "slices": slices}
+    # ``markdown`` keeps the page breaks for chunk-level indexing (#1006).
+    return {"ok": True, "engine": engine, "tags": tags, "slices": slices, "markdown": md}
 
 
 def ingest_text(*, text: str, title: str) -> dict:
@@ -550,4 +554,5 @@ def ingest_text(*, text: str, title: str) -> dict:
         "ok": True,
         "engine": ENGINE,
         "slices": slices_from_markdown(md or text, title or "文"),
+        "markdown": md or text,
     }

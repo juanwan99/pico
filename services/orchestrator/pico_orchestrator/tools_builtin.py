@@ -861,6 +861,8 @@ def _workspace_handlers(
                         {
                             "artifact_id": art_id,
                             "title": title,
+                            "heading": str(row.get("heading") or ""),
+                            "page": row.get("page"),
                             "kind": row.get("kind"),
                             "excerpt": _excerpt_around(text or title, query),
                             "match": "index",
