@@ -535,10 +535,13 @@ class MeiliIndex:
         limit: int,
     ) -> dict[str, Any]:
         clause = tenant_filter(school_id, membership_id)
+        want = max(1, int(limit))
+        # Chunks from one file used to fill the whole window (live hit@5 0.333).
+        fetch = min(48, max(want * 8, want))
         body: dict[str, Any] = {
             "q": query,
             "filter": clause,
-            "limit": limit,
+            "limit": fetch,
             "attributesToRetrieve": DISPLAYED,
             "attributesToHighlight": ["title", "heading", "text"],
             "highlightPreTag": "",
@@ -547,9 +550,10 @@ class MeiliIndex:
         status, payload = self._call("POST", f"/indexes/{INDEX}/search", body, timeout=12.0)
         if status >= 400:
             raise RuntimeError(f"meili search http {status}")
-        hits = payload.get("hits") if isinstance(payload, dict) else None
+        raw = payload.get("hits") if isinstance(payload, dict) else None
+        hits = collapse_hits_by_artifact(raw if isinstance(raw, list) else [], want)
         return {
-            "hits": hits if isinstance(hits, list) else [],
+            "hits": hits,
             "hybrid": False,
             "filter": clause,
         }
@@ -566,13 +570,18 @@ def upsert_material(doc: dict[str, Any], *, client: HttpClient | None = None) ->
         return False
 
 
-def upsert_documents(docs: list[dict[str, Any]], *, client: HttpClient | None = None) -> bool:
+def upsert_documents(
+    docs: list[dict[str, Any]],
+    *,
+    client: HttpClient | None = None,
+    replace_artifact: bool = True,
+) -> bool:
     if not meili_configured() or not docs:
         return False
     try:
         idx = MeiliIndex(client)
         aid = str(docs[0].get("artifact_id") or "").strip()
-        if aid:
+        if replace_artifact and aid:
             idx.delete(aid)
         idx.upsert_many(docs)
         return True
@@ -605,7 +614,25 @@ def search_materials(
     return idx.search(query, school_id=school_id, membership_id=membership_id, limit=limit)
 
 
-def project_material_artifact(
+def collapse_hits_by_artifact(hits: list[Any], limit: int) -> list[dict[str, Any]]:
+    """One best chunk per ledger file so five results are five materials."""
+    want = max(1, int(limit))
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for row in hits:
+        if not isinstance(row, dict):
+            continue
+        aid = str(row.get("artifact_id") or row.get("material_id") or "").strip()
+        if not aid or aid in seen:
+            continue
+        seen.add(aid)
+        out.append(row)
+        if len(out) >= want:
+            break
+    return out
+
+
+def material_chunk_docs(
     principal: Any,
     *,
     artifact_id: str,
@@ -613,12 +640,11 @@ def project_material_artifact(
     kind: str,
     content: str | bytes | None,
     created_at: str | None = None,
-    client: HttpClient | None = None,
-) -> bool:
+) -> list[dict[str, Any]]:
     if not is_material(kind=kind, title=title):
-        return False
+        return []
     if is_noise_title(title):
-        return False
+        return []
     text = ""
     raw: bytes | None = None
     if isinstance(content, bytes):
@@ -629,18 +655,37 @@ def project_material_artifact(
     suffix = _suffix_of(title)
     needs_body = suffix in PARSE_EXT or suffix in OFFICE_EXTRACT_EXT
     if needs_body and not str(text or "").strip():
-        # Empty Docling / office_extract: do not index title-only (no fake green).
-        return False
+        return []
     if not text and not title:
-        return False
+        return []
     if is_title_only_stub(title=title, text=text or ""):
-        return False
-    docs = documents_from_text(
+        return []
+    return documents_from_text(
         artifact_id=artifact_id,
         title=title,
         text=text or title,
         school_id=str(getattr(principal, "school_id", "") or ""),
         membership_id=str(getattr(principal, "membership_id", "") or ""),
+        created_at=created_at,
+    )
+
+
+def project_material_artifact(
+    principal: Any,
+    *,
+    artifact_id: str,
+    title: str,
+    kind: str,
+    content: str | bytes | None,
+    created_at: str | None = None,
+    client: HttpClient | None = None,
+) -> bool:
+    docs = material_chunk_docs(
+        principal,
+        artifact_id=artifact_id,
+        title=title,
+        kind=kind,
+        content=content,
         created_at=created_at,
     )
     if not docs:
