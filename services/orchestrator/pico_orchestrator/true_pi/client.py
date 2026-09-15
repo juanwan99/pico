@@ -349,6 +349,7 @@ class SubprocessTransport(TruePiTransport):
         self._proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task[None] | None = None
         self._queue: asyncio.Queue[RpcEvent | None] = asyncio.Queue()
+        self._resp_q: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._stderr_tail: list[str] = []
         self._stream_seen = 0
 
@@ -540,35 +541,28 @@ class SubprocessTransport(TruePiTransport):
                         )
                         continue
                     if isinstance(obj, dict):
-                        t = str(obj.get("type") or "?")
-                        if t == "extension_ui_request":
-                            await self._reply_extension_ui(obj)
-                        if t == "message_update":
-                            # Streaming deltas carry the FULL accumulated content
-                            # (up to ~40KB incl. the tool-call args while the
-                            # model streams a large HTML body token-by-token) and
-                            # arrive at ~100-400/sec (O(n²) over tokens).
-                            # Enqueueing them bloats the RPC queue + the
-                            # wait_response pending buffer, buries agent_end
-                            # behind the flood, and balloons memory.
-                            # Official thinking_delta / text_delta are small
-                            # chunks — keep only those, still drop the body.
-                            think = thinking_delta_from_rpc(obj)
-                            if think:
-                                await self._queue.put(
-                                    RpcEvent({"type": "thinking_delta", "delta": think})
-                                )
-                            piece, self._stream_seen = incremental_text_from_update(
-                                obj, self._stream_seen
-                            )
-                            if piece:
-                                await self._queue.put(
-                                    RpcEvent({"type": "text_delta", "delta": piece})
-                                )
-                            continue
-                        await self._queue.put(RpcEvent(obj))
+                        await self._ingest_rpc(obj)
         finally:
             await self._queue.put(None)
+            await self._resp_q.put({"type": "response", "command": "", "_eof": True})
+
+    async def _ingest_rpc(self, obj: dict[str, Any]) -> None:
+        t = str(obj.get("type") or "?")
+        if t == "response":
+            await self._resp_q.put(obj)
+            return
+        if t == "extension_ui_request":
+            await self._reply_extension_ui(obj)
+        if t == "message_update":
+            # Full body stays off both queues. Only small official/suffix slices.
+            think = thinking_delta_from_rpc(obj)
+            if think:
+                await self._queue.put(RpcEvent({"type": "thinking_delta", "delta": think}))
+            piece, self._stream_seen = incremental_text_from_update(obj, self._stream_seen)
+            if piece:
+                await self._queue.put(RpcEvent({"type": "text_delta", "delta": piece}))
+            return
+        await self._queue.put(RpcEvent(obj))
 
     async def _read_stderr(self) -> None:
         assert self._proc and self._proc.stderr
@@ -603,35 +597,34 @@ class SubprocessTransport(TruePiTransport):
         self, command_type: str, *, req_id: str | None = None, timeout: float = 30.0
     ) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + max(1.0, timeout)
-        pending: list[RpcEvent] = []
+        pending: list[dict[str, Any]] = []
         try:
             while asyncio.get_running_loop().time() < deadline:
                 remaining = max(0.05, deadline - asyncio.get_running_loop().time())
                 try:
-                    item = await asyncio.wait_for(self._queue.get(), timeout=remaining)
+                    raw = await asyncio.wait_for(self._resp_q.get(), timeout=remaining)
                 except TimeoutError as exc:
                     raise TruePiClientError(
                         f"timeout waiting for response {command_type}"
                     ) from exc
-                if item is None:
+                if raw.get("_eof"):
                     raise TruePiClientError(
                         f"process ended before response {command_type}; "
                         f"stderr_tail={self._stderr_tail[-5:]}"
                     )
-                raw = item.raw
                 if (
                     raw.get("type") == "response"
                     and raw.get("command") == command_type
                     and (req_id is None or raw.get("id") == req_id)
                 ):
                     for p in pending:
-                        await self._queue.put(p)
+                        await self._resp_q.put(p)
                     return raw
-                pending.append(item)
+                pending.append(raw)
             raise TruePiClientError(f"timeout waiting for response {command_type}")
         except Exception:
             for p in pending:
-                await self._queue.put(p)
+                await self._resp_q.put(p)
             raise
 
     async def close(self, *, kill: bool = True) -> None:

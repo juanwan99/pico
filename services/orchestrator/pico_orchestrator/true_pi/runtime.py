@@ -398,8 +398,6 @@ async def run_true_pi_agent(
             system_prompt=str(getattr(caps, "system_prompt", "") or ""),
         )
 
-        await client.prompt(full_prompt, images=list(getattr(caps, "images", None) or []))
-
         async def _consume() -> None:
             nonlocal last_progress_wall, last_tool_ok_wall
             async for event in client.events():
@@ -455,6 +453,10 @@ async def run_true_pi_agent(
 
         consumer = asyncio.create_task(_consume())
         try:
+            # Consume must run while wait_response sits on prompt ack.
+            # Live Pi can stream text_delta before the prompt response;
+            # starting after prompt() made TTFB == generation wall time.
+            await client.prompt(full_prompt, images=list(getattr(caps, "images", None) or []))
             while not state.settled and not stop.is_set():
                 if _hitl_ask_timed_out(transport):
                     await client.abort()
@@ -543,6 +545,13 @@ async def run_true_pi_agent(
             else:
                 with suppress(Exception):
                     consumer.result()
+        if state.event_kinds:
+            logger.info(
+                "true_pi mapped_kinds run_id=%s n=%s kinds=%s",
+                rid,
+                len(state.event_kinds),
+                ",".join(state.event_kinds[:120]),
+            )
 
         if _hitl_ask_timed_out(transport):
             await client.abort()
