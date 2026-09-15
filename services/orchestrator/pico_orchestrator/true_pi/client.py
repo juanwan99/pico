@@ -20,7 +20,10 @@ from typing import Any
 
 from pico_orchestrator.ask_user import AskTimedOut
 from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinking_level, pi_bin
-from pico_orchestrator.true_pi.thinking import text_delta_from_rpc, thinking_delta_from_rpc
+from pico_orchestrator.true_pi.thinking import (
+    incremental_text_from_update,
+    thinking_delta_from_rpc,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -347,6 +350,7 @@ class SubprocessTransport(TruePiTransport):
         self._reader_task: asyncio.Task[None] | None = None
         self._queue: asyncio.Queue[RpcEvent | None] = asyncio.Queue()
         self._stderr_tail: list[str] = []
+        self._stream_seen = 0
 
     def models_document(self) -> dict[str, Any]:
         return true_pi_models_document(
@@ -554,7 +558,9 @@ class SubprocessTransport(TruePiTransport):
                                 await self._queue.put(
                                     RpcEvent({"type": "thinking_delta", "delta": think})
                                 )
-                            piece = text_delta_from_rpc(obj)
+                            piece, self._stream_seen = incremental_text_from_update(
+                                obj, self._stream_seen
+                            )
                             if piece:
                                 await self._queue.put(
                                     RpcEvent({"type": "text_delta", "delta": piece})
@@ -580,6 +586,8 @@ class SubprocessTransport(TruePiTransport):
     async def send(self, command: Mapping[str, Any]) -> None:
         if self._proc is None or self._proc.stdin is None:
             raise TruePiClientError("process not started")
+        if str(command.get("type") or "") == "prompt":
+            self._stream_seen = 0
         line = json.dumps(dict(command), ensure_ascii=False) + "\n"
         self._proc.stdin.write(line.encode("utf-8"))
         await self._proc.stdin.drain()

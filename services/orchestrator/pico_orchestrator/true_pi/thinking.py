@@ -36,6 +36,43 @@ def text_delta_from_rpc(obj: Mapping[str, Any] | None) -> str:
     return _ame_delta(obj, "text_delta")
 
 
+def product_text_snapshot(obj: Mapping[str, Any] | None) -> str:
+    """Visible assistant text on a ``message_update``. Not thinking, not tools."""
+    if not isinstance(obj, Mapping):
+        return ""
+    msg = obj.get("message")
+    if not isinstance(msg, dict):
+        return ""
+    content = msg.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if str(block.get("type") or "") != "text":
+            continue
+        parts.append(str(block.get("text") or ""))
+    return "".join(parts)
+
+
+def incremental_text_from_update(obj: Mapping[str, Any] | None, seen: int) -> tuple[str, int]:
+    """Small new product slice. Prefer official text_delta; else snapshot suffix."""
+    have = max(0, int(seen))
+    official = text_delta_from_rpc(obj)
+    snap = product_text_snapshot(obj)
+    if snap and len(snap) < have:
+        have = 0
+    if official:
+        return official, max(have + len(official), len(snap))
+    if len(snap) <= have:
+        return "", have
+    piece = snap[have:][:_MAX_DELTA]
+    return piece, have + len(piece)
+
+
 def thinking_from_message(msg: Mapping[str, Any] | None) -> str:
     """Join official ``{type: thinking}`` content blocks. Never product text."""
     if not isinstance(msg, Mapping):
