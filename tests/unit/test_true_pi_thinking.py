@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 from pico_orchestrator.true_pi.client import RpcEvent
 from pico_orchestrator.true_pi.events import EventMapState, map_event
 from pico_orchestrator.true_pi.thinking import (
+    incremental_text_from_update,
     text_delta_from_rpc,
     thinking_delta_from_rpc,
     thinking_from_message,
@@ -52,6 +53,31 @@ def test_text_delta_from_rpc_keeps_only_the_chunk() -> None:
     }
     assert text_delta_from_rpc(flood) == "培训在"
     assert thinking_delta_from_rpc(flood) == ""
+
+
+def test_incremental_text_uses_snapshot_suffix_when_no_official_delta() -> None:
+    first = {
+        "type": "message_update",
+        "message": {"role": "assistant", "content": [{"type": "text", "text": "培训"}]},
+    }
+    piece, seen = incremental_text_from_update(first, 0)
+    assert piece == "培训"
+    assert seen == 2
+    second = {
+        "type": "message_update",
+        "message": {"role": "assistant", "content": [{"type": "text", "text": "培训在哪"}]},
+    }
+    piece, seen = incremental_text_from_update(second, seen)
+    assert piece == "在哪"
+    assert seen == 4
+    # Growing 8k body still only yields the new tail, never the whole blob.
+    flood = {
+        "type": "message_update",
+        "message": {"role": "assistant", "content": [{"type": "text", "text": "培训在哪" + ("。") * 100}]},
+    }
+    piece, seen = incremental_text_from_update(flood, seen)
+    assert piece.startswith("。")
+    assert len(piece) == 100
 
 
 def test_thinking_delta_from_rpc_ignores_text_and_tool_deltas() -> None:

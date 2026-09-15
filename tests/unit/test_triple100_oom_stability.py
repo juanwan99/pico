@@ -150,7 +150,8 @@ def test_source_filter_guard_present():
     assert 'event.type == "message_update"' in runtime
     assert 't == "message_update"' in client
     assert "thinking_delta_from_rpc" in client
-    assert "text_delta_from_rpc" in client
+    assert "text_delta_from_rpc" in client or "incremental_text_from_update" in client
+    assert "incremental_text_from_update" in client
     assert 'RpcEvent({"type": "thinking_delta"' in client or "thinking_delta" in client
     assert '"text_delta"' in client
 
