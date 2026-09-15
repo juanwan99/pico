@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 INDEX = "pico_materials"
 PRIMARY_KEY = "chunk_id"
 FILTERABLE = ["school_id", "membership_id", "scope", "artifact_id"]
-SEARCHABLE = ["title", "heading", "text"]
+SEARCHABLE = ["title", "heading", "text", "parent_text"]
 DISPLAYED = [
     "chunk_id",
     "artifact_id",
@@ -241,6 +242,102 @@ def embedder_provider() -> str | None:
 
 def embedding_api_key() -> str:
     return new_api_key() if new_api_embedder_spec() else ""
+
+
+_EMBED_PROBE: tuple[float, bool] | None = None
+
+
+def embed_query_ok() -> bool:
+    """Query-time embed must work. Documents can have leftover vectors while /embeddings is 1113."""
+    global _EMBED_PROBE
+    spec = new_api_embedder_spec()
+    if not spec:
+        return False
+    import time
+
+    now = time.monotonic()
+    if _EMBED_PROBE is not None and now - _EMBED_PROBE[0] < 45.0:
+        return _EMBED_PROBE[1]
+    ok = False
+    try:
+        status, body = HttpxClient().request(
+            "POST",
+            str(spec["url"]),
+            json={"model": kb_embed_model(), "input": ["probe"]},
+            headers={
+                "Authorization": f"Bearer {new_api_key()}",
+                "Content-Type": "application/json",
+            },
+            timeout=4.0,
+        )
+        ok = status < 400 and isinstance(body, dict) and bool(body.get("data"))
+    except Exception:  # noqa: BLE001
+        ok = False
+    _EMBED_PROBE = (now, ok)
+    return ok
+
+
+def expand_search_queries(query: str) -> list[str]:
+    """Two extra keyword strings from New API chat. Empty if the channel is down."""
+    flag = (os.environ.get("PICO_KB_QUERY_EXPAND") or "1").strip().lower()
+    if flag in {"0", "false", "off", "no"}:
+        return []
+    q = (query or "").strip()
+    if not q or not new_api_base() or not new_api_key() or not _is_new_api_loopback(new_api_base()):
+        return []
+    model = (os.environ.get("DEEPSEEK_MODEL") or "gpt-5.6-sol").strip() or "gpt-5.6-sol"
+    prompt = (
+        "老师在搜学校材料。根据这个问题写出 2 条检索词，要用材料里可能出现的专名、文件名、地名、日期，"
+        "不要解释。只输出 JSON：{\"q\":[\"...\",\"...\"]}\n问题：" + q[:300]
+    )
+    try:
+        status, body = HttpxClient().request(
+            "POST",
+            f"{new_api_base()}/responses",
+            json={
+                "model": model,
+                "input": [{"role": "user", "content": prompt}],
+                "reasoning": {"effort": "low"},
+                "stream": False,
+            },
+            headers={
+                "Authorization": f"Bearer {new_api_key()}",
+                "Content-Type": "application/json",
+            },
+            timeout=8.0,
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    if status >= 400 or not isinstance(body, dict):
+        return []
+    text = ""
+    for item in body.get("output") or []:
+        if not isinstance(item, dict):
+            continue
+        for part in item.get("content") or []:
+            if isinstance(part, dict) and part.get("type") in {"output_text", "text"}:
+                text += str(part.get("text") or "")
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text).rstrip("`").strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end < 0:
+        return []
+    try:
+        parsed = json.loads(text[start : end + 1])
+    except Exception:  # noqa: BLE001
+        return []
+    raw = parsed.get("q") if isinstance(parsed, dict) else None
+    out: list[str] = []
+    seen = {q}
+    for row in raw if isinstance(raw, list) else []:
+        s = str(row or "").strip()
+        if s and s not in seen and len(s) <= 80:
+            seen.add(s)
+            out.append(s)
+        if len(out) >= 2:
+            break
+    return out
 
 
 def meili_configured() -> bool:
@@ -555,7 +652,7 @@ class MeiliIndex:
 
     def ensure(self, *, force: bool = False) -> None:
         spec = new_api_embedder_spec()
-        cache_key = f"{meili_url()}|{INDEX}|chunk-v1|{spec.get('url') if spec else 'off'}"
+        cache_key = f"{meili_url()}|{INDEX}|chunk-v2|{spec.get('url') if spec else 'off'}"
         if not force and _ENSURE_CACHE.get(cache_key):
             return
         pk = self._primary_key()
@@ -580,6 +677,22 @@ class MeiliIndex:
         if not force and self._settings_match(want_embedders):
             _ENSURE_CACHE[cache_key] = True
             return
+        # Searchable-only fix must not resend embedders: that re-embeds the whole
+        # index and burns a dead query-embed channel.
+        if (
+            not force
+            and self._embedder_url_match(want_embedders)
+            and not self._searchable_match()
+        ):
+            self._accepted(
+                "PATCH",
+                f"/indexes/{INDEX}/settings",
+                {"searchableAttributes": SEARCHABLE, "displayedAttributes": DISPLAYED},
+                timeout=20.0,
+                wait_s=45.0,
+            )
+            _ENSURE_CACHE[cache_key] = True
+            return
         settings: dict[str, Any] = {
             "filterableAttributes": FILTERABLE,
             "searchableAttributes": SEARCHABLE,
@@ -592,25 +705,41 @@ class MeiliIndex:
         else:
             _ENSURE_CACHE.pop(cache_key, None)
 
-    def _settings_match(self, want_embedders: dict[str, Any] | None) -> bool:
+    def _settings_body(self) -> dict[str, Any] | None:
         try:
             status, body = self._call("GET", f"/indexes/{INDEX}/settings", timeout=3.0)
         except Exception:  # noqa: BLE001
-            return False
+            return None
         if status >= 400 or not isinstance(body, dict):
+            return None
+        return body
+
+    def _searchable_match(self, body: dict[str, Any] | None = None) -> bool:
+        live = body if body is not None else self._settings_body()
+        if not live:
             return False
-        if set(body.get("filterableAttributes") or []) != set(FILTERABLE):
+        return list(live.get("searchableAttributes") or []) == list(SEARCHABLE)
+
+    def _embedder_url_match(self, want_embedders: dict[str, Any] | None) -> bool:
+        live = self._settings_body()
+        if not live:
             return False
+        if set(live.get("filterableAttributes") or []) != set(FILTERABLE):
+            return False
+        emb = live.get("embedders") if isinstance(live.get("embedders"), dict) else {}
+        default = emb.get("default") if isinstance(emb, dict) else None
         if want_embedders:
-            live = body.get("embedders") if isinstance(body.get("embedders"), dict) else {}
-            default = live.get("default") if isinstance(live, dict) else None
             if not isinstance(default, dict):
                 return False
             want_default = want_embedders.get("default") or {}
             return str(default.get("url") or "") == str(want_default.get("url") or "")
-        live = body.get("embedders") if isinstance(body.get("embedders"), dict) else {}
-        default = live.get("default") if isinstance(live, dict) else None
         return not isinstance(default, dict)
+
+    def _settings_match(self, want_embedders: dict[str, Any] | None) -> bool:
+        live = self._settings_body()
+        if not live:
+            return False
+        return self._embedder_url_match(want_embedders) and self._searchable_match(live)
 
     def _accepted(
         self,
@@ -688,45 +817,62 @@ class MeiliIndex:
         clause = tenant_filter(school_id, membership_id, include_school=include_school)
         want = max(1, int(limit))
         spec = new_api_embedder_spec()
-        use_hybrid = self.embedder_is_new_api()
-        # Chunks from one file used to fill the whole window (live hit@5 0.333).
-        # Hybrid/rerank: Meili top-30, then New API rerank, then collapse.
-        fetch = 30 if (use_hybrid or spec) else min(48, max(want * 8, want))
-        body: dict[str, Any] = {
-            "q": query,
-            "filter": clause,
-            "limit": fetch,
-            "attributesToRetrieve": DISPLAYED,
-            "attributesToHighlight": ["title", "heading", "text"],
-            "highlightPreTag": "",
-            "highlightPostTag": "",
-        }
-        if use_hybrid:
-            body["hybrid"] = {
-                "semanticRatio": kb_hybrid_ratio(),
-                "embedder": "default",
+        # Only send hybrid when query embed works. Leftover document vectors + 1113
+        # made Meili retry the embedder five times and still return keyword.
+        use_hybrid = self.embedder_is_new_api() and embed_query_ok()
+        queries = [query]
+        for extra in expand_search_queries(query):
+            if extra not in queries:
+                queries.append(extra)
+        fetch = 30 if (use_hybrid or spec or len(queries) > 1) else min(48, max(want * 8, want))
+        merged: list[Any] = []
+        seen_chunk: set[str] = set()
+        for q in queries[:3]:
+            body: dict[str, Any] = {
+                "q": q,
+                "filter": clause,
+                "limit": fetch,
+                "attributesToRetrieve": DISPLAYED,
+                "attributesToHighlight": ["title", "heading", "text"],
+                "highlightPreTag": "",
+                "highlightPostTag": "",
             }
-        status, payload = self._call("POST", f"/indexes/{INDEX}/search", body, timeout=12.0)
-        if status >= 400:
-            raise RuntimeError(f"meili search http {status}")
-        raw = payload.get("hits") if isinstance(payload, dict) else None
-        raw_hits = raw if isinstance(raw, list) else []
+            if use_hybrid:
+                body["hybrid"] = {
+                    "semanticRatio": kb_hybrid_ratio(),
+                    "embedder": "default",
+                }
+            status, payload = self._call("POST", f"/indexes/{INDEX}/search", body, timeout=12.0)
+            if status >= 400:
+                raise RuntimeError(f"meili search http {status}")
+            raw = payload.get("hits") if isinstance(payload, dict) else None
+            for row in raw if isinstance(raw, list) else []:
+                if not isinstance(row, dict):
+                    continue
+                cid = str(row.get("chunk_id") or row.get("artifact_id") or "")
+                if not cid or cid in seen_chunk:
+                    continue
+                seen_chunk.add(cid)
+                merged.append(row)
+        files = collapse_hits_by_artifact(merged, 20)
         reranked = False
-        if spec and raw_hits:
-            window = raw_hits[:30]
-            texts = [
-                str(row.get("text") or "")[:2000] if isinstance(row, dict) else ""
-                for row in window
-            ]
+        if spec and files:
+            texts = []
+            for row in files:
+                head = " ".join(
+                    str(x) for x in (row.get("title"), row.get("heading")) if x
+                )
+                texts.append((head + "\n" + str(row.get("text") or ""))[:2000])
             order = rerank_documents(query, texts)
             if order:
-                raw_hits = _apply_rerank_order(window, order) + raw_hits[30:]
+                files = _apply_rerank_order(files, order)
                 reranked = True
-        hits = collapse_hits_by_artifact(raw_hits, want)
+        hits = collapse_hits_by_artifact(files, want)
         return {
             "hits": hits,
             "hybrid": use_hybrid,
             "reranked": reranked,
+            "expanded": max(0, len(queries) - 1),
             "filter": clause,
             "include_school": include_school,
         }
@@ -936,11 +1082,13 @@ def health_fields() -> dict[str, Any]:
     embedder = False
     provider = ""
     key_present = False
+    query_ok = False
     if idx is not None and reachable:
         try:
             check = getattr(idx, "embedder_is_new_api", None)
             if callable(check) and check():
-                embedder = True
+                query_ok = embed_query_ok()
+                embedder = query_ok
                 provider = "new-api"
                 key_present = bool(new_api_key())
         except Exception:  # noqa: BLE001
@@ -959,5 +1107,6 @@ def health_fields() -> dict[str, Any]:
         "meili_embedder": embedder,
         "meili_embedder_provider": provider,
         "meili_embedder_key_present": key_present,
+        "meili_embedder_query_ok": query_ok,
         "kb_mode": mode,
     }
