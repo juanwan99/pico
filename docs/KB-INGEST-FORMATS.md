@@ -9,7 +9,7 @@ STATUS: BINDING · 2026-09-14（#994 阶段 2 · #997 · 对仓 #990）
 
 edu 侧显示 `detail.message` 原文即可，不要再翻译。
 
-Pico 索引是 **chunk 级**（标题/章节/页 + 300–500 字段），不是一材料一条。`回复摘要` 与只剩文件名的旧 `.doc` 不进索引。`POST /v1/kb/search` 与 Pi `kb_search` 同一路。hybrid / rerank 等 New API 渠道 live（#1005）。
+Pico 索引是 **chunk 级**（标题/章节/页 + 300–500 字段），不是一材料一条。`回复摘要` 与只剩文件名的旧 `.doc` 不进索引。`POST /v1/kb/search` 与 Pi `kb_search` 同一路。hybrid / rerank 走 New API loopback（`embedding-3` + `rerank`），不直连厂牌（#1005）。
 
 ## 支持矩阵
 

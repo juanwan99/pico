@@ -126,6 +126,10 @@ services:
       SILICONFLOW_IMAGE_MODEL: ${SILICONFLOW_IMAGE_MODEL:-}
       PICO_MEILI_URL: ${PICO_MEILI_URL:-http://127.0.0.1:7700}
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
+      # KB embed/rerank via New API loopback only (DEEPSEEK_*). Not a vendor route.
+      PICO_KB_EMBED_MODEL: ${PICO_KB_EMBED_MODEL:-embedding-3}
+      PICO_KB_RERANK_MODEL: ${PICO_KB_RERANK_MODEL:-rerank}
+      PICO_KB_HYBRID_RATIO: ${PICO_KB_HYBRID_RATIO:-0.5}
     volumes:
       - pico_data:/app/data
       - ${PICO_SANDBOX_DISK_HOST:-./data/teacher-disks}:/var/lib/pico/teacher-disks

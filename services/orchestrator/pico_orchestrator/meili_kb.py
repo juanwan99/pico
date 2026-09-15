@@ -32,9 +32,8 @@ MAX_TEXT = 200_000
 # Bookkeeping chips that used to flood the index (735/953 on the live school).
 NOISE_TITLES = frozenset({"回复摘要", "summary", "run summary", "工具产物"})
 TITLE_ONLY_EXTS = frozenset({".doc", ".ppt", ".xls"})
-# Embedding / rerank, when live, go through New API only (#1005). This PR is
-# still keyword: leftover Zhipu/SF embedders stay stripped.
-# Do not PATCH a vendor embedder URL from this file.
+# Embedding / rerank only via New API (#1005). Pico never PATCHes a vendor
+# embedder URL into Meili. Leftover Zhipu/SF REST targets are stripped.
 
 MATERIAL_KINDS = frozenset(
     {
@@ -114,14 +113,134 @@ def meili_key() -> str:
     return (os.environ.get("MEILI_MASTER_KEY") or "").strip()
 
 
+_VENDOR_EMBED_MARKERS = (
+    "open.bigmodel.cn",
+    "api.siliconflow.cn",
+    "zhipuai",
+    "siliconflow",
+)
+
+
+def new_api_base() -> str:
+    return (os.environ.get("DEEPSEEK_BASE_URL") or "").strip().rstrip("/")
+
+
+def new_api_key() -> str:
+    return (os.environ.get("DEEPSEEK_API_KEY") or "").strip()
+
+
+def kb_embed_model() -> str:
+    return (os.environ.get("PICO_KB_EMBED_MODEL") or "embedding-3").strip() or "embedding-3"
+
+
+def kb_rerank_model() -> str:
+    return (os.environ.get("PICO_KB_RERANK_MODEL") or "rerank").strip() or "rerank"
+
+
+def kb_hybrid_ratio() -> float:
+    try:
+        value = float(os.environ.get("PICO_KB_HYBRID_RATIO") or "0.5")
+    except ValueError:
+        value = 0.5
+    return min(0.9, max(0.1, value))
+
+
+def _is_new_api_loopback(base: str) -> bool:
+    """Embedding/rerank only against the box New API, never a vendor or DeepSeek official."""
+    low = (base or "").lower()
+    if not low:
+        return False
+    if any(marker in low for marker in _VENDOR_EMBED_MARKERS):
+        return False
+    if "api.deepseek.com" in low:
+        return False
+    return "127.0.0.1:3000" in low or "localhost:3000" in low
+
+
+def new_api_embedder_spec() -> dict[str, Any] | None:
+    """Meili REST embedder aimed at New API. Never a vendor host."""
+    base = new_api_base()
+    key = new_api_key()
+    if not base or not key or not _is_new_api_loopback(base):
+        return None
+    url = f"{base}/embeddings"
+    return {
+        "source": "rest",
+        "url": url,
+        "apiKey": key,
+        "dimensions": 2048,
+        "documentTemplate": "{{doc.text}}",
+        "request": {"model": kb_embed_model(), "input": ["{{text}}"]},
+        "response": {"data": [{"embedding": "{{embedding}}"}]},
+    }
+
+
+def rerank_documents(query: str, texts: list[str]) -> list[int] | None:
+    """Reorder via New API /v1/rerank. None = keep Meili order (honest)."""
+    base = new_api_base()
+    key = new_api_key()
+    cleaned = [str(t or "")[:2000] for t in texts]
+    if not base or not key or not _is_new_api_loopback(base) or not cleaned:
+        return None
+    try:
+        status, body = HttpxClient().request(
+            "POST",
+            f"{base}/rerank",
+            json={
+                "model": kb_rerank_model(),
+                "query": query,
+                "documents": cleaned,
+                "top_n": len(cleaned),
+            },
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            timeout=12.0,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    if status >= 400 or not isinstance(body, dict):
+        return None
+    results = body.get("results")
+    if not isinstance(results, list) or not results:
+        return None
+    order: list[int] = []
+    seen: set[int] = set()
+    for row in results:
+        if not isinstance(row, dict):
+            continue
+        try:
+            idx = int(row.get("index"))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= idx < len(cleaned) and idx not in seen:
+            seen.add(idx)
+            order.append(idx)
+    if not order:
+        return None
+    for idx in range(len(cleaned)):
+        if idx not in seen:
+            order.append(idx)
+    return order
+
+
+def _apply_rerank_order(hits: list[Any], order: list[int]) -> list[Any]:
+    out: list[Any] = []
+    seen: set[int] = set()
+    for idx in order:
+        if 0 <= idx < len(hits) and idx not in seen:
+            seen.add(idx)
+            out.append(hits[idx])
+    for idx, row in enumerate(hits):
+        if idx not in seen:
+            out.append(row)
+    return out
+
+
 def embedder_provider() -> str | None:
-    """Pico never selects an embedding vendor."""
-    return None
+    return "new-api" if new_api_embedder_spec() else None
 
 
 def embedding_api_key() -> str:
-    """Always empty: hybrid is not a Pico product path."""
-    return ""
+    return new_api_key() if new_api_embedder_spec() else ""
 
 
 def meili_configured() -> bool:
@@ -400,14 +519,28 @@ class MeiliIndex:
 
     def live_embedder_armed(self) -> bool:
         """True only when Meili index actually has a ``default`` REST embedder."""
+        return bool(self.live_embedder_url())
+
+    def live_embedder_url(self) -> str:
         try:
             status, body = self._call("GET", f"/indexes/{INDEX}/settings/embedders", timeout=3.0)
         except Exception:  # noqa: BLE001
-            return False
+            return ""
         if status >= 400 or not isinstance(body, dict):
-            return False
+            return ""
         default = body.get("default")
-        return isinstance(default, dict) and bool(default.get("source") or default.get("url"))
+        if not isinstance(default, dict):
+            return ""
+        return str(default.get("url") or "")
+
+    def embedder_is_new_api(self) -> bool:
+        spec = new_api_embedder_spec()
+        if not spec:
+            return False
+        url = self.live_embedder_url()
+        if not url or any(marker in url.lower() for marker in _VENDOR_EMBED_MARKERS):
+            return False
+        return url == str(spec.get("url") or "")
 
     def _primary_key(self) -> str | None:
         try:
@@ -421,7 +554,8 @@ class MeiliIndex:
         return str(body.get("primaryKey") or "")
 
     def ensure(self, *, force: bool = False) -> None:
-        cache_key = f"{meili_url()}|{INDEX}|chunk-v1"
+        spec = new_api_embedder_spec()
+        cache_key = f"{meili_url()}|{INDEX}|chunk-v1|{spec.get('url') if spec else 'off'}"
         if not force and _ENSURE_CACHE.get(cache_key):
             return
         pk = self._primary_key()
@@ -441,22 +575,22 @@ class MeiliIndex:
                 {"uid": INDEX, "primaryKey": PRIMARY_KEY},
             )
             _ENSURE_CACHE.pop(cache_key, None)
+        want_embedders = {"default": spec} if spec else None
         # Skip PATCH when index already matches (stops reindex flooding settingsUpdate).
-        if not force and self._settings_match(None):
+        if not force and self._settings_match(want_embedders):
             _ENSURE_CACHE[cache_key] = True
             return
         settings: dict[str, Any] = {
             "filterableAttributes": FILTERABLE,
             "searchableAttributes": SEARCHABLE,
             "displayedAttributes": DISPLAYED,
-            # Strip leftover REST embedders (Zhipu/SF) so Meili does not keep calling them.
-            "embedders": {"default": None},
+            "embedders": {"default": spec} if spec else {"default": None},
         }
-        self._accepted("PATCH", f"/indexes/{INDEX}/settings", settings, timeout=20.0)
-        if self.live_embedder_armed():
-            _ENSURE_CACHE.pop(cache_key, None)
-        else:
+        self._accepted("PATCH", f"/indexes/{INDEX}/settings", settings, timeout=20.0, wait_s=90.0)
+        if (spec and self.embedder_is_new_api()) or (not spec and not self.live_embedder_armed()):
             _ENSURE_CACHE[cache_key] = True
+        else:
+            _ENSURE_CACHE.pop(cache_key, None)
 
     def _settings_match(self, want_embedders: dict[str, Any] | None) -> bool:
         try:
@@ -553,8 +687,11 @@ class MeiliIndex:
     ) -> dict[str, Any]:
         clause = tenant_filter(school_id, membership_id, include_school=include_school)
         want = max(1, int(limit))
+        spec = new_api_embedder_spec()
+        use_hybrid = self.embedder_is_new_api()
         # Chunks from one file used to fill the whole window (live hit@5 0.333).
-        fetch = min(48, max(want * 8, want))
+        # Hybrid/rerank: Meili top-30, then New API rerank, then collapse.
+        fetch = 30 if (use_hybrid or spec) else min(48, max(want * 8, want))
         body: dict[str, Any] = {
             "q": query,
             "filter": clause,
@@ -564,14 +701,32 @@ class MeiliIndex:
             "highlightPreTag": "",
             "highlightPostTag": "",
         }
+        if use_hybrid:
+            body["hybrid"] = {
+                "semanticRatio": kb_hybrid_ratio(),
+                "embedder": "default",
+            }
         status, payload = self._call("POST", f"/indexes/{INDEX}/search", body, timeout=12.0)
         if status >= 400:
             raise RuntimeError(f"meili search http {status}")
         raw = payload.get("hits") if isinstance(payload, dict) else None
-        hits = collapse_hits_by_artifact(raw if isinstance(raw, list) else [], want)
+        raw_hits = raw if isinstance(raw, list) else []
+        reranked = False
+        if spec and raw_hits:
+            window = raw_hits[:30]
+            texts = [
+                str(row.get("text") or "")[:2000] if isinstance(row, dict) else ""
+                for row in window
+            ]
+            order = rerank_documents(query, texts)
+            if order:
+                raw_hits = _apply_rerank_order(window, order) + raw_hits[30:]
+                reranked = True
+        hits = collapse_hits_by_artifact(raw_hits, want)
         return {
             "hits": hits,
-            "hybrid": False,
+            "hybrid": use_hybrid,
+            "reranked": reranked,
             "filter": clause,
             "include_school": include_school,
         }
@@ -661,6 +816,10 @@ def search_materials(
     idx = MeiliIndex(client)
     if not meili_configured() or not idx.ping():
         raise RuntimeError("meili unavailable")
+    try:
+        idx.ensure()
+    except Exception as exc:  # noqa: BLE001 — search still works on leftover keyword
+        logger.warning("meili ensure before search failed: %s", type(exc).__name__)
     return idx.search(
         query,
         school_id=school_id,
@@ -763,16 +922,32 @@ def project_material_artifact(
 
 
 def health_fields() -> dict[str, Any]:
-    """Keyword chunk mount. Vendor embedders are not product state until New API is armed."""
+    """Chunk mount. Hybrid only when the live Meili embedder URL is New API."""
     configured = meili_configured()
     reachable = False
+    idx: MeiliIndex | None = None
     if configured:
         try:
             idx = MeiliIndex()
             reachable = idx.ping()
         except Exception:  # noqa: BLE001
             reachable = False
-    if configured and reachable:
+            idx = None
+    embedder = False
+    provider = ""
+    key_present = False
+    if idx is not None and reachable:
+        try:
+            check = getattr(idx, "embedder_is_new_api", None)
+            if callable(check) and check():
+                embedder = True
+                provider = "new-api"
+                key_present = bool(new_api_key())
+        except Exception:  # noqa: BLE001
+            embedder = False
+    if embedder:
+        mode = "hybrid"
+    elif configured and reachable:
         mode = "keyword"
     elif configured:
         mode = "down"
@@ -781,8 +956,8 @@ def health_fields() -> dict[str, Any]:
     return {
         "meili_configured": configured,
         "meili_reachable": reachable,
-        "meili_embedder": False,
-        "meili_embedder_provider": "",
-        "meili_embedder_key_present": False,
+        "meili_embedder": embedder,
+        "meili_embedder_provider": provider,
+        "meili_embedder_key_present": key_present,
         "kb_mode": mode,
     }
