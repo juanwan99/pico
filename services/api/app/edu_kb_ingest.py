@@ -196,7 +196,12 @@ async def post_kb_search(
             continue
         if str(row.get("school_id") or "") and str(row["school_id"]) != principal.school_id:
             continue
-        if str(row.get("membership_id") or "") and str(row["membership_id"]) != principal.membership_id:
+        row_scope = str(row.get("scope") or "member")
+        row_member = str(row.get("membership_id") or "")
+        if include_school:
+            if row_scope != "school" and row_member != principal.membership_id:
+                continue
+        elif row_member and row_member != principal.membership_id:
             continue
         hits.append(
             {
