@@ -19,6 +19,7 @@ def _bare_transport() -> SubprocessTransport:
     t._queue = asyncio.Queue()
     t._resp_q = asyncio.Queue()
     t._stream_seen = 0
+    t._think_seen = 0
     t._stderr_tail = []
     t.run_id = "t"
     return t
@@ -47,6 +48,23 @@ async def test_ingest_routes_prompt_ack_off_event_queue() -> None:
     ack = t._resp_q.get_nowait()
     assert ack["command"] == "prompt"
     assert ack["id"] == "p-1"
+
+
+@pytest.mark.asyncio
+async def test_ingest_thinking_snapshot_becomes_thinking_delta() -> None:
+    t = _bare_transport()
+    await t._ingest_rpc(
+        {
+            "type": "message_update",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "thinking", "thinking": "先"}],
+            },
+        }
+    )
+    ev = t._queue.get_nowait()
+    assert ev.type == "thinking_delta"
+    assert ev.raw["delta"] == "先"
 
 
 @pytest.mark.asyncio

@@ -22,7 +22,7 @@ from pico_orchestrator.ask_user import AskTimedOut
 from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinking_level, pi_bin
 from pico_orchestrator.true_pi.thinking import (
     incremental_text_from_update,
-    thinking_delta_from_rpc,
+    incremental_thinking_from_update,
 )
 
 logger = logging.getLogger(__name__)
@@ -352,6 +352,7 @@ class SubprocessTransport(TruePiTransport):
         self._resp_q: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._stderr_tail: list[str] = []
         self._stream_seen = 0
+        self._think_seen = 0
 
     def models_document(self) -> dict[str, Any]:
         return true_pi_models_document(
@@ -555,7 +556,9 @@ class SubprocessTransport(TruePiTransport):
             await self._reply_extension_ui(obj)
         if t == "message_update":
             # Full body stays off both queues. Only small official/suffix slices.
-            think = thinking_delta_from_rpc(obj)
+            think, self._think_seen = incremental_thinking_from_update(
+                obj, self._think_seen
+            )
             if think:
                 await self._queue.put(RpcEvent({"type": "thinking_delta", "delta": think}))
             piece, self._stream_seen = incremental_text_from_update(obj, self._stream_seen)
@@ -582,6 +585,7 @@ class SubprocessTransport(TruePiTransport):
             raise TruePiClientError("process not started")
         if str(command.get("type") or "") == "prompt":
             self._stream_seen = 0
+            self._think_seen = 0
         line = json.dumps(dict(command), ensure_ascii=False) + "\n"
         self._proc.stdin.write(line.encode("utf-8"))
         await self._proc.stdin.drain()

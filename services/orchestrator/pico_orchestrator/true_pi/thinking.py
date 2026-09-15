@@ -73,8 +73,11 @@ def incremental_text_from_update(obj: Mapping[str, Any] | None, seen: int) -> tu
     return piece, have + len(piece)
 
 
-def thinking_from_message(msg: Mapping[str, Any] | None) -> str:
-    """Join official ``{type: thinking}`` content blocks. Never product text."""
+def thinking_snapshot(obj: Mapping[str, Any] | None) -> str:
+    """Growing thinking text on a ``message_update``. Never product text."""
+    if not isinstance(obj, Mapping):
+        return ""
+    msg = obj.get("message") if isinstance(obj.get("message"), Mapping) else obj
     if not isinstance(msg, Mapping):
         return ""
     content = msg.get("content")
@@ -87,4 +90,26 @@ def thinking_from_message(msg: Mapping[str, Any] | None) -> str:
         if str(block.get("type") or "") != "thinking":
             continue
         parts.append(str(block.get("thinking") or block.get("text") or ""))
-    return "".join(parts).strip()
+    return "".join(parts)
+
+
+def incremental_thinking_from_update(
+    obj: Mapping[str, Any] | None, seen: int
+) -> tuple[str, int]:
+    """Small new thinking slice. Prefer official thinking_delta; else snapshot suffix."""
+    have = max(0, int(seen))
+    official = thinking_delta_from_rpc(obj)
+    snap = thinking_snapshot(obj)
+    if snap and len(snap) < have:
+        have = 0
+    if official:
+        return official, max(have + len(official), len(snap))
+    if len(snap) <= have:
+        return "", have
+    piece = snap[have:][:_MAX_DELTA]
+    return piece, have + len(piece)
+
+
+def thinking_from_message(msg: Mapping[str, Any] | None) -> str:
+    """Join official ``{type: thinking}`` content blocks. Never product text."""
+    return thinking_snapshot(msg).strip()

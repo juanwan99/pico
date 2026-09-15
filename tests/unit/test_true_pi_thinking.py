@@ -15,6 +15,7 @@ from pico_orchestrator.true_pi.client import RpcEvent
 from pico_orchestrator.true_pi.events import EventMapState, map_event
 from pico_orchestrator.true_pi.thinking import (
     incremental_text_from_update,
+    incremental_thinking_from_update,
     text_delta_from_rpc,
     thinking_delta_from_rpc,
     thinking_from_message,
@@ -91,6 +92,52 @@ def test_thinking_delta_from_rpc_ignores_text_and_tool_deltas() -> None:
         == ""
     )
     assert thinking_delta_from_rpc({"type": "message_update"}) == ""
+
+
+def test_incremental_thinking_uses_snapshot_suffix_when_no_official_delta() -> None:
+    first = {
+        "type": "message_update",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": "先看"}],
+        },
+    }
+    piece, seen = incremental_thinking_from_update(first, 0)
+    assert piece == "先看"
+    assert seen == 2
+    second = {
+        "type": "message_update",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": "先看题目"}],
+        },
+    }
+    piece, seen = incremental_thinking_from_update(second, seen)
+    assert piece == "题目"
+    flood = {
+        "type": "message_update",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": "先看题目" + ("。") * 80}],
+        },
+    }
+    piece, seen = incremental_thinking_from_update(flood, seen)
+    assert piece.startswith("。")
+    assert len(piece) == 80
+
+
+def test_incremental_thinking_prefers_official_delta() -> None:
+    flood = {
+        "type": "message_update",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": "x" * 8000}],
+        },
+        "assistantMessageEvent": {"type": "thinking_delta", "delta": "先看题目"},
+    }
+    piece, seen = incremental_thinking_from_update(flood, 0)
+    assert piece == "先看题目"
+    assert seen == 8000
 
 
 def test_thinking_from_message_skips_product_text() -> None:
