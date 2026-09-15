@@ -9,6 +9,7 @@ import pytest
 from pico_orchestrator.meili_kb import (
     MeiliIndex,
     chunk_doc_id,
+    collapse_hits_by_artifact,
     document_from_artifact,
     documents_from_text,
     extract_index_text,
@@ -20,6 +21,7 @@ from pico_orchestrator.meili_kb import (
     quote_filter_value,
     search_materials,
     tenant_filter,
+    upsert_documents,
     upsert_material,
 )
 
@@ -157,6 +159,27 @@ def test_search_injects_principal_filter_not_query(monkeypatch: pytest.MonkeyPat
     assert "m-other" not in json.dumps(body)
     assert "hybrid" not in body
     assert out["hits"][0]["artifact_id"] == "a1"
+    assert body["limit"] == 48
+
+
+def test_search_collapses_same_artifact(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    http = FakeHttp()
+    http.search_hits = [
+        {"artifact_id": "a1", "chunk_id": "a1_0000", "text": "甲"},
+        {"artifact_id": "a1", "chunk_id": "a1_0001", "text": "乙"},
+        {"artifact_id": "a2", "chunk_id": "a2_0000", "text": "丙"},
+        {"artifact_id": "a3", "chunk_id": "a3_0000", "text": "丁"},
+    ]
+    out = search_materials("x", school_id="s1", membership_id="m1", limit=5, client=http)
+    assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a2", "a3"]
+    raw = [
+        {"artifact_id": "a1"},
+        {"artifact_id": "a1"},
+        {"artifact_id": "a2"},
+    ]
+    assert [h["artifact_id"] for h in collapse_hits_by_artifact(raw, 5)] == ["a1", "a2"]
 
 
 def test_search_never_hybrid_even_with_vendor_keys(
@@ -585,3 +608,22 @@ def test_upsert_many_raises_when_meili_rejects_id(monkeypatch: pytest.MonkeyPatc
                 }
             ]
         )
+
+
+def test_upsert_documents_batch_skips_per_artifact_delete(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pico_orchestrator.meili_kb as mk
+
+    mk._ENSURE_CACHE.clear()
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    http = FakeHttp()
+    ok = upsert_documents(
+        [
+            {"chunk_id": chunk_doc_id("a1", 0), "artifact_id": "a1", "text": "甲"},
+            {"chunk_id": chunk_doc_id("a2", 0), "artifact_id": "a2", "text": "乙"},
+        ],
+        client=http,
+        replace_artifact=False,
+    )
+    assert ok is True
+    assert not any(str(c[1]).endswith("/documents/delete") for c in http.calls)

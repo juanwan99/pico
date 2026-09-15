@@ -255,7 +255,18 @@ def cmd_run(args: argparse.Namespace) -> int:
                 extra = None
                 if args.mode == "hybrid":
                     extra = {"hybrid": {"semanticRatio": args.semantic_ratio, "embedder": args.embedder}}
-                hits, dt = meili_search(it["question"], school_id=school, limit=k * 2, extra=extra)
+                hits, dt = meili_search(
+                    it["question"], school_id=school, limit=max(k * 8, 40), extra=extra
+                )
+                seen: set[str] = set()
+                uniq: list[dict[str, Any]] = []
+                for row in hits:
+                    aid = str(row.get("material_id") or row.get("artifact_id") or "")
+                    if not aid or aid in seen:
+                        continue
+                    seen.add(aid)
+                    uniq.append(row)
+                hits = uniq
         except Exception as exc:  # noqa: BLE001
             errors += 1
             print(f"  error {it['id']}: {type(exc).__name__}", file=sys.stderr)
