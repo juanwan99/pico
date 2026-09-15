@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from pico_orchestrator.meili_kb import (
     MeiliIndex,
+    chunk_doc_id,
     document_from_artifact,
     documents_from_text,
     extract_index_text,
@@ -32,6 +33,8 @@ class FakeHttp:
         self.embedders_armed = False
         self.embedder_url = "https://api.siliconflow.cn/v1/embeddings"
         self.primary_key = "chunk_id"
+        self.task_status = "succeeded"
+        self.task_error: dict[str, Any] | None = None
 
     def request(
         self,
@@ -46,7 +49,10 @@ class FakeHttp:
         if url.endswith("/health"):
             return 200, {"status": "available"}
         if method == "GET" and "/tasks/" in url:
-            return 200, {"status": "succeeded", "uid": 1}
+            body: dict[str, Any] = {"status": self.task_status, "uid": 1}
+            if self.task_error:
+                body["error"] = self.task_error
+            return 200, body
         if method == "GET" and url.endswith("/settings/embedders"):
             if self.embedders_armed:
                 return 200, {
@@ -239,7 +245,7 @@ def test_projection_document_keys() -> None:
         "created_at",
     }
     assert doc["artifact_id"] == "art-9"
-    assert doc["chunk_id"] == "art-9:0000"
+    assert doc["chunk_id"] == "art-9_0000"
 
 
 def test_is_material_skips_html_keeps_docs() -> None:
@@ -480,8 +486,8 @@ def test_documents_from_text_split_and_cite() -> None:
         membership_id="m",
     )
     assert len(docs) == 2
-    assert docs[0]["chunk_id"] == "art-1:0000"
-    assert docs[1]["chunk_id"] == "art-1:0001"
+    assert docs[0]["chunk_id"] == "art-1_0000"
+    assert docs[1]["chunk_id"] == "art-1_0001"
     assert docs[1]["heading"] == "二、地点"
     assert "景炎" in docs[1]["text"]
     assert docs[0]["artifact_id"] == "art-1"
@@ -510,6 +516,7 @@ def test_project_emits_chunks_not_one_blob(monkeypatch: pytest.MonkeyPatch) -> N
     assert len(posted) >= 2
     assert all(d["artifact_id"] == "art-long" for d in posted)
     assert {d["chunk_id"] for d in posted} == {d["chunk_id"] for d in posted}
+    assert all(":" not in d["chunk_id"] for d in posted)
 
 
 def test_project_skips_noise_and_title_only_doc(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -550,3 +557,31 @@ def test_ensure_recreates_legacy_artifact_pk(monkeypatch: pytest.MonkeyPatch) ->
     methods = [c[0] + " " + c[1] for c in http.calls]
     assert any(m.endswith("/indexes/pico_materials") and m.startswith("DELETE") for m in methods)
     assert http.primary_key == "chunk_id"
+
+
+def test_chunk_doc_id_is_meili_safe() -> None:
+    cid = chunk_doc_id("a269bd37-44a2-4d98-9e9c-c095ae2b6827", 0)
+    assert cid == "a269bd37-44a2-4d98-9e9c-c095ae2b6827_0000"
+    assert chunk_doc_id("uuid:oops", 3) == "uuid_oops_0003"
+    assert all(c.isalnum() or c in "-_" for c in cid)
+
+
+def test_upsert_many_raises_when_meili_rejects_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pico_orchestrator.meili_kb as mk
+
+    mk._ENSURE_CACHE.clear()
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    http = FakeHttp()
+    http.task_status = "failed"
+    http.task_error = {"code": "invalid_document_id"}
+    with pytest.raises(RuntimeError, match="invalid_document_id"):
+        MeiliIndex(http).upsert_many(
+            [
+                {
+                    "chunk_id": chunk_doc_id("art-1", 0),
+                    "artifact_id": "art-1",
+                    "text": "x",
+                }
+            ]
+        )

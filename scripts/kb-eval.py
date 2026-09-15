@@ -67,7 +67,8 @@ def meili_search(
         "q": q,
         "filter": f"school_id = {_quote(school_id)}",
         "limit": limit,
-        "attributesToRetrieve": attrs or ["artifact_id", "title", "text", "membership_id"],
+        "attributesToRetrieve": attrs
+        or ["artifact_id", "material_id", "title", "text", "parent_text", "membership_id", "heading"],
     }
     if extra:
         body.update(extra)

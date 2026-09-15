@@ -58,6 +58,17 @@ PARSE_EXT = frozenset({".pdf", ".docx"})
 OFFICE_EXTRACT_EXT = frozenset({".xlsx", ".pptx", ".txt"})
 MATERIAL_EXTS = frozenset({".md", ".txt", ".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".json"})
 _ID_SAFE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+# Meili primary keys: alphanumeric / hyphen / underscore only. Colon is illegal
+# (live A2 wrote uuid:0000 → every documentAddition failed, index stayed empty).
+_MEILI_ID_BAD = re.compile(r"[^A-Za-z0-9_-]")
+
+
+def chunk_doc_id(artifact_id: str, seq: int) -> str:
+    """Stable Meili primary key for one chunk of one ledger artifact."""
+    base = _MEILI_ID_BAD.sub("_", str(artifact_id or "").strip())[:480]
+    if not base:
+        raise ValueError("empty artifact_id")
+    return f"{base}_{int(seq):04d}"
 # Process-local: avoid PATCH settings on every upsert (floods Meili task queue).
 _ENSURE_CACHE: dict[str, bool] = {}
 
@@ -281,7 +292,7 @@ def document_from_artifact(
 ) -> dict[str, Any]:
     """One-row fallback (tests / tiny docs). Live projection uses chunks."""
     return {
-        "chunk_id": f"{artifact_id}:0000",
+        "chunk_id": chunk_doc_id(artifact_id, 0),
         "artifact_id": artifact_id,
         "material_id": artifact_id,
         "title": (title or "")[:512],
@@ -327,7 +338,7 @@ def documents_from_text(
     for chunk in chunks:
         out.append(
             {
-                "chunk_id": f"{artifact_id}:{chunk.seq:04d}",
+                "chunk_id": chunk_doc_id(artifact_id, chunk.seq),
                 "artifact_id": artifact_id,
                 "material_id": artifact_id,
                 "title": (title or "")[:512],
@@ -399,7 +410,7 @@ class MeiliIndex:
             return
         pk = self._primary_key()
         if pk is None:
-            self._call(
+            self._accepted(
                 "POST",
                 "/indexes",
                 {"uid": INDEX, "primaryKey": PRIMARY_KEY},
@@ -407,8 +418,8 @@ class MeiliIndex:
             _ENSURE_CACHE.pop(cache_key, None)
         elif pk != PRIMARY_KEY:
             logger.warning("meili index pk %s → %s, recreating", pk, PRIMARY_KEY)
-            self._call("DELETE", f"/indexes/{INDEX}")
-            self._call(
+            self._accepted("DELETE", f"/indexes/{INDEX}")
+            self._accepted(
                 "POST",
                 "/indexes",
                 {"uid": INDEX, "primaryKey": PRIMARY_KEY},
@@ -425,11 +436,7 @@ class MeiliIndex:
             # Strip leftover REST embedders (Zhipu/SF) so Meili does not keep calling them.
             "embedders": {"default": None},
         }
-        patch_status, patch_body = self._call(
-            "PATCH", f"/indexes/{INDEX}/settings", settings, timeout=20.0
-        )
-        if patch_status < 400 and isinstance(patch_body, dict) and patch_body.get("taskUid") is not None:
-            self._wait_task(int(patch_body["taskUid"]), timeout_s=45.0)
+        self._accepted("PATCH", f"/indexes/{INDEX}/settings", settings, timeout=20.0)
         if self.live_embedder_armed():
             _ENSURE_CACHE.pop(cache_key, None)
         else:
@@ -442,7 +449,7 @@ class MeiliIndex:
             return False
         if status >= 400 or not isinstance(body, dict):
             return False
-        if list(body.get("filterableAttributes") or []) != list(FILTERABLE):
+        if set(body.get("filterableAttributes") or []) != set(FILTERABLE):
             return False
         if want_embedders:
             live = body.get("embedders") if isinstance(body.get("embedders"), dict) else {}
@@ -455,45 +462,64 @@ class MeiliIndex:
         default = live.get("default") if isinstance(live, dict) else None
         return not isinstance(default, dict)
 
+    def _accepted(
+        self,
+        method: str,
+        path: str,
+        payload: Any | None = None,
+        *,
+        timeout: float = 8.0,
+        wait_s: float = 45.0,
+    ) -> Any:
+        """POST/PATCH/DELETE that must land. 202 without a succeeded task is fake-green."""
+        status, body = self._call(method, path, payload, timeout=timeout)
+        if status >= 400:
+            raise RuntimeError(f"meili {method} {path} http {status}")
+        if isinstance(body, dict) and body.get("taskUid") is not None:
+            self._wait_task(int(body["taskUid"]), timeout_s=wait_s)
+        return body
+
     def _wait_task(self, task_uid: int, *, timeout_s: float = 45.0) -> None:
         import time
 
         deadline = time.monotonic() + max(1.0, timeout_s)
+        last: dict[str, Any] = {}
         while time.monotonic() < deadline:
-            try:
-                status, body = self._call("GET", f"/tasks/{task_uid}", timeout=3.0)
-            except Exception:  # noqa: BLE001
-                return
+            status, body = self._call("GET", f"/tasks/{task_uid}", timeout=3.0)
             if status >= 400 or not isinstance(body, dict):
-                return
+                raise RuntimeError(f"meili task {task_uid} http {status}")
+            last = body
             state = str(body.get("status") or "")
-            if state in {"succeeded", "failed", "canceled"}:
-                if state != "succeeded":
-                    logger.warning("meili settings task %s: %s", task_uid, state)
+            if state == "succeeded":
                 return
-            time.sleep(0.4)
+            if state in {"failed", "canceled"}:
+                err = body.get("error") if isinstance(body.get("error"), dict) else {}
+                code = str(err.get("code") or state)
+                raise RuntimeError(f"meili task {task_uid} {state}: {code}")
+            time.sleep(0.2)
+        raise RuntimeError(f"meili task {task_uid} timeout ({last.get('status') or 'unknown'})")
 
     def upsert(self, doc: dict[str, Any]) -> None:
         if not doc.get("chunk_id") and not doc.get("artifact_id"):
             return
         self.ensure()
         if not doc.get("chunk_id") and doc.get("artifact_id"):
-            doc = {**doc, "chunk_id": f"{doc['artifact_id']}:0000"}
-        self._call("POST", f"/indexes/{INDEX}/documents", [doc], timeout=20.0)
+            doc = {**doc, "chunk_id": chunk_doc_id(str(doc["artifact_id"]), 0)}
+        self._accepted("POST", f"/indexes/{INDEX}/documents", [doc], timeout=20.0)
 
     def upsert_many(self, docs: list[dict[str, Any]]) -> None:
         rows = [d for d in docs if d.get("chunk_id")]
         if not rows:
             return
         self.ensure()
-        self._call("POST", f"/indexes/{INDEX}/documents", rows, timeout=30.0)
+        self._accepted("POST", f"/indexes/{INDEX}/documents", rows, timeout=30.0, wait_s=60.0)
 
     def delete(self, artifact_id: str) -> None:
         aid = str(artifact_id or "").strip()
         if not aid:
             return
         self.ensure()
-        self._call(
+        self._accepted(
             "POST",
             f"/indexes/{INDEX}/documents/delete",
             {"filter": f"artifact_id = {quote_filter_value(aid)}"},
