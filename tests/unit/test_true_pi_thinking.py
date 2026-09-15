@@ -13,7 +13,11 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.true_pi.client import RpcEvent
 from pico_orchestrator.true_pi.events import EventMapState, map_event
-from pico_orchestrator.true_pi.thinking import thinking_delta_from_rpc, thinking_from_message
+from pico_orchestrator.true_pi.thinking import (
+    text_delta_from_rpc,
+    thinking_delta_from_rpc,
+    thinking_from_message,
+)
 
 
 def test_thinking_delta_from_rpc_keeps_only_the_chunk() -> None:
@@ -30,6 +34,24 @@ def test_thinking_delta_from_rpc_keeps_only_the_chunk() -> None:
         },
     }
     assert thinking_delta_from_rpc(flood) == "先看题目"
+
+
+def test_text_delta_from_rpc_keeps_only_the_chunk() -> None:
+    flood = {
+        "type": "message_update",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "x" * 8000}],
+            "usage": {"input": 9, "output": 9, "totalTokens": 18},
+        },
+        "assistantMessageEvent": {
+            "type": "text_delta",
+            "delta": "培训在",
+            "contentIndex": 0,
+        },
+    }
+    assert text_delta_from_rpc(flood) == "培训在"
+    assert thinking_delta_from_rpc(flood) == ""
 
 
 def test_thinking_delta_from_rpc_ignores_text_and_tool_deltas() -> None:
@@ -72,7 +94,28 @@ async def test_map_event_emits_thinking_delta_not_message_delta() -> None:
     assert [k for k, _ in events] == ["thinking.delta"]
     assert events[0][1]["text"] == "先列步骤"
     assert "message.delta" not in [k for k, _ in events]
+    assert "message.stream" not in [k for k, _ in events]
     assert state.thinking_emitted is True
+
+
+@pytest.mark.asyncio
+async def test_map_event_emits_text_delta_as_stream_not_ledger_kind() -> None:
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    state = EventMapState()
+    await map_event(
+        RpcEvent({"type": "text_delta", "delta": "培训在"}),
+        emit=emit,
+        state=state,
+    )
+    assert [k for k, _ in events] == ["message.stream"]
+    assert events[0][1]["text"] == "培训在"
+    assert state.text_streamed is True
+    assert state.final_parts == []
+    assert state.token_usage is None
 
 
 @pytest.mark.asyncio
@@ -113,3 +156,5 @@ def test_compat_streams_reasoning_content_not_product_bubble() -> None:
     assert '"reasoning": str(payload)' in src
     assert 'if event_type == "thinking.delta"' in src
     assert 'await q.put(("think", text))' in src
+    assert 'if event_type == "message.stream"' in src
+    assert "ledger_only" in src

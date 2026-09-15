@@ -50,6 +50,7 @@ class EventMapState:
     # Must not be painted as succeeded + empty bubble.
     provider_error: str | None = None
     thinking_emitted: bool = False
+    text_streamed: bool = False
 
 
 def assistant_turn_error(blob: Any) -> str:
@@ -307,6 +308,14 @@ async def map_event(
             state.thinking_emitted = True
             state.event_kinds.append("thinking.delta")
             await emit("thinking.delta", {"text": text, **tag})
+        return
+
+    if kind == "text_delta":
+        text = str(raw.get("delta") or raw.get("text") or "")
+        if text:
+            state.text_streamed = True
+            state.event_kinds.append("message.stream")
+            await emit("message.stream", {"text": text, **tag})
         return
 
     if kind in {"message_end", "message"}:
