@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pico_orchestrator.meili_kb import search_materials
 from pydantic import BaseModel, Field
 
 from app.auth import Principal, payer_for, require_any_scope
@@ -33,6 +34,13 @@ class IngestIn(BaseModel):
     content_b64: str | None = None
     text: str | None = None
     item_id: str | None = Field(default=None, max_length=80)
+
+
+class SearchIn(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    limit: int = Field(default=8, ge=1, le=50)
+    # Reserved: school-scope filter lands when ingest writes scope=school.
+    scope: str = Field(default="member", max_length=16)
 
 
 def _content_item_id(raw: str | None, content_sha: str) -> str:
@@ -127,3 +135,48 @@ async def post_kb_ingest(
                     f"{_content_item_id(body.item_id, content_sha)}:{content_sha}"
                 ),
             )
+
+
+@router.post("/v1/kb/search")
+async def post_kb_search(
+    body: SearchIn,
+    principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
+) -> dict[str, Any]:
+    """Same Meili path as Pi kb_search. Tenant comes from the JWT, not the body."""
+    _ = body.scope  # school-scope filter is a later ingest write; ignore for now.
+    try:
+        result = search_materials(
+            body.query,
+            school_id=principal.school_id,
+            membership_id=principal.membership_id,
+            limit=body.limit,
+        )
+    except RuntimeError as exc:
+        raise _bad("kb.unavailable", "材料库暂时不可用，没有查到。不能编造材料内容。", 503) from exc
+    hits = []
+    for row in result.get("hits") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("school_id") or "") and str(row["school_id"]) != principal.school_id:
+            continue
+        if str(row.get("membership_id") or "") and str(row["membership_id"]) != principal.membership_id:
+            continue
+        hits.append(
+            {
+                "chunk_id": row.get("chunk_id"),
+                "artifact_id": row.get("artifact_id") or row.get("material_id"),
+                "material_id": row.get("material_id") or row.get("artifact_id"),
+                "title": row.get("title") or "",
+                "heading": row.get("heading") or "",
+                "page": row.get("page"),
+                "text": row.get("text") or "",
+                "parent_text": row.get("parent_text") or "",
+            }
+        )
+    return {
+        "ok": True,
+        "mode": "keyword",
+        "hybrid": bool(result.get("hybrid")),
+        "count": len(hits),
+        "hits": hits,
+    }

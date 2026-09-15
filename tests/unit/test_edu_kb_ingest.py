@@ -366,3 +366,46 @@ def test_ingest_ledger_failure_does_not_break_success(client, monkeypatch):
         "/v1/kb/ingest", headers={"authorization": f"Bearer {_token()}"}, json={"text": "hello"},
     )
     assert response.status_code == 200, response.text
+
+
+def test_search_uses_principal_not_body_and_returns_chunks(client, monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_search(query, *, school_id, membership_id, limit, client=None):
+        captured["query"] = query
+        captured["school_id"] = school_id
+        captured["membership_id"] = membership_id
+        captured["limit"] = limit
+        _ = client
+        return {
+            "hybrid": False,
+            "hits": [
+                {
+                    "chunk_id": "art-1:0000",
+                    "artifact_id": "art-1",
+                    "material_id": "art-1",
+                    "title": "通知.pdf",
+                    "heading": "培训安排",
+                    "page": 2,
+                    "text": "7月8日在景炎初级中学。",
+                    "parent_text": "培训安排\n7月8日在景炎初级中学。",
+                    "school_id": school_id,
+                    "membership_id": membership_id,
+                }
+            ],
+        }
+
+    monkeypatch.setattr("app.edu_kb_ingest.search_materials", fake_search)
+    res = client.post(
+        "/v1/kb/search",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"query": "培训在哪", "limit": 5, "scope": "school"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert captured["school_id"] == "school-a"
+    assert captured["membership_id"] == "m-edu"
+    assert captured["query"] == "培训在哪"
+    assert body["hits"][0]["heading"] == "培训安排"
+    assert body["hits"][0]["page"] == 2
+    assert body["mode"] == "keyword"

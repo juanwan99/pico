@@ -9,6 +9,7 @@ import pytest
 from pico_orchestrator.meili_kb import (
     MeiliIndex,
     document_from_artifact,
+    documents_from_text,
     extract_index_text,
     extract_office_text,
     health_fields,
@@ -30,6 +31,7 @@ class FakeHttp:
         self.fail_search = False
         self.embedders_armed = False
         self.embedder_url = "https://api.siliconflow.cn/v1/embeddings"
+        self.primary_key = "chunk_id"
 
     def request(
         self,
@@ -66,9 +68,15 @@ class FakeHttp:
                 else {}
             )
             return 200, {
-                "filterableAttributes": ["school_id", "membership_id"],
-                "searchableAttributes": ["title", "text"],
+                "filterableAttributes": [
+                    "school_id",
+                    "membership_id",
+                    "scope",
+                    "artifact_id",
+                ],
+                "searchableAttributes": ["title", "heading", "text"],
                 "displayedAttributes": [
+                    "chunk_id",
                     "artifact_id",
                     "title",
                     "text",
@@ -79,7 +87,15 @@ class FakeHttp:
                 "embedders": emb,
             }
         if method == "GET" and url.endswith("/indexes/pico_materials"):
-            return 200, {"uid": "pico_materials"}
+            return 200, {"uid": "pico_materials", "primaryKey": self.primary_key}
+        if method == "DELETE" and url.endswith("/indexes/pico_materials"):
+            self.primary_key = ""
+            return 204, {}
+        if method == "POST" and url.endswith("/indexes"):
+            self.primary_key = str((json or {}).get("primaryKey") or "chunk_id")
+            return 202, {"taskUid": 1}
+        if method == "POST" and url.endswith("/documents/delete"):
+            return 202, {"taskUid": 1}
         if method == "POST" and url.endswith("/search"):
             if self.fail_search:
                 return 503, {"message": "down"}
@@ -214,6 +230,7 @@ def test_projection_document_keys() -> None:
         created_at="2026-08-23T00:00:00",
     )
     assert set(doc) >= {
+        "chunk_id",
         "artifact_id",
         "title",
         "text",
@@ -222,6 +239,7 @@ def test_projection_document_keys() -> None:
         "created_at",
     }
     assert doc["artifact_id"] == "art-9"
+    assert doc["chunk_id"] == "art-9:0000"
 
 
 def test_is_material_skips_html_keeps_docs() -> None:
@@ -450,3 +468,85 @@ def test_health_fields_honest_tiers(monkeypatch: pytest.MonkeyPatch) -> None:
     no_fake = health_fields()
     assert no_fake["meili_embedder"] is False
     assert no_fake["kb_mode"] == "down"
+
+
+def test_documents_from_text_split_and_cite() -> None:
+    text = "# 一、对象\n\n讲师团成员。\n\n# 二、地点\n\n株洲景炎初级中学。\n"
+    docs = documents_from_text(
+        artifact_id="art-1",
+        title="培训通知.pdf",
+        text=text,
+        school_id="s",
+        membership_id="m",
+    )
+    assert len(docs) == 2
+    assert docs[0]["chunk_id"] == "art-1:0000"
+    assert docs[1]["chunk_id"] == "art-1:0001"
+    assert docs[1]["heading"] == "二、地点"
+    assert "景炎" in docs[1]["text"]
+    assert docs[0]["artifact_id"] == "art-1"
+
+
+def test_project_emits_chunks_not_one_blob(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    posted: list[Any] = []
+
+    class _P:
+        school_id = "school-a"
+        membership_id = "m1"
+
+    monkeypatch.setattr(
+        "pico_orchestrator.meili_kb.upsert_documents",
+        lambda docs, client=None: posted.extend(docs) or True,
+    )
+    ok = project_material_artifact(
+        _P(),
+        artifact_id="art-long",
+        title="通知.md",
+        kind="file",
+        content="# 甲\n\n" + ("段落甲。" * 40) + "\n\n# 乙\n\n" + ("段落乙。" * 40),
+    )
+    assert ok is True
+    assert len(posted) >= 2
+    assert all(d["artifact_id"] == "art-long" for d in posted)
+    assert {d["chunk_id"] for d in posted} == {d["chunk_id"] for d in posted}
+
+
+def test_project_skips_noise_and_title_only_doc(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    posted: list[Any] = []
+
+    class _P:
+        school_id = "school-a"
+        membership_id = "m1"
+
+    monkeypatch.setattr(
+        "pico_orchestrator.meili_kb.upsert_documents",
+        lambda docs, client=None: posted.extend(docs) or True,
+    )
+    assert (
+        project_material_artifact(
+            _P(), artifact_id="n1", title="回复摘要", kind="doc", content="一段闲聊"
+        )
+        is False
+    )
+    assert (
+        project_material_artifact(
+            _P(), artifact_id="n2", title="教师教学计划.doc", kind="file", content="教师教学计划.doc"
+        )
+        is False
+    )
+    assert posted == []
+
+
+def test_ensure_recreates_legacy_artifact_pk(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pico_orchestrator.meili_kb as mk
+
+    mk._ENSURE_CACHE.clear()
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    http = FakeHttp()
+    http.primary_key = "artifact_id"
+    MeiliIndex(http).ensure(force=True)
+    methods = [c[0] + " " + c[1] for c in http.calls]
+    assert any(m.endswith("/indexes/pico_materials") and m.startswith("DELETE") for m in methods)
+    assert http.primary_key == "chunk_id"

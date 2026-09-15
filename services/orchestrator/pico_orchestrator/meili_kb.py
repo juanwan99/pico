@@ -6,18 +6,35 @@ import logging
 import os
 import re
 from typing import Any, Protocol
-from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
 INDEX = "pico_materials"
-PRIMARY_KEY = "artifact_id"
-FILTERABLE = ["school_id", "membership_id"]
-SEARCHABLE = ["title", "text"]
-DISPLAYED = ["artifact_id", "title", "text", "school_id", "membership_id", "created_at"]
-MAX_TEXT = 20_000
-# Pico does not own an embedder. Meili is a keyword mount of the ledger.
-# Do not PATCH REST embedders (Zhipu / SiliconFlow / New API) from this file.
+PRIMARY_KEY = "chunk_id"
+FILTERABLE = ["school_id", "membership_id", "scope", "artifact_id"]
+SEARCHABLE = ["title", "heading", "text"]
+DISPLAYED = [
+    "chunk_id",
+    "artifact_id",
+    "material_id",
+    "title",
+    "heading",
+    "page",
+    "text",
+    "parent_text",
+    "seq",
+    "scope",
+    "school_id",
+    "membership_id",
+    "created_at",
+]
+MAX_TEXT = 200_000
+# Bookkeeping chips that used to flood the index (735/953 on the live school).
+NOISE_TITLES = frozenset({"回复摘要", "summary", "run summary", "工具产物"})
+TITLE_ONLY_EXTS = frozenset({".doc", ".ppt", ".xls"})
+# Embedding / rerank, when live, go through New API only (#1005). This PR is
+# still keyword: leftover Zhipu/SF embedders stay stripped.
+# Do not PATCH a vendor embedder URL from this file.
 
 MATERIAL_KINDS = frozenset(
     {
@@ -206,8 +223,12 @@ def parse_office_bytes(*, filename: str, data: bytes) -> str:
         return ""
     if not result.get("ok"):
         return ""
+    # Prefer full markdown so page breaks (\\x0c) survive for the chunker.
+    md = str(result.get("markdown") or "").strip()
+    if md:
+        return md[:MAX_TEXT]
     parts = [str(row.get("excerpt") or "") for row in (result.get("slices") or [])]
-    return "\n".join(p for p in parts if p).strip()
+    return "\n".join(p for p in parts if p).strip()[:MAX_TEXT]
 
 
 def render_pdf_page_pngs(data: bytes, *, max_pages: int = 32) -> list[bytes]:
@@ -232,6 +253,23 @@ def render_pdf_page_pngs(data: bytes, *, max_pages: int = 32) -> list[bytes]:
         return []
 
 
+def is_noise_title(title: str) -> bool:
+    name = (title or "").strip()
+    if name in NOISE_TITLES:
+        return True
+    return any(name.startswith(n) for n in NOISE_TITLES)
+
+
+def is_title_only_stub(*, title: str, text: str) -> bool:
+    """Legacy OLE that never extracted — index was just the filename."""
+    suffix = _suffix_of(title)
+    if suffix not in TITLE_ONLY_EXTS:
+        return False
+    body = (text or "").strip()
+    heading = (title or "").strip()
+    return len(body) <= max(len(heading), 24)
+
+
 def document_from_artifact(
     *,
     artifact_id: str,
@@ -241,14 +279,70 @@ def document_from_artifact(
     membership_id: str,
     created_at: str | None = None,
 ) -> dict[str, Any]:
+    """One-row fallback (tests / tiny docs). Live projection uses chunks."""
     return {
+        "chunk_id": f"{artifact_id}:0000",
         "artifact_id": artifact_id,
+        "material_id": artifact_id,
         "title": (title or "")[:512],
+        "heading": (title or "")[:120],
+        "page": None,
         "text": (text or "")[:MAX_TEXT],
+        "parent_text": (text or "")[:2000],
+        "seq": 0,
+        "scope": "member",
         "school_id": school_id,
         "membership_id": membership_id,
         "created_at": created_at or "",
     }
+
+
+def documents_from_text(
+    *,
+    artifact_id: str,
+    title: str,
+    text: str,
+    school_id: str,
+    membership_id: str,
+    created_at: str | None = None,
+    scope: str = "member",
+) -> list[dict[str, Any]]:
+    from pico_orchestrator.kb_chunker import chunk_text
+
+    chunks = chunk_text(text, title=title)
+    if not chunks:
+        if not (text or title):
+            return []
+        return [
+            document_from_artifact(
+                artifact_id=artifact_id,
+                title=title,
+                text=text or title,
+                school_id=school_id,
+                membership_id=membership_id,
+                created_at=created_at,
+            )
+        ]
+    out: list[dict[str, Any]] = []
+    for chunk in chunks:
+        out.append(
+            {
+                "chunk_id": f"{artifact_id}:{chunk.seq:04d}",
+                "artifact_id": artifact_id,
+                "material_id": artifact_id,
+                "title": (title or "")[:512],
+                "heading": (chunk.heading or title or "")[:120],
+                "page": chunk.page,
+                "text": chunk.text,
+                "parent_text": chunk.parent_text,
+                "seq": chunk.seq,
+                "scope": scope,
+                "school_id": school_id,
+                "membership_id": membership_id,
+                "created_at": created_at or "",
+            }
+        )
+    return out
 
 
 class MeiliIndex:
@@ -288,12 +382,32 @@ class MeiliIndex:
         default = body.get("default")
         return isinstance(default, dict) and bool(default.get("source") or default.get("url"))
 
+    def _primary_key(self) -> str | None:
+        try:
+            status, body = self._call("GET", f"/indexes/{INDEX}")
+        except Exception:  # noqa: BLE001
+            return None
+        if status == 404:
+            return None
+        if status >= 400 or not isinstance(body, dict):
+            return ""
+        return str(body.get("primaryKey") or "")
+
     def ensure(self, *, force: bool = False) -> None:
-        cache_key = f"{meili_url()}|{INDEX}|keyword"
+        cache_key = f"{meili_url()}|{INDEX}|chunk-v1"
         if not force and _ENSURE_CACHE.get(cache_key):
             return
-        status, _ = self._call("GET", f"/indexes/{INDEX}")
-        if status == 404:
+        pk = self._primary_key()
+        if pk is None:
+            self._call(
+                "POST",
+                "/indexes",
+                {"uid": INDEX, "primaryKey": PRIMARY_KEY},
+            )
+            _ENSURE_CACHE.pop(cache_key, None)
+        elif pk != PRIMARY_KEY:
+            logger.warning("meili index pk %s → %s, recreating", pk, PRIMARY_KEY)
+            self._call("DELETE", f"/indexes/{INDEX}")
             self._call(
                 "POST",
                 "/indexes",
@@ -360,16 +474,31 @@ class MeiliIndex:
             time.sleep(0.4)
 
     def upsert(self, doc: dict[str, Any]) -> None:
-        if not doc.get("artifact_id"):
+        if not doc.get("chunk_id") and not doc.get("artifact_id"):
             return
         self.ensure()
+        if not doc.get("chunk_id") and doc.get("artifact_id"):
+            doc = {**doc, "chunk_id": f"{doc['artifact_id']}:0000"}
         self._call("POST", f"/indexes/{INDEX}/documents", [doc], timeout=20.0)
+
+    def upsert_many(self, docs: list[dict[str, Any]]) -> None:
+        rows = [d for d in docs if d.get("chunk_id")]
+        if not rows:
+            return
+        self.ensure()
+        self._call("POST", f"/indexes/{INDEX}/documents", rows, timeout=30.0)
 
     def delete(self, artifact_id: str) -> None:
         aid = str(artifact_id or "").strip()
         if not aid:
             return
-        self._call("DELETE", f"/indexes/{INDEX}/documents/{quote(aid, safe='')}")
+        self.ensure()
+        self._call(
+            "POST",
+            f"/indexes/{INDEX}/documents/delete",
+            {"filter": f"artifact_id = {quote_filter_value(aid)}"},
+            timeout=20.0,
+        )
 
     def search(
         self,
@@ -385,7 +514,7 @@ class MeiliIndex:
             "filter": clause,
             "limit": limit,
             "attributesToRetrieve": DISPLAYED,
-            "attributesToHighlight": ["title", "text"],
+            "attributesToHighlight": ["title", "heading", "text"],
             "highlightPreTag": "",
             "highlightPostTag": "",
         }
@@ -408,6 +537,21 @@ def upsert_material(doc: dict[str, Any], *, client: HttpClient | None = None) ->
         return True
     except Exception as exc:  # noqa: BLE001 — projection must not block ledger writes
         logger.warning("meili upsert failed: %s", type(exc).__name__)
+        return False
+
+
+def upsert_documents(docs: list[dict[str, Any]], *, client: HttpClient | None = None) -> bool:
+    if not meili_configured() or not docs:
+        return False
+    try:
+        idx = MeiliIndex(client)
+        aid = str(docs[0].get("artifact_id") or "").strip()
+        if aid:
+            idx.delete(aid)
+        idx.upsert_many(docs)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("meili upsert_many failed: %s", type(exc).__name__)
         return False
 
 
@@ -447,6 +591,8 @@ def project_material_artifact(
 ) -> bool:
     if not is_material(kind=kind, title=title):
         return False
+    if is_noise_title(title):
+        return False
     text = ""
     raw: bytes | None = None
     if isinstance(content, bytes):
@@ -461,7 +607,9 @@ def project_material_artifact(
         return False
     if not text and not title:
         return False
-    doc = document_from_artifact(
+    if is_title_only_stub(title=title, text=text or ""):
+        return False
+    docs = documents_from_text(
         artifact_id=artifact_id,
         title=title,
         text=text or title,
@@ -469,11 +617,13 @@ def project_material_artifact(
         membership_id=str(getattr(principal, "membership_id", "") or ""),
         created_at=created_at,
     )
-    return upsert_material(doc, client=client)
+    if not docs:
+        return False
+    return upsert_documents(docs, client=client)
 
 
 def health_fields() -> dict[str, Any]:
-    """Keyword mount only. Pico does not report vendor embedders as product state."""
+    """Keyword chunk mount. Vendor embedders are not product state until New API is armed."""
     configured = meili_configured()
     reachable = False
     if configured:
