@@ -55,7 +55,8 @@ MATERIAL_KINDS = frozenset(
 )
 SKIP_KINDS = frozenset({"html", "png", "image", "screenshot", "preview", "form_entry"})
 PARSE_EXT = frozenset({".pdf", ".docx"})
-OFFICE_EXTRACT_EXT = frozenset({".xlsx", ".pptx", ".txt"})
+OFFICE_EXTRACT_EXT = frozenset({".xlsx", ".pptx", ".txt", ".csv", ".tsv"})
+TABLE_EXTRACT_EXT = frozenset({".xlsx", ".csv", ".tsv"})
 MATERIAL_EXTS = frozenset({".md", ".txt", ".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".json"})
 _ID_SAFE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 # Meili primary keys: alphanumeric / hyphen / underscore only. Colon is illegal
@@ -440,6 +441,15 @@ def extract_index_text(*, title: str, kind: str, content: str | None, raw: bytes
     """Ledger UTF-8, Docling for pdf/docx, office_extract for xlsx/pptx/txt. No self-built parser."""
     name = title or "file"
     suffix = _suffix_of(name)
+    if suffix in TABLE_EXTRACT_EXT:
+        data = raw
+        if data is None and content and suffix != ".xlsx":
+            data = content.encode("utf-8")
+        if data:
+            parsed = extract_office_text(filename=name, data=data)
+            if parsed:
+                return parsed[:MAX_TEXT]
+        return (content or "")[:MAX_TEXT]
     if content and suffix not in PARSE_EXT:
         return content[:MAX_TEXT]
     if suffix in PARSE_EXT and raw:
