@@ -65,6 +65,7 @@ def expand_pipe_tables(text: str) -> str:
                         pairs.append(f"{lab}={val}")
                 if pairs:
                     out.append(raw + " " + " ".join(f"| {p}" for p in pairs))
+                    out.extend(f"| {p}" for p in pairs)
                 else:
                     out.append(lines[i])
                 i += 1

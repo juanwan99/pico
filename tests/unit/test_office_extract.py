@@ -92,6 +92,8 @@ def test_bind_table_rows_is_header_generic() -> None:
     )
     assert lines[0] == "日期,仓,件"
     assert "日期=周一" in lines[1] and "仓=东仓" in lines[1] and "件=12" in lines[1]
+    assert "| 仓=东仓" in lines
+    assert "| 件=12" in lines
     assert bind_table_rows([["只有一行", "2"]]) == ["只有一行,2"]
     assert bind_table_rows([["", "数量"], ["苹果", "4"]])[1].startswith("|")
     assert "列1=苹果" in bind_table_rows([["", "数量"], ["苹果", "4"]])[1]

@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from pico_orchestrator.meili_kb import (
+    EMBED_DOCUMENT_TEMPLATE,
     MeiliIndex,
     chunk_doc_id,
     collapse_hits_by_artifact,
@@ -18,6 +19,7 @@ from pico_orchestrator.meili_kb import (
     health_fields,
     is_material,
     kb_rerank_enabled,
+    merge_hybrid_and_title_hits,
     new_api_embedder_spec,
     parse_office_bytes,
     project_material_artifact,
@@ -44,6 +46,7 @@ class FakeHttp:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, Any]] = []
         self.search_hits: list[dict[str, Any]] = []
+        self.title_search_hits: list[dict[str, Any]] | None = None
         self.search_status = 200
         self.fail_search = False
         self.embedders_armed = False
@@ -123,6 +126,10 @@ class FakeHttp:
         if method == "POST" and url.endswith("/search"):
             if self.fail_search:
                 return 503, {"message": "down"}
+            if self.title_search_hits is not None and (json or {}).get(
+                "attributesToSearchOn"
+            ) == ["title"]:
+                return self.search_status, {"hits": list(self.title_search_hits)}
             return self.search_status, {"hits": list(self.search_hits)}
         if method == "PATCH" and url.endswith("/settings"):
             if isinstance(json, dict) and "embedders" in json:
@@ -247,6 +254,36 @@ def test_search_collapses_same_artifact(monkeypatch: pytest.MonkeyPatch) -> None
     assert [h["artifact_id"] for h in collapse_hits_by_artifact(raw, 5)] == ["a1", "a2"]
 
 
+def test_merge_title_only_hits_stay_in_pool() -> None:
+    hybrid = [{"chunk_id": f"h{i}", "artifact_id": f"h{i}"} for i in range(80)]
+    title = [{"chunk_id": "tf_0", "artifact_id": "title-file"}]
+    merged = merge_hybrid_and_title_hits(hybrid, title, pool=80, title_cap=20)
+    assert merged[0]["artifact_id"] == "title-file"
+    assert len(merged) == 80
+    assert "title-file" in {r["artifact_id"] for r in merged}
+
+
+def test_search_title_only_file_not_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
+    http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
+    http.search_hits = [
+        {"artifact_id": f"h{i}", "chunk_id": f"h{i}_0", "text": "其它"} for i in range(8)
+    ]
+    http.title_search_hits = [
+        {"artifact_id": "title-file", "chunk_id": "tf_0", "title": "库存.csv", "text": "仓=东仓"}
+    ]
+    out = search_materials("库存", school_id="s1", membership_id="m1", limit=3, client=http)
+    assert out["hits"][0]["artifact_id"] == "title-file"
+
+
 def test_search_never_hybrid_even_with_vendor_keys(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -349,6 +386,7 @@ def test_new_api_spec_rejects_vendor_and_official_deepseek(
     assert spec is not None
     assert spec["url"] == "http://127.0.0.1:3000/v1/embeddings"
     assert spec["request"]["model"] == "embedding-3"
+    assert spec["documentTemplate"] == EMBED_DOCUMENT_TEMPLATE
     assert "open.bigmodel" not in json.dumps(spec)
     assert "siliconflow" not in json.dumps(spec).lower()
 
@@ -368,7 +406,8 @@ def test_ensure_arms_new_api_not_vendor(monkeypatch: pytest.MonkeyPatch) -> None
     default = patch["embedders"]["default"]
     assert default["url"] == "http://127.0.0.1:3000/v1/embeddings"
     assert default["request"]["model"] == "embedding-3"
-    assert default["documentTemplate"] == "{{doc.text}}"
+    assert default["documentTemplate"] == EMBED_DOCUMENT_TEMPLATE
+    assert default["documentTemplateMaxBytes"] == 400
     dumped = json.dumps(patch)
     assert "open.bigmodel.cn" not in dumped
     assert "siliconflow" not in dumped.lower()
@@ -544,7 +583,7 @@ def test_ensure_patches_when_embed_template_differs(monkeypatch: pytest.MonkeyPa
     http.embedder_template = "{{doc.title}}\n{{doc.text}}"
     MeiliIndex(http).ensure()
     patch = next(c[2] for c in http.calls if c[0] == "PATCH")
-    assert patch["embedders"]["default"]["documentTemplate"] == "{{doc.text}}"
+    assert patch["embedders"]["default"]["documentTemplate"] == EMBED_DOCUMENT_TEMPLATE
     before = len([c for c in http.calls if c[0] == "PATCH"])
     MeiliIndex(http).ensure()
     assert len([c for c in http.calls if c[0] == "PATCH"]) == before
