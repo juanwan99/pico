@@ -188,7 +188,7 @@ def new_api_embedder_spec() -> dict[str, Any] | None:
         "url": url,
         "apiKey": key,
         "dimensions": 2048,
-        "documentTemplate": "{{doc.text}}",
+        "documentTemplate": "{{doc.title}}\n{{doc.heading}}\n{{doc.text}}",
         "request": {"model": kb_embed_model(), "input": ["{{text}}"]},
         "response": {"data": [{"embedding": "{{embedding}}"}]},
     }
@@ -750,7 +750,11 @@ class MeiliIndex:
             if not isinstance(default, dict):
                 return False
             want_default = want_embedders.get("default") or {}
-            return str(default.get("url") or "") == str(want_default.get("url") or "")
+            if str(default.get("url") or "") != str(want_default.get("url") or ""):
+                return False
+            return str(default.get("documentTemplate") or "") == str(
+                want_default.get("documentTemplate") or ""
+            )
         return not isinstance(default, dict)
 
     def _settings_match(self, want_embedders: dict[str, Any] | None) -> bool:

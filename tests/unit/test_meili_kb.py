@@ -45,6 +45,7 @@ class FakeHttp:
         self.fail_search = False
         self.embedders_armed = False
         self.embedder_url = "https://api.siliconflow.cn/v1/embeddings"
+        self.embedder_template = "{{doc.text}}"
         self.primary_key = "chunk_id"
         self.task_status = "succeeded"
         self.task_error: dict[str, Any] | None = None
@@ -81,6 +82,7 @@ class FakeHttp:
                     "default": {
                         "source": "rest",
                         "url": self.embedder_url,
+                        "documentTemplate": self.embedder_template,
                     }
                 }
                 if self.embedders_armed
@@ -128,6 +130,8 @@ class FakeHttp:
                 else:
                     self.embedders_armed = True
                     self.embedder_url = str(default.get("url") or self.embedder_url)
+                    if default.get("documentTemplate"):
+                        self.embedder_template = str(default["documentTemplate"])
             return 202, {"taskUid": 1}
         return 202, {"taskUid": 1}
 
@@ -356,6 +360,7 @@ def test_ensure_arms_new_api_not_vendor(monkeypatch: pytest.MonkeyPatch) -> None
     default = patch["embedders"]["default"]
     assert default["url"] == "http://127.0.0.1:3000/v1/embeddings"
     assert default["request"]["model"] == "embedding-3"
+    assert "{{doc.title}}" in default["documentTemplate"]
     dumped = json.dumps(patch)
     assert "open.bigmodel.cn" not in dumped
     assert "siliconflow" not in dumped.lower()
@@ -455,6 +460,26 @@ def test_search_keyword_when_key_but_embedder_not_armed(
     body = next(c[2] for c in http.calls if str(c[1]).endswith("/search"))
     assert "hybrid" not in body
     assert out["hybrid"] is False
+
+
+def test_ensure_patches_when_embed_template_differs(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pico_orchestrator.meili_kb as mk
+
+    mk._ENSURE_CACHE.clear()
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
+    http.embedder_template = "{{doc.text}}"
+    MeiliIndex(http).ensure()
+    patch = next(c[2] for c in http.calls if c[0] == "PATCH")
+    assert "{{doc.title}}" in patch["embedders"]["default"]["documentTemplate"]
+    before = len([c for c in http.calls if c[0] == "PATCH"])
+    MeiliIndex(http).ensure()
+    assert len([c for c in http.calls if c[0] == "PATCH"]) == before
 
 
 def test_ensure_strips_vendor_embedder(monkeypatch: pytest.MonkeyPatch) -> None:
