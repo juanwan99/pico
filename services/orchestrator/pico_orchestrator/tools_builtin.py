@@ -849,8 +849,6 @@ def _workspace_handlers(
                     art_id = str(row.get("artifact_id") or "")
                     title = str(row.get("title") or "")
                     text = str(row.get("text") or "")
-                    parent = str(row.get("parent_text") or "")
-                    body = parent if parent and (not text or text in parent or len(parent) > len(text)) else text
                     row_school = str(row.get("school_id") or "").strip()
                     row_member = str(row.get("membership_id") or "").strip()
                     if row_school and row_school != principal.school_id:
@@ -866,7 +864,7 @@ def _workspace_handlers(
                             "heading": str(row.get("heading") or ""),
                             "page": row.get("page"),
                             "kind": row.get("kind"),
-                            "excerpt": _excerpt_around(body or title, query),
+                            "excerpt": _excerpt_around(text or title, query),
                             "match": "index",
                         }
                     )
