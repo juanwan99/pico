@@ -270,6 +270,8 @@ def test_openai_responses_brain_keeps_gpt_model(monkeypatch: pytest.MonkeyPatch)
     assert resolve_model_id("pico-deep", cfg) == "gpt-5.6-sol"
     assert runtime_policy_for_model("pico-fast")["backend_model"] == "gpt-5.6-sol"
     assert runtime_policy_for_model("pico-deep")["backend_model"] == "gpt-5.6-sol"
+    assert runtime_policy_for_model("pico-fast")["thinking"] is False
+    assert runtime_policy_for_model("pico-deep")["thinking"] is True
 
 
 def test_openai_responses_brain_via_new_api_loopback(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -10,6 +10,7 @@ This is a splitter, not a parser: no layout model, no tokenizer, no vendor.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 
@@ -73,6 +74,54 @@ def expand_pipe_tables(text: str) -> str:
         out.append(lines[i])
         i += 1
     return "\n".join(out)
+
+
+JSON_FIELD_CAP = 200
+JSON_DEPTH_CAP = 6
+
+
+def expand_json_fields(text: str) -> str:
+    """Whole-document JSON also carries field=value lines. Same idea as tables."""
+    raw = text or ""
+    stripped = raw.strip()
+    if not stripped or stripped[0] not in "{[":
+        return raw
+    try:
+        data = json.loads(stripped)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return raw
+    extras: list[str] = []
+
+    def walk(obj: object, prefix: str, depth: int) -> None:
+        if len(extras) >= JSON_FIELD_CAP or depth > JSON_DEPTH_CAP:
+            return
+        if isinstance(obj, dict):
+            for key, val in obj.items():
+                name = str(key).strip() or "字段"
+                path = f"{prefix}.{name}" if prefix else name
+                walk(val, path, depth + 1)
+                if len(extras) >= JSON_FIELD_CAP:
+                    return
+            return
+        if isinstance(obj, list):
+            scalars = [x for x in obj if isinstance(x, (str, int, float, bool)) or x is None]
+            if obj and len(scalars) == len(obj):
+                vals = [str(x) for x in obj if x is not None and str(x).strip()]
+                if prefix and vals:
+                    extras.append(f"{prefix}={' / '.join(vals)}")
+                return
+            for i, val in enumerate(obj):
+                walk(val, f"{prefix}[{i}]" if prefix else f"[{i}]", depth + 1)
+                if len(extras) >= JSON_FIELD_CAP:
+                    return
+            return
+        if prefix and obj is not None and str(obj).strip():
+            extras.append(f"{prefix}={obj}")
+
+    walk(data, "", 0)
+    if not extras:
+        return raw
+    return raw.rstrip() + "\n" + "\n".join(extras)
 
 
 @dataclass
@@ -268,7 +317,7 @@ def chunk_text(
     max_chunks: int = MAX_CHUNKS,
 ) -> list[Chunk]:
     """Section-aware parent/child chunks. Empty text → []."""
-    blocks = _blocks(expand_pipe_tables(text))
+    blocks = _blocks(expand_pipe_tables(expand_json_fields(text)))
     if not blocks:
         return []
     # Group blocks into sections at headings.

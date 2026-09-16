@@ -41,7 +41,10 @@ def test_recipes_bound_pip_timeout():
 def test_recipes_use_locked_ingest_and_no_torch_constraints():
     ingest = (ROOT / "requirements-ingest.txt").read_text(encoding="utf-8")
     constraints = (ROOT / "constraints-no-torch.txt").read_text(encoding="utf-8")
-    assert "docling-slim[format-office,format-xlsx,convert-core]==2.121.0" in ingest
+    assert (
+        "docling-slim[format-office,format-xlsx,format-markdown,format-html,convert-core]==2.121.0"
+        in ingest
+    )
     assert _DOCLING_META.search(ingest) is None
     assert "torch==0.0.0" in constraints
     for name in RECIPES:
