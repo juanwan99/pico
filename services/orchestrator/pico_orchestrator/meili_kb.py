@@ -79,11 +79,10 @@ SKIP_KINDS = frozenset({"html", "png", "image", "screenshot", "preview", "form_e
 PARSE_EXT = frozenset({".pdf", ".docx"})
 OFFICE_EXTRACT_EXT = frozenset({".xlsx", ".pptx", ".txt", ".csv", ".tsv"})
 TABLE_EXTRACT_EXT = frozenset({".xlsx", ".csv", ".tsv"})
-# Embed the stored child only. Title in the vector pulled filename-similar
-# junk above the quote (#1020). A 180-char / 400-byte stub makes revision
-# siblings look identical. CHILD_MAX is 450 CJK ≈ 1.4KiB; 2000 bytes fits.
-EMBED_DOCUMENT_TEMPLATE = "{{doc.text}}"
-EMBED_TEMPLATE_MAX_BYTES = 2000
+# Meili official: short title + truncated body. truncate (chars) not
+# truncatewords — CJK has no spaces, so "30 words" was the whole chunk (#1020).
+EMBED_DOCUMENT_TEMPLATE = "{{doc.title}} {{doc.text | truncate: 180}}"
+EMBED_TEMPLATE_MAX_BYTES = 400
 TITLE_HIT_CAP = 20
 MATERIAL_EXTS = frozenset({".md", ".txt", ".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".json"})
 _ID_SAFE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
@@ -1030,7 +1029,7 @@ class MeiliIndex:
                 rerank_skip = ""
             else:
                 rerank_skip = "flat"
-        hits = take_passage_hits(pool, want)
+        hits = collapse_hits_by_artifact(pool, want)
         return {
             "hits": hits,
             "hybrid": use_hybrid,
@@ -1222,27 +1221,8 @@ def merge_hybrid_and_title_hits(
     return out[:want]
 
 
-def take_passage_hits(hits: list[Any], limit: int) -> list[dict[str, Any]]:
-    """Top passages. Same file may occupy more than one slot."""
-    want = max(1, int(limit))
-    seen: set[str] = set()
-    out: list[dict[str, Any]] = []
-    for row in hits:
-        if not isinstance(row, dict):
-            continue
-        cid = _hit_chunk_id(row)
-        if cid:
-            if cid in seen:
-                continue
-            seen.add(cid)
-        out.append(row)
-        if len(out) >= want:
-            break
-    return out
-
-
 def collapse_hits_by_artifact(hits: list[Any], limit: int) -> list[dict[str, Any]]:
-    """One chunk per ledger file. Kept for tests; live search returns passages."""
+    """One best chunk per ledger file so five results are five materials."""
     want = max(1, int(limit))
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
