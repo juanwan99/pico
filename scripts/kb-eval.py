@@ -388,6 +388,48 @@ def cmd_held(args: argparse.Namespace) -> int:
 # --- run ----------------------------------------------------------------------
 
 
+def rerank_pool(query: str, hits: list[dict[str, Any]], *, model: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Reorder the fetched pool via New API /v1/rerank (same call shape as live
+    meili_kb.rerank_documents). Returns (ordered hits, score stats). Flat scores
+    keep Meili order, like live."""
+    base = (os.environ.get("DEEPSEEK_BASE_URL") or "http://127.0.0.1:3000/v1").rstrip("/")
+    key = (os.environ.get("DEEPSEEK_API_KEY") or "").strip()
+    docs = [
+        (" ".join(str(x) for x in (h.get("title"), h.get("heading")) if x) + "\n" + str(h.get("text") or ""))[:2000]
+        for h in hits
+    ]
+    if not docs:
+        return hits, {"used": False}
+    t0 = time.perf_counter()
+    resp = httpx.post(
+        f"{base}/rerank",
+        json={"model": model, "query": query, "documents": docs, "top_n": len(docs)},
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        timeout=30.0,
+        trust_env=False,
+    )
+    dt = time.perf_counter() - t0
+    resp.raise_for_status()
+    results = resp.json().get("results") or []
+    order: list[int] = []
+    scores: list[float] = []
+    for row in results:
+        try:
+            idx = int(row.get("index"))
+            score = float(row.get("relevance_score", row.get("score")))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= idx < len(docs) and idx not in order:
+            order.append(idx)
+            scores.append(score)
+    spread = (max(scores) - min(scores)) if len(scores) > 1 else 0.0
+    stats = {"used": spread > 1e-6, "spread": round(spread, 4), "top": round(max(scores), 4) if scores else None, "ms": round(dt * 1000, 1)}
+    if not stats["used"]:
+        return hits, stats
+    ordered = [hits[i] for i in order] + [h for i, h in enumerate(hits) if i not in set(order)]
+    return ordered, stats
+
+
 def _rank_of(material_id: str, hits: list[dict[str, Any]]) -> int | None:
     """Rank of the target file, counting a merged clone (identical content) as a hit."""
     for i, h in enumerate(hits):
@@ -446,6 +488,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     lat: list[float] = []
     per_kind: dict[str, list[int | None]] = {}
     per_kind_quote: dict[str, int] = {}
+    rerank_used = 0
+    rerank_spread: list[float] = []
     errors = 0
     for it in items:
         kind = str(it.get("kind") or "?")
@@ -471,6 +515,11 @@ def cmd_run(args: argparse.Namespace) -> int:
                     extra=extra,
                     filt=tenant_filter(school, str(it.get("membership_id") or "")),
                 )
+                if args.rerank:
+                    raw, rs = rerank_pool(it["question"], raw[: args.rerank_pool], model=args.rerank)
+                    rerank_used += int(bool(rs.get("used")))
+                    rerank_spread.append(float(rs.get("spread") or 0.0))
+                    dt += float(rs.get("ms") or 0.0) / 1000.0
                 passages = raw
                 hits = collapse_by_file(raw, passages=args.passages)
         except Exception as exc:  # noqa: BLE001
@@ -510,6 +559,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     overall["p50_ms"] = round(statistics.median(lat) * 1000, 1) if lat else None
     overall["p95_ms"] = round(sorted(lat)[max(0, round(0.95 * (len(lat) - 1)))] * 1000, 1) if lat else None
     overall["errors"] = errors
+    if args.rerank:
+        overall["rerank"] = {
+            "model": args.rerank,
+            "pool": args.rerank_pool,
+            "order_changed": f"{rerank_used}/{len(items)}",
+            "score_spread_p50": round(statistics.median(rerank_spread), 4) if rerank_spread else None,
+        }
     by_kind = {}
     for kk, v in sorted(per_kind.items()):
         st = _stats(v)
@@ -529,8 +585,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"| set | mode | n | file@1 | file@{k} | file@20 | quote child@{k} | quote passages@20 | p50 ms | p95 ms |")
     print("|---|---|---|---|---|---|---|---|---|---|")
     o = overall
+    mode_label = f"{args.mode}+{args.rerank}" if args.rerank else args.mode
     print(
-        f"| {report['set']} | {args.mode} | {o['n']} | {o['file@1']} | {o[f'file@{k}']} | {o['file@20']} "
+        f"| {report['set']} | {mode_label} | {o['n']} | {o['file@1']} | {o[f'file@{k}']} | {o['file@20']} "
         f"| {o[f'quote_child@{k}']} | {o['quote_passages@20']} | {o['p50_ms']} | {o['p95_ms']} |"
     )
     for kk, st in by_kind.items():
@@ -568,6 +625,8 @@ def main() -> int:
     r.add_argument("--k", type=int, default=5)
     r.add_argument("--fetch", type=int, default=80, help="Meili hits before file collapse (live PICO_KB_FETCH)")
     r.add_argument("--passages", type=int, default=3, help="sibling chunks per file hit (live PICO_KB_PASSAGES)")
+    r.add_argument("--rerank", default="", help="New API rerank model to test on the pool (e.g. rerank, rerank-pro)")
+    r.add_argument("--rerank-pool", type=int, default=80, dest="rerank_pool")
     r.add_argument("--semantic-ratio", type=float, default=0.5, dest="semantic_ratio")
     r.add_argument("--embedder", default="default")
     r.add_argument("--base", default="http://127.0.0.1:18765")
