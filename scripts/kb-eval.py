@@ -74,27 +74,41 @@ def tenant_filter(school_id: str, membership_id: str) -> str:
 def collapse_by_file(
     hits: list[dict[str, Any]], k: int | None = None, *, passages: int = 1
 ) -> list[dict[str, Any]]:
-    """Mirror of live meili_kb.collapse_hits_by_artifact: file order = best chunk;
-    each row gets `passages` = that file's pooled chunks, itself first, capped."""
+    """Mirror of live meili_kb.collapse_hits_by_artifact: one row per content_sha
+    (clones merge; legacy rows fall back to artifact id), order = best chunk;
+    each row gets `passages` = pooled chunks of that content, itself first, capped,
+    and `clone_artifact_ids` = the other ledger ids with identical content."""
     order: list[str] = []
     best: dict[str, dict[str, Any]] = {}
     sibs: dict[str, list[dict[str, Any]]] = {}
+    clones: dict[str, list[str]] = {}
     for row in hits:
         aid = _aid(row)
         if not aid:
             continue
-        if aid not in best:
+        sha = str(row.get("content_sha") or "").strip()
+        key = f"sha:{sha}" if sha else f"aid:{aid}"
+        if key not in best:
             if k is not None and len(order) >= k:
                 continue
-            order.append(aid)
-            best[aid] = row
-            sibs[aid] = []
-        elif len(sibs[aid]) < passages - 1:
-            sibs[aid].append(row)
+            order.append(key)
+            best[key] = row
+            sibs[key] = []
+            clones[key] = [aid]
+        else:
+            if aid not in clones[key]:
+                clones[key].append(aid)
+            text = _norm(str(row.get("text") or ""))
+            kept = [best[key], *sibs[key]]
+            if len(sibs[key]) < passages - 1 and all(
+                text != _norm(str(x.get("text") or "")) for x in kept
+            ):
+                sibs[key].append(row)
     out = []
-    for aid in order:
-        row = dict(best[aid])
-        row["passages"] = [best[aid]] + sibs[aid]
+    for key in order:
+        row = dict(best[key])
+        row["passages"] = [best[key]] + sibs[key]
+        row["clone_artifact_ids"] = clones[key][1:]
         out.append(row)
     return out
 
@@ -127,7 +141,16 @@ def meili_search(
         "filter": filt or f"school_id = {_quote(school_id)}",
         "limit": limit,
         "attributesToRetrieve": attrs
-        or ["artifact_id", "material_id", "title", "text", "parent_text", "membership_id", "heading"],
+        or [
+            "artifact_id",
+            "material_id",
+            "title",
+            "text",
+            "parent_text",
+            "membership_id",
+            "heading",
+            "content_sha",
+        ],
     }
     if extra:
         body.update(extra)
@@ -366,8 +389,9 @@ def cmd_held(args: argparse.Namespace) -> int:
 
 
 def _rank_of(material_id: str, hits: list[dict[str, Any]]) -> int | None:
+    """Rank of the target file, counting a merged clone (identical content) as a hit."""
     for i, h in enumerate(hits):
-        if _aid(h) == material_id:
+        if _aid(h) == material_id or material_id in (h.get("clone_artifact_ids") or []):
             return i + 1
     return None
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -28,8 +29,17 @@ DISPLAYED = [
     "school_id",
     "membership_id",
     "created_at",
+    "content_sha",
 ]
 MAX_TEXT = 200_000
+_CONTENT_WS = re.compile(r"\s+")
+
+
+def content_sha(text: str) -> str:
+    """Whitespace-insensitive sha of a file's extracted text. Live school
+    2026-09-16: 168/547 files were byte-identical clones (16 PDFs, 8 xlsx x 400
+    chunks). Same content under different artifact ids collapses to one hit."""
+    return hashlib.sha1(_CONTENT_WS.sub("", text or "").encode("utf-8")).hexdigest()[:16]
 # Bookkeeping chips that used to flood the index (735/953 on the live school).
 NOISE_TITLES = frozenset({"回复摘要", "summary", "run summary", "工具产物"})
 # Fixture / probe tenants. Live Meili had 6081 school-a chunks vs 2613 real-school.
@@ -647,6 +657,7 @@ def document_from_artifact(
         "school_id": school_id,
         "membership_id": membership_id,
         "created_at": created_at or "",
+        "content_sha": content_sha(text or title),
     }
 
 
@@ -676,6 +687,7 @@ def documents_from_text(
                 created_at=created_at,
             )
         ]
+    sha = content_sha(text)
     out: list[dict[str, Any]] = []
     for chunk in chunks:
         out.append(
@@ -693,6 +705,7 @@ def documents_from_text(
                 "school_id": school_id,
                 "membership_id": membership_id,
                 "created_at": created_at or "",
+                "content_sha": sha,
             }
         )
     return out
@@ -828,7 +841,11 @@ class MeiliIndex:
         live = body if body is not None else self._settings_body()
         if not live:
             return False
-        return list(live.get("searchableAttributes") or []) == list(SEARCHABLE)
+        if list(live.get("searchableAttributes") or []) != list(SEARCHABLE):
+            return False
+        # displayed decides what search returns; a missing field (content_sha)
+        # silently degrades collapse to artifact id. Same cheap PATCH path.
+        return set(live.get("displayedAttributes") or []) >= set(DISPLAYED)
 
     def _embedder_url_match(self, want_embedders: dict[str, Any] | None) -> bool:
         live = self._settings_body()
@@ -1243,26 +1260,50 @@ def collapse_hits_by_artifact(
     order: list[str] = []
     best: dict[str, dict[str, Any]] = {}
     siblings: dict[str, list[dict[str, Any]]] = {}
+    clones: dict[str, list[str]] = {}
     for row in hits:
         if not isinstance(row, dict):
             continue
         aid = str(row.get("artifact_id") or row.get("material_id") or "").strip()
         if not aid:
             continue
-        if aid not in best:
+        key = collapse_key(row)
+        if key not in best:
             if len(order) >= want:
                 continue
-            order.append(aid)
-            best[aid] = row
-            siblings[aid] = []
-        elif len(siblings[aid]) < per_file - 1:
-            siblings[aid].append(row)
+            order.append(key)
+            best[key] = row
+            siblings[key] = []
+            clones[key] = [aid]
+        else:
+            if aid not in clones[key]:
+                clones[key].append(aid)
+            if len(siblings[key]) < per_file - 1 and not _same_passage_text(
+                row, [best[key], *siblings[key]]
+            ):
+                siblings[key].append(row)
     out: list[dict[str, Any]] = []
-    for aid in order:
-        row = dict(best[aid])
-        row["passages"] = [_passage_of(best[aid])] + [_passage_of(s) for s in siblings[aid]]
+    for key in order:
+        row = dict(best[key])
+        row["passages"] = [_passage_of(best[key])] + [_passage_of(s) for s in siblings[key]]
+        row["clone_artifact_ids"] = clones[key][1:]
         out.append(row)
     return out
+
+
+def _same_passage_text(row: dict[str, Any], kept: list[dict[str, Any]]) -> bool:
+    """A clone's copy of an already-kept chunk must not eat a passage slot."""
+    text = _CONTENT_WS.sub("", str(row.get("text") or ""))
+    return any(text == _CONTENT_WS.sub("", str(k.get("text") or "")) for k in kept)
+
+
+def collapse_key(row: dict[str, Any]) -> str:
+    """Identical extracted content under different ledger ids is one hit.
+    Docs indexed before content_sha existed fall back to artifact id."""
+    sha = str(row.get("content_sha") or "").strip()
+    if sha:
+        return f"sha:{sha}"
+    return f"aid:{str(row.get('artifact_id') or row.get('material_id') or '').strip()}"
 
 
 def _passage_of(row: dict[str, Any]) -> dict[str, Any]:
