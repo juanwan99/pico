@@ -27,6 +27,7 @@ from pico_orchestrator.meili_kb import (
     rerank_documents,
     rerank_scores_usable,
     search_materials,
+    take_passage_hits,
     tenant_filter,
     title_only_hits,
     upsert_documents,
@@ -235,7 +236,7 @@ def test_count_material_filters_item_and_school(monkeypatch: pytest.MonkeyPatch)
     assert 'school_id = "school-a"' in filt
 
 
-def test_search_collapses_same_artifact(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_keeps_sibling_passages(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEILI_MASTER_KEY", "k")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     http = FakeHttp()
@@ -246,12 +247,13 @@ def test_search_collapses_same_artifact(monkeypatch: pytest.MonkeyPatch) -> None
         {"artifact_id": "a3", "chunk_id": "a3_0000", "text": "丁"},
     ]
     out = search_materials("x", school_id="s1", membership_id="m1", limit=5, client=http)
-    assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a2", "a3"]
+    assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a1", "a2", "a3"]
     raw = [
-        {"artifact_id": "a1"},
-        {"artifact_id": "a1"},
-        {"artifact_id": "a2"},
+        {"artifact_id": "a1", "chunk_id": "a1_0"},
+        {"artifact_id": "a1", "chunk_id": "a1_1"},
+        {"artifact_id": "a2", "chunk_id": "a2_0"},
     ]
+    assert [h["chunk_id"] for h in take_passage_hits(raw, 5)] == ["a1_0", "a1_1", "a2_0"]
     assert [h["artifact_id"] for h in collapse_hits_by_artifact(raw, 5)] == ["a1", "a2"]
 
 
@@ -472,7 +474,8 @@ def test_ensure_arms_new_api_not_vendor(monkeypatch: pytest.MonkeyPatch) -> None
     assert default["url"] == "http://127.0.0.1:3000/v1/embeddings"
     assert default["request"]["model"] == "embedding-3"
     assert default["documentTemplate"] == EMBED_DOCUMENT_TEMPLATE
-    assert default["documentTemplateMaxBytes"] == 400
+    assert default["documentTemplateMaxBytes"] == 2000
+    assert "{{doc.title}}" not in default["documentTemplate"]
     dumped = json.dumps(patch)
     assert "open.bigmodel.cn" not in dumped
     assert "siliconflow" not in dumped.lower()
@@ -571,7 +574,7 @@ def test_search_skips_hybrid_when_embed_query_fails(
     assert out["hybrid"] is False
 
 
-def test_search_reranks_chunks_then_collapses(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_reranks_keeps_sibling_passages(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEILI_MASTER_KEY", "k")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
@@ -595,8 +598,7 @@ def test_search_reranks_chunks_then_collapses(monkeypatch: pytest.MonkeyPatch) -
     ]
     out = search_materials("x", school_id="s1", membership_id="m1", limit=2, client=http)
     assert seen == [3]
-    assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a2"]
-    assert out["hits"][0]["chunk_id"] == "a1_0001"
+    assert [h["chunk_id"] for h in out["hits"]] == ["a1_0001", "a1_0000"]
 
 
 def test_search_union_expanded_queries(monkeypatch: pytest.MonkeyPatch) -> None:
