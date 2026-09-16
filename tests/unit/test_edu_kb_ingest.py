@@ -92,7 +92,7 @@ def test_ingest_unsupported_format_is_415_with_human_line(client: TestClient, mo
             "ok": False,
             "unread": True,
             "code": "unsupported_format",
-            "error": "这种格式（.doc）知识库读不了。旧版 .doc 请先另存为 .docx 再入库。",
+            "error": "这种格式（.xyz）知识库读不了。支持：docx / xlsx / pptx / md / html / PDF / png / jpg。",
             "slices": [],
         }
 
@@ -102,15 +102,84 @@ def test_ingest_unsupported_format_is_415_with_human_line(client: TestClient, mo
         headers={"authorization": f"Bearer {_token()}"},
         json={
             "kind": "material",
-            "title": "老教案",
-            "filename": "老教案.doc",
+            "title": "笔记",
+            "filename": "笔记.xyz",
             "content_b64": base64.b64encode(b"\xd0\xcf\x11\xe0").decode(),
         },
     )
     assert res.status_code == 415, res.text
     detail = res.json()["detail"]
     assert detail["code"] == "unsupported_format"
-    assert ".docx" in detail["message"]
+    assert "读不了" in detail["message"]
+
+
+def test_ingest_wps_converts_then_indexes(client: TestClient, monkeypatch) -> None:
+    import ingest as ingest_mod
+
+    seen = {}
+
+    async def fake_convert(filename: str, data: bytes) -> bytes:
+        seen["name"] = filename
+        assert data[:2] != b"PK"
+        return b"PK\x03\x04converted-ooxml"
+
+    def fake_bytes(**kwargs):
+        seen["ingest_name"] = kwargs.get("filename")
+        return {
+            "ok": True,
+            "engine": "docling",
+            "tags": ["docling"],
+            "markdown": "通知正文一段",
+            "slices": [{"title": "通知", "excerpt": "通知正文一段", "tags": ["docling"]}],
+        }
+
+    monkeypatch.setattr(
+        "pico_orchestrator.office.convert.convert_legacy_office_bytes",
+        fake_convert,
+    )
+    monkeypatch.setattr(ingest_mod, "ingest_bytes", fake_bytes)
+    res = client.post(
+        "/v1/kb/ingest",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={
+            "kind": "material",
+            "title": "通知",
+            "filename": "通知.wps",
+            "content_b64": base64.b64encode(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1OLE").decode(),
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert seen["name"].endswith(".wps")
+    assert seen["ingest_name"].endswith(".docx")
+    body = res.json()
+    assert body["ok"] is True
+    assert body["engine"] == "docling"
+
+
+def test_ingest_legacy_convert_fail_is_422(client: TestClient, monkeypatch) -> None:
+    from pico_orchestrator.office.convert import LegacyOfficeConvertError
+
+    async def boom(filename: str, data: bytes) -> bytes:
+        raise LegacyOfficeConvertError("旧版文档转不开")
+
+    monkeypatch.setattr(
+        "pico_orchestrator.office.convert.convert_legacy_office_bytes",
+        boom,
+    )
+    res = client.post(
+        "/v1/kb/ingest",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={
+            "kind": "material",
+            "title": "通知",
+            "filename": "通知.wps",
+            "content_b64": base64.b64encode(b"\xd0\xcf\x11\xe0OLE").decode(),
+        },
+    )
+    assert res.status_code == 422, res.text
+    detail = res.json()["detail"]
+    assert detail["code"] == "file.legacy_unconvertible"
+    assert "旧格式" in detail["message"]
 
 
 def test_ingest_ok_passes_ocr_tags(client: TestClient, monkeypatch) -> None:

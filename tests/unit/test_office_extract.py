@@ -99,6 +99,13 @@ def test_bind_table_rows_is_header_generic() -> None:
     assert "列1=苹果" in bind_table_rows([["", "数量"], ["苹果", "4"]])[1]
 
 
+def test_converted_wps_name_reads_as_docx() -> None:
+    raw = _docx_bytes(["学期安排", "语文每周 5 节"])
+    got = extract_office("通知.wps", raw)
+    assert got["status"] == "ok"
+    assert "语文每周 5 节" in got["text"]
+
+
 def test_docx_paragraphs() -> None:
     got = extract_office("说明.docx", _docx_bytes(["本学期课时", "语文每周 5 节"]))
     assert got["status"] == "ok"

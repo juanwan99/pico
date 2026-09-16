@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
-LEGACY_OFFICE_EXTS = frozenset({".doc", ".ppt", ".xls"})
-LEGACY_OFFICE_ERROR = "这份还是旧版 .doc/.ppt/.xls（OLE），没有可用的 OOXML。"
+# Kingsoft Writer/Spreadsheet/Presentation sit on the same OLE→OOXML soffice
+# path as Word/Excel/PowerPoint. Not a Pico WPS kernel.
+LEGACY_TO_OOXML = {
+    ".doc": ".docx",
+    ".ppt": ".pptx",
+    ".xls": ".xlsx",
+    ".wps": ".docx",
+    ".et": ".xlsx",
+    ".dps": ".pptx",
+}
+LEGACY_OFFICE_EXTS = frozenset(LEGACY_TO_OOXML)
+LEGACY_OFFICE_ERROR = "这份还是旧版 .doc/.ppt/.xls/.wps（OLE），没有可用的 OOXML。"
 SUPPORTED_OFFICE_EXTS = frozenset({".docx", ".pptx", ".xlsx"})
-LEGACY_TO_OOXML = {".doc": ".docx", ".ppt": ".pptx", ".xls": ".xlsx"}
 
 
 def normalize_office_ext(ext: str) -> str:
@@ -49,11 +58,11 @@ def office_ext_for_bytes(ext: str, raw: bytes) -> str:
 def guess_office_ext(*, kind: str = "", title: str = "") -> str:
     name = (title or "").strip().lower()
     token = (kind or "").strip().lower()
-    if token in {"xlsx", "xls"} or name.endswith((".xlsx", ".xls")):
+    if token in {"xlsx", "xls", "et"} or name.endswith((".xlsx", ".xls", ".et")):
         return ".xlsx"
-    if token in {"pptx", "ppt"} or name.endswith((".pptx", ".ppt")):
+    if token in {"pptx", "ppt", "dps"} or name.endswith((".pptx", ".ppt", ".dps")):
         return ".pptx"
-    if token in {"docx", "doc"} or name.endswith((".docx", ".doc")):
+    if token in {"docx", "doc", "wps"} or name.endswith((".docx", ".doc", ".wps")):
         return ".docx"
     if name.endswith((".odt", ".ods", ".odp")):
         raise ValueError("不支持 OpenDocument（.odt/.ods/.odp）。")
@@ -64,10 +73,7 @@ def convert_target_from_name(filename: str) -> str | None:
     name = (filename or "").strip().lower()
     if name.endswith((".docx", ".pptx", ".xlsx")):
         return None
-    if name.endswith(".doc"):
-        return ".docx"
-    if name.endswith(".ppt"):
-        return ".pptx"
-    if name.endswith(".xls"):
-        return ".xlsx"
+    for src, dst in LEGACY_TO_OOXML.items():
+        if name.endswith(src):
+            return dst
     return None
