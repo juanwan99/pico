@@ -40,6 +40,57 @@ def _is_pipe_separator(line: str) -> bool:
     return bool(compact) and set(compact) <= set("|:-")
 
 
+def _is_pipe_pair_line(line: str) -> bool:
+    """A standalone ``列=值`` line produced by table expand / bind_table_rows."""
+    if not _is_pipe_table_line(line) or _is_pipe_separator(line):
+        return False
+    cells = [c for c in _pipe_cells(line) if c]
+    if len(cells) != 1:
+        return False
+    cell = cells[0]
+    eq = cell.find("=")
+    return eq > 0
+
+
+def _looks_like_plain_header(text: str) -> bool:
+    """One comma-separated header line (xlsx/csv bind), not prose."""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    if len(lines) != 1:
+        return False
+    ln = lines[0]
+    if ln.lstrip().startswith("|") or "=" in ln:
+        return False
+    if re.search(r"[。！？]", ln):
+        return False
+    cells = [c.strip() for c in ln.split(",")]
+    return 2 <= len(cells) <= 40 and any(cells) and all(len(c) <= 40 for c in cells)
+
+
+def _attach_plain_headers(blocks: list[_Block]) -> list[_Block]:
+    """Glue a csv/xlsx header para onto the following pipe table. Format-wide."""
+    out: list[_Block] = []
+    i = 0
+    while i < len(blocks):
+        cur = blocks[i]
+        nxt = blocks[i + 1] if i + 1 < len(blocks) else None
+        if (
+            nxt is not None
+            and cur.kind == "para"
+            and nxt.kind == "table"
+            and _looks_like_plain_header(cur.text)
+        ):
+            out.append(_Block("table", f"{cur.text}\n{nxt.text}", nxt.page or cur.page))
+            i += 2
+            continue
+        out.append(cur)
+        i += 1
+    return out
+
+
+def _is_table_child(text: str) -> bool:
+    return any(ln.lstrip().startswith("|") for ln in (text or "").splitlines())
+
+
 def expand_pipe_tables(text: str) -> str:
     """Each markdown table data row also carries header=value. Format-wide, no titles."""
     lines = (text or "").split("\n")
@@ -222,34 +273,44 @@ def _split_code(text: str, limit: int) -> list[str]:
 
 def _table_header_line(text: str) -> str:
     for line in (text or "").splitlines():
-        if line.strip() and not _is_pipe_separator(line):
+        if line.strip() and not _is_pipe_separator(line) and not _is_pipe_pair_line(line):
             return line.strip()
     return ""
 
 
-def _split_table(text: str, limit: int) -> list[str]:
-    """Keep the header on every table child so a split row still names its columns."""
-    header = _table_header_line(text)
-    data = [
-        ln
-        for ln in (text or "").splitlines()
-        if ln.strip() and not _is_pipe_separator(ln) and ln.strip() != header
-    ]
-    if not data:
-        return [text] if (text or "").strip() else []
-    pieces: list[str] = []
-    cur = [header] if header else []
-    cur_len = len(header)
-    for line in data:
-        extra = len(line) + 1
-        if cur and cur_len + extra > limit:
-            pieces.append("\n".join(cur).strip())
-            cur = [header] if header else []
-            cur_len = len(header)
-        cur.append(line)
-        cur_len += extra
+def _table_row_units(text: str) -> tuple[str, list[list[str]]]:
+    """Group a data row with its ``列=值`` lines. Never yield a half-row."""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip() and not _is_pipe_separator(ln)]
+    if not lines:
+        return "", []
+    header = lines[0]
+    units: list[list[str]] = []
+    cur: list[str] = []
+    for ln in lines[1:]:
+        if _is_pipe_pair_line(ln) and cur:
+            cur.append(ln)
+            continue
+        if cur:
+            units.append(cur)
+        cur = [ln]
     if cur:
-        pieces.append("\n".join(cur).strip())
+        units.append(cur)
+    return header, units
+
+
+def _split_table(text: str, limit: int) -> list[str]:
+    """One child per logical row. Header rides along. A long row stays whole."""
+    _ = limit
+    header, units = _table_row_units(text)
+    if not units:
+        return [text.strip()] if (text or "").strip() else []
+    pieces: list[str] = []
+    for unit in units:
+        body = "\n".join(unit).strip()
+        if header and header != body.splitlines()[0]:
+            pieces.append(f"{header}\n{body}")
+        else:
+            pieces.append(body)
     return [p for p in pieces if p]
 
 
@@ -290,8 +351,13 @@ def _children_of(blocks: list[_Block], *, child_max: int, child_min: int) -> lis
         cur, cur_len, cur_page = [], 0, None
 
     for block in blocks:
-        splitter = _split_table if block.kind == "table" else _split_long
-        for piece in splitter(block.text, child_max):
+        if block.kind == "table":
+            for piece in _split_table(block.text, child_max):
+                if cur:
+                    flush()
+                children.append((piece, block.page))
+            continue
+        for piece in _split_long(block.text, child_max):
             if cur and cur_len + len(piece) + 1 > child_max:
                 flush()
             if not cur:
@@ -299,8 +365,8 @@ def _children_of(blocks: list[_Block], *, child_max: int, child_min: int) -> lis
             cur.append(piece)
             cur_len += len(piece) + 1
     flush()
-    # Merge a trailing tiny child into its predecessor so citations are not one-liners.
-    if len(children) >= 2 and len(children[-1][0]) < child_min:
+    # Merge a trailing tiny prose sliver. Do not glue two table rows back together.
+    if len(children) >= 2 and len(children[-1][0]) < child_min and not _is_table_child(children[-1][0]):
         last_text, _last_page = children.pop()
         prev_text, prev_page = children[-1]
         children[-1] = (prev_text + "\n" + last_text, prev_page)
@@ -317,7 +383,7 @@ def chunk_text(
     max_chunks: int = MAX_CHUNKS,
 ) -> list[Chunk]:
     """Section-aware parent/child chunks. Empty text → []."""
-    blocks = _blocks(expand_pipe_tables(expand_json_fields(text)))
+    blocks = _attach_plain_headers(_blocks(expand_pipe_tables(expand_json_fields(text))))
     if not blocks:
         return []
     # Group blocks into sections at headings.
