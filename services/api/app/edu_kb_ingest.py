@@ -134,10 +134,13 @@ async def post_kb_ingest(
         if is_noise_title(title):
             skip_reason = "noise"
         else:
+            # Index the full extract. slices[] is a short edu preview (8×800);
+            # using only that dropped later sections (live Word 字体/行距 miss).
+            full = str(result.get("markdown") or "").strip() or _slices_text(slices)
             docs = documents_from_text(
                 artifact_id=item_id,
                 title=title,
-                text=_slices_text(slices),
+                text=full,
                 school_id=str(principal.school_id or ""),
                 membership_id=str(principal.membership_id or ""),
                 scope="school",

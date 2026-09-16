@@ -486,6 +486,38 @@ def test_ingest_writes_school_chunks(client: TestClient, monkeypatch) -> None:
     assert captured["docs"][0]["school_id"] == "school-a"
 
 
+def test_ingest_indexes_full_markdown_not_eight_slices(client: TestClient, monkeypatch) -> None:
+    import ingest as ingest_mod
+    from app import edu_kb_ingest as kb
+
+    captured: dict = {}
+    later = "行间距：固定值20磅。全文用宋体。"
+    monkeypatch.setattr(
+        ingest_mod,
+        "ingest_text",
+        lambda **kwargs: {
+            "ok": True,
+            "engine": "docling",
+            "slices": [{"title": "附件", "excerpt": "附件1 文稿格式"}],
+            "markdown": "# 附件1\n\n稿件内容一般应包括使用教材。\n\n" + later,
+        },
+    )
+
+    def fake_upsert(docs, *, client=None, replace_artifact=True):
+        captured["blob"] = " ".join(str(d.get("text") or "") for d in docs)
+        _ = client, replace_artifact
+        return True
+
+    monkeypatch.setattr(kb, "upsert_documents", fake_upsert)
+    res = client.post(
+        "/v1/kb/ingest",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"title": "附件", "text": "ignored", "item_id": "docx-full"},
+    )
+    assert res.status_code == 200, res.text
+    assert later in captured["blob"]
+
+
 def test_ingest_skips_noise_title(client: TestClient, monkeypatch) -> None:
     import ingest as ingest_mod
     from app import edu_kb_ingest as kb

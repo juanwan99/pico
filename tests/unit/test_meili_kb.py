@@ -274,7 +274,7 @@ def test_search_hybrid_when_new_api_embedder(monkeypatch: pytest.MonkeyPatch) ->
     out = search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)
     body = next(c[2] for c in http.calls if str(c[1]).endswith("/search"))
     assert body["hybrid"] == {"semanticRatio": 0.5, "embedder": "default"}
-    assert body["limit"] == 30
+    assert body["limit"] == 80
     assert out["hybrid"] is True
     assert out["reranked"] is True
     assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a2"]

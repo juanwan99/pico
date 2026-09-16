@@ -146,6 +146,24 @@ def kb_hybrid_ratio() -> float:
     return min(0.9, max(0.1, value))
 
 
+def kb_search_fetch() -> int:
+    """Meili hits per query before file-collapse. Hybrid recall@30 was 0.63, @80 0.69."""
+    try:
+        value = int(os.environ.get("PICO_KB_FETCH") or "80")
+    except ValueError:
+        value = 80
+    return min(200, max(20, value))
+
+
+def kb_rerank_pool() -> int:
+    """Files sent to New API /v1/rerank after collapse."""
+    try:
+        value = int(os.environ.get("PICO_KB_RERANK_POOL") or "30")
+    except ValueError:
+        value = 30
+    return min(50, max(5, value))
+
+
 def _is_new_api_loopback(base: str) -> bool:
     """Embedding/rerank only against the box New API, never a vendor or DeepSeek official."""
     low = (base or "").lower()
@@ -824,7 +842,7 @@ class MeiliIndex:
         for extra in expand_search_queries(query):
             if extra not in queries:
                 queries.append(extra)
-        fetch = 30 if (use_hybrid or spec or len(queries) > 1) else min(48, max(want * 8, want))
+        fetch = kb_search_fetch() if (use_hybrid or spec or len(queries) > 1) else min(48, max(want * 8, want))
         merged: list[Any] = []
         seen_chunk: set[str] = set()
         for q in queries[:3]:
@@ -854,7 +872,7 @@ class MeiliIndex:
                     continue
                 seen_chunk.add(cid)
                 merged.append(row)
-        files = collapse_hits_by_artifact(merged, 20)
+        files = collapse_hits_by_artifact(merged, kb_rerank_pool())
         reranked = False
         if spec and files:
             texts = []
