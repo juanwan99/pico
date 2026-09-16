@@ -222,6 +222,8 @@ async def post_kb_search(
         "ok": True,
         "mode": "keyword",
         "hybrid": bool(result.get("hybrid")),
+        "reranked": bool(result.get("reranked")),
+        "rerank_skip": str(result.get("rerank_skip") or ""),
         "include_school": include_school,
         "count": len(hits),
         "hits": hits,
