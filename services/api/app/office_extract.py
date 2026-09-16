@@ -113,6 +113,37 @@ def _fail(name: str, ext: str, status: str, error: str) -> dict:
     }
 
 
+def bind_table_rows(rows: list[list[str]]) -> list[str]:
+    """Every data row keeps raw cells plus header=value. No sheet-specific labels."""
+    cleaned = [[(c or "").strip() for c in row] for row in rows]
+    cleaned = [row for row in cleaned if any(row)]
+    if not cleaned:
+        return []
+    if len(cleaned) == 1:
+        return [",".join(cleaned[0])]
+    headers = cleaned[0]
+    seen: dict[str, int] = {}
+    labels: list[str] = []
+    for i, header in enumerate(headers):
+        name = header or f"列{i + 1}"
+        n = seen.get(name, 0) + 1
+        seen[name] = n
+        labels.append(name if n == 1 else f"{name}{n}")
+    out = [",".join(headers)]
+    width = len(labels)
+    for row in cleaned[1:]:
+        raw = ",".join((row[i] if i < len(row) else "") for i in range(width))
+        pairs = []
+        for i, lab in enumerate(labels):
+            val = row[i] if i < len(row) else ""
+            if val:
+                pairs.append(f"{lab}={val}")
+        if not pairs:
+            continue
+        out.append("| " + raw + " | " + " | ".join(pairs))
+    return out
+
+
 def _extract_text_table(name: str, ext: str, data: bytes, *, delimiter: str) -> dict:
     text = _decode_text(data)
     if ext in {"txt", "md", "json", "html", "htm"}:
@@ -124,7 +155,7 @@ def _extract_text_table(name: str, ext: str, data: bytes, *, delimiter: str) -> 
     except csv.Error:
         return _fail(name, ext, "bad_file", "坏文件，抽不出表")
     width = max((len(r) for r in rows), default=0)
-    preview = "\n".join(",".join(c.strip() for c in r) for r in rows[:MAX_ROWS])
+    preview = "\n".join(bind_table_rows([[c.strip() for c in r] for r in rows[:MAX_ROWS]]))
     headline = f"读到 {len(rows)} 行 / {width} 列"
     return _ok(name, ext, headline=headline, text=preview, rows=len(rows), cols=width)
 
@@ -213,12 +244,12 @@ def _extract_sheet(raw: bytes, shared: list[str]) -> tuple[int, int, list[str]]:
         max_c = max(max_c, c)
     if max_r < 0:
         return 0, 0, []
-    lines: list[str] = []
+    raw_rows: list[list[str]] = []
     for r in range(min(max_r + 1, MAX_ROWS)):
         row = [grid.get((r, c), "") for c in range(max_c + 1)]
         if any(row):
-            lines.append(",".join(row))
-    return max_r + 1, max_c + 1, lines
+            raw_rows.append(row)
+    return max_r + 1, max_c + 1, bind_table_rows(raw_rows)
 
 
 def _extract_xlsx(name: str, data: bytes) -> dict:

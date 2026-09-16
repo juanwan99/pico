@@ -9,7 +9,7 @@ from xml.sax.saxutils import escape
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 
-from app.office_extract import col_index, extract_office
+from app.office_extract import bind_table_rows, col_index, extract_office
 
 
 def _xlsx_bytes(rows: list[list[str]], *, sheet: str = "课时") -> bytes:
@@ -81,6 +81,20 @@ def test_xlsx_rows_cols() -> None:
     assert got["headline"] == "读到 3 行 / 3 列"
     assert "语文" in got["text"]
     assert "5" in got["text"]
+    assert "科=语文" in got["text"]
+    assert "周课时=5" in got["text"]
+    assert "高一1班,语文,5" in got["text"]
+
+
+def test_bind_table_rows_is_header_generic() -> None:
+    lines = bind_table_rows(
+        [["日期", "仓", "件"], ["周一", "东仓", "12"], ["周二", "西仓", "3"]]
+    )
+    assert lines[0] == "日期,仓,件"
+    assert "日期=周一" in lines[1] and "仓=东仓" in lines[1] and "件=12" in lines[1]
+    assert bind_table_rows([["只有一行", "2"]]) == ["只有一行,2"]
+    assert bind_table_rows([["", "数量"], ["苹果", "4"]])[1].startswith("|")
+    assert "列1=苹果" in bind_table_rows([["", "数量"], ["苹果", "4"]])[1]
 
 
 def test_docx_paragraphs() -> None:
@@ -113,6 +127,8 @@ def test_pptx_slides_ok() -> None:
 def test_csv() -> None:
     got = extract_office("a.csv", "班,科\n一班,语\n".encode())
     assert got["headline"] == "读到 2 行 / 2 列"
+    assert "科=语" in got["text"]
+    assert "一班,语" in got["text"]
 
 
 def test_markdown_text() -> None:

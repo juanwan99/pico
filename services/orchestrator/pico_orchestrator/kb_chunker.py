@@ -21,7 +21,57 @@ MAX_CHUNKS = 400
 
 _SENTENCE_END = re.compile(r"(?<=[。！？；!?;\n])")
 _HEADING = re.compile(r"^#{1,6}\s*(.+?)\s*#*\s*$")
+_CODE_START = re.compile(r"^(?:async\s+)?def\s|^class\s")
 _PAGE_BREAK = "\x0c"
+
+
+def _pipe_cells(line: str) -> list[str]:
+    s = line.strip().removeprefix("|").removesuffix("|")
+    return [c.strip() for c in s.split("|")]
+
+
+def _is_pipe_table_line(line: str) -> bool:
+    return line.lstrip().startswith("|")
+
+
+def _is_pipe_separator(line: str) -> bool:
+    compact = line.strip().replace(" ", "")
+    return bool(compact) and set(compact) <= set("|:-")
+
+
+def expand_pipe_tables(text: str) -> str:
+    """Each markdown table data row also carries header=value. Format-wide, no titles."""
+    lines = (text or "").split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if (
+            i + 1 < len(lines)
+            and _is_pipe_table_line(lines[i])
+            and _is_pipe_separator(lines[i + 1])
+        ):
+            header = _pipe_cells(lines[i])
+            out.append(lines[i])
+            out.append(lines[i + 1])
+            i += 2
+            while i < len(lines) and _is_pipe_table_line(lines[i]) and not _is_pipe_separator(lines[i]):
+                cells = _pipe_cells(lines[i])
+                raw = "| " + " | ".join(cells) + " |"
+                pairs = []
+                for j, name in enumerate(header):
+                    val = cells[j] if j < len(cells) else ""
+                    lab = name or f"列{j + 1}"
+                    if val:
+                        pairs.append(f"{lab}={val}")
+                if pairs:
+                    out.append(raw + " " + " ".join(f"| {p}" for p in pairs))
+                else:
+                    out.append(lines[i])
+                i += 1
+            continue
+        out.append(lines[i])
+        i += 1
+    return "\n".join(out)
 
 
 @dataclass
@@ -84,8 +134,79 @@ def _blocks(text: str) -> list[_Block]:
     return out
 
 
+def _looks_like_code(text: str) -> bool:
+    return any(_CODE_START.match(ln) for ln in (text or "").splitlines())
+
+
+def _split_code(text: str, limit: int) -> list[str]:
+    """Keep def/class units together; wrap leftover on newlines, not CJK periods."""
+    units: list[list[str]] = []
+    cur: list[str] = []
+    for ln in (text or "").splitlines():
+        if _CODE_START.match(ln) and cur:
+            units.append(cur)
+            cur = [ln]
+        else:
+            cur.append(ln)
+    if cur:
+        units.append(cur)
+    pieces: list[str] = []
+    for unit in units:
+        blob = "\n".join(unit).strip()
+        if not blob:
+            continue
+        if len(blob) <= limit:
+            pieces.append(blob)
+            continue
+        acc = ""
+        for line in unit:
+            if acc and len(acc) + len(line) + 1 > limit:
+                pieces.append(acc.strip())
+                acc = line
+            else:
+                acc = f"{acc}\n{line}" if acc else line
+        if acc.strip():
+            pieces.append(acc.strip())
+    return pieces
+
+
+def _table_header_line(text: str) -> str:
+    for line in (text or "").splitlines():
+        if line.strip() and not _is_pipe_separator(line):
+            return line.strip()
+    return ""
+
+
+def _split_table(text: str, limit: int) -> list[str]:
+    """Keep the header on every table child so a split row still names its columns."""
+    header = _table_header_line(text)
+    data = [
+        ln
+        for ln in (text or "").splitlines()
+        if ln.strip() and not _is_pipe_separator(ln) and ln.strip() != header
+    ]
+    if not data:
+        return [text] if (text or "").strip() else []
+    pieces: list[str] = []
+    cur = [header] if header else []
+    cur_len = len(header)
+    for line in data:
+        extra = len(line) + 1
+        if cur and cur_len + extra > limit:
+            pieces.append("\n".join(cur).strip())
+            cur = [header] if header else []
+            cur_len = len(header)
+        cur.append(line)
+        cur_len += extra
+    if cur:
+        pieces.append("\n".join(cur).strip())
+    return [p for p in pieces if p]
+
+
 def _split_long(text: str, limit: int) -> list[str]:
     """Split one oversized paragraph on sentence ends, then hard-wrap what is left."""
+    if _looks_like_code(text):
+        return _split_code(text, limit)
     if len(text) <= limit:
         return [text]
     pieces: list[str] = []
@@ -119,7 +240,8 @@ def _children_of(blocks: list[_Block], *, child_max: int, child_min: int) -> lis
         cur, cur_len, cur_page = [], 0, None
 
     for block in blocks:
-        for piece in _split_long(block.text, child_max):
+        splitter = _split_table if block.kind == "table" else _split_long
+        for piece in splitter(block.text, child_max):
             if cur and cur_len + len(piece) + 1 > child_max:
                 flush()
             if not cur:
@@ -145,7 +267,7 @@ def chunk_text(
     max_chunks: int = MAX_CHUNKS,
 ) -> list[Chunk]:
     """Section-aware parent/child chunks. Empty text → []."""
-    blocks = _blocks(text)
+    blocks = _blocks(expand_pipe_tables(text))
     if not blocks:
         return []
     # Group blocks into sections at headings.

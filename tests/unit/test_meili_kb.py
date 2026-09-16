@@ -700,6 +700,17 @@ def test_extract_index_text_office_extract_xlsx_pptx_txt(
     assert "三月开学" in txt
 
 
+def test_extract_index_text_csv_binds_headers() -> None:
+    csv = extract_index_text(
+        title="库存.csv",
+        kind="file",
+        content="仓,件\n东仓,12\n",
+        raw=None,
+    )
+    assert "仓=东仓" in csv
+    assert "东仓,12" in csv
+
+
 def test_extract_office_text_uses_stdlib_extract(monkeypatch: pytest.MonkeyPatch) -> None:
     import sys
     from pathlib import Path

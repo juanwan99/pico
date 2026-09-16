@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from pico_orchestrator.kb_chunker import chunk_text
+from pico_orchestrator.kb_chunker import chunk_text, expand_pipe_tables
 
 
 def test_sections_become_parents_and_children_keep_heading() -> None:
@@ -53,6 +53,22 @@ def test_table_rows_are_kept_together_and_split_by_size() -> None:
     chunks = chunk_text("| 姓名 | 分数 | 等级 |\n|---|---|---|\n" + rows, title="成绩.xlsx", child_max=400)
     assert len(chunks) >= 3
     assert all(c.text.lstrip().startswith("|") for c in chunks)
+    assert all("姓名" in c.text for c in chunks)
+    assert any("姓名=学生0" in c.text for c in chunks)
+
+
+def test_expand_pipe_tables_binds_every_data_row() -> None:
+    text = expand_pipe_tables("| 仓 | 件 |\n|---|---|\n| 东仓 | 12 |\n段落。\n")
+    assert "仓=东仓" in text and "件=12" in text
+    assert "段落。" in text
+
+
+def test_code_splits_on_def_not_cjk_period() -> None:
+    one = "def one():\n    x = '" + ("句。" * 20) + "'\n    return x\n"
+    two = "def two():\n    y = '" + ("段。" * 20) + "'\n    return y\n"
+    chunks = chunk_text(one + two, title="mod.py", child_max=80, child_min=1)
+    assert any("def one(" in c.text and "def two(" not in c.text for c in chunks)
+    assert any("def two(" in c.text and "def one(" not in c.text for c in chunks)
 
 
 def test_empty_and_cap() -> None:
