@@ -7,10 +7,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "packages" / "field-kb-ingest"))
 
 from ingest import (
+    PAGE_BREAK,
     classify_convert_error,
     ingest_bytes,
     pdf_ocr_settings,
     slices_from_markdown,
+    text_layer_is_sparse,
 )
 
 
@@ -172,3 +174,50 @@ def test_slices_headers_and_paragraphs():
     rows = slices_from_markdown("# 班\n语文,5\n\n说明一段", "课时表")
     blob = " ".join(r["excerpt"] for r in rows)
     assert "班" in blob or "语文" in blob
+
+
+def test_text_layer_sparse_is_page_majority() -> None:
+    assert text_layer_is_sparse("", 3) is True
+    assert text_layer_is_sparse("A" * 200, 1) is False
+    assert text_layer_is_sparse("短通知", 2) is False
+    thin = PAGE_BREAK.join(["页眉"] * 8)
+    assert text_layer_is_sparse(thin, 8) is True
+    rich = PAGE_BREAK.join(["正文" * 60] * 4)
+    assert text_layer_is_sparse(rich, 4) is False
+
+
+def test_sparse_text_layer_runs_ocr(monkeypatch):
+    import ingest as mod
+
+    called = {"ocr": 0}
+    thin = PAGE_BREAK.join(["页眉"] * 6)
+    monkeypatch.setattr(mod, "_pdf_text_layer", lambda path: thin)
+    monkeypatch.setattr(mod, "_pdf_page_count", lambda path: 6)
+    monkeypatch.setattr(
+        mod,
+        "_ocr_pdf_pages",
+        lambda path: called.__setitem__("ocr", 1) or ("幻灯正文很长" * 40),
+    )
+    out = ingest_bytes(filename="slides.pdf", data=b"%PDF-1.3 x", title="slides")
+    assert called["ocr"] == 1
+    assert out["ok"] is True
+    assert out["engine"] == "rapidocr"
+    assert "sparse-layer" in out["tags"]
+    assert "ocr" in out["tags"]
+    blob = " ".join(s["excerpt"] for s in out["slices"])
+    assert "幻灯正文" in blob
+
+
+def test_sparse_ocr_keeps_text_when_shorter(monkeypatch):
+    import ingest as mod
+
+    thin = PAGE_BREAK.join(["页眉"] * 6)
+    monkeypatch.setattr(mod, "_pdf_text_layer", lambda path: thin)
+    monkeypatch.setattr(mod, "_pdf_page_count", lambda path: 6)
+    monkeypatch.setattr(mod, "_ocr_pdf_pages", lambda path: "短")
+    out = ingest_bytes(filename="slides.pdf", data=b"%PDF-1.3 x", title="slides")
+    assert out["ok"] is True
+    assert out["engine"] == "pdfium-text"
+    assert "ocr-kept-text" in out["tags"]
+    blob = " ".join(s["excerpt"] for s in out["slices"])
+    assert "页眉" in blob

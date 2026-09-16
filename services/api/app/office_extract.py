@@ -59,16 +59,16 @@ def extract_office(filename: str, data: bytes) -> dict:
         return _extract_docx(name, data)
     if ext == "pptx":
         return _extract_pptx(name, data)
-    if ext in {"xls", "doc", "ppt"}:
-        if data[:2] == b"PK":
-            mapped = {"doc": "docx", "ppt": "pptx", "xls": "xlsx"}[ext]
+    if ext in {"xls", "doc", "ppt", "wps", "et", "dps"}:
+        from pico_orchestrator.office.legacy import LEGACY_OFFICE_ERROR, LEGACY_TO_OOXML
+
+        mapped = LEGACY_TO_OOXML.get(f".{ext}", "").lstrip(".")
+        if mapped and data[:2] == b"PK":
             if mapped == "xlsx":
                 return _extract_xlsx(name, data)
             if mapped == "docx":
                 return _extract_docx(name, data)
             return _extract_pptx(name, data)
-        from pico_orchestrator.office.legacy import LEGACY_OFFICE_ERROR
-
         return _fail(name, ext, "unsupported", LEGACY_OFFICE_ERROR)
     if ext == "pdf":
         return _fail(name, ext, "unread", "PDF")

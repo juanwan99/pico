@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 from pico_orchestrator.gateway import ToolError
-from pico_orchestrator.office.legacy import convert_target_from_name
+from pico_orchestrator.office.legacy import LEGACY_TO_OOXML, convert_target_from_name
 
 from sandbox_worker.browser import PNG_MAGIC
 
@@ -234,10 +234,10 @@ async def convert_legacy_office(*, filename: str, document: bytes) -> bytes:
         raise ToolError("tool.invalid_arguments", "文档超过 12MB，沙箱拒收")
     target = convert_target(filename)
     if target is None:
-        raise ToolError("tool.invalid_arguments", "不是旧版 .doc/.ppt/.xls")
+        raise ToolError("tool.invalid_arguments", "不是旧版 Office / WPS 文件")
     soffice = soffice_bin()
     source_ext = Path(filename or "").suffix.lower() or target.replace("x", "")
-    if source_ext not in {".doc", ".ppt", ".xls"}:
+    if source_ext not in LEGACY_TO_OOXML:
         source_ext = {".docx": ".doc", ".pptx": ".ppt", ".xlsx": ".xls"}[target]
     safe_name = f"in{source_ext}"
     _DOC_ROOT.mkdir(parents=True, exist_ok=True)

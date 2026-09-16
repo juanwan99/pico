@@ -49,13 +49,22 @@ OFFICE_BACKENDS: dict[str, tuple[str, str, str]] = {
     ".htm": ("HTML", "docling.backend.html_backend", "HTMLDocumentBackend"),
 }
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"})
-# Legacy OLE / other formats are not converted here (paperclip path converts
-# .doc via soffice before it reaches Pico; kb/ingest receives the file as-is).
+# Direct ingest_bytes still rejects OLE names. /v1/kb/ingest converts them
+# with the same soffice adapter as the paperclip path, then calls us as OOXML.
 UNSUPPORTED_HINT = {
     ".doc": "旧版 .doc 请先另存为 .docx 再入库",
     ".xls": "旧版 .xls 请先另存为 .xlsx 再入库",
     ".ppt": "旧版 .ppt 请先另存为 .pptx 再入库",
+    ".wps": "WPS 文字请先另存为 .docx 再入库",
+    ".et": "WPS 表格请先另存为 .xlsx 再入库",
+    ".dps": "WPS 演示请先另存为 .pptx 再入库",
 }
+# A digital text layer that is only headers/footers still blocks OCR today.
+# Majority of pages below this many characters → treat as sparse, OCR, keep
+# whichever text is longer. One- or two-page short memos stay on the text
+# layer (generic; no filename / school special case).
+SPARSE_PAGE_CHARS = 80
+MIN_PAGES_FOR_SPARSE = 3
 
 
 class UnsupportedFormat(Exception):
@@ -299,6 +308,20 @@ def _ocr_image(path: Path) -> str:
     return _rapidocr_text(engine(arr)).strip()
 
 
+def text_layer_is_sparse(layer: str, page_count: int = 0) -> bool:
+    """True when most pages have almost no extractable text (scan / slide image)."""
+    if not (layer or "").strip():
+        return True
+    pages = (layer or "").split(PAGE_BREAK)
+    n = max(int(page_count or 0), len(pages), 1)
+    if n < MIN_PAGES_FOR_SPARSE:
+        return False
+    thin = sum(1 for page in pages if len(page.strip()) < SPARSE_PAGE_CHARS)
+    if page_count > len(pages):
+        thin += page_count - len(pages)
+    return thin * 2 >= n
+
+
 def _pdf_text_layer(path: Path) -> str:
     """Digital PDF text layer via pypdfium2 (already the scan renderer). Not a Pico PDF kernel."""
     try:
@@ -457,15 +480,26 @@ def _extract(path: Path, suffix: str, *, ocr: bool = True) -> tuple[str, str, li
     low = suffix.lower()
     if low == ".pdf":
         layer = _pdf_text_layer(path)
-        if layer.strip():
+        pages = _pdf_page_count(path)
+        sparse = text_layer_is_sparse(layer, pages)
+        if layer.strip() and not sparse:
             return layer, ENGINE_PDF_TEXT, ["pdfium"]
         if not ocr:
-            return "", ENGINE_PDF_TEXT, ["pdfium", "empty-layer", "ocr-skipped"]
-        # Empty text layer = scan. OCR fallback (#994 S2 · owner 2026-09-14).
-        tags = ["pdfium", "empty-layer", "ocr"]
+            tags = ["pdfium"]
+            if not layer.strip():
+                tags.extend(["empty-layer", "ocr-skipped"])
+            else:
+                tags.extend(["sparse-layer", "ocr-skipped"])
+            return layer, ENGINE_PDF_TEXT, tags
+        tags = ["pdfium", "ocr"]
+        tags.append("empty-layer" if not layer.strip() else "sparse-layer")
         text = _ocr_pdf_pages(path)
-        if _pdf_page_count(path) > ocr_max_pages():
+        if pages > ocr_max_pages():
             tags.append("ocr-truncated")
+        if text.strip() and (not layer.strip() or len(text) > len(layer)):
+            return text, ENGINE_OCR, tags
+        if layer.strip():
+            return layer, ENGINE_PDF_TEXT, ["pdfium", "sparse-layer", "ocr-kept-text"]
         return text, ENGINE_OCR, tags
     if low in IMAGE_SUFFIXES:
         if not ocr:

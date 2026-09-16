@@ -20,10 +20,10 @@ Pico 索引是 **chunk 级**（标题/章节/页 + 300–500 字段），不是�
 | `.pptx` | Docling `MsPowerpointDocumentBackend` | `docling` | `docling` | 标题 + 要点 |
 | `.md` `.markdown` | Docling `MarkdownDocumentBackend` | `docling` | `docling` | |
 | `.html` `.htm` | Docling `HTMLDocumentBackend` | `docling` | `docling` | |
-| `.pdf` 有文字层 | pypdfium2 | `pdfium-text` | `pdfium` | 不渲页、不 OCR |
-| `.pdf` 无文字层（扫描件） | pypdfium2 渲页 + RapidOCR | `rapidocr` | `pdfium` `empty-layer` `ocr` (+`ocr-truncated`) | 页数上限 `PICO_KB_OCR_MAX_PAGES`（默认 40），超出只读前 N 页并打 `ocr-truncated` |
+| `.pdf` 有文字层 | pypdfium2 | `pdfium-text` | `pdfium` | 1–2 页短文或过半页 ≥80 字当数字层；不渲页 |
+| `.pdf` 无文字层或过半页 <80 字 | pypdfium2 渲页 + RapidOCR | `rapidocr` | `pdfium` `empty-layer`/`sparse-layer` `ocr` (+`ocr-truncated`) | 页数上限 `PICO_KB_OCR_MAX_PAGES`（默认 40）。OCR 比文字层更长才替换；更短则留原层并标 `ocr-kept-text` |
 | `.png` `.jpg` `.jpeg` `.webp` `.bmp` `.tif` `.tiff` | RapidOCR | `rapidocr` | `image` `ocr` | 一张图一份 |
-| `.doc` `.xls` `.ppt` | — | — | — | **不转**。415，提示另存为 OOXML（回形针那条路会经 soffice 转，kb/ingest 不会） |
+| `.doc` `.xls` `.ppt` `.wps` `.et` `.dps` | 沙箱 soffice → OOXML，再走 Docling | `docling` | `docling` | 与回形针同一条 OLE 薄适配。转失败 422 `file.legacy_unconvertible` |
 | 其它 | — | — | — | 415 |
 
 **OCR 只在显式 `POST /v1/kb/ingest` 跑**（在线程里，不占事件循环；`PICO_KB_OCR_THREADS` 默认 2 核）。账本→Meili 的重投影 / 部署时 `reindex-all` / 回形针 sidecar 一律 `ocr=False`：扫描件在这些路上是快速 miss，标 `ocr-skipped`。现网 2026-09-14 教训：部署 reindex-all 把每份历史扫描件都 OCR 一遍，pico-api 400% CPU、事件循环被堵、health 超时。
@@ -40,7 +40,8 @@ OCR 模型：`rapidocr` 轮子自带 PP-OCRv6 det/rec small + cls mobile（中�
 | 400 | `empty` | 文字层空且 OCR 没认出字；或 Office 文件里没有文字 | OCR：「这份是扫描件或图片，OCR 没认出文字。换清晰一点的版本，或先转成带文字层的 PDF。」 其它：「文件里没读到文字。空文档、纯图形或受保护的文件都会这样。」 |
 | 400 | `file.invalid` | base64 坏 / 无内容 | 「文件内容不是合法的 base64」等 |
 | 413 | `file.too_large` | > 20MB | 「文件太大（上限 20MB）」 |
-| 415 | `unsupported_format` | 不在矩阵内 | 「这种格式（.doc）知识库读不了。旧版 .doc 请先另存为 .docx 再入库。」 / 「这种格式（.xyz）知识库读不了。支持：docx / xlsx / pptx / md / html / PDF / png / jpg。」 |
+| 415 | `unsupported_format` | 不在矩阵内 | 「这种格式（.xyz）知识库读不了。支持：docx / xlsx / pptx / md / html / PDF / png / jpg。」 |
+| 422 | `file.legacy_unconvertible` | 旧版 OLE / WPS soffice 转不开 | 「《文件名》是旧格式，这次没能转成知识库能读的文件。…」 |
 | 422 | `ingest.failed` | 引擎抛出未归类异常（兜底） | 「这份没读出来。换个格式再试；持续失败请把文件名发给管理员。」 |
 | 503 | `ocr_missing` | RapidOCR ONNX 找不到 | 「OCR 引擎没就位，扫描件暂时读不了。请管理员看镜像里的 RapidOCR 模型。」 |
 | 503 | `docling_missing` | Docling 后端 import 失败 | 「文档转换引擎没就位，请管理员看镜像里的 Docling 后端。」 |

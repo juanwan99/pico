@@ -40,6 +40,9 @@ def test_legacy_ole_suffix_is_unsupported_with_hint():
     out = ingest_bytes(filename="老教案.doc", data=b"\xd0\xcf\x11\xe0", title="老教案")
     assert out["code"] == "unsupported_format"
     assert ".docx" in out["error"]
+    wps = ingest_bytes(filename="通知.wps", data=b"\xd0\xcf\x11\xe0", title="通知")
+    assert wps["code"] == "unsupported_format"
+    assert ".docx" in wps["error"]
 
 
 def test_office_backend_dispatch_never_imports_document_converter(monkeypatch):

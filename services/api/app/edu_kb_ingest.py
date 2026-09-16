@@ -67,6 +67,35 @@ def _bad(code: str, message: str, status: int = 400) -> HTTPException:
     return HTTPException(status_code=status, detail={"code": code, "message": message})
 
 
+def _legacy_ingest_name(filename: str, mapped: str) -> str:
+    stem = Path(filename or "file").stem or "file"
+    return f"{stem}{mapped}"
+
+
+async def maybe_convert_legacy(filename: str, data: bytes) -> tuple[str, bytes]:
+    """OLE / WPS → OOXML via the existing soffice sidecar. Not a Pico reader."""
+    from pico_orchestrator.office.convert import (
+        LegacyOfficeConvertError,
+        convert_legacy_office_bytes,
+    )
+    from pico_orchestrator.office.legacy import convert_target_from_name, looks_ooxml
+
+    mapped = convert_target_from_name(filename)
+    if not mapped:
+        return filename, data
+    if looks_ooxml(data):
+        return _legacy_ingest_name(filename, mapped), data
+    try:
+        converted = await convert_legacy_office_bytes(filename, data)
+    except LegacyOfficeConvertError as err:
+        human = (
+            f"《{filename}》是旧格式，这次没能转成知识库能读的文件。"
+            f"{err.message}。可以换成 .docx/.xlsx/.pptx 再传。"
+        )
+        raise _bad("file.legacy_unconvertible", human, 422) from err
+    return _legacy_ingest_name(filename, mapped), converted
+
+
 def _decode(raw: str) -> bytes:
     compact = "".join(str(raw or "").split())
     if not compact:
@@ -99,12 +128,14 @@ async def post_kb_ingest(
             raise _bad("ingest.unavailable", f"Docling 入库包不可用：{exc}", 503) from exc
 
         title = (body.title or body.filename or "未命名").strip()
+        ingest_name = body.filename or "file"
         try:
             # OCR / Docling are CPU-bound and synchronous: keep them off the
             # event loop so chat keeps flowing while a scan is read.
             if data is not None:
+                ingest_name, data = await maybe_convert_legacy(ingest_name, data)
                 result = await asyncio.to_thread(
-                    ingest_bytes, filename=body.filename or "file", data=data, title=title, ocr=True
+                    ingest_bytes, filename=ingest_name, data=data, title=title, ocr=True
                 )
             else:
                 result = await asyncio.to_thread(ingest_text, text=body.text or "", title=title)

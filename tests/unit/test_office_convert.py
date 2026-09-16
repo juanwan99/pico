@@ -21,6 +21,9 @@ def test_convert_target_maps_ole_not_ooxml_names() -> None:
     assert convert_target_from_name("计划.doc") == ".docx"
     assert convert_target_from_name("课.ppt") == ".pptx"
     assert convert_target_from_name("表.xls") == ".xlsx"
+    assert convert_target_from_name("通知.wps") == ".docx"
+    assert convert_target_from_name("表.et") == ".xlsx"
+    assert convert_target_from_name("课.dps") == ".pptx"
     assert convert_target_from_name("通知.docx") is None
     assert convert_target_from_name("a.pdf") is None
 
