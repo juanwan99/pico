@@ -749,7 +749,9 @@ def _caps_with_images(caps: Any, images: list[dict[str, Any]] | None) -> Any:
 def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
     """Apply the dual-mode runtime policy onto RunCaps (Pico 快速 / Pico 深度).
 
-    LAW #865: lanes do not hard-cap the upstream window. GPT brain thinks.
+    LAW #865: lanes do not hard-cap the upstream window. Deep lane thinks;
+    fast lane stays off so the first visible character is not waiting on
+    medium reasoning.
     """
     from dataclasses import replace as _dc_replace
 

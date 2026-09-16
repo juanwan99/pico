@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from pico_orchestrator.kb_chunker import chunk_text, expand_pipe_tables
+from pico_orchestrator.kb_chunker import chunk_text, expand_json_fields, expand_pipe_tables
 
 
 def test_sections_become_parents_and_children_keep_heading() -> None:
@@ -55,6 +55,31 @@ def test_table_rows_are_kept_together_and_split_by_size() -> None:
     assert all(c.text.lstrip().startswith("|") for c in chunks)
     assert all("姓名" in c.text for c in chunks)
     assert any("姓名=学生0" in c.text for c in chunks)
+
+
+def test_expand_json_fields_binds_leaf_and_enum_lists() -> None:
+    text = expand_json_fields(
+        '{"table":"leave","fields":[{"name":"leave_type","enum":["事假","病假"]}]}'
+    )
+    assert "table=leave" in text
+    assert "fields[0].name=leave_type" in text
+    assert "fields[0].enum=事假 / 病假" in text
+    assert text.startswith("{")
+
+
+def test_expand_json_fields_leaves_prose_alone() -> None:
+    assert expand_json_fields("请假类型写在正文里。") == "请假类型写在正文里。"
+    assert expand_json_fields("{not json") == "{not json"
+
+
+def test_chunk_text_json_document_exposes_field_lines() -> None:
+    chunks = chunk_text(
+        '{"leave_type":["事假","病假"],"note":"开始时间记 start_at"}',
+        title="schema.json",
+    )
+    blob = "\n".join(c.text for c in chunks)
+    assert "leave_type=事假 / 病假" in blob
+    assert "note=开始时间记 start_at" in blob
 
 
 def test_expand_pipe_tables_binds_every_data_row() -> None:

@@ -978,27 +978,38 @@ class MeiliIndex:
                     continue
                 seen_hybrid.add(cid)
                 hybrid_rows.append(row)
-            tstatus, tpayload = self._call(
-                "POST",
-                f"/indexes/{INDEX}/search",
-                {
-                    "q": q,
-                    "filter": clause,
-                    "limit": TITLE_HIT_CAP,
-                    "attributesToRetrieve": DISPLAYED,
-                    "attributesToSearchOn": ["title"],
-                },
-                timeout=12.0,
-            )
-            traw = tpayload.get("hits") if isinstance(tpayload, dict) and tstatus < 400 else None
-            for row in traw if isinstance(traw, list) else []:
-                if not isinstance(row, dict):
-                    continue
-                cid = str(row.get("chunk_id") or row.get("artifact_id") or "")
-                if not cid or cid in seen_title:
-                    continue
-                seen_title.add(cid)
-                title_rows.append(row)
+        unique_files = {
+            str(row.get("artifact_id") or row.get("material_id") or "").strip()
+            for row in hybrid_rows
+        }
+        unique_files.discard("")
+        # Title-only hits sit at the tail of the chunk pool. After file-collapse
+        # they never enter top-N when hybrid already filled N unique files, but
+        # the extra Meili round-trip still costs p95. Only probe titles when
+        # the returned file list would otherwise be short.
+        if len(unique_files) < want:
+            for q in queries[:3]:
+                tstatus, tpayload = self._call(
+                    "POST",
+                    f"/indexes/{INDEX}/search",
+                    {
+                        "q": q,
+                        "filter": clause,
+                        "limit": TITLE_HIT_CAP,
+                        "attributesToRetrieve": DISPLAYED,
+                        "attributesToSearchOn": ["title"],
+                    },
+                    timeout=12.0,
+                )
+                traw = tpayload.get("hits") if isinstance(tpayload, dict) and tstatus < 400 else None
+                for row in traw if isinstance(traw, list) else []:
+                    if not isinstance(row, dict):
+                        continue
+                    cid = str(row.get("chunk_id") or row.get("artifact_id") or "")
+                    if not cid or cid in seen_title:
+                        continue
+                    seen_title.add(cid)
+                    title_rows.append(row)
         pool = merge_hybrid_and_title_hits(
             hybrid_rows, title_rows, pool=kb_rerank_pool(), title_cap=TITLE_HIT_CAP
         )

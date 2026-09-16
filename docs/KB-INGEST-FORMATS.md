@@ -9,7 +9,7 @@ STATUS: BINDING · 2026-09-14（#994 阶段 2 · #997 · 对仓 #990）
 
 edu 侧显示 `detail.message` 原文即可，不要再翻译。
 
-Pico 索引是 **chunk 级**（标题/章节/页 + 300–500 字段），不是一材料一条。`回复摘要` 与只剩文件名的旧 `.doc` 不进索引。生产环境实验室租户（`school-a` / `handtest-kb` / `regress-school` 等）不进索引；扫描件 OCR 正文落账本 `kb_text`，部署 reindex 读这份而不是再 OCR。`POST /v1/kb/search` 与 Pi `kb_search` 同一路。hybrid 走 New API loopback（`embedding-3`）。精排同口默认关（`PICO_KB_RERANK=0`）：现网便宜 `rerank` 分数贴死 1.0，会打乱通用原文检索；开启后若分数无区分也不改序。向量模板只嵌 `text`（现网把 title 加进模板后金标从 0.765 掉到 0.706）。每路默认取 80；标题检索只补 hybrid **没召回的文件**，接在 hybrid 序后面（禁止标题段插到最前再塌缩）。精排开启时最多 80 段再按文件塌缩。问法扩写默认关。不直连厂牌（#1005）。入库索引用 `markdown` 全文，不用 8 段预览切片。表格（xlsx/csv/tsv 与 markdown 表）按列名=格子进索引（整行 + 独立一行），切片时表头跟着每一块；代码按 def/class 切。向量模板是短标题 + 正文截断 180 字（Meili `truncate`，不是全文+标题）。禁止按文件名/课表特判。
+Pico 索引是 **chunk 级**（标题/章节/页 + 300–500 字段），不是一材料一条。`回复摘要` 与只剩文件名的旧 `.doc` 不进索引。生产环境实验室租户（`school-a` / `handtest-kb` / `regress-school` 等）不进索引；扫描件 OCR 正文落账本 `kb_text`，部署 reindex 读这份而不是再 OCR。`POST /v1/kb/search` 与 Pi `kb_search` 同一路。hybrid 走 New API loopback（`embedding-3`）。精排同口默认关（`PICO_KB_RERANK=0`）：现网便宜 `rerank` 分数贴死 1.0，会打乱通用原文检索；开启后若分数无区分也不改序。向量模板只嵌 `text`（现网把 title 加进模板后金标从 0.765 掉到 0.706）。每路默认取 80；标题检索只补 hybrid **没召回的文件**，接在 hybrid 序后面（禁止标题段插到最前再塌缩）。hybrid 已经够 `limit` 个独特文件时不再打标题第二趟。精排开启时最多 80 段再按文件塌缩。问法扩写默认关。不直连厂牌（#1005）。入库索引用 `markdown` 全文，不用 8 段预览切片。表格（xlsx/csv/tsv 与 markdown 表）按列名=格子进索引（整行 + 独立一行），切片时表头跟着每一块；整篇 JSON 同样展开 `字段=值`；代码按 def/class 切。向量模板是短标题 + 正文截断 180 字（Meili `truncate`，不是全文+标题）。禁止按文件名/课表特判。镜像 extras：`format-office,format-xlsx,format-markdown,format-html,convert-core`（`.md` 要 marko，`.html` 要 beautifulsoup4）。
 
 ## 支持矩阵
 

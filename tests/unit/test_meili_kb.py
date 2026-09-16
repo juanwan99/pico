@@ -319,6 +319,36 @@ def test_search_hybrid_order_not_stolen_by_other_titles(
     assert [h["artifact_id"] for h in out["hits"]] == ["h0", "h1", "h2"]
 
 
+def test_search_skips_title_roundtrip_when_hybrid_already_filled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
+    http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
+    http.search_hits = [
+        {"artifact_id": f"h{i}", "chunk_id": f"h{i}_0", "text": "其它"} for i in range(8)
+    ]
+    http.title_search_hits = [
+        {"artifact_id": "title-file", "chunk_id": "tf_0", "title": "库存.csv", "text": "仓=东仓"}
+    ]
+    out = search_materials("库存", school_id="s1", membership_id="m1", limit=3, client=http)
+    title_calls = [
+        c
+        for c in http.calls
+        if str(c[1]).endswith("/search")
+        and isinstance(c[2], dict)
+        and c[2].get("attributesToSearchOn") == ["title"]
+    ]
+    assert title_calls == []
+    assert [h["artifact_id"] for h in out["hits"]] == ["h0", "h1", "h2"]
+    assert "title-file" not in {h["artifact_id"] for h in out["hits"]}
+
+
 def test_search_never_hybrid_even_with_vendor_keys(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

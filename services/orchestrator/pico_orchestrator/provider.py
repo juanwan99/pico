@@ -227,7 +227,8 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
 def runtime_policy_for_model(model: str | None) -> dict[str, object]:
     """Lane labels only. LAW #865: Pico does not hard-cap the upstream window.
 
-    GPT / OpenAI Responses brain: thinking on, 256k, 24 steps.
+    GPT / OpenAI Responses brain: deep lane thinks (medium). Fast lane stays
+    off so the first visible character is not waiting on reasoning (T3).
     DeepSeek flash: thinking off is a provider quirk (empty HTTP 200), not a
     Pico window cap — steps/tokens/context still match the upstream lane.
     """
@@ -237,7 +238,7 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
     gpt_brain = cfg is not None and uses_openai_responses_brain(cfg)
     deep = low in {"pico-deep", "pico-agent", "pico"}
     ui = "pico-agent" if low in {"pico-agent", "pico"} else (low or "pico-fast")
-    thinking = bool(gpt_brain or deep)
+    thinking = bool(deep)
     return {
         "ui_model": ui if ui.startswith("pico-") else (low or "pico-fast"),
         "backend_model": product_backend_model(deep=deep),
