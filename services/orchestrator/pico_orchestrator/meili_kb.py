@@ -188,7 +188,7 @@ def new_api_embedder_spec() -> dict[str, Any] | None:
         "url": url,
         "apiKey": key,
         "dimensions": 2048,
-        "documentTemplate": "{{doc.title}}\n{{doc.heading}}\n{{doc.text}}",
+        "documentTemplate": "{{doc.text}}",
         "request": {"model": kb_embed_model(), "input": ["{{text}}"]},
         "response": {"data": [{"embedding": "{{embedding}}"}]},
     }

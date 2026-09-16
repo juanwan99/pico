@@ -360,7 +360,7 @@ def test_ensure_arms_new_api_not_vendor(monkeypatch: pytest.MonkeyPatch) -> None
     default = patch["embedders"]["default"]
     assert default["url"] == "http://127.0.0.1:3000/v1/embeddings"
     assert default["request"]["model"] == "embedding-3"
-    assert "{{doc.title}}" in default["documentTemplate"]
+    assert default["documentTemplate"] == "{{doc.text}}"
     dumped = json.dumps(patch)
     assert "open.bigmodel.cn" not in dumped
     assert "siliconflow" not in dumped.lower()
@@ -473,10 +473,10 @@ def test_ensure_patches_when_embed_template_differs(monkeypatch: pytest.MonkeyPa
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
-    http.embedder_template = "{{doc.text}}"
+    http.embedder_template = "{{doc.title}}\n{{doc.text}}"
     MeiliIndex(http).ensure()
     patch = next(c[2] for c in http.calls if c[0] == "PATCH")
-    assert "{{doc.title}}" in patch["embedders"]["default"]["documentTemplate"]
+    assert patch["embedders"]["default"]["documentTemplate"] == "{{doc.text}}"
     before = len([c for c in http.calls if c[0] == "PATCH"])
     MeiliIndex(http).ensure()
     assert len([c for c in http.calls if c[0] == "PATCH"]) == before
