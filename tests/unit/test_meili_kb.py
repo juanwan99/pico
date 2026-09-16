@@ -695,6 +695,46 @@ def test_is_material_skips_html_keeps_docs() -> None:
     assert is_material(kind="pptx", title="封面.pptx") is True
 
 
+def test_is_lab_school_covers_fixtures_not_real() -> None:
+    from pico_orchestrator.meili_kb import is_lab_school
+
+    assert is_lab_school("school-a") is True
+    assert is_lab_school("handtest-kb") is True
+    assert is_lab_school("regress-school") is True
+    assert is_lab_school("ttfb-707a8932") is True
+    assert is_lab_school("s3probe-20260915T070811") is True
+    assert is_lab_school("627bcf3a-a9a8-4047-afcc-3d4878e2a7af") is False
+    assert is_lab_school("") is False
+
+
+def test_lab_index_blocked_only_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator.meili_kb import lab_index_blocked
+
+    monkeypatch.setenv("PICO_ENV", "development")
+    assert lab_index_blocked("school-a") is False
+    monkeypatch.setenv("PICO_ENV", "production")
+    assert lab_index_blocked("school-a") is True
+    assert lab_index_blocked("627bcf3a-a9a8-4047-afcc-3d4878e2a7af") is False
+
+
+def test_extract_index_text_keeps_stored_ocr_when_layer_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "pico_orchestrator.meili_kb.parse_office_bytes",
+        lambda **kwargs: "页眉",
+    )
+    body = extract_index_text(
+        title="扫描件.pdf",
+        kind="edu_office",
+        content=None,
+        raw=b"%PDF-1.4 empty",
+        stored_text="正文：胰岛素调节血糖。",
+    )
+    assert "胰岛素" in body
+    assert "页眉" not in body
+
+
 def test_extract_index_text_utf8_not_title_only() -> None:
     body = extract_index_text(
         title="通知.md",

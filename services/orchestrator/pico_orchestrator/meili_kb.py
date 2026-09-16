@@ -32,6 +32,28 @@ DISPLAYED = [
 MAX_TEXT = 200_000
 # Bookkeeping chips that used to flood the index (735/953 on the live school).
 NOISE_TITLES = frozenset({"回复摘要", "summary", "run summary", "工具产物"})
+# Fixture / probe tenants. Live Meili had 6081 school-a chunks vs 2613 real-school.
+# Skip on reindex so prod-update does not put the lab back. Not a janitor service.
+LAB_SCHOOLS = frozenset(
+    {
+        "school-a",
+        "school-b",
+        "school-other",
+        "other-school",
+        "other-sch",
+        "demo-school",
+        "school-demo",
+        "regress-school",
+        "load-school",
+        "gwprobe-school",
+        "handtest-kb",
+        "kb-usable-684",
+        "11111111-1111-4111-8111-111111111111",
+        "2a2b0002-7a22-4a22-8a22-000000000022",
+        "c1a55e00-1111-4111-8111-00000000a001",
+    }
+)
+LAB_SCHOOL_PREFIXES = ("ttfb-", "s3probe-")
 TITLE_ONLY_EXTS = frozenset({".doc", ".ppt", ".xls"})
 # Embedding / rerank only via New API (#1005). Pico never PATCHes a vendor
 # embedder URL into Meili. Leftover Zhipu/SF REST targets are stripped.
@@ -443,10 +465,22 @@ def _suffix_of(title: str) -> str:
     return "." + name.rsplit(".", 1)[-1].lower()
 
 
-def extract_index_text(*, title: str, kind: str, content: str | None, raw: bytes | None) -> str:
-    """Ledger UTF-8, Docling for pdf/docx, office_extract for xlsx/pptx/txt. No self-built parser."""
+def extract_index_text(
+    *,
+    title: str,
+    kind: str,
+    content: str | None,
+    raw: bytes | None,
+    stored_text: str | None = None,
+) -> str:
+    """Ledger UTF-8, Docling for pdf/docx, office_extract for xlsx/pptx/txt. No self-built parser.
+
+    ``stored_text`` is a same-task ``kb_text`` sibling. Reindex uses ocr=False so
+    scans would otherwise collapse to an empty layer and wipe the live index.
+    """
     name = title or "file"
     suffix = _suffix_of(name)
+    kept = (stored_text or "").strip()
     if suffix in TABLE_EXTRACT_EXT:
         data = raw
         if data is None and content and suffix != ".xlsx":
@@ -459,15 +493,19 @@ def extract_index_text(*, title: str, kind: str, content: str | None, raw: bytes
     if content and suffix not in PARSE_EXT:
         return content[:MAX_TEXT]
     if suffix in PARSE_EXT and raw:
-        parsed = parse_office_bytes(filename=name, data=raw)
+        parsed = parse_office_bytes(filename=name, data=raw) or ""
+        if kept and len(kept) > len(parsed.strip()):
+            return kept[:MAX_TEXT]
         if parsed:
             return parsed[:MAX_TEXT]
-        return (content or "")[:MAX_TEXT]
+        return (content or kept)[:MAX_TEXT]
+    if suffix in PARSE_EXT and kept:
+        return kept[:MAX_TEXT]
     if suffix in OFFICE_EXTRACT_EXT and raw:
         parsed = extract_office_text(filename=name, data=raw)
         if parsed:
             return parsed[:MAX_TEXT]
-    return (content or "")[:MAX_TEXT]
+    return (content or kept)[:MAX_TEXT]
 
 
 def extract_office_text(*, filename: str, data: bytes) -> str:
@@ -555,6 +593,24 @@ def is_noise_title(title: str) -> bool:
     if name in NOISE_TITLES:
         return True
     return any(name.startswith(n) for n in NOISE_TITLES)
+
+
+def is_lab_school(school_id: str) -> bool:
+    """True for unit-test / probe tenants that must not occupy the live index."""
+    sid = (school_id or "").strip()
+    if not sid:
+        return False
+    if sid in LAB_SCHOOLS:
+        return True
+    return sid.startswith(LAB_SCHOOL_PREFIXES)
+
+
+def lab_index_blocked(school_id: str) -> bool:
+    """Production must not ingest/project lab tenants. Development tests still use school-a."""
+    if not is_lab_school(school_id):
+        return False
+    env = (os.environ.get("PICO_ENV") or "").strip().lower()
+    return env in {"production", "prod"}
 
 
 def is_title_only_stub(*, title: str, text: str) -> bool:
@@ -1180,6 +1236,7 @@ def material_chunk_docs(
     kind: str,
     content: str | bytes | None,
     created_at: str | None = None,
+    stored_text: str | None = None,
 ) -> list[dict[str, Any]]:
     if not is_material(kind=kind, title=title):
         return []
@@ -1191,7 +1248,13 @@ def material_chunk_docs(
         raw = content
     elif isinstance(content, str):
         text = content
-    text = extract_index_text(title=title, kind=kind, content=text or None, raw=raw)
+    text = extract_index_text(
+        title=title,
+        kind=kind,
+        content=text or None,
+        raw=raw,
+        stored_text=stored_text,
+    )
     suffix = _suffix_of(title)
     needs_body = suffix in PARSE_EXT or suffix in OFFICE_EXTRACT_EXT
     if needs_body and not str(text or "").strip():
@@ -1220,6 +1283,8 @@ def project_material_artifact(
     created_at: str | None = None,
     client: HttpClient | None = None,
 ) -> bool:
+    if lab_index_blocked(str(getattr(principal, "school_id", "") or "")):
+        return False
     docs = material_chunk_docs(
         principal,
         artifact_id=artifact_id,

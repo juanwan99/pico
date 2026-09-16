@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from pico_orchestrator.meili_kb import is_material, material_chunk_docs, upsert_documents
+from pico_orchestrator.meili_kb import (
+    is_lab_school,
+    is_material,
+    material_chunk_docs,
+    upsert_documents,
+)
 from sqlalchemy import select
 
 from app.artifact_store import decode_artifact_payload
@@ -29,6 +34,17 @@ async def rebuild_materials(principal: Principal | None = None) -> dict[str, Any
             )
         rows = (await session.execute(stmt)).all()
 
+    stored_by_task_title: dict[tuple[str, str], str] = {}
+    for artifact, task in rows:
+        if str(artifact.kind or "") != "kb_text":
+            continue
+        if (artifact.content_encoding or "utf8") != "utf8":
+            continue
+        body = str(artifact.inline or "").strip()
+        if not body:
+            continue
+        stored_by_task_title[(str(task.id), str(artifact.title or ""))] = body
+
     def _flush() -> None:
         nonlocal pending, pending_arts, indexed, skipped
         if not pending:
@@ -41,6 +57,9 @@ async def rebuild_materials(principal: Principal | None = None) -> dict[str, Any
         pending_arts = 0
 
     for artifact, task in rows:
+        if is_lab_school(str(task.school_id or "")):
+            skipped += 1
+            continue
         if not is_material(kind=artifact.kind, title=artifact.title):
             skipped += 1
             continue
@@ -66,6 +85,7 @@ async def rebuild_materials(principal: Principal | None = None) -> dict[str, Any
             kind=artifact.kind,
             content=content,
             created_at=created,
+            stored_text=stored_by_task_title.get((str(task.id), str(artifact.title or ""))),
         )
         if not docs:
             skipped += 1
