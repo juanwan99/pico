@@ -9,7 +9,7 @@ STATUS: BINDING · 2026-09-14（#994 阶段 2 · #997 · 对仓 #990）
 
 edu 侧显示 `detail.message` 原文即可，不要再翻译。
 
-Pico 索引是 **chunk 级**（标题/章节/页 + 300–500 字段），不是一材料一条。`回复摘要` 与只剩文件名的旧 `.doc` 不进索引。`POST /v1/kb/search` 与 Pi `kb_search` 同一路。hybrid / rerank 走 New API loopback（`embedding-3` + `rerank`），Meili 向量模板带 `title`/`heading`/`text`（课表等文件名否则进不了向量）。每路默认取 80、另取标题 20、精排最多 80 段再按文件塌缩。问法扩写默认关。不直连厂牌（#1005）。入库索引用 `markdown` 全文，不用 8 段预览切片。
+Pico 索引是 **chunk 级**（标题/章节/页 + 300–500 字段），不是一材料一条。`回复摘要` 与只剩文件名的旧 `.doc` 不进索引。`POST /v1/kb/search` 与 Pi `kb_search` 同一路。hybrid / rerank 走 New API loopback（`embedding-3` + `rerank`）。向量模板只嵌 `text`（现网把 title 加进模板后金标从 0.765 掉到 0.706）。每路默认取 80、另取标题 20、精排最多 80 段再按文件塌缩。问法扩写默认关。不直连厂牌（#1005）。入库索引用 `markdown` 全文，不用 8 段预览切片。
 
 ## 支持矩阵
 
