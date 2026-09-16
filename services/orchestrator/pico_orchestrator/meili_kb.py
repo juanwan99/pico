@@ -158,9 +158,9 @@ def kb_search_fetch() -> int:
 def kb_rerank_pool() -> int:
     """Chunks sent to New API /v1/rerank; collapse to files after scores land."""
     try:
-        value = int(os.environ.get("PICO_KB_RERANK_POOL") or "40")
+        value = int(os.environ.get("PICO_KB_RERANK_POOL") or "80")
     except ValueError:
-        value = 40
+        value = 80
     return min(80, max(5, value))
 
 
@@ -297,7 +297,7 @@ def embed_query_ok() -> bool:
 
 def expand_search_queries(query: str) -> list[str]:
     """Two extra keyword strings from New API chat. Empty if the channel is down."""
-    flag = (os.environ.get("PICO_KB_QUERY_EXPAND") or "1").strip().lower()
+    flag = (os.environ.get("PICO_KB_QUERY_EXPAND") or "0").strip().lower()
     if flag in {"0", "false", "off", "no"}:
         return []
     q = (query or "").strip()
@@ -865,6 +865,28 @@ class MeiliIndex:
                 raise RuntimeError(f"meili search http {status}")
             raw = payload.get("hits") if isinstance(payload, dict) else None
             for row in raw if isinstance(raw, list) else []:
+                if not isinstance(row, dict):
+                    continue
+                cid = str(row.get("chunk_id") or row.get("artifact_id") or "")
+                if not cid or cid in seen_chunk:
+                    continue
+                seen_chunk.add(cid)
+                merged.append(row)
+            # Filename hits Meili hybrid often drops (课表 / 计划 / schema).
+            tstatus, tpayload = self._call(
+                "POST",
+                f"/indexes/{INDEX}/search",
+                {
+                    "q": q,
+                    "filter": clause,
+                    "limit": 20,
+                    "attributesToRetrieve": DISPLAYED,
+                    "attributesToSearchOn": ["title"],
+                },
+                timeout=12.0,
+            )
+            traw = tpayload.get("hits") if isinstance(tpayload, dict) and tstatus < 400 else None
+            for row in traw if isinstance(traw, list) else []:
                 if not isinstance(row, dict):
                     continue
                 cid = str(row.get("chunk_id") or row.get("artifact_id") or "")
