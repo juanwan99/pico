@@ -403,7 +403,9 @@ def rerank_pool(query: str, hits: list[dict[str, Any]], *, model: str) -> tuple[
     t0 = time.perf_counter()
     resp = httpx.post(
         f"{base}/rerank",
-        json={"model": model, "query": query, "documents": docs, "top_n": len(docs)},
+        # return_documents: New API's Zhipu rerank-pro adapter returns index=0 for
+        # every row (2026-09-16); the document text is the only way back.
+        json={"model": model, "query": query, "documents": docs, "top_n": len(docs), "return_documents": True},
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         timeout=30.0,
         trust_env=False,
@@ -411,11 +413,23 @@ def rerank_pool(query: str, hits: list[dict[str, Any]], *, model: str) -> tuple[
     dt = time.perf_counter() - t0
     resp.raise_for_status()
     results = resp.json().get("results") or []
-    order: list[int] = []
-    scores: list[float] = []
+    by_text = {d: i for i, d in enumerate(docs)}
+    raw_idx = []
     for row in results:
         try:
-            idx = int(row.get("index"))
+            raw_idx.append(int(row.get("index")))
+        except (TypeError, ValueError):
+            raw_idx.append(-1)
+    degenerate = len(results) > 1 and len(set(raw_idx)) == 1
+    order: list[int] = []
+    scores: list[float] = []
+    for row, idx in zip(results, raw_idx):
+        if degenerate:
+            doc = row.get("document")
+            if isinstance(doc, dict):
+                doc = doc.get("text")
+            idx = by_text.get(str(doc or ""), -1)
+        try:
             score = float(row.get("relevance_score", row.get("score")))
         except (TypeError, ValueError):
             continue
@@ -516,7 +530,9 @@ def cmd_run(args: argparse.Namespace) -> int:
                     filt=tenant_filter(school, str(it.get("membership_id") or "")),
                 )
                 if args.rerank:
-                    raw, rs = rerank_pool(it["question"], raw[: args.rerank_pool], model=args.rerank)
+                    # Rerank the head only; the tail keeps Meili order so file@20 is not cut.
+                    head, rs = rerank_pool(it["question"], raw[: args.rerank_pool], model=args.rerank)
+                    raw = head + raw[args.rerank_pool :]
                     rerank_used += int(bool(rs.get("used")))
                     rerank_spread.append(float(rs.get("spread") or 0.0))
                     dt += float(rs.get("ms") or 0.0) / 1000.0

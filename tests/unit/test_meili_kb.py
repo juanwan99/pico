@@ -478,6 +478,31 @@ def test_search_rerank_reorders_then_collapses(monkeypatch: pytest.MonkeyPatch) 
     assert out["rerank_skip"] == ""
 
 
+def test_search_reranks_head_only_and_keeps_tail(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setenv("PICO_KB_RERANK", "1")
+    monkeypatch.setenv("PICO_KB_RERANK_POOL", "5")
+    monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
+    seen_texts: list[int] = []
+
+    def _rr(query, texts):
+        seen_texts.append(len(texts))
+        return list(reversed(range(len(texts))))
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", _rr)
+    http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
+    http.search_hits = [{"artifact_id": f"a{i}", "chunk_id": f"a{i}_0", "text": f"段{i}"} for i in range(8)]
+    out = search_materials("x", school_id="s1", membership_id="m1", limit=8, client=http)
+    assert seen_texts == [5]
+    # head reversed, tail (a5..a7) untouched and still present
+    assert [h["artifact_id"] for h in out["hits"]] == ["a4", "a3", "a2", "a1", "a0", "a5", "a6", "a7"]
+
+
 def test_search_rerank_fail_keeps_meili_order(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEILI_MASTER_KEY", "k")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
@@ -548,15 +573,47 @@ def test_rerank_documents_parses_jina_shape(monkeypatch: pytest.MonkeyPatch) -> 
         def request(self, method, url, *, json=None, headers=None, timeout=8.0):
             assert method == "POST"
             assert url == "http://127.0.0.1:3000/v1/rerank"
-            assert json["model"] == "rerank"
+            assert json["model"] == "rerank-pro"
             assert json["documents"] == ["甲", "乙"]
+            assert json["return_documents"] is True
             return 200, {"results": [{"index": 1, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.1}]}
 
     monkeypatch.setattr("pico_orchestrator.meili_kb.HttpxClient", lambda: _RerankHttp())
     assert rerank_documents("q", ["甲", "乙"]) == [1, 0]
 
 
-def test_rerank_scores_usable_rejects_flat_and_tiny() -> None:
+def test_rerank_documents_maps_degenerate_index_by_document_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """New API's Zhipu rerank-pro adapter returns index=0 for every row (2026-09-16)."""
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+
+    class _Zero:
+        def request(self, method, url, *, json=None, headers=None, timeout=8.0):
+            return 200, {
+                "results": [
+                    {"index": 0, "relevance_score": 0.998, "document": "丙"},
+                    {"index": 0, "relevance_score": 0.0014, "document": "甲"},
+                    {"index": 0, "relevance_score": 0.00004, "document": "乙"},
+                ]
+            }
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.HttpxClient", lambda: _Zero())
+    assert rerank_documents("q", ["甲", "乙", "丙"]) == [2, 0, 1]
+
+    class _ZeroNoDoc:
+        def request(self, method, url, *, json=None, headers=None, timeout=8.0):
+            return 200, {"results": [{"index": 0, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.1}]}
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.HttpxClient", lambda: _ZeroNoDoc())
+    assert rerank_documents("q", ["甲", "乙"]) is None
+
+
+def test_rerank_scores_usable_rejects_flat_and_tiny(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PICO_KB_RERANK", raising=False)
+    assert kb_rerank_enabled() is True
+    monkeypatch.setenv("PICO_KB_RERANK", "0")
     assert kb_rerank_enabled() is False
     assert rerank_scores_usable([]) is False
     assert rerank_scores_usable([1.0]) is False
@@ -593,6 +650,7 @@ def test_search_does_not_call_rerank_when_disabled(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setenv("PICO_KB_RERANK", "0")
     called = {"n": 0}
 
     def _rr(query, texts):

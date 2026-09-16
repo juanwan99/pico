@@ -173,12 +173,16 @@ def kb_embed_model() -> str:
 
 
 def kb_rerank_model() -> str:
-    return (os.environ.get("PICO_KB_RERANK_MODEL") or "rerank").strip() or "rerank"
+    """rerank-pro (Zhipu via New API). Cheap `rerank` saturates near 1.0 and its
+    order is worse than Meili's (held-out file@5 0.830 -> 0.777)."""
+    return (os.environ.get("PICO_KB_RERANK_MODEL") or "rerank-pro").strip() or "rerank-pro"
 
 
 def kb_rerank_enabled() -> bool:
-    """New API rerank is opt-in. Live cheap scores saturate and bury generic hits."""
-    flag = (os.environ.get("PICO_KB_RERANK") or "0").strip().lower()
+    """On by default since 2026-09-16. The earlier 'rerank-pro scrambles order'
+    was New API returning index=0 for every row; mapped back by document text
+    it lifts held-out file@5 0.862 -> 0.936 at ~+0.6 s p50. PICO_KB_RERANK=0 reverts."""
+    flag = (os.environ.get("PICO_KB_RERANK") or "1").strip().lower()
     return flag not in {"0", "false", "off", "no"}
 
 
@@ -207,11 +211,13 @@ def kb_search_fetch() -> int:
 
 
 def kb_rerank_pool() -> int:
-    """Chunks sent to New API /v1/rerank; collapse to files after scores land."""
+    """Head of the fetched pool sent to New API /v1/rerank; the tail keeps Meili
+    order so file@20 is not cut. 40: held-out file@5 0.936 / p50 ~0.9 s;
+    20: 0.894 / ~0.7 s."""
     try:
-        value = int(os.environ.get("PICO_KB_RERANK_POOL") or "80")
+        value = int(os.environ.get("PICO_KB_RERANK_POOL") or "40")
     except ValueError:
-        value = 80
+        value = 40
     return min(80, max(5, value))
 
 
@@ -262,6 +268,9 @@ def rerank_documents(query: str, texts: list[str]) -> list[int] | None:
                 "query": query,
                 "documents": cleaned,
                 "top_n": len(cleaned),
+                # New API's Zhipu rerank-pro adapter returns index=0 on every row
+                # (2026-09-16). With the document echoed back we can map by text.
+                "return_documents": True,
             },
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             timeout=12.0,
@@ -273,16 +282,24 @@ def rerank_documents(query: str, texts: list[str]) -> list[int] | None:
     results = body.get("results")
     if not isinstance(results, list) or not results:
         return None
+    rows = [r for r in results if isinstance(r, dict)]
+    raw_idx: list[int] = []
+    for row in rows:
+        try:
+            raw_idx.append(int(row.get("index")))
+        except (TypeError, ValueError):
+            raw_idx.append(-1)
+    degenerate = len(rows) > 1 and len(set(raw_idx)) == 1
+    by_text = {t: i for i, t in enumerate(cleaned)}
     order: list[int] = []
     scores: list[float] = []
     seen: set[int] = set()
-    for row in results:
-        if not isinstance(row, dict):
-            continue
-        try:
-            idx = int(row.get("index"))
-        except (TypeError, ValueError):
-            continue
+    for row, idx in zip(rows, raw_idx, strict=True):
+        if degenerate:
+            doc = row.get("document")
+            if isinstance(doc, dict):
+                doc = doc.get("text")
+            idx = by_text.get(str(doc or ""), -1)
         raw = row.get("relevance_score", row.get("score"))
         try:
             score = float(raw)
@@ -1028,20 +1045,24 @@ class MeiliIndex:
                     seen_title.add(cid)
                     title_rows.append(row)
         pool = merge_hybrid_and_title_hits(
-            hybrid_rows, title_rows, pool=kb_rerank_pool(), title_cap=TITLE_HIT_CAP
+            hybrid_rows, title_rows, pool=max(fetch, kb_rerank_pool()), title_cap=TITLE_HIT_CAP
         )
         reranked = False
         rerank_skip = "off"
         if spec and pool and kb_rerank_enabled():
+            # Rerank the head only; the tail keeps Meili order so the 20-file
+            # list Pi asks for is not cut down to the rerank pool.
+            head_n = kb_rerank_pool()
+            head, tail = pool[:head_n], pool[head_n:]
             texts = []
-            for row in pool:
-                head = " ".join(
+            for row in head:
+                top = " ".join(
                     str(x) for x in (row.get("title"), row.get("heading")) if x
                 )
-                texts.append((head + "\n" + str(row.get("text") or ""))[:2000])
+                texts.append((top + "\n" + str(row.get("text") or ""))[:2000])
             order = rerank_documents(query, texts)
             if order:
-                pool = _apply_rerank_order(pool, order)
+                pool = _apply_rerank_order(head, order) + tail
                 reranked = True
                 rerank_skip = ""
             else:

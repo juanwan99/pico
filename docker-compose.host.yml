@@ -128,7 +128,9 @@ services:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
       # KB embed/rerank via New API loopback only (DEEPSEEK_*). Not a vendor route.
       PICO_KB_EMBED_MODEL: ${PICO_KB_EMBED_MODEL:-embedding-3}
-      PICO_KB_RERANK_MODEL: ${PICO_KB_RERANK_MODEL:-rerank}
+      PICO_KB_RERANK: ${PICO_KB_RERANK:-1}
+      PICO_KB_RERANK_MODEL: ${PICO_KB_RERANK_MODEL:-rerank-pro}
+      PICO_KB_RERANK_POOL: ${PICO_KB_RERANK_POOL:-40}
       PICO_KB_HYBRID_RATIO: ${PICO_KB_HYBRID_RATIO:-0.5}
     volumes:
       - pico_data:/app/data
