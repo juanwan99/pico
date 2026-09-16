@@ -394,7 +394,7 @@ def test_search_skips_hybrid_when_embed_query_fails(
     assert out["hybrid"] is False
 
 
-def test_search_collapses_files_before_rerank(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_reranks_chunks_then_collapses(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEILI_MASTER_KEY", "k")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
@@ -404,19 +404,21 @@ def test_search_collapses_files_before_rerank(monkeypatch: pytest.MonkeyPatch) -
 
     def _rr(query, texts):
         seen.append(len(texts))
-        return list(range(len(texts)))
+        return [2, 0, 1]
 
     monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", _rr)
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
     http.search_hits = [
-        {"artifact_id": "a1", "chunk_id": "a1_0000", "title": "甲", "text": "一"},
-        {"artifact_id": "a1", "chunk_id": "a1_0001", "title": "甲", "text": "二"},
-        {"artifact_id": "a2", "chunk_id": "a2_0000", "title": "乙", "text": "三"},
+        {"artifact_id": "a1", "chunk_id": "a1_0000", "title": "甲", "text": "封面"},
+        {"artifact_id": "a2", "chunk_id": "a2_0000", "title": "乙", "text": "其它"},
+        {"artifact_id": "a1", "chunk_id": "a1_0001", "title": "甲", "text": "答案段"},
     ]
-    search_materials("x", school_id="s1", membership_id="m1", limit=5, client=http)
-    assert seen == [2]
+    out = search_materials("x", school_id="s1", membership_id="m1", limit=2, client=http)
+    assert seen == [3]
+    assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a2"]
+    assert out["hits"][0]["chunk_id"] == "a1_0001"
 
 
 def test_search_union_expanded_queries(monkeypatch: pytest.MonkeyPatch) -> None:

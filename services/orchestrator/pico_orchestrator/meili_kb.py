@@ -156,12 +156,12 @@ def kb_search_fetch() -> int:
 
 
 def kb_rerank_pool() -> int:
-    """Files sent to New API /v1/rerank after collapse."""
+    """Chunks sent to New API /v1/rerank; collapse to files after scores land."""
     try:
-        value = int(os.environ.get("PICO_KB_RERANK_POOL") or "30")
+        value = int(os.environ.get("PICO_KB_RERANK_POOL") or "40")
     except ValueError:
-        value = 30
-    return min(50, max(5, value))
+        value = 40
+    return min(80, max(5, value))
 
 
 def _is_new_api_loopback(base: str) -> bool:
@@ -872,20 +872,20 @@ class MeiliIndex:
                     continue
                 seen_chunk.add(cid)
                 merged.append(row)
-        files = collapse_hits_by_artifact(merged, kb_rerank_pool())
+        pool = merged[: kb_rerank_pool()]
         reranked = False
-        if spec and files:
+        if spec and pool:
             texts = []
-            for row in files:
+            for row in pool:
                 head = " ".join(
                     str(x) for x in (row.get("title"), row.get("heading")) if x
                 )
                 texts.append((head + "\n" + str(row.get("text") or ""))[:2000])
             order = rerank_documents(query, texts)
             if order:
-                files = _apply_rerank_order(files, order)
+                pool = _apply_rerank_order(pool, order)
                 reranked = True
-        hits = collapse_hits_by_artifact(files, want)
+        hits = collapse_hits_by_artifact(pool, want)
         return {
             "hits": hits,
             "hybrid": use_hybrid,
