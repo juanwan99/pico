@@ -619,6 +619,33 @@ def test_ingest_skips_noise_title(client: TestClient, monkeypatch) -> None:
     assert called["n"] == 0
 
 
+def test_ingest_skips_lab_school_in_production(client: TestClient, monkeypatch) -> None:
+    import ingest as ingest_mod
+    from app import edu_kb_ingest as kb
+
+    monkeypatch.setenv("PICO_ENV", "production")
+    called = {"n": 0}
+    monkeypatch.setattr(
+        ingest_mod,
+        "ingest_text",
+        lambda **kwargs: {
+            "ok": True,
+            "engine": "text",
+            "slices": [{"title": "hello", "excerpt": "world"}],
+        },
+    )
+    monkeypatch.setattr(kb, "upsert_documents", lambda *a, **k: called.__setitem__("n", 1) or True)
+    res = client.post(
+        "/v1/kb/ingest",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"title": "hello", "text": "world", "item_id": "lab-1"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["indexed"] is False
+    assert res.json()["skip_reason"] == "lab"
+    assert called["n"] == 0
+
+
 def test_kb_item_status(client: TestClient, monkeypatch) -> None:
     from app import edu_kb_ingest as kb
 

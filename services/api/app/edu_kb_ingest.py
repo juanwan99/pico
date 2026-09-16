@@ -15,6 +15,7 @@ from pico_orchestrator.meili_kb import (
     count_material,
     documents_from_text,
     is_noise_title,
+    lab_index_blocked,
     search_materials,
     upsert_documents,
 )
@@ -164,6 +165,8 @@ async def post_kb_ingest(
         skip_reason = None
         if is_noise_title(title):
             skip_reason = "noise"
+        elif lab_index_blocked(str(principal.school_id or "")):
+            skip_reason = "lab"
         else:
             # Index the full extract. slices[] is a short edu preview (8×800);
             # using only that dropped later sections (live Word 字体/行距 miss).
