@@ -17,11 +17,13 @@ from pico_orchestrator.meili_kb import (
     extract_office_text,
     health_fields,
     is_material,
+    kb_rerank_enabled,
     new_api_embedder_spec,
     parse_office_bytes,
     project_material_artifact,
     quote_filter_value,
     rerank_documents,
+    rerank_scores_usable,
     search_materials,
     tenant_filter,
     upsert_documents,
@@ -35,6 +37,7 @@ def _no_new_api_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
     monkeypatch.setenv("PICO_KB_QUERY_EXPAND", "0")
+    monkeypatch.setenv("PICO_KB_RERANK", "0")
 
 
 class FakeHttp:
@@ -281,7 +284,8 @@ def test_search_hybrid_when_new_api_embedder(monkeypatch: pytest.MonkeyPatch) ->
     assert body["hybrid"] == {"semanticRatio": 0.5, "embedder": "default"}
     assert body["limit"] == 80
     assert out["hybrid"] is True
-    assert out["reranked"] is True
+    assert out["reranked"] is False
+    assert out["rerank_skip"] == "off"
     assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a2"]
 
 
@@ -290,6 +294,7 @@ def test_search_rerank_reorders_then_collapses(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setenv("PICO_KB_RERANK", "1")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
     monkeypatch.setattr(
         "pico_orchestrator.meili_kb.rerank_documents",
@@ -306,6 +311,7 @@ def test_search_rerank_reorders_then_collapses(monkeypatch: pytest.MonkeyPatch) 
     out = search_materials("x", school_id="s1", membership_id="m1", limit=2, client=http)
     assert [h["artifact_id"] for h in out["hits"]] == ["a3", "a1"]
     assert out["reranked"] is True
+    assert out["rerank_skip"] == ""
 
 
 def test_search_rerank_fail_keeps_meili_order(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -313,6 +319,7 @@ def test_search_rerank_fail_keeps_meili_order(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setenv("PICO_KB_RERANK", "1")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
     monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", lambda query, texts: None)
     http = FakeHttp()
@@ -326,6 +333,7 @@ def test_search_rerank_fail_keeps_meili_order(monkeypatch: pytest.MonkeyPatch) -
     assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a2"]
     assert out["hybrid"] is True
     assert out["reranked"] is False
+    assert out["rerank_skip"] == "flat"
 
 
 def test_new_api_spec_rejects_vendor_and_official_deepseek(
@@ -382,6 +390,65 @@ def test_rerank_documents_parses_jina_shape(monkeypatch: pytest.MonkeyPatch) -> 
     assert rerank_documents("q", ["甲", "乙"]) == [1, 0]
 
 
+def test_rerank_scores_usable_rejects_flat_and_tiny() -> None:
+    assert kb_rerank_enabled() is False
+    assert rerank_scores_usable([]) is False
+    assert rerank_scores_usable([1.0]) is False
+    assert rerank_scores_usable([1.0, 1.0, 1.0]) is False
+    assert rerank_scores_usable([0.867, 0.905]) is True
+
+
+def test_rerank_documents_flat_or_missing_scores_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+
+    class _Flat:
+        def request(self, method, url, *, json=None, headers=None, timeout=8.0):
+            return 200, {
+                "results": [
+                    {"index": 1, "relevance_score": 1.0},
+                    {"index": 0, "relevance_score": 1.0},
+                ]
+            }
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.HttpxClient", lambda: _Flat())
+    assert rerank_documents("q", ["甲", "乙"]) is None
+
+    class _NoScore:
+        def request(self, method, url, *, json=None, headers=None, timeout=8.0):
+            return 200, {"results": [{"index": 1}, {"index": 0}]}
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.HttpxClient", lambda: _NoScore())
+    assert rerank_documents("q", ["甲", "乙"]) is None
+
+
+def test_search_does_not_call_rerank_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    called = {"n": 0}
+
+    def _rr(query, texts):
+        called["n"] += 1
+        return [1, 0]
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", _rr)
+    http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
+    http.search_hits = [
+        {"artifact_id": "a1", "text": "甲"},
+        {"artifact_id": "a2", "text": "乙"},
+    ]
+    out = search_materials("x", school_id="s1", membership_id="m1", limit=5, client=http)
+    assert called["n"] == 0
+    assert [h["artifact_id"] for h in out["hits"]] == ["a1", "a2"]
+    assert out["reranked"] is False
+    assert out["rerank_skip"] == "off"
+
+
 def test_search_skips_hybrid_when_embed_query_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -405,6 +472,7 @@ def test_search_reranks_chunks_then_collapses(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setenv("PICO_KB_RERANK", "1")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
     seen: list[int] = []
 

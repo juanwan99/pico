@@ -138,6 +138,19 @@ def kb_rerank_model() -> str:
     return (os.environ.get("PICO_KB_RERANK_MODEL") or "rerank").strip() or "rerank"
 
 
+def kb_rerank_enabled() -> bool:
+    """New API rerank is opt-in. Live cheap scores saturate and bury generic hits."""
+    flag = (os.environ.get("PICO_KB_RERANK") or "0").strip().lower()
+    return flag not in {"0", "false", "off", "no"}
+
+
+def rerank_scores_usable(scores: list[float]) -> bool:
+    """True only when scores can change order. A flat 1.0 list is noise."""
+    if len(scores) < 2:
+        return False
+    return (max(scores) - min(scores)) > 1e-6
+
+
 def kb_hybrid_ratio() -> float:
     try:
         value = float(os.environ.get("PICO_KB_HYBRID_RATIO") or "0.5")
@@ -222,6 +235,7 @@ def rerank_documents(query: str, texts: list[str]) -> list[int] | None:
     if not isinstance(results, list) or not results:
         return None
     order: list[int] = []
+    scores: list[float] = []
     seen: set[int] = set()
     for row in results:
         if not isinstance(row, dict):
@@ -230,10 +244,16 @@ def rerank_documents(query: str, texts: list[str]) -> list[int] | None:
             idx = int(row.get("index"))
         except (TypeError, ValueError):
             continue
+        raw = row.get("relevance_score", row.get("score"))
+        try:
+            score = float(raw)
+        except (TypeError, ValueError):
+            return None
         if 0 <= idx < len(cleaned) and idx not in seen:
             seen.add(idx)
             order.append(idx)
-    if not order:
+            scores.append(score)
+    if not order or not rerank_scores_usable(scores):
         return None
     for idx in range(len(cleaned)):
         if idx not in seen:
@@ -900,7 +920,8 @@ class MeiliIndex:
                 merged.append(row)
         pool = merged[: kb_rerank_pool()]
         reranked = False
-        if spec and pool:
+        rerank_skip = "off"
+        if spec and pool and kb_rerank_enabled():
             texts = []
             for row in pool:
                 head = " ".join(
@@ -911,11 +932,15 @@ class MeiliIndex:
             if order:
                 pool = _apply_rerank_order(pool, order)
                 reranked = True
+                rerank_skip = ""
+            else:
+                rerank_skip = "flat"
         hits = collapse_hits_by_artifact(pool, want)
         return {
             "hits": hits,
             "hybrid": use_hybrid,
             "reranked": reranked,
+            "rerank_skip": rerank_skip,
             "expanded": max(0, len(queries) - 1),
             "filter": clause,
             "include_school": include_school,
