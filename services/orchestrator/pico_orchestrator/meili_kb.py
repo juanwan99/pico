@@ -57,6 +57,11 @@ SKIP_KINDS = frozenset({"html", "png", "image", "screenshot", "preview", "form_e
 PARSE_EXT = frozenset({".pdf", ".docx"})
 OFFICE_EXTRACT_EXT = frozenset({".xlsx", ".pptx", ".txt", ".csv", ".tsv"})
 TABLE_EXTRACT_EXT = frozenset({".xlsx", ".csv", ".tsv"})
+# Meili official: short title + truncated body. truncate (chars) not
+# truncatewords — CJK has no spaces, so "30 words" was the whole chunk (#1020).
+EMBED_DOCUMENT_TEMPLATE = "{{doc.title}} {{doc.text | truncate: 180}}"
+EMBED_TEMPLATE_MAX_BYTES = 400
+TITLE_HIT_CAP = 20
 MATERIAL_EXTS = frozenset({".md", ".txt", ".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".json"})
 _ID_SAFE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 # Meili primary keys: alphanumeric / hyphen / underscore only. Colon is illegal
@@ -202,7 +207,8 @@ def new_api_embedder_spec() -> dict[str, Any] | None:
         "url": url,
         "apiKey": key,
         "dimensions": 2048,
-        "documentTemplate": "{{doc.text}}",
+        "documentTemplate": EMBED_DOCUMENT_TEMPLATE,
+        "documentTemplateMaxBytes": EMBED_TEMPLATE_MAX_BYTES,
         "request": {"model": kb_embed_model(), "input": ["{{text}}"]},
         "response": {"data": [{"embedding": "{{embedding}}"}]},
     }
@@ -782,9 +788,17 @@ class MeiliIndex:
             want_default = want_embedders.get("default") or {}
             if str(default.get("url") or "") != str(want_default.get("url") or ""):
                 return False
-            return str(default.get("documentTemplate") or "") == str(
+            if str(default.get("documentTemplate") or "") != str(
                 want_default.get("documentTemplate") or ""
-            )
+            ):
+                return False
+            want_max = want_default.get("documentTemplateMaxBytes")
+            if want_max is None:
+                return True
+            live_max = default.get("documentTemplateMaxBytes")
+            if live_max is None:
+                live_max = 400
+            return int(live_max) == int(want_max)
         return not isinstance(default, dict)
 
     def _settings_match(self, want_embedders: dict[str, Any] | None) -> bool:
@@ -877,8 +891,10 @@ class MeiliIndex:
             if extra not in queries:
                 queries.append(extra)
         fetch = kb_search_fetch() if (use_hybrid or spec or len(queries) > 1) else min(48, max(want * 8, want))
-        merged: list[Any] = []
-        seen_chunk: set[str] = set()
+        hybrid_rows: list[Any] = []
+        title_rows: list[Any] = []
+        seen_hybrid: set[str] = set()
+        seen_title: set[str] = set()
         for q in queries[:3]:
             body: dict[str, Any] = {
                 "q": q,
@@ -902,18 +918,17 @@ class MeiliIndex:
                 if not isinstance(row, dict):
                     continue
                 cid = str(row.get("chunk_id") or row.get("artifact_id") or "")
-                if not cid or cid in seen_chunk:
+                if not cid or cid in seen_hybrid:
                     continue
-                seen_chunk.add(cid)
-                merged.append(row)
-            # Filename hits Meili hybrid often drops (课表 / 计划 / schema).
+                seen_hybrid.add(cid)
+                hybrid_rows.append(row)
             tstatus, tpayload = self._call(
                 "POST",
                 f"/indexes/{INDEX}/search",
                 {
                     "q": q,
                     "filter": clause,
-                    "limit": 20,
+                    "limit": TITLE_HIT_CAP,
                     "attributesToRetrieve": DISPLAYED,
                     "attributesToSearchOn": ["title"],
                 },
@@ -924,11 +939,13 @@ class MeiliIndex:
                 if not isinstance(row, dict):
                     continue
                 cid = str(row.get("chunk_id") or row.get("artifact_id") or "")
-                if not cid or cid in seen_chunk:
+                if not cid or cid in seen_title:
                     continue
-                seen_chunk.add(cid)
-                merged.append(row)
-        pool = merged[: kb_rerank_pool()]
+                seen_title.add(cid)
+                title_rows.append(row)
+        pool = merge_hybrid_and_title_hits(
+            hybrid_rows, title_rows, pool=kb_rerank_pool(), title_cap=TITLE_HIT_CAP
+        )
         reranked = False
         rerank_skip = "off"
         if spec and pool and kb_rerank_enabled():
@@ -1065,6 +1082,42 @@ def count_material(
     if not meili_configured() or not idx.ping():
         raise RuntimeError("meili unavailable")
     return idx.count(school_id=school_id, artifact_id=artifact_id, scope=scope)
+
+
+def _hit_chunk_id(row: Any) -> str:
+    if not isinstance(row, dict):
+        return ""
+    return str(row.get("chunk_id") or row.get("artifact_id") or "")
+
+
+def merge_hybrid_and_title_hits(
+    hybrid: list[Any],
+    title: list[Any],
+    *,
+    pool: int,
+    title_cap: int = TITLE_HIT_CAP,
+) -> list[Any]:
+    """Keep title-only chunks in the pool. Appending after a full hybrid page dropped them."""
+    want = max(1, int(pool))
+    hybrid_ids = {_hit_chunk_id(row) for row in hybrid if _hit_chunk_id(row)}
+    title_only: list[Any] = []
+    seen: set[str] = set()
+    for row in title:
+        cid = _hit_chunk_id(row)
+        if not cid or cid in hybrid_ids or cid in seen:
+            continue
+        seen.add(cid)
+        title_only.append(row)
+    out: list[Any] = list(title_only[: min(int(title_cap), want)])
+    for row in hybrid:
+        cid = _hit_chunk_id(row)
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        out.append(row)
+        if len(out) >= want:
+            break
+    return out[:want]
 
 
 def collapse_hits_by_artifact(hits: list[Any], limit: int) -> list[dict[str, Any]]:

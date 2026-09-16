@@ -60,6 +60,7 @@ def test_table_rows_are_kept_together_and_split_by_size() -> None:
 def test_expand_pipe_tables_binds_every_data_row() -> None:
     text = expand_pipe_tables("| 仓 | 件 |\n|---|---|\n| 东仓 | 12 |\n段落。\n")
     assert "仓=东仓" in text and "件=12" in text
+    assert "| 仓=东仓" in text.splitlines()
     assert "段落。" in text
 
 

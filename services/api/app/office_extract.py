@@ -141,6 +141,7 @@ def bind_table_rows(rows: list[list[str]]) -> list[str]:
         if not pairs:
             continue
         out.append("| " + raw + " | " + " | ".join(pairs))
+        out.extend(f"| {pair}" for pair in pairs)
     return out
 
 
