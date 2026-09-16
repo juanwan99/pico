@@ -516,8 +516,10 @@ def cmd_run(args: argparse.Namespace) -> int:
                     membership_id=it.get("membership_id") or "eval",
                     limit=k * 2,
                 )
-                passages = raw
-                hits = collapse_by_file(raw, passages=args.passages)
+                # Live already collapsed (content_sha, passages, clone_artifact_ids);
+                # re-collapsing here would drop clone credit and hide 0.2 of hits.
+                passages = [p for h in raw for p in (h.get("passages") or [h])]
+                hits = raw
             else:
                 extra = None
                 if args.mode == "hybrid":
