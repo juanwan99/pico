@@ -169,13 +169,14 @@ def test_search_injects_principal_filter_not_query(monkeypatch: pytest.MonkeyPat
         client=http,
     )
     search_calls = [c for c in http.calls if c[0] == "POST" and str(c[1]).endswith("/search")]
-    assert len(search_calls) == 1
+    assert len(search_calls) == 2
     body = search_calls[0][2]
     assert body["filter"] == tenant_filter("school-a", "m1")
     assert "m-other" not in json.dumps(body)
     assert "hybrid" not in body
     assert out["hits"][0]["artifact_id"] == "a1"
     assert body["limit"] == 48
+    assert search_calls[1][2]["attributesToSearchOn"] == ["title"]
 
 
 def test_search_school_scope_uses_or_filter(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -433,7 +434,11 @@ def test_search_union_expanded_queries(monkeypatch: pytest.MonkeyPatch) -> None:
     http = FakeHttp()
     http.search_hits = [{"artifact_id": "a1", "chunk_id": "a1_0000", "text": "甲"}]
     out = search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)
-    qs = [c[2]["q"] for c in http.calls if str(c[1]).endswith("/search")]
+    qs = [
+        c[2]["q"]
+        for c in http.calls
+        if str(c[1]).endswith("/search") and "attributesToSearchOn" not in (c[2] or {})
+    ]
     assert qs == ["近义", "专名"]
     assert out["expanded"] == 1
 
