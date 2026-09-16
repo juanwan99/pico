@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from pico_orchestrator.meili_kb import (
+    DISPLAYED,
     EMBED_DOCUMENT_TEMPLATE,
     MeiliIndex,
     chunk_doc_id,
@@ -273,9 +274,44 @@ def test_collapse_carries_sibling_passages_top_chunk_first() -> None:
     assert [p["chunk_id"] for p in out[1]["passages"]] == ["a2_0"]
 
 
+def test_collapse_merges_identical_content_under_different_ids() -> None:
+    raw = [
+        {"artifact_id": "copy-1", "chunk_id": "c1_0", "text": "同一份细则", "content_sha": "abc"},
+        {"artifact_id": "copy-2", "chunk_id": "c2_0", "text": "同一份细则", "content_sha": "abc"},
+        {"artifact_id": "other", "chunk_id": "o_0", "text": "别的", "content_sha": "def"},
+        {"artifact_id": "copy-3", "chunk_id": "c3_4", "text": "细则第四段", "content_sha": "abc"},
+        {"artifact_id": "legacy", "chunk_id": "l_0", "text": "没有 sha 的旧段"},
+    ]
+    out = collapse_hits_by_artifact(raw, 5, passages=3)
+    assert [h["artifact_id"] for h in out] == ["copy-1", "other", "legacy"]
+    assert out[0]["clone_artifact_ids"] == ["copy-2", "copy-3"]
+    # a clone's copy of the same chunk does not eat a passage slot
+    assert [p["chunk_id"] for p in out[0]["passages"]] == ["c1_0", "c3_4"]
+    assert out[1]["clone_artifact_ids"] == []
+
+
+def test_documents_carry_one_content_sha_per_file() -> None:
+    a = documents_from_text(
+        artifact_id="a", title="细则.docx", text="第一条 甲\n\n第二条 乙", school_id="s", membership_id="m"
+    )
+    b = documents_from_text(
+        artifact_id="b", title="细则(1).docx", text="第一条  甲\n第二条 乙\n", school_id="s", membership_id="m2"
+    )
+    c = documents_from_text(
+        artifact_id="c", title="别的.docx", text="第一条 丙", school_id="s", membership_id="m"
+    )
+    assert len({d["content_sha"] for d in a}) == 1
+    assert a[0]["content_sha"] == b[0]["content_sha"]  # whitespace-insensitive clone
+    assert a[0]["content_sha"] != c[0]["content_sha"]
+    assert "content_sha" in DISPLAYED
+
+
 def test_collapse_passages_default_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PICO_KB_PASSAGES", "1")
-    raw = [{"artifact_id": "a1", "chunk_id": "x"}, {"artifact_id": "a1", "chunk_id": "y"}]
+    raw = [
+        {"artifact_id": "a1", "chunk_id": "x", "text": "甲"},
+        {"artifact_id": "a1", "chunk_id": "y", "text": "乙"},
+    ]
     assert [p["chunk_id"] for p in collapse_hits_by_artifact(raw, 5)[0]["passages"]] == ["x"]
     monkeypatch.setenv("PICO_KB_PASSAGES", "99")
     assert len(collapse_hits_by_artifact(raw, 5)[0]["passages"]) == 2

@@ -252,6 +252,8 @@ async def post_kb_search(
                 "parent_text": row.get("parent_text") or "",
                 # Same file's other pooled chunks, top chunk first (#1006 knife 3).
                 "passages": [p for p in (row.get("passages") or []) if isinstance(p, dict)],
+                # Other ledger files with identical extracted content (#1006 knife 4).
+                "clone_artifact_ids": [str(a) for a in (row.get("clone_artifact_ids") or [])],
             }
         )
     return {
