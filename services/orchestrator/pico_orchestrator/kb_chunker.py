@@ -26,11 +26,7 @@ _PAGE_BREAK = "\x0c"
 
 
 def _pipe_cells(line: str) -> list[str]:
-    s = line.strip()
-    if s.startswith("|"):
-        s = s[1:]
-    if s.endswith("|"):
-        s = s[:-1]
+    s = line.strip().removeprefix("|").removesuffix("|")
     return [c.strip() for c in s.split("|")]
 
 
@@ -202,9 +198,7 @@ def _split_table(text: str, limit: int) -> list[str]:
             cur_len = len(header)
         cur.append(line)
         cur_len += extra
-    if cur and (not header or len(cur) > 1):
-        pieces.append("\n".join(cur).strip())
-    elif cur:
+    if cur:
         pieces.append("\n".join(cur).strip())
     return [p for p in pieces if p]
 
