@@ -662,6 +662,23 @@ def _excerpt_around(text: str, query: str, *, width: int = _MAX_KB_EXCERPT) -> s
     return snippet[:width]
 
 
+def _file_excerpt(row: dict[str, Any], fallback: str, query: str) -> str:
+    """One excerpt per sibling passage the file hit carries (top chunk first).
+    The evidence line is often the file's 2nd/3rd pooled chunk, not the top one."""
+    passages = row.get("passages")
+    if not isinstance(passages, list) or not passages:
+        return _excerpt_around(fallback, query)
+    parts: list[str] = []
+    seen: set[str] = set()
+    for p in passages:
+        text = str((p or {}).get("text") or "").strip() if isinstance(p, dict) else ""
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        parts.append(_excerpt_around(text, query))
+    return " ‖ ".join(parts) if parts else _excerpt_around(fallback, query)
+
+
 def _static_html_checks(content: str) -> list[dict[str, Any]]:
     """Structure-only HTML checks (no browser). Honest statuses: pass|fail|not_verified."""
     text = content or ""
@@ -864,7 +881,7 @@ def _workspace_handlers(
                             "heading": str(row.get("heading") or ""),
                             "page": row.get("page"),
                             "kind": row.get("kind"),
-                            "excerpt": _excerpt_around(text or title, query),
+                            "excerpt": _file_excerpt(row, text or title, query),
                             "match": "index",
                         }
                     )

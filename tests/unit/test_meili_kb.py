@@ -255,6 +255,32 @@ def test_search_collapses_same_artifact(monkeypatch: pytest.MonkeyPatch) -> None
     assert [h["artifact_id"] for h in collapse_hits_by_artifact(raw, 5)] == ["a1", "a2"]
 
 
+def test_collapse_carries_sibling_passages_top_chunk_first() -> None:
+    raw = [
+        {"artifact_id": "a1", "chunk_id": "a1_2", "text": "分最高但不是答案"},
+        {"artifact_id": "a2", "chunk_id": "a2_0", "text": "丙"},
+        {"artifact_id": "a1", "chunk_id": "a1_7", "text": "答案在这一段", "heading": "三"},
+        {"artifact_id": "a1", "chunk_id": "a1_9", "text": "第三段"},
+        {"artifact_id": "a1", "chunk_id": "a1_4", "text": "第四段被截"},
+        {"artifact_id": "a3", "chunk_id": "a3_0", "text": "丁"},
+    ]
+    out = collapse_hits_by_artifact(raw, 2, passages=3)
+    # file order unchanged; limit still counts files, not chunks
+    assert [h["artifact_id"] for h in out] == ["a1", "a2"]
+    assert out[0]["text"] == "分最高但不是答案"
+    assert [p["chunk_id"] for p in out[0]["passages"]] == ["a1_2", "a1_7", "a1_9"]
+    assert out[0]["passages"][1]["heading"] == "三"
+    assert [p["chunk_id"] for p in out[1]["passages"]] == ["a2_0"]
+
+
+def test_collapse_passages_default_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PICO_KB_PASSAGES", "1")
+    raw = [{"artifact_id": "a1", "chunk_id": "x"}, {"artifact_id": "a1", "chunk_id": "y"}]
+    assert [p["chunk_id"] for p in collapse_hits_by_artifact(raw, 5)[0]["passages"]] == ["x"]
+    monkeypatch.setenv("PICO_KB_PASSAGES", "99")
+    assert len(collapse_hits_by_artifact(raw, 5)[0]["passages"]) == 2
+
+
 def test_merge_title_only_hits_stay_in_pool() -> None:
     hybrid = [{"chunk_id": f"h{i}", "artifact_id": f"h{i}"} for i in range(80)]
     title = [{"chunk_id": "tf_0", "artifact_id": "title-file"}]

@@ -1221,22 +1221,57 @@ def merge_hybrid_and_title_hits(
     return out[:want]
 
 
-def collapse_hits_by_artifact(hits: list[Any], limit: int) -> list[dict[str, Any]]:
-    """One best chunk per ledger file so five results are five materials."""
+def kb_passages_per_file() -> int:
+    """Sibling chunks carried per file hit. Gold: quote sat in the file's 2nd/3rd
+    pooled chunk in 12/17 misses where the file itself was already top-5."""
+    try:
+        value = int(os.environ.get("PICO_KB_PASSAGES") or "3")
+    except ValueError:
+        value = 3
+    return min(5, max(1, value))
+
+
+def collapse_hits_by_artifact(
+    hits: list[Any], limit: int, *, passages: int | None = None
+) -> list[dict[str, Any]]:
+    """One row per ledger file so five results are five materials. File order =
+    best chunk order (unchanged). Each row carries `passages`: that file's
+    pooled chunks in Meili order, itself first, capped, so the model sees the
+    evidence chunk even when it is not the top-scoring one."""
     want = max(1, int(limit))
-    seen: set[str] = set()
-    out: list[dict[str, Any]] = []
+    per_file = kb_passages_per_file() if passages is None else max(1, int(passages))
+    order: list[str] = []
+    best: dict[str, dict[str, Any]] = {}
+    siblings: dict[str, list[dict[str, Any]]] = {}
     for row in hits:
         if not isinstance(row, dict):
             continue
         aid = str(row.get("artifact_id") or row.get("material_id") or "").strip()
-        if not aid or aid in seen:
+        if not aid:
             continue
-        seen.add(aid)
+        if aid not in best:
+            if len(order) >= want:
+                continue
+            order.append(aid)
+            best[aid] = row
+            siblings[aid] = []
+        elif len(siblings[aid]) < per_file - 1:
+            siblings[aid].append(row)
+    out: list[dict[str, Any]] = []
+    for aid in order:
+        row = dict(best[aid])
+        row["passages"] = [_passage_of(best[aid])] + [_passage_of(s) for s in siblings[aid]]
         out.append(row)
-        if len(out) >= want:
-            break
     return out
+
+
+def _passage_of(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "chunk_id": row.get("chunk_id"),
+        "heading": str(row.get("heading") or ""),
+        "page": row.get("page"),
+        "text": str(row.get("text") or ""),
+    }
 
 
 def material_chunk_docs(

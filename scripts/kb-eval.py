@@ -71,17 +71,31 @@ def tenant_filter(school_id: str, membership_id: str) -> str:
     )
 
 
-def collapse_by_file(hits: list[dict[str, Any]], k: int | None = None) -> list[dict[str, Any]]:
-    seen: set[str] = set()
-    out: list[dict[str, Any]] = []
+def collapse_by_file(
+    hits: list[dict[str, Any]], k: int | None = None, *, passages: int = 1
+) -> list[dict[str, Any]]:
+    """Mirror of live meili_kb.collapse_hits_by_artifact: file order = best chunk;
+    each row gets `passages` = that file's pooled chunks, itself first, capped."""
+    order: list[str] = []
+    best: dict[str, dict[str, Any]] = {}
+    sibs: dict[str, list[dict[str, Any]]] = {}
     for row in hits:
         aid = _aid(row)
-        if not aid or aid in seen:
+        if not aid:
             continue
-        seen.add(aid)
+        if aid not in best:
+            if k is not None and len(order) >= k:
+                continue
+            order.append(aid)
+            best[aid] = row
+            sibs[aid] = []
+        elif len(sibs[aid]) < passages - 1:
+            sibs[aid].append(row)
+    out = []
+    for aid in order:
+        row = dict(best[aid])
+        row["passages"] = [best[aid]] + sibs[aid]
         out.append(row)
-        if k is not None and len(out) >= k:
-            break
     return out
 
 
@@ -359,11 +373,14 @@ def _rank_of(material_id: str, hits: list[dict[str, Any]]) -> int | None:
 
 
 def _quote_in(quote: str, hits: list[dict[str, Any]], *, with_parent: bool) -> bool:
+    """Quote inside what the model sees for these file hits: every carried passage
+    (text), optionally plus parent_text."""
     nq = _norm(quote)
     if not nq:
         return False
     for h in hits:
-        blob = str(h.get("text") or "")
+        passages = h.get("passages") if isinstance(h.get("passages"), list) else [h]
+        blob = "".join(str((p or {}).get("text") or "") for p in passages)
         if with_parent:
             blob += str(h.get("parent_text") or "")
         if nq in _norm(blob):
@@ -418,7 +435,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                     limit=k * 2,
                 )
                 passages = raw
-                hits = collapse_by_file(raw)
+                hits = collapse_by_file(raw, passages=args.passages)
             else:
                 extra = None
                 if args.mode == "hybrid":
@@ -431,7 +448,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                     filt=tenant_filter(school, str(it.get("membership_id") or "")),
                 )
                 passages = raw
-                hits = collapse_by_file(raw)
+                hits = collapse_by_file(raw, passages=args.passages)
         except Exception as exc:  # noqa: BLE001
             errors += 1
             print(f"  error {it['id']}: {type(exc).__name__}", file=sys.stderr)
@@ -478,6 +495,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         "mode": args.mode,
         "set": Path(args.golden).name,
         "fetch": args.fetch,
+        "passages": args.passages,
         "school_id": school[:8],
         "overall": overall,
         "by_kind": by_kind,
@@ -525,6 +543,7 @@ def main() -> int:
     r.add_argument("--mode", choices=["keyword", "hybrid", "api"], default="hybrid")
     r.add_argument("--k", type=int, default=5)
     r.add_argument("--fetch", type=int, default=80, help="Meili hits before file collapse (live PICO_KB_FETCH)")
+    r.add_argument("--passages", type=int, default=3, help="sibling chunks per file hit (live PICO_KB_PASSAGES)")
     r.add_argument("--semantic-ratio", type=float, default=0.5, dest="semantic_ratio")
     r.add_argument("--embedder", default="default")
     r.add_argument("--base", default="http://127.0.0.1:18765")

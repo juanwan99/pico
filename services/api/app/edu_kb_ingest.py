@@ -250,6 +250,8 @@ async def post_kb_search(
                 "page": row.get("page"),
                 "text": row.get("text") or "",
                 "parent_text": row.get("parent_text") or "",
+                # Same file's other pooled chunks, top chunk first (#1006 knife 3).
+                "passages": [p for p in (row.get("passages") or []) if isinstance(p, dict)],
             }
         )
     return {
