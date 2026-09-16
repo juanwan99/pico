@@ -1090,6 +1090,33 @@ def _hit_chunk_id(row: Any) -> str:
     return str(row.get("chunk_id") or row.get("artifact_id") or "")
 
 
+def _hit_artifact_id(row: Any) -> str:
+    if not isinstance(row, dict):
+        return ""
+    return str(row.get("artifact_id") or row.get("material_id") or "").strip()
+
+
+def title_only_hits(
+    hybrid: list[Any],
+    title: list[Any],
+    *,
+    cap: int = TITLE_HIT_CAP,
+) -> list[Any]:
+    """First title chunk per file that hybrid never retrieved. Not extra chunks of a hit file."""
+    hy_aids = {_hit_artifact_id(row) for row in hybrid if _hit_artifact_id(row)}
+    out: list[Any] = []
+    seen: set[str] = set()
+    for row in title:
+        aid = _hit_artifact_id(row)
+        if not aid or aid in hy_aids or aid in seen:
+            continue
+        seen.add(aid)
+        out.append(row)
+        if len(out) >= max(0, int(cap)):
+            break
+    return out
+
+
 def merge_hybrid_and_title_hits(
     hybrid: list[Any],
     title: list[Any],
@@ -1097,19 +1124,26 @@ def merge_hybrid_and_title_hits(
     pool: int,
     title_cap: int = TITLE_HIT_CAP,
 ) -> list[Any]:
-    """Keep title-only chunks in the pool. Appending after a full hybrid page dropped them."""
+    """Hybrid rank first. Title-only files take leftover tail slots.
+
+    Prepending title chunks (live #1024) made collapse return a header
+    and let other titles occupy the top five files. Title reserve is
+    only for files hybrid missed, and only after hybrid order.
+    """
     want = max(1, int(pool))
-    hybrid_ids = {_hit_chunk_id(row) for row in hybrid if _hit_chunk_id(row)}
-    title_only: list[Any] = []
+    reserved = title_only_hits(hybrid, title, cap=min(int(title_cap), want))
+    budget = max(1, want - len(reserved)) if reserved else want
+    out: list[Any] = []
     seen: set[str] = set()
-    for row in title:
+    for row in hybrid:
         cid = _hit_chunk_id(row)
-        if not cid or cid in hybrid_ids or cid in seen:
+        if not cid or cid in seen:
             continue
         seen.add(cid)
-        title_only.append(row)
-    out: list[Any] = list(title_only[: min(int(title_cap), want)])
-    for row in hybrid:
+        out.append(row)
+        if len(out) >= budget:
+            break
+    for row in reserved:
         cid = _hit_chunk_id(row)
         if not cid or cid in seen:
             continue

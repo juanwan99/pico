@@ -28,6 +28,7 @@ from pico_orchestrator.meili_kb import (
     rerank_scores_usable,
     search_materials,
     tenant_filter,
+    title_only_hits,
     upsert_documents,
     upsert_material,
 )
@@ -258,12 +259,46 @@ def test_merge_title_only_hits_stay_in_pool() -> None:
     hybrid = [{"chunk_id": f"h{i}", "artifact_id": f"h{i}"} for i in range(80)]
     title = [{"chunk_id": "tf_0", "artifact_id": "title-file"}]
     merged = merge_hybrid_and_title_hits(hybrid, title, pool=80, title_cap=20)
-    assert merged[0]["artifact_id"] == "title-file"
+    assert merged[0]["artifact_id"] == "h0"
+    assert merged[-1]["artifact_id"] == "title-file"
     assert len(merged) == 80
     assert "title-file" in {r["artifact_id"] for r in merged}
 
 
-def test_search_title_only_file_not_dropped(
+def test_title_chunk_does_not_replace_hybrid_passage() -> None:
+    hybrid = [{"chunk_id": "a1_0003", "artifact_id": "a1", "text": "正文段"}]
+    title = [{"chunk_id": "a1_0000", "artifact_id": "a1", "text": "封面标题"}]
+    assert title_only_hits(hybrid, title) == []
+    merged = merge_hybrid_and_title_hits(hybrid, title, pool=80, title_cap=20)
+    collapsed = collapse_hits_by_artifact(merged, 5)
+    assert collapsed[0]["text"] == "正文段"
+
+
+def test_search_title_only_fills_leftover_not_front(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
+    http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
+    http.search_hits = [
+        {"artifact_id": "h0", "chunk_id": "h0_0", "text": "其它甲"},
+        {"artifact_id": "h1", "chunk_id": "h1_0", "text": "其它乙"},
+    ]
+    http.title_search_hits = [
+        {"artifact_id": "title-file", "chunk_id": "tf_0", "title": "库存.csv", "text": "仓=东仓"}
+    ]
+    out = search_materials("库存", school_id="s1", membership_id="m1", limit=3, client=http)
+    aids = [h["artifact_id"] for h in out["hits"]]
+    assert aids[0] == "h0"
+    assert "title-file" in aids
+
+
+def test_search_hybrid_order_not_stolen_by_other_titles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("MEILI_MASTER_KEY", "k")
@@ -281,7 +316,7 @@ def test_search_title_only_file_not_dropped(
         {"artifact_id": "title-file", "chunk_id": "tf_0", "title": "库存.csv", "text": "仓=东仓"}
     ]
     out = search_materials("库存", school_id="s1", membership_id="m1", limit=3, client=http)
-    assert out["hits"][0]["artifact_id"] == "title-file"
+    assert [h["artifact_id"] for h in out["hits"]] == ["h0", "h1", "h2"]
 
 
 def test_search_never_hybrid_even_with_vendor_keys(
