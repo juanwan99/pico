@@ -134,7 +134,7 @@ Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 
 - **Org:** **本窗合一**（写/合/部/收尾同一窗）。旧窗1/2/4 与主管/执行者是历史别名，不是编制。见 [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md)。
 - **Ship steps:** [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. **One window** runs the chain; no multi-issue process OS.
 - **Product goal:** Web WorkBuddy degree — [docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star v1.4。用法 = Grok。办公主线（Word/Excel/HTML/PPT）。写代码是仆人。能力并列。办公计算机交成熟上游。不要 bash。
-- **Default runtime:** true Pi (`health.default_runtime=pi-true`). Chat/image = **New API**（`openai-responses` / Gemini 渠道；现网模型见 EXPERIENCE §34，不是「DeepSeek 聊天核」）。计量：New API 管渠道，Pico 记用量，edu 只认 export。Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted**.
+- **Default runtime:** true Pi (`health.default_runtime=pi-true`). Chat/image = **New API**（`openai-responses` / Gemini 渠道；现网模型见 EXPERIENCE §34，不是「DeepSeek 聊天核」）。**Gemini 3.x 文本/识图必须 Vertex `global`（EXPERIENCE §99），禁止 `us-central1`。** 计量：New API 管渠道，Pico 记用量，edu 只认 export。Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted**.
 - **Prod flags:** `PICO_TRUE_PI_DEFAULT=1` → `health.default_runtime=pi-true`; hosted rollback = `PICO_HOSTED_LOOP=1`; legacy Kimi only if emergency. `CLAIM-WB-DEGREE-WEB` 已是业主 YES @ `dcb47c00…`（2026-08-26）；工程禁改口/再代签。
 - **KA-4 HARD:** `run_agent_loop` / `runner.py` **removed**. Rollback multi-step = redeploy prior tip or legacy flag — not revive loop.
 - **Speed:** deploy + smoke beat new process docs; see `docs/VELOCITY-CLEAN.md`.

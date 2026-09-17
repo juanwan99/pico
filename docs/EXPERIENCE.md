@@ -83,6 +83,7 @@ DATE: 2026-09-02
 96. **生产服务不继承宿主全局代理（#985 · 2026-09-13）。** New API 箱曾被 compose 钉 `HTTP_PROXY=127.0.0.1:7890`，老师聊天核 `superaichao.xin` 直连 200、经代理必 reset，四天失败率过半。哪条渠道要出网，用 New API 渠道级代理单独配。dockerd 同样被 systemd drop-in 钉了代理、镜像站首位 `docker.m.daocloud.io` 已要登录——root 清单在 #985；未修前基础镜像不在本机时 `prod-update` 会在 FROM 处死（现 impl 先预检、一行 FATAL exit 13）。
 97. **同机只能一个 `prod-update` 在跑（#994 阶段 0）。** 两窗同时部会留下 `Created` 临时容器 + compose 名字冲突。bootstrap 现持 `flock`（`PICO_DEPLOY_LOCK`，缺省 `/tmp/pico-prod-update.lock`），第二个直接 exit 5 并打印持有者。开部前仍先 `ps | grep prod-update` 看一眼。
 98. **失败率只看账本，不看感觉。** `scripts/teacher-failure-rate.py`（只读 helper，非真源）在 pico-api 箱里跑，出近 24h/7d 失败率、失败归并、成功 p50。阶段包必贴。9/8 93 轮 0 失败、9/11 56% 全是上游代理——核能稳，翻车在机器层。
+99. **Gemini 3.x 文本/识图必须 Vertex `global`，禁止 `us-central1`。** 试算项目 `project-788f89a1-433e-476b-b41`。`gemini-3*`（`gemini-3-flash-preview` / `3.5-flash` / `3.6-flash` / `3.8-flash`）publisher model 只在 `locations/global`。打 `us-central1` = **404**，不是模型名写错、不是 JSON 错。正确口：机上 `POST http://127.0.0.1:8082/v1beta/models/{model}:generateContent`（`vertex-adc-proxy` 必须 `startswith("gemini-3") → global` + `aiplatform.googleapis.com`）；或 ADC 直打 `https://aiplatform.googleapis.com/v1/projects/{PROJECT}/locations/global/publishers/google/models/{model}:generateContent`。New API `:3000` + `pico-gateway` 白名单只有出图模型和 `gemini-2.5-pro`，3.x 文本会 `model_not_found`。业主点名 Gemini 3 / 3.8 时禁止用 2.5-pro 顶替。测通：2026-09-12 DMIT 阅卷 `gemini-3-flash-preview` 200；2026-09-16 ECS ADC `gemini-3.8-flash` 200。钉评：https://github.com/juanwan99/pico/issues/1029
 
 ## D · Cloud Agent
 
@@ -91,5 +92,5 @@ DATE: 2026-09-02
 20. **禁止：** 密钥写进 `environment.json` / Issue / PR；把「白名单 22」当 Cloud Agent 部署通道；Save 前不经 draft build + 新 agent 验 `ECS_OK`。
 
 ```text
-派发点名示例：经验 §3 §17 §22 §80 §90 · 工具 grok-sandbox-exec · grok-preview-proxy · pr-ci-ready · tip-pin · ssh-ecs
+派发点名示例：经验 §3 §17 §22 §80 §90 §99 · 工具 grok-sandbox-exec · grok-preview-proxy · pr-ci-ready · tip-pin · ssh-ecs
 ```
