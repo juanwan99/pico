@@ -24,8 +24,11 @@ def test_ten_named_cases() -> None:
 def test_week_deck_has_three_marked_slides() -> None:
     raw = orx.make_week_deck()
     blob = orx._slide_blob(raw)
+    assert orx._pptx_slide_count(raw) == 3
     assert "slides=3" in blob
     assert "KEEP-封面" in blob and "KEEP-课表" in blob and "KEEP-作业" in blob
+    xml_only = orx._pptx_xml_text(raw)
+    assert "KEEP-封面" in xml_only
 
 
 def test_notice_docx_has_spring_and_safety() -> None:
