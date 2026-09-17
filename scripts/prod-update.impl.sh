@@ -343,8 +343,15 @@ if [ "$meili_ready" -ne 1 ]; then
   exit 9
 fi
 echo "[pico] meili health ok"
+# Incremental by default (only new artifacts get chunked). PICO_KB_REINDEX_FORCE=1
+# re-chunks the whole ledger — required after chunker / index-schema changes.
+REINDEX_URL="http://127.0.0.1:18765/v1/kb/reindex-all"
+if [ "${PICO_KB_REINDEX_FORCE:-0}" = "1" ]; then
+  REINDEX_URL="${REINDEX_URL}?force=1"
+  echo "[pico] kb reindex: force (full re-chunk)"
+fi
 REINDEX_FILE="$(mktemp)"
-REINDEX_CODE="$(curl -sS -o "$REINDEX_FILE" -w "%{http_code}" --max-time 600 -X POST http://127.0.0.1:18765/v1/kb/reindex-all || echo 000)"
+REINDEX_CODE="$(curl -sS -o "$REINDEX_FILE" -w "%{http_code}" --max-time 600 -X POST "$REINDEX_URL" || echo 000)"
 REINDEX_OUT="$(cat "$REINDEX_FILE" 2>/dev/null || true)"
 rm -f "$REINDEX_FILE"
 echo "[pico] kb reindex http=${REINDEX_CODE} body=${REINDEX_OUT:-empty}"
@@ -364,8 +371,14 @@ if body.get("ok") is not True:
     print("[pico] FATAL: kb reindex ok is not true", file=sys.stderr)
     raise SystemExit(10)
 print(
-    "[pico] kb reindex ok indexed=%s skipped=%s total=%s"
-    % (body.get("indexed"), body.get("skipped"), body.get("total"))
+    "[pico] kb reindex ok mode=%s indexed=%s unchanged=%s skipped=%s total=%s"
+    % (
+        body.get("mode"),
+        body.get("indexed"),
+        body.get("unchanged"),
+        body.get("skipped"),
+        body.get("total"),
+    )
 )
 ' "$REINDEX_OUT"; then
   exit 10

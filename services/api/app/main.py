@@ -359,17 +359,19 @@ async def kb_reindex(
     principal: Principal = Depends(require_any_scope("ai:run", "ai:read")),
 ) -> dict:
     """Rebuild this membership's Meili projection from the ledger."""
-    return await rebuild_materials(principal)
+    return await rebuild_materials(principal, force=True)
 
 
 @app.post("/v1/kb/reindex-all")
-async def kb_reindex_all(request: Request) -> dict:
-    """Ops rebuild. pico-api is loopback-bound; peer may be eth0 under host-network hairpin."""
+async def kb_reindex_all(request: Request, force: bool = False) -> dict:
+    """Ops rebuild. pico-api is loopback-bound; peer may be eth0 under host-network hairpin.
+
+    Incremental unless ``?force=1`` (re-chunk everything after chunker changes)."""
     from app.loopback import request_on_loopback_socket
 
     if not request_on_loopback_socket(request):
         raise HTTPException(status_code=403, detail={"code": "forbidden", "message": "loopback only"})
-    return await rebuild_materials(None)
+    return await rebuild_materials(None, force=force)
 
 
 @app.get("/v1/meta/freeze")
