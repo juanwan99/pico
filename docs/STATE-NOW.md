@@ -1,14 +1,14 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-09-14
+DATE: 2026-09-16
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
-在飞: #994 阶段总计划 T-FOUNDATION-2026Q3（线索卡 · 5 张执行卡 · 当前阶段 0 机器层）· #990 并入阶段 2
+在飞: #1006 T-QUALITY-A 续（知识库 · held-out file@5 0.947 已过 ima 档 · 交接与下一步见 #1006 末评论）· #994 阶段总计划仍开（阶段 0 机器层）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-      写本文时 tip = 58645e6b450a5b2214a9980419408355cf7a522b（#993）
-阻塞: 阶段 0 root 段（dockerd 代理/镜像站）等业主跑 #985 清单；其余不阻塞
+      写本文时 tip = bf0ee695e6251c1a325a55eb4f0d551abdc30ba7（#1039）
+阻塞: 无工程阻塞。等业主：精排 +0.6 s 留不留 · 首字 3 s 换不换模型渠道 · edu 入库去重 · 知识库计费方案（讨论 Issue）
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
