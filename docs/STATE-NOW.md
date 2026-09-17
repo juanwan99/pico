@@ -4,11 +4,11 @@
 DATE: 2026-09-16
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
-在飞: #1006 T-QUALITY-A 续（知识库 · held-out file@5 0.947 已过 ima 档 · 交接与下一步见 #1006 末评论）· #994 阶段总计划仍开（阶段 0 机器层）
+在飞: 无执行卡在飞。#1042 T-BILLING-GATE Pico 侧 DONE 等业主抽检关；#1006 挂起等业主（T2 质量已过）；#994 阶段总计划仍开。计费讨论 #1041
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-      写本文时 tip = bf0ee695e6251c1a325a55eb4f0d551abdc30ba7（#1039）
-阻塞: 无工程阻塞。等业主：精排 +0.6 s 留不留 · 首字 3 s 换不换模型渠道 · edu 入库去重 · 知识库计费方案（讨论 Issue）
+      写本文时 tip = f4f457a238985d7da6006ac40bf4a448ad20fa78（#1043）
+阻塞: 无工程阻塞。等 edu：JWT 带 allowance_points_today + feat:*（contracts/delegated-auth.md）· 入库去重。等业主：精排 +0.6 s 留不留 · 首字换渠道
 白名单勿关: #316 #449 #170 #634 #475
 ────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
