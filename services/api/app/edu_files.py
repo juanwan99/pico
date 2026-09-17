@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from pico_orchestrator.llm_file_pass import MAX_BYTES
 from pico_orchestrator.meili_kb import (
     PARSE_EXT,
     parse_office_bytes,
@@ -26,7 +27,6 @@ from app.office_extract import extract_office
 router = APIRouter(tags=["edu-files"])
 logger = logging.getLogger(__name__)
 
-MAX_BYTES = 12 * 1024 * 1024
 KIND_SRC = "edu_office"
 KIND_EXCERPT = "edu_excerpt"
 TEXT_KINDS = frozenset({"md", "txt", "json", "csv", "tsv", "html", "htm"})
@@ -65,7 +65,10 @@ class FileJsonIn(BaseModel):
 def _too_large() -> HTTPException:
     return HTTPException(
         status_code=413,
-        detail={"code": "file.too_large", "message": "文件太大（上限 8MB）"},
+        detail={
+            "code": "file.too_large",
+            "message": f"文件太大（上限 {MAX_BYTES // (1024 * 1024)}MB）",
+        },
     )
 
 

@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.llm_file_pass import (
+    MAX_BYTES,
     NativeFile,
     accept_native,
     forget_turn_files,
@@ -34,6 +35,30 @@ def test_accepts_pdf_docx_rejects_legacy_doc() -> None:
     assert accept_native("a.pdf", b"") is None
 
 
+def test_accept_native_40mb_latch() -> None:
+    """Teacher 34MB decks must ride input_file; 12MB was the old clip."""
+    assert MAX_BYTES == 40 * 1024 * 1024
+    just_over_old = b"%PDF" + b"x" * (12 * 1024 * 1024)
+    assert accept_native("课件.pdf", just_over_old) is not None
+
+
+def test_accept_native_rejects_over_max(monkeypatch) -> None:
+    monkeypatch.setattr("pico_orchestrator.llm_file_pass.MAX_BYTES", 8)
+    assert accept_native("课件.pdf", b"%PDF-12345") is None
+
+
+def test_edu_clip_message_matches_latch() -> None:
+    sys.path.insert(0, str(ROOT / "services" / "api"))
+    from app.edu_files import MAX_BYTES as edu_max
+    from app.edu_files import _too_large
+
+    assert edu_max == MAX_BYTES
+    exc = _too_large()
+    assert exc.status_code == 413
+    assert exc.detail["code"] == "file.too_large"
+    assert f"{MAX_BYTES // (1024 * 1024)}MB" in exc.detail["message"]
+
+
 def test_splice_adds_input_file_to_last_user() -> None:
     pdf = NativeFile(filename="通知.pdf", data=b"%PDF-1.4 hi")
     body = {
@@ -49,7 +74,9 @@ def test_splice_adds_input_file_to_last_user() -> None:
     assert content[1]["type"] == "input_file"
     assert content[1]["filename"] == "通知.pdf"
     assert content[1]["file_data"].startswith("data:application/pdf;base64,")
-    assert "hi" not in (body["input"][0]["content"] if isinstance(body["input"][0]["content"], str) else "")
+    assert "hi" not in (
+        body["input"][0]["content"] if isinstance(body["input"][0]["content"], str) else ""
+    )
     # original body unchanged
     assert body["input"][0]["content"] == "这是什么"
 
