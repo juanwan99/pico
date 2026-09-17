@@ -78,7 +78,11 @@ class Pico:
         with self.client.stream(
             "POST",
             f"{self.base}/v1/chat/completions",
-            headers={**self.headers, "X-Conversation-Id": conversation_id, "Accept": "text/event-stream"},
+            headers={
+                **self.headers,
+                "X-Conversation-Id": conversation_id,
+                "Accept": "text/event-stream",
+            },
             json=body,
         ) as resp:
             resp.raise_for_status()
@@ -103,7 +107,9 @@ class Pico:
 
     def tasks(self, conversation_id: str) -> list[dict[str, Any]]:
         resp = self.client.get(
-            f"{self.base}/v1/tasks", headers=self.headers, params={"conversation_id": conversation_id}
+            f"{self.base}/v1/tasks",
+            headers=self.headers,
+            params={"conversation_id": conversation_id},
         )
         resp.raise_for_status()
         return list(resp.json().get("tasks") or [])
@@ -125,12 +131,16 @@ class Pico:
         return dict(resp.json().get("run") or {})
 
     def cancel_active(self, task_id: str) -> dict[str, Any]:
-        resp = self.client.post(f"{self.base}/v1/tasks/{task_id}/cancel-active", headers=self.headers)
+        resp = self.client.post(
+            f"{self.base}/v1/tasks/{task_id}/cancel-active", headers=self.headers
+        )
         return resp.json() if resp.content else {"status_code": resp.status_code}
 
     def artifacts(self, conversation_id: str) -> list[dict[str, Any]]:
         resp = self.client.get(
-            f"{self.base}/v1/artifacts", headers=self.headers, params={"conversation_id": conversation_id}
+            f"{self.base}/v1/artifacts",
+            headers=self.headers,
+            params={"conversation_id": conversation_id},
         )
         resp.raise_for_status()
         return list(resp.json().get("artifacts") or [])
@@ -158,7 +168,11 @@ def _tool_calls(pico: Pico, conversation_id: str) -> tuple[int, str]:
         latest = task.get("latest_run") or {}
         if latest.get("id"):
             status = str(latest.get("status") or status)
-            total += sum(1 for e in pico.events(latest["id"]) if str(e.get("kind") or e.get("type") or "") == "tool.call")
+            total += sum(
+                1
+                for e in pico.events(latest["id"])
+                if str(e.get("kind") or e.get("type") or "") == "tool.call"
+            )
     return total, status
 
 
@@ -188,7 +202,14 @@ def make_gradebook() -> bytes:
     ws = wb.active
     ws.title = "成绩"
     ws.append(["姓名", "平时", "期末", "总分"])
-    for name, a, b in [("甲", 88, 92), ("乙", 75, 80), ("丙", 91, 85), ("丁", 60, 72), ("戊", 83, 79), ("己", 95, 97)]:
+    for name, a, b in [
+        ("甲", 88, 92),
+        ("乙", 75, 80),
+        ("丙", 91, 85),
+        ("丁", 60, 72),
+        ("戊", 83, 79),
+        ("己", 95, 97),
+    ]:
         ws.append([name, a, b, None])
     buf = io.BytesIO()
     wb.save(buf)
@@ -196,9 +217,16 @@ def make_gradebook() -> bytes:
 
 
 ROSTER_ROWS = [
-    ("张一", "2401", "A"), ("李二", "2402", "A"), ("王三", "2403", "B"), ("赵四", "2404", "C"),
-    ("孙五", "2405", "A"), ("周六", "2406", "B"), ("吴七", "2407", "C"), ("郑八", "2408", "A"),
-    ("冯九", "2409", "B"), ("陈十", "2410", "A"),
+    ("张一", "2401", "A"),
+    ("李二", "2402", "A"),
+    ("王三", "2403", "B"),
+    ("赵四", "2404", "C"),
+    ("孙五", "2405", "A"),
+    ("周六", "2406", "B"),
+    ("吴七", "2407", "C"),
+    ("郑八", "2408", "A"),
+    ("冯九", "2409", "B"),
+    ("陈十", "2410", "A"),
 ]
 
 
@@ -264,8 +292,19 @@ def case_t1(pico: Pico, stamp: str) -> CaseResult:
         raw2 = pico.download(latest2["id"])
         res.artifact_sha[latest2["title"] + "#2"] = _sha(raw2)
         wb2 = load_workbook(io.BytesIO(raw2))
-        blob = json.dumps([[str(c.value) for c in row] for ws2 in wb2.worksheets for row in ws2.iter_rows(max_row=3)], ensure_ascii=False)
-        titled = "三年二班" in blob or any("三年二班" in (s.title or "") for s in wb2.worksheets) or "三年二班" in str(latest2.get("title"))
+        blob = json.dumps(
+            [
+                [str(c.value) for c in row]
+                for ws2 in wb2.worksheets
+                for row in ws2.iter_rows(max_row=3)
+            ],
+            ensure_ascii=False,
+        )
+        titled = (
+            "三年二班" in blob
+            or any("三年二班" in (s.title or "") for s in wb2.worksheets)
+            or "三年二班" in str(latest2.get("title"))
+        )
         d2 = wb2.active["D2"].value
         keeps = isinstance(d2, str) and d2.startswith("=")
         ok_b = titled and keeps
@@ -379,7 +418,12 @@ def case_t3(pico: Pico, stamp: str) -> CaseResult:
             t = getattr(s.shapes, "title", None)
             titles.append((t.text if t is not None and t.has_text_frame else "").strip())
         if not any(titles):
-            texts = [sh.text_frame.text for s in prs.slides for sh in s.shapes if getattr(sh, "has_text_frame", False)]
+            texts = [
+                sh.text_frame.text
+                for s in prs.slides
+                for sh in s.shapes
+                if getattr(sh, "has_text_frame", False)
+            ]
             if not any(t.strip() for t in texts):
                 ok = False
                 res.notes.append("T3: pptx has no visible text")
@@ -425,7 +469,9 @@ def case_t4(pico: Pico, stamp: str) -> CaseResult:
     if cancelled.get("task_id"):
         for run in pico.runs(cancelled["task_id"]):
             status = str(run.get("status") or status)
-    res.notes.append(f"T4: run status={status} cancel={json.dumps(cancelled.get('resp'), ensure_ascii=False)[:120]}")
+    res.notes.append(
+        f"T4: run status={status} cancel={json.dumps(cancelled.get('resp'), ensure_ascii=False)[:120]}"
+    )
     res.tool_calls, _ = _tool_calls(pico, cid)
     res.ok = status in {"cancelled", "cancelling"} and res.artifacts == 0
     if res.artifacts:
@@ -433,16 +479,344 @@ def case_t4(pico: Pico, stamp: str) -> CaseResult:
     return res
 
 
-CASES = {"t1": case_t1, "t2": case_t2, "t3": case_t3, "t4": case_t4}
+def make_week_deck() -> bytes:
+    from pptx import Presentation
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.util import Inches, Pt
+
+    prs = Presentation()
+    prs.slide_width = Inches(13.333)
+    prs.slide_height = Inches(7.5)
+    blank = prs.slide_layouts[6]
+    titles = ("封面", "课表", "作业")
+    for i, title in enumerate(titles):
+        slide = prs.slides.add_slide(blank)
+        bar = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(1.0)
+        )
+        bar.fill.solid()
+        bar.fill.fore_color.rgb = RGBColor(0x1F, 0x4E, 0x79)
+        box = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(12), Inches(0.6))
+        run = box.text_frame.paragraphs[0].add_run()
+        run.text = title
+        run.font.size = Pt(28)
+        run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        body = slide.shapes.add_textbox(Inches(0.5), Inches(1.4), Inches(12), Inches(2))
+        body.text_frame.paragraphs[0].text = f"第{i + 1}页保留标记 KEEP-{title}"
+    buf = io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue()
+
+
+def make_notice_docx() -> bytes:
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+
+    doc = Document()
+    h = doc.add_heading("通知", level=1)
+    for run in h.runs:
+        run.font.color.rgb = RGBColor(0x1F, 0x4E, 0x79)
+    p1 = doc.add_paragraph()
+    r1 = p1.add_run("第一段春游安排，不得整篇重写。")
+    r1.bold = True
+    r1.font.size = Pt(12)
+    doc.add_paragraph("第二段安全事项，必须留下。")
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def make_chart_book() -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.chart import BarChart, Reference
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "人数"
+    ws.append(["组别", "人数"])
+    ws.append(["甲", 12])
+    ws.append(["乙", 8])
+    ws.append(["丙", 5])
+    chart = BarChart()
+    chart.title = "各组人数"
+    chart.add_data(Reference(ws, min_col=2, min_row=1, max_row=4), titles_from_data=True)
+    chart.set_categories(Reference(ws, min_col=1, min_row=2, max_row=4))
+    ws.add_chart(chart, "E2")
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def make_formula_book() -> bytes:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "成绩"
+    ws.append(["姓名", "平时", "期末", "总分", "备注"])
+    ws.append(["甲", 88, 92, "=B2*0.6+C2*0.4", "原备注留着"])
+    ws.append(["乙", 75, 80, "=B3*0.6+C3*0.4", "乙备注"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _slide_blob(raw: bytes) -> str:
+    from pptx import Presentation
+
+    prs = Presentation(io.BytesIO(raw))
+    parts: list[str] = [f"slides={len(prs.slides)}"]
+    for s in prs.slides:
+        for sh in s.shapes:
+            if getattr(sh, "has_text_frame", False):
+                parts.append(sh.text_frame.text)
+    return "\n".join(parts)
+
+
+def _docx_blob(raw: bytes) -> str:
+    from docx import Document
+
+    d = Document(io.BytesIO(raw))
+    return "\n".join(p.text for p in d.paragraphs)
+
+
+def _docx_has_media(raw: bytes) -> bool:
+    import zipfile
+
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        return any(name.startswith("word/media/") for name in zf.namelist())
+
+
+def case_t5(pico: Pico, stamp: str) -> CaseResult:
+    from pptx import Presentation
+
+    res = CaseResult(case="T5-ppt-template")
+    cid = f"regress-t5-{stamp}"
+    pico.upload(cid, "周课.pptx", make_week_deck())
+    _, wall = pico.chat(
+        cid,
+        "周课.pptx 在附件里。只改第二页标题「课表」为「本周课表」。"
+        "封面页、作业页的文字和蓝条不要动，页数保持 3 页。",
+    )
+    res.wall_s = wall
+    produced = _produced(pico.artifacts(cid))
+    res.artifacts = len(produced)
+    latest = _latest_by_suffix(produced, ".pptx")
+    ok = False
+    if not latest:
+        res.notes.append("T5: no pptx")
+    else:
+        raw = pico.download(latest["id"])
+        res.artifact_sha[latest["title"]] = _sha(raw)
+        prs = Presentation(io.BytesIO(raw))
+        blob = _slide_blob(raw)
+        ok = (
+            len(prs.slides) == 3
+            and "本周课表" in blob
+            and "KEEP-封面" in blob
+            and "KEEP-作业" in blob
+        )
+        if len(prs.slides) != 3:
+            res.notes.append(f"T5: slides={len(prs.slides)}")
+        if "本周课表" not in blob:
+            res.notes.append("T5: 本周课表 missing")
+        if "KEEP-封面" not in blob or "KEEP-作业" not in blob:
+            res.notes.append("T5: unused page mark lost")
+    res.tool_calls, _ = _tool_calls(pico, cid)
+    res.ok = ok
+    return res
+
+
+def case_t6(pico: Pico, stamp: str) -> CaseResult:
+    res = CaseResult(case="T6-word-rounds")
+    cid = f"regress-t6-{stamp}"
+    pico.upload(cid, "通知.docx", make_notice_docx())
+    _, wall = pico.chat(
+        cid, "通知.docx 在附件里。只把第一段的「春游」改成「秋游」，标题和其余段不要重排。"
+    )
+    res.wall_s += wall
+    _, wall2 = pico.chat(cid, "在第二段末尾加上「家长签字」。第一段的秋游和标题通知都要还在。")
+    res.wall_s += wall2
+    produced = _produced(pico.artifacts(cid))
+    res.artifacts = len(produced)
+    latest = _latest_by_suffix(produced, ".docx")
+    ok = False
+    if not latest:
+        res.notes.append("T6: no docx")
+    else:
+        raw = pico.download(latest["id"])
+        res.artifact_sha[latest["title"]] = _sha(raw)
+        blob = _docx_blob(raw)
+        ok = "秋游" in blob and "家长签字" in blob and "通知" in blob and "安全" in blob
+        if not ok:
+            res.notes.append(f"T6: blob={blob[:180]!r}")
+    res.tool_calls, _ = _tool_calls(pico, cid)
+    res.ok = ok
+    return res
+
+
+def case_t7(pico: Pico, stamp: str) -> CaseResult:
+    res = CaseResult(case="T7-chart-to-word")
+    cid = f"regress-t7-{stamp}"
+    pico.upload(cid, "人数.xlsx", make_chart_book())
+    _, wall = pico.chat(
+        cid,
+        "人数.xlsx 在附件里。做一份 Word，把表里的柱状图嵌进文档（真图片，不要只抄甲12乙8）。",
+    )
+    res.wall_s = wall
+    produced = _produced(pico.artifacts(cid))
+    res.artifacts = len(produced)
+    latest = _latest_by_suffix(produced, ".docx")
+    ok = False
+    if not latest:
+        res.notes.append("T7: no docx")
+    else:
+        raw = pico.download(latest["id"])
+        res.artifact_sha[latest["title"]] = _sha(raw)
+        blob = _docx_blob(raw)
+        ok = _docx_has_media(raw)
+        if not ok:
+            res.notes.append(f"T7: no word/media (text={blob[:120]!r})")
+    res.tool_calls, _ = _tool_calls(pico, cid)
+    res.ok = ok
+    return res
+
+
+def case_t8(pico: Pico, stamp: str) -> CaseResult:
+    res = CaseResult(case="T8-legacy-doc")
+    cid = f"regress-t8-{stamp}"
+    pico.upload(cid, "教师计划.doc", make_notice_docx())
+    _, wall = pico.chat(
+        cid,
+        "教师计划.doc 是旧版文件名。转成能改的 Word 后，只把「春游」改成「秋游」。"
+        "转失败就老实说转不开，不要假装已经交给模型。",
+    )
+    res.wall_s = wall
+    produced = _produced(pico.artifacts(cid))
+    res.artifacts = len(produced)
+    latest = _latest_by_suffix(produced, ".docx") or _latest_by_suffix(produced, ".doc")
+    ok = False
+    if not latest:
+        res.notes.append("T8: no converted/edited word")
+    else:
+        raw = pico.download(latest["id"])
+        res.artifact_sha[latest["title"]] = _sha(raw)
+        try:
+            blob = _docx_blob(raw)
+        except Exception as exc:  # noqa: BLE001 — not OOXML = fail closed
+            res.notes.append(f"T8: not openable docx ({type(exc).__name__})")
+            blob = ""
+        ok = "秋游" in blob and "安全" in blob
+        if not ok and blob:
+            res.notes.append(f"T8: blob={blob[:160]!r}")
+    res.tool_calls, _ = _tool_calls(pico, cid)
+    res.ok = ok
+    return res
+
+
+def case_t9(pico: Pico, stamp: str) -> CaseResult:
+    from openpyxl import load_workbook
+
+    res = CaseResult(case="T9-same-name")
+    cid = f"regress-t9-{stamp}"
+    original = make_gradebook()
+    pico.upload(cid, "成绩单.xlsx", original)
+    sha0 = _sha(original)
+    _, wall = pico.chat(
+        cid,
+        "成绩单.xlsx 在附件里。把表头第一行改成「期末成绩」，保存时文件名仍是 成绩单.xlsx（覆盖老师盘）。",
+    )
+    res.wall_s = wall
+    produced = _produced(pico.artifacts(cid))
+    res.artifacts = len(produced)
+    latest = _latest_by_suffix(produced, ".xlsx")
+    ok = False
+    if not latest:
+        res.notes.append("T9: no xlsx")
+    else:
+        raw = pico.download(latest["id"])
+        sha1 = _sha(raw)
+        res.artifact_sha[str(latest.get("title"))] = sha1
+        titled = str(latest.get("title") or "")
+        wb = load_workbook(io.BytesIO(raw))
+        blob = json.dumps(
+            [[str(c.value) for c in row] for row in wb.active.iter_rows(max_row=2)],
+            ensure_ascii=False,
+        )
+        ok = sha1 != sha0 and "成绩单.xlsx" in titled and "期末成绩" in blob
+        if sha1 == sha0:
+            res.notes.append("T9: sha unchanged")
+        if "成绩单.xlsx" not in titled:
+            res.notes.append(f"T9: title={titled!r}")
+        if "期末成绩" not in blob:
+            res.notes.append("T9: 期末成绩 missing")
+    res.tool_calls, _ = _tool_calls(pico, cid)
+    res.ok = ok
+    return res
+
+
+def case_t10(pico: Pico, stamp: str) -> CaseResult:
+    from openpyxl import load_workbook
+
+    res = CaseResult(case="T10-cell-keep")
+    cid = f"regress-t10-{stamp}"
+    pico.upload(cid, "定位改.xlsx", make_formula_book())
+    _, wall = pico.chat(
+        cid,
+        "定位改.xlsx 在附件里。只把 B2 改成 99。D 列公式和 E 列备注一个字都不要动。",
+    )
+    res.wall_s = wall
+    produced = _produced(pico.artifacts(cid))
+    res.artifacts = len(produced)
+    latest = _latest_by_suffix(produced, ".xlsx")
+    ok = False
+    if not latest:
+        res.notes.append("T10: no xlsx")
+    else:
+        raw = pico.download(latest["id"])
+        res.artifact_sha[latest["title"]] = _sha(raw)
+        ws = load_workbook(io.BytesIO(raw)).active
+        b2, d2, e2 = ws["B2"].value, ws["D2"].value, ws["E2"].value
+        ok = (
+            b2 == 99
+            and isinstance(d2, str)
+            and d2.startswith("=")
+            and "原备注留着" in str(e2 or "")
+        )
+        if not ok:
+            res.notes.append(f"T10: B2={b2!r} D2={d2!r} E2={e2!r}")
+    res.tool_calls, _ = _tool_calls(pico, cid)
+    res.ok = ok
+    return res
+
+
+CASES = {
+    "t1": case_t1,
+    "t2": case_t2,
+    "t3": case_t3,
+    "t4": case_t4,
+    "t5": case_t5,
+    "t6": case_t6,
+    "t7": case_t7,
+    "t8": case_t8,
+    "t9": case_t9,
+    "t10": case_t10,
+}
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--base", default=os.environ.get("PICO_BASE") or "http://127.0.0.1:18765")
     ap.add_argument("--key", default=os.environ.get("PICO_OPENAI_PROXY_KEY") or "")
-    ap.add_argument("--membership", default=os.environ.get("PICO_REGRESS_MEMBERSHIP") or "regress-school:regress-member")
+    ap.add_argument(
+        "--membership",
+        default=os.environ.get("PICO_REGRESS_MEMBERSHIP") or "regress-school:regress-member",
+    )
     ap.add_argument("--model", default=os.environ.get("PICO_REGRESS_MODEL") or "pico-fast")
-    ap.add_argument("--cases", default="t1,t2,t3,t4")
+    ap.add_argument("--cases", default="t1,t2,t3,t4,t5,t6,t7,t8,t9,t10")
     ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S)
     ap.add_argument("--json", default="", help="write JSON report here")
     args = ap.parse_args()
@@ -460,7 +834,11 @@ def main() -> int:
         try:
             results.append(fn(pico, stamp))
         except Exception as exc:  # noqa: BLE001 — report, do not hide
-            results.append(CaseResult(case=name.upper(), ok=False, notes=[f"exception: {type(exc).__name__}: {exc}"]))
+            results.append(
+                CaseResult(
+                    case=name.upper(), ok=False, notes=[f"exception: {type(exc).__name__}: {exc}"]
+                )
+            )
     report = {
         "base": args.base,
         "model": args.model,
@@ -470,13 +848,17 @@ def main() -> int:
         "pass": all(r.ok for r in results),
     }
     if args.json:
-        Path(args.json).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        Path(args.json).write_text(
+            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print()
     print("| case | ok | tool calls | wall s | artifacts | notes |")
     print("|---|---|---:|---:|---:|---|")
     for r in results:
-        print(f"| {r.case} | {'✅' if r.ok else '❌'} | {r.tool_calls} | {r.wall_s:.1f} | {r.artifacts} | {'; '.join(r.notes)[:200]} |")
+        print(
+            f"| {r.case} | {'✅' if r.ok else '❌'} | {r.tool_calls} | {r.wall_s:.1f} | {r.artifacts} | {'; '.join(r.notes)[:200]} |"
+        )
     return 0 if report["pass"] else 1
 
 

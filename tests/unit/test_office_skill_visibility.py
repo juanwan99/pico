@@ -60,9 +60,9 @@ def test_system_catalog_is_one_line_not_craft_body() -> None:
 
 def test_office_skill_bodies_have_craft_without_shell() -> None:
     expected = {
-        "docx": ("add_heading", "Table Grid", "section.header"),
-        "xlsx": ("=SUM(", "create_sheet", "number_format"),
-        "pptx": ("MSO_SHAPE", "RGBColor", "slide_layouts[6]"),
+        "docx": ("add_heading", "Table Grid", "section.header", "load_doc()", "p.runs"),
+        "xlsx": ("=SUM(", "create_sheet", "number_format", "load_book()", 'ws["B2"]'),
+        "pptx": ("MSO_SHAPE", "RGBColor", "slide_layouts[6]", "load_deck()", "prs.slides[1]"),
     }
     for sid in OFFICE_SKILL_IDS:
         text = load_office_skill_body(sid)

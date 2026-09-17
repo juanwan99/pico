@@ -622,6 +622,42 @@ def parse_office_bytes(*, filename: str, data: bytes) -> str:
     return "\n".join(p for p in parts if p).strip()[:MAX_TEXT]
 
 
+def ocr_fallback_text(*, filename: str, data: bytes) -> str:
+    """Existing RapidOCR ingest, only for originals the file channel refused.
+
+    Not a Pico PDF reader. Callers must not attach this when input_file already
+    carries the bytes.
+    """
+    import sys
+    from pathlib import Path
+
+    name = (filename or "file").strip() or "file"
+    if not data:
+        return ""
+    pkg = Path("/app/packages/field-kb-ingest")
+    if not pkg.exists():
+        pkg = Path(__file__).resolve().parents[3] / "packages" / "field-kb-ingest"
+    if str(pkg) not in sys.path:
+        sys.path.insert(0, str(pkg))
+    try:
+        from ingest import ingest_bytes
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ocr fallback ingest unavailable: %s", type(exc).__name__)
+        return ""
+    try:
+        result = ingest_bytes(filename=name, data=data, title=name, ocr=True)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ocr fallback failed: %s", type(exc).__name__)
+        return ""
+    if not isinstance(result, dict) or not result.get("ok"):
+        return ""
+    md = str(result.get("markdown") or "").strip()
+    if md:
+        return md[:MAX_TEXT]
+    parts = [str(row.get("excerpt") or "") for row in (result.get("slices") or [])]
+    return "\n".join(p for p in parts if p).strip()[:MAX_TEXT]
+
+
 def render_pdf_page_pngs(data: bytes, *, max_pages: int = 32) -> list[bytes]:
     """Thin call into field-kb-ingest pypdfium2 raster. Not a Pico PDF kernel."""
     import sys

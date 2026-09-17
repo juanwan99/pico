@@ -22,7 +22,9 @@ from pico_orchestrator.tools_builtin import build_default_gateway
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS, UNREGISTERED_OFFICE_TOOLS
 
 TS_PATH = ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts"
-TOOL_SERVER = ROOT / "services" / "orchestrator" / "pico_orchestrator" / "true_pi" / "tool_server.py"
+TOOL_SERVER = (
+    ROOT / "services" / "orchestrator" / "pico_orchestrator" / "true_pi" / "tool_server.py"
+)
 
 # Served by the bridge tool server itself (HITL park), not a gateway ToolSpec.
 BRIDGE_SERVED = frozenset({"ask_user"})
@@ -40,8 +42,18 @@ FORBIDDEN_VERBS = frozenset(
 # Python description (what the gateway / hosted path reads) must carry them.
 # These are product semantics, not prose style.
 ANCHORS: dict[str, tuple[str, ...]] = {
-    "sandbox_office_lib": ("pico-office", "OUTPUT_PATH", "stderr", "One call = one output file"),
-    "read_office_skill": ("sandbox_office_lib", "python-docx / openpyxl / python-pptx"),
+    "sandbox_office_lib": (
+        "pico-office",
+        "OUTPUT_PATH",
+        "stderr",
+        "One call = one output file",
+        "edit in place",
+    ),
+    "read_office_skill": (
+        "sandbox_office_lib",
+        "python-docx / openpyxl / python-pptx",
+        "edit in place",
+    ),
     "generate_html_document": ("pico-artifact:", "No CDN", "ok is not finished"),
     "verify_html_document": ("http(s)",),
     "generate_image": ("image_artifact_ids", "pico-artifact:<id>", "base64"),

@@ -405,3 +405,34 @@ async def test_office_lib_gateway_loads_artifact_id() -> None:
     wb = load_workbook(BytesIO(row["content"]), data_only=False)
     assert wb["成绩"]["A2"].value == "甲"
     assert wb["成绩"]["D1"].value == "营收"
+
+
+def test_edit_existing_docx_keeps_other_paragraph_and_color() -> None:
+    seed = """
+from docx import Document
+from docx.shared import RGBColor
+doc = Document()
+p = doc.add_paragraph()
+r = p.add_run("第一段春游安排，正文足够长，禁止整篇推倒重写。")
+r.font.color.rgb = RGBColor(0x1F, 0x4E, 0x79)
+doc.add_paragraph("第二段安全事项必须留下，打开文件还要看见这一句。")
+save_doc(doc)
+"""
+    original = run_office_lib_source(seed, kind="docx")
+    patched = run_office_lib_source(
+        """
+doc = load_doc()
+for p in doc.paragraphs:
+    for run in p.runs:
+        if "春游" in (run.text or ""):
+            run.text = run.text.replace("春游", "秋游")
+save_doc(doc)
+""",
+        kind="docx",
+        input_bytes=original,
+    )
+    doc = Document(BytesIO(patched))
+    blob = "\n".join(p.text for p in doc.paragraphs)
+    assert "秋游" in blob and "安全" in blob
+    color = doc.paragraphs[0].runs[0].font.color.rgb
+    assert str(color).upper() == "1F4E79"

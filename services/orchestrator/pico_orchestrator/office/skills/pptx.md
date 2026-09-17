@@ -11,6 +11,7 @@ Stock body bullets are not the ceiling. Free geometry uses shapes + RGBColor.
 ```python
 from pptx import Presentation, Inches, Pt, RGBColor
 
+# New file only. Existing deck: see Edit existing — do not start a blank Presentation().
 prs = Presentation()
 add_title_slide(prs, "封面标题", "副题")
 add_content_slide(prs, "要点", ["第一条", "第二条", "第三条"])
@@ -67,6 +68,19 @@ if IMAGE_PATHS:
 save_deck(prs)
 ```
 
+## Edit existing (artifact_id set — do this, do not rebuild)
+
+```python
+prs = load_deck()  # or Presentation(INPUT_PATH)
+slide = prs.slides[1]  # the named slide only
+if slide.shapes.title:
+    slide.shapes.title.text = "第二页新标题"
+# Other slides, theme, unused shapes stay. Do not drop slides to rewrite one title.
+save_deck(prs)
+```
+
+Do not `prs = Presentation()` then recreate the deck. That drops the teacher's theme and unused pages.
+
 ## Rules
 
 - Widescreen 13.333×7.5 unless the teacher asked otherwise.
@@ -74,7 +88,7 @@ save_deck(prs)
 - Color blocks: `add_shape` + `fill.solid()` + `RGBColor`. Spec path cannot place these.
 - Helpers `add_title_slide` / `add_content_slide` / `add_table` are injected. Aliases: `image=`, `prs=`, `IMAGE_PATHS[0]`.
 - Pictures: `IMAGE_PATHS` from `image_artifact_ids`. `[image:…]` in body does not embed.
-- Same title replaces the file the teacher opens.
+- Same title replaces the file the teacher opens. Change an existing deck with `artifact_id` + `load_deck()`. Edit the named slide in place. Do not rebuild a blank `Presentation()`.
 - After save, read `observation.outline`. Zero slides or title-only walls are not done.
 
 ## Check
