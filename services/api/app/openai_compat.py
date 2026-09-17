@@ -36,6 +36,7 @@ from app.auth import (
     LEGACY_PROXY_MEMBERSHIP_ID,
     Principal,
     decode_token,
+    enforce_feature,
     enforce_scope,
     payer_for,
     prompt_membership_conflicts_header,
@@ -291,6 +292,25 @@ def _principal_from_auth(
 def _normalized_model(model: str) -> str:
     normalized = model.strip()
     return normalized.split("/")[-1] if "/" in normalized else normalized
+
+
+async def _gate_allowance_for_turn(principal: Principal, prompt_text: str) -> None:
+    """#1042: refuse a new turn when today's priced usage + this turn's quote
+    exceeds the JWT allowance. No claim → no gate. Ledger read only, no wallet."""
+    from pico_orchestrator.features import allowance_millipoints
+
+    if allowance_millipoints(principal) is None:
+        return
+    from app.points_meter import quote_millipoints_from_input_len
+    from app.usage_ledger import enforce_allowance
+
+    factory = session_factory()
+    async with factory() as session:
+        await enforce_allowance(
+            session,
+            principal,
+            quote_milli=quote_millipoints_from_input_len(len(prompt_text or "")),
+        )
 
 
 def _assert_model_allowed(model: str, settings: Settings) -> None:
@@ -1329,6 +1349,11 @@ async def chat_completions(
             status_code=403,
             detail={"code": exc.code, "message": str(exc.message)},
         ) from exc
+    # #1042: teacher switches + today's allowance, both read from the JWT.
+    # Gate only at turn start; a running turn is never cut.
+    if _normalized_model(body.model) == "pico-deep":
+        enforce_feature(principal, "deep")
+    await _gate_allowance_for_turn(principal, raw_for_user)
     client_system = _client_system_from_messages(body.messages)
     edu_sidebar = _is_edu_sidebar_system(client_system)
     # AI 权 = 人权 on this page: the edu sidebar must not see this teacher's

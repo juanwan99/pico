@@ -239,6 +239,20 @@ def quote_points_from_input_len(
     Default resident floor is first-turn fresh input (no cache yet).
     Pass resident_milli=0 / resident_tokens=0 to quote teacher text alone.
     """
+    return format_millipoints(
+        quote_millipoints_from_input_len(
+            n, resident_milli=resident_milli, resident_tokens=resident_tokens
+        )
+    )
+
+
+def quote_millipoints_from_input_len(
+    n: int,
+    *,
+    resident_milli: int | None = None,
+    resident_tokens: int | None = None,
+) -> int:
+    """Same quote as an integer, for the allowance gate (#1042)."""
     n = max(0, min(int(n or 0), _QUOTE_INPUT_CAP))
     extra_units = quote_units_from_input_len(n)
     extra = milli_from_row(
@@ -262,7 +276,7 @@ def quote_points_from_input_len(
         ) or 0
     else:
         base = resident_quote_floor_milli()
-    return format_millipoints(base + extra)
+    return int(base + extra)
 
 
 def resident_quote_floor() -> int:

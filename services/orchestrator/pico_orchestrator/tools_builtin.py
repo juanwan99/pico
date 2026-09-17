@@ -96,7 +96,11 @@ from pico_orchestrator.sandbox_s1 import (
 )
 from pico_orchestrator.sandbox_s2 import PNG_MAGIC, raster_html_isolated, raster_meta_from_write
 from pico_orchestrator.sandbox_sidecar import sidecar_json
-from pico_orchestrator.usage_hook import emit_image_usage, emit_sandbox_usage
+from pico_orchestrator.usage_hook import (
+    emit_image_usage,
+    emit_rerank_usage,
+    emit_sandbox_usage,
+)
 from pico_orchestrator.vision import remember_conversation_png
 from pico_orchestrator.web_guard import parse_public_http_url
 from pico_orchestrator.web_tools import web_fetch_handler, web_search_handler
@@ -853,12 +857,18 @@ def _workspace_handlers(
             mode = "off"
         else:
             try:
+                from pico_orchestrator.features import feature_enabled
+
                 result = search_materials(
                     query,
                     school_id=principal.school_id,
                     membership_id=principal.membership_id,
                     limit=limit,
+                    rerank_ok=feature_enabled(principal, "rerank"),
                 )
+                if result.get("reranked"):
+                    # #1042: rerank costs tokens → metered. Plain search is free.
+                    await emit_rerank_usage(principal, usage=result.get("rerank_usage"))
                 mode = "keyword"
                 for row in result.get("hits") or []:
                     if not isinstance(row, dict):

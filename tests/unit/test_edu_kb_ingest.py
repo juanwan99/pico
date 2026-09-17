@@ -440,7 +440,7 @@ def test_ingest_ledger_failure_does_not_break_success(client, monkeypatch):
 def test_search_uses_principal_not_body_and_returns_chunks(client, monkeypatch) -> None:
     captured: dict = {}
 
-    def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None):
+    def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None, rerank_ok=True):
         captured["query"] = query
         captured["school_id"] = school_id
         captured["membership_id"] = membership_id
@@ -484,7 +484,7 @@ def test_search_uses_principal_not_body_and_returns_chunks(client, monkeypatch) 
 
 
 def test_search_school_keeps_other_teacher_school_hit(client, monkeypatch) -> None:
-    def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None):
+    def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None, rerank_ok=True):
         _ = query, limit, client
         return {
             "hybrid": False,

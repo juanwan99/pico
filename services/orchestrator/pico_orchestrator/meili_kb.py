@@ -254,11 +254,20 @@ def new_api_embedder_spec() -> dict[str, Any] | None:
 
 def rerank_documents(query: str, texts: list[str]) -> list[int] | None:
     """Reorder via New API /v1/rerank. None = keep Meili order (honest)."""
+    order, _usage = rerank_documents_with_usage(query, texts)
+    return order
+
+
+def rerank_documents_with_usage(
+    query: str, texts: list[str]
+) -> tuple[list[int] | None, dict[str, Any] | None]:
+    """Same as rerank_documents, plus the provider's token usage for the
+    usage ledger (#1042: rerank costs tokens, so it is metered)."""
     base = new_api_base()
     key = new_api_key()
     cleaned = [str(t or "")[:2000] for t in texts]
     if not base or not key or not _is_new_api_loopback(base) or not cleaned:
-        return None
+        return None, None
     try:
         status, body = HttpxClient().request(
             "POST",
@@ -276,12 +285,13 @@ def rerank_documents(query: str, texts: list[str]) -> list[int] | None:
             timeout=12.0,
         )
     except Exception:  # noqa: BLE001
-        return None
+        return None, None
     if status >= 400 or not isinstance(body, dict):
-        return None
+        return None, None
+    usage = _rerank_usage(body)
     results = body.get("results")
     if not isinstance(results, list) or not results:
-        return None
+        return None, usage
     rows = [r for r in results if isinstance(r, dict)]
     raw_idx: list[int] = []
     for row in rows:
@@ -304,17 +314,36 @@ def rerank_documents(query: str, texts: list[str]) -> list[int] | None:
         try:
             score = float(raw)
         except (TypeError, ValueError):
-            return None
+            return None, usage
         if 0 <= idx < len(cleaned) and idx not in seen:
             seen.add(idx)
             order.append(idx)
             scores.append(score)
     if not order or not rerank_scores_usable(scores):
-        return None
+        return None, usage
     for idx in range(len(cleaned)):
         if idx not in seen:
             order.append(idx)
-    return order
+    return order, usage
+
+
+def _rerank_usage(body: dict[str, Any]) -> dict[str, Any] | None:
+    """Provider token usage from a /v1/rerank body. None when absent (honest unknown)."""
+    usage = body.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    out: dict[str, Any] = {"model": kb_rerank_model()}
+    found = False
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        value = usage.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            out[key] = value
+            found = True
+    if not found:
+        return None
+    if "total_tokens" not in out:
+        out["total_tokens"] = int(out.get("prompt_tokens", 0)) + int(out.get("completion_tokens", 0))
+    return out
 
 
 def _apply_rerank_order(hits: list[Any], order: list[int]) -> list[Any]:
@@ -969,6 +998,7 @@ class MeiliIndex:
         membership_id: str,
         limit: int,
         include_school: bool = False,
+        rerank_ok: bool = True,
     ) -> dict[str, Any]:
         clause = tenant_filter(school_id, membership_id, include_school=include_school)
         want = max(1, int(limit))
@@ -1049,7 +1079,8 @@ class MeiliIndex:
         )
         reranked = False
         rerank_skip = "off"
-        if spec and pool and kb_rerank_enabled():
+        rerank_usage: dict[str, Any] | None = None
+        if spec and pool and kb_rerank_enabled() and rerank_ok:
             # Rerank the head only; the tail keeps Meili order so the 20-file
             # list Pi asks for is not cut down to the rerank pool.
             head_n = kb_rerank_pool()
@@ -1060,19 +1091,23 @@ class MeiliIndex:
                     str(x) for x in (row.get("title"), row.get("heading")) if x
                 )
                 texts.append((top + "\n" + str(row.get("text") or ""))[:2000])
-            order = rerank_documents(query, texts)
+            order, rerank_usage = rerank_documents_with_usage(query, texts)
             if order:
                 pool = _apply_rerank_order(head, order) + tail
                 reranked = True
                 rerank_skip = ""
             else:
                 rerank_skip = "flat"
+        elif not rerank_ok:
+            rerank_skip = "feature_off"
         hits = collapse_hits_by_artifact(pool, want)
         return {
             "hits": hits,
             "hybrid": use_hybrid,
             "reranked": reranked,
             "rerank_skip": rerank_skip,
+            # Provider tokens for the usage ledger (search without rerank is free).
+            "rerank_usage": rerank_usage if reranked or rerank_usage else None,
             "expanded": max(0, len(queries) - 1),
             "filter": clause,
             "include_school": include_school,
@@ -1158,8 +1193,10 @@ def search_materials(
     limit: int,
     include_school: bool = False,
     client: HttpClient | None = None,
+    rerank_ok: bool = True,
 ) -> dict[str, Any]:
-    """Search with server-injected tenant filter. Raises if Meili is down."""
+    """Search with server-injected tenant filter. Raises if Meili is down.
+    rerank_ok=False = teacher switched 精排 off (feat:rerank); free path."""
     idx = MeiliIndex(client)
     if not meili_configured() or not idx.ping():
         raise RuntimeError("meili unavailable")
@@ -1173,6 +1210,7 @@ def search_materials(
         membership_id=membership_id,
         limit=limit,
         include_school=include_school,
+        rerank_ok=rerank_ok,
     )
 
 
