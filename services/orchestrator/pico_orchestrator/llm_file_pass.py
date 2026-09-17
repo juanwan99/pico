@@ -21,7 +21,9 @@ MIME = {
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 MAX_FILES = 4
-MAX_BYTES = 12 * 1024 * 1024
+# Chat paperclip + input_file + office sandbox share this latch.
+# 40MB covers teacher decks (~34MB) with headroom; nginx is already 50m.
+MAX_BYTES = 40 * 1024 * 1024
 
 
 @dataclass(frozen=True)

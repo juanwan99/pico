@@ -15,6 +15,7 @@ import tempfile
 from pathlib import Path
 
 from pico_orchestrator.gateway import ToolError
+from pico_orchestrator.llm_file_pass import MAX_BYTES
 from pico_orchestrator.office.legacy import LEGACY_TO_OOXML, convert_target_from_name
 
 from sandbox_worker.browser import PNG_MAGIC
@@ -230,8 +231,11 @@ async def convert_legacy_office(*, filename: str, document: bytes) -> bytes:
     """Headless soffice OLE → OOXML. Not a Pico office kernel."""
     if not document:
         raise ToolError("tool.invalid_arguments", "文档内容为空")
-    if len(document) > 12 * 1024 * 1024:
-        raise ToolError("tool.invalid_arguments", "文档超过 12MB，沙箱拒收")
+    if len(document) > MAX_BYTES:
+        raise ToolError(
+            "tool.invalid_arguments",
+            f"文档超过 {MAX_BYTES // (1024 * 1024)}MB，沙箱拒收",
+        )
     target = convert_target(filename)
     if target is None:
         raise ToolError("tool.invalid_arguments", "不是旧版 Office / WPS 文件")
@@ -302,8 +306,11 @@ async def convert_legacy_office(*, filename: str, document: bytes) -> bytes:
 async def open_office(*, kind: str, filename: str, document: bytes) -> OfficeDesktop:
     if not document:
         raise ToolError("tool.invalid_arguments", "文档内容为空")
-    if len(document) > 12 * 1024 * 1024:
-        raise ToolError("tool.invalid_arguments", "文档超过 12MB，沙箱拒收")
+    if len(document) > MAX_BYTES:
+        raise ToolError(
+            "tool.invalid_arguments",
+            f"文档超过 {MAX_BYTES // (1024 * 1024)}MB，沙箱拒收",
+        )
     soffice = soffice_bin()
     xvfb = shutil.which("Xvfb")
     if not xvfb:
