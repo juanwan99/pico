@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from pico_orchestrator.meili_kb import (
+    indexed_artifact_ids,
     is_lab_school,
     is_material,
     material_chunk_docs,
@@ -19,12 +20,26 @@ from app.db import ArtifactRow, TaskRow, session_factory
 _FLUSH = 80
 
 
-async def rebuild_materials(principal: Principal | None = None) -> dict[str, Any]:
+async def rebuild_materials(
+    principal: Principal | None = None,
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Project ledger materials into Meili.
+
+    Incremental by default: artifacts whose chunks are already in the index are
+    left alone (``unchanged``), so a deploy only chunks what is new. ``force``
+    re-chunks everything (needed after chunker/schema changes). If the set of
+    indexed ids cannot be read, fall back to a full pass rather than skip.
+    """
     factory = session_factory()
     indexed = 0
     skipped = 0
+    unchanged = 0
     pending: list[dict[str, Any]] = []
     pending_arts = 0
+    known: set[str] | None = None if force else indexed_artifact_ids()
+    mode = "incremental" if known is not None else "full"
     async with factory() as session:
         stmt = select(ArtifactRow, TaskRow).join(TaskRow, ArtifactRow.task_id == TaskRow.id)
         if principal is not None:
@@ -63,6 +78,9 @@ async def rebuild_materials(principal: Principal | None = None) -> dict[str, Any
         if not is_material(kind=artifact.kind, title=artifact.title):
             skipped += 1
             continue
+        if known is not None and str(artifact.id) in known:
+            unchanged += 1
+            continue
         encoding = artifact.content_encoding or "utf8"
         content: str | bytes | None
         if encoding == "base64":
@@ -95,4 +113,11 @@ async def rebuild_materials(principal: Principal | None = None) -> dict[str, Any
         if len(pending) >= _FLUSH:
             _flush()
     _flush()
-    return {"ok": True, "indexed": indexed, "skipped": skipped, "total": indexed + skipped}
+    return {
+        "ok": True,
+        "mode": mode,
+        "indexed": indexed,
+        "unchanged": unchanged,
+        "skipped": skipped,
+        "total": indexed + unchanged + skipped,
+    }

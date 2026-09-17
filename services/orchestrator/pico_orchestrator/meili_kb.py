@@ -1144,6 +1144,46 @@ class MeiliIndex:
         hits = payload.get("hits")
         return len(hits) if isinstance(hits, list) else 0
 
+    def artifact_ids(self, *, page: int = 1000) -> set[str]:
+        """Every artifact_id currently projected. Facets cap at maxValuesPerFacet,
+        so page through /documents/fetch instead. Raises on any HTTP failure."""
+        out: set[str] = set()
+        offset = 0
+        while True:
+            status, payload = self._call(
+                "POST",
+                f"/indexes/{INDEX}/documents/fetch",
+                {"fields": ["artifact_id"], "limit": page, "offset": offset},
+                timeout=15.0,
+            )
+            if status == 404:
+                return out
+            if status >= 400 or not isinstance(payload, dict):
+                raise RuntimeError(f"meili documents/fetch http {status}")
+            results = payload.get("results")
+            if not isinstance(results, list):
+                raise TypeError("meili documents/fetch malformed")
+            for row in results:
+                if isinstance(row, dict):
+                    aid = str(row.get("artifact_id") or "").strip()
+                    if aid:
+                        out.add(aid)
+            if len(results) < page:
+                return out
+            offset += page
+
+
+def indexed_artifact_ids(*, client: HttpClient | None = None) -> set[str] | None:
+    """Artifacts already in Meili, or None when that cannot be known.
+    None must make callers fall back to a full rebuild — never to skipping."""
+    if not meili_configured():
+        return None
+    try:
+        return MeiliIndex(client).artifact_ids()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("meili artifact_ids failed: %s", type(exc).__name__)
+        return None
+
 
 def upsert_material(doc: dict[str, Any], *, client: HttpClient | None = None) -> bool:
     if not meili_configured():
