@@ -182,6 +182,29 @@ def _payload(file_id: str | None, extract: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _ocr_text_when_file_channel_misses(src: ArtifactRow, row: dict[str, Any]) -> str:
+    """OCR sidecar only when GPT input_file will not get the original.
+
+    Passed pdf/docx/xlsx/pptx stay names+ids. #865 still holds on that path.
+    """
+    from pico_orchestrator.llm_file_pass import accept_native
+    from pico_orchestrator.meili_kb import ocr_fallback_text
+
+    from app.artifact_store import decode_artifact_payload
+
+    title = str(src.title or row.get("title") or "file")
+    low = title.lower()
+    if not any(low.endswith(ext) for ext in (".pdf", ".png", ".jpg", ".jpeg")):
+        return ""
+    try:
+        raw = decode_artifact_payload(src.inline, src.content_encoding)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not raw or accept_native(title, raw) is not None:
+        return ""
+    return ocr_fallback_text(filename=title, data=raw)
+
+
 def _row_unread_office(row: dict[str, Any]) -> bool:
     from pico_orchestrator.office.legacy import convert_target_from_name, looks_ooxml
 
@@ -201,8 +224,9 @@ def _row_unread_office(row: dict[str, Any]) -> bool:
 def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None) -> str:
     """Paperclip names + ledger ids only. Never a local PDF/office reader.
 
-    LAW #865: no excerpt, no OCR, no 「没抽出」weld. The model sees that a file
-    arrived; it decides whether to open it. Empty → unchanged.
+    LAW #865: no excerpt on originals that already go to input_file.
+    OCR text is allowed only when the file channel refused the original
+    (`ocr_text` set by uploads_for_conversation). Empty → unchanged.
     Do not claim the file channel has OLE that never converted.
     """
     named = [row for row in (items or []) if isinstance(row, dict)]
@@ -224,6 +248,9 @@ def inject_conversation_uploads(prompt: str, items: list[dict[str, Any]] | None)
         id_note = f"（artifact_id {art_id}）" if art_id else ""
         unread_note = "（未能转成可给模型读的格式）" if _row_unread_office(row) else ""
         lines.append(f"- 《{title}》{id_note}{unread_note}")
+        ocr = str(row.get("ocr_text") or "").strip()
+        if ocr:
+            lines.append(f"  OCR 文本（原件未进文件口）：{ocr[:12_000]}")
     block = "\n".join(lines)
     if len(block) > _MAX_UPLOAD_BLOCK:
         block = block[:_MAX_UPLOAD_BLOCK].rstrip() + "…"
@@ -451,17 +478,19 @@ async def uploads_for_conversation(
         )
         if not text and (src.content_encoding or "utf8") != "base64":
             text = str(src.inline or "").strip()[:_MAX_UPLOAD_EXCERPT]
-        out.append(
-            {
-                "id": src.id,
-                "title": str(src.title or "文件"),
-                "kind": src.kind,
-                "excerpt": text[:_MAX_UPLOAD_EXCERPT],
-                "error": error,
-                "status": status,
-                "page_count": page_count,
-            }
-        )
+        row = {
+            "id": src.id,
+            "title": str(src.title or "文件"),
+            "kind": src.kind,
+            "excerpt": text[:_MAX_UPLOAD_EXCERPT],
+            "error": error,
+            "status": status,
+            "page_count": page_count,
+        }
+        ocr = _ocr_text_when_file_channel_misses(src, row)
+        if ocr:
+            row["ocr_text"] = ocr[:_MAX_UPLOAD_EXCERPT]
+        out.append(row)
     return out
 
 

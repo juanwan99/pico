@@ -14,8 +14,7 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill, numbers
 from openpyxl.utils import get_column_letter
 from openpyxl.chart import BarChart, Reference
 
-# Existing file (artifact_id set):
-# wb = load_book()
+# New file only. Existing file: see Edit existing — do not start a blank Workbook().
 wb = Workbook()
 ws = wb.active
 ws.title = "汇总"
@@ -52,6 +51,18 @@ detail["B3"] = 8
 save_book(wb)
 ```
 
+## Edit existing (artifact_id set — do this, do not rebuild)
+
+```python
+wb = load_book()  # or load_workbook(INPUT_PATH)
+ws = wb.active
+ws["B2"] = 95          # named cell only
+# Other sheets, columns, formulas, charts, column widths stay.
+save_book(wb)
+```
+
+Do not `wb = Workbook()` then retype the grid. That drops formulas, charts, and number formats.
+
 ## Rules
 
 - Numbers live in cells as numbers (`12`), not the string `"12"`, unless the teacher asked for text.
@@ -60,7 +71,7 @@ save_book(wb)
 - Multi-sheet: `wb.create_sheet("名")`. Cross-sheet refs like `=明细!B2` are allowed.
 - Column widths: `ws.column_dimensions["A"].width = …`.
 - Dates: real date objects or ISO text the teacher gave — do not invent.
-- Change existing sheets with `artifact_id` + `load_book()`.
+- Change existing sheets with `artifact_id` + `load_book()`. Edit the named cell (`ws["B2"]`). Do not rebuild a blank `Workbook()` and paste values.
 - Same title replaces the file the teacher opens.
 - After save, read observation. Cells that should be numbers must not be decoration.
 

@@ -277,7 +277,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "read_office_skill",
-    "On-demand office craft (docx / xlsx / pptx). SYSTEM only lists name+when. This returns the full python-docx / openpyxl / python-pptx craft. Not LibreChat Skills. After reading, write with sandbox_office_lib (kind matches id). Change an existing file with artifact_id. The office write path is sandbox_office_lib only.",
+    "On-demand office craft (docx / xlsx / pptx). SYSTEM only lists name+when. This returns the full python-docx / openpyxl / python-pptx craft. Not LibreChat Skills. After reading, write with sandbox_office_lib (kind matches id). Change an existing file with artifact_id and load_doc / load_book / load_deck, then edit in place (keep other pages/cells/styles). The office write path is sandbox_office_lib only.",
     Type.Object(
       {
         id: Type.String(),
@@ -288,7 +288,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_office_lib",
-    "The office write path: run a Python script inside the isolated pico-office container (no network, throwaway workdir). Full Python 3.12 with python-docx / openpyxl / python-pptx, the whole standard library (csv, json, re, os, pathlib...), pandas, Pillow, matplotlib, and soffice for legacy conversion. kind=docx|xlsx|pptx (or infer from title suffix). Names already in scope: INPUT_PATH (the artifact_id original, any type: xlsx/docx/pptx/csv/txt/json/png), OUTPUT_PATH, IMAGE_PATHS[i] (from image_artifact_ids), load_doc/load_book/load_deck, save_doc/save_book/save_deck, add_title_slide/add_content_slide/add_table. Write the result to OUTPUT_PATH (or any *.kind in the workdir; the newest is collected). Empty shells fail. On failure you get stderr back — fix the script and call again. One call = one output file.",
+    "The office write path: run a Python script inside the isolated pico-office container (no network, throwaway workdir). Full Python 3.12 with python-docx / openpyxl / python-pptx, the whole standard library (csv, json, re, os, pathlib...), pandas, Pillow, matplotlib, and soffice for legacy conversion. kind=docx|xlsx|pptx (or infer from title suffix). Names already in scope: INPUT_PATH (the artifact_id original, any type: xlsx/docx/pptx/csv/txt/json/png), OUTPUT_PATH, IMAGE_PATHS[i] (from image_artifact_ids), load_doc/load_book/load_deck, save_doc/save_book/save_deck, add_title_slide/add_content_slide/add_table. When artifact_id is set, start with load_doc / load_book / load_deck and edit in place; keep other pages, cells, charts, and styles. Write the result to OUTPUT_PATH (or any *.kind in the workdir; the newest is collected). Empty shells fail. On failure you get stderr back — fix the script and call again. One call = one output file.",
     Type.Object(
       {
         source: Type.String(),

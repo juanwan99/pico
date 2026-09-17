@@ -1272,3 +1272,21 @@ def test_upsert_documents_batch_skips_per_artifact_delete(monkeypatch: pytest.Mo
     )
     assert ok is True
     assert not any(str(c[1]).endswith("/documents/delete") for c in http.calls)
+
+
+def test_ocr_fallback_text_uses_ingest_ocr(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+    import types
+
+    import pico_orchestrator.meili_kb as mk
+
+    def fake_ingest(**kwargs):
+        assert kwargs.get("ocr") is True
+        return {"ok": True, "markdown": "扫描页口令 OCR-FALLBACK"}
+
+    fake = types.ModuleType("ingest")
+    fake.ingest_bytes = fake_ingest  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ingest", fake)
+    text = mk.ocr_fallback_text(filename="scan.pdf", data=b"%PDF-1.4 fake")
+    assert "OCR-FALLBACK" in text
+    assert mk.ocr_fallback_text(filename="scan.pdf", data=b"") == ""

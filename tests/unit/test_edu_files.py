@@ -34,7 +34,7 @@ def _xlsx_bytes(rows: list[list[str]]) -> bytes:
     sheet_xml = (
         '<?xml version="1.0"?>'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        f'<sheetData>{"".join(cells_xml)}</sheetData></worksheet>'
+        f"<sheetData>{''.join(cells_xml)}</sheetData></worksheet>"
     )
     workbook = (
         '<?xml version="1.0"?>'
@@ -410,12 +410,7 @@ def test_xlsx_cabinet_lists_one_row(client: TestClient) -> None:
 
 def test_system_tells_pi_to_read_paperclip_documents() -> None:
     system = (
-        ROOT
-        / "services"
-        / "orchestrator"
-        / "pico_orchestrator"
-        / "agent_assets"
-        / "system.md"
+        ROOT / "services" / "orchestrator" / "pico_orchestrator" / "agent_assets" / "system.md"
     ).read_text(encoding="utf-8")
     assert "Documents attached this turn" in system
     assert "workspace_read_file" in system
@@ -491,6 +486,38 @@ def test_inject_scan_pdf_does_not_weld_unreadable() -> None:
     assert "没抽出正文" not in out
     assert "读不了" not in out
     assert out.endswith("这是什么")
+
+
+def test_inject_ocr_text_only_when_file_channel_missed() -> None:
+    from app.edu_files import inject_conversation_uploads
+
+    passed = inject_conversation_uploads(
+        "这是什么",
+        [
+            {
+                "id": "art-ok",
+                "title": "讲义.pdf",
+                "excerpt": "不该出现的摘录",
+                "ocr_text": "",
+            }
+        ],
+    )
+    assert "不该出现的摘录" not in passed
+    assert "OCR 文本" not in passed
+    missed = inject_conversation_uploads(
+        "这是什么",
+        [
+            {
+                "id": "art-miss",
+                "title": "扫描件.pdf",
+                "status": "unread",
+                "ocr_text": "口令 LANTERN-OCR 出现在扫描页",
+            }
+        ],
+    )
+    assert "LANTERN-OCR" in missed
+    assert "原件未进文件口" in missed
+    assert missed.endswith("这是什么")
 
 
 def test_inject_conversation_uploads_legacy_doc_is_honest() -> None:
@@ -711,10 +738,14 @@ def test_scan_pdf_paperclip_pages_go_to_vision(client: TestClient) -> None:
         async with factory() as session:
             rows = await uploads_for_conversation(session, principal, cid)
             excerpt = (
-                await session.execute(
-                    select(ArtifactRow).where(ArtifactRow.kind == "edu_excerpt")
+                (
+                    await session.execute(
+                        select(ArtifactRow).where(ArtifactRow.kind == "edu_excerpt")
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             sidecar = json.loads(excerpt.inline) if excerpt and excerpt.inline else {}
         return rows, sidecar
 
@@ -879,9 +910,7 @@ def test_stale_unbound_paperclip_is_not_stolen(client: TestClient) -> None:
         headers={"authorization": f"Bearer {token}"},
         json={
             "filename": "地理答案本轮.md",
-            "content_b64": base64.b64encode("本轮正文 PICO860-FRESH\n".encode()).decode(
-                "ascii"
-            ),
+            "content_b64": base64.b64encode("本轮正文 PICO860-FRESH\n".encode()).decode("ascii"),
         },
     )
     assert fresh.status_code == 200, fresh.text

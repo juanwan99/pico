@@ -2468,7 +2468,9 @@ def build_default_gateway(
                 "python-pptx craft. Not LibreChat Skills. Not a second "
                 "store. After reading, write with sandbox_office_lib (kind matches "
                 "id). To change an existing file pass artifact_id and load_doc / "
-                "load_book / load_deck. "
+                "load_book / load_deck, then edit in place (keep other "
+                "pages/cells/styles). Do not start a blank Document/Workbook/"
+                "Presentation when artifact_id is set. "
                 "Args: id=docx|xlsx|pptx"
             ),
             handler=_make_read_office_skill(),
@@ -2486,7 +2488,9 @@ def build_default_gateway(
                 "(or infer from title suffix). In scope: INPUT_PATH (artifact_id "
                 "original, any type), OUTPUT_PATH, IMAGE_PATHS[i], load_doc / "
                 "load_book / load_deck, save_doc / save_book / save_deck, "
-                "add_title_slide / add_content_slide / add_table. Write to OUTPUT_PATH "
+                "add_title_slide / add_content_slide / add_table. When artifact_id "
+                "is set, start with load_doc / load_book / load_deck and edit in "
+                "place; keep other pages, cells, charts, and styles. Write to OUTPUT_PATH "
                 "(or any *.kind in the workdir; newest is collected). Empty shells "
                 "fail. On failure stderr comes back: fix and call again. A missing "
                 "image_artifact_ids entry is skipped. One call = one output file. "

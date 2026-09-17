@@ -13,8 +13,7 @@ from docx.shared import Pt, Inches, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 
-# Existing file (artifact_id set):
-# doc = load_doc()
+# New file only. Existing file: see Edit existing — do not start a blank Document().
 doc = Document()
 section = doc.sections[0]
 section.page_width = Inches(8.27)
@@ -53,6 +52,21 @@ if IMAGE_PATHS:
 save_doc(doc)
 ```
 
+## Edit existing (artifact_id set — do this, do not rebuild)
+
+```python
+doc = load_doc()  # or Document(INPUT_PATH)
+# Change the named paragraph / cell only. Other paragraphs, tables, header, styles stay.
+for p in doc.paragraphs:
+    if "春游" in p.text:
+        for run in p.runs:
+            if "春游" in run.text:
+                run.text = run.text.replace("春游", "秋游")
+save_doc(doc)
+```
+
+Do not `doc = Document()` then copy text out. That drops styles, headers, and images.
+
 ## Rules
 
 - Headings: `add_heading(..., level=1..3)`. Do not fake a heading with bold-only body text when a heading is needed.
@@ -62,7 +76,7 @@ save_doc(doc)
 - Lists: `doc.add_paragraph("项", style="List Bullet")` or `List Number`.
 - East-Asian font: set `w:eastAsia` on the run or Normal style. Latin `font.name` alone will not pick 宋体.
 - Pictures: `IMAGE_PATHS[i]` from `image_artifact_ids`, or a PNG you render into the workdir. Do not invent a host path.
-- Same title replaces the file the teacher opens. Change existing files with `artifact_id` + `load_doc()`.
+- Same title replaces the file the teacher opens. Change existing files with `artifact_id` + `load_doc()`. Edit runs in place (`p.runs`, table cells). Do not rebuild a blank `Document()` and paste text.
 - After save, the tool observation is what landed. `ok` is not finished.
 
 ## Check
