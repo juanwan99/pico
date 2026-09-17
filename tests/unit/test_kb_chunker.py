@@ -48,13 +48,41 @@ def test_no_page_marker_means_page_is_none() -> None:
     assert chunks[0].parent_text == "只有一段。"
 
 
-def test_table_rows_are_kept_together_and_split_by_size() -> None:
-    rows = "\n".join(f"| 学生{i} | {60 + i % 40} | 优 |" for i in range(60))
+def test_table_splits_one_logical_row_per_child() -> None:
+    rows = "\n".join(f"| 学生{i} | {60 + i % 40} | 优 |" for i in range(8))
     chunks = chunk_text("| 姓名 | 分数 | 等级 |\n|---|---|---|\n" + rows, title="成绩.xlsx", child_max=400)
-    assert len(chunks) >= 3
-    assert all(c.text.lstrip().startswith("|") for c in chunks)
+    assert len(chunks) == 8
     assert all("姓名" in c.text for c in chunks)
-    assert any("姓名=学生0" in c.text for c in chunks)
+    only0 = [c for c in chunks if "姓名=学生0" in c.text]
+    assert len(only0) == 1
+    assert "姓名=学生1" not in only0[0].text
+
+
+def test_wide_row_stays_in_one_chunk() -> None:
+    header = "| " + " | ".join(f"列{i}" for i in range(12)) + " |"
+    sep = "|" + "---|" * 12
+    row = "| " + " | ".join(f"值{i}" for i in range(12)) + " |"
+    chunks = chunk_text(f"{header}\n{sep}\n{row}", title="宽表.csv", child_max=80, child_min=1)
+    assert len(chunks) == 1
+    assert "列0=值0" in chunks[0].text and "列11=值11" in chunks[0].text
+
+
+def test_csv_header_rides_with_each_bound_row() -> None:
+    text = (
+        "仓,件\n"
+        "| 东仓,12 | 仓=东仓 | 件=12\n"
+        "| 仓=东仓\n"
+        "| 件=12\n"
+        "| 西仓,3 | 仓=西仓 | 件=3\n"
+        "| 仓=西仓\n"
+        "| 件=3\n"
+    )
+    chunks = chunk_text(text, title="库存.csv", child_max=400, child_min=1)
+    assert len(chunks) == 2
+    east = [c for c in chunks if "仓=东仓" in c.text]
+    assert len(east) == 1
+    assert "仓,件" in east[0].text
+    assert "仓=西仓" not in east[0].text
 
 
 def test_expand_json_fields_binds_leaf_and_enum_lists() -> None:

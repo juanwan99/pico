@@ -116,6 +116,20 @@
       "kind": "search",
       "model": "web_fetch",
       "per_call_yuan": 0.02
+    },
+    {
+      "id": "new-api:zhipu:rerank-pro",
+      "kind": "search",
+      "model": "rerank-pro",
+      "input_yuan_per_million": 0.8,
+      "note": "Zhipu rerank via New API. Token usage returned by New API; ~5-8k tokens per 40-chunk rerank (#1042)."
+    },
+    {
+      "id": "new-api:zhipu:kb-ingest-file",
+      "kind": "api",
+      "model": "kb-ingest-file",
+      "per_call_yuan": 0.02,
+      "note": "KB ingest priced per file (embedding-3 + OCR compute). Meili calls the embedder; Pico never sees those tokens (#1042)."
     }
   ]
 }

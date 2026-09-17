@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from pico_orchestrator.meili_kb import (
+    DISPLAYED,
     EMBED_DOCUMENT_TEMPLATE,
     MeiliIndex,
     chunk_doc_id,
@@ -255,6 +256,67 @@ def test_search_collapses_same_artifact(monkeypatch: pytest.MonkeyPatch) -> None
     assert [h["artifact_id"] for h in collapse_hits_by_artifact(raw, 5)] == ["a1", "a2"]
 
 
+def test_collapse_carries_sibling_passages_top_chunk_first() -> None:
+    raw = [
+        {"artifact_id": "a1", "chunk_id": "a1_2", "text": "分最高但不是答案"},
+        {"artifact_id": "a2", "chunk_id": "a2_0", "text": "丙"},
+        {"artifact_id": "a1", "chunk_id": "a1_7", "text": "答案在这一段", "heading": "三"},
+        {"artifact_id": "a1", "chunk_id": "a1_9", "text": "第三段"},
+        {"artifact_id": "a1", "chunk_id": "a1_4", "text": "第四段被截"},
+        {"artifact_id": "a3", "chunk_id": "a3_0", "text": "丁"},
+    ]
+    out = collapse_hits_by_artifact(raw, 2, passages=3)
+    # file order unchanged; limit still counts files, not chunks
+    assert [h["artifact_id"] for h in out] == ["a1", "a2"]
+    assert out[0]["text"] == "分最高但不是答案"
+    assert [p["chunk_id"] for p in out[0]["passages"]] == ["a1_2", "a1_7", "a1_9"]
+    assert out[0]["passages"][1]["heading"] == "三"
+    assert [p["chunk_id"] for p in out[1]["passages"]] == ["a2_0"]
+
+
+def test_collapse_merges_identical_content_under_different_ids() -> None:
+    raw = [
+        {"artifact_id": "copy-1", "chunk_id": "c1_0", "text": "同一份细则", "content_sha": "abc"},
+        {"artifact_id": "copy-2", "chunk_id": "c2_0", "text": "同一份细则", "content_sha": "abc"},
+        {"artifact_id": "other", "chunk_id": "o_0", "text": "别的", "content_sha": "def"},
+        {"artifact_id": "copy-3", "chunk_id": "c3_4", "text": "细则第四段", "content_sha": "abc"},
+        {"artifact_id": "legacy", "chunk_id": "l_0", "text": "没有 sha 的旧段"},
+    ]
+    out = collapse_hits_by_artifact(raw, 5, passages=3)
+    assert [h["artifact_id"] for h in out] == ["copy-1", "other", "legacy"]
+    assert out[0]["clone_artifact_ids"] == ["copy-2", "copy-3"]
+    # a clone's copy of the same chunk does not eat a passage slot
+    assert [p["chunk_id"] for p in out[0]["passages"]] == ["c1_0", "c3_4"]
+    assert out[1]["clone_artifact_ids"] == []
+
+
+def test_documents_carry_one_content_sha_per_file() -> None:
+    a = documents_from_text(
+        artifact_id="a", title="细则.docx", text="第一条 甲\n\n第二条 乙", school_id="s", membership_id="m"
+    )
+    b = documents_from_text(
+        artifact_id="b", title="细则(1).docx", text="第一条  甲\n第二条 乙\n", school_id="s", membership_id="m2"
+    )
+    c = documents_from_text(
+        artifact_id="c", title="别的.docx", text="第一条 丙", school_id="s", membership_id="m"
+    )
+    assert len({d["content_sha"] for d in a}) == 1
+    assert a[0]["content_sha"] == b[0]["content_sha"]  # whitespace-insensitive clone
+    assert a[0]["content_sha"] != c[0]["content_sha"]
+    assert "content_sha" in DISPLAYED
+
+
+def test_collapse_passages_default_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PICO_KB_PASSAGES", "1")
+    raw = [
+        {"artifact_id": "a1", "chunk_id": "x", "text": "甲"},
+        {"artifact_id": "a1", "chunk_id": "y", "text": "乙"},
+    ]
+    assert [p["chunk_id"] for p in collapse_hits_by_artifact(raw, 5)[0]["passages"]] == ["x"]
+    monkeypatch.setenv("PICO_KB_PASSAGES", "99")
+    assert len(collapse_hits_by_artifact(raw, 5)[0]["passages"]) == 2
+
+
 def test_merge_title_only_hits_stay_in_pool() -> None:
     hybrid = [{"chunk_id": f"h{i}", "artifact_id": f"h{i}"} for i in range(80)]
     title = [{"chunk_id": "tf_0", "artifact_id": "title-file"}]
@@ -371,8 +433,8 @@ def test_search_hybrid_when_new_api_embedder(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
     monkeypatch.setattr(
-        "pico_orchestrator.meili_kb.rerank_documents",
-        lambda query, texts: list(range(len(texts))),
+        "pico_orchestrator.meili_kb.rerank_documents_with_usage",
+        lambda query, texts: (list(range(len(texts))), None),
     )
     http = FakeHttp()
     http.embedders_armed = True
@@ -399,8 +461,8 @@ def test_search_rerank_reorders_then_collapses(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("PICO_KB_RERANK", "1")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
     monkeypatch.setattr(
-        "pico_orchestrator.meili_kb.rerank_documents",
-        lambda query, texts: [2, 0, 1],
+        "pico_orchestrator.meili_kb.rerank_documents_with_usage",
+        lambda query, texts: ([2, 0, 1], {"model": "rerank-pro", "prompt_tokens": 300, "total_tokens": 300}),
     )
     http = FakeHttp()
     http.embedders_armed = True
@@ -416,6 +478,31 @@ def test_search_rerank_reorders_then_collapses(monkeypatch: pytest.MonkeyPatch) 
     assert out["rerank_skip"] == ""
 
 
+def test_search_reranks_head_only_and_keeps_tail(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setenv("PICO_KB_RERANK", "1")
+    monkeypatch.setenv("PICO_KB_RERANK_POOL", "5")
+    monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
+    seen_texts: list[int] = []
+
+    def _rr(query, texts):
+        seen_texts.append(len(texts))
+        return list(reversed(range(len(texts))))
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda q, t: (_rr(q, t), None))
+    http = FakeHttp()
+    http.embedders_armed = True
+    http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
+    http.search_hits = [{"artifact_id": f"a{i}", "chunk_id": f"a{i}_0", "text": f"段{i}"} for i in range(8)]
+    out = search_materials("x", school_id="s1", membership_id="m1", limit=8, client=http)
+    assert seen_texts == [5]
+    # head reversed, tail (a5..a7) untouched and still present
+    assert [h["artifact_id"] for h in out["hits"]] == ["a4", "a3", "a2", "a1", "a0", "a5", "a6", "a7"]
+
+
 def test_search_rerank_fail_keeps_meili_order(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEILI_MASTER_KEY", "k")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
@@ -423,7 +510,7 @@ def test_search_rerank_fail_keeps_meili_order(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
     monkeypatch.setenv("PICO_KB_RERANK", "1")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", lambda query, texts: None)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda query, texts: (None, None))
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
@@ -486,15 +573,47 @@ def test_rerank_documents_parses_jina_shape(monkeypatch: pytest.MonkeyPatch) -> 
         def request(self, method, url, *, json=None, headers=None, timeout=8.0):
             assert method == "POST"
             assert url == "http://127.0.0.1:3000/v1/rerank"
-            assert json["model"] == "rerank"
+            assert json["model"] == "rerank-pro"
             assert json["documents"] == ["甲", "乙"]
+            assert json["return_documents"] is True
             return 200, {"results": [{"index": 1, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.1}]}
 
     monkeypatch.setattr("pico_orchestrator.meili_kb.HttpxClient", lambda: _RerankHttp())
     assert rerank_documents("q", ["甲", "乙"]) == [1, 0]
 
 
-def test_rerank_scores_usable_rejects_flat_and_tiny() -> None:
+def test_rerank_documents_maps_degenerate_index_by_document_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """New API's Zhipu rerank-pro adapter returns index=0 for every row (2026-09-16)."""
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+
+    class _Zero:
+        def request(self, method, url, *, json=None, headers=None, timeout=8.0):
+            return 200, {
+                "results": [
+                    {"index": 0, "relevance_score": 0.998, "document": "丙"},
+                    {"index": 0, "relevance_score": 0.0014, "document": "甲"},
+                    {"index": 0, "relevance_score": 0.00004, "document": "乙"},
+                ]
+            }
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.HttpxClient", lambda: _Zero())
+    assert rerank_documents("q", ["甲", "乙", "丙"]) == [2, 0, 1]
+
+    class _ZeroNoDoc:
+        def request(self, method, url, *, json=None, headers=None, timeout=8.0):
+            return 200, {"results": [{"index": 0, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.1}]}
+
+    monkeypatch.setattr("pico_orchestrator.meili_kb.HttpxClient", lambda: _ZeroNoDoc())
+    assert rerank_documents("q", ["甲", "乙"]) is None
+
+
+def test_rerank_scores_usable_rejects_flat_and_tiny(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PICO_KB_RERANK", raising=False)
+    assert kb_rerank_enabled() is True
+    monkeypatch.setenv("PICO_KB_RERANK", "0")
     assert kb_rerank_enabled() is False
     assert rerank_scores_usable([]) is False
     assert rerank_scores_usable([1.0]) is False
@@ -531,6 +650,7 @@ def test_search_does_not_call_rerank_when_disabled(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
+    monkeypatch.setenv("PICO_KB_RERANK", "0")
     called = {"n": 0}
 
     def _rr(query, texts):
@@ -538,7 +658,7 @@ def test_search_does_not_call_rerank_when_disabled(monkeypatch: pytest.MonkeyPat
         return [1, 0]
 
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", _rr)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda q, t: (_rr(q, t), None))
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
@@ -561,7 +681,7 @@ def test_search_skips_hybrid_when_embed_query_fails(
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: False)
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", lambda query, texts: None)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda query, texts: (None, None))
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
@@ -584,7 +704,7 @@ def test_search_reranks_chunks_then_collapses(monkeypatch: pytest.MonkeyPatch) -
         seen.append(len(texts))
         return [2, 0, 1]
 
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", _rr)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda q, t: (_rr(q, t), None))
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
@@ -607,7 +727,7 @@ def test_search_union_expanded_queries(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PICO_KB_QUERY_EXPAND", "1")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: False)
     monkeypatch.setattr("pico_orchestrator.meili_kb.expand_search_queries", lambda q: ["专名"])
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", lambda query, texts: None)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda query, texts: (None, None))
     http = FakeHttp()
     http.search_hits = [{"artifact_id": "a1", "chunk_id": "a1_0000", "text": "甲"}]
     out = search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -28,8 +29,17 @@ DISPLAYED = [
     "school_id",
     "membership_id",
     "created_at",
+    "content_sha",
 ]
 MAX_TEXT = 200_000
+_CONTENT_WS = re.compile(r"\s+")
+
+
+def content_sha(text: str) -> str:
+    """Whitespace-insensitive sha of a file's extracted text. Live school
+    2026-09-16: 168/547 files were byte-identical clones (16 PDFs, 8 xlsx x 400
+    chunks). Same content under different artifact ids collapses to one hit."""
+    return hashlib.sha1(_CONTENT_WS.sub("", text or "").encode("utf-8")).hexdigest()[:16]
 # Bookkeeping chips that used to flood the index (735/953 on the live school).
 NOISE_TITLES = frozenset({"回复摘要", "summary", "run summary", "工具产物"})
 # Fixture / probe tenants. Live Meili had 6081 school-a chunks vs 2613 real-school.
@@ -163,12 +173,16 @@ def kb_embed_model() -> str:
 
 
 def kb_rerank_model() -> str:
-    return (os.environ.get("PICO_KB_RERANK_MODEL") or "rerank").strip() or "rerank"
+    """rerank-pro (Zhipu via New API). Cheap `rerank` saturates near 1.0 and its
+    order is worse than Meili's (held-out file@5 0.830 -> 0.777)."""
+    return (os.environ.get("PICO_KB_RERANK_MODEL") or "rerank-pro").strip() or "rerank-pro"
 
 
 def kb_rerank_enabled() -> bool:
-    """New API rerank is opt-in. Live cheap scores saturate and bury generic hits."""
-    flag = (os.environ.get("PICO_KB_RERANK") or "0").strip().lower()
+    """On by default since 2026-09-16. The earlier 'rerank-pro scrambles order'
+    was New API returning index=0 for every row; mapped back by document text
+    it lifts held-out file@5 0.862 -> 0.936 at ~+0.6 s p50. PICO_KB_RERANK=0 reverts."""
+    flag = (os.environ.get("PICO_KB_RERANK") or "1").strip().lower()
     return flag not in {"0", "false", "off", "no"}
 
 
@@ -197,11 +211,13 @@ def kb_search_fetch() -> int:
 
 
 def kb_rerank_pool() -> int:
-    """Chunks sent to New API /v1/rerank; collapse to files after scores land."""
+    """Head of the fetched pool sent to New API /v1/rerank; the tail keeps Meili
+    order so file@20 is not cut. 40: held-out file@5 0.936 / p50 ~0.9 s;
+    20: 0.894 / ~0.7 s."""
     try:
-        value = int(os.environ.get("PICO_KB_RERANK_POOL") or "80")
+        value = int(os.environ.get("PICO_KB_RERANK_POOL") or "40")
     except ValueError:
-        value = 80
+        value = 40
     return min(80, max(5, value))
 
 
@@ -238,11 +254,20 @@ def new_api_embedder_spec() -> dict[str, Any] | None:
 
 def rerank_documents(query: str, texts: list[str]) -> list[int] | None:
     """Reorder via New API /v1/rerank. None = keep Meili order (honest)."""
+    order, _usage = rerank_documents_with_usage(query, texts)
+    return order
+
+
+def rerank_documents_with_usage(
+    query: str, texts: list[str]
+) -> tuple[list[int] | None, dict[str, Any] | None]:
+    """Same as rerank_documents, plus the provider's token usage for the
+    usage ledger (#1042: rerank costs tokens, so it is metered)."""
     base = new_api_base()
     key = new_api_key()
     cleaned = [str(t or "")[:2000] for t in texts]
     if not base or not key or not _is_new_api_loopback(base) or not cleaned:
-        return None
+        return None, None
     try:
         status, body = HttpxClient().request(
             "POST",
@@ -252,42 +277,73 @@ def rerank_documents(query: str, texts: list[str]) -> list[int] | None:
                 "query": query,
                 "documents": cleaned,
                 "top_n": len(cleaned),
+                # New API's Zhipu rerank-pro adapter returns index=0 on every row
+                # (2026-09-16). With the document echoed back we can map by text.
+                "return_documents": True,
             },
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             timeout=12.0,
         )
     except Exception:  # noqa: BLE001
-        return None
+        return None, None
     if status >= 400 or not isinstance(body, dict):
-        return None
+        return None, None
+    usage = _rerank_usage(body)
     results = body.get("results")
     if not isinstance(results, list) or not results:
-        return None
+        return None, usage
+    rows = [r for r in results if isinstance(r, dict)]
+    raw_idx: list[int] = []
+    for row in rows:
+        try:
+            raw_idx.append(int(row.get("index")))
+        except (TypeError, ValueError):
+            raw_idx.append(-1)
+    degenerate = len(rows) > 1 and len(set(raw_idx)) == 1
+    by_text = {t: i for i, t in enumerate(cleaned)}
     order: list[int] = []
     scores: list[float] = []
     seen: set[int] = set()
-    for row in results:
-        if not isinstance(row, dict):
-            continue
-        try:
-            idx = int(row.get("index"))
-        except (TypeError, ValueError):
-            continue
+    for row, idx in zip(rows, raw_idx, strict=True):
+        if degenerate:
+            doc = row.get("document")
+            if isinstance(doc, dict):
+                doc = doc.get("text")
+            idx = by_text.get(str(doc or ""), -1)
         raw = row.get("relevance_score", row.get("score"))
         try:
             score = float(raw)
         except (TypeError, ValueError):
-            return None
+            return None, usage
         if 0 <= idx < len(cleaned) and idx not in seen:
             seen.add(idx)
             order.append(idx)
             scores.append(score)
     if not order or not rerank_scores_usable(scores):
-        return None
+        return None, usage
     for idx in range(len(cleaned)):
         if idx not in seen:
             order.append(idx)
-    return order
+    return order, usage
+
+
+def _rerank_usage(body: dict[str, Any]) -> dict[str, Any] | None:
+    """Provider token usage from a /v1/rerank body. None when absent (honest unknown)."""
+    usage = body.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    out: dict[str, Any] = {"model": kb_rerank_model()}
+    found = False
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        value = usage.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            out[key] = value
+            found = True
+    if not found:
+        return None
+    if "total_tokens" not in out:
+        out["total_tokens"] = int(out.get("prompt_tokens", 0)) + int(out.get("completion_tokens", 0))
+    return out
 
 
 def _apply_rerank_order(hits: list[Any], order: list[int]) -> list[Any]:
@@ -647,6 +703,7 @@ def document_from_artifact(
         "school_id": school_id,
         "membership_id": membership_id,
         "created_at": created_at or "",
+        "content_sha": content_sha(text or title),
     }
 
 
@@ -676,6 +733,7 @@ def documents_from_text(
                 created_at=created_at,
             )
         ]
+    sha = content_sha(text)
     out: list[dict[str, Any]] = []
     for chunk in chunks:
         out.append(
@@ -693,6 +751,7 @@ def documents_from_text(
                 "school_id": school_id,
                 "membership_id": membership_id,
                 "created_at": created_at or "",
+                "content_sha": sha,
             }
         )
     return out
@@ -828,7 +887,11 @@ class MeiliIndex:
         live = body if body is not None else self._settings_body()
         if not live:
             return False
-        return list(live.get("searchableAttributes") or []) == list(SEARCHABLE)
+        if list(live.get("searchableAttributes") or []) != list(SEARCHABLE):
+            return False
+        # displayed decides what search returns; a missing field (content_sha)
+        # silently degrades collapse to artifact id. Same cheap PATCH path.
+        return set(live.get("displayedAttributes") or []) >= set(DISPLAYED)
 
     def _embedder_url_match(self, want_embedders: dict[str, Any] | None) -> bool:
         live = self._settings_body()
@@ -935,6 +998,7 @@ class MeiliIndex:
         membership_id: str,
         limit: int,
         include_school: bool = False,
+        rerank_ok: bool = True,
     ) -> dict[str, Any]:
         clause = tenant_filter(school_id, membership_id, include_school=include_school)
         want = max(1, int(limit))
@@ -1011,30 +1075,39 @@ class MeiliIndex:
                     seen_title.add(cid)
                     title_rows.append(row)
         pool = merge_hybrid_and_title_hits(
-            hybrid_rows, title_rows, pool=kb_rerank_pool(), title_cap=TITLE_HIT_CAP
+            hybrid_rows, title_rows, pool=max(fetch, kb_rerank_pool()), title_cap=TITLE_HIT_CAP
         )
         reranked = False
         rerank_skip = "off"
-        if spec and pool and kb_rerank_enabled():
+        rerank_usage: dict[str, Any] | None = None
+        if spec and pool and kb_rerank_enabled() and rerank_ok:
+            # Rerank the head only; the tail keeps Meili order so the 20-file
+            # list Pi asks for is not cut down to the rerank pool.
+            head_n = kb_rerank_pool()
+            head, tail = pool[:head_n], pool[head_n:]
             texts = []
-            for row in pool:
-                head = " ".join(
+            for row in head:
+                top = " ".join(
                     str(x) for x in (row.get("title"), row.get("heading")) if x
                 )
-                texts.append((head + "\n" + str(row.get("text") or ""))[:2000])
-            order = rerank_documents(query, texts)
+                texts.append((top + "\n" + str(row.get("text") or ""))[:2000])
+            order, rerank_usage = rerank_documents_with_usage(query, texts)
             if order:
-                pool = _apply_rerank_order(pool, order)
+                pool = _apply_rerank_order(head, order) + tail
                 reranked = True
                 rerank_skip = ""
             else:
                 rerank_skip = "flat"
+        elif not rerank_ok:
+            rerank_skip = "feature_off"
         hits = collapse_hits_by_artifact(pool, want)
         return {
             "hits": hits,
             "hybrid": use_hybrid,
             "reranked": reranked,
             "rerank_skip": rerank_skip,
+            # Provider tokens for the usage ledger (search without rerank is free).
+            "rerank_usage": rerank_usage if reranked or rerank_usage else None,
             "expanded": max(0, len(queries) - 1),
             "filter": clause,
             "include_school": include_school,
@@ -1120,8 +1193,10 @@ def search_materials(
     limit: int,
     include_school: bool = False,
     client: HttpClient | None = None,
+    rerank_ok: bool = True,
 ) -> dict[str, Any]:
-    """Search with server-injected tenant filter. Raises if Meili is down."""
+    """Search with server-injected tenant filter. Raises if Meili is down.
+    rerank_ok=False = teacher switched 精排 off (feat:rerank); free path."""
     idx = MeiliIndex(client)
     if not meili_configured() or not idx.ping():
         raise RuntimeError("meili unavailable")
@@ -1135,6 +1210,7 @@ def search_materials(
         membership_id=membership_id,
         limit=limit,
         include_school=include_school,
+        rerank_ok=rerank_ok,
     )
 
 
@@ -1221,22 +1297,81 @@ def merge_hybrid_and_title_hits(
     return out[:want]
 
 
-def collapse_hits_by_artifact(hits: list[Any], limit: int) -> list[dict[str, Any]]:
-    """One best chunk per ledger file so five results are five materials."""
+def kb_passages_per_file() -> int:
+    """Sibling chunks carried per file hit. Gold: quote sat in the file's 2nd/3rd
+    pooled chunk in 12/17 misses where the file itself was already top-5."""
+    try:
+        value = int(os.environ.get("PICO_KB_PASSAGES") or "3")
+    except ValueError:
+        value = 3
+    return min(5, max(1, value))
+
+
+def collapse_hits_by_artifact(
+    hits: list[Any], limit: int, *, passages: int | None = None
+) -> list[dict[str, Any]]:
+    """One row per ledger file so five results are five materials. File order =
+    best chunk order (unchanged). Each row carries `passages`: that file's
+    pooled chunks in Meili order, itself first, capped, so the model sees the
+    evidence chunk even when it is not the top-scoring one."""
     want = max(1, int(limit))
-    seen: set[str] = set()
-    out: list[dict[str, Any]] = []
+    per_file = kb_passages_per_file() if passages is None else max(1, int(passages))
+    order: list[str] = []
+    best: dict[str, dict[str, Any]] = {}
+    siblings: dict[str, list[dict[str, Any]]] = {}
+    clones: dict[str, list[str]] = {}
     for row in hits:
         if not isinstance(row, dict):
             continue
         aid = str(row.get("artifact_id") or row.get("material_id") or "").strip()
-        if not aid or aid in seen:
+        if not aid:
             continue
-        seen.add(aid)
+        key = collapse_key(row)
+        if key not in best:
+            if len(order) >= want:
+                continue
+            order.append(key)
+            best[key] = row
+            siblings[key] = []
+            clones[key] = [aid]
+        else:
+            if aid not in clones[key]:
+                clones[key].append(aid)
+            if len(siblings[key]) < per_file - 1 and not _same_passage_text(
+                row, [best[key], *siblings[key]]
+            ):
+                siblings[key].append(row)
+    out: list[dict[str, Any]] = []
+    for key in order:
+        row = dict(best[key])
+        row["passages"] = [_passage_of(best[key])] + [_passage_of(s) for s in siblings[key]]
+        row["clone_artifact_ids"] = clones[key][1:]
         out.append(row)
-        if len(out) >= want:
-            break
     return out
+
+
+def _same_passage_text(row: dict[str, Any], kept: list[dict[str, Any]]) -> bool:
+    """A clone's copy of an already-kept chunk must not eat a passage slot."""
+    text = _CONTENT_WS.sub("", str(row.get("text") or ""))
+    return any(text == _CONTENT_WS.sub("", str(k.get("text") or "")) for k in kept)
+
+
+def collapse_key(row: dict[str, Any]) -> str:
+    """Identical extracted content under different ledger ids is one hit.
+    Docs indexed before content_sha existed fall back to artifact id."""
+    sha = str(row.get("content_sha") or "").strip()
+    if sha:
+        return f"sha:{sha}"
+    return f"aid:{str(row.get('artifact_id') or row.get('material_id') or '').strip()}"
+
+
+def _passage_of(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "chunk_id": row.get("chunk_id"),
+        "heading": str(row.get("heading") or ""),
+        "page": row.get("page"),
+        "text": str(row.get("text") or ""),
+    }
 
 
 def material_chunk_docs(

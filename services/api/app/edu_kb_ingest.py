@@ -7,6 +7,7 @@ import base64
 import binascii
 import hashlib
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,13 @@ from pico_orchestrator.meili_kb import (
 )
 from pydantic import BaseModel, Field
 
-from app.auth import Principal, payer_for, require_any_scope
+from app.auth import (
+    Principal,
+    enforce_feature,
+    feature_enabled,
+    payer_for,
+    require_any_scope,
+)
 from app.usage_ledger import record_usage_event
 
 router = APIRouter(tags=["edu-kb-ingest"])
@@ -118,6 +125,7 @@ async def post_kb_ingest(
     # Invalid base64 still has a stable identity; valid files use decoded bytes.
     raw = body.content_b64 if body.content_b64 else body.text or ""
     content_sha = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    ingest_ok = False  # per-file price only when the file actually went in (#1042)
     try:
         data = None
         if body.content_b64:
@@ -181,6 +189,7 @@ async def post_kb_ingest(
             )
             indexed = upsert_documents(docs, replace_artifact=True)
             chunk_count = len(docs) if indexed else 0
+        ingest_ok = bool(indexed)
         return {
             "ok": True,
             "engine": result.get("engine") or "docling",
@@ -199,8 +208,12 @@ async def post_kb_ingest(
                 school_id=principal.school_id,
                 membership_id=principal.membership_id,
                 kind="api",
+                # #1042: ingest is priced per file (rate card per_call), not per token —
+                # Meili makes the embedding calls, Pico never sees those tokens.
+                model="kb-ingest-file",
                 source="kb_ingest",
                 tokens_unknown=True,
+                extra={"item_kind": body.kind, "query_count": 1, "ok": ingest_ok},
                 bill_to=payer_for(principal),
                 idempotency_key=(
                     "kb_ingest:"
@@ -217,6 +230,7 @@ async def post_kb_search(
 ) -> dict[str, Any]:
     """Same Meili path as Pi kb_search. Tenant comes from the JWT, not the body."""
     include_school = str(body.scope or "").strip().lower() == "school"
+    enforce_feature(principal, "kb")
     try:
         result = search_materials(
             body.query,
@@ -224,9 +238,28 @@ async def post_kb_search(
             membership_id=principal.membership_id,
             limit=body.limit,
             include_school=include_school,
+            rerank_ok=feature_enabled(principal, "rerank"),
         )
     except RuntimeError as exc:
         raise _bad("kb.unavailable", "材料库暂时不可用，没有查到。不能编造材料内容。", 503) from exc
+    if result.get("reranked"):
+        # #1042: the rerank call costs tokens; plain search does not.
+        await record_usage_event(
+            school_id=principal.school_id,
+            membership_id=principal.membership_id,
+            kind="search",
+            model=str((result.get("rerank_usage") or {}).get("model") or "") or None,
+            prompt_tokens=(result.get("rerank_usage") or {}).get("prompt_tokens"),
+            completion_tokens=(result.get("rerank_usage") or {}).get("completion_tokens"),
+            total_tokens=(result.get("rerank_usage") or {}).get("total_tokens"),
+            tokens_unknown=not isinstance(
+                (result.get("rerank_usage") or {}).get("total_tokens"), int
+            ),
+            source="kb_rerank",
+            extra={"tool": "kb_rerank", "query_count": 1, "ok": True},
+            bill_to=payer_for(principal),
+            idempotency_key=f"search:norun:kb_rerank:{uuid.uuid4().hex[:12]}",
+        )
     hits = []
     for row in result.get("hits") or []:
         if not isinstance(row, dict):
@@ -250,6 +283,10 @@ async def post_kb_search(
                 "page": row.get("page"),
                 "text": row.get("text") or "",
                 "parent_text": row.get("parent_text") or "",
+                # Same file's other pooled chunks, top chunk first (#1006 knife 3).
+                "passages": [p for p in (row.get("passages") or []) if isinstance(p, dict)],
+                # Other ledger files with identical extracted content (#1006 knife 4).
+                "clone_artifact_ids": [str(a) for a in (row.get("clone_artifact_ids") or [])],
             }
         )
     return {

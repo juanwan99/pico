@@ -10,7 +10,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 from pico_orchestrator.usage_parse import (
@@ -668,6 +668,66 @@ async def quote_points_for_principal(
 
     last = await last_known_billable_milli(session, principal, conversation_id)
     return quote_points_from_input_len(input_chars, resident_milli=last)
+
+
+_SHANGHAI = timezone(timedelta(hours=8))
+
+
+def shanghai_day_bounds_utc(now: datetime | None = None) -> tuple[datetime, datetime]:
+    """Today in Asia/Shanghai as naive-UTC [start, end) — the school day the
+    allowance resets on (owner 2026-09-16). No DST in CN."""
+    current = (now or datetime.now(UTC)).astimezone(_SHANGHAI)
+    start_local = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    start = start_local.astimezone(UTC).replace(tzinfo=None)
+    return start, start + timedelta(days=1)
+
+
+async def used_millipoints_today(session: AsyncSession, principal: Principal) -> int:
+    """This person's priced usage today (member-billed rows only). Not a wallet:
+    the sum is recomputed from usage_events every call."""
+    from app.points_meter import milli_from_row
+
+    start, end = shanghai_day_bounds_utc()
+    q = select(UsageEventRow).where(
+        UsageEventRow.school_id == principal.school_id,
+        UsageEventRow.membership_id == principal.membership_id,
+        UsageEventRow.created_at >= start,
+        UsageEventRow.created_at < end,
+        _personal_bill_clause(),
+    )
+    rows = list((await session.execute(q)).scalars().all())
+    total = 0
+    for row in rows:
+        milli = milli_from_row(**_row_meter_kwargs(row))
+        if milli:
+            total += int(milli)
+    return total
+
+
+async def enforce_allowance(
+    session: AsyncSession,
+    principal: Principal,
+    *,
+    quote_milli: int = 0,
+) -> dict[str, Any] | None:
+    """Gate a new turn on the JWT allowance (#1042). None = no allowance claim, no
+    gate. A turn already running is never cut; only the next one is refused."""
+    from fastapi import HTTPException, status
+    from pico_orchestrator.features import allowance_millipoints
+
+    allowance = allowance_millipoints(principal)
+    if allowance is None:
+        return None
+    used = await used_millipoints_today(session, principal)
+    if used + max(0, int(quote_milli)) > allowance:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "points.exhausted",
+                "message": "今日积分已用完，明天 0 点恢复，或充值后再试。",
+            },
+        )
+    return {"allowance_milli": allowance, "used_milli": used}
 
 
 def _day_bounds(day: str) -> tuple[datetime, datetime]:

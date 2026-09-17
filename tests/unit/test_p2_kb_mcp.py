@@ -113,7 +113,7 @@ def test_kb_search_hit_and_miss(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
 
-    def fake_search(query, *, school_id, membership_id, limit=8, client=None):
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True):
         _ = client
         assert school_id == principal.school_id
         assert membership_id == principal.membership_id
@@ -157,6 +157,48 @@ def test_kb_search_hit_and_miss(monkeypatch: pytest.MonkeyPatch) -> None:
     asyncio.run(_run())
 
 
+def test_kb_search_excerpt_covers_sibling_passages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1006 knife 3: the evidence line is often the file's 2nd/3rd pooled chunk."""
+    store = _MemStore()
+    principal = _P()
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True):
+        _ = (query, school_id, membership_id, limit, client)
+        return {
+            "hybrid": True,
+            "hits": [
+                {
+                    "artifact_id": "art-rule",
+                    "title": "考务细则.docx",
+                    "text": "第一章 总则",
+                    "school_id": principal.school_id,
+                    "membership_id": principal.membership_id,
+                    "passages": [
+                        {"chunk_id": "r_0", "text": "第一章 总则"},
+                        {"chunk_id": "r_5", "text": "监考老师须提前二十分钟到场领取试卷。"},
+                        {"chunk_id": "r_5", "text": "监考老师须提前二十分钟到场领取试卷。"},
+                    ],
+                }
+            ],
+        }
+
+    monkeypatch.setattr("pico_orchestrator.tools_builtin.search_materials", fake_search)
+
+    async def _run() -> None:
+        gw = build_default_gateway(store)
+        hit = await gw.invoke(principal, "kb_search", {"query": "监考几点到"})
+        assert hit["count"] == 1
+        excerpt = hit["hits"][0]["excerpt"]
+        assert "第一章 总则" in excerpt
+        assert "提前二十分钟" in excerpt
+        assert excerpt.count("提前二十分钟") == 1
+        assert hit["sources"][0]["snippet"] == excerpt
+
+    asyncio.run(_run())
+
+
 def test_kb_search_meili_down_is_honest_miss(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -193,7 +235,7 @@ def test_kb_search_ignores_client_filter(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
 
-    def fake_search(query, *, school_id, membership_id, limit=8, client=None):
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True):
         captured["school_id"] = school_id
         captured["membership_id"] = membership_id
         captured["query"] = query
@@ -254,7 +296,7 @@ def test_kb_search_drops_other_tenant_hits(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
 
-    def fake_search(query, *, school_id, membership_id, limit=8, client=None):
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True):
         _ = query, school_id, membership_id, limit, client
         return {
             "hybrid": False,
