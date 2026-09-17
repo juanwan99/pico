@@ -383,8 +383,6 @@ def case_t2(pico: Pico, stamp: str) -> CaseResult:
 def case_t3(pico: Pico, stamp: str) -> CaseResult:
     import re
 
-    from pptx import Presentation
-
     res = CaseResult(case="T3-files")
     cid = f"regress-t3-{stamp}"
     _, wall = pico.chat(cid, "做一页离线可开的 HTML 介绍潮汐，再做一个 3 页的 PPT 提纲。")
@@ -409,24 +407,14 @@ def case_t3(pico: Pico, stamp: str) -> CaseResult:
     else:
         raw = pico.download(pptx["id"])
         res.artifact_sha[pptx["title"]] = _sha(raw)
-        prs = Presentation(io.BytesIO(raw))
-        if len(prs.slides) < 3:
+        nslides = _pptx_slide_count(raw)
+        blob = _slide_blob(raw)
+        if nslides < 3:
             ok = False
-            res.notes.append(f"T3: pptx has {len(prs.slides)} slides (<3)")
-        titles = []
-        for s in prs.slides:
-            t = getattr(s.shapes, "title", None)
-            titles.append((t.text if t is not None and t.has_text_frame else "").strip())
-        if not any(titles):
-            texts = [
-                sh.text_frame.text
-                for s in prs.slides
-                for sh in s.shapes
-                if getattr(sh, "has_text_frame", False)
-            ]
-            if not any(t.strip() for t in texts):
-                ok = False
-                res.notes.append("T3: pptx has no visible text")
+            res.notes.append(f"T3: pptx has {nslides} slides (<3)")
+        if not any(line.strip() and not line.startswith("slides=") for line in blob.splitlines()):
+            ok = False
+            res.notes.append("T3: pptx has no visible text")
     res.tool_calls, _ = _tool_calls(pico, cid)
     res.ok = ok
     return res
@@ -480,6 +468,9 @@ def case_t4(pico: Pico, stamp: str) -> CaseResult:
 
 
 def make_week_deck() -> bytes:
+    canned = FIXTURES / "week.pptx"
+    if canned.is_file():
+        return canned.read_bytes()
     from pptx import Presentation
     from pptx.dml.color import RGBColor
     from pptx.enum.shapes import MSO_SHAPE
@@ -562,9 +553,39 @@ def make_formula_book() -> bytes:
     return buf.getvalue()
 
 
-def _slide_blob(raw: bytes) -> str:
-    from pptx import Presentation
+def _pptx_slide_count(raw: bytes) -> int:
+    import zipfile
 
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        return sum(
+            1
+            for name in zf.namelist()
+            if name.startswith("ppt/slides/slide") and name.endswith(".xml")
+        )
+
+
+def _pptx_xml_text(raw: bytes) -> str:
+    import re
+    import zipfile
+
+    parts: list[str] = []
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        names = [
+            name
+            for name in zf.namelist()
+            if name.startswith("ppt/slides/slide") and name.endswith(".xml")
+        ]
+        for name in sorted(names):
+            xml = zf.read(name).decode("utf-8", errors="replace")
+            parts.extend(re.findall(r"<a:t>([^<]*)</a:t>", xml))
+    return "\n".join(parts)
+
+
+def _slide_blob(raw: bytes) -> str:
+    try:
+        from pptx import Presentation
+    except ImportError:
+        return f"slides={_pptx_slide_count(raw)}\n{_pptx_xml_text(raw)}"
     prs = Presentation(io.BytesIO(raw))
     parts: list[str] = [f"slides={len(prs.slides)}"]
     for s in prs.slides:
@@ -589,8 +610,6 @@ def _docx_has_media(raw: bytes) -> bool:
 
 
 def case_t5(pico: Pico, stamp: str) -> CaseResult:
-    from pptx import Presentation
-
     res = CaseResult(case="T5-ppt-template")
     cid = f"regress-t5-{stamp}"
     pico.upload(cid, "周课.pptx", make_week_deck())
@@ -609,16 +628,16 @@ def case_t5(pico: Pico, stamp: str) -> CaseResult:
     else:
         raw = pico.download(latest["id"])
         res.artifact_sha[latest["title"]] = _sha(raw)
-        prs = Presentation(io.BytesIO(raw))
+        nslides = _pptx_slide_count(raw)
         blob = _slide_blob(raw)
         ok = (
-            len(prs.slides) == 3
+            nslides == 3
             and "本周课表" in blob
             and "KEEP-封面" in blob
             and "KEEP-作业" in blob
         )
-        if len(prs.slides) != 3:
-            res.notes.append(f"T5: slides={len(prs.slides)}")
+        if nslides != 3:
+            res.notes.append(f"T5: slides={nslides}")
         if "本周课表" not in blob:
             res.notes.append("T5: 本周课表 missing")
         if "KEEP-封面" not in blob or "KEEP-作业" not in blob:
