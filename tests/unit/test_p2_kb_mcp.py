@@ -113,7 +113,7 @@ def test_kb_search_hit_and_miss(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
 
-    def fake_search(query, *, school_id, membership_id, limit=8, client=None):
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True):
         _ = client
         assert school_id == principal.school_id
         assert membership_id == principal.membership_id
@@ -164,7 +164,7 @@ def test_kb_search_excerpt_covers_sibling_passages(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
 
-    def fake_search(query, *, school_id, membership_id, limit=8, client=None):
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True):
         _ = (query, school_id, membership_id, limit, client)
         return {
             "hybrid": True,
@@ -235,7 +235,7 @@ def test_kb_search_ignores_client_filter(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
 
-    def fake_search(query, *, school_id, membership_id, limit=8, client=None):
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True):
         captured["school_id"] = school_id
         captured["membership_id"] = membership_id
         captured["query"] = query
@@ -296,7 +296,7 @@ def test_kb_search_drops_other_tenant_hits(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
     monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
 
-    def fake_search(query, *, school_id, membership_id, limit=8, client=None):
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True):
         _ = query, school_id, membership_id, limit, client
         return {
             "hybrid": False,

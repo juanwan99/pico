@@ -202,7 +202,8 @@ def cost_micro_yuan(
     if not ok:
         return None
     kind_n = (kind or rate.kind or "").strip().lower()
-    if kind_n == "search" and rate.per_call_yuan > 0:
+    # per_call: web search calls, and kb ingest priced per file (#1042).
+    if kind_n in {"search", "api"} and rate.per_call_yuan > 0:
         return _yuan_to_micro(rate.per_call_yuan * Decimal(max(1, int(call_count))))
     if kind_n == "image" and (
         tokens_unknown or (prompt_tokens is None and completion_tokens is None and total_tokens is None)

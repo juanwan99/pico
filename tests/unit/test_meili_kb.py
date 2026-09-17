@@ -433,8 +433,8 @@ def test_search_hybrid_when_new_api_embedder(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
     monkeypatch.setattr(
-        "pico_orchestrator.meili_kb.rerank_documents",
-        lambda query, texts: list(range(len(texts))),
+        "pico_orchestrator.meili_kb.rerank_documents_with_usage",
+        lambda query, texts: (list(range(len(texts))), None),
     )
     http = FakeHttp()
     http.embedders_armed = True
@@ -461,8 +461,8 @@ def test_search_rerank_reorders_then_collapses(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("PICO_KB_RERANK", "1")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
     monkeypatch.setattr(
-        "pico_orchestrator.meili_kb.rerank_documents",
-        lambda query, texts: [2, 0, 1],
+        "pico_orchestrator.meili_kb.rerank_documents_with_usage",
+        lambda query, texts: ([2, 0, 1], {"model": "rerank-pro", "prompt_tokens": 300, "total_tokens": 300}),
     )
     http = FakeHttp()
     http.embedders_armed = True
@@ -492,7 +492,7 @@ def test_search_reranks_head_only_and_keeps_tail(monkeypatch: pytest.MonkeyPatch
         seen_texts.append(len(texts))
         return list(reversed(range(len(texts))))
 
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", _rr)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda q, t: (_rr(q, t), None))
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
@@ -510,7 +510,7 @@ def test_search_rerank_fail_keeps_meili_order(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
     monkeypatch.setenv("PICO_KB_RERANK", "1")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", lambda query, texts: None)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda query, texts: (None, None))
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
@@ -658,7 +658,7 @@ def test_search_does_not_call_rerank_when_disabled(monkeypatch: pytest.MonkeyPat
         return [1, 0]
 
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: True)
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", _rr)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda q, t: (_rr(q, t), None))
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
@@ -681,7 +681,7 @@ def test_search_skips_hybrid_when_embed_query_fails(
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-pico-gateway")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: False)
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", lambda query, texts: None)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda query, texts: (None, None))
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
@@ -704,7 +704,7 @@ def test_search_reranks_chunks_then_collapses(monkeypatch: pytest.MonkeyPatch) -
         seen.append(len(texts))
         return [2, 0, 1]
 
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", _rr)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda q, t: (_rr(q, t), None))
     http = FakeHttp()
     http.embedders_armed = True
     http.embedder_url = "http://127.0.0.1:3000/v1/embeddings"
@@ -727,7 +727,7 @@ def test_search_union_expanded_queries(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PICO_KB_QUERY_EXPAND", "1")
     monkeypatch.setattr("pico_orchestrator.meili_kb.embed_query_ok", lambda: False)
     monkeypatch.setattr("pico_orchestrator.meili_kb.expand_search_queries", lambda q: ["专名"])
-    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents", lambda query, texts: None)
+    monkeypatch.setattr("pico_orchestrator.meili_kb.rerank_documents_with_usage", lambda query, texts: (None, None))
     http = FakeHttp()
     http.search_hits = [{"artifact_id": "a1", "chunk_id": "a1_0000", "text": "甲"}]
     out = search_materials("近义", school_id="s1", membership_id="m1", limit=5, client=http)

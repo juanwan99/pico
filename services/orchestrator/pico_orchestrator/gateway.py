@@ -94,6 +94,16 @@ class AllowlistGateway:
         spec = self.tools.get(name)
         if spec is None:
             raise ToolError("tool.not_allowlisted", f"Tool not allowlisted: {name}")
+        from pico_orchestrator.features import (
+            FEATURE_OFF_MESSAGE,
+            feature_enabled,
+            feature_for_tool,
+        )
+
+        feature = feature_for_tool(name)
+        if feature and not feature_enabled(principal, feature):
+            # Teacher switched it off in edu (JWT feat:* allowlist, #1042).
+            raise ToolError("feature.off", FEATURE_OFF_MESSAGE.get(feature, "该功能未开启。"))
         if spec.school_scoped:
             target = arguments.get("school_id")
             if target is not None and str(target) != principal.school_id:

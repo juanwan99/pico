@@ -1506,6 +1506,13 @@ async def create_task(
 ) -> dict:
     if not body.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt required")
+    from app.points_meter import quote_millipoints_from_input_len
+    from app.usage_ledger import enforce_allowance
+
+    # #1042: same allowance gate as chat; only at turn start.
+    await enforce_allowance(
+        session, principal, quote_milli=quote_millipoints_from_input_len(len(body.prompt))
+    )
     task, run = await run_service.create_task(
         session, principal, body.title, body.prompt.strip(), body.skill_id
     )

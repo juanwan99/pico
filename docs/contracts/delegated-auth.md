@@ -43,8 +43,15 @@ SCHEMA: packages/contracts/schemas/delegated-claims.schema.json
 | `ai:confirm` | Confirm change proposals |
 | `ai:admin` | Reserved (platform); not used in school tokens Phase 1 |
 | `ai:school-run` | Additive. With `ai:run`, usage `extra.bill_to=school` (exam card / grading). Shell tickets must not include this. |
+| `feat:kb` `feat:rerank` `feat:image` `feat:deep` `feat:office` | Teacher-chosen switches (#1042). **No `feat:*` in the token = all on.** Any `feat:*` present = allowlist; features not listed answer `feature.off` (403 / tool error). edu stores the choice; Pico only reads. |
 
 Missing `ai:run` → cannot create tasks (403 `auth.forbidden`).
+
+### Optional claims (#1042)
+
+| Claim | Type | Description |
+|-------|------|-------------|
+| `allowance_points_today` | string `"N.NNN"` or number | Points this person may still spend today (school daily grant remaining + personal top-up). Pico compares it with its own ledger (today, Asia/Shanghai, member-billed rows) plus the turn quote; over → 403 `points.exhausted` before the turn starts. Absent = no gate. Pico never stores it. |
 
 ## 3. Validation rules (Pico, fail-closed)
 
@@ -65,6 +72,8 @@ Missing `ai:run` → cannot create tasks (403 `auth.forbidden`).
 | `auth.aud_mismatch` | 401 | Wrong audience |
 | `auth.iss_unknown` | 401 | Issuer not in Pico trust set |
 | `auth.forbidden` | 403 | Scope insufficient for route |
+| `feature.off` | 403 | Teacher switched this feature off (`feat:*` allowlist) |
+| `points.exhausted` | 403 | Today's allowance spent; next turn refused, running turn untouched |
 | `tenant.cross_school` | 403 | Tool/input school ≠ token school |
 
 Error body shape:

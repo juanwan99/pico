@@ -11,14 +11,23 @@ from typing import Any
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pico_orchestrator.features import (
+    FEATURE_OFF_MESSAGE,
+    FEATURE_SCOPES,
+    allowance_millipoints,
+    feature_enabled,
+)
 
 from app.settings import Settings, get_settings
 
 _bearer = HTTPBearer(auto_error=False)
 SCHOOL_RUN_SCOPE = "ai:school-run"
+# feat:* are teacher-chosen switches edu signs into the token (#1042).
 REGISTERED_SCOPES = frozenset(
-    {"ai:read", "ai:run", "ai:confirm", "ai:admin", SCHOOL_RUN_SCOPE}
+    {"ai:read", "ai:run", "ai:confirm", "ai:admin", SCHOOL_RUN_SCOPE} | FEATURE_SCOPES
 )
+
+__all__ = ["allowance_millipoints", "feature_enabled"]
 BILL_TO_SCHOOL = "school"
 BILL_TO_MEMBER = "member"
 # Persisted fallback ledger key. Rename only with a data migration; normal
@@ -438,6 +447,19 @@ def require_billed_identity(principal: Principal, settings: Settings | None = No
         detail={
             "code": "auth.edu_membership_required",
             "message": "请用学校账号登录后再使用。本地邮箱不能计费。",
+        },
+    )
+
+
+def enforce_feature(principal: Principal, feature: str) -> Principal:
+    """403 when the teacher switched this feature off in edu (JWT feat:* allowlist)."""
+    if feature_enabled(principal, feature):
+        return principal
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "feature.off",
+            "message": FEATURE_OFF_MESSAGE.get(feature, "该功能未开启，可在设置里开启。"),
         },
     )
 

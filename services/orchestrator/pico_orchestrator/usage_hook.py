@@ -227,6 +227,74 @@ async def emit_search_usage(
     )
 
 
+async def emit_rerank_usage(
+    principal: Any,
+    *,
+    usage: dict[str, Any] | None,
+    tool_call_id: str | None = None,
+    source: str = "kb_rerank",
+) -> None:
+    """Record the New API rerank call behind one kb_search (#1042). kind=search,
+    model = rerank model, provider tokens; without usage the row is an honest
+    unknown. Plain search (no rerank) emits nothing — it costs no tokens."""
+    bind = _BIND.get()
+    school = getattr(principal, "school_id", None) or (bind.school_id if bind else "")
+    member = getattr(principal, "membership_id", None) or (
+        bind.membership_id if bind else ""
+    )
+    if not school or not member:
+        return
+    run_id = (bind.run_id if bind else None) or None
+    task_id = (bind.task_id if bind else None) or None
+    store = getattr(principal, "_pico_artifact_store", None)
+    if run_id is None and store is not None:
+        run_id = getattr(store, "_run_id", None)
+        task_id = task_id or getattr(store, "_task_id", None)
+    usage = usage if isinstance(usage, dict) else {}
+    model = str(usage.get("model") or "").strip() or None
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    total_tokens = usage.get("total_tokens")
+    tokens_unknown = not any(
+        isinstance(v, int) for v in (prompt_tokens, completion_tokens, total_tokens)
+    )
+    payload: dict[str, Any] = {"tool": source, "ok": True, "query_count": 1}
+    try:
+        from app.channel_rates import load_rate_card
+
+        rate = load_rate_card().find(kind="search", model=model)
+        if rate is not None:
+            payload.setdefault("channel_id", rate.id)
+    except Exception:
+        logger.debug("rerank channel_id lookup skipped", exc_info=True)
+    call_id = (
+        (tool_call_id or "").strip()
+        or (bind.tool_call_id if bind else "")
+        or uuid.uuid4().hex[:12]
+    )
+    key = f"search:{run_id or 'norun'}:{source}:{call_id}"
+    try:
+        from app.usage_ledger import record_usage_event
+    except Exception:  # noqa: BLE001
+        logger.debug("usage_ledger not importable; rerank emit skipped")
+        return
+    await record_usage_event(
+        school_id=str(school),
+        membership_id=str(member),
+        kind="search",
+        model=model,
+        prompt_tokens=prompt_tokens if isinstance(prompt_tokens, int) else None,
+        completion_tokens=completion_tokens if isinstance(completion_tokens, int) else None,
+        total_tokens=total_tokens if isinstance(total_tokens, int) else None,
+        tokens_unknown=tokens_unknown,
+        task_id=str(task_id) if task_id else None,
+        run_id=str(run_id) if run_id else None,
+        source=source[:64],
+        extra=payload,
+        idempotency_key=key[:160],
+    )
+
+
 async def emit_sandbox_usage(
     principal: Any,
     *,

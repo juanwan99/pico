@@ -208,3 +208,36 @@ await record_usage_event(
 **不删行**（谁/何时/kind 仍在）。LibreChat 气泡 `usage` 只回原生提供方数字，缺则省略字段。
 
 edu 拉数：主机 `.env` 的 `PICO_HOOK_SERVICE_TOKEN`（`prod-update.sh` 空则生成；值不进 GitHub）。
+
+---
+
+## 9. 额度门 + 功能开关（#1042 · 业主 2026-09-16）
+
+```text
+学校日发积分（不累计）+ 个人充值 → 钱包/发放/清零/充值 都在 edu
+edu 签 JWT 时带：allowance_points_today（今日可用积分，一个数）+ scopes 里的 feat:*（老师自选的开关）
+Pico：开轮前用自己账本算「今日已用 + 本轮预计」≤ allowance → 够就跑，不够 403 points.exhausted
+      不存余额、不发积分、不做充值。门闩，不是钱包。
+```
+
+| 规则 | 值 |
+|------|----|
+| 日界 | Asia/Shanghai 00:00（`shanghai_day_bounds_utc`） |
+| 计入 | 本人 `bill_to=member` 的今日行；学校付的行不算个人额度 |
+| 预计 | `quote_millipoints_from_input_len`（驻留包 + 老师文字） |
+| 拒绝 | 只在开轮前（`/v1/chat/completions`、`/v1/tasks`）；进行中的回答不掐 |
+| 老师面 | 「今日积分已用完，明天 0 点恢复，或充值后再试。」 |
+| 无 claim | 不设门（edu 未上线额度） |
+| 开关 | `feat:kb` `feat:rerank` `feat:image` `feat:deep` `feat:office`。token 里一个 `feat:*` 都没有 = 全开；有任一 = 白名单 |
+| 关掉的功能 | 网关 `feature.off` 一句「该功能未开启，可在设置里开启」；`pico-deep` 403；`/v1/kb/search` 403 |
+
+**知识库计什么（不耗 token/费用即免费）：**
+
+| 动作 | 记账 | 价签 |
+|------|------|------|
+| 只检索（hybrid，无精排） | 不记行 | 免费 |
+| 精排 `rerank-pro` | `kind=search` `model=rerank-pro` `source=kb_rerank`，token 来自 New API 回的 usage | `new-api:zhipu:rerank-pro` ¥0.8/M（40 段一问 ≈ 12 积分） |
+| 入库 | `kind=api` `model=kb-ingest-file`，`extra.ok` 只在真的进了索引才 true | `new-api:zhipu:kb-ingest-file` per_call ¥0.02（50 积分/文件）；失败不计价（`points=null`） |
+| `feat:rerank` 关 | 跳过精排，走免费路径，`rerank_skip=feature_off` | — |
+
+Meili 自己打嵌入，Pico 看不到 token，所以入库按文件不按 token。克隆文件（同 `content_sha`）仍各记一行——去重的根在 edu 重复推送。
