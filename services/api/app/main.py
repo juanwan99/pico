@@ -54,7 +54,7 @@ from app.kb_rebuild import rebuild_materials
 from app.llm_pass_router import router as llm_pass_router
 from app.my_files import router as my_files_router
 from app.openai_compat import router as openai_compat_router
-from app.rate_limit import ChatRateLimitMiddleware
+from app.rate_limit import ChatRateLimitMiddleware, get_chat_admission
 from app.settings import Settings, get_settings
 
 
@@ -254,7 +254,9 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         "rate_limit": {
             "chat_rpm": settings.pico_chat_rpm,
             "chat_max_concurrent": settings.pico_chat_max_concurrent,
+            "chat_school_max_concurrent": settings.pico_chat_school_max_concurrent,
             "key_scope": "membership_or_ip",
+            **get_chat_admission().snapshot(),
         },
     }
     # P2 MCP allowlist observability (tool names only — no secrets)

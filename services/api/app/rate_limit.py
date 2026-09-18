@@ -25,7 +25,36 @@ class ChatAdmission:
         self._requests: MutableMapping[str, deque[float]] = defaultdict(deque)
         self._active: MutableMapping[str, int] = defaultdict(int)
 
-    async def acquire(self, key: str, *, rpm: int, max_concurrent: int) -> str | None:
+    def reset(self) -> None:
+        self._requests.clear()
+        self._active.clear()
+
+    def snapshot(self) -> dict[str, int]:
+        """Counts only — no membership or school ids (public /health)."""
+        by_school: dict[str, int] = defaultdict(int)
+        ip_inflight = 0
+        for key, n in self._active.items():
+            school = school_from_key(key)
+            if school:
+                by_school[school] += int(n)
+            else:
+                ip_inflight += int(n)
+        counts = list(by_school.values())
+        return {
+            "inflight_total": int(sum(self._active.values())),
+            "school_count": len(by_school),
+            "inflight_max": max(counts) if counts else 0,
+            "ip_inflight": ip_inflight,
+        }
+
+    async def acquire(
+        self,
+        key: str,
+        *,
+        rpm: int,
+        max_concurrent: int,
+        school_max_concurrent: int = 0,
+    ) -> str | None:
         now = time.monotonic()
         async with self._lock:
             recent = self._requests[key]
@@ -35,6 +64,13 @@ class ChatAdmission:
                 return "rate_limit"
             if self._active[key] >= max_concurrent:
                 return "concurrency_limit"
+            school = school_from_key(key)
+            if school and school_max_concurrent > 0:
+                school_active = sum(
+                    n for k, n in self._active.items() if school_from_key(k) == school
+                )
+                if school_active >= school_max_concurrent:
+                    return "concurrency_limit"
             recent.append(now)
             self._active[key] += 1
             return None
@@ -47,12 +83,80 @@ class ChatAdmission:
                 self._active[key] -= 1
 
 
+_ADMISSION = ChatAdmission()
+
+
+def get_chat_admission() -> ChatAdmission:
+    return _ADMISSION
+
+
+def school_from_key(key: str) -> str | None:
+    """Parse ``membership:{school}:{member}``. IP keys have no school."""
+    if not key.startswith("membership:"):
+        return None
+    parts = key.split(":", 2)
+    if len(parts) < 3:
+        return None
+    school = parts[1].strip()
+    return school or None
+
+
+def parse_chat_caps_json(raw: str) -> dict[str, dict[str, int]]:
+    text = (raw or "").strip()
+    if not text:
+        return {}
+    try:
+        blob = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(blob, dict):
+        return {}
+    out: dict[str, dict[str, int]] = {}
+    for key, val in blob.items():
+        name = str(key or "").strip()
+        if not name or not isinstance(val, dict):
+            continue
+        parsed: dict[str, int] = {}
+        for field in ("rpm", "max_concurrent", "school_max_concurrent"):
+            if field not in val:
+                continue
+            try:
+                parsed[field] = int(val[field])
+            except (TypeError, ValueError):
+                continue
+        if parsed:
+            out[name] = parsed
+    return out
+
+
+def resolve_chat_caps(key: str, settings: Any) -> tuple[int, int, int]:
+    """Return (rpm, person_max, school_max). school_max 0 = unlimited."""
+    rpm = int(settings.pico_chat_rpm)
+    person = int(settings.pico_chat_max_concurrent)
+    school_max = int(getattr(settings, "pico_chat_school_max_concurrent", 16) or 0)
+    overrides = parse_chat_caps_json(getattr(settings, "pico_chat_caps_json", "") or "")
+    school = school_from_key(key)
+    if school:
+        school_over = overrides.get(f"school:{school}")
+        if school_over:
+            rpm = int(school_over.get("rpm", rpm))
+            if "school_max_concurrent" in school_over:
+                school_max = int(school_over["school_max_concurrent"])
+            elif "max_concurrent" in school_over:
+                school_max = int(school_over["max_concurrent"])
+    member_over = overrides.get(key)
+    if member_over:
+        rpm = int(member_over.get("rpm", rpm))
+        person = int(member_over.get("max_concurrent", person))
+    return rpm, person, school_max
+
+
 class ChatRateLimitMiddleware:
     """Apply membership RPM and concurrency caps to the expensive chat endpoint."""
 
     def __init__(self, app: Any) -> None:
         self.app = app
-        self.admission = ChatAdmission()
+        self.admission = get_chat_admission()
 
     async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
         if scope["type"] != "http" or scope.get("path") != "/v1/chat/completions":
@@ -61,10 +165,12 @@ class ChatRateLimitMiddleware:
 
         settings = get_settings()
         key = _rate_limit_key(scope, settings)
+        rpm, person, school_max = resolve_chat_caps(key, settings)
         reason = await self.admission.acquire(
             key,
-            rpm=settings.pico_chat_rpm,
-            max_concurrent=settings.pico_chat_max_concurrent,
+            rpm=rpm,
+            max_concurrent=person,
+            school_max_concurrent=school_max,
         )
         if reason:
             # Human-readable Chinese for teachers; no bare 429 stacks.

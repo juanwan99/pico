@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -16,7 +17,13 @@ from app.openai_compat import (
     _effective_max_tokens,
     _principal_from_auth,
 )
-from app.rate_limit import ChatAdmission, _rate_limit_key
+from app.rate_limit import (
+    ChatAdmission,
+    _rate_limit_key,
+    parse_chat_caps_json,
+    resolve_chat_caps,
+    school_from_key,
+)
 from app.settings import Settings
 
 
@@ -140,6 +147,56 @@ async def test_chat_admission_allows_four_then_busy() -> None:
         == "concurrency_limit"
     )
     assert await admission.acquire("membership:school:other", rpm=30, max_concurrent=4) is None
+
+
+@pytest.mark.asyncio
+async def test_chat_admission_school_cap_across_members() -> None:
+    admission = ChatAdmission()
+    assert (
+        await admission.acquire(
+            "membership:school-a:m1", rpm=30, max_concurrent=4, school_max_concurrent=1
+        )
+        is None
+    )
+    assert (
+        await admission.acquire(
+            "membership:school-a:m2", rpm=30, max_concurrent=4, school_max_concurrent=1
+        )
+        == "concurrency_limit"
+    )
+    assert (
+        await admission.acquire(
+            "membership:school-b:m1", rpm=30, max_concurrent=4, school_max_concurrent=1
+        )
+        is None
+    )
+    snap = admission.snapshot()
+    assert snap["inflight_total"] == 2
+    assert snap["school_count"] == 2
+    assert snap["inflight_max"] == 1
+    assert "school-a" not in json.dumps(snap)
+
+
+def test_resolve_chat_caps_json_override() -> None:
+    settings = Settings(
+        _env_file=None,
+        pico_chat_rpm=30,
+        pico_chat_max_concurrent=4,
+        pico_chat_school_max_concurrent=16,
+        pico_chat_caps_json=json.dumps(
+            {
+                "school:demo": {"school_max_concurrent": 2},
+                "membership:demo:m1": {"rpm": 5, "max_concurrent": 1},
+            }
+        ),
+    )
+    rpm, person, school = resolve_chat_caps("membership:demo:m1", settings)
+    assert rpm == 5
+    assert person == 1
+    assert school == 2
+    assert parse_chat_caps_json("not-json") == {}
+    assert school_from_key("ip:1.2.3.4") is None
+    assert school_from_key("membership:demo:m1") == "demo"
 
 
 async def test_chat_admission_isolated_by_membership_on_same_ip() -> None:

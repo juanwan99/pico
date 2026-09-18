@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     # Per membership (not global). #1003 T1: 8 teachers @ cap 2 all ok;
     # same teacher 4-way was 2×429. Raised 2→4 so two-three tabs don't collide.
     pico_chat_max_concurrent: int = 4
+    # Per school across memberships. 0 = unlimited. One busy school must not
+    # be the only cap; person cap still applies.
+    pico_chat_school_max_concurrent: int = 16
+    # Optional JSON overrides, no secrets:
+    # {"school:demo":{"school_max_concurrent":8},"membership:demo:m1":{"rpm":10,"max_concurrent":2}}
+    pico_chat_caps_json: str = ""
     # Reject (do not silent-truncate) user prompts longer than this many chars.
     # 12k was a DeepSeek-era cost cap; GPT via New API has a 128k–256k window.
     pico_chat_max_prompt_chars: int = 256000
@@ -373,6 +379,8 @@ class Settings(BaseSettings):
             errors.append("PICO_CHAT_RPM must be greater than zero")
         if self.pico_chat_max_concurrent <= 0:
             errors.append("PICO_CHAT_MAX_CONCURRENT must be greater than zero")
+        if self.pico_chat_school_max_concurrent < 0:
+            errors.append("PICO_CHAT_SCHOOL_MAX_CONCURRENT must be >= 0")
         if self.pico_chat_max_prompt_chars <= 0:
             errors.append("PICO_CHAT_MAX_PROMPT_CHARS must be greater than zero")
         if self.pico_run_max_tokens <= 0:
