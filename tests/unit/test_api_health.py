@@ -14,6 +14,9 @@ from app.settings import Settings, get_settings
 
 
 def test_health() -> None:
+    from app.rate_limit import get_chat_admission
+
+    get_chat_admission().reset()
     client = TestClient(app)
     r = client.get("/health")
     assert r.status_code == 200
@@ -23,7 +26,12 @@ def test_health() -> None:
     assert body["rate_limit"] == {
         "chat_rpm": 30,
         "chat_max_concurrent": 4,
+        "chat_school_max_concurrent": 16,
         "key_scope": "membership_or_ip",
+        "inflight_total": 0,
+        "school_count": 0,
+        "inflight_max": 0,
+        "ip_inflight": 0,
     }
     assert body["default_runtime"] == "pi-agent"
     assert body["pi_agent_runtime_enabled"] is True

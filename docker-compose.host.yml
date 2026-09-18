@@ -73,6 +73,8 @@ services:
       PICO_MODEL_PROVIDER: "${PICO_MODEL_PROVIDER:-deepseek}"
       PICO_CHAT_RPM: "${PICO_CHAT_RPM:-30}"
       PICO_CHAT_MAX_CONCURRENT: "${PICO_CHAT_MAX_CONCURRENT:-4}"
+      PICO_CHAT_SCHOOL_MAX_CONCURRENT: "${PICO_CHAT_SCHOOL_MAX_CONCURRENT:-16}"
+      PICO_CHAT_CAPS_JSON: "${PICO_CHAT_CAPS_JSON:-}"
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}"
       DEEPSEEK_MODEL: "${DEEPSEEK_MODEL:-deepseek-v4-flash}"
@@ -81,6 +83,8 @@ services:
       PICO_KIMI_WORKDIR_BASE: /app/data/kimi-work
       PICO_PI_WORKDIR_BASE: /app/data/pi-work
       PICO_TRUE_PI_MEMORY_ROOT: /app/data/pi-memory
+      # Session jsonl must survive recreate. Default config is /tmp (wiped).
+      PICO_TRUE_PI_SESSION_ROOT: /app/data/pi-sessions
       # True-Pi cutover (env_file wins when set; listed for ops visibility)
       # DEFAULT multi-step = pi-true when PICO_TRUE_PI_DEFAULT=1
       # Accident rollback: PICO_HOSTED_LOOP=1 only (see docs/OPS-TRUE-PI-ROLLBACK.md)
