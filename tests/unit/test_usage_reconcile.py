@@ -97,6 +97,54 @@ def test_newapi_missing_is_honest_not_zero_billed() -> None:
     assert report["ok"] is True
 
 
+def test_headline_ok_ignores_embed_mix() -> None:
+    pico_rows = [
+        {
+            "kind": "llm",
+            "model": "gpt-5.6-sol",
+            "prompt_tokens": 800,
+            "completion_tokens": 200,
+            "tokens_unknown": False,
+            "idempotency_key": "llm:r1",
+        }
+    ]
+    newapi_rows = [
+        {"model_name": "gpt-5.6-sol", "prompt_tokens": 800, "completion_tokens": 200},
+        {"model_name": "embedding-3", "prompt_tokens": 400, "completion_tokens": 0},
+    ]
+    pico = ur.pico_token_book(pico_rows)
+    newapi = ur.newapi_token_book(newapi_rows)
+    blended = ur.deviation(pico["total_tokens"], newapi["total_tokens"])
+    assert blended > 0.2
+    report = ur.reconcile(
+        pico_book=pico,
+        newapi_book=newapi,
+        export_vs_ledger=None,
+        pico_rows=pico_rows,
+        newapi_rows=newapi_rows,
+    )
+    assert report["ok"] is True
+    assert report["by_model"]["gpt-5.6-sol"]["comparable"] is True
+    assert report["by_model"]["embedding-3"]["comparable"] is False
+    assert report["by_model"]["embedding-3"]["lane"] == "embed"
+
+
+def test_unknown_llm_breakdown_keeps_reason() -> None:
+    rows = [
+        {
+            "kind": "llm",
+            "model": "gpt-5.6-sol",
+            "tokens_unknown": True,
+            "source": "openai_compat",
+            "extra": {"reason": "provider_usage_missing", "fail_without_usage": True},
+        }
+    ]
+    out = ur.unknown_llm_breakdown(rows)
+    assert len(out) == 1
+    assert out[0]["reason"] == "provider_usage_missing"
+    assert out[0]["fail_without_usage"] is True
+
+
 def test_read_pico_and_newapi_sqlite(tmp_path: Path) -> None:
     pico = tmp_path / "pico.db"
     con = sqlite3.connect(pico)

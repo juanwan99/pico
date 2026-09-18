@@ -98,6 +98,7 @@ from pico_orchestrator.sandbox_s2 import PNG_MAGIC, raster_html_isolated, raster
 from pico_orchestrator.sandbox_sidecar import sidecar_json
 from pico_orchestrator.usage_hook import (
     emit_image_usage,
+    emit_query_embed_usage,
     emit_rerank_usage,
     emit_sandbox_usage,
 )
@@ -866,6 +867,13 @@ def _workspace_handlers(
                     limit=limit,
                     rerank_ok=feature_enabled(principal, "rerank"),
                 )
+                if result.get("hybrid"):
+                    # #1052: Meili query embed costs tokens Pico cannot see.
+                    await emit_query_embed_usage(
+                        principal,
+                        hybrid=True,
+                        query_count=int(result.get("expanded") or 0) + 1,
+                    )
                 if result.get("reranked"):
                     # #1042: rerank costs tokens → metered. Plain search is free.
                     await emit_rerank_usage(principal, usage=result.get("rerank_usage"))

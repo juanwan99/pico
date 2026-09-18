@@ -199,6 +199,27 @@ def test_upstream_overloaded_english_is_human() -> None:
     assert "overloaded" not in msg.lower()
     assert "server_error" not in msg.lower()
     assert not msg.startswith("未能完成")
+    assert "结果里" not in msg
+
+
+def test_overloaded_with_landed_file_points_at_results() -> None:
+    msg = user_message_for_error(
+        "server_error: Our servers are currently overloaded. Please try again later.",
+        code="true_pi.assistant_error",
+        has_deliverable=True,
+    )
+    assert "繁忙" in msg or "过载" in msg
+    assert "结果里" in msg
+    assert "overloaded" not in msg.lower()
+    p = enrich_fail_payload(
+        {
+            "status": "failed",
+            "reason": "server_error: overloaded",
+            "code": "true_pi.assistant_error",
+            "has_deliverable": True,
+        }
+    )
+    assert "结果里" in p["user_message"]
 
 
 def test_key_copy_points_at_new_api_not_legacy_vendors() -> None:

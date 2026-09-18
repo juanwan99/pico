@@ -1919,6 +1919,15 @@ async def chat_completions(
 
         q: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
 
+        async def _deliverable() -> bool:
+            try:
+                async with factory() as session:
+                    from app.run_service import run_has_deliverable
+
+                    return await run_has_deliverable(session, run_id)
+            except Exception:  # noqa: BLE001 — stream path stays up
+                return False
+
         async def emit(event_type: str, payload: dict[str, Any]) -> None:
             if event_type == "thinking.delta":
                 # Token-level thoughts: stream only. Do not flood the ledger.
@@ -2228,7 +2237,14 @@ async def chat_completions(
                             last_wire = time.monotonic()
                             yield chunk({"content": p})
                     last_wire = time.monotonic()
-                    yield chunk({"content": f"【错误】{user_message_for_error(str(payload))}"})
+                    has_file = await _deliverable()
+                    yield chunk(
+                        {
+                            "content": (
+                                f"【错误】{user_message_for_error(str(payload), has_deliverable=has_file)}"
+                            )
+                        }
+                    )
                     break
                 elif kind == "done":
                     result = payload
@@ -2245,7 +2261,10 @@ async def chat_completions(
                         text = getattr(result, "final_text", None) or ""
                         if not text and getattr(result, "status", None) == "failed":
                             # Prefer Chinese user_message for timeout / max_steps / token_cap
-                            text = user_message_for_error(getattr(result, "error", None))
+                            text = user_message_for_error(
+                                getattr(result, "error", None),
+                                has_deliverable=await _deliverable(),
+                            )
                         if not text:
                             text = getattr(result, "error", None) or ""
                         if not str(text).strip():

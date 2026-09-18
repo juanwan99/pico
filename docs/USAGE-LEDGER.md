@@ -162,6 +162,7 @@ await record_usage_event(
 - `extra` 只放工具/时长/次数；禁止单价与币种。
 - 幂等键必须含 run 或 tool_call / session，便于重试。
 - **#508 / #513：** `sandbox` 已 emit（不再是预留）。写入点：`sandbox_preview_inspect`（含 S2 光栅）、`generate_html_document` 预览落盘、可选 `sandbox_workspace_exec`。合同见 [`docs/SANDBOX-S1.md`](./SANDBOX-S1.md) · [`docs/SANDBOX-S2.md`](./SANDBOX-S2.md)。截图 `artifact_id` 可放进 extra；仍禁止钱字段。
+- **#1052：** hybrid 检索记一行 `kind=search` · `source=kb_query_embed` · `model=embedding-3` · `tokens_unknown=1`。Meili 拥有查询嵌入 token，Pico 不编 0。`usage-reconcile.py` 按模型拆；嵌入不进头条 ok。
 
 ---
 

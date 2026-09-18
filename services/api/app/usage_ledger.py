@@ -548,6 +548,7 @@ async def emit_llm_usage_after_run(
     tid = task_id
     usage = token_usage
     backend_from_event: str | None = None
+    run_status: str | None = None
     try:
         factory = session_factory()
         async with factory() as session:
@@ -558,6 +559,7 @@ async def emit_llm_usage_after_run(
                 tid = tid or run.task_id
                 ui_model = (run.model or "").strip() or None
                 model_id = model_id or ui_model
+                run_status = (run.status or "").strip() or None
                 backend_from_event = await _backend_model_from_events(session, rid)
                 if usage is None:
                     try:
@@ -584,6 +586,10 @@ async def emit_llm_usage_after_run(
     extra = usage_extra_bits(usage_dict)
     if ui_model and is_ui_lane(ui_model):
         extra.setdefault("ui_model", ui_model)
+    if fields.tokens_unknown:
+        extra.setdefault("reason", "provider_usage_missing")
+        if run_status == "failed":
+            extra.setdefault("fail_without_usage", True)
     try:
         from app.channel_rates import load_rate_card
 

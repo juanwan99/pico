@@ -660,3 +660,39 @@ def test_kb_item_status(client: TestClient, monkeypatch) -> None:
     assert body["chunk_count"] == 4
     assert body["ready"] is True
     assert body["scope"] == "school"
+
+
+def test_search_hybrid_emits_query_embed_unknown(client, monkeypatch, tmp_path) -> None:
+    def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None, rerank_ok=True):
+        _ = query, school_id, membership_id, limit, include_school, client, rerank_ok
+        return {
+            "hybrid": True,
+            "expanded": 1,
+            "hits": [
+                {
+                    "chunk_id": "art-1_0000",
+                    "artifact_id": "art-1",
+                    "material_id": "art-1",
+                    "title": "通知.pdf",
+                    "text": "7月8日",
+                    "school_id": school_id,
+                    "membership_id": membership_id,
+                }
+            ],
+        }
+
+    monkeypatch.setattr("app.edu_kb_ingest.search_materials", fake_search)
+    res = client.post(
+        "/v1/kb/search",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"query": "培训", "limit": 5},
+    )
+    assert res.status_code == 200, res.text
+    rows = _usage_rows(tmp_path)
+    embed = [r for r in rows if r.get("source") == "kb_query_embed"]
+    assert len(embed) == 1
+    assert embed[0]["tokens_unknown"] == 1
+    assert embed[0]["model"] == "embedding-3"
+    extra = json.loads(embed[0]["extra_json"] or "{}")
+    assert extra["query_count"] == 2
+    assert extra["reason"] == "meili_owns_query_embed_tokens"

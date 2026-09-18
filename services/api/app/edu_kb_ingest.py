@@ -16,6 +16,7 @@ from pico_orchestrator.meili_kb import (
     count_material,
     documents_from_text,
     is_noise_title,
+    kb_embed_model,
     lab_index_blocked,
     search_materials,
     upsert_documents,
@@ -242,6 +243,24 @@ async def post_kb_search(
         )
     except RuntimeError as exc:
         raise _bad("kb.unavailable", "材料库暂时不可用，没有查到。不能编造材料内容。", 503) from exc
+    if result.get("hybrid"):
+        # #1052: Meili query embed tokens stay unknown — do not invent 0.
+        await record_usage_event(
+            school_id=principal.school_id,
+            membership_id=principal.membership_id,
+            kind="search",
+            model=kb_embed_model(),
+            tokens_unknown=True,
+            source="kb_query_embed",
+            extra={
+                "tool": "kb_query_embed",
+                "query_count": int(result.get("expanded") or 0) + 1,
+                "ok": True,
+                "reason": "meili_owns_query_embed_tokens",
+            },
+            bill_to=payer_for(principal),
+            idempotency_key=f"search:norun:kb_query_embed:{uuid.uuid4().hex[:12]}",
+        )
     if result.get("reranked"):
         # #1042: the rerank call costs tokens; plain search does not.
         await record_usage_event(
