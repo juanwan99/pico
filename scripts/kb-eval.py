@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Knowledge-base retrieval eval (#1005 / #1006 T1). Not CI.
 
-Three commands, all run on the ECS with /opt/pico/.env loaded:
+Commands, all run on the ECS with /opt/pico/.env loaded:
 
   gen  — build a golden set from one school's materials already in Meili.
          GPT (via New API) writes teacher-style questions whose answer is a
@@ -10,6 +10,7 @@ Three commands, all run on the ECS with /opt/pico/.env loaded:
   held — build a frozen held-out set without a model: one mid-span excerpt per
          file, capped per suffix, gold files excluded. Same file shape as gen,
          `kind` = suffix. Regenerate only with a new --seed and a new --out.
+  schools — list indexed school_id counts. Second school missing → 「无校」, not a fake gold.
   run  — score a retrieval path against a set, per-item tenant filter, file
          collapse like live: file@k, quote-visible@k (quote inside a returned
          child), quote-in-passages@20 (no collapse), by kind, p50/p95 latency.
@@ -489,6 +490,58 @@ def search_via_api(q: str, *, base: str, school_id: str, membership_id: str, lim
     return list(resp.json().get("hits") or []), dt
 
 
+def meili_school_counts() -> dict[str, int]:
+    """Facet school_id when the index allows it; otherwise page unique ids."""
+    url, headers = _meili()
+    resp = httpx.post(
+        f"{url}/indexes/{INDEX}/search",
+        json={"q": "", "limit": 0, "facets": ["school_id"]},
+        headers=headers,
+        timeout=20.0,
+    )
+    if resp.status_code < 400:
+        dist = ((resp.json().get("facetDistribution") or {}).get("school_id") or {})
+        if isinstance(dist, dict) and dist:
+            return {str(k): int(v) for k, v in dist.items()}
+    rows = meili_fetch_all("", ["school_id"])
+    counts: dict[str, int] = {}
+    for row in rows:
+        sid = str(row.get("school_id") or "").strip()
+        if sid:
+            counts[sid] = counts.get(sid, 0) + 1
+    return counts
+
+
+def cmd_schools(args: argparse.Namespace) -> int:
+    try:
+        counts = meili_school_counts()
+    except Exception as exc:  # noqa: BLE001 — ops helper, honest fail
+        print(json.dumps({"ok": False, "reason": type(exc).__name__}, ensure_ascii=False))
+        return 2
+    schools = [
+        {"school_id": sid[:8], "docs": n} for sid, n in sorted(counts.items())
+    ]
+    want = (getattr(args, "school", "") or "").strip()
+    if want:
+        docs = int(counts.get(want) or 0)
+        status = "ready" if docs else "无校"
+        print(
+            json.dumps(
+                {"ok": True, "school_id": want[:8], "docs": docs, "status": status},
+                ensure_ascii=False,
+            )
+        )
+        return 0
+    status = "multi" if len(schools) >= 2 else ("ready" if schools else "无校")
+    print(
+        json.dumps(
+            {"ok": True, "schools": len(schools), "status": status, "counts": [s["docs"] for s in schools]},
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     golden = json.loads(Path(args.golden).read_text(encoding="utf-8"))
     items = golden["items"]
@@ -649,6 +702,9 @@ def main() -> int:
     r.add_argument("--embedder", default="default")
     r.add_argument("--base", default="http://127.0.0.1:18765")
     r.set_defaults(fn=cmd_run)
+    s = sub.add_parser("schools")
+    s.add_argument("--school", default="", help="probe one school_id; 0 docs → 无校")
+    s.set_defaults(fn=cmd_schools)
     args = ap.parse_args()
     return int(args.fn(args))
 

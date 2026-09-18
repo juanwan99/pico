@@ -227,6 +227,71 @@ async def emit_search_usage(
     )
 
 
+async def emit_query_embed_usage(
+    principal: Any,
+    *,
+    hybrid: bool,
+    query_count: int = 1,
+    model: str | None = None,
+    tool_call_id: str | None = None,
+    source: str = "kb_query_embed",
+) -> None:
+    """Honest unknown for Meili query embed (#1052). Tokens live in New API.
+
+    Pico never invents a token count. Keyword-only search emits nothing.
+    """
+    if not hybrid:
+        return
+    bind = _BIND.get()
+    school = getattr(principal, "school_id", None) or (bind.school_id if bind else "")
+    member = getattr(principal, "membership_id", None) or (
+        bind.membership_id if bind else ""
+    )
+    if not school or not member:
+        return
+    run_id = (bind.run_id if bind else None) or None
+    task_id = (bind.task_id if bind else None) or None
+    store = getattr(principal, "_pico_artifact_store", None)
+    if run_id is None and store is not None:
+        run_id = getattr(store, "_run_id", None)
+        task_id = task_id or getattr(store, "_task_id", None)
+    try:
+        from pico_orchestrator.meili_kb import kb_embed_model
+
+        model_name = (model or kb_embed_model() or "embedding-3").strip()[:64]
+    except Exception:  # noqa: BLE001
+        model_name = (model or "embedding-3").strip()[:64] or "embedding-3"
+    payload: dict[str, Any] = {
+        "tool": source,
+        "ok": True,
+        "query_count": max(1, int(query_count or 1)),
+        "reason": "meili_owns_query_embed_tokens",
+    }
+    call_id = (
+        (tool_call_id or "").strip()
+        or (bind.tool_call_id if bind else "")
+        or uuid.uuid4().hex[:12]
+    )
+    key = f"search:{run_id or 'norun'}:{source}:{call_id}"
+    try:
+        from app.usage_ledger import record_usage_event
+    except Exception:  # noqa: BLE001
+        logger.debug("usage_ledger not importable; query-embed emit skipped")
+        return
+    await record_usage_event(
+        school_id=str(school),
+        membership_id=str(member),
+        kind="search",
+        model=model_name,
+        tokens_unknown=True,
+        task_id=str(task_id) if task_id else None,
+        run_id=str(run_id) if run_id else None,
+        source=source[:64],
+        extra=payload,
+        idempotency_key=key[:160],
+    )
+
+
 async def emit_rerank_usage(
     principal: Any,
     *,
@@ -236,7 +301,8 @@ async def emit_rerank_usage(
 ) -> None:
     """Record the New API rerank call behind one kb_search (#1042). kind=search,
     model = rerank model, provider tokens; without usage the row is an honest
-    unknown. Plain search (no rerank) emits nothing — it costs no tokens."""
+    unknown. Keyword-only search emits nothing. Hybrid query embed is a
+    separate ``kb_query_embed`` unknown row (#1052)."""
     bind = _BIND.get()
     school = getattr(principal, "school_id", None) or (bind.school_id if bind else "")
     member = getattr(principal, "membership_id", None) or (

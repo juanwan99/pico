@@ -5,8 +5,25 @@ Internal logs/events may keep raw detail; UI should prefer `user_message`.
 
 from __future__ import annotations
 
+FILE_IN_RESULTS = "已经生成的文件还在结果里，可以直接打开。"
 
-def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
+
+def _with_deliverable_hint(msg: str, has_deliverable: bool) -> str:
+    """When tools already landed, never leave the teacher with busy-only copy."""
+    if not has_deliverable:
+        return msg
+    if "已经生成的文件" in msg:
+        return msg
+    return msg.rstrip("。") + "。" + FILE_IN_RESULTS
+
+
+def user_message_for_error(
+    raw: str | None, *, code: str | None = None, has_deliverable: bool = False
+) -> str:
+    return _with_deliverable_hint(_map_error(raw, code=code), has_deliverable)
+
+
+def _map_error(raw: str | None, *, code: str | None = None) -> str:
     text = (raw or "").strip()
     low = text.lower()
     c = (code or "").lower()
@@ -205,14 +222,17 @@ def user_message_for_error(raw: str | None, *, code: str | None = None) -> str:
     return f"未能完成：{text[:160]}"
 
 
-def enrich_fail_payload(payload: dict) -> dict:
+def enrich_fail_payload(payload: dict, *, has_deliverable: bool = False) -> dict:
     """Ensure failed run.status / run.error payloads expose user_message."""
     from pico_orchestrator.redact import redact_tenant_text
 
     out = dict(payload)
     raw = out.get("reason") or out.get("error") or out.get("message")
     code = out.get("code") if isinstance(out.get("code"), str) else None
+    has_file = has_deliverable or bool(out.get("has_deliverable"))
     if out.get("status") == "failed" or "error" in out or out.get("reason"):
-        msg = user_message_for_error(str(raw) if raw else None, code=code)
+        msg = user_message_for_error(
+            str(raw) if raw else None, code=code, has_deliverable=has_file
+        )
         out.setdefault("user_message", redact_tenant_text(msg))
     return out

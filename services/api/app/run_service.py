@@ -31,6 +31,27 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+_HIDDEN_DELIVERABLE_KINDS = ("edu_excerpt", "kb_text")
+_SKIP_DELIVERABLE_TITLES = {"回复摘要", "summary", "run summary"}
+
+
+async def run_has_deliverable(session: AsyncSession, run_id: str) -> bool:
+    """True when this run already has a teacher-visible file (not excerpt/summary)."""
+    rid = (run_id or "").strip()
+    if not rid:
+        return False
+    result = await session.execute(
+        select(ArtifactRow.kind, ArtifactRow.title).where(ArtifactRow.run_id == rid)
+    )
+    for kind, title in result.all():
+        if kind in _HIDDEN_DELIVERABLE_KINDS:
+            continue
+        if (title or "").strip() in _SKIP_DELIVERABLE_TITLES:
+            continue
+        return True
+    return False
+
+
 # In-process run owners (Phase-1 single-node). Tracked so SIGTERM can drain.
 _inflight_run_tasks: set[asyncio.Task[Any]] = set()
 
@@ -320,6 +341,7 @@ async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
     ).scalars().all()
     counts = {"cancelled": 0, "failed": 0}
     for run in active:
+        has_file = await run_has_deliverable(session, run.id)
         if run.cancel_requested:
             run.status = "cancelled"
             run.error = None
@@ -327,7 +349,7 @@ async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
                 "status": "cancelled",
                 "reason": "api_restart_reconciliation",
                 "user_message": user_message_for_error(
-                    "cancelled", code="cancelled"
+                    "cancelled", code="cancelled", has_deliverable=has_file
                 ),
             }
         else:
@@ -340,7 +362,8 @@ async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
                     "reason": "api_restart_reconciliation",
                     "error": run.error,
                     "code": "api.restart",
-                }
+                },
+                has_deliverable=has_file,
             )
         run.ended_at = _utcnow()
         counts[run.status] += 1
@@ -522,19 +545,23 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             run.status = "failed"
             run.ended_at = _utcnow()
             run.error = str(exc)
+            has_file = await run_has_deliverable(session, run_id)
             await session.commit()
             await append_event(
                 session,
                 run_id,
                 "run.status",
-                enrich_fail_payload({"status": "failed", "reason": str(exc)}),
+                enrich_fail_payload(
+                    {"status": "failed", "reason": str(exc)},
+                    has_deliverable=has_file,
+                ),
             )
             await append_event(
                 session,
                 run_id,
                 "message.final",
                 {
-                    "text": user_message_for_error(str(exc)),
+                    "text": user_message_for_error(str(exc), has_deliverable=has_file),
                     "role": "assistant",
                     "kind": "error",
                 },
@@ -571,13 +598,16 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         from pico_orchestrator.redact import redact_tenant_text
 
         if result.status == "failed" and not result.final_text:
+            has_file = await run_has_deliverable(session, run_id)
             await append_event(
                 session,
                 run_id,
                 "message.final",
                 {
                     "text": redact_tenant_text(
-                        user_message_for_error(result.error),
+                        user_message_for_error(
+                            result.error, has_deliverable=has_file
+                        ),
                         school_id=principal.school_id,
                         membership_id=principal.membership_id,
                     ),
