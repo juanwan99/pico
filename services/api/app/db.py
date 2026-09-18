@@ -267,6 +267,8 @@ class EduNamedBindRow(Base):
     item_ids_json: Mapped[str] = mapped_column(Text, default="[]")
     field_id: Mapped[str] = mapped_column(String(36), default="")
     archive_folder_id: Mapped[str] = mapped_column(String(36), default="")
+    search_school: Mapped[int] = mapped_column(Integer, default=0)
+    search_field_ids_json: Mapped[str] = mapped_column(Text, default="[]")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
@@ -385,6 +387,12 @@ def _migrate_sqlite_sync(conn) -> None:
     if ncols and "archive_folder_id" not in ncols:
         conn.execute(
             text("ALTER TABLE edu_named_bind ADD COLUMN archive_folder_id VARCHAR(36) DEFAULT ''")
+        )
+    if ncols and "search_school" not in ncols:
+        conn.execute(text("ALTER TABLE edu_named_bind ADD COLUMN search_school INTEGER DEFAULT 0"))
+    if ncols and "search_field_ids_json" not in ncols:
+        conn.execute(
+            text("ALTER TABLE edu_named_bind ADD COLUMN search_field_ids_json TEXT DEFAULT '[]'")
         )
 
     try:

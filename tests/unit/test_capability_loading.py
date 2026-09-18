@@ -133,7 +133,7 @@ def test_system_md_slim_and_catalog_not_scene_weld():
     assert "This block is **SYSTEM**" in body
     assert "Default is a chat answer" in body
     assert "Being listed does **not** mean you must call them" in body
-    assert "Call `kb_search` only when the teacher asks about school materials" in body
+    assert "School library search is in scope this turn" in body
     assert "generate_diagram" in body
     assert "`publish_html_page` is not a Pico capability" in body
     assert "school-admin approval" in body

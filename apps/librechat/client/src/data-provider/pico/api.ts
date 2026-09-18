@@ -578,19 +578,46 @@ export async function getEduSchoolMaterial(itemId: string) {
   return picoFetch<EduSchoolMaterial>(`/v1/edu/materials/${encodeURIComponent(itemId)}`);
 }
 
+export type EduNamedSearch = {
+  school?: boolean;
+  fieldIds?: string[];
+};
+
 export async function getEduNamedIds(conversationId = '') {
   const qs = conversationId ? `?conversation_id=${encodeURIComponent(conversationId)}` : '';
-  return picoFetch<{ ids?: string[]; field_id?: string; dumped?: boolean }>(`/v1/edu/named${qs}`);
+  return picoFetch<{
+    ids?: string[];
+    field_id?: string;
+    search_school?: boolean;
+    search_field_ids?: string[];
+    dumped?: boolean;
+  }>(`/v1/edu/named${qs}`);
 }
 
-export async function putEduNamedIds(conversationId: string, ids: string[], fieldId = '') {
-  return picoFetch<{ ids?: string[]; field_id?: string; dumped?: boolean }>(`/v1/edu/named`, {
+export async function putEduNamedIds(
+  conversationId: string,
+  ids: string[],
+  fieldId = '',
+  search?: EduNamedSearch,
+) {
+  const body: Record<string, unknown> = {
+    conversation_id: conversationId || '',
+    ids,
+    field_id: fieldId || '',
+  };
+  if (search) {
+    body.search_school = !!search.school;
+    body.search_field_ids = Array.isArray(search.fieldIds) ? search.fieldIds : [];
+  }
+  return picoFetch<{
+    ids?: string[];
+    field_id?: string;
+    search_school?: boolean;
+    search_field_ids?: string[];
+    dumped?: boolean;
+  }>(`/v1/edu/named`, {
     method: 'PUT',
-    body: JSON.stringify({
-      conversation_id: conversationId || '',
-      ids,
-      field_id: fieldId || '',
-    }),
+    body: JSON.stringify(body),
   });
 }
 

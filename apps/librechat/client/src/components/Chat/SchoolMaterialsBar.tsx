@@ -19,9 +19,17 @@ import {
 import { cn } from '~/utils';
 import ComposerChromeRow from '~/components/Chat/ComposerChromeRow';
 
-function asNamedIds(row: { ids?: string[] }) {
+function asNamedState(row: {
+  ids?: string[];
+  field_id?: string;
+  search_school?: boolean;
+  search_field_ids?: string[];
+}) {
   return {
     ids: Array.isArray(row.ids) ? row.ids : [],
+    fieldId: typeof row.field_id === 'string' ? row.field_id : '',
+    searchSchool: row.search_school === true,
+    searchFieldIds: Array.isArray(row.search_field_ids) ? row.search_field_ids : [],
   };
 }
 
@@ -31,8 +39,10 @@ function FieldFolderList({
   loadingFields,
   loadedFields,
   named,
+  searchFieldIds,
   testPrefix,
   onToggleField,
+  onToggleFieldSearch,
   onToggleItem,
 }: {
   groups: SchoolFieldGroup[];
@@ -40,8 +50,10 @@ function FieldFolderList({
   loadingFields: Record<string, boolean>;
   loadedFields: Record<string, boolean>;
   named: string[];
+  searchFieldIds: string[];
   testPrefix: string;
   onToggleField: (fieldKey: string) => void;
+  onToggleFieldSearch: (fieldKey: string) => void;
   onToggleItem: (id: string) => void;
 }) {
   return (
@@ -51,11 +63,23 @@ function FieldFolderList({
         const isOpen = !!expanded[fieldKey];
         const isLoading = !!loadingFields[fieldKey];
         const hasLoaded = !!loadedFields[fieldKey] || fieldKey === 'other';
+        const fieldSearchOn = fieldKey !== 'other' && searchFieldIds.includes(fieldKey);
         return (
           <section key={fieldKey} className="py-0.5" data-testid={`${testPrefix}-folder-${fieldKey}`}>
+            <div className="flex items-start gap-1">
+            {fieldKey !== 'other' ? (
+              <input
+                type="checkbox"
+                className="mt-1.5"
+                checked={fieldSearchOn}
+                onChange={() => onToggleFieldSearch(fieldKey)}
+                data-testid={`${testPrefix}-search-${fieldKey}`}
+                aria-label={`检索${group.field.name || group.field.id}`}
+              />
+            ) : null}
             <button
               type="button"
-              className="pico-type-sidebar flex w-full items-center gap-1 py-0.5 text-left text-[color:var(--pico-ink)]"
+              className="pico-type-sidebar flex min-w-0 flex-1 items-center gap-1 py-0.5 text-left text-[color:var(--pico-ink)]"
               aria-expanded={isOpen}
               data-testid={`${testPrefix}-toggle-${fieldKey}`}
               onClick={() => onToggleField(fieldKey)}
@@ -68,6 +92,7 @@ function FieldFolderList({
               />
               <span>{group.field.name || group.field.id}</span>
             </button>
+            </div>
             {isOpen ? (
               isLoading || !hasLoaded ? (
                 <p className="pico-type-aux py-0.5 pl-5 text-[color:var(--pico-ink-3)]">正在列出文档…</p>
@@ -121,6 +146,9 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
   const [loadedFields, setLoadedFields] = useState<Record<string, boolean>>({});
   const [loadingFields, setLoadingFields] = useState<Record<string, boolean>>({});
   const [named, setNamed] = useState<string[]>([]);
+  const [landFieldId, setLandFieldId] = useState('');
+  const [searchSchool, setSearchSchool] = useState(false);
+  const [searchFieldIds, setSearchFieldIds] = useState<string[]>([]);
   const [fields, setFields] = useState<EduSchoolField[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [followOpen, setFollowOpen] = useState(false);
@@ -168,7 +196,11 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
         if (cancelled) {
           return;
         }
-        setNamed(asNamedIds(namedRow).ids);
+        const namedState = asNamedState(namedRow);
+        setNamed(namedState.ids);
+        setLandFieldId(namedState.fieldId);
+        setSearchSchool(namedState.searchSchool);
+        setSearchFieldIds(namedState.searchFieldIds);
         setFields(fieldsRow.fields);
         setItemsByField({});
         setLoadedFields({});
@@ -223,18 +255,52 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
     await task;
   }, [loadedFields]);
 
-  const toggle = useCallback(
-    async (id: string) => {
-      const next = named.includes(id) ? named.filter((x) => x !== id) : [...named, id].slice(0, 12);
-      setNamed(next);
+  const persist = useCallback(
+    async (nextIds: string[], nextSchool: boolean, nextFields: string[]) => {
+      const fields = nextSchool ? [] : nextFields;
+      setNamed(nextIds);
+      setSearchSchool(nextSchool);
+      setSearchFieldIds(fields);
       try {
-        const row = await putEduNamedIds(convo, next, '');
-        setNamed(Array.isArray(row.ids) ? row.ids : next);
+        const row = await putEduNamedIds(convo, nextIds, landFieldId, {
+          school: nextSchool,
+          fieldIds: fields,
+        });
+        const saved = asNamedState(row);
+        setNamed(saved.ids);
+        if (saved.fieldId) {
+          setLandFieldId(saved.fieldId);
+        }
+        setSearchSchool(saved.searchSchool);
+        setSearchFieldIds(saved.searchFieldIds);
       } catch {
         setError('勾选没写上');
       }
     },
-    [convo, named],
+    [convo, landFieldId],
+  );
+
+  const toggle = useCallback(
+    async (id: string) => {
+      const next = named.includes(id) ? named.filter((x) => x !== id) : [...named, id].slice(0, 12);
+      await persist(next, searchSchool, searchFieldIds);
+    },
+    [named, persist, searchFieldIds, searchSchool],
+  );
+
+  const toggleSchoolSearch = useCallback(async () => {
+    await persist(named, !searchSchool, searchFieldIds);
+  }, [named, persist, searchFieldIds, searchSchool]);
+
+  const toggleFieldSearch = useCallback(
+    async (fieldKey: string) => {
+      const on = searchFieldIds.includes(fieldKey);
+      const nextFields = on
+        ? searchFieldIds.filter((id) => id !== fieldKey)
+        : [...searchFieldIds, fieldKey];
+      await persist(named, false, nextFields);
+    },
+    [named, persist, searchFieldIds],
   );
 
   const toggleField = useCallback(
@@ -260,9 +326,19 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
     loadingFields,
     loadedFields,
     named,
+    searchFieldIds,
     onToggleField: toggleField,
+    onToggleFieldSearch: (id: string) => void toggleFieldSearch(id),
     onToggleItem: (id: string) => void toggle(id),
   };
+
+  const chromeHint = named.length
+    ? String(named.length)
+    : searchSchool
+      ? '全校可检索'
+      : searchFieldIds.length
+        ? `${searchFieldIds.length} 场可检索`
+        : '默认可搜负责的场 · 未勾选不读正文';
 
   return (
     <div ref={rootRef} className="w-full text-left" data-testid="school-materials-bar">
@@ -275,15 +351,16 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
           aria-haspopup="true"
           onClick={() => setOpen((v) => !v)}
         >
-          {named.length ? (
-            <span className="pico-type-aux min-w-0 truncate text-[color:var(--pico-ink-2)]">
-              {named.length}
-            </span>
-          ) : (
-            <span className="pico-type-aux min-w-0 truncate text-[color:var(--pico-ink-3)]">
-              未勾选不读正文
-            </span>
-          )}
+          <span
+            className={cn(
+              'pico-type-aux min-w-0 truncate',
+              named.length || searchSchool || searchFieldIds.length
+                ? 'text-[color:var(--pico-ink-2)]'
+                : 'text-[color:var(--pico-ink-3)]',
+            )}
+          >
+            {chromeHint}
+          </span>
           <span aria-hidden className="pico-type-aux pico-chrome-caret">
             ▾
           </span>
@@ -291,6 +368,19 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
       </ComposerChromeRow>
       {open ? (
         <div className="mt-1" data-testid="school-materials-tree">
+          <label className="pico-type-body flex items-start gap-2 py-0.5 text-[color:var(--pico-ink)]">
+            <input
+              type="checkbox"
+              className="mt-1.5"
+              checked={searchSchool}
+              onChange={() => void toggleSchoolSearch()}
+              data-testid="school-search-all"
+            />
+            <span>全校可检索</span>
+          </label>
+          <p className="pico-type-aux pb-1 text-[color:var(--pico-ink-3)]">
+            勾场只收窄检索，不把这场正文灌进对话。点名文件才读全文。
+          </p>
           {error ? (
             <p className="pico-type-body text-[#b42318]" role="status">
               {error}

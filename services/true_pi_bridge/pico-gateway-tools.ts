@@ -230,7 +230,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "kb_search",
-    "Search this membership's indexed materials (Meili projection; keyword or hybrid). Call only when the teacher asks about school materials. Being listed does not mean you must call. Returns excerpts + sources (title/artifact_id/snippet) or honest_miss. Never invent content.",
+    "Search this membership's indexed materials (Meili projection; keyword or hybrid). School library is in scope this turn (default: the teacher's own venues). If the answer may be in school materials, call this. Being listed does not mean you must call. Returns excerpts + sources or honest_miss. Never invent school rules.",
     Type.Object(
       {
         query: Type.String(),

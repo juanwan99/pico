@@ -57,7 +57,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "工具返回 ok 不算完：读 observation（落地了什么），不对就再调。"
             "禁止空壳、禁止编造文件。不要向用户复读机读字段或 Artifact ID。"
             "HTML 必须断网可开：页内 CSS/JS/SVG，禁止 CDN / Three.js / Chart.js / ECharts 外链，禁止假定 window.THREE。"
-            "只有老师问学校材料时才 kb_search；工具在列表不代表必须调用。"
+            "答案可能在学校材料里就 kb_search；未命中禁止编校规；工具在列表不代表必须调用。"
             "honest_miss 就老实说没找到，禁止编造。"
         ),
     ),
@@ -91,7 +91,7 @@ _POLICIES: dict[str, SkillPolicy] = {
             "工具返回 ok 不算完：读 observation，不对就再调。"
             "禁止空壳、禁止编造。不要向用户复读机读字段。"
             "HTML 必须断网可开：页内 CSS/JS/SVG，禁止 CDN / Three.js / Chart.js / ECharts 外链，禁止假定 window.THREE。"
-            "只有老师问学校材料时才 kb_search；工具在列表不代表必须调用。"
+            "答案可能在学校材料里就 kb_search；未命中禁止编校规；工具在列表不代表必须调用。"
             "禁止编造未命中内容。"
         ),
     ),
@@ -222,7 +222,7 @@ _POLICIES: dict[str, SkillPolicy] = {
         ),
         risk="read",
         instruction=(
-            "本轮使用 skill.kb_ask：老师问学校材料时才 kb_search；"
+            "本轮使用 skill.kb_ask：答案可能在学校材料里就 kb_search；未命中禁止编校规；"
             "回答必须带出处（标题+摘录）；honest_miss=true 时诚实说明未命中，禁止编造。"
             "Pico 对话随传文件不是学校库。工具在列表不代表必须调用。"
         ),

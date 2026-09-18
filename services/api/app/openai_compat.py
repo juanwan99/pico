@@ -1400,18 +1400,33 @@ async def chat_completions(
 
         page_affordances = affordances_from_request(body.metadata, client_system, prompt)
         page_title = page_title_from_request(client_system)
+    kb_scope_block = ""
     try:
         # Use the module-level session_factory. A local `from app.db import
         # session_factory` here makes it a cell of chat_completions; the
         # nested event_stream then NameErrors on edu sidebar (this import
         # is skipped) when the Pi path calls session_factory().
-        from app.edu_school import excerpts_for_conversation, inject_named_school_materials
+        from app.edu_school import (
+            excerpts_for_conversation,
+            inject_named_school_materials,
+            kb_scope_system_block,
+            load_named_search_flags,
+        )
 
         factory = session_factory()
+        search_school = False
+        search_fields: list[str] = []
         async with factory() as named_session:
             named_items = await excerpts_for_conversation(
                 principal, conversation_id or "", named_session, settings
             )
+            if not edu_sidebar:
+                search_school, search_fields = await load_named_search_flags(
+                    named_session,
+                    principal.school_id,
+                    principal.membership_id,
+                    conversation_id or "",
+                )
             from app.edu_files import uploads_for_conversation
 
             upload_items = await uploads_for_conversation(
@@ -1438,8 +1453,12 @@ async def chat_completions(
             from app.edu_files import inject_conversation_uploads
 
             prompt = inject_conversation_uploads(prompt, upload_items)
+            kb_scope_block = kb_scope_system_block(
+                search_school=search_school, search_field_ids=search_fields
+            )
     except Exception:
         logger.exception("named school materials inject failed")
+    teacher_extra = "\n\n".join(part for part in (day_use_block, kb_scope_block) if part)
     turn_images = merge_images(turn_images, conversation_images(conversation_id))
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 100000) or 100000)
     # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
@@ -1639,8 +1658,8 @@ async def chat_completions(
             )
             if delivery_instr:
                 system = system + "\n" + delivery_instr
-            if day_use_block:
-                system = system + "\n\n" + day_use_block
+            if teacher_extra:
+                system = system + "\n\n" + teacher_extra
             parts: list[str] = []
             direct_usage: dict[str, Any] = {}
             try:
@@ -1691,7 +1710,7 @@ async def chat_completions(
                 system_prompt=client_system if edu_sidebar else "",
                 conversation_id=conversation_id,
                 images=turn_images,
-                day_use=day_use_block,
+                day_use=teacher_extra,
                 plan_on=plan_on,
                 native_files=native_files,
                 edu_sidebar=edu_sidebar,
@@ -1805,8 +1824,8 @@ async def chat_completions(
             )
             if delivery_instr:
                 system = system + "\n" + delivery_instr
-            if day_use_block:
-                system = system + "\n\n" + day_use_block
+            if teacher_extra:
+                system = system + "\n\n" + teacher_extra
             parts: list[str] = []
             stream_usage: dict[str, Any] = {}
             finalized = False
@@ -2058,10 +2077,10 @@ async def chat_completions(
 
                     caps = _dc_replace_sys_stream(caps, system_prompt=client_system)
                 caps = _caps_with_page_hands(caps, page_affordances, page_title)
-                if day_use_block:
+                if teacher_extra:
                     from dataclasses import replace as _dc_replace_day_stream
 
-                    caps = _dc_replace_day_stream(caps, day_use=day_use_block)
+                    caps = _dc_replace_day_stream(caps, day_use=teacher_extra)
                 if skill_snapshot:
                     await emit("skill.snapshot", skill_snapshot)
                 if delivery_plan is not None and getattr(
