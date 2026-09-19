@@ -1,15 +1,15 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-09-16
+DATE: 2026-09-19
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
-在飞: 无执行卡在飞。#1042 T-BILLING-GATE Pico 侧 DONE 等业主抽检关；#1006 挂起等业主（T2 质量已过）；#994 阶段总计划仍开。计费讨论 #1041
+在飞: 无执行卡。开着的只剩 #1005 线索卡（持续线，不派活）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-      写本文时 tip = f4f457a238985d7da6006ac40bf4a448ad20fa78（#1043）
-阻塞: 无工程阻塞。等 edu：JWT 带 allowance_points_today + feat:*（contracts/delegated-auth.md）· 入库去重。等业主：精排 +0.6 s 留不留 · 首字换渠道
-白名单勿关: #316 #449 #170 #634 #475
+      写本文时 tip = 开窗重 curl（A/B/C/D/E 与 #1055 已关；本行不是 SHA 账本）
+阻塞: 无工程卡。长任务/复杂任务未开卡（结构限制，见 RESEARCH-RUN-SURVIVE-RESTART）。计费产品在 edu
+白名单勿关: 无（旧 #316 #449 #170 #634 #475 已关）
 ────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
 PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源条业主 pass · #703/#706/#707/#708/#709/#710 业主 PASS 收口 · #733 夜包业主 PASS @ tip `a6bc83df…` · #752 业主 PASS @ tip `0c7943ac…` · #740 业主 PASS @ tip `2e668686…` · #776 业主 PASS @ tip `812360f6…` · #780 业主 PASS @ tip `e9e032b3…` · #785 业主 PASS @ tip `9d14329c…` · #788 积分门脸已关 · #824 T-UI-C-POLISH 业主 PASS @ tip `af3e8ad0…` · #829 T-UNMAIM-DRAFT 本窗 PASS @ tip `c4953f2e…` · #834 T-FOUNDATION-GATES 业主 PASS @ tip `6236489f…` · #811 T-RESIDENT-SHRINK 本窗 PASS @ tip `e5f840ef…` · #836 T-USAGE-THROUGH-PI 本窗 PASS @ tip `adaca179…` · #821/#806/#808/#809/#807/#810 业主 PASS 已关 · #794 业主 PASS 已关
@@ -18,7 +18,7 @@ PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源�
 最高: LAW §0-supreme · 禁止自搞一套 / 禁止重体系
 工作法: 本窗合一 · GitHub 唯一真源 · 写码树/生产树分开 · AGENTS 文首
 北极星: DIRECTION-NOW §0-star v1.4 · 用法 = Grok · 办公主线 · 能力并列 · 办公计算机交成熟上游 · 阶段方案 docs/PLAN-WORKENV-UPSTREAM.md
-冻结: docs/TRUTH-FREEZE.md v2.1（默认真 Pi · 模型/计量上游 New API · 知识库=Meili 挂载 · 扫描件/图片 OCR 兜底进库（#997）· 办公执行面 = pico-office 无网容器完整 Python · 不要 bash = 宿主 shell/宿主 builtins/通用 exec 动词 · generate_*/inspect 已拆）
+冻结: docs/TRUTH-FREEZE.md v2.2（默认真 Pi · 模型/计量上游 New API · 知识库=Meili 挂载 hybrid+rerank · 扫描件 OCR 只入库 · 办公执行面 = pico-office · generate_docx/pptx/inspect 已拆）
 真源: GitHub Issue/PR/SHA/CI + 公网 tip。本页三行是索引。
 juanwan99/oneflow: 不当真源（已 Archive）
 ```

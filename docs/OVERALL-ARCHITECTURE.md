@@ -2,8 +2,9 @@
 
 ```
 DOC: docs/OVERALL-ARCHITECTURE.md
-SUPERSEDED_IN_PART_BY: docs/TRUTH-FREEZE.md v1.0 + docs/WHAT-IS-PICO.md（产品/编排/沙箱边界以冻结真源为准；文中「底层 Agent」若指现网 = 过渡 tool-loop，非已接 Kimi Agent）；**计量工程认 [`USAGE-LEDGER.md`](./USAGE-LEDGER.md) + [`contracts/usage-export.md`](./contracts/usage-export.md)：Pico 只记用量，点/钱包/扣款在 edu-core，本节 8.x 点池不是 Pico 实现清单**
-STATUS: DRAFT v0.2 — 不确定项已由架构默认建议填齐（待业主一键 ACK 后升 FIXED v1.0）
+STATUS: ARCHIVED DRAFT · 2026-07-29 · **不是现网**
+SUPERSEDED_BY: docs/TRUTH-FREEZE.md v2.2 · docs/WHAT-IS-PICO.md · docs/ARCHITECTURE.md · docs/USAGE-LEDGER.md
+VOID_NOTE: 文中 Kimi 默认核、自研 tool-loop、Pico 点池/钱包、Dedicated 一校一单元 **均作废**。现网 = 真 Pi + New API；钱在 edu；本仓不写 edu。下文只当考古，禁止当施工清单。
 SCALE: 起步 10 校 × ~100 教师 ≈ 1000 席位
 RELATED:
   - docs/SCOPE.md

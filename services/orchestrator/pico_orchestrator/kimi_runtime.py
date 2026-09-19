@@ -1,8 +1,9 @@
-"""Kimi Agent Session runtime (multi-step production path).
+"""Kimi Agent Session runtime — **legacy rollback only**.
 
-Reachable when the runtime gate routes a principal here (KA-3: default when
-``PICO_KIMI_AGENT_RUNTIME=1`` and canary is empty or ``*``). Failures must not
-silently fall back — transitional loop was removed (KA-4 HARD).
+Not the product default. Reachable only when ``PICO_KIMI_AGENT_RUNTIME=1``
+(and canary / allow-all). Default multi-step is true Pi RPC.
+Do not describe this module as the production kernel. Failures must not
+silently fall back — transitional ``run_agent_loop`` stays removed (KA-4 HARD).
 """
 
 from __future__ import annotations

@@ -1,4 +1,8 @@
-"""Kimi callable tools that can execute only through Pico's allowlist gateway."""
+"""Kimi callable tools (legacy runtime only) through Pico's allowlist gateway.
+
+Product default does not load this module. generate_docx / generate_pptx here
+are Kimi-rollback verbs, not the live teacher gateway (sandbox_office_lib).
+"""
 
 from __future__ import annotations
 

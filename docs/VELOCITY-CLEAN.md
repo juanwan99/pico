@@ -2,6 +2,7 @@
 
 > **日常请直接用 [FAST-PATH.md](./FAST-PATH.md)**。
 > **2026-08-01：在必要安全下砍掉一切阻碍** — KEEP/CUT 清单以 FAST-PATH 为准；本页仅历史清障，**不是**第二套流程。
+> **2026-09-19：** §0 命题 1「目标从来只有开源 Kimi Agent」**已作废**。现网默认 = 真 Pi。本页不当施工清单。
 
 ```
 DOC: docs/VELOCITY-CLEAN.md

@@ -26,6 +26,7 @@ DATE: 2026-09-02
 45. **工作法。** 人合一、GitHub 唯一真源、工位分开、版本只认 main。改了必须合必须部。开窗先读 AGENTS.md 文首。
 46. **现网版本 = curl tip，必须等于 origin/main。** 不是 STATE-NOW，不是工作树 HEAD。禁止 docs-only 不部。改了必须合必须部，否则业主看不见效果。
 47. **卫生靠 GitHub 原生设置，不靠自建清理器。** 只 squash、合完删头枝、main 规则集（PR + 三门 CI + 线性）。合完写仓回 `main`，只删**本任务**本地枝。不要全库扫枝当仪式。现况只从 GitHub + tip 重建；聊天/旧窗摘要不当账本。
+49. **`docs/ARCHITECTURE.md` / `OVERALL-ARCHITECTURE.md` 不是现网。** 层简述已改口真 Pi + New API。7 月 OVERALL（Kimi 核 / Pico 点池）是考古草案。下一窗禁止把这两页当施工清单。
 
 ## B · 现网 / 产品
 

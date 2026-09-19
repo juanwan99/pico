@@ -87,23 +87,25 @@ hosted pi_runtime / Kimi Agent = 遗产回滚，非产品默认
 禁止：双核并列真源（真 Pi + hosted + Kimi 同时「官方唯一」）
 ```
 
-### 4.2 实现事实（2026-09-08 · **不是目标** · 以生产 tip 核）
+### 4.2 实现事实（2026-09-19 · **不是目标** · 以生产 tip 核）
 
-> **真源：** TRUTH-FREEZE **v2.0** + DIRECTION-NOW §0-star v1.4。  
+> **真源：** TRUTH-FREEZE **v2.2** + DIRECTION-NOW §0-star v1.4。  
 > 旧 v1.0「唯一核 = Kimi Agent / 禁 Pi」**已作废**。  
 > 旧「默认 = hosted `pi_runtime` / DeepSeek 聊天核」**不是现网**。  
-> `run_agent_loop` **从未**是产品目标；已移除，**禁止**复活为终局叙事。
+> `run_agent_loop` **从未**是产品目标；已移除，**禁止**复活为终局叙事。  
+> `docs/ARCHITECTURE.md`（旧稿曾写 Kimi 目标）与 `docs/OVERALL-ARCHITECTURE.md`（7 月点池草案）**不是现网**。
 
 ```text
 编排默认：真 Pi（health.default_runtime=pi-true）   ✅ 现网（须以生产 tip 核）
 模型默认：New API openai-responses（§34）          ✅ 现网脑；对外只叫 Pico
 出图：同一 New API Gemini 渠道                      ✅ 现网
-Meili                                              ✅ 关键词挂载；Pico 不自选 embedding 厂牌
+Meili                                              ✅ 挂载；hybrid + New API embed/rerank（#1006）· Pico 不自选厂牌
 计量：Pico usage_events → 积分；edu 认 export       ✅ 合同；本仓不写 edu
-Kimi Agent / hosted pi_runtime                    ⚠️ 遗产回滚 · 非默认
-隔离办公库 sandbox_office_lib                     ✅ 合同已接线（#936/#942）· 后端仍 pico-api 内 jail → #959 换 pico-office 容器
-generate_* / sandbox_pptx_lib                     ❌ 网关已拆（#952）· 不是 EXTENDED 别名
-老师聊天选路沙箱                                  ✅ #944 已证；写路只 sandbox_office_lib（#952）
+Kimi Agent / hosted pi_runtime                    ⚠️ 遗产回滚 · 非默认（PICO_HOSTED_LOOP / PICO_KIMI_AGENT_RUNTIME）
+隔离办公库 sandbox_office_lib                     ✅ pico-office 无网容器完整 Python（#959/#964）
+generate_docx/pptx / inspect / sandbox_pptx_lib   ❌ 网关已拆（#952）· 不是 EXTENDED 别名
+HTML 仍 generate_html_document                    ⚠️ 捷径还在；不是第二办公核
+老师聊天选路沙箱                                  ✅ 写路只 sandbox_office_lib
 「目标/长期是自研环」                              ❌ 污染 · 禁止
 「唯一目标仍是 Kimi Agent」                        ❌ 过期 v1.0 · 禁止再写
 「hosted pi_runtime 是产品默认」                   ❌ 过期 · 禁止再写

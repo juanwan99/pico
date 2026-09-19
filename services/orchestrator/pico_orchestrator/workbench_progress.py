@@ -2,6 +2,9 @@
 
 Thin adapter only: names already on the ledger, no second progress engine,
 no fake percentages.
+
+generate_docx / generate_pptx / sandbox_pptx_lib strings remain so *old*
+ledger events still render; they are not live teacher tools.
 """
 
 from __future__ import annotations
