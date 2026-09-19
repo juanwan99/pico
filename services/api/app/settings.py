@@ -367,7 +367,9 @@ class Settings(BaseSettings):
                     (
                         _normalize_model_name(provider_model)
                         in {"deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"}
-                        or _normalize_model_name(provider_model).startswith("gpt-")
+                        or _normalize_model_name(provider_model).startswith(
+                            ("gpt-", "grok-")
+                        )
                     )
                     and {"pico-fast", "pico-deep"}.intersection(normalized_allowed)
                 )
@@ -385,16 +387,16 @@ class Settings(BaseSettings):
             errors.append("PICO_CHAT_MAX_PROMPT_CHARS must be greater than zero")
         if self.pico_run_max_tokens <= 0:
             errors.append("PICO_RUN_MAX_TOKENS must be greater than zero")
-        if self.pico_run_max_seconds <= 0:
-            errors.append("PICO_RUN_MAX_SECONDS must be greater than zero")
+        if self.pico_run_max_seconds < 0:
+            errors.append("PICO_RUN_MAX_SECONDS must be >= 0 (0 = no Pico wall kill)")
         if self.pico_run_max_steps <= 0:
             errors.append("PICO_RUN_MAX_STEPS must be greater than zero")
-        if self.pico_run_short_max_seconds <= 0:
-            errors.append("PICO_RUN_SHORT_MAX_SECONDS must be greater than zero")
+        if self.pico_run_short_max_seconds < 0:
+            errors.append("PICO_RUN_SHORT_MAX_SECONDS must be >= 0 (0 = no Pico wall kill)")
         if self.pico_run_short_max_tokens <= 0:
             errors.append("PICO_RUN_SHORT_MAX_TOKENS must be greater than zero")
-        if self.pico_run_durable_max_seconds <= 0:
-            errors.append("PICO_RUN_DURABLE_MAX_SECONDS must be greater than zero")
+        if self.pico_run_durable_max_seconds < 0:
+            errors.append("PICO_RUN_DURABLE_MAX_SECONDS must be >= 0 (0 = no Pico wall kill)")
         if self.pico_dangerous_tools_enabled:
             errors.append("PICO_DANGEROUS_TOOLS_ENABLED must remain false")
         if not self.pico_pi_agent_runtime and not self.legacy_kimi_enabled:

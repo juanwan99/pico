@@ -274,6 +274,28 @@ def test_openai_responses_brain_keeps_gpt_model(monkeypatch: pytest.MonkeyPatch)
     assert runtime_policy_for_model("pico-deep")["thinking"] is True
 
 
+def test_grok_on_new_api_is_openai_responses_brain(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-newapi-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "grok-4.6")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    from pico_orchestrator.provider import (
+        is_openai_responses_model,
+        product_backend_model,
+        resolve_model_id,
+        resolve_provider,
+        uses_openai_responses_brain,
+    )
+
+    cfg = resolve_provider()
+    assert cfg is not None
+    assert is_openai_responses_model("grok-4.6")
+    assert uses_openai_responses_brain(cfg)
+    assert product_backend_model(deep=False) == "grok-4.6"
+    assert resolve_model_id("pico-fast", cfg) == "grok-4.6"
+
+
 def test_openai_responses_brain_via_new_api_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-newapi-test")
     monkeypatch.setenv("DEEPSEEK_MODEL", "gpt-5.6-sol")

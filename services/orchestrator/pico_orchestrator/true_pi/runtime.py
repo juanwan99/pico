@@ -176,7 +176,9 @@ async def run_true_pi_agent(
     timed_out = asyncio.Event()
     loop = asyncio.get_running_loop()
     started = loop.time()
-    deadline = started + max(1, caps.max_seconds)
+    from pico_orchestrator.run_caps import wall_deadline, wall_expired
+
+    deadline = wall_deadline(started, int(getattr(caps, "max_seconds", 0) or 0))
     # Dual-mode deep-lane circuit breaker (F2): true_pi must not run away on an
     # empty/no-tool-progress loop any more than the hosted kernel. Only the
     # thinking-on lane (Pico 深度) arms it; fast lane never trips.
@@ -191,7 +193,7 @@ async def run_true_pi_agent(
         while not stop.is_set():
             if await is_cancelled():
                 return
-            if loop.time() >= deadline:
+            if wall_expired(loop.time(), deadline):
                 timed_out.set()
                 return
             try:
@@ -472,7 +474,7 @@ async def run_true_pi_agent(
                     await client.abort()
                     await emit("run.status", {"status": "cancelled", **tag})
                     return _result("cancelled", state, principal=principal)
-                if timed_out.is_set() or loop.time() >= deadline:
+                if timed_out.is_set() or wall_expired(loop.time(), deadline):
                     await client.abort()
                     return await _failed(
                         emit,
@@ -569,7 +571,7 @@ async def run_true_pi_agent(
             await emit("run.status", {"status": "cancelled", **tag})
             return _result("cancelled", state, principal=principal)
 
-        if timed_out.is_set() or loop.time() >= deadline:
+        if timed_out.is_set() or wall_expired(loop.time(), deadline):
             await client.abort()
             return await _failed(
                 emit,

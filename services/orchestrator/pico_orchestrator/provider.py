@@ -79,8 +79,9 @@ def is_agent_model(model: str | None) -> bool:
 
 
 def is_openai_responses_model(model: str | None) -> bool:
-    """Codex / OpenAI Responses ids (gpt-5.5, gpt-5.6, …). Not DeepSeek."""
-    return _bare_model(model).lower().startswith("gpt-")
+    """Ids that ride New API OpenAI Responses (gpt-5.6-sol, grok-4.6, …). Not DeepSeek."""
+    bare = _bare_model(model).lower()
+    return bare.startswith(("gpt-", "grok-"))
 
 
 def uses_openai_responses_brain(cfg: ProviderConfig | None = None) -> bool:

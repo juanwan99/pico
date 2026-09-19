@@ -59,6 +59,17 @@ DELIVERY_MAX_TOKENS = _run_caps.DELIVERY_MAX_TOKENS
 SHORT_MAX_SECONDS = _run_caps.SHORT_MAX_SECONDS
 caps_for_tier = _run_caps.caps_for_tier
 spend_caps_public = _run_caps.spend_caps_public
+wall_deadline = _run_caps.wall_deadline
+wall_expired = _run_caps.wall_expired
+
+
+def test_zero_seconds_means_no_wall_kill() -> None:
+    assert wall_deadline(100.0, 0) is None
+    assert wall_deadline(100.0, -1) is None
+    assert wall_deadline(100.0, 10) == 110.0
+    assert wall_expired(200.0, None) is False
+    assert wall_expired(200.0, 150.0) is True
+    assert wall_expired(100.0, 150.0) is False
 
 
 def test_delivery_defaults_are_900s_not_120() -> None:
