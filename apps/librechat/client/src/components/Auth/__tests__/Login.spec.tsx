@@ -123,7 +123,11 @@ test('renders login form', () => {
   const { getByLabelText, getByRole } = setup();
   expect(getByLabelText(/email/i)).toBeInTheDocument();
   expect(getByLabelText(/password/i)).toBeInTheDocument();
-  expect(getByTestId(document.body, 'login-button')).toBeInTheDocument();
+  const loginBtn = getByTestId(document.body, 'login-button');
+  expect(loginBtn).toBeInTheDocument();
+  expect(loginBtn.className).not.toMatch(/green-500/);
+  expect(document.querySelector('.pico-auth-card')).toBeTruthy();
+  expect(document.querySelector('.pico-auth-input')).toBeTruthy();
   expect(getByRole('link', { name: /Sign up/i })).toBeInTheDocument();
   expect(getByRole('link', { name: /Sign up/i })).toHaveAttribute('href', '/register');
   expect(getByRole('link', { name: /Continue with Google/i })).toBeInTheDocument();

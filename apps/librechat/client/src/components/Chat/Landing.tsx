@@ -201,7 +201,7 @@ export default function Landing({
   return (
     <div className="pico-wb-landing pico-shell-bg flex h-full min-h-0 w-full flex-col items-center">
       <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto px-4 pt-10 sm:px-6 sm:pt-12">
-        <h1 className="pico-type-title text-center tracking-normal text-[color:var(--pico-ink)] dark:text-text-primary">
+        <h1 className="pico-type-title text-center tracking-tight text-[color:var(--pico-ink)]">
           Pico，我帮你
         </h1>
         {name ? (
@@ -270,7 +270,7 @@ export default function Landing({
               className={cn(
                 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors',
                 text.trim()
-                  ? 'text-[color:var(--pico-ink)] hover:bg-black/[0.04]'
+                  ? 'text-[color:var(--pico-accent)] hover:bg-[color:var(--pico-accent-wash)]'
                   : 'text-[color:var(--pico-ink-3)]',
               )}
               aria-label="发送"
