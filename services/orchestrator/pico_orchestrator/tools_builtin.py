@@ -853,6 +853,26 @@ def _workspace_handlers(
         degraded = False
         mode = "keyword"
         hits: list[dict[str, Any]] = []
+        include_school = False
+        allow_ids: set[str] | None = None
+        try:
+            from app.db import session_factory
+            from app.edu_school import load_kb_search_scope
+
+            from pico_orchestrator.usage_hook import current_usage_bind
+
+            bind = current_usage_bind()
+            cid = str((bind.conversation_id if bind else "") or "")
+            factory = session_factory()
+            async with factory() as named_session:
+                scope = await load_kb_search_scope(principal, cid, named_session)
+            include_school = bool(scope.get("include_school"))
+            raw_allow = scope.get("allow_ids")
+            if raw_allow:
+                allow_ids = {str(x) for x in raw_allow if x}
+        except Exception:  # noqa: BLE001 — missing bind/db: default mine (member-only)
+            include_school = False
+            allow_ids = None
         if not meili_configured():
             degraded = True
             mode = "off"
@@ -865,6 +885,7 @@ def _workspace_handlers(
                     school_id=principal.school_id,
                     membership_id=principal.membership_id,
                     limit=limit,
+                    include_school=include_school,
                     rerank_ok=feature_enabled(principal, "rerank"),
                 )
                 if result.get("hybrid"):
@@ -888,7 +909,13 @@ def _workspace_handlers(
                     row_member = str(row.get("membership_id") or "").strip()
                     if row_school and row_school != principal.school_id:
                         continue
-                    if row_member and row_member != principal.membership_id:
+                    row_scope = str(row.get("scope") or "member")
+                    if include_school:
+                        if row_scope != "school" and row_member and row_member != principal.membership_id:
+                            continue
+                    elif row_member and row_member != principal.membership_id:
+                        continue
+                    if allow_ids and art_id not in allow_ids:
                         continue
                     if not art_id or title in _SKIP_KB_TITLES:
                         continue
@@ -2382,10 +2409,11 @@ def build_default_gateway(
             name="kb_search",
             description=(
                 "Search this membership's indexed materials (Meili projection of the "
-                "artifact ledger; keyword or hybrid). Call only when the teacher asks "
-                "about school materials. Being listed does not mean you must call. "
+                "artifact ledger; keyword or hybrid). School library is in scope this "
+                "turn (default: the teacher's own venues). If the answer may be in "
+                "school materials, call this. Being listed does not mean you must call. "
                 "Returns excerpts + sources (title/artifact_id/snippet) or honest_miss. "
-                "Never invent content. Args: query, limit?"
+                "Never invent school rules. Args: query, limit?"
             ),
             handler=kb_search,
             school_scoped=False,

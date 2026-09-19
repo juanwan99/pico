@@ -13,7 +13,13 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 
 from app.auth import issue_test_token
-from app.edu_school import classify_land_kind, inject_named_school_materials, sanitize_field_id
+from app.edu_school import (
+    classify_land_kind,
+    inject_named_school_materials,
+    kb_scope_system_block,
+    sanitize_field_id,
+    sanitize_search_field_ids,
+)
 from app.edu_sso import sanitize_display_name
 from app.settings import get_settings
 
@@ -113,6 +119,82 @@ def test_named_bind_roundtrip_does_not_store_bodies(client) -> None:
     )
     assert got.status_code == 200
     assert got.json()["ids"] == [item]
+
+
+def test_kb_scope_block_default_is_mine_not_dump() -> None:
+    text = kb_scope_system_block(search_school=False, search_field_ids=[])
+    assert "负责范围内" in text
+    assert "kb_search" in text
+    assert "禁止编造校规" in text
+    assert "不算已读全文" in text
+    school = kb_scope_system_block(search_school=True, search_field_ids=["aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"])
+    assert "全校有权材料" in school
+    field = kb_scope_system_block(
+        search_school=False, search_field_ids=["aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"]
+    )
+    assert "勾选的场" in field
+
+
+def test_sanitize_search_field_ids_keeps_uuid_only() -> None:
+    keep = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    assert sanitize_search_field_ids([keep, "nope", keep]) == [keep]
+
+
+def test_named_bind_stores_search_scope(client) -> None:
+    field = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    put = client.put(
+        "/v1/edu/named",
+        json={
+            "conversation_id": "c-scope",
+            "ids": [],
+            "search_school": False,
+            "search_field_ids": [field],
+        },
+        headers={"Authorization": f"Bearer {_token()}", "X-Pico-Membership-Id": "school-a:m-edu"},
+    )
+    assert put.status_code == 200, put.text
+    assert put.json()["search_school"] is False
+    assert put.json()["search_field_ids"] == [field]
+    assert put.json()["ids"] == []
+    got = client.get(
+        "/v1/edu/named",
+        params={"conversation_id": "c-scope"},
+        headers={"Authorization": f"Bearer {_token()}", "X-Pico-Membership-Id": "school-a:m-edu"},
+    )
+    assert got.json()["search_field_ids"] == [field]
+
+
+def test_named_bind_school_search_clears_fields(client) -> None:
+    field = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    put = client.put(
+        "/v1/edu/named",
+        json={
+            "conversation_id": "c-school",
+            "ids": [],
+            "search_school": True,
+            "search_field_ids": [field],
+        },
+        headers={"Authorization": f"Bearer {_token()}", "X-Pico-Membership-Id": "school-a:m-edu"},
+    )
+    assert put.json()["search_school"] is True
+    assert put.json()["search_field_ids"] == []
+
+
+def test_named_bind_omitted_search_does_not_wipe(client) -> None:
+    field = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    client.put(
+        "/v1/edu/named",
+        json={"conversation_id": "c-keep", "ids": [], "search_field_ids": [field]},
+        headers={"Authorization": f"Bearer {_token()}", "X-Pico-Membership-Id": "school-a:m-edu"},
+    )
+    item = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
+    put = client.put(
+        "/v1/edu/named",
+        json={"conversation_id": "c-keep", "ids": [item]},
+        headers={"Authorization": f"Bearer {_token()}", "X-Pico-Membership-Id": "school-a:m-edu"},
+    )
+    assert put.json()["ids"] == [item]
+    assert put.json()["search_field_ids"] == [field]
 
 
 def test_named_bind_stores_field_id(client) -> None:

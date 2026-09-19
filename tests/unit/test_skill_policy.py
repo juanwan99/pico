@@ -197,12 +197,10 @@ def test_deliverable_skills_keep_search_and_ask_user():
         assert "publish_html_page" not in tools
 
 
-def test_kb_search_only_when_asking_school_materials():
+def test_kb_search_in_scope_without_keyword_routing():
     gw = build_default_gateway()
     assert "这是什么" not in gw.tools["kb_search"].description
-    assert "Call only when the teacher asks about school materials" in gw.tools[
-        "kb_search"
-    ].description
+    assert "School library is in scope this turn" in gw.tools["kb_search"].description
     assert "does not mean you must call" in gw.tools["kb_search"].description
     for skill_id in (
         "skill-deliverable",
@@ -212,9 +210,8 @@ def test_kb_search_only_when_asking_school_materials():
         text = instruction_for_snapshot(snapshot_for_skill(skill_id))
         assert "必须先 kb_search" not in text
         assert "这是什么" not in text
-        assert "问学校材料" in text
-        assert "才 kb_search" in text
-        assert "工具在列表不代表必须调用" in text
+        assert "kb_search" in text
+        assert "编校规" in text
     kb = snapshot_for_skill("skill-kb-ask")
     assert "kb_search" in kb["tools"]
     assert "出处" in instruction_for_snapshot(kb)
@@ -224,7 +221,7 @@ def test_kb_search_only_when_asking_school_materials():
         / "true_pi_bridge"
         / "pico-gateway-tools.ts"
     ).read_text(encoding="utf-8")
-    assert "Call only when the teacher asks about school materials" in ts
+    assert "School library is in scope this turn" in ts
     assert "does not mean you must call" in ts
     assert "uploaded/generated" not in ts
     assert "去搜库" not in ts

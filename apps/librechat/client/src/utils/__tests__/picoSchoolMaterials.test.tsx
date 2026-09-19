@@ -111,7 +111,10 @@ describe('SchoolMaterialsBar venue folder tree', () => {
     fireEvent.click(await screen.findByTestId('school-material-doc-2'));
 
     await waitFor(() => {
-      expect(mockPutEduNamedIds).toHaveBeenCalledWith('c1', ['doc-1', 'doc-2'], '');
+      expect(mockPutEduNamedIds).toHaveBeenCalledWith('c1', ['doc-1', 'doc-2'], '', {
+        school: false,
+        fieldIds: [],
+      });
     });
   });
 
@@ -127,12 +130,54 @@ describe('SchoolMaterialsBar venue folder tree', () => {
     });
 
     render(<SchoolMaterialsBar conversationId="new" />);
-    expect(screen.getByText('未勾选不读正文')).toBeInTheDocument();
+    expect(screen.getByText(/未勾选不读正文/)).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('school-materials-toggle'));
     fireEvent.click(await screen.findByTestId('school-field-toggle-field-venue'));
     const box = await screen.findByTestId('school-material-member-doc');
     expect(box).not.toBeChecked();
     expect(mockGetEduNamedIds).toHaveBeenCalledWith('');
+  });
+
+  it('checks a venue for search without naming its documents', async () => {
+    mockPutEduNamedIds.mockImplementation(
+      async (_convo: string, ids: string[], _field?: string, search?: { school?: boolean; fieldIds?: string[] }) => ({
+        ids,
+        search_school: !!search?.school,
+        search_field_ids: search?.fieldIds || [],
+      }),
+    );
+    render(<SchoolMaterialsBar conversationId="c1" />);
+    fireEvent.click(screen.getByTestId('school-materials-toggle'));
+    fireEvent.click(await screen.findByTestId('school-field-search-field-1'));
+    await waitFor(() => {
+      expect(mockPutEduNamedIds).toHaveBeenCalledWith('c1', [], '', {
+        school: false,
+        fieldIds: ['field-1'],
+      });
+    });
+    expect(screen.queryByTestId('school-material-doc-1')).not.toBeInTheDocument();
+    expect(screen.getByText('1 场可检索')).toBeInTheDocument();
+  });
+
+  it('can enable whole-school search', async () => {
+    mockPutEduNamedIds.mockImplementation(
+      async (_convo: string, ids: string[], _field?: string, search?: { school?: boolean; fieldIds?: string[] }) => ({
+        ids,
+        search_school: !!search?.school,
+        search_field_ids: search?.fieldIds || [],
+      }),
+    );
+    render(<SchoolMaterialsBar conversationId="c1" />);
+    fireEvent.click(screen.getByTestId('school-materials-toggle'));
+    fireEvent.click(await screen.findByTestId('school-search-all'));
+    await waitFor(() => {
+      expect(mockPutEduNamedIds).toHaveBeenCalledWith('c1', [], '', {
+        school: true,
+        fieldIds: [],
+      });
+    });
+    expect(screen.getByTestId('school-search-all')).toBeChecked();
+    expect(screen.getAllByText('全校可检索').length).toBeGreaterThanOrEqual(1);
   });
 
   it('splits manage left and followed right; followed stays folded', async () => {
