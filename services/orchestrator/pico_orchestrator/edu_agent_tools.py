@@ -19,6 +19,9 @@ CATALOG_FIND = "edu_catalog_find"
 CATALOG_DESCRIBE = "edu_catalog_describe"
 CATALOG_COMMAND = "edu_catalog_command"
 RUN_PACK = "edu_run_pack"
+# School /agent/catalog/* is teacher-session only. Pico membership JWT
+# uses the existing /v1/pico/membership/catalog/* mouths (edu-core #1636).
+MEMBERSHIP_CATALOG = "/v1/pico/membership/catalog"
 EDU_AGENT_TOOLS: tuple[str, ...] = (
     CATALOG_FIND,
     CATALOG_DESCRIBE,
@@ -127,27 +130,19 @@ def _cache_key(principal: Principal, kind: str, extra: str) -> tuple[str, str, s
 
 async def catalog_find(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
     q = str(args.get("q") or args.get("intent") or "").strip()
-    school = str(getattr(principal, "school_id", "") or "").strip()
-    path = f"/v1/schools/{school}/agent/catalog/find" if school else "/v1/pico/membership/catalog/find"
     params = {"q": q} if q else {}
-    if school:
-        return await edu_request(principal, "GET", path, params=params)
-    return await edu_request(principal, "GET", "/v1/pico/membership/catalog/find", params=params)
+    return await edu_request(principal, "GET", f"{MEMBERSHIP_CATALOG}/find", params=params)
 
 
 async def catalog_describe(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
     domain = str(args.get("domain") or "HOME").strip() or "HOME"
-    school = str(getattr(principal, "school_id", "") or "").strip()
-    path = (
-        f"/v1/schools/{school}/agent/catalog/describe"
-        if school
-        else "/v1/pico/membership/catalog/describe"
-    )
     key = _cache_key(principal, "describe", domain)
     cached = _ETAG_CACHE.get(key)
     if cached:
         return {**cached[1], "cache": "etag"}
-    data = await edu_request(principal, "GET", path, params={"domain": domain})
+    data = await edu_request(
+        principal, "GET", f"{MEMBERSHIP_CATALOG}/describe", params={"domain": domain}
+    )
     etag = str(data.get("etag") or "")
     _ETAG_CACHE[key] = (etag, data)
     return data
@@ -155,13 +150,9 @@ async def catalog_describe(principal: Principal, args: dict[str, Any]) -> dict[s
 
 async def catalog_command(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
     cid = str(args.get("id") or args.get("command") or "").strip()
-    school = str(getattr(principal, "school_id", "") or "").strip()
-    path = (
-        f"/v1/schools/{school}/agent/catalog/command"
-        if school
-        else "/v1/pico/membership/catalog/command"
+    return await edu_request(
+        principal, "GET", f"{MEMBERSHIP_CATALOG}/command", params={"id": cid}
     )
-    return await edu_request(principal, "GET", path, params={"id": cid})
 
 
 async def run_pack(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:

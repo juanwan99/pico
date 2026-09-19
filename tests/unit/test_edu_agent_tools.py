@@ -10,9 +10,12 @@ from pico_orchestrator.capability_loading import CORE_VISIBLE_TOOLS
 from pico_orchestrator.edu_agent_tools import (
     _ETAG_CACHE,
     CATALOG_DESCRIBE,
+    MEMBERSHIP_CATALOG,
     RUN_PACK,
+    catalog_command,
     catalog_command_id,
     catalog_describe,
+    catalog_find,
     register_edu_agent_tools,
     run_pack,
 )
@@ -55,6 +58,7 @@ async def test_describe_etag_second_call_cached():
     assert second.get("cache") == "etag"
     assert req.await_count == 1
     assert second["domain"] == "HOME"
+    assert req.await_args.args[2] == f"{MEMBERSHIP_CATALOG}/describe"
 
 
 @pytest.mark.asyncio
@@ -71,6 +75,24 @@ async def test_budget_500_not_swallowed():
     ):
         await catalog_describe(principal, {"domain": "HOME"})
     assert ei.value.code == "catalog_budget_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_catalog_uses_membership_mouth_when_school_present():
+    _ETAG_CACHE.clear()
+    principal = SimpleNamespace(school_id="s1", membership_id="m1")
+    with patch(
+        "pico_orchestrator.edu_agent_tools.edu_request",
+        new=AsyncMock(return_value={"items": []}),
+    ) as req:
+        await catalog_find(principal, {"q": "能干"})
+        await catalog_command(principal, {"id": "home.draft.grey"})
+    paths = [call.args[2] for call in req.await_args_list]
+    assert paths == [
+        f"{MEMBERSHIP_CATALOG}/find",
+        f"{MEMBERSHIP_CATALOG}/command",
+    ]
+    assert all("/schools/" not in p for p in paths)
 
 
 @pytest.mark.asyncio
