@@ -37,6 +37,10 @@ const ALLOWED = [
   "publish_html_page",
   "unpublish_html_page",
   "propose_page_mutation",
+  "edu_catalog_find",
+  "edu_catalog_describe",
+  "edu_catalog_command",
+  "edu_run_pack",
 ] as const;
 
 type ToolName = (typeof ALLOWED)[number];
@@ -363,12 +367,43 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "propose_page_mutation",
-    "Propose one change to the school page open on the left (fill / tick / click). Only ids from this page's affordances are accepted; the teacher confirms in the school shell and the school runs its own command. Nothing is written by this call. Args: affordance_id, params, label.",
+    "Propose one change to the school page open on the left (fill / tick / click). Page affordance ids or school catalog command ids (home.draft.grey) are accepted; the teacher confirms in the school shell and the school runs its own command. Nothing is written by this call. Args: affordance_id, params, label.",
     Type.Object(
       {
         affordance_id: Type.String(),
         params: Type.Optional(Type.Object({}, { additionalProperties: true })),
         label: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "edu_catalog_find",
+    "Ask the school workbench catalog what hands exist for an intent. Progressive: summaries only. Args: q.",
+    Type.Object({ q: Type.Optional(Type.String()) }, { additionalProperties: true }),
+  );
+  registerTool(
+    pi,
+    "edu_catalog_describe",
+    "Describe one school domain (default HOME). Command names without parameter schemas. Args: domain?",
+    Type.Object({ domain: Type.Optional(Type.String()) }, { additionalProperties: true }),
+  );
+  registerTool(
+    pi,
+    "edu_catalog_command",
+    "Fetch one school command contract including params_schema. Args: id.",
+    Type.Object({ id: Type.Optional(Type.String()) }, { additionalProperties: true }),
+  );
+  registerTool(
+    pi,
+    "edu_run_pack",
+    "Submit a school work pack under the teacher's grant. Drafts allowed; publish/submit will be rejected. Args: grant_id, steps, run_id?",
+    Type.Object(
+      {
+        grant_id: Type.String(),
+        steps: Type.Optional(Type.Array(Type.Object({}, { additionalProperties: true }))),
+        run_id: Type.Optional(Type.String()),
       },
       { additionalProperties: true },
     ),

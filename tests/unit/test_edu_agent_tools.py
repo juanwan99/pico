@@ -59,7 +59,8 @@ async def test_describe_etag_second_call_cached():
 
 @pytest.mark.asyncio
 async def test_budget_500_not_swallowed():
-    principal = SimpleNamespace(school_id="s1", membership_id="m1")
+    _ETAG_CACHE.clear()
+    principal = SimpleNamespace(school_id="s1", membership_id="m2")
 
     async def boom(*_a, **_k):
         raise ToolError("catalog_budget_exceeded", "describe token budget 2000 exceeded")
