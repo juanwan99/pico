@@ -476,10 +476,9 @@ async def run_true_pi_agent(
                     return _result("cancelled", state, principal=principal)
                 if timed_out.is_set() or wall_expired(loop.time(), deadline):
                     await client.abort()
-                    return await _failed(
+                    return await _wall_stop(
                         emit,
-                        code="timeout",
-                        reason=f"True Pi timeout after {caps.max_seconds}s",
+                        caps=caps,
                         state=state,
                         principal=principal,
                         tag=tag,
@@ -573,10 +572,9 @@ async def run_true_pi_agent(
 
         if timed_out.is_set() or wall_expired(loop.time(), deadline):
             await client.abort()
-            return await _failed(
+            return await _wall_stop(
                 emit,
-                code="timeout",
-                reason=f"True Pi timeout after {caps.max_seconds}s",
+                caps=caps,
                 state=state,
                 principal=principal,
                 tag=tag,
@@ -786,6 +784,28 @@ def _compose_prompt(
     """
     del skill, min_arts, history, allowed_tools, system_prompt
     return str(prompt or "")
+
+
+async def _wall_stop(
+    emit: EventEmitter,
+    *,
+    caps: RunCaps,
+    state: EventMapState,
+    principal: Principal | None,
+    tag: dict[str, Any],
+) -> RunResult:
+    """Hit Pico wall: teacher-facing pause, not a failed error bubble."""
+    from pico_orchestrator.user_errors import wall_stop_teacher_text
+
+    writes = count_write_tool_successes(state.tool_results)
+    text = wall_stop_teacher_text(
+        max_seconds=int(getattr(caps, "max_seconds", 0) or 0),
+        has_deliverable=writes > 0,
+    )
+    state.final_parts.append(text)
+    await emit("message.delta", {"text": text, **tag})
+    await emit("run.status", {"status": "succeeded", "code": "wall.stop", **tag})
+    return _result("succeeded", state, principal=principal)
 
 
 async def _failed(

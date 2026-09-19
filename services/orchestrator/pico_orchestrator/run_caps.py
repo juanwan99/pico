@@ -1,8 +1,8 @@
 """Tiered run budgets: short / delivery / durable.
 
-Package A: delivery (≈900s) for courseware multi-step.
-Package B: durable jobs need detach-from-browser + optional longer wall
-(default 3600s). Never treat a multi-hour global timeout alone as “durable.”
+Package A: delivery (default 4h) for multi-step office.
+Package B: durable jobs need detach-from-browser + a longer wall
+(default 6h). Hitting the wall is a teacher-facing pause, not an error.
 """
 
 from __future__ import annotations
@@ -15,19 +15,19 @@ from pico_orchestrator.run_types import RunCaps
 RunTier = Literal["short", "delivery", "durable"]
 
 # Code defaults (env overrides via Settings; keep in sync with .env.example).
-DELIVERY_MAX_SECONDS = 900
+DELIVERY_MAX_SECONDS = 14_400
 DELIVERY_MAX_TOKENS = 32_000
 DELIVERY_MAX_CONTEXT = 256_000
 DELIVERY_MAX_STEPS = 24
 DELIVERY_MAX_RETRIES = 2
 
-SHORT_MAX_SECONDS = 120
+SHORT_MAX_SECONDS = 1_800
 SHORT_MAX_TOKENS = 32_000
 SHORT_MAX_CONTEXT = 256_000
 SHORT_MAX_STEPS = 24
 SHORT_MAX_RETRIES = 2
 
-DURABLE_MAX_SECONDS = 3600
+DURABLE_MAX_SECONDS = 21_600
 DURABLE_MAX_TOKENS = 64_000
 DURABLE_MAX_CONTEXT = 256_000
 DURABLE_MAX_STEPS = 48

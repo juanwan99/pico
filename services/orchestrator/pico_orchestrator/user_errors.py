@@ -5,6 +5,8 @@ Internal logs/events may keep raw detail; UI should prefer `user_message`.
 
 from __future__ import annotations
 
+import re
+
 FILE_IN_RESULTS = "已经生成的文件还在结果里，可以直接打开。"
 
 
@@ -17,9 +19,41 @@ def _with_deliverable_hint(msg: str, has_deliverable: bool) -> str:
     return msg.rstrip("。") + "。" + FILE_IN_RESULTS
 
 
+def wall_stop_teacher_text(*, max_seconds: int, has_deliverable: bool = False) -> str:
+    """Teacher-facing pause when Pico's run wall is hit. Not an error chrome."""
+    sec = max(0, int(max_seconds or 0))
+    if sec <= 0:
+        span = "一段时间"
+    elif sec >= 7200:
+        hours = max(1, round(sec / 3600))
+        span = f"约 {hours} 小时"
+    else:
+        minutes = max(1, round(sec / 60))
+        span = f"约 {minutes} 分钟"
+    msg = (
+        f"这次已经跑了{span}，我先停在这里，不是系统报错。"
+        "单次任务有时间上限，避免一直占着通道。"
+        "要接着做，直接说「继续」，或把剩下的部分分开说。"
+    )
+    return _with_deliverable_hint(msg, has_deliverable)
+
+
+def is_wall_timeout_code(code: str | None, raw: str | None = None) -> bool:
+    c = (code or "").lower()
+    if c == "timeout":
+        return True
+    low = (raw or "").lower()
+    return "timeout after" in low or "true pi timeout" in low or "pi agent timeout" in low
+
+
 def user_message_for_error(
     raw: str | None, *, code: str | None = None, has_deliverable: bool = False
 ) -> str:
+    if is_wall_timeout_code(code, raw):
+        # Prefer the pause copy. Budget in the reason if present.
+        m = re.search(r"timeout after (\d+)s", (raw or ""), re.IGNORECASE)
+        sec = int(m.group(1)) if m else 0
+        return wall_stop_teacher_text(max_seconds=sec, has_deliverable=has_deliverable)
     return _with_deliverable_hint(_map_error(raw, code=code), has_deliverable)
 
 
@@ -73,10 +107,7 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
             "需要的话再发一次。"
         )
     if c == "timeout" or "timeout" in low or "timed out" in low:
-        return (
-            "处理超时。可点「再跑一次」继续生成，"
-            "或把任务拆短；交付类任务默认预算约 15 分钟。"
-        )
+        return wall_stop_teacher_text(max_seconds=0, has_deliverable=False)
     if "cancelled" in low or c == "cancelled":
         # Distinct from input-bar「停止生成」(screen-only): this is ledger cancel.
         return "云端任务已停止。需要结果时可点「重新运行」。"

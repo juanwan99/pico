@@ -173,10 +173,9 @@ async def run_pi_agent(
                     principal=principal,
                 )
             if timed_out.is_set() or wall_expired(loop.time(), deadline):
-                return await _failed_result(
+                return await _wall_stop_result(
                     emit,
-                    code="timeout",
-                    reason=f"Pi agent timeout after {caps.max_seconds}s",
+                    caps=caps,
                     final_parts=final_parts,
                     token_usage=token_usage,
                     tool_results=tool_context_results,
@@ -708,6 +707,35 @@ async def _watch_cancel(
             await asyncio.wait_for(stop.wait(), timeout=_CANCEL_POLL_SECONDS)
         except TimeoutError:
             pass
+
+
+async def _wall_stop_result(
+    emit: EventEmitter,
+    *,
+    caps: RunCaps,
+    final_parts: list[str] | None = None,
+    token_usage: dict[str, int] | None = None,
+    tool_results: list[tuple[str, dict[str, Any]]] | None = None,
+    principal: Principal | None = None,
+) -> RunResult:
+    from pico_orchestrator.user_errors import wall_stop_teacher_text
+
+    writes = count_write_tool_successes(tool_results or [])
+    text = wall_stop_teacher_text(
+        max_seconds=int(getattr(caps, "max_seconds", 0) or 0),
+        has_deliverable=writes > 0,
+    )
+    parts = list(final_parts or [])
+    parts.append(text)
+    await emit("message.delta", {"text": text, "runtime": RUNTIME_LABEL})
+    await emit("run.status", {"status": "succeeded", "code": "wall.stop", "runtime": RUNTIME_LABEL})
+    return _result(
+        "succeeded",
+        parts,
+        token_usage=token_usage,
+        tool_results=tool_results,
+        principal=principal,
+    )
 
 
 async def _failed_result(

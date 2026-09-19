@@ -47,16 +47,16 @@ class Settings(BaseSettings):
 
     # --- Tiered run budgets (P-COMPLEX-DONE package A) ---
     # Delivery / pico-agent multi-step (HTML 课件等): default 900s, not 120s freeze.
-    pico_run_max_seconds: int = 900
+    pico_run_max_seconds: int = 14_400
     pico_run_max_tokens: int = 32_000
     pico_run_max_steps: int = 24
     pico_run_max_retries: int = 2
     # Short / direct-model chat: keep snappy day-use turns.
-    pico_run_short_max_seconds: int = 120
+    pico_run_short_max_seconds: int = 1_800
     pico_run_short_max_tokens: int = 32_000
     # Durable long jobs (package B): wall cap for staged jobs / long agent when detach on.
     # Must pair with detach+checkpoint — never “only raise this to 8h.”
-    pico_run_durable_max_seconds: int = 3600
+    pico_run_durable_max_seconds: int = 21_600
     # Page close / SSE abort: default continue job (durable). 0 = legacy kill-on-disconnect.
     pico_run_detach_on_disconnect: bool = True
 
