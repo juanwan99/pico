@@ -34,6 +34,17 @@ DURABLE_MAX_STEPS = 48
 DURABLE_MAX_RETRIES = 2
 
 
+def wall_deadline(started: float, max_seconds: int) -> float | None:
+    """None means Pico does not kill the run on wall clock (env 0)."""
+    if int(max_seconds) <= 0:
+        return None
+    return started + max(1, int(max_seconds))
+
+
+def wall_expired(now: float, deadline: float | None) -> bool:
+    return deadline is not None and now >= deadline
+
+
 def caps_for_tier(
     tier: RunTier,
     *,

@@ -153,7 +153,9 @@ async def run_pi_agent(
     timed_out = asyncio.Event()
     loop = asyncio.get_running_loop()
     started = loop.time()
-    deadline = started + max(1, caps.max_seconds)
+    from pico_orchestrator.run_caps import wall_deadline, wall_expired
+
+    deadline = wall_deadline(started, int(getattr(caps, "max_seconds", 0) or 0))
     last_heartbeat = started
 
     watcher = asyncio.create_task(
@@ -170,7 +172,7 @@ async def run_pi_agent(
                     tool_results=tool_context_results,
                     principal=principal,
                 )
-            if timed_out.is_set() or loop.time() >= deadline:
+            if timed_out.is_set() or wall_expired(loop.time(), deadline):
                 return await _failed_result(
                     emit,
                     code="timeout",
@@ -225,11 +227,12 @@ async def run_pi_agent(
 
             now = loop.time()
             if now - last_heartbeat >= _HEARTBEAT_SECONDS:
+                remaining_s = None if deadline is None else max(0, int(deadline - now))
                 await emit(
                     "run.heartbeat",
                     {
                         "elapsed_seconds": int(now - started),
-                        "remaining_seconds": max(0, int(deadline - now)),
+                        "remaining_seconds": remaining_s,
                         "max_seconds": caps.max_seconds,
                         "runtime": RUNTIME_LABEL,
                     },
@@ -251,7 +254,11 @@ async def run_pi_agent(
                 create_kwargs["tools"] = tool_schemas
                 create_kwargs["tool_choice"] = "auto"
 
-            remaining = max(1.0, deadline - loop.time())
+            remaining = (
+                600.0
+                if deadline is None
+                else max(1.0, deadline - loop.time())
+            )
             max_retries = max(0, int(getattr(caps, "max_retries", 0) or 0))
             response = None
             last_exc: Exception | None = None
@@ -671,7 +678,7 @@ async def _watch_cancel(
     is_cancelled: Callable[[], Awaitable[bool]],
     stop: asyncio.Event,
     timed_out: asyncio.Event,
-    deadline: float,
+    deadline: float | None,
     started: float,
     emit: EventEmitter,
 ) -> None:
@@ -681,17 +688,18 @@ async def _watch_cancel(
         if await is_cancelled():
             return
         now = loop.time()
-        if now >= deadline:
+        if deadline is not None and now >= deadline:
             timed_out.set()
             return
         if now - last_heartbeat >= _HEARTBEAT_SECONDS:
             # Heartbeat must never abort the run; ledger write failures are non-fatal.
             with suppress(Exception):
+                remaining = None if deadline is None else max(0, int(deadline - now))
                 await emit(
                     "run.heartbeat",
                     {
                         "elapsed_seconds": int(now - started),
-                        "remaining_seconds": max(0, int(deadline - now)),
+                        "remaining_seconds": remaining,
                         "runtime": RUNTIME_LABEL,
                     },
                 )
