@@ -856,10 +856,10 @@ def _workspace_handlers(
         include_school = False
         allow_ids: set[str] | None = None
         try:
-            from pico_orchestrator.usage_hook import current_usage_bind
-
             from app.db import session_factory
             from app.edu_school import load_kb_search_scope
+
+            from pico_orchestrator.usage_hook import current_usage_bind
 
             bind = current_usage_bind()
             cid = str((bind.conversation_id if bind else "") or "")
