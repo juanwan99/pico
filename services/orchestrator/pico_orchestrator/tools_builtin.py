@@ -2322,10 +2322,12 @@ def build_default_gateway(
     that reported affordances). Without it the hand is registered but fails
     closed, so the tool contract stays one set across TS / Python / CORE.
     """
+    from pico_orchestrator.edu_agent_tools import register_edu_agent_tools
     from pico_orchestrator.page_mutations import register_propose_page_mutation
 
     gw = AllowlistGateway()
     register_propose_page_mutation(gw, page_mutations)
+    register_edu_agent_tools(gw)
     store = artifact_store or _UnavailableArtifactStore()
     h = _workspace_handlers(store)
     write_file = h["workspace_write_file"]

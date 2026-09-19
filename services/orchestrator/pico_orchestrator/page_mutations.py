@@ -129,6 +129,24 @@ class PageMutationBook:
             raise ToolError("page.affordance_required", "要先说改哪一处：affordance_id 不能为空。")
         row = self._lookup(aid)
         if row is None:
+            from pico_orchestrator.edu_agent_tools import catalog_command_id
+
+            if catalog_command_id(aid):
+                mutation = {
+                    "affordanceId": aid,
+                    "params": args.get("params") if isinstance(args.get("params"), dict) else {},
+                    "label": str(args.get("label") or aid).strip()[:_MAX_LABEL],
+                    "tier": "work",
+                    "status": "staged",
+                    "source": "catalog",
+                }
+                self.mutations.append(mutation)
+                return {
+                    "staged": True,
+                    "affordanceId": aid,
+                    "source": "catalog",
+                    "note": "目录命令，走学校 run_pack；未当页内手执行。",
+                }
             raise ToolError(
                 "page.affordance_unknown",
                 "这一页的能力表里没有这个 id，今天没有这只手；把缺的说给老师。",
@@ -194,6 +212,16 @@ def register_propose_page_mutation(gateway: Any, book: PageMutationBook | None) 
     async def handler(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         del principal
         if book is None:
+            from pico_orchestrator.edu_agent_tools import catalog_command_id
+
+            aid = str(args.get("affordance_id") or args.get("affordanceId") or "").strip()
+            if catalog_command_id(aid):
+                return {
+                    "staged": True,
+                    "affordanceId": aid,
+                    "source": "catalog",
+                    "note": "目录命令，走学校 run_pack；这一页没有能力表也可以用目录 id。",
+                }
             raise ToolError(
                 "page.no_affordances",
                 "这一页没有报能力表，改不了左页；可以说清楚缺什么。",
