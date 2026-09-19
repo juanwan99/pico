@@ -29,7 +29,7 @@ from pico_orchestrator.sse_keepalive import (
     SSE_STREAM_HEADERS,
     iter_with_idle_ticks,
 )
-from pico_orchestrator.user_errors import user_message_for_error
+from pico_orchestrator.user_errors import is_wall_timeout_code, user_message_for_error
 from pydantic import BaseModel
 
 from app.auth import (
@@ -2257,13 +2257,10 @@ async def chat_completions(
                             yield chunk({"content": p})
                     last_wire = time.monotonic()
                     has_file = await _deliverable()
-                    yield chunk(
-                        {
-                            "content": (
-                                f"【错误】{user_message_for_error(str(payload), has_deliverable=has_file)}"
-                            )
-                        }
-                    )
+                    raw = str(payload)
+                    msg = user_message_for_error(raw, has_deliverable=has_file)
+                    prefix = "" if is_wall_timeout_code(None, raw) else "【错误】"
+                    yield chunk({"content": f"{prefix}{msg}"})
                     break
                 elif kind == "done":
                     result = payload

@@ -72,20 +72,20 @@ def test_zero_seconds_means_no_wall_kill() -> None:
     assert wall_expired(100.0, 150.0) is False
 
 
-def test_delivery_defaults_are_900s_not_120() -> None:
-    assert DELIVERY_MAX_SECONDS == 900
-    assert DELIVERY_MAX_SECONDS > 120
+def test_delivery_defaults_are_hours_not_15min() -> None:
+    assert DELIVERY_MAX_SECONDS == 14_400
+    assert DELIVERY_MAX_SECONDS > 900
     assert DELIVERY_MAX_STEPS >= 16
     assert DELIVERY_MAX_TOKENS >= 16_000
     bare = RunCaps()
-    assert bare.max_seconds == 900
+    assert bare.max_seconds == 14_400
     assert bare.max_steps == 24
 
 
 def test_short_tier_stays_fast() -> None:
     short = caps_for_tier("short")
     delivery = caps_for_tier("delivery")
-    assert short.max_seconds == SHORT_MAX_SECONDS == 120
+    assert short.max_seconds == SHORT_MAX_SECONDS == 1_800
     assert short.max_seconds < delivery.max_seconds
     # LAW #865: short is a wall-clock lane, not a smaller model window.
     assert short.max_tokens == delivery.max_tokens == 32_000
@@ -103,13 +103,13 @@ def test_settings_delivery_and_short_caps() -> None:
     settings = Settings(_env_file=None)
     delivery = settings.delivery_run_caps()
     short = settings.short_run_caps()
-    assert delivery.max_seconds == 900
+    assert delivery.max_seconds == 14_400
     assert delivery.max_steps == 24
-    assert short.max_seconds == 120
+    assert short.max_seconds == 1_800
     public = settings.spend_caps_dict()
-    assert public["max_seconds"] == 900
-    assert public["delivery"]["max_seconds"] == 900
-    assert public["short"]["max_seconds"] == 120
+    assert public["max_seconds"] == 14_400
+    assert public["delivery"]["max_seconds"] == 14_400
+    assert public["short"]["max_seconds"] == 1_800
     assert "max_steps" in public
 
 

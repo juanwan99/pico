@@ -20,9 +20,18 @@ def test_no_key_message():
 
 
 def test_timeout():
-    msg = user_message_for_error("Kimi Agent timeout after 120s", code="timeout")
-    assert "超时" in msg
-    assert "再跑一次" in msg
+    msg = user_message_for_error("Kimi Agent timeout after 14400s", code="timeout")
+    assert "不是系统报错" in msg
+    assert "继续" in msg
+    assert "【错误】" not in msg
+    assert "15 分钟" not in msg
+
+
+def test_wall_stop_copy():
+    text = _mod.wall_stop_teacher_text(max_seconds=14400, has_deliverable=True)
+    assert "约 4 小时" in text
+    assert "不是系统报错" in text
+    assert "已经生成的文件" in text
 
 
 def test_ask_timeout_is_not_run_budget():

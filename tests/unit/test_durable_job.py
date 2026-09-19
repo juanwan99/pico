@@ -39,8 +39,8 @@ def _load_isolated(name: str, path: Path):
 def test_durable_tier_defaults() -> None:
     _load_isolated("pico_orchestrator.run_types", _ORCH / "run_types.py")
     caps_mod = _load_isolated("pico_orchestrator.run_caps", _ORCH / "run_caps.py")
-    assert caps_mod.DURABLE_MAX_SECONDS == 3600
-    assert caps_mod.DURABLE_MAX_SECONDS > caps_mod.DELIVERY_MAX_SECONDS
+    assert caps_mod.DURABLE_MAX_SECONDS == 21_600
+    assert caps_mod.DURABLE_MAX_SECONDS >= caps_mod.DELIVERY_MAX_SECONDS
     durable = caps_mod.caps_for_tier("durable")
     delivery = caps_mod.caps_for_tier("delivery")
     assert durable.max_seconds >= 1800
@@ -69,8 +69,8 @@ def test_settings_detach_default_true() -> None:
         pytest.skip(f"settings deps unavailable: {exc}")
     s = Settings(_env_file=None)
     assert s.pico_run_detach_on_disconnect is True
-    assert s.pico_run_durable_max_seconds == 3600
+    assert s.pico_run_durable_max_seconds == 21_600
     d = s.durable_run_caps()
-    assert d.max_seconds == 3600
+    assert d.max_seconds == 21_600
     snap = s.spend_caps_dict()
     assert snap["durable"]["detach_on_disconnect"] is True
