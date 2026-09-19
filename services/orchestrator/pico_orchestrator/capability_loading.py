@@ -35,6 +35,10 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "ask_user",
     "sandbox_browser_open",
     "sandbox_document_open",
+    "edu_catalog_find",
+    "edu_catalog_describe",
+    "edu_catalog_command",
+    "edu_run_pack",
 )
 
 # Same gateway, not registered unless a hung skill lists them — or, for
