@@ -12,6 +12,7 @@ import store from '~/store';
 
 type SearchBarProps = {
   isSmallScreen?: boolean;
+  autoFocus?: boolean;
 };
 
 const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivElement>) => {
@@ -19,7 +20,7 @@ const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivEleme
   const location = useLocation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { isSmallScreen } = props;
+  const { isSmallScreen, autoFocus } = props;
 
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -131,6 +132,7 @@ const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivEleme
         aria-label={localize('com_nav_search_placeholder')}
         aria-keyshortcuts={focusSearchAriaKey}
         placeholder={localize('com_nav_search_placeholder')}
+        autoFocus={autoFocus === true}
         onKeyUp={handleKeyUp}
         onFocus={() => setSearchState((prev) => ({ ...prev, isSearching: true }))}
         onBlur={() => setSearchState((prev) => ({ ...prev, isSearching: false }))}

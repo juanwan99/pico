@@ -34,7 +34,7 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
   return (
     <div
       className={cn(
-        'flex min-w-0 grow items-center gap-2 overflow-hidden rounded-lg px-2',
+        'flex min-w-0 grow items-start gap-2 overflow-hidden rounded-lg px-2 py-1',
         isActiveConvo || isPopoverActive ? 'bg-surface-active-alt' : '',
       )}
       title={
@@ -47,7 +47,7 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
     >
       {children}
       <div
-        className="relative flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden"
+        className="relative flex min-w-0 flex-1 items-start gap-1.5 overflow-hidden pt-0.5"
         onDoubleClick={(e) => {
           if (isSmallScreen) {
             return;
@@ -62,14 +62,14 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
             : title || localize('com_ui_untitled')
         }
       >
-        <span className="min-w-0 flex-1 truncate" data-testid="convo-title">
+        <span className="min-w-0 flex-1 break-words leading-snug line-clamp-2" data-testid="convo-title">
           {title || localize('com_ui_untitled')}
         </span>
         {ledgerStatus ? (
           <span
             data-testid="convo-ledger-status"
             className={cn(
-              'max-w-[4.5rem] shrink-0 truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none',
+              'mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none',
               STATUS_CLASS[ledgerStatus] ||
                 'bg-[color:var(--pico-surface-2)] text-[color:var(--pico-ink-2)]',
             )}

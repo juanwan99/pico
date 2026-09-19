@@ -121,7 +121,7 @@ const ConversationsSection = memo(() => {
             <BookmarkNav tags={tags} setTags={setTags} />
           </Suspense>
         )}
-        {(search.enabled && Boolean(search.query)) || location.pathname.startsWith('/search') ? (
+        {search.enabled && Boolean(search.query) && !location.pathname.startsWith('/search') ? (
           <SearchBar isSmallScreen={isSmallScreen} />
         ) : null}
         <button

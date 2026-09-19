@@ -8,6 +8,7 @@ import type { Index, ListRowProps } from 'react-virtualized';
 import type { TMessage } from 'librechat-data-provider';
 import { useElementSize, useLocalize, useAuthContext } from '~/hooks';
 import SearchMessage from '~/components/Chat/Messages/SearchMessage';
+import SearchStage from '~/components/Chat/SearchStage';
 import { useMessagesInfiniteQuery } from '~/data-provider';
 import { useFileMapContext } from '~/Providers';
 import { fontSizeAtom } from '~/store/fontSize';
@@ -264,7 +265,7 @@ export default function Search() {
 
   useEffect(() => {
     if (isError && searchQuery) {
-      showToast({ message: 'An error occurred during search', status: 'error' });
+      showToast({ message: '搜索暂时不可用，请再试一次。', status: 'error' });
     }
   }, [isError, searchQuery, showToast]);
 
@@ -288,7 +289,20 @@ export default function Search() {
   if (!searchQuery) {
     /** A fresh query is typed but its debounce hasn't fired yet: show loading
      *  rather than a blank route during that first delay. */
-    return search.query && search.isTyping ? loadingSpinner : null;
+    return (
+      <SearchStage>
+        {search.query && search.isTyping ? (
+          loadingSpinner
+        ) : (
+          <p
+            className="pico-type-body px-6 pt-8 text-center text-[color:var(--pico-ink-2)]"
+            data-testid="search-idle-hint"
+          >
+            输入关键字，结果会出现在这里。
+          </p>
+        )}
+      </SearchStage>
+    );
   }
 
   const hasResults = resultsCount > 0;
@@ -298,26 +312,26 @@ export default function Search() {
    *  search was empty and `keepPreviousData` holds those empty pages during the
    *  new request, which would otherwise flash a false "nothing found". */
   if ((isLoading || showingStale) && !hasResults) {
-    return loadingSpinner;
+    return <SearchStage>{loadingSpinner}</SearchStage>;
   }
 
   if (!hasResults) {
     return (
-      <>
+      <SearchStage>
         <div className="sr-only" role="alert" aria-atomic="true">
           {resultsAnnouncement}
         </div>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="rounded-lg bg-white p-6 text-lg text-gray-500 dark:border-gray-800/50 dark:bg-gray-800 dark:text-gray-300">
+        <div className="flex justify-center px-6 pt-10">
+          <p className="pico-type-body text-[color:var(--pico-ink-2)]">
             {localize('com_ui_nothing_found')}
-          </div>
+          </p>
         </div>
-      </>
+      </SearchStage>
     );
   }
 
   return (
-    <div className="relative flex h-full w-full flex-col bg-white pt-4 dark:bg-gray-800">
+    <SearchStage>
       <div className="sr-only" role="alert" aria-atomic="true">
         {resultsAnnouncement}
       </div>
@@ -342,7 +356,7 @@ export default function Search() {
           <Spinner className="text-text-primary" />
         </div>
       )}
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[5%] bg-gradient-to-t from-gray-50 to-transparent dark:from-gray-800" />
-    </div>
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[5%] bg-gradient-to-t from-[color:var(--pico-shell)] to-transparent" />
+    </SearchStage>
   );
 }

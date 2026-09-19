@@ -297,7 +297,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   </div>
                   {!isLandingPage ? (
                     <div className="w-full shrink-0 bg-transparent">
-                      <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">
+                      <div className="relative mx-auto w-full max-w-[797px] px-2 sm:px-0">
                         <ComposerMaterialsPanel
                           conversationId={conversationId}
                           open={materials.open}

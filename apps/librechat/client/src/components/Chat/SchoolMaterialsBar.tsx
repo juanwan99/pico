@@ -389,7 +389,7 @@ export default function SchoolMaterialsBar({ conversationId }: { conversationId?
           {busy && mineGroups.length === 0 && followGroups.length === 0 ? (
             <p className="pico-type-aux text-[color:var(--pico-ink-3)]">正在列出有权的场…</p>
           ) : null}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div data-testid="school-materials-mine">
               <p className="pico-type-aux py-0.5 text-[color:var(--pico-ink-2)]">我负责的</p>
               <FieldFolderList groups={mineGroups} testPrefix="school-field" {...folderProps} />
