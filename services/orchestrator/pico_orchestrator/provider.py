@@ -14,6 +14,8 @@ from pico_orchestrator.sse_keepalive import is_proxy_first_byte_timeout
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
 DEFAULT_DEEPSEEK_REASONER = "deepseek-reasoner"
 DEFAULT_DEEPSEEK_VISION = "deepseek-v4-flash-vision-exp"
+# Owner-named Vertex Gemini chat id. Do not silently pin 2.5-flash/pro.
+DEFAULT_GEMINI_FLASH = "gemini-3.8-flash"
 DEFAULT_DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 KNOWN_DEEPSEEK_MODELS = (
     "deepseek-v4-flash",
@@ -120,10 +122,16 @@ def uses_openai_responses_brain(cfg: ProviderConfig | None = None) -> bool:
 
 
 def product_backend_model(*, deep: bool) -> str:
-    """Lane backend id. Gemini: fast=env/flash, deep=pro. GPT/Grok keep configured id."""
+    """Lane backend id. Gemini: env id for both lanes unless PICO_BRAIN_DEEP_MODEL.
+
+    Do not invent a Gemini Pro the owner did not name. pico-deep is the same
+    Gemini id with thinking on, unless operators set PICO_BRAIN_DEEP_MODEL.
+    """
     cfg = resolve_provider()
     if cfg is not None and is_gemini_model(cfg.model):
-        return "gemini-2.5-pro" if deep else (cfg.model or "gemini-2.5-flash")
+        flash = (cfg.model or "").strip() or DEFAULT_GEMINI_FLASH
+        deep_id = (os.environ.get("PICO_BRAIN_DEEP_MODEL") or "").strip() or flash
+        return deep_id if deep else flash
     if cfg is not None and uses_openai_responses_brain(cfg):
         return cfg.model
     return DEFAULT_DEEPSEEK_REASONER if deep else DEFAULT_DEEPSEEK_MODEL
