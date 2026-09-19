@@ -3062,8 +3062,7 @@ html:not(.dark) .pico-wb-composer textarea {
   font-size: var(--pico-fs-body) !important;
   font-weight: var(--pico-fw) !important;
   line-height: var(--pico-lh-body) !important;
-  color: #1a1a1a !important;
-  min-height: 0 !important;
+  color: var(--pico-ink) !important;
 }
 html:not(.dark) .pico-wb-composer textarea::placeholder {
   color: #b0b0b0 !important;

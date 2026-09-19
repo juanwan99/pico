@@ -149,6 +149,13 @@ export function humanizeChatErrorText(raw: string): string {
   if (low.includes('econnreset') || low.includes('socket hang up') || low.includes('network error')) {
     return '网络中断，任务可能未跑完。请刷新查看侧栏状态，必要时点「重新运行」。';
   }
+  if (
+    low.includes('an error occurred while processing') ||
+    (low.includes('403') && low.includes('status code')) ||
+    low.includes('status code (no body)')
+  ) {
+    return '这次没完成。请再发一次。';
+  }
   if (low.includes('something went wrong') && low.includes('error message we encountered')) {
     const m = text.match(/encountered:\s*(.+)$/i);
     const inner = (m?.[1] || '').trim();

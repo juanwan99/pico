@@ -254,6 +254,10 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
         or 'reading "startswith"' in low
     ):
         return "智能体这次内部出错了，请再发一次。不是你的问题写错。"
+    if "an error occurred while processing" in low or (
+        "403" in low and "status code" in low
+    ):
+        return "这次没完成。请再发一次。"
     # Keep short; avoid dumping stack traces
     if "traceback" in low or len(text) > 180:
         return "服务暂时出错，请重试。详情已记入运行日志。"

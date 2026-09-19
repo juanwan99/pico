@@ -95,6 +95,7 @@ describe('Landing composer chrome', () => {
   const quoteFromChars = jest.fn();
 
   beforeEach(() => {
+    sessionStorage.removeItem('pico:composerMaterials');
     quoteFromChars.mockReset();
     mockHandleFiles.mockReset();
     usePointsMeter.mockReturnValue({
@@ -118,15 +119,33 @@ describe('Landing composer chrome', () => {
     expect(screen.queryByTestId('composer-plus-menu')).not.toBeInTheDocument();
   });
 
-  it('C1: plus, input, and send sit on one row', () => {
+  it('C1: plus, input, and send sit in the composer; tools on the toolbar', () => {
     render(<Landing centerFormOnLanding />);
     const row = screen.getByTestId('composer-one-row');
+    const toolbar = screen.getByTestId('composer-toolbar');
     expect(row).toContainElement(screen.getByTestId('composer-plus'));
     expect(row).toContainElement(screen.getByTestId('text-input'));
     expect(row).toContainElement(screen.getByTestId('send-button'));
     expect(row).toContainElement(screen.getByTestId('composer-mode-switch'));
     expect(row).toContainElement(screen.getByTestId('composer-plan-toggle'));
+    expect(toolbar).toContainElement(screen.getByTestId('composer-plus'));
+    expect(toolbar).toContainElement(screen.getByTestId('send-button'));
+    expect(toolbar).not.toContainElement(screen.getByTestId('text-input'));
     expect(screen.getByTestId('composer-plus').textContent?.trim()).not.toBe('+');
+  });
+
+  it('材料 stays closed until the chip is pressed', () => {
+    render(<Landing centerFormOnLanding />);
+    expect(screen.queryByTestId('composer-materials-panel')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('composer-materials-toggle'));
+    expect(screen.getByTestId('composer-materials-panel')).toBeInTheDocument();
+  });
+
+  it('greeting is product copy, not the account name', () => {
+    render(<Landing centerFormOnLanding />);
+    expect(screen.getByRole('heading', { name: 'Pico，我帮你' })).toBeInTheDocument();
+    expect(screen.getByText('直接说就行')).toBeInTheDocument();
+    expect(screen.queryByText(/老师，直接说就行/)).not.toBeInTheDocument();
   });
 
   it('plus opens the file picker; 快速/深度 sit as a switch', () => {

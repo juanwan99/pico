@@ -14,11 +14,11 @@
   --pico-fs-aux: 13px;
   --pico-fs-sidebar: 14px;
   --pico-fs-body: 16px;
-  --pico-fs-title: 24px;
-  --pico-lh-aux: 1.35;
+  --pico-fs-title: 32px;
+  --pico-lh-aux: 1.4;
   --pico-lh-sidebar: 1.4;
   --pico-lh-body: 1.55;
-  --pico-lh-title: 1.2;
+  --pico-lh-title: 1.25;
   --pico-space-1: 4px;
   --pico-space-2: 8px;
   --pico-space-3: 12px;
@@ -26,7 +26,7 @@
   --pico-icon-size-sm: 16px;
   --pico-icon-size-md: 20px;
   --pico-icon-size-lg: 24px;
-  --pico-control-h: 32px;
+  --pico-control-h: 40px;
   --pico-fw: 400;
   --pico-fw-medium: 560;
 }
@@ -71,7 +71,7 @@ html.dark .pico-app {
   --pico-surface-2: #f7f6fb;
   --pico-ink: #1a1b22;
   --pico-ink-2: #5a5d6b;
-  --pico-ink-3: #8a8d9a;
+  --pico-ink-3: #6b6e7c;
   --pico-accent: #4285f4;
   --pico-accent-dark: #3367d6;
   --pico-accent-wash: #e8f0fe;
@@ -103,11 +103,11 @@ html.dark .pico-app {
   --pico-fs-aux: 13px;
   --pico-fs-sidebar: 14px;
   --pico-fs-body: 16px;
-  --pico-fs-title: 24px;
-  --pico-lh-aux: 1.35;
+  --pico-fs-title: 32px;
+  --pico-lh-aux: 1.4;
   --pico-lh-sidebar: 1.4;
   --pico-lh-body: 1.55;
-  --pico-lh-title: 1.2;
+  --pico-lh-title: 1.25;
   --pico-space-1: 4px;
   --pico-space-2: 8px;
   --pico-space-3: 12px;
@@ -115,7 +115,7 @@ html.dark .pico-app {
   --pico-icon-size-sm: 16px;
   --pico-icon-size-md: 20px;
   --pico-icon-size-lg: 24px;
-  --pico-control-h: 32px;
+  --pico-control-h: 40px;
   --pico-fw: 400;
   --pico-fw-medium: 560;
   --font-size-base: 16px;
@@ -401,4 +401,23 @@ html.dark .pico-cta-accent {
 html.dark .pico-app .pico-auth-card [data-testid='login-button'],
 html.dark .pico-app .pico-auth-card button[type='submit'] {
   color: var(--pico-cta-fg) !important;
+}
+
+.pico-app .pico-hit {
+  min-height: var(--pico-control-h);
+  min-width: var(--pico-control-h);
+}
+
+.pico-app .pico-wb-composer textarea,
+.pico-app .pico-wb-composer [data-testid='text-input'],
+.pico-app #pico-wb-home-input {
+  min-height: var(--pico-control-h);
+}
+
+@media (max-width: 640px) {
+  :root,
+  .pico-app {
+    --pico-fs-title: 28px;
+    --pico-control-h: 44px;
+  }
 }

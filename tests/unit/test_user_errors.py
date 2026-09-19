@@ -244,6 +244,16 @@ def test_shell_undefined_error_code_is_human() -> None:
     assert "重试" in msg
 
 
+def test_upstream_403_english_is_not_dumped() -> None:
+    msg = user_message_for_error(
+        "An error occurred while processing the request: 403 status code (no body)"
+    )
+    assert "未能完成" not in msg
+    assert "403" not in msg
+    assert "An error occurred" not in msg
+    assert "再发一次" in msg
+
+
 def test_js_startswith_crash_is_not_dumped_to_teacher() -> None:
     raw = "Cannot read properties of undefined (reading 'startsWith')"
     msg = user_message_for_error(raw, code="true_pi.assistant_error")

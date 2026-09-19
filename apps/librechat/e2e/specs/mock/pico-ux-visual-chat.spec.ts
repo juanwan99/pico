@@ -25,7 +25,7 @@ test.describe('T-UX-VISUAL-CHAT', () => {
     const box = await row.boundingBox();
     expect(box).not.toBeNull();
     if (box) {
-      expect(box.height).toBeLessThan(88);
+      expect(box.height).toBeLessThan(140);
     }
     await expect(page.getByTestId('model-selector-button')).toHaveCount(0);
     await expect(page.getByTestId('add-multi-convo-button')).toHaveCount(0);
@@ -76,7 +76,7 @@ test.describe('T-UX-VISUAL-CHAT', () => {
     expect(box).not.toBeNull();
     if (box) {
       expect(box.x + box.width).toBeLessThanOrEqual(400);
-      expect(box.height).toBeLessThan(88);
+      expect(box.height).toBeLessThan(140);
     }
     await expect(page.getByTestId('model-selector-button')).toHaveCount(0);
     ensureDir();
