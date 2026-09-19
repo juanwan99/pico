@@ -74,6 +74,18 @@ def test_office_computer_v2_plan_exists() -> None:
     assert "PLAN-OFFICE-COMPUTER-V2.md" in workenv[:3000]
 
 
+def test_architecture_md_matches_freeze_not_kimi_target() -> None:
+    text = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    assert "true Pi" in text or "真 Pi" in text
+    assert "New API" in text
+    assert "sandbox_office_lib" in text
+    assert "Open-source Kimi Agent" not in text
+    assert "run_agent_loop" in text and "Removed" in text
+    overall = (ROOT / "docs" / "OVERALL-ARCHITECTURE.md").read_text(encoding="utf-8")
+    assert "不是现网" in overall
+    assert "ARCHIVED DRAFT" in overall
+
+
 def test_law_forbids_second_model_ledger() -> None:
     text = (ROOT / "docs" / "LAW-NO-SELF-BUILD-THIN-ADAPTER.md").read_text(encoding="utf-8")
     assert "第二套模型账" in text
