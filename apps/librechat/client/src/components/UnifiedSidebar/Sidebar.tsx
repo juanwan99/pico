@@ -15,6 +15,8 @@ import { useLocalize, useNewConvo } from '~/hooks';
 import { clearMessagesCache, cn } from '~/utils';
 import {
   getPicoSidebarRail,
+  isChatPath,
+  isPicoNavItemActive,
   setPicoSidebarRail,
   subscribePicoSidebarRail,
   type PicoSidebarRail,
@@ -43,16 +45,7 @@ const NAV: NavItem[] = [
 ];
 
 function isNavItemActive(pathname: string, item: NavItem, rail: PicoSidebarRail) {
-  if (item.id === 'files') {
-    return rail === 'files';
-  }
-  if (item.id === 'school') {
-    return rail === 'school';
-  }
-  if (item.id === 'capability') {
-    return pathname.startsWith('/capability') || pathname.startsWith('/skills');
-  }
-  return pathname.startsWith(item.path);
+  return isPicoNavItemActive(pathname, item.id, rail);
 }
 
 function Sidebar({
@@ -108,8 +101,8 @@ function Sidebar({
       if (item.rail) {
         setPicoSidebarRail(item.rail);
         setRail(item.rail);
-        if (location.pathname.startsWith('/more/files')) {
-          navigate('/c/new', { replace: true });
+        if (!isChatPath(location.pathname)) {
+          navigate('/c/new');
         }
         return;
       }

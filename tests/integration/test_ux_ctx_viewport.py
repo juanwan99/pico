@@ -65,6 +65,8 @@ def test_history_and_chrome_source_locks() -> None:
     assert "搜索会话" in sidebar
     assert "技能与连接器" in sidebar
     assert "我的文件" in sidebar
+    assert "isPicoNavItemActive" in sidebar
+    assert "isChatPath" in sidebar
     assert "学校材料" in sidebar
     assert "专家" not in sidebar
     assert "自动化" not in sidebar
