@@ -141,6 +141,7 @@ describe('Landing composer chrome', () => {
     const panel = screen.getByTestId('composer-materials-panel');
     expect(panel).toBeInTheDocument();
     expect(panel.className).toMatch(/max-sm:absolute/);
+    expect(panel.className).toMatch(/max-sm:max-h-\[32vh\]/);
   });
 
   it('greeting is product copy, not the account name', () => {

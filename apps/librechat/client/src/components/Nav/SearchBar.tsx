@@ -13,6 +13,7 @@ import store from '~/store';
 type SearchBarProps = {
   isSmallScreen?: boolean;
   autoFocus?: boolean;
+  isStage?: boolean;
 };
 
 const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivElement>) => {
@@ -20,7 +21,7 @@ const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivEleme
   const location = useLocation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { isSmallScreen, autoFocus } = props;
+  const { isSmallScreen, autoFocus, isStage } = props;
 
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -112,18 +113,34 @@ const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivEleme
   return (
     <div
       ref={ref}
-      className="group relative flex h-9 min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg border-2 border-transparent px-3 py-1.5 text-text-primary focus-within:border-ring-primary focus-within:bg-surface-active-alt hover:bg-surface-active-alt"
+      data-testid={isStage ? 'search-stage-field' : undefined}
+      className={cn(
+        'group relative flex min-w-0 w-full items-center gap-3 px-3',
+        isStage
+          ? 'h-10 rounded-xl border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] text-[color:var(--pico-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] focus-within:border-[color:var(--pico-accent)]'
+          : 'h-9 flex-1 cursor-pointer rounded-lg border-2 border-transparent py-1.5 text-text-primary focus-within:border-ring-primary focus-within:bg-surface-active-alt hover:bg-surface-active-alt',
+      )}
     >
       <PicoIcon
         name="search"
         size="sm"
-        className="absolute left-3 text-text-secondary group-focus-within:text-text-primary group-hover:text-text-primary"
+        className={cn(
+          'absolute left-3',
+          isStage
+            ? 'text-[color:var(--pico-ink-3)] group-focus-within:text-[color:var(--pico-ink)]'
+            : 'text-text-secondary group-focus-within:text-text-primary group-hover:text-text-primary',
+        )}
       />
       <input
         type="text"
         data-testid="nav-search-input"
         ref={inputRef}
-        className="m-0 mr-0 w-full border-none bg-transparent p-0 pl-7 text-sm leading-tight placeholder-text-secondary placeholder-opacity-100 focus-visible:outline-none group-focus-within:placeholder-text-primary group-hover:placeholder-text-primary"
+        className={cn(
+          'm-0 mr-0 w-full border-none bg-transparent p-0 pl-7 focus-visible:outline-none',
+          isStage
+            ? 'pico-type-body placeholder:text-[color:var(--pico-ink-3)]'
+            : 'text-sm leading-tight placeholder-text-secondary placeholder-opacity-100 group-focus-within:placeholder-text-primary group-hover:placeholder-text-primary',
+        )}
         value={text}
         onChange={onChange}
         onKeyDown={(e) => {

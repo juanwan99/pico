@@ -105,8 +105,19 @@ def test_nav_layout_type_and_school_docs() -> None:
     assert "ComposerMaterialsPanel" in landing
     assert "composer-toolbar" in landing
     materials = (ROOT / "apps/librechat/client/src/components/Chat/ComposerMaterials.tsx").read_text()
+    convo_row = (ROOT / "apps/librechat/client/src/components/Conversations/Convo.tsx").read_text()
+    convo_link = (ROOT / "apps/librechat/client/src/components/Conversations/ConvoLink.tsx").read_text()
+    search_stage = (ROOT / "apps/librechat/client/src/components/Chat/SearchStage.tsx").read_text()
     assert "ArchiveFolderBar" in materials
     assert "SchoolMaterialsBar" in materials
+    assert "max-sm:max-h-[32vh]" in materials
+    assert "max-sm:absolute" in materials
+    assert "md:min-h-9" in convo_row
+    assert "md:h-9" not in convo_row
+    assert "flex-col" in convo_link
+    assert "w-full" in convo_link
+    assert "isStage" in search_stage
+    assert "[data-testid='composer-materials-panel']" in tokens
     # Chat bar: fields on open, documents lazy per venue (no N× fan-out on open).
     assert "loadSchoolFields" in bar
     assert "loadSchoolFieldItems" in bar
