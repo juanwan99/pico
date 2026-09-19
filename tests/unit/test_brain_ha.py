@@ -14,8 +14,8 @@ class _Res:
 
 def test_candidates_primary_then_fallbacks(monkeypatch) -> None:
     monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "grok-4.6,gpt-5.6-sol")
-    assert brain_candidates("gemini-2.5-flash")[:3] == [
-        "gemini-2.5-flash",
+    assert brain_candidates("gemini-3.8-flash")[:3] == [
+        "gemini-3.8-flash",
         "grok-4.6",
         "gpt-5.6-sol",
     ]
@@ -29,6 +29,6 @@ def test_failover_only_on_channel_death() -> None:
 
 
 def test_teacher_note_is_human() -> None:
-    msg = fallback_teacher_note("gemini-2.5-flash", "grok-4.6")
+    msg = fallback_teacher_note("gemini-3.8-flash", "grok-4.6")
     assert "备用" in msg
     assert "【错误】" not in msg

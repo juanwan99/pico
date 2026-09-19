@@ -175,6 +175,11 @@ def true_pi_models_document(
     if url:
         provider_entry["baseUrl"] = url.rstrip("/")
     kind = (api or "").strip()
+    # Pi 0.84 openai built-ins default to openai-responses. A Gemini id with no
+    # api inherits that, then crashes (undefined.startsWith) on New API chat.
+    # Owner path: Gemini → chat/completions overlay, not responses.
+    if not kind and name == "openai" and mid.lower().startswith("gemini-"):
+        kind = "openai-completions"
     if kind:
         provider_entry["api"] = kind
         model_entry["api"] = kind

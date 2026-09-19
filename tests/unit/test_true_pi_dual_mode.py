@@ -176,6 +176,43 @@ def test_openai_responses_models_json_overlay(tmp_path: Path) -> None:
     assert cmd[cmd.index("--thinking") + 1] == "medium"
 
 
+def test_gemini_models_json_uses_openai_completions_not_responses(tmp_path: Path) -> None:
+    """Gemini overlay must pin chat/completions. Empty api used to inherit Pi's
+    openai-responses default and crash (undefined.startsWith) on New API."""
+    t = SubprocessTransport(
+        session_dir=tmp_path / "sess-gem",
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r-gem",
+        provider="openai",
+        model="gemini-3.8-flash",
+        thinking=False,
+        max_context=128_000,
+        max_tokens=8_000,
+        base_url="http://127.0.0.1:3000/v1",
+        api="",
+        accept_image=True,
+    )
+    written = json.loads((t.prepare_agent_home() / "models.json").read_text(encoding="utf-8"))
+    block = written["providers"]["openai"]
+    assert block["baseUrl"] == "http://127.0.0.1:3000/v1"
+    assert block["api"] == "openai-completions"
+    assert block["models"][0]["id"] == "gemini-3.8-flash"
+    assert block["models"][0]["api"] == "openai-completions"
+    assert block["models"][0]["api"] != "openai-responses"
+    assert "image" in block["models"][0]["input"]
+    src = (
+        Path(__file__).resolve().parents[2]
+        / "services"
+        / "orchestrator"
+        / "pico_orchestrator"
+        / "true_pi"
+        / "runtime.py"
+    ).read_text(encoding="utf-8")
+    assert "openai-completions" in src
+    assert "is_gemini_model" in src
+
+
 def test_true_pi_runtime_source_passes_caps_windows() -> None:
     """runtime must feed caps.max_context into SubprocessTransport (not provider-only)."""
     src = (

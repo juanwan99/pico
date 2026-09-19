@@ -244,6 +244,18 @@ def test_shell_undefined_error_code_is_human() -> None:
     assert "重试" in msg
 
 
+def test_js_startswith_crash_is_not_dumped_to_teacher() -> None:
+    raw = "Cannot read properties of undefined (reading 'startsWith')"
+    msg = user_message_for_error(raw, code="true_pi.assistant_error")
+    assert "未能完成" not in msg
+    assert "startsWith" not in msg
+    assert "undefined" not in msg.lower()
+    assert "再发一次" in msg
+    old = user_message_for_error("Cannot read property 'startsWith' of undefined")
+    assert "startsWith" not in old
+    assert not old.startswith("未能完成")
+
+
 def test_enrich_restart_payload_sets_user_message() -> None:
     p = enrich_fail_payload(
         {

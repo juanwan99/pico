@@ -290,6 +290,7 @@ async def _run_true_pi_once(
             # pico-fast → deepseek-v4-flash; pico-deep → deepseek-reasoner.
             # thinking flag follows caps.thinking_on. Never a global hardcoded off.
             from pico_orchestrator.provider import (
+                is_gemini_model,
                 runtime_policy_for_model,
                 uses_new_api_openai_overlay,
                 uses_openai_responses_brain,
@@ -312,7 +313,12 @@ async def _run_true_pi_once(
             openai_responses_brain = openai_brain
             pi_provider = "openai" if openai_overlay or provider.name != "deepseek" else "deepseek"
             pi_base = provider.base_url if openai_overlay else ""
-            pi_api = "openai-responses" if openai_brain else ""
+            if openai_brain:
+                pi_api = "openai-responses"
+            elif openai_overlay and is_gemini_model(backend_model):
+                pi_api = "openai-completions"
+            else:
+                pi_api = ""
             if openai_overlay and rid:
                 from pico_orchestrator.llm_file_pass import has_turn_files, pass_base_url
 
