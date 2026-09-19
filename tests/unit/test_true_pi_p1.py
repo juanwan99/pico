@@ -193,11 +193,10 @@ async def test_p1_t3_timeout() -> None:
         caps=RunCaps(max_seconds=1, max_steps=2),
         transport=transport,
     )
-    assert result.status == "failed"
-    assert result.error is not None
-    assert "timeout" in (result.error or "").lower() or any(
-        p.get("code") == "timeout" for k, p in events if k == "run.status"
-    )
+    assert result.status == "succeeded"
+    assert "不是系统报错" in (result.final_text or "")
+    assert not any(k == "run.error" for k, _ in events)
+    assert any(p.get("status") == "succeeded" for k, p in events if k == "run.status")
 
 
 @pytest.mark.asyncio
