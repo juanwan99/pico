@@ -1,10 +1,14 @@
 /**
- * Pico product chrome tokens — aligned to edu-core workbench-tokens v6
- * (read-only visual family; no edu business modules).
- * Type tokens live on :root so .pico-wb-* rules can read them;
- * .pico-app re-applies the same face on the product shell.
+ * Pico product chrome tokens.
+ * 2026-09-19: Gemini 3.8 Flash one-shot consult — Gemini blue accent,
+ * warm paper, no LibreChat green CTA. Still a token overlay, not a second
+ * design system. Type tokens live on :root so .pico-wb-* rules can read them.
  */
 :root {
+  --pico-shell: #f5f4fa;
+  --pico-accent: #4285f4;
+  --pico-accent-dark: #3367d6;
+  --pico-accent-wash: #e8f0fe;
   --pico-font: 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans SC', 'Noto Sans SC',
     'Microsoft YaHei', 'Heiti SC', system-ui, sans-serif;
   --pico-fs-aux: 13px;
@@ -29,17 +33,20 @@
 
 html.dark,
 html.dark .pico-app {
-  --pico-shell: #1c1c1c;
-  --pico-sidebar: #141414;
-  --pico-surface: #242424;
-  --pico-surface-2: #2c2c2c;
-  --pico-ink: #f4f4f2;
-  --pico-ink-2: #d5d6d3;
-  --pico-ink-3: #b8bab6;
-  --pico-cta-bg: var(--pico-shell);
-  --pico-cta-fg: var(--pico-ink);
-  --pico-line: #3f403e;
-  --pico-line-2: #4a4b49;
+  --pico-shell: #121318;
+  --pico-sidebar: #0e0f14;
+  --pico-surface: #1b1c24;
+  --pico-surface-2: #242530;
+  --pico-ink: #f2f3f8;
+  --pico-ink-2: #c5c7d1;
+  --pico-ink-3: #9aa0b0;
+  --pico-accent: #8ab4f8;
+  --pico-accent-dark: #aecbfa;
+  --pico-accent-wash: #1a2740;
+  --pico-cta-bg: var(--pico-accent);
+  --pico-cta-fg: #121318;
+  --pico-line: rgba(255, 255, 255, 0.1);
+  --pico-line-2: rgba(255, 255, 255, 0.16);
   --pico-mint-wash: #16352c;
   --pico-violet-wash: #2a2448;
   --pico-violet-line: #4a3f7a;
@@ -48,44 +55,47 @@ html.dark .pico-app {
   --pico-blue-wash: #1c2740;
   --pico-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 12px 32px rgba(0, 0, 0, 0.22);
   --pico-shadow-raised: 0 2px 5px rgba(0, 0, 0, 0.32), 0 18px 44px rgba(0, 0, 0, 0.28);
-  --pico-wb-bg: #1c1c1c;
-  --pico-wb-rail: #141414;
-  --pico-wb-surface: #242424;
-  --pico-wb-ink: #f4f4f2;
-  --pico-wb-muted: #b8bab6;
+  --pico-wb-bg: #121318;
+  --pico-wb-rail: #0e0f14;
+  --pico-wb-surface: #1b1c24;
+  --pico-wb-ink: #f2f3f8;
+  --pico-wb-muted: #9aa0b0;
   --pico-wb-line: rgba(255, 255, 255, 0.1);
   color: var(--pico-ink);
 }
 
 .pico-app {
-  --pico-shell: #f7f7f6;
-  --pico-sidebar: #f1f2f0;
+  --pico-shell: #f5f4fa;
+  --pico-sidebar: #eeebf6;
   --pico-surface: #ffffff;
-  --pico-surface-2: #f6f6f5;
-  --pico-ink: #171817;
-  --pico-ink-2: #5f6461;
-  --pico-ink-3: #969b98;
-  --pico-cta-bg: var(--pico-ink);
-  --pico-cta-fg: var(--pico-shell);
-  --pico-line: #e6e7e4;
-  --pico-line-2: #d9dcd8;
+  --pico-surface-2: #f7f6fb;
+  --pico-ink: #1a1b22;
+  --pico-ink-2: #5a5d6b;
+  --pico-ink-3: #8a8d9a;
+  --pico-accent: #4285f4;
+  --pico-accent-dark: #3367d6;
+  --pico-accent-wash: #e8f0fe;
+  --pico-cta-bg: var(--pico-accent);
+  --pico-cta-fg: #ffffff;
+  --pico-line: #e4e1ee;
+  --pico-line-2: #d4d0e3;
   --pico-mint: #28c99a;
   --pico-mint-dark: #15966f;
   --pico-mint-wash: #e9f9f3;
-  --pico-violet: #725af2;
-  --pico-violet-dark: #573bd6;
+  --pico-violet: #7b61ff;
+  --pico-violet-dark: #5b45d6;
   --pico-violet-wash: #f0edff;
   --pico-violet-line: #cfc5ff;
   --pico-red: #d84654;
   --pico-red-wash: #fff0f2;
   --pico-amber: #d98312;
   --pico-amber-wash: #fff5e5;
-  --pico-blue: #3f73db;
-  --pico-blue-wash: #edf3ff;
-  --pico-shadow: 0 1px 2px rgba(23, 24, 23, 0.035), 0 12px 32px rgba(23, 24, 23, 0.045);
-  --pico-shadow-raised: 0 2px 5px rgba(23, 24, 23, 0.045), 0 18px 44px rgba(23, 24, 23, 0.075);
-  --pico-radius: 16px;
-  --pico-radius-sm: 12px;
+  --pico-blue: #4285f4;
+  --pico-blue-wash: #e8f0fe;
+  --pico-shadow: 0 1px 2px rgba(26, 27, 34, 0.04), 0 16px 40px rgba(66, 133, 244, 0.08);
+  --pico-shadow-raised: 0 2px 6px rgba(26, 27, 34, 0.05), 0 20px 48px rgba(66, 133, 244, 0.12);
+  --pico-radius: 24px;
+  --pico-radius-sm: 14px;
   --pico-radius-pill: 999px;
   /* CJK first — Inter must not be the Chinese primary face */
   --pico-font: 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans SC', 'Noto Sans SC',
@@ -160,7 +170,7 @@ html.dark .pico-app {
 .pico-app select:focus-visible,
 .pico-app textarea:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 3px rgba(114, 90, 242, 0.22);
+  box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.22);
 }
 
 .pico-app .pico-wb-composer textarea:focus-visible,
@@ -236,20 +246,23 @@ html.dark .pico-app {
   color: var(--pico-ink);
 }
 .pico-cta {
-  background: var(--pico-ink);
-  color: #fff;
+  background: var(--pico-cta-bg);
+  color: var(--pico-cta-fg);
   border-radius: var(--pico-radius-pill);
 }
 .pico-cta:hover {
-  background: #2a2b2a;
+  background: var(--pico-accent-dark);
 }
 .pico-cta-accent {
-  background: var(--pico-violet);
+  background: var(--pico-accent);
   color: #fff;
   border-radius: var(--pico-radius-pill);
 }
 .pico-cta-accent:hover {
-  background: var(--pico-violet-dark);
+  background: var(--pico-accent-dark);
+}
+html.dark .pico-cta-accent {
+  color: var(--pico-cta-fg);
 }
 .pico-chip {
   background: var(--pico-surface);
@@ -337,6 +350,55 @@ html.dark .pico-app {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: var(--pico-violet-wash);
-  color: var(--pico-violet-dark);
+  background: var(--pico-accent-wash);
+  color: var(--pico-accent-dark);
+}
+
+/* Auth shell: kill LibreChat green focus/CTA. */
+.pico-app .pico-auth-input {
+  border: 1px solid var(--pico-line);
+  background: var(--pico-surface);
+  color: var(--pico-ink);
+  border-radius: 14px;
+}
+.pico-app .pico-auth-input:hover {
+  border-color: var(--pico-line-2);
+}
+.pico-app .pico-auth-input:focus,
+.pico-app .pico-auth-input:focus-visible {
+  border-color: var(--pico-accent);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.18);
+}
+.pico-app .pico-auth-label {
+  color: var(--pico-ink-2);
+  background: var(--pico-surface);
+}
+.pico-app .pico-auth-input:focus ~ .pico-auth-label,
+.pico-app .pico-auth-input:focus-visible ~ .pico-auth-label {
+  color: var(--pico-accent);
+}
+.pico-app .pico-auth-link {
+  color: var(--pico-accent);
+  text-decoration: none;
+}
+.pico-app .pico-auth-link:hover,
+.pico-app .pico-auth-link:focus {
+  color: var(--pico-accent-dark);
+  text-decoration: underline;
+}
+.pico-app .pico-auth-card [data-testid='login-button'],
+.pico-app .pico-auth-card button[type='submit'] {
+  background: var(--pico-accent) !important;
+  color: #fff !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.pico-app .pico-auth-card [data-testid='login-button']:hover,
+.pico-app .pico-auth-card button[type='submit']:hover {
+  background: var(--pico-accent-dark) !important;
+}
+html.dark .pico-app .pico-auth-card [data-testid='login-button'],
+html.dark .pico-app .pico-auth-card button[type='submit'] {
+  color: var(--pico-cta-fg) !important;
 }

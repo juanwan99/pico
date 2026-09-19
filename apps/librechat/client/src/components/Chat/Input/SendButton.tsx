@@ -24,7 +24,7 @@ const SubmitButton = React.memo(
             id="send-button"
             disabled={props.disabled}
             className={cn(
-              'inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-ink)] outline-offset-4 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:text-[color:var(--pico-ink-3)] disabled:opacity-40',
+              'inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-accent)] outline-offset-4 transition-colors hover:bg-[color:var(--pico-accent-wash)] disabled:cursor-not-allowed disabled:text-[color:var(--pico-ink-3)] disabled:opacity-40',
             )}
             data-testid="send-button"
             type="submit"
