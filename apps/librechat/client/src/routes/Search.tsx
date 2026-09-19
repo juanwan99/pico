@@ -294,12 +294,14 @@ export default function Search() {
         {search.query && search.isTyping ? (
           loadingSpinner
         ) : (
-          <p
-            className="pico-type-body px-6 pt-8 text-center text-[color:var(--pico-ink-2)]"
+          <div
+            className="flex h-full min-h-[12rem] items-center justify-center px-6"
             data-testid="search-idle-hint"
           >
-            输入关键字，结果会出现在这里。
-          </p>
+            <p className="pico-type-body text-center text-[color:var(--pico-ink-2)]">
+              输入关键字，结果会出现在这里。
+            </p>
+          </div>
         )}
       </SearchStage>
     );

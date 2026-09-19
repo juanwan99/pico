@@ -14,7 +14,7 @@ export function ComposerMaterialsPanel({
   }
   return (
     <div
-      className="mb-2 max-h-[min(40vh,20rem)] overflow-y-auto overscroll-contain max-sm:absolute max-sm:bottom-full max-sm:left-0 max-sm:right-0 max-sm:z-30 max-sm:mb-2 max-sm:max-h-[40vh] max-sm:rounded-xl max-sm:border max-sm:border-[color:var(--pico-line)] max-sm:bg-[color:var(--pico-surface)] max-sm:p-3 max-sm:shadow-[var(--pico-shadow-raised)]"
+      className="mb-2 max-h-[min(32vh,16rem)] overflow-y-auto overscroll-contain max-sm:absolute max-sm:bottom-full max-sm:left-0 max-sm:right-0 max-sm:z-30 max-sm:mb-2 max-sm:max-h-[32vh] max-sm:rounded-xl max-sm:border max-sm:border-[color:var(--pico-line)] max-sm:bg-[color:var(--pico-surface)] max-sm:p-2 max-sm:shadow-[var(--pico-shadow-raised)]"
       data-testid="composer-materials-panel"
     >
       <SchoolMaterialsBar conversationId={conversationId} />

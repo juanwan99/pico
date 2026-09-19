@@ -230,6 +230,28 @@ html.dark .pico-app {
   display: none;
 }
 
+/* Materials chip sheet: school + archive side by side so the overlay stays short. */
+.pico-app [data-testid='composer-materials-panel'] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  column-gap: 0.75rem;
+  row-gap: 0.5rem;
+}
+.pico-app [data-testid='composer-materials-panel'] .pico-composer-chrome-row {
+  margin-bottom: 0;
+}
+@media (max-width: 639px) {
+  .pico-app [data-testid='composer-materials-panel'] .pico-composer-chrome-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    row-gap: 0.25rem;
+  }
+  .pico-app [data-testid='composer-materials-panel'] .pico-chrome-control {
+    height: 36px;
+  }
+}
+
 .pico-app .message-render,
 .pico-app .markdown {
   line-height: 1.55;
