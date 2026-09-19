@@ -96,7 +96,7 @@ export default function SchoolFilesDirectory({ className }: { className?: string
       <p className="pico-type-sidebar pico-type-medium text-[color:var(--pico-ink)]">学校材料</p>
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p className="pico-type-body text-[#b42318]" role="status">
+          <p className="pico-type-sidebar text-[#b42318]" role="status">
             {error}
           </p>
         ) : null}
@@ -136,7 +136,7 @@ export default function SchoolFilesDirectory({ className }: { className?: string
                       row.id ? (
                         <li
                           key={row.id}
-                          className="pico-type-body flex items-center gap-1 py-0.5 text-[color:var(--pico-ink)]"
+                          className="pico-type-sidebar flex items-center gap-1 py-0.5 text-[color:var(--pico-ink)]"
                         >
                           <PicoIcon name="file" size="sm" className="shrink-0 text-[color:var(--pico-ink-2)]" />
                           <span className="min-w-0 truncate">{row.title || row.id}</span>
@@ -150,7 +150,7 @@ export default function SchoolFilesDirectory({ className }: { className?: string
           );
         })}
         {!busy && groups.length === 0 && !error ? (
-          <p className="pico-type-body text-[color:var(--pico-ink-2)]">还没有有权的场</p>
+          <p className="pico-type-sidebar text-[color:var(--pico-ink-2)]">还没有有权的场</p>
         ) : null}
       </div>
     </div>

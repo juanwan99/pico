@@ -35,3 +35,31 @@ export function subscribePicoSidebarRail(listener: (rail: PicoSidebarRail) => vo
   window.addEventListener(EVENT, onStorage);
   return () => window.removeEventListener(EVENT, onStorage);
 }
+
+export function isChatPath(pathname: string): boolean {
+  return pathname === '/c' || pathname.startsWith('/c/');
+}
+
+/** Exactly one of 搜索 / 技能与连接器 / 我的文件 / 学校材料. */
+export function isPicoNavItemActive(
+  pathname: string,
+  itemId: string,
+  rail: PicoSidebarRail,
+): boolean {
+  if (itemId === 'files') {
+    return rail === 'files';
+  }
+  if (itemId === 'school') {
+    return rail === 'school';
+  }
+  if (rail === 'files' || rail === 'school') {
+    return false;
+  }
+  if (itemId === 'capability') {
+    return pathname.startsWith('/capability') || pathname.startsWith('/skills');
+  }
+  if (itemId === 'search') {
+    return pathname.startsWith('/search');
+  }
+  return false;
+}

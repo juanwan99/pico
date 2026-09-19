@@ -114,7 +114,7 @@ const ChatsHeader: FC<ChatsHeaderProps> = memo(({ isExpanded, onToggle }) => {
     <div className="flex h-8 w-full items-center gap-0.5 pr-2">
       <button
         onClick={onToggle}
-        className="group flex min-w-0 flex-1 items-center gap-1 rounded-lg px-1 py-2 text-xs font-bold text-text-secondary outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black dark:focus-visible:ring-white"
+        className="pico-type-aux pico-type-medium group flex min-w-0 flex-1 items-center gap-1 rounded-lg px-1 py-2 text-[color:var(--pico-ink-2)] outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black dark:focus-visible:ring-white"
         type="button"
         aria-expanded={isExpanded}
       >
@@ -149,7 +149,7 @@ ChatsHeader.displayName = 'ChatsHeader';
 const PinnedHeader: FC = memo(() => {
   const localize = useLocalize();
   return (
-    <h2 className="pl-1 pt-1 text-text-secondary" style={{ fontSize: '0.7rem' }}>
+    <h2 className="pico-type-aux pl-1 pt-1 text-[color:var(--pico-ink-2)]">
       {localize('com_ui_pinned')}
     </h2>
   );
@@ -164,8 +164,10 @@ const DateLabel: FC<{ groupName: string; isFirst?: boolean }> = memo(({ groupNam
       aria-label={localize('com_a11y_chats_date_section', {
         date: localize(groupName as TranslationKeys) || groupName,
       })}
-      className={cn('pl-1 pt-1 text-text-secondary', isFirst === true ? 'mt-0' : 'mt-2')}
-      style={{ fontSize: '0.7rem' }}
+      className={cn(
+        'pico-type-aux pl-1 pt-1 text-[color:var(--pico-ink-2)]',
+        isFirst === true ? 'mt-0' : 'mt-2',
+      )}
     >
       {localize(groupName as TranslationKeys) || groupName}
     </h2>

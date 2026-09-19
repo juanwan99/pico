@@ -65,6 +65,8 @@ def test_history_and_chrome_source_locks() -> None:
     assert "搜索会话" in sidebar
     assert "技能与连接器" in sidebar
     assert "我的文件" in sidebar
+    assert "isPicoNavItemActive" in sidebar
+    assert "isChatPath" in sidebar
     assert "学校材料" in sidebar
     assert "专家" not in sidebar
     assert "自动化" not in sidebar
@@ -99,14 +101,41 @@ def test_nav_layout_type_and_school_docs() -> None:
     assert "--pico-fs-body: 16px" in tokens
     assert "--pico-fs-title: 32px" in tokens
     assert "--pico-control-h: 40px" in tokens
+    assert ".pico-app .text-xs" in tokens
+    assert ".pico-app .text-\\[12\\.5px\\]" in tokens or ".pico-app .text-[12.5px]" in tokens
+    assert ".pico-app .text-sm" in tokens
+    convo_list = (ROOT / "apps/librechat/client/src/components/Conversations/Conversations.tsx").read_text()
+    files_dir = (
+        ROOT / "apps/librechat/client/src/components/Workbench/FilesDirectoryPanel.tsx"
+    ).read_text()
+    school_dir = (
+        ROOT / "apps/librechat/client/src/components/Workbench/SchoolFilesDirectory.tsx"
+    ).read_text()
+    assert "font-size: '0.7rem'" not in convo_list
+    assert "0.7rem" not in convo_list
+    assert "pico-type-aux" in convo_list
+    assert "pico-type-sidebar min-w-0 flex-1 truncate text-left" in files_dir
+    assert 'data-testid={`my-files-folder-${folder.id}`}' in files_dir
+    assert "pico-type-sidebar flex items-center gap-1" in school_dir
     assert "pico-type-title" in landing
     assert "text-[30px]" not in landing
     assert "text-[34px]" not in landing
     assert "ComposerMaterialsPanel" in landing
     assert "composer-toolbar" in landing
     materials = (ROOT / "apps/librechat/client/src/components/Chat/ComposerMaterials.tsx").read_text()
+    convo_row = (ROOT / "apps/librechat/client/src/components/Conversations/Convo.tsx").read_text()
+    convo_link = (ROOT / "apps/librechat/client/src/components/Conversations/ConvoLink.tsx").read_text()
+    search_stage = (ROOT / "apps/librechat/client/src/components/Chat/SearchStage.tsx").read_text()
     assert "ArchiveFolderBar" in materials
     assert "SchoolMaterialsBar" in materials
+    assert "max-sm:max-h-[32vh]" in materials
+    assert "max-sm:absolute" in materials
+    assert "md:min-h-9" in convo_row
+    assert "md:h-9" not in convo_row
+    assert "flex-col" in convo_link
+    assert "w-full" in convo_link
+    assert "isStage" in search_stage
+    assert "[data-testid='composer-materials-panel']" in tokens
     # Chat bar: fields on open, documents lazy per venue (no N× fan-out on open).
     assert "loadSchoolFields" in bar
     assert "loadSchoolFieldItems" in bar

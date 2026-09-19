@@ -29,27 +29,65 @@ describe('buildConversationStatusMap', () => {
       },
     ];
     expect(buildConversationStatusMap(tasks)).toEqual({
-      c1: '进行中',
+      c1: '仍在处理…',
       c2: '失败',
     });
   });
 
-  it('prefers active over succeeded when multiple tasks share a conversation', () => {
+  it('prefers the newest run when multiple tasks share a conversation', () => {
     const tasks: PicoTask[] = [
       {
         id: 't-old',
         title: 'done',
         conversation_id: 'c-shared',
-        latest_run: { id: 'r-old', status: 'succeeded' },
+        created_at: '2026-09-19T12:01:00Z',
+        latest_run: {
+          id: 'r-old',
+          status: 'succeeded',
+          started_at: '2026-09-19T12:01:00Z',
+          ended_at: '2026-09-19T12:02:00Z',
+        },
       },
       {
         id: 't-new',
         title: 'live',
         conversation_id: 'c-shared',
-        latest_run: { id: 'r-new', status: 'running' },
+        created_at: '2026-09-19T12:33:00Z',
+        latest_run: { id: 'r-new', status: 'running', started_at: '2026-09-19T12:33:00Z' },
       },
     ];
-    expect(buildConversationStatusMap(tasks)).toEqual({ 'c-shared': '进行中' });
+    expect(buildConversationStatusMap(tasks)).toEqual({ 'c-shared': '仍在处理…' });
+  });
+
+  it('shows 已完成 after a later success even if an older turn on the same chat failed', () => {
+    const tasks: PicoTask[] = [
+      {
+        id: 't-ok',
+        title: '鹈鹕骑行',
+        conversation_id: 'c-zhou',
+        created_at: '2026-09-19T12:33:06Z',
+        latest_run: {
+          id: 'r-ok',
+          status: 'succeeded',
+          started_at: '2026-09-19T12:33:06Z',
+          ended_at: '2026-09-19T12:34:48Z',
+        },
+      },
+      {
+        id: 't-fail',
+        title: '鹈鹕骑行',
+        conversation_id: 'c-zhou',
+        created_at: '2026-09-19T12:01:17Z',
+        latest_run: {
+          id: 'r-fail',
+          status: 'failed',
+          started_at: '2026-09-19T12:01:17Z',
+          ended_at: '2026-09-19T12:02:04Z',
+        },
+      },
+    ];
+    expect(buildConversationStatusMap(tasks)).toEqual({ 'c-zhou': '已完成' });
+    expect(buildConversationStatusMap([...tasks].reverse())).toEqual({ 'c-zhou': '已完成' });
   });
 
   it('ignores tasks without conversation binding', () => {

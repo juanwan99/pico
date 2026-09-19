@@ -164,6 +164,32 @@ html.dark .pico-app {
   font-weight: var(--pico-fw-medium);
 }
 
+/* Collapse leftover LibreChat sizes onto the four Pico steps.
+   Nested menus, folder trees, and dropdowns inherit these mappings. */
+.pico-app .text-\[9px\],
+.pico-app .text-\[10px\],
+.pico-app .text-\[11px\],
+.pico-app .text-\[12px\],
+.pico-app .text-\[12\.5px\],
+.pico-app .text-xs {
+  font-size: var(--pico-fs-aux);
+  line-height: var(--pico-lh-aux);
+  font-family: var(--pico-font);
+}
+.pico-app .text-sm {
+  font-size: var(--pico-fs-sidebar);
+  line-height: var(--pico-lh-sidebar);
+  font-family: var(--pico-font);
+}
+.pico-app .text-\[15px\] {
+  font-size: var(--pico-fs-body);
+  line-height: var(--pico-lh-body);
+  font-family: var(--pico-font);
+}
+.pico-app .pico-wb-sidebar .font-bold {
+  font-weight: var(--pico-fw-medium);
+}
+
 .pico-app a:focus-visible,
 .pico-app button:focus-visible,
 .pico-app input:focus-visible,
@@ -228,6 +254,28 @@ html.dark .pico-app {
 }
 .pico-app select.pico-chrome-select::-ms-expand {
   display: none;
+}
+
+/* Materials chip sheet: school + archive side by side so the overlay stays short. */
+.pico-app [data-testid='composer-materials-panel'] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  column-gap: 0.75rem;
+  row-gap: 0.5rem;
+}
+.pico-app [data-testid='composer-materials-panel'] .pico-composer-chrome-row {
+  margin-bottom: 0;
+}
+@media (max-width: 639px) {
+  .pico-app [data-testid='composer-materials-panel'] .pico-composer-chrome-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    row-gap: 0.25rem;
+  }
+  .pico-app [data-testid='composer-materials-panel'] .pico-chrome-control {
+    height: 36px;
+  }
 }
 
 .pico-app .message-render,

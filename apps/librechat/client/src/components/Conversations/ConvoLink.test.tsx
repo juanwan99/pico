@@ -41,7 +41,7 @@ describe('ConvoLink ledger status badge', () => {
     expect(screen.queryByTestId('convo-ledger-status')).not.toBeInTheDocument();
   });
 
-  it('clamps a long title to two lines before the status badge', () => {
+  it('gives the title full width on two lines and stacks the status under it', () => {
     render(
       <ConvoLink
         isActiveConvo={false}
@@ -56,8 +56,10 @@ describe('ConvoLink ledger status badge', () => {
       </ConvoLink>,
     );
 
-    expect(screen.getByTestId('convo-title')).toHaveClass('min-w-0', 'line-clamp-2');
-    expect(screen.getByTestId('convo-ledger-status')).toHaveClass('shrink-0');
+    const title = screen.getByTestId('convo-title');
+    expect(title).toHaveClass('min-w-0', 'w-full', 'line-clamp-2');
+    expect(title.parentElement).toHaveClass('flex-col');
+    expect(screen.getByTestId('convo-ledger-status')).toHaveClass('self-start', 'shrink-0');
     expect(screen.getByTestId('convo-ledger-status')).not.toHaveClass('truncate');
   });
 });
