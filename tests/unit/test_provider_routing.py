@@ -274,6 +274,34 @@ def test_openai_responses_brain_keeps_gpt_model(monkeypatch: pytest.MonkeyPatch)
     assert runtime_policy_for_model("pico-deep")["thinking"] is True
 
 
+def test_gemini_on_new_api_uses_openai_overlay_not_responses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-newapi-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    from pico_orchestrator.provider import (
+        is_gemini_model,
+        product_backend_model,
+        resolve_model_id,
+        resolve_provider,
+        uses_new_api_openai_overlay,
+        uses_openai_responses_brain,
+    )
+
+    cfg = resolve_provider()
+    assert cfg is not None
+    assert is_gemini_model("gemini-2.5-flash")
+    assert uses_new_api_openai_overlay(cfg)
+    assert not uses_openai_responses_brain(cfg)
+    assert product_backend_model(deep=False) == "gemini-2.5-flash"
+    assert product_backend_model(deep=True) == "gemini-2.5-pro"
+    assert resolve_model_id("pico-fast", cfg) == "gemini-2.5-flash"
+    assert resolve_model_id("pico-deep", cfg) == "gemini-2.5-pro"
+
+
 def test_grok_on_new_api_is_openai_responses_brain(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-newapi-test")
     monkeypatch.setenv("DEEPSEEK_MODEL", "grok-4.6")

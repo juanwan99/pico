@@ -128,6 +128,80 @@ async def run_true_pi_agent(
     conversation_id: str | None = None,
     persist_pi_session: bool = False,
 ) -> RunResult:
+    """Run one turn. Fake transport skips HA. Live: Gemini → Grok → GPT on channel death."""
+    kwargs = {
+        "prompt": prompt,
+        "principal": principal,
+        "is_cancelled": is_cancelled,
+        "caps": caps,
+        "history": history,
+        "artifact_store": artifact_store,
+        "transport": transport,
+        "shadow": shadow,
+        "run_id": run_id,
+        "session_dir": session_dir,
+        "conversation_id": conversation_id,
+        "persist_pi_session": persist_pi_session,
+    }
+    if transport is not None:
+        return await _run_true_pi_once(emit=emit, **kwargs)
+    from dataclasses import replace
+
+    from pico_orchestrator.brain_ha import (
+        brain_candidates,
+        fallback_teacher_note,
+        should_failover,
+    )
+    from pico_orchestrator.provider import runtime_policy_for_model
+
+    caps = caps or RunCaps()
+    ui = str(getattr(caps, "ui_model", "") or "")
+    primary = str(getattr(caps, "backend_model", "") or "") or str(
+        runtime_policy_for_model(ui or None).get("backend_model") or ""
+    )
+    models = [m for m in brain_candidates(primary) if m] or [primary]
+    last: RunResult | None = None
+    held: list[tuple[str, dict[str, Any]]] = []
+    for i, mid in enumerate(models):
+        held = []
+
+        async def gated(kind: str, payload: dict[str, Any], _buf: list = held) -> None:
+            _buf.append((kind, payload))
+
+        last = await _run_true_pi_once(
+            emit=gated,
+            **{**kwargs, "caps": replace(caps, backend_model=mid)},
+        )
+        if last.status in {"succeeded", "cancelled"} or not should_failover(last):
+            if i > 0 and last.status == "succeeded":
+                await emit(
+                    "message.delta",
+                    {"text": fallback_teacher_note(models[0], mid) + "\n"},
+                )
+            for kind, payload in held:
+                await emit(kind, payload)
+            return last
+    for kind, payload in held:
+        await emit(kind, payload)
+    return last or await _run_true_pi_once(emit=emit, **kwargs)
+
+
+async def _run_true_pi_once(
+    *,
+    prompt: str,
+    principal: Principal,
+    emit: EventEmitter,
+    is_cancelled: Callable[[], Awaitable[bool]],
+    caps: RunCaps | None = None,
+    history: list[dict[str, Any]] | None = None,
+    artifact_store: ArtifactStore | None = None,
+    transport: TruePiTransport | None = None,
+    shadow: bool = False,
+    run_id: str | None = None,
+    session_dir: Path | None = None,
+    conversation_id: str | None = None,
+    persist_pi_session: bool = False,
+) -> RunResult:
     """Run one multi-step turn on true Pi (or fake transport)."""
     caps = caps or RunCaps()
     rid = run_id or f"tp-{uuid.uuid4().hex[:12]}"
@@ -217,6 +291,7 @@ async def run_true_pi_agent(
             # thinking flag follows caps.thinking_on. Never a global hardcoded off.
             from pico_orchestrator.provider import (
                 runtime_policy_for_model,
+                uses_new_api_openai_overlay,
                 uses_openai_responses_brain,
             )
 
@@ -233,11 +308,12 @@ async def run_true_pi_agent(
             thinking_on = bool(getattr(caps, "thinking_on", False))
             max_context, max_out = true_pi_windows_from_caps(caps)
             openai_brain = uses_openai_responses_brain(provider)
+            openai_overlay = uses_new_api_openai_overlay(provider) or openai_brain
             openai_responses_brain = openai_brain
-            pi_provider = "openai" if openai_brain or provider.name != "deepseek" else "deepseek"
-            pi_base = provider.base_url if openai_brain else ""
+            pi_provider = "openai" if openai_overlay or provider.name != "deepseek" else "deepseek"
+            pi_base = provider.base_url if openai_overlay else ""
             pi_api = "openai-responses" if openai_brain else ""
-            if openai_brain and rid:
+            if openai_overlay and rid:
                 from pico_orchestrator.llm_file_pass import has_turn_files, pass_base_url
 
                 if has_turn_files(rid):

@@ -116,7 +116,7 @@ def test_apply_images_switches_to_vision_model() -> None:
 
 
 def test_gpt55_keeps_model_when_images_attached() -> None:
-    for mid in ("gpt-5.5", "gpt-5.6-sol", "grok-4.6"):
+    for mid in ("gpt-5.5", "gpt-5.6-sol", "grok-4.6", "gemini-2.5-flash"):
         caps = apply_images_to_caps(
             RunCaps(backend_model=mid),
             [{"type": "image", "data": PNG_B64, "mimeType": "image/png"}],

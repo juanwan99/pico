@@ -78,10 +78,27 @@ def is_agent_model(model: str | None) -> bool:
     return not bare or bare in {"pico-agent", "pico", "pico-fast", "pico-deep"} or bare.startswith("pico-")
 
 
+def is_gemini_model(model: str | None) -> bool:
+    return _bare_model(model).lower().startswith("gemini-")
+
+
 def is_openai_responses_model(model: str | None) -> bool:
     """Ids that ride New API OpenAI Responses (gpt-5.6-sol, grok-4.6, …). Not DeepSeek."""
     bare = _bare_model(model).lower()
     return bare.startswith(("gpt-", "grok-"))
+
+
+def uses_new_api_openai_overlay(cfg: ProviderConfig | None = None) -> bool:
+    """Pi talks OpenAI protocol to New API loopback (Gemini chat/completions, GPT/Grok responses)."""
+    target = cfg if cfg is not None else resolve_provider()
+    if target is None:
+        return False
+    base = (target.base_url or "").strip().lower()
+    if "deepseek.com" in base:
+        return False
+    if "127.0.0.1:3000" in base or "localhost:3000" in base:
+        return True
+    return "/openai" in base
 
 
 def uses_openai_responses_brain(cfg: ProviderConfig | None = None) -> bool:
@@ -103,8 +120,10 @@ def uses_openai_responses_brain(cfg: ProviderConfig | None = None) -> bool:
 
 
 def product_backend_model(*, deep: bool) -> str:
-    """Lane backend id. OpenAI Responses brain keeps its configured model."""
+    """Lane backend id. Gemini: fast=env/flash, deep=pro. GPT/Grok keep configured id."""
     cfg = resolve_provider()
+    if cfg is not None and is_gemini_model(cfg.model):
+        return "gemini-2.5-pro" if deep else (cfg.model or "gemini-2.5-flash")
     if cfg is not None and uses_openai_responses_brain(cfg):
         return cfg.model
     return DEFAULT_DEEPSEEK_REASONER if deep else DEFAULT_DEEPSEEK_MODEL
