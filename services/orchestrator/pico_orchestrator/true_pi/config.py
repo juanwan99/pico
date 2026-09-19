@@ -75,6 +75,10 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "unpublish_html_page",
         # edu sidebar only: stage a left-page change against a reported affordance.
         "propose_page_mutation",
+        "edu_catalog_find",
+        "edu_catalog_describe",
+        "edu_catalog_command",
+        "edu_run_pack",
     }
 )
 

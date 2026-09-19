@@ -101,7 +101,7 @@ def issue_edu_write_token(principal: Principal, settings: Settings | None = None
     return _issue_edu_membership_token(
         principal,
         purpose="edu-write",
-        scopes=["ai:read", "ai:run"],
+        scopes=["ai:read", "ai:run", "ai:delegate"],
         settings=settings,
     )
 
