@@ -224,7 +224,7 @@ def register_edu_agent_tools(gateway: Any) -> None:
             description=(
                 "Submit a school work pack under the teacher's grant. "
                 "Drafts allowed; publish/submit will be rejected. "
-                "Args: grant_id, steps[{command,params}], run_id?"
+                "Args: grant_id, steps, run_id?"
             ),
             handler=run_pack,
             school_scoped=True,
