@@ -97,11 +97,16 @@ def test_nav_layout_type_and_school_docs() -> None:
     assert "--pico-fs-aux: 13px" in tokens
     assert "--pico-fs-sidebar: 14px" in tokens
     assert "--pico-fs-body: 16px" in tokens
-    assert "--pico-fs-title: 24px" in tokens
+    assert "--pico-fs-title: 32px" in tokens
+    assert "--pico-control-h: 40px" in tokens
     assert "pico-type-title" in landing
     assert "text-[30px]" not in landing
     assert "text-[34px]" not in landing
-    assert "ArchiveFolderBar" in landing
+    assert "ComposerMaterialsPanel" in landing
+    assert "composer-toolbar" in landing
+    materials = (ROOT / "apps/librechat/client/src/components/Chat/ComposerMaterials.tsx").read_text()
+    assert "ArchiveFolderBar" in materials
+    assert "SchoolMaterialsBar" in materials
     # Chat bar: fields on open, documents lazy per venue (no N× fan-out on open).
     assert "loadSchoolFields" in bar
     assert "loadSchoolFieldItems" in bar
