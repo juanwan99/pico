@@ -201,7 +201,7 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
       ref={renameInputRef}
       value={renameDraft}
       data-testid={`my-files-folder-rename-${folder.id}`}
-      className="pico-type-body min-w-0 flex-1 border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-1 py-0.5 outline-none"
+      className="pico-type-sidebar min-w-0 flex-1 border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-1 py-0.5 outline-none"
       onChange={(event) => setRenameDraft(event.target.value)}
       onBlur={() => void commitRename()}
       onKeyDown={(event) => {
@@ -225,7 +225,7 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
     >
       <button
         type="button"
-        className="pico-type-body inline-flex min-w-0 flex-1 items-center gap-1 text-left text-[color:var(--pico-ink)]"
+        className="pico-type-sidebar inline-flex min-w-0 flex-1 items-center gap-1 text-left text-[color:var(--pico-ink)]"
         onClick={() => void createFolder(parentId)}
         data-testid={parentId ? `my-files-create-folder-${parentId}` : 'my-files-create-folder'}
       >
@@ -248,12 +248,12 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
         >
           <div className="flex items-center gap-1">
             <PicoIcon name="file" size="sm" className="shrink-0 text-[color:var(--pico-ink-2)]" />
-            <p className="pico-type-body min-w-0 flex-1 truncate text-[color:var(--pico-ink)]">{name}</p>
+            <p className="pico-type-sidebar min-w-0 flex-1 truncate text-[color:var(--pico-ink)]">{name}</p>
           </div>
           <div className="mt-0.5 flex flex-wrap gap-2 pl-5">
             <button
               type="button"
-              className="pico-type-body text-[color:var(--pico-ink-2)]"
+              className="pico-type-aux text-[color:var(--pico-ink-2)]"
               disabled={busyId !== null}
               onClick={() => void openMine(row)}
             >
@@ -261,7 +261,7 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
             </button>
             <button
               type="button"
-              className="pico-type-body text-[color:var(--pico-ink-2)]"
+              className="pico-type-aux text-[color:var(--pico-ink-2)]"
               onClick={() => void openTransfer(row)}
               data-testid={`my-files-transfer-${row.id}`}
             >
@@ -309,7 +309,7 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
             ) : (
               <button
                 type="button"
-                className="pico-type-body min-w-0 flex-1 truncate text-left text-[color:var(--pico-ink)]"
+                className="pico-type-sidebar min-w-0 flex-1 truncate text-left text-[color:var(--pico-ink)]"
                 data-testid={`my-files-folder-${folder.id}`}
                 onClick={() =>
                   setExpanded((prev) => ({ ...prev, [folder.id]: true }))
@@ -369,12 +369,12 @@ export default function FilesDirectoryPanel({ className }: { className?: string 
       data-testid="files-directory"
     >
       {error ? (
-        <p className="pico-type-body text-[#b42318]" role="alert">
+        <p className="pico-type-sidebar text-[#b42318]" role="alert">
           {error}
         </p>
       ) : null}
       {message ? (
-        <p className="pico-type-body text-[color:var(--pico-ink-2)]" role="status">
+        <p className="pico-type-sidebar text-[color:var(--pico-ink-2)]" role="status">
           {message}
         </p>
       ) : null}
