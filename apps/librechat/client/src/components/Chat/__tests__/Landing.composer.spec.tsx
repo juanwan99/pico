@@ -138,7 +138,9 @@ describe('Landing composer chrome', () => {
     render(<Landing centerFormOnLanding />);
     expect(screen.queryByTestId('composer-materials-panel')).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId('composer-materials-toggle'));
-    expect(screen.getByTestId('composer-materials-panel')).toBeInTheDocument();
+    const panel = screen.getByTestId('composer-materials-panel');
+    expect(panel).toBeInTheDocument();
+    expect(panel.className).toMatch(/max-sm:absolute/);
   });
 
   it('greeting is product copy, not the account name', () => {

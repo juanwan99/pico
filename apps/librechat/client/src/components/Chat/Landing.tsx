@@ -210,7 +210,7 @@ export default function Landing({
       </div>
 
       <div
-        className="w-full max-w-[797px] shrink-0 px-4 pb-3 sm:px-6"
+        className="relative w-full max-w-[797px] shrink-0 px-4 pb-3 sm:px-6"
         data-testid="pico-wb-home-composer-dock"
       >
         {children}
