@@ -1,12 +1,12 @@
 /**
- * Pico home — one title, one composer row. Attach lives in +; 快速/深度 is a switch.
+ * Pico home — greeting sits above a two-row composer. Attach lives in +.
+ * 学校材料 / 存档 default behind the 材料 chip.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ExtendedFile } from '~/common';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import { useOptionalChatContext, useOptionalChatFormContext } from '~/Providers';
-import { useAuthContext } from '~/hooks';
 import useSubmitMessage from '~/hooks/Messages/useSubmitMessage';
 import FileFormChat from '~/components/Chat/Input/Files/FileFormChat';
 import {
@@ -16,9 +16,12 @@ import {
 } from '~/components/Chat/Input/ComposerPlusMenu';
 import { cn } from '~/utils';
 import { captureClipboardFiles, clipboardPlainText } from '~/utils/pasteFiles';
-import ArchiveFolderBar from '~/components/Chat/ArchiveFolderBar';
-import SchoolMaterialsBar from '~/components/Chat/SchoolMaterialsBar';
+import {
+  ComposerMaterialsChip,
+  ComposerMaterialsPanel,
+} from '~/components/Chat/ComposerMaterials';
 import PointsBar from '~/components/Chat/PointsBar';
+import { useComposerMaterials } from '~/hooks/Pico/useComposerMaterials';
 import { usePointsMeter } from '~/hooks/Pico/usePointsMeter';
 import {
   consumePendingModel,
@@ -41,7 +44,6 @@ export default function Landing({
   centerFormOnLanding: boolean;
   children?: ReactNode;
 }) {
-  const { user } = useAuthContext();
   const form = useOptionalChatFormContext();
   const { submitMessage } = useSubmitMessage();
   const { quoteFromChars } = usePointsMeter();
@@ -92,7 +94,7 @@ export default function Landing({
       return;
     }
     el.style.height = 'auto';
-    el.style.height = `${Math.max(32, Math.min(el.scrollHeight || 32, COMPOSER_MAX_PX))}px`;
+    el.style.height = `${Math.max(44, Math.min(el.scrollHeight || 44, COMPOSER_MAX_PX))}px`;
   }, [text]);
 
   const syncForm = useCallback(
@@ -196,19 +198,15 @@ export default function Landing({
     }
   }, []);
 
-  const name = user?.name?.split(/\s+/)[0] || '';
+  const materials = useComposerMaterials();
 
   return (
     <div className="pico-wb-landing pico-shell-bg flex h-full min-h-0 w-full flex-col items-center">
-      <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto px-4 pt-10 sm:px-6 sm:pt-12">
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-end overflow-y-auto px-4 pb-6 sm:px-6">
         <h1 className="pico-type-title text-center tracking-tight text-[color:var(--pico-ink)]">
           Pico，我帮你
         </h1>
-        {name ? (
-          <p className="pico-type-aux mt-2.5 text-[color:var(--pico-ink-3)]">
-            {name}，直接说就行
-          </p>
-        ) : null}
+        <p className="pico-type-body mt-2 text-[color:var(--pico-ink-2)]">直接说就行</p>
       </div>
 
       <div
@@ -216,8 +214,10 @@ export default function Landing({
         data-testid="pico-wb-home-composer-dock"
       >
         {children}
-        <SchoolMaterialsBar conversationId={chatCtx?.conversation?.conversationId} />
-        <ArchiveFolderBar conversationId={chatCtx?.conversation?.conversationId} />
+        <ComposerMaterialsPanel
+          conversationId={chatCtx?.conversation?.conversationId}
+          open={materials.open}
+        />
         <PointsBar />
         <div
           className="pico-wb-composer overflow-visible rounded-[var(--pico-radius)] border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] shadow-[var(--pico-shadow)]"
@@ -229,22 +229,7 @@ export default function Landing({
             setFiles={setFiles}
             setFilesLoading={setFilesLoading}
           />
-          <div
-            className="pico-wb-composer-row relative flex items-end gap-2 px-2 py-2"
-            data-testid="composer-one-row"
-          >
-            <div className="relative z-50 shrink-0">
-              {attach.input}
-              <button
-                type="button"
-                data-testid="composer-plus"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-ink-2)] hover:bg-black/[0.04]"
-                aria-label="上传附件"
-                onClick={attach.openPicker}
-              >
-                <PicoIcon name="plus" className="text-[color:var(--pico-ink-2)]" />
-              </button>
-            </div>
+          <div className="flex flex-col" data-testid="composer-one-row">
             <textarea
               id="pico-wb-home-input"
               ref={inputRef}
@@ -260,25 +245,44 @@ export default function Landing({
               }}
               placeholder={PLACEHOLDER}
               rows={1}
-              className="pico-type-body min-h-8 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent py-1 text-[color:var(--pico-ink)] outline-none placeholder:text-[color:var(--pico-ink-3)]"
+              className="pico-type-body min-h-[var(--pico-control-h)] min-w-0 w-full resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3 text-[color:var(--pico-ink)] outline-none placeholder:text-[color:var(--pico-ink-3)]"
             />
-            <ComposerModeSwitch value={model} onChange={applyModel} />
-            <ComposerPlanToggle on={planOn} onChange={applyPlan} />
-            <button
-              type="button"
-              data-testid="send-button"
-              className={cn(
-                'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors',
-                text.trim()
-                  ? 'text-[color:var(--pico-accent)] hover:bg-[color:var(--pico-accent-wash)]'
-                  : 'text-[color:var(--pico-ink-3)]',
-              )}
-              aria-label="发送"
-              disabled={!text.trim()}
-              onClick={() => sendTask()}
+            <div
+              className="pico-wb-composer-row relative flex items-center gap-1.5 px-2 pb-2 pt-1"
+              data-testid="composer-toolbar"
             >
-              <PicoIcon name="arrow-up" />
-            </button>
+              <div className="relative z-50 shrink-0">
+                {attach.input}
+                <button
+                  type="button"
+                  data-testid="composer-plus"
+                  className="pico-hit inline-flex items-center justify-center rounded-lg text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
+                  aria-label="上传附件"
+                  onClick={attach.openPicker}
+                >
+                  <PicoIcon name="plus" className="text-[color:var(--pico-ink-2)]" />
+                </button>
+              </div>
+              <div className="min-w-0 flex-1" />
+              <ComposerMaterialsChip open={materials.open} onToggle={materials.toggle} />
+              <ComposerModeSwitch value={model} onChange={applyModel} />
+              <ComposerPlanToggle on={planOn} onChange={applyPlan} />
+              <button
+                type="button"
+                data-testid="send-button"
+                className={cn(
+                  'pico-hit inline-flex shrink-0 items-center justify-center rounded-lg transition-colors',
+                  text.trim()
+                    ? 'text-[color:var(--pico-accent)] hover:bg-[color:var(--pico-accent-wash)]'
+                    : 'text-[color:var(--pico-ink-3)]',
+                )}
+                aria-label="发送"
+                disabled={!text.trim()}
+                onClick={() => sendTask()}
+              >
+                <PicoIcon name="arrow-up" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

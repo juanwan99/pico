@@ -1944,7 +1944,7 @@
   "com_ui_skill_new_folder": "新建文件夹",
   "com_ui_skill_no_edit_permission": "你没有编辑该技能的权限",
   "com_ui_skill_no_selection": "选择一个技能",
-  "com_ui_skill_no_selection_desc": "Choose a skill from the 侧栏 to view its details.",
+  "com_ui_skill_no_selection_desc": "从左边选一个技能看详情。",
   "com_ui_skill_not_found": "Skill 未找到",
   "com_ui_skill_not_found_description": "可能已删除，或你不再拥有访问权限。",
   "com_ui_skill_role_editor_desc": "可查看并编辑该技能",

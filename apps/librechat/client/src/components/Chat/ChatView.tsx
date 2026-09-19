@@ -22,8 +22,8 @@ import ProjectLandingChip from './ProjectLandingChip';
 import MessagesView from './Messages/MessagesView';
 import Presentation from './Presentation';
 import ChatForm from './Input/ChatForm';
-import ArchiveFolderBar from './ArchiveFolderBar';
-import SchoolMaterialsBar from './SchoolMaterialsBar';
+import { ComposerMaterialsPanel } from './ComposerMaterials';
+import { useComposerMaterials } from '~/hooks/Pico/useComposerMaterials';
 import Landing from './Landing';
 import MainDeliveryStrip from './MainDeliveryStrip';
 import PicoAskBar from './PicoAskBar';
@@ -116,6 +116,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches,
   );
   const [resultOpen, setResultOpen] = useState(false);
+  const materials = useComposerMaterials();
   const flatMessages = useMemo(
     () => chatHelpers.getMessages?.() ?? null,
     [chatHelpers, messagesTree, isSubmitting],
@@ -297,8 +298,10 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   {!isLandingPage ? (
                     <div className="w-full shrink-0 bg-transparent">
                       <div className="mx-auto w-full max-w-[797px] px-2 sm:px-0">
-                        <SchoolMaterialsBar conversationId={conversationId} />
-                        <ArchiveFolderBar conversationId={conversationId} />
+                        <ComposerMaterialsPanel
+                          conversationId={conversationId}
+                          open={materials.open}
+                        />
                         <PointsBar />
                         <PicoAskBar run={ledger.run} events={ledger.events} />
                         <ChatForm index={index} placeholder={chatFormPlaceholder} />

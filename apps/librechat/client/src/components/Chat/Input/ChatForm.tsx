@@ -30,6 +30,8 @@ import {
   ComposerPlanToggle,
   useComposerAttachInput,
 } from './ComposerPlusMenu';
+import { ComposerMaterialsChip } from '~/components/Chat/ComposerMaterials';
+import { useComposerMaterials } from '~/hooks/Pico/useComposerMaterials';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import { cn, removeFocusRings } from '~/utils';
 import DuringRunSendButton from './DuringRunSendButton';
@@ -94,6 +96,7 @@ const ChatForm = memo(function ChatForm({
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   useFocusChatEffect(textAreaRef);
   const localize = useLocalize();
+  const materials = useComposerMaterials();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [, setIsScrollable] = useState(false);
@@ -604,27 +607,9 @@ const ChatForm = memo(function ChatForm({
                 setFiles={setFiles}
                 setFilesLoading={setFilesLoading}
               />
-              <div
-                className={cn(
-                  'pico-wb-composer-row relative flex w-full items-end gap-2 px-2 py-2',
-                  isRTL ? 'flex-row-reverse' : 'flex-row',
-                )}
-                data-testid="composer-one-row"
-              >
-                <div className="relative z-50 shrink-0">
-                  {attach.input}
-                  <button
-                    type="button"
-                    data-testid="composer-plus"
-                    aria-label="上传附件"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--pico-ink-2)] hover:bg-black/[0.04] hover:text-[color:var(--pico-ink)]"
-                    onClick={attach.openPicker}
-                  >
-                    <PicoIcon name="plus" />
-                  </button>
-                </div>
+              <div className="flex w-full flex-col" data-testid="composer-one-row">
                 <div
-                  className="relative min-w-0 flex-1"
+                  className="relative min-w-0 w-full px-2"
                   style={
                     isCollapsed
                       ? {
@@ -668,10 +653,10 @@ const ChatForm = memo(function ChatForm({
                     className={cn(
                       baseClasses,
                       removeFocusRings,
-                      'scrollbar-hover min-h-8 transition-[max-height] duration-200 disabled:cursor-not-allowed',
+                      'scrollbar-hover min-h-[var(--pico-control-h)] px-2 pt-3 transition-[max-height] duration-200 disabled:cursor-not-allowed',
                     )}
                   />
-                  <div className="absolute right-0 top-0">
+                  <div className="absolute right-2 top-2">
                     <CollapseChat
                       isCollapsed={isCollapsed}
                       isScrollable={isMoreThanThreeRows}
@@ -679,23 +664,45 @@ const ChatForm = memo(function ChatForm({
                     />
                   </div>
                 </div>
-                <ComposerModeSwitch value={picoMode} onChange={applyPicoMode} />
-                <ComposerPlanToggle on={picoPlanOn} onChange={applyPicoPlan} />
-                <div className="shrink-0">
-                  {isSubmitting && showStopButton && !answerMode.active ? (
-                    duringRunSlot
-                  ) : (
-                    <SendButton
-                      ref={submitButtonRef}
-                      control={methods.control}
-                      disabled={
-                        filesLoading ||
-                        disableInputs ||
-                        isNotAppendable ||
-                        (isSubmitting && !answerMode.active)
-                      }
-                    />
+                <div
+                  className={cn(
+                    'pico-wb-composer-row relative flex w-full items-center gap-1.5 px-2 pb-2 pt-1',
+                    isRTL ? 'flex-row-reverse' : 'flex-row',
                   )}
+                  data-testid="composer-toolbar"
+                >
+                  <div className="relative z-50 shrink-0">
+                    {attach.input}
+                    <button
+                      type="button"
+                      data-testid="composer-plus"
+                      aria-label="上传附件"
+                      className="pico-hit inline-flex items-center justify-center rounded-lg text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)] hover:text-[color:var(--pico-ink)]"
+                      onClick={attach.openPicker}
+                    >
+                      <PicoIcon name="plus" />
+                    </button>
+                  </div>
+                  <div className="min-w-0 flex-1" />
+                  <ComposerMaterialsChip open={materials.open} onToggle={materials.toggle} />
+                  <ComposerModeSwitch value={picoMode} onChange={applyPicoMode} />
+                  <ComposerPlanToggle on={picoPlanOn} onChange={applyPicoPlan} />
+                  <div className="shrink-0">
+                    {isSubmitting && showStopButton && !answerMode.active ? (
+                      duringRunSlot
+                    ) : (
+                      <SendButton
+                        ref={submitButtonRef}
+                        control={methods.control}
+                        disabled={
+                          filesLoading ||
+                          disableInputs ||
+                          isNotAppendable ||
+                          (isSubmitting && !answerMode.active)
+                        }
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
               {TextToSpeech && automaticPlayback && <StreamAudio index={index} />}

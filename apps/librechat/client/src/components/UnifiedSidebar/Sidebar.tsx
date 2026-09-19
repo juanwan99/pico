@@ -210,7 +210,7 @@ function Sidebar({
         </div>
         <button
           type="button"
-          className="rounded-md p-1.5 text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
+          className="pico-hit inline-flex items-center justify-center rounded-lg text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
           onClick={onCollapse}
           aria-label={localize('com_nav_close_sidebar')}
         >
@@ -224,7 +224,7 @@ function Sidebar({
             type="button"
             data-testid="new-chat-button"
             onClick={onNewTask}
-            className="pico-type-sidebar pico-type-medium flex h-9 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--pico-cta-bg)] text-[color:var(--pico-cta-fg)] shadow-sm transition hover:opacity-90"
+            className="pico-type-sidebar pico-type-medium flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--pico-cta-bg)] text-[color:var(--pico-cta-fg)] shadow-sm transition hover:opacity-90"
           >
             <PicoIcon name="plus" size="sm" />
             新对话

@@ -127,7 +127,7 @@ const ConversationsSection = memo(() => {
         <button
           type="button"
           data-testid="sidebar-archive-open"
-          className="ml-auto shrink-0 rounded-md px-2 py-1 text-[12px] text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
+          className="ml-auto inline-flex min-h-9 shrink-0 items-center rounded-lg px-2 text-[13px] text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
           onClick={() => setShowArchived(true)}
         >
           {localize('com_nav_archived_chats')}

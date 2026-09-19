@@ -12,6 +12,7 @@ import { fontSizeAtom } from '~/store/fontSize';
 import SearchButtons from './SearchButtons';
 import SubRow from './SubRow';
 import { cn } from '~/utils';
+import { picoAssistantLabel } from '~/utils/picoFace';
 import store from '~/store';
 
 const MessageAvatar = ({ iconData }: { iconData: TMessageIcon }) => (
@@ -114,7 +115,7 @@ function SearchMessage({ message }: Pick<TMessageProps, 'message'>) {
         ? (user?.name ?? '') || (user?.username ?? '')
         : localize('com_user_message');
     }
-    return message?.sender ?? '';
+    return picoAssistantLabel(message?.sender);
   }, [
     message?.isCreatedByUser,
     message?.sender,

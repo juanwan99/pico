@@ -17,6 +17,7 @@ import useCopyToClipboard from './useCopyToClipboard';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetAddedConvo } from '~/hooks/Chat';
 import { useLocalize } from '~/hooks';
+import { picoAssistantLabel } from '~/utils/picoFace';
 import store from '~/store';
 
 export type TMessageActions = Pick<
@@ -127,11 +128,11 @@ export default function useMessageActions(props: TMessageActions) {
     if (message?.isCreatedByUser === true) {
       return UsernameDisplay ? (user?.name ?? '') || user?.username : localize('com_user_message');
     } else if (agent) {
-      return agent.name ?? 'Assistant';
+      return picoAssistantLabel(agent.name);
     } else if (assistant) {
-      return assistant.name ?? 'Assistant';
+      return picoAssistantLabel(assistant.name);
     } else {
-      return message?.sender;
+      return picoAssistantLabel(message?.sender);
     }
   }, [message, agent, assistant, UsernameDisplay, user, localize]);
 

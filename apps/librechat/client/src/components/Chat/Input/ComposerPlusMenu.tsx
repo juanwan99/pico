@@ -21,7 +21,7 @@ export function ComposerModeSwitch({
       role="group"
       aria-label="回复深度"
       data-testid="composer-mode-switch"
-      className="inline-flex h-8 shrink-0 items-center rounded-md border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-0"
+      className="pico-hit inline-flex shrink-0 items-center rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-0.5"
     >
       {PLUS_MODE_ITEMS.map((item) => {
         const active = value === item.id;
@@ -32,10 +32,10 @@ export function ComposerModeSwitch({
             data-testid={`composer-plus-mode-${item.id}`}
             aria-pressed={active}
             className={cn(
-              'pico-type-aux h-full rounded px-2 transition-colors',
+              'pico-type-aux h-full rounded-md px-2.5 transition-colors',
               active
-                ? 'bg-[color:var(--pico-surface-2)] font-medium text-[color:var(--pico-ink)]'
-                : 'text-[color:var(--pico-ink-3)] hover:text-[color:var(--pico-ink)]',
+                ? 'bg-[color:var(--pico-accent-wash)] font-medium text-[color:var(--pico-ink)]'
+                : 'text-[color:var(--pico-ink-2)] hover:text-[color:var(--pico-ink)]',
             )}
             onClick={() => onChange(item.id)}
           >
@@ -61,10 +61,10 @@ export function ComposerPlanToggle({
       aria-pressed={on}
       aria-label="先计划"
       className={cn(
-        'pico-type-aux h-8 shrink-0 rounded-md border border-[color:var(--pico-line)] px-2 transition-colors',
+        'pico-type-aux pico-hit shrink-0 rounded-lg border px-2.5 transition-colors',
         on
-          ? 'bg-[color:var(--pico-surface-2)] font-medium text-[color:var(--pico-ink)]'
-          : 'bg-[color:var(--pico-surface)] text-[color:var(--pico-ink-3)] hover:text-[color:var(--pico-ink)]',
+          ? 'border-[color:var(--pico-accent)] bg-[color:var(--pico-accent-wash)] font-medium text-[color:var(--pico-ink)]'
+          : 'border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] text-[color:var(--pico-ink-2)] hover:text-[color:var(--pico-ink)]',
       )}
       onClick={() => onChange(!on)}
     >

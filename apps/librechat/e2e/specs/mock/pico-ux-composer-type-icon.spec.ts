@@ -14,9 +14,10 @@ function verticalOverlap(a: { y: number; height: number }, b: { y: number; heigh
 }
 
 test.describe('T-UX-COMPOSER-TYPE-ICON', () => {
-  test('C1 idle composer is one row: plus · input · send', async ({ page }) => {
+  test('C1 idle composer is two rows: input above plus · send', async ({ page }) => {
     await page.goto(NEW_CHAT_PATH);
     const row = page.getByTestId('composer-one-row');
+    const toolbar = page.getByTestId('composer-toolbar');
     const plus = page.getByTestId('composer-plus');
     const input = page.locator('#pico-wb-home-input, [data-testid="text-input"]').first();
     const send = page.getByTestId('send-button');
@@ -26,22 +27,24 @@ test.describe('T-UX-COMPOSER-TYPE-ICON', () => {
     await expect(send).toBeVisible();
     await expect(page.getByTestId('composer-plus-menu')).toHaveCount(0);
 
-    const [rowBox, plusBox, inputBox, sendBox] = await Promise.all([
+    const [rowBox, plusBox, inputBox, sendBox, toolBox] = await Promise.all([
       row.boundingBox(),
       plus.boundingBox(),
       input.boundingBox(),
       send.boundingBox(),
+      toolbar.boundingBox(),
     ]);
     expect(rowBox).not.toBeNull();
     expect(plusBox).not.toBeNull();
     expect(inputBox).not.toBeNull();
     expect(sendBox).not.toBeNull();
-    if (rowBox && plusBox && inputBox && sendBox) {
-      expect(verticalOverlap(plusBox, rowBox)).toBeTruthy();
-      expect(verticalOverlap(inputBox, rowBox)).toBeTruthy();
-      expect(verticalOverlap(sendBox, rowBox)).toBeTruthy();
+    expect(toolBox).not.toBeNull();
+    if (rowBox && plusBox && inputBox && sendBox && toolBox) {
+      expect(verticalOverlap(plusBox, toolBox)).toBeTruthy();
+      expect(verticalOverlap(sendBox, toolBox)).toBeTruthy();
       expect(Math.abs(plusBox.y - sendBox.y)).toBeLessThan(16);
-      expect(rowBox.height).toBeLessThan(88);
+      expect(inputBox.y + inputBox.height).toBeLessThanOrEqual(toolBox.y + 8);
+      expect(rowBox.height).toBeLessThan(140);
     }
     const plusText = ((await plus.textContent()) || '').trim();
     expect(plusText).not.toBe('+');
@@ -70,7 +73,7 @@ test.describe('T-UX-COMPOSER-TYPE-ICON', () => {
       const computed = getComputedStyle(el);
       return { fontSize: computed.fontSize, fontFamily: computed.fontFamily };
     });
-    expect(parseFloat(style.fontSize)).toBe(15);
+    expect(parseFloat(style.fontSize)).toBe(16);
     expect(style.fontFamily.toLowerCase()).not.toMatch(/^\s*inter\b/);
     expect(style.fontFamily).toMatch(/PingFang|Hiragino|Source Han|Noto Sans SC|Microsoft YaHei|Heiti/i);
   });
@@ -95,7 +98,7 @@ test.describe('T-UX-COMPOSER-TYPE-ICON', () => {
     expect(box).not.toBeNull();
     if (box) {
       expect(box.x + box.width).toBeLessThanOrEqual(400);
-      expect(box.height).toBeLessThan(88);
+      expect(box.height).toBeLessThan(140);
     }
   });
 });

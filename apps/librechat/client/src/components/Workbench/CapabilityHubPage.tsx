@@ -8,6 +8,7 @@ import { useListSkillsQuery } from '~/data-provider';
 import { useSkillActiveState } from '~/hooks';
 import SkillToggle from '~/components/Skills/buttons/SkillToggle';
 import { cn } from '~/utils';
+import { picoSkillDesc, picoSkillTitle } from '~/utils/picoFace';
 import WorkbenchShell from './WorkbenchShell';
 
 type HubTab = 'skills' | 'connectors';
@@ -139,7 +140,8 @@ export default function CapabilityHubPage() {
             ) : (
               skills.map((skill) => {
                 const enabled = isActive(skill);
-                const title = skill.displayTitle || skill.name;
+                const title = picoSkillTitle(skill);
+                const desc = picoSkillDesc(skill);
                 return (
                   <div
                     key={skill._id}
@@ -151,9 +153,9 @@ export default function CapabilityHubPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-[14px] font-medium">{title}</p>
-                      {skill.description ? (
+                      {desc ? (
                         <p className="mt-0.5 line-clamp-2 text-[12.5px] text-[color:var(--pico-ink-2)]">
-                          {skill.description}
+                          {desc}
                         </p>
                       ) : null}
                     </div>
