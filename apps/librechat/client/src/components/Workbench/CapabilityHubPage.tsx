@@ -92,7 +92,7 @@ export default function CapabilityHubPage() {
               aria-selected={tab === t.id}
               onClick={() => setTabNav(t.id)}
               className={cn(
-                'rounded-t-lg px-3.5 py-2.5 text-[13px] font-medium',
+                'pico-type-aux pico-type-medium rounded-t-lg px-3.5 py-2.5',
                 tab === t.id
                   ? 'border-b-2 border-[color:var(--pico-ink)] text-[color:var(--pico-ink)]'
                   : 'text-[color:var(--pico-ink-3)] hover:text-[color:var(--pico-ink)]',
@@ -111,7 +111,7 @@ export default function CapabilityHubPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={tab === 'skills' ? '搜索技能' : '搜索连接器'}
-            className="w-full bg-transparent text-[13px] outline-none"
+            className="pico-type-aux w-full bg-transparent outline-none"
           />
         </div>
       </div>
@@ -122,19 +122,19 @@ export default function CapabilityHubPage() {
             {skillQuery.isLoading || statesLoading ? (
               <p
                 role="status"
-                className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4 text-[13px] text-[color:var(--pico-ink-2)]"
+                className="pico-type-aux rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4 text-[color:var(--pico-ink-2)]"
               >
                 正在读取技能…
               </p>
             ) : skillQuery.isError ? (
               <p
                 role="alert"
-                className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-900"
+                className="pico-type-aux rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900"
               >
                 技能目录暂时不可用，请稍后重试。
               </p>
             ) : skills.length === 0 ? (
-              <p className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4 text-[13px] text-[color:var(--pico-ink-2)]">
+              <p className="pico-type-aux rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4 text-[color:var(--pico-ink-2)]">
                 还没有技能。
               </p>
             ) : (
@@ -152,9 +152,9 @@ export default function CapabilityHubPage() {
                       <PicoIcon name="spark" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[14px] font-medium">{title}</p>
+                      <p className="pico-type-sidebar pico-type-medium">{title}</p>
                       {desc ? (
-                        <p className="mt-0.5 line-clamp-2 text-[12.5px] text-[color:var(--pico-ink-2)]">
+                        <p className="pico-type-aux mt-0.5 line-clamp-2 text-[color:var(--pico-ink-2)]">
                           {desc}
                         </p>
                       ) : null}
@@ -184,24 +184,24 @@ export default function CapabilityHubPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-[14px] font-medium">{c.name}</p>
+                    <p className="pico-type-sidebar pico-type-medium">{c.name}</p>
                     {c.status === 'connected' ? (
-                      <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-800">
+                      <span className="pico-type-aux rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-800">
                         已接通
                       </span>
                     ) : (
-                      <span className="rounded-full bg-[color:var(--pico-surface-2)] px-1.5 py-0.5 text-[10px] text-[color:var(--pico-ink-3)]">
+                      <span className="pico-type-aux rounded-full bg-[color:var(--pico-surface-2)] px-1.5 py-0.5 text-[color:var(--pico-ink-3)]">
                         未接
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-[12.5px] text-[color:var(--pico-ink-2)]">{c.desc}</p>
+                  <p className="pico-type-aux mt-1 text-[color:var(--pico-ink-2)]">{c.desc}</p>
                 </div>
                 {c.id === 'school-kb' ? (
                   <button
                     type="button"
                     onClick={() => navigate('/more/files#school')}
-                    className="shrink-0 rounded-md px-2 py-1 text-[12px] text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
+                    className="pico-type-aux shrink-0 rounded-md px-2 py-1 text-[color:var(--pico-ink-2)] hover:bg-[color:var(--pico-surface-2)]"
                   >
                     查看
                   </button>

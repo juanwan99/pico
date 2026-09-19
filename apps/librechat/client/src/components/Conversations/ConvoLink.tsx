@@ -72,7 +72,7 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
           <span
             data-testid="convo-ledger-status"
             className={cn(
-              'self-start shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none',
+              'pico-type-aux self-start shrink-0 rounded-full px-1.5 py-0.5 font-medium leading-none',
               STATUS_CLASS[ledgerStatus] ||
                 'bg-[color:var(--pico-surface-2)] text-[color:var(--pico-ink-2)]',
             )}

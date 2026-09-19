@@ -44,11 +44,11 @@ export default function WorkbenchShell({
           <PicoIcon name="back" size="sm" />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-[color:var(--pico-ink)] dark:text-text-primary">
+          <h1 className="pico-type-body pico-type-medium truncate text-[color:var(--pico-ink)] dark:text-text-primary">
             {title}
           </h1>
           {subtitle ? (
-            <p className="truncate text-[11px] text-[color:var(--pico-ink-3)]">{subtitle}</p>
+            <p className="pico-type-aux truncate text-[color:var(--pico-ink-3)]">{subtitle}</p>
           ) : null}
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}

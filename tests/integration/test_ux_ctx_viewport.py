@@ -99,6 +99,22 @@ def test_nav_layout_type_and_school_docs() -> None:
     assert "--pico-fs-body: 16px" in tokens
     assert "--pico-fs-title: 32px" in tokens
     assert "--pico-control-h: 40px" in tokens
+    assert ".pico-app .text-xs" in tokens
+    assert ".pico-app .text-\\[12\\.5px\\]" in tokens or ".pico-app .text-[12.5px]" in tokens
+    assert ".pico-app .text-sm" in tokens
+    convo_list = (ROOT / "apps/librechat/client/src/components/Conversations/Conversations.tsx").read_text()
+    files_dir = (
+        ROOT / "apps/librechat/client/src/components/Workbench/FilesDirectoryPanel.tsx"
+    ).read_text()
+    school_dir = (
+        ROOT / "apps/librechat/client/src/components/Workbench/SchoolFilesDirectory.tsx"
+    ).read_text()
+    assert "font-size: '0.7rem'" not in convo_list
+    assert "0.7rem" not in convo_list
+    assert "pico-type-aux" in convo_list
+    assert "pico-type-sidebar min-w-0 flex-1 truncate text-left" in files_dir
+    assert 'data-testid={`my-files-folder-${folder.id}`}' in files_dir
+    assert "pico-type-sidebar flex items-center gap-1" in school_dir
     assert "pico-type-title" in landing
     assert "text-[30px]" not in landing
     assert "text-[34px]" not in landing
