@@ -361,8 +361,8 @@ def test_deliverable_skill_is_not_a_playbook() -> None:
     assert "必须分别调用" not in text
     assert "按教学目标" not in text
     assert "observation" in text
-    assert "问学校材料" in text
-    assert "才 kb_search" in text
+    assert "kb_search" in text
+    assert "编校规" in text
     lesson = instruction_for_snapshot(snapshot_for_skill("skill-lesson-outline"))
     assert "教学目标" not in lesson
     assert "必须调用 generate_" not in lesson
