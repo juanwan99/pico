@@ -146,6 +146,7 @@ def true_pi_models_document(
     accept_image: bool | None = None,
     base_url: str = "",
     api: str = "",
+    thinking: bool = False,
 ) -> dict[str, Any]:
     """Pi 0.84 models.json overlay. Official path, not an invented CLI flag."""
     from pico_orchestrator.vision import model_accepts_image
@@ -161,12 +162,28 @@ def true_pi_models_document(
         accept_image = model_accepts_image(mid)
     if accept_image:
         inputs.append("image")
+    gemini = mid.lower().startswith("gemini-")
+    # Fast lane must not advertise extended thinking. Gemini 3.8 with
+    # reasoning:true still thinks for seconds before the first content token
+    # even when argv is --thinking off (#1005 首字).
     model_entry: dict[str, Any] = {
         "id": mid,
-        "reasoning": True,
+        "reasoning": bool(thinking) or not gemini,
         "input": inputs,
         **overlay,
     }
+    if gemini:
+        # pico-fast: reasoning off. pico-deep: New API honors reasoning_effort.
+        model_entry["reasoning"] = bool(thinking)
+        if thinking:
+            model_entry["thinkingLevelMap"] = {
+                "off": "none",
+                "minimal": "low",
+                "low": "low",
+                "medium": "medium",
+                "high": "high",
+                "xhigh": "high",
+            }
     provider_entry: dict[str, Any] = {
         "modelOverrides": {mid: dict(overlay)},
         "models": [model_entry],
@@ -178,7 +195,7 @@ def true_pi_models_document(
     # Pi 0.84 openai built-ins default to openai-responses. A Gemini id with no
     # api inherits that, then crashes (undefined.startsWith) on New API chat.
     # Owner path: Gemini → chat/completions overlay, not responses.
-    if not kind and name == "openai" and mid.lower().startswith("gemini-"):
+    if not kind and name == "openai" and gemini:
         kind = "openai-completions"
     if kind:
         provider_entry["api"] = kind
@@ -193,6 +210,13 @@ def true_pi_models_document(
                 "high": "medium",
                 "xhigh": "medium",
             }
+        elif gemini and kind == "openai-completions":
+            provider_entry["compat"] = {
+                "supportsDeveloperRole": False,
+                "supportsReasoningEffort": True,
+                "thinkingFormat": "reasoning_effort",
+            }
+            model_entry["compat"] = dict(provider_entry["compat"])
     return {"providers": {name: provider_entry}}
 
 
@@ -368,6 +392,7 @@ class SubprocessTransport(TruePiTransport):
             accept_image=self.accept_image,
             base_url=self.base_url,
             api=self.api,
+            thinking=self.thinking,
         )
 
     def prepare_agent_home(self, home: Path | None = None) -> Path:
