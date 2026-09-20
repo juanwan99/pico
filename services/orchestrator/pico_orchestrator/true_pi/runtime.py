@@ -325,10 +325,13 @@ async def _run_true_pi_once(
                 if has_turn_files(rid):
                     pi_base = pass_base_url(rid)
                     logger.info("true_pi llm-pass baseUrl run_id=%s", rid)
-            # Workbench GPT: medium. Caps thinking_on=False (edu sidebar) must
-            # spawn --thinking off so content, not reasoning, hits the rail.
+            # Workbench GPT: medium. Caps thinking_on=False (edu sidebar / pico-fast)
+            # must spawn --thinking off so the first visible character is not
+            # waiting on Gemini/GPT reasoning (#1005 首字).
             pi_thinking_level = (
-                ("medium" if thinking_on else "off") if openai_brain else ""
+                ("medium" if thinking_on else "off")
+                if (openai_brain or is_gemini_model(backend_model))
+                else ""
             )
             tool_server = ToolServer(
                 principal=principal,

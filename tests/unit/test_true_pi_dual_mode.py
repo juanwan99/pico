@@ -200,7 +200,36 @@ def test_gemini_models_json_uses_openai_completions_not_responses(tmp_path: Path
     assert block["models"][0]["id"] == "gemini-3.8-flash"
     assert block["models"][0]["api"] == "openai-completions"
     assert block["models"][0]["api"] != "openai-responses"
+    assert block["models"][0]["reasoning"] is False
+    assert "thinkingLevelMap" not in block["models"][0]
+    assert block["compat"]["thinkingFormat"] == "reasoning_effort"
+    assert block["compat"]["supportsReasoningEffort"] is True
     assert "image" in block["models"][0]["input"]
+    cmd = t.spawn_command()
+    assert cmd[cmd.index("--thinking") + 1] == "off"
+
+
+def test_gemini_deep_lane_keeps_reasoning_effort_map(tmp_path: Path) -> None:
+    t = SubprocessTransport(
+        session_dir=tmp_path / "sess-gem-deep",
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r-gem-deep",
+        provider="openai",
+        model="gemini-3.8-flash",
+        thinking=True,
+        max_context=256_000,
+        max_tokens=32_000,
+        base_url="http://127.0.0.1:3000/v1",
+        api="openai-completions",
+        thinking_level="medium",
+    )
+    written = json.loads((t.prepare_agent_home() / "models.json").read_text(encoding="utf-8"))
+    model = written["providers"]["openai"]["models"][0]
+    assert model["reasoning"] is True
+    assert model["thinkingLevelMap"]["off"] == "none"
+    assert model["thinkingLevelMap"]["medium"] == "medium"
+    assert t.spawn_command()[t.spawn_command().index("--thinking") + 1] == "medium"
     src = (
         Path(__file__).resolve().parents[2]
         / "services"
