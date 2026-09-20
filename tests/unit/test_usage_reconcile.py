@@ -147,6 +147,141 @@ def test_headline_ok_ignores_embed_mix() -> None:
     assert report["by_model"]["embedding-3"]["lane"] == "embed"
 
 
+def test_run_join_two_completions_match_one_pico_row() -> None:
+    pico_rows = [
+        {
+            "kind": "llm",
+            "model": "gemini-3.8-flash",
+            "run_id": "r1",
+            "prompt_tokens": 80,
+            "completion_tokens": 20,
+            "total_tokens": 100,
+            "tokens_unknown": False,
+            "idempotency_key": "llm:r1",
+            "created_at": "2026-09-20 00:00:10",
+        }
+    ]
+    runs = {
+        "r1": {
+            "id": "r1",
+            "started_at": "2026-09-20 00:00:00",
+            "ended_at": "2026-09-20 00:01:00",
+        }
+    }
+    t0 = int(datetime(2026, 9, 20, 0, 0, 10, tzinfo=UTC).timestamp())
+    newapi_rows = [
+        {
+            "id": 1,
+            "created_at": t0,
+            "model_name": "gemini-3.8-flash",
+            "prompt_tokens": 50,
+            "completion_tokens": 10,
+        },
+        {
+            "id": 2,
+            "created_at": t0 + 20,
+            "model_name": "gemini-3.8-flash",
+            "prompt_tokens": 30,
+            "completion_tokens": 10,
+        },
+        {
+            "id": 3,
+            "created_at": t0 + 3600,
+            "model_name": "gemini-3.8-flash",
+            "prompt_tokens": 999,
+            "completion_tokens": 1,
+        },
+        {
+            "id": 4,
+            "created_at": t0,
+            "model_name": "rerank-pro",
+            "prompt_tokens": 40,
+            "completion_tokens": 0,
+        },
+    ]
+    joined = ur.join_newapi_to_llm_runs(pico_rows, runs, newapi_rows)
+    assert joined is not None
+    assert joined["assigned_events"] == 2
+    assert joined["assigned_tokens"] == 100
+    assert joined["unattributed_events"] == 1
+    assert joined["unattributed_tokens"] == 1000
+    pico = ur.pico_token_book(pico_rows)
+    report = ur.reconcile(
+        pico_book=pico,
+        newapi_book=ur.newapi_token_book(newapi_rows),
+        export_vs_ledger=None,
+        pico_rows=pico_rows,
+        newapi_rows=newapi_rows,
+        run_join=joined,
+    )
+    assert report["ok"] is True
+    assert report["by_model"]["gemini-3.8-flash"]["token_deviation"] == 0.0
+    assert report["by_model"]["gemini-3.8-flash"]["newapi"]["events"] == 2
+    assert report["run_join"]["unattributed_tokens"] == 1000
+    assert "assigned_rows" not in report["run_join"]
+
+
+def test_unknown_run_newapi_is_not_gated() -> None:
+    pico_rows = [
+        {
+            "kind": "llm",
+            "model": "gpt-5.6-sol",
+            "run_id": "ok",
+            "prompt_tokens": 10,
+            "completion_tokens": 0,
+            "total_tokens": 10,
+            "tokens_unknown": False,
+            "idempotency_key": "llm:ok",
+            "created_at": "2026-09-20 00:00:05",
+        },
+        {
+            "kind": "llm",
+            "model": "gpt-5.6-sol",
+            "run_id": "fail",
+            "tokens_unknown": True,
+            "idempotency_key": "llm:fail",
+            "created_at": "2026-09-20 00:00:05",
+        },
+    ]
+    runs = {
+        "ok": {"started_at": "2026-09-20 00:00:00", "ended_at": "2026-09-20 00:00:10"},
+        "fail": {"started_at": "2026-09-20 00:00:11", "ended_at": "2026-09-20 00:00:20"},
+    }
+    t_ok = int(datetime(2026, 9, 20, 0, 0, 5, tzinfo=UTC).timestamp())
+    t_fail = int(datetime(2026, 9, 20, 0, 0, 15, tzinfo=UTC).timestamp())
+    newapi_rows = [
+        {"id": 1, "created_at": t_ok, "model_name": "gpt-5.6-sol", "prompt_tokens": 10, "completion_tokens": 0},
+        {"id": 2, "created_at": t_fail, "model_name": "gpt-5.6-sol", "prompt_tokens": 80, "completion_tokens": 0},
+    ]
+    joined = ur.join_newapi_to_llm_runs(pico_rows, runs, newapi_rows)
+    assert joined is not None
+    report = ur.reconcile(
+        pico_book=ur.pico_token_book(pico_rows),
+        newapi_book=ur.newapi_token_book(newapi_rows),
+        export_vs_ledger=None,
+        pico_rows=pico_rows,
+        newapi_rows=newapi_rows,
+        run_join=joined,
+    )
+    assert report["ok"] is True
+    assert report["by_model"]["gpt-5.6-sol"]["token_deviation"] == 0.0
+    assert report["by_model"]["gpt-5.6-sol"]["newapi"]["total_tokens"] == 10
+
+
+def test_run_join_skipped_without_run_id() -> None:
+    pico_rows = [
+        {
+            "kind": "llm",
+            "model": "gpt-5.6-sol",
+            "prompt_tokens": 80,
+            "completion_tokens": 20,
+            "tokens_unknown": False,
+            "idempotency_key": "llm:r1",
+        }
+    ]
+    assert ur.join_newapi_to_llm_runs(pico_rows, {}, [{"model_name": "gpt-5.6-sol"}]) is None
+
+
 def test_unknown_llm_breakdown_keeps_reason() -> None:
     rows = [
         {

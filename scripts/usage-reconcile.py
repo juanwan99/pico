@@ -10,6 +10,7 @@ On ECS (typical):
 edu 钱包实扣不在本仓。第三本 = export 行（与 usage_events 应逐行同）。
 unknown token 单独列，不当 0。偏差门槛默认 1%。
 头条 ok 只看可对的聊天/精排车道；查询嵌入不混进头条。
+聊天按 Pico run 窗口对齐 New API completion（一轮多 completion）；窗外调用单列，不进头条。
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 THRESHOLD = 0.01
+RUN_SLACK_S = 2
 
 
 def deviation(a: float, b: float) -> float:
@@ -64,6 +66,10 @@ def read_pico_usage(
     ]
     if "source" in cols:
         select_cols.append("source")
+    if "run_id" in cols:
+        select_cols.append("run_id")
+    if "created_at" in cols:
+        select_cols.append("created_at")
     rows = con.execute(
         f"""
         SELECT {", ".join(select_cols)}
@@ -92,10 +98,49 @@ def read_pico_usage(
             "idempotency_key": row[7],
             "extra": extra,
         }
+        idx = 9
         if "source" in cols:
-            rec["source"] = row[9]
+            rec["source"] = row[idx]
+            idx += 1
+        if "run_id" in cols:
+            rec["run_id"] = row[idx]
+            idx += 1
+        if "created_at" in cols:
+            rec["created_at"] = row[idx]
         out_rows.append(rec)
     return {"ok": True, "rows": out_rows}
+
+
+def read_pico_runs(db: Path, *, since: datetime, until: datetime) -> dict[str, dict[str, Any]]:
+    con = _connect_ro(db)
+    if "runs" not in _table_names(con):
+        con.close()
+        return {}
+    cols = _cols(con, "runs")
+    need = {"id", "started_at", "ended_at", "created_at"}
+    if not need.issubset(cols):
+        con.close()
+        return {}
+    select = ["id", "started_at", "ended_at", "created_at"]
+    if "status" in cols:
+        select.append("status")
+    rows = con.execute(
+        f"""
+        SELECT {", ".join(select)}
+        FROM runs
+        WHERE COALESCE(ended_at, created_at) >= ?
+          AND COALESCE(started_at, created_at) < ?
+        """,
+        (since.replace(tzinfo=None).isoformat(sep=" "), until.replace(tzinfo=None).isoformat(sep=" ")),
+    ).fetchall()
+    con.close()
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        rec = {select[i]: row[i] for i in range(len(select))}
+        rid = str(rec.get("id") or "").strip()
+        if rid:
+            out[rid] = rec
+    return out
 
 
 def pico_token_book(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -156,6 +201,8 @@ def read_newapi_logs(
         "prompt_tokens",
         "completion_tokens",
     ]
+    if "id" in cols:
+        select.append("id")
     if "model_name" in cols:
         select.append("model_name")
     if "token_name" in cols:
@@ -192,6 +239,197 @@ def newapi_token_book(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "completion_tokens": completion,
         "total_tokens": prompt + completion,
     }
+
+
+def _parse_dt(value: Any) -> datetime | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(int(value), tz=UTC)
+    text = str(value).replace("T", " ").removesuffix("Z")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def pico_billed_tokens(row: dict[str, Any]) -> int | None:
+    if row.get("tokens_unknown"):
+        return None
+    total = int(row.get("total_tokens") or 0)
+    if total > 0:
+        return total
+    return int(row.get("prompt_tokens") or 0) + int(row.get("completion_tokens") or 0)
+
+
+def na_row_tokens(row: dict[str, Any]) -> int:
+    return int(row.get("prompt_tokens") or 0) + int(row.get("completion_tokens") or 0)
+
+
+def join_newapi_to_llm_runs(
+    pico_rows: list[dict[str, Any]],
+    runs: dict[str, dict[str, Any]],
+    newapi_rows: list[dict[str, Any]],
+    *,
+    slack_s: int = RUN_SLACK_S,
+) -> dict[str, Any] | None:
+    """Assign chat completions to Pico llm runs by [started, ended] ± slack.
+
+    One Pico llm row per run; many New API rows. Returns None when there is
+    nothing to join (no run_id / no runs table) so callers keep the old gate.
+    """
+    windows: list[dict[str, Any]] = []
+    for row in pico_rows:
+        if str(row.get("kind") or "") != "llm":
+            continue
+        rid = str(row.get("run_id") or "").strip()
+        if not rid:
+            continue
+        run = runs.get(rid) or {}
+        started = _parse_dt(run.get("started_at")) or _parse_dt(row.get("created_at"))
+        ended = _parse_dt(run.get("ended_at"))
+        if started is None:
+            continue
+        if ended is None:
+            ended = started + timedelta(seconds=120)
+        st_u = int(started.timestamp()) - slack_s
+        en_u = int(ended.timestamp()) + slack_s
+        windows.append(
+            {
+                "run_id": rid,
+                "model": _model_key(row.get("model")),
+                "unknown": bool(row.get("tokens_unknown")),
+                "pico_tokens": pico_billed_tokens(row),
+                "st_u": st_u,
+                "en_u": en_u,
+                "dur": max(0, en_u - st_u),
+            }
+        )
+    if not windows:
+        return None
+
+    per_run: dict[str, dict[str, Any]] = {}
+    for window in windows:
+        rec = per_run.setdefault(
+            window["run_id"],
+            {
+                "model": window["model"],
+                "unknown": window["unknown"],
+                "pico_tokens": window["pico_tokens"],
+                "na_events": 0,
+                "na_tokens": 0,
+            },
+        )
+        rec["model"] = window["model"]
+        rec["unknown"] = window["unknown"]
+        rec["pico_tokens"] = window["pico_tokens"]
+
+    assigned: list[dict[str, Any]] = []
+    unattributed: list[dict[str, Any]] = []
+    for idx, raw in enumerate(newapi_rows):
+        if model_lane(raw.get("model_name")) != "chat":
+            continue
+        log = dict(raw)
+        log["_idx"] = log.get("id") if log.get("id") is not None else f"i{idx}"
+        ts = int(log.get("created_at") or 0)
+        model = _model_key(log.get("model_name"))
+        hits = [
+            window
+            for window in windows
+            if window["model"] == model and window["st_u"] <= ts <= window["en_u"]
+        ]
+        if not hits:
+            unattributed.append(log)
+            continue
+        known_hits = [window for window in hits if not window["unknown"]]
+        if not known_hits:
+            rec = per_run[hits[0]["run_id"]]
+            rec["na_events"] += 1
+            rec["na_tokens"] += na_row_tokens(log)
+            continue
+        known_hits.sort(key=lambda window: (window["dur"], window["st_u"]))
+        chosen = known_hits[0]
+        rec = per_run[chosen["run_id"]]
+        rec["na_events"] += 1
+        rec["na_tokens"] += na_row_tokens(log)
+        assigned.append(log)
+
+    assigned_tokens = sum(na_row_tokens(row) for row in assigned)
+    unattr_tokens = sum(na_row_tokens(row) for row in unattributed)
+    by_model: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "known_runs": 0,
+            "unknown_runs": 0,
+            "pico_tokens": 0,
+            "assigned_events": 0,
+            "assigned_tokens": 0,
+            "unattributed_events": 0,
+            "unattributed_tokens": 0,
+        }
+    )
+    for rec in per_run.values():
+        bucket = by_model[rec["model"]]
+        if rec["unknown"]:
+            bucket["unknown_runs"] += 1
+        else:
+            bucket["known_runs"] += 1
+            bucket["pico_tokens"] += int(rec["pico_tokens"] or 0)
+            bucket["assigned_events"] += rec["na_events"]
+            bucket["assigned_tokens"] += rec["na_tokens"]
+    unattr_by_model: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"events": 0, "tokens": 0}
+    )
+    for log in unattributed:
+        bucket = unattr_by_model[_model_key(log.get("model_name"))]
+        bucket["events"] += 1
+        bucket["tokens"] += na_row_tokens(log)
+        by_model[_model_key(log.get("model_name"))]["unattributed_events"] += 1
+        by_model[_model_key(log.get("model_name"))]["unattributed_tokens"] += na_row_tokens(
+            log
+        )
+    for name, bucket in by_model.items():
+        pico_tok = int(bucket["pico_tokens"] or 0)
+        assigned_tok = int(bucket["assigned_tokens"] or 0)
+        bucket["token_deviation"] = (
+            deviation(pico_tok, assigned_tok) if pico_tok or assigned_tok else 0.0
+        )
+        bucket["unattributed_events"] = int(unattr_by_model[name]["events"])
+        bucket["unattributed_tokens"] = int(unattr_by_model[name]["tokens"])
+    return {
+        "slack_s": slack_s,
+        "joined": True,
+        "assigned_events": len(assigned),
+        "unattributed_events": len(unattributed),
+        "assigned_tokens": assigned_tokens,
+        "unattributed_tokens": unattr_tokens,
+        "known_runs": sum(1 for rec in per_run.values() if not rec["unknown"]),
+        "unknown_runs": sum(1 for rec in per_run.values() if rec["unknown"]),
+        "by_model": {name: dict(bucket) for name, bucket in sorted(by_model.items())},
+        "assigned_rows": assigned,
+    }
+
+
+def gate_newapi_rows(
+    newapi_rows: list[dict[str, Any]],
+    run_join: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Chat rows that landed in a run window + all non-chat rows (rerank/embed)."""
+    if not run_join or not run_join.get("joined"):
+        return list(newapi_rows)
+    assigned_idx = {row.get("_idx") for row in run_join.get("assigned_rows") or []}
+    out: list[dict[str, Any]] = []
+    for idx, raw in enumerate(newapi_rows):
+        lane = model_lane(raw.get("model_name"))
+        if lane != "chat":
+            out.append(raw)
+            continue
+        key = raw.get("id") if raw.get("id") is not None else f"i{idx}"
+        if key in assigned_idx:
+            out.append(raw)
+    return out
 
 
 def export_matches_ledger(export_ids: list[str], ledger_ids: list[str]) -> dict[str, Any]:
@@ -297,16 +535,46 @@ def reconcile(
     threshold: float = THRESHOLD,
     pico_rows: list[dict[str, Any]] | None = None,
     newapi_rows: list[dict[str, Any]] | None = None,
+    run_join: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     token_dev = None
     if newapi_book is not None and newapi_book.get("ok") is not False:
         token_dev = deviation(pico_book["total_tokens"], newapi_book["total_tokens"])
     by_model = None
     comparable_ok = None
+    gate_rows = gate_newapi_rows(newapi_rows or [], run_join)
     if pico_rows is not None:
-        by_model, comparable_ok = books_by_model(
-            pico_rows, newapi_rows or [], threshold
-        )
+        by_model, comparable_ok = books_by_model(pico_rows, gate_rows, threshold)
+        if run_join and run_join.get("joined") and by_model is not None:
+            comparable_ok = []
+            join_models = run_join.get("by_model") or {}
+            for name, rec in by_model.items():
+                if rec.get("lane") == "chat" and name in join_models:
+                    stats = join_models[name]
+                    rec["token_deviation"] = stats.get("token_deviation")
+                    rec["note"] = (
+                        "run-aligned: New API completions inside known Pico run windows"
+                    )
+                    rec["comparable"] = int(stats.get("known_runs") or 0) > 0
+                    rec["pico"] = dict(rec.get("pico") or {})
+                    rec["pico"]["known"] = int(stats.get("known_runs") or 0)
+                    rec["pico"]["total_tokens"] = int(stats.get("pico_tokens") or 0)
+                    rec["newapi"] = {
+                        "events": int(stats.get("assigned_events") or 0),
+                        "prompt_tokens": None,
+                        "completion_tokens": None,
+                        "total_tokens": int(stats.get("assigned_tokens") or 0),
+                    }
+                    if rec["comparable"]:
+                        comparable_ok.append(
+                            rec["token_deviation"] is not None
+                            and rec["token_deviation"] <= threshold
+                        )
+                elif rec.get("comparable") and rec.get("lane") == "rerank":
+                    comparable_ok.append(
+                        rec.get("token_deviation") is not None
+                        and rec["token_deviation"] <= threshold
+                    )
     export_dev = None if export_vs_ledger is None else export_vs_ledger["deviation"]
     checks = []
     if comparable_ok is not None:
@@ -318,6 +586,23 @@ def reconcile(
         checks.append(export_dev <= threshold)
     checks.append(int(pico_book.get("duplicate_idempotency") or 0) == 0)
     ok = all(checks) if checks else False
+    notes = [
+        "unknown token rows excluded from token sums (not billed as 0)",
+        "edu wallet debit is not in this repo",
+        "headline ok uses comparable chat/rerank lanes only; embed is listed not gated",
+        "blended token_deviation is informational (do not mix embed into the gate)",
+        "pico total_tokens prefers ledger total (reasoning) over prompt+completion",
+    ]
+    if run_join and run_join.get("joined"):
+        notes.append(
+            "chat headline uses New API completions inside Pico run windows; "
+            "unattributed (probes / outside windows) listed under run_join, not gated"
+        )
+    else:
+        notes.append(
+            "Pico llm is one row per run; New API is one row per completion — "
+            "compare tokens, not row counts (run join skipped: no run_id/runs)"
+        )
     report = {
         "ok": ok,
         "threshold": threshold,
@@ -326,19 +611,19 @@ def reconcile(
         "pico": pico_book,
         "newapi": newapi_book,
         "export_vs_ledger": export_vs_ledger,
-        "notes": [
-            "unknown token rows excluded from token sums (not billed as 0)",
-            "edu wallet debit is not in this repo",
-            "headline ok uses comparable chat/rerank lanes only; embed is listed not gated",
-            "blended token_deviation is informational (do not mix embed into the gate)",
-            "Pico llm is one row per run; New API is one row per completion — compare tokens, not row counts",
-            "pico total_tokens prefers ledger total (reasoning) over prompt+completion",
-        ],
+        "notes": notes,
     }
     if by_model is not None:
         report["by_model"] = by_model
     if pico_rows is not None:
         report["unknown_llm"] = unknown_llm_breakdown(pico_rows)
+    if run_join is not None:
+        public_join = {
+            key: value
+            for key, value in run_join.items()
+            if key != "assigned_rows"
+        }
+        report["run_join"] = public_join
     return report
 
 
@@ -384,6 +669,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.export_ids:
         ids = json.loads(args.export_ids.read_text())
         export_vs = export_matches_ledger(list(ids), [r["id"] for r in pico["rows"]])
+    runs = read_pico_runs(args.pico_db, since=since, until=until)
+    run_join = join_newapi_to_llm_runs(pico["rows"], runs, newapi_rows)
     report = reconcile(
         pico_book=pico_book,
         newapi_book=newapi_book,
@@ -391,6 +678,7 @@ def main(argv: list[str] | None = None) -> int:
         threshold=float(args.threshold),
         pico_rows=pico["rows"],
         newapi_rows=newapi_rows,
+        run_join=run_join,
     )
     report["window"] = {"since": since.isoformat(), "until": until.isoformat(), "hours": args.hours}
     print(json.dumps(report, ensure_ascii=False, indent=2))
