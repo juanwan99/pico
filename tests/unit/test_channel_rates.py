@@ -104,6 +104,44 @@ def test_seed_card_thousand_input_tokens(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
 
+def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
+    reset_rate_card()
+    # 547.5 元/百万输入 × 1000 token = 0.5475 元成本 × 2.5 = 1368.750 积分
+    assert (
+        points_from_row(
+            tokens_unknown=False,
+            prompt_tokens=1000,
+            completion_tokens=0,
+            total_tokens=1000,
+            kind="llm",
+            model="gemini-3.8-flash",
+        )
+        == "1368.750"
+    )
+    assert (
+        points_from_row(
+            tokens_unknown=False,
+            prompt_tokens=1000,
+            completion_tokens=0,
+            total_tokens=1000,
+            kind="llm",
+            model="grok-4.6",
+        )
+        == "1368.750"
+    )
+    gemini_out = points_from_row(
+        tokens_unknown=False,
+        prompt_tokens=0,
+        completion_tokens=1000,
+        total_tokens=1000,
+        kind="llm",
+        model="gemini-3.8-flash",
+    )
+    # 2190 元/百万输出 × 1000 × 2.5 = 5475.000 积分
+    assert gemini_out == "5475.000"
+
+
 def test_sell_markup_two_point_five() -> None:
     card = load_rate_card()
     rate = card.find(kind="llm", model="gpt-5.6-sol")

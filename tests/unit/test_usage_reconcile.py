@@ -45,6 +45,24 @@ def test_unknown_tokens_excluded_from_sums() -> None:
     assert book["unknown"] == 1
     assert book["known"] == 1
     assert book["total_tokens"] == 120
+
+
+def test_pico_token_book_prefers_ledger_total_with_reasoning() -> None:
+    book = ur.pico_token_book(
+        [
+            {
+                "kind": "llm",
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "total_tokens": 150,
+                "tokens_unknown": False,
+                "idempotency_key": "llm:r1",
+            }
+        ]
+    )
+    assert book["prompt_tokens"] == 100
+    assert book["completion_tokens"] == 20
+    assert book["total_tokens"] == 150
     assert book["duplicate_idempotency"] == 0
 
 
