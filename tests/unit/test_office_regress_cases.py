@@ -54,3 +54,21 @@ def test_chart_book_is_xlsx() -> None:
 
 def test_docx_media_helper_false_on_plain() -> None:
     assert orx._docx_has_media(orx.make_notice_docx()) is False
+
+
+def test_xlsx_group_counts_reads_a_zu_layout() -> None:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    summary = wb.active
+    summary.title = "组别人数汇总"
+    summary.append(["组别", "人数"])
+    summary.append(["A组", 5])
+    summary.append(["B组", 3])
+    summary.append(["C组", 2])
+    detail = wb.create_sheet("花名册明细")
+    detail.append(["学号", "姓名", "组别"])
+    detail.append([2401, "张一", "A"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    assert orx._xlsx_group_counts(buf.getvalue()) == {"A": 5, "B": 3, "C": 2}

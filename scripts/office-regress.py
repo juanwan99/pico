@@ -192,6 +192,54 @@ def _latest_by_suffix(arts: list[dict[str, Any]], suffix: str) -> dict[str, Any]
     return max(matches, key=lambda a: str(a.get("created_at") or ""))
 
 
+def _xlsx_group_counts(raw: bytes, groups: tuple[str, ...] = ("A", "B", "C")) -> dict[str, int]:
+    """Read A/B/C headcounts from a summary sheet.
+
+    Live T2 writes「A组」+ 人数, not a bare「A」cell next to the count. Roster
+    detail sheets put「A」beside a 学号 (2401…) — ignore ints outside 1..20.
+    """
+    import re
+
+    from openpyxl import load_workbook
+
+    found: dict[str, int] = {}
+    label = re.compile(rf'^({"|".join(groups)})\s*组$')
+    wb = load_workbook(io.BytesIO(raw), data_only=False)
+    for ws in wb.worksheets:
+        for row in ws.iter_rows(values_only=True):
+            vals = [v for v in row if v is not None]
+            if not vals:
+                continue
+            group = None
+            for v in vals:
+                if not isinstance(v, str):
+                    continue
+                t = v.strip()
+                m = label.match(t)
+                if m:
+                    group = m.group(1)
+                    break
+                if t in groups:
+                    group = t
+                    break
+            if group is None or group in found:
+                continue
+            for v in vals:
+                n: int | None = None
+                if isinstance(v, bool):
+                    continue
+                if isinstance(v, (int, float)):
+                    n = int(v)
+                elif isinstance(v, str):
+                    m = re.match(r"^(\d+)\s*人?$", v.strip())
+                    if m:
+                        n = int(m.group(1))
+                if n is not None and 1 <= n <= 20:
+                    found[group] = n
+                    break
+    return found
+
+
 # --- fixtures -----------------------------------------------------------------
 
 
@@ -321,7 +369,6 @@ def case_t1(pico: Pico, stamp: str) -> CaseResult:
 
 def case_t2(pico: Pico, stamp: str) -> CaseResult:
     from docx import Document
-    from openpyxl import load_workbook
 
     res = CaseResult(case="T2")
     cid = f"regress-t2-{stamp}"
@@ -343,17 +390,7 @@ def case_t2(pico: Pico, stamp: str) -> CaseResult:
     else:
         raw = pico.download(xlsx["id"])
         res.artifact_sha[xlsx["title"]] = _sha(raw)
-        cells: dict[str, int] = {}
-        for ws in load_workbook(io.BytesIO(raw), data_only=False).worksheets:
-            for row in ws.iter_rows(values_only=True):
-                vals = [v for v in row if v is not None]
-                for i, v in enumerate(vals):
-                    if isinstance(v, str) and v.strip() in expect and i + 1 < len(vals):
-                        nxt = vals[i + 1]
-                        try:
-                            cells[v.strip()] = int(nxt)
-                        except (TypeError, ValueError):
-                            pass
+        cells = _xlsx_group_counts(raw, tuple(expect))
         for g, n in expect.items():
             if cells.get(g) != n:
                 ok = False
