@@ -96,6 +96,51 @@ async def test_catalog_uses_membership_mouth_when_school_present():
 
 
 @pytest.mark.asyncio
+async def test_run_pack_omits_grant_id_when_live():
+    principal = SimpleNamespace(school_id="s1", membership_id="m1")
+    with patch(
+        "pico_orchestrator.edu_agent_tools.edu_request",
+        new=AsyncMock(return_value={"receipts": [{"status": "ok", "command": "field.display.draft"}]}),
+    ) as req:
+        out = await run_pack(
+            principal,
+            {
+                "steps": [
+                    {
+                        "command": "field.display.draft",
+                        "params": {
+                            "field_id": "f1",
+                            "title": "生物",
+                            "q": "生物",
+                            "body_md": "细胞膜控制物质进出。",
+                        },
+                    }
+                ],
+            },
+        )
+    assert out["receipts"][0]["status"] == "ok"
+    sent = req.await_args.kwargs["body"]
+    assert "grant_id" not in sent
+    assert sent["steps"][0]["params"]["body_md"].startswith("细胞膜")
+
+
+@pytest.mark.asyncio
+async def test_run_pack_no_ticket_asks_to_issue():
+    principal = SimpleNamespace(school_id="s1", membership_id="m1")
+
+    async def missing(*_a, **_k):
+        raise ToolError("agent_grant_missing", "没有可用的活票，先在工作台开票")
+
+    with (
+        patch("pico_orchestrator.edu_agent_tools.edu_request", new=missing),
+        pytest.raises(ToolError) as ei,
+    ):
+        await run_pack(principal, {"steps": [{"command": "field.display.draft", "params": {}}]})
+    assert ei.value.code == "agent_grant_missing"
+    assert "开票" in str(ei.value)
+
+
+@pytest.mark.asyncio
 async def test_run_pack_submit_forbidden():
     principal = SimpleNamespace(school_id="s1", membership_id="m1")
 

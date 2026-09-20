@@ -161,18 +161,20 @@ async def run_pack(principal: Principal, args: dict[str, Any]) -> dict[str, Any]
         raise ToolError("edu.unconfigured", "没有学校登录，不能按票执行")
     grant_id = str(args.get("grant_id") or "").strip()
     steps = args.get("steps")
-    if not grant_id or not isinstance(steps, list):
-        raise ToolError("tool.invalid_arguments", "grant_id 和 steps 必填")
+    if not isinstance(steps, list):
+        raise ToolError("tool.invalid_arguments", "steps 必填")
     path = f"/v1/schools/{school}/agent/run-packs"
+    body: dict[str, Any] = {
+        "run_id": str(args.get("run_id") or "")[:80],
+        "steps": steps,
+    }
+    if grant_id:
+        body["grant_id"] = grant_id
     return await edu_request(
         principal,
         "POST",
         path,
-        body={
-            "grant_id": grant_id,
-            "run_id": str(args.get("run_id") or "")[:80],
-            "steps": steps,
-        },
+        body=body,
         scopes=["ai:read", "ai:delegate"],
         timeout=30,
     )
@@ -213,9 +215,11 @@ def register_edu_agent_tools(gateway: Any) -> None:
         ToolSpec(
             name=RUN_PACK,
             description=(
-                "Submit a school work pack under the teacher's grant. "
-                "Drafts allowed; publish/submit will be rejected. "
-                "Args: grant_id, steps, run_id?"
+                "Submit school work under the teacher's live grant. "
+                "grant_id optional when a live ticket exists. "
+                "For field.display.draft put a short 拟写 in steps[].params.body_md. "
+                "Drafts allowed; publish/submit rejected. "
+                "Args: steps, grant_id?, run_id?"
             ),
             handler=run_pack,
             school_scoped=True,

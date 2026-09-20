@@ -398,10 +398,10 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "edu_run_pack",
-    "Submit a school work pack under the teacher's grant. Drafts allowed; publish/submit will be rejected. Args: grant_id, steps, run_id?",
+    "Submit school work under the teacher's live grant. grant_id optional when a live ticket exists. For field.display.draft put a short 拟写 in steps[].params.body_md. Drafts allowed; publish/submit rejected. Args: steps, grant_id?, run_id?",
     Type.Object(
       {
-        grant_id: Type.String(),
+        grant_id: Type.Optional(Type.String()),
         steps: Type.Optional(Type.Array(Type.Object({}, { additionalProperties: true }))),
         run_id: Type.Optional(Type.String()),
       },
