@@ -283,14 +283,20 @@ def thinking_extra_body(
     *,
     thinking: bool | None = None,
 ) -> dict[str, object]:
-    """DeepSeek v4 thinking is on by default. Honor Pico fast/deep policy.
+    """Honor Pico fast/deep thinking on the wire.
 
-    Direct HTTPS (sidebar json_only) must send this or reasoning tokens eat
-    max_tokens and the stream finishes HTTP 200 with empty content.
-    Not a global off: pico-deep stays enabled unless the caller overrides.
+    DeepSeek v4: ``thinking.type`` disabled or the stream is HTTP 200 empty.
+    Gemini 3.8: do **not** send DeepSeek's thinking object (empty content);
+    fast lane omits extra; deep lane uses ``reasoning_effort``.
     """
+    policy = runtime_policy_for_model(model)
     if thinking is None:
-        thinking = bool(runtime_policy_for_model(model).get("thinking", False))
+        thinking = bool(policy.get("thinking", False))
+    backend = str(policy.get("backend_model") or model or "")
+    if is_gemini_model(backend) or is_gemini_model(model):
+        if thinking:
+            return {"reasoning_effort": "medium"}
+        return {}
     return {"thinking": {"type": "enabled" if thinking else "disabled"}}
 
 
