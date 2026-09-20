@@ -254,6 +254,8 @@ def test_true_pi_runtime_source_passes_caps_windows() -> None:
     ).read_text(encoding="utf-8")
     assert "true_pi_windows_from_caps" in src
     assert "max_context=max_context" in src
+    assert "prepare_agent_home()" in src
+    assert "tool_server.start()" in src
     assert "max_tokens=max_out" in src
     assert 'pi_thinking_level = (' in src
     assert '"medium" if thinking_on else "off"' in src

@@ -340,7 +340,6 @@ async def _run_true_pi_once(
                 conversation_id=conversation_id,
                 emit=emit,
             )
-            tool_url = await tool_server.start()
             school_key = str(getattr(principal, "school_id", "") or "")
             member_key = str(getattr(principal, "membership_id", "") or "")
             persist_dir = (
@@ -376,7 +375,7 @@ async def _run_true_pi_once(
                 extra_ext.append(plan_path)
             transport = SubprocessTransport(
                 session_dir=sess,
-                tool_url=tool_url,
+                tool_url="",
                 tool_token=tool_server.token,
                 run_id=rid,
                 provider=pi_provider,
@@ -414,6 +413,11 @@ async def _run_true_pi_once(
                     ),
                 },
             )
+            # Bind the tool port while writing models.json so spawn is not
+            # waiting on both serially (#1005 首字).
+            url_task = asyncio.create_task(tool_server.start())
+            transport.prepare_agent_home()
+            transport.tool_url = await url_task
 
         if tool_server is not None:
 

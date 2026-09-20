@@ -128,6 +128,18 @@ def test_runtime_policy_dual_mode_contract() -> None:
     }
 
 
+def test_thinking_extra_body_gemini_omits_deepseek_thinking(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gemini empty-200 if we send DeepSeek thinking.disabled (#1005 首字)."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    assert thinking_extra_body("pico-fast") == {}
+    assert thinking_extra_body("pico-deep") == {"reasoning_effort": "medium"}
+    assert thinking_extra_body("gemini-3.8-flash", thinking=False) == {}
+
+
 def test_circuit_breaker_only_in_thinking_on_lane() -> None:
     # Fast lane never trips regardless of repeated empties.
     assert not should_circuit_break(
