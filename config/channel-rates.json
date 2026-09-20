@@ -118,6 +118,22 @@
       "per_call_yuan": 0.02
     },
     {
+      "id": "new-api:gemini-vertex-trial:gemini-3.8-flash",
+      "kind": "llm",
+      "model": "gemini-3.8-flash",
+      "input_yuan_per_million": 547.5,
+      "output_yuan_per_million": 2190,
+      "note": "New API live 2026-09-20 pico-gateway. model_ratio 37.5 completion_ratio 4; 500000 quota=$1; usd_cny 7.3. Vertex channel 4."
+    },
+    {
+      "id": "new-api:micu-grok:grok-4.6",
+      "kind": "llm",
+      "model": "grok-4.6",
+      "input_yuan_per_million": 547.5,
+      "output_yuan_per_million": 547.5,
+      "note": "New API live 2026-09-20 pico-gateway. model_ratio 37.5 completion_ratio 1; 500000 quota=$1; usd_cny 7.3. micu channel 7."
+    },
+    {
       "id": "new-api:zhipu:rerank-pro",
       "kind": "search",
       "model": "rerank-pro",

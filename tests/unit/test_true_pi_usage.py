@@ -118,7 +118,39 @@ async def test_compaction_end_usage_adds_to_turn() -> None:
 
 
 @pytest.mark.asyncio
-async def test_turn_end_usage_is_kept_when_agent_end_only_has_last_round() -> None:
+async def test_agent_end_sums_every_assistant_usage() -> None:
+    """Pi 0.84 agent_end.messages is this prompt's tool loop, not last round only."""
+    state = EventMapState()
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        del k, p
+
+    await map_event(
+        RpcEvent(
+            {
+                "type": "agent_end",
+                "willRetry": False,
+                "messages": [
+                    {"role": "assistant", "usage": _pi_usage(inp=4000, out=80, total=4080)},
+                    {"role": "toolResult", "toolCallId": "t1"},
+                    {"role": "assistant", "usage": _pi_usage(inp=5000, out=70, total=5070)},
+                ],
+            }
+        ),
+        emit=emit,
+        state=state,
+    )
+    assert state.token_usage is not None
+    assert state.token_usage["total_tokens"] == 9150
+
+
+@pytest.mark.asyncio
+async def test_turn_end_usage_is_not_added_on_top_of_agent_end() -> None:
+    """turn_end and message_end carry the same assistant.usage as agent_end.
+
+    Harvesting both would double-count. Live grok/gpt 24h already match
+    New API when we only sum agent_end.messages[].usage.
+    """
     state = EventMapState()
 
     async def emit(k: str, p: dict[str, Any]) -> None:
@@ -137,19 +169,10 @@ async def test_turn_end_usage_is_kept_when_agent_end_only_has_last_round() -> No
     await map_event(
         RpcEvent(
             {
-                "type": "turn_end",
-                "message": {"role": "assistant", "usage": _pi_usage(inp=5000, out=70, total=5070)},
-            }
-        ),
-        emit=emit,
-        state=state,
-    )
-    await map_event(
-        RpcEvent(
-            {
                 "type": "agent_end",
                 "willRetry": False,
                 "messages": [
+                    {"role": "assistant", "usage": _pi_usage(inp=4000, out=80, total=4080)},
                     {"role": "assistant", "usage": _pi_usage(inp=5000, out=70, total=5070)},
                 ],
             }

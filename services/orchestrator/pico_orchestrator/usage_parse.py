@@ -24,8 +24,6 @@ _USAGE_HINT_KEYS = frozenset(
 )
 # Terminal RPC kinds whose usage is this Pico turn — not streaming deltas, not session totals.
 _TERMINAL_RPC_USAGE_KINDS = frozenset({"agent_end", "compaction_end"})
-# Per-model-round usage. message_update is cumulative mid-stream and stays banned.
-_TURN_RPC_USAGE_KINDS = frozenset({"turn_end", "message_end"})
 _ATTR_USAGE_KEYS = (
     "input_tokens",
     "output_tokens",
@@ -111,17 +109,9 @@ def usage_blobs_from_rpc_event(kind: str, raw: Any) -> list[Any]:
     if not isinstance(raw, dict):
         return []
     kind_n = str(kind or "").strip()
-    if kind_n in _TURN_RPC_USAGE_KINDS:
-        blobs: list[Any] = []
-        msg = raw.get("message") if isinstance(raw.get("message"), dict) else None
-        if isinstance(msg, dict) and isinstance(msg.get("usage"), dict):
-            blobs.append(msg["usage"])
-        elif isinstance(raw.get("usage"), dict):
-            blobs.append(raw["usage"])
-        return blobs
     if kind_n not in _TERMINAL_RPC_USAGE_KINDS:
         return []
-    blobs = []
+    blobs: list[Any] = []
     if kind_n == "agent_end":
         packed = raw.get("messages")
         if not isinstance(packed, list):

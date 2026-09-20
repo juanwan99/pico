@@ -197,19 +197,7 @@ async def map_event(
 
     from pico_orchestrator.usage_parse import add_usage, usage_blobs_from_rpc_event
 
-    blobs = usage_blobs_from_rpc_event(kind, raw)
-    # agent_end.messages[].usage can be last-round only. Prefer the larger of
-    # per-turn sums vs the terminal pack so we neither drop rounds nor double.
-    if kind == "agent_end" and state.token_usage is not None:
-        packed = None
-        for blob in blobs:
-            packed = add_usage(packed, blob)
-        have = int((state.token_usage or {}).get("total_tokens") or 0)
-        got = int((packed or {}).get("total_tokens") or 0)
-        if packed is not None and got > have:
-            state.token_usage = packed
-        blobs = []
-    for blob in blobs:
+    for blob in usage_blobs_from_rpc_event(kind, raw):
         state.token_usage = add_usage(state.token_usage, blob)
 
     if kind == "agent_start":

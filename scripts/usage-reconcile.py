@@ -331,6 +331,8 @@ def reconcile(
             "edu wallet debit is not in this repo",
             "headline ok uses comparable chat/rerank lanes only; embed is listed not gated",
             "blended token_deviation is informational (do not mix embed into the gate)",
+            "Pico llm is one row per run; New API is one row per completion — compare tokens, not row counts",
+            "pico total_tokens prefers ledger total (reasoning) over prompt+completion",
         ],
     }
     if by_model is not None:
