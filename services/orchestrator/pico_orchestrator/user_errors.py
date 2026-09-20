@@ -70,6 +70,14 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
         return "服务繁忙，请稍后重试。"
     if code == "token_cap" or "token cap" in low:
         return "本次回答超出长度上限。可点「再跑一次」，或缩短问题后重试。"
+    # New API pre-hold / user quota. Live 2026-09-19: remaining ~$2.56, pre-hold
+    # ~$2.86 mapped as generic new_api_error → teachers were told「网关出网」.
+    if (
+        "insufficient_user_quota" in low
+        or "预扣费额度失败" in text
+        or "剩余额度" in text
+    ):
+        return "模型额度不够了，请管理员给中转账号加额度后再试。不是你的问题写错。"
     # New API relay could not reach its upstream (live 2026-09-11/12: the gateway
     # box inherited a host proxy that reset every call). Not the teacher's input,
     # not a first-byte timeout — say so, and point the admin at gateway egress.

@@ -161,6 +161,22 @@ def test_image_siliconflow_rejected_copy() -> None:
     assert "SILICONFLOW" not in msg
 
 
+def test_new_api_quota_is_not_blamed_on_gateway_egress() -> None:
+    raw = (
+        '403: {"message":"预扣费额度失败, 用户剩余额度: ＄2.562234, 需要预扣费额度: ＄2.863500 '
+        '(request id: 202609192333451284779928268d9d6jkRLE2UV)","type":"new_api_error",'
+        '"param":"","code":"insufficient_user_quota"}'
+    )
+    msg = user_message_for_error(raw, code="true_pi.assistant_error")
+    assert "额度" in msg
+    assert "管理员" in msg
+    assert "不是你的问题" in msg
+    assert "网关出网" not in msg
+    assert "没连上上游" not in msg
+    assert "insufficient_user_quota" not in msg
+    assert "request id" not in msg.lower()
+
+
 def test_new_api_relay_failure_is_not_blamed_on_teacher_or_first_byte() -> None:
     """Live 2026-09-11/12 (#985): New API → AIProxy through a host proxy reset every
     call. Ledger text was the raw 500 body; teachers saw「服务暂时出错」."""
