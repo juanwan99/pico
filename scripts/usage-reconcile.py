@@ -101,6 +101,7 @@ def read_pico_usage(
 def pico_token_book(rows: list[dict[str, Any]]) -> dict[str, Any]:
     prompt = 0
     completion = 0
+    total = 0
     unknown = 0
     known = 0
     by_kind: dict[str, int] = defaultdict(int)
@@ -113,15 +114,21 @@ def pico_token_book(rows: list[dict[str, Any]]) -> dict[str, Any]:
             unknown += 1
             continue
         known += 1
-        prompt += int(row.get("prompt_tokens") or 0)
-        completion += int(row.get("completion_tokens") or 0)
+        pt = int(row.get("prompt_tokens") or 0)
+        ct = int(row.get("completion_tokens") or 0)
+        tt = int(row.get("total_tokens") or 0)
+        prompt += pt
+        completion += ct
+        # Gemini stores reasoning in extra; New API folds it into prompt+completion.
+        # Ledger total_tokens is the billed amount when present.
+        total += tt if tt > 0 else (pt + ct)
     return {
         "events": len(rows),
         "known": known,
         "unknown": unknown,
         "prompt_tokens": prompt,
         "completion_tokens": completion,
-        "total_tokens": prompt + completion,
+        "total_tokens": total,
         "by_kind": dict(by_kind),
         "duplicate_idempotency": max(0, dup_keys),
     }

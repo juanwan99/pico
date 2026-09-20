@@ -115,3 +115,47 @@ async def test_compaction_end_usage_adds_to_turn() -> None:
     )
     assert state.token_usage is not None
     assert state.token_usage["total_tokens"] == 35
+
+
+@pytest.mark.asyncio
+async def test_turn_end_usage_is_kept_when_agent_end_only_has_last_round() -> None:
+    state = EventMapState()
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        del k, p
+
+    await map_event(
+        RpcEvent(
+            {
+                "type": "turn_end",
+                "message": {"role": "assistant", "usage": _pi_usage(inp=4000, out=80, total=4080)},
+            }
+        ),
+        emit=emit,
+        state=state,
+    )
+    await map_event(
+        RpcEvent(
+            {
+                "type": "turn_end",
+                "message": {"role": "assistant", "usage": _pi_usage(inp=5000, out=70, total=5070)},
+            }
+        ),
+        emit=emit,
+        state=state,
+    )
+    await map_event(
+        RpcEvent(
+            {
+                "type": "agent_end",
+                "willRetry": False,
+                "messages": [
+                    {"role": "assistant", "usage": _pi_usage(inp=5000, out=70, total=5070)},
+                ],
+            }
+        ),
+        emit=emit,
+        state=state,
+    )
+    assert state.token_usage is not None
+    assert state.token_usage["total_tokens"] == 9150

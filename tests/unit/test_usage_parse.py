@@ -116,7 +116,10 @@ def test_usage_blobs_from_rpc_event_only_terminal_kinds() -> None:
         "usage": pi_usage,
     }
     assert usage_blobs_from_rpc_event("message_update", streaming) == []
-    assert usage_blobs_from_rpc_event("message_end", {"message": {"usage": pi_usage}}) == []
+    turn = usage_blobs_from_rpc_event("message_end", {"message": {"usage": pi_usage}})
+    assert len(turn) == 1
+    end_turn = usage_blobs_from_rpc_event("turn_end", {"message": {"usage": {"input": 4, "output": 1, "totalTokens": 5}}})
+    assert len(end_turn) == 1
     agent = {
         "messages": [
             {"role": "user", "content": "hi"},
