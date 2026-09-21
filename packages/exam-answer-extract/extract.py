@@ -23,6 +23,7 @@ SKILL_PATH = Path(__file__).resolve().parent / "SKILL.md"
 TEXT_CHUNK_CHARS = 60_000
 MAX_TEXT_CHARS = 400_000
 DEFAULT_MAX_OUTPUT_TOKENS = 16_000
+CONTINUE_ROUNDS = 4
 
 Completer = Callable[..., Awaitable[str]]
 
@@ -389,6 +390,24 @@ def merge_items(batches: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
     return [by_no[n] for n in sorted(by_no)]
 
 
+def json_looks_truncated(raw: str) -> bool:
+    s = strip_fence(raw).rstrip()
+    if not s:
+        return False
+    if s.endswith("]"):
+        return False
+    return "[" in s or '"number"' in s
+
+
+def roster_numbers(roster: str) -> list[int]:
+    out: list[int] = []
+    for m in re.finditer(r"(?m)^(\d+)\s", roster or ""):
+        n = int(m.group(1))
+        if n > 0:
+            out.append(n)
+    return out
+
+
 def chunk_text(text: str, limit: int = TEXT_CHUNK_CHARS) -> list[str]:
     text = text.replace("\r\n", "\n").strip()
     if len(text) <= limit:
@@ -638,6 +657,46 @@ async def extract_text(
         items = items_from_model_text(out, page=None, task=task)
         batches.append(items)
         reports.append({"page": idx, "ok": True, "count": len(items), "error": None})
+    wanted = roster_numbers(roster)
+    merged = merge_items(batches)
+    have = {q["number"] for q in merged}
+    truncated = json_looks_truncated(last_text)
+    for extra in range(CONTINUE_ROUNDS):
+        missing = [n for n in wanted if n not in have] if wanted else []
+        if wanted:
+            if not missing:
+                break
+        elif not truncated:
+            break
+        start_from = missing[0] if missing else ((max(have) + 1) if have else 1)
+        cont = (
+            f"上次 JSON 不完整。已抽出题号 {sorted(have)[:40]}{'…' if len(have) > 40 else ''}。"
+            f"只返回从 {start_from} 起还没抽出的题，仍是 JSON 数组。\n"
+            + (f"题号表未完成：{missing[:40]}\n" if missing else "")
+            + body
+        )
+        messages = [
+            {"role": "system", "content": prompts["system"]},
+            {"role": "user", "content": cont},
+        ]
+        try:
+            out = await _complete_with_retry(
+                complete, messages, thinking=False, usage=usage, model_out=model_out
+            )
+        except ExtractError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+            break
+        last_text = out
+        items = items_from_model_text(out, page=None, task=task)
+        if not items:
+            break
+        batches.append(items)
+        reports.append({"page": 100 + extra, "ok": True, "count": len(items), "error": None})
+        merged = merge_items(batches)
+        have = {q["number"] for q in merged}
+        truncated = json_looks_truncated(out)
     return _finish("text", batches, reports, errors, last_text, usage, model_out)
 
 
