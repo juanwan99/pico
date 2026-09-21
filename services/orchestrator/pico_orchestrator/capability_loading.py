@@ -39,6 +39,7 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "edu_catalog_describe",
     "edu_catalog_command",
     "edu_run_pack",
+    "edu_steward_public_corpus",
 )
 
 # Same gateway, not registered unless a hung skill lists them — or, for
