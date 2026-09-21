@@ -173,7 +173,7 @@ always-apply: false
 }
 
 规则：
-- 必须给每道已有题号写出答案，不要空着。
+- 必须给题号表里的每一题写出答案，不要空着，禁止从中间题号起笔。
 - 不要新增题号，不要删题号，不要把三选改成四选。
 - 解析放 rubric，不要写进 answer。
 ```
@@ -181,6 +181,9 @@ always-apply: false
 
 <!-- prompt:user_text_solve -->
 ```text
+题号表（必须按表逐题作答，禁止跳号）：
+{{roster}}
+
 以下是老师的试卷原文{{subject}}。请做出全部题的答案。不要改题型或选项数。只返回 JSON 数组。
 
 {{text}}
@@ -189,6 +192,9 @@ always-apply: false
 
 <!-- prompt:user_page_solve -->
 ```text
+题号表（必须按表逐题作答，禁止跳号）：
+{{roster}}
+
 这是老师试卷{{subject}}的一页。做出本页看得见的题的答案。不要改结构。只返回 JSON 数组。
 ```
 <!-- /prompt:user_page_solve -->

@@ -67,6 +67,12 @@ def test_prompts_come_from_skill_md():
     assert "不要做题" in struct["user_text"]
     solve = ex.load_prompts(task="solve")
     assert "不许改" in solve["system"]
+    assert "{{roster}}" in solve["user_text"]
+    filled = ex._fill_user_template(
+        solve["user_text"], subject="（科目 英语）", text="卷", roster="1 single_choice options=3"
+    )
+    assert "1 single_choice options=3" in filled
+    assert "禁止跳号" in filled or "题号表" in filled
 
 
 def test_structure_keeps_items_without_answers():
