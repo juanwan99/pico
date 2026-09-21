@@ -584,6 +584,16 @@ async def _complete_with_retry(
     raise last
 
 
+def _fill_user_template(template: str, *, subject: str, text: str = "", roster: str = "") -> str:
+    table = (roster or "").strip() or "（无题号表，按试卷全部作答）"
+    return (
+        (template or "")
+        .replace("{{subject}}", subject)
+        .replace("{{roster}}", table)
+        .replace("{{text}}", text)
+    )
+
+
 async def extract_text(
     text: str,
     *,
@@ -592,6 +602,7 @@ async def extract_text(
     complete: Completer | None = None,
     prompts: dict[str, str] | None = None,
     task: str = "answers",
+    roster: str = "",
 ) -> dict[str, Any]:
     complete = complete or model_complete
     prompts = prompts or load_prompts(task=task)
@@ -608,7 +619,7 @@ async def extract_text(
     last_text = ""
     errors: list[BaseException] = []
     for idx, chunk in enumerate(chunks, start=1):
-        user = prompts["user_text"].replace("{{subject}}", tag).replace("{{text}}", chunk)
+        user = _fill_user_template(prompts["user_text"], subject=tag, text=chunk, roster=roster)
         messages = [
             {"role": "system", "content": prompts["system"]},
             {"role": "user", "content": user},
@@ -639,6 +650,7 @@ async def extract_pages(
     prompts: dict[str, str] | None = None,
     concurrency: int | None = None,
     task: str = "answers",
+    roster: str = "",
 ) -> dict[str, Any]:
     """pages: [{page:int, mime:str, data_b64:str}] — one vision call per page, merged."""
     complete = complete or model_complete
@@ -662,7 +674,7 @@ async def extract_pages(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": prompts["user_page"].replace("{{subject}}", tag)},
+                    {"type": "text", "text": _fill_user_template(prompts["user_page"], subject=tag, roster=roster)},
                     {"type": "image", "mime": page["mime"], "data_b64": page["data_b64"]},
                 ],
             },
