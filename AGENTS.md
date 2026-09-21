@@ -1,19 +1,23 @@
 # Pico agent rules (binding)
 
+> 通用真源（唯一，强制）：`/home/ops/agent-policy/TASK-POLICY.md`（https://github.com/juanwan99/agent-policy/blob/main/TASK-POLICY.md）。本仓全部开发按该规范协作；本文件只补本仓过门。仓内旧文档写「本窗合一 / 主管执行者编制已废」的，以 TASK-POLICY §2 为准。
+>
 > **现况只认下面框。其余当索引不当现况。卡面四行。怎么跟业主说话不限。**
 
 ```text
 最高: 禁止自搞一套体系。禁止做重体系 / 厚桥 / 第二能力核。
       只允许薄适配。桥变厚=违法。详见 docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md §0-supreme
 真源: GitHub Issue/PR/SHA/CI + 公网 tip。聊天/磁盘/STATE-NOW/旧窗摘要都不是账本。
-人:   本窗合一。不设主管/执行者编制。业主抽检与 CLAIM-WB 不代签。
+人:   按 agent-policy §2：规划/审查窗（Fable）开卡·查冲突·派发·审 SHA·拍合部；
+      Grok 执行线程做全部重活（写码·测·调·prod-update·回执）。一卡一线程一树。
+      业主抽检与 CLAIM-WB 不代签。
 版本: 只有 origin/main 是生产线。旁支不准部。长分叉只移植、禁止整枝合。
       live = curl tip，必须是 origin/main 上的 SHA。GitHub 旁支头不是版本。
 工位: 写码 /home/ops/pico · 生产 /opt/pico 只 prod-update（干净+detached）
 环:   从 origin/main 开枝 → 改+测 → PR → CI绿 → squash 合 main
       → 必须 prod-update → curl tip = origin/main。业主靠现网看效果。
 合:   GitHub 只开 squash；合完自动删头枝。写仓回 main，删本任务本地枝。不攒着清。
-禁止: 主管/执行者两套编制 · mailbox · 在 /opt/pico 改业务 · docker compose 当发布
+禁止: 规划窗自己扛重活 · 第二套派发/状态系统 · mailbox · 在 /opt/pico 改业务 · docker compose 当发布
       旁支部 live · 整枝合长分叉 · 直推 main · 合了不部 · docs-only 不部
       PR/commit 正文写 GitHub 关卡关键字（Closes / Fixes / close #数字）
       「Do not close #数字」也会被当成关卡。过门后手关 Issue。
@@ -66,9 +70,9 @@ PR 必须能回答：适配哪段？上游是谁？升级是否只改适配层�
 
 ---
 
-## Execution workflow (binding) — **本窗合一 · GitHub 唯一真源**
+## Execution workflow (binding) — **规划窗 + Grok 执行线程 · GitHub 唯一真源**
 
-形状指针：[`docs/ONEFLOW.md`](docs/ONEFLOW.md)（机械门留下；主管/执行者编制已废）。  
+形状指针：[`docs/ONEFLOW.md`](docs/ONEFLOW.md)（机械门留下；编制以 agent-policy §2 为准，文中「编制已废」是旧话）。  
 节奏：[`docs/FAST-PATH.md`](docs/FAST-PATH.md)。版本：[`docs/VERSIONING.md`](docs/VERSIONING.md)。  
 Helper（非真源）：`bash scripts/oneflow-status.sh`
 
@@ -82,7 +86,7 @@ Helper（非真源）：`bash scripts/oneflow-status.sh`
 |----|---|
 | 真源 | GitHub Issue/PR/SHA/CI + `curl -fsS https://pico.aivia.asia/api/pico/tip` |
 | 版本 | 只部 `origin/main` 上的 SHA。旁支不是 live。长分叉只移植 |
-| 人 | 本窗合一：改、测、合、部同一窗 |
+| 人 | agent-policy §2：Grok 线程改、测、prod-update；规划窗审 SHA、拍合部、对账关单 |
 | 隔离 | 一件事一分支一 PR。翻车回原 PR |
 | 绿档 | CI 绿即可合 |
 | 黄/红 | 另一双眼睛、exact SHA；换核/密钥/租户业主抽检。CLAIM-WB 不代签 |
@@ -131,8 +135,8 @@ Owner-aligned goals: [`docs/DIRECTION-NOW.md`](docs/DIRECTION-NOW.md) §0-star +
 Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 `HANDOFF-NEW-WINDOW-2026-08-23.md` 当现况。
 
 ## Product rules
-- **Org:** **本窗合一**（写/合/部/收尾同一窗）。旧窗1/2/4 与主管/执行者是历史别名，不是编制。见 [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md)。
-- **Ship steps:** [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. **One window** runs the chain; no multi-issue process OS.
+- **Org:** agent-policy §2 —— 规划/审查窗（Fable）+ Grok 执行线程，一卡一线程一树。旧窗1/2/4 与 Cool/Keel 时代主管编制是历史别名。见 [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md)。
+- **Ship steps:** [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. Grok 线程跑链条、规划窗拍合部；no multi-issue process OS.
 - **Product goal:** Web WorkBuddy degree — [docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star v1.4。用法 = Grok。办公主线（Word/Excel/HTML/PPT）。写代码是仆人。能力并列。办公计算机交成熟上游。不要 bash。
 - **Default runtime:** true Pi (`health.default_runtime=pi-true`). Chat/image = **New API**（`openai-responses` / Gemini 渠道；现网模型见 EXPERIENCE §34，不是「DeepSeek 聊天核」）。**Gemini 3.x 文本/识图必须 Vertex `global`（EXPERIENCE §99），禁止 `us-central1`。** 计量：New API 管渠道，Pico 记用量，edu 只认 export。Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted**.
 - **Prod flags:** `PICO_TRUE_PI_DEFAULT=1` → `health.default_runtime=pi-true`; hosted rollback = `PICO_HOSTED_LOOP=1`; legacy Kimi only if emergency. `CLAIM-WB-DEGREE-WEB` 已是业主 YES @ `dcb47c00…`（2026-08-26）；工程禁改口/再代签。
@@ -143,12 +147,12 @@ Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 
 
 ## Speed vs safety
 
-**Default org:** 本窗合一 + 阶段包 ([STAGE-PACKAGE-MODE](docs/STAGE-PACKAGE-MODE.md))。  
-**Default tech rhythm:** [docs/FAST-PATH.md](docs/FAST-PATH.md) 同一窗串行。
+**Default org:** agent-policy §2（规划窗 + Grok 执行线程）+ 阶段包 ([STAGE-PACKAGE-MODE](docs/STAGE-PACKAGE-MODE.md))。  
+**Default tech rhythm:** [docs/FAST-PATH.md](docs/FAST-PATH.md) 一条 Grok 线程串行。
 
 **KEEP:** secrets out of git; allowlist tools; exact-SHA deploy; CI green; no fake global / WB CLAIM; no dual-run; **true-Pi default**.
 
-**CUT:** 主管/执行者编制、stamp-ok/派发条/收尾六步/CANDIDATE 总线、多窗日常派、碎卡、mailbox、旁支部 live、整枝合长分叉、把 ECS 当账本、Kimi-as-only-goal、Dify-as-product。
+**CUT:** Cool/Keel 时代主管编制、stamp-ok/收尾六步/CANDIDATE 总线、多窗日常派、碎卡、mailbox、旁支部 live、整枝合长分叉、把 ECS 当账本、Kimi-as-only-goal、Dify-as-product。
 
 PRs stay (one writer / one branch / CI). Do **not** split one theme into many waiting rounds or many windows.
 

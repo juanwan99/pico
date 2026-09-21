@@ -13,11 +13,16 @@ def test_agents_md_opens_with_supreme_ban() -> None:
     assert "禁止做重体系" in text
     head = text[:1600]
     assert "禁止自搞一套体系" in head
-    assert "本窗合一" in head
+    opening = text.split("```text", 1)[0]
+    assert "TASK-POLICY.md" in opening
+    assert "§2" in opening
     assert "GitHub Issue/PR/SHA/CI" in head
     assert "写码 /home/ops/pico" in head
     assert "生产 /opt/pico" in head
-    assert "主管/执行者两套编制" in head
+    box = text.split("```text", 1)[1].split("```", 1)[0]
+    forbid_line = next(ln for ln in box.splitlines() if ln.startswith("禁止:"))
+    assert "第二套派发/状态系统" in forbid_line
+    assert "mailbox" in forbid_line
     assert "只有 origin/main 是生产线" in head
     assert "旁支不准部" in head
     assert "必须 prod-update" in head
