@@ -19,6 +19,7 @@ CATALOG_FIND = "edu_catalog_find"
 CATALOG_DESCRIBE = "edu_catalog_describe"
 CATALOG_COMMAND = "edu_catalog_command"
 RUN_PACK = "edu_run_pack"
+STEWARD_CORPUS = "edu_steward_public_corpus"
 # School /agent/catalog/* is teacher-session only. Pico membership JWT
 # uses the existing /v1/pico/membership/catalog/* mouths (edu-core #1636).
 MEMBERSHIP_CATALOG = "/v1/pico/membership/catalog"
@@ -67,6 +68,26 @@ def _mint(principal: Principal, *, scopes: list[str]) -> str | None:
         "scopes": scopes,
         "sub": f"{school}:{member}",
         "purpose": "edu-agent",
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def _mint_steward(school: str) -> str | None:
+    iss = (os.environ.get("PICO_EDU_ISS") or "").strip()
+    secret = (os.environ.get("PICO_EDU_JWT_SECRET") or "").strip()
+    school_id = str(school or "").strip()
+    if not iss or not secret or not school_id:
+        return None
+    now = datetime.now(UTC)
+    payload = {
+        "iss": iss,
+        "aud": "pico-api",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=90)).timestamp()),
+        "school_id": school_id,
+        "scopes": ["ai:steward-public"],
+        "purpose": "steward-public",
+        "sub": f"{school_id}:steward-public",
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 
@@ -178,6 +199,33 @@ async def run_pack(principal: Principal, args: dict[str, Any]) -> dict[str, Any]
         scopes=["ai:read", "ai:delegate"],
         timeout=30,
     )
+
+
+async def steward_public_corpus(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+    school = str(getattr(principal, "school_id", "") or "").strip()
+    if not school:
+        raise ToolError("edu.unconfigured", "没有学校，不能读公开语料")
+    root = _edu_root()
+    token = _mint_steward(school)
+    if not root or not token:
+        raise ToolError("edu.unconfigured", "学校公开语料未接通（缺 edu 基址或密钥）")
+    url = f"{root}/v1/pico/steward/public-corpus"
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        raise ToolError("edu.unreachable", f"学校现在连不上（{exc}）") from exc
+    if response.status_code >= 400:
+        code, message = _message_from(response)
+        raise ToolError(code or "edu.error", message)
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise ToolError("edu.contract_error", "学校返回不是 JSON") from exc
+    if not isinstance(data, dict):
+        raise ToolError("edu.contract_error", "学校返回不是对象")
+    return data
 
 
 def register_edu_agent_tools(gateway: Any) -> None:

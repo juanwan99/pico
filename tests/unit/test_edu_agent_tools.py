@@ -12,12 +12,15 @@ from pico_orchestrator.edu_agent_tools import (
     CATALOG_DESCRIBE,
     MEMBERSHIP_CATALOG,
     RUN_PACK,
+    STEWARD_CORPUS,
+    _mint_steward,
     catalog_command,
     catalog_command_id,
     catalog_describe,
     catalog_find,
     register_edu_agent_tools,
     run_pack,
+    steward_public_corpus,
 )
 from pico_orchestrator.gateway import AllowlistGateway, ToolError
 from pico_orchestrator.page_mutations import PageMutationBook, register_propose_page_mutation
@@ -31,6 +34,7 @@ def test_tools_on_gateway_and_core():
     gw = AllowlistGateway()
     register_edu_agent_tools(gw)
     assert CATALOG_DESCRIBE in gw.tools
+    assert STEWARD_CORPUS not in ALLOWED_GATEWAY_TOOLS
 
 
 def test_catalog_command_id():
@@ -185,3 +189,58 @@ def test_detach_on_disconnect_default():
 
     raw = (os.environ.get("PICO_RUN_DETACH_ON_DISCONNECT") or "1").strip().lower()
     assert raw not in {"0", "false", "no"}
+
+
+def test_mint_steward_has_no_membership(monkeypatch):
+    import jwt
+
+    monkeypatch.setenv("PICO_EDU_ISS", "https://edu.example/iss/pico")
+    monkeypatch.setenv("PICO_EDU_JWT_SECRET", "edu-secret-at-least-32-bytes-long!!!")
+    token = _mint_steward("s1")
+    payload = jwt.decode(token, "edu-secret-at-least-32-bytes-long!!!", algorithms=["HS256"], audience="pico-api")
+    assert payload["school_id"] == "s1"
+    assert payload["scopes"] == ["ai:steward-public"]
+    assert "membership_id" not in payload
+
+
+@pytest.mark.asyncio
+async def test_steward_corpus_hits_public_mouth(monkeypatch):
+    monkeypatch.setenv("PICO_EDU_ISS", "https://edu.example/iss/pico")
+    monkeypatch.setenv("PICO_EDU_JWT_SECRET", "edu-secret-at-least-32-bytes-long!!!")
+    monkeypatch.setenv("PICO_EDU_BASE_URL", "https://edu.weiyuji.cn")
+    principal = SimpleNamespace(school_id="s1", membership_id="must-not-be-used")
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"field": {"name": "全校教职工"}, "files": [], "chats": [], "tables": [], "dumped": False}
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, headers=None):
+            assert url.endswith("/v1/pico/steward/public-corpus")
+            import jwt
+
+            payload = jwt.decode(
+                headers["Authorization"].split()[1],
+                "edu-secret-at-least-32-bytes-long!!!",
+                algorithms=["HS256"],
+                audience="pico-api",
+            )
+            assert "membership_id" not in payload
+            assert payload["scopes"] == ["ai:steward-public"]
+            return FakeResp()
+
+    with patch("pico_orchestrator.edu_agent_tools.httpx.AsyncClient", FakeClient):
+        out = await steward_public_corpus(principal, {})
+    assert out["field"]["name"] == "全校教职工"
+    assert out["dumped"] is False
