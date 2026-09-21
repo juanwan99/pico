@@ -409,6 +409,32 @@ async def test_pages_concurrency_env_can_force_serial(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_extract_text_continues_until_roster_complete():
+    calls: list[str] = []
+    first = json.dumps(
+        [{"number": i, "type": "single_choice", "answer": "A"} for i in range(1, 71)]
+    )
+    second = json.dumps(
+        [{"number": i, "type": "fill_in_blank", "answer": "word"} for i in range(71, 86)]
+    )
+    roster = "\n".join(f"{i} single_choice" for i in range(1, 71)) + "\n" + "\n".join(
+        f"{i} fill_in_blank" for i in range(71, 86)
+    )
+
+    async def complete(messages, **_):
+        text = messages[-1]["content"]
+        calls.append(text if isinstance(text, str) else "")
+        return first if len(calls) == 1 else second
+
+    result = await ex.extract_text("卷", complete=complete, roster=roster)
+    nums = [q["number"] for q in result["questions"]]
+    assert nums[0] == 1
+    assert 85 in nums
+    assert len(calls) >= 2
+    assert "71" in calls[1]
+
+
+@pytest.mark.asyncio
 async def test_extract_empty_array_is_failure_not_guess():
     with pytest.raises(ex.ExtractError) as caught:
         await ex.extract_text("1. C", complete=_stub("[]"))
