@@ -121,18 +121,52 @@ def parse_json_array(content: str | None) -> list[Any] | None:
 
     start = raw.find("[")
     if start < 0:
-        return None
+        salvaged = salvage_numbered_dicts(raw)
+        return salvaged or None
     body = raw[start:]
     last = body.rfind("}")
-    if last < 0:
-        return None
-    truncated = re.sub(r",\s*$", "", body[: last + 1])
-    truncated += "]" * max(0, truncated.count("[") - truncated.count("]"))
-    try:
-        repaired = json.loads(truncated)
-    except ValueError:
-        return None
-    return repaired if isinstance(repaired, list) else None
+    if last >= 0:
+        truncated = re.sub(r",\s*$", "", body[: last + 1])
+        truncated += "]" * max(0, truncated.count("[") - truncated.count("]"))
+        try:
+            repaired = json.loads(truncated)
+        except ValueError:
+            repaired = None
+        if isinstance(repaired, list) and repaired:
+            return repaired
+    salvaged = salvage_numbered_dicts(raw)
+    return salvaged or None
+
+
+def salvage_numbered_dicts(raw: str) -> list[dict[str, Any]]:
+    """Keep numbered objects even when the model truncated the last key (``"rubr``)."""
+    out: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for m in re.finditer(r"\{[^{}]*\}", raw or ""):
+        try:
+            obj = json.loads(m.group(0))
+        except ValueError:
+            obj = None
+        if isinstance(obj, dict) and any(k in obj for k in ("number", "qno", "question_no")):
+            try:
+                n = int(float(obj.get("number", obj.get("qno", obj.get("question_no")))))
+            except (TypeError, ValueError):
+                continue
+            if n > 0 and n not in seen:
+                seen.add(n)
+                out.append(obj)
+    for m in re.finditer(r'"number"\s*:\s*(\d+)', raw or ""):
+        n = int(m.group(1))
+        if n <= 0 or n in seen:
+            continue
+        window = (raw or "")[max(0, m.start() - 40) : m.end() + 180]
+        typ = re.search(r'"type"\s*:\s*"([^"]+)"', window)
+        obj: dict[str, Any] = {"number": n}
+        if typ:
+            obj["type"] = typ.group(1)
+        seen.add(n)
+        out.append(obj)
+    return out
 
 
 # --------------------------------------------------------------------------- items
@@ -307,8 +341,7 @@ def items_from_model_text(
         item = normalize_item(raw, page=page, task=task)
         if item is None:
             continue
-        if task == "structure" or item["answer"] or item["rubric"]:
-            items.append(item)
+        items.append(item)
     return items
 
 

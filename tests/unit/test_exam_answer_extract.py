@@ -77,8 +77,8 @@ def test_structure_keeps_items_without_answers():
     assert len(items) == 1
     assert items[0]["options_count"] == 3
     assert items[0]["answer"] == ""
-    dropped = ex.items_from_model_text(raw, page=None, task="answers")
-    assert dropped == []
+    kept_empty = ex.items_from_model_text(raw, page=None, task="answers")
+    assert kept_empty and kept_empty[0]["number"] == 1
 
 
 def test_prompt_missing_block_is_explicit():
@@ -95,6 +95,12 @@ def test_parse_json_array_variants():
     ndjson = '{"number": 1, "answer": "C"}\n{"number": 2, "answer": "D"}'
     assert [q["number"] for q in ex.parse_json_array(ndjson)] == [1, 2]
     truncated = '[{"number": 1, "answer": "C"}, {"number": 2, "ans'
+    cut = '[ { "number": 56, "type": "fill_in_blank", "section": "第二节", "answer": "", "rubr'
+    got = ex.parse_json_array(cut)
+    assert got and got[0]["number"] == 56
+    kept = ex.items_from_model_text(cut, page=None, task="answers")
+    assert kept and kept[0]["number"] == 56
+    assert kept[0]["type"] == "fill_in_blank"
     repaired = ex.parse_json_array(truncated)
     assert repaired == [{"number": 1, "answer": "C"}]
     assert ex.parse_json_array("模型不可用") is None
