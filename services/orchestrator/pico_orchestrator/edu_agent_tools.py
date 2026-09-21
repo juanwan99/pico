@@ -28,7 +28,6 @@ EDU_AGENT_TOOLS: tuple[str, ...] = (
     CATALOG_DESCRIBE,
     CATALOG_COMMAND,
     RUN_PACK,
-    STEWARD_CORPUS,
 )
 
 _ETAG_CACHE: dict[tuple[str, str, str], tuple[str, dict[str, Any]]] = {}
@@ -271,18 +270,6 @@ def register_edu_agent_tools(gateway: Any) -> None:
                 "Args: steps, grant_id?, run_id?"
             ),
             handler=run_pack,
-            school_scoped=True,
-        )
-    )
-    gateway.register(
-        ToolSpec(
-            name=STEWARD_CORPUS,
-            description=(
-                "Read the school's public steward corpus for 全校教职工: "
-                "public-folder files, field-group chat excerpts, table column labels. "
-                "No grey drafts, internal green, or DMs. No args."
-            ),
-            handler=steward_public_corpus,
             school_scoped=True,
         )
     )

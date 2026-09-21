@@ -79,7 +79,6 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "edu_catalog_describe",
         "edu_catalog_command",
         "edu_run_pack",
-        "edu_steward_public_corpus",
     }
 )
 

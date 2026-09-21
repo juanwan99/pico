@@ -28,13 +28,13 @@ from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
 
 def test_tools_on_gateway_and_core():
-    for name in (CATALOG_DESCRIBE, RUN_PACK, "edu_catalog_find", "edu_catalog_command", STEWARD_CORPUS):
+    for name in (CATALOG_DESCRIBE, RUN_PACK, "edu_catalog_find", "edu_catalog_command"):
         assert name in ALLOWED_GATEWAY_TOOLS
         assert name in CORE_VISIBLE_TOOLS
     gw = AllowlistGateway()
     register_edu_agent_tools(gw)
     assert CATALOG_DESCRIBE in gw.tools
-    assert STEWARD_CORPUS in gw.tools
+    assert STEWARD_CORPUS not in ALLOWED_GATEWAY_TOOLS
 
 
 def test_catalog_command_id():
