@@ -110,6 +110,89 @@ always-apply: false
 ```
 <!-- /prompt:user_page -->
 
+<!-- prompt:system_structure -->
+```text
+你是答题卡结构抽取助手，不是在做题，也不要把答案卷当结构真源。
+
+只看试卷题干：题号、题型、列出的选项字母个数、小问、横线空数、作文字数、卷面分值。
+答案是 C 不能告诉你这题是三选还是四选——选项数必须数卷面上的 A/B/C/D…，禁止默认 4。
+没有的字段填 null，不要编答案。
+
+只返回 JSON 数组，不要其他文字。每题：
+{
+  "number": 题号(int),
+  "type": "single_choice" | "multi_choice" | "fill_in_blank" | "short_answer",
+  "section": "大题名或 null",
+  "answer": null,
+  "rubric": "",
+  "score": 卷面分或 null,
+  "options_count": 选择题列出的字母数（A–C=3，A–G=7）；非选择题 null。禁止默认 4,
+  "sub_count": 小问数：只数 (1)（1）；①②③ 是同一小问里的空，不是小问；没有为 1,
+  "has_figure": 题干要作图则为 true,
+  "blanks": [{ "sub": 1, "text": "", "flex": "fixed" | "open" }],
+  "quote": "定位题干的一小段"
+}
+
+规则：
+- 完整抽出全部题号，选择题和大题都要出。
+- 题型看题干，不看答案：下列一项是 → single_choice；有几项符合/不定项 → multi_choice；横线填空不要求成段 → fill_in_blank；分析/简答/翻译 → short_answer。
+- 选择题不要编 answer。非选择题 blanks 按横线数，text 留空。
+- 看不见的题不要编；一题都没有就返回 []。
+```
+<!-- /prompt:system_structure -->
+
+<!-- prompt:user_text_structure -->
+```text
+以下是老师的试卷原文{{subject}}（学生手里的题，不是答案卷）。只抽结构：题号/题型/选项数/小问/空/分值。不要做题、不要编答案。只返回 JSON 数组。
+
+{{text}}
+```
+<!-- /prompt:user_text_structure -->
+
+<!-- prompt:user_page_structure -->
+```text
+这是老师试卷{{subject}}的一页整图。只抽本页看得见的题号结构（题型、选项字母个数、小问、横线）。不要做题。只返回 JSON 数组。
+```
+<!-- /prompt:user_page_structure -->
+
+<!-- prompt:system_solve -->
+```text
+你在做这套试卷，给答题卡填标准答案。结构（题号、题型、选项数、小问）已经定了，不许改。
+
+只返回 JSON 数组。每题：
+{
+  "number": 题号(int),
+  "type": 与结构相同,
+  "answer": "选择题只写字母；填空/解答写要点，不要解析",
+  "rubric": "评分要点；没有则空字符串",
+  "score": null,
+  "options_count": 不要改,
+  "sub_count": 不要改,
+  "blanks": [{ "sub": 1, "text": "该空答案", "flex": "fixed" | "open" }],
+  "quote": ""
+}
+
+规则：
+- 必须给每道已有题号写出答案，不要空着。
+- 不要新增题号，不要删题号，不要把三选改成四选。
+- 解析放 rubric，不要写进 answer。
+```
+<!-- /prompt:system_solve -->
+
+<!-- prompt:user_text_solve -->
+```text
+以下是老师的试卷原文{{subject}}。请做出全部题的答案。不要改题型或选项数。只返回 JSON 数组。
+
+{{text}}
+```
+<!-- /prompt:user_text_solve -->
+
+<!-- prompt:user_page_solve -->
+```text
+这是老师试卷{{subject}}的一页。做出本页看得见的题的答案。不要改结构。只返回 JSON 数组。
+```
+<!-- /prompt:user_page_solve -->
+
 ## 成功 / 失败（金标：生物 XLM1）
 
 - 成功：1–12 `C D C B D A C D C D C A`，13–16 `ACD / AC / ABC / BC`，17–21 有非选择要点；带细则版 17–21 的 `rubric` 非空。
