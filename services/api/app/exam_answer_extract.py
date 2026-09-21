@@ -46,6 +46,7 @@ class ExtractIn(BaseModel):
     text: str | None = Field(default=None, max_length=MAX_TEXT_CHARS)
     pages: list[PageIn] | None = Field(default=None, max_length=MAX_PAGES)
     item_id: str | None = Field(default=None, max_length=80)
+    task: str | None = Field(default="answers", max_length=16)
 
 
 def _bad(code: str, message: str, status: int = 400) -> HTTPException:
@@ -112,11 +113,17 @@ async def post_exam_answer_extract(
         try:
             if has_pages:
                 result = await extract_mod.extract_pages(
-                    pages, subject_code=body.subject_code, subject_name=body.subject_name
+                    pages,
+                    subject_code=body.subject_code,
+                    subject_name=body.subject_name,
+                    task=body.task or "answers",
                 )
             else:
                 result = await extract_mod.extract_text(
-                    body.text or "", subject_code=body.subject_code, subject_name=body.subject_name
+                    body.text or "",
+                    subject_code=body.subject_code,
+                    subject_name=body.subject_name,
+                    task=body.task or "answers",
                 )
         except extract_mod.ExtractError as exc:
             status = {

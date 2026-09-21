@@ -55,11 +55,16 @@ def _prompt_block(name: str, skill_text: str | None = None) -> str:
     return block.strip()
 
 
-def load_prompts(skill_text: str | None = None) -> dict[str, str]:
+TASKS = ("answers", "structure", "solve")
+
+
+def load_prompts(skill_text: str | None = None, task: str = "answers") -> dict[str, str]:
+    t = task if task in TASKS else "answers"
+    suffix = "" if t == "answers" else f"_{t}"
     return {
-        "system": _prompt_block("system", skill_text),
-        "user_text": _prompt_block("user_text", skill_text),
-        "user_page": _prompt_block("user_page", skill_text),
+        "system": _prompt_block(f"system{suffix}", skill_text),
+        "user_text": _prompt_block(f"user_text{suffix}", skill_text),
+        "user_page": _prompt_block(f"user_page{suffix}", skill_text),
     }
 
 
@@ -193,7 +198,9 @@ def is_vision_miss(item: dict[str, Any]) -> bool:
     return bool(_VISION_MISS_RE.search(text))
 
 
-def normalize_item(raw: dict[str, Any], *, page: int | None) -> dict[str, Any] | None:
+def normalize_item(
+    raw: dict[str, Any], *, page: int | None, task: str = "answers"
+) -> dict[str, Any] | None:
     try:
         number = int(float(raw.get("number", raw.get("qno", raw.get("question_no")))))
     except (TypeError, ValueError):
@@ -222,13 +229,19 @@ def normalize_item(raw: dict[str, Any], *, page: int | None) -> dict[str, Any] |
         letters = re.sub(r"[^A-Ha-h]", "", answer).upper()
         if letters:
             answer = letters
-            if len(letters) > 1 and qtype == "single_choice":
+            if task != "structure" and len(letters) > 1 and qtype == "single_choice":
                 qtype = "multi_choice"
         try:
-            options_count = int(raw.get("options_count") or 4)
+            raw_opts = raw.get("options_count")
+            options_count = int(raw_opts) if raw_opts not in (None, "") else None
         except (TypeError, ValueError):
-            options_count = 4
-        options_count = options_count if options_count >= 2 else 4
+            options_count = None
+        if task == "structure":
+            if options_count is not None and options_count < 2:
+                options_count = None
+        else:
+            if options_count is None or options_count < 2:
+                options_count = 4
     else:
         options_count = None
 
@@ -283,14 +296,18 @@ def _normalize_blanks(raw: Any) -> list[dict[str, Any]]:
     return out
 
 
-def items_from_model_text(text: str, *, page: int | None) -> list[dict[str, Any]]:
+def items_from_model_text(
+    text: str, *, page: int | None, task: str = "answers"
+) -> list[dict[str, Any]]:
     parsed = parse_json_array(text) or []
     items: list[dict[str, Any]] = []
     for raw in _flatten(parsed):
         if not isinstance(raw, dict) or is_vision_miss(raw):
             continue
-        item = normalize_item(raw, page=page)
-        if item is not None and (item["answer"] or item["rubric"]):
+        item = normalize_item(raw, page=page, task=task)
+        if item is None:
+            continue
+        if task == "structure" or item["answer"] or item["rubric"]:
             items.append(item)
     return items
 
@@ -541,9 +558,10 @@ async def extract_text(
     subject_name: str | None = None,
     complete: Completer | None = None,
     prompts: dict[str, str] | None = None,
+    task: str = "answers",
 ) -> dict[str, Any]:
     complete = complete or model_complete
-    prompts = prompts or load_prompts()
+    prompts = prompts or load_prompts(task=task)
     body = str(text or "").strip()
     if not body:
         raise ExtractError("extract.invalid", "text 是空的")
@@ -573,7 +591,7 @@ async def extract_text(
             reports.append(_failed_page(idx, exc))
             continue
         last_text = out
-        items = items_from_model_text(out, page=None)
+        items = items_from_model_text(out, page=None, task=task)
         batches.append(items)
         reports.append({"page": idx, "ok": True, "count": len(items), "error": None})
     return _finish("text", batches, reports, errors, last_text, usage, model_out)
@@ -587,10 +605,11 @@ async def extract_pages(
     complete: Completer | None = None,
     prompts: dict[str, str] | None = None,
     concurrency: int | None = None,
+    task: str = "answers",
 ) -> dict[str, Any]:
     """pages: [{page:int, mime:str, data_b64:str}] — one vision call per page, merged."""
     complete = complete or model_complete
-    prompts = prompts or load_prompts()
+    prompts = prompts or load_prompts(task=task)
     if not pages:
         raise ExtractError("extract.invalid", "pages 是空的")
     tag = subject_tag(subject_code, subject_name)
@@ -624,7 +643,7 @@ async def extract_pages(
                 raise
             except Exception as exc:  # noqa: BLE001
                 return number, [], "", _failed_page(number, exc)
-        items = items_from_model_text(out, page=number)
+        items = items_from_model_text(out, page=number, task=task)
         return number, items, out, {"page": number, "ok": True, "count": len(items), "error": None}
 
     results = await asyncio.gather(*(one(p) for p in pages))

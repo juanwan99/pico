@@ -62,6 +62,23 @@ def test_prompts_come_from_skill_md():
     assert "{{text}}" in prompts["user_text"]
     assert "{{subject}}" in prompts["user_page"]
     assert "```" not in prompts["system"]
+    struct = ex.load_prompts(task="structure")
+    assert "禁止默认 4" in struct["system"]
+    assert "不要做题" in struct["user_text"]
+    solve = ex.load_prompts(task="solve")
+    assert "不许改" in solve["system"]
+
+
+def test_structure_keeps_items_without_answers():
+    raw = json.dumps(
+        [{"number": 1, "type": "single_choice", "options_count": 3, "answer": None}]
+    )
+    items = ex.items_from_model_text(raw, page=None, task="structure")
+    assert len(items) == 1
+    assert items[0]["options_count"] == 3
+    assert items[0]["answer"] == ""
+    dropped = ex.items_from_model_text(raw, page=None, task="answers")
+    assert dropped == []
 
 
 def test_prompt_missing_block_is_explicit():
