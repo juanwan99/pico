@@ -35,6 +35,8 @@ fi
 cd "$ROOT"
 echo "[pico] update $(hostname) $(date -Is)"
 echo "[pico] before: $(git rev-parse HEAD 2>/dev/null || echo none)"
+# Rollback hint target for the impl's E2E smoke gate (#1095).
+export PICO_PREV_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
 
 # Production checkouts are immutable inputs. Never hide local edits in an automatic stash.
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then

@@ -482,4 +482,24 @@ if command -v ss >/dev/null 2>&1; then
   echo "[pico] listen check: 18765 not on 0.0.0.0 (ok)"
 fi
 
+# E2E smoke gate (#1095, agent-policy §1): the read-only key flows must pass
+# against the tree just deployed, or this deploy is a failure. Same command
+# AGENTS.md registers as E2E-SMOKE. Rollback = redeploy the previous main SHA.
+SMOKE="$ROOT/scripts/e2e-smoke.sh"
+PREV_SHA="${PICO_PREV_SHA:-}"
+if [ -z "$PREV_SHA" ]; then
+  PREV_SHA="$(git rev-parse --verify -q 'HEAD@{1}' 2>/dev/null || true)"
+fi
+echo "[pico] e2e smoke:"
+if [ ! -f "$SMOKE" ]; then
+  echo "[pico] FATAL: $SMOKE missing — this SHA is not a valid deploy tree" >&2
+  exit 16
+fi
+if ! PICO_SMOKE_EXPECT_SHA="$CURRENT_SHA" bash "$SMOKE" --prod; then
+  echo "[pico] FATAL: e2e smoke failed — deploy of $CURRENT_SHA is NOT good" >&2
+  echo "[pico] rollback: PICO_DEPLOY_SHA=${PREV_SHA:-<previous-main-sha>} bash /opt/pico/scripts/prod-update.sh" >&2
+  exit 16
+fi
+echo "[pico] e2e smoke ok"
+
 echo "[pico] done — open https://pico.aivia.asia/login"
