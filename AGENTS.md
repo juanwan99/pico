@@ -152,3 +152,10 @@ Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 
 
 PRs stay (one writer / one branch / CI). Do **not** split one theme into many waiting rounds or many windows.
 
+
+## E2E 过门登记（agent-policy TASK-POLICY.md §1 · `ap-check` 机读，格式固定，每条独占一行）
+
+命中下列路径的 PR，回执必须附 `E2E: <命令> → <结果> @<环境>`；`prod-update` 末尾强制跑同一条冒烟，失败即部署失败（#1095）。
+
+E2E-PATHS: services/api/app/ scripts/prod-update.sh scripts/prod-update.impl.sh scripts/e2e-smoke.sh scripts/apply-gateway-nginx.sh docker-compose.host.yml Dockerfile.pico-api.true-pi Dockerfile.pico-api librechat.yaml .github/workflows/
+E2E-SMOKE: bash scripts/e2e-smoke.sh --prod
