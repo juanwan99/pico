@@ -114,13 +114,19 @@ esac
 
 echo "== 1/4 gVisor runsc"
 if ! command -v runsc >/dev/null; then
-  apt-get update -qq
-  apt-get install -y -qq apt-transport-https ca-certificates curl gnupg
+  for bin in curl gpg; do
+    command -v "$bin" >/dev/null || { echo "missing $bin (install it first)" >&2; exit 3; }
+  done
   curl -fsSL https://gvisor.dev/archive.key | gpg --dearmor --yes -o /usr/share/keyrings/gvisor-archive-keyring.gpg
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" \
     >/etc/apt/sources.list.d/gvisor.list
-  apt-get update -qq
-  apt-get install -y -qq runsc
+  # Refresh only the gVisor source: other repos on this shared host (e.g. a
+  # stale third-party key) must neither block us nor be touched by us.
+  apt-get update -qq \
+    -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/gvisor.list \
+    -o Dir::Etc::sourceparts=- \
+    -o APT::Get::List-Cleanup=0
+  apt-get install -y -qq --no-install-recommends runsc
 fi
 runsc --version | head -1
 if ! docker info --format '{{json .Runtimes}}' | grep -q '"runsc"'; then
