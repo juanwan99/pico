@@ -79,9 +79,11 @@ async def _stream(
             async for chunk in upstream.aiter_bytes():
                 yield chunk
         finally:
-            await upstream.aclose()
-            await client.aclose()
-            _done()
+            try:
+                await upstream.aclose()
+                await client.aclose()
+            finally:
+                _done()
 
     out = {k: v for k, v in upstream.headers.items() if k.lower() not in _HOP}
     return StreamingResponse(

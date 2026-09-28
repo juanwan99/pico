@@ -158,8 +158,11 @@ def list_regular(
     return rows, truncated
 
 
-def usage(paths: list[Path]) -> tuple[int, int]:
-    """(bytes on disk, entry count) under ``paths``; fd-based, never follows links."""
+def usage(paths: list[Path], *, stop_after_bytes: int | None = None) -> tuple[int, int]:
+    """(bytes on disk, entry count) under ``paths``; fd-based, never follows links.
+
+    With ``stop_after_bytes`` the walk ends as soon as the total passes it.
+    """
     used = 0
     count = 0
     for base in paths:
@@ -173,6 +176,8 @@ def usage(paths: list[Path]) -> tuple[int, int]:
                     count += 1
                     with contextlib.suppress(OSError):
                         used += os.stat(name, dir_fd=dfd, follow_symlinks=False).st_blocks * 512
+                if stop_after_bytes is not None and used > stop_after_bytes:
+                    return used, count
         finally:
             os.close(top)
     return used, count

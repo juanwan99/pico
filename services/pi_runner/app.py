@@ -145,7 +145,8 @@ class Runner:
         env = filter_env(spec.get("env"))
         with_memory = bool(spec.get("memory"))
         member_dir = self.settings.workspace_root / key.school / key.member
-        member_used, _ = await asyncio.to_thread(fsafe.usage, [member_dir])
+        cap = self.settings.member_max_mb * 1024 * 1024
+        member_used, _ = await asyncio.to_thread(fsafe.usage, [member_dir], stop_after_bytes=cap)
         if member_used > self.settings.member_max_mb * 1024 * 1024:
             raise PolicyError("runner.member_quota", "你的工作区总容量已满，请删掉旧对话后再试。")
         async with self.lock:
@@ -544,7 +545,12 @@ def build_proxy_app(runner: Runner) -> FastAPI:
             return _deny("proxy.busy", 429)
         finally:
             session.proxy_waiting -= 1
-        body = await read_capped(request, MAX_PROXY_BODY)
+        try:
+            body = await read_capped(request, MAX_PROXY_BODY)
+        except BaseException:
+            # Box dropped mid-body: the slot must come back or the run starves.
+            session.proxy_slots.release()
+            raise
         if body is None:
             session.proxy_slots.release()
             return _deny("proxy.too_large", 413)
@@ -564,8 +570,10 @@ def build_proxy_app(runner: Runner) -> FastAPI:
                 async for chunk in resp.aiter_raw():
                     yield chunk
             finally:
-                await resp.aclose()
-                session.proxy_slots.release()
+                try:
+                    await resp.aclose()
+                finally:
+                    session.proxy_slots.release()
 
         out_headers = {k: v for k, v in resp.headers.items() if k.lower() in {"content-type", "cache-control"}}
         return StreamingResponse(body_iter(), status_code=resp.status_code, headers=out_headers)

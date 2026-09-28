@@ -201,6 +201,7 @@ class ToolServer:
             await self._write(writer, 200, {"ok": True, "tool": name, "result": result})
         except ToolError as exc:
             self.invocations.append((name, args, False))
+            self.trusted_results.append((name, {"error": exc.message, "code": exc.code}))
             await self._write(
                 writer,
                 400,

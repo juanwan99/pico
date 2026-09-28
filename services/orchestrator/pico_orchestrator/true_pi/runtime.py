@@ -772,8 +772,9 @@ async def _run_true_pi_once(
         ):
             state.final_parts.append(transport.assistant_text)
 
+        ws_landed: list[tuple[str, dict[str, Any]]] = []
         if ws_on:
-            await _land_workspace_outputs(
+            ws_landed = await _land_workspace_outputs(
                 transport=transport,
                 before=ws_before,
                 since=ws_since,
@@ -787,10 +788,7 @@ async def _run_true_pi_once(
         write_basis = state.tool_results
         if ws_on and tool_server is not None:
             # Box can forge Pi RPC tool events; count only what Pico itself saw.
-            write_basis = [
-                *tool_server.trusted_results,
-                *[(n, r) for n, r in state.tool_results if n == "workspace_output"],
-            ]
+            write_basis = [*tool_server.trusted_results, *ws_landed]
         writes = count_write_tool_successes(write_basis)
         write_fail = failed_write_user_message(write_basis)
         if write_fail:
@@ -910,8 +908,12 @@ async def _land_workspace_outputs(
     state: EventMapState,
     emit: EventEmitter,
     tag: dict[str, Any],
-) -> None:
-    """Workspace ``outputs/`` → Pico ledger, shown like any write tool."""
+) -> list[tuple[str, dict[str, Any]]]:
+    """Workspace ``outputs/`` → Pico ledger, shown like any write tool.
+
+    Returns what landed: the only workspace delivery evidence that counts
+    (a ``workspace_output`` event from the box's RPC stream can be forged).
+    """
     import json as _json
 
     from pico_orchestrator.true_pi.runner import land_outputs
@@ -945,6 +947,7 @@ async def _land_workspace_outputs(
             payload["user_message"] = str(result.get("error"))
         state.event_kinds.append("tool.result")
         await emit("tool.result", payload)
+    return landed
 
 
 def _provider_fail_code(reason: str) -> str:
