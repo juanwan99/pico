@@ -73,6 +73,7 @@ def test_box_argv_never_mounts_socket_or_host() -> None:
     mounts = _flag(argv, "-v")
     assert mounts == [
         f"/var/lib/pico/workspaces/{'a' * 32}/{'b' * 32}/{'c' * 32}:/workspace:rw",
+        "/var/lib/pico/workspaces/.pico-resolv.conf:/etc/resolv.conf:ro",
         f"/var/lib/pico/workspaces/{'a' * 32}/{'b' * 32}/_memory:/memory:rw",
     ]
 

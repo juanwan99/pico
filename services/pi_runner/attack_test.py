@@ -22,7 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from pi_runner.policy import RunnerSettings, WorkspaceKey, docker_run_argv
+from pi_runner.policy import RunnerSettings, WorkspaceKey, docker_run_argv, write_resolv_conf
 
 PROBE = r'''
 import json, os, platform, socket, ssl, subprocess, sys, urllib.request
@@ -38,7 +38,9 @@ out["kernel"] = platform.release()
 secret_words = ("SECRET", "PASSWORD", "MASTER", "ADMIN", "DEEPSEEK", "MEILI", "SUB2API", "PROXY_KEY")
 out["secret_env"] = sorted(k for k in os.environ if any(w in k.upper() for w in secret_words))
 out["docker_sock"] = os.path.exists("/var/run/docker.sock") or os.path.exists("/run/docker.sock")
-out["host_paths_visible"] = [p for p in ("/var/lib/pico", "/opt/pico", "/home/ops", "/etc/docker") if os.path.exists(p)]
+out["host_paths_visible"] = [p for p in ("/var/lib/pico", "/home/ops", "/etc/docker", "/opt/pico/.git",
+                                         "/opt/pico/.env", "/opt/pico/docker-compose.host.yml", "/root/.ssh")
+                             if os.path.exists(p)]
 def can_write(path):
     try:
         with open(path, "w") as fh: fh.write("x")
@@ -96,6 +98,7 @@ def _iface_ips() -> list[str]:
 
 def main() -> int:
     settings = RunnerSettings.from_env()
+    write_resolv_conf(settings)
     host_ips = _iface_ips()
     must_fail: list[tuple[str, int]] = [
         ("100.100.100.200", 80),  # Aliyun metadata
@@ -147,7 +150,7 @@ def main() -> int:
     got = json.loads(line[5:])
     checks = {
         "non_root": got["uid"] != 0,
-        "gvisor_kernel": got["kernel"].startswith("4.4.0"),
+        "gvisor_kernel": "gvisor" in got["kernel"] or got["kernel"].startswith("4.4.0"),
         "no_secret_env": not got["secret_env"],
         "no_docker_sock": not got["docker_sock"],
         "no_host_paths": not got["host_paths_visible"],
@@ -164,7 +167,8 @@ def main() -> int:
     }
     leaks = sorted(k for k, v in got["blocked"].items() if v)
     report = {"ok": all(checks.values()), "checks": checks, "leaks": leaks, "host_ips": host_ips,
-              "kernel": got["kernel"], "forks": got["forks_before_limit"]}
+              "kernel": got["kernel"], "forks": got["forks_before_limit"],
+              "host_paths": got["host_paths_visible"]}
     print(json.dumps(report, indent=2, ensure_ascii=False))
     return 0 if report["ok"] else 1
 

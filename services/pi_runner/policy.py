@@ -197,6 +197,33 @@ def validate_pi_args(args: list[str] | None) -> list[str]:
     return out
 
 
+RESOLV_NAME = ".pico-resolv.conf"
+
+
+def resolv_conf_path(settings: RunnerSettings) -> Path:
+    return settings.workspace_root / RESOLV_NAME
+
+
+def resolv_conf_text(settings: RunnerSettings) -> str:
+    return "".join(f"nameserver {d}\n" for d in settings.dns) + "options timeout:2 attempts:2\n"
+
+
+def write_resolv_conf(settings: RunnerSettings) -> Path:
+    """Public resolvers for boxes.
+
+    gVisor's netstack skips the in-namespace NAT that routes Docker's embedded
+    DNS (127.0.0.11) on user-defined networks, so boxes get their own
+    resolv.conf instead of relying on --dns.
+    """
+    path = resolv_conf_path(settings)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(resolv_conf_text(settings), encoding="utf-8")
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+    return path
+
+
 def container_name(run_id: str) -> str:
     return f"pico-ws-{validate_run_id(run_id)}".lower()
 
@@ -272,6 +299,7 @@ def docker_run_argv(
     ]
     for server in settings.dns:
         argv.extend(["--dns", server])
+    argv.extend(["-v", f"{resolv_conf_path(settings)}:/etc/resolv.conf:ro"])
     if with_memory:
         argv.extend(["-v", f"{key.memory_dir(settings.workspace_root)}:{MEMORY_MOUNT}:rw"])
     argv.append(settings.image)

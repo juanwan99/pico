@@ -49,6 +49,7 @@ from pi_runner.policy import (
     safe_relpath,
     validate_pi_args,
     validate_run_id,
+    write_resolv_conf,
 )
 
 logger = logging.getLogger("pi_runner")
@@ -81,6 +82,8 @@ class Session:
 class Runner:
     def __init__(self, settings: RunnerSettings) -> None:
         self.settings = settings
+        with contextlib.suppress(OSError):
+            write_resolv_conf(settings)
         self.sessions: dict[str, Session] = {}
         self.lock = asyncio.Lock()
 
