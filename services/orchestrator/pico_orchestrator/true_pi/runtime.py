@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
@@ -381,7 +382,8 @@ async def _run_true_pi_once(
                 runner_enabled,
             )
 
-            use_runner = runner_enabled(member_key)
+            # Tenant fail-closed: no box without both ids (legacy spawn keeps builtins off).
+            use_runner = bool(school_key and member_key) and runner_enabled(member_key)
             transport_cls: Any = SubprocessTransport
             runner_kwargs: dict[str, Any] = {}
             if use_runner:
@@ -492,16 +494,19 @@ async def _run_true_pi_once(
             transport.ui_select = _plan_select
             if hasattr(transport, "plan_hitl"):
                 transport.plan_hitl = True
-        await client.start()
-        ws_before: dict[str, str] | None = None
-        if getattr(transport, "runner", None) is not None:
+        ws_on = getattr(transport, "runner", None) is not None
+        ws_before: dict[str, Any] | None = None
+        ws_since = time.time()
+        if ws_on:
+            # Snapshot before the box exists (the runner refuses file access
+            # while one runs). On failure landing falls back to mtime >= since.
             from pico_orchestrator.true_pi.runner import list_outputs
 
             try:
                 ws_before = await list_outputs(transport.runner.key)
-            except Exception as exc:  # noqa: BLE001 — landing still re-lists
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("true_pi runner outputs snapshot failed: %s", type(exc).__name__)
-                ws_before = {}
+        await client.start()
         await emit(
             "run.model",
             {
@@ -767,10 +772,11 @@ async def _run_true_pi_once(
         ):
             state.final_parts.append(transport.assistant_text)
 
-        if ws_before is not None:
+        if ws_on:
             await _land_workspace_outputs(
                 transport=transport,
                 before=ws_before,
+                since=ws_since,
                 artifact_store=artifact_store,
                 principal=principal,
                 state=state,
@@ -890,7 +896,8 @@ async def _run_true_pi_once(
 async def _land_workspace_outputs(
     *,
     transport: Any,
-    before: dict[str, str],
+    before: dict[str, Any] | None,
+    since: float,
     artifact_store: ArtifactStore | None,
     principal: Principal,
     state: EventMapState,
@@ -902,10 +909,14 @@ async def _land_workspace_outputs(
 
     from pico_orchestrator.true_pi.runner import land_outputs
 
+    # Stop the box first: files are only read once nothing can race them.
+    with suppress(Exception):
+        await transport.close(kill=True)
     try:
         landed = await land_outputs(
             key=transport.runner.key,
             before=before,
+            since=since,
             artifact_store=artifact_store,
             principal=principal,
         )

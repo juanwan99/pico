@@ -114,3 +114,15 @@ def test_workspace_key_must_be_hex() -> None:
 def test_pi_args_must_be_rpc() -> None:
     with pytest.raises(PolicyError):
         validate_pi_args(["-p", "hi"])
+
+
+def test_box_argv_no_host_log_file() -> None:
+    assert _flag(_argv(), "--log-driver") == ["none"]
+
+
+def test_runner_refuses_non_gvisor_runtime(monkeypatch) -> None:
+    monkeypatch.setenv("PICO_RUNNER_TOKEN", "t" * 32)
+    monkeypatch.setenv("PICO_RUNNER_RUNTIME", "runc")
+    monkeypatch.delenv("PICO_RUNNER_ALLOW_UNSAFE_RUNTIME", raising=False)
+    with pytest.raises(PolicyError):
+        RunnerSettings.from_env()

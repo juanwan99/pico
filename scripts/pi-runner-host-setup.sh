@@ -67,16 +67,16 @@ FW
 [Unit]
 Description=Pico workspace box firewall (card #1093)
 After=docker.service
-Requires=docker.service
+# Re-applied whenever docker (re)starts; never removed on stop (fail-closed).
+PartOf=docker.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=$FW_BIN apply
-ExecStop=$FW_BIN remove
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=multi-user.target docker.service
 UNIT
 }
 

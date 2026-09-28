@@ -4,21 +4,22 @@ Two listeners, one process:
 
 * control (127.0.0.1:18790, pico-api only, ``X-Pico-Runner-Token``):
   WebSocket ``/v1/session`` pipes Pi RPC stdio of one container; file
-  upload (attachments) / listing + download (outputs).
-* proxy (pico-ws gateway IP:18791, workspace containers only): forwards
-  ``/l/<run>/...`` (model) and ``/t/<run>/...`` (Pico gateway tools) to
-  pico-api's token-checked ``/internal/ws-proxy``. This is the only
-  internal address a workspace can reach.
+  upload (attachments) / listing + download (outputs) — only while no box
+  is running on that workspace.
+* proxy (pico-ws gateway IP:18791, workspace containers only): forwards a
+  fixed list of paths — model ``/l/<run>/v1/{chat/completions,responses,models}``
+  and gateway tools ``/t/<run>/v1/tool`` — to pico-api's token-checked
+  ``/internal/ws-proxy``. The only internal address a box can reach.
 
 Not an orchestrator: Pi is the kernel, pico-api owns the ledger. The
-runner only starts/stops containers and moves bytes.
+runner only starts/stops containers and moves bytes. It runs as root with
+the docker socket, so every workspace file access goes through ``fsafe``.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-import hashlib
 import hmac
 import json
 import logging
@@ -34,6 +35,7 @@ import httpx
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from pi_runner import fsafe
 from pi_runner.policy import (
     DOWNLOAD_PREFIXES,
     SEED_PREFIXES,
@@ -54,8 +56,16 @@ logger = logging.getLogger("pi_runner")
 MAX_UPLOAD = 100 * 1024 * 1024
 MAX_OUTPUT_FILE = 60 * 1024 * 1024
 MAX_OUTPUT_FILES = 200
-MAX_LINE = 32 * 1024 * 1024
-WS_UID = 65532
+MAX_OUTPUT_TOTAL = 200 * 1024 * 1024
+# Pi RPC lines can carry a whole transcript (agent_end); stderr never needs much.
+MAX_LINE = 16 * 1024 * 1024
+MAX_ERR_LINE = 8 * 1024
+MAX_PROXY_BODY = 16 * 1024 * 1024
+PROXY_PER_RUN = 4
+WATCH_EVERY_S = 5
+
+MODEL_PATHS = frozenset({"v1/chat/completions", "v1/responses", "v1/models"})
+TOOL_PATHS = frozenset({"v1/tool", "health"})
 
 
 @dataclass
@@ -64,6 +74,7 @@ class Session:
     key: WorkspaceKey
     proc: asyncio.subprocess.Process
     started: float = field(default_factory=time.monotonic)
+    proxy_slots: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(PROXY_PER_RUN))
 
 
 class Runner:
@@ -72,85 +83,56 @@ class Runner:
         self.sessions: dict[str, Session] = {}
         self.lock = asyncio.Lock()
 
+    def busy(self, key: WorkspaceKey) -> bool:
+        return any(s.key == key for s in self.sessions.values())
+
     # --- tenancy / capacity -------------------------------------------------
 
-    def _check_capacity(self, key: WorkspaceKey) -> None:
-        if len(self.sessions) >= self.settings.max_sessions:
-            raise PolicyError("runner.busy", "too many workspace sessions")
-        per_school = sum(1 for s in self.sessions.values() if s.key.school == key.school)
-        if per_school >= self.settings.max_per_school:
-            raise PolicyError("runner.school_busy", "too many sessions for this school")
+    def free_mb(self) -> int:
         root = self.settings.workspace_root
         root.mkdir(parents=True, exist_ok=True)
-        free_mb = shutil.disk_usage(root).free // (1024 * 1024)
-        if free_mb < self.settings.min_free_mb:
-            raise PolicyError("runner.disk_full", "host disk too full for a workspace")
+        return shutil.disk_usage(root).free // (1024 * 1024)
 
-    def _own(self, path: Path) -> None:
-        # lchown: never follow a model-made symlink out of the workspace.
-        with contextlib.suppress(PermissionError, OSError):
-            os.lchown(path, WS_UID, WS_UID)
-
-    def ensure_dir(self, path: Path) -> None:
-        """mkdir that replaces a model-made symlink instead of following it."""
-        if path.is_symlink() or (path.exists() and not path.is_dir()):
-            path.unlink()
-        path.mkdir(exist_ok=True)
-        self._own(path)
-
-    def safe_dest(self, ws: Path, rel) -> Path:
-        """Writable target under ``ws`` with no symlink on the way."""
-        cur = ws
-        for part in rel.parts[:-1]:
-            cur = cur / part
-            self.ensure_dir(cur)
-        dest = cur / rel.parts[-1]
-        if dest.is_symlink() or dest.is_dir():
-            if dest.is_dir() and not dest.is_symlink():
-                shutil.rmtree(dest)
-            else:
-                dest.unlink()
-        if not dest.parent.resolve().is_relative_to(ws.resolve()):
-            raise PolicyError("runner.bad_path", "path escapes workspace")
-        return dest
-
-    def write_file(self, ws: Path, rel, data: bytes) -> Path:
-        dest = self.safe_dest(ws, rel)
-        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-        self._own(dest)
-        return dest
+    def _check_capacity(self, key: WorkspaceKey) -> None:
+        if self.busy(key):
+            # One box per workspace: no second box racing the first one's files.
+            raise PolicyError("runner.workspace_busy", "这个对话上一轮还在运行，请等它结束再发。")
+        if len(self.sessions) >= self.settings.max_sessions:
+            raise PolicyError("runner.busy", "工作区都在忙，请稍后再试。")
+        per_school = sum(1 for s in self.sessions.values() if s.key.school == key.school)
+        if per_school >= self.settings.max_per_school:
+            raise PolicyError("runner.school_busy", "本校同时运行的工作区已满，请稍后再试。")
+        if self.free_mb() < self.settings.min_free_mb:
+            raise PolicyError("runner.disk_full", "服务器磁盘空间不足，暂时不能开工作区。")
 
     def prepare_workspace(self, key: WorkspaceKey, *, with_memory: bool) -> Path:
         root = self.settings.workspace_root
         root.mkdir(parents=True, exist_ok=True)
-        ws = key.workspace_dir(root)
-        # Tenant levels are runner-owned (root); only the leaf is the box's.
+        # Tenant levels are runner-owned; only the leaf belongs to the box.
         for d in (root / key.school, root / key.school / key.member):
-            d.mkdir(exist_ok=True)
-        ws.mkdir(exist_ok=True)
-        self._own(ws)
-        for sub in ("attachments", "outputs", ".pico", ".pico/agent", ".pico/session", ".pi"):
-            cur = ws
-            for part in sub.split("/"):
-                cur = cur / part
-                self.ensure_dir(cur)
+            d.mkdir(mode=0o711, exist_ok=True)
+        ws = key.workspace_dir(root)
+        ws.mkdir(mode=0o755, exist_ok=True)
+        with contextlib.suppress(OSError):
+            os.lchown(ws, fsafe.WS_UID, fsafe.WS_UID)
+        for sub in ("attachments", "outputs", ".pico/agent", ".pico/session", ".pi"):
+            fsafe.ensure_dirs(ws, sub)
         if with_memory:
             mem = key.memory_dir(root)
-            mem.mkdir(exist_ok=True)
-            self._own(mem)
+            mem.mkdir(mode=0o755, exist_ok=True)
+            with contextlib.suppress(OSError):
+                os.lchown(mem, fsafe.WS_UID, fsafe.WS_UID)
         os.utime(ws)
         return ws
 
     def seed_files(self, ws: Path, files: dict[str, str] | None) -> None:
         for rel, text in (files or {}).items():
             path = safe_relpath(rel, prefixes=SEED_PREFIXES)
-            self.write_file(ws, path, str(text).encode("utf-8"))
+            fsafe.write_file(ws, path, str(text).encode("utf-8"))
 
     # --- container ------------------------------------------------------------
 
-    async def start(self, spec: dict[str, Any]) -> tuple[Session, Path]:
+    async def start(self, spec: dict[str, Any]) -> Session:
         run_id = validate_run_id(str(spec.get("run_id") or ""))
         raw_key = spec.get("key") or {}
         key = WorkspaceKey.parse(
@@ -165,8 +147,8 @@ class Runner:
             if run_id in self.sessions:
                 raise PolicyError("runner.duplicate", "run already has a session")
             self._check_capacity(key)
-            ws = self.prepare_workspace(key, with_memory=with_memory)
-            self.seed_files(ws, spec.get("files"))
+            ws = await asyncio.to_thread(self.prepare_workspace, key, with_memory=with_memory)
+            await asyncio.to_thread(self.seed_files, ws, spec.get("files"))
             # Tokens go through a 0600 env-file, never argv (argv shows in ps).
             fd, env_path = tempfile.mkstemp(prefix="pico-ws-env-")
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -189,19 +171,12 @@ class Runner:
                     limit=MAX_LINE,
                 )
             finally:
-                # docker reads --env-file before the container starts; give
-                # the CLI a moment, then remove it regardless.
+                # docker reads --env-file before the container starts.
                 asyncio.get_running_loop().call_later(10.0, _unlink_quiet, env_path)
             session = Session(run_id=run_id, key=key, proc=proc)
             self.sessions[run_id] = session
-        logger.info(
-            "ws start run=%s school=%s image=%s runtime=%s",
-            run_id,
-            key.school[:8],
-            self.settings.image,
-            self.settings.runtime,
-        )
-        return session, ws
+        logger.info("ws start run=%s school=%s runtime=%s", run_id, key.school[:8], self.settings.runtime)
+        return session
 
     async def stop(self, session: Session) -> None:
         proc = session.proc
@@ -220,6 +195,9 @@ class Runner:
             if proc.returncode is None:
                 with contextlib.suppress(ProcessLookupError):
                     proc.kill()
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(proc.wait(), timeout=5)
+        # Container is gone before the workspace is released for file access.
         async with self.lock:
             self.sessions.pop(session.run_id, None)
         logger.info(
@@ -231,13 +209,22 @@ class Runner:
 
     # --- housekeeping ---------------------------------------------------------
 
-    def workspace_mb(self, ws: Path) -> int:
-        total = 0
-        for dirpath, _dirs, files in os.walk(ws):
-            for name in files:
-                with contextlib.suppress(OSError):
-                    total += os.lstat(os.path.join(dirpath, name)).st_size
-        return total // (1024 * 1024)
+    def over_limits(self, session: Session) -> str | None:
+        root = self.settings.workspace_root
+        paths = [session.key.workspace_dir(root)]
+        mem = session.key.memory_dir(root)
+        if mem.is_dir():
+            paths.append(mem)
+        used, count = fsafe.usage(paths)
+        if used > self.settings.workspace_max_mb * 1024 * 1024:
+            return "工作区超过容量上限，已停止。"
+        if count > self.settings.workspace_max_files:
+            return "工作区文件数超过上限，已停止。"
+        if self.free_mb() < self.settings.min_free_mb // 2:
+            return "服务器磁盘空间不足，已停止。"
+        if time.monotonic() - session.started > self.settings.max_session_s:
+            return "工作区运行时间超过上限，已停止。"
+        return None
 
     def sweep_expired(self) -> int:
         root = self.settings.workspace_root
@@ -247,13 +234,13 @@ class Runner:
         active = {s.key.workspace_dir(root) for s in self.sessions.values()}
         removed = 0
         for school in root.iterdir():
-            if not school.is_dir():
+            if not school.is_dir() or school.is_symlink():
                 continue
             for member in school.iterdir():
-                if not member.is_dir():
+                if not member.is_dir() or member.is_symlink():
                     continue
                 for conv in member.iterdir():
-                    if not conv.is_dir() or conv.name == "_memory" or conv in active:
+                    if conv.is_symlink() or not conv.is_dir() or conv.name == "_memory" or conv in active:
                         continue
                     with contextlib.suppress(OSError):
                         if conv.stat().st_mtime < cutoff:
@@ -271,16 +258,8 @@ def _authorized(settings: RunnerSettings, value: str | None) -> bool:
     return bool(value) and hmac.compare_digest(str(value), settings.token)
 
 
-def _key_from_path(school: str, member: str, conv: str) -> WorkspaceKey:
-    return WorkspaceKey.parse(school, member, conv)
-
-
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def _deny(code: str, status: int) -> JSONResponse:
+    return JSONResponse({"ok": False, "code": code}, status_code=status)
 
 
 def build_control_app(runner: Runner) -> FastAPI:
@@ -297,85 +276,72 @@ def build_control_app(runner: Runner) -> FastAPI:
             "runtime": settings.runtime,
         }
 
-    def _deny(request: Request) -> JSONResponse | None:
+    def _gate(request: Request, school: str, member: str, conv: str) -> WorkspaceKey | JSONResponse:
         if not _authorized(settings, request.headers.get("x-pico-runner-token")):
-            return JSONResponse({"ok": False, "code": "auth.denied"}, status_code=401)
-        return None
+            return _deny("auth.denied", 401)
+        try:
+            key = WorkspaceKey.parse(school, member, conv)
+        except PolicyError as exc:
+            return _deny(exc.code, 400)
+        if runner.busy(key):
+            # Files are only touched while no box can race them.
+            return _deny("runner.workspace_busy", 409)
+        return key
 
     @app.put("/v1/ws/{school}/{member}/{conv}/file")
     async def put_file(school: str, member: str, conv: str, path: str, request: Request):
-        denied = _deny(request)
-        if denied:
-            return denied
+        key = _gate(request, school, member, conv)
+        if isinstance(key, JSONResponse):
+            return key
         try:
-            key = _key_from_path(school, member, conv)
             rel = safe_relpath(path, prefixes=UPLOAD_PREFIXES)
         except PolicyError as exc:
-            return JSONResponse({"ok": False, "code": exc.code}, status_code=400)
-        body = await request.body()
-        if len(body) > MAX_UPLOAD:
-            return JSONResponse({"ok": False, "code": "runner.too_large"}, status_code=413)
-        ws = runner.prepare_workspace(key, with_memory=False)
+            return _deny(exc.code, 400)
+        body = await read_capped(request, MAX_UPLOAD)
+        if body is None:
+            return _deny("runner.too_large", 413)
         try:
-            runner.write_file(ws, rel, body)
-        except PolicyError as exc:
-            return JSONResponse({"ok": False, "code": exc.code}, status_code=400)
+            ws = await asyncio.to_thread(runner.prepare_workspace, key, with_memory=False)
+            await asyncio.to_thread(fsafe.write_file, ws, rel, body)
+        except OSError:
+            return _deny("runner.bad_path", 400)
         return {"ok": True, "path": str(rel), "bytes": len(body)}
 
     @app.get("/v1/ws/{school}/{member}/{conv}/outputs")
     async def list_outputs(school: str, member: str, conv: str, request: Request):
-        denied = _deny(request)
-        if denied:
-            return denied
-        try:
-            key = _key_from_path(school, member, conv)
-        except PolicyError as exc:
-            return JSONResponse({"ok": False, "code": exc.code}, status_code=400)
-        out_dir = key.workspace_dir(settings.workspace_root) / "outputs"
-        rows: list[dict[str, Any]] = []
-        if out_dir.is_dir():
-            for dirpath, _dirs, files in os.walk(out_dir):
-                for name in sorted(files):
-                    full = Path(dirpath) / name
-                    if full.is_symlink() or not full.is_file():
-                        continue
-                    size = full.stat().st_size
-                    if size > MAX_OUTPUT_FILE:
-                        continue
-                    rows.append(
-                        {
-                            "path": str(full.relative_to(out_dir.parent)),
-                            "size": size,
-                            "mtime": full.stat().st_mtime,
-                            "sha256": _sha256(full),
-                        }
-                    )
-                    if len(rows) >= MAX_OUTPUT_FILES:
-                        break
-        return {"ok": True, "files": rows}
+        key = _gate(request, school, member, conv)
+        if isinstance(key, JSONResponse):
+            return key
+        ws = key.workspace_dir(settings.workspace_root)
+        if not ws.is_dir():
+            return {"ok": True, "files": [], "truncated": False}
+        rows, truncated = await asyncio.to_thread(
+            fsafe.list_regular,
+            ws,
+            "outputs",
+            max_files=MAX_OUTPUT_FILES,
+            max_total=MAX_OUTPUT_TOTAL,
+            max_file=MAX_OUTPUT_FILE,
+        )
+        return {"ok": True, "files": [r.__dict__ for r in rows], "truncated": truncated}
 
     @app.get("/v1/ws/{school}/{member}/{conv}/file")
     async def get_file(school: str, member: str, conv: str, path: str, request: Request):
-        denied = _deny(request)
-        if denied:
-            return denied
+        key = _gate(request, school, member, conv)
+        if isinstance(key, JSONResponse):
+            return key
         try:
-            key = _key_from_path(school, member, conv)
             rel = safe_relpath(path, prefixes=DOWNLOAD_PREFIXES)
         except PolicyError as exc:
-            return JSONResponse({"ok": False, "code": exc.code}, status_code=400)
+            return _deny(exc.code, 400)
         ws = key.workspace_dir(settings.workspace_root)
-        full = ws / rel
-        # Resolve after join: a model-made symlink must not escape the box dir.
         try:
-            real = full.resolve(strict=True)
+            data = await asyncio.to_thread(fsafe.read_file, ws, rel, max_bytes=MAX_OUTPUT_FILE)
+        except FileNotFoundError:
+            return _deny("runner.not_found", 404)
         except OSError:
-            return JSONResponse({"ok": False, "code": "runner.not_found"}, status_code=404)
-        if not real.is_relative_to(ws.resolve()) or not real.is_file():
-            return JSONResponse({"ok": False, "code": "runner.bad_path"}, status_code=400)
-        if real.stat().st_size > MAX_OUTPUT_FILE:
-            return JSONResponse({"ok": False, "code": "runner.too_large"}, status_code=413)
-        return Response(content=real.read_bytes(), media_type="application/octet-stream")
+            return _deny("runner.bad_path", 400)
+        return Response(content=data, media_type="application/octet-stream")
 
     @app.websocket("/v1/session")
     async def session_ws(ws: WebSocket) -> None:
@@ -387,9 +353,11 @@ def build_control_app(runner: Runner) -> FastAPI:
             spec = json.loads(await ws.receive_text())
             if spec.get("type") != "start":
                 raise PolicyError("runner.bad_start", "first frame must be start")
-            session, wsdir = await runner.start(spec)
+            session = await runner.start(spec)
         except PolicyError as exc:
-            await ws.send_text(json.dumps({"type": "error", "code": exc.code, "message": exc.message}))
+            await ws.send_text(
+                json.dumps({"type": "error", "code": exc.code, "message": exc.message}, ensure_ascii=False)
+            )
             await ws.close()
             return
         except Exception as exc:
@@ -401,83 +369,81 @@ def build_control_app(runner: Runner) -> FastAPI:
             return
         await ws.send_text(json.dumps({"type": "ready", "container": container_name(session.run_id)}))
         proc = session.proc
-        over_quota = asyncio.Event()
+        stop_reason: list[str] = []
 
-        async def pump_out(stream: asyncio.StreamReader, kind: str) -> None:
+        async def send(obj: dict[str, Any]) -> None:
+            await ws.send_text(json.dumps(obj, ensure_ascii=False))
+
+        async def pump_out() -> None:
+            assert proc.stdout is not None
             while True:
                 try:
-                    line = await stream.readline()
+                    line = await proc.stdout.readline()
                 except ValueError:
-                    # Line longer than the limit: drop it rather than wedge.
+                    logger.warning("ws oversized stdout line run=%s dropped", session.run_id)
                     continue
                 if not line:
                     return
-                await ws.send_text(
-                    json.dumps({"type": kind, "line": line.decode("utf-8", errors="replace").rstrip("\n")})
-                )
+                await send({"type": "out", "line": line.decode("utf-8", errors="replace").rstrip("\n")})
+
+        async def pump_err() -> None:
+            assert proc.stderr is not None
+            while True:
+                try:
+                    line = await proc.stderr.readline()
+                except ValueError:
+                    continue
+                if not line:
+                    return
+                text = line[:MAX_ERR_LINE].decode("utf-8", errors="replace").rstrip("\n")
+                await send({"type": "err", "line": text})
 
         async def pump_in() -> None:
+            # Runs until the socket closes, also after stdin EOF, so an abort
+            # from pico-api (socket drop) always kills the box.
             assert proc.stdin is not None
+            stdin_open = True
             while True:
                 msg = json.loads(await ws.receive_text())
                 t = msg.get("type")
-                if t == "in":
+                if t == "in" and stdin_open:
                     proc.stdin.write((str(msg.get("line") or "") + "\n").encode("utf-8"))
                     await proc.stdin.drain()
-                elif t == "close":
+                elif t == "close" and stdin_open:
                     proc.stdin.close()
-                    return
+                    stdin_open = False
 
-        async def quota_watch() -> None:
+        async def watch() -> None:
             while proc.returncode is None:
-                await asyncio.sleep(20)
-                mb = await asyncio.to_thread(runner.workspace_mb, wsdir)
-                if mb > settings.workspace_max_mb:
-                    logger.warning("ws quota run=%s mb=%s", session.run_id, mb)
-                    over_quota.set()
+                await asyncio.sleep(WATCH_EVERY_S)
+                reason = await asyncio.to_thread(runner.over_limits, session)
+                if reason:
+                    logger.warning("ws limit run=%s: %s", session.run_id, reason)
+                    stop_reason.append(reason)
                     return
 
-        out_t = asyncio.create_task(pump_out(proc.stdout, "out"))  # type: ignore[arg-type]
-        err_t = asyncio.create_task(pump_out(proc.stderr, "err"))  # type: ignore[arg-type]
+        out_t = asyncio.create_task(pump_out())
+        err_t = asyncio.create_task(pump_err())
         in_t = asyncio.create_task(pump_in())
-        quota_t = asyncio.create_task(quota_watch())
+        watch_t = asyncio.create_task(watch())
         wait_t = asyncio.create_task(proc.wait())
         try:
-            while True:
-                done, _ = await asyncio.wait(
-                    {out_t, wait_t, in_t, quota_t}, return_when=asyncio.FIRST_COMPLETED
-                )
-                if quota_t in done and over_quota.is_set():
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "type": "error",
-                                "code": "runner.workspace_quota",
-                                "message": "工作区超过容量上限，已停止。",
-                            }
-                        )
-                    )
-                    break
-                if in_t in done:
-                    exc = in_t.exception()
-                    if isinstance(exc, WebSocketDisconnect) or exc is not None:
-                        break
-                    # stdin closed on purpose; keep draining stdout.
-                    in_t = asyncio.create_task(asyncio.sleep(3600))
-                if out_t in done or wait_t in done:
-                    with contextlib.suppress(Exception):
-                        await asyncio.wait_for(out_t, timeout=5)
-                    with contextlib.suppress(Exception):
-                        await asyncio.wait_for(wait_t, timeout=5)
-                    break
-            with contextlib.suppress(Exception):
-                await asyncio.wait_for(err_t, timeout=2)
-            with contextlib.suppress(Exception):
-                await ws.send_text(json.dumps({"type": "exit", "code": proc.returncode}))
+            done, _ = await asyncio.wait({out_t, wait_t, in_t, watch_t}, return_when=asyncio.FIRST_COMPLETED)
+            if watch_t in done and stop_reason:
+                with contextlib.suppress(Exception):
+                    await send({"type": "error", "code": "runner.limit", "message": stop_reason[0]})
+            elif in_t not in done:
+                # Box finished on its own: drain, then report the exit code.
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(asyncio.gather(out_t, wait_t), timeout=5)
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(err_t, timeout=2)
+                with contextlib.suppress(Exception):
+                    await send({"type": "exit", "code": proc.returncode})
         except WebSocketDisconnect:
             pass
         finally:
-            for t in (out_t, err_t, in_t, quota_t, wait_t):
+            for t in (out_t, err_t, in_t, watch_t, wait_t):
                 t.cancel()
             await runner.stop(session)
             with contextlib.suppress(Exception):
@@ -486,37 +452,71 @@ def build_control_app(runner: Runner) -> FastAPI:
     return app
 
 
-_PROXY_HOP = {"host", "content-length", "connection", "transfer-encoding", "x-pico-runner-token"}
 _PROXY_KEEP = {"authorization", "content-type", "accept", "user-agent", "openai-beta"}
+
+
+def proxy_path_ok(lane: str, path: str, raw_path: bytes) -> bool:
+    """Fixed allow-list; no encoded separators or dot segments anywhere."""
+    low = raw_path.lower()
+    if b"%" in low or b".." in low or b"\\" in low or b"//" in low:
+        return False
+    if lane == "l":
+        return path in MODEL_PATHS
+    if lane == "t":
+        return path in TOOL_PATHS
+    return False
+
+
+async def read_capped(request: Request, cap: int) -> bytes | None:
+    length = request.headers.get("content-length")
+    if length is not None:
+        try:
+            if int(length) > cap:
+                return None
+        except ValueError:
+            return None
+    buf = bytearray()
+    async for chunk in request.stream():
+        buf.extend(chunk)
+        if len(buf) > cap:
+            return None
+    return bytes(buf)
 
 
 def build_proxy_app(runner: Runner) -> FastAPI:
     settings = runner.settings
     app = FastAPI(title="pi-runner proxy", docs_url=None, redoc_url=None, openapi_url=None)
-    client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=None, write=60.0, pool=10.0))
+    client = httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=10.0, read=None, write=60.0, pool=30.0),
+        limits=httpx.Limits(max_connections=settings.max_sessions * PROXY_PER_RUN + 8),
+        follow_redirects=False,
+    )
 
     @app.api_route("/{lane}/{run_id}/{path:path}", methods=["GET", "POST"])
     async def forward(lane: str, run_id: str, path: str, request: Request) -> Response:
-        if lane not in {"l", "t"}:
-            return JSONResponse({"ok": False, "code": "proxy.denied"}, status_code=404)
         try:
             validate_run_id(run_id)
         except PolicyError:
-            return JSONResponse({"ok": False, "code": "proxy.denied"}, status_code=404)
-        if run_id not in runner.sessions:
-            return JSONResponse({"ok": False, "code": "proxy.no_session"}, status_code=403)
-        body = await request.body()
-        if len(body) > MAX_UPLOAD:
-            return JSONResponse({"ok": False, "code": "proxy.too_large"}, status_code=413)
-        headers = {
-            k: v for k, v in request.headers.items() if k.lower() in _PROXY_KEEP and k.lower() not in _PROXY_HOP
-        }
+            return _deny("proxy.denied", 404)
+        if not proxy_path_ok(lane, path, request.scope.get("raw_path") or b""):
+            return _deny("proxy.denied", 404)
+        session = runner.sessions.get(run_id)
+        if session is None:
+            return _deny("proxy.no_session", 403)
+        body = await read_capped(request, MAX_PROXY_BODY)
+        if body is None:
+            return _deny("proxy.too_large", 413)
+        headers = {k: v for k, v in request.headers.items() if k.lower() in _PROXY_KEEP}
         headers["x-pico-runner-token"] = settings.token
+        # Query strings are dropped: no allowed path needs one.
         target = f"{settings.upstream}/internal/ws-proxy/{lane}/{run_id}/{path}"
-        if request.url.query:
-            target = f"{target}?{request.url.query}"
-        upstream = client.build_request(request.method, target, headers=headers, content=body)
-        resp = await client.send(upstream, stream=True)
+        await session.proxy_slots.acquire()
+        try:
+            upstream = client.build_request(request.method, target, headers=headers, content=body)
+            resp = await client.send(upstream, stream=True)
+        except Exception:  # noqa: BLE001 — any upstream failure is a 502 to the box
+            session.proxy_slots.release()
+            return _deny("proxy.upstream_unreachable", 502)
 
         async def body_iter():
             try:
@@ -524,12 +524,9 @@ def build_proxy_app(runner: Runner) -> FastAPI:
                     yield chunk
             finally:
                 await resp.aclose()
+                session.proxy_slots.release()
 
-        out_headers = {
-            k: v
-            for k, v in resp.headers.items()
-            if k.lower() in {"content-type", "cache-control"}
-        }
+        out_headers = {k: v for k, v in resp.headers.items() if k.lower() in {"content-type", "cache-control"}}
         return StreamingResponse(body_iter(), status_code=resp.status_code, headers=out_headers)
 
     return app
@@ -544,7 +541,7 @@ async def _sweeper(runner: Runner) -> None:
         await asyncio.sleep(3600)
 
 
-async def _reap_orphans(settings: RunnerSettings) -> None:
+async def _reap_orphans() -> None:
     """Kill workspace containers left over from a previous runner process."""
     with contextlib.suppress(Exception):
         ps = await asyncio.create_subprocess_exec(
@@ -567,19 +564,21 @@ async def _reap_orphans(settings: RunnerSettings) -> None:
 
 
 async def serve() -> None:
+    import signal
+
     import uvicorn
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     settings = RunnerSettings.from_env()
     runner = Runner(settings)
-    await _reap_orphans(settings)
+    await _reap_orphans()
     control = uvicorn.Server(
         uvicorn.Config(
             build_control_app(runner),
             host=settings.control_host,
             port=settings.control_port,
             log_level="info",
-            ws_max_size=MAX_LINE,
+            ws_max_size=32 * 1024 * 1024,
         )
     )
     proxy = uvicorn.Server(
@@ -594,8 +593,6 @@ async def serve() -> None:
     # Two servers share one loop: one signal handler stops both.
     control.install_signal_handlers = lambda: None  # type: ignore[method-assign]
     proxy.install_signal_handlers = lambda: None  # type: ignore[method-assign]
-    import signal
-
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         with contextlib.suppress(NotImplementedError):

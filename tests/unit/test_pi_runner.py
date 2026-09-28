@@ -37,7 +37,9 @@ H = {"x-pico-runner-token": TOKEN}
 def control(tmp_path: Path):
     settings = RunnerSettings(token=TOKEN, workspace_root=tmp_path / "ws", min_free_mb=0)
     runner = Runner(settings)
-    return TestClient(build_control_app(runner)), tmp_path / "ws" / S / M / C
+    client = TestClient(build_control_app(runner))
+    client.runner = runner  # type: ignore[attr-defined]
+    return client, tmp_path / "ws" / S / M / C
 
 
 def test_control_requires_runner_token(control) -> None:
@@ -177,6 +179,7 @@ def proxy_client(monkeypatch):
             llm_key="REAL-KEY",
             tool_url="http://127.0.0.1:5555",
             tool_token="tooltok",
+            model="gemini-3.8-flash",
         )
     )
     yield TestClient(app), seen
@@ -188,7 +191,7 @@ def test_proxy_swaps_box_token_for_real_key(proxy_client) -> None:
     r = client.post(
         "/internal/ws-proxy/l/run9/v1/chat/completions",
         headers={**H, "authorization": "Bearer boxtok"},
-        json={"x": 1},
+        json={"model": "gemini-3.8-flash"},
     )
     assert r.status_code == 200
     assert seen["target"] == "http://127.0.0.1:3000/v1/chat/completions"
@@ -207,6 +210,20 @@ def test_proxy_denies(proxy_client, headers, run) -> None:
     client, seen = proxy_client
     r = client.post(f"/internal/ws-proxy/l/{run}/v1/responses", headers=headers, json={})
     assert r.status_code in {401, 403}
+    assert "target" not in seen
+
+
+def test_proxy_pins_run_model_and_paths(proxy_client) -> None:
+    client, seen = proxy_client
+    auth = {**H, "authorization": "Bearer boxtok"}
+    r = client.post("/internal/ws-proxy/l/run9/v1/chat/completions", headers=auth, json={"model": "gpt-5.6-sol"})
+    assert r.status_code == 403
+    for path in ("images/generations", "embeddings", "admin/gateway"):
+        assert client.post(f"/internal/ws-proxy/l/run9/v1/{path}", headers=auth, json={}).status_code == 404
+    r = client.post(
+        "/internal/ws-proxy/l/run9/v1/..%2F..%2Fadmin", headers=auth, json={"model": "gemini-3.8-flash"}
+    )
+    assert r.status_code == 404
     assert "target" not in seen
 
 
@@ -243,31 +260,121 @@ def _docx() -> bytes:
     return buf.getvalue()
 
 
-@pytest.mark.asyncio
-async def test_land_outputs_new_changed_and_invalid(monkeypatch) -> None:
-    key = WorkspaceKey.for_run(school_id="s", membership_id="m", conversation_id="c", run_id="r")
-    files = {"outputs/old.txt": b"same", "outputs/new.docx": _docx(), "outputs/fake.xlsx": b"text"}
+async def _fake_listing(monkeypatch, files: dict[str, bytes], mtimes: dict[str, float] | None = None):
+    import hashlib
 
     async def fake_list(k):
-        import hashlib
-
-        return {p: hashlib.sha256(b).hexdigest() for p, b in files.items()}
+        return {
+            p: {"path": p, "sha256": hashlib.sha256(b).hexdigest(), "mtime": (mtimes or {}).get(p, 2000.0)}
+            for p, b in files.items()
+        }
 
     async def fake_fetch(k, path):
         return files[path]
 
     monkeypatch.setattr(tp_runner, "list_outputs", fake_list)
     monkeypatch.setattr(tp_runner, "fetch_output", fake_fetch)
+
+
+async def test_land_outputs_new_changed_and_invalid(monkeypatch) -> None:
     import hashlib
 
-    before = {"outputs/old.txt": hashlib.sha256(b"same").hexdigest()}
+    key = WorkspaceKey.for_run(school_id="s", membership_id="m", conversation_id="c", run_id="r")
+    files = {"outputs/old.txt": b"same", "outputs/new.docx": _docx(), "outputs/fake.xlsx": b"text"}
+    await _fake_listing(monkeypatch, files)
+    before = {"outputs/old.txt": {"sha256": hashlib.sha256(b"same").hexdigest()}}
     store = _Store()
-    results = await land_outputs(key=key, before=before, artifact_store=store, principal=object())
+    results = await land_outputs(
+        key=key, before=before, since=0.0, artifact_store=store, principal=object()
+    )
     by_title = {r["title"]: r for _, r in results}
     assert set(by_title) == {"new.docx", "fake.xlsx"}
     assert by_title["new.docx"]["artifact_id"] == "a0"
     assert "error" in by_title["fake.xlsx"]
     assert [r["title"] for r in store.rows] == ["new.docx"]
+
+
+async def test_land_outputs_without_snapshot_uses_mtime(monkeypatch) -> None:
+    key = WorkspaceKey.for_run(school_id="s", membership_id="m", conversation_id="c", run_id="r")
+    files = {"outputs/old.md": b"old", "outputs/new.md": b"new"}
+    await _fake_listing(monkeypatch, files, {"outputs/old.md": 100.0, "outputs/new.md": 2000.0})
+    store = _Store()
+    results = await land_outputs(key=key, before=None, since=1000.0, artifact_store=store, principal=object())
+    assert [r["title"] for _, r in results] == ["new.md"]
+
+
+def test_workspace_key_fail_closed_without_tenant() -> None:
+    from pico_orchestrator.true_pi.client import TruePiClientError
+
+    with pytest.raises(TruePiClientError):
+        WorkspaceKey.for_run(school_id="", membership_id="m", conversation_id="c", run_id="r")
+    with pytest.raises(TruePiClientError):
+        WorkspaceKey.for_run(school_id="s", membership_id=" ", conversation_id="c", run_id="r")
+
+
+def test_control_refuses_files_while_box_runs(control) -> None:
+    from types import SimpleNamespace
+
+    from pi_runner.policy import WorkspaceKey as RKey
+
+    client, _ = control
+    client.runner.sessions["live"] = SimpleNamespace(key=RKey.parse(S, M, C))
+    try:
+        assert client.get(f"{BASE}/outputs", headers=H).status_code == 409
+        assert client.get(f"{BASE}/file", params={"path": "outputs/a"}, headers=H).status_code == 409
+        r = client.put(f"{BASE}/file", params={"path": "attachments/a"}, content=b"x", headers=H)
+        assert r.status_code == 409
+    finally:
+        client.runner.sessions.clear()
+
+
+@pytest.mark.parametrize(
+    "lane,path,raw,ok",
+    [
+        ("l", "v1/chat/completions", b"/l/r/v1/chat/completions", True),
+        ("l", "v1/responses", b"/l/r/v1/responses", True),
+        ("t", "v1/tool", b"/t/r/v1/tool", True),
+        ("l", "v1/../../v1/admin/gateway", b"/l/r/v1/..%2F..%2Fv1%2Fadmin%2Fgateway", False),
+        ("l", "v1/admin", b"/l/r/v1/admin", False),
+        ("l", "v1/chat/completions", b"/l/r/v1/chat%2Fcompletions", False),
+        ("t", "v1/tool/../x", b"/t/r/v1/tool/../x", False),
+        ("x", "v1/tool", b"/x/r/v1/tool", False),
+    ],
+)
+def test_runner_proxy_path_allowlist(lane, path, raw, ok) -> None:
+    from pi_runner.app import proxy_path_ok
+
+    assert proxy_path_ok(lane, path, raw) is ok
+
+
+def test_fifo_and_symlink_never_read(tmp_path: Path) -> None:
+    from pathlib import PurePosixPath
+
+    from pi_runner import fsafe
+
+    ws = tmp_path / "ws"
+    (ws / "outputs").mkdir(parents=True)
+    os.mkfifo(ws / "outputs" / "pipe.docx")
+    os.symlink("/proc/self/environ", ws / "outputs" / "env.txt")
+    (ws / "outputs" / "ok.txt").write_text("fine")
+    rows, truncated = fsafe.list_regular(ws, "outputs", max_files=10, max_total=1 << 20, max_file=1 << 20)
+    assert [r.path for r in rows] == ["outputs/ok.txt"] and not truncated
+    for bad in ("outputs/pipe.docx", "outputs/env.txt"):
+        with pytest.raises(OSError):
+            fsafe.read_file(ws, PurePosixPath(bad), max_bytes=1 << 20)
+
+
+def test_listing_caps_across_nested_dirs(tmp_path: Path) -> None:
+    from pi_runner import fsafe
+
+    ws = tmp_path / "ws"
+    for i in range(5):
+        d = ws / "outputs" / f"d{i}" / "x"
+        d.mkdir(parents=True)
+        for j in range(5):
+            (d / f"f{j}.txt").write_text("x")
+    rows, truncated = fsafe.list_regular(ws, "outputs", max_files=7, max_total=1 << 20, max_file=1 << 20)
+    assert len(rows) == 7 and truncated
 
 
 def test_runner_enabled_allowlist(monkeypatch) -> None:

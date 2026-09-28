@@ -71,6 +71,8 @@ class RunnerSettings:
     tmp_size: str = "512m"
     home_size: str = "512m"
     workspace_max_mb: int = 2048
+    workspace_max_files: int = 20000
+    max_session_s: int = 8 * 3600
     max_sessions: int = 6
     max_per_school: int = 3
     min_free_mb: int = 3072
@@ -92,6 +94,10 @@ class RunnerSettings:
             for d in os.environ.get("PICO_RUNNER_DNS", "223.5.5.5,119.29.29.29").split(",")
             if d.strip()
         )
+        runtime = os.environ.get("PICO_RUNNER_RUNTIME", "runsc")
+        if runtime != "runsc" and os.environ.get("PICO_RUNNER_ALLOW_UNSAFE_RUNTIME") != "1":
+            # Boxes run untrusted model commands; plain runc shares the host kernel.
+            raise PolicyError("runner.runtime", f"refusing runtime {runtime!r}; boxes need runsc")
         return cls(
             token=token,
             upstream=os.environ.get("PICO_RUNNER_UPSTREAM", "http://127.0.0.1:18765").rstrip("/"),
@@ -100,11 +106,13 @@ class RunnerSettings:
             ),
             image=os.environ.get("PICO_RUNNER_IMAGE", "pico-workspace:v1"),
             network=os.environ.get("PICO_RUNNER_NETWORK", "pico-ws"),
-            runtime=os.environ.get("PICO_RUNNER_RUNTIME", "runsc"),
+            runtime=runtime,
             memory=os.environ.get("PICO_RUNNER_MEM", "1536m"),
             cpus=os.environ.get("PICO_RUNNER_CPUS", "1.5"),
             pids=_env_int("PICO_RUNNER_PIDS", 256),
             workspace_max_mb=_env_int("PICO_RUNNER_WS_MAX_MB", 2048),
+            workspace_max_files=_env_int("PICO_RUNNER_WS_MAX_FILES", 20000),
+            max_session_s=_env_int("PICO_RUNNER_MAX_SESSION_S", 8 * 3600),
             max_sessions=_env_int("PICO_RUNNER_MAX_SESSIONS", 6),
             max_per_school=_env_int("PICO_RUNNER_MAX_PER_SCHOOL", 3),
             min_free_mb=_env_int("PICO_RUNNER_MIN_FREE_MB", 3072),
@@ -246,6 +254,9 @@ def docker_run_argv(
         str(settings.pids),
         "--ulimit",
         "nofile=4096:4096",
+        # stdout/stderr go to the runner pipe only; no json-file log on the host disk.
+        "--log-driver",
+        "none",
         "--env-file",
         str(env_file),
         "-e",

@@ -4,16 +4,21 @@
 FROM python:3.12-slim-bookworm
 
 ARG DOCKER_CLI_VERSION=29.4.0
+# sha256 of docker-29.4.0.tgz (download.docker.com == mirrors.aliyun.com, 2026-09-28)
+ARG DOCKER_CLI_SHA256=56c90317a05d86bd84f2bf8d086faefce6f31f82e8c92880de7710dd5f8ce5b7
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONPATH=/app/services
+    PYTHONPATH=/app/services \
+    DOCKER_CONFIG=/tmp/.docker
 
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl; \
-    curl -fsSL "https://mirrors.aliyun.com/docker-ce/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz" \
-      | tar -xz -C /tmp docker/docker; \
+    curl -fsSL -o /tmp/docker.tgz \
+      "https://mirrors.aliyun.com/docker-ce/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz"; \
+    echo "${DOCKER_CLI_SHA256}  /tmp/docker.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/docker.tgz -C /tmp docker/docker; rm -f /tmp/docker.tgz; \
     mv /tmp/docker/docker /usr/local/bin/docker; \
     docker --version; \
     apt-get purge -y curl; apt-get autoremove -y; rm -rf /var/lib/apt/lists/*

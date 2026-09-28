@@ -99,12 +99,15 @@ class WorkspaceKey:
     def for_run(
         cls, *, school_id: str, membership_id: str, conversation_id: str | None, run_id: str
     ) -> WorkspaceKey:
+        # Tenant fail-closed: no shared "none" workspace for missing ids.
+        if not str(school_id or "").strip() or not str(membership_id or "").strip():
+            raise TruePiClientError("workspace needs school and membership")
         # One workspace per conversation; a chat without a conversation id
         # gets a throwaway workspace per run.
         conv = conversation_id or f"run:{run_id}"
         return cls(
-            school=_h(school_id or "none", salt="school"),
-            member=_h(membership_id or "none", salt="member"),
+            school=_h(school_id, salt="school"),
+            member=_h(membership_id, salt="member"),
             conv=_h(conv, salt="conv"),
         )
 
@@ -126,6 +129,9 @@ class ProxyEntry:
     llm_key: str
     tool_url: str
     tool_token: str
+    model: str = ""
+    # Concurrent model calls one box may hold open through the proxy.
+    slots: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(4))
 
 
 _REGISTRY: dict[str, ProxyEntry] = {}
@@ -277,9 +283,14 @@ class RunnerTransport(SubprocessTransport):
                 llm_key=self.runner.llm_key,
                 tool_url=self.tool_url,
                 tool_token=self.tool_token,
+                model=self.model,
             )
         )
-        await self.upload_attachments()
+        try:
+            await self.upload_attachments()
+        except Exception:
+            unregister_proxy(self.run_id)
+            raise
         ws_url = runner_url().replace("http://", "ws://").replace("https://", "wss://")
         try:
             self._ws = await connect(
@@ -411,19 +422,27 @@ def _safe_name(name: str) -> str:
 # --- outputs → Pico ledger -----------------------------------------------------
 
 
-async def list_outputs(key: WorkspaceKey) -> dict[str, str]:
-    """{path: sha256} of files under outputs/."""
+async def list_outputs(key: WorkspaceKey) -> dict[str, dict[str, Any]]:
+    """{path: {sha256, mtime, size}} of regular files under outputs/.
+
+    The runner refuses (409) while a box is still running on the workspace;
+    the box of this turn is being stopped, so wait briefly for it.
+    """
     import httpx
 
     async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.get(
-            f"{runner_url()}/v1/ws/{key.path()}/outputs",
-            headers={"x-pico-runner-token": runner_token()},
-        )
+        for attempt in range(20):
+            resp = await client.get(
+                f"{runner_url()}/v1/ws/{key.path()}/outputs",
+                headers={"x-pico-runner-token": runner_token()},
+            )
+            if resp.status_code != 409:
+                break
+            await asyncio.sleep(0.5 if attempt < 10 else 1.5)
     if resp.status_code != 200:
         raise TruePiClientError(f"runner outputs failed ({resp.status_code})")
     rows = resp.json().get("files") or []
-    return {str(r.get("path")): str(r.get("sha256")) for r in rows if r.get("path")}
+    return {str(r["path"]): r for r in rows if r.get("path")}
 
 
 async def fetch_output(key: WorkspaceKey, path: str) -> bytes:
@@ -448,17 +467,27 @@ def output_kind(path: str) -> str:
 async def land_outputs(
     *,
     key: WorkspaceKey,
-    before: Mapping[str, str],
+    before: Mapping[str, Any] | None,
+    since: float,
     artifact_store: Any,
     principal: Any,
 ) -> list[tuple[str, dict[str, Any]]]:
-    """Write new/changed outputs into the ledger. Returns tool-style results."""
+    """Write new/changed outputs into the ledger. Returns tool-style results.
+
+    ``before`` is the pre-turn listing; if it could not be taken, only files
+    modified since ``since`` count, so old files never pose as this turn's.
+    """
     from pico_orchestrator.artifact_types import is_valid_ooxml_package, title_protected_extension
 
     after = await list_outputs(key)
     results: list[tuple[str, dict[str, Any]]] = []
-    for path, sha in sorted(after.items()):
-        if before.get(path) == sha:
+    for path, row in sorted(after.items()):
+        sha = str(row.get("sha256") or "")
+        if before is not None:
+            prev = before.get(path)
+            if prev is not None and str(prev.get("sha256") or "") == sha:
+                continue
+        elif float(row.get("mtime") or 0) < since:
             continue
         title = os.path.basename(path)
         try:
@@ -474,8 +503,8 @@ async def land_outputs(
             continue
         if artifact_store is None:
             continue
-        row = await artifact_store.write(
-            principal, title=title, content=raw, kind=output_kind(path)
+        written = await artifact_store.write(principal, title=title, content=raw, kind=output_kind(path))
+        results.append(
+            ("workspace_output", {**written, "title": title, "bytes": len(raw), "via": "workspace"})
         )
-        results.append(("workspace_output", {**row, "title": title, "bytes": len(raw), "via": "workspace"}))
     return results

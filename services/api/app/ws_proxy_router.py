@@ -14,6 +14,7 @@ of a run that is alive in this process:
 from __future__ import annotations
 
 import hmac
+import json
 import logging
 
 import httpx
@@ -75,34 +76,60 @@ async def _stream(method: str, target: str, headers: dict[str, str], body: bytes
     )
 
 
+MODEL_PATHS = frozenset({"chat/completions", "responses", "models"})
+TOOL_PATHS = frozenset({"v1/tool", "health"})
+MAX_BODY = 16 * 1024 * 1024
+
+
+def _raw_path_ok(request: Request) -> bool:
+    raw = (request.scope.get("raw_path") or b"").lower()
+    return not (b"%" in raw or b".." in raw or b"\\" in raw or b"//" in raw)
+
+
 @router.api_route("/internal/ws-proxy/l/{run_id}/v1/{path:path}", methods=["GET", "POST"])
 async def ws_llm(run_id: str, path: str, request: Request) -> Response:
     if not _runner_ok(request):
         return _deny("auth.denied", 401)
+    if path not in MODEL_PATHS or not _raw_path_ok(request):
+        return _deny("proxy.denied", 404)
     entry = proxy_entry(run_id)
     if entry is None:
         return _deny("proxy.no_run")
     if not hmac.compare_digest(_bearer(request), entry.llm_token):
         return _deny("auth.denied", 401)
+    body = await request.body()
+    if len(body) > MAX_BODY:
+        return _deny("proxy.too_large", 413)
+    if request.method == "POST":
+        # The box may only spend on this run's model (curl in the box can call
+        # the proxy directly; it must not pick another model or endpoint).
+        try:
+            payload = json.loads(body.decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return _deny("proxy.bad_body", 400)
+        if not isinstance(payload, dict) or str(payload.get("model") or "") != entry.model:
+            return _deny("proxy.model_denied")
     headers = {k: v for k, v in request.headers.items() if k.lower() in _KEEP}
     headers["authorization"] = f"Bearer {entry.llm_key}"
     target = f"{entry.llm_upstream.rstrip('/')}/{path}"
-    if request.url.query:
-        target = f"{target}?{request.url.query}"
-    return await _stream(request.method, target, headers, await request.body())
+    async with entry.slots:
+        return await _stream(request.method, target, headers, body)
 
 
 @router.api_route("/internal/ws-proxy/t/{run_id}/{path:path}", methods=["GET", "POST"])
 async def ws_tool(run_id: str, path: str, request: Request) -> Response:
     if not _runner_ok(request):
         return _deny("auth.denied", 401)
+    if path not in TOOL_PATHS or not _raw_path_ok(request):
+        return _deny("proxy.denied", 404)
     entry = proxy_entry(run_id)
     if entry is None or not entry.tool_url:
         return _deny("proxy.no_run")
-    if path not in {"v1/tool", "health"}:
-        return _deny("proxy.denied", 404)
     headers = {k: v for k, v in request.headers.items() if k.lower() in _KEEP}
     auth = request.headers.get("authorization")
     if auth:
         headers["authorization"] = auth
-    return await _stream(request.method, f"{entry.tool_url.rstrip('/')}/{path}", headers, await request.body())
+    body = await request.body()
+    if len(body) > MAX_BODY:
+        return _deny("proxy.too_large", 413)
+    return await _stream(request.method, f"{entry.tool_url.rstrip('/')}/{path}", headers, body)
