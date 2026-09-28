@@ -2,9 +2,10 @@
 
 ```text
 DOC: docs/RESEARCH-RUN-SURVIVE-RESTART.md
-STATUS: BINDING 选型结论 · T-CLOSE-P0P1-UX-STABILITY-CLAIM
+STATUS: BINDING 选型结论已由业主 2026-09-28 放开 C（#1090）· 旧 B2/B4 否决 SUPERSEDED
 DATE: 2026-08-11
-法律: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
+UPDATED: 2026-09-28
+法律: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md §3b
 CLAIM-WB: NO
 ```
 
@@ -17,17 +18,18 @@ CLAIM-WB: NO
 | ID | 方案 | 成本 | 法律 | 体验 | 结论 |
 |----|------|------|------|------|------|
 | **B1** | **SIGTERM soft drain**：lifespan 等 in-flight ≤N 秒 + compose `stop_grace_period` | 低 | **合规**（不增第二 worker OS） | 短任务多半可跑完 | **选用** |
-| **B2** | 检查点 resume（tool 步后可续） | 中高 | 边界：勿自研会话树 | 长任务更强 | **不做本卡**（真 Pi 上游能力成熟后再薄适配） |
+| **B2** | 检查点 resume（tool 步后可续） | 中高 | 薄适配 Pi `--session` | 长任务更强 | **业主 2026-09-28 放开**（C：中断用 Pi `--session` 续跑） |
 | **B3** | 失败人话 + 一键重新运行 | 已部分落地 | 合规 | 必须保留 | **保留加固** |
-| **B4** | 外置 durable worker / 第二进程队列 | 高 | **易违法**（自研 worker OS） | 最强 | **否决本卡** |
+| **B4** | 执行与 pico-api 进程分离（上游 Pi 进程 + session，不是自研 worker OS） | 中 | 薄适配 | 部署不杀在飞 | **业主 2026-09-28 放开**（C）。自研第二套任务队列核仍违法 |
 
 ## 选型（定稿）
 
 ```text
-本卡实现: B1 + B3
-不做: B2 完整 resume · B4 外置 worker
-理由: 单节点 in-process 真源下，drain 是唯一低成本、法律安全的「降低伤害」；
-      完整 resume 属于上游 harness 能力，禁止在 Pico 自研第二编排核。
+旧结论（B2/B4 否决）SUPERSEDED · 业主 2026-09-28 放开 C（#1090）。
+现行：B1 drain 仍可作部署缓冲；B2 = 薄适配 Pi --session 续跑；
+      B4 允许的是「执行与 pico-api 进程分离」（上游 Pi 进程活过部署），
+      禁止自研第二套 worker OS / 任务队列核。
+实现走 T-LONGTASK 第 2 张卡。
 ```
 
 ## 实现要点（C）

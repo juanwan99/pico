@@ -1,0 +1,27 @@
+{
+  "id": "LT1",
+  "title": "多附件通读后写长报告（Word）",
+  "timeout_s": 900,
+  "turns": [
+    {
+      "prompt": "附件里有教研纪要、家长会提纲和成绩样例。请通读全部附件后，写一份给没来开会的家长看的书面报告（Word）。要求：有标题和分段；点名语文/数学/英语均分和甲乙组数学差距；点名作业按时率；不要点名批评任何同学；不要网页。",
+      "attachments": [
+        {"name": "教研纪要.md", "file": "fixtures/memo-a.md"},
+        {"name": "家长会提纲.md", "file": "fixtures/memo-b.md"},
+        {"name": "成绩样例.csv", "file": "fixtures/scores.csv"}
+      ]
+    }
+  ],
+  "expect": {
+    "kinds": ["docx"],
+    "min_paragraphs": 8,
+    "must_contain": ["81.5", "76", "92"]
+  },
+  "score_points": [
+    {"id": "file", "text": "产出可打开的 Word，不是聊天复述"},
+    {"id": "coverage", "text": "点名了三科均分、两组差距、作业按时率"},
+    {"id": "length", "text": "有标题分段，篇幅够家长补看（约千字以上）"},
+    {"id": "privacy", "text": "没有点名批评具体同学"},
+    {"id": "fidelity", "text": "数字与附件一致，没有另编班级"}
+  ]
+}

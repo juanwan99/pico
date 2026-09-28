@@ -1,0 +1,28 @@
+{
+  "id": "LT8",
+  "title": "混合附件办公套件（Word+Excel+PPT）",
+  "timeout_s": 1200,
+  "turns": [
+    {
+      "prompt": "附件同时有纪要、成绩 CSV、单元说明。请一次交出：Word 会议纪要整理稿、Excel 成绩汇总（公式算总分=平时*0.6+期末*0.4）、PPT 5 页以上把单元目标和校历两件事情讲清楚。三份都要。不要网页。",
+      "attachments": [
+        {"name": "教研纪要.md", "file": "fixtures/memo-a.md"},
+        {"name": "成绩样例.csv", "file": "fixtures/scores.csv"},
+        {"name": "单元说明.md", "file": "fixtures/unit-plan.md"},
+        {"name": "校历.md", "file": "fixtures/calendar.md"}
+      ]
+    }
+  ],
+  "expect": {
+    "kinds": ["docx", "xlsx", "pptx"],
+    "min_slides": 5,
+    "xlsx_has_formula": true
+  },
+  "score_points": [
+    {"id": "triple", "text": "三份文件都有且可打开"},
+    {"id": "formula", "text": "Excel 总分是公式不是写死数字"},
+    {"id": "ppt", "text": "PPT ≥5 页，点到单元或校历"},
+    {"id": "word", "text": "Word 整理了纪要要点而不是空标题"},
+    {"id": "bundle", "text": "套件齐全，没有用聊天代替其中一份"}
+  ]
+}

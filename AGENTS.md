@@ -58,7 +58,7 @@ Pico 禁止自研内核/协议栈/Agent OS/第二编排真源。
 | 真 Pi RPC/SDK 薄客户端 + gateway 回调 | 自研 agent loop 当长期主核加厚 |
 | 事件映射进唯一 Pico 账本 | 第二套账本 / 第二默认核 |
 | 门闩·人包·假绿防护·租户 | 自研 MCP 协议栈 / 向量库内核 |
-| 白名单工具（无公网 bash） | 桥内再造 delivery 全家桶 / 私有 OS / 自搞一套重体系 |
+| 隔离工作区 Pi 内建工具（全出网；禁内网/宿主/元数据） | 桥内再造 delivery 全家桶 / 私有 OS / 自搞一套重体系 / 宿主 shell |
 
 PR 必须能回答：适配哪段？上游是谁？升级是否只改适配层？
 
@@ -101,7 +101,7 @@ Do **not** route Cool/Keel/supervisor/mailbox/relay/self-drive. Visual Ready sti
 
 开场只读文首 + `docs/EXPERIENCE.md` 点名段。下面是索引；SUPERSEDED / 考古不当现况。
 
-Owner-aligned goals: [`docs/DIRECTION-NOW.md`](docs/DIRECTION-NOW.md) §0-star + [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md) v2.0。[`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md) = 考古，文中 Kimi 优先句已废，**勿当当前目标**。
+Owner-aligned goals: [`docs/DIRECTION-NOW.md`](docs/DIRECTION-NOW.md) §0-star v1.5 + [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md) v3.0。[`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md) = 考古，文中 Kimi 优先句已废，**勿当当前目标**。
 
 **Truth freeze:** [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md)  
 **What is Pico:** [`docs/WHAT-IS-PICO.md`](docs/WHAT-IS-PICO.md)  
@@ -133,7 +133,7 @@ Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 
 ## Product rules
 - **Org:** **本窗合一**（写/合/部/收尾同一窗）。旧窗1/2/4 与主管/执行者是历史别名，不是编制。见 [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md)。
 - **Ship steps:** [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. **One window** runs the chain; no multi-issue process OS.
-- **Product goal:** Web WorkBuddy degree — [docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star v1.4。用法 = Grok。办公主线（Word/Excel/HTML/PPT）。写代码是仆人。能力并列。办公计算机交成熟上游。不要 bash。
+- **Product goal:** Web WorkBuddy degree — [docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star v1.5。用法 = Grok。第一需求 = 长任务高质量跑完。办公主线（Word/Excel/HTML/PPT）。写代码是仆人。能力并列。隔离工作区交上游 Pi（内建工具打开）。不碰宿主 shell。
 - **Default runtime:** true Pi (`health.default_runtime=pi-true`). Chat/image = **New API**（`openai-responses` / Gemini 渠道；现网模型见 EXPERIENCE §34，不是「DeepSeek 聊天核」）。**Gemini 3.x 文本/识图必须 Vertex `global`（EXPERIENCE §99），禁止 `us-central1`。** 计量：New API 管渠道，Pico 记用量，edu 只认 export。Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted**.
 - **Prod flags:** `PICO_TRUE_PI_DEFAULT=1` → `health.default_runtime=pi-true`; hosted rollback = `PICO_HOSTED_LOOP=1`; legacy Kimi only if emergency. `CLAIM-WB-DEGREE-WEB` 已是业主 YES @ `dcb47c00…`（2026-08-26）；工程禁改口/再代签。
 - **KA-4 HARD:** `run_agent_loop` / `runner.py` **removed**. Rollback multi-step = redeploy prior tip or legacy flag — not revive loop.

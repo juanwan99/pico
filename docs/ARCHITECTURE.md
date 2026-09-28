@@ -1,7 +1,7 @@
 # Pico architecture (current)
 
 ```
-STATUS: subordinate to docs/TRUTH-FREEZE.md v2.2 + docs/WHAT-IS-PICO.md + DIRECTION-NOW §0-star
+STATUS: subordinate to docs/TRUTH-FREEZE.md v3.0 + docs/WHAT-IS-PICO.md + DIRECTION-NOW §0-star v1.5
 DATE: 2026-09-19
 NOTE: This page is a layer sketch. Frozen product/runtime sentences live in TRUTH-FREEZE.
       docs/OVERALL-ARCHITECTURE.md (2026-07-29 Kimi / 点池 draft) is not live.

@@ -1,3 +1,5 @@
+> **SUPERSEDED（业主 2026-09-28 · #1090）**：本文「不要 bash / B1 取消 / `--no-builtin-tools` 永在 / 无公网 bash」作为现行禁令已放开。现行法条：LAW §3b · TRUTH-FREEZE v3.0。下文只作学习账。
+
 # Pico 阶段方案：办公计算机交成熟上游 · Pico 只做薄适配
 
 ```text
@@ -5,7 +7,7 @@ DOC: Pico stage plan · office computer to mature upstream
 STATUS: BINDING stage plan · 2026-09-06 · 办公主线纠偏
 CORRECTED: 2026-09-05 · Codex review of exp SHA eefa8879 — A对照、隔离三层、失败语义；撤回「读容器 /etc = B1 路线失败」
 OWNER-LOCK: 2026-09-06 · 公开发布不是 Pico 能力。学校页面走 Edu 申请 + 校管批准。H3 / PR-4 取消。不把 publish 挪进 CORE。不自研审批核。禁止 Pico `/p/{id}` 当发布产品。
-OWNER-LOCK: 2026-09-06 · **不要 bash。** 宿主与 overlay **都不**开放 Pi 内建 bash/read/write/edit。B1（箱内 Pi 去掉 `--no-builtin-tools`）**取消**。PR-7b 不开。不自研通用 exec 核。
+OWNER-LOCK: 2026-09-06 · **不要 bash**（**SUPERSEDED 2026-09-28 · #1090**：隔离工作区打开 Pi 内建工具；宿主 shell 仍禁）。B1 取消句作废。不自研通用 exec 核。
 OWNER-LOCK: 2026-09-06 · **产品主线是办公**（Word / Excel / HTML / PPT）。写代码只够服务办公，不是编程产品。本阶段接办公计算机，不是 Pi bash / overlay 编程环境。
 DATE: 2026-09-06
 AUTHOR: Grok (本窗)

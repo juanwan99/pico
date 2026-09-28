@@ -22,7 +22,7 @@ CLAIM-WB: NO
 | 未选 | 长期把编排侧迁 Node；Python 重写 Pi 内核；默认 Node SDK 微服务 |
 | **镜像** | 生产 host 路径：`Dockerfile.pico-api.true-pi`（Node 22 + 钉版 pi）；lean `Dockerfile.pico-api` 仅无真核场景 |
 | **模型** | 真 Pi `--provider openai` + `api=openai-responses`，打 **New API**（`DEEPSEEK_BASE_URL` 槽位指向 `http://127.0.0.1:3000/v1`，钥是 New API token）。现网模型见 EXPERIENCE §34。禁止把「deepseek provider」写成现网聊天核 |
-| **工具** | `--no-builtin-tools` + 仓内 extension 仅注册 Pico gateway 白名单（workspace/generate/verify + #507 `web_search`/`web_fetch`）；经 127.0.0.1 回调 Python。`prompt()` 可带 `images[]`（#703）；仍禁 host bash |
+| **工具** | 目标（#1090 A）：隔离工作区打开 Pi 内建 read/write/edit/bash + 仓内 extension 注册 Pico gateway 白名单。现网仍 `--no-builtin-tools`（实现走第 1 张卡）。`prompt()` 可带 `images[]`（#703）；仍禁 host shell |
 | **默认路径** | **`default_runtime=pi-true`**（`PICO_TRUE_PI_DEFAULT=1`） |
 | **回滚** | **唯一事故路径** `PICO_HOSTED_LOOP=1` → hosted `pi_runtime`（`default_runtime=pi-agent`） |
 | **过渡开关** | `SHADOW` / `BYPASS` / `CANARY` 非生产常态；禁止与 DEFAULT 双开装饰 |

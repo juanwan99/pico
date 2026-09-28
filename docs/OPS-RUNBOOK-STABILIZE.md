@@ -28,7 +28,7 @@ AUTH_HEALTH: GET /api/pico/health  (登录后 · 策略 A · 含 git_sha)
 | 项 | 默认 |
 |----|------|
 | 页关 / SSE 断 | **不杀 job**（`PICO_RUN_DETACH_ON_DISCONNECT=1`） |
-| 长跑墙钟 | `PICO_RUN_DURABLE_MAX_SECONDS=3600` |
+| 长跑成本帽 | 业主 2026-09-28 放开 E：撤墙钟熔断，只留成本/用量帽。旧 `PICO_RUN_DURABLE_MAX_SECONDS=3600` 作为现行熔断 SUPERSEDED（实现走第 2 张卡） |
 | 权威 | 服务端 ledger（Task/Run/Event/Artifact） |
 | 部署 | 进程重启 in-flight 可能丢 → 失败可 **续跑/retry**；见 `docs/ADR-DURABLE-RUN.md` |
 

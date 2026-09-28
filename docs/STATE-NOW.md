@@ -1,14 +1,14 @@
 # STATE-NOW · Pico（本窗真源）
 
 ```text
-DATE: 2026-09-19
+DATE: 2026-09-28
 仓: juanwan99/pico ONLY
 ── 现况三行（开窗索引；对不上以 GitHub + tip 为准）──
-在飞: 无执行卡。开着的只剩 #1005 线索卡（持续线，不派活）
+在飞: #1091 T-LONGTASK-0 法条放开 + 长任务基线验收集（线索 #1090）
 live: curl -fsS https://pico.aivia.asia/api/pico/tip
       → 必须 = origin/main（合了必须部）
-      写本文时 tip = 开窗重 curl（A/B/C/D/E 与 #1055 已关；本行不是 SHA 账本）
-阻塞: 无工程卡。长任务/复杂任务未开卡（结构限制，见 RESEARCH-RUN-SURVIVE-RESTART）。计费产品在 edu
+      写本文时 tip = 开窗重 curl（本行不是 SHA 账本）
+阻塞: 无。长任务线已开（#1090/#1091）。计费产品在 edu
 白名单勿关: 无（旧 #316 #449 #170 #634 #475 已关）
 ────────────────────────────────
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 OWNER DECISION @ 本 tip）
@@ -17,8 +17,8 @@ PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源�
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 最高: LAW §0-supreme · 禁止自搞一套 / 禁止重体系
 工作法: 本窗合一 · GitHub 唯一真源 · 写码树/生产树分开 · AGENTS 文首
-北极星: DIRECTION-NOW §0-star v1.4 · 用法 = Grok · 办公主线 · 能力并列 · 办公计算机交成熟上游 · 阶段方案 docs/PLAN-WORKENV-UPSTREAM.md
-冻结: docs/TRUTH-FREEZE.md v2.2（默认真 Pi · 模型/计量上游 New API · 知识库=Meili 挂载 hybrid+rerank · 扫描件 OCR 只入库 · 办公执行面 = pico-office · generate_docx/pptx/inspect 已拆）
+北极星: DIRECTION-NOW §0-star v1.5 · 用法 = Grok · 长任务第一 · 办公主线 · 能力并列 · 隔离工作区交上游 Pi
+冻结: docs/TRUTH-FREEZE.md v3.0（默认真 Pi · 放开 A–F · 模型/计量上游 New API · 知识库=Meili 挂载 hybrid+rerank · 扫描件 OCR 只入库 · 隔离工作区 · generate_docx/pptx/inspect 已拆）
 真源: GitHub Issue/PR/SHA/CI + 公网 tip。本页三行是索引。
 juanwan99/oneflow: 不当真源（已 Archive）
 ```
@@ -64,6 +64,7 @@ curl tip + GitHub 在飞 → EXPERIENCE（点名≤3）
 
 | 优先级 | Issue | 说明 |
 |--------|-------|------|
+| 在飞 | [#1091](https://github.com/juanwan99/pico/issues/1091) | T-LONGTASK-0 法条放开 + 长任务基线验收集（线索 [#1090](https://github.com/juanwan99/pico/issues/1090)） |
 | 已收口 | [#686](https://github.com/juanwan99/pico/issues/686) | T-LONG-OFFICE 长任务办公 · 业主 PASS · tip=`dcb47c00…` |
 | 已收口 | [#684](https://github.com/juanwan99/pico/issues/684) | T-KB-USABLE 库能用 · 业主 PASS · tip=`c8acc46b…` |
 | 已收口 | [#682](https://github.com/juanwan99/pico/issues/682) | A1 T-KB-ENGINE-ON · 业主 PASS · tip=`590772fe…` |

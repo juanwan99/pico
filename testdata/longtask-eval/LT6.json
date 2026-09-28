@@ -1,0 +1,31 @@
+{
+  "id": "LT6",
+  "title": "预计超过 20 分钟的学期材料包",
+  "timeout_s": 1800,
+  "turns": [
+    {
+      "prompt": "这是一套合成学期材料（纪要、提纲、成绩、单元说明、问卷、校历）。请全部读完后一次交出三份：1) 不少于 2500 字的学期说明 Word（目录+分章，引用材料里的具体数字）；2) 至少 15 页 PPT 给家长会用；3) 一张汇总 Excel（各组人数、三科均分）。不要网页。请自己检查页数和数字后再交。",
+      "attachments": [
+        {"name": "教研纪要.md", "file": "fixtures/memo-a.md"},
+        {"name": "家长会提纲.md", "file": "fixtures/memo-b.md"},
+        {"name": "成绩样例.csv", "file": "fixtures/scores.csv"},
+        {"name": "单元说明.md", "file": "fixtures/unit-plan.md"},
+        {"name": "问卷摘要.md", "file": "fixtures/survey.md"},
+        {"name": "校历.md", "file": "fixtures/calendar.md"}
+      ]
+    }
+  ],
+  "expect": {
+    "kinds": ["docx", "pptx", "xlsx"],
+    "min_slides": 15,
+    "min_paragraphs": 15,
+    "must_contain": ["81.5", "28"]
+  },
+  "score_points": [
+    {"id": "triple", "text": "Word + PPT + Excel 三份都交了且可打开"},
+    {"id": "length", "text": "Word 够长、PPT ≥15 页"},
+    {"id": "numbers", "text": "引用了均分/问卷 n=28/校历日期"},
+    {"id": "selfcheck", "text": "页数或数字有自检痕迹，不是交空壳"},
+    {"id": "finish", "text": "任务跑完而不是中途熔断"}
+  ]
+}

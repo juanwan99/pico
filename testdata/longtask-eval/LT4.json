@@ -1,0 +1,30 @@
+{
+  "id": "LT4",
+  "title": "同会话多轮续改",
+  "timeout_s": 900,
+  "turns": [
+    {
+      "prompt": "根据附件成绩样例，先写一份一页 Word《三年二班平时成绩说明》，点名六位同学的平时分。不要网页。",
+      "attachments": [
+        {"name": "成绩样例.csv", "file": "fixtures/scores.csv"}
+      ]
+    },
+    {
+      "prompt": "同一份 Word：标题改成「三年二班期中说明」，补一节「期末分」，六位同学的期末分都写上，原来的平时分不要丢。"
+    },
+    {
+      "prompt": "再补一节「建议」，写两条给家长的具体建议。文件还是这一份 Word。"
+    }
+  ],
+  "expect": {
+    "kinds": ["docx"],
+    "must_contain": ["三年二班期中说明", "88", "92"]
+  },
+  "score_points": [
+    {"id": "round1", "text": "第一轮交出可打开 Word"},
+    {"id": "title", "text": "续改后标题变成期中说明"},
+    {"id": "keep", "text": "平时分还在"},
+    {"id": "final", "text": "期末分补上"},
+    {"id": "advice", "text": "有建议节，仍是同一份文档而不是另起炉灶丢数据"}
+  ]
+}

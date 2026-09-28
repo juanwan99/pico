@@ -3,7 +3,7 @@
 ```
 DOC: docs/WHAT-IS-PICO.md
 STATUS: BINDING · 覆盖一切冲突的产品口述与旧文档金句
-FREEZE: docs/TRUTH-FREEZE.md v2.0 · LAW §0-supreme · AGENTS 文首工作法 · HANDOFF-WB-PI（产品六条）· DIRECTION-NOW §0-star v1.4
+FREEZE: docs/TRUTH-FREEZE.md v3.0 · LAW §0-supreme · AGENTS 文首工作法 · HANDOFF-WB-PI（产品六条）· DIRECTION-NOW §0-star v1.5
 OWNER: 业主目标 + 总管落盘
 TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可更新「现状」；不可偷偷改「目标」
 ```
@@ -14,7 +14,7 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 
 **Pico 的用法 = Grok 的用法。** 通用 LLM。老师的话是 user；系统纪律是 system，不得冒充人话。工具 / 材料 / Skill 是挂载，模型看老师的话决定用不用。问「这是什么」就解释；说「做成 Word」才交文件。
 
-产品主线是办公（Word / Excel / HTML / PPT）。写代码只够服务办公，不是编程产品。能力并列，禁止焊死唯一路径。专用办公动词是捷径，不是天花板。天花板 = 隔离面上真跑成熟办公库。工作环境交给成熟上游隔离执行面；本阶段接的是办公计算机，不是通用 bash。Pico 只薄适配账本、授权、门脸。Skill 只能收窄。
+产品主线是办公（Word / Excel / HTML / PPT）。写代码只够服务办公，不是编程产品。第一需求 = 长任务高质量跑完。能力并列，禁止焊死唯一路径。专用办公动词是捷径，不是天花板。天花板 = 隔离工作区真跑成熟办公库 + 上游 Pi 内建工具。工作环境交给隔离工作区容器（全出网；禁内网/宿主/元数据）；不碰宿主 shell。Pico 只薄适配账本、授权、门脸。成熟文档 skill 可常驻。
 
 工作台（LibreChat + Pico 账本）是壳和控制面，**不是**读正文猜任务的定向工作流。
 
@@ -56,7 +56,7 @@ TRUTH: 本页「是/不是/现状/目标」；代码与 DEPLOYED/TEST REPORT 可
 | 读正文猜任务的定向 Agent | **禁止**。特定任务只因老师挂了文件/Skill/工具。见 DIRECTION-NOW §0-star |
 | Live Preview 沙箱端口故事 | 业主主路径是 **公网 HTTPS** |
 | 公开发布通道 | **否**。发布是 Edu 专用申请、校管批准。Pico 不挂 `/p/{id}` 当产品 |
-| 编程 Agent / 代码 IDE | **否**。写代码只为做出/改好办公文件。不要 bash，不要对标 Codex/Cursor |
+| 编程 Agent / 代码 IDE | **否**。写代码只为做出/改好办公文件。不碰宿主 shell，不要对标 Codex/Cursor |
 
 ---
 
@@ -89,7 +89,7 @@ hosted pi_runtime / Kimi Agent = 遗产回滚，非产品默认
 
 ### 4.2 实现事实（2026-09-19 · **不是目标** · 以生产 tip 核）
 
-> **真源：** TRUTH-FREEZE **v2.2** + DIRECTION-NOW §0-star v1.4。  
+> **真源：** TRUTH-FREEZE **v3.0** + DIRECTION-NOW §0-star v1.5。  
 > 旧 v1.0「唯一核 = Kimi Agent / 禁 Pi」**已作废**。  
 > 旧「默认 = hosted `pi_runtime` / DeepSeek 聊天核」**不是现网**。  
 > `run_agent_loop` **从未**是产品目标；已移除，**禁止**复活为终局叙事。  
@@ -155,5 +155,5 @@ HTML 仍 generate_html_document                    ⚠️ 捷径还在；不是�
 ## 7. 三句记忆
 
 1. Pico 是 AI 工作台底座（壳 + 账本 + 控制面 + 模型 API），不是网盘/教务。  
-2. **目标默认：真 Pi 编排 + 云端 API 脑**（TRUTH-FREEZE v2.0）；hosted / Kimi 是遗产回滚。办公天花板 = 隔离库，不是 `generate_*`。  
+2. **目标默认：真 Pi 编排 + 云端 API 脑**（TRUTH-FREEZE v3.0）；hosted / Kimi 是遗产回滚。办公天花板 = 隔离工作区 + 上游 Pi 内建工具，不是 `generate_*`。第一需求 = 长任务高质量跑完。  
 3. **最高：禁止自搞一套体系、禁止做重体系。** 自研工具环与双核并列真源均禁止；实现现状以 GitHub + tip 为准，禁止假称完成。
