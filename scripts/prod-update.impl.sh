@@ -205,6 +205,23 @@ precheck_base_images
 
 docker compose -f "$COMPOSE_FILE" build pico-api librechat pico-sandbox pico-office
 
+# Card #1093 workspace boxes: only when .env arms the runner. Host prerequisites
+# (runsc runtime, pico-ws network) are root work in scripts/pi-runner-host-setup.sh;
+# without them fail here, before any container is touched.
+RUNNER_ON=0
+if [ -f .env ] && grep -Eq '^PICO_RUNNER_TOKEN=.{24,}' .env; then
+  RUNNER_ON=1
+  if ! docker info --format '{{json .Runtimes}}' | grep -q '"runsc"'; then
+    echo "[pico] FATAL: PICO_RUNNER_TOKEN set but dockerd has no runsc runtime — run: sudo bash scripts/pi-runner-host-setup.sh" >&2
+    exit 15
+  fi
+  if ! docker network inspect pico-ws >/dev/null 2>&1; then
+    echo "[pico] FATAL: PICO_RUNNER_TOKEN set but docker network pico-ws missing — run: sudo bash scripts/pi-runner-host-setup.sh" >&2
+    exit 15
+  fi
+  docker compose -f "$COMPOSE_FILE" build pi-runner pi-workspace
+fi
+
 # Teacher runs live inside the pico-api process; recreating pico-api kills them.
 # Owner rule (2026-09-09): deploy may interrupt, but wait first. Poll the live
 # /health inflight_runs (old image without the field, or API down, counts as 0).
@@ -246,6 +263,22 @@ fi
 # no-op rebuilds. Teacher runs still die if pico-api itself recreates; the
 # inflight wait above stays. Do not invent a drain OS / second proxy.
 docker compose -f "$COMPOSE_FILE" up -d pico-api librechat pico-sandbox pico-office meilisearch pico-edu-gw-host edu-pico-gw
+if [ "$RUNNER_ON" = "1" ]; then
+  # Recreates only when runner code/config changed; boxes of a restarted
+  # runner are reaped and those turns fail in teacher words.
+  docker compose -f "$COMPOSE_FILE" up -d pi-runner
+  RUNNER_OK=0
+  for _ in $(seq 1 20); do
+    if curl -sf --max-time 2 http://127.0.0.1:18790/health >/dev/null; then RUNNER_OK=1; break; fi
+    sleep 1
+  done
+  if [ "$RUNNER_OK" != "1" ]; then
+    echo "[pico] FATAL: pi-runner 127.0.0.1:18790/health not answering" >&2
+    docker compose -f "$COMPOSE_FILE" logs --no-log-prefix --tail 20 pi-runner >&2 || true
+    exit 15
+  fi
+  echo "[pico] pi-runner ok"
+fi
 
 echo "[pico] ps:"
 docker compose -f "$COMPOSE_FILE" ps

@@ -27,6 +27,7 @@ WRITE_TOOLS = frozenset(
         "render_document",
         "generate_image",
         "generate_diagram",
+        "workspace_output",
     }
 )
 

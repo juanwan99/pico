@@ -230,6 +230,53 @@ services:
     mem_limit: 1g
     pids_limit: 128
 
+  # Card #1093: true Pi with builtins in per-conversation gVisor boxes.
+  # Off until .env sets PICO_RUNNER_TOKEN (prod-update then builds + starts it)
+  # and pico-api gets PICO_RUNNER_URL. Host prerequisites (runsc runtime,
+  # pico-ws network, firewall) come from scripts/pi-runner-host-setup.sh.
+  pi-runner:
+    image: pico-pi-runner:v1
+    build:
+      context: .
+      dockerfile: services/pi_runner/Dockerfile
+    restart: unless-stopped
+    # Binds 127.0.0.1:18790 (pico-api) and the pico-ws gateway 172.30.250.1:18791
+    # (boxes). Host network so the box-facing bind needs no published port.
+    network_mode: host
+    environment:
+      PICO_RUNNER_TOKEN: ${PICO_RUNNER_TOKEN:-}
+      PICO_RUNNER_UPSTREAM: http://127.0.0.1:18765
+      PICO_RUNNER_WS_ROOT: /var/lib/pico/workspaces
+      PICO_RUNNER_IMAGE: pico-workspace:v1
+      PICO_RUNNER_NETWORK: pico-ws
+      PICO_RUNNER_RUNTIME: ${PICO_RUNNER_RUNTIME:-runsc}
+      PICO_RUNNER_PROXY_HOST: 172.30.250.1
+      PICO_RUNNER_MAX_SESSIONS: ${PICO_RUNNER_MAX_SESSIONS:-6}
+      PICO_RUNNER_MAX_PER_SCHOOL: ${PICO_RUNNER_MAX_PER_SCHOOL:-3}
+      PICO_RUNNER_MEM: ${PICO_RUNNER_MEM:-1536m}
+      PICO_RUNNER_WS_MAX_MB: ${PICO_RUNNER_WS_MAX_MB:-2048}
+      PICO_RUNNER_MIN_FREE_MB: ${PICO_RUNNER_MIN_FREE_MB:-3072}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Same path inside and out: the runner hands host paths to dockerd.
+      - /var/lib/pico/workspaces:/var/lib/pico/workspaces
+    # Own filesystem read-only: nothing a box influences can land in runner code.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    mem_limit: 768m
+    stop_grace_period: 30s
+
+  # Build-only: the box image the runner starts. Never `up`.
+  pi-workspace:
+    image: pico-workspace:v1
+    build:
+      context: .
+      dockerfile: services/pi_workspace/Dockerfile
+      args:
+        BASE: pico-sandbox:v13
+    profiles: ["build-only"]
+
   librechat:
     image: pico-librechat:v13
     build:

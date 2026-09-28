@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
@@ -373,7 +374,44 @@ async def _run_true_pi_once(
             plan_path = plan_mode_extension_path()
             if plan_path.is_file() and want_plan_mode_extension(plan_on=plan_on):
                 extra_ext.append(plan_path)
-            transport = SubprocessTransport(
+            from pico_orchestrator.true_pi.runner import (
+                WORKSPACE_SYSTEM,
+                RunnerSpec,
+                RunnerTransport,
+                WorkspaceKey,
+                runner_enabled,
+            )
+
+            # Tenant fail-closed: no box without both ids (legacy spawn keeps builtins off).
+            use_runner = bool(school_key and member_key) and runner_enabled(member_key)
+            transport_cls: Any = SubprocessTransport
+            runner_kwargs: dict[str, Any] = {}
+            if use_runner:
+                from pico_orchestrator.llm_file_pass import turn_files
+
+                # Box always speaks OpenAI-compatible to the runner proxy; the
+                # real upstream (+ key) stays in pico-api.
+                llm_upstream = pi_base or provider.base_url
+                if pi_provider == "deepseek" or not pi_api:
+                    pi_provider = "openai"
+                    pi_api = pi_api or "openai-completions"
+                ws_key = WorkspaceKey.for_run(
+                    school_id=school_key,
+                    membership_id=member_key,
+                    conversation_id=conversation_id,
+                    run_id=rid,
+                )
+                runner_kwargs["runner"] = RunnerSpec(
+                    key=ws_key,
+                    llm_upstream=llm_upstream,
+                    llm_key=provider.api_key,
+                    with_memory=mem_dir is not None and mem_path in extra_ext,
+                    attachments=[(f.filename, f.data) for f in turn_files(rid)],
+                )
+                system_text = f"{system_text}\n\n{WORKSPACE_SYSTEM}".strip()
+                transport_cls = RunnerTransport
+            transport = transport_cls(
+                **runner_kwargs,
                 session_dir=sess,
                 tool_url="",
                 tool_token=tool_server.token,
@@ -456,6 +494,18 @@ async def _run_true_pi_once(
             transport.ui_select = _plan_select
             if hasattr(transport, "plan_hitl"):
                 transport.plan_hitl = True
+        ws_on = getattr(transport, "runner", None) is not None
+        ws_before: dict[str, Any] | None = None
+        ws_since = time.time()
+        if ws_on:
+            # Snapshot before the box exists (the runner refuses file access
+            # while one runs). On failure landing falls back to mtime >= since.
+            from pico_orchestrator.true_pi.runner import list_outputs
+
+            try:
+                ws_before = await list_outputs(transport.runner.key)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("true_pi runner outputs snapshot failed: %s", type(exc).__name__)
         await client.start()
         await emit(
             "run.model",
@@ -722,8 +772,25 @@ async def _run_true_pi_once(
         ):
             state.final_parts.append(transport.assistant_text)
 
-        writes = count_write_tool_successes(state.tool_results)
-        write_fail = failed_write_user_message(state.tool_results)
+        ws_landed: list[tuple[str, dict[str, Any]]] = []
+        if ws_on:
+            ws_landed = await _land_workspace_outputs(
+                transport=transport,
+                before=ws_before,
+                since=ws_since,
+                artifact_store=artifact_store,
+                principal=principal,
+                state=state,
+                emit=emit,
+                tag=tag,
+            )
+
+        write_basis = state.tool_results
+        if ws_on and tool_server is not None:
+            # Box can forge Pi RPC tool events; count only what Pico itself saw.
+            write_basis = [*tool_server.trusted_results, *ws_landed]
+        writes = count_write_tool_successes(write_basis)
+        write_fail = failed_write_user_message(write_basis)
         if write_fail:
             return await _failed(
                 emit,
@@ -829,6 +896,58 @@ async def _run_true_pi_once(
         if tool_server is not None:
             with suppress(Exception):
                 await tool_server.stop()
+
+
+async def _land_workspace_outputs(
+    *,
+    transport: Any,
+    before: dict[str, Any] | None,
+    since: float,
+    artifact_store: ArtifactStore | None,
+    principal: Principal,
+    state: EventMapState,
+    emit: EventEmitter,
+    tag: dict[str, Any],
+) -> list[tuple[str, dict[str, Any]]]:
+    """Workspace ``outputs/`` → Pico ledger, shown like any write tool.
+
+    Returns what landed: the only workspace delivery evidence that counts
+    (a ``workspace_output`` event from the box's RPC stream can be forged).
+    """
+    import json as _json
+
+    from pico_orchestrator.true_pi.runner import land_outputs
+
+    # Stop the box first: files are only read once nothing can race them.
+    with suppress(Exception):
+        await transport.close(kill=True)
+    try:
+        landed = await land_outputs(
+            key=transport.runner.key,
+            before=before,
+            since=since,
+            artifact_store=artifact_store,
+            principal=principal,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("true_pi runner land outputs failed: %s", type(exc).__name__)
+        landed = [("workspace_output", {"error": "工作区文件没能取回，请再跑一次。"})]
+    for name, result in landed:
+        state.tool_results.append((name, result))
+        failed = bool(result.get("error"))
+        payload = {
+            "tool": name,
+            "ok": not failed,
+            "result": _json.dumps(result, ensure_ascii=False),
+            "message": str(result.get("error") or "ok"),
+            "call_id": f"ws-{len(state.tool_results)}",
+            **tag,
+        }
+        if failed:
+            payload["user_message"] = str(result.get("error"))
+        state.event_kinds.append("tool.result")
+        await emit("tool.result", payload)
+    return landed
 
 
 def _provider_fail_code(reason: str) -> str:

@@ -56,6 +56,7 @@ from app.my_files import router as my_files_router
 from app.openai_compat import router as openai_compat_router
 from app.rate_limit import ChatRateLimitMiddleware, get_chat_admission
 from app.settings import Settings, get_settings
+from app.ws_proxy_router import router as ws_proxy_router
 
 
 def _sync_settings_to_environ() -> None:
@@ -155,6 +156,7 @@ app.include_router(edu_school_router)
 app.include_router(my_files_router)
 app.include_router(html_pages_router)
 app.include_router(llm_pass_router)
+app.include_router(ws_proxy_router)
 
 
 # ----- meta / auth -----

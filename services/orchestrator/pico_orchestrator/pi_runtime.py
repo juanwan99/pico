@@ -41,6 +41,7 @@ _WRITE_TOOLS = frozenset(
         "sandbox_office_lib",
         "generate_image",
         "generate_diagram",
+        "workspace_output",
     }
 )
 
