@@ -8,7 +8,7 @@ STATUS: Accepted · 业主令：先纪律后能力；有成熟做法不自研
 CLAIM-WB: 不改签（已 YES · 本 ADR 不代签）
 REPO: juanwan99/pico ONLY
 LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
-北极星: docs/DIRECTION-NOW.md §0-star v1.4 · 用法 = Grok · 办公主线 · 能力并列 · Skill 只收窄
+北极星: docs/DIRECTION-NOW.md §0-star v1.5 · 用法 = Grok · 长任务第一 · 办公主线 · 能力并列 · 成熟文档 skill 可常驻
 目录: docs/ADR-SKILL-CATALOG.md（唯一 Skill 面 = LibreChat Skills）
 现况: docs/STATE-NOW.md · 本 ADR 是加载纪律真源，不是在飞卡
 ```
@@ -45,7 +45,7 @@ LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 |----|--------|------|-------------|
 | **常驻** | 每轮都在模型眼前的动词 | Anthropic：最常用 3–5 个永远加载；业界：常驻过 15 易乱调 | 目标：少数字（读/写、交 HTML/Office、出图、日后一张结构图）。润色默认不是工具。多了 **合并**，不新开调度器 |
 | **Skill 目录** | 每条只挂 **名字 + 一句何时用** | Agent Skills 第一层；Codex 目录约占上下文 ≤2% | 唯一目录 = LibreChat Skills。老师可不点；`$` 是高手出口。禁止第二商店 |
-| **Skill 全文** | 对上了才读 `SKILL.md` 与附件 | 渐进披露第二/三层 | Skill **只能收窄** 白名单。禁止把 `skill-deliverable` 那种长说明书每轮灌进 |
+| **Skill 全文** | 对上了才读 `SKILL.md` 与附件 | 渐进披露第二/三层 | 成熟文档 skill 可常驻（业主 2026-09-28 F）。其余 Skill 只收窄白名单。禁止把 `skill-deliverable` 那种长说明书每轮灌进 |
 
 工具说明必须写 **做什么 + 何时用**。那就是路由，Pico 不写 `if 课件 then …`。
 
@@ -58,7 +58,7 @@ LAW: docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md
 ```text
 1. 老师不可见菜单？（隐性 = 默认；限额可以看见）
 2. 旧动词加参数 / 一篇 SKILL.md / 不得已才新动词？
-3. 新动词能进 gateway 白名单？扩名单须 ADR；禁公网 bash
+3. 新动词能进 gateway 白名单？扩名单须 ADR；禁宿主 shell。隔离工作区 Pi 内建 bash 已放开（#1090 A）
 4. 适配哪段上游？升级是否只改适配层？
 ```
 

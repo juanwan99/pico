@@ -1,0 +1,28 @@
+{
+  "id": "LT7",
+  "title": "长页离线 HTML 说明",
+  "timeout_s": 900,
+  "turns": [
+    {
+      "prompt": "做一份离线可打开的 HTML，介绍「观察与记录」单元给家长。至少 10 个小节（目标、课时、评价、作业、问卷、校历、注意事项、示例表格、常见问题、联系方式）。禁止 CDN / 外链脚本。表格用材料里的问卷数字。不要 PPT。",
+      "attachments": [
+        {"name": "单元说明.md", "file": "fixtures/unit-plan.md"},
+        {"name": "问卷摘要.md", "file": "fixtures/survey.md"},
+        {"name": "校历.md", "file": "fixtures/calendar.md"}
+      ]
+    }
+  ],
+  "expect": {
+    "kinds": ["html"],
+    "min_heading_like": 8,
+    "forbid_http_assets": true,
+    "must_contain": ["22", "观察与记录"]
+  },
+  "score_points": [
+    {"id": "file", "text": "产出可打开 HTML"},
+    {"id": "sections", "text": "小节够多，不是单屏三句"},
+    {"id": "offline", "text": "无 http(s) 外链资源"},
+    {"id": "numbers", "text": "问卷数字进页"},
+    {"id": "unit", "text": "单元名与评价比例出现"}
+  ]
+}

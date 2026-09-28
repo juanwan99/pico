@@ -23,7 +23,7 @@
 | CI 红就新开 PR | **否** · 原 PR 补 |
 | Cloud Agent 靠公网 22 / egress 白名单进 ECS | **否** · Tailscale MagicDNS · `ssh ecs`（ops@aliyun-hy）· EXPERIENCE §17–19 |
 | 出图还靠硅基流动 / 再要 SILICONFLOW 出图钥 | **否** · 业主已否决 · 真源 = New API 反代多 Gemini 账户（§28 · #752） · Pico 只打一个网关口 |
-| Pico 是本地 PDF 阅读器 / 办公投影器 / 交件监工 | **否** · 厚桥四层绝对禁止（#865 · LAW §2.9–12） |
+| Pico 是本地 PDF 阅读器 / 办公投影器 / 交件监工 | **否** · Pico 不自研阅读核、不交件监工。附件进工作区由模型自读自检（#1090 B · LAW §2.9–11） |
 | 现网默认核 = hosted `pi_runtime` / `pi-agent` | **否** · `health.default_runtime=pi-true`（TRUTH-FREEZE v1.9） |
 | 现网聊天核 = DeepSeek | **否** · New API `openai-responses`（EXPERIENCE §34）；对外只叫 Pico |
 | Pico 或 edu 可再直连厂牌做第二套计费 | **否** · 模型/统计/渠道管理统一 New API；Pico 不做钱；edu 只认 export；本仓不写 edu |

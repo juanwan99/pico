@@ -3,7 +3,7 @@
 ```
 DOC: docs/OVERALL-ARCHITECTURE.md
 STATUS: ARCHIVED DRAFT · 2026-07-29 · **不是现网**
-SUPERSEDED_BY: docs/TRUTH-FREEZE.md v2.2 · docs/WHAT-IS-PICO.md · docs/ARCHITECTURE.md · docs/USAGE-LEDGER.md
+SUPERSEDED_BY: docs/TRUTH-FREEZE.md v3.0 · docs/WHAT-IS-PICO.md · docs/ARCHITECTURE.md · docs/USAGE-LEDGER.md
 VOID_NOTE: 文中 Kimi 默认核、自研 tool-loop、Pico 点池/钱包、Dedicated 一校一单元 **均作废**。现网 = 真 Pi + New API；钱在 edu；本仓不写 edu。下文只当考古，禁止当施工清单。
 SCALE: 起步 10 校 × ~100 教师 ≈ 1000 席位
 RELATED:

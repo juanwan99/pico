@@ -4,7 +4,7 @@
 
 ## 目标（校正）
 
-详见 **[docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md](docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md) §0-supreme**（最高：禁止自搞一套 / 禁止重体系）· **[AGENTS.md](AGENTS.md)** 文首工作法 · **[docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star** · **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.9** · **[docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)** · 开窗目录 **[docs/README.md](docs/README.md)**
+详见 **[docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md](docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md) §0-supreme**（最高：禁止自搞一套 / 禁止重体系）· **[AGENTS.md](AGENTS.md)** 文首工作法 · **[docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star v1.5** · **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v3.0** · **[docs/WHAT-IS-PICO.md](docs/WHAT-IS-PICO.md)** · 开窗目录 **[docs/README.md](docs/README.md)**
 
 任务进度与证据以 **GitHub PR/SHA/CI** 为准（[OneFlow](docs/ONEFLOW.md)）。
 
@@ -16,12 +16,12 @@
 | 办公 | 天花板 = 隔离 `sandbox_office_lib`；`generate_*` 不在默认常驻 |
 | 账本 | **仅 Pico**（禁止与 edu 双 AI） |
 | 范围 | **只写本仓**；edu 对接后置 |
-| 真源冻结 | **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v1.9** |
+| 真源冻结 | **[docs/TRUTH-FREEZE.md](docs/TRUTH-FREEZE.md) v3.0** |
 | 最高法律 | 禁止自搞一套体系 · 禁止做重体系 · 只允许薄适配 |
 
 ```text
 最高：禁止自搞一套体系。禁止做重体系。
-目标：Web 上 WorkBuddy 程度（六条）· 用法 = Grok · 办公主线（Word/Excel/HTML/PPT）· 写代码是仆人 · 能力并列 · 办公计算机交成熟上游（阶段方案 docs/PLAN-WORKENV-UPSTREAM.md）
+目标：Web 上 WorkBuddy 程度（六条）· 用法 = Grok · 第一需求 = 长任务高质量跑完 · 办公主线（Word/Excel/HTML/PPT）· 写代码是仆人 · 能力并列 · 隔离工作区交上游 Pi
 方案：回 Pico 整车 + 默认真 Pi + New API 脑/计量 + 隔离办公库
 不做：自研第二套能力核、Dify 门脸终局、场景考卷当对标、双核并列真源
 ```

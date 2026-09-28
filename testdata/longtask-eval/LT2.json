@@ -1,0 +1,25 @@
+{
+  "id": "LT2",
+  "title": "多表 Excel 分析出图",
+  "timeout_s": 900,
+  "turns": [
+    {
+      "prompt": "附件 workbooks.xlsx 有三张表：成绩、出勤、问卷。请做一份分析工作簿：1) 按组别汇总人数和三科均分；2) 做一张柱状图或折线图（嵌入工作簿）；3) 另写一页 Word 说明各组人数。不要网页。",
+      "attachments": [
+        {"name": "workbooks.xlsx", "generate": "triple_workbook"}
+      ]
+    }
+  ],
+  "expect": {
+    "kinds": ["xlsx", "docx"],
+    "xlsx_has_chart": true,
+    "must_contain": ["A", "B", "C"]
+  },
+  "score_points": [
+    {"id": "xlsx", "text": "产出可打开的 xlsx，含分组合计"},
+    {"id": "chart", "text": "工作簿里有图（柱/折线）"},
+    {"id": "docx", "text": "另有 Word 点名各组人数"},
+    {"id": "numbers", "text": "人数与三科均分对得上附件"},
+    {"id": "sheets", "text": "不是把三张表粘成一段文字"}
+  ]
+}

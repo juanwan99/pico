@@ -16,7 +16,7 @@ DECIDERS: 业主 · 总管 · 实现窗（Codex）
 ## 决策驱动
 
 1. 用户只看到 **一套** 技能/能力入口。  
-2. 执行仍受 **全局工具白名单** 约束（Skill 只能收窄）。  
+2. 执行仍受 **全局工具白名单** 约束（成熟文档 skill 可常驻；其余 Skill 只收窄）。  
 3. 账本 Run 必须能存 **受控快照**（与上游可变配置解耦）。  
 4. 60–90 分钟只读调查可验证现状后再写代码。
 5. **怎么挂进模型**（少常驻 / 目录一行 / 正文按需）见 [`docs/ADR-CAPABILITY-LOADING.md`](ADR-CAPABILITY-LOADING.md)；本 ADR 只管目录唯一，不管加载纪律。
@@ -71,7 +71,7 @@ DECIDERS: 业主 · 总管 · 实现窗（Codex）
 |--------------------|-------------------|------|
 | `skill.name` / deployment folder | `skill.id` | N2 只接三条稳定演示 id：`skill-chat`、`skill-read`、`skill-write-s7`；LibreChat 仍为唯一浏览目录 |
 | `displayTitle` / `name` | `skill.name` | 面向审计报告的人类可读名 |
-| `tools` frontmatter / Pico overlay | `skill.tools` | 与 `build_default_gateway()` 全局白名单求交；Skill 只能收窄 |
+| `tools` frontmatter / Pico overlay | `skill.tools` | 与 `build_default_gateway()` 全局白名单求交；成熟文档 skill 可常驻，其余只收窄 |
 | `risk` / `requires_s7` overlay | `skill.risk`、`skill.requires_s7` | `write_s7` 只产生 S7 提案，不直接写业务 |
 | `SKILL.md` body / policy prompt | `skill.prompt_hash` | 记录策略提示 hash，避免目录后续变更影响既有 Run |
 

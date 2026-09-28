@@ -30,16 +30,16 @@ v9（观察回执）：写/改/打开工具回 `observation`（落地事实，�
 
 ## 允许的工具
 
-**不要手抄本表当 CORE。** Pi 默认可见 = `CORE_VISIBLE_TOOLS`（`capability_loading.py`）。执行天花板 = `ALLOWED_GATEWAY_TOOLS`（`true_pi/config.py`）。挂 Skill 只能收窄。
+**不要手抄本表当 CORE。** Pi 默认可见 = `CORE_VISIBLE_TOOLS`（`capability_loading.py`）。执行天花板 = `ALLOWED_GATEWAY_TOOLS`（`true_pi/config.py`）+ 隔离工作区 Pi 内建工具（业主 2026-09-28 A，实现走第 1 张卡）。成熟文档 skill 可常驻。
 
 ```text
-现行原则（2026-09-08 · #952）：
-- 办公天花板 = sandbox_office_lib + read_office_skill
+现行原则（2026-09-28 · #1090）：
+- 办公天花板 = 隔离工作区成熟办公库 + 上游 Pi 内建 read/write/edit/bash
 - generate_* / sandbox_pptx_lib / inspect / verify / edit / render = 已从网关拆除，不是 EXTENDED 别名
 - publish_* = EXTENDED 失败关闭，不进默认 CORE
-- 禁 bash / 任意 FS / 未登记 MCP / 自研 tool_search
-- 办公执行后端（v2.0 · #959）= pico-office 无网容器跑完整 Python；桥/网关不注册 bash / exec / run_python；
-  pico-api 内 AST/import jail 待删。sandbox_workspace_exec（parse-only 假执行）随 #959 退出网关
+- 禁宿主 shell / 未登记 MCP / 自研 tool_search。「禁 bash / 任意 FS」SUPERSEDED（箱内打开）
+- 工作区容器全出网（禁内网/宿主/元数据）；密钥不进容器
+- pico-api 内 AST/import jail 已删。sandbox_workspace_exec 已退出网关
 ```
 
 下列为 **历史累加说明**（v1–v10），不是现行 CORE 抄本。
@@ -56,14 +56,14 @@ v6（#703 T-UNMASK-PI）：`prompt()` 可带 `images[]`；`models.json` 在 visi
 
 ## 禁止在桥内做
 
-- host shell / bash / 任意文件系统
+- host shell / 宿主任意文件系统（隔离工作区 Pi 内建工具已放开 · #1090 A）
 - 未登记 MCP
 - delivery_policy 全文复刻（只复用现有 `count_write_tool_successes` / min 门闩）
 - 第二业务账本 / 第二 OS
 - 无 live 冒烟强制切主
 - 密钥写入日志 / Issue
 - 删除 `pi_runtime.py`（回滚必须保留）
-- **本地 PDF 阅读器**（抽文/OCR/渲页进 chat user 或 images[] 冒充已读）
-- **办公投影器**（摘录/spec 条目墙当模型输入或天花板）
+- **Pico 自研 PDF 阅读核**（抽文/OCR/渲页焊进 chat user 冒充已读）。附件进工作区、模型自检 = 允许（#1090 B）
+- **办公投影器当能力核**（摘录/spec 条目墙当天花板）
 - **交件监工**（force_agent / min_artifacts 词表 / 焊「必须交 N 个文件」）
-- **硬帽截窗**（把 Pi/模型窗口用 Pico reserve/步数截短）
+- **硬帽截窗**（把 Pi/模型窗口用 Pico reserve/步数截短）。历史交官方 compaction（#1090 D）

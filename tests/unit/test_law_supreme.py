@@ -37,11 +37,16 @@ def test_law_supreme_section_exists() -> None:
     assert "只允许对成熟上游做薄适配" in text
     assert "最高句（禁止自搞一套 / 禁止重体系）" in text
     assert "工作法不另起文件" in text
+    assert "## 3b. 业主 2026-09-28 放开 A–F" in text
+    assert "SUPERSEDED" in text
+    assert "不碰宿主 shell" in text
+    assert "密钥不进执行容器" in text
 
 
 def test_truth_freeze_has_s0_and_w0() -> None:
     text = (ROOT / "docs" / "TRUTH-FREEZE.md").read_text(encoding="utf-8")
-    assert "BINDING FREEZE v2.2" in text
+    assert "BINDING FREEZE v3.0" in text
+    assert "OWNER_ORDER_2026-09-28" in text
     assert "OWNER_ORDER_2026-09-14" in text
     assert "| S0 |" in text
     assert "| W0 |" in text
@@ -53,6 +58,8 @@ def test_truth_freeze_has_s0_and_w0() -> None:
     assert "OWNER_ORDER_2026-09-08c" in text
     assert "不算 bash" in text
     assert "Pico 不维护 import 白名单" in text
+    assert "第一需求 = 长任务" in text
+    assert "放开 A–F" in text or "放开 A-F" in text
 
 
 def test_law_forbids_interpreter_jail() -> None:
@@ -112,3 +119,35 @@ def test_state_now_is_index_not_second_ledger() -> None:
     direction = (ROOT / "docs" / "DIRECTION-NOW.md").read_text(encoding="utf-8")
     assert "CLAIM-WB-DEGREE-WEB: YES" in direction[:800]
     assert "CLAIM-WB-DEGREE-WEB: NO" not in direction[:800]
+    assert "v1.5" in direction[:800]
+    assert "第一需求 = 长任务" in direction
+
+
+def test_current_status_docs_mark_old_bans_superseded() -> None:
+    """Old harness bans in current-status docs must be SUPERSEDED or rewritten."""
+    current = [
+        ROOT / "docs" / "LAW-NO-SELF-BUILD-THIN-ADAPTER.md",
+        ROOT / "docs" / "DIRECTION-NOW.md",
+        ROOT / "docs" / "TRUTH-FREEZE.md",
+        ROOT / "docs" / "WHAT-IS-PICO.md",
+        ROOT / "docs" / "STATE-NOW.md",
+        ROOT / "docs" / "EXPERIENCE.md",
+        ROOT / "docs" / "ADR-CAPABILITY-LOADING.md",
+        ROOT / "README.md",
+        ROOT / "AGENTS.md",
+    ]
+    needles = ("不要 bash", "无公网 bash", "禁止跨进程恢复", "Skill 只能收窄")
+    leftover: list[str] = []
+    for path in current:
+        text = path.read_text(encoding="utf-8")
+        if path.name == "TRUTH-FREEZE.md" and "## 5. 版本" in text:
+            text = text.split("## 5. 版本", 1)[0]
+        for i, line in enumerate(text.splitlines(), 1):
+            if not any(n in line for n in needles):
+                continue
+            if "SUPERSEDED" in line or "放开" in line or "作废" in line or "SUPERSEDES" in line:
+                continue
+            if line.lstrip().startswith("| **v") or line.lstrip().startswith("- 新增 P0"):
+                continue
+            leftover.append(f"{path.relative_to(ROOT)}:{i}:{line.strip()[:120]}")
+    assert leftover == [], "old bans still current:\n" + "\n".join(leftover)
