@@ -11,13 +11,15 @@ def test_agents_md_opens_with_supreme_ban() -> None:
     text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "禁止自搞一套体系" in text
     assert "禁止做重体系" in text
+    opening = text.split("```text", 1)[0]
+    assert "TASK-POLICY.md" in opening
+    assert "$AGENT_POLICY_ROOT" in opening
+    assert "本窗合一" not in opening
     head = text[:1600]
     assert "禁止自搞一套体系" in head
-    assert "本窗合一" in head
     assert "GitHub Issue/PR/SHA/CI" in head
     assert "写码 /home/ops/pico" in head
     assert "生产 /opt/pico" in head
-    assert "主管/执行者两套编制" in head
     assert "只有 origin/main 是生产线" in head
     assert "旁支不准部" in head
     assert "必须 prod-update" in head
@@ -27,6 +29,12 @@ def test_agents_md_opens_with_supreme_ban() -> None:
     assert "删本任务本地枝" in head
     assert "旧窗摘要" in head
     assert "已合头枝不是在飞" in head
+    box = text.split("```text", 1)[1].split("```", 1)[0]
+    assert "本窗合一" not in box
+    assert "主管/执行者两套编制" not in box
+    assert "mailbox" in box
+    assert "CLAIM-WB" in box
+    assert "TASK-POLICY.md" in box
 
 
 def test_law_supreme_section_exists() -> None:
