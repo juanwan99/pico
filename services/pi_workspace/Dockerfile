@@ -37,7 +37,10 @@ RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ \
       "pypdf>=4,<6" "pdfplumber>=0.11,<1" "xlrd>=2,<3"
 
 COPY services/true_pi_bridge /opt/pico/true_pi_bridge
+# Base image's sandbox dirs are not used in a box; drop them so nothing
+# looks like a host path from inside.
 RUN chmod -R a+rX /opt/pico/true_pi_bridge \
+ && rm -rf /var/lib/pico /app \
  && mkdir -p /workspace /memory /home/pi \
  && chown 65532:65532 /workspace /memory /home/pi
 

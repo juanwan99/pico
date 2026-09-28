@@ -38,9 +38,20 @@ out["kernel"] = platform.release()
 secret_words = ("SECRET", "PASSWORD", "MASTER", "ADMIN", "DEEPSEEK", "MEILI", "SUB2API", "PROXY_KEY")
 out["secret_env"] = sorted(k for k in os.environ if any(w in k.upper() for w in secret_words))
 out["docker_sock"] = os.path.exists("/var/run/docker.sock") or os.path.exists("/run/docker.sock")
-out["host_paths_visible"] = [p for p in ("/var/lib/pico", "/home/ops", "/etc/docker", "/opt/pico/.git",
-                                         "/opt/pico/.env", "/opt/pico/docker-compose.host.yml", "/root/.ssh")
-                             if os.path.exists(p)]
+host_markers = [p for p in ("/var/lib/pico/workspaces", "/home/ops", "/etc/docker", "/opt/pico/.git",
+                            "/opt/pico/.env", "/opt/pico/docker-compose.host.yml", "/root/.ssh")
+                if os.path.exists(p)]
+allowed_mounts = {"/workspace", "/memory", "/etc/resolv.conf", "/etc/hosts", "/etc/hostname",
+                  "/", "/proc", "/sys", "/dev", "/dev/pts", "/dev/shm", "/dev/mqueue", "/tmp", "/home/pi",
+                  "/sys/fs/cgroup"}
+mounts = []
+with open("/proc/mounts") as fh:
+    for ln in fh:
+        parts = ln.split()
+        if len(parts) > 1:
+            mounts.append(parts[1])
+out["host_paths_visible"] = host_markers + sorted(m for m in mounts if m not in allowed_mounts
+                                                  and not m.startswith(("/proc/", "/sys/", "/dev/")))
 def can_write(path):
     try:
         with open(path, "w") as fh: fh.write("x")
