@@ -488,18 +488,25 @@ def main() -> int:
         if args.timeout:
             case = {**case, "timeout_s": args.timeout}
         try:
-            results.append(run_case(pico, case, stamp))
-        except Exception as exc:  # noqa: BLE001
-            results.append(
-                CaseResult(
-                    case=case.get("id") or "?",
-                    title=case.get("title") or "",
-                    ok=False,
-                    fail_reason="other",
-                    notes=[f"exception: {type(exc).__name__}: {exc}"],
-                    score_points=list(case.get("score_points") or []),
-                )
+            print(f"START {case.get('id')} timeout_s={case.get('timeout_s')}", flush=True)
+            one = run_case(pico, case, stamp)
+            results.append(one)
+            print(
+                f"DONE {one.case} ok={one.ok} score={one.auto_score} "
+                f"wall_s={one.wall_s:.1f} fail={one.fail_reason or '-'}",
+                flush=True,
             )
+        except Exception as exc:  # noqa: BLE001
+            fail = CaseResult(
+                case=case.get("id") or "?",
+                title=case.get("title") or "",
+                ok=False,
+                fail_reason="other",
+                notes=[f"exception: {type(exc).__name__}: {exc}"],
+                score_points=list(case.get("score_points") or []),
+            )
+            results.append(fail)
+            print(f"DONE {fail.case} ok=False exception={type(exc).__name__}", flush=True)
     report = {
         "base": args.base,
         "model": args.model,
