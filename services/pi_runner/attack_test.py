@@ -129,16 +129,20 @@ def main() -> int:
         env_file=Path(env_path),
         with_memory=False,
     )
-    # Same flags, probe instead of Pi.
+    # Same isolation flags, probe instead of Pi. Relabel so the runner's
+    # orphan reaper (label pico.ws=1, no live session) leaves the probe alone.
     cut = argv.index(settings.image) + 1
-    argv = [a for a in argv[:cut] if a != "-i"] + ["python3", "-c", PROBE, json.dumps(targets)]
+    argv = [
+        "pico.ws.attack=1" if a == "pico.ws=1" else a for a in argv[:cut] if a != "-i"
+    ] + ["python3", "-c", PROBE, json.dumps(targets)]
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=600, check=False)
     finally:
         os.unlink(env_path)
     line = next((ln for ln in proc.stdout.splitlines() if ln.startswith("PROBE")), "")
     if not line:
-        print(json.dumps({"ok": False, "error": "probe produced no result", "stderr": proc.stderr[-2000:]}))
+        print(json.dumps({"ok": False, "error": "probe produced no result", "rc": proc.returncode,
+                          "stdout": proc.stdout[-1000:], "stderr": proc.stderr[-2000:]}))
         return 1
     got = json.loads(line[5:])
     checks = {

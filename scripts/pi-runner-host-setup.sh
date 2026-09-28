@@ -128,7 +128,8 @@ if ! command -v runsc >/dev/null; then
     -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/gvisor.list \
     -o Dir::Etc::sourceparts=- \
     -o APT::Get::List-Cleanup=0
-  apt-get install -y -qq --no-install-recommends runsc
+  # Shared prod host: never let needrestart bounce containerd / nginx / ssh.
+  NEEDRESTART_SUSPEND=1 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends runsc
 fi
 runsc --version | head -1
 if ! docker info --format '{{json .Runtimes}}' | grep -q '"runsc"'; then
