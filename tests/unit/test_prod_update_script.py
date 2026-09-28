@@ -10,6 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "prod-update.sh"
 IMPL = ROOT / "scripts" / "prod-update.impl.sh"
+SMOKE = ROOT / "scripts" / "e2e-smoke.sh"
 
 
 # Windows: the `bash` on PATH is usually the WSL launcher, which cannot see C:/.
@@ -45,6 +46,7 @@ def _production_checkout(tmp_path: Path) -> tuple[Path, str]:
     (source / "scripts").mkdir()
     shutil.copy2(SCRIPT, source / "scripts" / "prod-update.sh")
     shutil.copy2(IMPL, source / "scripts" / "prod-update.impl.sh")
+    shutil.copy2(SMOKE, source / "scripts" / "e2e-smoke.sh")
     (source / "docker-compose.host.yml").write_text("services: {}\n")
     _run("git", "add", ".", cwd=source)
     _run("git", "commit", "-m", "fixture", cwd=source)
@@ -69,12 +71,16 @@ def _fake_runtime(
     volume_rm_fails: bool = False,
     inflight_health_polls: int = 0,
     edu_gw_down: bool = False,
+    smoke_models_http: str = "200",
 ) -> Path:
     """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w).
 
     Fake docker branches on the subcommand so the impl's own gates are exercised:
     the pico-office unix-socket probe (``compose exec -T pico-api python3``),
     ``volume ls --filter label=…pico_office_sock`` and ``volume rm``.
+
+    ``smoke_models_http``: status the fake ``/v1/models`` returns to the E2E
+    smoke gate at the end of the impl (``500`` = one key flow broken).
 
     ``inflight_health_polls``: the first N ``/health`` calls report
     ``inflight_runs=2`` (teacher runs still owned by the old process); later
@@ -178,10 +184,13 @@ def _fake_runtime(
         "        inflight_field='\"inflight_runs\":0,'\n"
         "      fi\n"
         "    fi\n"
-        "    printf '{\"ok\":true,\"git_sha\":\"%s\",%s"
+        "    health_body=\"$(printf '{\"ok\":true,\"service\":\"pico-api\",\"git_sha\":\"%s\",%s"
         "\"true_pi_binary_available\":true,"
         "\"true_pi_package_pin\":\"@earendil-works/pi-coding-agent@0.84.4\"}' "
-        "\"$PICO_GIT_SHA\" \"$inflight_field\" ;;\n"
+        "\"$PICO_GIT_SHA\" \"$inflight_field\")\"\n"
+        # impl reads /health from stdout; the smoke gate uses `-o file -w %{http_code}`.
+        "    if [ -n \"$out_file\" ]; then printf '%s' \"$health_body\" >\"$out_file\"; printf '200'; "
+        "else printf '%s' \"$health_body\"; fi ;;\n"
         "  */kb/reindex-all)\n"
         "    if [ -n \"$out_file\" ]; then printf '%s' '"
         + reindex_body
@@ -197,6 +206,40 @@ def _fake_runtime(
         "    printf '200'\n"
         "    ;;\n"
         + login_body
+        # ---- E2E smoke gate endpoints (scripts/e2e-smoke.sh --prod) ----
+        + "  */api/pico/tip)\n"
+        "    [ -n \"$out_file\" ] && printf '{\"ok\":true,\"git_sha\":\"%s\"}' \"$PICO_GIT_SHA\" >\"$out_file\"\n"
+        "    printf '200' ;;\n"
+        "  */api/config)\n"
+        "    [ -n \"$out_file\" ] && printf '{\"appTitle\":\"Pico\"}' >\"$out_file\"\n"
+        "    printf '200' ;;\n"
+        "  */v1/me)\n"
+        "    case \"$*\" in\n"
+        "      *Authorization*)\n"
+        "        [ -n \"$out_file\" ] && printf '{\"school_id\":\"smoke-school\",\"membership_id\":\"smoke-e2e\",\"scopes\":[\"ai:read\"]}' >\"$out_file\"\n"
+        "        printf '200' ;;\n"
+        "      *)\n"
+        "        [ -n \"$out_file\" ] && printf '{\"detail\":\"auth.missing\"}' >\"$out_file\"\n"
+        "        printf '401' ;;\n"
+        "    esac ;;\n"
+        "  */v1/models)\n"
+        "    [ -n \"$out_file\" ] && printf '{\"data\":[{\"id\":\"pico-fast\"}]}' >\"$out_file\"\n"
+        "    printf '" + smoke_models_http + "' ;;\n"
+        "  */v1/skills/catalog)\n"
+        "    [ -n \"$out_file\" ] && printf '{\"skills\":[{\"id\":\"skill-deliverable\"}]}' >\"$out_file\"\n"
+        "    printf '200' ;;\n"
+        "  */v1/tools)\n"
+        "    [ -n \"$out_file\" ] && printf '{\"tools\":[]}' >\"$out_file\"\n"
+        "    printf '200' ;;\n"
+        "  */v1/tasks)\n"
+        "    [ -n \"$out_file\" ] && printf '{\"tasks\":[]}' >\"$out_file\"\n"
+        "    printf '200' ;;\n"
+        "  */v1/usage/summary)\n"
+        "    [ -n \"$out_file\" ] && printf '{\"billing\":false,\"schema\":\"pico.usage.v1\",\"days\":[]}' >\"$out_file\"\n"
+        "    printf '200' ;;\n"
+        "  */v1/my/folders)\n"
+        "    [ -n \"$out_file\" ] && printf '{\"folders\":[]}' >\"$out_file\"\n"
+        "    printf '200' ;;\n"
         + "esac\n"
     )
     for path in bin_dir.iterdir():
@@ -229,6 +272,8 @@ def _run_prod_update(
             "PICO_DEPLOY_SHA": sha,
             # Never share the host lock with a real deploy on this machine.
             "PICO_DEPLOY_LOCK": _bash_path(production.parent / "deploy.lock"),
+            # E2E smoke gate: the host reads PICO_OPENAI_PROXY_KEY from /opt/pico/.env.
+            "PICO_SMOKE_KEY": "smoke-fixture-key",
             **(extra_env or {}),
         },
         capture_output=True,
@@ -260,7 +305,36 @@ def test_prod_update_deploys_exact_clean_main_sha(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert f"health.git_sha exact match: {sha}" in result.stdout
     assert "ui_login=200" in result.stdout
+    assert "smoke 12/12 PASS (prod)" in result.stdout
+    assert "[pico] e2e smoke ok" in result.stdout
     assert "[pico] done" in result.stdout
+
+
+def test_prod_update_fails_when_e2e_smoke_fails(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, smoke_models_http="500")
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 16
+    assert "FAIL models" in result.stdout
+    assert "smoke 11/12 FAIL (prod)" in result.stdout
+    assert "e2e smoke failed" in result.stderr
+    assert f"rollback: PICO_DEPLOY_SHA={sha} bash /opt/pico/scripts/prod-update.sh" in result.stderr
+    assert "[pico] done" not in result.stdout
+
+
+def test_prod_update_fails_when_smoke_script_missing_from_tree(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    # A deploy tree without the smoke script cannot prove itself; the impl must refuse.
+    (production / "scripts" / "e2e-smoke.sh").unlink()
+    _run("git", "config", "user.email", "ci@pico.local", cwd=production)
+    _run("git", "config", "user.name", "Pico CI", cwd=production)
+    _run("git", "commit", "-qam", "drop smoke", cwd=production)
+    _run("git", "push", "-q", "origin", "HEAD:main", cwd=production)
+    sha = _run("git", "rev-parse", "HEAD", cwd=production).stdout.strip()
+    result = _run_prod_update(production, sha, _fake_runtime(tmp_path))
+    assert result.returncode == 16
+    assert "e2e-smoke.sh missing" in result.stderr
+    assert "[pico] done" not in result.stdout
 
 
 def test_prod_update_refuses_stale_origin_main_after_fetch(tmp_path: Path) -> None:
@@ -434,6 +508,7 @@ def test_prod_update_ui_readiness_honors_librechat_url_override(tmp_path: Path) 
             "PICO_ROOT": _bash_path(production),
             "PICO_DEPLOY_SHA": sha,
             "LIBRECHAT_URL": "http://127.0.0.1:19999",
+            "PICO_SMOKE_KEY": "smoke-fixture-key",
         },
         capture_output=True,
         text=True,
