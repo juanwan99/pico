@@ -326,6 +326,8 @@ def test_prod_update_fails_when_smoke_script_missing_from_tree(tmp_path: Path) -
     production, sha = _production_checkout(tmp_path)
     # A deploy tree without the smoke script cannot prove itself; the impl must refuse.
     (production / "scripts" / "e2e-smoke.sh").unlink()
+    _run("git", "config", "user.email", "ci@pico.local", cwd=production)
+    _run("git", "config", "user.name", "Pico CI", cwd=production)
     _run("git", "commit", "-qam", "drop smoke", cwd=production)
     _run("git", "push", "-q", "origin", "HEAD:main", cwd=production)
     sha = _run("git", "rev-parse", "HEAD", cwd=production).stdout.strip()
