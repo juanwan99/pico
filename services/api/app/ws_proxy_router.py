@@ -13,6 +13,7 @@ of a run that is alive in this process:
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 import logging
@@ -49,13 +50,27 @@ def _bearer(request: Request) -> str:
     return raw[7:].strip() if raw.lower().startswith("bearer ") else ""
 
 
-async def _stream(method: str, target: str, headers: dict[str, str], body: bytes) -> Response:
+async def _stream(
+    method: str,
+    target: str,
+    headers: dict[str, str],
+    body: bytes,
+    *,
+    on_done=None,
+) -> Response:
+    """Stream upstream back. ``on_done`` runs once the body is fully sent (or failed)."""
+
+    def _done() -> None:
+        if on_done is not None:
+            on_done()
+
     client = httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False)
     req = client.build_request(method, target, headers=headers, content=body or None)
     try:
         upstream = await client.send(req, stream=True)
     except Exception as exc:  # noqa: BLE001 — any upstream failure is a 502 to the box
         await client.aclose()
+        _done()
         logger.warning("ws-proxy upstream error %s", type(exc).__name__)
         return _deny("proxy.upstream_unreachable", 502)
 
@@ -66,6 +81,7 @@ async def _stream(method: str, target: str, headers: dict[str, str], body: bytes
         finally:
             await upstream.aclose()
             await client.aclose()
+            _done()
 
     out = {k: v for k, v in upstream.headers.items() if k.lower() not in _HOP}
     return StreamingResponse(
@@ -103,17 +119,42 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
     if request.method == "POST":
         # The box may only spend on this run's model (curl in the box can call
         # the proxy directly; it must not pick another model or endpoint).
-        try:
-            payload = json.loads(body.decode("utf-8") or "{}")
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return _deny("proxy.bad_body", 400)
-        if not isinstance(payload, dict) or str(payload.get("model") or "") != entry.model:
+        payload = pinned_model_body(body, entry.model)
+        if payload is None:
             return _deny("proxy.model_denied")
+        body = payload
     headers = {k: v for k, v in request.headers.items() if k.lower() in _KEEP}
     headers["authorization"] = f"Bearer {entry.llm_key}"
+    headers["content-type"] = "application/json" if request.method == "POST" else headers.get(
+        "content-type", "application/json"
+    )
     target = f"{entry.llm_upstream.rstrip('/')}/{path}"
-    async with entry.slots:
-        return await _stream(request.method, target, headers, body)
+    try:
+        await asyncio.wait_for(entry.slots.acquire(), timeout=120)
+    except TimeoutError:
+        return _deny("proxy.busy", 429)
+    # Slot is held until the streamed body is done, not just the headers.
+    return await _stream(request.method, target, headers, body, on_done=entry.slots.release)
+
+
+def pinned_model_body(body: bytes, model: str) -> bytes | None:
+    """Re-serialised JSON with ``model`` forced; None if the box tried another.
+
+    Go JSON decoders (New API) match keys case-insensitively, so any key that
+    folds to "model" other than the exact one is refused.
+    """
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or not model:
+        return None
+    if any(k != "model" and k.casefold() == "model" for k in payload):
+        return None
+    if str(payload.get("model") or "") != model:
+        return None
+    payload["model"] = model
+    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
 @router.api_route("/internal/ws-proxy/t/{run_id}/{path:path}", methods=["GET", "POST"])

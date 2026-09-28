@@ -36,6 +36,10 @@ class ToolServer:
     ask_timed_out: bool = False
     _server: asyncio.AbstractServer | None = None
     invocations: list[tuple[str, dict[str, Any], bool]] = field(default_factory=list)
+    # Results as Pico's gateway returned them. Delivery evidence in a
+    # workspace box comes from here, not from Pi RPC events (the box can
+    # write to Pi's stdout and forge those).
+    trusted_results: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
     @property
     def base_url(self) -> str:
@@ -193,6 +197,7 @@ class ToolServer:
         try:
             result = await self.gateway.invoke(self.principal, name, args)
             self.invocations.append((name, args, True))
+            self.trusted_results.append((name, result if isinstance(result, dict) else {}))
             await self._write(writer, 200, {"ok": True, "tool": name, "result": result})
         except ToolError as exc:
             self.invocations.append((name, args, False))

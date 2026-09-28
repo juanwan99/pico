@@ -72,6 +72,7 @@ class RunnerSettings:
     home_size: str = "512m"
     workspace_max_mb: int = 2048
     workspace_max_files: int = 20000
+    member_max_mb: int = 5120
     max_session_s: int = 8 * 3600
     max_sessions: int = 6
     max_per_school: int = 3
@@ -112,6 +113,7 @@ class RunnerSettings:
             pids=_env_int("PICO_RUNNER_PIDS", 256),
             workspace_max_mb=_env_int("PICO_RUNNER_WS_MAX_MB", 2048),
             workspace_max_files=_env_int("PICO_RUNNER_WS_MAX_FILES", 20000),
+            member_max_mb=_env_int("PICO_RUNNER_MEMBER_MAX_MB", 5120),
             max_session_s=_env_int("PICO_RUNNER_MAX_SESSION_S", 8 * 3600),
             max_sessions=_env_int("PICO_RUNNER_MAX_SESSIONS", 6),
             max_per_school=_env_int("PICO_RUNNER_MAX_PER_SCHOOL", 3),

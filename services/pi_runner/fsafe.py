@@ -159,15 +159,20 @@ def list_regular(
 
 
 def usage(paths: list[Path]) -> tuple[int, int]:
-    """(bytes on disk, file count) under ``paths`` without following links."""
+    """(bytes on disk, entry count) under ``paths``; fd-based, never follows links."""
     used = 0
     count = 0
     for base in paths:
-        if not base.is_dir() or base.is_symlink():
+        try:
+            top = os.open(base, _DIR_FLAGS)
+        except OSError:
             continue
-        for dirpath, dirs, files in os.walk(base, followlinks=False):
-            for name in files + dirs:
-                count += 1
-                with contextlib.suppress(OSError):
-                    used += os.lstat(os.path.join(dirpath, name)).st_blocks * 512
+        try:
+            for _dirpath, dirs, files, dfd in os.fwalk(".", dir_fd=top, follow_symlinks=False):
+                for name in files + dirs:
+                    count += 1
+                    with contextlib.suppress(OSError):
+                        used += os.stat(name, dir_fd=dfd, follow_symlinks=False).st_blocks * 512
+        finally:
+            os.close(top)
     return used, count

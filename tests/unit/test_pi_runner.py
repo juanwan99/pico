@@ -161,10 +161,12 @@ def proxy_client(monkeypatch):
     monkeypatch.setenv("PICO_RUNNER_TOKEN", TOKEN)
     seen: dict[str, Any] = {}
 
-    async def fake_stream(method, target, headers, body):
+    async def fake_stream(method, target, headers, body, on_done=None):
         from fastapi.responses import JSONResponse
 
         seen.update(method=method, target=target, headers=headers, body=body)
+        if on_done is not None:
+            on_done()
         return JSONResponse({"ok": True})
 
     monkeypatch.setattr(mod, "_stream", fake_stream)
@@ -387,3 +389,31 @@ def test_runner_enabled_allowlist(monkeypatch) -> None:
     assert runner_enabled("anyone")
     monkeypatch.setenv("PICO_RUNNER_MEMBERSHIPS", "m1, m2")
     assert runner_enabled("m2") and not runner_enabled("m3")
+
+
+def test_pinned_model_body_refuses_case_tricks() -> None:
+    from app.ws_proxy_router import pinned_model_body
+
+    m = "gemini-3.8-flash"
+    assert json.loads(pinned_model_body(b'{"model":"gemini-3.8-flash","x":1}', m)) == {"model": m, "x": 1}
+    assert pinned_model_body(b'{"model":"gemini-3.8-flash","Model":"gpt-5-pro"}', m) is None
+    assert pinned_model_body(b'{"model":"gemini-3.8-flash","MODEL":"x"}', m) is None
+    assert pinned_model_body(b'{"Model":"gemini-3.8-flash"}', m) is None
+    assert pinned_model_body(b"not json", m) is None
+    assert pinned_model_body(b"[]", m) is None
+
+
+def test_member_quota_blocks_new_box(tmp_path: Path) -> None:
+    import asyncio
+
+    from pi_runner.policy import PolicyError
+
+    settings = RunnerSettings(token=TOKEN, workspace_root=tmp_path / "ws", min_free_mb=0, member_max_mb=0)
+    runner = Runner(settings)
+    member = tmp_path / "ws" / S / M / "d"
+    member.mkdir(parents=True)
+    (member / "big").write_bytes(b"x" * 8192)
+    spec = {"run_id": "r1", "key": {"school": S, "member": M, "conv": C}, "args": ["--mode", "rpc"]}
+    with pytest.raises(PolicyError) as exc:
+        asyncio.run(runner.start(spec))
+    assert exc.value.code == "runner.member_quota"

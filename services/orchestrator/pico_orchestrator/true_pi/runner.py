@@ -356,8 +356,9 @@ class RunnerTransport(SubprocessTransport):
                         _runner_error_event(str(msg.get("code") or ""), str(msg.get("message") or ""))
                     )
                 elif t == "exit":
+                    # Keep reading: the runner closes the socket only after the
+                    # container is gone, which is when outputs may be read.
                     self._exit_code = msg.get("code")
-                    break
         except Exception as exc:  # noqa: BLE001 — connection drop ends the stream
             logger.info("true_pi runner stream ended run_id=%s (%s)", self.run_id, type(exc).__name__)
         finally:
@@ -383,9 +384,17 @@ class RunnerTransport(SubprocessTransport):
         # which makes the runner kill + remove the container.
         with contextlib.suppress(Exception):
             await ws.send(json.dumps({"type": "close"}))
+        # Wait for the runner to close the socket (= box stopped and removed).
+        # Pi exits on stdin EOF; if it does not, dropping the socket makes the
+        # runner kill it, and we still wait for that close.
         if self._reader_task is not None:
             with contextlib.suppress(Exception):
-                await asyncio.wait_for(asyncio.shield(self._reader_task), timeout=3.0 if kill else 10.0)
+                await asyncio.wait_for(asyncio.shield(self._reader_task), timeout=5.0)
+            if not self._reader_task.done():
+                with contextlib.suppress(Exception):
+                    await ws.close()
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(asyncio.shield(self._reader_task), timeout=45.0)
         with contextlib.suppress(Exception):
             await ws.close()
         if self._reader_task is not None:
@@ -431,14 +440,14 @@ async def list_outputs(key: WorkspaceKey) -> dict[str, dict[str, Any]]:
     import httpx
 
     async with httpx.AsyncClient(timeout=60.0) as client:
-        for attempt in range(20):
+        for attempt in range(40):
             resp = await client.get(
                 f"{runner_url()}/v1/ws/{key.path()}/outputs",
                 headers={"x-pico-runner-token": runner_token()},
             )
             if resp.status_code != 409:
                 break
-            await asyncio.sleep(0.5 if attempt < 10 else 1.5)
+            await asyncio.sleep(0.5 if attempt < 10 else 2.0)
     if resp.status_code != 200:
         raise TruePiClientError(f"runner outputs failed ({resp.status_code})")
     rows = resp.json().get("files") or []

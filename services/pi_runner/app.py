@@ -75,6 +75,7 @@ class Session:
     proc: asyncio.subprocess.Process
     started: float = field(default_factory=time.monotonic)
     proxy_slots: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(PROXY_PER_RUN))
+    proxy_waiting: int = 0
 
 
 class Runner:
@@ -143,6 +144,10 @@ class Runner:
         pi_args = validate_pi_args(spec.get("args"))
         env = filter_env(spec.get("env"))
         with_memory = bool(spec.get("memory"))
+        member_dir = self.settings.workspace_root / key.school / key.member
+        member_used, _ = await asyncio.to_thread(fsafe.usage, [member_dir])
+        if member_used > self.settings.member_max_mb * 1024 * 1024:
+            raise PolicyError("runner.member_quota", "你的工作区总容量已满，请删掉旧对话后再试。")
         async with self.lock:
             if run_id in self.sessions:
                 raise PolicyError("runner.duplicate", "run already has a session")
@@ -180,16 +185,10 @@ class Runner:
 
     async def stop(self, session: Session) -> None:
         proc = session.proc
+        name = container_name(session.run_id)
         if proc.returncode is None:
             with contextlib.suppress(Exception):
-                kill = await asyncio.create_subprocess_exec(
-                    "docker",
-                    "kill",
-                    container_name(session.run_id),
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                await asyncio.wait_for(kill.wait(), timeout=15)
+                await _docker("kill", name, timeout=15)
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(proc.wait(), timeout=10)
             if proc.returncode is None:
@@ -197,6 +196,14 @@ class Runner:
                     proc.kill()
                 with contextlib.suppress(Exception):
                     await asyncio.wait_for(proc.wait(), timeout=5)
+        # The CLI exiting is not proof: hold the session (busy gate, capacity)
+        # until dockerd no longer has the container.
+        for _ in range(30):
+            if not await _container_exists(name):
+                break
+            with contextlib.suppress(Exception):
+                await _docker("rm", "-f", name, timeout=15)
+            await asyncio.sleep(1)
         # Container is gone before the workspace is released for file access.
         async with self.lock:
             self.sessions.pop(session.run_id, None)
@@ -247,6 +254,24 @@ class Runner:
                             shutil.rmtree(conv, ignore_errors=True)
                             removed += 1
         return removed
+
+
+async def _docker(*args: str, timeout: float) -> tuple[int, str]:
+    proc = await asyncio.create_subprocess_exec(
+        "docker", *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
+    )
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except TimeoutError:
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+        return 124, ""
+    return proc.returncode or 0, out.decode("utf-8", errors="replace")
+
+
+async def _container_exists(name: str) -> bool:
+    code, out = await _docker("ps", "-aq", "--filter", f"name=^{name}$", timeout=15)
+    return code != 0 or bool(out.strip())
 
 
 def _unlink_quiet(path: str) -> None:
@@ -367,7 +392,6 @@ def build_control_app(runner: Runner) -> FastAPI:
             )
             await ws.close()
             return
-        await ws.send_text(json.dumps({"type": "ready", "container": container_name(session.run_id)}))
         proc = session.proc
         stop_reason: list[str] = []
 
@@ -422,12 +446,16 @@ def build_control_app(runner: Runner) -> FastAPI:
                     stop_reason.append(reason)
                     return
 
-        out_t = asyncio.create_task(pump_out())
-        err_t = asyncio.create_task(pump_err())
-        in_t = asyncio.create_task(pump_in())
-        watch_t = asyncio.create_task(watch())
-        wait_t = asyncio.create_task(proc.wait())
+        tasks: list[asyncio.Task[Any]] = []
         try:
+            # Inside try: a socket dropped right after start still stops the box.
+            await send({"type": "ready", "container": container_name(session.run_id)})
+            out_t = asyncio.create_task(pump_out())
+            err_t = asyncio.create_task(pump_err())
+            in_t = asyncio.create_task(pump_in())
+            watch_t = asyncio.create_task(watch())
+            wait_t = asyncio.create_task(proc.wait())
+            tasks = [out_t, err_t, in_t, watch_t, wait_t]
             done, _ = await asyncio.wait({out_t, wait_t, in_t, watch_t}, return_when=asyncio.FIRST_COMPLETED)
             if watch_t in done and stop_reason:
                 with contextlib.suppress(Exception):
@@ -442,8 +470,10 @@ def build_control_app(runner: Runner) -> FastAPI:
                     await send({"type": "exit", "code": proc.returncode})
         except WebSocketDisconnect:
             pass
+        except Exception:
+            logger.exception("ws session error run=%s", session.run_id)
         finally:
-            for t in (out_t, err_t, in_t, watch_t, wait_t):
+            for t in tasks:
                 t.cancel()
             await runner.stop(session)
             with contextlib.suppress(Exception):
@@ -503,14 +533,25 @@ def build_proxy_app(runner: Runner) -> FastAPI:
         session = runner.sessions.get(run_id)
         if session is None:
             return _deny("proxy.no_session", 403)
+        # Slot first, body second: a box can hold at most PROXY_PER_RUN bodies
+        # in runner memory, and only a few more requests may queue.
+        if session.proxy_waiting >= PROXY_PER_RUN * 2:
+            return _deny("proxy.busy", 429)
+        session.proxy_waiting += 1
+        try:
+            await asyncio.wait_for(session.proxy_slots.acquire(), timeout=120)
+        except TimeoutError:
+            return _deny("proxy.busy", 429)
+        finally:
+            session.proxy_waiting -= 1
         body = await read_capped(request, MAX_PROXY_BODY)
         if body is None:
+            session.proxy_slots.release()
             return _deny("proxy.too_large", 413)
         headers = {k: v for k, v in request.headers.items() if k.lower() in _PROXY_KEEP}
         headers["x-pico-runner-token"] = settings.token
         # Query strings are dropped: no allowed path needs one.
         target = f"{settings.upstream}/internal/ws-proxy/{lane}/{run_id}/{path}"
-        await session.proxy_slots.acquire()
         try:
             upstream = client.build_request(request.method, target, headers=headers, content=body)
             resp = await client.send(upstream, stream=True)
@@ -541,26 +582,25 @@ async def _sweeper(runner: Runner) -> None:
         await asyncio.sleep(3600)
 
 
-async def _reap_orphans() -> None:
-    """Kill workspace containers left over from a previous runner process."""
+async def _reap_orphans(runner: Runner | None = None) -> None:
+    """Remove workspace containers no live session owns."""
     with contextlib.suppress(Exception):
-        ps = await asyncio.create_subprocess_exec(
-            "docker",
-            "ps",
-            "-q",
-            "--filter",
-            "label=pico.ws=1",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
+        code, out = await _docker(
+            "ps", "-a", "--filter", "label=pico.ws=1", "--format", '{{.ID}} {{.Label "pico.ws.run"}}', timeout=15
         )
-        out, _ = await ps.communicate()
-        ids = [x for x in out.decode().split() if x]
+        if code != 0:
+            return
+        live = set(runner.sessions) if runner is not None else set()
+        ids = [cid for cid, _, run in (ln.partition(" ") for ln in out.splitlines()) if cid and run not in live]
         if ids:
-            kill = await asyncio.create_subprocess_exec(
-                "docker", "kill", *ids, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
-            )
-            await kill.wait()
+            await _docker("rm", "-f", *ids, timeout=30)
             logger.info("ws reaped orphans=%s", len(ids))
+
+
+async def _orphan_loop(runner: Runner) -> None:
+    while True:
+        await asyncio.sleep(60)
+        await _reap_orphans(runner)
 
 
 async def serve() -> None:
@@ -571,7 +611,7 @@ async def serve() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     settings = RunnerSettings.from_env()
     runner = Runner(settings)
-    await _reap_orphans()
+    await _reap_orphans(runner)
     control = uvicorn.Server(
         uvicorn.Config(
             build_control_app(runner),
@@ -598,10 +638,12 @@ async def serve() -> None:
         with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, lambda: [setattr(s, "should_exit", True) for s in (control, proxy)])
     sweeper = asyncio.create_task(_sweeper(runner))
+    reaper = asyncio.create_task(_orphan_loop(runner))
     try:
         await asyncio.gather(control.serve(), proxy.serve())
     finally:
         sweeper.cancel()
+        reaper.cancel()
         for session in list(runner.sessions.values()):
             await runner.stop(session)
 

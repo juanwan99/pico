@@ -784,8 +784,15 @@ async def _run_true_pi_once(
                 tag=tag,
             )
 
-        writes = count_write_tool_successes(state.tool_results)
-        write_fail = failed_write_user_message(state.tool_results)
+        write_basis = state.tool_results
+        if ws_on and tool_server is not None:
+            # Box can forge Pi RPC tool events; count only what Pico itself saw.
+            write_basis = [
+                *tool_server.trusted_results,
+                *[(n, r) for n, r in state.tool_results if n == "workspace_output"],
+            ]
+        writes = count_write_tool_successes(write_basis)
+        write_fail = failed_write_user_message(write_basis)
         if write_fail:
             return await _failed(
                 emit,
