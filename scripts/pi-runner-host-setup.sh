@@ -120,6 +120,8 @@ if ! command -v runsc >/dev/null; then
   curl -fsSL https://gvisor.dev/archive.key | gpg --dearmor --yes -o /usr/share/keyrings/gvisor-archive-keyring.gpg
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" \
     >/etc/apt/sources.list.d/gvisor.list
+  # This host's root umask is 027; apt verifies as user _apt, which must read both.
+  chmod 0644 /usr/share/keyrings/gvisor-archive-keyring.gpg /etc/apt/sources.list.d/gvisor.list
   # Refresh only the gVisor source: other repos on this shared host (e.g. a
   # stale third-party key) must neither block us nor be touched by us.
   apt-get update -qq \
