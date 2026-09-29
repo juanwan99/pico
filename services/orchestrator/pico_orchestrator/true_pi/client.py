@@ -101,6 +101,10 @@ def plan_choice_pending(value: str) -> bool:
 # the window is models.json contextWindow (see packages/coding-agent/docs/models.md).
 PI_MODELS_JSON = "models.json"
 PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
+# Vertex Gemini sends a functionCall whole once generated: a 100KB file is ~3 min
+# of silence on the wire. Pi's 5 min idle default would cut bigger ones; match
+# the ws-proxy read timeout (900s) instead.
+PI_HTTP_IDLE_TIMEOUT_MS = 900_000
 
 
 def official_compaction_settings(max_context: int) -> dict[str, Any]:
@@ -121,7 +125,8 @@ def official_compaction_settings(max_context: int) -> dict[str, Any]:
             "enabled": True,
             "reserveTokens": reserve,
             "keepRecentTokens": keep,
-        }
+        },
+        "httpIdleTimeoutMs": PI_HTTP_IDLE_TIMEOUT_MS,
     }
 
 

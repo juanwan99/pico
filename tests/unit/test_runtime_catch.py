@@ -99,6 +99,8 @@ def test_prepare_agent_home_writes_official_compaction_settings(tmp_path: Path) 
         assert compact["keepRecentTokens"] == 20_000
         assert compact["reserveTokens"] == 20_000
         assert 128_000 - compact["reserveTokens"] == 108_000
+        # A whole Gemini functionCall can be minutes of silence; 5 min default cut it.
+        assert blob["httpIdleTimeoutMs"] == 900_000
 
 
 def test_prepare_agent_home_deep_lane_compaction_fires_on_long_office(tmp_path: Path) -> None:
