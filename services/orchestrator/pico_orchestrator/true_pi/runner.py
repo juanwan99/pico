@@ -433,6 +433,7 @@ def _runner_error_event(code: str, message: str):
     return RpcEvent(
         {
             "type": "agent_end",
+            "runnerCode": code or "runner.error",
             "messages": [
                 {
                     "role": "assistant",

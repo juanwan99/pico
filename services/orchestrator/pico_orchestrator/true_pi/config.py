@@ -9,7 +9,7 @@ Environment (documented · no secrets):
   PICO_TRUE_PI_BIN           — pi executable (default: pi)
   PICO_TRUE_PI_PACKAGE       — npm package pin
   PICO_TRUE_PI_SESSION_ROOT  — session dir parent
-  PICO_TRUE_PI_HISTORY_N     — max history turns injected (default 10)
+  PICO_RUN_RESUME_MAX        — same-session resumes after an upstream error mid-run (default 3)
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ TRUE_PI_BIN_ENV = "PICO_TRUE_PI_BIN"
 TRUE_PI_PACKAGE_ENV = "PICO_TRUE_PI_PACKAGE"
 TRUE_PI_SESSION_ROOT_ENV = "PICO_TRUE_PI_SESSION_ROOT"
 TRUE_PI_MEMORY_ROOT_ENV = "PICO_TRUE_PI_MEMORY_ROOT"
-TRUE_PI_HISTORY_N_ENV = "PICO_TRUE_PI_HISTORY_N"
+RUN_RESUME_MAX_ENV = "PICO_RUN_RESUME_MAX"
 
 # npm pin for deploy notes
 PINNED_PI_PACKAGE = "@earendil-works/pi-coding-agent@0.84.4"
@@ -261,12 +261,18 @@ def persist_session_file(
     return root / PERSIST_SESSION_FILE
 
 
-def history_n() -> int:
-    raw = os.environ.get(TRUE_PI_HISTORY_N_ENV, "10").strip() or "10"
+def resume_max() -> int:
+    """How many times one run re-prompts the same Pi session after an upstream error.
+
+    Long tasks are dozens of model calls; one 5xx / cut stream / stray
+    content_filter after the model already produced output used to fail the
+    whole run. 0 = old behaviour (fail on the first error).
+    """
+    raw = os.environ.get(RUN_RESUME_MAX_ENV, "3").strip() or "3"
     try:
-        return max(0, min(40, int(raw)))
+        return max(0, min(10, int(raw)))
     except ValueError:
-        return 10
+        return 3
 
 
 def extension_path() -> Path:
