@@ -54,6 +54,11 @@ class EventMapState:
     # The box itself is going away (runner limit): a resume prompt has nowhere to go.
     no_resume: bool = False
     resumes: int = 0
+    # After a same-session resume prompt: drop whatever the previous turn still
+    # had queued (Pi 0.84 sends agent_end AND agent_settled; the consumer stops
+    # at the first) until the new turn's agent_start. Prod run 2fb28c1a: the
+    # stale agent_settled "settled" the resumed turn 0.5s in, blank success.
+    awaiting_start: bool = False
 
     @property
     def has_output(self) -> bool:
@@ -199,6 +204,10 @@ async def map_event(
     """Emit Pico ledger events for one Pi RPC event."""
     kind = event.type
     raw = event.raw
+    if state.awaiting_start:
+        if kind != "agent_start":
+            return
+        state.awaiting_start = False
     tag = {"runtime": RUNTIME_LABEL}
     if shadow:
         tag["shadow"] = True

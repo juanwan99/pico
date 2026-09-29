@@ -750,9 +750,16 @@ async def _run_true_pi_once(
                 {"attempt": state.resumes, "max": budget, "reason": reason, **tag},
             )
             await emit("message.delta", {"text": resume_teacher_note(state.resumes), **tag})
+            state.awaiting_start = True
+            steps_before = state.step
             early = await _drive(resume_prompt(reason), [])
             if early is not None:
                 return early
+            if state.step == steps_before and not state.provider_error:
+                # Nothing new ran (box gone, prompt ignored): never a blank success.
+                state.provider_error = f"resume produced no new turn after: {reason}"
+                state.settled = True
+                state.no_resume = True
         if state.event_kinds:
             logger.info(
                 "true_pi mapped_kinds run_id=%s n=%s kinds=%s",
