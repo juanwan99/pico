@@ -20,6 +20,25 @@ _INSECURE_JWT_SECRETS = {
     "change-me",
     "change-me-dev-only-not-for-prod-32b!",
 }
+def millipoints_for_usage(usage: dict, model: str) -> int | None:
+    """Rate-card price of one run's usage so far; None when the model is unpriced."""
+    from app.points_meter import milli_from_row
+
+    usage = usage if isinstance(usage, dict) else {}
+    return milli_from_row(
+        tokens_unknown=False,
+        total_tokens=usage.get("total_tokens"),
+        prompt_tokens=usage.get("prompt_tokens"),
+        completion_tokens=usage.get("completion_tokens"),
+        extra={
+            "cached_tokens": usage.get("cached_tokens"),
+            "cache_write_tokens": usage.get("cache_write_tokens"),
+        },
+        kind="llm",
+        model=model or None,
+    )
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(".env", "../../.env"), extra="ignore")
 
@@ -59,6 +78,9 @@ class Settings(BaseSettings):
     pico_run_durable_max_seconds: int = 21_600
     # Page close / SSE abort: default continue job (durable). 0 = legacy kill-on-disconnect.
     pico_run_detach_on_disconnect: bool = True
+    # Per-run spend cap (#1104 IN3), millipoints on the rate card; 0 = off.
+    # The wall clock stays as the last resort; this is the cap that matters.
+    pico_run_max_millipoints: int = 0
 
     # --- Pi Agent (product default multi-step kernel · HANDOFF-WB-PI) ---
     # True + empty canary (or *) → all principals use Pi (prod default).
@@ -274,6 +296,8 @@ class Settings(BaseSettings):
             max_retries=self.pico_run_max_retries,
             allowed_tools=allowed_tools,
             skill_instruction=skill_instruction,
+            max_millipoints=self.pico_run_max_millipoints,
+            millipoints_for_usage=millipoints_for_usage,
         )
 
     def short_run_caps(self):
@@ -304,6 +328,8 @@ class Settings(BaseSettings):
             max_retries=self.pico_run_max_retries,
             allowed_tools=allowed_tools,
             skill_instruction=skill_instruction,
+            max_millipoints=self.pico_run_max_millipoints,
+            millipoints_for_usage=millipoints_for_usage,
         )
 
     def spend_caps_dict(self) -> dict:
@@ -397,6 +423,8 @@ class Settings(BaseSettings):
             errors.append("PICO_RUN_SHORT_MAX_TOKENS must be greater than zero")
         if self.pico_run_durable_max_seconds < 0:
             errors.append("PICO_RUN_DURABLE_MAX_SECONDS must be >= 0 (0 = no Pico wall kill)")
+        if self.pico_run_max_millipoints < 0:
+            errors.append("PICO_RUN_MAX_MILLIPOINTS must be >= 0 (0 = no spend cap)")
         if self.pico_dangerous_tools_enabled:
             errors.append("PICO_DANGEROUS_TOOLS_ENABLED must remain false")
         if not self.pico_pi_agent_runtime and not self.legacy_kimi_enabled:

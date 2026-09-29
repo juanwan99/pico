@@ -59,6 +59,10 @@ class EventMapState:
     # at the first) until the new turn's agent_start. Prod run 2fb28c1a: the
     # stale agent_settled "settled" the resumed turn 0.5s in, blank success.
     awaiting_start: bool = False
+    # Spend so far (#1104 IN3): per model call from turn_end.message.usage.
+    # Separate from token_usage (ledger, harvested once at agent_end).
+    spent_usage: dict[str, Any] | None = None
+    spent_calls: int = 0
 
     @property
     def has_output(self) -> bool:
@@ -484,6 +488,9 @@ async def map_event(
         state.event_kinds.append("turn.end")
         await emit("agent.step", {"phase": "turn_end", "step": state.step, **tag})
         msg = raw.get("message") or {}
+        if isinstance(msg, dict) and isinstance(msg.get("usage"), dict):
+            state.spent_usage = add_usage(state.spent_usage, msg["usage"])
+            state.spent_calls += 1
         _record_assistant_turn(
             state, msg=msg if isinstance(msg, dict) else {}, raw=raw
         )

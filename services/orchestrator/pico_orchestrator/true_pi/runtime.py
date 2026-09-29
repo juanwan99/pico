@@ -571,6 +571,44 @@ async def _run_true_pi_once(
             system_prompt=str(getattr(caps, "system_prompt", "") or ""),
         )
 
+        async def salvage_outputs() -> None:
+            # A turn that stops early still delivers what it already saved.
+            if ws_on:
+                await _land_workspace_outputs(
+                    transport=transport,
+                    before=ws_before,
+                    since=ws_since,
+                    artifact_store=artifact_store,
+                    principal=principal,
+                    state=state,
+                    emit=emit,
+                    tag=tag,
+                )
+
+        # Spend cap (#1104 IN3): priced per model call from turn_end usage.
+        spend_cap = max(0, int(getattr(caps, "max_millipoints", 0) or 0))
+        pricer = getattr(caps, "millipoints_for_usage", None)
+        spend_model = str(getattr(caps, "backend_model", "") or "") or str(
+            getattr(transport, "model", "") or ""
+        )
+        spend_seen = 0
+        spent_milli = 0
+
+        def _spend_exceeded() -> bool:
+            nonlocal spend_seen, spent_milli
+            if spend_cap <= 0 or pricer is None or state.spent_calls == spend_seen:
+                return spent_milli >= spend_cap > 0
+            spend_seen = state.spent_calls
+            try:
+                milli = pricer(state.spent_usage or {}, spend_model)
+            except Exception as exc:  # noqa: BLE001 — pricing must never kill a run
+                logger.warning("true_pi spend price failed: %s", type(exc).__name__)
+                return False
+            if milli is None:
+                return False
+            spent_milli = int(milli)
+            return spent_milli >= spend_cap
+
         async def _drive(prompt_text: str, images: list[dict[str, Any]]) -> RunResult | None:
             """One prompt on the live Pi session. Returns a RunResult only on an early stop."""
             async def _consume() -> None:
@@ -649,9 +687,21 @@ async def _run_true_pi_once(
                         return _result("cancelled", state, principal=principal)
                     if timed_out.is_set() or wall_expired(loop.time(), deadline):
                         await client.abort()
+                        await salvage_outputs()
                         return await _wall_stop(
                             emit,
                             caps=caps,
+                            state=state,
+                            principal=principal,
+                            tag=tag,
+                        )
+                    if _spend_exceeded():
+                        await client.abort()
+                        await salvage_outputs()
+                        return await _spend_stop(
+                            emit,
+                            millipoints=spent_milli,
+                            cap=spend_cap,
                             state=state,
                             principal=principal,
                             tag=tag,
@@ -767,20 +817,6 @@ async def _run_true_pi_once(
                 len(state.event_kinds),
                 ",".join(state.event_kinds[:120]),
             )
-
-        async def salvage_outputs() -> None:
-            # A turn that stops early still delivers what it already saved.
-            if ws_on:
-                await _land_workspace_outputs(
-                    transport=transport,
-                    before=ws_before,
-                    since=ws_since,
-                    artifact_store=artifact_store,
-                    principal=principal,
-                    state=state,
-                    emit=emit,
-                    tag=tag,
-                )
 
         if _hitl_ask_timed_out(transport):
             await client.abort()
@@ -1111,6 +1147,29 @@ def resume_prompt(reason: str) -> str:
         f"上游模型刚才中断了一次（{why}）。请从中断处继续完成原任务："
         "先看工作区里已经写好的文件，不要重做，只补齐剩下的部分，然后照常交付。"
     )
+
+
+async def _spend_stop(
+    emit: EventEmitter,
+    *,
+    millipoints: int,
+    cap: int,
+    state: EventMapState,
+    principal: Principal | None,
+    tag: dict[str, Any],
+) -> RunResult:
+    """Hit the per-run spend cap: teacher-facing pause, same shape as the wall."""
+    from pico_orchestrator.user_errors import spend_stop_teacher_text
+
+    writes = count_write_tool_successes(state.tool_results)
+    text = spend_stop_teacher_text(
+        millipoints=millipoints, cap_millipoints=cap, has_deliverable=writes > 0
+    )
+    state.final_parts.append(text)
+    await emit("run.spend", {"millipoints": millipoints, "cap_millipoints": cap, **tag})
+    await emit("message.delta", {"text": text, **tag})
+    await emit("run.status", {"status": "succeeded", "code": "spend.stop", **tag})
+    return _result("succeeded", state, principal=principal)
 
 
 async def _wall_stop(

@@ -19,6 +19,21 @@ def _with_deliverable_hint(msg: str, has_deliverable: bool) -> str:
     return msg.rstrip("。") + "。" + FILE_IN_RESULTS
 
 
+def spend_stop_teacher_text(
+    *, millipoints: int, cap_millipoints: int, has_deliverable: bool = False
+) -> str:
+    """Teacher-facing pause when one run reaches its spend cap. Not an error chrome."""
+    spent = max(0, int(millipoints or 0)) / 1000
+    cap = max(0, int(cap_millipoints or 0)) / 1000
+    msg = (
+        f"这次任务已用掉约 {spent:.1f} 点，到了单次上限（{cap:.0f} 点），"
+        "我先停在这里，不是系统报错。要接着做，直接说「继续」，或把剩下的部分分开说。"
+    )
+    if has_deliverable:
+        msg += "已经做好的文件都在右侧「结果 / 产物」里。"
+    return msg
+
+
 def wall_stop_teacher_text(*, max_seconds: int, has_deliverable: bool = False) -> str:
     """Teacher-facing pause when Pico's run wall is hit. Not an error chrome."""
     sec = max(0, int(max_seconds or 0))
