@@ -571,152 +571,188 @@ async def _run_true_pi_once(
             system_prompt=str(getattr(caps, "system_prompt", "") or ""),
         )
 
-        async def _consume() -> None:
-            nonlocal last_progress_wall, last_tool_ok_wall
-            async for event in client.events():
-                # Responses are handled by wait_response on SubprocessTransport;
-                # ignore type=response in the event stream if any leak through.
-                if event.type == "response":
-                    continue
-                # Streaming deltas (message_update) carry the FULL accumulated
-                # text and can arrive at hundreds/thousands per second while the
-                # model streams (O(n^2) over tokens). map_event drops them, so
-                # drop them HERE before the per-event cancellation DB check —
-                # otherwise a fast model stream backlogs the event queue with
-                # RpcEvents (each holding the growing text) and balloons memory.
-                # Cancellation is already enforced by the main loop + _watcher.
-                if event.type == "message_update":
-                    continue
-                if stop.is_set() or timed_out.is_set() or await is_cancelled():
-                    break
-                prev_tool_oks = state.tool_oks
-                await map_event(
-                    event,
-                    emit=emit,
-                    state=state,
-                    shadow=shadow,
-                    artifact_store=artifact_store,
-                    principal=principal,
-                )
-                # Official plan-mode: hold the first end only while auto-Execute
-                # actually started a second turn. Never wait for a 3rd end
-                # (live hang: pending stayed True and unset the 2nd settle).
-                hold, ends, pending = plan_settle_hold(
-                    event_type=event.type,
-                    plan_flag=bool(getattr(transport, "plan_flag", False)),
-                    plan_agent_ends=int(getattr(transport, "plan_agent_ends", 0) or 0),
-                    plan_execute_pending=bool(
-                        getattr(transport, "plan_execute_pending", False)
-                    ),
-                )
-                transport.plan_agent_ends = ends
-                if hold:
-                    state.settled = False
-                elif pending and ends >= 2:
-                    transport.plan_execute_pending = False
-                # Circuit-breaker progress bookkeeping (F2): any event that maps
-                # is real forward motion; a newly successful tool execution
-                # resets the no-tool-progress timer used by the deep-lane
-                # bailout.
-                last_progress_wall = loop.time()
-                if state.tool_oks > prev_tool_oks:
-                    last_tool_ok_wall = loop.time()
-                if state.settled:
-                    break
+        async def _drive(prompt_text: str, images: list[dict[str, Any]]) -> RunResult | None:
+            """One prompt on the live Pi session. Returns a RunResult only on an early stop."""
+            async def _consume() -> None:
+                nonlocal last_progress_wall, last_tool_ok_wall
+                async for event in client.events():
+                    # Responses are handled by wait_response on SubprocessTransport;
+                    # ignore type=response in the event stream if any leak through.
+                    if event.type == "response":
+                        continue
+                    # Streaming deltas (message_update) carry the FULL accumulated
+                    # text and can arrive at hundreds/thousands per second while the
+                    # model streams (O(n^2) over tokens). map_event drops them, so
+                    # drop them HERE before the per-event cancellation DB check —
+                    # otherwise a fast model stream backlogs the event queue with
+                    # RpcEvents (each holding the growing text) and balloons memory.
+                    # Cancellation is already enforced by the main loop + _watcher.
+                    if event.type == "message_update":
+                        continue
+                    if stop.is_set() or timed_out.is_set() or await is_cancelled():
+                        break
+                    prev_tool_oks = state.tool_oks
+                    await map_event(
+                        event,
+                        emit=emit,
+                        state=state,
+                        shadow=shadow,
+                        artifact_store=artifact_store,
+                        principal=principal,
+                    )
+                    # Official plan-mode: hold the first end only while auto-Execute
+                    # actually started a second turn. Never wait for a 3rd end
+                    # (live hang: pending stayed True and unset the 2nd settle).
+                    hold, ends, pending = plan_settle_hold(
+                        event_type=event.type,
+                        plan_flag=bool(getattr(transport, "plan_flag", False)),
+                        plan_agent_ends=int(getattr(transport, "plan_agent_ends", 0) or 0),
+                        plan_execute_pending=bool(
+                            getattr(transport, "plan_execute_pending", False)
+                        ),
+                    )
+                    transport.plan_agent_ends = ends
+                    if hold:
+                        state.settled = False
+                    elif pending and ends >= 2:
+                        transport.plan_execute_pending = False
+                    # Circuit-breaker progress bookkeeping (F2): any event that maps
+                    # is real forward motion; a newly successful tool execution
+                    # resets the no-tool-progress timer used by the deep-lane
+                    # bailout.
+                    last_progress_wall = loop.time()
+                    if state.tool_oks > prev_tool_oks:
+                        last_tool_ok_wall = loop.time()
+                    if state.settled:
+                        break
 
-        consumer = asyncio.create_task(_consume())
-        try:
-            # Consume must run while wait_response sits on prompt ack.
-            # Live Pi can stream text_delta before the prompt response;
-            # starting after prompt() made TTFB == generation wall time.
-            await client.prompt(full_prompt, images=list(getattr(caps, "images", None) or []))
-            while not state.settled and not stop.is_set():
-                if _hitl_ask_timed_out(transport):
-                    await client.abort()
-                    return await _failed(
-                        emit,
-                        code="ask.timeout",
-                        reason="超时未选，没有继续。请再发一次。",
-                        state=state,
-                        principal=principal,
-                        tag=tag,
-                    )
-                if await is_cancelled():
-                    await client.abort()
-                    await emit("run.status", {"status": "cancelled", **tag})
-                    return _result("cancelled", state, principal=principal)
-                if timed_out.is_set() or wall_expired(loop.time(), deadline):
-                    await client.abort()
-                    return await _wall_stop(
-                        emit,
-                        caps=caps,
-                        state=state,
-                        principal=principal,
-                        tag=tag,
-                    )
-                # Dual-mode deep-lane circuit breaker (F2): DeepSeek 深度 empty
-                # loop fuse. GPT Responses thinking is skipped (see helper).
-                if thinking_on and not state.settled:
-                    now = loop.time()
-                    tool_gap = (
-                        now - last_tool_ok_wall
-                        if last_tool_ok_wall is not None
-                        else now - started
-                    )
-                    progress_gap = now - last_progress_wall
-                    if should_trip_true_pi_idle_breaker(
-                        thinking_on=thinking_on,
-                        openai_responses_brain=openai_responses_brain,
-                        tool_oks=state.tool_oks,
-                        tool_gap=tool_gap,
-                        progress_gap=progress_gap,
-                        breaker_seconds=breaker_seconds,
-                    ):
+            consumer = asyncio.create_task(_consume())
+            try:
+                # Consume must run while wait_response sits on prompt ack.
+                # Live Pi can stream text_delta before the prompt response;
+                # starting after prompt() made TTFB == generation wall time.
+                await client.prompt(prompt_text, images=images)
+                while not state.settled and not stop.is_set():
+                    if _hitl_ask_timed_out(transport):
                         await client.abort()
-                        await emit(
-                            "circuit.breaker",
-                            {
-                                "tool_exec_count": state.tool_oks,
-                                "wall_seconds": int(now - started),
-                                "stalled_seconds": int(progress_gap),
-                                "runtime": RUNTIME_LABEL,
-                            },
-                        )
                         return await _failed(
                             emit,
-                            code="pi.no_progress",
-                            reason=(
-                                "深度模式长时间无有效进展，已触发熔断以避免空转。"
-                                "可点「再跑一次」，或改用 Pico 快速档重试。"
-                            ),
+                            code="ask.timeout",
+                            reason="超时未选，没有继续。请再发一次。",
                             state=state,
                             principal=principal,
                             tag=tag,
                         )
-                if consumer.done():
-                    break
-                # Empty-plan Stay / no UI: first end already happened, Execute
-                # never started, Pi is idle. Land instead of waiting 3600s.
-                if (
-                    not state.settled
-                    and int(getattr(transport, "plan_agent_ends", 0) or 0) >= 1
-                    and not bool(getattr(transport, "plan_execute_pending", False))
-                ):
-                    held_at = getattr(transport, "plan_first_held_at", None)
-                    if held_at is None:
-                        transport.plan_first_held_at = loop.time()
-                    elif loop.time() - float(transport.plan_first_held_at) >= _PLAN_FIRST_END_GRACE:
-                        state.settled = True
+                    if await is_cancelled():
+                        await client.abort()
+                        await emit("run.status", {"status": "cancelled", **tag})
+                        return _result("cancelled", state, principal=principal)
+                    if timed_out.is_set() or wall_expired(loop.time(), deadline):
+                        await client.abort()
+                        return await _wall_stop(
+                            emit,
+                            caps=caps,
+                            state=state,
+                            principal=principal,
+                            tag=tag,
+                        )
+                    # Dual-mode deep-lane circuit breaker (F2): DeepSeek 深度 empty
+                    # loop fuse. GPT Responses thinking is skipped (see helper).
+                    if thinking_on and not state.settled:
+                        now = loop.time()
+                        tool_gap = (
+                            now - last_tool_ok_wall
+                            if last_tool_ok_wall is not None
+                            else now - started
+                        )
+                        progress_gap = now - last_progress_wall
+                        if should_trip_true_pi_idle_breaker(
+                            thinking_on=thinking_on,
+                            openai_responses_brain=openai_responses_brain,
+                            tool_oks=state.tool_oks,
+                            tool_gap=tool_gap,
+                            progress_gap=progress_gap,
+                            breaker_seconds=breaker_seconds,
+                        ):
+                            await client.abort()
+                            await emit(
+                                "circuit.breaker",
+                                {
+                                    "tool_exec_count": state.tool_oks,
+                                    "wall_seconds": int(now - started),
+                                    "stalled_seconds": int(progress_gap),
+                                    "runtime": RUNTIME_LABEL,
+                                },
+                            )
+                            return await _failed(
+                                emit,
+                                code="pi.no_progress",
+                                reason=(
+                                    "深度模式长时间无有效进展，已触发熔断以避免空转。"
+                                    "可点「再跑一次」，或改用 Pico 快速档重试。"
+                                ),
+                                state=state,
+                                principal=principal,
+                                tag=tag,
+                            )
+                    if consumer.done():
                         break
-                await asyncio.sleep(0.05)
-        finally:
-            if not consumer.done():
-                consumer.cancel()
-                with suppress(asyncio.CancelledError):
-                    await consumer
-            else:
-                with suppress(Exception):
-                    consumer.result()
+                    # Empty-plan Stay / no UI: first end already happened, Execute
+                    # never started, Pi is idle. Land instead of waiting 3600s.
+                    if (
+                        not state.settled
+                        and int(getattr(transport, "plan_agent_ends", 0) or 0) >= 1
+                        and not bool(getattr(transport, "plan_execute_pending", False))
+                    ):
+                        held_at = getattr(transport, "plan_first_held_at", None)
+                        if held_at is None:
+                            transport.plan_first_held_at = loop.time()
+                        elif loop.time() - float(transport.plan_first_held_at) >= _PLAN_FIRST_END_GRACE:
+                            state.settled = True
+                            break
+                    await asyncio.sleep(0.05)
+            finally:
+                if not consumer.done():
+                    consumer.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await consumer
+                else:
+                    with suppress(Exception):
+                        consumer.result()
+            return None
+
+        early = await _drive(full_prompt, list(getattr(caps, "images", None) or []))
+        if early is not None:
+            return early
+        # Same-session resume (#1104): one upstream error after the model already
+        # did work must not throw the whole long task away. Pi keeps the turn in
+        # its session; ask it to carry on from where it stopped. Before any
+        # output brain-HA still fails over to the next model instead.
+        from pico_orchestrator.true_pi.config import resume_max
+
+        budget = resume_max()
+        while (
+            state.settled
+            and state.provider_error
+            and state.has_output
+            and not state.no_resume
+            and state.resumes < budget
+            and _provider_fail_code(state.provider_error) != "model.usage_limit"
+        ):
+            state.resumes += 1
+            reason = str(state.provider_error)[:200]
+            logger.info("true_pi resume run_id=%s n=%s/%s reason=%s", rid, state.resumes, budget, reason)
+            state.provider_error = None
+            state.settled = False
+            state.event_kinds.append("run.resume")
+            await emit(
+                "run.resume",
+                {"attempt": state.resumes, "max": budget, "reason": reason, **tag},
+            )
+            await emit("message.delta", {"text": resume_teacher_note(state.resumes), **tag})
+            early = await _drive(resume_prompt(reason), [])
+            if early is not None:
+                return early
         if state.event_kinds:
             logger.info(
                 "true_pi mapped_kinds run_id=%s n=%s kinds=%s",
@@ -1055,6 +1091,19 @@ def _compose_prompt(
     """
     del skill, min_arts, history, allowed_tools, system_prompt
     return str(prompt or "")
+
+
+def resume_teacher_note(attempt: int) -> str:
+    return f"（模型渠道中断了一次，已自动从断处续跑，第 {attempt} 次）\n"
+
+
+def resume_prompt(reason: str) -> str:
+    """User turn Pi gets after an upstream error: carry on, do not redo saved work."""
+    why = (reason or "").strip().replace("\n", " ")[:200]
+    return (
+        f"上游模型刚才中断了一次（{why}）。请从中断处继续完成原任务："
+        "先看工作区里已经写好的文件，不要重做，只补齐剩下的部分，然后照常交付。"
+    )
 
 
 async def _wall_stop(

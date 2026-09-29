@@ -105,6 +105,8 @@ PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
 # of silence on the wire. Pi's 5 min idle default would cut bigger ones; match
 # the ws-proxy read timeout (900s) instead.
 PI_HTTP_IDLE_TIMEOUT_MS = 900_000
+PI_RETRY_MAX = 5
+PI_RETRY_BASE_DELAY_MS = 3_000
 
 
 def official_compaction_settings(max_context: int) -> dict[str, Any]:
@@ -127,6 +129,9 @@ def official_compaction_settings(max_context: int) -> dict[str, Any]:
             "keepRecentTokens": keep,
         },
         "httpIdleTimeoutMs": PI_HTTP_IDLE_TIMEOUT_MS,
+        # Pi's own retry on retryable upstream errors (overloaded / 5xx / 429).
+        # Default 3 × 2s; a long office task deserves a few more, spaced wider.
+        "retry": {"enabled": True, "maxRetries": PI_RETRY_MAX, "baseDelayMs": PI_RETRY_BASE_DELAY_MS},
     }
 
 
@@ -264,6 +269,8 @@ class FakeTransport(TruePiTransport):
     """Deterministic transport for unit tests without a real pi binary."""
 
     scripted: list[dict[str, Any]] = field(default_factory=list)
+    # One script per follow-up prompt (same-session resume); popped in order.
+    scripted_after_prompt: list[list[dict[str, Any]]] = field(default_factory=list)
     sent: list[dict[str, Any]] = field(default_factory=list)
     assistant_text: str = "已写入 notes.md，请从产物列表下载。"
     _event_q: asyncio.Queue[RpcEvent | None] = field(default_factory=asyncio.Queue)
@@ -279,6 +286,10 @@ class FakeTransport(TruePiTransport):
         self.sent.append(cmd)
         ctype = str(cmd.get("type") or "")
         req_id = cmd.get("id")
+        prompts = sum(1 for c in self.sent if c.get("type") == "prompt")
+        if ctype == "prompt" and prompts > 1 and self.scripted_after_prompt:
+            for item in self.scripted_after_prompt.pop(0):
+                await self._event_q.put(RpcEvent(item))
         ack: dict[str, Any] = {
             "type": "response",
             "command": ctype,

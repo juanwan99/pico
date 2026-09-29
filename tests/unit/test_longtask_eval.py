@@ -94,3 +94,15 @@ def test_every_case_can_pass_when_all_checks_hold() -> None:
     by_id = {c["id"]: c.get("expect") or {} for c in lte.load_cases()}
     assert lte.max_points(by_id["LT4"]) == 2 and lte.pass_bar(by_id["LT4"]) == 2
     assert lte.pass_bar(by_id["LT6"]) == 3
+
+
+def test_fake_green_flagged_explicitly() -> None:
+    """Baseline #1091: 5 runs said succeeded with 0 files. Now a column, never a pass."""
+    res = lte.CaseResult(case="LT9", title="t", ok=True, auto_score=3, max_score=5, artifacts=0)
+    lte.flag_fake_green(res, "succeeded")
+    assert res.fake_green is True and res.ok is False
+    with_files = lte.CaseResult(case="LT9", title="t", ok=True, auto_score=3, artifacts=2)
+    lte.flag_fake_green(with_files, "succeeded")
+    assert with_files.fake_green is False and with_files.ok is True
+    table = lte.render_markdown([res, with_files])
+    assert "假绿" in table and "| 是 |" in table and "假绿：1" in table

@@ -14,9 +14,12 @@ of a run that is alive in this process:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hmac
 import json
 import logging
+import os
+from collections import Counter
 
 import httpx
 from fastapi import APIRouter, Request, Response
@@ -95,6 +98,32 @@ async def _stream(
 
 
 MODEL_PATHS = frozenset({"chat/completions", "responses", "models"})
+# Chaos switch for #1104 T1 (ops only, no restart): write N into this file and
+# the N-th model call of the next run gets one 502; the file is then removed.
+FAULT_FILE_ENV = "PICO_WS_PROXY_FAULT_FILE"
+_FAULT_FILE_DEFAULT = "/app/data/ws-proxy-fault"
+_model_calls: Counter[str] = Counter()
+
+
+def fault_injected(run_id: str) -> bool:
+    path = os.environ.get(FAULT_FILE_ENV, _FAULT_FILE_DEFAULT).strip()
+    if not path or not os.path.exists(path):
+        return False
+    _model_calls[run_id] += 1
+    try:
+        with open(path, encoding="utf-8") as fh:
+            nth = max(1, int(fh.read().strip() or "2"))
+    except (OSError, ValueError):
+        nth = 2
+    if _model_calls[run_id] < nth:
+        return False
+    with contextlib.suppress(OSError):
+        os.remove(path)
+    _model_calls.clear()
+    logger.warning("ws-proxy fault injected run_id=%s call=%s", run_id, nth)
+    return True
+
+
 TOOL_PATHS = frozenset({"v1/tool", "health"})
 MAX_BODY = 16 * 1024 * 1024
 
@@ -131,6 +160,8 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
         "content-type", "application/json"
     )
     target = f"{entry.llm_upstream.rstrip('/')}/{path}"
+    if request.method == "POST" and fault_injected(run_id):
+        return _deny("proxy.fault_injected", 502)
     try:
         await asyncio.wait_for(entry.slots.acquire(), timeout=120)
     except TimeoutError:

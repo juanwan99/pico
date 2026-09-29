@@ -42,6 +42,8 @@ class CaseResult:
     ok: bool = False
     auto_score: int = 0
     max_score: int = 0
+    # run.status succeeded yet nothing landed: the fake green #1091 measured.
+    fake_green: bool = False
     tool_calls: int = 0
     agent_steps: int = 0
     wall_s: float = 0.0
@@ -417,6 +419,14 @@ def score_case(case: dict[str, Any], arts: list[dict[str, Any]], pico: Pico, res
         res.ok = False
 
 
+def flag_fake_green(res: CaseResult, status: str) -> None:
+    """A run that says succeeded with nothing landed never counts as a pass."""
+    if status == "succeeded" and res.artifacts <= 0:
+        res.fake_green = True
+        res.ok = False
+        res.notes.append("run succeeded, 0 artifacts")
+
+
 def run_case(pico: Pico, case: dict[str, Any], stamp: str) -> CaseResult:
     cid = f"longtask-{case['id'].lower()}-{stamp}"
     res = CaseResult(case=case["id"], title=case.get("title") or "", score_points=list(case.get("score_points") or []))
@@ -433,6 +443,7 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str) -> CaseResult:
         score_case(case, arts, pico, res)
         if status == "failed" and not res.fail_reason:
             res.fail_reason = "other"
+        flag_fake_green(res, status)
         if status == "failed":
             res.ok = False
             if not res.notes:
@@ -450,20 +461,22 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str) -> CaseResult:
 
 def render_markdown(results: list[CaseResult]) -> str:
     lines = [
-        "| 例 | 标题 | ok | 自动分 | 失败原因 | 耗时 s | 工具 | 步 | 产物 | 备注 |",
-        "|---|---|---|---:|---|---:|---:|---:|---:|---|",
+        "| 例 | 标题 | ok | 自动分 | 失败原因 | 假绿 | 耗时 s | 工具 | 步 | 产物 | 备注 |",
+        "|---|---|---|---:|---|---|---:|---:|---:|---:|---|",
     ]
     for r in results:
         notes = "; ".join(r.notes)[:180]
         lines.append(
             f"| {r.case} | {r.title} | {'✅' if r.ok else '❌'} | {r.auto_score}/{r.max_score or 5} | "
-            f"{r.fail_reason or '—'} | {r.wall_s:.1f} | {r.tool_calls} | {r.agent_steps} | "
+            f"{r.fail_reason or '—'} | {'是' if r.fake_green else '—'} | {r.wall_s:.1f} | "
+            f"{r.tool_calls} | {r.agent_steps} | "
             f"{r.artifacts} | {notes or '—'} |"
         )
     n = len(results)
     ok_n = sum(1 for r in results if r.ok)
     lines.append("")
-    lines.append(f"成功率：{ok_n}/{n}" + (f" ({ok_n / n * 100:.0f}%)" if n else ""))
+    fake_n = sum(1 for r in results if r.fake_green)
+    lines.append(f"成功率：{ok_n}/{n}" + (f" ({ok_n / n * 100:.0f}%)" if n else "") + f" · 假绿：{fake_n}")
     lines.append("")
     lines.append("人读评分要点（0–5，规划窗填）：")
     for r in results:

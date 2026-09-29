@@ -51,6 +51,14 @@ class EventMapState:
     provider_error: str | None = None
     thinking_emitted: bool = False
     text_streamed: bool = False
+    # The box itself is going away (runner limit): a resume prompt has nowhere to go.
+    no_resume: bool = False
+    resumes: int = 0
+
+    @property
+    def has_output(self) -> bool:
+        """The model already did visible work this run (tools, text, or a message)."""
+        return self.tool_calls > 0 or self.text_streamed or bool(self.final_parts)
 
 
 def assistant_turn_error(blob: Any) -> str:
@@ -442,6 +450,8 @@ async def map_event(
         err = assistant_turn_error(raw)
         if err:
             state.provider_error = err
+        if raw.get("runnerCode"):
+            state.no_resume = True
         if will_retry:
             # Pi retries this error itself; only a failure after the retry counts.
             state.provider_error = None
