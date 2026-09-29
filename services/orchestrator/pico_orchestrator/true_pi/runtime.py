@@ -237,6 +237,16 @@ async def _run_true_pi_once(
     allowed = resolve_visible_tools(caps.allowed_tools)
     if page_book is not None and PAGE_TOOL not in allowed:
         allowed = [*allowed, PAGE_TOOL]
+    from pico_orchestrator.true_pi.runner import BOX_HIDDEN_TOOLS, runner_enabled
+
+    school_key = str(getattr(principal, "school_id", "") or "")
+    member_key = str(getattr(principal, "membership_id", "") or "")
+    # Tenant fail-closed: no box without both ids (legacy spawn keeps builtins off).
+    box_mode = (
+        transport is None and bool(school_key and member_key) and runner_enabled(member_key)
+    )
+    if box_mode:
+        allowed = [name for name in allowed if name not in BOX_HIDDEN_TOOLS]
     gateway = gateway.restricted_to(allowed)
     system_text = pico_system_text(
         skill=str(getattr(caps, "skill_instruction", "") or ""),
@@ -341,8 +351,6 @@ async def _run_true_pi_once(
                 conversation_id=conversation_id,
                 emit=emit,
             )
-            school_key = str(getattr(principal, "school_id", "") or "")
-            member_key = str(getattr(principal, "membership_id", "") or "")
             persist_dir = (
                 persist_session_dir(
                     school_id=school_key,
@@ -379,14 +387,12 @@ async def _run_true_pi_once(
                 RunnerSpec,
                 RunnerTransport,
                 WorkspaceKey,
-                runner_enabled,
+                take_conversation_files,
             )
 
-            # Tenant fail-closed: no box without both ids (legacy spawn keeps builtins off).
-            use_runner = bool(school_key and member_key) and runner_enabled(member_key)
             transport_cls: Any = SubprocessTransport
             runner_kwargs: dict[str, Any] = {}
-            if use_runner:
+            if box_mode:
                 from pico_orchestrator.llm_file_pass import turn_files
 
                 # Box always speaks OpenAI-compatible to the runner proxy; the
@@ -406,7 +412,10 @@ async def _run_true_pi_once(
                     llm_upstream=llm_upstream,
                     llm_key=provider.api_key,
                     with_memory=mem_dir is not None and mem_path in extra_ext,
-                    attachments=[(f.filename, f.data) for f in turn_files(rid)],
+                    attachments=_box_attachments(
+                        take_conversation_files(member_key, conversation_id),
+                        [(f.filename, f.data) for f in turn_files(rid)],
+                    ),
                 )
                 system_text = f"{system_text}\n\n{WORKSPACE_SYSTEM}".strip()
                 transport_cls = RunnerTransport
@@ -896,6 +905,17 @@ async def _run_true_pi_once(
         if tool_server is not None:
             with suppress(Exception):
                 await tool_server.stop()
+
+
+def _box_attachments(
+    conversation: list[tuple[str, bytes]], turn: list[tuple[str, bytes]]
+) -> list[tuple[str, bytes]]:
+    """All conversation uploads (any type) plus this turn's native files, by name."""
+    out: dict[str, bytes] = {}
+    for name, data in [*conversation, *turn]:
+        if name and data:
+            out[str(name)] = bytes(data)
+    return list(out.items())
 
 
 async def _land_workspace_outputs(

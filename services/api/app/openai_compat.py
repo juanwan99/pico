@@ -1444,6 +1444,20 @@ async def chat_completions(
             native_files = await native_files_from_rows(
                 named_session, list(upload_items) + list(named_items or [])
             )
+            from pico_orchestrator.true_pi.runner import (
+                remember_conversation_files,
+                runner_enabled,
+            )
+
+            if conversation_id and runner_enabled(principal.membership_id):
+                # Workspace box reads every upload itself (card #1093).
+                from app.edu_files import workspace_files_from_rows
+
+                remember_conversation_files(
+                    principal.membership_id,
+                    conversation_id,
+                    await workspace_files_from_rows(named_session, list(upload_items)),
+                )
             turn_images = merge_images(
                 turn_images,
                 await images_from_upload_rows(named_session, upload_items),

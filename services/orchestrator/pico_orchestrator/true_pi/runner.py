@@ -50,13 +50,36 @@ WS_BRIDGE = "/opt/pico/true_pi_bridge"
 
 WORKSPACE_SYSTEM = """## Workspace
 
-You have an isolated Linux workspace at `/workspace` with read / write / edit / bash.
-- The teacher's attached files for this conversation are in `/workspace/attachments/`.
-- Save every file the teacher should receive in `/workspace/outputs/`. Files there are delivered to the teacher when you finish; nothing else is.
-- Python 3 with python-docx, openpyxl, python-pptx, pandas, matplotlib and LibreOffice (`soffice`) are installed; you may `pip install` more and use the internet.
-- Before you say a file is done, open it again and check it (re-read, render with `soffice --headless --convert-to pdf` or count slides/rows).
-- The workspace persists across turns of this conversation, so you can revise earlier files in place.
+You have an isolated Linux workspace at `/workspace` with read / write / edit / bash. Work there like a careful engineer.
+- Every file the teacher attached in this conversation is in `/workspace/attachments/`. Read them there (`ls`, `read`, python, `pdftotext`).
+- Make Word / Excel / PowerPoint / HTML / Markdown files yourself with Python in this workspace: python-docx, openpyxl, python-pptx, pandas, matplotlib and LibreOffice (`soffice`) are installed; `pip install` and the internet work too. When a skill says `sandbox_office_lib`, run the same code here instead.
+- Save only the files the teacher should receive in `/workspace/outputs/`; they are delivered when you finish, nothing else is. Keep scripts and scratch files elsewhere (e.g. `/workspace/work/`).
+- Never say a file is done until you have checked it: `ls -l /workspace/outputs`, reopen it, count pages / slides / rows, or render with `soffice --headless --convert-to pdf`. If it is not there, it was not delivered.
+- The workspace persists across turns of this conversation: revise earlier files in place.
 """
+
+# Gateway tools the workspace makes redundant (same job, done in the box).
+BOX_HIDDEN_TOOLS = frozenset({"sandbox_office_lib", "workspace_write_file"})
+# Written to outputs/ by habit but never a teacher deliverable.
+NOT_DELIVERABLE_EXT = frozenset({".py", ".pyc", ".sh", ".ipynb", ".log", ".tmp", ".lock"})
+
+# --- conversation attachments for the box ---------------------------------
+# openai_compat knows the conversation's uploads (any type); the runtime only
+# knows the run. Keyed by (membership, conversation); popped by the run.
+_CONV_FILES: dict[tuple[str, str], list[tuple[str, bytes]]] = {}
+
+
+def remember_conversation_files(membership_id: str, conversation_id: str, files: list[tuple[str, bytes]]) -> None:
+    key = (str(membership_id or ""), str(conversation_id or ""))
+    if files:
+        _CONV_FILES[key] = list(files)
+    else:
+        _CONV_FILES.pop(key, None)
+
+
+def take_conversation_files(membership_id: str, conversation_id: str | None) -> list[tuple[str, bytes]]:
+    return _CONV_FILES.pop((str(membership_id or ""), str(conversation_id or "")), [])
+
 
 
 def runner_enabled(membership_id: str | None = None) -> bool:
@@ -499,6 +522,8 @@ async def land_outputs(
         elif float(row.get("mtime") or 0) < since:
             continue
         title = os.path.basename(path)
+        if title.startswith(".") or os.path.splitext(title)[1].lower() in NOT_DELIVERABLE_EXT:
+            continue
         try:
             raw = await fetch_output(key, path)
         except TruePiClientError as exc:

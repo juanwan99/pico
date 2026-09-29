@@ -417,3 +417,38 @@ def test_member_quota_blocks_new_box(tmp_path: Path) -> None:
     with pytest.raises(PolicyError) as exc:
         asyncio.run(runner.start(spec))
     assert exc.value.code == "runner.member_quota"
+
+
+def test_box_attachments_merge_by_name() -> None:
+    from pico_orchestrator.true_pi.runtime import _box_attachments
+
+    got = _box_attachments([("a.md", b"1"), ("b.csv", b"2")], [("a.md", b"3"), ("c.pdf", b"")])
+    assert dict(got) == {"a.md": b"3", "b.csv": b"2"}
+
+
+def test_conversation_files_are_taken_once() -> None:
+    from pico_orchestrator.true_pi.runner import (
+        remember_conversation_files,
+        take_conversation_files,
+    )
+
+    remember_conversation_files("m1", "c1", [("x.md", b"x")])
+    assert take_conversation_files("m1", "c1") == [("x.md", b"x")]
+    assert take_conversation_files("m1", "c1") == []
+    assert take_conversation_files("m2", "c1") == []
+
+
+async def test_land_outputs_skips_scripts(monkeypatch) -> None:
+    key = WorkspaceKey.for_run(school_id="s", membership_id="m", conversation_id="c", run_id="r")
+    files = {"outputs/build.py": b"print(1)", "outputs/.hidden": b"x", "outputs/plan.md": b"# plan"}
+    await _fake_listing(monkeypatch, files)
+    store = _Store()
+    results = await land_outputs(key=key, before={}, since=0.0, artifact_store=store, principal=object())
+    assert [r["title"] for _, r in results] == ["plan.md"]
+
+
+def test_box_hides_redundant_office_tools() -> None:
+    from pico_orchestrator.true_pi.runner import BOX_HIDDEN_TOOLS, WORKSPACE_SYSTEM
+
+    assert "sandbox_office_lib" in BOX_HIDDEN_TOOLS
+    assert "/workspace/outputs/" in WORKSPACE_SYSTEM and "/workspace/attachments/" in WORKSPACE_SYSTEM

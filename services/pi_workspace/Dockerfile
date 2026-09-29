@@ -16,6 +16,8 @@ ENV PATH="/usr/local/lib/nodejs/bin:${PATH}" \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     NPM_CONFIG_REGISTRY=https://registry.npmmirror.com \
     NPM_CONFIG_PREFIX=/home/pi/.npm-global \
+    OPENBLAS_NUM_THREADS=2 \
+    OMP_NUM_THREADS=2 \
     PYTHONPATH=
 
 RUN set -eux; \
