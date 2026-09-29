@@ -611,7 +611,7 @@ def test_prod_update_waits_for_inflight_runs_then_recreates(tmp_path: Path) -> N
     bin_dir = _fake_runtime(tmp_path, inflight_health_polls=3)
     result = _run_prod_update(production, sha, bin_dir)
     assert result.returncode == 0, result.stderr
-    assert "inflight_runs=2 — waiting up to 300s before recreate" in result.stdout
+    assert "inflight_runs=2 — waiting up to 900s before recreate" in result.stdout
     assert "inflight_runs=0 after" in result.stdout
     assert "WARN recreating with inflight_runs" not in result.stderr
     assert "[pico] done" in result.stdout
@@ -624,9 +624,21 @@ def test_prod_update_warns_and_recreates_when_inflight_runs_outlast_budget(
     bin_dir = _fake_runtime(tmp_path, inflight_health_polls=10_000)
     result = _run_prod_update(production, sha, bin_dir)
     assert result.returncode == 0, result.stderr
-    assert "waiting up to 300s before recreate" in result.stdout
-    assert "WARN recreating with inflight_runs=2 after 300s" in result.stderr
+    assert "waiting up to 900s before recreate" in result.stdout
+    assert "WARN recreating with inflight_runs=2 after 900s" in result.stderr
     assert "[pico] done" in result.stdout
+
+
+def test_prod_update_drain_wait_tunable_from_env_file(tmp_path: Path) -> None:
+    """#1104 T4: ops set PICO_DEPLOY_DRAIN_WAIT_S in .env; no shell env needed."""
+    production, sha = _production_checkout(tmp_path)
+    (production / ".env").write_text("PICO_SANDBOX_TOKEN=x\nPICO_DEPLOY_DRAIN_WAIT_S=120\n")
+    (production / ".git" / "info" / "exclude").write_text(".env\n")
+    bin_dir = _fake_runtime(tmp_path, inflight_health_polls=10_000)
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert "waiting up to 120s before recreate" in result.stdout
+    assert "WARN recreating with inflight_runs=2 after 120s" in result.stderr
 
 
 def test_prod_update_treats_missing_inflight_field_as_zero(tmp_path: Path) -> None:

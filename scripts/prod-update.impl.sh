@@ -226,6 +226,8 @@ fi
 # Owner rule (2026-09-09): deploy may interrupt, but wait first. Poll the live
 # /health inflight_runs (old image without the field, or API down, counts as 0).
 # Past the budget we warn and continue — no drain mode, no cross-process resume.
+# #1104 T4: long office tasks run 5–10 min (LT6 570s); the wait covers a whole
+# one so a deploy lands between tasks, not inside one. Tunable via .env.
 inflight_runs_now() {
   local body
   body="$(curl -sf --max-time 2 http://127.0.0.1:18765/health 2>/dev/null || true)"
@@ -240,7 +242,10 @@ except Exception:
 ' "$body"
 }
 
-DRAIN_WAIT_S="${PICO_DEPLOY_DRAIN_WAIT_S:-300}"
+if [ -z "${PICO_DEPLOY_DRAIN_WAIT_S:-}" ] && [ -f .env ]; then
+  PICO_DEPLOY_DRAIN_WAIT_S="$(grep -E '^PICO_DEPLOY_DRAIN_WAIT_S=[0-9]+$' .env | tail -1 | cut -d= -f2 || true)"
+fi
+DRAIN_WAIT_S="${PICO_DEPLOY_DRAIN_WAIT_S:-900}"
 DRAIN_POLL_S=5
 inflight="$(inflight_runs_now)"
 if [ "$inflight" -gt 0 ]; then
