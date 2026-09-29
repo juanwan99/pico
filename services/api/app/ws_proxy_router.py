@@ -43,8 +43,10 @@ def _deny(code: str, status: int = 403) -> JSONResponse:
 def _runner_ok(request: Request) -> bool:
     expected = runner_token()
     got = request.headers.get("x-pico-runner-token") or ""
-    return bool(expected) and hmac.compare_digest(got, expected) and request_on_loopback_socket(
-        request
+    return (
+        bool(expected)
+        and hmac.compare_digest(got, expected)
+        and request_on_loopback_socket(request)
     )
 
 
@@ -98,15 +100,17 @@ async def _stream(
 
 
 MODEL_PATHS = frozenset({"chat/completions", "responses", "models"})
-# Chaos switch for #1104 T1 (ops only, no restart): write ``N`` (or ``N cut``)
-# into this file and the N-th model call of the next run fails once; the file
-# is then removed. ``502`` is what Pi retries itself; ``cut`` answers 200 and
-# drops the SSE stream after one chunk — the non-retryable "Stream ended
-# without finish_reason" that killed round-3 long tasks, so it reaches Pico's
-# same-session resume.
+# Chaos switch for #1104 T1 (ops only, no restart): write ``N [cut] [K]`` into
+# this file and model calls N..N+K-1 of the next run fail (K default 1); the
+# file is removed after the K-th hit. ``502`` and a ``cut`` stream (200 SSE,
+# one chunk, no finish_reason) are both retried by Pi itself (prod runs
+# d130322d / 93a3e9e6: agent.end will_retry=true, then done). K above Pi's
+# retry.maxRetries makes Pi give up — that is where Pico's same-session
+# resume takes over, which is what T1 has to show.
 FAULT_FILE_ENV = "PICO_WS_PROXY_FAULT_FILE"
 _FAULT_FILE_DEFAULT = "/app/data/ws-proxy-fault"
 _model_calls: Counter[str] = Counter()
+_fault_hits = 0
 _CUT_CHUNK = (
     'data: {"id":"pico-fault","object":"chat.completion.chunk","choices":'
     '[{"index":0,"delta":{"role":"assistant","content":"（"},"finish_reason":null}]}\n\n'
@@ -115,25 +119,41 @@ _CUT_CHUNK = (
 
 def fault_injected(run_id: str) -> str:
     """'' (no fault), '502', or 'cut' for this model call."""
+    global _fault_hits
     path = os.environ.get(FAULT_FILE_ENV, _FAULT_FILE_DEFAULT).strip()
     if not path or not os.path.exists(path):
         return ""
     _model_calls[run_id] += 1
-    mode = "502"
+    mode, nth, count = "502", 2, 1
     try:
         with open(path, encoding="utf-8") as fh:
             words = fh.read().split()
-        nth = max(1, int(words[0])) if words else 2
+        if words:
+            nth = max(1, int(words[0]))
         if "cut" in words[1:]:
             mode = "cut"
+        nums = [w for w in words[1:] if w.isdigit()]
+        if nums:
+            count = max(1, int(nums[0]))
     except (OSError, ValueError):
-        nth = 2
+        pass
     if _model_calls[run_id] < nth:
         return ""
-    with contextlib.suppress(OSError):
-        os.remove(path)
-    _model_calls.clear()
-    logger.warning("ws-proxy fault injected run_id=%s call=%s mode=%s", run_id, nth, mode)
+    _fault_hits += 1
+    hit = _fault_hits
+    if hit >= count:
+        with contextlib.suppress(OSError):
+            os.remove(path)
+        _model_calls.clear()
+        _fault_hits = 0
+    logger.warning(
+        "ws-proxy fault injected run_id=%s call=%s mode=%s hit=%s/%s",
+        run_id,
+        _model_calls[run_id] or nth,
+        mode,
+        hit,
+        count,
+    )
     return mode
 
 
@@ -176,8 +196,10 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
         body = payload
     headers = {k: v for k, v in request.headers.items() if k.lower() in _KEEP}
     headers["authorization"] = f"Bearer {entry.llm_key}"
-    headers["content-type"] = "application/json" if request.method == "POST" else headers.get(
-        "content-type", "application/json"
+    headers["content-type"] = (
+        "application/json"
+        if request.method == "POST"
+        else headers.get("content-type", "application/json")
     )
     target = f"{entry.llm_upstream.rstrip('/')}/{path}"
     fault = fault_injected(run_id) if request.method == "POST" else ""
