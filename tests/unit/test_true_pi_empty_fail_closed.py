@@ -236,3 +236,69 @@ async def test_upstream_error_still_delivers_saved_workspace_files(monkeypatch) 
     assert kinds.index("tool.result") < kinds.index("run.status", kinds.index("tool.result"))
     landed = [p for k, p in events if k == "tool.result" and p.get("tool") == "workspace_output"]
     assert landed and landed[0]["ok"] is True
+
+
+def _stream_cut_assistant() -> dict[str, Any]:
+    return {**_usage_limit_assistant(), "errorMessage": "Stream ended without finish_reason"}
+
+
+def _answer_assistant(text: str) -> dict[str, Any]:
+    return {
+        "role": "assistant",
+        "content": [{"type": "text", "text": text}],
+        "stopReason": "stop",
+    }
+
+
+async def _run_scripted(scripted: list[dict[str, Any]]):
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        events.append((k, p))
+
+    result = await run_true_pi_agent(
+        prompt="做 20 页 PPT",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=8),
+        transport=FakeTransport(scripted=scripted, assistant_text=""),
+    )
+    return result, events
+
+
+@pytest.mark.asyncio
+async def test_error_pi_retried_successfully_is_not_a_failure() -> None:
+    """Live LT3/LT6/LT8 2026-09-29: Pi auto-retried a cut stream and finished;
+    Pico still failed the run with the first error."""
+    cut = _stream_cut_assistant()
+    done = _answer_assistant("PPT 已做好。")
+    result, events = await _run_scripted(
+        [
+            {"type": "agent_start"},
+            {"type": "message_end", "message": cut},
+            {"type": "turn_end", "message": cut},
+            {"type": "agent_end", "willRetry": True, "messages": [cut]},
+            {"type": "message_end", "message": done},
+            {"type": "turn_end", "message": done},
+            {"type": "agent_end", "willRetry": False, "messages": [done]},
+        ]
+    )
+    assert result.status == "succeeded", result.error
+    assert "failed" not in [p.get("status") for k, p in events if k == "run.status"]
+
+
+@pytest.mark.asyncio
+async def test_error_still_failing_after_retry_fails_the_run() -> None:
+    cut = _stream_cut_assistant()
+    result, _ = await _run_scripted(
+        [
+            {"type": "agent_start"},
+            {"type": "message_end", "message": cut},
+            {"type": "agent_end", "willRetry": True, "messages": [cut]},
+            {"type": "message_end", "message": cut},
+            {"type": "agent_end", "willRetry": False, "messages": [cut]},
+        ]
+    )
+    assert result.status == "failed"
+    assert "finish_reason" in (result.error or "")

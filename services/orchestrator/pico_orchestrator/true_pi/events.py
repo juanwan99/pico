@@ -442,6 +442,9 @@ async def map_event(
         err = assistant_turn_error(raw)
         if err:
             state.provider_error = err
+        if will_retry:
+            # Pi retries this error itself; only a failure after the retry counts.
+            state.provider_error = None
         state.event_kinds.append("agent.end")
         await emit("agent.end", {"will_retry": will_retry, **tag})
         if not will_retry:
