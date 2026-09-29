@@ -725,8 +725,23 @@ async def _run_true_pi_once(
                 ",".join(state.event_kinds[:120]),
             )
 
+        async def salvage_outputs() -> None:
+            # A turn that stops early still delivers what it already saved.
+            if ws_on:
+                await _land_workspace_outputs(
+                    transport=transport,
+                    before=ws_before,
+                    since=ws_since,
+                    artifact_store=artifact_store,
+                    principal=principal,
+                    state=state,
+                    emit=emit,
+                    tag=tag,
+                )
+
         if _hitl_ask_timed_out(transport):
             await client.abort()
+            await salvage_outputs()
             return await _failed(
                 emit,
                 code="ask.timeout",
@@ -738,11 +753,13 @@ async def _run_true_pi_once(
 
         if await is_cancelled():
             await client.abort()
+            await salvage_outputs()
             await emit("run.status", {"status": "cancelled", **tag})
             return _result("cancelled", state, principal=principal)
 
         if timed_out.is_set() or wall_expired(loop.time(), deadline):
             await client.abort()
+            await salvage_outputs()
             return await _wall_stop(
                 emit,
                 caps=caps,
@@ -753,6 +770,7 @@ async def _run_true_pi_once(
 
         if not state.settled and not state.started:
             # Stream ended with no agent_start (e.g. process died).
+            await salvage_outputs()
             return await _failed(
                 emit,
                 code="true_pi.no_events",
@@ -771,6 +789,7 @@ async def _run_true_pi_once(
             ):
                 state.settled = True
             else:
+                await salvage_outputs()
                 return await _failed(
                     emit,
                     code="timeout",
@@ -782,6 +801,7 @@ async def _run_true_pi_once(
 
         # Upstream said this turn failed (quota / provider). Do not succeed blank.
         if state.provider_error:
+            await salvage_outputs()
             return await _failed(
                 emit,
                 code=_provider_fail_code(state.provider_error),

@@ -186,3 +186,53 @@ async def test_empty_stop_without_error_is_empty_response_not_success() -> None:
     assert result.status == "failed"
     assert "empty" in (result.error or "").lower()
     assert "succeeded" not in [p.get("status") for k, p in events if k == "run.status"]
+
+
+@pytest.mark.asyncio
+async def test_upstream_error_still_delivers_saved_workspace_files(monkeypatch) -> None:
+    """Live LT3 2026-09-29: 20-slide pptx saved, then the stream died → 0 files."""
+    from types import SimpleNamespace
+
+    from pico_orchestrator.true_pi import runner
+
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        events.append((k, p))
+
+    async def fake_list(_key: Any) -> dict[str, Any]:
+        return {}
+
+    landed_calls: list[Any] = []
+
+    async def fake_land(**kw: Any) -> list[tuple[str, dict[str, Any]]]:
+        landed_calls.append(kw)
+        return [("workspace_output", {"artifact_id": "a1", "title": "家长说明会.pptx"})]
+
+    monkeypatch.setattr(runner, "list_outputs", fake_list)
+    monkeypatch.setattr(runner, "land_outputs", fake_land)
+    transport = FakeTransport(
+        scripted=[
+            {"type": "agent_start"},
+            {"type": "turn_start"},
+            {"type": "message_end", "message": _usage_limit_assistant()},
+            {"type": "turn_end", "message": _usage_limit_assistant()},
+            {"type": "agent_end", "willRetry": False},
+        ],
+        assistant_text="",
+    )
+    transport.runner = SimpleNamespace(key="ws-key")
+    result = await run_true_pi_agent(
+        prompt="做 20 页 PPT",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=8),
+        transport=transport,
+    )
+    assert result.status == "failed"
+    assert len(landed_calls) == 1
+    kinds = [k for k, _ in events]
+    assert kinds.index("tool.result") < kinds.index("run.status", kinds.index("tool.result"))
+    landed = [p for k, p in events if k == "tool.result" and p.get("tool") == "workspace_output"]
+    assert landed and landed[0]["ok"] is True
