@@ -52,3 +52,16 @@ def test_cut_mode_drops_stream_without_finish_reason(tmp_path: Path, monkeypatch
     assert "finish_reason\":null" in wpr._CUT_CHUNK and "[DONE]" not in wpr._CUT_CHUNK
     resp = wpr._cut_stream()
     assert resp.status_code == 200 and resp.media_type == "text/event-stream"
+
+
+def test_count_keeps_faulting_consecutive_calls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``3 cut 6``: calls 3..8 are cut (more than Pi's 5 retries), then the flag is gone."""
+    flag = tmp_path / "fault"
+    flag.write_text("3 cut 6")
+    monkeypatch.setenv(wpr.FAULT_FILE_ENV, str(flag))
+    wpr._model_calls.clear()
+    wpr._fault_hits = 0
+    got = [wpr.fault_injected("r4") for _ in range(9)]
+    assert got == ["", "", "cut", "cut", "cut", "cut", "cut", "cut", ""]
+    assert not flag.exists()
+    assert wpr._fault_hits == 0
