@@ -56,6 +56,12 @@ class RunCaps:
     # Non-empty → propose_page_mutation is visible for this run. Never invented.
     page_affordances: list[dict[str, Any]] | None = None
     page_title: str = ""
+    # Per-run spend cap in millipoints (#1104 IN3). 0 = off. Priced by
+    # ``millipoints_for_usage(usage, model)`` which pico-api supplies from its
+    # rate card; the orchestrator never carries prices itself. Hitting the cap
+    # is a teacher-facing pause like the wall clock, not an error.
+    max_millipoints: int = 0
+    millipoints_for_usage: Callable[[dict[str, Any], str], int | None] | None = None
 
 
 @dataclass

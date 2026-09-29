@@ -54,6 +54,8 @@ def caps_for_tier(
     max_retries: int | None = None,
     allowed_tools: list[str] | None = None,
     skill_instruction: str = "",
+    max_millipoints: int | None = None,
+    millipoints_for_usage=None,
 ) -> RunCaps:
     """Build RunCaps for the requested tier.
 
@@ -91,6 +93,8 @@ def caps_for_tier(
         max_retries=max_retries if max_retries is not None else base.max_retries,
         allowed_tools=allowed_tools,
         skill_instruction=skill_instruction,
+        max_millipoints=max(0, int(max_millipoints or 0)),
+        millipoints_for_usage=millipoints_for_usage,
     )
 
 
