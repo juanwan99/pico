@@ -8,7 +8,8 @@ proxy key, synthetic tenant. Cases live in testdata/longtask-eval/.
       --base http://127.0.0.1:18765 --membership regress-school:regress-member
 
 Prints JSON + a markdown table (paste into the Issue). Exit 1 if any case
-exceptions-out before scoring. Auto-score is 0–5 from file/content checks;
+exceptions-out before scoring. Auto-score is 0–5 from file/content checks; a case
+passes at 3 points, or at every check when it has fewer than 3;
 human score_points are listed for the planner, not auto-filled.
 """
 
@@ -40,6 +41,7 @@ class CaseResult:
     title: str = ""
     ok: bool = False
     auto_score: int = 0
+    max_score: int = 0
     tool_calls: int = 0
     agent_steps: int = 0
     wall_s: float = 0.0
@@ -316,6 +318,25 @@ def _attachment_bytes(spec: dict[str, Any]) -> bytes:
     return (CASES_DIR / rel).read_bytes()
 
 
+def max_points(expect: dict[str, Any]) -> int:
+    """Most points score_case can award for this case (same checks, same cap)."""
+    kinds = [str(k).lower() for k in expect.get("kinds") or []]
+    n = len(kinds)
+    n += "docx" in kinds and bool(expect.get("min_paragraphs"))
+    n += "pptx" in kinds and bool(expect.get("min_slides"))
+    if "xlsx" in kinds:
+        n += bool(expect.get("xlsx_has_chart")) + bool(expect.get("xlsx_has_formula"))
+    if "html" in kinds:
+        n += bool(expect.get("forbid_http_assets")) + bool(expect.get("min_heading_like"))
+    n += bool(expect.get("must_contain"))
+    return min(5, n)
+
+
+def pass_bar(expect: dict[str, Any]) -> int:
+    """3 points, or every check when a case has fewer than 3 (else it can never pass)."""
+    return min(3, max_points(expect))
+
+
 def score_case(case: dict[str, Any], arts: list[dict[str, Any]], pico: Pico, res: CaseResult) -> None:
     expect = case.get("expect") or {}
     produced = _produced(arts)
@@ -390,7 +411,8 @@ def score_case(case: dict[str, Any], arts: list[dict[str, Any]], pico: Pico, res
         else:
             points += 1
     res.auto_score = max(0, min(5, points))
-    res.ok = res.auto_score >= 3 and not any(k for k in kinds if k not in res.artifact_kinds)
+    res.max_score = max_points(expect)
+    res.ok = res.auto_score >= pass_bar(expect) and not any(k for k in kinds if k not in res.artifact_kinds)
     if kinds and any(k not in res.artifact_kinds for k in kinds):
         res.ok = False
 
@@ -434,7 +456,7 @@ def render_markdown(results: list[CaseResult]) -> str:
     for r in results:
         notes = "; ".join(r.notes)[:180]
         lines.append(
-            f"| {r.case} | {r.title} | {'✅' if r.ok else '❌'} | {r.auto_score}/5 | "
+            f"| {r.case} | {r.title} | {'✅' if r.ok else '❌'} | {r.auto_score}/{r.max_score or 5} | "
             f"{r.fail_reason or '—'} | {r.wall_s:.1f} | {r.tool_calls} | {r.agent_steps} | "
             f"{r.artifacts} | {notes or '—'} |"
         )

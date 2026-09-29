@@ -84,3 +84,13 @@ def test_classify_fail_buckets() -> None:
     assert lte._classify_fail("failed", "Tool not allowlisted: x") == "tool_error"
     assert lte._classify_fail("failed", "durable_max exceeded") == "wall_clock"
     assert lte._classify_fail("succeeded", "") == ""
+
+
+def test_every_case_can_pass_when_all_checks_hold() -> None:
+    """LT3/LT4/LT5 top out at 2 points; a fixed >=3 bar made them unpassable."""
+    for case in lte.load_cases():
+        expect = case.get("expect") or {}
+        assert 1 <= lte.pass_bar(expect) <= lte.max_points(expect), case["id"]
+    by_id = {c["id"]: c.get("expect") or {} for c in lte.load_cases()}
+    assert lte.max_points(by_id["LT4"]) == 2 and lte.pass_bar(by_id["LT4"]) == 2
+    assert lte.pass_bar(by_id["LT6"]) == 3
