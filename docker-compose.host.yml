@@ -223,7 +223,13 @@ services:
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
       PICO_OFFICE_TMP: /tmp
       PICO_OFFICE_CONCURRENCY: "2"
-      PICO_OFFICE_RLIMIT_NPROC: "64"
+      # RLIMIT_NPROC counts every thread of uid 65532 host-wide, and the
+      # pico-sandbox Chromium shares that uid (68 threads idle, 2026-09-28):
+      # a 64 cap made every office job die at `import numpy`. pids_limit below
+      # is the real per-container bound.
+      PICO_OFFICE_RLIMIT_NPROC: "0"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
       HOME: /tmp
       LANG: C.UTF-8
       LC_ALL: C.UTF-8

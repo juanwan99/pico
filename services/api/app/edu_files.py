@@ -548,6 +548,46 @@ async def native_files_from_rows(
     return out
 
 
+async def workspace_files_from_rows(
+    session: AsyncSession,
+    rows: list[dict[str, Any]] | None,
+    *,
+    max_files: int = 50,
+    max_total: int = 100 * 1024 * 1024,
+) -> list[tuple[str, bytes]]:
+    """Every conversation upload as (title, original bytes) for the workspace box.
+
+    Unlike ``native_files_from_rows`` this keeps any type (md / csv / images /
+    legacy Office): the box reads files itself. Excerpts and KB text are not files.
+    """
+    from app.artifact_store import decode_artifact_payload
+
+    out: list[tuple[str, bytes]] = []
+    seen: set[str] = set()
+    total = 0
+    for row in rows or []:
+        if not isinstance(row, dict) or len(out) >= max_files:
+            continue
+        art_id = str(row.get("id") or row.get("workspace_artifact_id") or "").strip()
+        if not art_id or art_id in seen:
+            continue
+        src = await session.get(ArtifactRow, art_id)
+        if src is None or str(src.kind or "") in {KIND_EXCERPT, "kb_text"}:
+            continue
+        try:
+            raw = decode_artifact_payload(src.inline, src.content_encoding)
+        except Exception as exc:  # noqa: BLE001 — unread stays honest
+            logger.warning("workspace file decode skipped id=%s err=%s", art_id, type(exc).__name__)
+            continue
+        if not raw or total + len(raw) > max_total:
+            continue
+        seen.add(art_id)
+        total += len(raw)
+        title = str(src.title or row.get("title") or row.get("filename") or "file")
+        out.append((title, bytes(raw)))
+    return out
+
+
 def _row_is_pixel(title: str, kind: str) -> bool:
     token = (kind or "").strip().lower().lstrip(".")
     if token in PIXEL_KINDS:
