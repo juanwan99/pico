@@ -162,29 +162,52 @@ async def run_true_pi_agent(
     )
     models = [m for m in brain_candidates(primary) if m] or [primary]
     last: RunResult | None = None
-    held: list[tuple[str, dict[str, Any]]] = []
+    gate: _FailoverGate | None = None
     for i, mid in enumerate(models):
-        held = []
-
-        async def gated(kind: str, payload: dict[str, Any], _buf: list = held) -> None:
-            _buf.append((kind, payload))
-
+        note = fallback_teacher_note(models[0], mid) + "\n" if i > 0 else ""
+        gate = _FailoverGate(emit, note)
         last = await _run_true_pi_once(
-            emit=gated,
+            emit=gate.emit,
             **{**kwargs, "caps": replace(caps, backend_model=mid)},
         )
-        if last.status in {"succeeded", "cancelled"} or not should_failover(last):
-            if i > 0 and last.status == "succeeded":
-                await emit(
-                    "message.delta",
-                    {"text": fallback_teacher_note(models[0], mid) + "\n"},
-                )
-            for kind, payload in held:
-                await emit(kind, payload)
+        # Once the model has produced output the teacher saw it live; a
+        # restart on another model would redo the task from scratch.
+        if gate.live or last.status in {"succeeded", "cancelled"} or not should_failover(last):
+            await gate.flush()
             return last
-    for kind, payload in held:
-        await emit(kind, payload)
+    if gate is not None:
+        await gate.flush()
     return last or await _run_true_pi_once(emit=emit, **kwargs)
+
+
+# First sign the model channel works; before it a failed attempt is dropped.
+_LIVE_KINDS = frozenset({"tool.call", "message.stream", "thinking.delta", "message.delta"})
+
+
+class _FailoverGate:
+    """Hold one attempt's events until the model answers, then stream live."""
+
+    def __init__(self, emit: EventEmitter, note: str) -> None:
+        self._emit = emit
+        self._note = note
+        self._held: list[tuple[str, dict[str, Any]]] = []
+        self.live = False
+
+    async def emit(self, kind: str, payload: dict[str, Any]) -> None:
+        if self.live:
+            await self._emit(kind, payload)
+            return
+        self._held.append((kind, payload))
+        if kind in _LIVE_KINDS:
+            await self.flush()
+
+    async def flush(self) -> None:
+        if not self.live and self._note:
+            await self._emit("message.delta", {"text": self._note})
+        self.live = True
+        held, self._held = self._held, []
+        for kind, payload in held:
+            await self._emit(kind, payload)
 
 
 async def _run_true_pi_once(
