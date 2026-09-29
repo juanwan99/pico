@@ -73,6 +73,11 @@ def _error_after_work(msg: str = _CUT, **agent_end: Any) -> list[dict[str, Any]]
     ]
 
 
+def _error_after_work_with_trailing_settle() -> list[dict[str, Any]]:
+    """Pi 0.84 shape on prod: agent_end (retries exhausted) then agent_settled."""
+    return [*_error_after_work(), {"type": "agent_settled"}]
+
+
 def _error_before_work() -> list[dict[str, Any]]:
     return [
         {"type": "agent_start"},
@@ -215,3 +220,56 @@ def test_resume_max_default_and_clamp(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resume_max() == 10
     monkeypatch.setenv("PICO_RUN_RESUME_MAX", "x")
     assert resume_max() == 3
+
+
+@pytest.mark.asyncio
+async def test_stale_settle_from_failed_turn_does_not_end_the_resumed_turn() -> None:
+    """Prod run 2fb28c1a (#1104): the leftover agent_settled made the resume a blank success."""
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = FakeTransport(
+        scripted=_error_after_work_with_trailing_settle(),
+        scripted_after_prompt=[_finish()],
+        assistant_text="",
+    )
+    result = await _run(transport, events)
+    assert result.status == "succeeded", result.error
+    assert len(_prompts(transport)) == 2
+    # The resumed turn really ran: a new agent step after run.resume.
+    kinds = [k for k, _ in events]
+    assert kinds.index("run.resume") < len(kinds) - 1 - kinds[::-1].index("agent.step")
+    assert [p["status"] for k, p in events if k == "run.status"][-1] == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_resume_with_no_new_turn_is_not_a_success() -> None:
+    """Box gone / prompt ignored after resume: fail honestly, never blank green."""
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = FakeTransport(
+        scripted=_error_after_work_with_trailing_settle(),
+        scripted_after_prompt=[[]],
+        assistant_text="",
+    )
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    async def run_it():
+        return await run_true_pi_agent(
+            prompt="做一份长报告",
+            principal=Principal(),
+            emit=emit,
+            is_cancelled=_not_cancelled,
+            caps=RunCaps(min_artifacts=0, max_seconds=3),
+            transport=transport,
+            run_id="resume-t2",
+        )
+
+    import asyncio
+
+    task = asyncio.create_task(run_it())
+    await asyncio.sleep(0.3)
+    await transport.close()  # stream ends with no new turn
+    result = await task
+    assert result.status == "failed"
+    fail = [p for k, p in events if k == "run.error"]
+    assert fail and "no new turn" in str(fail[-1]["error"])
