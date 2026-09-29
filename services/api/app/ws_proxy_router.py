@@ -98,30 +98,50 @@ async def _stream(
 
 
 MODEL_PATHS = frozenset({"chat/completions", "responses", "models"})
-# Chaos switch for #1104 T1 (ops only, no restart): write N into this file and
-# the N-th model call of the next run gets one 502; the file is then removed.
+# Chaos switch for #1104 T1 (ops only, no restart): write ``N`` (or ``N cut``)
+# into this file and the N-th model call of the next run fails once; the file
+# is then removed. ``502`` is what Pi retries itself; ``cut`` answers 200 and
+# drops the SSE stream after one chunk — the non-retryable "Stream ended
+# without finish_reason" that killed round-3 long tasks, so it reaches Pico's
+# same-session resume.
 FAULT_FILE_ENV = "PICO_WS_PROXY_FAULT_FILE"
 _FAULT_FILE_DEFAULT = "/app/data/ws-proxy-fault"
 _model_calls: Counter[str] = Counter()
+_CUT_CHUNK = (
+    'data: {"id":"pico-fault","object":"chat.completion.chunk","choices":'
+    '[{"index":0,"delta":{"role":"assistant","content":"（"},"finish_reason":null}]}\n\n'
+)
 
 
-def fault_injected(run_id: str) -> bool:
+def fault_injected(run_id: str) -> str:
+    """'' (no fault), '502', or 'cut' for this model call."""
     path = os.environ.get(FAULT_FILE_ENV, _FAULT_FILE_DEFAULT).strip()
     if not path or not os.path.exists(path):
-        return False
+        return ""
     _model_calls[run_id] += 1
+    mode = "502"
     try:
         with open(path, encoding="utf-8") as fh:
-            nth = max(1, int(fh.read().strip() or "2"))
+            words = fh.read().split()
+        nth = max(1, int(words[0])) if words else 2
+        if "cut" in words[1:]:
+            mode = "cut"
     except (OSError, ValueError):
         nth = 2
     if _model_calls[run_id] < nth:
-        return False
+        return ""
     with contextlib.suppress(OSError):
         os.remove(path)
     _model_calls.clear()
-    logger.warning("ws-proxy fault injected run_id=%s call=%s", run_id, nth)
-    return True
+    logger.warning("ws-proxy fault injected run_id=%s call=%s mode=%s", run_id, nth, mode)
+    return mode
+
+
+def _cut_stream() -> Response:
+    async def _iter():
+        yield _CUT_CHUNK.encode("utf-8")
+
+    return StreamingResponse(_iter(), status_code=200, media_type="text/event-stream")
 
 
 TOOL_PATHS = frozenset({"v1/tool", "health"})
@@ -160,7 +180,10 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
         "content-type", "application/json"
     )
     target = f"{entry.llm_upstream.rstrip('/')}/{path}"
-    if request.method == "POST" and fault_injected(run_id):
+    fault = fault_injected(run_id) if request.method == "POST" else ""
+    if fault == "cut":
+        return _cut_stream()
+    if fault:
         return _deny("proxy.fault_injected", 502)
     try:
         await asyncio.wait_for(entry.slots.acquire(), timeout=120)
