@@ -1,0 +1,47 @@
+{
+  "id": "LC2",
+  "title": "修 bug：小项目测试修到全绿",
+  "timeout_s": 1200,
+  "turns": [
+    {
+      "prompt": "附件 roster.zip 是一个班级名单小项目，运行 python -m unittest discover -s tests 有好几个测试挂了。请解压后找出原因把代码修好，让全部测试通过。不许改测试文件、不许删测试；除了让现有测试通过，也要按函数说明把边界情况处理对（比如整组都缺考、空名单）。改完把整个项目重新打包成 roster_fixed.zip 交给我，并在回复里逐条说明每个 bug 是什么、怎么修的。",
+      "attachments": [
+        {
+          "name": "roster.zip",
+          "zip_dir": "fixtures/code/roster"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "files": [
+      "roster_fixed.zip"
+    ],
+    "check": {
+      "script": "lc2_roster.py",
+      "max": 3
+    }
+  },
+  "score_points": [
+    {
+      "id": "green",
+      "text": "原有测试全绿"
+    },
+    {
+      "id": "untouched",
+      "text": "测试文件一字未改"
+    },
+    {
+      "id": "edges",
+      "text": "隐藏边界测试也过（整组缺考 / 空名单 / BOM）"
+    },
+    {
+      "id": "explain",
+      "text": "回复逐条说清每个 bug"
+    },
+    {
+      "id": "zip",
+      "text": "交回的是完整可运行的项目包"
+    }
+  ]
+}

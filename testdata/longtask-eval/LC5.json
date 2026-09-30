@@ -1,0 +1,55 @@
+{
+  "id": "LC5",
+  "title": "三轮迭代：出题模块 → 去重历史 → 命令行出 Word 卷",
+  "timeout_s": 1500,
+  "turns": [
+    {
+      "prompt": "帮我写一个 Python 模块 quiz.py（先只用标准库）：函数 make_paper(bank, n, ratio, seed) 从题库里抽 n 道题组卷并返回题目列表。题库 bank 是题目字典的列表，每题 {id, stem, level, answer}，level 是 易/中/难；ratio 是各难度占比，比如 {\"易\": 0.5, \"中\": 0.3, \"难\": 0.2}，按比例四舍五入算各难度题数，总数必须正好是 n；某个难度题不够时用其他难度的题补齐；同一个 seed 结果必须一样；题目不重复。再写 test_quiz.py（unittest）。附件 bank.json 是题库样例。写完跑通测试。",
+      "attachments": [
+        {
+          "name": "bank.json",
+          "file": "fixtures/code/bank.json"
+        }
+      ]
+    },
+    {
+      "prompt": "加功能：make_paper 增加可选参数 exclude_ids（一组题目 id），这些题不能出。再写 history.py：record(student, paper, path) 把某学生做过的题 id 追加存到 JSON 文件 path；seen_ids(student, path) 返回这个学生做过的全部题 id（文件不存在时返回空）。测试也补上，跑通。"
+    },
+    {
+      "prompt": "最后加命令行：python quiz.py --bank bank.json --n 10 --student 张三 --history h.json --out paper.docx，自动排除这个学生做过的题，生成一份 Word 试卷（题目编号、只放题干），最后另起一页「答案」列出答案，并把这次的题记进历史。python-docx 可以用。自己连跑两次确认两份卷子不重题，然后把 quiz.py、history.py、test_quiz.py 交给我。"
+    }
+  ],
+  "expect": {
+    "files": [
+      "quiz.py",
+      "history.py",
+      "test_quiz.py"
+    ],
+    "check": {
+      "script": "lc5_quiz.py",
+      "max": 5
+    }
+  },
+  "score_points": [
+    {
+      "id": "api",
+      "text": "比例 / 补齐 / 同 seed 一致 都对"
+    },
+    {
+      "id": "history",
+      "text": "排除与历史记录可用"
+    },
+    {
+      "id": "cli",
+      "text": "命令行出 Word 卷，两次不重题，有答案页"
+    },
+    {
+      "id": "tests",
+      "text": "单测随三轮更新且能过"
+    },
+    {
+      "id": "keep",
+      "text": "后两轮在原代码上改，没把前面功能改坏"
+    }
+  ]
+}

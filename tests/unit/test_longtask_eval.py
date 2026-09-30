@@ -33,7 +33,7 @@ def test_help_exits_zero() -> None:
 
 
 def test_eight_cases_cover_required_shapes() -> None:
-    cases = lte.load_cases()
+    cases = lte.load_cases("office")
     ids = [c["id"] for c in cases]
     assert ids == ["LT1", "LT2", "LT3", "LT4", "LT5", "LT6", "LT7", "LT8"]
     titles = " ".join(c["title"] for c in cases)
@@ -88,7 +88,7 @@ def test_classify_fail_buckets() -> None:
 
 def test_every_case_can_pass_when_all_checks_hold() -> None:
     """LT3/LT4/LT5 top out at 2 points; a fixed >=3 bar made them unpassable."""
-    for case in lte.load_cases():
+    for case in lte.load_cases("office"):
         expect = case.get("expect") or {}
         assert 1 <= lte.pass_bar(expect) <= lte.max_points(expect), case["id"]
     by_id = {c["id"]: c.get("expect") or {} for c in lte.load_cases()}
@@ -106,3 +106,65 @@ def test_fake_green_flagged_explicitly() -> None:
     assert with_files.fake_green is False and with_files.ok is True
     table = lte.render_markdown([res, with_files])
     assert "假绿" in table and "| 是 |" in table and "假绿：1" in table
+
+
+def test_coding_suite_cases_and_checkers() -> None:
+    """#1090 v3.1: coding sits beside office. Every LC case names a hidden checker."""
+    cases = lte.load_cases("coding")
+    assert [c["id"] for c in cases] == ["LC1", "LC2", "LC3", "LC4", "LC5"]
+    assert [c["id"] for c in lte.load_cases()][:8] == [f"LT{i}" for i in range(1, 9)]
+    assert len(lte.load_cases()) == 13
+    assert any(len(c.get("turns") or []) >= 3 for c in cases)
+    for c in cases:
+        check = c["expect"]["check"]
+        assert (lte.CHECKS_DIR / check["script"]).is_file(), c["id"]
+        assert lte.max_points(c["expect"]) == len(c["expect"]["files"] and [1]) + check["max"]
+        for turn in c["turns"]:
+            for att in turn.get("attachments") or []:
+                assert lte._attachment_bytes(att), (c["id"], att["name"])
+        assert 1 <= len(c["score_points"]) <= 5
+
+
+def test_zip_dir_is_deterministic_project() -> None:
+    import io
+    import zipfile
+
+    a = lte._zip_dir("fixtures/code/roster")
+    assert a == lte._zip_dir("fixtures/code/roster")
+    names = zipfile.ZipFile(io.BytesIO(a)).namelist()
+    assert "roster/tests/test_roster.py" in names and "roster/roster/stats.py" in names
+
+
+def test_delivered_files_skip_uploads_and_summary() -> None:
+    arts = [
+        {"id": "1", "title": "bank.json", "kind": "file", "created_at": "1"},
+        {"id": "2", "title": "roster.zip", "kind": "edu_office", "created_at": "1"},
+        {"id": "3", "title": "回复摘要", "kind": "doc", "created_at": "1"},
+        {"id": "4", "title": "quiz.py", "kind": "py", "created_at": "1"},
+        {"id": "5", "title": "quiz.py", "kind": "py", "created_at": "2"},
+    ]
+    latest = lte._latest_by_title(arts)
+    assert list(latest) == ["quiz.py"] and latest["quiz.py"]["id"] == "5"
+
+
+def test_unzip_skips_entries_escaping_dest(tmp_path: Path) -> None:
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("ok/a.py", "x = 1")
+        zf.writestr("../evil.py", "boom")
+    lte._unzip_into(buf.getvalue(), tmp_path / "out")
+    assert (tmp_path / "out" / "ok" / "a.py").is_file()
+    assert not (tmp_path / "evil.py").exists()
+
+
+def test_coding_case_fails_when_files_missing() -> None:
+    case = {"id": "LCX", "expect": {"files": ["a.py", "b.py"]}}
+    res = lte.CaseResult(case="LCX")
+    lte.score_code(case, {"a.py": b"x"}, res, "img", "runc")
+    assert res.ok is False and res.auto_score == 0 and "missing files: b.py" in res.notes
+    done = lte.CaseResult(case="LCX")
+    lte.score_code(case, {"a.py": b"x", "b.py": b"y"}, done, "img", "runc")
+    assert done.ok is True and done.auto_score == 1

@@ -1,0 +1,48 @@
+{
+  "id": "LC1",
+  "title": "成绩统计命令行工具 + 单元测试",
+  "timeout_s": 1200,
+  "turns": [
+    {
+      "prompt": "帮我写一个 Python 命令行小工具 grade_stats.py（只用标准库），统计附件这种成绩表：\n- 用法：python grade_stats.py 成绩.csv [--subject 数学] [--json]\n- 列是 姓名,组别,语文,数学,英语；分数可能是空或「缺考」：不算进均分，但算不及格；算总分时记 0 分\n- 输出：各组各科均分（保留 1 位小数）、各科及格率（≥60 分，分母是全体人数）、总分前三名\n- 加 --json 时只输出一个 JSON：{\"groups\": {组别: {科目: 均分}}, \"pass_rate\": {科目: 0 到 1 的小数}, \"top3\": [姓名, 姓名, 姓名]}\n- 再写 test_grade_stats.py（unittest），测试数据写在测试文件里，不要依赖附件路径，在没有网络的电脑上 python -m unittest test_grade_stats 要能全部通过\n写完自己跑一遍，把这两个 .py 文件交给我。",
+      "attachments": [
+        {
+          "name": "成绩.csv",
+          "file": "fixtures/code/scores-40.csv"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "files": [
+      "grade_stats.py",
+      "test_grade_stats.py"
+    ],
+    "check": {
+      "script": "lc1_grade_stats.py",
+      "max": 4
+    }
+  },
+  "score_points": [
+    {
+      "id": "files",
+      "text": "两个 .py 都交到了老师手里（能下载）"
+    },
+    {
+      "id": "numbers",
+      "text": "隐藏成绩表上均分 / 及格率 / 前三名全对，缺考处理对"
+    },
+    {
+      "id": "tests",
+      "text": "自带单测离线能跑且全过"
+    },
+    {
+      "id": "cli",
+      "text": "非 --json 输出老师看得懂"
+    },
+    {
+      "id": "finish",
+      "text": "自己跑过再交，不是只贴代码"
+    }
+  ]
+}
