@@ -2,20 +2,21 @@
 
 ```
 DOC: docs/TRUTH-FREEZE.md
-STATUS: BINDING FREEZE v3.0
-FROZEN_AT: 2026-09-28
+STATUS: BINDING FREEZE v3.1
+FROZEN_AT: 2026-09-30
 PURPOSE: 固定产品/架构真源，防止聊天与旧文档再次冲掉校准结论
 AUTHORITY: 业主书面确认 + HANDOFF-WB-PI + 本文件 + WHAT-IS-PICO + DIRECTION-NOW §0-star + LAW §0-supreme + AGENTS 文首工作法
-SUPERSEDES: v2.2；v2.1；v2.0；v1.9；v1.8；v1.7；v1.6；v1.5；v1.4；v1.3；v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；主管/执行者编制；多窗日常碎派；「不要 bash / --no-builtin-tools 永在 / 无公网 bash / 禁止跨进程恢复 / Skill 只能收窄 / 厚桥四层对检查」作为现行禁令；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
+SUPERSEDES: v2.2；v2.1；v2.0；v1.9；v1.8；v1.7；v1.6；v1.5；v1.4；v1.3；v1.2；v1.1；v1.0「唯一编排 = Kimi Agent / 禁 Pi」；主管/执行者编制；多窗日常碎派；「不要 bash / --no-builtin-tools 永在 / 无公网 bash / 禁止跨进程恢复 / Skill 只能收窄 / 厚桥四层对检查」作为现行禁令；「写代码是仆人 / 不对标 Codex·Cursor / 编程 Agent 不是 Pico」；一切未列入本冻结集的冲突口述、过时 README 金句、archive 旧文
 OWNER_ORDER_2026-09-02: 最高要求：禁止自搞一套体系 / 禁止做重体系。工作法：人合一 · GitHub 唯一真源 · 工位分开。厚桥四层对检查的禁令已由 OWNER_ORDER_2026-09-28 放开。
 OWNER_ORDER_2026-09-05: 北极星 v1.3 — 能力并列 · 禁焊死路径 · 专用动词是捷径 · 工作环境交成熟上游（#744 · #919）
-OWNER_ORDER_2026-09-06: 北极星 v1.4 — 产品主线是办公（Word/Excel/HTML/PPT）；写代码是仆人；本阶段接办公计算机。「不要 bash」作为现行禁令已由 OWNER_ORDER_2026-09-28 放开（宿主 shell 仍禁）。
+OWNER_ORDER_2026-09-06: 北极星 v1.4 — 产品主线是办公（Word/Excel/HTML/PPT）；写代码是仆人（已由 OWNER_ORDER_2026-09-30 改为编程与办公并列）；本阶段接办公计算机。「不要 bash」作为现行禁令已由 OWNER_ORDER_2026-09-28 放开（宿主 shell 仍禁）。
 OWNER_ORDER_2026-09-14: 知识库入库（kb/ingest）文字层为空的 PDF 与 png/jpg 走 RapidOCR 渲页兜底进 Meili（#994 阶段 2 · #997）。
 OWNER_ORDER_2026-09-14b: 质量和效率压过旧禁令（#1005）。embedding / rerank **只准经 New API**，Pico 不认厂牌；Meili 可开 hybrid。回形针：原件进工作区优先；仍禁 Pico 自建 PDF 阅读器核。架构冻结 90 天 / 一天一部作废。
 OWNER_ORDER_2026-09-08: 名实 — 默认核 = 真 Pi（`pi-true`），hosted `pi_runtime` 只回滚；聊天脑 = New API `openai-responses`（现网模型见 EXPERIENCE §34），不是「DeepSeek 聊天核」；隔离办公库是天花板。Pico 与 edu 的模型调用 / 统计 / 渠道管理终局统一走 New API；Pico 不做钱；edu 钱包只认 Pico export，禁止另接一套模型账。本仓仍禁止写 edu-cloud / edu-core。
 OWNER_ORDER_2026-09-08b: 正本清源 — 知识库是 Meili 挂载，不是 Pico 检索产品。禁止 Pico 自选 embedding 厂牌，禁止把「待统一」写成施工卡。`generate_*` / inspect 投影是待拆污染，不是快路建设许可证。
 OWNER_ORDER_2026-09-08c: 办公计算机 v2 — 隔离容器内跑完整 Python + 办公库是天花板执行层，不算自制 jail。Pico 不维护 import 白名单 / AST jail；隔离靠容器合同，不靠解释器。方案 docs/PLAN-OFFICE-COMPUTER-V2.md · #959。宿主 shell 仍禁。
 OWNER_ORDER_2026-09-28: 第一需求 = 长任务 / 复杂任务高质量跑完（#1090）。瓶颈 = harness。放开 A–F：A 真 Pi 打开内建工具（read/write/edit/bash），整个 Pi 跑在隔离工作区容器 · B 附件进工作区，模型自读自渲自检（撤厚桥四层对检查的禁令）· C 执行与 pico-api 进程分离，部署不杀在飞，Pi `--session` 续跑 · D 历史交 Pi 会话 + 官方 compaction，撤 Pico 截断 · E 撤墙钟熔断，只留成本/用量帽 · F Skill 可常驻成熟文档 skill。工作区全出网（仍禁内网/宿主/云元数据）。保留：租户隔离 · 密钥不进执行容器 · 不碰宿主 shell · Pico 唯一账本 · 发布走 edu · 本仓不写 edu · LAW §0-supreme。
+OWNER_ORDER_2026-09-30: 整体向 Codex / Claude Code 看齐：连续、流畅的长任务，**编程等复杂任务与办公并列**（「写代码是仆人 / 不对标 Codex」SUPERSEDED）。Pi 内建 read/write/edit/bash 开放。执行搬专用机：**不要虚拟沙箱**（不要 gVisor），普通 Docker 或裸机即可；专用机不放 New API 钥 / Pico 库 / edu 库，机上 shell 不算「宿主 shell」。搬机前同机保留 gVisor（生产机有钥有库）。仍留：生产机宿主 shell 禁 · 密钥不进执行机 · 一次 run 一个工作目录 · Pico 唯一账本 · 发布走 edu · 本仓不写 edu · LAW §0-supreme。
 RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/MEMORY-RESET.md
 ```
 
@@ -43,10 +44,10 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 | P0b | **第一需求 = 长任务高质量跑完**（业主 2026-09-28 · #1090）。瓶颈 = harness。Pico 不自研 PDF/办公阅读核、不交件监工。附件进隔离工作区，模型自读自渲自检（「厚桥四层对检查的禁令」SUPERSEDED）。历史交 Pi 会话 + 官方 compaction，撤 Pico 截断。 |
 | P0c | **能力并列 · 禁焊死路径**（#744）：多项能力同时可被模型选用。禁止把「必须真图 / 必须某厂 / 必须某工具」写成唯一主路。先扎实能力，再优化编排。以后多源自动编排仍用上游 Pi，禁止自研第二编排核。 |
 | P0d | **专用动词是捷径，工作环境交成熟上游**（#919 · 业主 2026-09-28 放开 A/F）：天花板 = 隔离工作区里的成熟办公库 + 上游 Pi 内建工具。`generate_*` / inspect / 按地址薄改是**待拆污染**，禁止再当快路建设、禁止加厚 spec。成熟文档 skill 可常驻；其余 Skill 仍只收窄，不得当权限裁剪器藏已承诺能力。文件、程序执行、依赖、进程生命周期交给隔离工作区容器（整个 Pi 在箱内）。Pico 保留身份授权、唯一账本、产品对象、交互与交付门闩。新能力先问哪段成熟方案接走职责。 |
-| P0e | **产品主线是办公**（业主 2026-09-06 + 2026-09-28）：Word / Excel / HTML / PPT 是产品。写代码只够服务办公。天花板 = 隔离工作区真跑 python-docx / openpyxl / python-pptx + 文档 skill 工艺 + 上游 Pi 内建 read/write/edit/bash。不要自制通用 jail。不要 Pi 市场办公包。**宿主 shell 仍禁。密钥不进执行容器。** 工作区容器全出网（禁内网/宿主/云元数据）。隔离容器内完整 Python + 办公库是天花板执行层，不算 bash、不算自制 jail。Pico 不维护 import 白名单 / AST jail。执行与 pico-api 进程分离；部署不杀在飞；中断用 Pi `--session` 续跑。撤墙钟熔断，只留成本/用量帽。 |
+| P0e | **办公与编程并列**（业主 2026-09-06 + 2026-09-28 + 2026-09-30）：Word / Excel / HTML / PPT 是主场景；编程等复杂任务同样要连续跑完，整体对标 Codex / Claude Code。天花板 = 隔离工作区真跑 python-docx / openpyxl / python-pptx + 文档 skill 工艺 + 上游 Pi 内建 read/write/edit/bash。不要自制通用 jail。不要 Pi 市场办公包。**生产机（有 New API 钥 / Pico 库 / edu 库）宿主 shell 仍禁。密钥不进执行机。** 专用执行机（无钥无库）用普通 Docker 或裸机，不要虚拟沙箱；搬机前同机保留 gVisor。工作区容器全出网（禁内网/宿主/云元数据）。隔离容器内完整 Python + 办公库是天花板执行层，不算 bash、不算自制 jail。Pico 不维护 import 白名单 / AST jail。执行与 pico-api 进程分离；部署不杀在飞；中断用 Pi `--session` 续跑。撤墙钟熔断，只留成本/用量帽。 |
 | P0f | **模型与计量上游 = New API**（业主 2026-09-08）：聊天、出图、以及后续要统计/计费的模型调用只打 New API（现网 `127.0.0.1:3000`，槽位名可仍是 `DEEPSEEK_*` / `PICO_IMAGE_GATEWAY_*`）。渠道、密钥、轮询、账号管理在 New API。Pico 只记 `usage_events` 并派生积分。钱在 edu-core，只拉 Pico export 的 `points`，禁止再乘，禁止 edu 另接厂牌直连当第二账。禁止为 DeepSeek/Kimi/Claude/Grok 再造直连核。对外身份只叫 Pico。知识库 = Meili 挂载（chunk 级）；**embedding / rerank 只准经 New API**，禁止 Pico 自选厂牌。本仓不写 edu。 |
-| P1 | Pico = **任务型 AI 工作台（Web）** 底座（对话 + 办事 + 产物 + 唯一 AI 账本 + 控制面）；办事程度类 WorkBuddy（六条）。P1 不得压过 P0。办事优先 = 办公文件，不是写代码。 |
-| P2 | **不是** 网盘 / 教务 SaaS / 成绩主库 / 自托管大模型默认 / Dify 门脸终局 / 场景考卷对标 / 定向猜任务的办公机器人 / 编程 Agent |
+| P1 | Pico = **任务型 AI 工作台（Web）** 底座（对话 + 办事 + 产物 + 唯一 AI 账本 + 控制面）；办事程度类 WorkBuddy（六条）。P1 不得压过 P0。办事 = 办公文件与编程等复杂任务并列。 |
+| P2 | **不是** 网盘 / 教务 SaaS / 成绩主库 / 自托管大模型默认 / Dify 门脸终局 / 场景考卷对标 / 定向猜任务的办公机器人 |
 | P3 | 用户成功 = 公网登录 → 开放派活 → 多步过程可见 → 真产物 → 能停、能找回、同会话可改 → 状态诚实 |
 | P4 | 壳 = **`apps/librechat`（MIT）**；禁止回潮 web/nextchat/workbench；禁止拆闭源 WorkBuddy |
 | P5 | 与 edu：Pico = **AI 过程真源**；edu-core = **业务事实真源**（钱/钱包/学籍）；对接后置；**禁止写 edu-cloud / edu-core**；**禁止 Agent 写成绩/教务库**。计量合同见 P0f / C11 / `USAGE-LEDGER.md` |
@@ -80,12 +81,12 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 | C2 | 租户/membership 数据隔离 | 把数据隔离叫「每校执行沙箱」并当主线；一人一机云桌面 |
 | C3 | 公网 HTTPS 工作台 | 以 Live Preview 为业主主路径 |
 | C4 | Skill 前台可见可选；成熟文档 skill 可常驻 | 自研 MCP 协议栈 / 自研向量库内核 |
-| C5 | MCP / KB = 接入现成组件（分期）；隔离工作区 Pi 内建 bash/FS | 默认开放 Host Shell；编程沙箱当产品卖点 |
+| C5 | MCP / KB = 接入现成组件（分期）；隔离工作区 / 专用执行机 Pi 内建 bash/FS | 生产机开放 Host Shell |
 | C6 | S7：业务变更需确认 | AI 直接改正式成绩 |
 | C7 | WorkBuddy **Web 六条**；长任务高质量跑完 | 桌面 exe / 像素 1:1 / 固定场景考卷冒充完成 |
 | C8 | 原件进工作区；模型自读自渲自检 | Pico 自研 PDF 阅读核 / 办公投影核 / 交件监工 / Pico 硬帽截窗 |
 | C9 | 天花板 = 隔离工作区（完整 Python + Pi 内建工具）；成熟文档 skill 可常驻 | 把专用动词当能力上限；用 Skill 藏已承诺能力；加厚 spec；Pico 替模型决定能不能 import |
-| C10 | 办公主线：真 Word/Excel/HTML/PPT；短脚本只服务办公；脚本在工作区容器跑 | 编程产品；host shell 当办公能力；把 generate_* 当上限 |
+| C10 | 办公与编程并列：真 Word/Excel/HTML/PPT，编程等复杂任务连续跑完；执行在工作区容器 / 专用执行机 | 生产机 host shell；把 generate_* 当上限 |
 | C11 | 模型调用与计量统一 New API；Pico `usage_events` → 积分；edu 钱包只消费 export | Pico 做钱/点池；edu 另接模型直连第二账；为厂牌再造直连核；Pico 自建检索/embedding 核 |
 
 ### 1.5 协作与仓
@@ -164,6 +165,7 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 | **v2.1** | 2026-09-14 | 文件能读：kb/ingest 文字层为空 → RapidOCR 渲页兜底（轮子自带 ONNX，无 torch）；png/jpg 同口；Office 入库改直调 Docling 格式后端（DocumentConverter 在 no-torch 镜像导入即挂，现网 Office 入库曾 100% 断）；P0b 厚桥四层不动 |
 | **v2.2** | 2026-09-15 | #1005：质量和效率压过旧禁令。embedding/rerank 只经 New API；Meili 可 hybrid；回形针原件优先、读不了才 OCR 文本 |
 | **v3.0** | 2026-09-28 | 业主 #1090：第一需求 = 长任务高质量跑完。放开 A–F（Pi 内建工具进隔离工作区、附件自读自检、执行与 pico-api 分离、官方 compaction、撤墙钟熔断、文档 skill 可常驻）。「不要 bash / --no-builtin-tools 永在 / 无公网 bash / 禁止跨进程恢复 / Skill 只能收窄 / 厚桥四层对检查」SUPERSEDED。宿主 shell · 密钥不进容器 · 租户 · 唯一账本 · §0-supreme 仍留。 |
+| **v3.1** | 2026-09-30 | 业主：整体向 Codex / Claude Code 看齐，编程与办公并列（「写代码是仆人」SUPERSEDED）；专用执行机不要虚拟沙箱，普通 Docker / 裸机，机上 shell 不算宿主 shell；搬机前同机留 gVisor。P0e/P1/P2/C5/C10 改写。 |
 
 升版规则：任何 P0–W5 / A1–A4 / O1–O7 / C1–C11 的修改 → **新 PR**，标题含 `TRUTH-FREEZE`。
 
@@ -214,3 +216,10 @@ edu-cloud→ 现网服役/对账（非本仓工作区）
 - P0d / P0e / C1 / C5 / C8 / C9 / C10：打开隔离工作区 Pi 内建 read/write/edit/bash；工作区全出网（禁内网/宿主/元数据）；执行与 pico-api 分离；Pi `--session` 续跑；撤 Pico 截断与墙钟熔断；成熟文档 skill 可常驻。
 - 仍留：宿主 shell 禁、密钥不进执行容器、租户隔离、Pico 唯一账本、发布走 edu、本仓不写 edu、LAW §0-supreme。
 - 旧禁令「不要 bash」「`--no-builtin-tools` 永在」「无公网 bash」「禁止跨进程恢复」「Skill 只能收窄」标 SUPERSEDED，禁止两套说法并存。
+
+### v3.1 · 2026-09-30
+
+- 业主（经 edu 管家线落字 + 本窗确认）：整体向 Codex / Claude Code 看齐——连续、流畅的长任务，包括编程等复杂任务。
+- P0e / P1 / P2 / C10：办公与编程并列；「写代码是仆人」「不对标 Codex/Cursor」「编程 Agent 不是 Pico」SUPERSEDED。
+- P0e / C5：专用执行机不要虚拟沙箱（不要 gVisor），普通 Docker 或裸机；机上不放 New API 钥 / Pico 库 / edu 库，机上 shell 不算宿主 shell。搬机前同机保留 gVisor。
+- 仍留：生产机宿主 shell 禁、密钥不进执行机、一次 run 一个工作目录、Pico 唯一账本、发布走 edu、本仓不写 edu、LAW §0-supreme。

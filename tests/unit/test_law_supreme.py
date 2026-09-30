@@ -45,7 +45,8 @@ def test_law_supreme_section_exists() -> None:
 
 def test_truth_freeze_has_s0_and_w0() -> None:
     text = (ROOT / "docs" / "TRUTH-FREEZE.md").read_text(encoding="utf-8")
-    assert "BINDING FREEZE v3.0" in text
+    assert "OWNER_ORDER_2026-09-30" in text
+    assert "BINDING FREEZE v3.1" in text
     assert "OWNER_ORDER_2026-09-28" in text
     assert "OWNER_ORDER_2026-09-14" in text
     assert "| S0 |" in text
@@ -119,7 +120,7 @@ def test_state_now_is_index_not_second_ledger() -> None:
     direction = (ROOT / "docs" / "DIRECTION-NOW.md").read_text(encoding="utf-8")
     assert "CLAIM-WB-DEGREE-WEB: YES" in direction[:800]
     assert "CLAIM-WB-DEGREE-WEB: NO" not in direction[:800]
-    assert "v1.5" in direction[:800]
+    assert "v1.6" in direction[:800]
     assert "第一需求 = 长任务" in direction
 
 

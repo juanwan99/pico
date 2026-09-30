@@ -5,7 +5,7 @@
 DATE: 2026-09-02
 用法: 开窗读本文。禁止把正文贴进卡或对业主聊天。
 工具: docs/TOOLING-CATALOG.md（本文不抄用法表）。
-北极星: docs/DIRECTION-NOW.md §0-star v1.5 · 用法 = Grok · 长任务第一 · 办公主线 · 能力并列 · 隔离工作区交上游 Pi
+北极星: docs/DIRECTION-NOW.md §0-star v1.6 · 用法 = Grok · 长任务第一 · 办公与编程并列 · 能力并列 · 隔离工作区交上游 Pi
 按域检索: A 版本/收口 · B 产品 · C 部署/ECS/工位 · D Cloud Agent
 ```
 

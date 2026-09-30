@@ -22,7 +22,7 @@ CLAIM-WB: NO
 | 未选 | 长期把编排侧迁 Node；Python 重写 Pi 内核；默认 Node SDK 微服务 |
 | **镜像** | 生产 host 路径：`Dockerfile.pico-api.true-pi`（Node 22 + 钉版 pi）；lean `Dockerfile.pico-api` 仅无真核场景 |
 | **模型** | 真 Pi `--provider openai` + `api=openai-responses`，打 **New API**（`DEEPSEEK_BASE_URL` 槽位指向 `http://127.0.0.1:3000/v1`，钥是 New API token）。现网模型见 EXPERIENCE §34。禁止把「deepseek provider」写成现网聊天核 |
-| **工具** | 目标（#1090 A）：隔离工作区打开 Pi 内建 read/write/edit/bash + 仓内 extension 注册 Pico gateway 白名单。现网仍 `--no-builtin-tools`（实现走第 1 张卡）。`prompt()` 可带 `images[]`（#703）；仍禁 host shell |
+| **工具** | 现网（#1090 A · #1093）：隔离工作区打开 Pi 内建 read/write/edit/bash + 仓内 extension 注册 Pico gateway 白名单。`prompt()` 可带 `images[]`（#703）；仍禁生产机 host shell |
 | **默认路径** | **`default_runtime=pi-true`**（`PICO_TRUE_PI_DEFAULT=1`） |
 | **回滚** | **唯一事故路径** `PICO_HOSTED_LOOP=1` → hosted `pi_runtime`（`default_runtime=pi-agent`） |
 | **过渡开关** | `SHADOW` / `BYPASS` / `CANARY` 非生产常态；禁止与 DEFAULT 双开装饰 |
@@ -40,7 +40,7 @@ CLAIM-WB: NO
 | 方案 | 原因 |
 |------|------|
 | Python 重写 Pi 内核 | 失去 compaction/会话树/生态；与「换回真 Pi」目标相反 |
-| 公网默认 bash / 内建 read·write·edit | 多租户安全否决 |
+| ~~公网默认 bash / 内建 read·write·edit~~ | ~~多租户安全否决~~ **SUPERSEDED**（业主 2026-09-28 #1090 A + 2026-09-30）：隔离工作区 / 专用执行机内开放 |
 | 双默认核并列 | 失败模式×N；hosted 仅回滚 |
 | 桥内再造 delivery_policy / skill 全家桶 | 膨胀成第二 OS |
 | lean 镜像覆盖 DEFAULT=1 生产 | 静默丢 pi（#436 D1） |
@@ -57,7 +57,7 @@ CLAIM-WB: NO
 ## 桥职责白名单（防膨胀）
 
 **允许：** spawn RPC · JSONL prompt/abort · 事件映射 · 白名单工具回调（含 web_search/web_fetch）· session 目录 · 显式 shadow diff  
-**禁止：** bash · 任意 FS · 未登记 MCP · 在桥内实现政策副本 · 第二账本
+**禁止：** 在 pico-api / 生产机宿主上跑 bash 或任意 FS（Pi 内建工具只在隔离工作区 / 专用执行机）· 未登记 MCP · 在桥内实现政策副本 · 第二账本
 
 详见 [`docs/TRUE-PI-BRIDGE-DUTIES.md`](./TRUE-PI-BRIDGE-DUTIES.md)。  
 运维/回滚：[`docs/OPS-TRUE-PI-ROLLBACK.md`](./OPS-TRUE-PI-ROLLBACK.md)。
