@@ -257,7 +257,7 @@ def test_true_pi_runtime_source_passes_caps_windows() -> None:
     assert "prepare_agent_home()" in src
     assert "tool_server.start()" in src
     assert "max_tokens=max_out" in src
-    assert 'pi_thinking_level = (' in src
+    assert "pi_api, pi_thinking_level = pi_wire(" in src
     assert '"medium" if thinking_on else "off"' in src
     assert 'pi_thinking_level = "medium" if openai_brain else ""' not in src
 
@@ -354,3 +354,24 @@ async def test_true_pi_fast_lane_never_trips_breaker() -> None:
     kinds = [k for k, _ in events]
     assert "circuit.breaker" not in kinds
     assert result.status in {"failed", "succeeded"}
+
+
+def test_pi_wire_responses_models_on_gemini_primary() -> None:
+    """#1090: PICO_BRAIN_DEEP_MODEL / failover to gpt-5.6-sol under a Gemini brain got
+    chat/completions; New API answers that in Responses shape Pi cannot parse."""
+    from pico_orchestrator.true_pi.runtime import pi_wire
+
+    wire = {"openai_brain": False, "openai_overlay": True}
+    assert pi_wire("gpt-5.6-sol", thinking_on=True, **wire) == ("openai-responses", "medium")
+    assert pi_wire("grok-4.6", thinking_on=False, **wire) == ("openai-responses", "off")
+    assert pi_wire("gemini-3.8-flash", thinking_on=True, **wire) == ("openai-completions", "medium")
+    assert pi_wire("gemini-3.8-flash", thinking_on=False, **wire) == ("openai-completions", "off")
+    # GPT primary brain unchanged; DeepSeek direct unchanged.
+    assert pi_wire("gpt-5.6-sol", thinking_on=False, openai_brain=True, openai_overlay=True) == (
+        "openai-responses",
+        "off",
+    )
+    assert pi_wire("deepseek-v4-flash", thinking_on=True, openai_brain=False, openai_overlay=False) == (
+        "",
+        "",
+    )

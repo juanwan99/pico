@@ -210,6 +210,31 @@ class _FailoverGate:
             await self._emit(kind, payload)
 
 
+def pi_wire(
+    backend_model: str, *, openai_brain: bool, openai_overlay: bool, thinking_on: bool
+) -> tuple[str, str]:
+    """(Pi api, --thinking level) for the lane's backend model on New API.
+
+    gpt-* / grok-* ride OpenAI Responses (EXPERIENCE §34) even when the
+    primary brain is Gemini: a PICO_BRAIN_DEEP_MODEL or failover to
+    gpt-5.6-sol got chat/completions, whose reply New API passes through in
+    Responses shape Pi cannot parse (#1090). Gemini stays chat/completions.
+    Caps thinking_on=False (edu sidebar / pico-fast) spawns --thinking off so
+    the first visible character is not waiting on reasoning (#1005 首字).
+    """
+    from pico_orchestrator.provider import is_gemini_model, is_openai_responses_model
+
+    responses = openai_brain or (openai_overlay and is_openai_responses_model(backend_model))
+    if responses:
+        api = "openai-responses"
+    elif openai_overlay and is_gemini_model(backend_model):
+        api = "openai-completions"
+    else:
+        api = ""
+    level = ("medium" if thinking_on else "off") if (api or is_gemini_model(backend_model)) else ""
+    return api, level
+
+
 async def _run_true_pi_once(
     *,
     prompt: str,
@@ -324,7 +349,6 @@ async def _run_true_pi_once(
             # pico-fast → deepseek-v4-flash; pico-deep → deepseek-reasoner.
             # thinking flag follows caps.thinking_on. Never a global hardcoded off.
             from pico_orchestrator.provider import (
-                is_gemini_model,
                 runtime_policy_for_model,
                 uses_new_api_openai_overlay,
                 uses_openai_responses_brain,
@@ -344,29 +368,22 @@ async def _run_true_pi_once(
             max_context, max_out = true_pi_windows_from_caps(caps)
             openai_brain = uses_openai_responses_brain(provider)
             openai_overlay = uses_new_api_openai_overlay(provider) or openai_brain
-            openai_responses_brain = openai_brain
             pi_provider = "openai" if openai_overlay or provider.name != "deepseek" else "deepseek"
             pi_base = provider.base_url if openai_overlay else ""
-            if openai_brain:
-                pi_api = "openai-responses"
-            elif openai_overlay and is_gemini_model(backend_model):
-                pi_api = "openai-completions"
-            else:
-                pi_api = ""
+            pi_api, pi_thinking_level = pi_wire(
+                backend_model,
+                openai_brain=openai_brain,
+                openai_overlay=openai_overlay,
+                thinking_on=thinking_on,
+            )
+            # GPT/Grok Responses think minutes before a tool: no empty-loop fuse.
+            openai_responses_brain = pi_api == "openai-responses"
             if openai_overlay and rid:
                 from pico_orchestrator.llm_file_pass import has_turn_files, pass_base_url
 
                 if has_turn_files(rid):
                     pi_base = pass_base_url(rid)
                     logger.info("true_pi llm-pass baseUrl run_id=%s", rid)
-            # Workbench GPT: medium. Caps thinking_on=False (edu sidebar / pico-fast)
-            # must spawn --thinking off so the first visible character is not
-            # waiting on Gemini/GPT reasoning (#1005 首字).
-            pi_thinking_level = (
-                ("medium" if thinking_on else "off")
-                if (openai_brain or is_gemini_model(backend_model))
-                else ""
-            )
             tool_server = ToolServer(
                 principal=principal,
                 gateway=gateway,
