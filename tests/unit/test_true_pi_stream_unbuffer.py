@@ -20,6 +20,7 @@ def _bare_transport() -> SubprocessTransport:
     t._resp_q = asyncio.Queue()
     t._stream_seen = 0
     t._think_seen = 0
+    t._toolcall_seen = {}
     t._stderr_tail = []
     t.run_id = "t"
     return t

@@ -113,3 +113,39 @@ def incremental_thinking_from_update(
 def thinking_from_message(msg: Mapping[str, Any] | None) -> str:
     """Join official ``{type: thinking}`` content blocks. Never product text."""
     return thinking_snapshot(msg).strip()
+
+
+TOOLCALL_PROGRESS_EVERY_S = 5.0
+
+
+def toolcall_progress_from_update(
+    obj: Mapping[str, Any] | None, seen: dict[int, list[float]], now: float
+) -> dict[str, Any] | None:
+    """Throttled "tool arguments are being written" slice from official
+    ``toolcall_start`` / ``toolcall_delta``. Long arguments (a whole file) take
+    minutes to generate; this is the only sign of life while they stream.
+    ``seen`` maps contentIndex -> [chars, last_emit]; reset it per message.
+    """
+    if not isinstance(obj, Mapping):
+        return None
+    ame = obj.get("assistantMessageEvent")
+    if not isinstance(ame, dict):
+        return None
+    kind = str(ame.get("type") or "")
+    if kind not in {"toolcall_start", "toolcall_delta"}:
+        return None
+    idx = ame.get("contentIndex")
+    if not isinstance(idx, int):
+        return None
+    entry = seen.setdefault(idx, [0.0, 0.0])
+    if kind == "toolcall_delta":
+        entry[0] += len(str(ame.get("delta") or ""))
+    if entry[1] and now - entry[1] < TOOLCALL_PROGRESS_EVERY_S:
+        return None
+    entry[1] = now
+    name = ""
+    msg = obj.get("message")
+    content = msg.get("content") if isinstance(msg, dict) else None
+    if isinstance(content, list) and 0 <= idx < len(content) and isinstance(content[idx], dict):
+        name = str(content[idx].get("name") or "")
+    return {"type": "toolcall_progress", "tool": name, "chars": int(entry[0])}

@@ -21,6 +21,7 @@ from pico_orchestrator.true_pi.thinking import thinking_from_message
 from pico_orchestrator.user_errors import user_message_for_error
 from pico_orchestrator.workbench_progress import (
     tool_result_failed,
+    workbench_drafting_line,
     workbench_tool_step_line,
 )
 
@@ -321,6 +322,22 @@ async def map_event(
                     "sandbox.session",
                     {**session_ev, "tool": name, **tag},
                 )
+        return
+
+    if kind == "toolcall_progress":
+        # Throttled (client.py): a long tool call's arguments are still streaming.
+        name = str(raw.get("tool") or "")
+        chars = int(raw.get("chars") or 0)
+        state.event_kinds.append("tool.drafting")
+        await emit(
+            "tool.drafting",
+            {
+                "tool": name,
+                "chars": chars,
+                "step_line": workbench_drafting_line(name, chars),
+                **tag,
+            },
+        )
         return
 
     if kind == "thinking_delta":

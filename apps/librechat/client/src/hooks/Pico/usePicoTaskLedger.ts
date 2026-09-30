@@ -214,6 +214,11 @@ function describeSearchOrTool(event: PicoRunEvent): string | null {
     }
     return `已检索 ${sources.length} 条来源`;
   }
+  if (event.type === 'tool.drafting') {
+    // A long tool call's arguments are still streaming (「正在写文件（已写 12 KB）」).
+    const line = event.payload?.step_line;
+    return typeof line === 'string' && line.trim() ? line.trim() : null;
+  }
   if (event.type === 'tool.call') {
     const tool = toolName(event);
     if (!tool) {

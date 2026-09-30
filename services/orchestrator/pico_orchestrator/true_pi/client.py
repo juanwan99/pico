@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import signal
+import time
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Mapping
@@ -23,6 +24,7 @@ from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinki
 from pico_orchestrator.true_pi.thinking import (
     incremental_text_from_update,
     incremental_thinking_from_update,
+    toolcall_progress_from_update,
 )
 
 logger = logging.getLogger(__name__)
@@ -398,6 +400,7 @@ class SubprocessTransport(TruePiTransport):
         self._stderr_tail: list[str] = []
         self._stream_seen = 0
         self._think_seen = 0
+        self._toolcall_seen: dict[int, list[float]] = {}
 
     def models_document(self) -> dict[str, Any]:
         return true_pi_models_document(
@@ -610,7 +613,12 @@ class SubprocessTransport(TruePiTransport):
             piece, self._stream_seen = incremental_text_from_update(obj, self._stream_seen)
             if piece:
                 await self._queue.put(RpcEvent({"type": "text_delta", "delta": piece}))
+            progress = toolcall_progress_from_update(obj, self._toolcall_seen, time.monotonic())
+            if progress:
+                await self._queue.put(RpcEvent(progress))
             return
+        if t == "message_start":
+            self._toolcall_seen = {}
         await self._queue.put(RpcEvent(obj))
 
     async def _read_stderr(self) -> None:

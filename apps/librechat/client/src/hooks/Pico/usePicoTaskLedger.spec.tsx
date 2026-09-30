@@ -55,6 +55,27 @@ describe('workbench Chinese progress (T-AGENT-FACE-V1)', () => {
     ).toBe('正在写 Word');
   });
 
+  it('shows tool.drafting while long tool arguments stream', () => {
+    expect(
+      lastProcessStep([
+        {
+          id: 'e1',
+          run_id: 'r1',
+          seq: 1,
+          type: 'agent.step',
+          payload: { step: 3, phase: 'model' },
+        },
+        {
+          id: 'e2',
+          run_id: 'r1',
+          seq: 2,
+          type: 'tool.drafting',
+          payload: { tool: 'write', chars: 12400, step_line: '正在写文件（已写 12 KB）' },
+        },
+      ]),
+    ).toBe('正在写文件（已写 12 KB）');
+  });
+
   it('falls back to 正在调工具 for unknown tools', () => {
     expect(
       lastProcessStep([

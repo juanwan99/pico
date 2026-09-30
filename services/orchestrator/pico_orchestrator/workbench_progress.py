@@ -132,6 +132,22 @@ def workbench_tool_step_line(tool: str) -> str:
     return _DOING.get(name, FALLBACK_DOING)
 
 
+# Pi builtins whose arguments are the work itself (a whole file / script).
+_DRAFTING: dict[str, str] = {
+    "write": "正在写文件",
+    "edit": "正在改文件",
+    "bash": "正在写脚本",
+}
+
+
+def workbench_drafting_line(tool: str, chars: int) -> str:
+    """Line while a tool call's arguments are still being generated."""
+    name = (tool or "").strip()
+    base = _DRAFTING.get(name) or workbench_tool_step_line(name) or FALLBACK_DOING
+    kb = max(0, int(chars or 0)) // 1024
+    return f"{base}（已写 {kb} KB）" if kb else f"{base}…"
+
+
 def sidebar_progress_delta(event_type: str, payload: dict[str, Any] | None) -> str:
     """School rail has no TaskRunBar. Tool process must ride `content`."""
     row = payload if isinstance(payload, dict) else {}
