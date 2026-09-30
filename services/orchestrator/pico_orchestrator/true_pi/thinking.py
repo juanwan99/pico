@@ -119,12 +119,14 @@ TOOLCALL_PROGRESS_EVERY_S = 5.0
 
 
 def toolcall_progress_from_update(
-    obj: Mapping[str, Any] | None, seen: dict[int, list[float]], now: float
+    obj: Mapping[str, Any] | None, seen: dict[int, dict[str, Any]], now: float
 ) -> dict[str, Any] | None:
     """Throttled "tool arguments are being written" slice from official
     ``toolcall_start`` / ``toolcall_delta``. Long arguments (a whole file) take
     minutes to generate; this is the only sign of life while they stream.
-    ``seen`` maps contentIndex -> [chars, last_emit]; reset it per message.
+    Pi's JSON/RPC ``message_update`` drops the message body: the tool name is
+    only on ``toolcall_start`` (``toolName``). ``seen`` maps contentIndex ->
+    {name, chars, last}; reset it per message.
     """
     if not isinstance(obj, Mapping):
         return None
@@ -137,15 +139,12 @@ def toolcall_progress_from_update(
     idx = ame.get("contentIndex")
     if not isinstance(idx, int):
         return None
-    entry = seen.setdefault(idx, [0.0, 0.0])
-    if kind == "toolcall_delta":
-        entry[0] += len(str(ame.get("delta") or ""))
-    if entry[1] and now - entry[1] < TOOLCALL_PROGRESS_EVERY_S:
+    entry = seen.setdefault(idx, {"name": "", "chars": 0, "last": 0.0})
+    if kind == "toolcall_start":
+        entry["name"] = str(ame.get("toolName") or "")
+    else:
+        entry["chars"] += len(str(ame.get("delta") or ""))
+    if entry["last"] and now - entry["last"] < TOOLCALL_PROGRESS_EVERY_S:
         return None
-    entry[1] = now
-    name = ""
-    msg = obj.get("message")
-    content = msg.get("content") if isinstance(msg, dict) else None
-    if isinstance(content, list) and 0 <= idx < len(content) and isinstance(content[idx], dict):
-        name = str(content[idx].get("name") or "")
-    return {"type": "toolcall_progress", "tool": name, "chars": int(entry[0])}
+    entry["last"] = now
+    return {"type": "toolcall_progress", "tool": entry["name"], "chars": int(entry["chars"])}

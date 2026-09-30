@@ -31,17 +31,18 @@ def _bare_transport() -> SubprocessTransport:
 
 
 def _update(kind: str, *, delta: str = "", name: str = "write", idx: int = 0) -> dict[str, Any]:
-    content: list[dict[str, Any]] = [{"type": "thinking", "thinking": ""}] * idx
-    content = content + [{"type": "toolCall", "name": name, "arguments": {}}]
-    return {
-        "type": "message_update",
-        "message": {"role": "assistant", "content": content},
-        "assistantMessageEvent": {"type": kind, "contentIndex": idx, "delta": delta},
-    }
+    # Shape Pi's JSON/RPC mode really emits (json-event.js toJsonEvent): no
+    # message body; toolcall_start carries toolName, deltas carry no name.
+    ame: dict[str, Any] = {"type": kind, "contentIndex": idx}
+    if kind == "toolcall_start":
+        ame.update({"id": "call_1", "toolName": name})
+    else:
+        ame["delta"] = delta
+    return {"type": "message_update", "usage": {}, "assistantMessageEvent": ame}
 
 
 def test_progress_throttled_and_counts_chars() -> None:
-    seen: dict[int, list[float]] = {}
+    seen: dict[int, dict[str, Any]] = {}
     first = toolcall_progress_from_update(_update("toolcall_start"), seen, 100.0)
     assert first == {"type": "toolcall_progress", "tool": "write", "chars": 0}
     assert toolcall_progress_from_update(_update("toolcall_delta", delta="x" * 3000), seen, 102.0) is None
@@ -50,14 +51,14 @@ def test_progress_throttled_and_counts_chars() -> None:
 
 
 def test_progress_ignores_text_and_thinking() -> None:
-    seen: dict[int, list[float]] = {}
+    seen: dict[int, dict[str, Any]] = {}
     body = _update("text_delta", delta="hi")
     assert toolcall_progress_from_update(body, seen, 1.0) is None
     assert seen == {}
 
 
 def test_progress_names_the_right_content_block() -> None:
-    seen: dict[int, list[float]] = {}
+    seen: dict[int, dict[str, Any]] = {}
     got = toolcall_progress_from_update(_update("toolcall_start", name="bash", idx=2), seen, 1.0)
     assert got is not None and got["tool"] == "bash"
 
