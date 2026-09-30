@@ -577,19 +577,32 @@ async def stream_chat(
             "stream_options": {"include_usage": True},
         }
         stream = await client.chat.completions.create(**kwargs)
+        spent = 0
+        answered = False
         async for chunk in stream:
             usage = getattr(chunk, "usage", None)
             if usage is not None:
                 from pico_orchestrator.usage_parse import parse_usage_blob
 
-                _apply_usage_out(usage_out, parse_usage_blob(usage))
+                parsed = parse_usage_blob(usage)
+                _apply_usage_out(usage_out, parsed)
+                spent = int((parsed or {}).get("completion_tokens") or 0)
             choices = getattr(chunk, "choices", None) or []
             finish = getattr(choices[0], "finish_reason", None) if choices else None
             if finish and finish_out is not None:
                 finish_out["finish_reason"] = str(finish)
             delta = choices[0].delta.content if choices else None
             if delta:
+                answered = True
                 yield delta
+        # Gemini can spend the whole budget thinking and still say stop (#1116).
+        if (
+            finish_out is not None
+            and finish_out.get("finish_reason") in (None, "stop")
+            and spent
+            and (spent >= max_tokens or not answered)
+        ):
+            finish_out["finish_reason"] = "length"
 
     async def _iter_provider(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
         if uses_openai_responses_brain(provider):
