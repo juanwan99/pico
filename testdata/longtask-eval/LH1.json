@@ -1,0 +1,47 @@
+{
+  "id": "LH1",
+  "title": "大仓库跨文件重构：五处等级统一 + 全仓改字段名",
+  "timeout_s": 3600,
+  "turns": [
+    {
+      "prompt": "附件 gradebook.zip 是我们学校的成绩小系统。家长投诉：成绩单、排名表、导出表、班级汇总、家长通知上的「总评」和「等级」对不上——好几个地方各算各的，算法和等级线都不一样。请解压后重构，要求：\n1. 新建 gradebook/grading.py，全系统只在这里算。term_score(parts) 接收 {\"平时\":…, \"期中\":…, \"期末\":…}（缺考为 None），返回学期总评 = 平时×30% + 期中×30% + 期末×40%；某几项缺考时，其余项按权重比例折算（例：缺期中 → (平时×30 + 期末×40) / 70）；三项都缺返回 None。总评保留 1 位小数，严格四舍五入（80.15 → 80.2，不能出浮点误差）。\n2. letter(score, thresholds=None) 按「保留 1 位后的总评」给等级 A/B/C/D/E，None 给「缺考」。等级线默认 A≥90、B≥80、C≥70、D≥60，其余 E；thresholds 不传时，先看环境变量 GRADEBOOK_GRADING 指向的 JSON 文件，没有就读项目根目录的 grading.json（格式 {\"A\": 90, \"B\": 80, \"C\": 70, \"D\": 60}），都没有用默认。\n3. 成绩单、排名、导出、班级汇总、家长通知这些地方全部改用 grading.py 的总评和等级（成绩单和导出里显示的总评也换成新总评）；及格 = 总评 ≥ 60。各处输出格式保持不变。\n4. Student 的字段 cls 改名为 class_name，全仓改掉；为了不打断老脚本，student.cls 仍然可读可写，但每次都要发 DeprecationWarning。\n5. tests/ 下原有的测试和数据一字不改、全部通过；给 grading.py 补新测试。\n改完把整个项目打包成 gradebook_v2.zip 交给我，回复里列出改了哪些文件、每处原来错在哪。",
+      "attachments": [
+        {
+          "name": "gradebook.zip",
+          "zip_dir": "fixtures/code/gradebook"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "files": [
+      "gradebook_v2.zip"
+    ],
+    "check": {
+      "script": "lh1_gradebook.py",
+      "max": 5
+    }
+  },
+  "score_points": [
+    {
+      "id": "all_sites",
+      "text": "五处（成绩单/排名/导出/汇总/家长通知）全部找到并统一"
+    },
+    {
+      "id": "math",
+      "text": "折算与四舍五入对（Decimal，不是 float round）"
+    },
+    {
+      "id": "config",
+      "text": "等级线参数 / 环境变量 / grading.json 三级都生效"
+    },
+    {
+      "id": "rename",
+      "text": "cls→class_name 全仓改净，旧名带 DeprecationWarning 仍可用"
+    },
+    {
+      "id": "explain",
+      "text": "回复逐处说清原来错在哪（阈值不一、只用期末、F/E 混用、>60 等）"
+    }
+  ]
+}

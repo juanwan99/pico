@@ -1,0 +1,64 @@
+{
+  "id": "LH3",
+  "title": "六轮长会话排课：需求逐轮加码、中途推翻一条",
+  "timeout_s": 2400,
+  "turns": [
+    {
+      "prompt": "帮我写一个排课的 Python 模块 timetable.py（先只用标准库）：make_timetable(plan, days=5, periods=6, seed=0) 给多个班排一周课表。plan 形如 {\"七1\": {\"语文\": 6, \"数学\": 5, …}, \"七2\": {…}}，数字是每周节数。返回 {班级: grid}，grid[d][p] 是第 d 天（0 起）第 p 节（0 起）的科目名，没课是 None。规则：每科节数正好等于计划；同一个班同一科一天最多 2 节，一天有 2 节时必须连堂（相邻两节）；某班总节数超过 days×periods 抛 ValueError；同一个 seed 结果必须一样。再写 test_timetable.py（unittest），跑通。"
+    },
+    {
+      "prompt": "加一条规则：体育不排第 1 节（p=0）。测试补上。"
+    },
+    {
+      "prompt": "再加：语文、数学、英语每科每周至少一半节数（向上取整，比如 5 节至少 3 节）排在上午，上午是前 4 节（p<4）。测试补上。"
+    },
+    {
+      "prompt": "刚才体育那条是我记错了，取消「体育不排第 1 节」，第 1 节可以排体育。改成：体育不排每天最后一节，也不排午饭前后那两节（午饭在第 4、5 节之间，也就是 p=3 和 p=4 不排体育）。测试相应改。"
+    },
+    {
+      "prompt": "加老师：make_timetable 增加可选参数 teachers={班级: {科目: 老师名}}，同一个老师同一时间只能在一个班上课。排不出来时一律抛 ValueError，不能死循环，一分钟内要给出结论；如果是某个老师总课时超过一周的时段数，错误信息里要写出这个老师的名字。测试补上。"
+    },
+    {
+      "prompt": "最后加命令行：python timetable.py school.json 课表.xlsx。school.json 里有 plan 和 teachers（附件是我们年级的真实数据），每个班一张工作表、表名用班级名，行是第几节、列是星期一到星期五，格子里写「科目/老师」（没登记老师的只写科目），空课留空。用附件跑一遍，检查一遍前面所有规则都还满足，然后把 timetable.py、test_timetable.py、课表.xlsx 交给我。",
+      "attachments": [
+        {
+          "name": "school.json",
+          "file": "fixtures/code/school.json"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "files": [
+      "timetable.py",
+      "test_timetable.py",
+      "课表.xlsx"
+    ],
+    "check": {
+      "script": "lh3_timetable.py",
+      "max": 5
+    }
+  },
+  "score_points": [
+    {
+      "id": "rules",
+      "text": "节数 / 一天≤2 且连堂 / 主科上午过半 / 同 seed 一致 全部成立"
+    },
+    {
+      "id": "reversal",
+      "text": "第 4 轮推翻的规则真的撤了（体育可排第 1 节），新规则生效"
+    },
+    {
+      "id": "teachers",
+      "text": "共用老师不撞课；排不出能在一分钟内报错并点名老师"
+    },
+    {
+      "id": "deliver",
+      "text": "课表.xlsx 每班一表、格式对、与计划一致"
+    },
+    {
+      "id": "memory",
+      "text": "六轮下来没丢早先的规则，回复说清每轮改了什么"
+    }
+  ]
+}

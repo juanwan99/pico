@@ -17,6 +17,9 @@ checker (``expect.check``, testdata/longtask-eval/checks/). The checker runs the
 delivered code in a throwaway container: workspace image, gVisor, no network.
 A coding case passes only when every file landed and the checker passes.
 Re-score saved files without a model: ``--check-dir DIR --cases LC1``.
+
+Hard cases (LH*, ``--suite hard``) are graded the same way; they exist because
+LT/LC saturated (13/13 on two models) and stopped telling models apart.
 """
 
 from __future__ import annotations
@@ -43,7 +46,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CASES_DIR = ROOT / "testdata" / "longtask-eval"
 CHECKS_DIR = CASES_DIR / "checks"
 PRODUCED_KINDS = {"xlsx", "docx", "pptx", "html"}
-SUITES = {"office": "LT", "coding": "LC"}
+SUITES = {"office": "LT", "coding": "LC", "hard": "LH"}
 
 
 @dataclass
@@ -200,7 +203,72 @@ def _triple_workbook() -> bytes:
     return buf.getvalue()
 
 
-GENERATORS = {"triple_workbook": _triple_workbook}
+SUBJECTS6 = ["语文", "数学", "英语", "物理", "化学", "生物"]
+
+
+def _grade_book() -> bytes:
+    """LH2: 6 classes x 45 students x 6 subjects, 期中 + 期末, with real-sheet traps.
+
+    Seeded, so the checker regenerates the same values. Traps: class names with
+    stray spaces, 期末 rows shuffled, the same name in two classes, a student
+    gone after 期中, 缺考 / 作废 / blank cells, IDs typed as text.
+    """
+    import random
+
+    from openpyxl import Workbook
+
+    rng = random.Random(2026)
+    surnames = "王李张刘陈杨黄赵吴周徐孙马朱胡郭何高林罗郑梁谢宋唐许韩冯邓曹彭曾"
+    given = "伟芳娜敏静磊洋勇艳杰涛明超霞平刚桂英华玉兰红军辉鹏飞燕丽强"
+    classes = [f"八年级{i}班" for i in range(1, 7)]
+    ability = {c: rng.uniform(-6, 6) for c in classes}
+    drift = {(c, s): rng.uniform(-5, 5) for c in classes for s in SUBJECTS6}
+    students = []
+    for ci, cls in enumerate(classes):
+        for k in range(45):
+            sid = f"2025{ci + 1}{k + 1:02d}"
+            name = rng.choice(surnames) + rng.choice(given) + (rng.choice(given) if rng.random() < 0.6 else "")
+            students.append((sid, name, cls, rng.gauss(72 + ability[cls], 9)))
+    students[7] = (students[7][0], "王磊", students[7][2], students[7][3])
+    students[100] = (students[100][0], "王磊", students[100][2], students[100][3])
+
+    def mark(base: float, bump: float) -> float | str | None:
+        r = rng.random()
+        if r < 0.012:
+            return "缺考"
+        if r < 0.016:
+            return None
+        v = max(0.0, min(100.0, base + bump + rng.gauss(0, 7)))
+        return round(v * 2) / 2
+
+    wb = Workbook()
+    header = ["班级", "学号", "姓名", *SUBJECTS6]
+    mid = wb.active
+    mid.title = "期中"
+    mid.append(header)
+    final_rows = []
+    for i, (sid, name, cls, base) in enumerate(students):
+        shown = cls + (" " if i % 17 == 3 else "")
+        mid.append([shown, sid, name, *[mark(base, 0) for _ in SUBJECTS6]])
+        if i == 150:
+            continue
+        row = [cls, sid, name, *[mark(base, drift[(cls, s)]) for s in SUBJECTS6]]
+        if i % 53 == 11:
+            row[3 + rng.randrange(6)] = "作废"
+        if i % 23 == 5:
+            row[0] = " " + cls
+        final_rows.append(row)
+    rng.shuffle(final_rows)
+    fin = wb.create_sheet("期末")
+    fin.append(header)
+    for row in final_rows:
+        fin.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+GENERATORS = {"triple_workbook": _triple_workbook, "grade_book": _grade_book}
 
 
 def _produced(arts: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -330,7 +398,7 @@ def _zip_dir(rel: str) -> bytes:
     root = CASES_DIR / rel
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        for path in sorted(p for p in root.rglob("*") if p.is_file() and "__pycache__" not in p.parts):
             info = zipfile.ZipInfo(f"{root.name}/{path.relative_to(root).as_posix()}", (2026, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             zf.writestr(info, path.read_bytes())
@@ -636,7 +704,9 @@ def main() -> int:
     )
     ap.add_argument("--model", default=os.environ.get("PICO_REGRESS_MODEL") or "pico-fast")
     ap.add_argument("--cases", default="", help="comma ids, default every case in --suite")
-    ap.add_argument("--suite", choices=["all", *SUITES], default="all", help="LT office, LC coding")
+    ap.add_argument(
+        "--suite", choices=["all", *SUITES], default="all", help="LT office, LC coding, LH hard"
+    )
     ap.add_argument("--check-image", default="pico-workspace:v1", help="image coding checkers run in")
     ap.add_argument("--check-runtime", default="runsc", help="docker runtime for coding checkers")
     ap.add_argument(
