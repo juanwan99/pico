@@ -287,7 +287,10 @@ def thinking_extra_body(
 
     DeepSeek v4: ``thinking.type`` disabled or the stream is HTTP 200 empty.
     Gemini 3.8: do **not** send DeepSeek's thinking object (empty content);
-    fast lane omits extra; deep lane uses ``reasoning_effort``.
+    deep lane uses ``reasoning_effort``. Fast lane turns thinking off for
+    flash: New API only reads Gemini's thinking config under a literal
+    ``extra_body`` key (``reasoning_effort: none`` is ignored), and dynamic
+    thinking otherwise eats the output budget (#1116).
     """
     policy = runtime_policy_for_model(model)
     if thinking is None:
@@ -296,6 +299,8 @@ def thinking_extra_body(
     if is_gemini_model(backend) or is_gemini_model(model):
         if thinking:
             return {"reasoning_effort": "medium"}
+        if "flash" in backend.lower():
+            return {"extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}}
         return {}
     return {"thinking": {"type": "enabled" if thinking else "disabled"}}
 
@@ -527,8 +532,11 @@ async def stream_chat(
     model: str | None = None,
     thinking: bool | None = None,
     usage_out: dict | None = None,
+    finish_out: dict | None = None,
 ) -> AsyncIterator[str]:
     """Stream assistant text deltas from the real model API (token-level).
+
+    ``finish_out["finish_reason"]`` gets the upstream finish (e.g. ``length``).
 
     Raises RuntimeError if no API key is configured.
 
@@ -576,6 +584,9 @@ async def stream_chat(
 
                 _apply_usage_out(usage_out, parse_usage_blob(usage))
             choices = getattr(chunk, "choices", None) or []
+            finish = getattr(choices[0], "finish_reason", None) if choices else None
+            if finish and finish_out is not None:
+                finish_out["finish_reason"] = str(finish)
             delta = choices[0].delta.content if choices else None
             if delta:
                 yield delta

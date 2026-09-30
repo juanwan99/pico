@@ -126,6 +126,11 @@ def test_requested_tokens_are_clamped_to_global_cap() -> None:
     assert _effective_max_tokens(999_999, 4096) == 4096
     assert _effective_max_tokens(512, 4096) == 512
     assert _effective_max_tokens(None, 1024) == 1024
+    # json_only (edu sidebar extraction) gets room for a whole JSON (#1116).
+    assert _effective_max_tokens(None, 32_000) == 2048
+    assert _effective_max_tokens(None, 32_000, json_only=True) == 8192
+    assert _effective_max_tokens(None, 4096, json_only=True) == 4096
+    assert _effective_max_tokens(300, 32_000, json_only=True) == 300
 
 
 async def test_chat_admission_enforces_concurrency_and_rpm() -> None:
