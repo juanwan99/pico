@@ -458,4 +458,5 @@ def test_box_prompt_keeps_tool_calls_small() -> None:
     # Vertex emits tool-call arguments in one piece: a 90KB write = 3+ min of silence (#1111).
     from pico_orchestrator.true_pi.runner import WORKSPACE_SYSTEM
 
-    assert "150 lines" in WORKSPACE_SYSTEM and "heredoc" in WORKSPACE_SYSTEM
+    assert "150 lines" in WORKSPACE_SYSTEM and "cat << EOF" in WORKSPACE_SYSTEM
+    assert "content_01.json" in WORKSPACE_SYSTEM and "under 100 lines" in WORKSPACE_SYSTEM
