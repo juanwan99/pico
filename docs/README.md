@@ -8,7 +8,7 @@
 STATUS: BINDING navigation · 现况不在本页
 TRUTH: GitHub (Issue/PR/SHA/CI/DEPLOY) + 公网 tip outrank all prose
 NOW: GitHub 执行卡（最多 1）· docs/STATE-NOW.md 是索引
-FREEZE: docs/TRUTH-FREEZE.md v3.0
+FREEZE: docs/TRUTH-FREEZE.md v3.1
 ```
 
 ## 现行层（2026-09-08 · 开窗只认这些句）
@@ -44,7 +44,7 @@ FREEZE: docs/TRUTH-FREEZE.md v3.0
 |----------|------|------|
 | **NOW** | **[STATE-NOW.md](./STATE-NOW.md)** | **开窗索引三行**（对不上以 GitHub + tip 为准） |
 | **NOW** | **[#634](https://github.com/juanwan99/pico/issues/634)** | **冻结令** · 可钉现况三行评论 |
-| 0 | **[DIRECTION-NOW.md](./DIRECTION-NOW.md)** | 北极星 §0-star v1.5 · 用法 = Grok · 长任务第一 · 办公主线 · 能力并列 · 隔离工作区交上游 Pi |
+| 0 | **[DIRECTION-NOW.md](./DIRECTION-NOW.md)** | 北极星 §0-star v1.6 · 用法 = Grok · 长任务第一 · 办公与编程并列 · 能力并列 · 隔离工作区交上游 Pi |
 | 0 | **[TRUTH-FREEZE.md](./TRUTH-FREEZE.md)** | 目标冻结 v3.0（真 Pi · 放开 A–F · New API 脑 · 知识库挂载 · 扫描件 OCR 兜底进库 · 隔离工作区） |
 | — | **[WHAT-IS-PICO.md](./WHAT-IS-PICO.md)** | 产品定义（§4 实现以 tip 为准） |
 | — | **[PLAN-OFFICE-COMPUTER-V2.md](./PLAN-OFFICE-COMPUTER-V2.md)** | 办公计算机 v2 学习账（#959 已部）。B1 取消 / 无网 / `--no-builtin-tools` 永在 已由 #1090 SUPERSEDED |
@@ -86,6 +86,6 @@ FREEZE: docs/TRUTH-FREEZE.md v3.0
 **冻结令:** [#634](https://github.com/juanwan99/pico/issues/634)  
 **在飞:** [#1091](https://github.com/juanwan99/pico/issues/1091)（线索 [#1090](https://github.com/juanwan99/pico/issues/1090)）  
 **经验 / 工具:** [EXPERIENCE.md](./EXPERIENCE.md) · [TOOLING-CATALOG.md](./TOOLING-CATALOG.md)  
-**北极星:** [DIRECTION-NOW.md](./DIRECTION-NOW.md) §0-star v1.5  
+**北极星:** [DIRECTION-NOW.md](./DIRECTION-NOW.md) §0-star v1.6  
 **冻结:** [TRUTH-FREEZE.md](./TRUTH-FREEZE.md) v3.0  
 **不当下一张:** #627 / #628 / #646 / 任何 DAY-TASK · 无业主点头不开办公减法卡

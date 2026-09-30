@@ -17,8 +17,8 @@ PRODUCT PASS: #682/#684/#686/#690/#694/#697 业主已签 · #701 夜间/来源�
 工具: docs/TOOLING-CATALOG.md（派发只认 ID）
 最高: LAW §0-supreme · 禁止自搞一套 / 禁止重体系
 工作法: 本窗合一 · GitHub 唯一真源 · 写码树/生产树分开 · AGENTS 文首
-北极星: DIRECTION-NOW §0-star v1.5 · 用法 = Grok · 长任务第一 · 办公主线 · 能力并列 · 隔离工作区交上游 Pi
-冻结: docs/TRUTH-FREEZE.md v3.0（默认真 Pi · 放开 A–F · 模型/计量上游 New API · 知识库=Meili 挂载 hybrid+rerank · 扫描件 OCR 只入库 · 隔离工作区 · generate_docx/pptx/inspect 已拆）
+北极星: DIRECTION-NOW §0-star v1.6 · 用法 = Grok · 长任务第一 · 办公与编程并列 · 能力并列 · 隔离工作区交上游 Pi
+冻结: docs/TRUTH-FREEZE.md v3.1（默认真 Pi · 放开 A–F · 模型/计量上游 New API · 知识库=Meili 挂载 hybrid+rerank · 扫描件 OCR 只入库 · 隔离工作区 · generate_docx/pptx/inspect 已拆）
 真源: GitHub Issue/PR/SHA/CI + 公网 tip。本页三行是索引。
 juanwan99/oneflow: 不当真源（已 Archive）
 ```
