@@ -11,6 +11,12 @@ Prints JSON + a markdown table (paste into the Issue). Exit 1 if any case
 exceptions-out before scoring. Auto-score is 0–5 from file/content checks; a case
 passes at 3 points, or at every check when it has fewer than 3;
 human score_points are listed for the planner, not auto-filled.
+
+Coding cases (LC*) name the files to deliver (``expect.files``) and a hidden
+checker (``expect.check``, testdata/longtask-eval/checks/). The checker runs the
+delivered code in a throwaway container: workspace image, gVisor, no network.
+A coding case passes only when every file landed and the checker passes.
+Re-score saved files without a model: ``--check-dir DIR --cases LC1``.
 """
 
 from __future__ import annotations
@@ -20,7 +26,10 @@ import io
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 import uuid
 import zipfile
@@ -32,7 +41,9 @@ import httpx
 
 ROOT = Path(__file__).resolve().parent.parent
 CASES_DIR = ROOT / "testdata" / "longtask-eval"
+CHECKS_DIR = CASES_DIR / "checks"
 PRODUCED_KINDS = {"xlsx", "docx", "pptx", "html"}
+SUITES = {"office": "LT", "coding": "LC"}
 
 
 @dataclass
@@ -149,10 +160,12 @@ class Pico:
         return resp.content
 
 
-def load_cases() -> list[dict[str, Any]]:
+def load_cases(suite: str = "all") -> list[dict[str, Any]]:
+    prefixes = list(SUITES.values()) if suite == "all" else [SUITES[suite]]
     cases = []
-    for path in sorted(CASES_DIR.glob("LT*.json")):
-        cases.append(json.loads(path.read_text(encoding="utf-8")))
+    for prefix in prefixes:
+        for path in sorted(CASES_DIR.glob(f"{prefix}*.json")):
+            cases.append(json.loads(path.read_text(encoding="utf-8")))
     return cases
 
 
@@ -312,10 +325,24 @@ def _run_events(pico: Pico, conversation_id: str) -> tuple[int, int, str, str]:
     return tool_calls, steps, status, error
 
 
+def _zip_dir(rel: str) -> bytes:
+    """Deterministic zip of a fixture project; entries sit under its folder name."""
+    root = CASES_DIR / rel
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(p for p in root.rglob("*") if p.is_file()):
+            info = zipfile.ZipInfo(f"{root.name}/{path.relative_to(root).as_posix()}", (2026, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, path.read_bytes())
+    return buf.getvalue()
+
+
 def _attachment_bytes(spec: dict[str, Any]) -> bytes:
     if spec.get("generate"):
         fn = GENERATORS[str(spec["generate"])]
         return fn()
+    if spec.get("zip_dir"):
+        return _zip_dir(str(spec["zip_dir"]))
     rel = spec["file"]
     return (CASES_DIR / rel).read_bytes()
 
@@ -331,6 +358,8 @@ def max_points(expect: dict[str, Any]) -> int:
     if "html" in kinds:
         n += bool(expect.get("forbid_http_assets")) + bool(expect.get("min_heading_like"))
     n += bool(expect.get("must_contain"))
+    if expect.get("files") or expect.get("check"):
+        return n + bool(expect.get("files")) + int((expect.get("check") or {}).get("max") or 0)
     return min(5, n)
 
 
@@ -339,8 +368,118 @@ def pass_bar(expect: dict[str, Any]) -> int:
     return min(3, max_points(expect))
 
 
-def score_case(case: dict[str, Any], arts: list[dict[str, Any]], pico: Pico, res: CaseResult) -> None:
+# Uploads land as edu_office / file / excerpts; the reply summary is doc.
+# Workspace deliveries carry their extension as kind (py, zip, csv, html…).
+NOT_DELIVERED_KINDS = {"edu_office", "edu_excerpt", "kb_text", "file", "doc"}
+
+
+def _latest_by_title(arts: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Delivered files only, newest per title."""
+    out: dict[str, dict[str, Any]] = {}
+    for a in sorted(arts, key=lambda a: str(a.get("created_at") or "")):
+        title = os.path.basename(str(a.get("title") or ""))
+        if title and str(a.get("kind") or "").lower() not in NOT_DELIVERED_KINDS:
+            out[title] = a
+    return out
+
+
+def _unzip_into(raw: bytes, dest: Path) -> None:
+    """Unpack a delivered zip; entries escaping ``dest`` are skipped."""
+    dest.mkdir(parents=True, exist_ok=True)
+    root = dest.resolve()
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        for info in zf.infolist():
+            target = (dest / info.filename).resolve()
+            if info.is_dir() or not str(target).startswith(str(root) + os.sep):
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(zf.read(info))
+
+
+def run_checker(
+    case: dict[str, Any], out_dir: Path, res: CaseResult, image: str, runtime: str
+) -> tuple[int, bool]:
+    """Run the case's hidden checker on delivered files in a no-network container."""
+    spec = case["expect"]["check"]
+    with tempfile.TemporaryDirectory(prefix="lt-check-") as tmp:
+        w = Path(tmp)
+        shutil.copytree(out_dir, w / "out")
+        for zpath in list((w / "out").rglob("*.zip")):
+            try:
+                _unzip_into(zpath.read_bytes(), zpath.with_suffix(""))
+            except zipfile.BadZipFile:
+                res.notes.append(f"bad zip {zpath.name}")
+        (w / "in").mkdir()
+        for turn in case.get("turns") or []:
+            for att in turn.get("attachments") or []:
+                (w / "in" / att["name"]).write_bytes(_attachment_bytes(att))
+        shutil.copytree(CHECKS_DIR, w / "check")
+        for path in w.rglob("*"):
+            path.chmod(0o755 if path.is_dir() else 0o644)
+        w.chmod(0o755)
+        cmd = [
+            "docker", "run", "--rm", "--network", "none", "--runtime", runtime,
+            "--memory", "1g", "--cpus", "1", "--pids-limit", "256", "--shm-size", "256m",
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+            "-v", f"{w}:/w:ro", "-w", "/tmp", "--entrypoint", "",
+            image, "timeout", "300", "python3", f"/w/check/{spec['script']}",
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=420, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            res.notes.append(f"check: {type(exc).__name__}")
+            return 0, False
+    lines = (proc.stdout or "").strip().splitlines()
+    try:
+        verdict = json.loads(lines[-1])
+    except (ValueError, IndexError):
+        res.notes.append(f"check crashed rc={proc.returncode}: {' '.join((proc.stderr or '').split())[-200:]}")
+        return 0, False
+    res.notes += [f"check: {n}" for n in verdict.get("notes") or []]
+    return int(verdict.get("points") or 0), bool(verdict.get("pass"))
+
+
+def score_code(
+    case: dict[str, Any], files: dict[str, bytes], res: CaseResult, image: str, runtime: str
+) -> None:
+    """Coding case: required files landed + hidden checker passes."""
     expect = case.get("expect") or {}
+    want = [str(f) for f in expect.get("files") or []]
+    missing = [f for f in want if f not in files]
+    points = 0
+    if want:
+        if missing:
+            res.notes.append("missing files: " + ",".join(missing))
+        else:
+            points += 1
+    passed = True
+    if expect.get("check"):
+        with tempfile.TemporaryDirectory(prefix="lt-out-") as tmp:
+            for name, raw in files.items():
+                (Path(tmp) / name).write_bytes(raw)
+            got, passed = run_checker(case, Path(tmp), res, image, runtime)
+        points += got
+    res.auto_score = points
+    res.max_score = max_points(expect)
+    res.ok = not missing and passed
+
+
+def score_case(
+    case: dict[str, Any],
+    arts: list[dict[str, Any]],
+    pico: Pico,
+    res: CaseResult,
+    image: str = "",
+    runtime: str = "",
+) -> None:
+    expect = case.get("expect") or {}
+    if expect.get("files") or expect.get("check"):
+        latest = _latest_by_title(arts)
+        res.artifacts = len(latest)
+        res.artifact_kinds = sorted({str(a.get("kind") or "").lower() for a in latest.values() if a.get("kind")})
+        files = {title: pico.download(a["id"]) for title, a in latest.items() if a.get("id")}
+        score_code(case, files, res, image, runtime)
+        return
     produced = _produced(arts)
     res.artifacts = len(produced)
     res.artifact_kinds = sorted({str(a.get("kind") or "").lower() for a in produced if a.get("kind")})
@@ -427,7 +566,7 @@ def flag_fake_green(res: CaseResult, status: str) -> None:
         res.notes.append("run succeeded, 0 artifacts")
 
 
-def run_case(pico: Pico, case: dict[str, Any], stamp: str) -> CaseResult:
+def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runtime: str = "") -> CaseResult:
     cid = f"longtask-{case['id'].lower()}-{stamp}"
     res = CaseResult(case=case["id"], title=case.get("title") or "", score_points=list(case.get("score_points") or []))
     timeout = float(case.get("timeout_s") or pico.timeout_s)
@@ -440,7 +579,7 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str) -> CaseResult:
         arts = pico.artifacts(cid)
         res.tool_calls, res.agent_steps, status, error = _run_events(pico, cid)
         res.fail_reason = _classify_fail(status, error)
-        score_case(case, arts, pico, res)
+        score_case(case, arts, pico, res, image, runtime)
         if status == "failed" and not res.fail_reason:
             res.fail_reason = "other"
         flag_fake_green(res, status)
@@ -496,19 +635,22 @@ def main() -> int:
         default=os.environ.get("PICO_REGRESS_MEMBERSHIP") or "regress-school:regress-member",
     )
     ap.add_argument("--model", default=os.environ.get("PICO_REGRESS_MODEL") or "pico-fast")
-    ap.add_argument("--cases", default="", help="comma ids, default all LT*.json")
+    ap.add_argument("--cases", default="", help="comma ids, default every case in --suite")
+    ap.add_argument("--suite", choices=["all", *SUITES], default="all", help="LT office, LC coding")
+    ap.add_argument("--check-image", default="pico-workspace:v1", help="image coding checkers run in")
+    ap.add_argument("--check-runtime", default="runsc", help="docker runtime for coding checkers")
+    ap.add_argument(
+        "--check-dir", default="", help="score these files as one LC case's delivery, no model"
+    )
     ap.add_argument("--timeout", type=float, default=0.0, help="override per-case timeout_s")
     ap.add_argument("--json", default="", help="write JSON report here")
     ap.add_argument("--list", action="store_true", help="list cases and exit")
     args = ap.parse_args()
-    cases = load_cases()
+    cases = load_cases(args.suite)
     if args.list:
         for c in cases:
             print(f"{c['id']}\t{c.get('timeout_s')}\t{c.get('title')}")
         return 0
-    if not args.key:
-        print("PICO_OPENAI_PROXY_KEY / --key required", file=sys.stderr)
-        return 2
     wanted = {x.strip().upper() for x in args.cases.split(",") if x.strip()}
     if wanted:
         cases = [c for c in cases if c["id"].upper() in wanted]
@@ -516,6 +658,19 @@ def main() -> int:
         if missing:
             print("unknown cases: " + ",".join(sorted(missing)), file=sys.stderr)
             return 2
+    if args.check_dir:
+        if len(cases) != 1:
+            print("--check-dir needs exactly one --cases id", file=sys.stderr)
+            return 2
+        src = Path(args.check_dir)
+        files = {p.name: p.read_bytes() for p in src.iterdir() if p.is_file()}
+        res = CaseResult(case=cases[0]["id"], title=cases[0].get("title") or "")
+        score_code(cases[0], files, res, args.check_image, args.check_runtime)
+        print(json.dumps(res.__dict__, ensure_ascii=False, indent=2))
+        return 0 if res.ok else 1
+    if not args.key:
+        print("PICO_OPENAI_PROXY_KEY / --key required", file=sys.stderr)
+        return 2
     pico = Pico(args.base, args.key, args.membership, args.model, args.timeout or 1800.0)
     stamp = f"{int(time.time())}-{uuid.uuid4().hex[:6]}"
     results: list[CaseResult] = []
@@ -524,7 +679,7 @@ def main() -> int:
             case = {**case, "timeout_s": args.timeout}
         try:
             print(f"START {case.get('id')} timeout_s={case.get('timeout_s')}", flush=True)
-            one = run_case(pico, case, stamp)
+            one = run_case(pico, case, stamp, args.check_image, args.check_runtime)
             results.append(one)
             print(
                 f"DONE {one.case} ok={one.ok} score={one.auto_score} "

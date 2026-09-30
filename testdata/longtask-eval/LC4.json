@@ -1,0 +1,58 @@
+{
+  "id": "LC4",
+  "title": "三个月考勤脏数据清洗",
+  "timeout_s": 1500,
+  "turns": [
+    {
+      "prompt": "附件是三个月的考勤导出，格式都不太一样（编码、列顺序、日期写法、名字里的空格、重复行、状态写法都有乱的）。请写一个清洗脚本 clean.py：\n- 用法：python clean.py 输入目录 输出目录（读输入目录里所有 .csv）\n- 在输出目录生成 attendance_clean.csv：列 日期,姓名,状态；日期统一 YYYY-MM-DD；姓名去掉所有空格；状态只能是 出勤/迟到/缺勤/请假（病假、事假算请假，旷课算缺勤，√ 算出勤）；完全重复的行只留一条；没有日期的行丢掉\n- 同时生成 summary.csv：列 姓名,出勤,迟到,缺勤,请假，每人各状态的次数\n- 另写 README.md 说明每类脏数据是怎么处理的、丢了哪些行\n请用附件实际跑一遍并核对结果，然后把 clean.py、attendance_clean.csv、summary.csv、README.md 四个文件交给我。",
+      "attachments": [
+        {
+          "name": "2026-09.csv",
+          "file": "fixtures/code/attendance/2026-09.csv"
+        },
+        {
+          "name": "2026-10.csv",
+          "file": "fixtures/code/attendance/2026-10.csv"
+        },
+        {
+          "name": "2026-11.csv",
+          "file": "fixtures/code/attendance/2026-11.csv"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "files": [
+      "clean.py",
+      "attendance_clean.csv",
+      "summary.csv",
+      "README.md"
+    ],
+    "check": {
+      "script": "lc4_attendance.py",
+      "max": 5
+    }
+  },
+  "score_points": [
+    {
+      "id": "rows",
+      "text": "清洗后行集合与真值完全一致（112 行）"
+    },
+    {
+      "id": "summary",
+      "text": "每人各状态次数对"
+    },
+    {
+      "id": "rerun",
+      "text": "clean.py 在原始数据上重跑结果一致"
+    },
+    {
+      "id": "readme",
+      "text": "README 说清每类脏数据怎么处理"
+    },
+    {
+      "id": "encoding",
+      "text": "GBK / BOM / 11月3日 这类都处理了"
+    }
+  ]
+}
