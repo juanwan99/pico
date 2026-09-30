@@ -300,3 +300,42 @@ async def test_finalize_true_multi_full_delivery_succeeds(tmp_path, monkeypatch)
         assert run is not None
         assert run.status == "succeeded"
         assert run.error is None
+
+
+@pytest.mark.asyncio
+async def test_finalize_mints_no_file_beside_workspace_delivery(tmp_path, monkeypatch) -> None:
+    """#1090 LC4: the box delivered clean.py; a reply quoting it (or a prompt saying
+    「生成 attendance_clean.csv」) must not add a second, fake file."""
+    from app.db import ArtifactRow, RunRow, TaskRow, new_id
+    from app.openai_compat import _finalize_run
+
+    factory = await _boot_db(tmp_path, monkeypatch, "finalize-no-mint.db")
+    task_id, run_id = new_id(), new_id()
+    prompt = "写 clean.py，在输出目录生成 attendance_clean.csv"
+    async with factory() as session:
+        session.add(TaskRow(id=task_id, school_id="s", membership_id="m", title="lc4"))
+        session.add(RunRow(id=run_id, task_id=task_id, status="running", prompt=prompt, model="m"))
+        session.add(
+            ArtifactRow(
+                id=new_id(),
+                task_id=task_id,
+                run_id=run_id,
+                kind="py",
+                title="clean.py",
+                inline="print(1)\nprint(2)\n",
+                content_encoding="utf8",
+                byte_size=18,
+            )
+        )
+        await session.commit()
+
+    await _finalize_run(
+        run_id,
+        status="succeeded",
+        final_text="核心逻辑：\n```clean.py\nprint(1)\n```\n",
+        task_id=task_id,
+        user_prompt=prompt,
+    )
+    async with factory() as session:
+        rows = (await session.execute(select(ArtifactRow).where(ArtifactRow.run_id == run_id))).scalars().all()
+    assert [(r.kind, r.title) for r in rows] == [("py", "clean.py")]
