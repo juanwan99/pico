@@ -135,9 +135,13 @@ def test_thinking_extra_body_gemini_omits_deepseek_thinking(monkeypatch: pytest.
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
-    assert thinking_extra_body("pico-fast") == {}
+    off = {"extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}}
+    assert thinking_extra_body("pico-fast") == off
     assert thinking_extra_body("pico-deep") == {"reasoning_effort": "medium"}
-    assert thinking_extra_body("gemini-3.8-flash", thinking=False) == {}
+    assert thinking_extra_body("gemini-3.8-flash", thinking=False) == off
+    # pro may not turn thinking off; leave it alone.
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.1-pro")
+    assert thinking_extra_body("pico-fast") == {}
 
 
 def test_circuit_breaker_only_in_thinking_on_lane() -> None:

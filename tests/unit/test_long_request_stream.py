@@ -209,3 +209,48 @@ async def test_stream_chat_retries_524_once(monkeypatch: pytest.MonkeyPatch) -> 
     chunks = [piece async for piece in stream_chat("hi")]
     assert chunks == ["ok"]
     assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_reports_upstream_finish(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A length cut must reach the caller, not be rewritten as stop (#1116)."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    captured: dict = {}
+
+    def _chunk(content: str | None, finish: str | None) -> SimpleNamespace:
+        choice = SimpleNamespace(delta=SimpleNamespace(content=content), finish_reason=finish)
+        return SimpleNamespace(usage=None, choices=[choice])
+
+    class _Stream:
+        def __init__(self) -> None:
+            self._items = [_chunk('{"items": [', None), _chunk("", "length")]
+
+        def __aiter__(self) -> _Stream:
+            return self
+
+        async def __anext__(self) -> SimpleNamespace:
+            if self._items:
+                return self._items.pop(0)
+            raise StopAsyncIteration
+
+    class _Completions:
+        async def create(self, **kwargs: object) -> _Stream:
+            captured.update(kwargs)
+            return _Stream()
+
+    class _Client:
+        def __init__(self, **_kwargs: object) -> None:
+            self.chat = SimpleNamespace(completions=_Completions())
+
+    monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _Client)
+    finish: dict = {}
+    chunks = [p async for p in stream_chat("hi", model="pico-fast", thinking=False, finish_out=finish)]
+    assert chunks == ['{"items": [']
+    assert finish == {"finish_reason": "length"}
+    assert captured["extra_body"] == {
+        "extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}
+    }

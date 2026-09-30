@@ -363,8 +363,10 @@ def _coerce_default_model(model: str, settings: Settings) -> str:
     return model
 
 
-def _effective_max_tokens(requested: int | None, cap: int) -> int:
-    default = min(2048, cap)
+def _effective_max_tokens(requested: int | None, cap: int, *, json_only: bool = False) -> int:
+    # json_only callers (edu sidebar extraction) rarely send max_tokens; 2048
+    # cut their JSON mid-array (#1116).
+    default = min(8192 if json_only else 2048, cap)
     return min(requested if requested and requested > 0 else default, cap)
 
 
@@ -1636,7 +1638,9 @@ async def chat_completions(
     token_ceiling = (
         settings.pico_run_short_max_tokens if use_direct else settings.pico_run_max_tokens
     )
-    effective_max_tokens = _effective_max_tokens(body.max_tokens, token_ceiling)
+    effective_max_tokens = _effective_max_tokens(
+        body.max_tokens, token_ceiling, json_only=json_only
+    )
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
 
@@ -1676,6 +1680,7 @@ async def chat_completions(
                 system = system + "\n\n" + teacher_extra
             parts: list[str] = []
             direct_usage: dict[str, Any] = {}
+            direct_finish: dict[str, Any] = {}
             try:
                 if json_only and sidebar_web_hits and sidebar_web_hits.get("honest_miss"):
                     text = honest_miss_json(sidebar_web_hits)
@@ -1688,6 +1693,7 @@ async def chat_completions(
                         model=model,
                         thinking=False if json_only else None,
                         usage_out=direct_usage,
+                        finish_out=direct_finish,
                     ):
                         if piece:
                             parts.append(piece)
@@ -1752,7 +1758,10 @@ async def chat_completions(
                 {
                     "index": 0,
                     "message": {"role": "assistant", "content": text},
-                    "finish_reason": "stop",
+                    "finish_reason": (
+                        (direct_finish.get("finish_reason") if use_direct else None)
+                        or "stop"
+                    ),
                 }
             ],
         }
@@ -1842,6 +1851,7 @@ async def chat_completions(
                 system = system + "\n\n" + teacher_extra
             parts: list[str] = []
             stream_usage: dict[str, Any] = {}
+            stream_finish: dict[str, Any] = {}
             finalized = False
             try:
                 async for piece in iter_with_idle_ticks(
@@ -1853,6 +1863,7 @@ async def chat_completions(
                         model=model,
                         thinking=False if json_only else None,
                         usage_out=stream_usage,
+                        finish_out=stream_finish,
                     )
                 ):
                     if piece is None:
@@ -1906,7 +1917,7 @@ async def chat_completions(
                     )
             yield chunk(
                 {},
-                finish="stop",
+                finish=stream_finish.get("finish_reason") or "stop",
                 usage=_compat_usage_payload(prompt, "".join(parts), stream_usage or None),
             )
             yield b"data: [DONE]\n\n"
