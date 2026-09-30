@@ -301,7 +301,34 @@ export function lastProcessStep(events: PicoRunEvent[]): string | null {
   return latestTool || latestAgent;
 }
 
-export function composeProcessHint(run: PicoRun | null, events: PicoRunEvent[]): string | null {
+/** Silence after the last ledger event before the strip says the model is thinking. */
+export const THINKING_QUIET_MS = 10_000;
+
+/** While a tool runs or a choice waits, silence is not the model thinking. */
+const NOT_THINKING_AFTER = new Set(['tool.call', 'ui.prompt.begin']);
+
+/**
+ * 「模型在思考 · 已 N 秒」when an active run has been quiet a while. Between
+ * tool.result and the next tool, the model (or a slow first token) often gives
+ * no event for 10–60s+ and the strip would sit on the last finished step (#1090).
+ * ``quietMs`` is client-observed time since the event list last grew.
+ */
+export function thinkingLine(events: PicoRunEvent[], quietMs: number): string | null {
+  if (quietMs < THINKING_QUIET_MS) {
+    return null;
+  }
+  const last = events[events.length - 1];
+  if (last && NOT_THINKING_AFTER.has(last.type)) {
+    return null;
+  }
+  return `模型在思考 · 已 ${Math.floor(quietMs / 1000)} 秒`;
+}
+
+export function composeProcessHint(
+  run: PicoRun | null,
+  events: PicoRunEvent[],
+  quietMs = 0,
+): string | null {
   // Teachers need a fixed process strip: runtime · step/tool · terminal when known.
   const runtime = runtimeHint(events);
   const step = lastProcessStep(events);
@@ -314,6 +341,10 @@ export function composeProcessHint(run: PicoRun | null, events: PicoRunEvent[]):
     }
     // Package B: job lives on the server; tab close does not stop it.
     const cloud = '云端继续中';
+    const thinking = thinkingLine(events, quietMs);
+    if (thinking) {
+      return [cloud, runtime, thinking].filter(Boolean).join(' · ');
+    }
     if (step) {
       return [cloud, runtime, step].filter(Boolean).join(' · ');
     }
@@ -437,6 +468,7 @@ export function usePicoTaskLedger(
   const recoveryDeadlineRef = useRef(0);
   const cancelRequestRunIdRef = useRef<string | null>(null);
   const cancelErrorRunIdRef = useRef<string | null>(null);
+  const quietRef = useRef({ key: '', at: 0 });
   runRef.current = run;
   taskRef.current = task;
 
@@ -812,13 +844,21 @@ export function usePicoTaskLedger(
     return () => window.clearInterval(id);
   }, [isSubmitting, conversationId, activeRun, recovering, hasRun]);
 
+  // When did this browser last see the event list grow? Client clock only:
+  // ledger created_at is naive UTC and teachers' clocks drift.
+  const lastSeq = events.length ? events[events.length - 1].seq : -1;
+  const quietKey = `${run?.id ?? ''}:${lastSeq}`;
+  if (quietRef.current.key !== quietKey) {
+    quietRef.current = { key: quietKey, at: Date.now() };
+  }
+
   return {
     task,
     run,
     events,
     artifacts,
     statusLabel: computeRunStatusLabel(run, isSubmitting, artifacts, events),
-    processHint: composeProcessHint(run, events),
+    processHint: composeProcessHint(run, events, Date.now() - quietRef.current.at),
     loading,
     error: rerunError ?? cancelError ?? rebindError ?? loadError,
     refresh,
