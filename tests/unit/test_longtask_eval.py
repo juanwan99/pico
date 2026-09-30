@@ -113,7 +113,7 @@ def test_coding_suite_cases_and_checkers() -> None:
     cases = lte.load_cases("coding")
     assert [c["id"] for c in cases] == ["LC1", "LC2", "LC3", "LC4", "LC5"]
     assert [c["id"] for c in lte.load_cases()][:8] == [f"LT{i}" for i in range(1, 9)]
-    assert len(lte.load_cases()) == 13
+    assert len(lte.load_cases("office")) + len(cases) == 13
     assert any(len(c.get("turns") or []) >= 3 for c in cases)
     for c in cases:
         check = c["expect"]["check"]
@@ -123,6 +123,55 @@ def test_coding_suite_cases_and_checkers() -> None:
             for att in turn.get("attachments") or []:
                 assert lte._attachment_bytes(att), (c["id"], att["name"])
         assert 1 <= len(c["score_points"]) <= 5
+
+
+def test_hard_suite_cases_and_checkers() -> None:
+    """LT/LC saturated at 13/13 on two models; LH cases exist to tell them apart."""
+    cases = lte.load_cases("hard")
+    assert [c["id"] for c in cases] == ["LH1", "LH2", "LH3"]
+    assert [c["id"] for c in lte.load_cases()][-3:] == ["LH1", "LH2", "LH3"]
+    assert any(len(c["turns"]) >= 6 for c in cases)
+    for c in cases:
+        check = c["expect"]["check"]
+        assert (lte.CHECKS_DIR / check["script"]).is_file(), c["id"]
+        assert lte.max_points(c["expect"]) == 1 + check["max"]
+        assert int(c["timeout_s"]) >= 1800
+        for turn in c["turns"]:
+            for att in turn.get("attachments") or []:
+                assert lte._attachment_bytes(att), (c["id"], att["name"])
+
+
+def test_grade_book_is_seeded_and_carries_traps() -> None:
+    import io
+
+    from openpyxl import load_workbook
+
+    def cells(raw: bytes) -> list[list[object]]:
+        wb = load_workbook(io.BytesIO(raw))
+        return [[c.value for c in row] for ws in wb.worksheets for row in ws.iter_rows()]
+
+    raw = lte._grade_book()
+    assert cells(raw) == cells(lte._grade_book())
+    wb = load_workbook(io.BytesIO(raw))
+    mid, fin = wb["期中"], wb["期末"]
+    assert mid.max_row == 271 and fin.max_row == 270
+    names = [r[0].value for r in mid.iter_rows(min_row=2)]
+    assert len({n.strip() for n in names}) == 6 and len(set(names)) > 6
+    marks = [c.value for row in fin.iter_rows(min_row=2) for c in row[3:]]
+    assert "作废" in marks and "缺考" in marks and None in marks
+    ids_mid = [r[1].value for r in mid.iter_rows(min_row=2)]
+    ids_fin = [r[1].value for r in fin.iter_rows(min_row=2)]
+    assert ids_fin != sorted(ids_fin) and len(set(ids_mid) - set(ids_fin)) == 1
+
+
+def test_zip_dir_skips_pycache(tmp_path: Path) -> None:
+    import io
+    import zipfile
+
+    raw = lte._zip_dir("fixtures/code/gradebook")
+    names = zipfile.ZipFile(io.BytesIO(raw)).namelist()
+    assert "gradebook/gradebook/models.py" in names and "gradebook/tests/test_loader.py" in names
+    assert not any("__pycache__" in n for n in names)
 
 
 def test_zip_dir_is_deterministic_project() -> None:
