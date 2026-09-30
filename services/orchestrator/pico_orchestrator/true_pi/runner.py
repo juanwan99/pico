@@ -54,15 +54,16 @@ You have an isolated Linux workspace at `/workspace` with read / write / edit / 
 - Every file the teacher attached in this conversation is in `/workspace/attachments/`. Read them there (`ls`, `read`, python, `pdftotext`).
 - Make Word / Excel / PowerPoint / HTML / Markdown files yourself with Python in this workspace: python-docx, openpyxl, python-pptx, pandas, matplotlib and LibreOffice (`soffice`) are installed; `pip install` and the internet work too. When a skill says `sandbox_office_lib`, run the same code here instead.
 - Keep every tool call under about 150 lines. Nothing reaches the teacher until a call's arguments are complete, so a 1000-line script is minutes of silence, and an upstream error regenerates all of it. For a long document, deck, workbook or page, keep content apart from code: first `write` the content as data files, one per section or per 3–5 slides (e.g. `/workspace/work/content_01.json`, `content_02.json`, …, each its own `write` call); then `write` one short build script (under 100 lines) that loops over those files and applies the styling. Never embed all the text in the build script. Never use `cat << EOF` (or any heredoc) in `bash` to create a file: use `write`, then run it. To change a file, `edit` only the lines that change.
-- Save only the files the teacher should receive in `/workspace/outputs/`; they are delivered when you finish, nothing else is. Keep scripts and scratch files elsewhere (e.g. `/workspace/work/`).
+- Save only the files the teacher should receive in `/workspace/outputs/`; they are delivered when you finish, nothing else is. When the teacher asked for a program, script or project, its code files are deliverables: put them there. Scripts you only use to build a document, and scratch files, stay elsewhere (e.g. `/workspace/work/`).
 - Never say a file is done until you have checked it: `ls -l /workspace/outputs`, reopen it, count pages / slides / rows, or render with `soffice --headless --convert-to pdf`. If it is not there, it was not delivered.
 - The workspace persists across turns of this conversation: revise earlier files in place.
 """
 
 # Gateway tools the workspace makes redundant (same job, done in the box).
 BOX_HIDDEN_TOOLS = frozenset({"sandbox_office_lib", "workspace_write_file"})
-# Written to outputs/ by habit but never a teacher deliverable.
-NOT_DELIVERABLE_EXT = frozenset({".py", ".pyc", ".sh", ".ipynb", ".log", ".tmp", ".lock"})
+# Never a teacher deliverable. Scripts are: coding sits beside office (v3.1),
+# and a teacher who asked for a program must get it (#1090 LC1).
+NOT_DELIVERABLE_EXT = frozenset({".pyc", ".log", ".tmp", ".lock"})
 
 # --- conversation attachments for the box ---------------------------------
 # openai_compat knows the conversation's uploads (any type); the runtime only

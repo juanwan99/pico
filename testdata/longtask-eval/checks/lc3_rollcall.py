@@ -23,6 +23,20 @@ def picked(text):
     return hits[0] if len(hits) == 1 else None
 
 
+def settled(page, sel, quiet_ms=600, max_ms=5000):
+    """Text of ``sel`` once it stops changing: pages may roll names before landing."""
+    last, still, waited = None, 0, 0
+    while waited < max_ms:
+        now = page.text_content(sel)
+        still = still + 100 if now == last else 0
+        if still >= quiet_ms:
+            break
+        last = now
+        page.wait_for_timeout(100)
+        waited += 100
+    return last
+
+
 def main():
     sc = Score()
     path = page_path()
@@ -48,16 +62,14 @@ def main():
             got = []
             for _ in NAMES:
                 page.click("#pick")
-                page.wait_for_timeout(150)
-                got.append(picked(page.text_content("#result")))
+                got.append(picked(settled(page, "#result")))
             sc.check(
                 sorted(n for n in got if n) == sorted(NAMES),
                 f"5 picks should cover all 5 once, got {got}",
             )
             page.click("#pick")
-            page.wait_for_timeout(150)
             sc.check(
-                picked(page.text_content("#result")) is not None,
+                picked(settled(page, "#result")) is not None,
                 "6th pick (new round) shows no name",
                 essential=False,
             )

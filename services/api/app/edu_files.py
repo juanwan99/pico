@@ -688,7 +688,11 @@ async def persist_edu_file(
     suffix = ""
     if "." in (filename or ""):
         suffix = (filename or "").rsplit(".", 1)[-1].strip().lower()
-    if kind in TEXT_KINDS and text_body:
+    # Text kinds whose extract is the file itself stay one utf8 row. When the
+    # extract differs (csv/tsv become k=v rows and get cut at MAX_ROWS; GBK,
+    # BOM, over-long), keep the original like Office does: the workspace box
+    # gets these bytes, the model and KB read kb_text + excerpt (#1090 LC1).
+    if kind in TEXT_KINDS and text_body and data == text_body.encode("utf-8"):
         stored, encoding, byte_size, digest = encode_artifact_payload(text_body)
         artifact_kind = "file"
     elif kind in PIXEL_KINDS or suffix in PIXEL_KINDS:
