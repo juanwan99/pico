@@ -11,7 +11,6 @@ from app.openai_compat import (
     ChatMessage,
     _conversation_id_from,
     _extract_file_artifacts,
-    _file_from_user_prompt,
     _model_preference_from_prompt,
 )
 
@@ -29,13 +28,11 @@ def test_extract_file_fence_bare_name() -> None:
     assert "hello world" in files[0][1]
 
 
-def test_file_from_user_prompt_cn() -> None:
-    files = _file_from_user_prompt("创建 hello.txt，内容为 hi")
-    assert files == [("hello.txt", "hi")]
+def test_no_file_is_minted_from_the_teacher_prompt() -> None:
+    """#1090 LC4: 「生成 attendance_clean.csv」 minted a 2-byte 「hi」 file beside the real one."""
+    import app.openai_compat as oc
 
-
-def test_file_from_user_prompt_no_match() -> None:
-    assert _file_from_user_prompt("只回：演示OK") == []
+    assert not hasattr(oc, "_file_from_user_prompt")
 
 
 def test_model_preference_routes_file_skill_to_pico_agent() -> None:

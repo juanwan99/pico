@@ -680,27 +680,6 @@ def _extract_file_artifacts(text: str) -> list[tuple[str, str]]:
     return out
 
 
-def _file_from_user_prompt(user_prompt: str | None) -> list[tuple[str, str]]:
-    """Synthesize file when user explicitly asks to create name.ext with content."""
-    import re
-
-    if not user_prompt:
-        return []
-    um = re.search(
-        r"(?:创建|生成|写|保存).{0,40}?([\w.\-]+\.(?:txt|md|csv|json))",
-        user_prompt,
-        re.IGNORECASE,
-    )
-    if not um:
-        return []
-    name = um.group(1)
-    cm = re.search(r"内容\s*[为是:=：]\s*([^\n，,。；;]{1,200})", user_prompt)
-    body = "hi"
-    if cm:
-        body = cm.group(1).strip().strip("\"'「」")
-    return [(name, body or "hi")]
-
-
 def _this_round_delivery_plan(
     raw_prompt: str,
     *,
@@ -1003,9 +982,10 @@ async def _finalize_run(
                 )
             )
             existing_keys = {(kind, title) for kind, title in existing.all()}
-            files = _extract_file_artifacts(final_text)
-            if not files:
-                files = _file_from_user_prompt(user_prompt)
+            # Fenced blocks become files only when the run delivered nothing
+            # else: a reply quoting part of clean.py must not sit beside the
+            # real clean.py from the workspace (#1090 LC4).
+            files = [] if existing_keys else _extract_file_artifacts(final_text)
             for name, body in files:
                 key = ("file", name)
                 if key in existing_keys:
