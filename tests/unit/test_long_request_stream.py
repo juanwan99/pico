@@ -254,3 +254,51 @@ async def test_stream_chat_reports_upstream_finish(monkeypatch: pytest.MonkeyPat
     assert captured["extra_body"] == {
         "extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}
     }
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_thinking_only_is_length(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Budget spent on thinking with no answer: upstream says stop, caller gets length."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+
+    def _items(text: str, tokens: int) -> list[SimpleNamespace]:
+        choice = SimpleNamespace(delta=SimpleNamespace(content=text), finish_reason="stop")
+        usage = {"prompt_tokens": 10, "completion_tokens": tokens, "total_tokens": 10 + tokens}
+        return [
+            SimpleNamespace(usage=None, choices=[choice]),
+            SimpleNamespace(usage=usage, choices=[]),
+        ]
+
+    class _Stream:
+        def __init__(self, items: list[SimpleNamespace]) -> None:
+            self._items = items
+
+        def __aiter__(self) -> _Stream:
+            return self
+
+        async def __anext__(self) -> SimpleNamespace:
+            if self._items:
+                return self._items.pop(0)
+            raise StopAsyncIteration
+
+    plan: list[list[SimpleNamespace]] = [_items("", 61), _items("ok", 5)]
+
+    class _Completions:
+        async def create(self, **_kwargs: object) -> _Stream:
+            return _Stream(plan.pop(0))
+
+    class _Client:
+        def __init__(self, **_kwargs: object) -> None:
+            self.chat = SimpleNamespace(completions=_Completions())
+
+    monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _Client)
+    finish: dict = {}
+    assert [p async for p in stream_chat("hi", max_tokens=64, finish_out=finish)] == []
+    assert finish == {"finish_reason": "length"}
+    finish = {}
+    assert [p async for p in stream_chat("hi", max_tokens=64, finish_out=finish)] == ["ok"]
+    assert finish == {"finish_reason": "stop"}
