@@ -438,13 +438,21 @@ def test_conversation_files_are_taken_once() -> None:
     assert take_conversation_files("m2", "c1") == []
 
 
-async def test_land_outputs_skips_scripts(monkeypatch) -> None:
+async def test_land_outputs_delivers_code_skips_junk(monkeypatch) -> None:
+    # v3.1 coding beside office: a program the teacher asked for is delivered (#1090 LC1).
     key = WorkspaceKey.for_run(school_id="s", membership_id="m", conversation_id="c", run_id="r")
-    files = {"outputs/build.py": b"print(1)", "outputs/.hidden": b"x", "outputs/plan.md": b"# plan"}
+    files = {
+        "outputs/grade_stats.py": b"print(1)",
+        "outputs/run.sh": b"echo 1",
+        "outputs/grade_stats.cpython-312.pyc": b"\x00",
+        "outputs/debug.log": b"x",
+        "outputs/.hidden": b"x",
+        "outputs/plan.md": b"# plan",
+    }
     await _fake_listing(monkeypatch, files)
     store = _Store()
     results = await land_outputs(key=key, before={}, since=0.0, artifact_store=store, principal=object())
-    assert [r["title"] for _, r in results] == ["plan.md"]
+    assert sorted(r["title"] for _, r in results) == ["grade_stats.py", "plan.md", "run.sh"]
 
 
 def test_box_hides_redundant_office_tools() -> None:

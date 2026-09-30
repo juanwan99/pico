@@ -194,6 +194,54 @@ def test_post_markdown_is_workspace_readable(client: TestClient, tmp_path, monke
     asyncio.run(_check())
 
 
+def _workspace_bytes(conversation_id: str) -> dict[str, bytes]:
+    import asyncio
+
+    from app.auth import Principal
+    from app.db import session_factory
+    from app.edu_files import uploads_for_conversation, workspace_files_from_rows
+
+    principal = Principal(
+        school_id="school-a",
+        membership_id="m-edu",
+        scopes=["ai:run", "ai:read"],
+        iss="test",
+        aud="test",
+        exp=0,
+        raw={},
+    )
+
+    async def _go() -> tuple[dict[str, bytes], list[dict]]:
+        async with session_factory()() as session:
+            rows = await uploads_for_conversation(session, principal, conversation_id)
+            return dict(await workspace_files_from_rows(session, rows)), rows
+
+    files, rows = asyncio.run(_go())
+    return files, {r["title"]: r for r in rows}
+
+
+def test_box_gets_original_bytes_of_csv_and_gbk_text(client: TestClient) -> None:
+    """#1090 LC1: the box read a csv as extracted k=v rows. It must get the file."""
+    token = _token()
+    csv_raw = "姓名,组别,数学\n甲,A,90\n乙,B,缺考\n".encode()
+    gbk_raw = "姓名,状态\n王五,出勤\n".encode("gbk")
+    md_raw = "# 班情\n人数 42\n".encode()
+    for name, raw in (("成绩.csv", csv_raw), ("考勤.txt", gbk_raw), ("班情.md", md_raw)):
+        res = client.post(
+            "/v1/files",
+            headers={"authorization": f"Bearer {token}", "X-Conversation-Id": "convo-box"},
+            json={"filename": name, "content_b64": base64.b64encode(raw).decode("ascii")},
+        )
+        assert res.status_code == 200, res.text
+        assert res.json()["status"] == "ok"
+    files, rows = _workspace_bytes("convo-box")
+    assert files == {"成绩.csv": csv_raw, "考勤.txt": gbk_raw, "班情.md": md_raw}
+    # The model's prompt still gets the extract (k=v rows, decoded GBK).
+    assert "数学=90" in rows["成绩.csv"]["excerpt"]
+    assert "王五" in rows["考勤.txt"]["excerpt"]
+    assert rows["班情.md"]["kind"] == "file" and "人数 42" in rows["班情.md"]["excerpt"]
+
+
 def test_foreign_membership_cannot_read(client: TestClient) -> None:
     raw = _xlsx_bytes([["a", "b"]])
     owner = _token()
