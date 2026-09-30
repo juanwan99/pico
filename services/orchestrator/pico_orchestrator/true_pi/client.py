@@ -400,7 +400,7 @@ class SubprocessTransport(TruePiTransport):
         self._stderr_tail: list[str] = []
         self._stream_seen = 0
         self._think_seen = 0
-        self._toolcall_seen: dict[int, list[float]] = {}
+        self._toolcall_seen: dict[int, dict[str, Any]] = {}
 
     def models_document(self) -> dict[str, Any]:
         return true_pi_models_document(
