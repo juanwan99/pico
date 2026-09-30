@@ -1,9 +1,9 @@
-# DIRECTION-NOW · 业主方向锁定（2026-08-09 · v1.5 北极星 2026-09-28）
+# DIRECTION-NOW · 业主方向锁定（2026-08-09 · v1.6 北极星 2026-09-30）
 
 ```text
 STATUS: BINDING · 业主书面四条 + 阶段 1.5 加线 + 北极星（Grok 用法 · 办公主线 · 长任务第一 · 能力并列 · 工作区交上游 Pi）
 DATE: 2026-08-09
-UPDATED: 2026-09-28 · 业主 #1090 第一需求 = 长任务高质量跑完；放开 A–F；北极星 v1.5
+UPDATED: 2026-09-28 · 业主 #1090 第一需求 = 长任务高质量跑完；放开 A–F；北极星 v1.5；2026-09-30 v1.6 办公与编程并列（对标 Codex / Claude Code）
 仓: juanwan99/pico ONLY
 SEE: HANDOFF-WB-PI · TRUTH-FREEZE v3.0 · STATE-NOW · #744 · #919 · #1090
 CLAIM-WB-DEGREE-WEB: YES（业主 2026-08-26 · #449/#316 · 以 STATE-NOW 为准 · 本页不代签）
