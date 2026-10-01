@@ -25,6 +25,10 @@ Load test (#1135): ``--parallel 20 --repeat 3 --spread 5`` runs every case 3×,
 20 at once, each job its own synthetic member spread over 5 schools. Each
 result records ``queued_max`` (most runs ever ahead of it in the runner's line;
 -1 = never queued).
+
+Extra-long cases (LX*, ``--suite xlong``, #1139) are built to overflow one context
+window so Pi's official compaction has to fire mid-task; each result records
+``compactions`` / ``compaction_failed``. ``--suite all`` leaves them out (cost).
 """
 
 from __future__ import annotations
@@ -52,7 +56,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CASES_DIR = ROOT / "testdata" / "longtask-eval"
 CHECKS_DIR = CASES_DIR / "checks"
 PRODUCED_KINDS = {"xlsx", "docx", "pptx", "html"}
-SUITES = {"office": "LT", "coding": "LC", "hard": "LH"}
+SUITES = {"office": "LT", "coding": "LC", "hard": "LH", "xlong": "LX"}
+DEFAULT_SUITES = ("office", "coding", "hard")
 
 
 @dataclass
@@ -70,6 +75,8 @@ class CaseResult:
     artifacts: int = 0
     fail_reason: str = ""
     queued_max: int = -1
+    compactions: int = 0
+    compaction_failed: int = 0
     membership: str = ""
     notes: list[str] = field(default_factory=list)
     score_points: list[dict[str, str]] = field(default_factory=list)
@@ -189,7 +196,7 @@ class Pico:
 
 
 def load_cases(suite: str = "all") -> list[dict[str, Any]]:
-    prefixes = list(SUITES.values()) if suite == "all" else [SUITES[suite]]
+    prefixes = [SUITES[s] for s in DEFAULT_SUITES] if suite == "all" else [SUITES[suite]]
     cases = []
     for prefix in prefixes:
         for path in sorted(CASES_DIR.glob(f"{prefix}*.json")):
@@ -293,7 +300,15 @@ def _grade_book() -> bytes:
     return buf.getvalue()
 
 
-GENERATORS = {"triple_workbook": _triple_workbook, "grade_book": _grade_book}
+def _lx_records() -> bytes:
+    """LX1: the checker rebuilds truth from the same module, so it lives in checks/."""
+    sys.path.insert(0, str(CHECKS_DIR))
+    import lx_corpus
+
+    return lx_corpus.corpus_zip()
+
+
+GENERATORS = {"triple_workbook": _triple_workbook, "grade_book": _grade_book, "lx_records": _lx_records}
 
 
 def _produced(arts: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -394,7 +409,7 @@ def _classify_fail(status: str, error: str) -> str:
     return st or "other"
 
 
-def _run_events(pico: Pico, conversation_id: str) -> tuple[int, int, str, str, int]:
+def _run_events(pico: Pico, conversation_id: str, res: CaseResult | None = None) -> tuple[int, int, str, str, int]:
     tool_calls = 0
     steps = 0
     status = "?"
@@ -418,6 +433,10 @@ def _run_events(pico: Pico, conversation_id: str) -> tuple[int, int, str, str, i
                 tool_calls += 1
             if kind == "agent.step":
                 steps += 1
+            if res is not None and kind == "compaction.end":
+                res.compactions += 1
+            if res is not None and kind == "compaction.failed":
+                res.compaction_failed += 1
             if kind == "run.queued":
                 ahead = (e.get("payload") or {}).get("ahead")
                 if isinstance(ahead, int):
@@ -685,7 +704,7 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runt
                 res.notes.append("stream dropped, followed run")
             res.wall_s += wall
         arts = pico.artifacts(cid)
-        res.tool_calls, res.agent_steps, status, error, res.queued_max = _run_events(pico, cid)
+        res.tool_calls, res.agent_steps, status, error, res.queued_max = _run_events(pico, cid, res)
         res.fail_reason = _classify_fail(status, error)
         score_case(case, arts, pico, res, image, runtime)
         if status == "failed" and not res.fail_reason:
@@ -708,8 +727,8 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runt
 
 def render_markdown(results: list[CaseResult]) -> str:
     lines = [
-        "| 例 | 标题 | ok | 自动分 | 失败原因 | 假绿 | 耗时 s | 工具 | 步 | 产物 | 备注 |",
-        "|---|---|---|---:|---|---|---:|---:|---:|---:|---|",
+        "| 例 | 标题 | ok | 自动分 | 失败原因 | 假绿 | 耗时 s | 工具 | 步 | 压缩 | 产物 | 备注 |",
+        "|---|---|---|---:|---|---|---:|---:|---:|---:|---:|---|",
     ]
     for r in results:
         notes = "; ".join(r.notes)[:180]
@@ -717,6 +736,7 @@ def render_markdown(results: list[CaseResult]) -> str:
             f"| {r.case} | {r.title} | {'✅' if r.ok else '❌'} | {r.auto_score}/{r.max_score or 5} | "
             f"{r.fail_reason or '—'} | {'是' if r.fake_green else '—'} | {r.wall_s:.1f} | "
             f"{r.tool_calls} | {r.agent_steps} | "
+            f"{r.compactions}{f'（败 {r.compaction_failed}）' if r.compaction_failed else ''} | "
             f"{r.artifacts} | {notes or '—'} |"
         )
     n = len(results)
@@ -745,7 +765,7 @@ def main() -> int:
     ap.add_argument("--model", default=os.environ.get("PICO_REGRESS_MODEL") or "pico-fast")
     ap.add_argument("--cases", default="", help="comma ids, default every case in --suite")
     ap.add_argument(
-        "--suite", choices=["all", *SUITES], default="all", help="LT office, LC coding, LH hard"
+        "--suite", choices=["all", *SUITES], default="all", help="LT office, LC coding, LH hard, LX extra-long (not in all)"
     )
     ap.add_argument("--check-image", default="pico-workspace:v1", help="image coding checkers run in")
     ap.add_argument("--check-runtime", default="runsc", help="docker runtime for coding checkers")
