@@ -3,7 +3,8 @@
 Two listeners, one process:
 
 * control (127.0.0.1:18790, pico-api only, ``X-Pico-Runner-Token``):
-  WebSocket ``/v1/session`` pipes Pi RPC stdio of one container; file
+  WebSocket ``/v1/session`` pipes Pi RPC stdio of one container (when the
+  runner is full the request waits in line and gets ``queued`` frames); file
   upload (attachments) / listing + download (outputs) — only while no box
   is running on that workspace.
 * proxy (pico-ws gateway IP:18791, workspace containers only): forwards a
@@ -27,6 +28,7 @@ import os
 import shutil
 import tempfile
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -46,6 +48,8 @@ from pi_runner.policy import (
     container_name,
     docker_run_argv,
     filter_env,
+    mem_available_mb,
+    queue_order,
     safe_relpath,
     validate_pi_args,
     validate_run_id,
@@ -64,6 +68,10 @@ MAX_ERR_LINE = 8 * 1024
 MAX_PROXY_BODY = 16 * 1024 * 1024
 PROXY_PER_RUN = 4
 WATCH_EVERY_S = 5
+# A queued request re-checks room this often (host memory frees without an
+# event) and tells pico-api it is still in line at least every QUEUE_PING_S.
+QUEUE_TICK_S = 2.0
+QUEUE_PING_S = 15.0
 
 MODEL_PATHS = frozenset({"v1/chat/completions", "v1/responses", "v1/models"})
 TOOL_PATHS = frozenset({"v1/tool", "health"})
@@ -79,12 +87,24 @@ class Session:
     proxy_waiting: int = 0
 
 
+@dataclass(eq=False)
+class Waiter:
+    """One start request waiting for room (or holding a granted slot)."""
+
+    key: WorkspaceKey
+    since: float = field(default_factory=time.monotonic)
+    granted: asyncio.Event = field(default_factory=asyncio.Event)
+
+
 class Runner:
     def __init__(self, settings: RunnerSettings) -> None:
         self.settings = settings
         with contextlib.suppress(OSError):
             write_resolv_conf(settings)
         self.sessions: dict[str, Session] = {}
+        # In line, and granted but not yet a session (a slot is held for them).
+        self.waiting: list[Waiter] = []
+        self.granted: list[Waiter] = []
         self.lock = asyncio.Lock()
 
     def busy(self, key: WorkspaceKey) -> bool:
@@ -97,17 +117,93 @@ class Runner:
         root.mkdir(parents=True, exist_ok=True)
         return shutil.disk_usage(root).free // (1024 * 1024)
 
-    def _check_capacity(self, key: WorkspaceKey) -> None:
-        if self.busy(key):
+    def avail_mb(self) -> int | None:
+        try:
+            with open("/proc/meminfo", encoding="ascii") as fh:
+                return mem_available_mb(fh.read())
+        except OSError:
+            return None
+
+    def _refuse_now(self, key: WorkspaceKey) -> None:
+        """Reasons waiting cannot fix. Caller holds ``self.lock``."""
+        if self.busy(key) or any(w.key == key for w in (*self.waiting, *self.granted)):
             # One box per workspace: no second box racing the first one's files.
             raise PolicyError("runner.workspace_busy", "这个对话上一轮还在运行，请等它结束再发。")
-        if len(self.sessions) >= self.settings.max_sessions:
-            raise PolicyError("runner.busy", "工作区都在忙，请稍后再试。")
-        per_school = sum(1 for s in self.sessions.values() if s.key.school == key.school)
-        if per_school >= self.settings.max_per_school:
-            raise PolicyError("runner.school_busy", "本校同时运行的工作区已满，请稍后再试。")
         if self.free_mb() < self.settings.min_free_mb:
             raise PolicyError("runner.disk_full", "服务器磁盘空间不足，暂时不能开工作区。")
+        if len(self.waiting) >= self.settings.queue_max and not self._room():
+            raise PolicyError("runner.busy", "排队的任务太多，请稍后再试。")
+
+    def _held_schools(self) -> list[str]:
+        return [s.key.school for s in self.sessions.values()] + [w.key.school for w in self.granted]
+
+    def _room(self) -> bool:
+        """Room for one more box anywhere (count ceiling + host memory floor)."""
+        if len(self._held_schools()) >= self.settings.max_sessions:
+            return False
+        avail = self.avail_mb()
+        return avail is None or avail >= self.settings.min_avail_mb
+
+    def _school_room(self, school: str) -> bool:
+        cap = self.settings.max_per_school
+        return cap <= 0 or self._held_schools().count(school) < cap
+
+    def _order(self) -> list[Waiter]:
+        active: dict[str, int] = {}
+        for school in self._held_schools():
+            active[school] = active.get(school, 0) + 1
+        idx = queue_order([(w.key.school, w.since) for w in self.waiting], active)
+        return [self.waiting[i] for i in idx]
+
+    def pump(self) -> None:
+        """Grant held slots to waiters in fair order. Caller holds ``self.lock``."""
+        while self.waiting and self._room():
+            nxt = next((w for w in self._order() if self._school_room(w.key.school)), None)
+            if nxt is None:
+                return
+            self.waiting.remove(nxt)
+            self.granted.append(nxt)
+            nxt.granted.set()
+
+    async def admit(
+        self, key: WorkspaceKey, on_queued: Callable[[int], Awaitable[None]] | None = None
+    ) -> Waiter:
+        """Hold a slot for ``key``; wait in line while the runner is full."""
+        settings = self.settings
+        async with self.lock:
+            self._refuse_now(key)
+            waiter = Waiter(key=key)
+            self.waiting.append(waiter)
+        deadline = time.monotonic() + settings.queue_wait_s
+        told: int | None = None
+        told_at = 0.0
+        try:
+            while True:
+                async with self.lock:
+                    self.pump()
+                    if waiter.granted.is_set():
+                        return waiter
+                    ahead = self._order().index(waiter)
+                now = time.monotonic()
+                if now >= deadline:
+                    raise PolicyError("runner.busy", "排队太久，请稍后再试。")
+                if on_queued is not None and (ahead != told or now - told_at >= QUEUE_PING_S):
+                    await on_queued(ahead)
+                    told, told_at = ahead, now
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(waiter.granted.wait(), timeout=QUEUE_TICK_S)
+        except BaseException:
+            await self.release(waiter)
+            raise
+
+    async def release(self, waiter: Waiter) -> None:
+        """Give back a queue place or a granted slot that never became a box."""
+        async with self.lock:
+            if waiter in self.waiting:
+                self.waiting.remove(waiter)
+            if waiter in self.granted:
+                self.granted.remove(waiter)
+            self.pump()
 
     def prepare_workspace(self, key: WorkspaceKey, *, with_memory: bool) -> Path:
         root = self.settings.workspace_root
@@ -136,7 +232,9 @@ class Runner:
 
     # --- container ------------------------------------------------------------
 
-    async def start(self, spec: dict[str, Any]) -> Session:
+    async def start(
+        self, spec: dict[str, Any], on_queued: Callable[[int], Awaitable[None]] | None = None
+    ) -> Session:
         run_id = validate_run_id(str(spec.get("run_id") or ""))
         raw_key = spec.get("key") or {}
         key = WorkspaceKey.parse(
@@ -152,12 +250,30 @@ class Runner:
         member_used, _ = await asyncio.to_thread(fsafe.usage, [member_dir], stop_after_bytes=cap)
         if member_used > self.settings.member_max_mb * 1024 * 1024:
             raise PolicyError("runner.member_quota", "你的工作区总容量已满，请删掉旧对话后再试。")
+        if run_id in self.sessions:
+            raise PolicyError("runner.duplicate", "run already has a session")
+        waiter = await self.admit(key, on_queued)
+        try:
+            return await self._spawn(run_id, key, pi_args, env, with_memory, spec.get("files"), waiter)
+        except BaseException:
+            await self.release(waiter)
+            raise
+
+    async def _spawn(
+        self,
+        run_id: str,
+        key: WorkspaceKey,
+        pi_args: list[str],
+        env: dict[str, str],
+        with_memory: bool,
+        files: dict[str, str] | None,
+        waiter: Waiter,
+    ) -> Session:
         async with self.lock:
             if run_id in self.sessions:
                 raise PolicyError("runner.duplicate", "run already has a session")
-            self._check_capacity(key)
             ws = await asyncio.to_thread(self.prepare_workspace, key, with_memory=with_memory)
-            await asyncio.to_thread(self.seed_files, ws, spec.get("files"))
+            await asyncio.to_thread(self.seed_files, ws, files)
             # Tokens go through a 0600 env-file, never argv (argv shows in ps).
             fd, env_path = tempfile.mkstemp(prefix="pico-ws-env-")
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -183,6 +299,8 @@ class Runner:
                 # docker reads --env-file before the container starts.
                 asyncio.get_running_loop().call_later(10.0, _unlink_quiet, env_path)
             session = Session(run_id=run_id, key=key, proc=proc)
+            # The held slot becomes this session in one step under the lock.
+            self.granted.remove(waiter)
             self.sessions[run_id] = session
         logger.info("ws start run=%s school=%s runtime=%s", run_id, key.school[:8], self.settings.runtime)
         return session
@@ -211,6 +329,7 @@ class Runner:
         # Container is gone before the workspace is released for file access.
         async with self.lock:
             self.sessions.pop(session.run_id, None)
+            self.pump()
         logger.info(
             "ws stop run=%s code=%s wall=%.0fs",
             session.run_id,
@@ -301,6 +420,8 @@ def build_control_app(runner: Runner) -> FastAPI:
             "ok": True,
             "sessions": len(runner.sessions),
             "max_sessions": settings.max_sessions,
+            "queued": len(runner.waiting),
+            "mem_available_mb": runner.avail_mb(),
             "image": settings.image,
             "runtime": settings.runtime,
         }
@@ -382,7 +503,26 @@ def build_control_app(runner: Runner) -> FastAPI:
             spec = json.loads(await ws.receive_text())
             if spec.get("type") != "start":
                 raise PolicyError("runner.bad_start", "first frame must be start")
-            session = await runner.start(spec)
+
+            async def queued(ahead: int) -> None:
+                await ws.send_text(json.dumps({"type": "queued", "ahead": ahead}))
+
+            # pico-api sends nothing until "ready": any frame or a drop while
+            # in line means it gave up, so the place in line goes back.
+            start_t = asyncio.create_task(runner.start(spec, on_queued=queued))
+            gone_t = asyncio.create_task(ws.receive())
+            await asyncio.wait({start_t, gone_t}, return_when=asyncio.FIRST_COMPLETED)
+            if not start_t.done():
+                start_t.cancel()
+                with contextlib.suppress(BaseException):
+                    await start_t
+                with contextlib.suppress(Exception):
+                    await ws.close()
+                return
+            gone_t.cancel()
+            with contextlib.suppress(BaseException):
+                await gone_t
+            session = start_t.result()
         except PolicyError as exc:
             await ws.send_text(
                 json.dumps({"type": "error", "code": exc.code, "message": exc.message}, ensure_ascii=False)

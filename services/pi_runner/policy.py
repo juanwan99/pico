@@ -74,9 +74,19 @@ class RunnerSettings:
     workspace_max_files: int = 20000
     member_max_mb: int = 5120
     max_session_s: int = 8 * 3600
-    max_sessions: int = 6
-    max_per_school: int = 3
+    # Idle boxes cost ~60-90MB (gVisor + Pi); 1.5G/1.5 CPU are per-box caps,
+    # not reservations. The shared ceiling is the cgroup slice + host memory.
+    max_sessions: int = 32
+    max_per_school: int = 24
     min_free_mb: int = 3072
+    # Host MemAvailable floor: below it no new box starts (requests queue).
+    min_avail_mb: int = 3072
+    # Full runner = wait in line, not fail (card #1135).
+    queue_wait_s: int = 1200
+    queue_max: int = 200
+    # Every box under one systemd slice; its limits (host-setup step 5) are the
+    # pooled CPU/memory budget that keeps the shared host's production safe.
+    cgroup_parent: str = "pico-ws.slice"
     ttl_days: int = 7
     dns: tuple[str, ...] = ("223.5.5.5", "119.29.29.29")
     control_host: str = "127.0.0.1"
@@ -115,9 +125,13 @@ class RunnerSettings:
             workspace_max_files=_env_int("PICO_RUNNER_WS_MAX_FILES", 20000),
             member_max_mb=_env_int("PICO_RUNNER_MEMBER_MAX_MB", 5120),
             max_session_s=_env_int("PICO_RUNNER_MAX_SESSION_S", 8 * 3600),
-            max_sessions=_env_int("PICO_RUNNER_MAX_SESSIONS", 6),
-            max_per_school=_env_int("PICO_RUNNER_MAX_PER_SCHOOL", 3),
+            max_sessions=_env_int("PICO_RUNNER_MAX_SESSIONS", 32),
+            max_per_school=_env_int("PICO_RUNNER_MAX_PER_SCHOOL", 24),
             min_free_mb=_env_int("PICO_RUNNER_MIN_FREE_MB", 3072),
+            min_avail_mb=_env_int("PICO_RUNNER_MIN_AVAIL_MB", 3072),
+            queue_wait_s=_env_int("PICO_RUNNER_QUEUE_WAIT_S", 1200),
+            queue_max=_env_int("PICO_RUNNER_QUEUE_MAX", 200),
+            cgroup_parent=os.environ.get("PICO_RUNNER_CGROUP_PARENT", "pico-ws.slice").strip(),
             ttl_days=_env_int("PICO_RUNNER_TTL_DAYS", 7),
             dns=dns or ("223.5.5.5",),
             control_host=os.environ.get("PICO_RUNNER_CONTROL_HOST", "127.0.0.1"),
@@ -147,6 +161,25 @@ class WorkspaceKey:
 
     def memory_dir(self, root: Path) -> Path:
         return root / self.school / self.member / "_memory"
+
+
+def queue_order(waiting: list[tuple[str, float]], active: dict[str, int]) -> list[int]:
+    """Indices of ``waiting`` ((school, since) pairs) in admission order.
+
+    The school running fewest boxes goes first, then first come first served:
+    a busy school can fill idle capacity but never starves another school.
+    """
+    return sorted(range(len(waiting)), key=lambda i: (active.get(waiting[i][0], 0), waiting[i][1], i))
+
+
+def mem_available_mb(meminfo: str) -> int | None:
+    """``MemAvailable`` from /proc/meminfo text (a container sees the host's)."""
+    for line in meminfo.splitlines():
+        if line.startswith("MemAvailable:"):
+            parts = line.split()
+            if len(parts) >= 2 and parts[1].isdigit():
+                return int(parts[1]) // 1024
+    return None
 
 
 def validate_run_id(run_id: str) -> str:
@@ -260,6 +293,10 @@ def docker_run_argv(
         f"pico.ws.run={validate_run_id(run_id)}",
         "--runtime",
         settings.runtime,
+    ]
+    if settings.cgroup_parent:
+        argv.extend(["--cgroup-parent", settings.cgroup_parent])
+    argv += [
         "--network",
         settings.network,
         "--user",

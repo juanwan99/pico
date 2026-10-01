@@ -26,7 +26,7 @@ def test_health() -> None:
     assert body["rate_limit"] == {
         "chat_rpm": 30,
         "chat_max_concurrent": 4,
-        "chat_school_max_concurrent": 16,
+        "chat_school_max_concurrent": 48,
         "key_scope": "membership_or_ip",
         "inflight_total": 0,
         "school_count": 0,

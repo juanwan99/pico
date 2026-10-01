@@ -324,6 +324,19 @@ export function thinkingLine(events: PicoRunEvent[], quietMs: number): string | 
   return `模型在思考 · 已 ${Math.floor(quietMs / 1000)} 秒`;
 }
 
+/**
+ * 「排队中 · 前面还有 N 个」while the workspace runner is full and this run
+ * waits in its line (#1135). ``started`` marks the run leaving the line.
+ */
+export function queueLine(events: PicoRunEvent[]): string | null {
+  const last = events[events.length - 1];
+  if (!last || last.type !== 'run.queued' || last.payload?.started) {
+    return null;
+  }
+  const ahead = Number(last.payload?.ahead ?? 0);
+  return ahead > 0 ? `排队中 · 前面还有 ${ahead} 个任务` : '排队中 · 马上轮到你';
+}
+
 export function composeProcessHint(
   run: PicoRun | null,
   events: PicoRunEvent[],
@@ -341,6 +354,10 @@ export function composeProcessHint(
     }
     // Package B: job lives on the server; tab close does not stop it.
     const cloud = '云端继续中';
+    const queue = queueLine(events);
+    if (queue) {
+      return [cloud, queue].join(' · ');
+    }
     const thinking = thinkingLine(events, quietMs);
     if (thinking) {
       return [cloud, runtime, thinking].filter(Boolean).join(' · ');

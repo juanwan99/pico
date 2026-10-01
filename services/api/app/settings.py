@@ -105,8 +105,9 @@ class Settings(BaseSettings):
     # same teacher 4-way was 2×429. Raised 2→4 so two-three tabs don't collide.
     pico_chat_max_concurrent: int = 4
     # Per school across memberships. 0 = unlimited. One busy school must not
-    # be the only cap; person cap still applies.
-    pico_chat_school_max_concurrent: int = 16
+    # be the only cap; person cap still applies. Workspace boxes past the
+    # runner's room wait in its line (#1135), so this only stops a runaway.
+    pico_chat_school_max_concurrent: int = 48
     # Optional JSON overrides, no secrets:
     # {"school:demo":{"school_max_concurrent":8},"membership:demo:m1":{"rpm":10,"max_concurrent":2}}
     pico_chat_caps_json: str = ""

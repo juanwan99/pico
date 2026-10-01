@@ -3,7 +3,8 @@
 #
 #   sudo bash scripts/pi-runner-host-setup.sh            # install / re-apply (idempotent)
 #   sudo bash scripts/pi-runner-host-setup.sh --check    # print state, change nothing
-#   sudo bash scripts/pi-runner-host-setup.sh --rollback # remove firewall unit + pico-ws network
+#   sudo bash scripts/pi-runner-host-setup.sh --rollback # remove firewall unit + slices + pico-ws network
+#   sudo bash scripts/pi-runner-host-setup.sh --slices   # only step 5 (box budget)
 #
 # What it touches (nothing else):
 #   1. gVisor runsc from the official apt repo; registers the "runsc" docker
@@ -14,6 +15,12 @@
 #   4. iptables chains PICO-WS-FWD (from DOCKER-USER) and PICO-WS-IN (from
 #      INPUT), only for traffic whose source is pico-ws, persisted by the
 #      systemd unit pico-ws-firewall.service.
+#   5. systemd slices pico.slice / pico-ws.slice: every box runs under
+#      pico-ws.slice (runner --cgroup-parent), so all boxes share one budget.
+#      CPU yields to production (low weight, quota leaves cores to the host);
+#      memory has one ceiling for all boxes together (card #1135). Override
+#      with PICO_WS_CPU_WEIGHT / PICO_WS_CPU_QUOTA / PICO_WS_MEM_HIGH /
+#      PICO_WS_MEM_MAX / PICO_WS_TASKS_MAX. Applies to running boxes at once.
 set -euo pipefail
 
 SUBNET="172.30.250.0/24"
@@ -23,6 +30,13 @@ NET="pico-ws"
 WS_ROOT="/var/lib/pico/workspaces"
 FW_BIN="/usr/local/sbin/pico-ws-firewall.sh"
 FW_UNIT="/etc/systemd/system/pico-ws-firewall.service"
+SLICE_TOP="/etc/systemd/system/pico.slice"
+SLICE_WS="/etc/systemd/system/pico-ws.slice"
+CPU_WEIGHT="${PICO_WS_CPU_WEIGHT:-50}"
+CPU_QUOTA="${PICO_WS_CPU_QUOTA:-$(( ($(nproc) - 2) * 100 ))%}"
+MEM_HIGH="${PICO_WS_MEM_HIGH:-10G}"
+MEM_MAX="${PICO_WS_MEM_MAX:-12G}"
+TASKS_MAX="${PICO_WS_TASKS_MAX:-8192}"
 
 mode="${1:-apply}"
 
@@ -80,6 +94,28 @@ WantedBy=multi-user.target docker.service
 UNIT
 }
 
+write_slices() {
+  # Weight competes with system.slice (production containers, weight 100)
+  # one level up, so it sits on pico.slice; the box budget on pico-ws.slice.
+  cat >"$SLICE_TOP" <<UNIT
+[Unit]
+Description=Pico workloads (card #1135)
+
+[Slice]
+CPUWeight=$CPU_WEIGHT
+UNIT
+  cat >"$SLICE_WS" <<UNIT
+[Unit]
+Description=Pico workspace boxes, one shared budget (card #1135)
+
+[Slice]
+CPUQuota=$CPU_QUOTA
+MemoryHigh=$MEM_HIGH
+MemoryMax=$MEM_MAX
+TasksMax=$TASKS_MAX
+UNIT
+}
+
 check() {
   echo "runsc:        $(command -v runsc || echo missing) $(runsc --version 2>/dev/null | head -1 || true)"
   echo "docker rt:    $(docker info --format '{{json .Runtimes}}' | grep -o '"runsc"' || echo 'runsc not registered')"
@@ -88,6 +124,8 @@ check() {
   echo "fw unit:      $(systemctl is-active pico-ws-firewall.service 2>/dev/null || true)"
   echo "DOCKER-USER:  $(iptables -w -S DOCKER-USER 2>/dev/null | grep -c PICO-WS-FWD || true) jump(s)"
   echo "INPUT:        $(iptables -w -S INPUT 2>/dev/null | grep -c PICO-WS-IN || true) jump(s)"
+  echo "pico.slice:   $(systemctl show pico.slice -p CPUWeight --value 2>/dev/null || echo missing) cpu weight"
+  echo "pico-ws.slice: quota $(systemctl show pico-ws.slice -p CPUQuotaPerSecUSec --value 2>/dev/null) mem high $(systemctl show pico-ws.slice -p MemoryHigh --value 2>/dev/null) max $(systemctl show pico-ws.slice -p MemoryMax --value 2>/dev/null)"
 }
 
 case "$mode" in
@@ -98,21 +136,28 @@ case "$mode" in
   --rollback)
     systemctl disable --now pico-ws-firewall.service 2>/dev/null || true
     [ -x "$FW_BIN" ] && "$FW_BIN" remove || true
-    rm -f "$FW_UNIT" "$FW_BIN"
+    rm -f "$FW_UNIT" "$FW_BIN" "$SLICE_TOP" "$SLICE_WS"
     systemctl daemon-reload
     docker network rm "$NET" 2>/dev/null || true
-    echo "rolled back firewall + $NET (runsc runtime and $WS_ROOT left in place; harmless)"
+    echo "rolled back firewall + slices + $NET (runsc runtime and $WS_ROOT left in place; harmless)"
     check
     exit 0
     ;;
   apply) ;;
+  --slices)
+    # Only step 5: box budget, nothing else touched.
+    write_slices
+    systemctl daemon-reload
+    check
+    exit 0
+    ;;
   *)
-    echo "usage: $0 [--check|--rollback]" >&2
+    echo "usage: $0 [--check|--rollback|--slices]" >&2
     exit 2
     ;;
 esac
 
-echo "== 1/4 gVisor runsc"
+echo "== 1/5 gVisor runsc"
 if ! command -v runsc >/dev/null; then
   for bin in curl gpg; do
     command -v "$bin" >/dev/null || { echo "missing $bin (install it first)" >&2; exit 3; }
@@ -140,7 +185,7 @@ if ! docker info --format '{{json .Runtimes}}' | grep -q '"runsc"'; then
 fi
 docker info --format '{{json .Runtimes}}' | grep -q '"runsc"' || { echo "runsc runtime not registered" >&2; exit 3; }
 
-echo "== 2/4 network $NET"
+echo "== 2/5 network $NET"
 if ! docker network inspect "$NET" >/dev/null 2>&1; then
   docker network create --driver bridge \
     --subnet "$SUBNET" --gateway "$GATEWAY" \
@@ -149,16 +194,20 @@ if ! docker network inspect "$NET" >/dev/null 2>&1; then
     "$NET"
 fi
 
-echo "== 3/4 $WS_ROOT"
+echo "== 3/5 $WS_ROOT"
 mkdir -p "$WS_ROOT"
 chown root:root "$WS_ROOT"
 chmod 0711 "$WS_ROOT"
 
-echo "== 4/4 firewall"
+echo "== 4/5 firewall"
 write_firewall
 systemctl daemon-reload
 systemctl enable pico-ws-firewall.service >/dev/null
 systemctl restart pico-ws-firewall.service
+
+echo "== 5/5 slices (shared box budget)"
+write_slices
+systemctl daemon-reload
 
 echo "== smoke: runsc box on $NET"
 docker run --rm --runtime=runsc --network "$NET" --dns 223.5.5.5 python:3.12-slim-bookworm \

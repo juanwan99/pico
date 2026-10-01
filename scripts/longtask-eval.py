@@ -20,11 +20,17 @@ Re-score saved files without a model: ``--check-dir DIR --cases LC1``.
 
 Hard cases (LH*, ``--suite hard``) are graded the same way; they exist because
 LT/LC saturated (13/13 on two models) and stopped telling models apart.
+
+Load test (#1135): ``--parallel 20 --repeat 3 --spread 5`` runs every case 3×,
+20 at once, each job its own synthetic member spread over 5 schools. Each
+result records ``queued_max`` (most runs ever ahead of it in the runner's line;
+-1 = never queued).
 """
 
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import io
 import json
 import os
@@ -63,6 +69,8 @@ class CaseResult:
     wall_s: float = 0.0
     artifacts: int = 0
     fail_reason: str = ""
+    queued_max: int = -1
+    membership: str = ""
     notes: list[str] = field(default_factory=list)
     score_points: list[dict[str, str]] = field(default_factory=list)
     artifact_kinds: list[str] = field(default_factory=list)
@@ -359,6 +367,8 @@ def _classify_fail(status: str, error: str) -> str:
     st = (status or "").lower()
     if st in {"succeeded", "ok", ""}:
         return ""
+    if "runner refused" in low or "runner queue" in low:
+        return "runner_busy"
     if any(n in low for n in ("terminated", "owner was lost", "restart")):
         return "deploy_killed"
     if any(n in low for n in ("max_seconds", "durable_max", "run timeout after")):
@@ -384,11 +394,12 @@ def _classify_fail(status: str, error: str) -> str:
     return st or "other"
 
 
-def _run_events(pico: Pico, conversation_id: str) -> tuple[int, int, str, str]:
+def _run_events(pico: Pico, conversation_id: str) -> tuple[int, int, str, str, int]:
     tool_calls = 0
     steps = 0
     status = "?"
     error = ""
+    queued_max = -1
     for task in pico.tasks(conversation_id):
         latest = task.get("latest_run") or {}
         rid = latest.get("id")
@@ -407,7 +418,11 @@ def _run_events(pico: Pico, conversation_id: str) -> tuple[int, int, str, str]:
                 tool_calls += 1
             if kind == "agent.step":
                 steps += 1
-    return tool_calls, steps, status, error
+            if kind == "run.queued":
+                ahead = (e.get("payload") or {}).get("ahead")
+                if isinstance(ahead, int):
+                    queued_max = max(queued_max, ahead)
+    return tool_calls, steps, status, error, queued_max
 
 
 def _zip_dir(rel: str) -> bytes:
@@ -670,7 +685,7 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runt
                 res.notes.append("stream dropped, followed run")
             res.wall_s += wall
         arts = pico.artifacts(cid)
-        res.tool_calls, res.agent_steps, status, error = _run_events(pico, cid)
+        res.tool_calls, res.agent_steps, status, error, res.queued_max = _run_events(pico, cid)
         res.fail_reason = _classify_fail(status, error)
         score_case(case, arts, pico, res, image, runtime)
         if status == "failed" and not res.fail_reason:
@@ -740,6 +755,11 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=0.0, help="override per-case timeout_s")
     ap.add_argument("--json", default="", help="write JSON report here")
     ap.add_argument("--list", action="store_true", help="list cases and exit")
+    ap.add_argument("--parallel", type=int, default=1, help="jobs at once (load test, #1135)")
+    ap.add_argument("--repeat", type=int, default=1, help="run every case this many times")
+    ap.add_argument(
+        "--spread", type=int, default=0, help="one synthetic member per job, over N synthetic schools"
+    )
     args = ap.parse_args()
     cases = load_cases(args.suite)
     if args.list:
@@ -766,23 +786,27 @@ def main() -> int:
     if not args.key:
         print("PICO_OPENAI_PROXY_KEY / --key required", file=sys.stderr)
         return 2
-    pico = Pico(args.base, args.key, args.membership, args.model, args.timeout or 1800.0)
     stamp = f"{int(time.time())}-{uuid.uuid4().hex[:6]}"
-    results: list[CaseResult] = []
-    for case in cases:
+    jobs = [case for _ in range(max(1, args.repeat)) for case in cases]
+    tag = uuid.uuid4().hex[:6]
+
+    def one_job(i: int, case: dict[str, Any]) -> CaseResult:
+        membership = (
+            f"load{tag}-s{i % args.spread}:load{tag}-m{i}" if args.spread > 0 else args.membership
+        )
+        pico = Pico(args.base, args.key, membership, args.model, args.timeout or 1800.0)
         if args.timeout:
             case = {**case, "timeout_s": args.timeout}
         try:
-            print(f"START {case.get('id')} timeout_s={case.get('timeout_s')}", flush=True)
-            one = run_case(pico, case, stamp, args.check_image, args.check_runtime)
-            results.append(one)
+            print(f"START {case.get('id')}#{i} timeout_s={case.get('timeout_s')}", flush=True)
+            one = run_case(pico, case, f"{stamp}-{i}", args.check_image, args.check_runtime)
             print(
-                f"DONE {one.case} ok={one.ok} score={one.auto_score} "
-                f"wall_s={one.wall_s:.1f} fail={one.fail_reason or '-'}",
+                f"DONE {one.case}#{i} ok={one.ok} score={one.auto_score} wall_s={one.wall_s:.1f} "
+                f"queued_max={one.queued_max} fail={one.fail_reason or '-'}",
                 flush=True,
             )
         except Exception as exc:  # noqa: BLE001
-            fail = CaseResult(
+            one = CaseResult(
                 case=case.get("id") or "?",
                 title=case.get("title") or "",
                 ok=False,
@@ -790,13 +814,21 @@ def main() -> int:
                 notes=[f"exception: {type(exc).__name__}: {exc}"],
                 score_points=list(case.get("score_points") or []),
             )
-            results.append(fail)
-            print(f"DONE {fail.case} ok=False exception={type(exc).__name__}", flush=True)
+            print(f"DONE {one.case}#{i} ok=False exception={type(exc).__name__}", flush=True)
+        one.membership = membership
+        return one
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:
+        results = list(pool.map(lambda pair: one_job(*pair), enumerate(jobs)))
     report = {
         "base": args.base,
         "model": args.model,
         "membership": args.membership,
         "stamp": stamp,
+        "parallel": args.parallel,
+        "jobs": len(jobs),
+        "queued_jobs": sum(1 for r in results if r.queued_max >= 0),
+        "runner_busy": sum(1 for r in results if r.fail_reason == "runner_busy"),
         "results": [r.__dict__ for r in results],
         "pass": all(r.ok for r in results),
         "success": f"{sum(1 for r in results if r.ok)}/{len(results)}",
