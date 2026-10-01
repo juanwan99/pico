@@ -155,6 +155,8 @@ venv/
 .ruff_cache/
 .mypy_cache/
 data/
+# Eval fixtures ship their own tests/data (#1130).
+!testdata/**/data/
 *.db
 .coverage
 htmlcov/
