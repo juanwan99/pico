@@ -14,9 +14,11 @@ Not a Pico PDF kernel: no layout, no tables, no torch.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import tempfile
+import threading
 from pathlib import Path
 
 ENGINE = "docling"
@@ -308,6 +310,20 @@ def _ocr_image(path: Path) -> str:
     return _rapidocr_text(engine(arr)).strip()
 
 
+# PDFium is not thread-safe, even across documents. pico-api runs extraction
+# in worker threads (#1135), so every pypdfium2 entry point takes this lock.
+_PDFIUM_LOCK = threading.RLock()
+
+
+def _pdfium_serialized(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _PDFIUM_LOCK:
+            return fn(*args, **kwargs)
+
+    return wrapper
+
+
 def text_layer_is_sparse(layer: str, page_count: int = 0) -> bool:
     """True when most pages have almost no extractable text (scan / slide image)."""
     if not (layer or "").strip():
@@ -322,6 +338,7 @@ def text_layer_is_sparse(layer: str, page_count: int = 0) -> bool:
     return thin * 2 >= n
 
 
+@_pdfium_serialized
 def _pdf_text_layer(path: Path) -> str:
     """Digital PDF text layer via pypdfium2 (already the scan renderer). Not a Pico PDF kernel."""
     try:
@@ -365,6 +382,7 @@ def _pdf_text_layer(path: Path) -> str:
                 close_doc()
 
 
+@_pdfium_serialized
 def _ocr_pdf_pages(path: Path, *, max_pages: int | None = None) -> str:
     """Render each PDF page to an image and OCR. No Docling layout / torch.
 
@@ -419,6 +437,7 @@ def _png_bytes(pil) -> bytes:
     return buf.getvalue()[:MAX_PDF_PAGE_PNG]
 
 
+@_pdfium_serialized
 def render_pdf_page_pngs(data: bytes, *, max_pages: int = MAX_PDF_VISION_PAGES) -> list[bytes]:
     """Raster PDF pages with pypdfium2 (same renderer as scan OCR). Not a Pico PDF kernel."""
     if not data:
@@ -457,6 +476,7 @@ def render_pdf_page_pngs(data: bytes, *, max_pages: int = MAX_PDF_VISION_PAGES) 
     return out
 
 
+@_pdfium_serialized
 def _pdf_page_count(path: Path) -> int:
     try:
         import pypdfium2 as pdfium

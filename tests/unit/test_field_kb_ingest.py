@@ -221,3 +221,38 @@ def test_sparse_ocr_keeps_text_when_shorter(monkeypatch):
     assert "ocr-kept-text" in out["tags"]
     blob = " ".join(s["excerpt"] for s in out["slices"])
     assert "页眉" in blob
+
+
+def test_pdfium_calls_never_overlap_across_threads(monkeypatch) -> None:
+    """#1135: uploads extract in worker threads; PDFium is not thread-safe."""
+    import threading
+    import time
+    import types
+
+    import ingest
+
+    state = {"inside": 0, "max": 0}
+    guard = threading.Lock()
+
+    class FakeDoc:
+        def __init__(self, *_a, **_k) -> None:
+            with guard:
+                state["inside"] += 1
+                state["max"] = max(state["max"], state["inside"])
+            time.sleep(0.05)
+
+        def __len__(self) -> int:
+            return 1
+
+        def close(self) -> None:
+            with guard:
+                state["inside"] -= 1
+
+    monkeypatch.setitem(sys.modules, "pypdfium2", types.SimpleNamespace(PdfDocument=FakeDoc))
+    threads = [threading.Thread(target=ingest._pdf_page_count, args=(Path("x.pdf"),)) for _ in range(4)]
+    threads += [threading.Thread(target=ingest.render_pdf_page_pngs, args=(b"%PDF",)) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert state["max"] == 1
