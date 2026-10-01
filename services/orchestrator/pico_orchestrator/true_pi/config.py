@@ -31,6 +31,7 @@ TRUE_PI_PACKAGE_ENV = "PICO_TRUE_PI_PACKAGE"
 TRUE_PI_SESSION_ROOT_ENV = "PICO_TRUE_PI_SESSION_ROOT"
 TRUE_PI_MEMORY_ROOT_ENV = "PICO_TRUE_PI_MEMORY_ROOT"
 RUN_RESUME_MAX_ENV = "PICO_RUN_RESUME_MAX"
+TOOL_HANG_SECONDS_ENV = "PICO_TOOL_HANG_SECONDS"
 
 # npm pin for deploy notes
 PINNED_PI_PACKAGE = "@earendil-works/pi-coding-agent@0.84.4"
@@ -273,6 +274,20 @@ def resume_max() -> int:
         return max(0, min(10, int(raw)))
     except ValueError:
         return 3
+
+
+def tool_hang_seconds() -> int:
+    """How long one tool call may stay open before Pico aborts it and resumes.
+
+    Upstream Pi's bash has no default timeout and the wall clock is gone
+    (#1104 E), so a model-written endless loop held a run for 33 minutes until
+    a deploy killed it (LH3, 2026-10-01). 0 = never abort a running tool.
+    """
+    raw = os.environ.get(TOOL_HANG_SECONDS_ENV, "600").strip() or "600"
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 600
 
 
 def extension_path() -> Path:
