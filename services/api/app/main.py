@@ -108,6 +108,11 @@ async def lifespan(_app: FastAPI):
     factory = run_service.session_factory()
     async with factory() as session:
         await run_service.reconcile_orphaned_runs(session)
+    from app import run_resume
+
+    resumed = await run_resume.resume_orphaned_runs()
+    if resumed:
+        print(f"[pico] restart resume runs={resumed}", flush=True)
     from app import automation_service
 
     automation_service.start_scheduler()
@@ -115,6 +120,8 @@ async def lifespan(_app: FastAPI):
         yield
     finally:
         await automation_service.stop_scheduler()
+        # Owners cancelled from here on leave resumable runs for the next process.
+        run_resume.mark_shutting_down()
         # B1 soft drain: give in-process owners a short window before hard kill
         # (docker stop_grace_period must be ≥ this). Then reconcile leftovers.
         drain = await run_service.drain_inflight_runs(timeout_s=45.0)

@@ -332,6 +332,8 @@ async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
     """
     from pico_orchestrator.user_errors import enrich_fail_payload, user_message_for_error
 
+    from app.run_resume import resumable
+
     active = (
         await session.execute(
             select(RunRow).where(
@@ -339,8 +341,12 @@ async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
             )
         )
     ).scalars().all()
-    counts = {"cancelled": 0, "failed": 0}
+    counts = {"cancelled": 0, "failed": 0, "resumable": 0}
     for run in active:
+        if await resumable(session, run):
+            # Left running: startup hands it back to the runtime (#1133).
+            counts["resumable"] += 1
+            continue
         has_file = await run_has_deliverable(session, run.id)
         if run.cancel_requested:
             run.status = "cancelled"

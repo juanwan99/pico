@@ -62,6 +62,9 @@ class RunCaps:
     # is a teacher-facing pause like the wall clock, not an error.
     max_millipoints: int = 0
     millipoints_for_usage: Callable[[dict[str, Any], str], int | None] | None = None
+    # Restart resume (#1133): epoch seconds the run first started. >0 = files the
+    # workspace wrote since then are this run's, though an earlier box wrote them.
+    outputs_since: float = 0.0
 
 
 @dataclass

@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     # Per-run spend cap (#1104 IN3), millipoints on the rate card; 0 = off.
     # The wall clock stays as the last resort; this is the cap that matters.
     pico_run_max_millipoints: int = 0
+    # Workspace runs a pico-api restart cut off resume in the same Pi session
+    # (#1133) up to this many times per run; 0 = old behaviour (api.restart fail).
+    pico_run_restart_resume_max: int = 2
 
     # --- Pi Agent (product default multi-step kernel · HANDOFF-WB-PI) ---
     # True + empty canary (or *) → all principals use Pi (prod default).
@@ -423,6 +426,8 @@ class Settings(BaseSettings):
             errors.append("PICO_RUN_SHORT_MAX_TOKENS must be greater than zero")
         if self.pico_run_durable_max_seconds < 0:
             errors.append("PICO_RUN_DURABLE_MAX_SECONDS must be >= 0 (0 = no Pico wall kill)")
+        if self.pico_run_restart_resume_max < 0:
+            errors.append("PICO_RUN_RESTART_RESUME_MAX must be >= 0 (0 = no restart resume)")
         if self.pico_run_max_millipoints < 0:
             errors.append("PICO_RUN_MAX_MILLIPOINTS must be >= 0 (0 = no spend cap)")
         if self.pico_dangerous_tools_enabled:
