@@ -125,6 +125,23 @@ class Pico:
                         out.append(str(delta))
         return "".join(out), time.perf_counter() - started
 
+    def follow(self, conversation_id: str, timeout_s: float) -> float:
+        """Stream dropped (pico-api restart, #1133): poll like the UI until no run is active."""
+        started = time.perf_counter()
+        while time.perf_counter() - started < timeout_s:
+            time.sleep(10)
+            try:
+                active = [
+                    t
+                    for t in self.tasks(conversation_id)
+                    if str((t.get("latest_run") or {}).get("status") or "") in {"queued", "preparing", "running"}
+                ]
+            except (httpx.TransportError, httpx.HTTPStatusError):
+                continue  # API still coming back
+            if not active:
+                return time.perf_counter() - started
+        raise httpx.ReadTimeout("run still active after stream drop")
+
     def tasks(self, conversation_id: str) -> list[dict[str, Any]]:
         resp = self.client.get(
             f"{self.base}/v1/tasks",
@@ -642,7 +659,15 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runt
         for turn in case.get("turns") or []:
             for att in turn.get("attachments") or []:
                 pico.upload(cid, att["name"], _attachment_bytes(att))
-            _, wall = pico.chat(cid, turn["prompt"], timeout_s=timeout)
+            t0 = time.perf_counter()
+            try:
+                _, wall = pico.chat(cid, turn["prompt"], timeout_s=timeout)
+            except httpx.TimeoutException:
+                raise
+            except httpx.TransportError:
+                pico.follow(cid, timeout)
+                wall = time.perf_counter() - t0
+                res.notes.append("stream dropped, followed run")
             res.wall_s += wall
         arts = pico.artifacts(cid)
         res.tool_calls, res.agent_steps, status, error = _run_events(pico, cid)

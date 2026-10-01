@@ -238,6 +238,57 @@ async def test_upstream_error_still_delivers_saved_workspace_files(monkeypatch) 
     assert landed and landed[0]["ok"] is True
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outputs_since", [0.0, 123.0])
+async def test_restart_resume_lands_files_the_killed_box_wrote(monkeypatch, outputs_since) -> None:
+    """#1133: a resumed run counts files written since the run first started."""
+    from types import SimpleNamespace
+
+    from pico_orchestrator.true_pi import runner
+
+    listing = {"outputs/a.pptx": {"sha256": "s1", "mtime": 200.0}}
+
+    async def fake_list(_key: Any) -> dict[str, Any]:
+        return listing
+
+    landed_calls: list[Any] = []
+
+    async def fake_land(**kw: Any) -> list[tuple[str, dict[str, Any]]]:
+        landed_calls.append(kw)
+        return []
+
+    async def emit(_k: str, _p: dict[str, Any]) -> None:
+        return None
+
+    monkeypatch.setattr(runner, "list_outputs", fake_list)
+    monkeypatch.setattr(runner, "land_outputs", fake_land)
+    transport = FakeTransport(
+        scripted=[
+            {"type": "agent_start"},
+            {"type": "turn_start"},
+            {"type": "message_end", "message": _answer_assistant("好了")},
+            {"type": "turn_end", "message": _answer_assistant("好了")},
+            {"type": "agent_end"},
+        ],
+        assistant_text="好了",
+    )
+    transport.runner = SimpleNamespace(key="ws-key")
+    await run_true_pi_agent(
+        prompt="继续",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=8, outputs_since=outputs_since),
+        transport=transport,
+    )
+    assert len(landed_calls) == 1
+    if outputs_since:
+        assert landed_calls[0]["before"] is None
+        assert landed_calls[0]["since"] == outputs_since
+    else:
+        assert landed_calls[0]["before"] == listing
+
+
 def _stream_cut_assistant() -> dict[str, Any]:
     return {**_usage_limit_assistant(), "errorMessage": "Stream ended without finish_reason"}
 

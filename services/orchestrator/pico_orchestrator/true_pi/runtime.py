@@ -592,6 +592,12 @@ async def _run_true_pi_once(
                 ws_before = await list_outputs(transport.runner.key)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("true_pi runner outputs snapshot failed: %s", type(exc).__name__)
+            outputs_since = float(getattr(caps, "outputs_since", 0) or 0)
+            if outputs_since > 0:
+                # Restart resume (#1133): the killed box's files were never landed;
+                # count all written since the run first started. The snapshot
+                # above still waited for that box to release the workspace.
+                ws_before, ws_since = None, outputs_since
         await client.start()
         await emit(
             "run.model",

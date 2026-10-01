@@ -933,6 +933,11 @@ async def _finalize_run(
             )
 
         usage = _json_dict(run.token_usage_json)
+        from app.run_resume import SPEC_KEY
+
+        if usage.pop(SPEC_KEY, None) is not None and not token_usage:
+            # Terminal: nothing left to resume (#1133).
+            run.token_usage_json = json.dumps(usage, ensure_ascii=False)
         if token_usage:
             snapshot = usage.get("skill_snapshot")
             usage.update({k: v for k, v in token_usage.items() if k != "skill_snapshot"})
@@ -2086,6 +2091,17 @@ async def chat_completions(
                     from dataclasses import replace as _dc_replace_day_stream
 
                     caps = _dc_replace_day_stream(caps, day_use=teacher_extra)
+                from app import run_resume
+
+                await run_resume.save_spec(
+                    run_id,
+                    run_resume.build_spec(
+                        caps=caps,
+                        principal=principal,
+                        conversation_id=conversation_id,
+                        task_id=task_id,
+                    ),
+                )
                 if skill_snapshot:
                     await emit("skill.snapshot", skill_snapshot)
                 if delivery_plan is not None and getattr(
@@ -2160,7 +2176,11 @@ async def chat_completions(
                 )
                 await q.put(("done", result))
             except asyncio.CancelledError:
-                # Only explicit task.cancel() (legacy kill path) lands here.
+                # Only explicit task.cancel() (legacy kill path / shutdown drain) lands here.
+                from app import run_resume
+
+                if run_resume.shutting_down() and await run_resume.keep_for_resume(run_id):
+                    raise
                 await asyncio.shield(
                     _finalize_run(
                         run_id,

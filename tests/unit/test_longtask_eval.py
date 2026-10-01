@@ -246,3 +246,28 @@ def test_coding_case_fails_when_files_missing() -> None:
     done = lte.CaseResult(case="LCX")
     lte.score_code(case, {"a.py": b"x", "b.py": b"y"}, done, "img", "runc")
     assert done.ok is True and done.auto_score == 1
+
+
+def test_follow_waits_out_an_api_restart(monkeypatch) -> None:
+    """#1133: the stream drops on deploy; the run is followed until it ends."""
+    import httpx
+
+    monkeypatch.setattr(lte.time, "sleep", lambda _s: None)
+    replies = iter(
+        [
+            httpx.ConnectError("api down"),
+            [{"latest_run": {"status": "running"}}],
+            [{"latest_run": {"status": "succeeded"}}],
+        ]
+    )
+
+    def tasks(_cid: str):
+        r = next(replies)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    pico = lte.Pico.__new__(lte.Pico)
+    pico.tasks = tasks
+    assert pico.follow("c", timeout_s=60) >= 0
+    assert next(replies, None) is None

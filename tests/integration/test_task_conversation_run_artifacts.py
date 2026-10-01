@@ -111,7 +111,7 @@ async def test_startup_reconciliation_finalizes_ownerless_runs(tmp_path, monkeyp
         session.add_all((task, cancelled, failed, terminal))
         await session.commit()
         counts = await reconcile_orphaned_runs(session)
-        assert counts == {"cancelled": 1, "failed": 1}
+        assert counts == {"cancelled": 1, "failed": 1, "resumable": 0}
 
     async with factory() as session:
         assert (await session.get(RunRow, cancelled.id)).status == "cancelled"
