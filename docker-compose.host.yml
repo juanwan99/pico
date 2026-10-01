@@ -258,11 +258,12 @@ services:
       PICO_RUNNER_RUNTIME: ${PICO_RUNNER_RUNTIME:-runsc}
       PICO_RUNNER_PROXY_HOST: 172.30.250.1
       # Boxes idle at ~60-90MB; the pooled budget is the pico-ws.slice limits
-      # (scripts/pi-runner-host-setup.sh step 5) + the host memory floor.
+      # (scripts/pi-runner-host-setup.sh --slices) + the host memory floor.
+      # 12 is safe without the slices; with them, .env may raise to 32 / 24.
       # Past the ceiling, requests wait in line (pico-api reads the same
       # PICO_RUNNER_QUEUE_WAIT_S from .env).
-      PICO_RUNNER_MAX_SESSIONS: ${PICO_RUNNER_MAX_SESSIONS:-32}
-      PICO_RUNNER_MAX_PER_SCHOOL: ${PICO_RUNNER_MAX_PER_SCHOOL:-24}
+      PICO_RUNNER_MAX_SESSIONS: ${PICO_RUNNER_MAX_SESSIONS:-12}
+      PICO_RUNNER_MAX_PER_SCHOOL: ${PICO_RUNNER_MAX_PER_SCHOOL:-9}
       PICO_RUNNER_MIN_AVAIL_MB: ${PICO_RUNNER_MIN_AVAIL_MB:-3072}
       PICO_RUNNER_QUEUE_WAIT_S: ${PICO_RUNNER_QUEUE_WAIT_S:-1200}
       PICO_RUNNER_QUEUE_MAX: ${PICO_RUNNER_QUEUE_MAX:-200}

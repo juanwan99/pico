@@ -72,6 +72,8 @@ WATCH_EVERY_S = 5
 # event) and tells pico-api it is still in line at least every QUEUE_PING_S.
 QUEUE_TICK_S = 2.0
 QUEUE_PING_S = 15.0
+# A granted box has not touched memory yet; count it this much against the floor.
+GRANT_MEM_MB = 150
 
 MODEL_PATHS = frozenset({"v1/chat/completions", "v1/responses", "v1/models"})
 TOOL_PATHS = frozenset({"v1/tool", "health"})
@@ -142,7 +144,7 @@ class Runner:
         if len(self._held_schools()) >= self.settings.max_sessions:
             return False
         avail = self.avail_mb()
-        return avail is None or avail >= self.settings.min_avail_mb
+        return avail is None or avail - GRANT_MEM_MB * len(self.granted) >= self.settings.min_avail_mb
 
     def _school_room(self, school: str) -> bool:
         cap = self.settings.max_per_school
@@ -152,7 +154,7 @@ class Runner:
         active: dict[str, int] = {}
         for school in self._held_schools():
             active[school] = active.get(school, 0) + 1
-        idx = queue_order([(w.key.school, w.since) for w in self.waiting], active)
+        idx = queue_order([(w.key.school, w.since) for w in self.waiting], active, time.monotonic())
         return [self.waiting[i] for i in idx]
 
     def pump(self) -> None:
@@ -253,8 +255,20 @@ class Runner:
         if run_id in self.sessions:
             raise PolicyError("runner.duplicate", "run already has a session")
         waiter = await self.admit(key, on_queued)
+        # Once granted, spawning finishes even if the client leaves: a cancel
+        # inside docker run / workspace writes would leave an uncounted box.
+        spawn = asyncio.ensure_future(
+            self._spawn(run_id, key, pi_args, env, with_memory, spec.get("files"), waiter)
+        )
         try:
-            return await self._spawn(run_id, key, pi_args, env, with_memory, spec.get("files"), waiter)
+            return await asyncio.shield(spawn)
+        except asyncio.CancelledError:
+            await asyncio.wait({spawn})
+            if not spawn.cancelled() and spawn.exception() is None:
+                await self.stop(spawn.result())
+            else:
+                await self.release(waiter)
+            raise
         except BaseException:
             await self.release(waiter)
             raise
@@ -524,17 +538,20 @@ def build_control_app(runner: Runner) -> FastAPI:
                 await gone_t
             session = start_t.result()
         except PolicyError as exc:
-            await ws.send_text(
-                json.dumps({"type": "error", "code": exc.code, "message": exc.message}, ensure_ascii=False)
-            )
-            await ws.close()
+            # The client may already be gone (a failed queued send ends here too).
+            with contextlib.suppress(Exception):
+                await ws.send_text(
+                    json.dumps({"type": "error", "code": exc.code, "message": exc.message}, ensure_ascii=False)
+                )
+                await ws.close()
             return
         except Exception as exc:
             logger.exception("ws start failed")
-            await ws.send_text(
-                json.dumps({"type": "error", "code": "runner.start_failed", "message": type(exc).__name__})
-            )
-            await ws.close()
+            with contextlib.suppress(Exception):
+                await ws.send_text(
+                    json.dumps({"type": "error", "code": "runner.start_failed", "message": type(exc).__name__})
+                )
+                await ws.close()
             return
         proc = session.proc
         stop_reason: list[str] = []

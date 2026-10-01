@@ -616,8 +616,11 @@ async def _run_true_pi_once(
                 await asyncio.wait({start_task}, timeout=_QUEUE_CANCEL_POLL)
                 if not start_task.done() and await is_cancelled():
                     start_task.cancel()
-                    with suppress(asyncio.CancelledError, Exception):
-                        await start_task
+                    # wait() never raises the inner cancel; a shutdown cancel
+                    # of this run still propagates.
+                    await asyncio.wait({start_task})
+                    if not start_task.cancelled():
+                        start_task.exception()
                     await emit("run.status", {"status": "cancelled", **tag})
                     return _result("cancelled", state, principal=principal)
         finally:
@@ -626,8 +629,16 @@ async def _run_true_pi_once(
                 start_task.cancel()
         start_task.result()
         if queued:
-            # Out of line: the strip stops saying 排队中.
+            # Out of line: the strip stops saying 排队中. Time in line is not
+            # the run's: wall cap and no-progress fuse start now.
             await emit("run.queued", {"ahead": 0, "started": True, **tag})
+            started = loop.time()
+            deadline = wall_deadline(started, int(getattr(caps, "max_seconds", 0) or 0))
+            last_progress_wall = started
+            if timed_out.is_set():
+                # The watcher fired on the old deadline while in line.
+                timed_out.clear()
+                watcher = asyncio.create_task(_watcher())
         await emit(
             "run.model",
             {

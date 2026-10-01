@@ -33,7 +33,7 @@ FW_UNIT="/etc/systemd/system/pico-ws-firewall.service"
 SLICE_TOP="/etc/systemd/system/pico.slice"
 SLICE_WS="/etc/systemd/system/pico-ws.slice"
 CPU_WEIGHT="${PICO_WS_CPU_WEIGHT:-50}"
-CPU_QUOTA="${PICO_WS_CPU_QUOTA:-$(( ($(nproc) - 2) * 100 ))%}"
+CPU_QUOTA="${PICO_WS_CPU_QUOTA:-$(( $(nproc) > 2 ? ($(nproc) - 2) * 100 : 100 ))%}"
 MEM_HIGH="${PICO_WS_MEM_HIGH:-10G}"
 MEM_MAX="${PICO_WS_MEM_MAX:-12G}"
 TASKS_MAX="${PICO_WS_TASKS_MAX:-8192}"
@@ -126,6 +126,9 @@ check() {
   echo "INPUT:        $(iptables -w -S INPUT 2>/dev/null | grep -c PICO-WS-IN || true) jump(s)"
   echo "pico.slice:   $(systemctl show pico.slice -p CPUWeight --value 2>/dev/null || echo missing) cpu weight"
   echo "pico-ws.slice: quota $(systemctl show pico-ws.slice -p CPUQuotaPerSecUSec --value 2>/dev/null) mem high $(systemctl show pico-ws.slice -p MemoryHigh --value 2>/dev/null) max $(systemctl show pico-ws.slice -p MemoryMax --value 2>/dev/null)"
+  # Kernel view (exists while a box runs): what is actually enforced.
+  local cg=/sys/fs/cgroup/pico.slice
+  echo "kernel:       weight $(cat "$cg/cpu.weight" 2>/dev/null || echo -) cpu.max $(cat "$cg/pico-ws.slice/cpu.max" 2>/dev/null || echo -) memory.high $(cat "$cg/pico-ws.slice/memory.high" 2>/dev/null || echo -) memory.max $(cat "$cg/pico-ws.slice/memory.max" 2>/dev/null || echo -)"
 }
 
 case "$mode" in

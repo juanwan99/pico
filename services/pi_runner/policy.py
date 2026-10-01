@@ -75,9 +75,11 @@ class RunnerSettings:
     member_max_mb: int = 5120
     max_session_s: int = 8 * 3600
     # Idle boxes cost ~60-90MB (gVisor + Pi); 1.5G/1.5 CPU are per-box caps,
-    # not reservations. The shared ceiling is the cgroup slice + host memory.
-    max_sessions: int = 32
-    max_per_school: int = 24
+    # not reservations. 12 x 1.5G fits the shared host even with no slice
+    # limits; raise (e.g. 32 / 24) once host-setup --slices put the shared
+    # memory ceiling in place (card #1135).
+    max_sessions: int = 12
+    max_per_school: int = 9
     min_free_mb: int = 3072
     # Host MemAvailable floor: below it no new box starts (requests queue).
     min_avail_mb: int = 3072
@@ -125,8 +127,8 @@ class RunnerSettings:
             workspace_max_files=_env_int("PICO_RUNNER_WS_MAX_FILES", 20000),
             member_max_mb=_env_int("PICO_RUNNER_MEMBER_MAX_MB", 5120),
             max_session_s=_env_int("PICO_RUNNER_MAX_SESSION_S", 8 * 3600),
-            max_sessions=_env_int("PICO_RUNNER_MAX_SESSIONS", 32),
-            max_per_school=_env_int("PICO_RUNNER_MAX_PER_SCHOOL", 24),
+            max_sessions=_env_int("PICO_RUNNER_MAX_SESSIONS", 12),
+            max_per_school=_env_int("PICO_RUNNER_MAX_PER_SCHOOL", 9),
             min_free_mb=_env_int("PICO_RUNNER_MIN_FREE_MB", 3072),
             min_avail_mb=_env_int("PICO_RUNNER_MIN_AVAIL_MB", 3072),
             queue_wait_s=_env_int("PICO_RUNNER_QUEUE_WAIT_S", 1200),
@@ -163,13 +165,25 @@ class WorkspaceKey:
         return root / self.school / self.member / "_memory"
 
 
-def queue_order(waiting: list[tuple[str, float]], active: dict[str, int]) -> list[int]:
+# Every this-many seconds in line counts as one box fewer for the school, so
+# a busy school's request is not passed over until the line gives up.
+QUEUE_AGE_STEP_S = 120.0
+
+
+def queue_order(waiting: list[tuple[str, float]], active: dict[str, int], now: float) -> list[int]:
     """Indices of ``waiting`` ((school, since) pairs) in admission order.
 
-    The school running fewest boxes goes first, then first come first served:
-    a busy school can fill idle capacity but never starves another school.
+    The school running fewest boxes goes first (time in line lowers that
+    count), then first come first served: a busy school fills idle capacity
+    but cannot starve another school, and is not starved itself.
     """
-    return sorted(range(len(waiting)), key=lambda i: (active.get(waiting[i][0], 0), waiting[i][1], i))
+
+    def rank(i: int) -> tuple[int, float, int]:
+        school, since = waiting[i]
+        aged = int(max(0.0, now - since) // QUEUE_AGE_STEP_S)
+        return (active.get(school, 0) - aged, since, i)
+
+    return sorted(range(len(waiting)), key=rank)
 
 
 def mem_available_mb(meminfo: str) -> int | None:

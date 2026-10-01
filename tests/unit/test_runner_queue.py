@@ -46,8 +46,15 @@ def _runner(tmp_path: Path, **kw: Any) -> Runner:
 
 def test_queue_order_fewest_running_school_first_then_fifo() -> None:
     waiting = [("A", 1.0), ("B", 2.0), ("A", 0.5), ("C", 3.0)]
-    assert queue_order(waiting, {"A": 2, "B": 1}) == [3, 1, 2, 0]
-    assert queue_order(waiting, {}) == [2, 0, 1, 3]
+    assert queue_order(waiting, {"A": 2, "B": 1}, 3.0) == [3, 1, 2, 0]
+    assert queue_order(waiting, {}, 3.0) == [2, 0, 1, 3]
+
+
+def test_queue_order_ages_a_busy_school_forward() -> None:
+    # A runs 2 boxes but has waited 4 minutes: counts as 0, and came first.
+    waiting = [("A", 0.0), ("B", 230.0)]
+    assert queue_order(waiting, {"A": 2}, 240.0) == [0, 1]
+    assert queue_order(waiting, {"A": 2}, 100.0) == [1, 0]
 
 
 def test_mem_available_mb_parses_meminfo() -> None:
@@ -70,10 +77,10 @@ def test_boxes_go_under_the_shared_slice(tmp_path: Path) -> None:
     assert "--cgroup-parent" not in argv
 
 
-def test_defaults_scale_past_six(monkeypatch) -> None:
+def test_defaults_scale_past_six_and_fit_without_slices(monkeypatch) -> None:
     monkeypatch.setenv("PICO_RUNNER_TOKEN", TOKEN)
     s = RunnerSettings.from_env()
-    assert (s.max_sessions, s.max_per_school, s.queue_wait_s, s.cgroup_parent) == (32, 24, 1200, "pico-ws.slice")
+    assert (s.max_sessions, s.max_per_school, s.queue_wait_s, s.cgroup_parent) == (12, 9, 1200, "pico-ws.slice")
     monkeypatch.setenv("PICO_RUNNER_CGROUP_PARENT", "")
     assert RunnerSettings.from_env().cgroup_parent == ""
 
@@ -169,6 +176,50 @@ async def test_low_host_memory_queues_instead_of_starting(tmp_path: Path, monkey
     assert not t.done()
     avail["mb"] = 8000
     await asyncio.wait_for(t, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_granted_boxes_count_against_memory_floor(tmp_path: Path, monkeypatch) -> None:
+    runner = _runner(tmp_path, max_sessions=8)
+    runner.settings = RunnerSettings(token=TOKEN, workspace_root=tmp_path / "ws", min_free_mb=0, min_avail_mb=3000)
+    monkeypatch.setattr(runner, "avail_mb", lambda: 3100)
+    await runner.admit(_key(A, "1"))
+    t = asyncio.create_task(runner.admit(_key(B, "2")))
+    await asyncio.sleep(0.02)
+    assert not t.done() and len(runner.granted) == 1
+    t.cancel()
+
+
+@pytest.mark.asyncio
+async def test_client_leaving_mid_spawn_stops_the_box(tmp_path: Path, monkeypatch) -> None:
+    runner = _runner(tmp_path, max_sessions=1)
+    made = asyncio.Event()
+    stopped: list[str] = []
+
+    async def slow_spawn(run_id, key, *_a, **_k):
+        await asyncio.sleep(0.05)
+        async with runner.lock:
+            runner.granted.clear()
+            sess = SimpleNamespace(run_id=run_id, key=key)
+            runner.sessions[run_id] = sess
+        made.set()
+        return sess
+
+    async def fake_stop(sess) -> None:
+        stopped.append(sess.run_id)
+        async with runner.lock:
+            runner.sessions.pop(sess.run_id, None)
+            runner.pump()
+
+    monkeypatch.setattr(runner, "_spawn", slow_spawn)
+    monkeypatch.setattr(runner, "stop", fake_stop)
+    spec = {"run_id": "r1", "key": {"school": A, "member": "e" * 32, "conv": "1" * 32}, "args": ["--mode", "rpc"]}
+    t = asyncio.create_task(runner.start(spec))
+    await asyncio.sleep(0.01)
+    t.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await t
+    assert made.is_set() and stopped == ["r1"] and not runner.sessions and not runner.granted
 
 
 @pytest.mark.asyncio
@@ -408,6 +459,42 @@ async def test_runtime_shows_queue_then_runs(monkeypatch) -> None:
     assert [q["ahead"] for q in queued] == [2, 1, 0] and queued[-1]["started"] is True
     kinds = [k for k, _ in events]
     assert kinds.index("run.queued") < kinds.index("run.model")
+
+
+@pytest.mark.asyncio
+async def test_time_in_line_is_not_the_runs_wall(monkeypatch) -> None:
+    from pico_orchestrator.run_types import RunCaps
+    from pico_orchestrator.true_pi import runner as tp_runner
+    from pico_orchestrator.true_pi import runtime as rt
+
+    async def no_listing(_key: Any) -> dict[str, Any]:
+        return {}
+
+    async def no_landing(**_k: Any) -> list[Any]:
+        return []
+
+    monkeypatch.setattr(tp_runner, "list_outputs", no_listing)
+    monkeypatch.setattr(rt, "_land_workspace_outputs", no_landing)
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    async def not_cancelled() -> bool:
+        return False
+
+    release = asyncio.Event()
+    asyncio.get_running_loop().call_later(1.3, release.set)
+    result = await rt.run_true_pi_agent(
+        prompt="hi",
+        principal=SimpleNamespace(school_id="s", membership_id="m", scopes=None),
+        emit=emit,
+        is_cancelled=not_cancelled,
+        caps=RunCaps(max_seconds=1),
+        transport=_queued_transport(release=release),
+    )
+    assert result.status == "succeeded"
+    assert not any(p.get("code") == "wall.stop" for k, p in events if k == "run.status")
 
 
 @pytest.mark.asyncio
