@@ -148,17 +148,50 @@ async def test_hung_tool_is_aborted_and_the_session_resumes(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
-async def test_pi_that_never_ends_the_aborted_turn_still_resumes(
+async def test_pi_that_never_ends_the_aborted_turn_fails_instead_of_waiting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A resume prompt would queue behind a turn Pi never ended, with no wall clock."""
     monkeypatch.setenv("PICO_TOOL_HANG_SECONDS", "1")
     monkeypatch.setattr(runtime, "_HANG_ABORT_GRACE", 0.3)
     events: list[tuple[str, dict[str, Any]]] = []
     transport = AbortingTransport(scripted=_hanging_bash(), scripted_after_prompt=[_finish()])
     transport.mute = True
     result = await _run(transport, events)
-    assert result.status == "succeeded", result.error
-    assert len(_prompts(transport)) == 2
+    assert result.status == "failed"
+    assert len(_prompts(transport)) == 1
+    assert "bash 命令运行超过" in str(result.error)
+
+
+@pytest.mark.asyncio
+async def test_usage_limit_in_the_aborted_turn_is_not_resumed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PICO_TOOL_HANG_SECONDS", "1")
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = AbortingTransport(scripted=_hanging_bash(), scripted_after_prompt=[_finish()])
+    transport.mute = True
+    limit = {
+        "role": "assistant",
+        "content": [],
+        "stopReason": "error",
+        "errorMessage": "The usage limit has been reached",
+    }
+
+    async def send(command: Any) -> None:
+        await FakeTransport.send(transport, command)
+        if dict(command).get("type") == "abort":
+            for item in (
+                {"type": "message_end", "message": limit},
+                {"type": "agent_end", "willRetry": False, "messages": []},
+            ):
+                await transport._event_q.put(RpcEvent(item))
+
+    transport.send = send  # type: ignore[method-assign]
+    result = await _run(transport, events)
+    assert result.status == "failed"
+    assert len(_prompts(transport)) == 1
+    assert "usage limit" in str(result.error)
 
 
 @pytest.mark.asyncio

@@ -684,7 +684,9 @@ async def _run_true_pi_once(
                     if stop.is_set() or timed_out.is_set() or await is_cancelled():
                         break
                     prev_tool_oks = state.tool_oks
-                    track_open_tool(open_tools, event.type, event.raw, loop.time(), hang_limit)
+                    # Leftovers of an aborted turn (dropped below until agent_start) open nothing.
+                    if not state.awaiting_start or event.type == "agent_start":
+                        track_open_tool(open_tools, event.type, event.raw, loop.time(), hang_limit)
                     await map_event(
                         event,
                         emit=emit,
@@ -773,7 +775,10 @@ async def _run_true_pi_once(
                             open_tools.clear()
                             await client.abort()
                     if hung_at is not None and loop.time() - hung_at >= _HANG_ABORT_GRACE:
+                        # Pi never ended the aborted turn: a resume prompt would queue
+                        # behind it with no wall clock to stop the wait. Fail instead.
                         state.settled = True
+                        state.no_resume = True
                         break
                     # Dual-mode deep-lane circuit breaker (F2): DeepSeek 深度 empty
                     # loop fuse. GPT Responses thinking is skipped (see helper).
@@ -838,7 +843,7 @@ async def _run_true_pi_once(
                 else:
                     with suppress(Exception):
                         consumer.result()
-            if state.tool_hung:
+            if state.tool_hung and _provider_fail_code(state.provider_error or "") != "model.usage_limit":
                 state.provider_error = state.tool_hung
             return None
 
@@ -877,6 +882,11 @@ async def _run_true_pi_once(
                 {"text": resume_teacher_note(state.resumes, tool_hang=bool(hung)), **tag},
             )
             state.awaiting_start = True
+            if hasattr(transport, "plan_agent_ends"):
+                # Plan-mode end counting is per prompt; the last prompt's ends would
+                # land the resumed turn ~1s in as "empty plan".
+                transport.plan_agent_ends = 0
+                transport.plan_first_held_at = None
             steps_before = state.step
             early = await _drive(tool_hang_prompt(hung) if hung else resume_prompt(reason), [])
             if early is not None:
