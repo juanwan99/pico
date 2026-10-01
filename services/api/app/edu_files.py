@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import json
@@ -701,6 +702,9 @@ async def persist_edu_file(
     else:
         stored, encoding, byte_size, digest = encode_artifact_payload(data)
         artifact_kind = KIND_SRC
+    # Meili is plain HTTP: after commit and off the event loop, never while
+    # this write transaction holds the SQLite lock (#1135 load test).
+    projections: list[tuple[str, str, str | bytes]] = []
     factory = session_factory()
     async with factory() as session:
         task = TaskRow(
@@ -737,16 +741,7 @@ async def persist_edu_file(
                 byte_size=text_size,
             )
             session.add(kb_row)
-            try:
-                project_material_artifact(
-                    principal,
-                    artifact_id=kb_row.id,
-                    title=filename[:512],
-                    kind="kb_text",
-                    content=text_body,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("meili project kb_text failed: %s", type(exc).__name__)
+            projections.append((kb_row.id, "kb_text", text_body))
         if artifact_kind == KIND_SRC:
             sidecar = {k: v for k, v in extract.items() if k != "page_pngs"}
             sidecar_json = json.dumps(sidecar, ensure_ascii=False)
@@ -762,22 +757,20 @@ async def persist_edu_file(
             )
             session.add(excerpt)
         await session.commit()
-        index_body: str | bytes
-        if artifact_kind == KIND_SRC:
-            index_body = data
-        else:
-            index_body = stored
+    projections.append((src.id, artifact_kind, data if artifact_kind == KIND_SRC else stored))
+    for artifact_id, kind_, body in projections:
         try:
-            project_material_artifact(
+            await asyncio.to_thread(
+                project_material_artifact,
                 principal,
-                artifact_id=src.id,
+                artifact_id=artifact_id,
                 title=filename[:512],
-                kind=artifact_kind,
-                content=index_body,
+                kind=kind_,
+                content=body,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("meili project after file persist failed: %s", type(exc).__name__)
-        return src.id
+    return src.id
 
 
 async def load_edu_file(principal: Principal, file_id: str) -> dict[str, Any] | None:
@@ -853,7 +846,7 @@ async def post_edu_file(
         # (not attached to the conversation) and fail the upload with a human
         # line so the teacher sees it now, not from the model later.
         logger.info("legacy office ingest convert failed name=%s", filename)
-        extract = extract_for_kb(filename, data)
+        extract = await asyncio.to_thread(extract_for_kb, filename, data)
         extract["status"] = "unsupported"
         extract["error"] = err.message
         extract["text"] = ""
@@ -879,7 +872,8 @@ async def post_edu_file(
                 "error": err.message,
             },
         ) from err
-    extract = extract_for_kb(filename, data)
+    # Zip / Office parsing is CPU work: off the event loop every run shares.
+    extract = await asyncio.to_thread(extract_for_kb, filename, data)
     file_id = await persist_edu_file(
         principal,
         filename=filename,

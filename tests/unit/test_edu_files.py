@@ -1011,3 +1011,44 @@ def test_native_input_file_pdf_rasters_to_images() -> None:
     assert "地理答案" in _last_user_prompt([msg])
     images = images_from_native_pdf_parts([msg])
     assert images == []
+
+
+def test_upload_projects_to_meili_after_commit_off_the_loop(client: TestClient, monkeypatch) -> None:
+    """#1135: Meili HTTP never runs on the event loop or under the SQLite write lock."""
+    import asyncio
+    import os
+    import sqlite3
+
+    from app import edu_files
+
+    db_file = os.environ["PICO_DATABASE_URL"].split(":///", 1)[1]
+    seen: list[tuple[str, bool, bool]] = []
+
+    def fake_project(_principal, *, artifact_id, title, kind, content):
+        try:
+            asyncio.get_running_loop()
+            off_loop = False
+        except RuntimeError:
+            off_loop = True
+        conn = sqlite3.connect(db_file, timeout=0.2)
+        try:
+            conn.execute("BEGIN IMMEDIATE")  # fails fast if a writer holds the lock
+            conn.rollback()
+            free = True
+        except sqlite3.OperationalError:
+            free = False
+        finally:
+            conn.close()
+        seen.append((kind, off_loop, free))
+        return True
+
+    monkeypatch.setattr(edu_files, "project_material_artifact", fake_project)
+    raw = _xlsx_bytes([["班", "周课时"], ["一班", "5"]])
+    res = client.post(
+        "/v1/files",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"filename": "课时.xlsx", "content_b64": base64.b64encode(raw).decode("ascii")},
+    )
+    assert res.status_code == 200, res.text
+    assert seen and all(off and free for _, off, free in seen), seen
+    assert {k for k, _, _ in seen} >= {"kb_text"}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import logging
@@ -210,7 +211,9 @@ class LedgerArtifactStore:
         try:
             from pico_orchestrator.meili_kb import project_material_artifact
 
-            project_material_artifact(
+            # Blocking HTTP: off the event loop every run shares (#1135).
+            await asyncio.to_thread(
+                project_material_artifact,
                 principal,
                 artifact_id=str(out["artifact_id"]),
                 title=title,
@@ -222,7 +225,8 @@ class LedgerArtifactStore:
         try:
             from pico_orchestrator.sandbox_persist import persist_office_to_owner_disk
 
-            persist_office_to_owner_disk(
+            await asyncio.to_thread(
+                persist_office_to_owner_disk,
                 principal.school_id,
                 principal.membership_id,
                 title,

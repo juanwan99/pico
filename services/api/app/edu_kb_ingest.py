@@ -188,7 +188,7 @@ async def post_kb_ingest(
                 membership_id=str(principal.membership_id or ""),
                 scope="school",
             )
-            indexed = upsert_documents(docs, replace_artifact=True)
+            indexed = await asyncio.to_thread(upsert_documents, docs, replace_artifact=True)
             chunk_count = len(docs) if indexed else 0
         ingest_ok = bool(indexed)
         return {
@@ -233,7 +233,8 @@ async def post_kb_search(
     include_school = str(body.scope or "").strip().lower() == "school"
     enforce_feature(principal, "kb")
     try:
-        result = search_materials(
+        result = await asyncio.to_thread(
+            search_materials,
             body.query,
             school_id=principal.school_id,
             membership_id=principal.membership_id,

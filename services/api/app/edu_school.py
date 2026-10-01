@@ -7,6 +7,7 @@ the whole school into the model.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -707,9 +708,9 @@ async def _workspace_named_file(
 
     try:
         data = await convert_legacy_office_bytes(filename, data)
-        extract = extract_for_kb(filename, data)
+        extract = await asyncio.to_thread(extract_for_kb, filename, data)
     except LegacyOfficeConvertError as err:
-        extract = extract_for_kb(filename, data)
+        extract = await asyncio.to_thread(extract_for_kb, filename, data)
         extract["status"] = "unsupported"
         extract["error"] = err.message
         extract["text"] = ""
