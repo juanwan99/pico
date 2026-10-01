@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -367,6 +368,19 @@ def _is_model_missing_error(exc: Exception) -> bool:
     return "404" in msg or ("model" in low and "not" in low) or "invalid_request" in low
 
 
+# New API sheds load with an instant 503 while the host CPU is pegged; that
+# can last minutes (#1135). Before the first token, back off and try again:
+# 3s doubling × 6 ≈ 3 min. The SDK's own retry stays off (timeouts, #766).
+OVERLOAD_RETRY_MAX = 6
+OVERLOAD_RETRY_BASE_S = 3.0
+_OVERLOAD_STATUS = {429, 500, 502, 503, 504, 529}
+
+
+def _is_upstream_overload(exc: Exception) -> bool:
+    status = getattr(exc, "status_code", None)
+    return status in _OVERLOAD_STATUS or "overloaded" in str(exc).lower()
+
+
 def _llm_client(provider: ProviderConfig) -> AsyncOpenAI:
     """Official OpenAI SDK. Long read timeout: GPT thinking can exceed 10 min."""
     return AsyncOpenAI(
@@ -619,9 +633,22 @@ async def stream_chat(
         async for piece in _iter_chat_completions(provider, mid):
             yield piece
 
+    async def _with_overload_retry(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
+        for attempt in range(OVERLOAD_RETRY_MAX + 1):
+            yielded = False
+            try:
+                async for piece in _iter_provider(provider, mid):
+                    yielded = True
+                    yield piece
+                return
+            except Exception as exc:
+                if yielded or attempt == OVERLOAD_RETRY_MAX or not _is_upstream_overload(exc):
+                    raise
+            await asyncio.sleep(OVERLOAD_RETRY_BASE_S * 2**attempt)
+
     async def _pump(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
         try:
-            async for piece in _iter_provider(provider, mid):
+            async for piece in _with_overload_retry(provider, mid):
                 yield piece
         except Exception as e:
             fallback = _deepseek_config()

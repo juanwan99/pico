@@ -302,3 +302,100 @@ async def test_stream_chat_thinking_only_is_length(monkeypatch: pytest.MonkeyPat
     finish = {}
     assert [p async for p in stream_chat("hi", max_tokens=64, finish_out=finish)] == ["ok"]
     assert finish == {"finish_reason": "stop"}
+
+
+class _Overloaded(Exception):
+    status_code = 503
+
+    def __init__(self) -> None:
+        super().__init__("system cpu overloaded (current: 100.0%, threshold: 90%)")
+
+
+def _gemini_env(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    slept: list[float] = []
+
+    async def _sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    monkeypatch.setattr("pico_orchestrator.provider.asyncio.sleep", _sleep)
+    return slept
+
+
+def _text_stream(*texts: str, fail_after: bool = False) -> object:
+    items = [
+        SimpleNamespace(
+            usage=None,
+            choices=[SimpleNamespace(delta=SimpleNamespace(content=t), finish_reason=None)],
+        )
+        for t in texts
+    ]
+
+    class _Stream:
+        def __aiter__(self) -> _Stream:
+            return self
+
+        async def __anext__(self) -> SimpleNamespace:
+            if items:
+                return items.pop(0)
+            if fail_after:
+                raise _Overloaded()
+            raise StopAsyncIteration
+
+    return _Stream()
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_waits_out_new_api_overload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """New API 503s while the host CPU is pegged; back off instead of failing (#1135)."""
+    slept = _gemini_env(monkeypatch)
+    calls = {"n": 0}
+
+    class _Completions:
+        async def create(self, **_kwargs: object) -> object:
+            calls["n"] += 1
+            if calls["n"] <= 3:
+                raise _Overloaded()
+            return _text_stream("ok")
+
+    class _Client:
+        def __init__(self, **_kwargs: object) -> None:
+            self.chat = SimpleNamespace(completions=_Completions())
+
+    monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _Client)
+    chunks = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
+    assert chunks == ["ok"]
+    assert slept == [3.0, 6.0, 12.0]
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_overload_gives_up_and_never_replays(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bounded backoff; once text went out, a retry would duplicate it — raise instead."""
+    from pico_orchestrator.provider import OVERLOAD_RETRY_MAX
+
+    slept = _gemini_env(monkeypatch)
+
+    class _Always:
+        async def create(self, **_kwargs: object) -> object:
+            raise _Overloaded()
+
+    class _MidStream:
+        async def create(self, **_kwargs: object) -> object:
+            return _text_stream("half", fail_after=True)
+
+    for completions, want_sleeps in ((_Always(), OVERLOAD_RETRY_MAX), (_MidStream(), 0)):
+        slept.clear()
+
+        def _client(_c: object = completions, **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(chat=SimpleNamespace(completions=_c))
+
+        monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _client)
+        with pytest.raises(RuntimeError, match="overloaded"):
+            _ = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
+        assert len(slept) == want_sleeps
