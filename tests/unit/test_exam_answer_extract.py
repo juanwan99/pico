@@ -609,3 +609,124 @@ def test_prompt_counts_sub_questions_not_circled_blanks():
     assert "只数 (1)（1）1) 这一层" in system
     assert "①②③ 是同一小问里的多个空，不是小问" in system
     assert "保留原卷的小问号 (1)(2) 和空号 ①②" in system
+
+
+# ---------------------------------------------------------------- subs (pico#1126)
+
+BIO17_FLAT = "叶绿体；抑制；氧气（或O2）；上升（或升高）；不变；栅藻光合作用增强"
+
+
+def test_sub_count_ignores_circled_blanks_and_stray_parens():
+    assert ex.count_sub_marks("（1）①叶绿体 ②基质（2）抑制") == 2
+    assert ex.count_sub_marks("①甲 ②乙 ③丙") == 1
+    assert ex.count_sub_marks("f(5)=3") == 1
+    assert ex.count_sub_marks("(1) 甲 (1) 乙") == 1
+    item = ex.normalize_item(
+        {"number": 17, "type": "short_answer", "answer": "（1）①叶绿体 ②基质 ③NADPH", "sub_count": 1},
+        page=None,
+    )
+    assert item["sub_count"] == 1
+    assert item["subs"] == []
+
+
+def test_subs_rebuild_answer_with_marks_and_sum_score():
+    item = ex.normalize_item(
+        {
+            "number": 17,
+            "type": "short_answer",
+            "answer": BIO17_FLAT,
+            "sub_count": 9,
+            "has_figure": True,
+            "subs": [
+                {"sub": 1, "answer": "叶绿体", "score": 2},
+                {"sub": 2, "answer": "抑制", "score": "2"},
+                {"sub": 3, "answer": "氧气（或O2）", "score": 1},
+                {"sub": 4, "answer": "上升（或升高）", "score": 2},
+                {"sub": 5, "answer": "不变", "score": 2},
+                {"sub": 6, "answer": "栅藻光合作用增强", "score": 3},
+            ],
+        },
+        page=None,
+    )
+    assert item["sub_count"] == 6
+    assert item["score"] == 12
+    assert item["answer"].startswith("（1）叶绿体\n（2）抑制\n（3）")
+    assert ex.count_sub_marks(item["answer"]) == 6
+    assert [s["score"] for s in item["subs"]] == [2, 2, 1, 2, 2, 3]
+
+
+def test_subs_keep_marked_answer_and_null_scores_never_spread():
+    item = ex.normalize_item(
+        {
+            "number": 11,
+            "type": "fill_in_blank",
+            "answer": "（1）1.700（2）0.20",
+            "score": 9,
+            "subs": [
+                {"sub": 2, "answer": "0.20", "score": 3.0},
+                {"sub": 1, "answer": "1.700", "score": None},
+                {"sub": 3, "answer": "减小", "score": 2.67},
+                {"sub": 4, "answer": "x", "score": 1.5},
+            ],
+        },
+        page=None,
+    )
+    assert [s["sub"] for s in item["subs"]] == [1, 2, 3, 4]
+    assert [s["score"] for s in item["subs"]] == [None, 3, None, 1.5]
+    assert item["score"] == 9
+    assert item["sub_count"] == 4
+    # model answer lacked (3)(4) → rebuilt so edu can cut every 小问
+    assert "（3）减小" in item["answer"] and "（4）x" in item["answer"]
+    choice = ex.normalize_item(
+        {"number": 1, "type": "single_choice", "answer": "A", "subs": [{"sub": 1, "answer": "A"}]},
+        page=1,
+    )
+    assert choice["subs"] == []
+
+
+def test_merge_fills_sub_scores_from_rubric_page_and_warns_on_mismatch():
+    answers = ex.items_from_model_text(
+        json.dumps(
+            [
+                {
+                    "number": 18,
+                    "type": "short_answer",
+                    "answer": "（1）绿色（2）替换",
+                    "subs": [{"sub": 1, "answer": "绿色"}, {"sub": 2, "answer": "替换"}],
+                }
+            ]
+        ),
+        page=1,
+    )
+    rubric = ex.items_from_model_text(
+        json.dumps(
+            [
+                {
+                    "number": 18,
+                    "type": "short_answer",
+                    "answer": "",
+                    "rubric": "（1）2 分（2）3 分",
+                    "score": 6,
+                    "subs": [{"sub": 1, "answer": "", "score": 2}, {"sub": 2, "answer": "", "score": 3}],
+                }
+            ]
+        ),
+        page=2,
+    )
+    merged = ex.merge_items([answers, rubric])
+    assert merged[0]["subs"] == [
+        {"sub": 1, "answer": "绿色", "score": 2},
+        {"sub": 2, "answer": "替换", "score": 3},
+    ]
+    assert merged[0]["sub_count"] == 2
+    out = ex._finish("pages", [answers, rubric], [], [], "", {}, {})
+    assert any("第 18 题小问分合计 5 ≠ 题分 6" in w for w in out["warnings"])
+
+
+def test_prompts_ask_for_subs_per_sub_question():
+    for task in ex.TASKS:
+        system = ex.load_prompts(task=task)["system"]
+        assert '"subs"' in system, task
+    system = ex.load_prompts()["system"]
+    assert "一问一段" in system
+    assert "禁止把题分平摊到小问" in system

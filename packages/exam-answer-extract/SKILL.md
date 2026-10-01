@@ -39,6 +39,7 @@ always-apply: false
       "score": 12 | null,
       "options_count": 4 | null,
       "sub_count": 2,
+      "subs": [{ "sub": 1, "answer": "本小问答案", "score": 4 }, { "sub": 2, "answer": "…", "score": null }],
       "has_figure": false,
       "source": { "page": 3, "quote": "定位原文的一小段" }
     }
@@ -49,6 +50,8 @@ always-apply: false
 ```
 
 - `score` 没有就是 `null`，禁止默认 1。
+- `subs` 一问一条（原卷几问就几条，没有小问为 `[]`）；`subs[].score` 是评分细则写明的本问分，拿不到就是 `null`，不平摊、不估。题分为 `null` 且各问都有分时，题分取合计。
+- `sub_count` 只数小问：有 `subs` 时等于最大小问号；①② 空不算。`answer` 必带「（1）…（2）…」号，一问一段（模型漏号时由 `subs` 拼回），edu 按号切。
 - `rubric` 与 `answer` 分离：细则默认折叠在题下，不进排版。
 - 空数组 = 失败（`422 extract.empty`），不许用正则 / 启发式顶上。
 - 一页失败不整单失败；全部页失败才 `502 model.failed`。
@@ -71,6 +74,9 @@ always-apply: false
   "score": 分值(int) 或 null；没有分值必须 null，禁止默认填 1,
   "options_count": 选择题选项数，默认 4；非选择题 null,
   "sub_count": 小问数：只数 (1)（1）1) 这一层；①②③ 是同一小问里的多个空，不是小问；没有小问为 1,
+  "subs": [
+    { "sub": 1, "answer": "本小问的答案（多空用 ①② 分开）", "score": 本小问分值(int) 或 null }
+  ],
   "has_figure": 答案或题目含需要作答的图则为 true,
   "blanks": [
     { "sub": 1, "text": "该空的标准答案", "flex": "fixed" | "open" }
@@ -84,6 +90,9 @@ always-apply: false
 - 详细解析版：answer 只留答案；过程、解析、补充说明、评分标准全部放进 rubric，不要丢。
 - 答案含图 / 作图题：has_figure=true，并给够 sub_count。
 - answer 里保留原卷的小问号 (1)(2) 和空号 ①②，不要抹掉：edu 靠它们把答案落到答题卡的每一行每一空。
+- 有小问的题：answer 写成「（1）…（2）…」，一问一段；同一问里的多空用 ①② 分开，不要用「；」把几问连成一串。原卷有 (1)(2) 号但答案卷没写号，也要按原卷小问对上号。
+- subs 按小问一问一条，sub 从 1 起连续；原卷几问就几条，不合并、不拆；sub_count 等于 subs 条数。没有小问的题 subs 为 []。
+- subs[].score：评分细则写了本问「……N 分」，或本问每空 / 每点的分，就累计成本问分值；细则没写本问分就是 null。禁止把题分平摊到小问，禁止估分、禁止写小数凑数。
 - 选择题：单个字母 → single_choice；多个字母 → multi_choice。字母必须逐题抄进 answer，不要合并成一串。
 - 短填空 → fill_in_blank；要写步骤或作图 → short_answer。
 - 非选择题每个空标 flex（edu 排版只认这个，不猜）：fixed = 死空，学生几乎只能写这个词/字母/数字（如 A、叶绿体基质）；open = 活空，学生可能写得比标准答案长、还要涂改。选择题不要 blanks。
@@ -128,6 +137,7 @@ always-apply: false
   "score": 卷面分或 null,
   "options_count": 选择题列出的字母数（A–C=3，A–G=7）；非选择题 null。禁止默认 4,
   "sub_count": 小问数：只数 (1)（1）；①②③ 是同一小问里的空，不是小问；没有为 1,
+  "subs": [{ "sub": 1, "answer": "", "score": 卷面印的本小问分(int) 或 null }],
   "has_figure": 题干要作图则为 true,
   "blanks": [{ "sub": 1, "text": "", "flex": "fixed" | "open" }],
   "quote": "定位题干的一小段"
@@ -137,6 +147,7 @@ always-apply: false
 - 完整抽出全部题号，选择题和大题都要出。
 - 题型看题干，不看答案：下列一项是 → single_choice；有几项符合/不定项 → multi_choice；横线填空不要求成段 → fill_in_blank；分析/简答/翻译 → short_answer。
 - 选择题不要编 answer。非选择题 blanks 按横线数，text 留空。
+- 有小问的题 subs 一问一条（没有小问为 []），answer 留空；卷面没印本小问分就是 null，不要平摊题分。
 - 看不见的题不要编；一题都没有就返回 []。
 ```
 <!-- /prompt:system_structure -->
@@ -168,6 +179,7 @@ always-apply: false
   "score": null,
   "options_count": 不要改,
   "sub_count": 不要改,
+  "subs": [{ "sub": 1, "answer": "本小问答案（多空用 ①② 分开）", "score": null }],
   "blanks": [{ "sub": 1, "text": "该空答案", "flex": "fixed" | "open" }],
   "quote": ""
 }
@@ -176,6 +188,7 @@ always-apply: false
 - 必须给题号表里的每一题写出答案，不要空着，禁止从中间题号起笔。
 - 不要新增题号，不要删题号，不要把三选改成四选。
 - 解析放 rubric，不要写进 answer。
+- 有小问的题：answer 写成「（1）…（2）…」一问一段，subs 一问一条，条数等于 sub_count；没有小问 subs 为 []。
 ```
 <!-- /prompt:system_solve -->
 
