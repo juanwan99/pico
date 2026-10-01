@@ -107,7 +107,7 @@ PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
 # of silence on the wire. Pi's 5 min idle default would cut bigger ones; match
 # the ws-proxy read timeout (900s) instead.
 PI_HTTP_IDLE_TIMEOUT_MS = 900_000
-PI_RETRY_MAX = 5
+PI_RETRY_MAX = 8
 PI_RETRY_BASE_DELAY_MS = 3_000
 
 
@@ -132,7 +132,10 @@ def official_compaction_settings(max_context: int) -> dict[str, Any]:
         },
         "httpIdleTimeoutMs": PI_HTTP_IDLE_TIMEOUT_MS,
         # Pi's own retry on retryable upstream errors (overloaded / 5xx / 429).
-        # Default 3 × 2s; a long office task deserves a few more, spaced wider.
+        # Default 3 × 2s. New API rejects with 503 for minutes while the host
+        # CPU is pegged (#1135): 3s doubling × 8 ≈ 13 min keeps a long task alive.
+        # A model with no channel does not wait this out: the runtime aborts on
+        # the first auto_retry_start and brain-HA fails over.
         "retry": {"enabled": True, "maxRetries": PI_RETRY_MAX, "baseDelayMs": PI_RETRY_BASE_DELAY_MS},
     }
 

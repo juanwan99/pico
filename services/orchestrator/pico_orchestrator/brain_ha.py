@@ -9,10 +9,15 @@ from __future__ import annotations
 import os
 from typing import Any
 
-_FAILOVER_MARKERS = (
+# New API has no channel for this model: retrying the same model cannot help.
+_CHANNEL_DEAD_MARKERS = (
     "no available channel",
     "failed to get available channel",
     "model_not_found",
+    "无可用渠道",
+)
+_FAILOVER_MARKERS = (
+    *_CHANNEL_DEAD_MARKERS,
     "http 503",
     "http 502",
     "temporarily unavailable",
@@ -41,6 +46,17 @@ def brain_candidates(primary: str | None) -> list[str]:
         if mid not in out:
             out.append(mid)
     return out or [head] if head else []
+
+
+def is_channel_dead(error: str) -> bool:
+    low = (error or "").lower()
+    return any(m in low for m in _CHANNEL_DEAD_MARKERS)
+
+
+def is_upstream_overloaded(error: str) -> bool:
+    """New API load shedding / rate limit: the same wait hits every model."""
+    low = (error or "").lower()
+    return "overloaded" in low or "429" in low or "rate limit" in low
 
 
 def should_failover(result: Any) -> bool:

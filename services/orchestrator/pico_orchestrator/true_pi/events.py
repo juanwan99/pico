@@ -17,6 +17,9 @@ from pico_orchestrator.sandbox_session_event import (
 )
 from pico_orchestrator.true_pi.client import RpcEvent
 from pico_orchestrator.true_pi.config import RUNTIME_LABEL
+
+# Pi's retry budget before #1135; non-overload errors before output keep it.
+PRE_OUTPUT_RETRIES = 5
 from pico_orchestrator.true_pi.thinking import thinking_from_message
 from pico_orchestrator.user_errors import user_message_for_error
 from pico_orchestrator.workbench_progress import (
@@ -66,6 +69,9 @@ class EventMapState:
     spent_calls: int = 0
     # A tool call Pico aborted for running too long; the resume prompt says so.
     tool_hung: str = ""
+    # Before any output, an upstream error that waiting will not fix: stop Pi's
+    # retries and let brain-HA fail over to the next model.
+    failover_error: str = ""
 
     @property
     def has_output(self) -> bool:
@@ -462,6 +468,32 @@ async def map_event(
                 "plan.progress",
                 {"text": strip_ansi(text.strip()), "method": method, **tag},
             )
+        return
+
+    if kind == "auto_retry_start":
+        # Pi's own retry (overloaded / 5xx / 429). Ledger shows the wait.
+        err = str(raw.get("errorMessage") or "")
+        state.event_kinds.append("model.retry")
+        await emit(
+            "model.retry",
+            {
+                "attempt": raw.get("attempt"),
+                "max_retries": raw.get("maxAttempts"),
+                "delay_ms": raw.get("delayMs"),
+                "error": err[:300],
+                **tag,
+            },
+        )
+        from pico_orchestrator.brain_ha import is_channel_dead, is_upstream_overloaded
+
+        # Only an overload gets Pi's long budget before output; anything else
+        # fails over after the old 5 tries, a dead channel at once.
+        attempt = int(raw.get("attempt") or 0)
+        if not state.has_output and (
+            is_channel_dead(err)
+            or (attempt > PRE_OUTPUT_RETRIES and not is_upstream_overloaded(err))
+        ):
+            state.failover_error = err
         return
 
     if kind == "agent_end":
