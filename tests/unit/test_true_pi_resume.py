@@ -334,3 +334,50 @@ async def test_dead_channel_after_output_keeps_retrying() -> None:
     result = await _run(transport, events)
     assert result.status == "succeeded", result.error
     assert not any(c.get("type") == "abort" for c in transport.sent)
+
+
+@pytest.mark.asyncio
+async def test_other_errors_before_output_keep_old_budget() -> None:
+    """A 5xx that is not load shedding still fails over after Pi's old 5 tries."""
+    from pico_orchestrator.brain_ha import should_failover
+    from pico_orchestrator.true_pi.events import PRE_OUTPUT_RETRIES
+
+    err = "upstream error: do request failed"
+    retries = [_retry_start(err, n) for n in range(1, PRE_OUTPUT_RETRIES + 2)]
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = FakeTransport(scripted=[*_finish()[:2], *retries])
+    result = await _run(transport, events)
+    assert result.status == "failed" and should_failover(result)
+    assert len([k for k, _ in events if k == "model.retry"]) == PRE_OUTPUT_RETRIES + 1
+
+    many = [_retry_start(_OVERLOADED, n) for n in range(1, PRE_OUTPUT_RETRIES + 3)]
+    finish = _finish()
+    transport = FakeTransport(scripted=[*finish[:2], *many, *finish[2:]], assistant_text="ok")
+    assert (await _run(transport, [])).status == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_retry_backoff_does_not_trip_deep_lane_fuse() -> None:
+    """Waiting out a 503 is not an empty loop: the fuse clock moves past the backoff."""
+    import time
+
+    events: list[tuple[str, dict[str, Any]]] = []
+    wait = dict(_retry_start(_OVERLOADED), delayMs=1500)
+    transport = FakeTransport(scripted=[*_finish()[:2], wait])
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    t0 = time.monotonic()
+    result = await run_true_pi_agent(
+        prompt="深度任务",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=30, thinking_on=True, no_progress_seconds=1),
+        transport=transport,
+        run_id="fuse-t",
+    )
+    assert result.status == "failed"
+    assert [p["code"] for k, p in events if k == "run.error"] == ["pi.no_progress"]
+    assert time.monotonic() - t0 >= 2.4

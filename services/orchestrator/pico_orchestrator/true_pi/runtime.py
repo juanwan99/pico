@@ -360,6 +360,8 @@ async def _run_true_pi_once(
     breaker_seconds = max(1, int(getattr(caps, "no_progress_seconds", 180) or 180))
     last_tool_ok_wall: float | None = None
     last_progress_wall = started
+    # Deep-lane fuse clock before the first tool; Pi's retry backoff pushes it on.
+    fuse_from = started
     hang_limit = tool_hang_seconds()
     open_tools: dict[str, tuple[str, float, float]] = {}
 
@@ -634,7 +636,7 @@ async def _run_true_pi_once(
             await emit("run.queued", {"ahead": 0, "started": True, **tag})
             started = loop.time()
             deadline = wall_deadline(started, int(getattr(caps, "max_seconds", 0) or 0))
-            last_progress_wall = started
+            last_progress_wall = fuse_from = started
             if timed_out.is_set():
                 # The watcher fired on the old deadline while in line.
                 timed_out.clear()
@@ -712,7 +714,7 @@ async def _run_true_pi_once(
         async def _drive(prompt_text: str, images: list[dict[str, Any]]) -> RunResult | None:
             """One prompt on the live Pi session. Returns a RunResult only on an early stop."""
             async def _consume() -> None:
-                nonlocal last_progress_wall, last_tool_ok_wall
+                nonlocal last_progress_wall, last_tool_ok_wall, fuse_from
                 async for event in client.events():
                     # Responses are handled by wait_response on SubprocessTransport;
                     # ignore type=response in the event stream if any leak through.
@@ -762,6 +764,11 @@ async def _run_true_pi_once(
                     # resets the no-tool-progress timer used by the deep-lane
                     # bailout.
                     last_progress_wall = loop.time()
+                    if event.type == "auto_retry_start":
+                        # Waiting on upstream is not an empty loop (#1135).
+                        wait = float(event.raw.get("delayMs") or 0) / 1000
+                        last_progress_wall += wait
+                        fuse_from = max(fuse_from, last_progress_wall)
                     if state.tool_oks > prev_tool_oks:
                         last_tool_ok_wall = loop.time()
                     if state.settled:
@@ -826,12 +833,12 @@ async def _run_true_pi_once(
                         state.settled = True
                         state.no_resume = True
                         break
-                    if state.dead_channel:
+                    if state.failover_error:
                         await client.abort()
                         return await _failed(
                             emit,
                             code="model.unconfigured",
-                            reason=state.dead_channel[:300],
+                            reason=state.failover_error,
                             state=state,
                             principal=principal,
                             tag=tag,
@@ -843,7 +850,7 @@ async def _run_true_pi_once(
                         tool_gap = (
                             now - last_tool_ok_wall
                             if last_tool_ok_wall is not None
-                            else now - started
+                            else now - fuse_from
                         )
                         progress_gap = now - last_progress_wall
                         if should_trip_true_pi_idle_breaker(

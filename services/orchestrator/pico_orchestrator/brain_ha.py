@@ -53,6 +53,12 @@ def is_channel_dead(error: str) -> bool:
     return any(m in low for m in _CHANNEL_DEAD_MARKERS)
 
 
+def is_upstream_overloaded(error: str) -> bool:
+    """New API load shedding / rate limit: the same wait hits every model."""
+    low = (error or "").lower()
+    return "overloaded" in low or "429" in low or "rate limit" in low
+
+
 def should_failover(result: Any) -> bool:
     if str(getattr(result, "status", "") or "") != "failed":
         return False

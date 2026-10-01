@@ -17,6 +17,9 @@ from pico_orchestrator.sandbox_session_event import (
 )
 from pico_orchestrator.true_pi.client import RpcEvent
 from pico_orchestrator.true_pi.config import RUNTIME_LABEL
+
+# Pi's retry budget before #1135; non-overload errors before output keep it.
+PRE_OUTPUT_RETRIES = 5
 from pico_orchestrator.true_pi.thinking import thinking_from_message
 from pico_orchestrator.user_errors import user_message_for_error
 from pico_orchestrator.workbench_progress import (
@@ -66,9 +69,9 @@ class EventMapState:
     spent_calls: int = 0
     # A tool call Pico aborted for running too long; the resume prompt says so.
     tool_hung: str = ""
-    # Pi is retrying a model with no channel before any output: fail over now
-    # instead of sitting through Pi's whole retry budget.
-    dead_channel: str = ""
+    # Before any output, an upstream error that waiting will not fix: stop Pi's
+    # retries and let brain-HA fail over to the next model.
+    failover_error: str = ""
 
     @property
     def has_output(self) -> bool:
@@ -481,10 +484,16 @@ async def map_event(
                 **tag,
             },
         )
-        from pico_orchestrator.brain_ha import is_channel_dead
+        from pico_orchestrator.brain_ha import is_channel_dead, is_upstream_overloaded
 
-        if not state.has_output and is_channel_dead(err):
-            state.dead_channel = err
+        # Only an overload gets Pi's long budget before output; anything else
+        # fails over after the old 5 tries, a dead channel at once.
+        attempt = int(raw.get("attempt") or 0)
+        if not state.has_output and (
+            is_channel_dead(err)
+            or (attempt > PRE_OUTPUT_RETRIES and not is_upstream_overloaded(err))
+        ):
+            state.failover_error = err
         return
 
     if kind == "agent_end":
