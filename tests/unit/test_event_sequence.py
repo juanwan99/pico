@@ -46,3 +46,36 @@ async def test_event_sequence_is_unique_and_foreign_keys_are_enabled(event_db):
         session.add(EventRow(run_id=new_id(), seq=1, type="orphan"))
         with pytest.raises(IntegrityError):
             await session.commit()
+
+
+async def test_concurrent_runs_never_lose_events_to_sqlite_busy(event_db):
+    """#1135 32-box load test: 30+ runs emitting at once must queue on the write
+    lock, not fail fast. A read-then-write (SELECT max(seq), then INSERT) upgrade
+    is refused at once under WAL when another writer committed in between."""
+    import asyncio
+
+    runs = []
+    async with session_factory()() as session:
+        for _ in range(40):
+            task = TaskRow(id=new_id(), school_id="school-a", membership_id="member-a")
+            run = RunRow(id=new_id(), task_id=task.id)
+            session.add_all([task, run])
+            runs.append(run.id)
+        await session.commit()
+
+    async def emit_many(run_id: str) -> None:
+        for i in range(30):
+            async with session_factory()() as session:
+                await append_event(session, run_id, "agent.step", {"i": i})
+
+    results = await asyncio.gather(*(emit_many(r) for r in runs), return_exceptions=True)
+    errors = [r for r in results if isinstance(r, BaseException)]
+    assert not errors, f"{len(errors)} runs lost events: {errors[0]!r}"
+    async with session_factory()() as session:
+        for run_id in runs:
+            seqs = (
+                await session.scalars(
+                    text("select seq from events where run_id = :r order by seq").bindparams(r=run_id)
+                )
+            ).all()
+            assert seqs == list(range(1, 31))

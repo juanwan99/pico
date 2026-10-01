@@ -889,6 +889,17 @@ async def _run_true_pi_once(
                 else:
                     with suppress(Exception):
                         consumer.result()
+            # A consumer that raised (ledger write, event mapping) ended the stream
+            # early: fail with that, not "did not settle within max_seconds" (#1135).
+            # Keep what the box already wrote; a finished plan turn still lands.
+            if consumer.done() and not consumer.cancelled() and consumer.exception() is not None:
+                plan_landed = int(getattr(transport, "plan_agent_ends", 0) or 0) >= 1 and not bool(
+                    getattr(transport, "plan_execute_pending", False)
+                )
+                if not plan_landed:
+                    with suppress(Exception):
+                        await salvage_outputs()
+                    raise consumer.exception()  # type: ignore[misc]
             if state.tool_hung and _provider_fail_code(state.provider_error or "") != "model.usage_limit":
                 state.provider_error = state.tool_hung
             return None
