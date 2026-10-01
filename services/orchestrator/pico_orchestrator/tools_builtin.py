@@ -880,7 +880,9 @@ def _workspace_handlers(
             try:
                 from pico_orchestrator.features import feature_enabled
 
-                result = search_materials(
+                # Meili + rerank are blocking HTTP; every run shares this loop.
+                result = await asyncio.to_thread(
+                    search_materials,
                     query,
                     school_id=principal.school_id,
                     membership_id=principal.membership_id,
