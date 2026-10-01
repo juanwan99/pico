@@ -164,6 +164,25 @@ def test_grade_book_is_seeded_and_carries_traps() -> None:
     assert ids_fin != sorted(ids_fin) and len(set(ids_mid) - set(ids_fin)) == 1
 
 
+def test_fixture_projects_ship_their_test_data() -> None:
+    """.gitignore has ``data/``: tests/data CSVs were never committed (LH1 2026-10-01)."""
+    import subprocess
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "testdata/longtask-eval/fixtures/code"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    for name in (
+        "roster/tests/data/class.csv",
+        "gradebook/tests/data/sample.csv",
+        "gradebook/tests/data/attendance.csv",
+    ):
+        assert f"testdata/longtask-eval/fixtures/code/{name}" in tracked, name
+
+
 def test_zip_dir_skips_pycache(tmp_path: Path) -> None:
     import io
     import zipfile
