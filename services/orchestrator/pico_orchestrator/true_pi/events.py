@@ -66,6 +66,9 @@ class EventMapState:
     spent_calls: int = 0
     # A tool call Pico aborted for running too long; the resume prompt says so.
     tool_hung: str = ""
+    # Pi is retrying a model with no channel before any output: fail over now
+    # instead of sitting through Pi's whole retry budget.
+    dead_channel: str = ""
 
     @property
     def has_output(self) -> bool:
@@ -462,6 +465,26 @@ async def map_event(
                 "plan.progress",
                 {"text": strip_ansi(text.strip()), "method": method, **tag},
             )
+        return
+
+    if kind == "auto_retry_start":
+        # Pi's own retry (overloaded / 5xx / 429). Ledger shows the wait.
+        err = str(raw.get("errorMessage") or "")
+        state.event_kinds.append("model.retry")
+        await emit(
+            "model.retry",
+            {
+                "attempt": raw.get("attempt"),
+                "max_retries": raw.get("maxAttempts"),
+                "delay_ms": raw.get("delayMs"),
+                "error": err[:300],
+                **tag,
+            },
+        )
+        from pico_orchestrator.brain_ha import is_channel_dead
+
+        if not state.has_output and is_channel_dead(err):
+            state.dead_channel = err
         return
 
     if kind == "agent_end":

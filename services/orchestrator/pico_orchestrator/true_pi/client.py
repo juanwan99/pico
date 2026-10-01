@@ -134,6 +134,8 @@ def official_compaction_settings(max_context: int) -> dict[str, Any]:
         # Pi's own retry on retryable upstream errors (overloaded / 5xx / 429).
         # Default 3 × 2s. New API rejects with 503 for minutes while the host
         # CPU is pegged (#1135): 3s doubling × 8 ≈ 13 min keeps a long task alive.
+        # A model with no channel does not wait this out: the runtime aborts on
+        # the first auto_retry_start and brain-HA fails over.
         "retry": {"enabled": True, "maxRetries": PI_RETRY_MAX, "baseDelayMs": PI_RETRY_BASE_DELAY_MS},
     }
 

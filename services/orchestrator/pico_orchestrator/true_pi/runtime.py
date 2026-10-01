@@ -826,6 +826,16 @@ async def _run_true_pi_once(
                         state.settled = True
                         state.no_resume = True
                         break
+                    if state.dead_channel:
+                        await client.abort()
+                        return await _failed(
+                            emit,
+                            code="model.unconfigured",
+                            reason=state.dead_channel[:300],
+                            state=state,
+                            principal=principal,
+                            tag=tag,
+                        )
                     # Dual-mode deep-lane circuit breaker (F2): DeepSeek 深度 empty
                     # loop fuse. GPT Responses thinking is skipped (see helper).
                     if thinking_on and not state.settled:

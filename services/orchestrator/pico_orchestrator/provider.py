@@ -373,7 +373,7 @@ def _is_model_missing_error(exc: Exception) -> bool:
 # 3s doubling × 6 ≈ 3 min. The SDK's own retry stays off (timeouts, #766).
 OVERLOAD_RETRY_MAX = 6
 OVERLOAD_RETRY_BASE_S = 3.0
-_OVERLOAD_STATUS = {429, 500, 502, 503, 504, 529}
+_OVERLOAD_STATUS = {429, 503, 529}
 
 
 def _is_upstream_overload(exc: Exception) -> bool:

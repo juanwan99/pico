@@ -273,3 +273,64 @@ async def test_resume_with_no_new_turn_is_not_a_success() -> None:
     assert result.status == "failed"
     fail = [p for k, p in events if k == "run.error"]
     assert fail and "no new turn" in str(fail[-1]["error"])
+
+
+def _retry_start(msg: str, attempt: int = 1) -> dict[str, Any]:
+    return {
+        "type": "auto_retry_start",
+        "attempt": attempt,
+        "maxAttempts": PI_RETRY_MAX,
+        "delayMs": 3000,
+        "errorMessage": msg,
+    }
+
+
+_OVERLOADED = '503: {"message":"system cpu overloaded (current: 100.0%, threshold: 90%)"}'
+_NO_CHANNEL = "503 No available channel for model gemini-3.8-flash under group default"
+
+
+@pytest.mark.asyncio
+async def test_overload_retry_is_logged_and_waited_out() -> None:
+    """New API sheds load with 503 for minutes (#1135); Pi retries, the run lives."""
+    events: list[tuple[str, dict[str, Any]]] = []
+    finish = _finish()
+    transport = FakeTransport(
+        scripted=[*finish[:2], _retry_start(_OVERLOADED), _retry_start(_OVERLOADED, 2), *finish[2:]],
+        assistant_text="已补齐 a.md。",
+    )
+    result = await _run(transport, events)
+    assert result.status == "succeeded", result.error
+    retries = [p for k, p in events if k == "model.retry"]
+    assert [p["attempt"] for p in retries] == [1, 2]
+    assert retries[0]["max_retries"] == PI_RETRY_MAX
+    assert "overloaded" in retries[0]["error"]
+    assert not any(k == "run.error" for k, _ in events)
+
+
+@pytest.mark.asyncio
+async def test_dead_channel_fails_over_without_waiting_out_retries() -> None:
+    """No channel for the model: retrying cannot help, hand over to brain-HA at once."""
+    from pico_orchestrator.brain_ha import should_failover
+
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = FakeTransport(scripted=[*_finish()[:2], _retry_start(_NO_CHANNEL)])
+    result = await _run(transport, events)
+    assert result.status == "failed"
+    assert should_failover(result)
+    assert any(c.get("type") == "abort" for c in transport.sent)
+    fail = [p for k, p in events if k == "run.error"]
+    assert fail[-1]["code"] == "model.unconfigured"
+
+
+@pytest.mark.asyncio
+async def test_dead_channel_after_output_keeps_retrying() -> None:
+    """Mid-task there is no failover (the teacher saw output); let Pi keep trying."""
+    events: list[tuple[str, dict[str, Any]]] = []
+    finish = _finish()
+    transport = FakeTransport(
+        scripted=[*finish[:2], *_write_events(), _retry_start(_NO_CHANNEL), *finish[2:]],
+        assistant_text="已补齐 a.md。",
+    )
+    result = await _run(transport, events)
+    assert result.status == "succeeded", result.error
+    assert not any(c.get("type") == "abort" for c in transport.sent)
