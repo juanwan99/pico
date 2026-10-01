@@ -64,6 +64,8 @@ class EventMapState:
     # Separate from token_usage (ledger, harvested once at agent_end).
     spent_usage: dict[str, Any] | None = None
     spent_calls: int = 0
+    # A tool call Pico aborted for running too long; the resume prompt says so.
+    tool_hung: str = ""
 
     @property
     def has_output(self) -> bool:

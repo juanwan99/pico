@@ -37,6 +37,7 @@ from pico_orchestrator.true_pi.config import (
     persist_session_file,
     plan_mode_extension_path,
     session_root,
+    tool_hang_seconds,
 )
 from pico_orchestrator.true_pi.events import EventMapState, map_event
 from pico_orchestrator.true_pi.tool_server import ToolServer
@@ -48,6 +49,40 @@ logger = logging.getLogger(__name__)
 _CANCEL_POLL = 0.05
 # First plan-turn select arrives on the same stdout pipe; 1s is enough.
 _PLAN_FIRST_END_GRACE = 1.0
+# After aborting a hung tool, how long Pi gets to end the turn before Pico stops waiting.
+_HANG_ABORT_GRACE = 60.0
+
+
+def track_open_tool(
+    open_tools: dict[str, tuple[str, float, float]],
+    event_type: str,
+    raw: dict[str, Any],
+    now: float,
+    limit: float,
+) -> None:
+    """Keep the tool calls Pi started and has not finished, with their own deadline.
+
+    A model that asks bash for a longer ``timeout`` gets that plus a little slack.
+    """
+    call_id = str(raw.get("toolCallId") or raw.get("callId") or "")
+    if event_type == "tool_execution_start":
+        args = raw.get("args") or raw.get("arguments") or {}
+        asked = args.get("timeout") if isinstance(args, dict) else None
+        own = float(asked) + 30 if isinstance(asked, (int, float)) and asked > 0 else 0.0
+        name = str(raw.get("toolName") or raw.get("tool") or "tool")
+        open_tools[call_id] = (name, now, max(float(limit), own))
+    elif event_type == "tool_execution_end":
+        open_tools.pop(call_id, None)
+    elif event_type == "agent_end":
+        open_tools.clear()
+
+
+def hung_tool(open_tools: dict[str, tuple[str, float, float]], now: float) -> str:
+    """Why the oldest open tool call counts as hung, or empty if none has."""
+    for name, opened, limit in open_tools.values():
+        if limit > 0 and now - opened >= limit:
+            return f"{name} 命令运行超过 {int((now - opened) // 60)} 分钟没有结束"
+    return ""
 
 
 def _hitl_ask_timed_out(transport: Any) -> bool:
@@ -321,6 +356,8 @@ async def _run_true_pi_once(
     breaker_seconds = max(1, int(getattr(caps, "no_progress_seconds", 180) or 180))
     last_tool_ok_wall: float | None = None
     last_progress_wall = started
+    hang_limit = tool_hang_seconds()
+    open_tools: dict[str, tuple[str, float, float]] = {}
 
     async def _watcher() -> None:
         while not stop.is_set():
@@ -647,6 +684,7 @@ async def _run_true_pi_once(
                     if stop.is_set() or timed_out.is_set() or await is_cancelled():
                         break
                     prev_tool_oks = state.tool_oks
+                    track_open_tool(open_tools, event.type, event.raw, loop.time(), hang_limit)
                     await map_event(
                         event,
                         emit=emit,
@@ -682,6 +720,7 @@ async def _run_true_pi_once(
                         break
 
             consumer = asyncio.create_task(_consume())
+            hung_at: float | None = None
             try:
                 # Consume must run while wait_response sits on prompt ack.
                 # Live Pi can stream text_delta before the prompt response;
@@ -723,6 +762,19 @@ async def _run_true_pi_once(
                             principal=principal,
                             tag=tag,
                         )
+                    # Hung tool (Pi bash has no default timeout): abort the turn,
+                    # then the same-session resume below asks for another way.
+                    if hang_limit > 0 and hung_at is None:
+                        why = hung_tool(open_tools, loop.time())
+                        if why:
+                            logger.warning("true_pi tool hang run_id=%s %s", rid, why)
+                            state.tool_hung = why
+                            hung_at = loop.time()
+                            open_tools.clear()
+                            await client.abort()
+                    if hung_at is not None and loop.time() - hung_at >= _HANG_ABORT_GRACE:
+                        state.settled = True
+                        break
                     # Dual-mode deep-lane circuit breaker (F2): DeepSeek 深度 empty
                     # loop fuse. GPT Responses thinking is skipped (see helper).
                     if thinking_on and not state.settled:
@@ -786,6 +838,8 @@ async def _run_true_pi_once(
                 else:
                     with suppress(Exception):
                         consumer.result()
+            if state.tool_hung:
+                state.provider_error = state.tool_hung
             return None
 
         early = await _drive(full_prompt, list(getattr(caps, "images", None) or []))
@@ -816,10 +870,15 @@ async def _run_true_pi_once(
                 "run.resume",
                 {"attempt": state.resumes, "max": budget, "reason": reason, **tag},
             )
-            await emit("message.delta", {"text": resume_teacher_note(state.resumes), **tag})
+            hung = state.tool_hung
+            state.tool_hung = ""
+            await emit(
+                "message.delta",
+                {"text": resume_teacher_note(state.resumes, tool_hang=bool(hung)), **tag},
+            )
             state.awaiting_start = True
             steps_before = state.step
-            early = await _drive(resume_prompt(reason), [])
+            early = await _drive(tool_hang_prompt(hung) if hung else resume_prompt(reason), [])
             if early is not None:
                 return early
             if state.step == steps_before and not state.provider_error:
@@ -1153,7 +1212,9 @@ def _compose_prompt(
     return str(prompt or "")
 
 
-def resume_teacher_note(attempt: int) -> str:
+def resume_teacher_note(attempt: int, *, tool_hang: bool = False) -> str:
+    if tool_hang:
+        return f"（有一条命令跑太久没结束，已中断并让模型换个办法接着做，第 {attempt} 次）\n"
     return f"（模型渠道中断了一次，已自动从断处续跑，第 {attempt} 次）\n"
 
 
@@ -1163,6 +1224,15 @@ def resume_prompt(reason: str) -> str:
     return (
         f"上游模型刚才中断了一次（{why}）。请从中断处继续完成原任务："
         "先看工作区里已经写好的文件，不要重做，只补齐剩下的部分，然后照常交付。"
+    )
+
+
+def tool_hang_prompt(why: str) -> str:
+    """User turn Pi gets after Pico aborted a hung tool call."""
+    return (
+        f"刚才那条命令被系统中断了：{why}。很可能是死循环、规模太大或在等输入。"
+        "不要原样重跑。先想清楚原因，换更快的办法（缩小规模、加进度输出、"
+        "给 bash 传 timeout 参数），然后从中断处继续完成原任务，已写好的文件不要重做。"
     )
 
 
