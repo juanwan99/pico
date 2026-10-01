@@ -271,3 +271,94 @@ def test_follow_waits_out_an_api_restart(monkeypatch) -> None:
     pico.tasks = tasks
     assert pico.follow("c", timeout_s=60) >= 0
     assert next(replies, None) is None
+
+
+def _lx1_answer(tmp_path: Path, wrong_early: int = 0) -> Path:
+    from openpyxl import Workbook
+
+    sys.path.insert(0, str(lte.CHECKS_DIR))
+    import lx_corpus
+
+    truth = lx_corpus.students()
+    early = sorted((t for t in truth if t["file"] < "21_"), key=lambda t: t["file"])
+    flip = {t["id"] for t in early[:wrong_early]}
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "评语"
+    ws.append(["学号", "姓名", "进步方向", "家校配合", "期末评语"])
+    counts: dict[str, int] = {}
+    for t in truth:
+        prog = t["progress"]
+        if t["id"] in flip:
+            prog = next(p for p in lx_corpus.PROGRESS if p != prog)
+        text = f"{t['name']}，这学期你在{prog}方面的变化老师都看在眼里，每一点努力都没有白费，继续保持这份认真和坚持，下学期一定会更好，老师相信你。"
+        ws.append([t["id"], t["name"], prog, t["home"], text])
+        for v in (prog, t["home"]):
+            counts[v] = counts.get(v, 0) + 1
+    st = wb.create_sheet("统计")
+    for label in [*lx_corpus.PROGRESS, *lx_corpus.HOME]:
+        st.append([label, counts.get(label, 0)])
+    out = tmp_path / "期末评语.xlsx"
+    wb.save(out)
+    return out
+
+
+def _run_lx1_checker(monkeypatch, capsys, path: Path) -> dict:
+    sys.path.insert(0, str(lte.CHECKS_DIR))
+    import lx1_records
+
+    monkeypatch.setattr(lx1_records, "find", lambda name: str(path))
+    try:
+        lx1_records.main()
+    except SystemExit:
+        pass
+    return json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+
+
+def test_xlong_suite_overflows_one_window_and_stays_out_of_all() -> None:
+    """#1139: LX cases must outgrow 256k tokens so compaction fires; never in --suite all."""
+    cases = lte.load_cases("xlong")
+    assert [c["id"] for c in cases] == ["LX1"]
+    assert not [c for c in lte.load_cases() if c["id"].startswith("LX")]
+    sys.path.insert(0, str(lte.CHECKS_DIR))
+    import lx_corpus
+
+    rows = lx_corpus.students()
+    texts = [lx_corpus.record(r) for r in rows]
+    assert sum(len(t) for t in texts) > 500_000
+    assert max(len(t.encode()) for t in texts) < 50_000  # one Pi read per file
+    for t in texts:
+        for label in [*lx_corpus.PROGRESS, *lx_corpus.HOME]:
+            assert label not in t  # read, don't grep
+    assert lte._attachment_bytes(cases[0]["turns"][0]["attachments"][0]) == lx_corpus.corpus_zip()
+    assert lte.max_points(cases[0]["expect"]) == 6
+
+
+def test_lx1_checker_full_marks_on_truth(monkeypatch, capsys, tmp_path: Path) -> None:
+    verdict = _run_lx1_checker(monkeypatch, capsys, _lx1_answer(tmp_path))
+    assert verdict["pass"] is True, verdict
+    assert verdict["points"] == 5
+
+
+def test_lx1_checker_catches_early_amnesia(monkeypatch, capsys, tmp_path: Path) -> None:
+    """6 of the first 20 wrong: 92.5% overall would pass, the early bar must not."""
+    verdict = _run_lx1_checker(monkeypatch, capsys, _lx1_answer(tmp_path, wrong_early=6))
+    assert verdict["pass"] is False
+    assert any("first20 14/20" in n for n in verdict["notes"]), verdict
+
+
+def test_compaction_events_counted() -> None:
+    class Fake:
+        def tasks(self, cid):
+            return [{"latest_run": {"id": "r1", "status": "succeeded"}}]
+
+        def run(self, rid):
+            return {"status": "succeeded"}
+
+        def events(self, rid):
+            return [{"type": "compaction.begin"}, {"type": "compaction.end"}, {"type": "compaction.failed"}]
+
+    res = lte.CaseResult(case="LX1")
+    lte._run_events(Fake(), "c", res)
+    assert (res.compactions, res.compaction_failed) == (1, 1)
+    assert "| 1（败 1） |" in lte.render_markdown([res])
