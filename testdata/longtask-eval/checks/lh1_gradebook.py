@@ -160,10 +160,13 @@ try:
     elif group == "rename":
         from gradebook.models import Student
         from gradebook.loader import load_csv
-        names = [f.name for f in dataclasses.fields(Student)]
-        if "class_name" not in names or "cls" in names:
-            bad(f"Student fields {names}")
+        if dataclasses.is_dataclass(Student):
+            names = [f.name for f in dataclasses.fields(Student)]
+            if "class_name" not in names or "cls" in names:
+                bad(f"Student fields {names}")
         s = Student(sid="1", name="x", class_name="c")
+        if "cls" in vars(s) or vars(s).get("class_name") != "c":
+            bad(f"Student stores {sorted(vars(s))}")
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             v = s.cls
