@@ -889,6 +889,10 @@ async def _run_true_pi_once(
                 else:
                     with suppress(Exception):
                         consumer.result()
+            # A consumer that raised (ledger write, event mapping) ended the stream
+            # early: fail with that, not "did not settle within max_seconds" (#1135).
+            if consumer.done() and not consumer.cancelled() and consumer.exception() is not None:
+                raise consumer.exception()  # type: ignore[misc]
             if state.tool_hung and _provider_fail_code(state.provider_error or "") != "model.usage_limit":
                 state.provider_error = state.tool_hung
             return None

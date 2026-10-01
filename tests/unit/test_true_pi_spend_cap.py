@@ -157,3 +157,39 @@ def test_spend_stop_copy_is_teacher_words() -> None:
     text = spend_stop_teacher_text(millipoints=12_345, cap_millipoints=10_000, has_deliverable=True)
     assert "12.3 点" in text and "10 点" in text and "不是系统报错" in text and "产物" in text
     assert "millipoint" not in text.lower()
+
+
+@pytest.mark.asyncio
+async def test_failed_event_write_is_reported_not_called_a_wall_clock() -> None:
+    """#1135 32-box load: a ledger write that fails mid-stream ended the consumer;
+    the run said "did not settle within 21600s" after 30 seconds."""
+    events: list[tuple[str, dict[str, Any]]] = []
+    raised: list[str] = []
+
+    class LedgerBusy(Exception):
+        pass
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        if k == "agent.step" and not raised:
+            raised.append(k)
+            raise LedgerBusy("database is locked")
+        events.append((k, p))
+
+    transport = FakeTransport(
+        scripted=[{"type": "agent_start"}, *_turn(10, 5), *_turn(10, 5)],
+        assistant_text="",
+    )
+    result = await run_true_pi_agent(
+        prompt="写一个脚本",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=600),
+        transport=transport,
+        run_id="ledger-busy-t1",
+    )
+    assert raised
+    assert result.status == "failed"
+    status = [p for k, p in events if k == "run.status"][-1]
+    assert "LedgerBusy" in status["reason"]
+    assert "did not settle" not in status["reason"]

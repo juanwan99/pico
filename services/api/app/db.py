@@ -20,6 +20,8 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     event,
+    func,
+    insert,
     select,
     text,
 )
@@ -500,29 +502,39 @@ async def append_event(
     *,
     commit: bool = True,
 ) -> EventRow:
+    # One INSERT that reads max(seq) itself (#1135, 32 boxes): a SELECT first and
+    # then an INSERT upgrades a read snapshot to a write, which SQLite WAL refuses
+    # at once — no busy_timeout — whenever another run committed in between. A
+    # write as the transaction's first statement waits its turn instead. A caller's
+    # read-only snapshot is closed first for the same reason; commit=True commits
+    # its work anyway.
+    if commit and session.in_transaction():
+        await session.commit()
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    next_seq = (
+        select(func.coalesce(func.max(EventRow.seq), 0) + 1)
+        .where(EventRow.run_id == run_id)
+        .scalar_subquery()
+    )
     last_err: Exception | None = None
     for attempt in range(5):
         try:
+            row_id = new_id()
             async with session.begin_nested():
-                result = await session.execute(
-                    select(EventRow.seq)
-                    .where(EventRow.run_id == run_id)
-                    .order_by(EventRow.seq.desc())
-                    .limit(1)
+                await session.execute(
+                    insert(EventRow).values(
+                        id=row_id,
+                        run_id=run_id,
+                        seq=next_seq,
+                        type=event_type,
+                        payload_json=payload_json,
+                        created_at=_utcnow(),
+                    )
                 )
-                last = result.scalar_one_or_none()
-                row = EventRow(
-                    id=new_id(),
-                    run_id=run_id,
-                    seq=(last or 0) + 1,
-                    type=event_type,
-                    payload_json=json.dumps(payload, ensure_ascii=False),
-                )
-                session.add(row)
-                await session.flush()
+            row = await session.get(EventRow, row_id)
+            assert row is not None
             if commit:
                 await session.commit()
-            await session.refresh(row)
             return row
         except IntegrityError as exc:
             last_err = exc
@@ -535,5 +547,5 @@ async def append_event(
             if attempt >= 4:
                 raise
             await session.rollback()
-            await asyncio.sleep(0.05 * (attempt + 1))
+            await asyncio.sleep(0.2 * (attempt + 1))
     raise RuntimeError(f"event sequence allocation exhausted: {last_err!r}")
