@@ -123,6 +123,11 @@ async def resumable(session: Any, run: RunRow) -> bool:
     spec = spec_of(run)
     if limit <= 0 or spec is None or run.cancel_requested or run.status not in _ACTIVE:
         return False
+    from pico_orchestrator.true_pi.runner import runner_enabled
+
+    # Rolled back off the workspace: the session is in the box, not here.
+    if not runner_enabled(str((spec.get("principal") or {}).get("membership_id") or "")):
+        return False
     wall = int(settings.pico_run_durable_max_seconds)
     if wall > 0 and time.time() - float(spec.get("started") or 0) > wall:
         return False
@@ -198,16 +203,9 @@ async def resume_run(run_id: str) -> None:
         if run is None or spec is None:
             return
         user_prompt = run.prompt
-    task_id = str(spec["task_id"])
-    conversation_id = str(spec["conversation_id"])
-    principal = Principal(**spec["principal"])
-    known = {f.name for f in fields(RunCaps)}
-    caps = RunCaps(**{k: v for k, v in dict(spec["caps"]).items() if k in known})
-    caps = replace(
-        caps,
-        millipoints_for_usage=millipoints_for_usage,
-        outputs_since=float(spec.get("started") or 0),
-    )
+    task_id = str(spec.get("task_id") or "") or None
+    conversation_id = str(spec.get("conversation_id") or "")
+    principal: Principal | None = None
 
     async def emit(event_type: str, payload: dict[str, Any]) -> None:
         # Token-level stream has no subscriber after a restart.
@@ -222,6 +220,21 @@ async def resume_run(run_id: str) -> None:
             return bool(row and (row.cancel_requested or row.status == "cancelled"))
 
     try:
+        principal = Principal(**spec["principal"])
+        known = {f.name for f in fields(RunCaps)}
+        caps = RunCaps(**{k: v for k, v in dict(spec["caps"]).items() if k in known})
+        started = float(spec.get("started") or 0)
+        # One wall for the whole run, not a fresh one per resume. The spend cap
+        # is per attempt: usage of the killed attempt never reached Pico.
+        left = int(caps.max_seconds) - int(time.time() - started)
+        if caps.max_seconds > 0 and left <= 0:
+            raise RuntimeError("run wall clock used up before restart resume")
+        caps = replace(
+            caps,
+            max_seconds=left if caps.max_seconds > 0 else 0,
+            millipoints_for_usage=millipoints_for_usage,
+            outputs_since=started,
+        )
         await _wait_runner()
         result = await run_agent_runtime(
             use_pi_agent=settings.pico_pi_agent_runtime,
@@ -231,7 +244,8 @@ async def resume_run(run_id: str) -> None:
             kimi_agent_canary_principals=settings.kimi_agent_canary_principal_set,
             kimi_agent_allow_all=settings.kimi_agent_default_all,
             legacy_agent_loop_emergency=settings.pico_legacy_agent_loop_emergency,
-            prompt=RESTART_PROMPT,
+            # The cut may come before Pi ever saw this turn: say what the task was.
+            prompt=f"{RESTART_PROMPT}\n\n原任务：{user_prompt}",
             principal=principal,
             emit=emit,
             is_cancelled=is_cancelled,
@@ -264,5 +278,9 @@ async def resume_run(run_id: str) -> None:
     except Exception as exc:
         logger.exception("restart resume failed run=%s", run_id)
         await _finalize_run(
-            run_id, status="failed", error=str(exc), task_id=task_id, bill_to=payer_for(principal)
+            run_id,
+            status="failed",
+            error=str(exc),
+            task_id=task_id,
+            bill_to=payer_for(principal) if principal is not None else None,
         )

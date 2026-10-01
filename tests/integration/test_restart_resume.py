@@ -153,7 +153,11 @@ async def test_startup_resumes_in_the_same_session(db, monkeypatch) -> None:
         calls.append(kw)
         await kw["emit"]("message.stream", {"text": "x"})
         await kw["emit"]("tool.result", {"tool": "workspace_output", "ok": True})
-        return RunResult(status="succeeded", final_text="做好了，20 页。")
+        return RunResult(
+            status="succeeded",
+            final_text="做好了，20 页。",
+            token_usage={"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+        )
 
     async def no_wait() -> None:
         return None
@@ -175,11 +179,12 @@ async def test_startup_resumes_in_the_same_session(db, monkeypatch) -> None:
     assert len(calls) == 1
     kw = calls[0]
     assert kw["run_id"] == run_id and kw["conversation_id"] == "conv-1"
-    assert kw["prompt"] == run_resume.RESTART_PROMPT
+    assert kw["prompt"].startswith(run_resume.RESTART_PROMPT) and "原任务：做 20 页 PPT" in kw["prompt"]
     assert kw["persist_pi_session"] is True and kw["history"] is None
     caps = kw["caps"]
     assert caps.ui_model == "pico-deep" and caps.min_artifacts == 1 and caps.images is None
     assert caps.outputs_since > 0 and caps.millipoints_for_usage is not None
+    assert 0 < caps.max_seconds <= 21_600
     assert kw["principal"].membership_id == "member-a"
     async with db() as session:
         run = await session.get(RunRow, run_id)
@@ -200,3 +205,48 @@ async def test_shutdown_keeps_resumable_run_running(db, monkeypatch) -> None:
     assert await run_resume.keep_for_resume(plain) is False
     async with db() as session:
         assert (await session.get(RunRow, run_id)).status == "running"
+
+
+@pytest.mark.asyncio
+async def test_runner_rolled_back_is_not_resumable(db, monkeypatch) -> None:
+    await _add_run(db, spec=_spec())
+    monkeypatch.delenv("PICO_RUNNER_URL")
+    async with db() as session:
+        counts = await reconcile_orphaned_runs(session)
+    assert counts["failed"] == 1 and counts["resumable"] == 0
+
+
+@pytest.mark.asyncio
+async def test_bad_spec_fails_the_run_instead_of_hanging(db, monkeypatch) -> None:
+    spec = _spec()
+    spec["principal"] = {**spec["principal"], "unknown_field": 1}
+    _, run_id = await _add_run(db, spec=spec)
+
+    async def no_wait() -> None:
+        return None
+
+    monkeypatch.setattr(run_resume, "_wait_runner", no_wait)
+    await run_resume.resume_run(run_id)
+    async with db() as session:
+        assert (await session.get(RunRow, run_id)).status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_wall_clock_is_shared_across_resumes(db, monkeypatch) -> None:
+    spec = _spec(started=time.time() - 21_000)
+    _, run_id = await _add_run(db, spec=spec)
+    seen: list[int] = []
+
+    async def fake_runtime(**kw: Any) -> RunResult:
+        seen.append(kw["caps"].max_seconds)
+        return RunResult(status="succeeded", final_text="ok")
+
+    async def no_wait() -> None:
+        return None
+
+    import pico_orchestrator.runtime as rt
+
+    monkeypatch.setattr(rt, "run_agent_runtime", fake_runtime)
+    monkeypatch.setattr(run_resume, "_wait_runner", no_wait)
+    await run_resume.resume_run(run_id)
+    assert seen and 0 < seen[0] <= 600
