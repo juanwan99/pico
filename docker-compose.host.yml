@@ -73,7 +73,7 @@ services:
       PICO_MODEL_PROVIDER: "${PICO_MODEL_PROVIDER:-deepseek}"
       PICO_CHAT_RPM: "${PICO_CHAT_RPM:-30}"
       PICO_CHAT_MAX_CONCURRENT: "${PICO_CHAT_MAX_CONCURRENT:-4}"
-      PICO_CHAT_SCHOOL_MAX_CONCURRENT: "${PICO_CHAT_SCHOOL_MAX_CONCURRENT:-16}"
+      PICO_CHAT_SCHOOL_MAX_CONCURRENT: "${PICO_CHAT_SCHOOL_MAX_CONCURRENT:-48}"
       PICO_CHAT_CAPS_JSON: "${PICO_CHAT_CAPS_JSON:-}"
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}"
@@ -257,8 +257,17 @@ services:
       PICO_RUNNER_NETWORK: pico-ws
       PICO_RUNNER_RUNTIME: ${PICO_RUNNER_RUNTIME:-runsc}
       PICO_RUNNER_PROXY_HOST: 172.30.250.1
-      PICO_RUNNER_MAX_SESSIONS: ${PICO_RUNNER_MAX_SESSIONS:-6}
-      PICO_RUNNER_MAX_PER_SCHOOL: ${PICO_RUNNER_MAX_PER_SCHOOL:-3}
+      # Boxes idle at ~60-90MB; the pooled budget is the pico-ws.slice limits
+      # (scripts/pi-runner-host-setup.sh --slices) + the host memory floor.
+      # 12 is safe without the slices; with them, .env may raise to 32 / 24.
+      # Past the ceiling, requests wait in line (pico-api reads the same
+      # PICO_RUNNER_QUEUE_WAIT_S from .env).
+      PICO_RUNNER_MAX_SESSIONS: ${PICO_RUNNER_MAX_SESSIONS:-12}
+      PICO_RUNNER_MAX_PER_SCHOOL: ${PICO_RUNNER_MAX_PER_SCHOOL:-9}
+      PICO_RUNNER_MIN_AVAIL_MB: ${PICO_RUNNER_MIN_AVAIL_MB:-3072}
+      PICO_RUNNER_QUEUE_WAIT_S: ${PICO_RUNNER_QUEUE_WAIT_S:-1200}
+      PICO_RUNNER_QUEUE_MAX: ${PICO_RUNNER_QUEUE_MAX:-200}
+      PICO_RUNNER_CGROUP_PARENT: ${PICO_RUNNER_CGROUP_PARENT-pico-ws.slice}
       PICO_RUNNER_MEM: ${PICO_RUNNER_MEM:-1536m}
       PICO_RUNNER_WS_MAX_MB: ${PICO_RUNNER_WS_MAX_MB:-2048}
       PICO_RUNNER_MIN_FREE_MB: ${PICO_RUNNER_MIN_FREE_MB:-3072}
@@ -270,7 +279,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m
-    mem_limit: 768m
+    # Pipes + proxy bodies for up to PICO_RUNNER_MAX_SESSIONS boxes.
+    mem_limit: 1536m
     stop_grace_period: 30s
 
   # Build-only: the box image the runner starts. Never `up`.

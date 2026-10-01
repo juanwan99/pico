@@ -47,6 +47,8 @@ from pico_orchestrator.workbench_progress import failed_write_user_message
 logger = logging.getLogger(__name__)
 
 _CANCEL_POLL = 0.05
+# Stop checks while a run waits in the runner's line (is_cancelled reads the DB).
+_QUEUE_CANCEL_POLL = 1.0
 # First plan-turn select arrives on the same stdout pipe; 1s is enough.
 _PLAN_FIRST_END_GRACE = 1.0
 # After aborting a hung tool, how long Pi gets to end the turn before Pico stops waiting.
@@ -217,6 +219,8 @@ async def run_true_pi_agent(
 
 # First sign the model channel works; before it a failed attempt is dropped.
 _LIVE_KINDS = frozenset({"tool.call", "message.stream", "thinking.delta", "message.delta"})
+# Shown at once: waiting in the runner's line is not a model attempt.
+_PASS_KINDS = frozenset({"run.queued"})
 
 
 class _FailoverGate:
@@ -229,7 +233,7 @@ class _FailoverGate:
         self.live = False
 
     async def emit(self, kind: str, payload: dict[str, Any]) -> None:
-        if self.live:
+        if self.live or kind in _PASS_KINDS:
             await self._emit(kind, payload)
             return
         self._held.append((kind, payload))
@@ -581,6 +585,7 @@ async def _run_true_pi_once(
             if hasattr(transport, "plan_hitl"):
                 transport.plan_hitl = True
         ws_on = getattr(transport, "runner", None) is not None
+        queued: list[int] = []
         ws_before: dict[str, Any] | None = None
         ws_since = time.time()
         if ws_on:
@@ -598,7 +603,42 @@ async def _run_true_pi_once(
                 # count all written since the run first started. The snapshot
                 # above still waited for that box to release the workspace.
                 ws_before, ws_since = None, outputs_since
-        await client.start()
+
+            async def _queued(ahead: int) -> None:
+                queued.append(ahead)
+                await emit("run.queued", {"ahead": ahead, **tag})
+
+            transport.on_queued = _queued
+        # A full runner keeps the run in line; the teacher can still stop it.
+        start_task = asyncio.create_task(client.start())
+        try:
+            while not start_task.done():
+                await asyncio.wait({start_task}, timeout=_QUEUE_CANCEL_POLL)
+                if not start_task.done() and await is_cancelled():
+                    start_task.cancel()
+                    # wait() never raises the inner cancel; a shutdown cancel
+                    # of this run still propagates.
+                    await asyncio.wait({start_task})
+                    if not start_task.cancelled():
+                        start_task.exception()
+                    await emit("run.status", {"status": "cancelled", **tag})
+                    return _result("cancelled", state, principal=principal)
+        finally:
+            # Shutdown cancelling this run must not leave the start orphaned.
+            if not start_task.done():
+                start_task.cancel()
+        start_task.result()
+        if queued:
+            # Out of line: the strip stops saying 排队中. Time in line is not
+            # the run's: wall cap and no-progress fuse start now.
+            await emit("run.queued", {"ahead": 0, "started": True, **tag})
+            started = loop.time()
+            deadline = wall_deadline(started, int(getattr(caps, "max_seconds", 0) or 0))
+            last_progress_wall = started
+            if timed_out.is_set():
+                # The watcher fired on the old deadline while in line.
+                timed_out.clear()
+                watcher = asyncio.create_task(_watcher())
         await emit(
             "run.model",
             {

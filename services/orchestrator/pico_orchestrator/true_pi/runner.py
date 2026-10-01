@@ -22,7 +22,7 @@ import json
 import logging
 import os
 import secrets
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -40,6 +40,11 @@ logger = logging.getLogger(__name__)
 RUNNER_URL_ENV = "PICO_RUNNER_URL"
 RUNNER_TOKEN_ENV = "PICO_RUNNER_TOKEN"
 RUNNER_PROXY_URL_ENV = "PICO_RUNNER_PROXY_URL"
+# How long a run may wait in the runner's line (match the runner's own
+# PICO_RUNNER_QUEUE_WAIT_S; the runner gives up first and says why).
+RUNNER_QUEUE_WAIT_ENV = "PICO_RUNNER_QUEUE_WAIT_S"
+# The runner says "still queued" at least this often; silence longer = dead.
+RUNNER_FRAME_TIMEOUT_S = 60.0
 
 WS_ROOT = "/workspace"
 WS_AGENT = f"{WS_ROOT}/.pico/agent"
@@ -108,6 +113,13 @@ def runner_token() -> str:
 
 def runner_proxy_url() -> str:
     return os.environ.get(RUNNER_PROXY_URL_ENV, "http://172.30.250.1:18791").strip().rstrip("/")
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
 
 
 def _h(value: str, *, salt: str) -> str:
@@ -205,6 +217,8 @@ class RunnerTransport(SubprocessTransport):
         self._ws: Any = None
         self._seed: dict[str, str] = {}
         self._exit_code: int | None = None
+        # Told how many runs are ahead while the runner is full (card #1135).
+        self.on_queued: Callable[[int], Awaitable[None]] | None = None
         # Model traffic goes to the runner proxy, never the real gateway.
         self.base_url = f"{runner_proxy_url()}/l/{self.run_id}/v1"
 
@@ -342,17 +356,45 @@ class RunnerTransport(SubprocessTransport):
                 }
             )
         )
-        first = json.loads(await asyncio.wait_for(self._ws.recv(), timeout=60))
+        try:
+            first = await self._await_ready()
+        except BaseException:
+            # Cancelled in line (teacher stop) or runner gone: closing the
+            # socket gives the place in line back.
+            with contextlib.suppress(Exception):
+                await self._ws.close()
+            unregister_proxy(self.run_id)
+            raise
         if first.get("type") != "ready":
             await self._ws.close()
             unregister_proxy(self.run_id)
+            msg = str(first.get("message") or "")[:200]
             raise TruePiClientError(
-                f"runner refused: {first.get('code') or first.get('type')}"
+                f"runner refused: {first.get('code') or first.get('type')}" + (f": {msg}" if msg else "")
             )
         logger.info(
             "true_pi runner start run_id=%s ws=%s", self.run_id, self.runner.key.path()[:24]
         )
         self._reader_task = asyncio.create_task(self._read_ws())
+
+    async def _await_ready(self) -> dict[str, Any]:
+        """First non-``queued`` frame; reports the line position on the way."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _env_float(RUNNER_QUEUE_WAIT_ENV, 1200.0) + RUNNER_FRAME_TIMEOUT_S
+        told: int | None = None
+        while True:
+            left = deadline - loop.time()
+            if left <= 0:
+                raise TruePiClientError("runner queue timed out")
+            frame = json.loads(
+                await asyncio.wait_for(self._ws.recv(), timeout=min(left, RUNNER_FRAME_TIMEOUT_S))
+            )
+            if frame.get("type") != "queued":
+                return frame
+            ahead = max(0, int(frame.get("ahead") or 0))
+            if ahead != told and self.on_queued is not None:
+                await self.on_queued(ahead)
+            told = ahead
 
     async def _read_ws(self) -> None:
         try:
