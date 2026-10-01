@@ -172,13 +172,86 @@ def salvage_numbered_dicts(raw: str) -> list[dict[str, Any]]:
 
 # --------------------------------------------------------------------------- items
 
-_SUB_MARK_RE = re.compile(r"(?:[（(]\s*\d+\s*[）)]|\d+\s*[)）]|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮])")
+# Sub-question level only: (1)（1）1). ①② are blanks inside one 小问, never sub-questions.
+_SUB_MARK_RE = re.compile(r"[（(]\s*(\d{1,2})\s*[）)]|(?<![\w.+\-*/^])(\d{1,2})\s*[)）]")
 _VISION_MISS_RE = re.compile(r"未收到|没有收到.*图|看不到.*图|无法查看|无法看到|未提供图")
 
 
 def count_sub_marks(text: str | None) -> int:
-    found = _SUB_MARK_RE.findall(str(text or ""))
-    return max(len(found), 1) if found else 1
+    """Longest run (1)(2)…(k) in the text; a stray f(5) or repeated (1) does not add 小问."""
+    nums = {int(a or b) for a, b in _SUB_MARK_RE.findall(str(text or ""))}
+    k = 0
+    while k + 1 in nums:
+        k += 1
+    return max(k, 1)
+
+
+def _score_value(raw: Any) -> int | float | None:
+    if raw in ("", None) or isinstance(raw, bool):
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if value < 0:
+        return None
+    return int(value) if value == int(value) else value
+
+
+def _normalize_subs(raw: Any) -> list[dict[str, Any]]:
+    """Model-given 小问 list. Scores the rubric does not state stay null — never spread."""
+    if not isinstance(raw, list):
+        return []
+    by_sub: dict[int, dict[str, Any]] = {}
+    for s in raw:
+        if not isinstance(s, dict):
+            continue
+        try:
+            sub = int(s.get("sub"))
+        except (TypeError, ValueError):
+            continue
+        if sub < 1:
+            continue
+        answer = "" if s.get("answer") is None else str(s.get("answer")).strip()
+        score = _score_value(s.get("score"))
+        # half points exist on real rubrics; 2.67 only comes from spreading a total
+        if isinstance(score, float) and score * 2 != int(score * 2):
+            score = None
+        by_sub[sub] = _merge_sub(by_sub.get(sub), {"sub": sub, "answer": answer, "score": score})
+    return [by_sub[n] for n in sorted(by_sub)]
+
+
+def _merge_sub(prev: dict[str, Any] | None, nxt: dict[str, Any]) -> dict[str, Any]:
+    if prev is None:
+        return dict(nxt)
+    return {
+        "sub": prev["sub"],
+        "answer": prev["answer"] or nxt["answer"],
+        "score": prev["score"] if prev["score"] is not None else nxt["score"],
+    }
+
+
+def merge_subs(a: list[dict[str, Any]], b: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_sub = {s["sub"]: dict(s) for s in a}
+    for s in b:
+        by_sub[s["sub"]] = _merge_sub(by_sub.get(s["sub"]), s)
+    return [by_sub[n] for n in sorted(by_sub)]
+
+
+def answer_from_subs(answer: str, subs: list[dict[str, Any]]) -> str:
+    """Keep the model's answer when it already carries every （n）; else rebuild it from subs."""
+    if len(subs) < 2 or count_sub_marks(answer) >= len(subs):
+        return answer
+    if not any(s["answer"] for s in subs):
+        return answer
+    return "\n".join(f"（{s['sub']}）{s['answer']}" for s in subs)
+
+
+def subs_total(subs: list[dict[str, Any]]) -> int | float | None:
+    if not subs or any(s["score"] is None for s in subs):
+        return None
+    total = sum(s["score"] for s in subs)
+    return int(total) if total == int(total) else total
 
 
 def _type_from_hint(raw: Any) -> str:
@@ -247,18 +320,7 @@ def normalize_item(
     rubric_raw = raw.get("rubric", raw.get("细则", raw.get("scoring_rubric", "")))
     rubric = "" if rubric_raw is None else str(rubric_raw).strip()
 
-    score: int | float | None = raw.get("score")
-    if score in ("", None):
-        score = None
-    else:
-        try:
-            score = float(score)
-            if score < 0:
-                score = None
-            elif score == int(score):
-                score = int(score)
-        except (TypeError, ValueError):
-            score = None
+    score = _score_value(raw.get("score"))
 
     if qtype in ("single_choice", "multi_choice"):
         letters = re.sub(r"[^A-Ha-h]", "", answer).upper()
@@ -285,9 +347,16 @@ def normalize_item(
         sub_count = int(raw.get("sub_count") or raw.get("subCount") or 0)
     except (TypeError, ValueError):
         sub_count = 0
-    sub_count = max(sub_count, count_sub_marks(answer), 1)
-    if has_figure:
-        sub_count = max(sub_count, 3)
+    subs = [] if qtype in ("single_choice", "multi_choice") else _normalize_subs(raw.get("subs"))
+    if subs:
+        answer = answer_from_subs(answer, subs)
+        sub_count = subs[-1]["sub"]
+        if score is None:
+            score = subs_total(subs)
+    else:
+        sub_count = max(sub_count, count_sub_marks(answer), 1)
+        if has_figure:
+            sub_count = max(sub_count, 3)
 
     quote = str(raw.get("quote") or "").strip()[:60]
     section = raw.get("section")
@@ -305,6 +374,7 @@ def normalize_item(
         "score": score,
         "options_count": options_count,
         "sub_count": sub_count,
+        "subs": subs,
         "has_figure": has_figure,
         "blanks": blanks,
         "source": {"page": page, "quote": quote},
@@ -382,7 +452,15 @@ def merge_items(batches: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
             if not prev["section"] and item["section"]:
                 merged["section"] = item["section"]
             merged["rubric"] = _merge_rubric(prev["rubric"], item["rubric"])
-            merged["sub_count"] = max(prev["sub_count"], item["sub_count"])
+            subs = merge_subs(prev.get("subs") or [], item.get("subs") or [])
+            merged["subs"] = subs
+            if subs:
+                merged["answer"] = answer_from_subs(merged["answer"], subs)
+                merged["sub_count"] = subs[-1]["sub"]
+                if merged["score"] is None:
+                    merged["score"] = subs_total(subs)
+            else:
+                merged["sub_count"] = max(prev["sub_count"], item["sub_count"])
             merged["has_figure"] = prev["has_figure"] or item["has_figure"]
             if not prev.get("blanks") and item.get("blanks"):
                 merged["blanks"] = item["blanks"]
@@ -782,6 +860,10 @@ def _finish(
             + (f"（开头：{head}）" if head else "")
             + "。请换清晰卷或改用带题号的 Word / 文本。",
         )
+    for q in questions:
+        total = subs_total(q.get("subs") or [])
+        if total is not None and q["score"] is not None and total != q["score"]:
+            warnings.append(f"第 {q['number']} 题小问分合计 {total} ≠ 题分 {q['score']}，请老师核对")
     null_scores = sum(1 for q in questions if q["score"] is None)
     if null_scores:
         warnings.append(f"{null_scores} 题分值为 null：发布前请老师补分，禁止后端默认 1")
