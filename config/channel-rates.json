@@ -121,17 +121,19 @@
       "id": "new-api:gemini-vertex-trial:gemini-3.8-flash",
       "kind": "llm",
       "model": "gemini-3.8-flash",
-      "input_yuan_per_million": 547.5,
-      "output_yuan_per_million": 2190,
-      "note": "New API live 2026-09-20 pico-gateway. model_ratio 37.5 completion_ratio 4; 500000 quota=$1; usd_cny 7.3. Vertex channel 4."
+      "input_yuan_per_million": 10.95,
+      "output_yuan_per_million": 54.75,
+      "cache_read_yuan_per_million": 1.095,
+      "note": "Vertex list price USD 1.50 in / 7.50 out / 0.15 cached per M x 7.3 (intro 50% off until 2026-12-31 not used). Was New API default ratio 37.5 (~USD 75/M), 50x too high. Vertex channel 4."
     },
     {
       "id": "new-api:micu-grok:grok-4.6",
       "kind": "llm",
       "model": "grok-4.6",
-      "input_yuan_per_million": 547.5,
-      "output_yuan_per_million": 547.5,
-      "note": "New API live 2026-09-20 pico-gateway. model_ratio 37.5 completion_ratio 1; 500000 quota=$1; usd_cny 7.3. micu channel 7."
+      "input_yuan_per_million": 14.6,
+      "output_yuan_per_million": 43.8,
+      "cache_read_yuan_per_million": 3.65,
+      "note": "xAI list price USD 2 in / 6 out / 0.50 cached per M x 7.3 (prompts under 200K). Was New API default ratio 37.5. micu channel 7."
     },
     {
       "id": "new-api:zhipu:rerank-pro",

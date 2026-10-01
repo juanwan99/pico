@@ -107,7 +107,7 @@ def test_seed_card_thousand_input_tokens(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
     reset_rate_card()
-    # 547.5 元/百万输入 × 1000 token = 0.5475 元成本 × 2.5 = 1368.750 积分
+    # Vertex 标价 $1.50/M × 7.3 = 10.95 元/百万输入 × 1000 token × 2.5 = 27.375 积分
     assert (
         points_from_row(
             tokens_unknown=False,
@@ -117,7 +117,7 @@ def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -
             kind="llm",
             model="gemini-3.8-flash",
         )
-        == "1368.750"
+        == "27.375"
     )
     assert (
         points_from_row(
@@ -128,7 +128,7 @@ def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -
             kind="llm",
             model="grok-4.6",
         )
-        == "1368.750"
+        == "36.500"
     )
     gemini_out = points_from_row(
         tokens_unknown=False,
@@ -138,8 +138,19 @@ def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -
         kind="llm",
         model="gemini-3.8-flash",
     )
-    # 2190 元/百万输出 × 1000 × 2.5 = 5475.000 积分
-    assert gemini_out == "5475.000"
+    # 54.75 元/百万输出 × 1000 × 2.5 = 136.875 积分
+    assert gemini_out == "136.875"
+    gemini_cached = points_from_row(
+        tokens_unknown=False,
+        prompt_tokens=1000,
+        completion_tokens=0,
+        total_tokens=1000,
+        extra={"cached_tokens": 1000},
+        kind="llm",
+        model="gemini-3.8-flash",
+    )
+    # 缓存命中按 1.095 元/百万计，不再免费：1000 × 1.095 / 1e6 × 2.5 × 1000 ≈ 2.738 积分
+    assert gemini_cached == "2.738"
 
 
 def test_sell_markup_two_point_five() -> None:
