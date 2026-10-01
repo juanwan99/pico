@@ -183,6 +183,16 @@ def test_fixture_projects_ship_their_test_data() -> None:
         assert f"testdata/longtask-eval/fixtures/code/{name}" in tracked, name
 
 
+def test_new_fixture_data_is_not_gitignored() -> None:
+    """A new fixture's tests/data must not need ``git add -f`` again."""
+    import subprocess
+
+    probe = "testdata/longtask-eval/fixtures/code/new-project/tests/data/x.csv"
+    rc = subprocess.run(["git", "check-ignore", "-q", probe], cwd=ROOT).returncode
+    assert rc == 1, "fixture tests/data is still ignored"
+    assert subprocess.run(["git", "check-ignore", "-q", "data/pico.db"], cwd=ROOT).returncode == 0
+
+
 def test_zip_dir_skips_pycache(tmp_path: Path) -> None:
     import io
     import zipfile
