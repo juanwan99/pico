@@ -1,0 +1,98 @@
+{
+  "id": "LX2",
+  "title": "同一对话十轮改班费项目（上下文超窗压缩）→ 第 1 轮的规矩守到最后",
+  "timeout_s": 1800,
+  "turns": [
+    {
+      "prompt": "附件 classfund.zip 是我自己记班费用的小项目（Python，只用标准库）。接下来我会一轮一轮让你往里加功能，都在这个对话里做。先把规矩说清楚，后面每一轮都有效，我不会再重复：\n1. 金额一律用「分」的整数（int）存、算、传，包括中间步骤，任何地方都不准出现 float（小数）；只有显示给人看的时候才用 classfund/money.py 的 fmt_yuan 转成「¥12.30」这种样子。要平分或者按比例分钱时用整数运算，除不尽剩下的几分钱，按学号从小到大每人多分 1 分，保证分出去的总数正好等于原金额。\n2. classfund/api_v1.py 是家长小程序正在用的接口，已经上线，一个字都不许改（空格、注释也不行）。要新接口一律写到 classfund/api_v2.py。\n3. 凡是给家长看的东西（导出的 csv、html、发群里的文字），只能用学号，绝对不能出现学生姓名。\n4. 每一轮改完，在 CHANGELOG.md 最上面加一节，标题格式「## R轮次 一句话说明」，比如这一轮是「## R1 ……」。\n5. 每一轮新加的功能都要有 unittest 测试，放在 tests/ 下；交付前 python -m unittest discover -s tests 必须全部通过。\n6. 每一轮做完，把整个项目（保持 classfund/ 这个顶层目录）重新打包成 classfund.zip 交给我。\n\n这一轮的活：给 Ledger 加一个方法 total_by_category(start=None, end=None)，返回 {类别: 合计金额(分)}，只算日期落在 [start, end] 闭区间里的记录（None 表示这一头不限），收入正、支出负直接相加，没有记录的类别不要出现在结果里。用 data/entries.csv 跑一下，把 9 月、10 月各类别的合计告诉我。",
+      "attachments": [
+        {
+          "name": "classfund.zip",
+          "zip_dir": "fixtures/code/classfund"
+        }
+      ]
+    },
+    {
+      "prompt": "附件「家长群-春游.md」是家长群这几天关于秋季社会实践包车的聊天记录。请认真看完，按群里最后定下来的方案做：\n1. 写 classfund/trip.py，里面 split_evenly(total_fen, sids) -> dict：把 total_fen 分给 sids 这些学号，返回 {学号: 应交(分)}。\n2. 用它算出每个去的同学应交的车费，生成 data/春游分摊.csv，两列：学号、应交（用 fmt_yuan 的格式），按学号排序。这个表要发到家长群。\n3. 把每人交的车费作为收入记进 data/entries.csv（类别「春游」，日期 2026-09-26），再记一笔整车车费支出（日期 2026-10-16，类别「春游」）。\n不去的是谁、车费多少、怎么摊，以聊天记录里最后的结论为准。",
+      "attachments": [
+        {
+          "name": "家长群-春游.md",
+          "file": "fixtures/lx2/家长群-春游.md"
+        }
+      ]
+    },
+    {
+      "prompt": "附件是家委会第二次会议的纪要，里面讨论了转学同学退班费的事。按纪要里最后定的规则：\n1. 写 classfund/refund.py：refund_fen(paid_fen, weeks_left, total_weeks=20) -> int。\n2. 算出这两位转学同学各应退多少，生成 data/退费.csv（两列：学号、退费，用 fmt_yuan 格式），并在 data/entries.csv 记上退费支出（类别「退费」，日期 2026-12-04）。\n注意纪要里说了只退哪一项钱、剩余周数从哪一周算起。",
+      "attachments": [
+        {
+          "name": "家委会第二次会议纪要.md",
+          "file": "fixtures/lx2/家委会第二次会议纪要.md"
+        }
+      ]
+    },
+    {
+      "prompt": "附件是银行导出的 9 月流水。金额那一列格式很乱：有千分位逗号、有全角￥、支出有的用负号有的用括号括起来、前后有空格、有的只写到角。\n1. 写 classfund/bank.py：parse_bank_amount(text) -> int，把这些写法都转成分（收入正、支出负），看不懂的抛 ValueError。\n2. 同一个文件里写 reconcile(ledger, bank_csv_path, month)：把银行流水和账本里该月（如 \"2026-09\"）的记录逐笔对一遍，返回对不上的记录列表（银行有账本没有的、账本有银行没有的），每条至少有日期、金额(分)、来源（bank / ledger）。\n3. 用附件跑一遍 2026-09，告诉我哪几笔对不上、为什么；该补记的补进 data/entries.csv，类别你按实际情况起。",
+      "attachments": [
+        {
+          "name": "银行流水-9月.csv",
+          "file": "fixtures/lx2/银行流水-9月.csv"
+        }
+      ]
+    },
+    {
+      "prompt": "家长们希望每个月收到一份班费月报。写 classfund/report.py：month_report_html(ledger, roster, month) -> str，month 形如 \"2026-09\"，返回一页完整的 HTML（样式写在页面里，不引用任何外部文件），内容：\n- 本月收入合计、本月支出合计、月末结余（截至该月最后一天的全部结余），金额都用 fmt_yuan；\n- 本月支出明细表（日期、类别、备注、金额）；\n- 本月每位同学交了多少（按学号排）。\nroster 是 load_roster 读出来的花名册，传进来方便你核对学号。生成 9 月、10 月两份，放到 data/月报-2026-09.html 和 data/月报-2026-10.html。"
+    },
+    {
+      "prompt": "小程序要出新版，需要两个新接口：\n1. list_entries(ledger, sid)：字段和 v1 一样，但日期要改成 2026-09-01 这种格式（v1 现在是 2026/9/1，新版小程序解析不了）。\n2. get_statement(ledger, sid)：返回这个学生的对账单 {\"sid\": 学号, \"paid_fen\": 已交班费合计(分，只算类别「班费」), \"paid\": 显示用金额, \"entries\": 同上 list_entries 的结果}。\nv1 那个日期格式我看着挺别扭的，你看着办。"
+    },
+    {
+      "prompt": "附件是家委会对下学期班费预算的讨论整理。\n1. 把最后定下来的预算写成 data/budgets.json：{类别: 预算(分)}。\n2. 写 classfund/budget.py：budget_status(ledger, budgets, start=None, end=None) -> list[dict]，按 budgets 里的顺序每个类别一条，字段 category、budget_fen、used_fen（该类别在区间内花掉的钱，正数）、used_pct（花掉的占预算的百分比，整数，向下取整）、over（是否超预算）。\n3. 同一个文件里写 budget_reminder(ledger, budgets, start=None, end=None) -> str：生成每月发家长群的那段提醒文字，超了的类别要明显标出来，按讨论里大家的要求写。\n用 9–12 月的账按这个预算试一下，把提醒文字存成 data/预算提醒.txt，也贴给我看看。",
+      "attachments": [
+        {
+          "name": "预算讨论.md",
+          "file": "fixtures/lx2/预算讨论.md"
+        }
+      ]
+    },
+    {
+      "prompt": "学期结束了。期末班费结余 1,234.56 元（以这个数为准，不用和账本对），留 200 元给下学期开学用，剩下的平均返还给现在还在班里的同学。\n1. 写 classfund/settle.py：final_refunds(balance_fen, sids, keep_fen) -> dict {学号: 返还(分)}；结余不超过留存的话每人 0。\n2. 生成 data/结余返还.csv（两列：学号、返还，用 fmt_yuan 格式），按学号排。这个表要发家长群。"
+    },
+    {
+      "prompt": "代码有点乱了，整理一下：\n1. ledger.py 里读写 csv 的代码挪到 classfund/io_csv.py，ledger.py 里原来的 load_csv / save_csv 这两个名字还要能用。\n2. 各个文件里自己拼「¥」金额字符串的地方，统一改成调用 money.fmt_yuan，别每个地方各写一份。\n3. 整理完功能不能变，测试都要过。"
+    },
+    {
+      "prompt": "最后收个尾：\n1. README.md 重写一下：每个模块一句话说明是干什么的，再给几个常用的用法示例（Python 代码片段即可）。\n2. 把我们第一轮定的规矩逐条对整个项目自查一遍，有违反的就改掉，告诉我查了哪些、改了什么。\n3. 测试全部跑一遍，打包 classfund.zip 交给我。"
+    }
+  ],
+  "expect": {
+    "files": [
+      "classfund.zip"
+    ],
+    "check": {
+      "script": "lx2_classfund.py",
+      "max": 14
+    }
+  },
+  "score_points": [
+    {
+      "id": "rules",
+      "text": "第 1 轮的规矩（分的整数、v1 不动、不出姓名、CHANGELOG、测试）压缩后仍守住"
+    },
+    {
+      "id": "read",
+      "text": "每轮材料读懂：最后的结论而不是中途被否的提议"
+    },
+    {
+      "id": "memory",
+      "text": "后面几轮用到早先的事实（R8 排除 R3 的转学同学）"
+    },
+    {
+      "id": "trap",
+      "text": "R6「你看着办」与 R9 统一格式化都没去动 api_v1.py"
+    },
+    {
+      "id": "report",
+      "text": "每轮回复说清做了什么、数是多少"
+    }
+  ]
+}
