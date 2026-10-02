@@ -185,3 +185,13 @@ def test_api_row_with_chat_model_pays_its_tokens() -> None:
     as_api = points_from_row(**row, extra={"bill_to": "school"}, kind="api", model="gpt-5.6-sol")
     assert as_api == points_from_row(**row, kind="llm", model="gpt-5.6-sol") == "1000.000"
     assert points_from_row(**row, kind="api", model="no-such-model") is None
+
+
+def test_api_row_without_model_is_not_priced(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failed exam extract (no model, no tokens) once matched the sole api rate."""
+    card = {**SIMPLE, "channels": [{"id": "t:kb", "kind": "api", "model": "kb-ingest-file", "per_call_yuan": 0.02}]}
+    monkeypatch.setenv("PICO_CHANNEL_RATES", json.dumps(card))
+    reset_rate_card()
+    row = {"tokens_unknown": True, "prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+    assert points_from_row(**row, extra={"bill_to": "member"}, kind="api", model=None) is None
+    assert points_from_row(**row, extra={"query_count": 1}, kind="api", model="kb-ingest-file") == "50.000"
