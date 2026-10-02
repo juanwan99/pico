@@ -32,6 +32,8 @@ window so Pi's official compaction has to fire mid-task; each result records
 leaves them out (cost). A case may reuse another (``"base": "LX2"``) and add long
 pasted text to some turns (``"pastes"``, #1152). ``expect.check.per_turn`` hands the
 checker every turn's delivery under /w/out/turns/R01… so rules are checked turn by turn.
+LX3 (#1151) is the office one: a Word letter, an Excel analysis and a PPT, revised
+over fourteen turns, workbooks recalculated with LibreOffice before grading.
 """
 
 from __future__ import annotations
@@ -229,7 +231,13 @@ def turn_prompt(turn: dict[str, Any]) -> str:
     sys.path.insert(0, str(CHECKS_DIR))
     import lx_chat
 
-    text = lx_chat.chat(int(paste["seed"]), int(paste["chars"]), str(paste.get("start") or ""))
+    text = lx_chat.chat(
+        int(paste["seed"]),
+        int(paste["chars"]),
+        str(paste.get("start") or ""),
+        cast=str(paste.get("cast") or "lx2"),
+        extra=tuple(paste.get("extra") or ()),
+    )
     return f"{turn['prompt']}\n\n{paste['lead']}\n\n{text}"
 
 
@@ -337,7 +345,30 @@ def _lx_records() -> bytes:
     return lx_corpus.corpus_zip()
 
 
-GENERATORS = {"triple_workbook": _triple_workbook, "grade_book": _grade_book, "lx_records": _lx_records}
+def _lx3(name: str):
+    """LX3 attachments come from the checker's own truth module (#1151)."""
+
+    def build() -> bytes:
+        sys.path.insert(0, str(CHECKS_DIR))
+        import lx3_data
+
+        return {
+            "final": lx3_data.final_book,
+            "mid": lx3_data.mid_book,
+            "notice": lx3_data.notice_docx,
+            "fix1": lambda: lx3_data.fix_docx(1),
+            "fix2": lambda: lx3_data.fix_docx(2),
+        }[name]()
+
+    return build
+
+
+GENERATORS = {
+    "triple_workbook": _triple_workbook,
+    "grade_book": _grade_book,
+    "lx_records": _lx_records,
+    **{f"lx3_{n}": _lx3(n) for n in ("final", "mid", "notice", "fix1", "fix2")},
+}
 
 
 def _produced(arts: list[dict[str, Any]]) -> list[dict[str, Any]]:
