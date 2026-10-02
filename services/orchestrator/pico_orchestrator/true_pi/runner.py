@@ -554,7 +554,11 @@ async def land_outputs(
     ``before`` is the pre-turn listing; if it could not be taken, only files
     modified since ``since`` count, so old files never pose as this turn's.
     """
-    from pico_orchestrator.artifact_types import is_valid_ooxml_package, title_protected_extension
+    from pico_orchestrator.artifact_types import (
+        is_valid_ooxml_package,
+        title_protected_extension,
+        zip_with_utf8_flag,
+    )
 
     after = await list_outputs(key)
     results: list[tuple[str, dict[str, Any]]] = []
@@ -580,6 +584,8 @@ async def land_outputs(
                 ("workspace_output", {"title": title, "error": f"{title} 不是有效的 {protected} 文件"})
             )
             continue
+        if title.lower().endswith(".zip"):
+            raw = zip_with_utf8_flag(raw)
         if artifact_store is None:
             continue
         written = await artifact_store.write(principal, title=title, content=raw, kind=output_kind(path))

@@ -305,6 +305,54 @@ async def test_land_outputs_without_snapshot_uses_mtime(monkeypatch) -> None:
     assert [r["title"] for _, r in results] == ["new.md"]
 
 
+def _info_zip(entries: dict[str, bytes], encoding: str = "utf-8") -> bytes:
+    """ZIP as Info-ZIP `zip -r` writes it: raw name bytes, UTF-8 bit 0."""
+    import io
+    import zipfile
+
+    stand_ins = {name: f"N{i}".ljust(len(name.encode(encoding)), "_") for i, name in enumerate(entries)}
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for name, data in entries.items():
+            zf.writestr(stand_ins[name], data)
+    raw = buf.getvalue()
+    for name, stand_in in stand_ins.items():
+        raw = raw.replace(stand_in.encode(), name.encode(encoding))
+    return raw
+
+
+async def test_land_outputs_marks_utf8_zip_names(monkeypatch) -> None:
+    """Box `zip` stores 春游.csv with flag 0; Windows would show cp437 garbage."""
+    import io
+    import zipfile
+
+    key = WorkspaceKey.for_run(school_id="s", membership_id="m", conversation_id="c", run_id="r")
+    raw = _info_zip({"春游分摊.csv": b"a,b", "目录/表.txt": b"x"})
+    assert all(not i.flag_bits & 0x800 for i in zipfile.ZipFile(io.BytesIO(raw)).infolist())
+    await _fake_listing(monkeypatch, {"outputs/包.zip": raw})
+    store = _Store()
+    await land_outputs(key=key, before={}, since=0.0, artifact_store=store, principal=object())
+    zf = zipfile.ZipFile(io.BytesIO(store.rows[0]["content"]))
+    assert all(i.flag_bits & 0x800 for i in zf.infolist())
+    assert zf.namelist() == ["春游分摊.csv", "目录/表.txt"]
+    assert zf.read("春游分摊.csv") == b"a,b"
+
+
+def test_zip_utf8_flag_leaves_other_zips_alone() -> None:
+    import io
+    import zipfile
+
+    from pico_orchestrator.artifact_types import zip_with_utf8_flag
+
+    gbk = _info_zip({"春游.csv": b"1"}, encoding="gbk")
+    assert zip_with_utf8_flag(gbk) == gbk  # a teacher's GBK zip: not ours to guess
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("春游.csv", b"1")  # Python already sets the bit
+    assert zip_with_utf8_flag(buf.getvalue()) == buf.getvalue()
+    assert zip_with_utf8_flag(b"not a zip") == b"not a zip"
+
+
 def test_workspace_key_fail_closed_without_tenant() -> None:
     from pico_orchestrator.true_pi.client import TruePiClientError
 
