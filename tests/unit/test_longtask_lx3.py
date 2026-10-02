@@ -228,3 +228,24 @@ def test_checker_catches_each_slip(monkeypatch, capsys, tmp_path: Path, flags: d
     verdict = _run(monkeypatch, capsys, *_delivery(tmp_path, **flags))
     assert verdict["pass"] is False, verdict
     assert any(needle in n for n in verdict["notes"]), verdict
+
+
+def test_deck_banner_is_not_body(tmp_path: Path) -> None:
+    """A banner on every slide is chrome: the title is the next text down, not the banner (r1 9:89)."""
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    prs = Presentation()
+    body = "家" * 79
+    for i in range(4):
+        s = prs.slides.add_slide(prs.slide_layouts[6])  # blank: no title placeholder
+        s.shapes.add_textbox(Inches(0), Inches(0), Inches(9), Inches(0.5)).text_frame.text = "滨江市第三中学 八年级（2）班期末家长会"
+        s.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(1)).text_frame.text = f"第{i}页标题"
+        s.shapes.add_textbox(Inches(1), Inches(2), Inches(8), Inches(3)).text_frame.text = body if i == 3 else "短"
+    path = tmp_path / "d.pptx"
+    prs.save(path)
+    deck = chk.Deck(str(path))
+    last = deck.slides[3]
+    assert last["title"] == "第3页标题"
+    assert chk.cjk(last["main"]) - chk.cjk(last["title"]) == 79
+    assert "滨江市第三中学" in deck.text  # chrome still counts for names / numbers

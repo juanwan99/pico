@@ -20,6 +20,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections import Counter
 
 sys.path.insert(0, "/w/check")
 import lx3_data as D
@@ -200,20 +201,30 @@ class Deck:
         from pptx import Presentation
 
         self.slides = []
+        raw = []
         for slide in Presentation(path).slides:
-            texts, tables, title = [], [], ""
+            texts, tables = [], []
             for shape in _shapes(slide.shapes):
                 if shape.has_text_frame and shape.text_frame.text.strip():
                     texts.append((shape, shape.text_frame.text))
                 if getattr(shape, "has_table", False) and shape.has_table:
                     tables.append([[c.text for c in r.cells] for r in shape.table.rows])
+            raw.append((slide, texts, tables))
+        # A banner / footer repeated on most slides is chrome, not that slide's 正文.
+        seen = Counter(k for _sl, texts, _t in raw for k in {norm(t) for _s, t in texts})
+        chrome = {k for k, n in seen.items() if len(raw) >= 3 and n > len(raw) / 2}
+        for slide, texts, tables in raw:
+            own = [(s, t) for s, t in texts if norm(t) not in chrome]
+            title = ""
             if slide.shapes.title is not None and slide.shapes.title.has_text_frame:
                 title = slide.shapes.title.text_frame.text
-            elif texts:
-                title = min(texts, key=lambda t: (t[0].top or 0))[1]
+            elif own:
+                title = min(own, key=lambda t: (t[0].top or 0))[1]
             notes = slide.notes_slide.notes_text_frame.text if slide.has_notes_slide and slide.notes_slide.notes_text_frame else ""
-            body = "\n".join(t for _s, t in texts) + "\n" + "\n".join(c for t in tables for r in t for c in r)
-            self.slides.append({"title": title, "body": body, "tables": tables, "notes": notes})
+            cells = "\n".join(c for t in tables for r in t for c in r)
+            body = "\n".join(t for _s, t in texts) + "\n" + cells
+            main = "\n".join(t for _s, t in own) + "\n" + cells
+            self.slides.append({"title": title, "body": body, "main": main, "tables": tables, "notes": notes})
         self.text = "\n".join(s["body"] + "\n" + s["notes"] for s in self.slides)
 
 
@@ -438,9 +449,9 @@ def main():
         p.append("no deck")
     sc.check(not p, f"deck structure (cover / 书目 / notes): {p}")
     over = [
-        f"{i + 1}:{cjk(s['body']) - cjk(s['title'])}"
+        f"{i + 1}:{cjk(s['main']) - cjk(s['title'])}"
         for i, s in enumerate(deck.slides if deck else [])
-        if cjk(s["body"]) - cjk(s["title"]) > 80
+        if cjk(s["main"]) - cjk(s["title"]) > 80
     ]
     sc.check(deck is not None and not over, f"slides over 80 汉字 of body (家委会 rule): {over[:5]}")
     leaks = [f"letter:{n}" for n in names_in(lt)] + [f"deck:{n}" for n in names_in(dt)]
