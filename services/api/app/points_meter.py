@@ -143,8 +143,10 @@ def milli_from_row(
     model_n = (model or str(extra.get("billed_model") or "")).strip() or None
     channel_id = str(extra.get("channel_id") or "").strip() or None
     card = load_rate_card()
+    if kind_n == "api" and not model_n:
+        return None  # a failed exam extract names no model; never bill it as kb-ingest
     rate = card.find(kind=kind_n, model=model_n, channel_id=channel_id)
-    if rate is None and kind_n == "api" and model_n:
+    if rate is None and kind_n == "api":
         # A feature API that calls a chat model (exam extract → gemini) pays its tokens.
         rate = card.find(kind="llm", model=model_n, channel_id=channel_id)
     if rate is None or not rate.priced():
