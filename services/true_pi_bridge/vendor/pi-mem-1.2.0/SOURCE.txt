@@ -8,3 +8,6 @@ Pico thin adapter (LAW-NO-SELF-BUILD):
 - Drop TUI dashboard, Last-24h LLM summary, git autocommit, session scanner.
 - RPC has no pi-tui; compact notify is a no-op without ctx.hasUI.
 - Do not invent a vector Memory OS.
+- Memory instructions reworded (#1164): injected memory is background from
+  earlier conversations, not a new request; MEMORY.md never holds one
+  conversation's project rules, files or round numbers.
