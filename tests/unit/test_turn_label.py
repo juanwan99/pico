@@ -70,7 +70,7 @@ async def test_pi_gets_the_label_once() -> None:
 async def test_turn_counts_this_members_messages_in_the_conversation(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'turn.db'}")
     from app import db as dbmod
-    from app.db import TaskRow, init_db, new_id, session_factory
+    from app.db import RunRow, TaskRow, init_db, new_id, session_factory
     from app.openai_compat import _caps_with_turn
     from app.settings import get_settings
 
@@ -79,6 +79,7 @@ async def test_turn_counts_this_members_messages_in_the_conversation(tmp_path, m
     dbmod._Session = None
     await init_db()
     async with session_factory()() as session:
+        tids = []
         for school, member, convo in [
             ("school-a", "member-a", "c1"),
             ("school-a", "member-a", "c1"),
@@ -87,7 +88,13 @@ async def test_turn_counts_this_members_messages_in_the_conversation(tmp_path, m
             ("school-a", "member-b", "c1"),
             ("school-b", "member-a", "c1"),
         ]:
-            session.add(TaskRow(id=new_id(), school_id=school, membership_id=member, conversation_id=convo))
+            tid = new_id()
+            tids.append(tid)
+            session.add(TaskRow(id=tid, school_id=school, membership_id=member, conversation_id=convo))
+            session.add(RunRow(id=new_id(), task_id=tid))
+        # A resumed message adds a run, not a turn; an upload adds a task with no run.
+        session.add(RunRow(id=new_id(), task_id=tids[0]))
+        session.add(TaskRow(id=new_id(), school_id="school-a", membership_id="member-a", conversation_id="c1"))
         await session.commit()
 
     caps = await _caps_with_turn(RunCaps(), Principal(), "c1")
