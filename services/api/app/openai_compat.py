@@ -928,6 +928,11 @@ async def _finalize_run(
         )
         if claimed.rowcount != 1:
             await session.rollback()
+            from app.run_service import bill_stopped_run
+
+            await bill_stopped_run(
+                run_id, token_usage, source="openai_compat", bill_to=bill_to
+            )
             return
 
         run = await session.get(RunRow, run_id)
