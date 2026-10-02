@@ -144,6 +144,9 @@ def milli_from_row(
     channel_id = str(extra.get("channel_id") or "").strip() or None
     card = load_rate_card()
     rate = card.find(kind=kind_n, model=model_n, channel_id=channel_id)
+    if rate is None and kind_n == "api" and model_n:
+        # A feature API that calls a chat model (exam extract → gemini) pays its tokens.
+        rate = card.find(kind="llm", model=model_n, channel_id=channel_id)
     if rate is None or not rate.priced():
         return None
     cached = _extra_int(extra, "cached_tokens", "cache_read", "cacheRead")
