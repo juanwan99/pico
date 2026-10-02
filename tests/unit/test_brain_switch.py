@@ -237,3 +237,24 @@ def test_models_document_lists_backups_on_their_own_wire() -> None:
     assert models["grok-4.6"]["contextWindow"] == 256_000
     assert "compat" not in models["grok-4.6"]
     json.dumps(doc)  # models.json stays plain JSON
+
+
+class RefusingTransport(SpareTransport):
+    async def send(self, command: Any) -> None:
+        if command.get("type") == "set_model":
+            self.sent.append(dict(command))
+            await self._resp_q.put(
+                {"type": "response", "command": "set_model", "id": command.get("id"), "success": False}
+            )
+            return
+        await super().send(command)
+
+
+@pytest.mark.asyncio
+async def test_refused_switch_keeps_the_pin_on_the_model_pi_still_uses(pinned) -> None:
+    transport = RefusingTransport([*_work(), _retry(1), _retry(2), _retry(3), *_done()], SPARES)
+    result, events = await _run(transport)
+    assert result.status == "succeeded", result.error
+    assert _set_models(transport) == ["grok-4.6"]
+    assert proxy_entry(_RID).model == "gemini-3.8-flash"
+    assert not any(k == "model.switch" for k, _ in events)

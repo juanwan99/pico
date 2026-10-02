@@ -703,9 +703,10 @@ class SubprocessTransport(TruePiTransport):
                     return raw
                 pending.append(raw)
             raise TruePiClientError(f"timeout waiting for response {command_type}")
-        except Exception:
+        except BaseException:
+            # Cancelled too: replies held for other waiters go back (#1160 review).
             for p in pending:
-                await self._resp_q.put(p)
+                self._resp_q.put_nowait(p)
             raise
 
     async def close(self, *, kill: bool = True) -> None:
@@ -789,15 +790,17 @@ class TruePiRpcClient:
         except TruePiClientError:
             logger.info("true_pi abort response missing (process may be dead)")
 
-    async def set_model(self, provider: str, model_id: str) -> None:
-        """Official RPC ``set_model``: the session's next model call uses it."""
+    async def set_model(self, provider: str, model_id: str) -> bool:
+        """Official RPC ``set_model``: the session's next model call uses it.
+
+        False = Pi answered no. Raises when Pi did not answer at all.
+        """
         rid = f"m-{uuid.uuid4().hex[:8]}"
         await self.transport.send(
             {"id": rid, "type": "set_model", "provider": provider, "modelId": model_id}
         )
         resp = await self.transport.wait_response("set_model", req_id=rid, timeout=10.0)
-        if not resp.get("success"):
-            raise TruePiClientError(f"set_model rejected: {str(resp)[:200]}")
+        return bool(resp.get("success"))
 
     async def get_last_assistant_text(self) -> str:
         rid = f"t-{uuid.uuid4().hex[:8]}"

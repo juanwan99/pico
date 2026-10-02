@@ -745,11 +745,19 @@ async def _run_true_pi_once(
             if entry is not None:
                 entry.model = to_model
             try:
-                await client.set_model(str(getattr(transport, "provider", "") or "openai"), to_model)
-            except Exception as exc:  # noqa: BLE001 — Pi keeps retrying the old model
+                switched = await client.set_model(
+                    str(getattr(transport, "provider", "") or "openai"), to_model
+                )
+            except Exception as exc:  # noqa: BLE001
+                # No answer: Pi may still apply it, and a pin moved back would
+                # refuse every later call. The pin stays with the backup.
+                logger.warning("true_pi set_model %s unanswered run_id=%s: %s", to_model, rid, exc)
+                return
+            if not switched:
+                # Pi said no and keeps retrying the old model.
                 if entry is not None:
                     entry.model = pinned
-                logger.warning("true_pi set_model %s failed run_id=%s: %s", to_model, rid, exc)
+                logger.warning("true_pi set_model %s refused run_id=%s", to_model, rid)
                 return
             logger.info("true_pi brain switch run_id=%s %s -> %s", rid, brain, to_model)
             state.event_kinds.append("model.switch")
