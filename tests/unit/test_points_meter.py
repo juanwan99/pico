@@ -177,3 +177,11 @@ def test_quote_tracks_last_weighted_bill() -> None:
     quoted = quote_points_from_input_len(14, resident_milli=milli)
     assert actual is not None and quoted is not None
     assert float(quoted) >= float(actual)
+
+
+def test_api_row_with_chat_model_pays_its_tokens() -> None:
+    """Exam extract logs kind=api + the chat model it called; it was 0 points."""
+    row = {"tokens_unknown": False, "prompt_tokens": 1000, "completion_tokens": 0, "total_tokens": 1000}
+    as_api = points_from_row(**row, extra={"bill_to": "school"}, kind="api", model="gpt-5.6-sol")
+    assert as_api == points_from_row(**row, kind="llm", model="gpt-5.6-sol") == "1000.000"
+    assert points_from_row(**row, kind="api", model="no-such-model") is None
