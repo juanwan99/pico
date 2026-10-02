@@ -1149,7 +1149,7 @@ async def _run_true_pi_once(
         return RunResult(
             status="succeeded",
             final_text=final_text,
-            token_usage=state.token_usage,
+            token_usage=ledger_usage(state),
             change_proposal=page_book.change_proposal() if page_book else None,
             page_mutations=list(page_book.mutations) if page_book else None,
         )
@@ -1422,5 +1422,23 @@ def _result(
         status=status,
         final_text=final_text,
         error=error,
-        token_usage=state.token_usage,
+        token_usage=ledger_usage(state),
     )
+
+
+def ledger_usage(state: EventMapState) -> dict[str, Any] | None:
+    """Usage the run is billed for.
+
+    Pi sums a run's usage at agent_end. A turn stopped before that (teacher
+    stop, wall or spend cap) still paid for every model call turn_end already
+    reported, so the larger of the two wins (#1158).
+    """
+
+    def total(usage: dict[str, Any] | None) -> int:
+        try:
+            return int((usage or {}).get("total_tokens") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    done, seen = state.token_usage, state.spent_usage
+    return seen if total(seen) > total(done) else done
