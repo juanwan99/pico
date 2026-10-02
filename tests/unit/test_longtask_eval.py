@@ -238,6 +238,20 @@ def test_unzip_skips_entries_escaping_dest(tmp_path: Path) -> None:
     assert not (tmp_path / "evil.py").exists()
 
 
+def test_unzip_reads_utf8_names_without_the_utf8_bit(tmp_path: Path) -> None:
+    """Info-ZIP `zip -r` in the box stores UTF-8 names with flag 0 (LX2 run 1)."""
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("p/XXXXXX.csv", "学号")  # same byte length as 春游 in UTF-8
+    raw = buf.getvalue().replace(b"XXXXXX", "春游".encode())
+    assert zipfile.ZipFile(io.BytesIO(raw)).infolist()[0].flag_bits & 0x800 == 0
+    lte._unzip_into(raw, tmp_path / "out")
+    assert (tmp_path / "out" / "p" / "春游.csv").read_text(encoding="utf-8") == "学号"
+
+
 def test_coding_case_fails_when_files_missing() -> None:
     case = {"id": "LCX", "expect": {"files": ["a.py", "b.py"]}}
     res = lte.CaseResult(case="LCX")

@@ -508,7 +508,15 @@ def _unzip_into(raw: bytes, dest: Path) -> None:
     root = dest.resolve()
     with zipfile.ZipFile(io.BytesIO(raw)) as zf:
         for info in zf.infolist():
-            target = (dest / info.filename).resolve()
+            name = info.filename
+            if not info.flag_bits & 0x800:
+                # Info-ZIP in the box writes UTF-8 names without the UTF-8 bit;
+                # zipfile then reads them as cp437 mojibake (#1139 LX2).
+                try:
+                    name = name.encode("cp437").decode("utf-8")
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    pass
+            target = (dest / name).resolve()
             if info.is_dir() or not str(target).startswith(str(root) + os.sep):
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
