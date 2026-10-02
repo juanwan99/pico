@@ -604,7 +604,11 @@ async def _day_use_system_block(
 
 
 async def _caps_with_turn(caps: Any, principal: Principal, conversation_id: str | None) -> Any:
-    """Stamp which teacher message this is, counted from this member's ledger (#1151)."""
+    """Stamp which teacher message this is, counted from this member's ledger (#1151).
+
+    Only tasks with a run are messages: an uploaded attachment gets its own
+    task in the conversation (edu-read) and must not push the count up.
+    """
     if not conversation_id:
         return caps
     from dataclasses import replace
@@ -614,8 +618,9 @@ async def _caps_with_turn(caps: Any, principal: Principal, conversation_id: str 
     try:
         async with session_factory()() as session:
             n = await session.scalar(
-                select(func.count())
+                select(func.count(func.distinct(TaskRow.id)))
                 .select_from(TaskRow)
+                .join(RunRow, RunRow.task_id == TaskRow.id)
                 .where(
                     TaskRow.school_id == principal.school_id,
                     TaskRow.membership_id == principal.membership_id,
