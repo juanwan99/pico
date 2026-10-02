@@ -332,7 +332,7 @@ def _run_lx1_checker(monkeypatch, capsys, path: Path) -> dict:
 def test_xlong_suite_overflows_one_window_and_stays_out_of_all() -> None:
     """#1139: LX cases must outgrow 256k tokens so compaction fires; never in --suite all."""
     cases = lte.load_cases("xlong")
-    assert [c["id"] for c in cases] == ["LX1", "LX2", "LX4"]
+    assert [c["id"] for c in cases] == ["LX1", "LX2", "LX3", "LX4"]
     assert not [c for c in lte.load_cases() if c["id"].startswith("LX")]
     sys.path.insert(0, str(lte.CHECKS_DIR))
     import lx_corpus
