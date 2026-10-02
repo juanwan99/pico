@@ -7,6 +7,10 @@ Graded on the last classfund.zip only:
   essential  api_v1.py byte-identical · each feature right with int fen · exports
              carry 学号 only · facts from early turns still used late (R8/R10/R13 need R3)
   extra      no float in the package · CHANGELOG R1..R15 newest first · own tests pass
+Every turn's own classfund.zip (/w/out/turns/R01…, #1152) is checked too, so a rule
+broken right after a compaction and quietly restored later still shows:
+  essential  delivered · api_v1.py byte-identical · CHANGELOG top is this turn · no names
+  extra      no float · own tests pass
 """
 
 import csv
@@ -20,7 +24,7 @@ import zipfile
 from pathlib import Path
 
 sys.path.insert(0, "/w/check")
-from _common import IN, Score, find, run, tail, workdir
+from _common import IN, OUT, Score, find, run, tail, workdir
 
 # Truth from the material (testdata/longtask-eval/fixtures/lx2/*).
 ALL = [f"202503{i:02d}" for i in range(1, 41)]
@@ -252,6 +256,53 @@ def floats_in(pkg: str) -> list[str]:
     return hits
 
 
+def leaks_in(root: str, names) -> list[str]:
+    """Student names in anything parents see: the parent csv sheets, html pages, budget reminders."""
+    leaks = []
+    for fname in PARENT_FILES:
+        path = find(fname, root)
+        raw = Path(path).read_text(encoding="utf-8-sig", errors="replace") if path else ""
+        leaks += [f"{fname}:{n}" for n in names if n in raw]
+    for dirpath, _d, files in os.walk(os.path.join(root, "data")):
+        for f in files:
+            if f.endswith((".html", ".htm")) or f.startswith("预算提醒"):
+                text = Path(dirpath, f).read_text(encoding="utf-8", errors="replace")
+                leaks += [f"{f}:{n}" for n in names if n in text]
+    return leaks
+
+
+def top_round(root: str) -> int | None:
+    path = Path(root, "CHANGELOG.md")
+    m = re.search(r"^##\s*R(\d+)", path.read_text(encoding="utf-8") if path.exists() else "", re.MULTILINE)
+    return int(m.group(1)) if m else None
+
+
+def per_turn(sc: Score, original: bytes, names) -> None:
+    """Each turn's delivery, not just the last: the turn-1 rules held every single turn."""
+    hard, soft = [], []
+    for n in range(1, 16):
+        tdir = os.path.join(OUT, "turns", f"R{n:02d}")
+        v1 = find("api_v1.py", tdir) if os.path.isdir(tdir) else None
+        if not v1:
+            hard.append(f"R{n} no classfund.zip")
+            continue
+        root = workdir(os.path.dirname(os.path.dirname(v1)), f"turn{n:02d}")
+        if Path(v1).read_bytes() != original:
+            hard.append(f"R{n} api_v1 edited")
+        if top_round(root) != n:
+            hard.append(f"R{n} CHANGELOG top R{top_round(root)}")
+        leaks = leaks_in(root, names)
+        if leaks:
+            hard.append(f"R{n} names {leaks[:2]}")
+        if floats_in(os.path.join(root, "classfund")):
+            soft.append(f"R{n} float")
+        t = run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], cwd=root, timeout=60)
+        if t.returncode != 0:
+            soft.append(f"R{n} tests fail")
+    sc.check(not hard, f"per-turn turn-1 rules: {'; '.join(hard[:8])}")
+    sc.check(not soft, f"per-turn float/tests: {'; '.join(soft[:8])}", essential=False)
+
+
 def main():
     sc = Score()
     v1 = find("api_v1.py")
@@ -302,7 +353,6 @@ def main():
     sc.check(isinstance(summ, dict) and all(summ.get(k) for k in ("income", "spent", "balance", "cats", "offline")),
              f"R14 term_summary_html: {summ}")
 
-    leaks = []
     sheets = {}
     for label, fname, truth in (
         ("R2", "春游分摊.csv", TRIP), ("R3", "退费.csv", TRANSFERRED), ("R8", "结余返还.csv", SETTLE),
@@ -315,15 +365,7 @@ def main():
             sc.notes.append(f"{label} {fname}: {len(got)} rows vs {len(truth)}, first diffs {diff}")
         elif got is None:
             sc.notes.append(f"{label} {fname} missing")
-    for fname in PARENT_FILES:
-        path = find(fname, root)
-        raw = Path(path).read_text(encoding="utf-8-sig", errors="replace") if path else ""
-        leaks += [f"{fname}:{n}" for n in roster.values() if n in raw]
-    for dirpath, _d, files in os.walk(os.path.join(root, "data")):
-        for f in files:
-            if f.endswith((".html", ".htm")) or f.startswith("预算提醒"):
-                text = Path(dirpath, f).read_text(encoding="utf-8", errors="replace")
-                leaks += [f"{f}:{n}" for n in roster.values() if n in text]
+    leaks = leaks_in(root, roster.values())
     sc.check(sheets["R2"], "R2 春游分摊.csv wrong (who went / 2380 / remainder by 学号)")
     sc.check(sheets["R3"] and sheets["R8"], f"R3 退费.csv ok={sheets['R3']} · R8 结余返还.csv ok={sheets['R8']} (transferred out, 1234.56-200)")
     sc.check(sheets["R10"], "R10 班服分摊.csv wrong (38 now − 2 own shirts, 46.80 each − 300 sponsor)")
@@ -348,6 +390,7 @@ def main():
              f"CHANGELOG rounds {order[:17]} (want R15..R1 newest first)", essential=False)
     t = run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], cwd=root, timeout=180)
     sc.check(t.returncode == 0, f"own tests fail: {tail(t.stderr)}", essential=False)
+    per_turn(sc, original, roster.values())
     sc.emit()
 
 

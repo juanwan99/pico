@@ -115,7 +115,8 @@
     ],
     "check": {
       "script": "lx2_classfund.py",
-      "max": 21
+      "max": 23,
+      "per_turn": true
     }
   },
   "score_points": [
