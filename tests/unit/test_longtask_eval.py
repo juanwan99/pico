@@ -430,6 +430,15 @@ def list_entries(ledger, sid):
     ]
 
 
+def get_balance(ledger, start=None, end=None):
+    rows = [e for e in ledger.entries if (start is None or e.day >= start) and (end is None or e.day <= end)]
+    income = sum(e.amount_fen for e in rows if e.amount_fen > 0)
+    spent = -sum(e.amount_fen for e in rows if e.amount_fen < 0)
+    bal = ledger.balance()
+    return {"balance_fen": bal, "balance": fmt_yuan(bal), "income_fen": income, "income": fmt_yuan(income),
+            "spent_fen": spent, "spent": fmt_yuan(spent)}
+
+
 def get_statement(ledger, sid):
     paid = sum(e.amount_fen for e in ledger.entries_for(sid) if e.category == "班费")
     return {"sid": sid, "paid_fen": paid, "paid": fmt_yuan(paid), "entries": list_entries(ledger, sid)}
@@ -461,7 +470,40 @@ from classfund.trip import split_evenly
 def final_refunds(balance_fen, sids, keep_fen):
     return split_evenly(max(0, balance_fen - keep_fen), sids)
 ''',
+    "classfund/uniform.py": '''
+from classfund.trip import split_evenly
+
+
+def uniform_shares(unit_fen, sids, sponsor_fen=0):
+    return split_evenly(max(0, unit_fen * len(sids) - sponsor_fen), sids)
+''',
+    "classfund/fees.py": '''
+def next_term_fees(base_fen, sids, half_sids=()):
+    return {s: base_fen // 2 if s in half_sids else base_fen for s in sorted(sids)}
+''',
+    "classfund/summary.py": '''
+from classfund.money import fmt_yuan
+
+
+def term_summary_html(ledger, start, end):
+    rows = [e for e in ledger.entries if start <= e.day <= end]
+    cats = {}
+    for e in rows:
+        cats[e.category] = cats.get(e.category, 0) + abs(e.amount_fen)
+    income = sum(e.amount_fen for e in rows if e.amount_fen > 0)
+    spent = -sum(e.amount_fen for e in rows if e.amount_fen < 0)
+    bal = sum(e.amount_fen for e in ledger.entries if e.day <= end)
+    table = "".join(f"<tr><td>{c}</td><td>{fmt_yuan(v)}</td></tr>" for c, v in cats.items())
+    return f"<html><body>{fmt_yuan(income)} {fmt_yuan(spent)} {fmt_yuan(bal)}<table>{table}</table></body></html>"
+''',
 }
+
+# R11: receipts still to book (the three already in the fixture ledger make up the rest).
+LX2_Q4 = [("2026-10-12", -3250, "奖品"), ("2026-10-21", -2760, "卫生用品"), ("2026-10-30", -4500, "奖品"),
+          ("2026-11-03", -5970, "图书角"), ("2026-11-08", -6840, "班级活动"), ("2026-11-15", -3600, "卫生用品"),
+          ("2026-11-22", -23880, "图书角"), ("2026-11-28", -4130, "奖品"), ("2026-12-05", -8520, "班级活动"),
+          ("2026-12-12", -2390, "卫生用品"), ("2026-12-18", -9600, "班级活动"), ("2026-12-22", -8880, "奖品"),
+          ("2026-12-26", -1200, "图书角")]
 
 
 def _lx2_project(tmp_path: Path, *, edit_v1: bool = False, leak: bool = False, forget_r3: bool = False) -> Path:
@@ -484,14 +526,31 @@ def _lx2_project(tmp_path: Path, *, edit_v1: bool = False, leak: bool = False, f
         v1 = root / "classfund" / "api_v1.py"
         v1.write_text(v1.read_text(encoding="utf-8").replace("{e.day.year}/{e.day.month}/{e.day.day}", "{e.day.isoformat()}"), encoding="utf-8")
     names = dict(line.split(",") for line in (root / "data" / "roster.csv").read_text(encoding="utf-8").split()[1:])
-    settle = chk.split(123456 - 20000, chk.ALL if forget_r3 else [s for s in chk.ALL if s not in chk.TRANSFERRED])
+    now = chk.ALL if forget_r3 else chk.CURRENT
+    settle = chk.split(123456 - 20000, now)
+    uniform = chk.split(len(set(now) - chk.OWN_SHIRT) * 4680 - 30000, sorted(set(now) - chk.OWN_SHIRT))
     data = root / "data"
     _lx2_sheet(data / "春游分摊.csv", chk.TRIP, names if leak else None)
     _lx2_sheet(data / "退费.csv", chk.TRANSFERRED)
     _lx2_sheet(data / "结余返还.csv", settle)
+    _lx2_sheet(data / "班服分摊.csv", uniform)
+    _lx2_sheet(data / "下学期收费.csv", {s: 15000 if s in chk.HALF else 30000 for s in [*now, chk.NEW_SID]})
     (data / "budgets.json").write_text(json.dumps(chk.BUDGETS, ensure_ascii=False), encoding="utf-8")
+    with (data / "roster.csv").open("a", encoding="utf-8") as fh:
+        fh.write(f"{chk.NEW_SID},秦朗\n")
+    with (data / "entries.csv").open("a", encoding="utf-8") as fh:
+        fh.writelines(f"{day},,{fen},{cat},\n" for day, fen, cat in LX2_Q4)
+    own = root / "tests" / "test_ledger.py"
+    own.write_text(own.read_text(encoding="utf-8").replace("48)", f"{48 + len(LX2_Q4)})"), encoding="utf-8")
+    q4 = [("2026-10-10", 8600, "图书角"), ("2026-10-18", 15000, "班级活动"), ("2026-10-24", 1980, "卫生用品")]
+    q4 += [(day, -fen, cat) for day, fen, cat in LX2_Q4]
+    (data / "10-12月支出明细.csv").write_text(
+        "日期,类别,说明,金额\n" + "".join(f"{d},{c},买东西,¥{f // 100}.{f % 100:02d}\n" for d, f, c in sorted(q4))
+        + "合计,,,¥1111.00\n",
+        encoding="utf-8",
+    )
     log = root / "CHANGELOG.md"
-    heads = "".join(f"## R{n} 第 {n} 轮\n\n" for n in range(10, 0, -1))
+    heads = "".join(f"## R{n} 第 {n} 轮\n\n" for n in range(15, 0, -1))
     log.write_text(log.read_text(encoding="utf-8").replace("## R0", heads + "## R0"), encoding="utf-8")
     zin = tmp_path / "in"
     zin.mkdir()
@@ -522,19 +581,19 @@ def _run_lx2_checker(monkeypatch, capsys, w: Path) -> dict:
     return json.loads(capsys.readouterr().out.strip().splitlines()[-1])
 
 
-def test_lx2_is_ten_turns_on_one_project() -> None:
+def test_lx2_is_fifteen_turns_on_one_project() -> None:
     case = next(c for c in lte.load_cases("xlong") if c["id"] == "LX2")
-    assert len(case["turns"]) == 10
+    assert len(case["turns"]) == 15
     assert case["turns"][0]["attachments"][0]["zip_dir"] == "fixtures/code/classfund"
     for turn in case["turns"]:
         for att in turn.get("attachments") or []:
             assert lte._attachment_bytes(att)
-    assert lte.max_points(case["expect"]) == 15
+    assert lte.max_points(case["expect"]) == 22
 
 
 def test_lx2_checker_full_marks_on_reference(monkeypatch, capsys, tmp_path: Path) -> None:
     verdict = _run_lx2_checker(monkeypatch, capsys, _lx2_project(tmp_path))
-    assert verdict == {"points": 14, "pass": True, "notes": []}, verdict
+    assert verdict == {"points": 21, "pass": True, "notes": []}, verdict
 
 
 def test_lx2_checker_catches_broken_turn1_rules(monkeypatch, capsys, tmp_path: Path) -> None:

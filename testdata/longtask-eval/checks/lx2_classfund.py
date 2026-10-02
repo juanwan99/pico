@@ -1,12 +1,12 @@
-"""LX2: one conversation, ten turns on the classfund project; turn-1 rules must survive.
+"""LX2: one conversation, fifteen turns on the classfund project; turn-1 rules must survive.
 
 Turn 1 sets the rules (integer fen, api_v1.py frozen, no student names in anything
-for parents, CHANGELOG R<n>, tests pass). Turns 2–9 add features from material the
+for parents, CHANGELOG R<n>, tests pass). Turns 2–14 add features from material the
 model has to read; the context passes one window, so Pi compacts mid-conversation.
 Graded on the last classfund.zip only:
   essential  api_v1.py byte-identical · each feature right with int fen · exports
-             carry 学号 only · facts from early turns still used late (R8 needs R3)
-  extra      no float in the package · CHANGELOG R1..R10 newest first · own tests pass
+             carry 学号 only · facts from early turns still used late (R8/R10/R13 need R3)
+  extra      no float in the package · CHANGELOG R1..R15 newest first · own tests pass
 """
 
 import csv
@@ -27,6 +27,11 @@ ALL = [f"202503{i:02d}" for i in range(1, 41)]
 TRIP_ABSENT = {"20250307", "20250315", "20250338"}  # 赵一鸣 胡宇航 蒋晨阳; 曹雨涵 went after all
 TRANSFERRED = {"20250318": 12000, "20250326": 7500}  # 8 and 5 weeks left of 20, 班费 only
 BUDGETS = {"班级活动": 80000, "图书角": 65000, "卫生用品": 30000, "奖品": 40000}
+CURRENT = [s for s in ALL if s not in TRANSFERRED]  # 38 after R3
+OWN_SHIRT = {"20250325", "20250337"}  # 唐睿 潘悦; 曹雨涵 buys after all
+Q4_SPENT = {"图书角": 39650, "班级活动": 39960, "卫生用品": 10730, "奖品": 20760}  # incl. 3 already in ledger
+HALF = {"20250329", "20250332"}  # 邓皓轩 曾俊熙
+NEW_SID = "20250341"  # 秦朗
 
 
 def split(total, sids):
@@ -36,10 +41,13 @@ def split(total, sids):
 
 
 TRIP = split(238000, [s for s in ALL if s not in TRIP_ABSENT])
-SETTLE = split(123456 - 20000, [s for s in ALL if s not in TRANSFERRED])
+SETTLE = split(123456 - 20000, CURRENT)
+UNIFORM = split(36 * 4680 - 30000, [s for s in CURRENT if s not in OWN_SHIRT])
+NEXT = {s: 15000 if s in HALF else 30000 for s in [*CURRENT, NEW_SID]}
+PARENT_FILES = ("春游分摊.csv", "退费.csv", "结余返还.csv", "班服分摊.csv", "下学期收费.csv", "10-12月支出明细.csv")
 
 API = r"""
-import json, os, sys
+import json, os, re, sys
 from datetime import date
 sys.path.insert(0, os.getcwd())
 out = {}
@@ -133,6 +141,50 @@ def settle():
     return (a == {"a": 34486, "b": 34485, "c": 34485} and z == {"a": 0, "b": 0}
             and all(isint(v) for v in a.values())) or {"a": a, "z": z}
 safe("settle", settle)
+
+def uniform():
+    from classfund.uniform import uniform_shares as u
+    a, b, c = u(4680, ["b", "a", "c"], 1000), u(100, ["a", "b"], 500), u(4680, ["a"])
+    return (a == {"a": 4347, "b": 4347, "c": 4346} and b == {"a": 0, "b": 0} and c == {"a": 4680}
+            and all(isint(v) for v in a.values())) or {"a": a, "b": b, "c": c}
+safe("uniform", uniform)
+
+def asof(fn, *args, **kw):
+    try:
+        return fn(*args, **kw)
+    except (TypeError, AttributeError, ValueError):
+        return fn(*args, **{k: v.isoformat() for k, v in kw.items()})
+
+L5 = Ledger([E(date(2026, 9, 1), 30000, "班费", "20250301"), E(date(2026, 9, 12), -4550, "班级活动", "", "中秋"),
+             E(date(2026, 9, 26), 6433, "春游", "20250301"), E(date(2026, 10, 3), -1999, "图书角"),
+             E(date(2027, 2, 5), 30000, "班费", "20250302")])
+
+def balance():
+    from classfund import api_v2
+    keys = ("balance_fen", "balance", "income_fen", "income", "spent_fen", "spent")
+    a = api_v2.get_balance(L5)
+    b = asof(api_v2.get_balance, L5, start=date(2026, 10, 1), end=date(2026, 12, 31))
+    want_a = {"balance_fen": 59884, "balance": "¥598.84", "income_fen": 66433, "income": "¥664.33", "spent_fen": 6549, "spent": "¥65.49"}
+    want_b = {"balance_fen": 59884, "balance": "¥598.84", "income_fen": 0, "income": "¥0.00", "spent_fen": 1999, "spent": "¥19.99"}
+    got_a, got_b = {k: a.get(k) for k in keys}, {k: b.get(k) for k in keys}
+    return (got_a == want_a and got_b == want_b) or {"all": got_a, "q4": got_b}
+safe("balance", balance)
+
+def fees():
+    from classfund.fees import next_term_fees as f
+    a, b = f(30001, ["b", "a", "c"], ["a"]), f(30000, ["x"])
+    return (a == {"a": 15000, "b": 30001, "c": 30001} and b == {"x": 30000}
+            and all(isint(v) for v in a.values())) or {"a": a, "b": b}
+safe("fees", fees)
+
+def summary():
+    from classfund.summary import term_summary_html
+    html = asof(term_summary_html, L5, start=date(2026, 9, 1), end=date(2027, 1, 31))
+    low = html.lower()
+    return {"income": "¥364.33" in html, "spent": "¥65.49" in html, "balance": "¥298.84" in html,
+            "cats": "¥45.50" in html and "¥19.99" in html and "¥300.00" in html,
+            "offline": not re.search(r'''<script[^>]+src=|<link[^>]+href=|@import|url\(\s*['"]?https?:''', low)}
+safe("summary", summary)
 print(json.dumps(out, ensure_ascii=False, default=str))
 """
 
@@ -157,6 +209,30 @@ def sheet(path):
         if len(row) >= 2 and re.fullmatch(r"\d{8}", row[0].strip()):
             got[row[0].strip()] = money(row[1])
     return got, raw
+
+
+def q4_spent(path: str) -> dict[str, int] | None:
+    """Oct–Dec spending of the four budget categories in the delivered ledger, as positive fen."""
+    if not os.path.exists(path):
+        return None
+    got: dict[str, int] = {}
+    with open(path, encoding="utf-8-sig", newline="") as fh:
+        for row in csv.DictReader(fh):
+            day, cat = (row.get("日期") or "").strip(), (row.get("类别") or "").strip()
+            amount = (row.get("金额(分)") or "").strip()
+            if cat in Q4_SPENT and "2026-10-01" <= day <= "2026-12-31" and amount.lstrip("-").isdigit() and int(amount) < 0:
+                got[cat] = got.get(cat, 0) - int(amount)
+    return got
+
+
+def sheet_total(path):
+    """Rows and summed last-column money of a 日期,类别,说明,金额 sheet."""
+    if not path or not os.path.exists(path):
+        return 0, None
+    rows = [r for r in csv.reader(io.StringIO(Path(path).read_text(encoding="utf-8-sig"))) if len(r) >= 4]
+    rows = [r for r in rows[1:] if not re.search("合计|总计|小计", "".join(r))]
+    vals = [money(r[3]) for r in rows]
+    return len(vals), (sum(abs(v) for v in vals) if vals and None not in vals else None)
 
 
 def floats_in(pkg: str) -> list[str]:
@@ -219,17 +295,29 @@ def main():
         f"R7 budget: {bud} budgets.json={want_budgets}",
     )
     sc.check(res.get("settle") is True, f"R8 final_refunds: {res.get('settle')}")
+    sc.check(res.get("uniform") is True, f"R10 uniform_shares: {res.get('uniform')}")
+    sc.check(res.get("balance") is True, f"R12 api_v2.get_balance: {res.get('balance')}")
+    sc.check(res.get("fees") is True, f"R13 next_term_fees: {res.get('fees')}")
+    summ = res.get("summary") or {}
+    sc.check(isinstance(summ, dict) and all(summ.get(k) for k in ("income", "spent", "balance", "cats", "offline")),
+             f"R14 term_summary_html: {summ}")
 
     leaks = []
     sheets = {}
-    for label, fname, truth in (("R2", "春游分摊.csv", TRIP), ("R3", "退费.csv", TRANSFERRED), ("R8", "结余返还.csv", SETTLE)):
-        got, raw = sheet(find(fname, root))
+    for label, fname, truth in (
+        ("R2", "春游分摊.csv", TRIP), ("R3", "退费.csv", TRANSFERRED), ("R8", "结余返还.csv", SETTLE),
+        ("R10", "班服分摊.csv", UNIFORM), ("R13", "下学期收费.csv", NEXT),
+    ):
+        got, _raw = sheet(find(fname, root))
         sheets[label] = got == truth
         if got is not None and got != truth:
             diff = sorted(set(got) ^ set(truth))[:4] or [k for k in truth if got.get(k) != truth[k]][:4]
             sc.notes.append(f"{label} {fname}: {len(got)} rows vs {len(truth)}, first diffs {diff}")
         elif got is None:
             sc.notes.append(f"{label} {fname} missing")
+    for fname in PARENT_FILES:
+        path = find(fname, root)
+        raw = Path(path).read_text(encoding="utf-8-sig", errors="replace") if path else ""
         leaks += [f"{fname}:{n}" for n in roster.values() if n in raw]
     for dirpath, _d, files in os.walk(os.path.join(root, "data")):
         for f in files:
@@ -238,6 +326,13 @@ def main():
                 leaks += [f"{f}:{n}" for n in roster.values() if n in text]
     sc.check(sheets["R2"], "R2 春游分摊.csv wrong (who went / 2380 / remainder by 学号)")
     sc.check(sheets["R3"] and sheets["R8"], f"R3 退费.csv ok={sheets['R3']} · R8 结余返还.csv ok={sheets['R8']} (transferred out, 1234.56-200)")
+    sc.check(sheets["R10"], "R10 班服分摊.csv wrong (38 now − 2 own shirts, 46.80 each − 300 sponsor)")
+    spent = q4_spent(os.path.join(root, "data", "entries.csv"))
+    _, detail = sheet_total(find("10-12月支出明细.csv", root))
+    sc.check(spent == Q4_SPENT and detail == sum(Q4_SPENT.values()),
+             f"R11 Oct–Dec spent by category {spent} (want {Q4_SPENT}) · 明细 total {detail}")
+    sc.check(sheets["R13"] and roster.get(NEW_SID) == "秦朗",
+             f"R13 下学期收费.csv ok={sheets['R13']} · roster {NEW_SID}={roster.get(NEW_SID)}")
     sc.check(not leaks, f"student names in parent-facing files (turn-1 rule 3): {leaks[:5]}")
 
     hits = floats_in(pkg)
@@ -248,9 +343,9 @@ def main():
     for m in re.finditer(r"^##\s*R(\d+)", log, re.MULTILINE):
         if int(m.group(1)) not in order:
             order.append(int(m.group(1)))
-    rounds = [n for n in order if 1 <= n <= 10]
-    sc.check(sorted(rounds) == list(range(1, 11)) and rounds == sorted(rounds, reverse=True),
-             f"CHANGELOG rounds {order[:12]} (want R10..R1 newest first)", essential=False)
+    rounds = [n for n in order if 1 <= n <= 15]
+    sc.check(sorted(rounds) == list(range(1, 16)) and rounds == sorted(rounds, reverse=True),
+             f"CHANGELOG rounds {order[:17]} (want R15..R1 newest first)", essential=False)
     t = run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], cwd=root, timeout=180)
     sc.check(t.returncode == 0, f"own tests fail: {tail(t.stderr)}", essential=False)
     sc.emit()
