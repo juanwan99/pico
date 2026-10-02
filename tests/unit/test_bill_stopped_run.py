@@ -103,3 +103,51 @@ async def test_finished_run_is_not_rebilled_as_stopped(tmp_path, monkeypatch) ->
 
     _run, rows = await _rows(factory, run_id)
     assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_stopped_pi_turn_reports_the_calls_it_already_paid_for() -> None:
+    """Stop lands before Pi's agent_end; turn_end already carried each call's usage."""
+    import asyncio
+    import time
+
+    from pico_orchestrator.run_types import RunCaps
+    from pico_orchestrator.true_pi.client import FakeTransport
+    from pico_orchestrator.true_pi.runtime import run_true_pi_agent
+
+    class P:
+        school_id, membership_id, scopes = "school-a", "m-stop", ("ai:run",)
+
+    call = {"role": "assistant", "content": [{"type": "text", "text": "写第一部分"}],
+            "usage": {"input": 50_000, "output": 1_000, "totalTokens": 51_000}}
+    transport = FakeTransport(
+        scripted=[
+            {"type": "agent_start"},
+            {"type": "turn_start"},
+            {"type": "turn_end", "message": call},
+            {"type": "turn_start"},
+            {"type": "turn_end", "message": call},
+        ]
+    )
+    stop_at = time.monotonic() + 0.4
+
+    async def stopped() -> bool:
+        return time.monotonic() >= stop_at
+
+    async def emit(kind, payload) -> None:
+        del kind, payload
+
+    result = await asyncio.wait_for(
+        run_true_pi_agent(
+            prompt="长任务",
+            principal=P(),
+            emit=emit,
+            is_cancelled=stopped,
+            caps=RunCaps(min_artifacts=0, max_seconds=30),
+            transport=transport,
+            run_id="stop-usage",
+        ),
+        timeout=10,
+    )
+    assert result.status == "cancelled"
+    assert result.token_usage and result.token_usage["total_tokens"] == 102_000
