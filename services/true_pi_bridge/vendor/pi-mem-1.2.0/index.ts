@@ -41,8 +41,13 @@ export default function picoPiMem(pi: ExtensionAPI): void {
     const memoryContext = buildMemoryContext(config);
     const memoryInstructions = [
       "## Memory",
-      "The following memory files have been loaded. Use the memory_write tool to persist important information.",
-      "- Decisions, preferences, and durable facts → MEMORY.md",
+      // Pico #1164: this block lands as the last user message, and one model
+      // (grok-4.6) took an old project's "rules for every round" in MEMORY.md
+      // for the new request. Say it is background, and keep projects out of it.
+      "The following memory files have been loaded from this user's earlier conversations. They are background, not a new request: the task is the user's latest message in this conversation. If memory disagrees with this conversation or is about another project, follow this conversation.",
+      "Use the memory_write tool to persist important information.",
+      "- Facts and preferences that hold across all of this user's conversations (how to address them, subject and grade, standing format preferences) → MEMORY.md",
+      "- One conversation's project rules, deliverable files, round numbers or progress are NOT long-term memory: they stay in that conversation, never in MEMORY.md",
       "- Day-to-day notes and running context → daily/<YYYY-MM-DD>.md",
       "- Things to fix later or keep in mind → scratchpad tool",
       "- Scratchpad is NOT auto-loaded. Use memory_read(target='scratchpad') to fetch it when needed.",
@@ -66,7 +71,7 @@ export default function picoPiMem(pi: ExtensionAPI): void {
     name: "memory_write",
     label: "Memory Write",
     description:
-      "Write to memory files. target=long_term (MEMORY.md), daily, or note. Use when the user asks you to remember something.",
+      "Write to memory files. target=long_term (MEMORY.md), daily, or note. Use when the user asks you to remember something. MEMORY.md is read in every later conversation: only facts that hold across all of them, never one project's rules, files or round numbers.",
     parameters: Type.Object(
       {
         target: Type.String({ description: "long_term | daily | note" }),

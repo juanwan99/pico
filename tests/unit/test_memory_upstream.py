@@ -23,6 +23,16 @@ def test_memory_extension_is_vendored() -> None:
     assert "pi-mem-1.2.0" in str(path)
 
 
+def test_memory_is_background_and_not_a_project_store() -> None:
+    """#1164: an old project's rules in MEMORY.md were read as the new request."""
+    src = memory_extension_path().read_text(encoding="utf-8")
+    assert "They are background, not a new request" in src
+    assert "the task is the user's latest message in this conversation" in src
+    assert "never in MEMORY.md" in src
+    assert "never one project's rules, files or round numbers" in src
+    assert "Decisions, preferences, and durable facts" not in src
+
+
 def test_membership_dirs_do_not_overlap(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PICO_TRUE_PI_MEMORY_ROOT", str(tmp_path))
     a = persist_memory_dir(school_id="school-a", membership_id="member-1")
