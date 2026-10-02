@@ -65,6 +65,10 @@ class RunCaps:
     # Restart resume (#1133): epoch seconds the run first started. >0 = files the
     # workspace wrote since then are this run's, though an earlier box wrote them.
     outputs_since: float = 0.0
+    # Which teacher message of this conversation this is (1-based, from the
+    # Pico ledger). Pi's compaction summary keeps no count, so a rule like
+    # "每轮加一行 R1、R2…" drifts after it (#1151). 0 = unknown / no label.
+    turn_no: int = 0
 
 
 @dataclass

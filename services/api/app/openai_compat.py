@@ -603,6 +603,30 @@ async def _day_use_system_block(
     return build_day_use_block(display_name=name, recent_titles=titles)
 
 
+async def _caps_with_turn(caps: Any, principal: Principal, conversation_id: str | None) -> Any:
+    """Stamp which teacher message this is, counted from this member's ledger (#1151)."""
+    if not conversation_id:
+        return caps
+    from dataclasses import replace
+
+    from sqlalchemy import func, select
+
+    try:
+        async with session_factory()() as session:
+            n = await session.scalar(
+                select(func.count())
+                .select_from(TaskRow)
+                .where(
+                    TaskRow.school_id == principal.school_id,
+                    TaskRow.membership_id == principal.membership_id,
+                    TaskRow.conversation_id == conversation_id,
+                )
+            )
+    except Exception:  # noqa: BLE001 — a missing count only drops the label
+        return caps
+    return replace(caps, turn_no=int(n or 0))
+
+
 async def _ledger_task_run(
     *,
     principal: Principal,
@@ -1182,6 +1206,7 @@ async def _run_and_collect(
 
         caps = _dc_replace_sys(caps, system_prompt=system_prompt)
     caps = _caps_with_page_hands(caps, page_affordances, page_title)
+    caps = await _caps_with_turn(caps, principal, conversation_id)
     if day_use:
         from dataclasses import replace as _dc_replace_day
 
@@ -2087,6 +2112,7 @@ async def chat_completions(
 
                     caps = _dc_replace_sys_stream(caps, system_prompt=client_system)
                 caps = _caps_with_page_hands(caps, page_affordances, page_title)
+                caps = await _caps_with_turn(caps, principal, conversation_id)
                 if teacher_extra:
                     from dataclasses import replace as _dc_replace_day_stream
 

@@ -671,6 +671,7 @@ async def _run_true_pi_once(
             history=tree_history,
             allowed_tools=allowed,
             system_prompt=str(getattr(caps, "system_prompt", "") or ""),
+            turn_no=int(getattr(caps, "turn_no", 0) or 0),
         )
 
         async def salvage_outputs() -> None:
@@ -1286,14 +1287,22 @@ def _compose_prompt(
     history: list[dict[str, Any]] | None,
     allowed_tools: list[str],
     system_prompt: str = "",
+    turn_no: int = 0,
 ) -> str:
     """User message for true Pi ``prompt()``: teacher original only.
 
     Skill / landing / history / tool lists are system or session-tree, not user.
-    Signature kept so existing callers/tests still pass kwargs.
+    Signature kept so existing callers/tests still pass kwargs. The one addition
+    is the turn label: after compaction the model cannot count turns (#1151).
+    It sits in the user message, not SYSTEM, so the prompt cache survives.
     """
     del skill, min_arts, history, allowed_tools, system_prompt
-    return str(prompt or "")
+    text = str(prompt or "")
+    return f"{turn_label(turn_no)}{text}" if turn_no > 0 else text
+
+
+def turn_label(turn_no: int) -> str:
+    return f"〔本对话第 {turn_no} 轮〕\n"
 
 
 def resume_teacher_note(attempt: int, *, tool_hang: bool = False) -> str:
