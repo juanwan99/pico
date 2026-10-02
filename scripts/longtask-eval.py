@@ -28,7 +28,10 @@ result records ``queued_max`` (most runs ever ahead of it in the runner's line;
 
 Extra-long cases (LX*, ``--suite xlong``, #1139) are built to overflow one context
 window so Pi's official compaction has to fire mid-task; each result records
-``compactions`` / ``compaction_failed``. ``--suite all`` leaves them out (cost).
+``compactions`` / ``compaction_failed`` and the turns they fired in. ``--suite all``
+leaves them out (cost). A case may reuse another (``"base": "LX2"``) and add long
+pasted text to some turns (``"pastes"``, #1152). ``expect.check.per_turn`` hands the
+checker every turn's delivery under /w/out/turns/R01… so rules are checked turn by turn.
 """
 
 from __future__ import annotations
@@ -77,6 +80,7 @@ class CaseResult:
     queued_max: int = -1
     compactions: int = 0
     compaction_failed: int = 0
+    compaction_turns: list[int] = field(default_factory=list)
     membership: str = ""
     notes: list[str] = field(default_factory=list)
     score_points: list[dict[str, str]] = field(default_factory=list)
@@ -195,13 +199,38 @@ class Pico:
         return resp.content
 
 
+def _resolve_base(case: dict[str, Any]) -> dict[str, Any]:
+    """``base`` copies another case's turns and grading; ``pastes`` adds text to some turns."""
+    if not case.get("base"):
+        return case
+    base = json.loads((CASES_DIR / f"{case['base']}.json").read_text(encoding="utf-8"))
+    merged = {**base, **{k: v for k, v in case.items() if k not in ("base", "pastes")}}
+    turns = [dict(t) for t in base["turns"]]
+    for idx, paste in (case.get("pastes") or {}).items():
+        turns[int(idx) - 1]["paste"] = paste
+    merged["turns"] = turns
+    return merged
+
+
 def load_cases(suite: str = "all") -> list[dict[str, Any]]:
     prefixes = [SUITES[s] for s in DEFAULT_SUITES] if suite == "all" else [SUITES[suite]]
     cases = []
     for prefix in prefixes:
         for path in sorted(CASES_DIR.glob(f"{prefix}*.json")):
-            cases.append(json.loads(path.read_text(encoding="utf-8")))
+            cases.append(_resolve_base(json.loads(path.read_text(encoding="utf-8"))))
     return cases
+
+
+def turn_prompt(turn: dict[str, Any]) -> str:
+    """The turn's ask, then any pasted material after it (a teacher pasting a chat export)."""
+    paste = turn.get("paste")
+    if not paste:
+        return str(turn["prompt"])
+    sys.path.insert(0, str(CHECKS_DIR))
+    import lx_chat
+
+    text = lx_chat.chat(int(paste["seed"]), int(paste["chars"]), str(paste.get("start") or ""))
+    return f"{turn['prompt']}\n\n{paste['lead']}\n\n{text}"
 
 
 def _triple_workbook() -> bytes:
@@ -409,13 +438,16 @@ def _classify_fail(status: str, error: str) -> str:
     return st or "other"
 
 
-def _run_events(pico: Pico, conversation_id: str, res: CaseResult | None = None) -> tuple[int, int, str, str, int]:
+def _run_events(
+    pico: Pico, conversation_id: str, res: CaseResult | None = None, turn_of: dict[str, int] | None = None
+) -> tuple[int, int, str, str, int]:
     tool_calls = 0
     steps = 0
     status = "?"
     error = ""
     queued_max = -1
     for task in pico.tasks(conversation_id):
+        turn = (turn_of or {}).get(str(task.get("id") or ""))
         latest = task.get("latest_run") or {}
         rid = latest.get("id")
         if not rid:
@@ -435,6 +467,8 @@ def _run_events(pico: Pico, conversation_id: str, res: CaseResult | None = None)
                 steps += 1
             if res is not None and kind == "compaction.end":
                 res.compactions += 1
+                if turn:
+                    res.compaction_turns.append(turn)
             if res is not None and kind == "compaction.failed":
                 res.compaction_failed += 1
             if kind == "run.queued":
@@ -567,7 +601,12 @@ def run_checker(
 
 
 def score_code(
-    case: dict[str, Any], files: dict[str, bytes], res: CaseResult, image: str, runtime: str
+    case: dict[str, Any],
+    files: dict[str, bytes],
+    res: CaseResult,
+    image: str,
+    runtime: str,
+    turn_files: list[dict[str, bytes]] | None = None,
 ) -> None:
     """Coding case: required files landed + hidden checker passes."""
     expect = case.get("expect") or {}
@@ -584,6 +623,11 @@ def score_code(
         with tempfile.TemporaryDirectory(prefix="lt-out-") as tmp:
             for name, raw in files.items():
                 (Path(tmp) / name).write_bytes(raw)
+            for n, delivered in enumerate(turn_files or [], 1):
+                tdir = Path(tmp) / "turns" / f"R{n:02d}"
+                tdir.mkdir(parents=True)
+                for name, raw in delivered.items():
+                    (tdir / name).write_bytes(raw)
             got, passed = run_checker(case, Path(tmp), res, image, runtime)
         points += got
     res.auto_score = points
@@ -598,6 +642,7 @@ def score_case(
     res: CaseResult,
     image: str = "",
     runtime: str = "",
+    turn_arts: list[list[dict[str, Any]]] | None = None,
 ) -> None:
     expect = case.get("expect") or {}
     if expect.get("files") or expect.get("check"):
@@ -605,7 +650,13 @@ def score_case(
         res.artifacts = len(latest)
         res.artifact_kinds = sorted({str(a.get("kind") or "").lower() for a in latest.values() if a.get("kind")})
         files = {title: pico.download(a["id"]) for title, a in latest.items() if a.get("id")}
-        score_code(case, files, res, image, runtime)
+        turn_files = None
+        if (expect.get("check") or {}).get("per_turn"):
+            turn_files = [
+                {title: pico.download(a["id"]) for title, a in _latest_by_title(new).items() if a.get("id")}
+                for new in turn_arts or []
+            ]
+        score_code(case, files, res, image, runtime, turn_files)
         return
     produced = _produced(arts)
     res.artifacts = len(produced)
@@ -697,13 +748,17 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runt
     cid = f"longtask-{case['id'].lower()}-{stamp}"
     res = CaseResult(case=case["id"], title=case.get("title") or "", score_points=list(case.get("score_points") or []))
     timeout = float(case.get("timeout_s") or pico.timeout_s)
+    seen_tasks: set[str] = set()
+    seen_arts: set[str] = set()
+    turn_of: dict[str, int] = {}
+    turn_arts: list[list[dict[str, Any]]] = []
     try:
-        for turn in case.get("turns") or []:
+        for n, turn in enumerate(case.get("turns") or [], 1):
             for att in turn.get("attachments") or []:
                 pico.upload(cid, att["name"], _attachment_bytes(att))
             t0 = time.perf_counter()
             try:
-                _, wall = pico.chat(cid, turn["prompt"], timeout_s=timeout)
+                _, wall = pico.chat(cid, turn_prompt(turn), timeout_s=timeout)
             except httpx.TimeoutException:
                 raise
             except httpx.TransportError:
@@ -711,10 +766,18 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runt
                 wall = time.perf_counter() - t0
                 res.notes.append("stream dropped, followed run")
             res.wall_s += wall
+            for task in pico.tasks(cid):
+                tid = str(task.get("id") or "")
+                if tid and tid not in seen_tasks:
+                    seen_tasks.add(tid)
+                    turn_of[tid] = n
+            now = pico.artifacts(cid)
+            turn_arts.append([a for a in now if str(a.get("id")) not in seen_arts])
+            seen_arts |= {str(a.get("id")) for a in now}
         arts = pico.artifacts(cid)
-        res.tool_calls, res.agent_steps, status, error, res.queued_max = _run_events(pico, cid, res)
+        res.tool_calls, res.agent_steps, status, error, res.queued_max = _run_events(pico, cid, res, turn_of)
         res.fail_reason = _classify_fail(status, error)
-        score_case(case, arts, pico, res, image, runtime)
+        score_case(case, arts, pico, res, image, runtime, turn_arts)
         if status == "failed" and not res.fail_reason:
             res.fail_reason = "other"
         flag_fake_green(res, status)
@@ -744,7 +807,8 @@ def render_markdown(results: list[CaseResult]) -> str:
             f"| {r.case} | {r.title} | {'✅' if r.ok else '❌'} | {r.auto_score}/{r.max_score or 5} | "
             f"{r.fail_reason or '—'} | {'是' if r.fake_green else '—'} | {r.wall_s:.1f} | "
             f"{r.tool_calls} | {r.agent_steps} | "
-            f"{r.compactions}{f'（败 {r.compaction_failed}）' if r.compaction_failed else ''} | "
+            f"{r.compactions}{f'（败 {r.compaction_failed}）' if r.compaction_failed else ''}"
+            f"{' @R' + '/R'.join(map(str, sorted(r.compaction_turns))) if r.compaction_turns else ''} | "
             f"{r.artifacts} | {notes or '—'} |"
         )
     n = len(results)

@@ -332,7 +332,7 @@ def _run_lx1_checker(monkeypatch, capsys, path: Path) -> dict:
 def test_xlong_suite_overflows_one_window_and_stays_out_of_all() -> None:
     """#1139: LX cases must outgrow 256k tokens so compaction fires; never in --suite all."""
     cases = lte.load_cases("xlong")
-    assert [c["id"] for c in cases] == ["LX1", "LX2"]
+    assert [c["id"] for c in cases] == ["LX1", "LX2", "LX4"]
     assert not [c for c in lte.load_cases() if c["id"].startswith("LX")]
     sys.path.insert(0, str(lte.CHECKS_DIR))
     import lx_corpus
@@ -376,6 +376,57 @@ def test_compaction_events_counted() -> None:
     lte._run_events(Fake(), "c", res)
     assert (res.compactions, res.compaction_failed) == (1, 1)
     assert "| 1（败 1） |" in lte.render_markdown([res])
+
+
+def test_compaction_turn_recorded() -> None:
+    class Fake:
+        def tasks(self, cid):
+            return [{"id": "t7", "latest_run": {"id": "r7"}}, {"id": "t13", "latest_run": {"id": "r13"}}]
+
+        def run(self, rid):
+            return {"status": "succeeded"}
+
+        def events(self, rid):
+            return [{"type": "compaction.end"}]
+
+    res = lte.CaseResult(case="LX4")
+    lte._run_events(Fake(), "c", res, {"t7": 7, "t13": 13})
+    assert res.compaction_turns == [7, 13]
+    assert "| 2 @R7/R13 |" in lte.render_markdown([res])
+
+
+def test_lx4_is_lx2_with_pasted_chat() -> None:
+    """#1152: same turns, truth and checker as LX2; long pastes push compaction early."""
+    cases = {c["id"]: c for c in lte.load_cases("xlong")}
+    lx2, lx4 = cases["LX2"], cases["LX4"]
+    assert lx4["expect"] == lx2["expect"] and len(lx4["turns"]) == 15
+    for a, b in zip(lx2["turns"], lx4["turns"]):
+        assert a["prompt"] == b["prompt"] and a.get("attachments") == b.get("attachments")
+    prompts = [lte.turn_prompt(t) for t in lx4["turns"]]
+    assert prompts[0] == lx2["turns"][0]["prompt"]
+    pasted = [n for n, (t, p) in enumerate(zip(lx4["turns"], prompts), 1) if len(p) > len(t["prompt"]) + 20000]
+    assert pasted[:6] == [2, 3, 4, 5, 6, 7] and len(pasted) >= 10
+    assert max(len(p) for p in prompts) < 100_000  # pico_chat_max_prompt_chars
+    assert prompts == [lte.turn_prompt(t) for t in lx4["turns"]]  # seeded
+    chat = "".join(p[len(t["prompt"]):] for t, p in zip(lx4["turns"], prompts))
+    for word in ("班费", "转学", "退费", "¥", "高若溪", "许静怡"):
+        assert word not in chat  # filler never moves an LX2 answer
+    assert "api_v1" in chat  # the edit-v1 bait
+
+
+def test_per_turn_files_land_under_turns(monkeypatch, tmp_path: Path) -> None:
+    seen = {}
+
+    def fake_checker(case, out_dir, res, image, runtime):
+        seen["files"] = sorted(str(p.relative_to(out_dir)) for p in out_dir.rglob("*") if p.is_file())
+        return 1, True
+
+    monkeypatch.setattr(lte, "run_checker", fake_checker)
+    case = {"expect": {"files": ["a.zip"], "check": {"script": "x.py", "max": 1, "per_turn": True}}}
+    res = lte.CaseResult(case="X")
+    lte.score_code(case, {"a.zip": b"v2"}, res, "img", "rt", [{"a.zip": b"v1"}, {}, {"a.zip": b"v2"}])
+    assert seen["files"] == ["a.zip", "turns/R01/a.zip", "turns/R03/a.zip"]
+    assert res.ok and res.auto_score == 2
 
 
 LX2_SOLUTION = {
@@ -506,8 +557,14 @@ LX2_Q4 = [("2026-10-12", -3250, "奖品"), ("2026-10-21", -2760, "卫生用品")
           ("2026-12-26", -1200, "图书角")]
 
 
-def _lx2_project(tmp_path: Path, *, edit_v1: bool = False, leak: bool = False, forget_r3: bool = False) -> Path:
-    """Correct LX2 delivery built on the fixture; flags break one turn-1 rule each."""
+def _lx2_project(
+    tmp_path: Path, *, edit_v1: bool = False, leak: bool = False, forget_r3: bool = False, slip_turn: int = 0
+) -> Path:
+    """Correct LX2 delivery built on the fixture; flags break one turn-1 rule each.
+
+    Every turn's delivery lands under out/turns/R01… as a copy whose CHANGELOG tops
+    at that turn; ``slip_turn`` edits api_v1.py in that one turn only (restored later).
+    """
     import shutil
 
     sys.path.insert(0, str(lte.CHECKS_DIR))
@@ -552,6 +609,14 @@ def _lx2_project(tmp_path: Path, *, edit_v1: bool = False, leak: bool = False, f
     log = root / "CHANGELOG.md"
     heads = "".join(f"## R{n} 第 {n} 轮\n\n" for n in range(15, 0, -1))
     log.write_text(log.read_text(encoding="utf-8").replace("## R0", heads + "## R0"), encoding="utf-8")
+    final = log.read_text(encoding="utf-8")
+    for n in range(1, 16):
+        turn = tmp_path / "out" / "turns" / f"R{n:02d}" / "classfund"
+        shutil.copytree(root, turn)
+        (turn / "CHANGELOG.md").write_text(final[final.index(f"## R{n} "):], encoding="utf-8")
+        if n == slip_turn:
+            v1 = turn / "classfund" / "api_v1.py"
+            v1.write_text(v1.read_text(encoding="utf-8") + "\n", encoding="utf-8")
     zin = tmp_path / "in"
     zin.mkdir()
     (zin / "classfund.zip").write_bytes(lte._zip_dir("fixtures/code/classfund"))
@@ -573,6 +638,7 @@ def _run_lx2_checker(monkeypatch, capsys, w: Path) -> dict:
     out, real_find = str(w / "out"), _common.find
     monkeypatch.setattr(chk, "find", lambda name, root=out: real_find(name, root))
     monkeypatch.setattr(chk, "IN", str(w / "in"))
+    monkeypatch.setattr(chk, "OUT", out)
     monkeypatch.chdir(w)
     try:
         chk.main()
@@ -588,17 +654,22 @@ def test_lx2_is_fifteen_turns_on_one_project() -> None:
     for turn in case["turns"]:
         for att in turn.get("attachments") or []:
             assert lte._attachment_bytes(att)
-    assert lte.max_points(case["expect"]) == 22
+    assert lte.max_points(case["expect"]) == 24
 
 
 def test_lx2_checker_full_marks_on_reference(monkeypatch, capsys, tmp_path: Path) -> None:
     verdict = _run_lx2_checker(monkeypatch, capsys, _lx2_project(tmp_path))
-    assert verdict == {"points": 21, "pass": True, "notes": []}, verdict
+    assert verdict == {"points": 23, "pass": True, "notes": []}, verdict
 
 
 def test_lx2_checker_catches_broken_turn1_rules(monkeypatch, capsys, tmp_path: Path) -> None:
     """Each flag forgets one thing a compaction could drop; each must fail the case."""
-    for flag, needle in (("edit_v1", "api_v1.py was edited"), ("leak", "student names"), ("forget_r3", "R8 结余返还.csv ok=False")):
-        verdict = _run_lx2_checker(monkeypatch, capsys, _lx2_project(tmp_path / flag, **{flag: True}))
-        assert verdict["pass"] is False, (flag, verdict)
-        assert any(needle in n for n in verdict["notes"]), (flag, verdict)
+    for kw, needle in (
+        ({"edit_v1": True}, "api_v1.py was edited"),
+        ({"leak": True}, "student names"),
+        ({"forget_r3": True}, "R8 结余返还.csv ok=False"),
+        ({"slip_turn": 9}, "R9 api_v1 edited"),  # broken in one turn, restored by the last
+    ):
+        verdict = _run_lx2_checker(monkeypatch, capsys, _lx2_project(tmp_path / next(iter(kw)), **kw))
+        assert verdict["pass"] is False, (kw, verdict)
+        assert any(needle in n for n in verdict["notes"]), (kw, verdict)
