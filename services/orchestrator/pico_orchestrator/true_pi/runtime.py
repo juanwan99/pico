@@ -502,8 +502,23 @@ async def _run_true_pi_once(
                 )
                 system_text = f"{system_text}\n\n{WORKSPACE_SYSTEM}".strip()
                 transport_cls = RunnerTransport
+            # Backups the session can switch to mid-run (#1160): same provider
+            # and base URL; each on its own wire (Gemini chat, GPT/Grok Responses).
+            backups: list[tuple[str, str]] = []
+            if pi_provider == "openai":
+                from pico_orchestrator.brain_ha import brain_candidates
+
+                for spare in brain_candidates(backend_model)[1:]:
+                    spare_api, _level = pi_wire(
+                        spare,
+                        openai_brain=openai_brain,
+                        openai_overlay=True,
+                        thinking_on=thinking_on,
+                    )
+                    backups.append((spare, spare_api or "openai-completions"))
             transport = transport_cls(
                 **runner_kwargs,
+                backups=backups,
                 session_dir=sess,
                 tool_url="",
                 tool_token=tool_server.token,
@@ -712,6 +727,47 @@ async def _run_true_pi_once(
             spent_milli = int(milli)
             return spent_milli >= spend_cap
 
+        # Mid-run brain switch (#1160): same Pi session, official set_model.
+        spares = [m for m, _api in (getattr(transport, "backups", None) or []) if m]
+        brain = str(getattr(transport, "model", "") or "")
+
+        async def _switch_brain(why: str) -> None:
+            nonlocal brain
+            if not spares:
+                return
+            from pico_orchestrator.brain_ha import switch_teacher_note
+            from pico_orchestrator.true_pi.runner import proxy_entry
+
+            to_model = spares.pop(0)
+            # The box proxy pins one model per run; move the pin with the session.
+            entry = proxy_entry(rid)
+            pinned = entry.model if entry is not None else ""
+            if entry is not None:
+                entry.model = to_model
+            try:
+                switched = await client.set_model(
+                    str(getattr(transport, "provider", "") or "openai"), to_model
+                )
+            except Exception as exc:  # noqa: BLE001
+                # No answer: Pi may still apply it, and a pin moved back would
+                # refuse every later call. The pin stays with the backup.
+                logger.warning("true_pi set_model %s unanswered run_id=%s: %s", to_model, rid, exc)
+                return
+            if not switched:
+                # Pi said no and keeps retrying the old model.
+                if entry is not None:
+                    entry.model = pinned
+                logger.warning("true_pi set_model %s refused run_id=%s", to_model, rid)
+                return
+            logger.info("true_pi brain switch run_id=%s %s -> %s", rid, brain, to_model)
+            state.event_kinds.append("model.switch")
+            await emit(
+                "model.switch",
+                {"from": brain or None, "to": to_model, "reason": why[:200], **tag},
+            )
+            await emit("message.delta", {"text": switch_teacher_note(to_model), **tag})
+            brain = to_model
+
         async def _drive(prompt_text: str, images: list[dict[str, Any]]) -> RunResult | None:
             """One prompt on the live Pi session. Returns a RunResult only on an early stop."""
             async def _consume() -> None:
@@ -765,6 +821,11 @@ async def _run_true_pi_once(
                     # resets the no-tool-progress timer used by the deep-lane
                     # bailout.
                     last_progress_wall = loop.time()
+                    if state.switch_wanted:
+                        # Inside Pi's retry sleep, so the next attempt already
+                        # goes to the backup.
+                        why, state.switch_wanted = state.switch_wanted, ""
+                        await _switch_brain(why)
                     if event.type == "auto_retry_start":
                         # Waiting on upstream is not an empty loop (#1135).
                         wait = float(event.raw.get("delayMs") or 0) / 1000

@@ -162,8 +162,13 @@ def true_pi_models_document(
     base_url: str = "",
     api: str = "",
     thinking: bool = False,
+    backups: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Pi 0.84 models.json overlay. Official path, not an invented CLI flag."""
+    """Pi 0.84 models.json overlay. Official path, not an invented CLI flag.
+
+    ``backups`` are (model, api) the run may ``set_model`` to mid-session
+    (#1160); each gets its own entry under the same provider.
+    """
     from pico_orchestrator.vision import model_accepts_image
 
     name = (provider or "deepseek").strip() or "deepseek"
@@ -232,6 +237,18 @@ def true_pi_models_document(
                 "thinkingFormat": "reasoning_effort",
             }
             model_entry["compat"] = dict(provider_entry["compat"])
+    for spare, spare_api in backups or []:
+        if not spare or spare == mid:
+            continue
+        doc = true_pi_models_document(
+            provider=name,
+            model=spare,
+            max_context=max_context,
+            max_tokens=max_tokens,
+            api=spare_api,
+            thinking=thinking,
+        )
+        provider_entry["models"].extend(doc["providers"][name]["models"])
     return {"providers": {name: provider_entry}}
 
 
@@ -362,6 +379,7 @@ class SubprocessTransport(TruePiTransport):
         base_url: str = "",
         api: str = "",
         thinking_level: str = "",
+        backups: list[tuple[str, str]] | None = None,
     ) -> None:
         self.session_dir = session_dir
         self.tool_url = tool_url
@@ -392,6 +410,7 @@ class SubprocessTransport(TruePiTransport):
         self.base_url = str(base_url or "").strip()
         self.api = str(api or "").strip()
         self.thinking_level = str(thinking_level or "").strip()
+        self.backups = list(backups or [])
         self.plan_execute_pending = False
         self.plan_agent_ends = 0
         self.plan_stayed = False
@@ -415,6 +434,7 @@ class SubprocessTransport(TruePiTransport):
             base_url=self.base_url,
             api=self.api,
             thinking=self.thinking,
+            backups=self.backups,
         )
 
     def prepare_agent_home(self, home: Path | None = None) -> Path:
@@ -683,9 +703,10 @@ class SubprocessTransport(TruePiTransport):
                     return raw
                 pending.append(raw)
             raise TruePiClientError(f"timeout waiting for response {command_type}")
-        except Exception:
+        except BaseException:
+            # Cancelled too: replies held for other waiters go back (#1160 review).
             for p in pending:
-                await self._resp_q.put(p)
+                self._resp_q.put_nowait(p)
             raise
 
     async def close(self, *, kill: bool = True) -> None:
@@ -768,6 +789,18 @@ class TruePiRpcClient:
             await self.transport.wait_response("abort", req_id=rid, timeout=5.0)
         except TruePiClientError:
             logger.info("true_pi abort response missing (process may be dead)")
+
+    async def set_model(self, provider: str, model_id: str) -> bool:
+        """Official RPC ``set_model``: the session's next model call uses it.
+
+        False = Pi answered no. Raises when Pi did not answer at all.
+        """
+        rid = f"m-{uuid.uuid4().hex[:8]}"
+        await self.transport.send(
+            {"id": rid, "type": "set_model", "provider": provider, "modelId": model_id}
+        )
+        resp = await self.transport.wait_response("set_model", req_id=rid, timeout=10.0)
+        return bool(resp.get("success"))
 
     async def get_last_assistant_text(self) -> str:
         rid = f"t-{uuid.uuid4().hex[:8]}"
