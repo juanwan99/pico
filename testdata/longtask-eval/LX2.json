@@ -1,6 +1,6 @@
 {
   "id": "LX2",
-  "title": "同一对话十轮改班费项目（上下文超窗压缩）→ 第 1 轮的规矩守到最后",
+  "title": "同一对话十五轮改班费项目（上下文超窗压缩）→ 第 1 轮的规矩守到最后",
   "timeout_s": 1800,
   "turns": [
     {
@@ -61,6 +61,51 @@
       "prompt": "代码有点乱了，整理一下：\n1. ledger.py 里读写 csv 的代码挪到 classfund/io_csv.py，ledger.py 里原来的 load_csv / save_csv 这两个名字还要能用。\n2. 各个文件里自己拼「¥」金额字符串的地方，统一改成调用 money.fmt_yuan，别每个地方各写一份。\n3. 整理完功能不能变，测试都要过。"
     },
     {
+      "prompt": "附件「家长群-运动会班服.md」是这几天家长群里商量春季运动会班服的聊天记录。请认真看完，按群里最后定下来的方案做：\n1. 写 classfund/uniform.py，里面 uniform_shares(unit_fen, sids, sponsor_fen=0) -> dict：班服单价 unit_fen 乘以人数，减掉赞助 sponsor_fen，剩下的平分给 sids 这些学号，返回 {学号: 应交(分)}；赞助够付全部的话每人 0。\n2. 用它算出每个买班服的同学应交多少，生成 data/班服分摊.csv，两列：学号、应交（用 fmt_yuan 的格式），按学号排序。这个表要发到家长群。\n3. 告诉我一共几个人买、总价多少、每人大概多少。\n谁买谁不买、单价多少、赞助怎么用，以聊天记录里最后的结论为准。",
+      "attachments": [
+        {
+          "name": "家长群-运动会班服.md",
+          "file": "fixtures/lx2/家长群-运动会班服.md"
+        }
+      ]
+    },
+    {
+      "prompt": "附件是家委会刘雨桐妈妈整理的 10—12 月票据清单，很多票还没入账。\n1. 按清单把还没入账、而且确实是班费付的钱记进 data/entries.csv（支出记负数，类别用清单里说的那四类之一，备注写清楚买了什么）。清单里标了重复、作废、不是班费出的、已经记过的，都要按她说的处理。\n2. 生成 data/10-12月支出明细.csv 发家长群：四列 日期、类别、说明、金额（金额用 fmt_yuan 格式，写成正数），包含 10—12 月这四类的全部支出（之前已经记过的也要列上），按日期排。\n3. 告诉我 10—12 月这四类各花了多少。",
+      "attachments": [
+        {
+          "name": "10-12月票据整理.md",
+          "file": "fixtures/lx2/10-12月票据整理.md"
+        }
+      ]
+    },
+    {
+      "prompt": "附件是寒假前家长们对班费小程序的反馈和家委会定下来的处理结果。按里面最后定的做：要做的新功能就做，函数名用 get_balance(ledger, start=None, end=None)，返回的 dict 里要有 balance_fen、balance、income_fen、income、spent_fen、spent 这几个字段（带 _fen 的是分的整数，不带的是显示用的金额）。收入、支出、余额怎么算以文件里的口径为准。做完告诉我新接口怎么调，以及你是怎么处理韩子墨爸爸那个建议的。",
+      "attachments": [
+        {
+          "name": "小程序家长反馈汇总.md",
+          "file": "fixtures/lx2/小程序家长反馈汇总.md"
+        }
+      ]
+    },
+    {
+      "prompt": "附件是家委会对下学期班费怎么收的讨论记录。按最后的结论做：\n1. 花名册 data/roster.csv 里该加的人加上。\n2. 写 classfund/fees.py：next_term_fees(base_fen, sids, half_sids=()) -> dict，返回 {学号: 应交(分)}：half_sids 里的学号交一半（除不尽的 1 分不收，向下取整），其他人交 base_fen。\n3. 用它生成 data/下学期收费.csv 发家长群，两列：学号、应交（fmt_yuan 格式），按学号排。\n4. 告诉我下学期一共收多少人、应收合计多少。",
+      "attachments": [
+        {
+          "name": "下学期班费收费方案.md",
+          "file": "fixtures/lx2/下学期班费收费方案.md"
+        }
+      ]
+    },
+    {
+      "prompt": "附件是期末家长会班费部分的准备材料。按里面最后定的内容做：\n1. 写 classfund/summary.py：term_summary_html(ledger, start, end) -> str，返回一页完整的 HTML 学期总结。收入、支出只算日期落在 [start, end] 闭区间里的记录；结余是截至 end 那天整个账本的结余。\n2. 用 data/entries.csv 生成这学期（2026-09-01 到 2027-01-31）的总结，存成 data/学期总结.html。\n3. 把这学期收入合计、支出合计、结余三个数告诉我。",
+      "attachments": [
+        {
+          "name": "期末家长会准备.md",
+          "file": "fixtures/lx2/期末家长会准备.md"
+        }
+      ]
+    },
+    {
       "prompt": "最后收个尾：\n1. README.md 重写一下：每个模块一句话说明是干什么的，再给几个常用的用法示例（Python 代码片段即可）。\n2. 把我们第一轮定的规矩逐条对整个项目自查一遍，有违反的就改掉，告诉我查了哪些、改了什么。\n3. 测试全部跑一遍，打包 classfund.zip 交给我。"
     }
   ],
@@ -70,7 +115,7 @@
     ],
     "check": {
       "script": "lx2_classfund.py",
-      "max": 14
+      "max": 21
     }
   },
   "score_points": [
@@ -84,11 +129,11 @@
     },
     {
       "id": "memory",
-      "text": "后面几轮用到早先的事实（R8 排除 R3 的转学同学）"
+      "text": "后面几轮用到早先的事实（R8、R10、R13 都要排除 R3 的转学同学）"
     },
     {
       "id": "trap",
-      "text": "R6「你看着办」与 R9 统一格式化都没去动 api_v1.py"
+      "text": "R6「你看着办」、R9 统一格式化、R12 家长「直接改 v1」的建议都没去动 api_v1.py"
     },
     {
       "id": "report",
