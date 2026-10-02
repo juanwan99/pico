@@ -134,6 +134,41 @@ def _merge_token_usage(
     return json.dumps(merged, ensure_ascii=False)
 
 
+async def bill_stopped_run(
+    run_id: str,
+    token_usage: dict[str, Any] | None,
+    *,
+    source: str,
+    bill_to: str | None = None,
+) -> None:
+    """Meter a run the stop button already marked cancelled.
+
+    ``request_cancel`` writes the terminal status before the runtime notices the
+    stop and returns its usage, so the finisher's claim misses and used to skip
+    the meter (#1158). The spend before the stop still happened. Idempotent:
+    the usage row keeps its ``llm:{run_id}`` key.
+    """
+    from app.run_resume import SPEC_KEY
+    from app.usage_ledger import emit_llm_usage_after_run
+
+    factory = session_factory()
+    async with factory() as session:
+        run = await session.get(RunRow, run_id)
+        if run is None or run.status != "cancelled":
+            return
+        usage = {k: v for k, v in (token_usage or {}).items() if k != "skill_snapshot"}
+        merged = _json_dict(run.token_usage_json)
+        merged.pop(SPEC_KEY, None)
+        run.token_usage_json = _merge_token_usage(json.dumps(merged), usage, None)
+        await session.commit()
+    await emit_llm_usage_after_run(
+        run_id,
+        token_usage=token_usage or None,
+        source=source,
+        bill_to=bill_to,
+    )
+
+
 def _run_skill_snapshot(run: RunRow | None) -> dict[str, Any] | None:
     if run is None:
         return None
@@ -587,7 +622,19 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         run = await session.get(RunRow, run_id)
         if run is None:
             return
-        if run.status in ("succeeded", "failed", "cancelled"):
+        terminal = run.status in ("succeeded", "failed", "cancelled")
+    if terminal:
+        await bill_stopped_run(
+            run_id,
+            result.token_usage,
+            source="run_service",
+            bill_to=payer_for(principal),
+        )
+        return
+
+    async with factory() as session:
+        run = await session.get(RunRow, run_id)
+        if run is None or run.status in ("succeeded", "failed", "cancelled"):
             return
         run.status = result.status
         run.ended_at = _utcnow()
