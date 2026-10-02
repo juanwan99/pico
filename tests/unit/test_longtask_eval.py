@@ -318,7 +318,7 @@ def _run_lx1_checker(monkeypatch, capsys, path: Path) -> dict:
 def test_xlong_suite_overflows_one_window_and_stays_out_of_all() -> None:
     """#1139: LX cases must outgrow 256k tokens so compaction fires; never in --suite all."""
     cases = lte.load_cases("xlong")
-    assert [c["id"] for c in cases] == ["LX1"]
+    assert [c["id"] for c in cases] == ["LX1", "LX2"]
     assert not [c for c in lte.load_cases() if c["id"].startswith("LX")]
     sys.path.insert(0, str(lte.CHECKS_DIR))
     import lx_corpus
@@ -362,3 +362,170 @@ def test_compaction_events_counted() -> None:
     lte._run_events(Fake(), "c", res)
     assert (res.compactions, res.compaction_failed) == (1, 1)
     assert "| 1（败 1） |" in lte.render_markdown([res])
+
+
+LX2_SOLUTION = {
+    "classfund/ledger.py": '''
+    def total_by_category(self, start=None, end=None):
+        out = {}
+        for e in self.entries:
+            if (start is None or e.day >= start) and (end is None or e.day <= end):
+                out[e.category] = out.get(e.category, 0) + e.amount_fen
+        return out
+''',
+    "classfund/trip.py": '''
+def split_evenly(total_fen, sids):
+    sids = sorted(sids)
+    base, rest = divmod(total_fen, len(sids))
+    return {s: base + (1 if i < rest else 0) for i, s in enumerate(sids)}
+''',
+    "classfund/refund.py": '''
+def refund_fen(paid_fen, weeks_left, total_weeks=20):
+    return paid_fen * weeks_left // total_weeks
+''',
+    "classfund/bank.py": '''
+from classfund.money import parse_yuan
+
+
+def parse_bank_amount(text):
+    s = text.strip().replace(",", "").replace("\\uffe5", "").lstrip("+")
+    if s.startswith("(") and s.endswith(")"):
+        return -parse_yuan(s[1:-1])
+    return parse_yuan(s)
+''',
+    "classfund/report.py": '''
+from classfund.money import fmt_yuan
+
+
+def month_report_html(ledger, roster, month):
+    rows = [e for e in ledger.entries if e.day.isoformat().startswith(month)]
+    income = sum(e.amount_fen for e in rows if e.amount_fen > 0)
+    spent = -sum(e.amount_fen for e in rows if e.amount_fen < 0)
+    bal = sum(e.amount_fen for e in ledger.entries if e.day.isoformat()[:7] <= month)
+    paid = "".join(f"<li>{e.sid} {fmt_yuan(e.amount_fen)}</li>" for e in rows if e.sid in roster)
+    return f"<html><body>{fmt_yuan(income)} {fmt_yuan(spent)} {fmt_yuan(bal)}<ul>{paid}</ul></body></html>"
+''',
+    "classfund/api_v2.py": '''
+from classfund.money import fmt_yuan
+
+
+def list_entries(ledger, sid):
+    return [
+        {"date": e.day.isoformat(), "amount_fen": e.amount_fen, "amount": fmt_yuan(e.amount_fen), "category": e.category}
+        for e in ledger.entries_for(sid)
+    ]
+
+
+def get_statement(ledger, sid):
+    paid = sum(e.amount_fen for e in ledger.entries_for(sid) if e.category == "班费")
+    return {"sid": sid, "paid_fen": paid, "paid": fmt_yuan(paid), "entries": list_entries(ledger, sid)}
+''',
+    "classfund/budget.py": '''
+def budget_status(ledger, budgets, start=None, end=None):
+    out = []
+    for cat, budget in budgets.items():
+        used = -sum(
+            e.amount_fen for e in ledger.entries
+            if e.category == cat and e.amount_fen < 0
+            and (start is None or e.day >= start) and (end is None or e.day <= end)
+        )
+        out.append({"category": cat, "budget_fen": budget, "used_fen": used,
+                    "used_pct": used * 100 // budget, "over": used > budget})
+    return out
+
+
+def budget_reminder(ledger, budgets, start=None, end=None):
+    return "\\n".join(
+        f"{r['category']} {r['used_pct']}%" + (" 【超预算】" if r["over"] else "")
+        for r in budget_status(ledger, budgets, start, end)
+    )
+''',
+    "classfund/settle.py": '''
+from classfund.trip import split_evenly
+
+
+def final_refunds(balance_fen, sids, keep_fen):
+    return split_evenly(max(0, balance_fen - keep_fen), sids)
+''',
+}
+
+
+def _lx2_project(tmp_path: Path, *, edit_v1: bool = False, leak: bool = False, forget_r3: bool = False) -> Path:
+    """Correct LX2 delivery built on the fixture; flags break one turn-1 rule each."""
+    import shutil
+
+    sys.path.insert(0, str(lte.CHECKS_DIR))
+    import lx2_classfund as chk
+
+    root = tmp_path / "out" / "classfund"
+    shutil.copytree(CASES / "fixtures" / "code" / "classfund", root)
+    for rel, code in LX2_SOLUTION.items():
+        path = root / rel
+        if path.exists():  # ledger.py: the method goes into class Ledger
+            text = path.read_text(encoding="utf-8").replace("\n\ndef load_csv", code + "\n\ndef load_csv", 1)
+            path.write_text(text, encoding="utf-8")
+        else:
+            path.write_text(code.lstrip(), encoding="utf-8")
+    if edit_v1:
+        v1 = root / "classfund" / "api_v1.py"
+        v1.write_text(v1.read_text(encoding="utf-8").replace("{e.day.year}/{e.day.month}/{e.day.day}", "{e.day.isoformat()}"), encoding="utf-8")
+    names = dict(line.split(",") for line in (root / "data" / "roster.csv").read_text(encoding="utf-8").split()[1:])
+    settle = chk.split(123456 - 20000, chk.ALL if forget_r3 else [s for s in chk.ALL if s not in chk.TRANSFERRED])
+    data = root / "data"
+    _lx2_sheet(data / "春游分摊.csv", chk.TRIP, names if leak else None)
+    _lx2_sheet(data / "退费.csv", chk.TRANSFERRED)
+    _lx2_sheet(data / "结余返还.csv", settle)
+    (data / "budgets.json").write_text(json.dumps(chk.BUDGETS, ensure_ascii=False), encoding="utf-8")
+    log = root / "CHANGELOG.md"
+    heads = "".join(f"## R{n} 第 {n} 轮\n\n" for n in range(10, 0, -1))
+    log.write_text(log.read_text(encoding="utf-8").replace("## R0", heads + "## R0"), encoding="utf-8")
+    zin = tmp_path / "in"
+    zin.mkdir()
+    (zin / "classfund.zip").write_bytes(lte._zip_dir("fixtures/code/classfund"))
+    return tmp_path
+
+
+def _lx2_sheet(path: Path, rows: dict[str, int], names: dict[str, str] | None = None) -> None:
+    lines = ["学号,金额"]
+    for sid, fen in sorted(rows.items()):
+        lines.append(f"{sid},¥{fen // 100}.{fen % 100:02d}" + (f",{names[sid]}" if names else ""))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _run_lx2_checker(monkeypatch, capsys, w: Path) -> dict:
+    sys.path.insert(0, str(lte.CHECKS_DIR))
+    import _common
+    import lx2_classfund as chk
+
+    out, real_find = str(w / "out"), _common.find
+    monkeypatch.setattr(chk, "find", lambda name, root=out: real_find(name, root))
+    monkeypatch.setattr(chk, "IN", str(w / "in"))
+    monkeypatch.chdir(w)
+    try:
+        chk.main()
+    except SystemExit:
+        pass
+    return json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+
+
+def test_lx2_is_ten_turns_on_one_project() -> None:
+    case = next(c for c in lte.load_cases("xlong") if c["id"] == "LX2")
+    assert len(case["turns"]) == 10
+    assert case["turns"][0]["attachments"][0]["zip_dir"] == "fixtures/code/classfund"
+    for turn in case["turns"]:
+        for att in turn.get("attachments") or []:
+            assert lte._attachment_bytes(att)
+    assert lte.max_points(case["expect"]) == 15
+
+
+def test_lx2_checker_full_marks_on_reference(monkeypatch, capsys, tmp_path: Path) -> None:
+    verdict = _run_lx2_checker(monkeypatch, capsys, _lx2_project(tmp_path))
+    assert verdict == {"points": 14, "pass": True, "notes": []}, verdict
+
+
+def test_lx2_checker_catches_broken_turn1_rules(monkeypatch, capsys, tmp_path: Path) -> None:
+    """Each flag forgets one thing a compaction could drop; each must fail the case."""
+    for flag, needle in (("edit_v1", "api_v1.py was edited"), ("leak", "student names"), ("forget_r3", "R8 结余返还.csv ok=False")):
+        verdict = _run_lx2_checker(monkeypatch, capsys, _lx2_project(tmp_path / flag, **{flag: True}))
+        assert verdict["pass"] is False, (flag, verdict)
+        assert any(needle in n for n in verdict["notes"]), (flag, verdict)
