@@ -22,6 +22,7 @@ from pico_orchestrator.delivery_policy import (
     is_bookkeeping_title,
     looks_like_clarification,
     looks_like_delivery_claim,
+    looks_like_redelivery_claim,
 )
 from pico_orchestrator.document_generators import office_shell_reason
 
@@ -155,19 +156,26 @@ async def apply_delivery_gate(
 
     # Fail-closed only when the assistant claimed a file landed and none did
     # on this conversation. Restating files from an earlier turn on the same
-    # chat is not fake-green (结果区 would otherwise go empty + 假红).
-    if (
+    # chat is not fake-green (结果区 would otherwise go empty + 假红); saying
+    # they were made again this turn is (#1167).
+    empty_turn = (
         status == "succeeded"
         and user_art_count == 0
-        and prior_artifact_count == 0
-        and looks_like_delivery_claim(final_text or "")
         and not looks_like_clarification(final_text or "")
-    ):
+    )
+    if empty_turn and prior_artifact_count == 0 and looks_like_delivery_claim(final_text or ""):
         run.status = "failed"
         run.error = (
             "本轮声称已交文件，但没有可下载的真文件。"
             "请用工具落盘后再交；纯聊天复述不能当作文件交付。"
         )
+    elif empty_turn and looks_like_redelivery_claim(final_text or ""):
+        run.status = "failed"
+        run.error = (
+            "本轮说已重新交付文件，但这一轮没有新文件落盘，结果区里还是上一版。"
+            "可以让 Pico 重做这一轮。"
+        )
+    if run.status == "failed" and status == "succeeded":
         await append_event(
             session,
             run_id,
