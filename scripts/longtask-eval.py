@@ -83,6 +83,7 @@ class CaseResult:
     compactions: int = 0
     compaction_failed: int = 0
     compaction_turns: list[int] = field(default_factory=list)
+    turn_status: dict[int, str] = field(default_factory=dict)
     membership: str = ""
     notes: list[str] = field(default_factory=list)
     score_points: list[dict[str, str]] = field(default_factory=list)
@@ -490,6 +491,8 @@ def _run_events(
             error = str(row.get("error") or error)
         except Exception as exc:  # noqa: BLE001 — keep counting events
             error = error or f"{type(exc).__name__}"
+        if res is not None and turn:
+            res.turn_status[turn] = status
         for e in pico.events(rid):
             kind = str(e.get("kind") or e.get("type") or "")
             if kind == "tool.call":
@@ -767,12 +770,26 @@ def score_case(
         res.ok = False
 
 
-def flag_fake_green(res: CaseResult, status: str) -> None:
+def flag_fake_green(
+    res: CaseResult, status: str, per_turn: bool = False, turn_arts: list[list[dict[str, Any]]] | None = None
+) -> None:
     """A run that says succeeded with nothing landed never counts as a pass."""
     if status == "succeeded" and res.artifacts <= 0:
         res.fake_green = True
         res.ok = False
         res.notes.append("run succeeded, 0 artifacts")
+    if not per_turn:
+        return
+    # #1167: every per-turn round ships files; "已重新打包交付" with none is fake green.
+    empty = [
+        n
+        for n, new in enumerate(turn_arts or [], 1)
+        if not new and res.turn_status.get(n) == "succeeded"
+    ]
+    if empty:
+        res.fake_green = True
+        res.ok = False
+        res.notes.append("succeeded, 0 new files: " + ",".join(f"R{n}" for n in empty))
 
 
 def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runtime: str = "") -> CaseResult:
@@ -811,7 +828,8 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runt
         score_case(case, arts, pico, res, image, runtime, turn_arts)
         if status == "failed" and not res.fail_reason:
             res.fail_reason = "other"
-        flag_fake_green(res, status)
+        per_turn = bool(((case.get("expect") or {}).get("check") or {}).get("per_turn"))
+        flag_fake_green(res, status, per_turn, turn_arts)
         if status == "failed":
             res.ok = False
             if not res.notes:

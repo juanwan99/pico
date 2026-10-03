@@ -1,7 +1,8 @@
 """Thin post-run delivery gates. Not a task-guessing supervisor.
 
 Kept:
-  - looks_like_delivery_claim / looks_like_clarification (assistant vs disk)
+  - looks_like_delivery_claim / looks_like_redelivery_claim /
+    looks_like_clarification (assistant vs disk)
   - count_user_artifacts / is_bookkeeping_title / normalize_artifact_title
   - DeliveryPlan as a no-guess observability stub (min=0, force_agent=False)
 
@@ -73,6 +74,19 @@ def looks_like_delivery_claim(text: str) -> bool:
     out of the teacher's message.
     """
     return bool(_ASSISTANT_FILE_CLAIM.search((text or "").strip()))
+
+
+# #1167: "第 13 轮已完成…工程已重新打包交付" with nothing new on disk. Saying the
+# files were made again *this turn* is not restating earlier ones (#850).
+_ASSISTANT_REDELIVERY_CLAIM = re.compile(
+    r"已(?:经)?重新(?:打包|生成|导出|交付|落盘)|"
+    r"重新(?:打包|生成|导出)(?:并|后)?(?:交付|完成|好了)",
+)
+
+
+def looks_like_redelivery_claim(text: str) -> bool:
+    """True when the assistant says it made the files again this turn."""
+    return bool(_ASSISTANT_REDELIVERY_CLAIM.search((text or "").strip()))
 
 
 def looks_like_clarification(text: str) -> bool:

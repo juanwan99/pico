@@ -673,3 +673,16 @@ def test_lx2_checker_catches_broken_turn1_rules(monkeypatch, capsys, tmp_path: P
         verdict = _run_lx2_checker(monkeypatch, capsys, _lx2_project(tmp_path / next(iter(kw)), **kw))
         assert verdict["pass"] is False, (kw, verdict)
         assert any(needle in n for n in verdict["notes"]), (kw, verdict)
+
+
+def test_per_turn_round_with_no_new_files_is_fake_green() -> None:
+    """#1167: LX2 R13 said 「已重新打包交付」, run succeeded, nothing new landed."""
+    res = lte.CaseResult(case="LX2", title="t", ok=True, artifacts=3)
+    res.turn_status = {1: "succeeded", 2: "succeeded", 3: "failed"}
+    turn_arts = [[{"id": "a"}], [], []]
+    lte.flag_fake_green(res, "failed", per_turn=True, turn_arts=turn_arts)
+    assert res.fake_green is True and res.ok is False
+    assert "succeeded, 0 new files: R2" in res.notes
+    whole = lte.CaseResult(case="LT1", title="t", ok=True, artifacts=1)
+    lte.flag_fake_green(whole, "succeeded", per_turn=False, turn_arts=[[], []])
+    assert whole.fake_green is False and whole.ok is True
