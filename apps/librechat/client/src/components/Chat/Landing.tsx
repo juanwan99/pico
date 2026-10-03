@@ -20,9 +20,7 @@ import {
   ComposerMaterialsChip,
   ComposerMaterialsPanel,
 } from '~/components/Chat/ComposerMaterials';
-import PointsBar from '~/components/Chat/PointsBar';
 import { useComposerMaterials } from '~/hooks/Pico/useComposerMaterials';
-import { usePointsMeter } from '~/hooks/Pico/usePointsMeter';
 import {
   consumePendingModel,
   getPicoModelMode,
@@ -46,7 +44,6 @@ export default function Landing({
 }) {
   const form = useOptionalChatFormContext();
   const { submitMessage } = useSubmitMessage();
-  const { quoteFromChars } = usePointsMeter();
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [model, setModel] = useState(() => {
@@ -84,10 +81,6 @@ export default function Landing({
     setConversationRef.current?.((prev) => patchConversationPlan(prev, on) ?? prev);
   }, []);
 
-  useEffect(() => {
-    quoteFromChars(text.length);
-  }, [text, quoteFromChars]);
-
   useLayoutEffect(() => {
     const el = inputRef.current;
     if (!el) {
@@ -116,11 +109,10 @@ export default function Landing({
     if (!value) {
       return;
     }
-    quoteFromChars(value.length);
     // Single submit path — no DOM bridge to hidden ChatForm
     submitMessage({ text: value });
     syncForm('');
-  }, [text, submitMessage, syncForm, quoteFromChars]);
+  }, [text, submitMessage, syncForm]);
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement> | ClipboardEvent) => {
@@ -218,7 +210,6 @@ export default function Landing({
           conversationId={chatCtx?.conversation?.conversationId}
           open={materials.open}
         />
-        <PointsBar />
         <div
           className="pico-wb-composer overflow-visible rounded-[var(--pico-radius)] border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] shadow-[var(--pico-shadow)]"
           data-testid="pico-wb-home-composer"

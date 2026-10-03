@@ -101,18 +101,7 @@ jest.mock('~/utils', () => ({
 jest.mock('~/components/Endpoints/ConvoIcon', () => () => <span data-testid="convo-icon" />);
 
 jest.mock('~/hooks/Pico/usePointsMeter', () => ({
-  usePointsMeter: () => ({
-    phase: 'idle',
-    points: null,
-    quoteFromChars: jest.fn(),
-    turnForMessage: () => null,
-    composerLive: false,
-  }),
-}));
-
-jest.mock('~/components/Chat/PointsBar', () => ({
-  __esModule: true,
-  default: () => null,
+  usePointsMeter: () => ({ turnForMessage: () => null }),
 }));
 
 jest.mock('~/components/Chat/SchoolMaterialsBar', () => ({

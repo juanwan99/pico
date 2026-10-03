@@ -8,39 +8,32 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { getPicoConversationPoints, getPicoRunPoints, quotePicoPoints } from '~/data-provider/pico/api';
+import { getPicoConversationPoints, getPicoRunPoints } from '~/data-provider/pico/api';
 import {
-  formatComposerQuote,
-  formatPointsLabel,
   formatTurnPointsLabel,
-  migrateTurnMessageId,
   zipRunsToAssistantMessages,
-  type PointsBarPhase,
   type PointsTurnRecord,
 } from '~/hooks/Pico/formatPointsLabel';
 
-export {
-  formatComposerQuote,
-  formatPointsLabel,
-  formatTurnPointsLabel,
-  migrateTurnMessageId,
-  zipRunsToAssistantMessages,
-};
-export type { PointsBarPhase, PointsTurnRecord };
+export { formatTurnPointsLabel, zipRunsToAssistantMessages };
+export type { PointsTurnRecord };
 
 export type PointsMeterValue = {
-  phase: PointsBarPhase;
-  points: string | null;
-  quoteFromChars: (n: number) => void;
   turnForMessage: (messageId?: string | null) => PointsTurnRecord | null;
-  composerLive: boolean;
 };
 
 const PointsMeterContext = createContext<PointsMeterValue | null>(null);
 
 const TERMINAL = new Set(['succeeded', 'failed', 'cancelled']);
 const ACTIVE = new Set(['queued', 'running', 'preparing']);
+/** How often 已用 refreshes while a run goes (#1171). */
+export const LIVE_POINTS_MS = 3000;
 
+/**
+ * 积分 per reply. No number before the run: a long task's cost cannot be
+ * known up front (#1171). While it runs the latest reply shows 已用 so far;
+ * when it ends, 实际 — the number edu debits.
+ */
 export function PointsMeterProvider({
   children,
   runId,
@@ -48,7 +41,6 @@ export function PointsMeterProvider({
   latestAssistantMessageId,
   assistantMessageIds,
   conversationId,
-  isSubmitting,
 }: {
   children: ReactNode;
   runId?: string | null;
@@ -56,118 +48,15 @@ export function PointsMeterProvider({
   latestAssistantMessageId?: string | null;
   assistantMessageIds?: string[] | null;
   conversationId?: string | null;
-  isSubmitting?: boolean;
 }) {
-  const [inflightQuote, setInflightQuote] = useState<string | null>(null);
   const [turns, setTurns] = useState<Record<string, PointsTurnRecord>>({});
-  const boundRef = useRef<{ runId: string | null; messageId: string | null }>({
-    runId: null,
-    messageId: null,
-  });
-  const inflightQuoteRef = useRef<string | null>(null);
-  inflightQuoteRef.current = inflightQuote;
+  const [live, setLive] = useState<{ runId: string; points: string } | null>(null);
   const latestAssistantRef = useRef<string | null>(latestAssistantMessageId ?? null);
   latestAssistantRef.current = latestAssistantMessageId ?? null;
-  const settledByRunRef = useRef<Record<string, string>>({});
   const assistantIds = assistantMessageIds ?? [];
   const assistantKey = assistantIds.join('|');
   const assistantIdsRef = useRef(assistantIds);
   assistantIdsRef.current = assistantIds;
-
-  const quoteSeqRef = useRef(0);
-  const quoteTimerRef = useRef<number | null>(null);
-  const quoteFromChars = useCallback((n: number) => {
-    boundRef.current = { runId: null, messageId: null };
-    const chars = Math.max(0, Math.floor(n) || 0);
-    if (quoteTimerRef.current != null) {
-      window.clearTimeout(quoteTimerRef.current);
-      quoteTimerRef.current = null;
-    }
-    if (chars <= 0) {
-      quoteSeqRef.current += 1;
-      setInflightQuote(null);
-      return;
-    }
-    quoteTimerRef.current = window.setTimeout(() => {
-      quoteTimerRef.current = null;
-      const seq = ++quoteSeqRef.current;
-      void quotePicoPoints(chars, conversationId)
-        .then((view) => {
-          if (seq !== quoteSeqRef.current) {
-            return;
-          }
-          setInflightQuote(typeof view.points === 'string' ? view.points : null);
-        })
-        .catch(() => {
-          if (seq !== quoteSeqRef.current) {
-            return;
-          }
-          setInflightQuote(null);
-        });
-    }, 300);
-  }, [conversationId]);
-
-  useEffect(
-    () => () => {
-      if (quoteTimerRef.current != null) {
-        window.clearTimeout(quoteTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    const mid = latestAssistantMessageId;
-    if (!mid) {
-      return;
-    }
-    setTurns((prev) => {
-      const moved = migrateTurnMessageId(prev, boundRef.current.messageId, mid);
-      if (moved[mid]) {
-        return moved === prev ? prev : moved;
-      }
-      const quote = inflightQuote;
-      const actual = runId ? settledByRunRef.current[runId] || null : null;
-      if (!quote && !actual) {
-        return moved;
-      }
-      return {
-        ...moved,
-        [mid]: {
-          messageId: mid,
-          runId: runId ?? null,
-          quote,
-          actual,
-        },
-      };
-    });
-    boundRef.current.messageId = mid;
-    if (runId) {
-      boundRef.current.runId = runId;
-    }
-  }, [inflightQuote, latestAssistantMessageId, runId]);
-
-  useEffect(() => {
-    if (!runId) {
-      return;
-    }
-    const mid = boundRef.current.messageId || latestAssistantRef.current;
-    if (!mid) {
-      return;
-    }
-    boundRef.current.runId = runId;
-    const actual = settledByRunRef.current[runId] || null;
-    setTurns((prev) => {
-      const cur = prev[mid];
-      if (!cur) {
-        return prev;
-      }
-      if (cur.runId === runId && (!actual || cur.actual === actual)) {
-        return prev;
-      }
-      return { ...prev, [mid]: { ...cur, runId, actual: actual || cur.actual } };
-    });
-  }, [runId]);
 
   useEffect(() => {
     const cid = (conversationId || '').trim();
@@ -186,28 +75,16 @@ export function PointsMeterProvider({
           return;
         }
         setTurns((prev) => {
-          let changed = false;
           const next = { ...prev };
           for (const row of zipped) {
-            if (row.actual) {
-              settledByRunRef.current[row.runId || ''] = row.actual;
+            if (!next[row.messageId]?.actual) {
+              next[row.messageId] = row;
             }
-            const cur = next[row.messageId];
-            if (cur?.actual) {
-              continue;
-            }
-            changed = true;
-            next[row.messageId] = {
-              messageId: row.messageId,
-              runId: row.runId ?? cur?.runId ?? null,
-              quote: cur?.quote ?? null,
-              actual: row.actual,
-            };
           }
-          return changed ? next : prev;
+          return next;
         });
       } catch {
-        /* keep 预计 until tokens land */
+        /* the footer stays empty until the ledger answers */
       }
     })();
     return () => {
@@ -216,87 +93,59 @@ export function PointsMeterProvider({
   }, [conversationId, assistantKey]);
 
   useEffect(() => {
+    if (!runId || !runStatus || !ACTIVE.has(runStatus)) {
+      return;
+    }
+    let cancelled = false;
+    const rid = runId;
+    const tick = async () => {
+      try {
+        const view = await getPicoRunPoints(rid);
+        if (!cancelled && view.phase === 'live' && typeof view.points === 'string') {
+          setLive({ runId: rid, points: view.points });
+        }
+      } catch {
+        /* keep the last 已用 */
+      }
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), LIVE_POINTS_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [runId, runStatus]);
+
+  useEffect(() => {
     if (!runId || !runStatus || !TERMINAL.has(runStatus)) {
       return;
     }
     let cancelled = false;
     const rid = runId;
-
-    const applyActual = (points: string) => {
-      settledByRunRef.current[rid] = points;
-      const preferredMid = latestAssistantRef.current || boundRef.current.messageId;
-      setTurns((prev) => {
-        const entry = Object.values(prev).find((t) => t.runId === rid);
-        const mid = preferredMid || entry?.messageId;
-        if (!mid) {
-          return prev;
-        }
-        const cur = prev[mid] || (entry ? prev[entry.messageId] : undefined);
-        if (cur?.actual === points && cur.runId === rid && prev[mid]) {
-          return prev;
-        }
-        const next = { ...prev };
-        if (entry && entry.messageId !== mid) {
-          delete next[entry.messageId];
-        }
-        next[mid] = {
-          messageId: mid,
-          runId: rid,
-          quote: cur?.quote ?? inflightQuoteRef.current,
-          actual: points,
-        };
-        return next;
-      });
-      const shouldClearQuote =
-        !boundRef.current.runId || boundRef.current.runId === rid;
-      if (preferredMid) {
-        boundRef.current.messageId = preferredMid;
-      }
-      boundRef.current.runId = rid;
-      if (shouldClearQuote) {
-        setInflightQuote(null);
-      }
-    };
-
-    const tick = async () => {
-      const view = await getPicoRunPoints(rid);
-      if (cancelled) {
-        return false;
-      }
-      if (view.phase === 'settled' && typeof view.points === 'string') {
-        applyActual(view.points);
-        return true;
-      }
-      return false;
-    };
-
     void (async () => {
-      for (let i = 0; i < 30; i += 1) {
+      // The llm row lands just after the terminal status; wait for 实际.
+      for (let i = 0; i < 30 && !cancelled; i += 1) {
         try {
-          if (await tick()) {
+          const view = await getPicoRunPoints(rid);
+          const mid = latestAssistantRef.current;
+          if (!cancelled && view.phase === 'settled' && typeof view.points === 'string' && mid) {
+            const actual = view.points;
+            setTurns((prev) => ({
+              ...prev,
+              [mid]: { messageId: mid, runId: rid, live: null, actual },
+            }));
             return;
           }
         } catch {
-          /* keep 预计 on that turn until tokens land */
-        }
-        if (cancelled) {
-          return;
+          /* retry */
         }
         await new Promise((r) => setTimeout(r, 1000));
       }
     })();
-
     return () => {
       cancelled = true;
     };
   }, [runId, runStatus]);
-
-  const composerLive = Boolean(
-    inflightQuote &&
-      (!latestAssistantMessageId ||
-        Boolean(isSubmitting) ||
-        (runStatus != null && ACTIVE.has(runStatus))),
-  );
 
   const turnForMessage = useCallback(
     (messageId?: string | null): PointsTurnRecord | null => {
@@ -306,41 +155,20 @@ export function PointsMeterProvider({
       if (turns[messageId]) {
         return turns[messageId];
       }
-      if (messageId === latestAssistantMessageId && inflightQuote) {
-        return {
-          messageId,
-          runId: runId ?? null,
-          quote: inflightQuote,
-          actual: runId ? settledByRunRef.current[runId] || null : null,
-        };
+      const running = Boolean(runStatus && ACTIVE.has(runStatus));
+      if (messageId === latestAssistantMessageId && running && live && live.runId === runId) {
+        return { messageId, runId, live: live.points, actual: null };
       }
       return null;
     },
-    [turns, latestAssistantMessageId, inflightQuote, runId],
+    [turns, latestAssistantMessageId, live, runId, runStatus],
   );
 
-  const value = useMemo<PointsMeterValue>(
-    () => ({
-      phase: composerLive ? 'quote' : 'idle',
-      points: composerLive ? inflightQuote : null,
-      quoteFromChars,
-      turnForMessage,
-      composerLive,
-    }),
-    [composerLive, inflightQuote, quoteFromChars, turnForMessage],
-  );
+  const value = useMemo<PointsMeterValue>(() => ({ turnForMessage }), [turnForMessage]);
 
   return <PointsMeterContext.Provider value={value}>{children}</PointsMeterContext.Provider>;
 }
 
 export function usePointsMeter(): PointsMeterValue {
-  return (
-    useContext(PointsMeterContext) ?? {
-      phase: 'idle',
-      points: null,
-      quoteFromChars: () => undefined,
-      turnForMessage: () => null,
-      composerLive: false,
-    }
-  );
+  return useContext(PointsMeterContext) ?? { turnForMessage: () => null };
 }

@@ -537,11 +537,13 @@ async def map_event(
     if kind == "turn_end":
         # Not terminal alone (multi-turn tools), but useful progress.
         state.event_kinds.append("turn.end")
-        await emit("agent.step", {"phase": "turn_end", "step": state.step, **tag})
         msg = raw.get("message") or {}
         if isinstance(msg, dict) and isinstance(msg.get("usage"), dict):
             state.spent_usage = add_usage(state.spent_usage, msg["usage"])
             state.spent_calls += 1
+        # The run's spend so far rides the ledger so 积分 can count up live (#1171).
+        spent = {"usage": dict(state.spent_usage)} if state.spent_usage else {}
+        await emit("agent.step", {"phase": "turn_end", "step": state.step, **spent, **tag})
         _record_assistant_turn(
             state, msg=msg if isinstance(msg, dict) else {}, raw=raw
         )

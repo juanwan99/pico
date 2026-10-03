@@ -947,6 +947,72 @@ async def _backfill_run_tokens(
     return await list_usage_events_for_run(session, principal, run_id)
 
 
+_ACTIVE_RUN = frozenset({"queued", "preparing", "running"})
+# A finished run writes its llm row just after the terminal status (#1171).
+_LLM_ROW_GRACE = timedelta(seconds=60)
+
+
+async def _spent_usage_so_far(session: AsyncSession, run_id: str) -> dict[str, Any] | None:
+    """Latest running total the runtime put on a turn_end step (#1171)."""
+    from app.db import EventRow
+
+    result = await session.execute(
+        select(EventRow.payload_json)
+        .where(
+            EventRow.run_id == run_id,
+            EventRow.type == "agent.step",
+            EventRow.payload_json.like('%"usage"%'),
+        )
+        .order_by(EventRow.seq.desc())
+        .limit(1)
+    )
+    raw = result.scalar_one_or_none()
+    try:
+        usage = json.loads(raw).get("usage") if raw else None
+    except (json.JSONDecodeError, AttributeError):
+        return None
+    return usage if isinstance(usage, dict) else None
+
+
+async def _live_points_view(
+    session: AsyncSession, run: Any, rows: list[UsageEventRow]
+) -> dict[str, Any]:
+    """积分 while the run goes: model spend so far + tool rows already metered."""
+    from app.points_meter import format_millipoints, milli_from_row
+
+    milli = 0
+    saw = False
+    for row in rows:
+        if (row.kind or "") == "llm":
+            continue
+        one = milli_from_row(**_row_meter_kwargs(row))
+        if one is not None:
+            milli += one
+            saw = True
+    usage = await _spent_usage_so_far(session, run.id)
+    fields = extract_token_fields(usage)
+    if not fields.tokens_unknown:
+        billed = billed_model_id(run.model, await _backend_model_from_events(session, run.id))
+        one = milli_from_row(
+            tokens_unknown=False,
+            total_tokens=fields.total_tokens,
+            prompt_tokens=fields.prompt_tokens,
+            completion_tokens=fields.completion_tokens,
+            extra=usage_extra_bits(usage),
+            kind="llm",
+            model=billed,
+        )
+        if one is not None:
+            milli += one
+            saw = True
+    return {
+        "phase": "live",
+        "points": format_millipoints(milli) if saw else None,
+        "wallet": False,
+        "run_id": run.id,
+    }
+
+
 async def settle_points_for_run(
     session: AsyncSession,
     principal: Principal,
@@ -959,11 +1025,27 @@ async def settle_points_for_run(
     if run is None:
         return None
     rows = await list_usage_events_for_run(session, principal, run_id)
+    has_llm = any((row.kind or "") == "llm" for row in rows)
+    if not has_llm and (run.status or "") in _ACTIVE_RUN:
+        return await _live_points_view(session, run, rows)
+    if not has_llm:
+        rows = await _backfill_run_tokens(session, principal, run_id, run, rows)
+    if not any((row.kind or "") == "llm" for row in rows) and _recently_finished(run):
+        # A search row alone is not this run's 实际 yet.
+        return {"phase": "pending", "points": None, "wallet": False, "run_id": run_id}
     view = _points_view_from_rows(run_id, rows)
     if view["phase"] == "settled":
         return view
     rows = await _backfill_run_tokens(session, principal, run_id, run, rows)
     return _points_view_from_rows(run_id, rows)
+
+
+def _recently_finished(run: Any) -> bool:
+    ended = getattr(run, "ended_at", None) or getattr(run, "created_at", None)
+    if not isinstance(ended, datetime):
+        return False
+    now = datetime.now(UTC).replace(tzinfo=None)
+    return now - ended.replace(tzinfo=None) < _LLM_ROW_GRACE
 
 
 async def settle_points_for_conversation(

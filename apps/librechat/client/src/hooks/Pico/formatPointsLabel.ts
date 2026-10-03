@@ -1,23 +1,14 @@
-export type PointsBarPhase = 'idle' | 'quote' | 'pending' | 'settled';
-
 export type PointsTurnRecord = {
   messageId: string;
   runId?: string | null;
-  quote: string | null;
+  /** 已用 so far while the run goes (#1171). */
+  live: string | null;
   actual: string | null;
 };
 
-/** Composer: only live 预计. Never 未结算. */
-export function formatComposerQuote(live: boolean, quote: string | null): string | null {
-  if (!live || !quote) {
-    return null;
-  }
-  return `预计 ${quote} 积分`;
-}
-
-/** End of a round: 实际 when the ledger has tokens; otherwise keep 预计. Never wipe. */
+/** End of a round: 实际. While it runs: 已用 so far. No guess before the run (#1171). */
 export function formatTurnPointsLabel(
-  turn: Pick<PointsTurnRecord, 'quote' | 'actual'> | null | undefined,
+  turn: Pick<PointsTurnRecord, 'live' | 'actual'> | null | undefined,
 ): string | null {
   if (!turn) {
     return null;
@@ -25,63 +16,34 @@ export function formatTurnPointsLabel(
   if (turn.actual) {
     return `实际 ${turn.actual} 积分`;
   }
-  if (turn.quote) {
-    return `预计 ${turn.quote} 积分`;
+  if (turn.live) {
+    return `已用 ${turn.live} 积分 · 进行中`;
   }
   return null;
 }
 
-export function migrateTurnMessageId(
-  turns: Record<string, PointsTurnRecord>,
-  fromId: string | null | undefined,
-  toId: string | null | undefined,
-): Record<string, PointsTurnRecord> {
-  if (!toId || fromId === toId) {
-    return turns;
-  }
-  if (turns[toId]) {
-    return turns;
-  }
-  if (fromId && turns[fromId]) {
-    const next = { ...turns, [toId]: { ...turns[fromId], messageId: toId } };
-    delete next[fromId];
-    return next;
-  }
-  return turns;
-}
-
+/**
+ * Right-align the conversation's runs onto its assistant replies. Every run
+ * takes a slot, settled or not, so one unsettled run does not shift the 实际
+ * of every later reply onto the one before it (#1171).
+ */
 export function zipRunsToAssistantMessages(
   messageIds: string[],
   runs: Array<{ run_id?: string | null; points?: string | null; phase?: string | null }>,
 ): PointsTurnRecord[] {
-  const settled = runs.filter((row) => row.phase === 'settled' && row.points && row.run_id);
-  const n = Math.min(messageIds.length, settled.length);
+  const withId = runs.filter((row) => row.run_id);
+  const n = Math.min(messageIds.length, withId.length);
   if (n <= 0) {
     return [];
   }
   const ids = messageIds.slice(messageIds.length - n);
-  const slice = settled.slice(settled.length - n);
-  return ids.map((id, i) => ({
-    messageId: id,
-    runId: slice[i].run_id ?? null,
-    quote: null,
-    actual: slice[i].points ?? null,
-  }));
-}
-
-export function formatPointsLabel(phase: PointsBarPhase, points: string | null): string | null {
-  if (phase === 'idle') {
-    return null;
-  }
-  if (phase === 'settled' && points) {
-    return `实际 ${points} 积分`;
-  }
-  if ((phase === 'quote' || phase === 'pending') && points) {
-    return `预计 ${points} 积分`;
-  }
-  if (phase === 'quote') {
-    return '预计 … 积分';
-  }
-  // pending without a number: keep empty rather than 「未结算」
-  return null;
+  const slice = withId.slice(withId.length - n);
+  return ids
+    .map((id, i) => ({
+      messageId: id,
+      runId: slice[i].run_id ?? null,
+      live: null,
+      actual: slice[i].phase === 'settled' ? (slice[i].points ?? null) : null,
+    }))
+    .filter((row) => row.actual);
 }

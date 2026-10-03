@@ -964,3 +964,110 @@ async def test_school_bill_to_hidden_from_teacher_visible_in_export(client: Asyn
     assert school["billing"] is False
 
 
+
+
+def _principal():
+    from app.auth import Principal
+
+    return Principal(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read"],
+        iss="pico-test-issuer",
+        aud="pico-api",
+        exp=0,
+        raw={},
+    )
+
+
+async def _search_row(run_id: str) -> str:
+    row = await record_usage_event(
+        school_id="school-a",
+        membership_id="m1",
+        kind="search",
+        model="web_search",
+        source="web_search",
+        extra={"ok": True, "query_count": 1},
+        idempotency_key=f"search:{run_id}:call-1",
+        run_id=run_id,
+    )
+    assert row is not None
+    return points_from_row(
+        tokens_unknown=True,
+        prompt_tokens=None,
+        completion_tokens=None,
+        total_tokens=None,
+        extra={"ok": True, "query_count": 1},
+        kind="search",
+        model="web_search",
+    )
+
+
+async def test_points_count_up_while_the_run_goes(client: AsyncClient):
+    """#1171: a running run reports 已用 from its latest turn_end total, priced on the real model."""
+    from decimal import Decimal
+
+    from app.db import append_event, session_factory
+    from app.run_service import create_task
+
+    headers = await _auth(client)
+    async with session_factory()() as session:
+        _task, run = await create_task(session, _principal(), "t", "hello")
+        run.status = "running"
+        run.model = "pico-fast"
+        await session.commit()
+        run_id = run.id
+        await append_event(session, run_id, "run.model", {"backend_model": "gemini-3.8-flash"})
+
+    first = await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})
+    assert first.json() == {"phase": "live", "points": None, "wallet": False, "run_id": run_id}
+
+    async with session_factory()() as session:
+        await append_event(session, run_id, "agent.step", {"phase": "turn_end", "step": 1,
+            "usage": {"prompt_tokens": 1000, "completion_tokens": 100, "total_tokens": 1100}})
+        await append_event(session, run_id, "agent.step", {"phase": "model", "step": 2})
+        await append_event(session, run_id, "agent.step", {"phase": "turn_end", "step": 2,
+            "usage": {"prompt_tokens": 9000, "completion_tokens": 300, "total_tokens": 9300,
+                      "cached_tokens": 4000}})
+    search = await _search_row(run_id)
+
+    live = (await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})).json()
+    assert live["phase"] == "live"
+    llm = points_from_row(
+        tokens_unknown=False,
+        prompt_tokens=9000,
+        completion_tokens=300,
+        total_tokens=9300,
+        extra={"cached_tokens": 4000},
+        kind="llm",
+        model="gemini-3.8-flash",
+    )
+    assert Decimal(live["points"]) == Decimal(llm) + Decimal(search)
+
+
+async def test_finished_run_without_its_llm_row_is_not_settled_on_search_alone(
+    client: AsyncClient,
+):
+    """#1171: the terminal status lands before the llm row; a search row alone is not 实际."""
+    from app.db import session_factory
+    from app.run_service import _utcnow, create_task
+
+    headers = await _auth(client)
+    async with session_factory()() as session:
+        _task, run = await create_task(session, _principal(), "t", "hello")
+        run.status = "succeeded"
+        run.ended_at = _utcnow()
+        await session.commit()
+        run_id = run.id
+    await _search_row(run_id)
+
+    early = (await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})).json()
+    assert early["phase"] == "pending"
+
+    await emit_llm_usage_after_run(
+        run_id,
+        token_usage={"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10},
+        source="test",
+    )
+    done = (await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})).json()
+    assert done["phase"] == "settled"

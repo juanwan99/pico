@@ -39,7 +39,6 @@ import { mainTextareaId, BadgeItem } from '~/common';
 import PendingSteerChips from './PendingSteerChips';
 import PendingQuoteChips from './PendingQuoteChips';
 import useSteering from '~/hooks/Chat/useSteering';
-import { usePointsMeter } from '~/hooks/Pico/usePointsMeter';
 import FileFormChat from './Files/FileFormChat';
 import InFlightSteers from './InFlightSteers';
 import TextareaHeader from './TextareaHeader';
@@ -222,7 +221,6 @@ const ChatForm = memo(function ChatForm({
   });
 
   const { submitMessage, submitPrompt } = useSubmitMessage();
-  const { quoteFromChars } = usePointsMeter();
 
   /** Queued/steered sends carry their FULL submission context: explicit
    *  (possibly empty) overrides stop `ask` from vacuuming quotes or skill
@@ -446,10 +444,6 @@ const ChatForm = memo(function ChatForm({
   const textValue = useWatch({ control: methods.control, name: 'text' });
 
   useEffect(() => {
-    quoteFromChars(typeof textValue === 'string' ? textValue.length : 0);
-  }, [textValue, quoteFromChars]);
-
-  useEffect(() => {
     if (textAreaRef.current) {
       const style = window.getComputedStyle(textAreaRef.current);
       const lineHeight = parseFloat(style.lineHeight);
@@ -521,7 +515,6 @@ const ChatForm = memo(function ChatForm({
           }
           return;
         }
-        quoteFromChars((data.text || '').length);
         return submitMessage(data);
       })}
       className={cn(
