@@ -739,6 +739,11 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         )
         await session.commit()
 
+        # #1175 PR-3: same auto-land as the interactive path (_finalize_run).
+        from app.edu_auto_land import auto_land_after_run
+
+        await auto_land_after_run(session, run_id)
+
     from app.usage_ledger import emit_llm_usage_after_run
 
     await emit_llm_usage_after_run(
