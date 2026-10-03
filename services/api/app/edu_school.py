@@ -819,6 +819,78 @@ async def excerpts_for_conversation(
     return out
 
 
+KB_BIND_BATCH = 12  # edu NAMED_IDS_MAX on membership/excerpts
+
+
+async def bind_school_hit_ids(
+    principal: Principal,
+    ids: list[str],
+    *,
+    settings: Settings | None = None,
+) -> set[str] | None:
+    """Which of these edu item ids may this membership read *now*.
+
+    edu ``membership/excerpts`` is the permission truth (field perm · active ·
+    read); Pico Meili only knows school_id. ``None`` = edu unreachable or not
+    configured → the caller drops every school hit (fail-closed). Non-UUID ids
+    are not edu items and never come back.
+    """
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for raw in ids:
+        value = str(raw or "").strip()
+        if value and value not in seen and _UUID_RE.match(value):
+            seen.add(value)
+            wanted.append(value)
+    visible: set[str] = set()
+    for start in range(0, len(wanted), KB_BIND_BATCH):
+        chunk = wanted[start : start + KB_BIND_BATCH]
+        try:
+            data = await _edu_post(
+                principal, "/v1/pico/membership/excerpts", body={"ids": chunk}, settings=settings
+            )
+        except HTTPException as exc:
+            logger.warning("kb school bind via edu failed: %s", getattr(exc, "status_code", "?"))
+            return None
+        if data.get("configured") is False:
+            return None
+        items = data.get("items")
+        for row in items if isinstance(items, list) else []:
+            if isinstance(row, dict) and row.get("id"):
+                visible.add(str(row["id"]))
+    return visible
+
+
+def _hit_scope(row: dict[str, Any]) -> str:
+    return str(row.get("scope") or "member")
+
+
+def _hit_item_id(row: dict[str, Any]) -> str:
+    return str(row.get("artifact_id") or row.get("material_id") or "").strip()
+
+
+async def keep_visible_school_hits(
+    principal: Principal,
+    rows: list[dict[str, Any]],
+    *,
+    settings: Settings | None = None,
+) -> tuple[list[dict[str, Any]], str]:
+    """Drop school-scope hits edu will not show this membership (#1175 PR-1).
+
+    Own member rows pass untouched. Returns ``(rows, bind)`` with bind one of
+    ``none`` (no school rows asked), ``ok``, ``unavailable`` (edu down → all
+    school rows dropped, never guessed).
+    """
+    school_ids = [_hit_item_id(r) for r in rows if _hit_scope(r) == "school"]
+    if not school_ids:
+        return list(rows), "none"
+    visible = await bind_school_hit_ids(principal, school_ids, settings=settings)
+    if visible is None:
+        return [r for r in rows if _hit_scope(r) != "school"], "unavailable"
+    kept = [r for r in rows if _hit_scope(r) != "school" or _hit_item_id(r) in visible]
+    return kept, "ok"
+
+
 @router.get("/v1/edu/materials")
 async def list_edu_materials(
     q: str = Query(default=""),

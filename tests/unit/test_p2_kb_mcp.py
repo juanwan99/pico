@@ -326,6 +326,110 @@ def test_kb_search_drops_other_tenant_hits(monkeypatch: pytest.MonkeyPatch) -> N
     asyncio.run(_run())
 
 
+_EDU_OK = "11111111-2222-4333-8444-555555555555"
+_EDU_HIDDEN = "66666666-7777-4888-9999-aaaaaaaaaaaa"
+
+
+def _school_scope_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Teacher ticked 全校可检索; no real DB needed for the named-bind lookup."""
+
+    class _Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    async def fake_scope(principal, conversation_id, session=None, settings=None):
+        return {"include_school": True, "allow_ids": None, "search_school": True, "field_ids": []}
+
+    monkeypatch.setattr("app.db.session_factory", lambda: _Session)
+    monkeypatch.setattr("app.edu_school.load_kb_search_scope", fake_scope)
+
+
+def _school_hits(principal: _P) -> list[dict[str, Any]]:
+    def row(art: str, scope: str, member: str) -> dict[str, Any]:
+        return {
+            "artifact_id": art,
+            "title": f"{art}.md",
+            "text": "开学典礼 9 月 1 日举行。",
+            "scope": scope,
+            "school_id": principal.school_id,
+            "membership_id": member,
+        }
+
+    return [
+        row(_EDU_OK, "school", "uploader-x"),
+        row(_EDU_HIDDEN, "school", "uploader-y"),
+        row("art-mine", "member", principal.membership_id),
+    ]
+
+
+def test_kb_search_school_hits_bound_by_edu(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1175: 全校可检索 must not leak other teachers' private fields."""
+    store = _MemStore()
+    principal = _P()
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    _school_scope_on(monkeypatch)
+    captured: dict[str, Any] = {}
+
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True, include_school=False):
+        _ = query, client
+        captured["limit"] = limit
+        captured["include_school"] = include_school
+        return {"hybrid": False, "hits": _school_hits(principal)}
+
+    async def fake_post(principal_, path, *, body=None, settings=None):
+        captured["ids"] = list(body["ids"])
+        return {"configured": True, "items": [{"id": _EDU_OK}], "dumped": False}
+
+    monkeypatch.setattr("pico_orchestrator.tools_builtin.search_materials", fake_search)
+    monkeypatch.setattr("app.edu_school._edu_post", fake_post)
+
+    async def _run() -> None:
+        gw = build_default_gateway(store)
+        out = await gw.invoke(principal, "kb_search", {"query": "开学", "limit": 5})
+        assert captured["include_school"] is True
+        assert captured["limit"] == 10
+        assert captured["ids"] == [_EDU_OK, _EDU_HIDDEN]
+        assert [h["artifact_id"] for h in out["hits"]] == [_EDU_OK, "art-mine"]
+        assert out["school_bind"] == "ok"
+        assert out["degraded"] is False
+
+    asyncio.run(_run())
+
+
+def test_kb_search_edu_down_drops_school_rows_and_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi import HTTPException
+
+    store = _MemStore()
+    principal = _P()
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+    _school_scope_on(monkeypatch)
+
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True, include_school=False):
+        _ = query, client, limit, include_school
+        return {"hybrid": False, "hits": _school_hits(principal)}
+
+    async def fake_post(principal_, path, *, body=None, settings=None):
+        raise HTTPException(status_code=502, detail={"code": "edu.unreachable"})
+
+    monkeypatch.setattr("pico_orchestrator.tools_builtin.search_materials", fake_search)
+    monkeypatch.setattr("app.edu_school._edu_post", fake_post)
+
+    async def _run() -> None:
+        gw = build_default_gateway(store)
+        out = await gw.invoke(principal, "kb_search", {"query": "开学"})
+        assert [h["artifact_id"] for h in out["hits"]] == ["art-mine"]
+        assert out["school_bind"] == "unavailable"
+        assert out["degraded"] is True
+        assert "核验" in out["user_message"]
+
+    asyncio.run(_run())
+
+
 def test_kb_search_is_meili_not_edu_green() -> None:
     import inspect
 

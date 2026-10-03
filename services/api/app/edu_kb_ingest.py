@@ -6,6 +6,7 @@ import asyncio
 import base64
 import binascii
 import hashlib
+import logging
 import sys
 import uuid
 from pathlib import Path
@@ -50,6 +51,8 @@ class IngestIn(BaseModel):
     text: str | None = None
     item_id: str | None = Field(default=None, max_length=80)
 
+
+logger = logging.getLogger(__name__)
 
 class SearchIn(BaseModel):
     query: str = Field(min_length=1, max_length=500)
@@ -232,13 +235,15 @@ async def post_kb_search(
     """Same Meili path as Pi kb_search. Tenant comes from the JWT, not the body."""
     include_school = str(body.scope or "").strip().lower() == "school"
     enforce_feature(principal, "kb")
+    # School rows get pruned by edu permission below; widen the pool first.
+    fetch_limit = min(50, body.limit * 2) if include_school else body.limit
     try:
         result = await asyncio.to_thread(
             search_materials,
             body.query,
             school_id=principal.school_id,
             membership_id=principal.membership_id,
-            limit=body.limit,
+            limit=fetch_limit,
             include_school=include_school,
             rerank_ok=feature_enabled(principal, "rerank"),
         )
@@ -298,6 +303,7 @@ async def post_kb_search(
                 "chunk_id": row.get("chunk_id"),
                 "artifact_id": row.get("artifact_id") or row.get("material_id"),
                 "material_id": row.get("material_id") or row.get("artifact_id"),
+                "scope": row_scope,
                 "title": row.get("title") or "",
                 "heading": row.get("heading") or "",
                 "page": row.get("page"),
@@ -309,6 +315,19 @@ async def post_kb_search(
                 "clone_artifact_ids": [str(a) for a in (row.get("clone_artifact_ids") or [])],
             }
         )
+    school_bind = "none"
+    if include_school and hits:
+        # #1175: Meili knows school_id only; edu membership/excerpts is the
+        # permission truth. edu unreachable → school rows dropped, not guessed.
+        try:
+            from app.edu_school import keep_visible_school_hits
+
+            hits, school_bind = await keep_visible_school_hits(principal, hits)
+        except Exception:  # same shape as the Pi tool: drop school rows, never 500
+            logger.exception("kb/search school bind failed")
+            hits = [h for h in hits if str(h.get("scope") or "member") != "school"]
+            school_bind = "unavailable"
+    hits = hits[: body.limit]
     return {
         "ok": True,
         "mode": "keyword",
@@ -316,6 +335,7 @@ async def post_kb_search(
         "reranked": bool(result.get("reranked")),
         "rerank_skip": str(result.get("rerank_skip") or ""),
         "include_school": include_school,
+        "school_bind": school_bind,
         "count": len(hits),
         "hits": hits,
     }

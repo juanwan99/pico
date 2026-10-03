@@ -855,6 +855,7 @@ def _workspace_handlers(
         hits: list[dict[str, Any]] = []
         include_school = False
         allow_ids: set[str] | None = None
+        school_bind = "none"
         try:
             from app.db import session_factory
             from app.edu_school import load_kb_search_scope
@@ -881,12 +882,15 @@ def _workspace_handlers(
                 from pico_orchestrator.features import feature_enabled
 
                 # Meili + rerank are blocking HTTP; every run shares this loop.
+                # School rows get pruned by edu permission / field allowlist
+                # below; ask for a wider pool so the pruned list still fills.
+                fetch_limit = min(50, limit * 2) if include_school else limit
                 result = await asyncio.to_thread(
                     search_materials,
                     query,
                     school_id=principal.school_id,
                     membership_id=principal.membership_id,
-                    limit=limit,
+                    limit=fetch_limit,
                     include_school=include_school,
                     rerank_ok=feature_enabled(principal, "rerank"),
                 )
@@ -928,6 +932,7 @@ def _workspace_handlers(
                             "heading": str(row.get("heading") or ""),
                             "page": row.get("page"),
                             "kind": row.get("kind"),
+                            "scope": row_scope,
                             "excerpt": _file_excerpt(row, text or title, query),
                             "match": "index",
                         }
@@ -936,6 +941,21 @@ def _workspace_handlers(
                 degraded = True
                 mode = "down"
                 hits = []
+            if include_school and hits:
+                # #1175: Meili knows school_id only. edu says which school
+                # files this teacher may read now (field perm · active · read).
+                # edu unreachable → school rows dropped, never guessed.
+                try:
+                    from app.edu_school import keep_visible_school_hits
+
+                    hits, school_bind = await keep_visible_school_hits(principal, hits)
+                except Exception:  # no edu adapter: fail closed
+                    logger.exception("kb_search school bind failed")
+                    hits = [h for h in hits if str(h.get("scope") or "member") != "school"]
+                    school_bind = "unavailable"
+                if school_bind == "unavailable":
+                    degraded = True
+                hits = hits[:limit]
 
         sources = [
             {
@@ -947,6 +967,11 @@ def _workspace_handlers(
             for h in hits
             if h.get("artifact_id")
         ]
+        bind_note = (
+            "学校权限核验连不上，学校材料这次没有返回，不能编造。"
+            if school_bind == "unavailable"
+            else ""
+        )
         if not hits:
             return {
                 "hits": [],
@@ -956,8 +981,9 @@ def _workspace_handlers(
                 "mode": mode,
                 "retrieved": False,
                 "sources": [],
+                "school_bind": school_bind,
                 "user_message": (
-                    "未在已入库材料中命中该问题。"
+                    (bind_note or "未在已入库材料中命中该问题。")
                     if mode == "keyword"
                     else "材料库暂时不可用，没有查到。不能编造材料内容。"
                 ),
@@ -971,7 +997,8 @@ def _workspace_handlers(
             "mode": mode,
             "retrieved": True,
             "sources": sources,
-            "user_message": f"命中 {len(hits)} 条材料依据（{engine}，含出处）。",
+            "school_bind": school_bind,
+            "user_message": f"命中 {len(hits)} 条材料依据（{engine}，含出处）。" + bind_note,
         }
 
     async def generate_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
