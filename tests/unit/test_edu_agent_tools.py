@@ -166,22 +166,25 @@ async def test_run_pack_submit_forbidden():
 
 
 @pytest.mark.asyncio
-async def test_propose_accepts_catalog_id_without_page():
+async def test_propose_rejects_catalog_id_without_page():
+    """#1175: catalog command ids are not page hands (sidebar-session §3)."""
     gw = AllowlistGateway()
     register_propose_page_mutation(gw, None)
     spec = gw.tools["propose_page_mutation"]
-    out = await spec.handler(
-        SimpleNamespace(school_id="s1", membership_id="m1"),
-        {"affordance_id": "home.draft.grey", "params": {"title": "教研组计划"}},
-    )
-    assert out["source"] == "catalog"
-    assert out["affordanceId"] == "home.draft.grey"
+    with pytest.raises(ToolError) as ei:
+        await spec.handler(
+            SimpleNamespace(school_id="s1", membership_id="m1"),
+            {"affordance_id": "home.draft.grey", "params": {"title": "教研组计划"}},
+        )
+    assert ei.value.code == "page.no_affordances"
 
 
-def test_propose_book_accepts_catalog_id():
+def test_propose_book_rejects_catalog_id():
     book = PageMutationBook(affordances=[], page_title="x")
-    out = book.propose({"affordance_id": "home.draft.grey", "params": {}})
-    assert out["source"] == "catalog"
+    with pytest.raises(ToolError) as ei:
+        book.propose({"affordance_id": "home.draft.grey", "params": {}})
+    assert ei.value.code == "page.affordance_unknown"
+    assert book.mutations == []
 
 
 def test_detach_on_disconnect_default():
