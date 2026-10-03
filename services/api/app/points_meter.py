@@ -73,10 +73,11 @@ def normalize_token_counts(
     total = None if total_tokens is None else max(0, int(total_tokens))
     cached = max(0, int(cached_tokens or 0))
     write = max(0, int(cache_write_tokens or 0))
-    if prompt is not None and cached and prompt < cached and total is not None:
-        reconstructed = prompt + cached + (completion or 0)
-        if abs(reconstructed - total) <= 1:
-            prompt = prompt + cached
+    if prompt is not None and (cached or write) and total is not None:
+        # Same shape test as usage_parse (#1173): total tells whether prompt holds the cache.
+        split = prompt + cached + write + (completion or 0)
+        if abs(split - total) <= 1 and abs(prompt + (completion or 0) - total) > 1:
+            prompt = prompt + cached + write
     if total is None and prompt is not None and completion is not None:
         total = prompt + completion
     return {

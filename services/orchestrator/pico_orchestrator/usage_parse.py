@@ -202,10 +202,12 @@ def parse_usage_blob(raw: Any) -> dict[str, Any] | None:
         return None
     if not estimated and (prompt or 0) == 0 and (completion or 0) == 0 and (total or 0) == 0:
         return None
-    if prompt is not None and cached and prompt < cached and total is not None:
-        reconstructed = prompt + cached + (completion or 0)
-        if abs(reconstructed - total) <= 1:
-            prompt = prompt + cached
+    if prompt is not None and (cached or cache_write) and total is not None:
+        # Pi reports input = prompt − cache reads − cache writes (#1173); the
+        # total says which shape this is, whatever the sizes.
+        split = prompt + (cached or 0) + (cache_write or 0) + (completion or 0)
+        if abs(split - total) <= 1 and abs(prompt + (completion or 0) - total) > 1:
+            prompt = prompt + (cached or 0) + (cache_write or 0)
     if total is None and prompt is not None and completion is not None:
         total = prompt + completion
     out: dict[str, Any] = {}

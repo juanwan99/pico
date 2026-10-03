@@ -1071,3 +1071,52 @@ async def test_finished_run_without_its_llm_row_is_not_settled_on_search_alone(
     )
     done = (await client.get("/v1/usage/points", headers=headers, params={"run_id": run_id})).json()
     assert done["phase"] == "settled"
+
+
+async def test_summary_prices_each_row_on_its_model_and_cache(client: AsyncClient):
+    """#1173: the usage page adds up per-row points (= 实际 / export), not a GPT-priced token sum."""
+    from decimal import Decimal
+
+    extra = {"cached_tokens": 6000}
+    await record_usage_event(
+        school_id="school-a",
+        membership_id="m1",
+        kind="llm",
+        model="gemini-3.8-flash",
+        prompt_tokens=10000,
+        completion_tokens=500,
+        total_tokens=10500,
+        source="test",
+        extra=extra,
+        run_id="run-sum",
+        idempotency_key="llm:run-sum",
+    )
+    search = await _search_row("run-sum")
+    llm = points_from_row(
+        tokens_unknown=False,
+        prompt_tokens=10000,
+        completion_tokens=500,
+        total_tokens=10500,
+        extra=extra,
+        kind="llm",
+        model="gemini-3.8-flash",
+    )
+    headers = await _auth(client)
+    days = (await client.get("/v1/usage/summary", headers=headers)).json()["days"]
+    by_kind = {row["kind"]: row["points"] for row in days}
+    assert by_kind["llm"] == llm
+    assert by_kind["search"] == search
+    gpt_guess = _llm_pts(10000, 500, 10500)
+    assert Decimal(by_kind["llm"]) < Decimal(gpt_guess)
+
+
+async def test_lane_named_llm_row_prices_on_the_lane_backend(monkeypatch):
+    """#1173: a row that only names the lane is priced on that lane's backend, not GPT."""
+    from app import channel_rates
+
+    monkeypatch.setattr(channel_rates, "_lane_backend", lambda lane: "gemini-3.8-flash")
+    card = channel_rates.load_rate_card()
+    assert card.find(kind="llm", model="pico-fast").model == "gemini-3.8-flash"
+    assert card.find(kind="llm", model="").model == "gemini-3.8-flash"
+    monkeypatch.setattr(channel_rates, "_lane_backend", lambda lane: "no-such-model")
+    assert card.find(kind="llm", model="pico-fast").model == "gpt-5.6-sol"
