@@ -305,7 +305,9 @@ const ContentParts = memo(function ContentParts({
   );
 
   const thinkText = useMemo(() => collectThinkText(content), [content]);
-  const showThinkChain = !isCreatedByUser && (Boolean(thinkText) || effectiveIsSubmitting);
+  // The latest reply also shows its run's step lines (#1169), even after it finished.
+  const showThinkChain =
+    !isCreatedByUser && (Boolean(thinkText) || effectiveIsSubmitting || Boolean(isLatestMessage));
 
   const sequentialParts = useMemo<PartWithIndex[]>(() => {
     if (!content) {
@@ -387,7 +389,11 @@ const ContentParts = memo(function ContentParts({
   const showEmptyCursor = safeContent.length === 0 && effectiveIsSubmitting && !showThinkChain;
   const lastContentIdx = safeContent.length - 1;
   const thinkingChain = showThinkChain ? (
-    <PicoThinkingChain text={thinkText} isSubmitting={effectiveIsSubmitting} />
+    <PicoThinkingChain
+      text={thinkText}
+      isSubmitting={effectiveIsSubmitting}
+      withRunSteps={Boolean(isLatestMessage)}
+    />
   ) : null;
 
   // Parallel content: use dedicated renderer with columns (TMessageContentParts includes ContentMetadata)

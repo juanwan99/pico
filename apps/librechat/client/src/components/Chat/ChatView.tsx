@@ -36,7 +36,8 @@ import PointsBar from './PointsBar';
 import { cn } from '~/utils';
 import { isUnnamedConvoTitle } from '~/utils/picoConvoTitle';
 import store from '~/store';
-import { usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
+import { processStepLines, usePicoTaskLedger } from '~/hooks/Pico/usePicoTaskLedger';
+import { PicoRunStepsContext } from '~/hooks/Pico/PicoRunStepsContext';
 import { PointsMeterProvider } from '~/hooks/Pico/usePointsMeter';
 import { collectPicoSandboxSession } from '~/utils/picoSandboxSession';
 import { isAskUserWaiting } from '~/utils/picoAskPrompt';
@@ -152,9 +153,12 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
     chatHelpers.conversation?.conversationId,
   );
   const ledger = usePicoTaskLedger(ledgerConversationId, isSubmitting);
-  const cancellableRunId = ['queued', 'running', 'preparing'].includes(ledger.run?.status || '')
-    ? ledger.run?.id
-    : undefined;
+  const runActive = ['queued', 'running', 'preparing'].includes(ledger.run?.status || '');
+  const cancellableRunId = runActive ? ledger.run?.id : undefined;
+  const runSteps = useMemo(
+    () => ({ active: runActive, lines: processStepLines(ledger.events) }),
+    [runActive, ledger.events],
+  );
   // Show task-bar「停止任务」whenever stream is live or ledger run is active.
   // Distinct from input-bar「停止生成」(screen-only).
   const canCancelTask = Boolean(cancellableRunId) || isSubmitting;
@@ -225,6 +229,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
             conversationId={conversationId}
             isSubmitting={isSubmitting}
           >
+          <PicoRunStepsContext.Provider value={runSteps}>
           <Presentation>
             <div className="relative flex h-full w-full flex-col">
               <div className="flex min-h-0 flex-1 flex-row">
@@ -364,6 +369,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
               </div>
             </div>
           </Presentation>
+          </PicoRunStepsContext.Provider>
           </PointsMeterProvider>
         </AddedChatContext.Provider>
       </ChatContext.Provider>
