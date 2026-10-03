@@ -59,20 +59,6 @@ def is_upstream_overloaded(error: str) -> bool:
     return "overloaded" in low or "429" in low or "rate limit" in low
 
 
-# Mid-run (the model already worked): Pi's retries on the same model this many
-# times in a row before the session switches to the next backup (#1160).
-SWITCH_AFTER_RETRIES = 3
-
-
-def should_switch_mid_run(attempt: int, error: str) -> bool:
-    """Pi's consecutive retry ``attempt`` failed with ``error``: try a backup now?
-
-    An overload is New API shedding load and hits every model the same, so it
-    keeps Pi's own backoff. A broken stream or 5xx on one channel does not.
-    """
-    return int(attempt or 0) >= SWITCH_AFTER_RETRIES and not is_upstream_overloaded(error)
-
-
 def should_failover(result: Any) -> bool:
     if str(getattr(result, "status", "") or "") != "failed":
         return False
@@ -87,7 +73,3 @@ def fallback_teacher_note(from_model: str, to_model: str) -> str:
         f"主渠道（{from_model}）暂时不可用，已改用备用模型 {to_model} 继续。"
         "不是你的问题写错。"
     )
-
-
-def switch_teacher_note(to_model: str) -> str:
-    return f"（主模型连续几次没有回应，已换备用模型 {to_model} 接着做，前面的进度都在）\n"

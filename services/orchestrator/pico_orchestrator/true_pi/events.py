@@ -72,11 +72,6 @@ class EventMapState:
     # Before any output, an upstream error that waiting will not fix: stop Pi's
     # retries and let brain-HA fail over to the next model.
     failover_error: str = ""
-    # After output, Pi's retries kept failing on one model: switch the session
-    # to the next backup (#1160). ``retry_base`` is the attempt of the last
-    # switch, so each model gets its own run of retries.
-    switch_wanted: str = ""
-    retry_base: int = 0
 
     @property
     def has_output(self) -> bool:
@@ -489,25 +484,16 @@ async def map_event(
                 **tag,
             },
         )
-        from pico_orchestrator.brain_ha import (
-            is_channel_dead,
-            is_upstream_overloaded,
-            should_switch_mid_run,
-        )
+        from pico_orchestrator.brain_ha import is_channel_dead, is_upstream_overloaded
 
         # Only an overload gets Pi's long budget before output; anything else
         # fails over after the old 5 tries, a dead channel at once.
         attempt = int(raw.get("attempt") or 0)
-        if attempt <= 1:
-            state.retry_base = 0
         if not state.has_output and (
             is_channel_dead(err)
             or (attempt > PRE_OUTPUT_RETRIES and not is_upstream_overloaded(err))
         ):
             state.failover_error = err
-        elif state.has_output and should_switch_mid_run(attempt - state.retry_base, err):
-            state.switch_wanted = err or "retry"
-            state.retry_base = attempt
         return
 
     if kind == "agent_end":
