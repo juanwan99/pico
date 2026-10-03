@@ -483,29 +483,41 @@ def test_search_uses_principal_not_body_and_returns_chunks(client, monkeypatch) 
     assert body["include_school"] is True
 
 
-def test_search_school_keeps_other_teacher_school_hit(client, monkeypatch) -> None:
+_EDU_OK = "11111111-2222-4333-8444-555555555555"
+_EDU_HIDDEN = "66666666-7777-4888-9999-aaaaaaaaaaaa"
+
+
+def _school_row(item_id: str, school_id: str, *, uploader: str = "uploader-other") -> dict:
+    return {
+        "chunk_id": f"{item_id}_0000",
+        "artifact_id": item_id,
+        "material_id": item_id,
+        "title": "通知",
+        "heading": "培训",
+        "page": 1,
+        "text": "景炎",
+        "parent_text": "景炎",
+        "scope": "school",
+        "school_id": school_id,
+        "membership_id": uploader,
+    }
+
+
+def test_search_school_keeps_other_teacher_school_hit_edu_allows(client, monkeypatch) -> None:
+    captured: dict = {}
+
     def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None, rerank_ok=True):
-        _ = query, limit, client
-        return {
-            "hybrid": False,
-            "hits": [
-                {
-                    "chunk_id": "edu-1_0000",
-                    "artifact_id": "edu-1",
-                    "material_id": "edu-1",
-                    "title": "通知",
-                    "heading": "培训",
-                    "page": 1,
-                    "text": "景炎",
-                    "parent_text": "景炎",
-                    "scope": "school",
-                    "school_id": school_id,
-                    "membership_id": "uploader-other",
-                }
-            ],
-        }
+        _ = query, client
+        captured["limit"] = limit
+        return {"hybrid": False, "hits": [_school_row(_EDU_OK, school_id)]}
+
+    async def fake_post(principal, path, *, body=None, settings=None):
+        captured["path"] = path
+        captured["ids"] = list(body["ids"])
+        return {"configured": True, "items": [{"id": _EDU_OK, "title": "通知"}], "dumped": False}
 
     monkeypatch.setattr("app.edu_kb_ingest.search_materials", fake_search)
+    monkeypatch.setattr("app.edu_school._edu_post", fake_post)
     res = client.post(
         "/v1/kb/search",
         headers={"authorization": f"Bearer {_token()}"},
@@ -513,7 +525,86 @@ def test_search_school_keeps_other_teacher_school_hit(client, monkeypatch) -> No
     )
     assert res.status_code == 200, res.text
     assert res.json()["count"] == 1
-    assert res.json()["hits"][0]["artifact_id"] == "edu-1"
+    assert res.json()["hits"][0]["artifact_id"] == _EDU_OK
+    assert res.json()["school_bind"] == "ok"
+    assert captured["path"] == "/v1/pico/membership/excerpts"
+    assert captured["ids"] == [_EDU_OK]
+    assert captured["limit"] == 10  # pool widened before edu prunes
+
+
+def test_search_school_drops_hits_edu_will_not_show(client, monkeypatch) -> None:
+    """#1175: Meili knows school_id only; edu membership/excerpts decides."""
+
+    def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None, rerank_ok=True):
+        _ = query, limit, client
+        mine = _school_row("art-mine", school_id, uploader=membership_id)
+        mine["scope"] = "member"
+        return {
+            "hybrid": False,
+            "hits": [
+                _school_row(_EDU_OK, school_id),
+                _school_row(_EDU_HIDDEN, school_id),
+                _school_row("not-a-uuid", school_id),
+                mine,
+            ],
+        }
+
+    async def fake_post(principal, path, *, body=None, settings=None):
+        assert body["ids"] == [_EDU_OK, _EDU_HIDDEN]
+        return {"configured": True, "items": [{"id": _EDU_OK}], "dumped": False}
+
+    monkeypatch.setattr("app.edu_kb_ingest.search_materials", fake_search)
+    monkeypatch.setattr("app.edu_school._edu_post", fake_post)
+    res = client.post(
+        "/v1/kb/search",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"query": "培训", "limit": 5, "scope": "school"},
+    )
+    assert res.status_code == 200, res.text
+    ids = [h["artifact_id"] for h in res.json()["hits"]]
+    assert ids == [_EDU_OK, "art-mine"]
+    assert res.json()["school_bind"] == "ok"
+
+
+def test_search_school_edu_down_drops_every_school_row(client, monkeypatch) -> None:
+    from fastapi import HTTPException
+
+    def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None, rerank_ok=True):
+        _ = query, limit, client
+        mine = _school_row("art-mine", school_id, uploader=membership_id)
+        mine["scope"] = "member"
+        return {"hybrid": False, "hits": [_school_row(_EDU_OK, school_id), mine]}
+
+    async def fake_post(principal, path, *, body=None, settings=None):
+        raise HTTPException(status_code=502, detail={"code": "edu.unreachable"})
+
+    monkeypatch.setattr("app.edu_kb_ingest.search_materials", fake_search)
+    monkeypatch.setattr("app.edu_school._edu_post", fake_post)
+    res = client.post(
+        "/v1/kb/search",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"query": "培训", "limit": 5, "scope": "school"},
+    )
+    assert res.status_code == 200, res.text
+    assert [h["artifact_id"] for h in res.json()["hits"]] == ["art-mine"]
+    assert res.json()["school_bind"] == "unavailable"
+
+
+def test_search_school_edu_not_configured_is_fail_closed(client, monkeypatch) -> None:
+    def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None, rerank_ok=True):
+        _ = query, limit, client
+        return {"hybrid": False, "hits": [_school_row(_EDU_OK, school_id)]}
+
+    monkeypatch.setattr("app.edu_kb_ingest.search_materials", fake_search)
+    # no PICO_EDU_BASE_URL in tests → _edu_call answers configured=False
+    res = client.post(
+        "/v1/kb/search",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"query": "培训", "limit": 5, "scope": "school"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["count"] == 0
+    assert res.json()["school_bind"] == "unavailable"
 
 
 def test_ingest_writes_school_chunks(client: TestClient, monkeypatch) -> None:
