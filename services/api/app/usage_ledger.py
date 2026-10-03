@@ -751,58 +751,51 @@ def _day_bounds(day: str) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=1)
 
 
-def _points_from_sum(
-    *,
-    kind: str | None,
-    total_tokens: Any,
-    prompt_tokens: Any,
-    completion_tokens: Any,
-) -> str | None:
-    from app.points_meter import points_from_row
+def _rollup(rows: list[UsageEventRow], key: Any) -> dict[Any, dict[str, Any]]:
+    """Group rows and price each one on its own model and cache split (#1173),
+    the way 实际 and the edu export do — never a summed-token guess."""
+    from app.points_meter import milli_from_row
 
-    kind_n = (kind or "llm").strip().lower() or "llm"
-    return points_from_row(
-        tokens_unknown=False,
-        total_tokens=_int_or_none(total_tokens),
-        prompt_tokens=_int_or_none(prompt_tokens),
-        completion_tokens=_int_or_none(completion_tokens),
-        kind=kind_n,
-        model="gpt-5.6-sol" if kind_n == "llm" else None,
-    )
+    groups: dict[Any, dict[str, Any]] = {}
+    for row in rows:
+        g = groups.setdefault(
+            key(row),
+            {"event_count": 0, "total_tokens": None, "unknown_count": 0, "milli": None},
+        )
+        g["event_count"] += 1
+        g["unknown_count"] += int(bool(row.tokens_unknown))
+        if row.total_tokens is not None:
+            g["total_tokens"] = (g["total_tokens"] or 0) + int(row.total_tokens)
+        milli = milli_from_row(**_row_meter_kwargs(row))
+        if milli is not None:
+            g["milli"] = (g["milli"] or 0) + milli
+    return groups
+
+
+def _rollup_points(group: dict[str, Any]) -> str | None:
+    from app.points_meter import format_millipoints
+
+    return None if group["milli"] is None else format_millipoints(group["milli"])
 
 
 async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
     """School-blind today rollup for the owner gateway page. No membership ids."""
     today = datetime.now(UTC).date().isoformat()
     start, end = _day_bounds(today)
-    q = (
-        select(
-            UsageEventRow.kind,
-            func.count().label("event_count"),
-            func.sum(UsageEventRow.prompt_tokens).label("prompt_tokens"),
-            func.sum(UsageEventRow.completion_tokens).label("completion_tokens"),
-            func.sum(UsageEventRow.total_tokens).label("total_tokens"),
-            func.sum(UsageEventRow.tokens_unknown).label("unknown_count"),
-        )
-        .where(UsageEventRow.created_at >= start, UsageEventRow.created_at < end)
-        .group_by(UsageEventRow.kind)
-        .order_by(UsageEventRow.kind)
+    q = select(UsageEventRow).where(
+        UsageEventRow.created_at >= start, UsageEventRow.created_at < end
     )
-    rows = (await session.execute(q)).all()
+    rows = list((await session.execute(q)).scalars().all())
+    groups = _rollup(rows, lambda row: row.kind)
     kinds = [
         {
-            "kind": r.kind,
-            "event_count": int(r.event_count or 0),
-            "total_tokens": int(r.total_tokens) if r.total_tokens is not None else None,
-            "unknown_count": int(r.unknown_count or 0),
-            "points": _points_from_sum(
-                kind=r.kind,
-                total_tokens=r.total_tokens,
-                prompt_tokens=r.prompt_tokens,
-                completion_tokens=r.completion_tokens,
-            ),
+            "kind": kind,
+            "event_count": g["event_count"],
+            "total_tokens": g["total_tokens"],
+            "unknown_count": g["unknown_count"],
+            "points": _rollup_points(g),
         }
-        for r in rows
+        for kind, g in sorted(groups.items())
     ]
     return {
         "ok": True,
@@ -921,6 +914,9 @@ async def _backfill_run_tokens(
             llm_row = found
     if llm_row is not None and not llm_row.tokens_unknown and llm_row.run_id == run_id:
         return rows
+    # Price the run's real backend with its cache split, not a GPT default (#1173).
+    billed = billed_model_id(getattr(run, "model", None), await _backend_model_from_events(session, run_id))
+    bits = usage_extra_bits(blob if isinstance(blob, dict) else None)
     if llm_row is not None:
         llm_row.tokens_unknown = 0
         llm_row.estimated = 0
@@ -928,12 +924,17 @@ async def _backfill_run_tokens(
         llm_row.completion_tokens = fields.completion_tokens
         llm_row.total_tokens = fields.total_tokens
         llm_row.run_id = run_id
+        llm_row.model = llm_row.model or billed
+        if bits:
+            llm_row.extra_json = json.dumps({**_row_extra(llm_row), **bits}, ensure_ascii=False)
         await session.commit()
         return await list_usage_events_for_run(session, principal, run_id)
     await record_usage_event(
         school_id=principal.school_id,
         membership_id=principal.membership_id,
         kind="llm",
+        model=billed,
+        extra=bits or None,
         prompt_tokens=fields.prompt_tokens,
         completion_tokens=fields.completion_tokens,
         total_tokens=fields.total_tokens,
@@ -1097,24 +1098,10 @@ async def summarize_usage(
     membership_id: str | None = None,
 ) -> dict[str, Any]:
     school, member = _tenant_filter(principal, membership_id)
-    day_expr = func.strftime("%Y-%m-%d", UsageEventRow.created_at)
-    q = (
-        select(
-            day_expr.label("day"),
-            UsageEventRow.kind,
-            func.count().label("event_count"),
-            func.sum(UsageEventRow.prompt_tokens).label("prompt_tokens"),
-            func.sum(UsageEventRow.completion_tokens).label("completion_tokens"),
-            func.sum(UsageEventRow.total_tokens).label("total_tokens"),
-            func.sum(UsageEventRow.tokens_unknown).label("unknown_count"),
-        )
-        .where(
-            UsageEventRow.school_id == school,
-            UsageEventRow.membership_id == member,
-            _personal_bill_clause(),
-        )
-        .group_by(day_expr, UsageEventRow.kind)
-        .order_by(day_expr.desc(), UsageEventRow.kind)
+    q = select(UsageEventRow).where(
+        UsageEventRow.school_id == school,
+        UsageEventRow.membership_id == member,
+        _personal_bill_clause(),
     )
     if kind:
         kind_n = kind.strip().lower()
@@ -1123,21 +1110,20 @@ async def summarize_usage(
     if day:
         start, end = _day_bounds(day)
         q = q.where(UsageEventRow.created_at >= start, UsageEventRow.created_at < end)
-    rows = (await session.execute(q)).all()
+    rows = list((await session.execute(q)).scalars().all())
+    groups = _rollup(rows, lambda row: (row.created_at.strftime("%Y-%m-%d"), row.kind))
     days = [
         {
-            "day": r.day,
-            "kind": r.kind,
-            "event_count": int(r.event_count or 0),
-            "points": _points_from_sum(
-                kind=r.kind,
-                total_tokens=r.total_tokens,
-                prompt_tokens=r.prompt_tokens,
-                completion_tokens=r.completion_tokens,
-            ),
+            "day": day_key,
+            "kind": kind_key,
+            "event_count": g["event_count"],
+            "points": _rollup_points(g),
         }
-        for r in rows
+        for (day_key, kind_key), g in sorted(
+            groups.items(), key=lambda item: (item[0][0], item[0][1])
+        )
     ]
+    days.sort(key=lambda row: row["day"], reverse=True)
     return {
         "billing": False,
         "schema": USAGE_EXPORT_SCHEMA,

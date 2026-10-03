@@ -70,10 +70,11 @@ class RateCard:
         want_id = (channel_id or "").strip()
         want_kind = (kind or "").strip().lower()
         want_model = (model or "").strip()
-        if want_kind == "llm" and (
-            not want_model or want_model.lower() in {"pico-fast", "pico-deep", "pico-agent", "pico"}
-        ):
-            want_model = "gpt-5.6-sol"
+        if want_kind == "llm" and (not want_model or want_model.lower() in _LANES):
+            # A lane name or no name: price the lane's real backend (#1173).
+            backend = _lane_backend(want_model)
+            hit = self.find(kind=kind, model=backend, channel_id=channel_id) if backend else None
+            return hit or self.find(kind=kind, model=_LEGACY_LANE_MODEL, channel_id=channel_id)
         if want_id:
             for row in self.channels:
                 if row.id == want_id:
@@ -95,6 +96,15 @@ class RateCard:
 
 
 _CARD: RateCard | None = None
+_LANES = frozenset({"pico-fast", "pico-deep", "pico-agent", "pico"})
+# What a lane priced as before the brain moved to Gemini; last resort only.
+_LEGACY_LANE_MODEL = "gpt-5.6-sol"
+
+
+def _lane_backend(lane: str) -> str | None:
+    from pico_orchestrator.provider import product_backend_model
+
+    return product_backend_model(deep=lane.lower() == "pico-deep") or None
 
 
 def default_rates_path() -> Path:
