@@ -272,6 +272,36 @@ function describeSearchOrTool(event: PicoRunEvent): string | null {
   return null;
 }
 
+/**
+ * Every step of the run as one line each, oldest first, for the rolling box
+ * above the reply (#1169). A tool's drafting progress and then its call share
+ * one line that updates in place; a result only adds a line when it failed.
+ */
+export function processStepLines(events: PicoRunEvent[]): string[] {
+  const lines: string[] = [];
+  let openTool: string | null = null;
+  for (const event of events) {
+    if (event.type === 'tool.result' && event.payload?.ok !== false) {
+      openTool = null;
+      continue;
+    }
+    const line = describeSearchOrTool(event);
+    if (!line) {
+      continue;
+    }
+    const tool = toolName(event);
+    const inPlace =
+      (event.type === 'tool.drafting' || event.type === 'tool.call') && tool && tool === openTool;
+    if (inPlace) {
+      lines[lines.length - 1] = line;
+    } else if (lines[lines.length - 1] !== line) {
+      lines.push(line);
+    }
+    openTool = event.type === 'tool.drafting' ? tool : null;
+  }
+  return lines;
+}
+
 export function lastProcessStep(events: PicoRunEvent[]): string | null {
   if (liveAskEvent(events)) {
     return '在等你选';

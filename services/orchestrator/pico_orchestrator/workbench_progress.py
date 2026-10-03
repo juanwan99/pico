@@ -9,7 +9,9 @@ ledger events still render; they are not live teacher tools.
 
 from __future__ import annotations
 
+import re
 from typing import Any
+from urllib.parse import urlparse
 
 # Tools that create or edit a user-visible downloadable artifact.
 WRITE_TOOLS = frozenset(
@@ -59,6 +61,11 @@ _DOING: dict[str, str] = {
     "unpublish_html_page": "正在撤回遗留公开页",
     "ask_user": "在等你选",
     "propose_page_mutation": "正在拟左边这页的改动",
+    "memory_read": "正在读记忆",
+    "memory_write": "正在记进记忆",
+    "memory_search": "正在查记忆",
+    "sandbox_document_open": "正在打开文档",
+    "sandbox_browser_open": "正在阅读网页",
 }
 
 _DONE: dict[str, str] = {
@@ -130,6 +137,62 @@ def workbench_tool_step_line(tool: str) -> str:
     if not name:
         return ""
     return _DOING.get(name, FALLBACK_DOING)
+
+
+# Pi builtins plus tools whose argument says what this step works on.
+_PATH_VERB: dict[str, str] = {"read": "正在读", "write": "正在写", "edit": "正在改"}
+_QUERY_VERB: dict[str, str] = {
+    "web_search": "正在检索",
+    "kb_search": "正在查材料",
+    "memory_search": "正在查记忆",
+}
+_URL_TOOLS = frozenset({"web_fetch", "sandbox_browser_open"})
+_DETAIL_MAX = 40
+
+
+def _short(text: str) -> str:
+    one = re.sub(r"\s+", " ", text).strip()
+    return one if len(one) <= _DETAIL_MAX else one[: _DETAIL_MAX - 1] + "…"
+
+
+def _arg(args: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = args.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def workbench_call_step_line(tool: str, args: dict[str, Any] | None) -> str:
+    """In-flight line naming what this call works on (「正在读 教案.docx」).
+
+    Falls back to the tool-only line when the arguments name nothing.
+    """
+    name = (tool or "").strip()
+    base = workbench_tool_step_line(name)
+    a = args if isinstance(args, dict) else {}
+    detail = ""
+    if name in _PATH_VERB:
+        path = _arg(a, "path").rstrip("/")
+        if path:
+            return f"{_PATH_VERB[name]} {_short(path.rsplit('/', 1)[-1])}"
+    elif name == "bash":
+        first = _arg(a, "command").splitlines()[0] if _arg(a, "command") else ""
+        first = re.sub(r"^cd\s+\S+\s*&&\s*", "", first)
+        first = re.sub(r"/workspace\b/?", "", first)
+        if first.strip():
+            return f"正在执行：{_short(first)}"
+    elif name in _QUERY_VERB:
+        detail = _arg(a, "query")
+        if detail:
+            return f"{_QUERY_VERB[name]}：{_short(detail)}"
+    elif name in _URL_TOOLS:
+        host = urlparse(_arg(a, "url")).netloc
+        if host:
+            return f"正在阅读网页：{host.removeprefix('www.')}"
+    else:
+        detail = _arg(a, "title", "filename")
+    return f"{base}：{_short(detail)}" if detail and base else base
 
 
 # Pi builtins whose arguments are the work itself (a whole file / script).

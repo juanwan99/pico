@@ -24,8 +24,8 @@ from pico_orchestrator.true_pi.thinking import thinking_from_message
 from pico_orchestrator.user_errors import user_message_for_error
 from pico_orchestrator.workbench_progress import (
     tool_result_failed,
+    workbench_call_step_line,
     workbench_drafting_line,
-    workbench_tool_step_line,
 )
 
 EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
@@ -250,7 +250,7 @@ async def map_event(
         if not isinstance(args, dict):
             args = {}
         state.event_kinds.append("tool.call")
-        step = workbench_tool_step_line(name)
+        step = workbench_call_step_line(name, args)
         await emit(
             "tool.call",
             {

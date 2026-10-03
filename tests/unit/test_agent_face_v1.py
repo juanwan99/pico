@@ -126,7 +126,7 @@ async def test_tool_call_emits_chinese_step_line() -> None:
     )
     calls = [p for k, p in events if k == "tool.call"]
     assert calls
-    assert calls[0]["step_line"] == "正在写 Word"
+    assert calls[0]["step_line"] == "正在写 Word：教案.docx"
     assert "%" not in calls[0]["step_line"]
 
 
