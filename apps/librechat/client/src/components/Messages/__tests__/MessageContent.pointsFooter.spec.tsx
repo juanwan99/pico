@@ -27,7 +27,7 @@ describe('MessageContent points footer (live content[] path)', () => {
   it('pins 实际 at the end of an assistant reply', () => {
     usePointsMeter.mockReturnValue({
       turnForMessage: (id: string) =>
-        id === 'a1' ? { messageId: 'a1', quote: '25.224', actual: '25.254' } : null,
+        id === 'a1' ? { messageId: 'a1', live: null, actual: '25.254' } : null,
     });
     render(
       <MessageContent
@@ -38,16 +38,16 @@ describe('MessageContent points footer (live content[] path)', () => {
     expect(screen.queryByText('未结算')).not.toBeInTheDocument();
   });
 
-  it('keeps 预计 on that reply until tokens land', () => {
+  it('counts 已用 up on that reply until 实际 lands', () => {
     usePointsMeter.mockReturnValue({
       turnForMessage: (id: string) =>
-        id === 'a1' ? { messageId: 'a1', quote: '25.224', actual: null } : null,
+        id === 'a1' ? { messageId: 'a1', live: '12.500', actual: null } : null,
     });
     render(
       <MessageContent
         message={{ messageId: 'a1', isCreatedByUser: false, content: [{ type: 'text', text: '好' }] } as never}
       />,
     );
-    expect(screen.getByTestId('pico-turn-points')).toHaveTextContent('预计 25.224 积分');
+    expect(screen.getByTestId('pico-turn-points')).toHaveTextContent('已用 12.500 积分 · 进行中');
   });
 });

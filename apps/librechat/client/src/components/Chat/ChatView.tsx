@@ -32,7 +32,6 @@ import TaskRunBar from './TaskRunBar';
 import ChangeConfirmBanner from './ChangeConfirmBanner';
 import Header from './Header';
 import Footer from './Footer';
-import PointsBar from './PointsBar';
 import { cn } from '~/utils';
 import { isUnnamedConvoTitle } from '~/utils/picoConvoTitle';
 import store from '~/store';
@@ -227,7 +226,6 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
             latestAssistantMessageId={latestAssistantMessageId}
             assistantMessageIds={assistantMessageIds}
             conversationId={conversationId}
-            isSubmitting={isSubmitting}
           >
           <PicoRunStepsContext.Provider value={runSteps}>
           <Presentation>
@@ -307,7 +305,6 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                           conversationId={conversationId}
                           open={materials.open}
                         />
-                        <PointsBar />
                         <PicoAskBar run={ledger.run} events={ledger.events} />
                         <ChatForm index={index} placeholder={chatFormPlaceholder} />
                       </div>

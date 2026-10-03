@@ -45,11 +45,6 @@ jest.mock('~/components/Chat/ArchiveFolderBar', () => ({
   default: () => null,
 }));
 
-jest.mock('~/components/Chat/PointsBar', () => ({
-  __esModule: true,
-  default: () => null,
-}));
-
 jest.mock('~/Providers', () => ({
   useOptionalChatFormContext: () => ({
     setValue: jest.fn(),
@@ -92,19 +87,10 @@ const { usePointsMeter } = jest.requireMock('~/hooks/Pico/usePointsMeter') as {
 };
 
 describe('Landing composer chrome', () => {
-  const quoteFromChars = jest.fn();
-
   beforeEach(() => {
     sessionStorage.removeItem('pico:composerMaterials');
-    quoteFromChars.mockReset();
     mockHandleFiles.mockReset();
-    usePointsMeter.mockReturnValue({
-      phase: 'idle',
-      points: null,
-      quoteFromChars,
-      turnForMessage: () => null,
-      composerLive: false,
-    });
+    usePointsMeter.mockReturnValue({ turnForMessage: () => null });
   });
 
   it('U1: idle composer is one input + plus, no 调用技能与指令 second layer', () => {
@@ -184,13 +170,6 @@ describe('Landing composer chrome', () => {
     render(<Landing centerFormOnLanding />);
     expect(screen.getByTestId('composer-plus-file-input')).toBeInTheDocument();
     expect(screen.queryByTestId('composer-plus-attach')).not.toBeInTheDocument();
-  });
-
-  it('quotes while typing, not only on submit', () => {
-    render(<Landing centerFormOnLanding />);
-    const input = screen.getByTestId('text-input');
-    fireEvent.change(input, { target: { value: 'hi nishi shui' } });
-    expect(quoteFromChars).toHaveBeenCalledWith('hi nishi shui'.length);
   });
 
   it('paste of a document attaches instead of inserting the filename', () => {

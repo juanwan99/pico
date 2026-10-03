@@ -712,7 +712,7 @@ export async function transferMyArtifact(
   );
 }
 
-export type PicoPointsPhase = 'quote' | 'pending' | 'settled';
+export type PicoPointsPhase = 'live' | 'pending' | 'settled';
 
 export type PicoPointsView = {
   phase: PicoPointsPhase;
@@ -720,23 +720,6 @@ export type PicoPointsView = {
   wallet?: boolean;
   run_id?: string;
 };
-
-export async function quotePicoPoints(
-  inputChars: number,
-  conversationId?: string | null,
-): Promise<PicoPointsView> {
-  const cid = (conversationId || '').trim();
-  const body: { input_chars: number; conversation_id?: string } = {
-    input_chars: Math.max(0, Math.floor(inputChars) || 0),
-  };
-  if (cid && cid.toLowerCase() !== 'new' && cid.toLowerCase() !== 'search') {
-    body.conversation_id = cid;
-  }
-  return picoFetch<PicoPointsView>('/v1/usage/points/quote', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
 
 export async function getPicoRunPoints(runId: string): Promise<PicoPointsView> {
   return picoFetch<PicoPointsView>(`/v1/usage/points?run_id=${encodeURIComponent(runId)}`);
