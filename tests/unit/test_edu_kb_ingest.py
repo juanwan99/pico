@@ -590,6 +590,28 @@ def test_search_school_edu_down_drops_every_school_row(client, monkeypatch) -> N
     assert res.json()["school_bind"] == "unavailable"
 
 
+def test_search_school_bind_crash_drops_school_rows_not_500(client, monkeypatch) -> None:
+    def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None, rerank_ok=True):
+        _ = query, limit, client
+        mine = _school_row("art-mine", school_id, uploader=membership_id)
+        mine["scope"] = "member"
+        return {"hybrid": False, "hits": [_school_row(_EDU_OK, school_id), mine]}
+
+    async def fake_post(principal, path, *, body=None, settings=None):
+        raise RuntimeError("settings exploded")
+
+    monkeypatch.setattr("app.edu_kb_ingest.search_materials", fake_search)
+    monkeypatch.setattr("app.edu_school._edu_post", fake_post)
+    res = client.post(
+        "/v1/kb/search",
+        headers={"authorization": f"Bearer {_token()}"},
+        json={"query": "培训", "limit": 5, "scope": "school"},
+    )
+    assert res.status_code == 200, res.text
+    assert [h["artifact_id"] for h in res.json()["hits"]] == ["art-mine"]
+    assert res.json()["school_bind"] == "unavailable"
+
+
 def test_search_school_edu_not_configured_is_fail_closed(client, monkeypatch) -> None:
     def fake_search(query, *, school_id, membership_id, limit, include_school=False, client=None, rerank_ok=True):
         _ = query, limit, client

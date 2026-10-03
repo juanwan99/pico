@@ -6,6 +6,7 @@ import asyncio
 import base64
 import binascii
 import hashlib
+import logging
 import sys
 import uuid
 from pathlib import Path
@@ -50,6 +51,8 @@ class IngestIn(BaseModel):
     text: str | None = None
     item_id: str | None = Field(default=None, max_length=80)
 
+
+logger = logging.getLogger(__name__)
 
 class SearchIn(BaseModel):
     query: str = Field(min_length=1, max_length=500)
@@ -316,9 +319,14 @@ async def post_kb_search(
     if include_school and hits:
         # #1175: Meili knows school_id only; edu membership/excerpts is the
         # permission truth. edu unreachable → school rows dropped, not guessed.
-        from app.edu_school import keep_visible_school_hits
+        try:
+            from app.edu_school import keep_visible_school_hits
 
-        hits, school_bind = await keep_visible_school_hits(principal, hits)
+            hits, school_bind = await keep_visible_school_hits(principal, hits)
+        except Exception:  # same shape as the Pi tool: drop school rows, never 500
+            logger.exception("kb/search school bind failed")
+            hits = [h for h in hits if str(h.get("scope") or "member") != "school"]
+            school_bind = "unavailable"
     hits = hits[: body.limit]
     return {
         "ok": True,
