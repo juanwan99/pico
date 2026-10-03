@@ -31,6 +31,12 @@ TOOL_DESCRIPTION = (
     "Args: affordance_id, params, label."
 )
 
+SIDEBAR_NO_HANDS_HINT = (
+    "左边这一页今天没有报能力表（affordances）：这轮不能代填、代勾、代点，也没有 propose_page_mutation 这只手。"
+    "老师要改左页，如实说这页今天没有手，把要填的内容用文字给出让老师自己填。"
+    "不要在正文里写 JSON、affordanceId 或「请确认」装作提案；没有确认条，学校什么都不会改。"
+)
+
 SIDEBAR_PAGE_HANDS_HINT = (
     "左边这一页报了能力表（affordances）：人能填、能勾、能点的都在里面，带 id 和当前值。"
     "要改左页，用 propose_page_mutation 按 id 一条条提案；人确认后由学校执行，你不要当成已改。"
@@ -129,24 +135,8 @@ class PageMutationBook:
             raise ToolError("page.affordance_required", "要先说改哪一处：affordance_id 不能为空。")
         row = self._lookup(aid)
         if row is None:
-            from pico_orchestrator.edu_agent_tools import catalog_command_id
-
-            if catalog_command_id(aid):
-                mutation = {
-                    "affordanceId": aid,
-                    "params": args.get("params") if isinstance(args.get("params"), dict) else {},
-                    "label": str(args.get("label") or aid).strip()[:_MAX_LABEL],
-                    "tier": "work",
-                    "status": "staged",
-                    "source": "catalog",
-                }
-                self.mutations.append(mutation)
-                return {
-                    "staged": True,
-                    "affordanceId": aid,
-                    "source": "catalog",
-                    "note": "目录命令，走学校 run_pack；未当页内手执行。",
-                }
+            # #1175 PR-2: contract §3 — affordanceId is always one of this
+            # request's ids. Catalog command ids are not page hands.
             raise ToolError(
                 "page.affordance_unknown",
                 "这一页的能力表里没有这个 id，今天没有这只手；把缺的说给老师。",
@@ -212,16 +202,6 @@ def register_propose_page_mutation(gateway: Any, book: PageMutationBook | None) 
     async def handler(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         del principal
         if book is None:
-            from pico_orchestrator.edu_agent_tools import catalog_command_id
-
-            aid = str(args.get("affordance_id") or args.get("affordanceId") or "").strip()
-            if catalog_command_id(aid):
-                return {
-                    "staged": True,
-                    "affordanceId": aid,
-                    "source": "catalog",
-                    "note": "目录命令，走学校 run_pack；这一页没有能力表也可以用目录 id。",
-                }
             raise ToolError(
                 "page.no_affordances",
                 "这一页没有报能力表，改不了左页；可以说清楚缺什么。",

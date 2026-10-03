@@ -33,7 +33,7 @@ that the school executes after the teacher confirms.
 2. **No cross-teacher session.** Session dir is `school / membership / conversation`; two teachers on the same page-keyed conversation id never share a Pi session file.
 3. **History semantics.** Pi path ignores `messages[]` beyond the last user turn; continuity comes from the session file above. If edu omits `X-Conversation-Id`, every turn is a fresh session (allowed, but the rail is then stateless).
 4. **Same hands.** CORE (`generate_html_document`, `sandbox_office_lib`, `generate_image`, `workspace_*`, `web_*`, `kb_search`, `ask_user`, sandbox doors). Thinking off; tool progress rides `content` so the rail can show it.
-5. **Left-page hand.** When `affordances[]` is present: one extra tool `propose_page_mutation` (contracts/tools.md §4.7). Otherwise the model has no way to touch the left page and must say so.
+5. **Left-page hand.** When `affordances[]` is present: one extra tool `propose_page_mutation` (contracts/tools.md §4.7). Otherwise the model has no way to touch the left page and must say so — Pico puts that sentence in SYSTEM (`SIDEBAR_NO_HANDS_HINT`): no JSON / `affordanceId` / 「请确认」 in prose pretending to be a proposal.
 
 ## 3. Mutations envelope (Pico → edu)
 
@@ -52,7 +52,7 @@ field, present even when empty:
 ```
 
 - Streaming: the same field rides the final `finish_reason:"stop"` chunk (next to `usage`).
-- `affordanceId` is always one of the request's ids. `params` is opaque to Pico. `tier` is copied from the affordance (`work` default, `final` for 回写/进绿/授权 — edu keeps them in separate confirm packs, edu-core#604 §5.3).
+- `affordanceId` is always one of the request's ids; anything else (including catalog command ids like `home.draft.grey`) is rejected with `page.affordance_unknown`. `params` is opaque to Pico. `tier` is copied from the affordance (`work` default, `final` for 回写/进绿/授权 — edu keeps them in separate confirm packs, edu-core#604 §5.3).
 - The human `content` stays human: no JSON blob for the shell to parse.
 - Pico also writes one ChangeProposal ledger row (`status=proposed`) per turn with mutations — the audit trail (contracts/change-handoff.md). Confirm/execute is the school's; Pico writes nothing to the school.
 

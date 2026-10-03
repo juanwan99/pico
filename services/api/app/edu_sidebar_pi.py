@@ -44,11 +44,15 @@ def _hint_caps(caps: Any) -> Any:
     if mark not in system:
         return caps
     hinted = _sidebar_helpers()[3](system)
-    if getattr(caps, "page_affordances", None):
-        from pico_orchestrator.page_mutations import SIDEBAR_PAGE_HANDS_HINT
+    from pico_orchestrator.page_mutations import SIDEBAR_NO_HANDS_HINT, SIDEBAR_PAGE_HANDS_HINT
 
+    if getattr(caps, "page_affordances", None):
         if SIDEBAR_PAGE_HANDS_HINT not in hinted:
             hinted = f"{hinted}\n{SIDEBAR_PAGE_HANDS_HINT}"
+    elif SIDEBAR_NO_HANDS_HINT not in hinted:
+        # Contract §2.5: without affordances the model must say the page has
+        # no hand today — the prompt has to carry that, not just the envelope.
+        hinted = f"{hinted}\n{SIDEBAR_NO_HANDS_HINT}"
     if hinted == system:
         return caps
     return replace(caps, system_prompt=hinted)

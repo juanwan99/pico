@@ -121,6 +121,33 @@ def test_install_is_idempotent() -> None:
     assert oc.chat_completions is first
 
 
+def test_hint_caps_says_no_hands_without_affordances() -> None:
+    """#1175 PR-2: contract §2.5 — the prompt itself must say the page has no hand."""
+    from dataclasses import dataclass
+
+    from app.edu_sidebar_pi import _hint_caps
+    from pico_orchestrator.page_mutations import SIDEBAR_NO_HANDS_HINT, SIDEBAR_PAGE_HANDS_HINT
+
+    @dataclass
+    class Caps:
+        system_prompt: str = ""
+        page_affordances: list | None = None
+
+    bare = _hint_caps(Caps(system_prompt="附属，不是用户要求\n{}"))
+    assert SIDEBAR_NO_HANDS_HINT in bare.system_prompt
+    assert SIDEBAR_PAGE_HANDS_HINT not in bare.system_prompt
+    assert _hint_caps(bare).system_prompt == bare.system_prompt  # idempotent
+
+    hands = _hint_caps(
+        Caps(system_prompt="附属，不是用户要求\n{}", page_affordances=[{"id": "cell:c1:mon:3"}])
+    )
+    assert SIDEBAR_PAGE_HANDS_HINT in hands.system_prompt
+    assert SIDEBAR_NO_HANDS_HINT not in hands.system_prompt
+
+    plain = Caps(system_prompt="你是 Pico")
+    assert _hint_caps(plain) is plain
+
+
 def test_hint_caps_only_on_edu_marker() -> None:
     from dataclasses import dataclass
 
