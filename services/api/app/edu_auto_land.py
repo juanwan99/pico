@@ -15,6 +15,7 @@ Thin adapter over the existing ``membership/land`` call (app.edu_school):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 LANDED_EVENT = "artifact.landed"
 FAILED_EVENT = "artifact.land_failed"
+SKIPPED_EVENT = "artifact.land_skipped"
 AUTO_LAND_ISS = "pico-auto-land"
 # The same person's write ticket is minted from school_id + membership_id;
 # scopes here only shape the local Principal, not the edu ticket.
@@ -137,6 +139,20 @@ async def auto_land_run_artifacts(session: AsyncSession, run_id: str) -> list[di
             payload["error"] = str(outcome.get("error") or outcome.get("user_message") or "")[:300]
         await append_event(session, run.id, LANDED_EVENT if landed else FAILED_EVENT, payload)
         results.append(payload)
+    dropped = candidates[MAX_ARTIFACTS_PER_RUN:]
+    if dropped:
+        # Honest ledger: say which ones did not go, instead of silently stopping.
+        await append_event(
+            session,
+            run.id,
+            SKIPPED_EVENT,
+            {
+                "field_id": field_id,
+                "skipped": len(dropped),
+                "titles": [str(row.title or "")[:120] for row in dropped[:50]],
+                "reason": f"每次最多落 {MAX_ARTIFACTS_PER_RUN} 份，其余请在我的文件里手动转存",
+            },
+        )
     return results
 
 
@@ -150,3 +166,23 @@ async def auto_land_after_run(session: AsyncSession, run_id: str) -> None:
             await session.rollback()
         except Exception:
             logger.exception("auto land rollback failed for run %s", run_id)
+
+
+def schedule_auto_land(run_id: str) -> asyncio.Task[None] | None:
+    """Finalizer hook. Lands in the background so the reply's last chunk is
+    never held by an edu round-trip (write timeout ≥ 20 s per artifact).
+    Tracked as inflight so prod-update drains it like a run. Never raises."""
+    try:
+        from app.db import session_factory
+        from app.run_service import _track_inflight
+
+        async def _job() -> None:
+            async with session_factory()() as session:
+                await auto_land_after_run(session, run_id)
+
+        task = asyncio.create_task(_job())
+        _track_inflight(task)
+        return task
+    except Exception:
+        logger.exception("auto land not scheduled for run %s", run_id)
+        return None

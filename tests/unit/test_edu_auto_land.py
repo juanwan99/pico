@@ -253,6 +253,62 @@ def test_silent_green_is_refused_and_recorded(client, monkeypatch) -> None:
     assert [t for t, _ in _events(run_id)] == ["artifact.land_failed"]
 
 
+def test_scheduled_hook_lands_off_the_reply_path(client, monkeypatch) -> None:
+    calls: list[str] = []
+
+    async def fake_call(principal, method, path, *, body=None, write=False, **_):
+        calls.append(path)
+        return {"ok": True, "landed": True, "kind": "page", "id": EDU_ID, "configured": True}
+
+    monkeypatch.setattr("app.edu_school._edu_call", fake_call)
+    _, run_id = _seed(bound=True)
+    from app.edu_auto_land import schedule_auto_land
+
+    async def _go() -> None:
+        task = schedule_auto_land(run_id)
+        assert task is not None
+        await task
+
+    asyncio.run(_go())
+    assert calls == ["/v1/pico/membership/land"]
+    assert [t for t, _ in _events(run_id)] == ["artifact.landed"]
+
+
+def test_over_cap_artifacts_are_recorded_not_dropped(client, monkeypatch) -> None:
+    from app.db import ArtifactRow, new_id, session_factory
+    from app.edu_auto_land import MAX_ARTIFACTS_PER_RUN
+
+    async def fake_call(*_a, **_k):
+        return {"ok": True, "landed": True, "kind": "page", "id": EDU_ID, "configured": True}
+
+    monkeypatch.setattr("app.edu_school._edu_call", fake_call)
+    task_id, run_id = _seed(bound=True)
+
+    async def _more() -> None:
+        async with session_factory()() as session:
+            for i in range(MAX_ARTIFACTS_PER_RUN + 1):
+                session.add(
+                    ArtifactRow(
+                        id=new_id(),
+                        task_id=task_id,
+                        run_id=run_id,
+                        kind="html",
+                        title=f"第{i}页.html",
+                        inline="<p>x</p>",
+                        content_encoding="utf8",
+                    )
+                )
+            await session.commit()
+
+    asyncio.run(_more())
+    out = _land(run_id)
+    assert len(out) == MAX_ARTIFACTS_PER_RUN
+    events = _events(run_id)
+    assert events[-1][0] == "artifact.land_skipped"
+    assert events[-1][1]["skipped"] == 2
+    assert len(events[-1][1]["titles"]) == 2
+
+
 def test_hook_never_raises(client, monkeypatch) -> None:
     async def crash(*_a, **_k):
         raise RuntimeError("edu adapter exploded")

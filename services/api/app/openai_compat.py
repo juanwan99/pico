@@ -1148,10 +1148,10 @@ async def _finalize_run(
         await session.commit()
 
         # #1175 PR-3: succeeded + conversation bound to a school field →
-        # page/material artifacts land as grey drafts. Never flips the run.
-        from app.edu_auto_land import auto_land_after_run
+        # page/material artifacts land as grey drafts. Background, never flips the run.
+        from app.edu_auto_land import schedule_auto_land
 
-        await auto_land_after_run(session, run_id)
+        schedule_auto_land(run_id)
 
     # Usage meter is best-effort and must never roll back the Run path.
     from app.usage_ledger import emit_llm_usage_after_run
