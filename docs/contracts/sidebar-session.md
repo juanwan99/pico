@@ -21,7 +21,7 @@ that the school executes after the teacher confirms.
 |------|-------------|-----|
 | `Authorization` | edu-minted JWT; `school_id` / `membership_id` come from claims only | AI 权 = 人权 |
 | `messages[0].role=system` | contains the marker `附属，不是用户要求` and the page short profile as JSON (`{"page": {"title": …, "table"?: …, "affordances"?: […]}}`) | Pico recognises a sidebar turn by this marker, nothing else |
-| `X-Conversation-Id` | **required**. edu generates it per **teacher + page** (same lifetime as its `bindKey` brain key). New id when edu clears the brain (logout, 新对话, 换校). | Pi memory lives in a session file keyed by `school / membership / conversation`. Pico does **not** replay `messages[]` history on the Pi path. |
+| `X-Conversation-Id` | **required** and **stable**; its lifetime is edu's call (today: one per teacher per browser tab, kept in sessionStorage, renewed only on 新对话 / logout / 换校 — edu-core#833 「会话跟人走，手跟页走」). Pico never generates one. | Pi memory lives in a session file keyed by `school / membership / conversation`. Pico does **not** replay `messages[]` history on the Pi path. |
 | `model` | any allowed id; a sidebar turn that is not json_only always runs on Pi | same hands is not a side effect of the SKU string |
 | `allowed_tools` | ignored for sidebar turns (`[]`, web-only lists are not a castration) | #905 |
 | `affordances[]` | optional; in `metadata.affordances`, or in the system JSON (`affordances` / `page.affordances`), or in the json_only user JSON | see §3 |

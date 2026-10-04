@@ -424,9 +424,11 @@ async def promote_named_bind(
     search_school, search_fields = await load_named_search_flags(
         session, school_id, membership_id, ""
     )
-    if not landing_ids and not search_school and not search_fields:
-        return []
     field_id = await load_named_field_id(session, school_id, membership_id, "")
+    # #1180 ④: edu 「去办」 binds only field_id on the default slot so the next
+    # workbench conversation lands there. A field alone must promote too.
+    if not landing_ids and not search_school and not search_fields and not field_id:
+        return []
     await remember_named_ids(
         session,
         school_id,
