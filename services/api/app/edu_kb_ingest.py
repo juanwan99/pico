@@ -30,10 +30,12 @@ from app.auth import (
     feature_enabled,
     payer_for,
     require_any_scope,
+    require_person,
 )
 from app.usage_ledger import record_usage_event
 
-router = APIRouter(tags=["edu-kb-ingest"])
+# #1180 ③: every door here stands for one membership; the public steward patrol has none.
+router = APIRouter(tags=["edu-kb-ingest"], dependencies=[Depends(require_person)])
 
 MAX_BYTES = 20 * 1024 * 1024
 PKG = Path("/app/packages/field-kb-ingest")

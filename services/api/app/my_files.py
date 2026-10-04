@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.artifact_store import decode_artifact_payload
-from app.auth import Principal, require_any_scope
+from app.auth import Principal, require_any_scope, require_person
 from app.db import (
     ArtifactRow,
     EduNamedBindRow,
@@ -30,7 +30,8 @@ from app.edu_school import (
 )
 from app.run_service import get_artifact_for_principal
 
-router = APIRouter(tags=["my-files"])
+# #1180 ③: every door here stands for one membership; the public steward patrol has none.
+router = APIRouter(tags=["my-files"], dependencies=[Depends(require_person)])
 
 _FOLDER_NAME_RE = re.compile(r"^[^/\\\n\r]{1,40}$")
 _MAX_FOLDERS = 40

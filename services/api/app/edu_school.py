@@ -20,13 +20,20 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import Principal, issue_edu_read_token, issue_edu_write_token, require_any_scope
+from app.auth import (
+    Principal,
+    issue_edu_read_token,
+    issue_edu_write_token,
+    require_any_scope,
+    require_person,
+)
 from app.db import EduNamedBindRow, get_session, new_id
 from app.edu_sso import sanitize_named_ids
 from app.page_collect import attach_page_collect, sanitize_uuid, sanitize_uuid_list
 from app.settings import Settings, get_settings
 
-router = APIRouter(tags=["edu-school"])
+# #1180 ③: every door here stands for one membership; the public steward patrol has none.
+router = APIRouter(tags=["edu-school"], dependencies=[Depends(require_person)])
 logger = logging.getLogger(__name__)
 
 _CONV_RE = re.compile(r"^[A-Za-z0-9._:-]{0,128}$")

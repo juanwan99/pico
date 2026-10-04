@@ -22,9 +22,17 @@ from app.settings import Settings, get_settings
 
 _bearer = HTTPBearer(auto_error=False)
 SCHOOL_RUN_SCOPE = "ai:school-run"
+# #1180 ③: edu's public steward patrol runs on a ticket with NO membership_id
+# (SCHOOL-STEWARD-PLAN §2.1 — not a school-admin ticket, not a person). Pico
+# books it under one fixed per-school ledger slot and never mints an edu
+# membership ticket for it: its only edu door is GET /v1/pico/steward/public-corpus,
+# which edu opens with the same ticket, not through Pico.
+STEWARD_PUBLIC_SCOPE = "ai:steward-public"
+STEWARD_PUBLIC_MEMBERSHIP_ID = "steward-public"
 # feat:* are teacher-chosen switches edu signs into the token (#1042).
 REGISTERED_SCOPES = frozenset(
-    {"ai:read", "ai:run", "ai:confirm", "ai:admin", SCHOOL_RUN_SCOPE} | FEATURE_SCOPES
+    {"ai:read", "ai:run", "ai:confirm", "ai:admin", SCHOOL_RUN_SCOPE, STEWARD_PUBLIC_SCOPE}
+    | FEATURE_SCOPES
 )
 
 __all__ = ["allowance_millipoints", "feature_enabled"]
@@ -38,13 +46,27 @@ _MEMBER_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 def bill_to_from_scopes(scopes: list[str] | None) -> str:
     """Payer tag for usage_events. Token scope only — request body cannot raise to school."""
-    if SCHOOL_RUN_SCOPE in (scopes or []):
+    if SCHOOL_RUN_SCOPE in (scopes or []) or STEWARD_PUBLIC_SCOPE in (scopes or []):
         return BILL_TO_SCHOOL
     return BILL_TO_MEMBER
 
 
+def is_steward_public(principal: Any) -> bool:
+    """The school's public steward patrol — a role, not a person.
+
+    Matches the scope on a live ticket and the ledger slot on principals
+    rebuilt from stored rows (auto-land, automations), so neither path ever
+    mints an edu membership ticket for the patrol or bills it as a member.
+    """
+    if STEWARD_PUBLIC_SCOPE in (getattr(principal, "scopes", None) or []):
+        return True
+    return str(getattr(principal, "membership_id", "") or "") == STEWARD_PUBLIC_MEMBERSHIP_ID
+
+
 def payer_for(principal: Any) -> str:
     """Works on Principal and test doubles (SimpleNamespace)."""
+    if is_steward_public(principal):
+        return BILL_TO_SCHOOL
     tagged = getattr(principal, "bill_to", None)
     if tagged in {BILL_TO_SCHOOL, BILL_TO_MEMBER}:
         return str(tagged)
@@ -64,6 +86,8 @@ class Principal:
 
     @property
     def bill_to(self) -> str:
+        if self.membership_id == STEWARD_PUBLIC_MEMBERSHIP_ID:
+            return BILL_TO_SCHOOL
         return bill_to_from_scopes(self.scopes)
 
 
@@ -92,12 +116,16 @@ def issue_test_token(
 
 
 def issue_edu_read_token(principal: Principal, settings: Settings | None = None) -> str | None:
+    if is_steward_public(principal):
+        return None  # no membership behind it: no edu membership door, fail closed
     """Short pico-api JWT for this membership so edu RLS runs as that person."""
     return _issue_edu_membership_token(principal, purpose="edu-read", scopes=["ai:read"], settings=settings)
 
 
 def issue_edu_write_token(principal: Principal, settings: Settings | None = None) -> str | None:
     """Same person, write land. Not a school-wide service account."""
+    if is_steward_public(principal):
+        return None
     return _issue_edu_membership_token(
         principal,
         purpose="edu-write",
@@ -159,7 +187,6 @@ def _decode_with_key(
             "iss",
             "aud",
             "school_id",
-            "membership_id",
             "scopes",
         ]
     }
@@ -183,14 +210,6 @@ def _principal_from_claims(data: dict[str, Any]) -> Principal:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "auth.invalid", "message": "school_id must be a non-empty string"},
         )
-    if not isinstance(membership_id, str) or not membership_id.strip():
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "code": "auth.invalid",
-                "message": "membership_id must be a non-empty string",
-            },
-        )
     if (
         not isinstance(scopes, list)
         or not scopes
@@ -201,6 +220,27 @@ def _principal_from_claims(data: dict[str, Any]) -> Principal:
             detail={
                 "code": "auth.invalid",
                 "message": "scopes must be a non-empty string array",
+            },
+        )
+    has_membership = isinstance(membership_id, str) and bool(membership_id.strip())
+    if STEWARD_PUBLIC_SCOPE in scopes:
+        # A person's ticket never carries the patrol scope, and the patrol
+        # ticket never carries a person (edu verifyPicoStewardPublic agrees).
+        if has_membership:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "auth.invalid",
+                    "message": "ai:steward-public ticket must not carry membership_id",
+                },
+            )
+        membership_id = STEWARD_PUBLIC_MEMBERSHIP_ID
+    elif not has_membership:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "auth.invalid",
+                "message": "membership_id must be a non-empty string",
             },
         )
     unknown_scopes = set(scopes) - REGISTERED_SCOPES
@@ -419,6 +459,22 @@ async def require_scoped_principal(
         )
     p = decode_token(creds.credentials, settings)
     return scope_proxy_principal(p, x_pico_membership_id)
+
+
+async def require_person(
+    principal: Principal = Depends(require_scoped_principal),
+) -> Principal:
+    """Doors that stand for one edu membership (named materials, my files,
+    kb ingest, landing). The public steward patrol has no person behind it."""
+    if is_steward_public(principal):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "auth.steward_public_denied",
+                "message": "公开管家票只能跑公开巡逻，不能进个人材料口。",
+            },
+        )
+    return principal
 
 
 def billed_identity_ok(principal: Principal, *, production: bool) -> bool:
