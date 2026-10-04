@@ -52,12 +52,21 @@ def bill_to_from_scopes(scopes: list[str] | None) -> str:
 
 
 def is_steward_public(principal: Any) -> bool:
-    """The school's public steward patrol — a role, not a person."""
-    return STEWARD_PUBLIC_SCOPE in (getattr(principal, "scopes", None) or [])
+    """The school's public steward patrol — a role, not a person.
+
+    Matches the scope on a live ticket and the ledger slot on principals
+    rebuilt from stored rows (auto-land, automations), so neither path ever
+    mints an edu membership ticket for the patrol or bills it as a member.
+    """
+    if STEWARD_PUBLIC_SCOPE in (getattr(principal, "scopes", None) or []):
+        return True
+    return str(getattr(principal, "membership_id", "") or "") == STEWARD_PUBLIC_MEMBERSHIP_ID
 
 
 def payer_for(principal: Any) -> str:
     """Works on Principal and test doubles (SimpleNamespace)."""
+    if is_steward_public(principal):
+        return BILL_TO_SCHOOL
     tagged = getattr(principal, "bill_to", None)
     if tagged in {BILL_TO_SCHOOL, BILL_TO_MEMBER}:
         return str(tagged)
@@ -77,6 +86,8 @@ class Principal:
 
     @property
     def bill_to(self) -> str:
+        if self.membership_id == STEWARD_PUBLIC_MEMBERSHIP_ID:
+            return BILL_TO_SCHOOL
         return bill_to_from_scopes(self.scopes)
 
 

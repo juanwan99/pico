@@ -71,6 +71,28 @@ def test_steward_ticket_bills_school_even_without_school_run_scope() -> None:
     assert p.bill_to == "school"
 
 
+def test_rebuilt_principal_on_steward_slot_is_still_the_patrol() -> None:
+    """auto-land / automations rebuild a Principal from task rows with plain
+    scopes; the ledger slot alone must keep it out of edu and billed to school."""
+    from app.auth import Principal, payer_for
+
+    s = _settings()
+    rebuilt = Principal(
+        school_id="school-a",
+        membership_id=STEWARD_PUBLIC_MEMBERSHIP_ID,
+        scopes=["ai:read", "ai:run"],
+        iss="pico-auto-land",
+        aud="pico-api",
+        exp=0,
+        raw={},
+    )
+    assert is_steward_public(rebuilt)
+    assert rebuilt.bill_to == "school"
+    assert payer_for(rebuilt) == "school"
+    assert issue_edu_read_token(rebuilt, s) is None
+    assert issue_edu_write_token(rebuilt, s) is None
+
+
 def test_steward_ticket_with_membership_is_rejected() -> None:
     from fastapi import HTTPException
 
