@@ -214,6 +214,26 @@ def test_named_bind_stores_field_id(client) -> None:
     assert got.json()["field_id"] == field
 
 
+def test_default_slot_field_only_promotes_to_new_conversation(client) -> None:
+    """#1180 ④: edu 去办 binds only field_id on the default slot; the next
+    workbench conversation must inherit it (no ids, no search flags)."""
+    field = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    headers = {"Authorization": f"Bearer {_token()}", "X-Pico-Membership-Id": "school-a:m-edu"}
+    put = client.put(
+        "/v1/edu/named",
+        json={"conversation_id": "", "ids": [], "field_id": field},
+        headers=headers,
+    )
+    assert put.status_code == 200, put.text
+    got = client.get("/v1/edu/named", params={"conversation_id": "c-fresh"}, headers=headers)
+    assert got.status_code == 200, got.text
+    assert got.json()["field_id"] == field
+    assert got.json()["ids"] == []
+    # the default slot keeps the field for the conversation after this one
+    again = client.get("/v1/edu/named", params={"conversation_id": "c-next"}, headers=headers)
+    assert again.json()["field_id"] == field
+
+
 def test_classify_land_kind_routes_html_and_office() -> None:
     assert classify_land_kind("页.html") == "page"
     assert classify_land_kind("报告.docx") == "material"
