@@ -244,6 +244,7 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         "ok": True,
         "service": "pico-api",
         "git_sha": _resolve_git_sha(),
+        "revision": _resolve_git_sha(),
         "edu_mode": settings.pico_edu_mode,
         # Product default multi-step kernel (HANDOFF-WB-PI / true-Pi phase-2)
         "default_runtime": _resolve_default_runtime(settings),
@@ -331,6 +332,7 @@ async def meta_version(settings: Settings = Depends(get_settings)) -> dict:
         "ok": True,
         "service": "pico-api",
         "git_sha": _resolve_git_sha(),
+        "revision": _resolve_git_sha(),
         "api_version": app.version,
         "product_ui": product_ui,
         "product_ui_ok": product_ui == "librechat",
@@ -351,10 +353,13 @@ async def meta_tip() -> dict:
     Product UI exposes the same shape at GET /api/pico/tip (no JWT).
     See docs/TIP-PROBE.md.
     """
+    sha = _resolve_git_sha()
     return {
         "ok": True,
         "service": "pico-api",
-        "git_sha": _resolve_git_sha(),
+        "git_sha": sha,
+        # Same value under edu's name so one probe reads both products (#1186).
+        "revision": sha,
     }
 
 

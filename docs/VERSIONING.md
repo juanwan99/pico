@@ -12,7 +12,7 @@ RELATED: AGENTS.md 文首 · docs/ONEFLOW.md
 2. 现网 = curl https://pico.aivia.asia/api/pico/tip
 3. 可部 SHA = origin/main 上的提交（通常是 tip；回滚必须仍是 main 祖先）
 4. 长分叉只移植，禁止整枝 merge。合入只 squash（仓库只开 squash）
-5. 写码树 /home/ops/pico ≠ 生产树 /opt/pico（只 prod-update）
+5. 发版目录只有 /opt/pico（只 prod-update；`/health` 与 `/api/pico/tip` 的 `revision` = `git_sha` 自证）。ECS 的 /home/ops/pico 不是发版目录，禁止从它 compose/build——落后树会把线上打回去（#1186）
 6. STATE-NOW / 聊天 / 本地 HEAD 都不是现网版本
 ```
 

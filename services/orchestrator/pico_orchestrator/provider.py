@@ -279,6 +279,15 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
     }
 
 
+# Gemini flash via New API only turns thinking off through this literal
+# ``extra_body`` key (``reasoning_effort: none`` is ignored — probed on the
+# live gateway, #1183). Shared by the direct path and the Pi models.json
+# overlay so the fast lane means the same thing on both wires.
+GEMINI_FLASH_THINKING_OFF_BODY: dict[str, object] = {
+    "extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}
+}
+
+
 def thinking_extra_body(
     model: str | None,
     *,
@@ -301,7 +310,7 @@ def thinking_extra_body(
         if thinking:
             return {"reasoning_effort": "medium"}
         if "flash" in backend.lower():
-            return {"extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}}
+            return dict(GEMINI_FLASH_THINKING_OFF_BODY)
         return {}
     return {"thinking": {"type": "enabled" if thinking else "disabled"}}
 

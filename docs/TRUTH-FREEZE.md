@@ -93,7 +93,7 @@ RELATED: docs/HANDOFF-WB-PI.md → docs/DIRECTION-NOW.md（北极星）→ docs/
 
 | # | 冻结句 |
 |---|--------|
-| W0 | **工作法**：本窗合一。GitHub Issue/PR/SHA/CI + 公网 tip = 唯一真源。写码树 `/home/ops/pico` ≠ 生产树 `/opt/pico`（只 prod-update）。卫生=对账。禁止主管/执行者日常编制、mailbox、ECS 第二账本。真源：AGENTS 文首 |
+| W0 | **工作法**：本窗合一。GitHub Issue/PR/SHA/CI + 公网 tip = 唯一真源。发版目录只有 `/opt/pico`（只 prod-update）；ECS 的 `/home/ops/pico` 不是发版目录，禁止从它 compose/build（#1186）。卫生=对账。禁止主管/执行者日常编制、mailbox、ECS 第二账本。真源：AGENTS 文首 |
 | W1 | 只写 `juanwan99/pico`（产品主仓） |
 | W2 | 禁 PROXY=1；禁打印密钥 |
 | W3 | 本窗端到端（STAGE-PACKAGE）；旧窗1/2/4 与主管/执行者仅历史别名；无自动 E1 派工 |

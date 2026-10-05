@@ -15,8 +15,9 @@ def test_agents_md_opens_with_supreme_ban() -> None:
     assert "禁止自搞一套体系" in head
     assert "本窗合一" in head
     assert "GitHub Issue/PR/SHA/CI" in head
-    assert "写码 /home/ops/pico" in head
-    assert "生产 /opt/pico" in head
+    # #1186: one release dir. The stale ECS writer tree must never be built from.
+    assert "发版目录只有 /opt/pico" in head
+    assert "/home/ops/pico 不是发版目录" in head
     assert "主管/执行者两套编制" in head
     assert "只有 origin/main 是生产线" in head
     assert "旁支不准部" in head
@@ -112,8 +113,8 @@ def test_state_now_is_index_not_second_ledger() -> None:
     assert "在飞: " in text
     assert "GitHub Issue/PR/SHA/CI + 公网 tip" in text
     assert "本页三行是索引" in text
-    assert "写码 `/home/ops/pico`" in text
-    assert "生产 `/opt/pico`" in text
+    assert "发版目录只有 `/opt/pico`" in text
+    assert "`/home/ops/pico` 不是发版目录" in text
     assert "写本文时 tip = " in text
     assert "已收口 | [#954]" in text
     assert "已收口 | [#956]" in text
