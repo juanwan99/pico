@@ -10,7 +10,7 @@ PARENT: T-CAP-DELIVERY-FOUNDATION · G4
 
 | 通道 | 命令 / URL | 说明 |
 |------|------------|------|
-| **公网 tip（推荐）** | `curl -sS https://pico.aivia.asia/api/pico/tip` | 仅 `{ok, git_sha, revision, service}`（`revision` = `git_sha`，与 edu `/api/health` 同名），**无需登录** |
+| **公网 tip（推荐）** | `curl -sS https://pico.aivia.asia/api/pico/tip` | 仅 `{ok, git_sha, revision, service}`（`revision` = `git_sha`，与 edu `/api/health` 同名；LibreChat `routes/pico.js` 转出），**无需登录** |
 | **内网 SSH（权威）** | `bash scripts/remote-health.sh [pico-prod]` | 生产 loopback `127.0.0.1:18765/health` |
 | 登录后健康 | `GET /api/pico/health`（需 JWT） | 含 runtime/canary 摘要；勿当公网匿名口 |
 | SPA `/health` | 返回纯文本 `OK` | **不是** tip；勿当 git_sha 源 |
