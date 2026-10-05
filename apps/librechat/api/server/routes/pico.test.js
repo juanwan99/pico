@@ -63,6 +63,7 @@ describe('Pico proxy routes', () => {
     expect(response.body).toEqual({
       ok: true,
       git_sha: sha,
+      revision: sha,
       service: 'pico-api',
     });
     expect(response.body.pi_agent_canary_membership_count).toBeUndefined();
@@ -167,6 +168,7 @@ describe('Pico proxy routes', () => {
       const response = await request(app).get('/api/pico/tip');
       expect(response.status).toBe(200);
       expect(response.body.git_sha).toBeNull();
+      expect(response.body.revision).toBeNull();
       expect(response.body.ok).toBe(false);
       expect(response.body.service).toBe('pico-api');
     },

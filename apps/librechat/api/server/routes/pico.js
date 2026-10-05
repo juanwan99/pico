@@ -48,6 +48,8 @@ router.get('/tip', async (_req, res) => {
     res.status(r.status).json({
       ok: j.ok === true && Boolean(gitSha),
       git_sha: gitSha,
+      // Same value under edu's health name so one probe reads both products (#1186).
+      revision: gitSha,
       service: typeof j.service === 'string' ? j.service : 'pico-api',
     });
   } catch (e) {
