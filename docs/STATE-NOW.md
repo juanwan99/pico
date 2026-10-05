@@ -33,7 +33,7 @@ juanwan99/oneflow: 不当真源（已 Archive）
 4. **1 卡 1 PR。** CI/测/部的修补走原 PR。同卡续只在业主说还差。卡别拆太细：同层薄适配并一张。
 5. **聊天默认易失。** 约束下一窗必须落 Issue 评论或本页/`EXPERIENCE`/`TOOLING-CATALOG`。
 6. **本窗合一。** 开卡、改、测、合、部、收尾同一窗。禁主管/执行者两套编制。禁 spawn 子 agent / Cursor 云 Task。
-7. **工位分开。** 写码 `/home/ops/pico`。生产 `/opt/pico` 只 `prod-update`。禁在生产树改业务、禁 `docker compose` 当发布。
+7. **工位分开。** 写码在本机线树 `~/wt/pico--<线>`。发版目录只有 `/opt/pico`，只 `prod-update`；ECS 的 `/home/ops/pico` 不是发版目录，禁止从它 compose/build（#1186）。禁在生产树改业务、禁 `docker compose` 当发布。
 8. **真源 = GitHub + curl tip。** 禁 mailbox / 把 ECS 当第二账本。旁支不准部。合了未部必须说 live 落后 main。
 
 失真 = 旁支部 live / 整枝合长分叉 / 合了报 DONE / 凭聊天或 STATE-NOW 当真源。

@@ -9,7 +9,8 @@
 人:   本窗合一。不设主管/执行者编制。业主抽检与 CLAIM-WB 不代签。
 版本: 只有 origin/main 是生产线。旁支不准部。长分叉只移植、禁止整枝合。
       live = curl tip，必须是 origin/main 上的 SHA。GitHub 旁支头不是版本。
-工位: 写码 /home/ops/pico · 生产 /opt/pico 只 prod-update（干净+detached）
+工位: 写码在本机线树 ~/wt/pico--<线>（TASK-POLICY）· 发版目录只有 /opt/pico，只 prod-update（干净+detached）
+      ECS 的 /home/ops/pico 不是发版目录：禁止从它 compose/build；落后树会把线上打回去（#1186）
 环:   从 origin/main 开枝 → 改+测 → PR → CI绿 → squash 合 main
       → 必须 prod-update → curl tip = origin/main。业主靠现网看效果。
 合:   GitHub 只开 squash；合完自动删头枝。写仓回 main，删本任务本地枝。不攒着清。
@@ -86,7 +87,7 @@ Helper（非真源）：`bash scripts/oneflow-status.sh`
 | 隔离 | 一件事一分支一 PR。翻车回原 PR |
 | 绿档 | CI 绿即可合 |
 | 黄/红 | 另一双眼睛、exact SHA；换核/密钥/租户业主抽检。CLAIM-WB 不代签 |
-| 工位 | 写码 `/home/ops/pico`；生产 `/opt/pico` 只 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh` |
+| 工位 | 写码在本机线树 `~/wt/pico--<线>`；**发版目录只有 `/opt/pico`**，只 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`。ECS 的 `/home/ops/pico` 不是发版目录，禁止从它 compose/build（#1186） |
 | 过门 | 公网看得见结果句。CI/API 200 不算过门 |
 | 卫生 | 开窗 curl tip + 开 PR≤1。收工 tip=origin/main、写仓 `main` 干净、本任务本地枝已删。GitHub 合完删头枝。禁止自建清理器 |
 

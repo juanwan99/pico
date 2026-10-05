@@ -26,6 +26,7 @@ that the school executes after the teacher confirms.
 | `allowed_tools` | ignored for sidebar turns (`[]`, web-only lists are not a castration) | #905 |
 | `affordances[]` | optional; in `metadata.affordances`, or in the system JSON (`affordances` / `page.affordances`), or in the json_only user JSON | see §3 |
 | `"output":"json_only_no_files"` / `X-Pico-Output` | the one-shot propose contract (#577); unchanged by this document | |
+| `reasoning_effort` | OpenAI-standard, per request. `"none"` turns model thinking off on the wire (direct path **and** Pi); `low/medium/high` turns it on; absent = lane default (fast off / deep on). Sidebar turns stay off regardless. Exam transcription sends `"none"` (#1183) | #1183 |
 
 ## 2. What Pico guarantees on a sidebar turn
 

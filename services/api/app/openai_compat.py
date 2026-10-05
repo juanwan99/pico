@@ -73,6 +73,10 @@ class ChatCompletionRequest(BaseModel):
     pico_plan: bool = False
     tools: list[Any] | None = None
     allowed_tools: list[str] | None = None
+    # OpenAI-standard per-request knob (#1183). "none" turns thinking off on
+    # the wire for both the direct path and Pi; a named level turns it on;
+    # absent = the lane decides (LAW #865).
+    reasoning_effort: str | None = None
 
 
 EDU_SIDEBAR_MARK = "附属，不是用户要求"
@@ -803,6 +807,36 @@ def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
     return _dc_replace(caps, **fields)
 
 
+def _thinking_override(reasoning_effort: str | None) -> bool | None:
+    """Per-request `reasoning_effort` → thinking on/off/None (lane default)."""
+    low = str(reasoning_effort or "").strip().lower()
+    if not low:
+        return None
+    if low in {"none", "off"}:
+        return False
+    if low in {"minimal", "low", "medium", "high", "xhigh"}:
+        return True
+    return None
+
+
+def _caps_with_request_thinking(caps: Any, override: bool | None) -> Any:
+    """Apply the request's thinking choice onto RunCaps (Pi path). Runs before
+    the sidebar rule so the rail still wins (it only paints content)."""
+    if override is None or bool(getattr(caps, "thinking_on", False)) == override:
+        return caps
+    from dataclasses import replace as _dc_replace
+
+    return _dc_replace(caps, thinking_on=override)
+
+
+def _direct_thinking(*, json_only: bool, override: bool | None) -> bool | None:
+    """Direct (toolless) path: json_only and `reasoning_effort: none` are off;
+    a named level is on; otherwise the lane policy decides."""
+    if json_only or override is False:
+        return False
+    return True if override else None
+
+
 def _caps_with_sidebar_thinking(caps: Any, *, edu_sidebar: bool) -> Any:
     """Edu rail only paints `content`. Thinking stays in reasoning_content, so
     the school placeholder 正在想 never clears. Sidebar turns thinking off;
@@ -1186,6 +1220,7 @@ async def _run_and_collect(
     edu_sidebar: bool = False,
     page_affordances: list[dict[str, Any]] | None = None,
     page_title: str = "",
+    thinking_override: bool | None = None,
 ) -> Any:
     from pico_orchestrator.llm_file_pass import remember_turn_files
     from pico_orchestrator.runtime import run_agent_runtime
@@ -1212,6 +1247,7 @@ async def _run_and_collect(
     )
     # Dual-mode: Pico 快速 / Pico 深度 set their own steps/tokens/thinking.
     caps = _caps_with_dual_mode(caps, model)
+    caps = _caps_with_request_thinking(caps, thinking_override)
     caps = _caps_with_sidebar_thinking(caps, edu_sidebar=edu_sidebar)
     caps = _caps_with_plan(caps, plan_on)
     caps = _caps_with_images(caps, images)
@@ -1403,6 +1439,7 @@ async def chat_completions(
             or body.metadata.get("skillId")
         )
     json_only = is_json_only_propose(raw_prompt_with_skill, output_header=x_pico_output)
+    thinking_override = _thinking_override(body.reasoning_effort)
     native_files: list = []
     request_tools = _normalize_allowed_tools(body.allowed_tools)
     if request_tools is None:
@@ -1717,7 +1754,7 @@ async def chat_completions(
                         history=history,
                         system=system,
                         model=model,
-                        thinking=False if json_only else None,
+                        thinking=_direct_thinking(json_only=json_only, override=thinking_override),
                         usage_out=direct_usage,
                         finish_out=direct_finish,
                     ):
@@ -1762,6 +1799,7 @@ async def chat_completions(
                 edu_sidebar=edu_sidebar,
                 page_affordances=page_affordances,
                 page_title=page_title,
+                thinking_override=thinking_override,
             )
             text = result.final_text or result.error or "(empty)"
             await _finalize_run(
@@ -1887,7 +1925,7 @@ async def chat_completions(
                         history=history,
                         system=system,
                         model=model,
-                        thinking=False if json_only else None,
+                        thinking=_direct_thinking(json_only=json_only, override=thinking_override),
                         usage_out=stream_usage,
                         finish_out=stream_finish,
                     )
@@ -2118,6 +2156,7 @@ async def chat_completions(
                     )
                 # Stream path must apply the same dual-mode policy as non-stream.
                 caps = _caps_with_dual_mode(caps, model)
+                caps = _caps_with_request_thinking(caps, thinking_override)
                 caps = _caps_with_sidebar_thinking(caps, edu_sidebar=edu_sidebar)
                 caps = _caps_with_plan(caps, plan_on)
                 caps = _caps_with_images(caps, turn_images)

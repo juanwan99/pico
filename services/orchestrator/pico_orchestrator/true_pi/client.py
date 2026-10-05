@@ -7,6 +7,7 @@ Transport is injectable for unit tests (FakeTransport).
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -20,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from pico_orchestrator.ask_user import AskTimedOut
+from pico_orchestrator.provider import GEMINI_FLASH_THINKING_OFF_BODY
 from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinking_level, pi_bin
 from pico_orchestrator.true_pi.thinking import (
     incremental_text_from_update,
@@ -190,6 +192,12 @@ def true_pi_models_document(
     if gemini:
         # pico-fast: reasoning off. pico-deep: New API honors reasoning_effort.
         model_entry["reasoning"] = bool(thinking)
+        if not thinking and "flash" in mid.lower():
+            # reasoning:false only stops Pi from *asking* for thinking; Gemini
+            # flash still thinks dynamically unless the wire carries
+            # thinking_budget 0. Pi's models.json samplingParams is the
+            # official way to add request fields (#1183).
+            model_entry["samplingParams"] = copy.deepcopy(GEMINI_FLASH_THINKING_OFF_BODY)
         if thinking:
             model_entry["thinkingLevelMap"] = {
                 "off": "none",

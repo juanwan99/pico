@@ -66,7 +66,7 @@ DATE: 2026-09-02
 16. **部署真源：** `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`；证伪用 **tip-pin** + **remote-health**（见 TOOLING-CATALOG）。公网 tip 与 ECS loopback 必须同 SHA。
 17. **SSH 进机：只用 Tailscale MagicDNS。** Host 别名 `ecs` / `pico-prod` → `aliyun-hy`，用户 `ops`。禁止拿 Cloud Agent 公网 egress IP 去开安全组 22（IP 漂移 = 假通路）。
 
-80. **本窗在 ECS，工位仍两处。** 写码只动 `/home/ops/pico`。生产 `/opt/pico` 必须 detached、必须干净，只跑 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`。禁止在生产树开功能分支或改业务。禁止 `docker compose up` 当发布。不要拉 Cursor 云 Task。`scripts/spawn-executor.sh` / `scripts/ecs-grok-exec.sh` **入口已断**。业主点名 Codex 的卡仍走业主点名，不当默认。
+80. **发版目录只有 `/opt/pico`。** 写码在本机线树（`~/wt/pico--<线>`）；ECS 的 `/home/ops/pico` 不是发版目录，禁止从它 compose/build——它落后时会把线上打回去（#1186）。生产 `/opt/pico` 必须 detached、必须干净，只跑 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`。禁止在生产树开功能分支或改业务。禁止 `docker compose up` 当发布。不要拉 Cursor 云 Task。`scripts/spawn-executor.sh` / `scripts/ecs-grok-exec.sh` **入口已断**。业主点名 Codex 的卡仍走业主点名，不当默认。
 81. **开窗先自检，假红当事故。** 密钥根可以是目录（`/root/.edu-secrets` 或 `$HOME/.edu-secrets`），一钥一文件；私钥文件可以叫 `ecs_ops`。不要用 `[[ -f 目录 ]]` 判断「无钥」——目录不是文件，会假红。无钥才 BLOCKED；钥齐但 ssh 不通才是真红。自检一边 BLOCKED 一边 exit 0 = 撒谎。
 82. **不要 sudo bash 写密钥或跑装机脚本。** sudo 会清掉环境变量，看起来像没钥。tailscaled 需要提权就在脚本里对那一条 sudo，整段不要包。
 83. **Tailscale 主机名按这台沙箱的 hostname，前面加仓前缀（`pico-…`）。** 禁止设成对面仓的固定名（如 `cursor-edu-core`）——会把另一扇窗踢下线。两窗不要抢同一个 Tailscale 节点。

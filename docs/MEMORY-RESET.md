@@ -36,4 +36,4 @@
 | origin 上还挂已合 feat 枝 = 在飞 | **否** · 在飞 = 未合 PR。合完 GitHub 删头枝 |
 | 为卫生自建清理器 / 记忆账本 | **否** · GitHub 设置 + AGENTS 文首 |
 | STATE-NOW 压过 GitHub | **否** · 真源 = Issue/PR/SHA/CI + 公网 tip；STATE-NOW 是索引 |
-| 人在 ECS 就可以在 /opt/pico 改业务 | **否** · 写码 `/home/ops/pico`；生产树只 prod-update |
+| 人在 ECS 就可以在 /opt/pico 改业务 | **否** · 写码在本机线树；发版目录只有 `/opt/pico`，只 prod-update；`/home/ops/pico` 不是发版目录、禁止从它 compose/build（#1186） |

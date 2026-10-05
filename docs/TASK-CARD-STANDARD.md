@@ -15,7 +15,7 @@ SUPERSEDES: 四行短卡当派发形态
 
 点 **New Issue** 选「执行卡」或贴 **标准任务卡**（#627 体例）。卡必须自含【已锁事实】【IN】【验收】——跨窗零记忆，调查必须写进 Issue。
 
-派给本窗时：派发条可贴合同 Issue（`## 派发`）。本窗合一：开卡/改/合/部/收尾同一窗。写码 `/home/ops/pico`；生产 `/opt/pico` 只 prod-update。禁止 spawn-executor / Cursor 云 Task（入口已断）。合前 `pr-ci-ready` 一眼，禁止窗里轮询 CI。模板 [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)。卡别拆太细。
+派给本窗时：派发条可贴合同 Issue（`## 派发`）。本窗合一：开卡/改/合/部/收尾同一窗。写码在本机线树；发版目录只有 `/opt/pico`，只 prod-update（`/home/ops/pico` 不是发版目录）。禁止 spawn-executor / Cursor 云 Task（入口已断）。合前 `pr-ci-ready` 一眼，禁止窗里轮询 CI。模板 [`docs/templates/dispatch-slip.md`](./templates/dispatch-slip.md)。卡别拆太细。
 
 ## 卡面（Issue 合同）
 
