@@ -878,3 +878,108 @@ def test_fix_pair_read_as_same_word_is_flagged_not_rewritten():
     assert q["answer"] == "（1）“救赎”改为“救赎”", "flag only, never guess the wrong word"
     assert q["uncertain"] is True
     assert any("第 20 题改错答案左右读成同一个词" in w for w in out["warnings"])
+
+
+# --------------------------------------------------------------------------- pico#1193
+
+_BLOCKED = "prompt_blocked: Error code: 400 - request blocked by Gemini API: SAFETY"
+
+
+def _ink_page(bands: list[tuple[int, int]], height: int = 300) -> dict:
+    """White page with black text bands; the stub tells full page / halves apart by height."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (100, height), "white")
+    draw = ImageDraw.Draw(img)
+    for top, bottom in bands:
+        draw.rectangle((5, top, 95, bottom), fill="black")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return {"page": 2, "mime": "image/png", "data_b64": base64.b64encode(buf.getvalue()).decode()}
+
+
+def _halves_stub(top, bottom, calls: list, extra: dict | None = None):
+    """Full 300-px page is blocked; a 150-px half with ink at row 100 is the bottom one."""
+    import io
+
+    from PIL import Image
+
+    async def complete(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        img = next(p for p in messages[-1]["content"] if p["type"] == "image")
+        pic = Image.open(io.BytesIO(base64.b64decode(img["data_b64"]))).convert("L")
+        height = pic.size[1]
+        if height == 300:
+            calls.append(300)
+            out = RuntimeError(_BLOCKED)
+        elif height == 150:
+            name = "bottom" if pic.getpixel((50, 100)) < 128 else "top"
+            calls.append(name)
+            out = bottom if name == "bottom" else top
+        else:
+            calls.append(height)
+            out = (extra or {})[height]
+        if isinstance(out, BaseException):
+            raise out
+        return out
+
+    return complete
+
+
+_BANDS = [(20, 40), (110, 148), (152, 190), (250, 270)]
+
+
+def test_split_cuts_on_the_blank_row_nearest_the_middle():
+    halves = ex.split_page_image("image/png", _ink_page(_BANDS)["data_b64"])
+    import io
+
+    from PIL import Image
+
+    sizes = [Image.open(io.BytesIO(base64.b64decode(h["data_b64"]))).size for h in halves]
+    assert sizes == [(100, 150), (100, 150)]
+    assert [h["mime"] for h in halves] == ["image/png", "image/png"]
+    assert ex.split_page_image("image/jpeg", base64.b64encode(b"2").decode()) is None
+
+
+@pytest.mark.asyncio
+async def test_safety_blocked_page_is_read_as_two_halves_not_retried():
+    """pico#1193: Gemini blocks the whole chemistry key page at any safetySettings; halves pass."""
+    calls: list = []
+    top = json.dumps([
+        {"number": 8, "type": "single_choice", "answer": "C", "score": 3},
+        {"number": 15, "type": "short_answer", "answer": "（1）氧化 Fe2+", "score": 15,
+         "subs": [{"sub": 1, "answer": "氧化 Fe2+", "score": 2}]},
+    ])
+    bottom = json.dumps([
+        {"number": 0, "continued": True, "type": "short_answer",
+         "subs": [{"sub": 2, "answer": "bc", "score": 2}]},
+        {"number": 16, "type": "short_answer", "answer": "略", "score": 14},
+    ])
+    result = await ex.extract_pages(
+        [_ink_page(_BANDS)],
+        complete=_halves_stub(top, bottom, calls),
+    )
+    assert calls == [300, "top", "bottom"], "a SAFETY block is deterministic: no retry of the full page"
+    by_no = {q["number"]: q for q in result["questions"]}
+    assert sorted(by_no) == [8, 15, 16]
+    assert [s["sub"] for s in by_no[15]["subs"]] == [1, 2]
+    assert result["pages"] == [{"page": 2, "ok": True, "count": 4, "error": None, "safety": True}]
+    assert not any("没读" in w for w in result["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_half_still_blocked_keeps_the_other_half_and_tells_the_teacher():
+    calls: list = []
+    top = json.dumps([{"number": 8, "type": "single_choice", "answer": "C", "score": 3}])
+    next_page = json.dumps([{"number": 0, "continued": True, "answer": "续", "subs": [{"sub": 3, "answer": "续"}]}])
+    result = await ex.extract_pages(
+        [_ink_page(_BANDS), {**_ink_page([(10, 20)], height=200), "page": 3}],
+        complete=_halves_stub(top, RuntimeError(_BLOCKED), calls, extra={200: next_page}),
+        concurrency=1,
+    )
+    assert [q["number"] for q in result["questions"]] == [8], "page 3 continuation: page 2 tail unknown"
+    assert result["pages"][0]["ok"] is False and "下半页" in result["pages"][0]["error"]
+    assert result["warnings"] == [
+        "第 2 页被模型安全审查拦下，切成两半重读仍没读全：这页的题请老师按卷面手动录入答案"
+    ]
