@@ -134,7 +134,8 @@ def test_normalize_keeps_null_score_and_splits_letters():
     assert essay["sub_count"] == 2
     assert essay["options_count"] is None
     assert essay["blanks"] == []
-    assert ex.normalize_item({"number": 0, "answer": "A"}, page=1) is None
+    # number 0 = page-top continuation (pico#1185); attach_continued drops it with no predecessor
+    assert ex.normalize_item({"number": 0, "answer": "A"}, page=1)["number"] == 0
     assert ex.normalize_item({"answer": "A"}, page=1) is None
 
 
@@ -383,7 +384,7 @@ async def test_pages_concurrency_is_bounded_by_default(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_pages_read_at_low_effort_by_default_medium_by_env(monkeypatch):
-    """edu-core#1506: page images go out with thinking=False (low); env flips to medium (None)."""
+    """edu-core#1506: page images go out with thinking=False (low); env flips to medium (True)."""
     seen: list = []
 
     async def spy(messages, *, thinking=None, usage_out=None, model_out=None, **_):
@@ -395,7 +396,7 @@ async def test_pages_read_at_low_effort_by_default_medium_by_env(monkeypatch):
     assert seen == [False]
     monkeypatch.setenv("PICO_EXAM_EXTRACT_PAGE_EFFORT", "medium")
     await ex.extract_pages([_page(1)], complete=spy)
-    assert seen == [False, None]
+    assert seen == [False, True], "flash defaults to thinking off (#1183); medium must ask for it"
     monkeypatch.setenv("PICO_EXAM_EXTRACT_PAGE_EFFORT", "nonsense")
     assert ex.page_thinking() is False, "unknown values fall back to low, never to a slower default"
 
@@ -730,3 +731,150 @@ def test_prompts_ask_for_subs_per_sub_question():
     system = ex.load_prompts()["system"]
     assert "一问一段" in system
     assert "禁止把题分平摊到小问" in system
+
+
+# ---------------------------------------------------------------- verbatim / continued / writing (pico#1184 #1185 #1187)
+
+
+def test_prompts_copy_verbatim_and_flag_uncertain_chars():
+    system = ex.load_prompts()["system"]
+    assert "逐字照抄卷面" in system and "禁止按语义「改正」" in system
+    assert "左右两边一样，说明你把左边改正了" in system
+    assert '"uncertain"' in system
+
+
+def test_prompts_keep_writing_points_out_of_sub_questions():
+    for task in ("answers", "structure"):
+        system = ex.load_prompts(task=task)["system"]
+        assert "写作题" in system and "sub_count = 1" in system, task
+        assert "不是小问" in system, task
+
+
+def test_page_prompts_mark_page_top_continuation_and_read_answer_sheets_for_structure():
+    for task in ("answers", "structure"):
+        page = ex.load_prompts(task=task)["user_page"]
+        assert "number 写 0、continued 写 true" in page, task
+    system = ex.load_prompts(task="structure")["system"]
+    assert "老师有时只有答案卷" in system
+    assert "不要把答案卷当结构真源" not in system
+
+
+def _geo_page2() -> str:
+    return json.dumps(
+        [
+            {"number": 16, "type": "single_choice", "answer": "A", "score": 3},
+            {
+                "number": 17,
+                "type": "short_answer",
+                "answer": "（1）地形平缓（2）向西、向南",
+                "rubric": "（1）2 分一点",
+                "score": 22,
+                "subs": [
+                    {"sub": 1, "answer": "地形平缓", "score": 6},
+                    {"sub": 2, "answer": "向西、向南", "score": 4},
+                ],
+                "blanks": [{"sub": 1, "text": "", "flex": "open"}],
+            },
+        ]
+    )
+
+
+def _geo_page3() -> str:
+    return json.dumps(
+        [
+            {
+                "number": 0,
+                "continued": True,
+                "type": "short_answer",
+                "answer": "（3）灌溉水源（4）威胁与措施",
+                "rubric": "（3）2 分一点（4）2 分一点",
+                "subs": [
+                    {"sub": 3, "answer": "灌溉水源", "score": 4},
+                    {"sub": 4, "answer": "威胁与措施", "score": 8},
+                ],
+                "blanks": [{"sub": 3, "text": "", "flex": "open"}],
+            },
+            {
+                "number": 18,
+                "type": "short_answer",
+                "answer": "（1）时间分布不均",
+                "score": 4,
+                "subs": [{"sub": 1, "answer": "时间分布不均", "score": 4}],
+            },
+        ]
+    )
+
+
+@pytest.mark.asyncio
+async def test_page_top_continuation_lands_in_last_question_subs_not_rubric():
+    """pico#1185: 17 (1)(2) on page 2, (3)(4) on page 3 top → one 22-point question, 4 subs."""
+    result = await ex.extract_pages(
+        [_page(2), _page(3)], complete=_stub({2: _geo_page2(), 3: _geo_page3()})
+    )
+    by_no = {q["number"]: q for q in result["questions"]}
+    assert sorted(by_no) == [16, 17, 18]
+    q17 = by_no[17]
+    assert q17["score"] == 22 and q17["sub_count"] == 4
+    assert [s["answer"] for s in q17["subs"]] == ["地形平缓", "向西、向南", "灌溉水源", "威胁与措施"]
+    assert "（3）灌溉水源" in q17["answer"] and "（4）威胁与措施" in q17["answer"]
+    assert [b["sub"] for b in q17["blanks"]] == [1, 3]
+    assert not any("17 题小问分合计" in w for w in result["warnings"])
+    assert by_no[18]["sub_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_continuation_is_dropped_when_the_page_before_failed_or_there_is_none():
+    """A failed page hides its last question; never hang the continuation on an older one."""
+    result = await ex.extract_pages(
+        [_page(1), _page(2), _page(3)],
+        complete=_stub(
+            {1: json.dumps([{"number": 14, "type": "single_choice", "answer": "C"}]),
+             2: RuntimeError("SAFETY"),
+             3: _geo_page3()}
+        ),
+    )
+    by_no = {q["number"]: q for q in result["questions"]}
+    assert sorted(by_no) == [14, 18]
+    assert by_no[14]["subs"] == [] and by_no[14]["answer"] == "C"
+
+    alone = await ex.extract_pages([_page(3)], complete=_stub({3: _geo_page3()}))
+    assert [q["number"] for q in alone["questions"]] == [18]
+
+
+def test_number_zero_is_continuation_even_without_the_flag():
+    """Live: the model wrote number 0 but dropped "continued": true on 1 of 3 reads."""
+    assert ex.normalize_item({"number": 0, "answer": "x"}, page=1)["number"] == 0
+    assert ex.normalize_item({"continued": True, "answer": "x"}, page=1)["number"] == 0
+    assert ex.normalize_item({"answer": "x"}, page=1) is None
+    assert ex.normalize_item({"number": -1, "answer": "x"}, page=1) is None
+    page2 = ex.items_from_model_text(_geo_page2(), page=2)
+    page3 = ex.items_from_model_text(
+        json.dumps([{"number": 0, "type": "short_answer", "subs": [{"sub": 3, "answer": "灌溉水源"}]}]), page=3
+    )
+    merged = ex.merge_items(ex.attach_continued([page2, page3]))
+    assert merged[-1]["number"] == 17 and merged[-1]["sub_count"] == 3
+    assert ex.merge_items(ex.attach_continued([page3])) == []
+
+
+def test_uncertain_passes_through_and_survives_merge():
+    a = ex.items_from_model_text(json.dumps([{"number": 17, "answer": "甲", "uncertain": True}]), page=1)
+    b = ex.items_from_model_text(json.dumps([{"number": 17, "answer": "", "rubric": "细则"}]), page=2)
+    assert a[0]["uncertain"] is True and b[0]["uncertain"] is False
+    assert ex.merge_items([a, b])[0]["uncertain"] is True
+
+
+def test_fix_pair_read_as_same_word_is_flagged_not_rewritten():
+    """pico#1184: 「“X”改为“X”」 means the printed wrong word was read as the right one."""
+    assert ex.self_corrected_fix("（2）“救赎”改为“救赎”")
+    assert ex.self_corrected_fix("「概而言之」改为「概而言之」")
+    assert not ex.self_corrected_fix("（1）“偕调”改为“谐调”/“协调”（2）“救椟”改为“救赎”")
+    assert not ex.self_corrected_fix("（4）\"反应\"改为\"反映\"")
+    items = ex.items_from_model_text(
+        json.dumps([{"number": 20, "type": "fill_in_blank", "answer": "（1）“救赎”改为“救赎”", "score": 4}]),
+        page=3,
+    )
+    out = ex._finish("pages", [items], [{"page": 3, "ok": True}], [], "", {}, {})
+    q = out["questions"][0]
+    assert q["answer"] == "（1）“救赎”改为“救赎”", "flag only, never guess the wrong word"
+    assert q["uncertain"] is True
+    assert any("第 20 题改错答案左右读成同一个词" in w for w in out["warnings"])

@@ -174,6 +174,8 @@ def salvage_numbered_dicts(raw: str) -> list[dict[str, Any]]:
 
 # Sub-question level only: (1)（1）1). ①② are blanks inside one 小问, never sub-questions.
 _SUB_MARK_RE = re.compile(r"[（(]\s*(\d{1,2})\s*[）)]|(?<![\w.+\-*/^])(\d{1,2})\s*[)）]")
+# 改错题「“X”改为“Y”」: the model read the printed wrong word as the right one when X == Y.
+_FIX_PAIR_RE = re.compile(r"[“\"「]([^”\"」]{1,12})[”\"」]\s*改为\s*[“\"「]([^”\"」]{1,12})[”\"」]")
 _VISION_MISS_RE = re.compile(r"未收到|没有收到.*图|看不到.*图|无法查看|无法看到|未提供图")
 
 
@@ -184,6 +186,11 @@ def count_sub_marks(text: str | None) -> int:
     while k + 1 in nums:
         k += 1
     return max(k, 1)
+
+
+def self_corrected_fix(answer: str | None) -> bool:
+    """True when a 改错 pair reads 「X 改为 X」— the wrong word was silently corrected."""
+    return any(a.strip() == b.strip() for a, b in _FIX_PAIR_RE.findall(str(answer or "")))
 
 
 def _score_value(raw: Any) -> int | float | None:
@@ -309,11 +316,15 @@ def is_vision_miss(item: dict[str, Any]) -> bool:
 def normalize_item(
     raw: dict[str, Any], *, page: int | None, task: str = "answers"
 ) -> dict[str, Any] | None:
+    # 0 is never a 题号: the page prompt asks for number 0 on page-top continuations,
+    # and the model sometimes forgets the companion "continued": true.
     try:
         number = int(float(raw.get("number", raw.get("qno", raw.get("question_no")))))
     except (TypeError, ValueError):
-        return None
-    if number <= 0:
+        if raw.get("continued") is not True:
+            return None
+        number = 0
+    if number < 0:
         return None
     qtype = _type_from_hint(raw.get("type"))
     answer = "" if raw.get("answer") is None else str(raw.get("answer")).strip()
@@ -377,6 +388,7 @@ def normalize_item(
         "subs": subs,
         "has_figure": has_figure,
         "blanks": blanks,
+        "uncertain": raw.get("uncertain") is True,
         "source": {"page": page, "quote": quote},
     }
 
@@ -414,6 +426,39 @@ def items_from_model_text(
             continue
         items.append(item)
     return items
+
+
+def attach_continued(
+    batches: list[list[dict[str, Any]]], ok: list[bool] | None = None
+) -> list[list[dict[str, Any]]]:
+    """Page-top content with no new 题号 (number 0) belongs to the last question read so far.
+
+    One page = one model call, so the model on page 3 cannot know that its leading
+    (3)(4) continue 17 from page 2; it marks them continued and the merge order says whose.
+    Nothing read before it, or the page before it failed (its last question is unknown)
+    → dropped, never hung on a guessed number.
+    """
+    last = 0
+    out: list[list[dict[str, Any]]] = []
+    for idx, batch in enumerate(batches):
+        if ok is not None and idx < len(ok) and not ok[idx]:
+            last = 0
+        kept: list[dict[str, Any]] = []
+        for item in batch:
+            if item["number"] == 0:
+                if last:
+                    kept.append({**item, "number": last})
+                continue
+            kept.append(item)
+        if kept:
+            last = max(last, max(i["number"] for i in kept))
+        out.append(kept)
+    return out
+
+
+def _merge_blanks(prev: list[dict[str, Any]], nxt: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    have = {b["sub"] for b in prev}
+    return prev + [b for b in nxt if b["sub"] not in have]
 
 
 def _merge_rubric(prev: str, nxt: str) -> str:
@@ -462,8 +507,8 @@ def merge_items(batches: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
             else:
                 merged["sub_count"] = max(prev["sub_count"], item["sub_count"])
             merged["has_figure"] = prev["has_figure"] or item["has_figure"]
-            if not prev.get("blanks") and item.get("blanks"):
-                merged["blanks"] = item["blanks"]
+            merged["uncertain"] = bool(prev.get("uncertain") or item.get("uncertain"))
+            merged["blanks"] = _merge_blanks(prev.get("blanks") or [], item.get("blanks") or [])
             by_no[item["number"]] = merged
     return [by_no[n] for n in sorted(by_no)]
 
@@ -642,13 +687,14 @@ _DEFAULT_CONCURRENCY = 4
 # Reasoning effort for one page image. "low" (thinking=False) matched or beat "medium"
 # on every page of the 1092×1648 gold scan (21 runs, edu-core#1506) and returns rubric
 # pages in half the time; the miss-reads came from 524 px pages, not from effort.
-# "medium" (thinking=None → provider default) stays one env flip away.
+# "medium" stays one env flip away. It must ask for thinking explicitly: the provider
+# default for Gemini flash is now thinking off (#1183), so None no longer meant medium.
 _DEFAULT_PAGE_EFFORT = "low"
 
 
-def page_thinking() -> bool | None:
+def page_thinking() -> bool:
     effort = (os.environ.get("PICO_EXAM_EXTRACT_PAGE_EFFORT") or _DEFAULT_PAGE_EFFORT).strip().lower()
-    return None if effort == "medium" else False
+    return effort == "medium"
 
 
 async def _complete_with_retry(
@@ -729,6 +775,7 @@ async def extract_text(
             raise
         except Exception as exc:  # noqa: BLE001 — surfaced as model.failed below
             errors.append(exc)
+            batches.append([])
             reports.append(_failed_page(idx, exc))
             continue
         last_text = out
@@ -736,7 +783,7 @@ async def extract_text(
         batches.append(items)
         reports.append({"page": idx, "ok": True, "count": len(items), "error": None})
     wanted = roster_numbers(roster)
-    merged = merge_items(batches)
+    merged = merge_items(attach_continued(batches))
     have = {q["number"] for q in merged}
     truncated = json_looks_truncated(last_text)
     for extra in range(CONTINUE_ROUNDS):
@@ -772,7 +819,7 @@ async def extract_text(
             break
         batches.append(items)
         reports.append({"page": 100 + extra, "ok": True, "count": len(items), "error": None})
-        merged = merge_items(batches)
+        merged = merge_items(attach_continued(batches))
         have = {q["number"] for q in merged}
         truncated = json_looks_truncated(out)
     return _finish("text", batches, reports, errors, last_text, usage, model_out)
@@ -846,7 +893,8 @@ def _finish(
     usage: dict[str, Any],
     model_out: dict[str, Any],
 ) -> dict[str, Any]:
-    questions = merge_items(batches)
+    ok = [rep["ok"] for rep in reports] if len(reports) == len(batches) else None
+    questions = merge_items(attach_continued(batches, ok))
     warnings: list[str] = []
     if errors and questions:
         warnings.append(f"{len(errors)} 页没读成，其余页已合并")
@@ -861,6 +909,9 @@ def _finish(
             + "。请换清晰卷或改用带题号的 Word / 文本。",
         )
     for q in questions:
+        if self_corrected_fix(q["answer"]):
+            q["uncertain"] = True
+            warnings.append(f"第 {q['number']} 题改错答案左右读成同一个词，卷面错字可能被读成了正字，请老师按卷面核对")
         total = subs_total(q.get("subs") or [])
         if total is not None and q["score"] is not None and total != q["score"]:
             warnings.append(f"第 {q['number']} 题小问分合计 {total} ≠ 题分 {q['score']}，请老师核对")
