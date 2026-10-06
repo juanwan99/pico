@@ -9,6 +9,8 @@ No regex / heuristic fallback: an empty extraction is a failure, never a guess.
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 import json
 import os
 import re
@@ -441,8 +443,6 @@ def attach_continued(
     last = 0
     out: list[list[dict[str, Any]]] = []
     for idx, batch in enumerate(batches):
-        if ok is not None and idx < len(ok) and not ok[idx]:
-            last = 0
         kept: list[dict[str, Any]] = []
         for item in batch:
             if item["number"] == 0:
@@ -452,6 +452,8 @@ def attach_continued(
             kept.append(item)
         if kept:
             last = max(last, max(i["number"] for i in kept))
+        if ok is not None and idx < len(ok) and not ok[idx]:
+            last = 0
         out.append(kept)
     return out
 
@@ -677,6 +679,51 @@ def _failed_page(page: int, exc: BaseException) -> dict[str, Any]:
     return {"page": page, "ok": False, "count": 0, "error": f"{code}: {_preview(str(exc))}"}
 
 
+# Gemini blocks some whole pages at the prompt (``prompt_blocked … SAFETY``) whatever
+# safetySettings say: OFF / BLOCK_NONE were blocked alike on a chemistry key whose
+# halves each read fine (pico#1193). The block is deterministic, so it is never retried;
+# the page is read again as two halves instead.
+_SAFETY_BLOCK_RE = re.compile(r"prompt_blocked|blocked by Gemini|\bSAFETY\b|PROHIBITED_CONTENT")
+
+
+class SafetyBlocked(RuntimeError):
+    """The brain refused the page image itself; retrying the same bytes cannot help."""
+
+
+def is_safety_block(exc: BaseException) -> bool:
+    return isinstance(exc, SafetyBlocked) or bool(_SAFETY_BLOCK_RE.search(str(exc)))
+
+
+def split_page_image(mime: str, data_b64: str) -> list[dict[str, str]] | None:
+    """Cut a page image in two at the emptiest row of its middle third (never mid-line).
+
+    None when the bytes are not an image Pillow can open — the page then stays failed.
+    """
+    from PIL import Image
+
+    try:
+        img = Image.open(io.BytesIO(base64.b64decode(data_b64)))
+        img.load()
+    except Exception:  # noqa: BLE001 — undecodable page: no split, caller reports the block
+        return None
+    width, height = img.size
+    if height < 6:
+        return None
+    ink = img.convert("L").point(lambda v: 255 if v < 160 else 0)
+    mid = height // 2
+
+    def score(y: int) -> tuple[int, int]:
+        return ink.crop((0, y, width, y + 1)).histogram()[255], abs(y - mid)
+
+    cut = min(range(height // 3, 2 * height // 3), key=score)
+    halves = []
+    for box in ((0, 0, width, cut), (0, cut, width, height)):
+        buf = io.BytesIO()
+        img.crop(box).save(buf, format="PNG")
+        halves.append({"mime": "image/png", "data_b64": base64.b64encode(buf.getvalue()).decode()})
+    return halves
+
+
 # Relay/proxy hops in front of the brain reset connections in bursts (seen live as
 # "upstream error: do request failed" within ~1 s, three in a row inside a 10 s window,
 # then the very next request passes). Resets are cheap, so spread attempts across
@@ -720,6 +767,8 @@ async def _complete_with_retry(
         except ExtractError:
             raise
         except Exception as exc:  # noqa: BLE001 — retried, then surfaced by the caller
+            if is_safety_block(exc):
+                raise SafetyBlocked(str(exc)) from exc
             last = exc
             if n + 1 < tries:
                 await sleep(_RETRY_BACKOFF_SECONDS[min(n, len(_RETRY_BACKOFF_SECONDS) - 1)])
@@ -851,25 +900,67 @@ async def extract_pages(
     usage: dict[str, Any] = {}
     model_out: dict[str, Any] = {}
 
-    async def one(page: dict[str, Any]) -> tuple[int, list[dict[str, Any]], str, dict[str, Any]]:
-        number = int(page["page"])
+    async def read(image: dict[str, Any]) -> str:
         messages = [
             {"role": "system", "content": prompts["system"]},
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": _fill_user_template(prompts["user_page"], subject=tag, roster=roster)},
-                    {"type": "image", "mime": page["mime"], "data_b64": page["data_b64"]},
+                    {"type": "image", "mime": image["mime"], "data_b64": image["data_b64"]},
                 ],
             },
         ]
-        async with sem:
+        return await _complete_with_retry(
+            complete, messages, thinking=page_thinking(), usage=usage, model_out=model_out
+        )
+
+    async def read_halves(
+        number: int, page: dict[str, Any], blocked: SafetyBlocked
+    ) -> tuple[int, list[dict[str, Any]], str, dict[str, Any]]:
+        halves = split_page_image(page["mime"], page["data_b64"])
+        if not halves:
+            return number, [], "", {**_failed_page(number, blocked), "safety": True}
+        parts: list[list[dict[str, Any]] | None] = []
+        outs: list[str] = []
+        for half in halves:
             try:
-                out = await _complete_with_retry(
-                    complete, messages, thinking=page_thinking(), usage=usage, model_out=model_out
-                )
+                out = await read(half)
             except ExtractError:
                 raise
+            except Exception:  # noqa: BLE001 — that half stays unread, reported below
+                parts.append(None)
+                continue
+            outs.append(out)
+            parts.append(items_from_model_text(out, page=number, task=task))
+        top, bottom = parts
+        # The bottom half's leading number 0 continues the top half's last question;
+        # with the top unread its owner is unknown, so it is dropped (as across pages).
+        items = list(top or [])
+        last = max((i["number"] for i in items), default=0)
+        for item in bottom or []:
+            if item["number"] == 0 and top is None:
+                continue
+            items.append({**item, "number": last} if item["number"] == 0 and last else item)
+        missing = "".join(name for name, part in (("上", top), ("下", bottom)) if part is None)
+        report = {
+            "page": number,
+            "ok": not missing,
+            "count": len(items),
+            "error": f"SafetyBlocked: 整页被模型安全审查拦下，切半重读后{missing}半页仍没读成" if missing else None,
+            "safety": True,
+        }
+        return number, items, "\n".join(outs), report
+
+    async def one(page: dict[str, Any]) -> tuple[int, list[dict[str, Any]], str, dict[str, Any]]:
+        number = int(page["page"])
+        async with sem:
+            try:
+                out = await read(page)
+            except ExtractError:
+                raise
+            except SafetyBlocked as exc:
+                return await read_halves(number, page, exc)
             except Exception as exc:  # noqa: BLE001
                 return number, [], "", _failed_page(number, exc)
         items = items_from_model_text(out, page=number, task=task)
@@ -896,8 +987,11 @@ def _finish(
     ok = [rep["ok"] for rep in reports] if len(reports) == len(batches) else None
     questions = merge_items(attach_continued(batches, ok))
     warnings: list[str] = []
-    if errors and questions:
-        warnings.append(f"{len(errors)} 页没读成，其余页已合并")
+    blocked = [rep["page"] for rep in reports if rep.get("safety") and not rep["ok"]]
+    if len(errors) > len(blocked) and questions:
+        warnings.append(f"{len(errors) - len(blocked)} 页没读成，其余页已合并")
+    for page in blocked:
+        warnings.append(f"第 {page} 页被模型安全审查拦下，切成两半重读仍没读全：这页的题请老师按卷面手动录入答案")
     if not questions:
         if errors and len(errors) == len(reports):
             raise ExtractError("model.failed", f"上游没做成：{_preview(str(errors[-1]))}")
