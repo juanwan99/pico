@@ -227,7 +227,11 @@ class RunnerTransport(SubprocessTransport):
         del home
         models = json.dumps(self.models_document(), ensure_ascii=False, indent=2) + "\n"
         settings = (
-            json.dumps(official_compaction_settings(self.max_context), ensure_ascii=False, indent=2)
+            json.dumps(
+                official_compaction_settings(self.max_context, retry_max=self.retry_max),
+                ensure_ascii=False,
+                indent=2,
+            )
             + "\n"
         )
         seed = {

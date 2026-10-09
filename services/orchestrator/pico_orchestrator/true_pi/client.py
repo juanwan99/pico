@@ -111,9 +111,14 @@ PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
 PI_HTTP_IDLE_TIMEOUT_MS = 900_000
 PI_RETRY_MAX = 8
 PI_RETRY_BASE_DELAY_MS = 3_000
+# A run with no tools is one model answer. Upstream cuts it at the same token
+# every time (#1195): 8 retries × resumes was 36 resends and an hour. One retry.
+PI_RETRY_MAX_TOOLLESS = 1
 
 
-def official_compaction_settings(max_context: int) -> dict[str, Any]:
+def official_compaction_settings(
+    max_context: int, *, retry_max: int = PI_RETRY_MAX
+) -> dict[str, Any]:
     """Pi official compaction knobs only. Trigger: used > window - reserveTokens.
 
     LAW #865: Pico must not hard-cap the upstream window. A 256k model keeps
@@ -138,7 +143,7 @@ def official_compaction_settings(max_context: int) -> dict[str, Any]:
         # CPU is pegged (#1135): 3s doubling × 8 ≈ 13 min keeps a long task alive.
         # A model with no channel does not wait this out: the runtime aborts on
         # the first auto_retry_start and brain-HA fails over.
-        "retry": {"enabled": True, "maxRetries": PI_RETRY_MAX, "baseDelayMs": PI_RETRY_BASE_DELAY_MS},
+        "retry": {"enabled": True, "maxRetries": retry_max, "baseDelayMs": PI_RETRY_BASE_DELAY_MS},
     }
 
 
@@ -344,6 +349,9 @@ class FakeTransport(TruePiTransport):
 class SubprocessTransport(TruePiTransport):
     """Spawn ``pi --mode rpc`` with isolated session dir and no built-in tools."""
 
+    # Pi's own retry budget written into settings.json (toolless runs lower it).
+    retry_max: int = PI_RETRY_MAX
+
     def __init__(
         self,
         *,
@@ -436,7 +444,7 @@ class SubprocessTransport(TruePiTransport):
         )
         # Official Pi compaction settings (docs/compaction.md). Not a self-built
         # compressor: keepRecentTokens / reserveTokens are Pi's own knobs.
-        settings = official_compaction_settings(self.max_context)
+        settings = official_compaction_settings(self.max_context, retry_max=self.retry_max)
         settings_text = json.dumps(settings, ensure_ascii=False, indent=2) + "\n"
         (dest / "settings.json").write_text(settings_text, encoding="utf-8")
         project_pi = (self.spawn_cwd or self.session_dir) / ".pi"
