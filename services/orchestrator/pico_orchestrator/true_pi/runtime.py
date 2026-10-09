@@ -53,6 +53,8 @@ _QUEUE_CANCEL_POLL = 1.0
 _PLAN_FIRST_END_GRACE = 1.0
 # After aborting a hung tool, how long Pi gets to end the turn before Pico stops waiting.
 _HANG_ABORT_GRACE = 60.0
+# Wall for a run the caller gave no tools: one answer, not a long task (#1195).
+TOOLLESS_MAX_SECONDS = 300
 
 
 def track_open_tool(
@@ -335,6 +337,17 @@ async def _run_true_pi_once(
     if box_mode:
         allowed = [name for name in allowed if name not in BOX_HIDDEN_TOOLS]
     gateway = gateway.restricted_to(allowed)
+    # Caller asked for no Pico tools (edu json calls, #1195): one model answer,
+    # so Pi retries once, no same-session resume, and a short wall that fails.
+    toolless = caps.allowed_tools is not None and not allowed
+    if toolless:
+        from dataclasses import replace as _dc_replace_toolless
+
+        wall = int(getattr(caps, "max_seconds", 0) or 0)
+        caps = _dc_replace_toolless(
+            caps,
+            max_seconds=min(wall, TOOLLESS_MAX_SECONDS) if wall > 0 else TOOLLESS_MAX_SECONDS,
+        )
     system_text = pico_system_text(
         skill=str(getattr(caps, "skill_instruction", "") or ""),
         system_override=str(getattr(caps, "system_prompt", "") or ""),
@@ -543,6 +556,10 @@ async def _run_true_pi_once(
                     ),
                 },
             )
+            if toolless:
+                from pico_orchestrator.true_pi.client import PI_RETRY_MAX_TOOLLESS
+
+                transport.retry_max = PI_RETRY_MAX_TOOLLESS
             # Bind the tool port while writing models.json so spawn is not
             # waiting on both serially (#1005 首字).
             url_task = asyncio.create_task(tool_server.start())
@@ -802,6 +819,7 @@ async def _run_true_pi_once(
                         await salvage_outputs()
                         return await _wall_stop(
                             emit,
+                            toolless=toolless,
                             caps=caps,
                             state=state,
                             principal=principal,
@@ -931,7 +949,7 @@ async def _run_true_pi_once(
         # output brain-HA still fails over to the next model instead.
         from pico_orchestrator.true_pi.config import resume_max
 
-        budget = resume_max()
+        budget = 0 if toolless else resume_max()
         while (
             state.settled
             and state.provider_error
@@ -1002,6 +1020,7 @@ async def _run_true_pi_once(
             await salvage_outputs()
             return await _wall_stop(
                 emit,
+                toolless=toolless,
                 caps=caps,
                 state=state,
                 principal=principal,
@@ -1359,9 +1378,22 @@ async def _wall_stop(
     state: EventMapState,
     principal: Principal | None,
     tag: dict[str, Any],
+    toolless: bool = False,
 ) -> RunResult:
     """Hit Pico wall: teacher-facing pause, not a failed error bubble."""
     from pico_orchestrator.user_errors import wall_stop_teacher_text
+
+    if toolless:
+        # No work to keep: an API caller needs a timeout, not a pause note.
+        seconds = int(getattr(caps, "max_seconds", 0) or 0)
+        return await _failed(
+            emit,
+            code="timeout",
+            reason=f"model did not finish within {seconds}s (timeout)",
+            state=state,
+            principal=principal,
+            tag=tag,
+        )
 
     writes = count_write_tool_successes(state.tool_results)
     text = wall_stop_teacher_text(

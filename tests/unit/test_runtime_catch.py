@@ -189,3 +189,17 @@ def test_t_long_office_named_word_still_no_guess() -> None:
         plan = _this_round_delivery_plan(prompt)
         assert plan.force_agent is False, prompt
         assert plan.min_artifacts == 0, prompt
+
+
+def test_prepare_agent_home_toolless_retry_budget(tmp_path: Path) -> None:
+    """#1195: a toolless run writes Pi's retry budget as 1 into settings.json."""
+    t = SubprocessTransport(
+        session_dir=tmp_path / "sess",
+        tool_url="http://127.0.0.1:1",
+        tool_token="tok",
+        run_id="r-toolless",
+        spawn_cwd=tmp_path / "sess",
+    )
+    t.retry_max = 1
+    home = t.prepare_agent_home()
+    assert json.loads((home / "settings.json").read_text(encoding="utf-8"))["retry"]["maxRetries"] == 1

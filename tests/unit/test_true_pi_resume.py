@@ -381,3 +381,57 @@ async def test_retry_backoff_does_not_trip_deep_lane_fuse() -> None:
     assert result.status == "failed"
     assert [p["code"] for k, p in events if k == "run.error"] == ["pi.no_progress"]
     assert time.monotonic() - t0 >= 2.4
+
+
+async def _run_toolless(transport: FakeTransport, events: list[tuple[str, dict[str, Any]]]):
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    return await run_true_pi_agent(
+        prompt='转写，只回 {"text": ...}',
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=30, allowed_tools=[]),
+        transport=transport,
+        run_id="toolless-t",
+    )
+
+
+@pytest.mark.asyncio
+async def test_toolless_run_is_not_resumed() -> None:
+    """#1195: allowed_tools=[] is one answer; a cut stream fails, no 36 resends."""
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = FakeTransport(
+        scripted=_error_after_work(), scripted_after_prompt=[_finish()], assistant_text=""
+    )
+    result = await _run_toolless(transport, events)
+    assert result.status == "failed"
+    assert _CUT in str(result.error)
+    assert len(_prompts(transport)) == 1
+    assert not any(k == "run.resume" for k, _ in events)
+
+
+@pytest.mark.asyncio
+async def test_toolless_wall_fails_as_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1195: the toolless wall is a timeout failure, not a teacher pause note."""
+    import pico_orchestrator.true_pi.runtime as rt
+
+    monkeypatch.setattr(rt, "TOOLLESS_MAX_SECONDS", 1)
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = FakeTransport(
+        scripted=[{"type": "agent_start"}, {"type": "turn_start"}], assistant_text=""
+    )
+    result = await _run_toolless(transport, events)
+    assert result.status == "failed"
+    assert "timeout" in str(result.error)
+    assert not any(p.get("code") == "wall.stop" for k, p in events if k == "run.status")
+
+
+def test_toolless_pi_retry_budget_is_one() -> None:
+    from pico_orchestrator.true_pi.client import PI_RETRY_MAX_TOOLLESS
+
+    assert PI_RETRY_MAX_TOOLLESS == 1
+    doc = official_compaction_settings(128_000, retry_max=PI_RETRY_MAX_TOOLLESS)
+    assert doc["retry"]["maxRetries"] == 1
+    assert official_compaction_settings(128_000)["retry"]["maxRetries"] == PI_RETRY_MAX
