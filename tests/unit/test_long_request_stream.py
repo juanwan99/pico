@@ -399,3 +399,96 @@ async def test_stream_chat_overload_gives_up_and_never_replays(
         with pytest.raises(RuntimeError, match="overloaded"):
             _ = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
         assert len(slept) == want_sleeps
+
+
+class _UrlError502(Exception):
+    status_code = 502
+
+    def __init__(self) -> None:
+        super().__init__('Error code: 502 - {"message":"URLError","type":"upstream_error"}')
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_resends_once_on_5xx_before_first_byte(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1195: the vertex hop's fast 502 URLError gets one quick resend, no backoff."""
+    slept = _gemini_env(monkeypatch)
+    calls = {"n": 0}
+
+    class _Completions:
+        async def create(self, **_kwargs: object) -> object:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise _UrlError502()
+            return _text_stream("ok")
+
+    monkeypatch.setattr(
+        "pico_orchestrator.provider.AsyncOpenAI",
+        lambda **_k: SimpleNamespace(chat=SimpleNamespace(completions=_Completions())),
+    )
+    assert [p async for p in stream_chat("hi", model="pico-fast", thinking=False)] == ["ok"]
+    assert calls["n"] == 2 and slept == []
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_5xx_twice_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    _gemini_env(monkeypatch)
+    calls = {"n": 0}
+
+    class _Completions:
+        async def create(self, **_kwargs: object) -> object:
+            calls["n"] += 1
+            raise _UrlError502()
+
+    monkeypatch.setattr(
+        "pico_orchestrator.provider.AsyncOpenAI",
+        lambda **_k: SimpleNamespace(chat=SimpleNamespace(completions=_Completions())),
+    )
+    with pytest.raises(RuntimeError, match="URLError"):
+        _ = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_first_byte_timeout_resends_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1195: a thinking-off call silent past the first-byte limit is resent once."""
+    _gemini_env(monkeypatch)
+    monkeypatch.setattr("pico_orchestrator.provider.FIRST_BYTE_TIMEOUT_S", 0.05)
+    calls = {"n": 0}
+
+    class _Hung:
+        def __aiter__(self) -> _Hung:
+            return self
+
+        async def __anext__(self) -> object:
+            await asyncio.Event().wait()
+
+    class _Completions:
+        async def create(self, **_kwargs: object) -> object:
+            calls["n"] += 1
+            return _Hung() if calls["n"] == 1 else _text_stream("ok")
+
+    monkeypatch.setattr(
+        "pico_orchestrator.provider.AsyncOpenAI",
+        lambda **_k: SimpleNamespace(chat=SimpleNamespace(completions=_Completions())),
+    )
+    assert [p async for p in stream_chat("hi", model="pico-fast", thinking=False)] == ["ok"]
+    assert calls["n"] == 2
+
+    calls["n"] = 0
+
+    class _AlwaysHung:
+        async def create(self, **_kwargs: object) -> object:
+            calls["n"] += 1
+            return _Hung()
+
+    monkeypatch.setattr(
+        "pico_orchestrator.provider.AsyncOpenAI",
+        lambda **_k: SimpleNamespace(chat=SimpleNamespace(completions=_AlwaysHung())),
+    )
+    with pytest.raises(RuntimeError, match="first byte timeout"):
+        _ = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
+    assert calls["n"] == 2

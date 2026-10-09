@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from dataclasses import dataclass
 
 import httpx
@@ -399,6 +400,19 @@ OVERLOAD_RETRY_BASE_S = 3.0
 _OVERLOAD_STATUS = {429, 503, 529}
 
 
+# Thinking-off calls answer within seconds; a stall before the first byte is a
+# hung upstream, not a long think (#1195: a 385-token call sat 114 s on a 3600 s
+# read timeout). One quick resend covers that and the vertex hop's 1.7 s
+# URLError 502s. Thinking-on keeps the long read timeout (GPT can think 10 min).
+FIRST_BYTE_TIMEOUT_S = 60.0
+FIRST_BYTE_RETRIES = 1
+
+
+def _is_upstream_5xx(exc: Exception) -> bool:
+    status = getattr(exc, "status_code", None)
+    return (isinstance(status, int) and 500 <= status < 600) or "URLError" in str(exc)
+
+
 def _is_upstream_overload(exc: Exception) -> bool:
     status = getattr(exc, "status_code", None)
     return status in _OVERLOAD_STATUS or "overloaded" in str(exc).lower()
@@ -669,18 +683,43 @@ async def stream_chat(
         async for piece in _iter_chat_completions(provider, mid):
             yield piece
 
+    first_byte_s = FIRST_BYTE_TIMEOUT_S if thinking is False else None
+
     async def _with_overload_retry(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
-        for attempt in range(OVERLOAD_RETRY_MAX + 1):
+        attempt = 0
+        quick_left = FIRST_BYTE_RETRIES
+        while True:
             yielded = False
+            pieces = _iter_provider(provider, mid)
             try:
-                async for piece in _iter_provider(provider, mid):
+                while True:
+                    try:
+                        if yielded or first_byte_s is None:
+                            piece = await anext(pieces)
+                        else:
+                            piece = await asyncio.wait_for(anext(pieces), first_byte_s)
+                    except StopAsyncIteration:
+                        return
+                    except TimeoutError:
+                        raise TimeoutError(
+                            f"upstream first byte timeout after {int(first_byte_s or 0)}s"
+                        ) from None
                     yielded = True
                     yield piece
-                return
             except Exception as exc:
-                if yielded or attempt == OVERLOAD_RETRY_MAX or not _is_upstream_overload(exc):
+                if yielded:
                     raise
-            await asyncio.sleep(OVERLOAD_RETRY_BASE_S * 2**attempt)
+                if attempt < OVERLOAD_RETRY_MAX and _is_upstream_overload(exc):
+                    await asyncio.sleep(OVERLOAD_RETRY_BASE_S * 2**attempt)
+                    attempt += 1
+                    continue
+                if quick_left > 0 and (isinstance(exc, TimeoutError) or _is_upstream_5xx(exc)):
+                    quick_left -= 1
+                    continue
+                raise
+            finally:
+                with suppress(Exception):
+                    await pieces.aclose()
 
     async def _pump(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
         try:
