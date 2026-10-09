@@ -4,7 +4,8 @@
 # - no ghcr.io uv COPY
 # - npm ci --legacy-peer-deps
 # - lower default NODE heap for 2G hosts
-FROM node:24.16.0-alpine AS node
+# - FROM pinned by digest so apk/npm ci layers stay cached across deploys (#1200)
+FROM node:24.16.0-alpine@sha256:bc23e6976e92708e9eadae437d7dd180b3fd47ed75edf322d6cfa36eba4a7fc8 AS node
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
   && apk upgrade --no-cache \
