@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import sys
 from collections.abc import AsyncIterator
@@ -10,6 +11,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -246,11 +249,15 @@ async def test_agent_runtime_canary_gate_routes_only_allowlisted_membership(
             x_pico_membership_id=None,
             settings=settings,
         )
+        if isinstance(response, JSONResponse):
+            # A failed run is a 5xx with a machine code, not a 200 (#1195).
+            return {"status": response.status_code, **json.loads(response.body)}
         return response
 
     # RUNTIME off → fail closed (no loop)
     off = await complete(base_settings, "conversation-old-runtime")
-    assert "KA-4 HARD" in (off["choices"][0]["message"]["content"] or off.get("error", "") or str(off))
+    assert off["status"] == 502 and off["error"]["code"] == "upstream_error"
+    assert "KA-4 HARD" in str(off)
     not_allowlisted_settings = Settings(
         _env_file=None,
         pico_pi_agent_runtime=True,
@@ -513,8 +520,11 @@ def test_non_stream_agent_reuses_one_run_and_preserves_failure(client, monkeypat
             ],
         },
     )
-    assert response.status_code == 200, response.text
-    assert response.json()["choices"][0]["message"]["content"] == "provider unavailable"
+    # A failed run answers 502 + machine code, never 200 with the error as text (#1195).
+    assert response.status_code == 502, response.text
+    err = response.json()["error"]
+    assert err["code"] == "upstream_error" and err["retryable"] is True
+    assert err["detail"] == "provider unavailable"
 
     tasks = client.get(
         "/v1/tasks",
@@ -557,7 +567,7 @@ def test_failed_run_retry_creates_distinct_auditable_run(client, monkeypatch) ->
             ],
         },
     )
-    assert failed.status_code == 200, failed.text
+    assert failed.status_code == 502, failed.text
 
     tasks = client.get(
         "/v1/tasks",
@@ -1248,3 +1258,181 @@ def test_active_txt_artifact_is_plain_text_inline_and_attachment_on_download(
     assert download.content == file_body.encode()
     assert download.headers["content-type"].startswith("text/plain")
     assert download.headers["content-disposition"].startswith("attachment;")
+
+
+class _GoneRequest:
+    """Non-stream caller that has already hung up."""
+
+    async def is_disconnected(self) -> bool:
+        return True
+
+
+async def _fresh_db(tmp_path, monkeypatch, name: str) -> Settings:
+    monkeypatch.setenv("PICO_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / name}")
+    monkeypatch.setenv("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
+    monkeypatch.setenv("PICO_ENV", "development")
+    from app import db as dbmod
+
+    get_settings.cache_clear()
+    dbmod._engine = None
+    dbmod._Session = None
+    await init_db()
+    return Settings()
+
+
+@pytest.mark.asyncio
+async def test_non_stream_client_gone_cancels_direct_run(tmp_path, monkeypatch) -> None:
+    """#1195: a hung-up non-stream caller cancels the run and frees the slot."""
+    settings = await _fresh_db(tmp_path, monkeypatch, "gone-direct.db")
+    monkeypatch.setattr("app.openai_compat._CLIENT_GONE_POLL_S", 0.01)
+
+    async def hung_stream(*_args, **_kwargs) -> AsyncIterator[str]:
+        await asyncio.Event().wait()
+        yield ""
+
+    monkeypatch.setattr("pico_orchestrator.provider.stream_chat", hung_stream)
+    token = issue_test_token(school_id="school-a", membership_id="member-gone", settings=settings)
+    response = await asyncio.wait_for(
+        chat_completions(
+            ChatCompletionRequest(
+                model="gpt-5.6-sol",
+                stream=False,
+                messages=[ChatMessage(role="user", content="【Pico-Convo:conversation-gone】hello")],
+            ),
+            authorization=f"Bearer {token}",
+            x_conversation_id=None,
+            x_workspace_id=None,
+            x_pico_membership_id=None,
+            settings=settings,
+            request=_GoneRequest(),
+        ),
+        timeout=10,
+    )
+    assert response.status_code == 499
+    from sqlalchemy import select
+
+    async with session_factory()() as session:
+        run = (await session.execute(select(RunRow))).scalar_one()
+        assert run.status == "cancelled"
+        assert run.cancel_requested == 1
+        kinds = [
+            row.type
+            for row in (
+                await session.execute(select(EventRow).where(EventRow.run_id == run.id))
+            ).scalars()
+        ]
+        assert "run.client_gone" in kinds
+
+
+@pytest.mark.asyncio
+async def test_non_stream_direct_sends_images_in_order(tmp_path, monkeypatch) -> None:
+    """#1195: json_only direct path carries every image, in caller order."""
+    settings = await _fresh_db(tmp_path, monkeypatch, "direct-images.db")
+    seen: dict = {}
+
+    async def capture_stream(*_args, **kwargs) -> AsyncIterator[str]:
+        seen["images"] = kwargs.get("images")
+        yield '{"ok":1}'
+
+    monkeypatch.setattr("pico_orchestrator.provider.stream_chat", capture_stream)
+    monkeypatch.setattr("pico_orchestrator.provider.direct_accepts_images", lambda _m: True)
+    token = issue_test_token(school_id="school-a", membership_id="member-img", settings=settings)
+    pngs = [base64.b64encode(b"\x89PNG\r\n\x1a\n" + bytes([i])).decode() for i in range(3)]
+    content = [{"type": "text", "text": "转写"}] + [
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{data}"}}
+        for data in pngs
+    ]
+    response = await chat_completions(
+        ChatCompletionRequest(
+            model="pico-fast",
+            stream=False,
+            messages=[ChatMessage(role="user", content=content)],
+        ),
+        authorization=f"Bearer {token}",
+        x_conversation_id=None,
+        x_workspace_id=None,
+        x_pico_membership_id=None,
+        x_pico_output="json_only_no_files",
+        settings=settings,
+    )
+    assert response["choices"][0]["message"]["content"] == '{"ok":1}'
+    assert [item["data"] for item in seen["images"]] == pngs
+
+
+@pytest.mark.asyncio
+async def test_direct_images_on_blind_model_is_400(tmp_path, monkeypatch) -> None:
+    """#1195: never answer an image question without the image."""
+    settings = await _fresh_db(tmp_path, monkeypatch, "blind-images.db")
+    monkeypatch.setattr("pico_orchestrator.provider.direct_accepts_images", lambda _m: False)
+    token = issue_test_token(school_id="school-a", membership_id="member-blind", settings=settings)
+    data = base64.b64encode(b"\x89PNG\r\n\x1a\nx").decode()
+    content = [
+        {"type": "text", "text": "看图"},
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{data}"}},
+    ]
+    with pytest.raises(HTTPException) as exc:
+        await chat_completions(
+            ChatCompletionRequest(
+                model="pico-fast",
+                stream=False,
+                messages=[ChatMessage(role="user", content=content)],
+            ),
+            authorization=f"Bearer {token}",
+            x_conversation_id=None,
+            x_workspace_id=None,
+            x_pico_membership_id=None,
+            x_pico_output="json_only_no_files",
+            settings=settings,
+        )
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == "images_unsupported"
+
+
+@pytest.mark.asyncio
+async def test_non_stream_client_gone_aborts_pi_run(tmp_path, monkeypatch) -> None:
+    """#1195: Pi sees the ledger cancel, stops, and its spend is still metered."""
+    await _fresh_db(tmp_path, monkeypatch, "gone-pi.db")
+    monkeypatch.setattr("app.openai_compat._CLIENT_GONE_POLL_S", 0.01)
+    import pico_orchestrator.runtime as rt
+
+    async def until_cancelled(*, is_cancelled, **_kwargs) -> RunResult:
+        while not await is_cancelled():
+            await asyncio.sleep(0.01)
+        return RunResult(
+            status="cancelled",
+            final_text="",
+            token_usage={"prompt_tokens": 7000, "completion_tokens": 10, "total_tokens": 7010},
+        )
+
+    monkeypatch.setattr(rt, "_PI_IMPL", until_cancelled)
+    settings = Settings(
+        _env_file=None,
+        pico_pi_agent_runtime=True,
+        pico_legacy_kimi_agent_runtime=False,
+        pico_kimi_agent_runtime=False,
+        pico_pi_agent_canary_membership_ids="",
+    )
+    token = issue_test_token(school_id="school-a", membership_id="member-gone-pi", settings=settings)
+    response = await asyncio.wait_for(
+        chat_completions(
+            ChatCompletionRequest(
+                model="pico-agent",
+                stream=False,
+                messages=[ChatMessage(role="user", content="long job")],
+            ),
+            authorization=f"Bearer {token}",
+            x_conversation_id="conversation-gone-pi",
+            x_workspace_id=None,
+            x_pico_membership_id=None,
+            settings=settings,
+            request=_GoneRequest(),
+        ),
+        timeout=10,
+    )
+    assert response.status_code == 499
+    from sqlalchemy import select
+
+    async with session_factory()() as session:
+        run = (await session.execute(select(RunRow))).scalar_one()
+        assert run.status == "cancelled"
+        assert "7000" in (run.token_usage_json or "")
