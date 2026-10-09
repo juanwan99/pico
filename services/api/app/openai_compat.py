@@ -11,8 +11,8 @@ from collections.abc import AsyncIterator
 from contextlib import suppress
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pico_orchestrator.edu_sidebar import (
     SIDEBAR_PROPOSE_HINT,
     SIDEBAR_WEB_SYSTEM,
@@ -1311,6 +1311,77 @@ async def _run_and_collect(
     return result
 
 
+# Non-stream callers (edu) get the run's real outcome on the status line (#1195):
+# a failed or empty run is never a 200 whose body they cannot parse.
+_CLIENT_GONE_POLL_S = 1.0
+_CLIENT_GONE_GRACE_S = 20.0
+_TIMEOUT_MARKS = ("timeout", "timed out", "524", "超时", "wall")
+_OVERLOAD_MARKS = ("429", "503", "529", "overload", "rate limit", "频繁")
+
+
+def _failure_response(
+    error: str | None, *, status: str, run_id: str, empty: bool = False
+) -> JSONResponse:
+    """OpenAI-style error body with a machine ``code`` and ``retryable``."""
+    low = str(error or "").lower()
+    if status == "cancelled":
+        http, code, retryable = 409, "run_cancelled", False
+    elif empty:
+        http, code, retryable = 502, "empty_output", True
+    elif any(mark in low for mark in _TIMEOUT_MARKS):
+        http, code, retryable = 504, "upstream_timeout", True
+    elif any(mark in low for mark in _OVERLOAD_MARKS):
+        http, code, retryable = 503, "upstream_overloaded", True
+    else:
+        http, code, retryable = 502, "upstream_error", True
+    message = user_message_for_error(error) if error else "模型没有返回内容。"
+    return JSONResponse(
+        status_code=http,
+        content={
+            "error": {
+                "message": message,
+                "type": "upstream_error",
+                "code": code,
+                "retryable": retryable,
+                "detail": str(error or "")[:500],
+            },
+            "pico_run_id": run_id,
+        },
+    )
+
+
+async def _client_gone_first(
+    request: Request | None, work: asyncio.Task, run_id: str, *, grace: float = 0.0
+) -> bool:
+    """Wait for ``work``; True when the non-stream caller hung up first.
+
+    The run is cancelled on the ledger; a Pi run gets ``grace`` to abort on its
+    own cancel poll (and report usage), then the task is cancelled. The handler
+    returns, which frees the caller's concurrency slot (#1195).
+    """
+    while True:
+        done, _ = await asyncio.wait({work}, timeout=_CLIENT_GONE_POLL_S)
+        if done:
+            return False
+        if request is not None and await request.is_disconnected():
+            break
+    from app.run_service import request_cancel
+
+    async with session_factory()() as session:
+        run = await session.get(RunRow, run_id)
+        if run is not None:
+            with suppress(ValueError):
+                await request_cancel(session, run)
+        await append_event(session, run_id, "run.client_gone", {"source": "non_stream"})
+    if grace > 0:
+        await asyncio.wait({work}, timeout=grace)
+    if not work.done():
+        work.cancel()
+    with suppress(asyncio.CancelledError, Exception):
+        await work
+    return True
+
+
 def _sse_chunk(data: dict[str, Any]) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
@@ -1382,6 +1453,7 @@ async def chat_completions(
     x_pico_output: str | None = Header(default=None, alias="X-Pico-Output"),
     x_pico_plan: str | None = Header(default=None, alias="X-Pico-Plan"),
     settings: Settings = Depends(get_settings),
+    request: Request = None,  # type: ignore[assignment]
 ):
     import re
 
@@ -1698,6 +1770,18 @@ async def chat_completions(
     )
     if native_files and not json_only:
         use_direct = False
+    if use_direct and turn_images:
+        from pico_orchestrator.provider import direct_accepts_images
+
+        if not direct_accepts_images(model):
+            # Never answer an image question without the image (#1195).
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "images_unsupported",
+                    "message": f"模型 {model} 读不了图，图片没有发出；请换能读图的模型。",
+                },
+            )
     token_ceiling = (
         settings.pico_run_short_max_tokens if use_direct else settings.pico_run_max_tokens
     )
@@ -1741,37 +1825,34 @@ async def chat_completions(
                 system = system + "\n" + delivery_instr
             if teacher_extra:
                 system = system + "\n\n" + teacher_extra
-            parts: list[str] = []
             direct_usage: dict[str, Any] = {}
             direct_finish: dict[str, Any] = {}
-            try:
+
+            async def _direct_text() -> str:
                 if json_only and sidebar_web_hits and sidebar_web_hits.get("honest_miss"):
-                    text = honest_miss_json(sidebar_web_hits)
-                else:
-                    async for piece in stream_chat(
-                        prompt,
-                        max_tokens=effective_max_tokens,
-                        history=history,
-                        system=system,
-                        model=model,
-                        thinking=_direct_thinking(json_only=json_only, override=thinking_override),
-                        usage_out=direct_usage,
-                        finish_out=direct_finish,
-                    ):
-                        if piece:
-                            parts.append(piece)
-                    text = "".join(parts) or "(empty)"
-                await _finalize_run(
-                    run_id,
-                    status="succeeded",
-                    final_text=text,
-                    task_id=task_id,
-                    user_prompt=prompt,
-                    token_usage=direct_usage or None,
-                    bill_to=payer_for(principal),
-                )
+                    return honest_miss_json(sidebar_web_hits)
+                parts: list[str] = []
+                async for piece in stream_chat(
+                    prompt,
+                    max_tokens=effective_max_tokens,
+                    history=history,
+                    system=system,
+                    model=model,
+                    thinking=_direct_thinking(json_only=json_only, override=thinking_override),
+                    usage_out=direct_usage,
+                    finish_out=direct_finish,
+                    images=turn_images,
+                ):
+                    if piece:
+                        parts.append(piece)
+                return "".join(parts)
+
+            work = asyncio.create_task(_direct_text())
+            if await _client_gone_first(request, work, run_id):
+                return Response(status_code=499)
+            try:
+                text = work.result()
             except Exception as e:  # noqa: BLE001
-                text = f"【错误】{user_message_for_error(str(e))}"
                 await _finalize_run(
                     run_id,
                     status="failed",
@@ -1779,8 +1860,28 @@ async def chat_completions(
                     task_id=task_id,
                     bill_to=payer_for(principal),
                 )
+                return _failure_response(str(e), status="failed", run_id=run_id)
+            if not text.strip():
+                await _finalize_run(
+                    run_id,
+                    status="failed",
+                    error="empty model output",
+                    task_id=task_id,
+                    token_usage=direct_usage or None,
+                    bill_to=payer_for(principal),
+                )
+                return _failure_response(None, status="failed", run_id=run_id, empty=True)
+            await _finalize_run(
+                run_id,
+                status="succeeded",
+                final_text=text,
+                task_id=task_id,
+                user_prompt=prompt,
+                token_usage=direct_usage or None,
+                bill_to=payer_for(principal),
+            )
         else:
-            result = await _run_and_collect(
+            work = asyncio.create_task(_run_and_collect(
                 prompt,
                 principal,
                 settings,
@@ -1800,8 +1901,32 @@ async def chat_completions(
                 page_affordances=page_affordances,
                 page_title=page_title,
                 thinking_override=thinking_override,
-            )
-            text = result.final_text or result.error or "(empty)"
+            ))
+            if await _client_gone_first(request, work, run_id, grace=_CLIENT_GONE_GRACE_S):
+                gone = None
+                if work.done() and not work.cancelled() and work.exception() is None:
+                    gone = work.result()
+                await _finalize_run(
+                    run_id,
+                    status="cancelled",
+                    error="client disconnected",
+                    task_id=task_id,
+                    token_usage=getattr(gone, "token_usage", None),
+                    bill_to=payer_for(principal),
+                )
+                return Response(status_code=499)
+            try:
+                result = work.result()
+            except Exception as e:  # noqa: BLE001
+                await _finalize_run(
+                    run_id,
+                    status="failed",
+                    error=str(e),
+                    task_id=task_id,
+                    bill_to=payer_for(principal),
+                )
+                return _failure_response(str(e), status="failed", run_id=run_id)
+            text = result.final_text or ""
             await _finalize_run(
                 run_id,
                 status=result.status,
@@ -1813,6 +1938,13 @@ async def chat_completions(
                 token_usage=getattr(result, "token_usage", None),
                 bill_to=payer_for(principal),
             )
+            if result.status != "succeeded" or not text.strip():
+                return _failure_response(
+                    result.error,
+                    status=result.status,
+                    run_id=run_id,
+                    empty=result.status == "succeeded",
+                )
         payload = {
             "id": completion_id,
             "object": "chat.completion",
@@ -1928,6 +2060,7 @@ async def chat_completions(
                         thinking=_direct_thinking(json_only=json_only, override=thinking_override),
                         usage_out=stream_usage,
                         finish_out=stream_finish,
+                        images=turn_images,
                     )
                 ):
                     if piece is None:

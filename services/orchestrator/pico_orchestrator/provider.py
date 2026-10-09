@@ -352,7 +352,10 @@ def _messages_for_chat(
     *,
     history: list[dict] | None,
     system: str | None,
+    images: list[dict] | None = None,
 ) -> list[dict]:
+    from pico_orchestrator.vision import hosted_user_content
+
     messages: list[dict] = []
     if system:
         messages.append({"role": "system", "content": system})
@@ -361,8 +364,19 @@ def _messages_for_chat(
         content = h.get("content")
         if role in ("user", "assistant") and content:
             messages.append({"role": role, "content": str(content)})
-    messages.append({"role": "user", "content": prompt})
+    # Images ride the user turn in caller order (#1195), never dropped.
+    messages.append({"role": "user", "content": hosted_user_content(prompt, list(images or []))})
     return messages
+
+
+def direct_accepts_images(model: str | None) -> bool:
+    """Whether the direct path's resolved upstream id can read image parts."""
+    from pico_orchestrator.vision import model_accepts_image
+
+    cfg = resolve_provider_for_model(model)
+    if cfg is None:
+        return False
+    return model_accepts_image(resolve_model_id(model, cfg))
 
 
 def _is_auth_error(exc: Exception) -> bool:
@@ -411,11 +425,23 @@ def _responses_input_from_messages(
         if role == "system":
             instructions.append(str(content or ""))
             continue
+        if isinstance(content, list):
+            content = [_responses_part(part) for part in content]
         items.append({"role": role, "content": content if content is not None else ""})
     if not items:
         items = [{"role": "user", "content": ""}]
     joined = "\n".join(part for part in instructions if str(part).strip()) or None
     return joined, items
+
+
+def _responses_part(part: dict) -> dict:
+    """Chat ``text`` / ``image_url`` part → Responses ``input_text`` / ``input_image``."""
+    if part.get("type") == "image_url":
+        url = (part.get("image_url") or {}).get("url") or ""
+        return {"type": "input_image", "image_url": url}
+    if part.get("type") == "text":
+        return {"type": "input_text", "text": str(part.get("text") or "")}
+    return part
 
 
 def _responses_text_delta(event: object) -> str:
@@ -556,6 +582,7 @@ async def stream_chat(
     thinking: bool | None = None,
     usage_out: dict | None = None,
     finish_out: dict | None = None,
+    images: list[dict] | None = None,
 ) -> AsyncIterator[str]:
     """Stream assistant text deltas from the real model API (token-level).
 
@@ -583,7 +610,7 @@ async def stream_chat(
             "或 KIMI_API_KEY / MOONSHOT_API_KEY。密钥只放服务端，勿写入前端。"
         )
 
-    messages = _messages_for_chat(prompt, history=history, system=system)
+    messages = _messages_for_chat(prompt, history=history, system=system, images=images)
     model_id = resolve_model_id(model, cfg)
     extra_body = thinking_extra_body(model, thinking=thinking)
 
