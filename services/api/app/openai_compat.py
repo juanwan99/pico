@@ -1687,10 +1687,22 @@ async def chat_completions(
         skill_snapshot = None
         delivery_plan = None
         if json_only and not sidebar_system:
-            sidebar_system = (
-                "只输出一个 JSON 对象，不要文件或 Markdown 解释："
-                '{"summary":"一句话","mutations":[{"affordanceId":"id","params":{},"label":"短标签"}]}'
-            )
+            from pico_orchestrator.page_mutations import affordances_from_request
+
+            # The summary/mutations shape is the sidebar propose contract only.
+            # Header-only callers (exam grading) ask for their own JSON (#1195).
+            if is_json_only_propose(raw_prompt_with_skill) or affordances_from_request(
+                body.metadata, None, prompt
+            ):
+                sidebar_system = (
+                    "只输出一个 JSON 对象，不要文件或 Markdown 解释："
+                    '{"summary":"一句话","mutations":[{"affordanceId":"id","params":{},"label":"短标签"}]}'
+                )
+            else:
+                sidebar_system = (
+                    "只输出用户要求的那个 JSON，结构、字段照用户原样，"
+                    "不要文件、不要 Markdown 代码块、不要另加外壳。"
+                )
         if edu_sidebar:
             # json_only propose has affordances but no Pico tools: page hint only.
             sidebar_system = (
