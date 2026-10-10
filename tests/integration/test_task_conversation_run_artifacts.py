@@ -1360,6 +1360,46 @@ async def test_non_stream_direct_sends_images_in_order(tmp_path, monkeypatch) ->
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("prompt", "metadata", "shell"),
+    [
+        ('只返回 JSON：{"ok":true}', None, False),
+        ('{"output":"json_only_no_files","asked":"填表"}', None, True),
+        ("填表", {"affordances": [{"id": "fill_cells", "label": "填格"}]}, True),
+    ],
+)
+async def test_json_only_shell_is_propose_only(
+    tmp_path, monkeypatch, prompt, metadata, shell
+) -> None:
+    """#1195: header-only json_only gets the caller's JSON, not summary/mutations."""
+    settings = await _fresh_db(tmp_path, monkeypatch, f"json-shell-{shell}-{bool(metadata)}.db")
+    seen: dict = {}
+
+    async def capture_stream(*_args, **kwargs) -> AsyncIterator[str]:
+        seen["system"] = kwargs.get("system") or ""
+        yield '{"ok":true}'
+
+    monkeypatch.setattr("pico_orchestrator.provider.stream_chat", capture_stream)
+    token = issue_test_token(school_id="school-a", membership_id="member-json", settings=settings)
+    response = await chat_completions(
+        ChatCompletionRequest(
+            model="pico-fast",
+            stream=False,
+            messages=[ChatMessage(role="user", content=prompt)],
+            metadata=metadata,
+        ),
+        authorization=f"Bearer {token}",
+        x_conversation_id=None,
+        x_workspace_id=None,
+        x_pico_membership_id=None,
+        x_pico_output="json_only_no_files",
+        settings=settings,
+    )
+    assert response["choices"][0]["message"]["content"] == '{"ok":true}'
+    assert ("mutations" in seen["system"]) is shell
+
+
+@pytest.mark.asyncio
 async def test_direct_images_on_blind_model_is_400(tmp_path, monkeypatch) -> None:
     """#1195: never answer an image question without the image."""
     settings = await _fresh_db(tmp_path, monkeypatch, "blind-images.db")
