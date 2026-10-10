@@ -41,7 +41,11 @@ def _turn(inp: int, out: int) -> list[dict[str, Any]]:
         "content": [{"type": "text", "text": "…"}],
         "usage": _usage(inp, out),
     }
-    return [{"type": "turn_start"}, {"type": "turn_end", "message": msg}]
+    return [
+        {"type": "turn_start"},
+        {"type": "message_end", "message": msg},
+        {"type": "turn_end", "message": msg},
+    ]
 
 
 def _one_milli_per_token(usage: dict[str, Any], model: str) -> int | None:
@@ -50,7 +54,7 @@ def _one_milli_per_token(usage: dict[str, Any], model: str) -> int | None:
 
 
 @pytest.mark.asyncio
-async def test_turn_end_usage_accumulates_spend_separately_from_ledger() -> None:
+async def test_assistant_message_end_usage_accumulates_spend_separately_from_ledger() -> None:
     state = EventMapState()
 
     async def emit(k: str, p: dict[str, Any]) -> None:
@@ -61,6 +65,26 @@ async def test_turn_end_usage_accumulates_spend_separately_from_ledger() -> None
     assert state.spent_calls == 2
     assert state.spent_usage["total_tokens"] == 470
     assert state.token_usage is None  # ledger usage still only from agent_end
+
+
+@pytest.mark.asyncio
+async def test_only_assistant_message_end_counts_as_a_call() -> None:
+    """User / tool-result message_end and the turn_end echo add nothing."""
+    state = EventMapState()
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        del k, p
+
+    call = {"role": "assistant", "content": [], "usage": _usage(100, 20)}
+    for ev in [
+        {"type": "message_end", "message": {"role": "user", "content": "hi"}},
+        {"type": "message_end", "message": call},
+        {"type": "message_end", "message": {"role": "toolResult", "content": [], "usage": _usage(9, 9)}},
+        {"type": "turn_end", "message": call},
+    ]:
+        await map_event(RpcEvent(ev), emit=emit, state=state)
+    assert state.spent_calls == 1
+    assert state.spent_usage["total_tokens"] == 120
 
 
 @pytest.mark.asyncio
