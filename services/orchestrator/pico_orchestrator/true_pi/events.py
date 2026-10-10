@@ -63,8 +63,9 @@ class EventMapState:
     # at the first) until the new turn's agent_start. Prod run 2fb28c1a: the
     # stale agent_settled "settled" the resumed turn 0.5s in, blank success.
     awaiting_start: bool = False
-    # Spend so far (#1104 IN3): per model call from turn_end.message.usage.
-    # Separate from token_usage (ledger, harvested once at agent_end).
+    # Spend so far (#1104 IN3): per model call from the assistant message_end.
+    # Pi ends a turn only after its tools ran, so turn_end would miss a call that
+    # a stop mid-tool cut off (#1195). Separate from token_usage (agent_end).
     spent_usage: dict[str, Any] | None = None
     spent_calls: int = 0
     # A tool call Pico aborted for running too long; the resume prompt says so.
@@ -367,6 +368,14 @@ async def map_event(
     if kind in {"message_end", "message"}:
         msg = raw.get("message") if isinstance(raw.get("message"), dict) else raw
         custom = ""
+        if (
+            kind == "message_end"
+            and isinstance(msg, dict)
+            and msg.get("role") == "assistant"
+            and isinstance(msg.get("usage"), dict)
+        ):
+            state.spent_usage = add_usage(state.spent_usage, msg["usage"])
+            state.spent_calls += 1
         if isinstance(msg, dict):
             custom = str(msg.get("customType") or raw.get("customType") or "")
             text = _text_from_message(msg)
@@ -538,9 +547,6 @@ async def map_event(
         # Not terminal alone (multi-turn tools), but useful progress.
         state.event_kinds.append("turn.end")
         msg = raw.get("message") or {}
-        if isinstance(msg, dict) and isinstance(msg.get("usage"), dict):
-            state.spent_usage = add_usage(state.spent_usage, msg["usage"])
-            state.spent_calls += 1
         # The run's spend so far rides the ledger so 积分 can count up live (#1171).
         spent = {"usage": dict(state.spent_usage)} if state.spent_usage else {}
         await emit("agent.step", {"phase": "turn_end", "step": state.step, **spent, **tag})

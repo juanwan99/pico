@@ -107,7 +107,11 @@ async def test_finished_run_is_not_rebilled_as_stopped(tmp_path, monkeypatch) ->
 
 @pytest.mark.asyncio
 async def test_stopped_pi_turn_reports_the_calls_it_already_paid_for() -> None:
-    """Stop lands before Pi's agent_end; turn_end already carried each call's usage."""
+    """Stop lands mid-tool, before Pi's agent_end and the 2nd turn_end (#1195).
+
+    Pi emits the assistant message_end (with usage) before it runs the tools and
+    turn_end only after them, so the 2nd call is paid for but its turn never ends.
+    """
     import asyncio
     import time
 
@@ -124,9 +128,12 @@ async def test_stopped_pi_turn_reports_the_calls_it_already_paid_for() -> None:
         scripted=[
             {"type": "agent_start"},
             {"type": "turn_start"},
+            {"type": "message_end", "message": call},
             {"type": "turn_end", "message": call},
             {"type": "turn_start"},
-            {"type": "turn_end", "message": call},
+            {"type": "message_end", "message": call},
+            {"type": "tool_execution_start", "toolCallId": "t2", "toolName": "bash",
+             "args": {"command": "python build_ppt.py"}},
         ]
     )
     stop_at = time.monotonic() + 0.4
