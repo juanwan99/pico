@@ -32,6 +32,7 @@ from pico_orchestrator.sse_keepalive import (
 from pico_orchestrator.user_errors import is_wall_timeout_code, user_message_for_error
 from pydantic import BaseModel
 
+from app import json_only_replay
 from app.auth import (
     LEGACY_PROXY_MEMBERSHIP_ID,
     Principal,
@@ -1805,17 +1806,8 @@ async def chat_completions(
 
     # Direct Kimi (or DeepSeek) for non-agent models — real HTTPS API, not mock
     if not body.stream:
-        task_id, run_id = await _ledger_task_run(
-            principal=principal,
-            prompt=prompt,
-            model=model,
-            conversation_id=conversation_id,
-            workspace_id=workspace_id,
-            skill_snapshot=skill_snapshot,
-        )
+        replay_key: str | None = None
         if use_direct:
-            from pico_orchestrator.provider import stream_chat
-
             system = (
                 sidebar_system
                 if (json_only or edu_sidebar) and sidebar_system
@@ -1837,6 +1829,39 @@ async def chat_completions(
                 system = system + "\n" + delivery_instr
             if teacher_extra:
                 system = system + "\n\n" + teacher_extra
+            # #1204: edu's steward re-sends the same JSON envelope; replay the
+            # last answer. Header-only json_only (exam grading) re-runs on purpose.
+            if (
+                is_json_only_propose(raw_prompt_with_skill)
+                and sidebar_web_hits is None
+                and not turn_images
+                and not native_files
+            ):
+                replay_key = json_only_replay.replay_key(
+                    school_id=principal.school_id,
+                    membership_id=principal.membership_id,
+                    model=model,
+                    system=system,
+                    history=history,
+                    prompt=prompt,
+                    max_tokens=effective_max_tokens,
+                    thinking=_direct_thinking(json_only=json_only, override=thinking_override),
+                    affordances=page_affordances,
+                )
+                replayed = json_only_replay.get(replay_key)
+                if replayed is not None:
+                    return JSONResponse(replayed, headers={"X-Pico-Replay": "1"})
+        task_id, run_id = await _ledger_task_run(
+            principal=principal,
+            prompt=prompt,
+            model=model,
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+            skill_snapshot=skill_snapshot,
+        )
+        if use_direct:
+            from pico_orchestrator.provider import stream_chat
+
             direct_usage: dict[str, Any] = {}
             direct_finish: dict[str, Any] = {}
 
@@ -1988,6 +2013,8 @@ async def chat_completions(
         )
         if envelope:
             payload.update(envelope)
+        if replay_key and payload["choices"][0]["finish_reason"] == "stop":
+            json_only_replay.put(replay_key, payload)
         return payload
 
     async def event_stream() -> AsyncIterator[bytes]:

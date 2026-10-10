@@ -1399,6 +1399,88 @@ async def test_json_only_shell_is_propose_only(
     assert ("mutations" in seen["system"]) is shell
 
 
+async def _json_only_call(settings, prompt: str, *, member: str = "member-replay"):
+    token = issue_test_token(school_id="school-a", membership_id=member, settings=settings)
+    return await chat_completions(
+        ChatCompletionRequest(
+            model="pico-fast",
+            stream=False,
+            messages=[ChatMessage(role="user", content=prompt)],
+        ),
+        authorization=f"Bearer {token}",
+        x_conversation_id=None,
+        x_workspace_id=None,
+        x_pico_membership_id=None,
+        x_pico_output="json_only_no_files",
+        settings=settings,
+    )
+
+
+async def _usage_rows() -> int:
+    from app.db import UsageEventRow
+    from sqlalchemy import func, select
+
+    async with session_factory()() as session:
+        return int(await session.scalar(select(func.count()).select_from(UsageEventRow)))
+
+
+@pytest.mark.asyncio
+async def test_json_only_envelope_replays_identical_request(tmp_path, monkeypatch) -> None:
+    """#1204: same envelope again → last answer, no model call, no usage row."""
+    settings = await _fresh_db(tmp_path, monkeypatch, "json-replay.db")
+    calls: list[str] = []
+
+    async def counting_stream(*_args, usage_out=None, **_kwargs) -> AsyncIterator[str]:
+        calls.append("x")
+        if usage_out is not None:
+            usage_out.update({"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12})
+        yield '{"summary":"ok","mutations":[]}'
+
+    monkeypatch.setattr("pico_orchestrator.provider.stream_chat", counting_stream)
+    envelope = '{"output":"json_only_no_files","items":[{"kicker":"待我填"}]}'
+
+    first = await _json_only_call(settings, envelope)
+    usage_after_first = await _usage_rows()
+    second = await _json_only_call(settings, envelope)
+
+    assert len(calls) == 1
+    assert isinstance(second, JSONResponse)
+    assert second.headers["X-Pico-Replay"] == "1"
+    assert json.loads(second.body) == json.loads(json.dumps(first))
+    assert await _usage_rows() == usage_after_first
+
+    # One character off, or another member → a real call.
+    await _json_only_call(settings, envelope.replace("待我填", "待我审"))
+    await _json_only_call(settings, envelope, member="member-other")
+    assert len(calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_json_only_replay_skips_header_only_and_failures(tmp_path, monkeypatch) -> None:
+    """#1204: exam grading re-runs on purpose; a failed answer is never replayed."""
+    settings = await _fresh_db(tmp_path, monkeypatch, "json-replay-skip.db")
+    calls: list[str] = []
+    replies = iter(["", '{"ok":true}', '{"ok":true}', '{"ok":true}'])
+
+    async def scripted_stream(*_args, **_kwargs) -> AsyncIterator[str]:
+        calls.append("x")
+        yield next(replies)
+
+    monkeypatch.setattr("pico_orchestrator.provider.stream_chat", scripted_stream)
+    envelope = '{"output":"json_only_no_files","asked":"填表"}'
+    failed = await _json_only_call(settings, envelope)
+    assert isinstance(failed, JSONResponse) and failed.status_code >= 500
+    ok = await _json_only_call(settings, envelope)
+    assert ok["choices"][0]["message"]["content"] == '{"ok":true}'
+    assert len(calls) == 2
+
+    grading = '只返回 JSON：{"ok":true}'
+    await _json_only_call(settings, grading)
+    again = await _json_only_call(settings, grading)
+    assert not isinstance(again, JSONResponse)
+    assert len(calls) == 4
+
+
 @pytest.mark.asyncio
 async def test_direct_images_on_blind_model_is_400(tmp_path, monkeypatch) -> None:
     """#1195: never answer an image question without the image."""

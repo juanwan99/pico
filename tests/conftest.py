@@ -9,4 +9,19 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
 os.environ.setdefault("PICO_OFFICE_URL", "embedded")
+
+
+@pytest.fixture(autouse=True)
+def _empty_json_only_replay():
+    """#1204: a replayed answer from one test must not leak into the next."""
+    try:
+        from app import json_only_replay
+    except ImportError:
+        yield
+        return
+    json_only_replay.clear()
+    yield
+    json_only_replay.clear()
