@@ -85,6 +85,7 @@ class ActBody(BaseModel):
     values: list[str] = Field(default_factory=list)
     key: str = Field(default="", max_length=32)
     submit: bool = False
+    slowly: bool = False
     url: str = Field(default="", max_length=2048)
     seconds: float = 0.0
     text_gone: str = Field(default="", max_length=400)
@@ -314,6 +315,7 @@ async def act_session(
             values=list(body.values or []),
             key=body.key,
             submit=body.submit,
+            slowly=body.slowly,
             url=body.url,
             seconds=body.seconds,
             text_gone=body.text_gone,

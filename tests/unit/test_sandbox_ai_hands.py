@@ -1,6 +1,6 @@
 """AI hands on the B2 pane (#1207 · #1206 step 2): act by snapshot ref.
 
-Upstream = Playwright aria snapshot (`aria_snapshot(ref=True)`) + `aria-ref=` selector
+Upstream = Playwright aria snapshot (`aria_snapshot(mode="ai")`) + `aria-ref=` selector
 + `storage_state` for the teacher's saved login. Pico only wires the gateway tool →
 sidecar → page. Humans keep password / captcha typing and payment; the AI may
 click login and submit (owner 2026-10-11 09:17「简单、有效」).
@@ -97,8 +97,8 @@ def _png() -> bytes:
 class FakeFormPage:
     """Stand-in for PlaywrightPage with the BrowserHands surface.
 
-    Refs: s1e1 name box · s1e2 password box · s1e3 captcha box · s1e4 pizza
-    select · s1e5 login button · s1e6 next link · s1e7 submit button · s1e8 pay.
+    Refs: e1 name box · e2 password box · e3 captcha box · e4 pizza
+    select · e5 login button · e6 next link · e7 submit button · e8 pay.
     """
 
     def __init__(self, url: str, login_state: dict[str, Any] | None = None) -> None:
@@ -106,7 +106,7 @@ class FakeFormPage:
         self._url = url
         self.login_state = login_state
         self.logged_in = bool(login_state)
-        self.fields: dict[str, str] = {"s1e1": "", "s1e2": "hunter2", "s1e3": ""}
+        self.fields: dict[str, str] = {"e1": "", "e2": "hunter2", "e3": ""}
         self.selected = "small"
         self.keys: list[str] = []
         self.waited: list[tuple[str, str, float]] = []
@@ -145,18 +145,18 @@ class FakeFormPage:
     # ---- hands ----
     def _info(self, ref: str) -> dict[str, Any]:
         table = {
-            "s1e1": {"tag": "INPUT", "type": "text", "name": "name"},
-            "s1e2": {"tag": "INPUT", "type": "password", "name": "pwd"},
-            "s1e3": {"tag": "INPUT", "type": "text", "name": "code", "placeholder": "请输入验证码"},
-            "s1e4": {"tag": "SELECT", "type": "select-one"},
-            "s1e5": {"tag": "BUTTON", "type": "submit", "text": "登录", "in_login_form": True},
-            "s1e6": {"tag": "A", "text": "下一页"},
-            "s1e7": {"tag": "INPUT", "type": "submit", "value": "提交报名"},
-            "s1e8": {"tag": "BUTTON", "type": "button", "text": "立即支付"},
+            "e1": {"tag": "INPUT", "type": "text", "name": "name"},
+            "e2": {"tag": "INPUT", "type": "password", "name": "pwd"},
+            "e3": {"tag": "INPUT", "type": "text", "name": "code", "placeholder": "请输入验证码"},
+            "e4": {"tag": "SELECT", "type": "select-one"},
+            "e5": {"tag": "BUTTON", "type": "submit", "text": "登录", "in_login_form": True},
+            "e6": {"tag": "A", "text": "下一页"},
+            "e7": {"tag": "INPUT", "type": "submit", "value": "提交报名"},
+            "e8": {"tag": "BUTTON", "type": "button", "text": "立即支付"},
         }
         import re
 
-        if not re.fullmatch(r"(?:s\d+)?e\d+", ref):
+        if not re.fullmatch(r"(?:f\d+)?e\d+", ref):
             raise ToolError("tool.invalid_arguments", "ref 必须是快照里的编号")
         if ref not in table:
             raise ToolError("sandbox.ref_stale", "这个编号在当前页面上找不到")
@@ -164,15 +164,15 @@ class FakeFormPage:
 
     async def snapshot(self) -> str:
         raw = (
-            f'- textbox "姓名" [ref=s1e1]: {self.fields["s1e1"]}\n'
-            f'- textbox "密码" [ref=s1e2]: {self.fields["s1e2"]}\n'
-            f'- textbox "验证码" [ref=s1e3]: {self.fields["s1e3"]}\n'
-            f'- combobox "披萨" [ref=s1e4]: {self.selected}\n'
-            '- button "登录" [ref=s1e5]\n'
-            '- link "下一页" [ref=s1e6]\n'
-            '- button "提交报名" [ref=s1e7]\n'
+            f'- textbox "姓名" [ref=e1]: {self.fields["e1"]}\n'
+            f'- textbox "密码" [ref=e2]: {self.fields["e2"]}\n'
+            f'- textbox "验证码" [ref=e3]: {self.fields["e3"]}\n'
+            f'- combobox "披萨" [ref=e4]: {self.selected}\n'
+            '- button "登录" [ref=e5]\n'
+            '- link "下一页" [ref=e6]\n'
+            '- button "提交报名" [ref=e7]\n'
         )
-        return mask_secret_values(raw, [self.fields["s1e2"]])
+        return mask_secret_values(raw, [self.fields["e2"]])
 
     async def navigate(self, url: str) -> None:
         parse_public_http_url(url)
@@ -220,11 +220,11 @@ class FakeFormPage:
             from sandbox_worker.browser import human_required
 
             raise human_required(step)
-        if ref == "s1e6":
+        if ref == "e6":
             self._url = self._url.rstrip("/") + "/page2"
-        if ref == "s1e5":
+        if ref == "e5":
             self.logged_in = True
-        if ref == "s1e7":
+        if ref == "e7":
             self._url = self._url.rstrip("/") + "/done"
 
     async def save_login(self, path: Path) -> None:
@@ -232,7 +232,7 @@ class FakeFormPage:
         cookies = [{"name": "sid", "value": "teacher-session"}] if self.logged_in else []
         path.write_text(json.dumps({"cookies": cookies, "origins": []}), encoding="utf-8")
 
-    async def type_ref(self, ref: str, text: str, *, submit: bool) -> None:
+    async def type_ref(self, ref: str, text: str, *, submit: bool, slowly: bool = False) -> None:
         info = self._info(ref)
         step = is_human_only_field(info)
         if step:
@@ -304,7 +304,7 @@ def test_human_only_fields_password_and_captcha() -> None:
 
 
 def test_mask_secret_values_hides_password_text() -> None:
-    raw = '- textbox "密码" [ref=s1e2]: hunter2\n- text: hunter2 appears again\n'
+    raw = '- textbox "密码" [ref=e2]: hunter2\n- text: hunter2 appears again\n'
     out = mask_secret_values(raw, ["hunter2", ""])
     assert "hunter2" not in out
     assert out.count(SECRET_MASK) == 2
@@ -344,16 +344,16 @@ async def test_fill_select_click_act_on_page_and_return_fresh_snapshot(hands_run
     owner = P("school-a", "member-a", ["ai:run"])
     await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
     typed = await gw.invoke(
-        owner, "sandbox_browser_type", {"ref": "s1e1", "text": "张三", "element": "姓名"}
+        owner, "sandbox_browser_type", {"ref": "e1", "text": "张三", "element": "姓名"}
     )
-    assert pages[0].fields["s1e1"] == "张三"
+    assert pages[0].fields["e1"] == "张三"
     assert '[ref=e1]: 张三' in typed["snapshot"]
     picked = await gw.invoke(
-        owner, "sandbox_browser_select_option", {"ref": "s1e4", "values": ["medium"]}
+        owner, "sandbox_browser_select_option", {"ref": "e4", "values": ["medium"]}
     )
     assert pages[0].selected == "medium"
     assert "medium" in picked["snapshot"]
-    clicked = await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e6"})
+    clicked = await gw.invoke(owner, "sandbox_browser_click", {"ref": "e6"})
     assert clicked["url"].endswith("/page2")
     pressed = await gw.invoke(owner, "sandbox_browser_press_key", {"key": "Tab"})
     assert pages[0].keys == ["Tab"]
@@ -370,18 +370,18 @@ async def test_back_hover_tabs_and_dialog_note_reach_the_model(hands_runtime) ->
     gw = _gw()
     owner = P("school-a", "member-a", ["ai:run"])
     await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
-    await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e6"})
+    await gw.invoke(owner, "sandbox_browser_click", {"ref": "e6"})
     back = await gw.invoke(owner, "sandbox_browser_navigate_back", {})
     assert back["url"] == "https://example.com"
     assert back["action"] == "navigate_back"
     assert "tabs" not in back  # one tab: no noise
-    await gw.invoke(owner, "sandbox_browser_hover", {"ref": "s1e6"})
-    assert pages[0].hovered == ["s1e6"]
+    await gw.invoke(owner, "sandbox_browser_hover", {"ref": "e6"})
+    assert pages[0].hovered == ["e6"]
     with pytest.raises(ToolError):
         await gw.invoke(owner, "sandbox_browser_hover", {})
     pages[0].dialogs.append("确定提交?")
     pages[0].second_tab = "https://example.com/b"
-    clicked = await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e7", "double_click": True})
+    clicked = await gw.invoke(owner, "sandbox_browser_click", {"ref": "e7", "double_click": True})
     assert pages[0].keys[-1] == "dblclick"
     assert clicked["dialogs"] == ["确定提交?"]
     assert "页面弹窗「确定提交?」，已点确定" in clicked["message"]
@@ -406,14 +406,14 @@ async def test_fill_form_and_upload_from_disk_and_ledger(hands_runtime) -> None:
         owner,
         "sandbox_browser_fill_form",
         {"fields": [
-            {"ref": "s1e1", "value": "张三", "name": "姓名"},
-            {"ref": "s1e2", "value": "pw"},
-            {"ref": "s1e3", "value": "1234"},
+            {"ref": "e1", "value": "张三", "name": "姓名"},
+            {"ref": "e2", "value": "pw"},
+            {"ref": "e3", "value": "1234"},
         ]},
     )
-    assert pages[0].fields["s1e1"] == "张三"
-    assert pages[0].fields["s1e2"] == "hunter2"  # password untouched
-    assert pages[0].fields["s1e3"] == ""
+    assert pages[0].fields["e1"] == "张三"
+    assert pages[0].fields["e2"] == "hunter2"  # password untouched
+    assert pages[0].fields["e3"] == ""
     assert "密码、验证码格留给老师" in filled["message"]
     assert filled["action"] == "fill_form"
     with pytest.raises(ToolError):
@@ -424,7 +424,7 @@ async def test_fill_form_and_upload_from_disk_and_ledger(hands_runtime) -> None:
     up = await gw.invoke(
         owner,
         "sandbox_browser_file_upload",
-        {"ref": "s1e1", "filenames": ["../成绩.xlsx"], "artifact_ids": [doc["artifact_id"]]},
+        {"ref": "e1", "filenames": ["../成绩.xlsx"], "artifact_ids": [doc["artifact_id"]]},
     )
     assert up["action"] == "file_upload"
     assert [(n, b) for n, _, b in pages[0].uploaded] == [
@@ -433,9 +433,9 @@ async def test_fill_form_and_upload_from_disk_and_ledger(hands_runtime) -> None:
     ]
     assert pages[0].uploaded[0][1].startswith("application/")
     with pytest.raises(ToolError):
-        await gw.invoke(owner, "sandbox_browser_file_upload", {"ref": "s1e1"})
+        await gw.invoke(owner, "sandbox_browser_file_upload", {"ref": "e1"})
     with pytest.raises(ToolError):
-        await gw.invoke(owner, "sandbox_browser_file_upload", {"ref": "s1e1", "filenames": ["没有.pdf"]})
+        await gw.invoke(owner, "sandbox_browser_file_upload", {"ref": "e1", "filenames": ["没有.pdf"]})
 
 
 @pytest.mark.asyncio
@@ -461,19 +461,19 @@ async def test_password_captcha_pay_stay_with_human_login_submit_are_ai(hands_ru
     owner = P("school-a", "member-a", ["ai:run"])
     await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
     for args in (
-        ("sandbox_browser_click", {"ref": "s1e8"}),  # 立即支付
-        ("sandbox_browser_type", {"ref": "s1e2", "text": "pw"}),  # password box
-        ("sandbox_browser_type", {"ref": "s1e3", "text": "1234"}),  # captcha box
+        ("sandbox_browser_click", {"ref": "e8"}),  # 立即支付
+        ("sandbox_browser_type", {"ref": "e2", "text": "pw"}),  # password box
+        ("sandbox_browser_type", {"ref": "e3", "text": "1234"}),  # captcha box
     ):
         with pytest.raises(ToolError) as exc:
             await gw.invoke(owner, *args)
         assert exc.value.code == HUMAN_REQUIRED_CODE
         assert "自己" in exc.value.message
-    assert pages[0].fields["s1e2"] == "hunter2"  # untouched
-    assert pages[0].fields["s1e3"] == ""
-    await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e5"})  # 登录
+    assert pages[0].fields["e2"] == "hunter2"  # untouched
+    assert pages[0].fields["e3"] == ""
+    await gw.invoke(owner, "sandbox_browser_click", {"ref": "e5"})  # 登录
     assert pages[0].logged_in is True
-    done = await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e7"})  # 提交报名
+    done = await gw.invoke(owner, "sandbox_browser_click", {"ref": "e7"})  # 提交报名
     assert done["url"].endswith("/done")
 
 
@@ -485,7 +485,7 @@ async def test_login_is_kept_per_teacher_for_next_open(hands_runtime, tmp_path: 
     other = P("school-a", "member-b", ["ai:run"])
     opened = await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
     assert pages[0].login_state is None
-    await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e5"})
+    await gw.invoke(owner, "sandbox_browser_click", {"ref": "e5"})
     saved = tmp_path / "disks" / "school-a" / "member-a" / LOGIN_FILE
     assert read_login_state(saved)["cookies"][0]["value"] == "teacher-session"
     # Hidden from the teacher's file list.
@@ -563,7 +563,7 @@ async def test_other_tenant_cannot_act_on_my_desk(hands_runtime) -> None:
     other = P("school-b", "member-b", ["ai:run"])
     opened = await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
     with pytest.raises(ToolError) as exc:
-        await gw.invoke(other, "sandbox_browser_click", {"ref": "s1e6", "session_id": opened["session_id"]})
+        await gw.invoke(other, "sandbox_browser_click", {"ref": "e6", "session_id": opened["session_id"]})
     assert exc.value.code == "sandbox.forbidden"
     with pytest.raises(ToolError) as exc:
         await gw.invoke(other, "sandbox_browser_snapshot", {})
@@ -581,7 +581,7 @@ async def test_hands_bill_as_sandbox_usage(hands_runtime) -> None:
     owner = P("school-a", "member-a", ["ai:run"])
     with patch("app.usage_ledger.record_usage_event", fake_record):
         await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
-        await gw.invoke(owner, "sandbox_browser_type", {"ref": "s1e1", "text": "secret-name"})
+        await gw.invoke(owner, "sandbox_browser_type", {"ref": "e1", "text": "secret-name"})
     rows = [r for r in captured if (r.get("extra") or {}).get("tool") == "sandbox_browser_type"]
     assert rows and rows[0].get("kind") == "sandbox"
     extra = rows[0]["extra"]
@@ -594,7 +594,7 @@ async def test_hands_bill_as_sandbox_usage(hands_runtime) -> None:
 
 @pytest.mark.asyncio
 async def test_real_chromium_snapshot_refs_fill_select_and_handoff() -> None:
-    """Playwright 1.52 `aria_snapshot(ref=True)` + `aria-ref=` drive a real form."""
+    """Playwright `aria_snapshot(mode="ai")` + `aria-ref=` drive a real form."""
     pytest.importorskip("playwright.async_api")
     from playwright.async_api import async_playwright
     from sandbox_worker.browser import CHROMIUM_ARGS, PlaywrightPage
@@ -664,7 +664,7 @@ async def test_real_chromium_snapshot_refs_fill_select_and_handoff() -> None:
         assert exc.value.code == "sandbox.action_failed"
         # Refs from a stale snapshot are a clean error, not a crash.
         with pytest.raises(ToolError) as exc:
-            await hands.click_ref("s9e999")
+            await hands.click_ref("e999")
         assert exc.value.code == "sandbox.ref_stale"
         # Saved login round-trips through Playwright storage_state.
         await context.add_cookies(
@@ -714,7 +714,7 @@ async def test_action_after_snapshot_returns_only_the_change(hands_runtime) -> N
     full = await gw.invoke(owner, "sandbox_browser_snapshot", {})
     assert full["snapshot_mode"] == "full"
     typed = await gw.invoke(owner, "sandbox_browser_type", {"ref": "e1", "text": "张三"})
-    assert pages[0].fields["s1e1"] == "张三"  # stable e1 → Playwright s1e1
+    assert pages[0].fields["e1"] == "张三"  # stable e1 → Playwright e1
     assert typed["snapshot_mode"] == "delta"
     assert '[ref=e1]: 张三' in typed["snapshot"]
     assert "提交报名" not in typed["snapshot"]

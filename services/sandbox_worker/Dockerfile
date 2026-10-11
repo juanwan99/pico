@@ -27,7 +27,7 @@ RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --upgrade pip
 
 COPY requirements.txt /app/requirements.txt
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ -r /app/requirements.txt \
-    && pip install -i https://mirrors.aliyun.com/pypi/simple/ playwright==1.52.0
+    && pip install -i https://mirrors.aliyun.com/pypi/simple/ playwright==1.63.0
 
 # pico-office (same image, second service): office scripts get a full Python.
 # Mature PyPI only; not a science stack. requests is pointless (network none).
