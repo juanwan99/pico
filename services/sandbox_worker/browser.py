@@ -1,12 +1,14 @@
 """Thin Playwright/Chromium adapter for B2.
 
-Upstream: Playwright Chromium. Pico only wires web_guard, tmpfs/memory
-cookies, screenshots, and human-in-the-loop input. Not a second agent loop.
+Upstream: Playwright Chromium. Pico only wires web_guard, the teacher's saved
+login (Playwright ``storage_state``), screenshots, and human-in-the-loop input.
+Not a second agent loop.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -31,10 +33,10 @@ GOTO_TIMEOUT_MS = 20_000
 SNAPSHOT_MAX_CHARS = 30_000
 SECRET_MASK = "••••"
 WAIT_MAX_S = 30.0
-# Human-only steps: the sidecar refuses these clicks/keystrokes mechanically.
-# Login, payment and the final submit stay with the teacher (owner 2026-10-11).
+# Human-only steps: typing a password or captcha, and paying. Everything else
+# (login button, submit) the AI may click (owner 2026-10-11 09:17「简单、有效」).
 HANDOFF_RE = re.compile(
-    r"登\s*[录陆]|sign\s*in|log\s*in|支付|付款|缴费|付费|\bpay\b|checkout|结算|提交|submit",
+    r"支付|付款|缴费|付费|\bpay\b|checkout|结算",
     re.IGNORECASE,
 )
 CAPTCHA_RE = re.compile(r"验证码|captcha|短信码|动态码", re.IGNORECASE)
@@ -108,22 +110,30 @@ def mask_secret_values(snapshot: str, secrets: list[str]) -> str:
 def human_required(step: str) -> ToolError:
     return ToolError(
         HUMAN_REQUIRED_CODE,
-        f"这一步（{step}）要老师自己在沙箱画面里做；AI 不代登录、不碰密码和验证码、不替人付款或提交。"
+        f"这一步（{step}）要老师自己在沙箱画面里做：输密码、填验证码、付款只能人来。"
         "做完后再调用 sandbox_browser_snapshot 继续。",
     )
 
 
 def is_handoff_control(info: dict[str, Any]) -> str | None:
-    """Return the human-only step name for a clickable element, else None."""
+    """Return the human-only step name for a clickable element (payment), else None."""
     text = " ".join(
         str(info.get(k) or "") for k in ("text", "value", "aria_label", "title", "name")
     )
     if HANDOFF_RE.search(text):
-        return text.strip()[:40] or "提交"
-    kind = str(info.get("type") or "").lower()
-    if kind in {"submit", "image"} and info.get("in_login_form"):
-        return "登录"
+        return text.strip()[:40] or "付款"
     return None
+
+
+def read_login_state(path: Path | None) -> dict[str, Any] | None:
+    """The teacher's saved browser login (cookies + localStorage), or None."""
+    if path is None or not path.is_file():
+        return None
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return state if isinstance(state, dict) else None
 
 
 def is_human_only_field(info: dict[str, Any]) -> str | None:
@@ -221,7 +231,7 @@ async def _guard_route(route: Any) -> None:
 
 
 class PlaywrightPage:
-    """One Chromium context. Cookies live in this context / tmpfs, not host HOME."""
+    """One Chromium context. Login is saved to the teacher's own disk, not host HOME."""
 
     def __init__(self, context: Any, page: Any, profile_dir: Path) -> None:
         self._context = context
@@ -395,7 +405,6 @@ class PlaywrightPage:
                             return labels.map((l) => l.innerText || '').join(' ');
                         } catch (e) { return ''; }
                     })();
-                    const form = el.form || el.closest('form');
                     return {
                         tag: String(el.tagName || ''),
                         type: String(el.type || el.getAttribute('type') || ''),
@@ -408,7 +417,6 @@ class PlaywrightPage:
                         placeholder: String(el.getAttribute('placeholder') || ''),
                         autocomplete: String(el.getAttribute('autocomplete') || ''),
                         label: labelText,
-                        in_login_form: !!(form && form.querySelector('input[type="password"]')),
                     };
                 }""",
                 timeout=5_000,
@@ -527,6 +535,14 @@ class PlaywrightPage:
             logger.debug("input value read failed", exc_info=True)
             return ""
 
+    async def save_login(self, path: Path) -> None:
+        """Keep the teacher's login for next time (Playwright storage_state)."""
+        state = await self._context.storage_state()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+
     async def close(self) -> None:
         try:
             await self._context.close()
@@ -535,8 +551,11 @@ class PlaywrightPage:
         shutil.rmtree(self._profile_dir, ignore_errors=True)
 
 
-async def open_chromium(url: str) -> PlaywrightPage:
-    """Open a public URL in headless Chromium. Caller already ran web_guard."""
+async def open_chromium(url: str, *, login_state: Path | None = None) -> PlaywrightPage:
+    """Open a public URL in headless Chromium. Caller already ran web_guard.
+
+    ``login_state`` = the teacher's saved login; the site opens already logged in.
+    """
     parse_public_http_url(url)
     browser = await _ensure_browser()
     profile_dir = Path(tempfile.mkdtemp(prefix="sbox_", dir=str(_profile_root())))
@@ -546,6 +565,7 @@ async def open_chromium(url: str) -> PlaywrightPage:
             ignore_https_errors=False,
             accept_downloads=False,
             java_script_enabled=True,
+            storage_state=read_login_state(login_state),
         )
         await context.route("**/*", _guard_route)
         page = context.pages[0] if context.pages else await context.new_page()

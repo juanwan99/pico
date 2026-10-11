@@ -2006,9 +2006,7 @@ def _workspace_handlers(
 
     async def browser_screenshot(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter()
-        session_id = str(args.get("session_id") or "").strip()
-        if not session_id:
-            raise ToolError("tool.invalid_arguments", "session_id 必须是非空字符串")
+        session_id = str(args.get("session_id") or "").strip() or "current"
         run_id = current_run_id(principal, store)
         ws = workspace_id_for(principal.school_id, principal.membership_id, run_id)
 
@@ -2056,6 +2054,9 @@ def _workspace_handlers(
                 logger.debug("sandbox screenshot png fetch skipped", exc_info=True)
             if png:
                 remember_conversation_png(png)
+                # The bridge hands this to Pi as image content and drops it from
+                # the text the ledger keeps (#1206 · model sees the page now).
+                out = {**out, "image_png_base64": base64.b64encode(png).decode("ascii")}
                 try:
                     shot_title = (
                         f"shot-{safe_segment(session_id, fallback='page')}.png"
@@ -2084,7 +2085,7 @@ def _workspace_handlers(
     def _browser_hand(tool_name: str, action: str):
         """AI hands (#1207): one Playwright action in the teacher's own sidecar
         session, then a fresh ref snapshot. Thin adapter: sidecar refuses login /
-        captcha / payment / submit (sandbox.human_required). Never logs `text`."""
+        payment and password / captcha typing (sandbox.human_required). Never logs `text`."""
 
         async def hand(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
             started = time.perf_counter()
@@ -2580,9 +2581,10 @@ def build_default_gateway(
         ToolSpec(
             name="sandbox_browser_screenshot",
             description=(
-                "Capture the current isolated browser screen as a PNG artifact. "
-                "The PNG is remembered so the teacher's next question can see the page. "
-                "Args: session_id."
+                "Look at the current sandbox browser screen: the image comes back to you "
+                "in this call and the PNG is remembered so the teacher's next question "
+                "can see the page. session_id defaults to the teacher's open sandbox. "
+                "Args: session_id?."
             ),
             handler=browser_screenshot,
             school_scoped=False,
@@ -2594,9 +2596,10 @@ def build_default_gateway(
     _HANDS_COMMON = (
         "Acts inside the teacher's own isolated sandbox browser session (sidecar "
         "Chromium) and returns a fresh page snapshot with element refs. "
-        "Login, captcha, payment and the final submit are human-only: the sidecar "
+        "Typing a password or captcha, and paying, are human-only: the sidecar "
         "refuses them (sandbox.human_required) — tell the teacher to do that step on "
-        "the sandbox pane, then snapshot again. Cookies never leave the sidecar. "
+        "the sandbox pane, then snapshot again. Everything else, including the login "
+        "and submit buttons, you may click. The teacher's login is kept for next time. "
     )
     for _name, _desc, _args in (
         (
@@ -2988,10 +2991,9 @@ def openai_tool_schemas(
             "properties": {
                 "session_id": {
                     "type": "string",
-                    "description": "Isolated sandbox session id from sandbox_browser_open",
+                    "description": "Sandbox session id; omit for the teacher's open sandbox",
                 },
             },
-            "required": ["session_id"],
         },
         "sandbox_browser_snapshot": {
             "type": "object",

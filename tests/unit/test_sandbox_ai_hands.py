@@ -1,14 +1,18 @@
-"""AI hands on the B2 pane (#1207): act by snapshot ref; humans keep login / pay / submit.
+"""AI hands on the B2 pane (#1207 · #1206 step 2): act by snapshot ref.
 
-Upstream = Playwright aria snapshot (`aria_snapshot(ref=True)`) + `aria-ref=` selector.
-Pico only wires the gateway tool → sidecar → page, masks password values, and
-refuses the human-only steps mechanically.
+Upstream = Playwright aria snapshot (`aria_snapshot(ref=True)`) + `aria-ref=` selector
++ `storage_state` for the teacher's saved login. Pico only wires the gateway tool →
+sidecar → page. Humans keep password / captcha typing and payment; the AI may
+click login and submit (owner 2026-10-11 09:17「简单、有效」).
 """
 
 from __future__ import annotations
 
+import base64
+import json
 import os
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +34,7 @@ from pico_orchestrator.tools_builtin import build_default_gateway
 from pico_orchestrator.web_guard import parse_public_http_url
 from sandbox_worker.browser import (
     HUMAN_REQUIRED_CODE,
+    PNG_MAGIC,
     SECRET_MASK,
     SNAPSHOT_MAX_CHARS,
     VIEWPORT_HEIGHT,
@@ -37,8 +42,9 @@ from sandbox_worker.browser import (
     is_handoff_control,
     is_human_only_field,
     mask_secret_values,
+    read_login_state,
 )
-from sandbox_worker.runtime import CURRENT_SESSION, RUNTIME
+from sandbox_worker.runtime import CURRENT_SESSION, LOGIN_FILE, RUNTIME
 
 HANDS = (
     "sandbox_browser_snapshot",
@@ -86,12 +92,14 @@ class FakeFormPage:
     """Stand-in for PlaywrightPage with the BrowserHands surface.
 
     Refs: s1e1 name box · s1e2 password box · s1e3 captcha box · s1e4 pizza
-    select · s1e5 login button · s1e6 next link · s1e7 submit button.
+    select · s1e5 login button · s1e6 next link · s1e7 submit button · s1e8 pay.
     """
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, login_state: dict[str, Any] | None = None) -> None:
         parse_public_http_url(url)
         self._url = url
+        self.login_state = login_state
+        self.logged_in = bool(login_state)
         self.fields: dict[str, str] = {"s1e1": "", "s1e2": "hunter2", "s1e3": ""}
         self.selected = "small"
         self.keys: list[str] = []
@@ -133,6 +141,7 @@ class FakeFormPage:
             "s1e5": {"tag": "BUTTON", "type": "submit", "text": "登录", "in_login_form": True},
             "s1e6": {"tag": "A", "text": "下一页"},
             "s1e7": {"tag": "INPUT", "type": "submit", "value": "提交报名"},
+            "s1e8": {"tag": "BUTTON", "type": "button", "text": "立即支付"},
         }
         import re
 
@@ -167,6 +176,15 @@ class FakeFormPage:
             raise human_required(step)
         if ref == "s1e6":
             self._url = self._url.rstrip("/") + "/page2"
+        if ref == "s1e5":
+            self.logged_in = True
+        if ref == "s1e7":
+            self._url = self._url.rstrip("/") + "/done"
+
+    async def save_login(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cookies = [{"name": "sid", "value": "teacher-session"}] if self.logged_in else []
+        path.write_text(json.dumps({"cookies": cookies, "origins": []}), encoding="utf-8")
 
     async def type_ref(self, ref: str, text: str, *, submit: bool) -> None:
         info = self._info(ref)
@@ -191,12 +209,13 @@ class FakeFormPage:
 
 
 @pytest.fixture
-async def hands_runtime(monkeypatch: pytest.MonkeyPatch):
+async def hands_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("PICO_SANDBOX_URL", "embedded")
+    monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disks"))
     pages: list[FakeFormPage] = []
 
-    async def fake_open(url: str) -> FakeFormPage:
-        page = FakeFormPage(url)
+    async def fake_open(url: str, *, login_state: Path | None = None) -> FakeFormPage:
+        page = FakeFormPage(url, read_login_state(login_state))
         pages.append(page)
         return page
 
@@ -215,16 +234,19 @@ def _gw():
 # ---------------------------------------------------------------- latches
 
 
-def test_handoff_latch_names_login_pay_submit() -> None:
-    assert is_handoff_control({"text": "登录"}) == "登录"
-    assert is_handoff_control({"text": "Sign in"})
+def test_handoff_latch_is_payment_only() -> None:
     assert is_handoff_control({"value": "立即支付"})
-    assert is_handoff_control({"text": "提交报名"})
-    assert is_handoff_control({"aria_label": "Submit"})
-    assert is_handoff_control({"type": "submit", "in_login_form": True}) == "登录"
+    assert is_handoff_control({"text": "去付款"})
+    assert is_handoff_control({"text": "缴费"})
+    assert is_handoff_control({"aria_label": "Pay now"})
+    assert is_handoff_control({"text": "Checkout"})
+    # Login and submit are the AI's to click (owner 2026-10-11 09:17).
+    assert is_handoff_control({"text": "登录"}) is None
+    assert is_handoff_control({"text": "Sign in"}) is None
+    assert is_handoff_control({"text": "提交报名"}) is None
+    assert is_handoff_control({"aria_label": "Submit"}) is None
+    assert is_handoff_control({"type": "submit", "text": "登录"}) is None
     assert is_handoff_control({"text": "下一步"}) is None
-    assert is_handoff_control({"text": "查询进度", "type": "button"}) is None
-    assert is_handoff_control({"type": "submit", "in_login_form": False, "text": "搜索"}) is None
 
 
 def test_human_only_fields_password_and_captcha() -> None:
@@ -296,14 +318,13 @@ async def test_fill_select_click_act_on_page_and_return_fresh_snapshot(hands_run
 
 
 @pytest.mark.asyncio
-async def test_login_pay_submit_and_password_stay_with_the_human(hands_runtime) -> None:
+async def test_password_captcha_pay_stay_with_human_login_submit_are_ai(hands_runtime) -> None:
     _, pages = hands_runtime
     gw = _gw()
     owner = P("school-a", "member-a", ["ai:run"])
     await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
     for args in (
-        ("sandbox_browser_click", {"ref": "s1e5"}),  # 登录 button
-        ("sandbox_browser_click", {"ref": "s1e7"}),  # 提交报名
+        ("sandbox_browser_click", {"ref": "s1e8"}),  # 立即支付
         ("sandbox_browser_type", {"ref": "s1e2", "text": "pw"}),  # password box
         ("sandbox_browser_type", {"ref": "s1e3", "text": "1234"}),  # captcha box
     ):
@@ -313,7 +334,49 @@ async def test_login_pay_submit_and_password_stay_with_the_human(hands_runtime) 
         assert "自己" in exc.value.message
     assert pages[0].fields["s1e2"] == "hunter2"  # untouched
     assert pages[0].fields["s1e3"] == ""
-    assert pages[0].url == "https://example.com/"
+    await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e5"})  # 登录
+    assert pages[0].logged_in is True
+    done = await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e7"})  # 提交报名
+    assert done["url"].endswith("/done")
+
+
+@pytest.mark.asyncio
+async def test_login_is_kept_per_teacher_for_next_open(hands_runtime, tmp_path: Path) -> None:
+    runtime, pages = hands_runtime
+    gw = _gw()
+    owner = P("school-a", "member-a", ["ai:run"])
+    other = P("school-a", "member-b", ["ai:run"])
+    opened = await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    assert pages[0].login_state is None
+    await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e5"})
+    saved = tmp_path / "disks" / "school-a" / "member-a" / LOGIN_FILE
+    assert read_login_state(saved)["cookies"][0]["value"] == "teacher-session"
+    # Hidden from the teacher's file list.
+    meta = await gw.invoke(owner, "sandbox_browser_snapshot", {})
+    assert LOGIN_FILE not in json.dumps(meta, ensure_ascii=False)
+    # Sandbox expires → next open is already logged in.
+    await runtime.destroy(opened["session_id"])
+    await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    assert pages[1].logged_in is True
+    # Another teacher starts clean.
+    await gw.invoke(other, "sandbox_browser_open", {"url": "https://example.com/"})
+    assert pages[2].login_state is None
+    # Clearing the teacher disk drops the login too.
+    from pico_orchestrator.sandbox_persist import clear_owner_disk
+
+    clear_owner_disk("school-a", "member-a")
+    assert not saved.exists()
+
+
+@pytest.mark.asyncio
+async def test_screenshot_gives_the_model_pixels_not_the_ledger(hands_runtime) -> None:
+    gw = _gw()
+    owner = P("school-a", "member-a", ["ai:run"])
+    opened = await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    out = await gw.invoke(owner, "sandbox_browser_screenshot", {})
+    assert out["session_id"] == opened["session_id"]
+    assert base64.b64decode(out["image_png_base64"]).startswith(PNG_MAGIC)
+    assert "image_png_base64" not in public_tool_result(out)
 
 
 @pytest.mark.asyncio
@@ -398,6 +461,7 @@ async def test_real_chromium_snapshot_refs_fill_select_and_handoff() -> None:
                 <option value="medium">中</option></select></label>
               <button type="button" id="next">下一步</button>
               <button type="submit">提交报名</button>
+              <button type="button">立即支付</button>
               <a id="go" href="#after">帮助</a>
             </form>
             <script>
@@ -431,8 +495,9 @@ async def test_real_chromium_snapshot_refs_fill_select_and_handoff() -> None:
                 await hands.type_ref(ref_of(label), "x", submit=False)
             assert exc.value.code == HUMAN_REQUIRED_CODE
         assert await page.locator("input[name=pwd]").input_value() == "secret123"
+        await hands.click_ref(ref_of("提交报名"))  # AI may submit (owner 09:17)
         with pytest.raises(ToolError) as exc:
-            await hands.click_ref(ref_of("提交报名"))
+            await hands.click_ref(ref_of("立即支付"))
         assert exc.value.code == HUMAN_REQUIRED_CODE
         await hands.click_ref(ref_of("帮助"))
         assert page.url.endswith("#after")
@@ -444,6 +509,18 @@ async def test_real_chromium_snapshot_refs_fill_select_and_handoff() -> None:
         with pytest.raises(ToolError) as exc:
             await hands.click_ref("s9e999")
         assert exc.value.code == "sandbox.ref_stale"
+        # Saved login round-trips through Playwright storage_state.
+        await context.add_cookies(
+            [{"name": "sid", "value": "kept", "domain": "example.com", "path": "/"}]
+        )
+        saved = Path(tempfile.mkdtemp()) / LOGIN_FILE
+        await hands.save_login(saved)
+        again = await browser.new_context(storage_state=read_login_state(saved))
+        try:
+            cookies = await again.cookies("https://example.com/")
+            assert any(c["name"] == "sid" and c["value"] == "kept" for c in cookies)
+        finally:
+            await again.close()
     finally:
         await context.close()
         await browser.close()

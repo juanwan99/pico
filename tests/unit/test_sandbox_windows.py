@@ -42,7 +42,7 @@ async def test_same_desk_keeps_browser_when_opening_writer():
     browser = FakeSurface("https://example.com/", "Example Domain", "Example Domain")
     writer = FakeSurface("sandbox://writer/notes.docx", "LibreOffice Writer · notes.docx")
 
-    async def open_browser(url: str):
+    async def open_browser(url: str, **_kw):
         _ = url
         return browser
 
@@ -99,7 +99,7 @@ async def test_opening_new_docx_replaces_writer_and_keeps_tree():
     second_doc.filename = "new.docx"
     docs = [first_doc, second_doc]
 
-    async def open_browser(url: str):
+    async def open_browser(url: str, **_kw):
         raise AssertionError(url)
 
     async def open_office(*, kind: str, filename: str, document: bytes):
@@ -196,7 +196,7 @@ async def test_ninth_desk_is_refused():
     import sandbox_worker.runtime as runtime_mod
     from pico_orchestrator.gateway import ToolError
 
-    async def open_browser(url: str):
+    async def open_browser(url: str, **_kw):
         return FakeSurface(url, "Example Domain", "Example Domain")
 
     async def open_files(names):
