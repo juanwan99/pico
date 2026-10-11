@@ -73,7 +73,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("PICO_SANDBOX_ROOT", str(tmp_path / "sandbox-root"))
     monkeypatch.setenv("PICO_SANDBOX_URL", "embedded")
 
-    async def fake_open(url: str):
+    async def fake_open(url: str, **_kw):
         return _FakePage(url)
 
     monkeypatch.setattr(RUNTIME, "_open_browser", fake_open)
