@@ -60,6 +60,8 @@ def sandbox_session_payload(result: Any) -> dict[str, Any] | None:
         "workspace_id": str(result.get("workspace_id") or ""),
         "has_text_input": bool(result.get("has_text_input")),
         "has_password_input": bool(result.get("has_password_input")),
+        "human_hold": bool(result.get("human_hold")),
+        "ai_acting": bool(result.get("ai_acting")),
     }
     windows = result.get("windows")
     if isinstance(windows, list):

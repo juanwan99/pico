@@ -69,6 +69,9 @@ STREAM_PING_S = 15.0
 # "current" = the caller's own desk (one per school+membership). Lets the AI act
 # on a pane the teacher opened without having the session id in hand.
 CURRENT_SESSION = "current"
+# Takeover (#1230): the pane says「AI 正在操作」while the AI touched the page this recently.
+AI_ACTING_S = 60.0
+HUMAN_HOLD_COPY = "老师接管了这个画面，正在自己操作。先停下，等老师点「交还 AI」后再继续。"
 HANDS_ACTIONS = frozenset(
     {
         "snapshot", "navigate", "navigate_back", "click", "hover", "type",
@@ -138,6 +141,9 @@ class SandboxSession:
     has_text_input: bool = False
     has_password_input: bool = False
     login_saved_at: float = 0.0
+    # Takeover (#1230): while held, the AI's hands (/act) are refused.
+    human_hold: bool = False
+    ai_acted_at: float = 0.0
 
     def focused(self) -> SandboxWindow:
         for item in self.windows:
@@ -389,6 +395,9 @@ class SandboxRuntime:
                 "mime": "image/png",
                 "has_text_input": sess.has_text_input,
                 "has_password_input": sess.has_password_input,
+                "human_hold": sess.human_hold,
+                "ai_acting": not sess.human_hold
+                and time.time() - sess.ai_acted_at < AI_ACTING_S,
                 **extra,
             },
             sess.secret_fields,
@@ -707,6 +716,14 @@ class SandboxRuntime:
             message=APPLIED_COPY if session.kind == "browser" else HUMAN_OFFICE_COPY,
         )
 
+    def hold(self, session: SandboxSession, *, hold: bool) -> dict[str, Any]:
+        """Takeover (#1230): the teacher holds the page; 交还 AI releases it."""
+        session.human_hold = bool(hold)
+        session.ai_acted_at = 0.0
+        return self._public_meta(
+            session, message="你在操作，AI 已停手" if hold else "已交还 AI"
+        )
+
     def _hands(self, session: SandboxSession) -> SandboxWindow:
         """The browser window the AI may act on. Office/files windows are not pages."""
         for item in session.windows:
@@ -747,9 +764,12 @@ class SandboxRuntime:
         browser adapter (sandbox.human_required). Never logs `text`.
         """
         await self._purge()
+        if session.human_hold:
+            raise ToolError("sandbox.human_took_over", HUMAN_HOLD_COPY)
         verb = (action or "").strip().lower()
         if verb not in HANDS_ACTIONS:
             raise ToolError("tool.invalid_arguments", f"未知动作 {verb or '(空)'}")
+        session.ai_acted_at = time.time()
         window = self._hands(session)
         hands: BrowserHands = window.surface  # type: ignore[assignment]
         ref = window.refs.resolve(ref)

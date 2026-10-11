@@ -4,6 +4,8 @@
  * back to polling the PNG. Click → click_x/y, wheel → scroll, keys → Enter/Tab/…
  * Dead session: honest copy + reopen. Login chrome only when the live page
  * actually has a text/password field. Password never leaves this pane.
+ * Takeover (#1230): while the AI works the page the pane says「AI 正在操作 · 接管」;
+ * 接管 stops the task and holds the page (the AI's hands are refused) until 交还 AI.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PicoIcon } from '~/components/ui/pico-icons';
@@ -12,6 +14,7 @@ import {
   focusPicoSandboxWindow,
   getPicoSandboxScreenshot,
   getPicoSandboxSession,
+  holdPicoSandboxSession,
   openPicoSandboxDocument,
   postPicoSandboxInput,
   streamPicoSandbox,
@@ -57,6 +60,8 @@ export default function SandboxWebPane({
   onDestroyed,
   onReopen,
   onOpenOfficeFile,
+  aiBusy = false,
+  onTakeOver,
 }: {
   sessionId: string;
   initialUrl?: string;
@@ -72,6 +77,10 @@ export default function SandboxWebPane({
   onDestroyed?: () => void;
   onReopen?: (args: { url: string; kind?: string }) => void;
   onOpenOfficeFile?: (filename: string) => void;
+  /** The AI's turn is running (task bar shows 停止任务). */
+  aiBusy?: boolean;
+  /** 接管 also stops the task — same as the task bar's「停止任务」. */
+  onTakeOver?: () => void;
 }) {
   const [windows, setWindows] = useState<PicoSandboxWindow[]>([]);
   const [files, setFiles] = useState<Array<{ name: string }>>([]);
@@ -88,6 +97,9 @@ export default function SandboxWebPane({
   const [hasPasswordInput, setHasPasswordInput] = useState(false);
   const [chromeOpen, setChromeOpen] = useState(false);
   const [visibleText, setVisibleText] = useState('');
+  const [humanHold, setHumanHold] = useState(false);
+  const [aiActing, setAiActing] = useState(false);
+  const [holding, setHolding] = useState(false);
   const secretRef = useRef<HTMLInputElement>(null);
   const objectUrlRef = useRef<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -106,6 +118,8 @@ export default function SandboxWebPane({
     files?: Array<{ name: string }>;
     has_text_input?: boolean;
     has_password_input?: boolean;
+    human_hold?: boolean;
+    ai_acting?: boolean;
   }) => {
     if (meta.url) {
       setPageUrl(meta.url);
@@ -127,6 +141,12 @@ export default function SandboxWebPane({
     }
     if (typeof meta.has_password_input === 'boolean') {
       setHasPasswordInput(meta.has_password_input);
+    }
+    if (typeof meta.human_hold === 'boolean') {
+      setHumanHold(meta.human_hold);
+    }
+    if (typeof meta.ai_acting === 'boolean') {
+      setAiActing(meta.ai_acting);
     }
   }, []);
 
@@ -394,6 +414,26 @@ export default function SandboxWebPane({
     }
   };
 
+  const setHold = async (hold: boolean) => {
+    setHolding(true);
+    setError(null);
+    try {
+      if (hold) {
+        onTakeOver?.();
+      }
+      applyMeta(await holdPicoSandboxSession(sessionId, hold));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('404')) {
+        markDead();
+      } else {
+        setError(hold ? '接管没成功，请再点一次' : '交还没成功，请再点一次');
+      }
+    } finally {
+      setHolding(false);
+    }
+  };
+
   const closeWindow = async () => {
     setBusy(true);
     try {
@@ -407,6 +447,9 @@ export default function SandboxWebPane({
       setChromeOpen(false);
     }
   };
+
+  const takeover: 'ai' | 'human' | null =
+    live !== 'live' ? null : humanHold ? 'human' : aiBusy && aiActing ? 'ai' : null;
 
   const showLogin =
     live === 'live' && !isOffice && focusedKind === 'browser' && (hasTextInput || hasPasswordInput);
@@ -462,129 +505,158 @@ export default function SandboxWebPane({
           ))}
         </div>
       ) : null}
-      <div
-        ref={stageRef}
-        className="relative min-h-0 flex-1 overflow-auto bg-[#f3f3f3]"
-        data-testid="sandbox-web-stage"
-        data-zoom={`${Math.round(zoom * 100)}%`}
-        onWheel={onWheelZoom}
-      >
-        <div className="absolute right-2 top-2 z-10">
-          <button
-            type="button"
-            data-testid="sandbox-screen-menu"
-            aria-label="沙箱菜单"
-            aria-expanded={chromeOpen}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[#3d3d3d] shadow-sm hover:bg-white"
-            onClick={() => setChromeOpen((value) => !value)}
-          >
-            <PicoIcon name="more" />
-          </button>
-          {chromeOpen ? (
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {takeover ? (
+          <>
             <div
-              data-testid="sandbox-screen-menu-pop"
-              className="absolute right-0 mt-1 w-56 rounded-lg border border-black/[0.08] bg-white p-2 text-left shadow-lg"
+              className={`pointer-events-none absolute inset-0 z-[5] ring-2 ring-inset ${
+                takeover === 'ai' ? 'ring-[#3b6fd9]/70' : 'ring-[#e0a100]/70'
+              }`}
+              aria-hidden
+            />
+            <div
+              className="absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-[#1a1a1a]/90 py-1 pl-3 pr-1 text-[12px] text-white shadow-md"
+              data-testid="sandbox-takeover-bar"
+              data-state={takeover}
+              role="status"
             >
-              <p className="truncate px-1 text-[11px] text-[#8c8c8c]" title={pageUrl || undefined}>
-                {pageTitle || '隔离网页'}
-                {pageUrl ? ` · ${pageUrl}` : ''}
-              </p>
-              <p className="mt-1 px-1 text-[11px] text-[#6b6b6b]" data-testid="sandbox-web-copy">
-                {humanCopy ||
-                  (isOffice
-                    ? '沙箱内容框：只渲染页面/幻灯片，不是 Writer/Impress 整窗。'
-                    : '请在此画面自行登录，不要在聊天里发送密码')}
-              </p>
-              <p className="mt-0.5 px-1 text-[10px] text-[#9a9a9a]" data-testid="sandbox-web-status">
-                {status}
-              </p>
-              {onZoomIn || onZoomOut ? (
-                <div className="mt-2 flex items-center gap-1 px-1" data-testid="sandbox-zoom-menu">
-                  <button
-                    type="button"
-                    className="rounded-md p-1 hover:bg-black/[0.04]"
-                    aria-label="缩小"
-                    data-testid="pane-zoom-out"
-                    onClick={onZoomOut}
-                  >
-                    <PicoIcon name="zoom-out" size="sm" />
-                  </button>
-                  <button
-                    type="button"
-                    className="pico-type-aux min-w-[2.5rem] rounded-md px-1 py-0.5 hover:bg-black/[0.04]"
-                    aria-label="重置缩放"
-                    data-testid="pane-zoom-label"
-                    data-zoom={`${Math.round(zoom * 100)}%`}
-                    onClick={onZoomReset}
-                  >
-                    {Math.round(zoom * 100)}%
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md p-1 hover:bg-black/[0.04]"
-                    aria-label="放大"
-                    data-testid="pane-zoom-in"
-                    onClick={onZoomIn}
-                  >
-                    <PicoIcon name="zoom-in" size="sm" />
-                  </button>
-                </div>
-              ) : null}
+              <span>{takeover === 'ai' ? 'AI 正在操作' : '你在操作 · AI 已停手'}</span>
               <button
                 type="button"
-                disabled={busy}
-                className="mt-2 w-full rounded-md border border-black/[0.08] px-2.5 py-1.5 text-left text-[12px] disabled:opacity-50"
-                onClick={() => void closeWindow()}
-                data-testid="sandbox-close-keep-disk"
+                className="rounded-full bg-white px-2.5 py-0.5 text-[12px] font-medium text-[#1a1a1a] disabled:opacity-60"
+                data-testid={takeover === 'ai' ? 'sandbox-takeover' : 'sandbox-handback'}
+                disabled={holding}
+                onClick={() => void setHold(takeover === 'ai')}
               >
-                关闭窗口（文件保留）
+                {takeover === 'ai' ? '接管' : '交还 AI'}
               </button>
             </div>
-          ) : null}
-        </div>
-        {focusedKind === 'files' && files.length > 0 ? (
-          <div className="space-y-1 bg-white p-2" data-testid="sandbox-file-list">
-            {files.map((file) => (
-              <button
-                key={file.name}
-                type="button"
-                data-testid={`sandbox-file-${file.name}`}
-                className="block w-full rounded px-2 py-1.5 text-left text-[12px] hover:bg-[#f0f0f0]"
-                onClick={() => {
-                  if (isOfficeFilename(file.name) && onOpenOfficeFile) {
-                    onOpenOfficeFile(file.name);
-                    return;
-                  }
-                  void openPicoSandboxDocument({ filename: file.name });
-                }}
-              >
-                {file.name}
-              </button>
-            ))}
-          </div>
+          </>
         ) : null}
-        {imageUrl ? (
-          <img
-            ref={imgRef}
-            src={imageUrl}
-            alt="隔离浏览器画面"
-            width={VIEWPORT_W}
-            onClick={(ev) => void onViewportClick(ev)}
-            onWheel={onViewportWheel}
-            onKeyDown={onViewportKey}
-            tabIndex={0}
-            style={{ width: `${Math.round(zoom * 100)}%` }}
-            className="mx-auto block h-auto max-w-none cursor-crosshair bg-white"
-            data-testid="sandbox-web-viewport"
-          />
-        ) : (
-          <div
-            className="flex min-h-[280px] items-center justify-center text-[13px] text-[#8c8c8c]"
-            data-testid="sandbox-web-opening"
-          >
-            打开中
+        <div
+          ref={stageRef}
+          className="relative min-h-0 flex-1 overflow-auto bg-[#f3f3f3]"
+          data-testid="sandbox-web-stage"
+          data-zoom={`${Math.round(zoom * 100)}%`}
+          onWheel={onWheelZoom}
+        >
+          <div className="absolute right-2 top-2 z-10">
+            <button
+              type="button"
+              data-testid="sandbox-screen-menu"
+              aria-label="沙箱菜单"
+              aria-expanded={chromeOpen}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[#3d3d3d] shadow-sm hover:bg-white"
+              onClick={() => setChromeOpen((value) => !value)}
+            >
+              <PicoIcon name="more" />
+            </button>
+            {chromeOpen ? (
+              <div
+                data-testid="sandbox-screen-menu-pop"
+                className="absolute right-0 mt-1 w-56 rounded-lg border border-black/[0.08] bg-white p-2 text-left shadow-lg"
+              >
+                <p className="truncate px-1 text-[11px] text-[#8c8c8c]" title={pageUrl || undefined}>
+                  {pageTitle || '隔离网页'}
+                  {pageUrl ? ` · ${pageUrl}` : ''}
+                </p>
+                <p className="mt-1 px-1 text-[11px] text-[#6b6b6b]" data-testid="sandbox-web-copy">
+                  {humanCopy ||
+                    (isOffice
+                      ? '沙箱内容框：只渲染页面/幻灯片，不是 Writer/Impress 整窗。'
+                      : '请在此画面自行登录，不要在聊天里发送密码')}
+                </p>
+                <p className="mt-0.5 px-1 text-[10px] text-[#9a9a9a]" data-testid="sandbox-web-status">
+                  {status}
+                </p>
+                {onZoomIn || onZoomOut ? (
+                  <div className="mt-2 flex items-center gap-1 px-1" data-testid="sandbox-zoom-menu">
+                    <button
+                      type="button"
+                      className="rounded-md p-1 hover:bg-black/[0.04]"
+                      aria-label="缩小"
+                      data-testid="pane-zoom-out"
+                      onClick={onZoomOut}
+                    >
+                      <PicoIcon name="zoom-out" size="sm" />
+                    </button>
+                    <button
+                      type="button"
+                      className="pico-type-aux min-w-[2.5rem] rounded-md px-1 py-0.5 hover:bg-black/[0.04]"
+                      aria-label="重置缩放"
+                      data-testid="pane-zoom-label"
+                      data-zoom={`${Math.round(zoom * 100)}%`}
+                      onClick={onZoomReset}
+                    >
+                      {Math.round(zoom * 100)}%
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md p-1 hover:bg-black/[0.04]"
+                      aria-label="放大"
+                      data-testid="pane-zoom-in"
+                      onClick={onZoomIn}
+                    >
+                      <PicoIcon name="zoom-in" size="sm" />
+                    </button>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="mt-2 w-full rounded-md border border-black/[0.08] px-2.5 py-1.5 text-left text-[12px] disabled:opacity-50"
+                  onClick={() => void closeWindow()}
+                  data-testid="sandbox-close-keep-disk"
+                >
+                  关闭窗口（文件保留）
+                </button>
+              </div>
+            ) : null}
           </div>
-        )}
+          {focusedKind === 'files' && files.length > 0 ? (
+            <div className="space-y-1 bg-white p-2" data-testid="sandbox-file-list">
+              {files.map((file) => (
+                <button
+                  key={file.name}
+                  type="button"
+                  data-testid={`sandbox-file-${file.name}`}
+                  className="block w-full rounded px-2 py-1.5 text-left text-[12px] hover:bg-[#f0f0f0]"
+                  onClick={() => {
+                    if (isOfficeFilename(file.name) && onOpenOfficeFile) {
+                      onOpenOfficeFile(file.name);
+                      return;
+                    }
+                    void openPicoSandboxDocument({ filename: file.name });
+                  }}
+                >
+                  {file.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {imageUrl ? (
+            <img
+              ref={imgRef}
+              src={imageUrl}
+              alt="隔离浏览器画面"
+              width={VIEWPORT_W}
+              onClick={(ev) => void onViewportClick(ev)}
+              onWheel={onViewportWheel}
+              onKeyDown={onViewportKey}
+              tabIndex={0}
+              style={{ width: `${Math.round(zoom * 100)}%` }}
+              className="mx-auto block h-auto max-w-none cursor-crosshair bg-white"
+              data-testid="sandbox-web-viewport"
+            />
+          ) : (
+            <div
+              className="flex min-h-[280px] items-center justify-center text-[13px] text-[#8c8c8c]"
+              data-testid="sandbox-web-opening"
+            >
+              打开中
+            </div>
+          )}
+        </div>
       </div>
       {showLogin ? (
         <form

@@ -2657,6 +2657,8 @@ def build_default_gateway(
         "refuses them (sandbox.human_required) — tell the teacher to do that step on "
         "the sandbox pane, then snapshot again. Everything else, including the login "
         "and submit buttons, you may click. The teacher's login is kept for next time. "
+        "If the teacher took over the page (sandbox.human_took_over), stop acting and "
+        "wait until they hand it back. "
     )
     for _name, _desc, _args in (
         (

@@ -444,6 +444,10 @@ export type PicoSandboxSessionMeta = {
   typed?: boolean;
   has_text_input?: boolean;
   has_password_input?: boolean;
+  /** Takeover (#1230): the teacher holds the page; the AI's hands are refused. */
+  human_hold?: boolean;
+  /** The AI touched this page in the last minute. */
+  ai_acting?: boolean;
 };
 
 export async function openPicoSandboxSession(body: {
@@ -538,6 +542,17 @@ export async function focusPicoSandboxWindow(
     {
       method: 'POST',
       body: JSON.stringify(body),
+    },
+  );
+}
+
+/** 接管 (hold=true) / 交还 AI (hold=false) — #1230. */
+export async function holdPicoSandboxSession(sessionId: string, hold: boolean) {
+  return picoFetch<PicoSandboxSessionMeta>(
+    `/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/hold`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ hold }),
     },
   );
 }

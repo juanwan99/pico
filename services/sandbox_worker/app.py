@@ -68,6 +68,12 @@ class FocusBody(BaseModel):
     kind: str = ""
 
 
+class HoldBody(BaseModel):
+    school_id: str
+    membership_id: str
+    hold: bool
+
+
 class ActBody(BaseModel):
     """AI hands (#1207). Field names follow Playwright MCP. `text` is never logged."""
 
@@ -100,6 +106,8 @@ def _tool_http(exc: ToolError) -> HTTPException:
         status = 403
     elif exc.code == "sandbox.quota":
         status = 429
+    elif exc.code == "sandbox.human_took_over":
+        status = 409
     elif exc.code in {"sandbox.session_not_found", "artifact.not_found", "sandbox.file_not_found"}:
         status = 404
     elif exc.code == "diagram.missing_engine":
@@ -316,6 +324,23 @@ async def act_session(
             filenames=list(body.filenames or []),
             files=list(body.files or []),
         )
+    except ToolError as exc:
+        raise _tool_http(exc) from exc
+
+
+@app.post("/v1/internal/sessions/{session_id}/hold")
+async def hold_session(
+    session_id: str,
+    body: HoldBody,
+    x_pico_sandbox_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Takeover (#1230): the teacher holds the page; /act is refused until released."""
+    _require_token(x_pico_sandbox_token)
+    try:
+        sess = RUNTIME.require_owner(
+            session_id, school_id=body.school_id, membership_id=body.membership_id
+        )
+        return RUNTIME.hold(sess, hold=body.hold)
     except ToolError as exc:
         raise _tool_http(exc) from exc
 

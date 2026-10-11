@@ -262,6 +262,8 @@ export default function ResultPanel({
   rerunning,
   onRerun,
   expandedDock,
+  aiBusy,
+  onTakeOver,
 }: {
   messages?: TMessage[] | null;
   conversationId?: string | null;
@@ -277,6 +279,9 @@ export default function ResultPanel({
   onRerun?: () => void;
   /** Chat dock shown under the pane while it is full screen (#1226). */
   expandedDock?: ReactNode;
+  /** Takeover (#1230): the AI's turn is running; 接管 stops it like the task bar. */
+  aiBusy?: boolean;
+  onTakeOver?: () => void;
 }) {
   const [view, setView] = useState<TopView>('web');
   const [expanded, setExpanded] = useState(false);
@@ -1236,6 +1241,8 @@ export default function ResultPanel({
                 kind={sandboxSession.kind}
                 zoom={paneZoom.zoom}
                 onWheelZoom={paneZoom.onWheel}
+                aiBusy={aiBusy}
+                onTakeOver={onTakeOver}
                 onZoomIn={paneZoom.zoomIn}
                 onZoomOut={paneZoom.zoomOut}
                 onZoomReset={paneZoom.reset}
