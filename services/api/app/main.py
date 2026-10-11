@@ -1078,6 +1078,44 @@ async def sandbox_session_focus(
     )
 
 
+@app.post("/v1/sandbox/sessions/{session_id}/hold")
+async def sandbox_session_hold(
+    session_id: str,
+    request: Request,
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> JSONResponse:
+    """Takeover (#1230): hold=true locks the page for the teacher; false hands it back."""
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    hold = bool(body.get("hold")) if isinstance(body, dict) else False
+    try:
+        meta = await sidecar_json(
+            "POST",
+            f"/v1/internal/sessions/{session_id}/hold",
+            json_body={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+                "hold": hold,
+            },
+        )
+    except ToolError as exc:
+        status = {"sandbox.forbidden": 403, "sandbox.session_not_found": 404}.get(exc.code, 400)
+        raise HTTPException(
+            status_code=status, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    if not isinstance(meta, dict):
+        raise HTTPException(status_code=502, detail={"code": "sandbox.unavailable"})
+    return JSONResponse(
+        content=_sandbox_public_meta(session_id, meta),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.post("/v1/sandbox/sessions/{session_id}/input")
 async def sandbox_session_input(
     session_id: str,

@@ -333,6 +333,8 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     rerunning={ledger.rerunning}
                     onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
                     onClose={() => setResultOpen(false)}
+                    aiBusy={canCancelTask}
+                    onTakeOver={() => void ledger.cancelRun(cancellableRunId)}
                     expandedDock={
                       <PaneChatDock
                         messages={flatMessages}

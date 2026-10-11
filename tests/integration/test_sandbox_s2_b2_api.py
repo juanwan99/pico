@@ -288,3 +288,65 @@ def test_pane_size_goes_through_api_to_the_browser_window(client, monkeypatch) -
     assert r.status_code == 200, r.text
     assert sizes == [(480, 620)]
     assert r.json()["clicked"] is False
+
+
+def test_takeover_hold_refuses_ai_hands_until_handed_back(client, monkeypatch) -> None:
+    """#1230: 接管 locks the page for the teacher; the AI's /act is refused; 交还 AI unlocks."""
+
+    async def snapshot(self):
+        return '- heading "Example Domain" [ref=e1]'
+
+    async def tabs(self, action, index):
+        return []
+
+    monkeypatch.setattr(_FakePage, "snapshot", snapshot, raising=False)
+    monkeypatch.setattr(_FakePage, "tabs", tabs, raising=False)
+    monkeypatch.setattr(_FakePage, "take_dialogs", lambda self: [], raising=False)
+    owner = _headers(client, "member-a")
+    outsider = _headers(client, "member-b")
+    opened = _invoke(client, owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    session_id = opened.json()["result"]["session_id"]
+
+    acted = _invoke(client, owner, "sandbox_browser_snapshot", {"session_id": session_id})
+    assert acted.status_code == 200, acted.text
+    meta = client.get(f"/v1/sandbox/sessions/{session_id}", headers=owner).json()
+    assert meta["ai_acting"] is True and meta["human_hold"] is False
+
+    hold = f"/v1/sandbox/sessions/{session_id}/hold"
+    assert client.post(hold, headers=outsider, json={"hold": True}).status_code == 403
+    held = client.post(hold, headers=owner, json={"hold": True})
+    assert held.status_code == 200, held.text
+    assert held.json()["human_hold"] is True and held.json()["ai_acting"] is False
+
+    refused = _invoke(client, owner, "sandbox_browser_snapshot", {"session_id": session_id})
+    assert refused.status_code >= 400
+    assert refused.json()["detail"]["code"] == "sandbox.human_took_over"
+    # The teacher's own clicks still go through while held.
+    clicked = client.post(
+        f"/v1/sandbox/sessions/{session_id}/input",
+        headers={**owner, "Accept": "application/json"},
+        json={"click_x": 10, "click_y": 10},
+    )
+    assert clicked.status_code == 200 and clicked.json()["clicked"] is True
+
+    back = client.post(hold, headers=owner, json={"hold": False})
+    assert back.json()["human_hold"] is False
+    assert _invoke(client, owner, "sandbox_browser_snapshot", {"session_id": session_id}).status_code == 200
+
+
+def test_sidecar_hold_route_answers_409_on_act(client) -> None:
+    """#1230: the sidecar's own HTTP surface — held page, /act answers 409."""
+    from sandbox_worker.app import app as sidecar_app
+
+    owner = _headers(client, "member-a")
+    opened = _invoke(client, owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    session_id = opened.json()["result"]["session_id"]
+    who = {"school_id": "school-a", "membership_id": "member-a"}
+    side = TestClient(sidecar_app)
+    base = f"/v1/internal/sessions/{session_id}"
+    assert side.post(base + "/hold", json={**who, "hold": True}).json()["human_hold"] is True
+    refused = side.post(base + "/act", json={**who, "action": "snapshot"})
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "sandbox.human_took_over"
+    other = side.post(base + "/hold", json={**who, "membership_id": "member-b", "hold": False})
+    assert other.status_code == 403
