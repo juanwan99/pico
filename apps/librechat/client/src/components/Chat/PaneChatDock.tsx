@@ -18,14 +18,17 @@ export function latestReplyText(messages?: TMessage[] | null): string {
     const msg = list[i];
     if (msg && !msg.isCreatedByUser) {
       const text = getAllContentText(msg).trim();
-      if (!msg.error) {
+      // A failed turn reads the same as the main bubble (「这次没完成…」): either
+      // the message is flagged, or it carries an error part (Part.tsx).
+      const part = (msg.content ?? []).find((c) => c?.type === 'error') as
+        | { error?: string; text?: string | { value?: string } }
+        | undefined;
+      if (!msg.error && !part) {
         return text;
       }
-      // A failed turn reads the same as the main bubble (「这次没完成…」).
-      const part = (msg.content ?? []).find((c) => c?.type === 'error') as
-        | { error?: string }
-        | undefined;
-      return humanizeChatErrorText(text || String(part?.error ?? ''));
+      const partText =
+        part?.error ?? (typeof part?.text === 'string' ? part.text : part?.text?.value) ?? '';
+      return humanizeChatErrorText(text || partText);
     }
   }
   return '';

@@ -78,6 +78,14 @@ describe('PaneChatDock', () => {
       },
     ] as unknown as TMessage[];
     expect(latestReplyText(failed)).toBe('这次没完成。请再发一次。');
+    const errorPart = [
+      {
+        messageId: 'e2',
+        isCreatedByUser: false,
+        content: [{ type: 'error', error: 'An error occurred while processing the request: 403' }],
+      },
+    ] as unknown as TMessage[];
+    expect(latestReplyText(errorPart)).toBe('这次没完成。请再发一次。');
     expect(latestReplyText([])).toBe('');
   });
 });
