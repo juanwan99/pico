@@ -580,6 +580,15 @@ router.post('/v1/sandbox/sessions/:sessionId/focus', (req, res) => {
     return res.status(400).json({ error: 'bad_request', message: e.message });
   }
 });
+// Takeover (#1230): 接管 / 交还 AI.
+router.post('/v1/sandbox/sessions/:sessionId/hold', (req, res) => {
+  try {
+    assertId(req.params.sessionId, 'sessionId');
+    return proxy(req, res, `/v1/sandbox/sessions/${req.params.sessionId}/hold`);
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
 router.post('/v1/sandbox/sessions/:sessionId/input', (req, res) => {
   try {
     assertId(req.params.sessionId, 'sessionId');

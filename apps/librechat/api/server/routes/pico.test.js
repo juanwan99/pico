@@ -533,6 +533,17 @@ describe('Pico proxy routes', () => {
     );
   });
 
+  it('proxies sandbox hold for 接管 / 交还 AI (#1230)', async () => {
+    const response = await request(app)
+      .post('/api/pico/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa/hold')
+      .send({ hold: true });
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa/hold',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ hold: true }) }),
+    );
+  });
+
   it('proxies owner disk list', async () => {
     const response = await request(app).get('/api/pico/v1/sandbox/disk');
     expect(response.status).toBe(201);
