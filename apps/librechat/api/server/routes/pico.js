@@ -4,6 +4,7 @@
  * Exception (G4 tip observability): GET /api/pico/tip is public and returns only
  * {ok, git_sha, service} — no membership, canary, or secret fields.
  */
+const { Readable } = require('stream');
 const express = require('express');
 const { logger } = require('~/config');
 const { requireJwtAuth } = require('~/server/middleware');
@@ -527,6 +528,48 @@ router.get('/v1/sandbox/sessions/:sessionId/screenshot', (req, res) => {
     });
   } catch (e) {
     return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+});
+// Live pane (#1215): SSE of JPEG frames. The generic proxy reads the whole body,
+// so this one route pipes. `no-transform` keeps compression() from buffering it.
+router.get('/v1/sandbox/sessions/:sessionId/stream', async (req, res) => {
+  try {
+    assertId(req.params.sessionId, 'sessionId');
+  } catch (e) {
+    return res.status(400).json({ error: 'bad_request', message: e.message });
+  }
+  const abort = new AbortController();
+  res.on('close', () => abort.abort());
+  try {
+    const r = await fetch(`${picoBase()}/v1/sandbox/sessions/${req.params.sessionId}/stream`, {
+      headers: {
+        Authorization: `Bearer ${picoKey()}`,
+        Accept: 'text/event-stream',
+        'X-Pico-Membership-Id': membershipFromReq(req),
+      },
+      signal: abort.signal,
+    });
+    if (!r.ok || !r.body) {
+      return res.status(r.status || 502).type('application/json').send(await r.text());
+    }
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-store, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+    const body = Readable.fromWeb(r.body);
+    body.on('error', () => res.end());
+    body.pipe(res);
+  } catch (err) {
+    if (abort.signal.aborted) {
+      return;
+    }
+    logger.error('[pico stream]', err);
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'pico_upstream_unavailable' });
+    } else {
+      res.end();
+    }
   }
 });
 router.post('/v1/sandbox/sessions/:sessionId/focus', (req, res) => {

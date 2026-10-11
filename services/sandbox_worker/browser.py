@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import tempfile
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -33,6 +34,15 @@ GOTO_TIMEOUT_MS = 20_000
 SNAPSHOT_MAX_CHARS = 30_000
 SECRET_MASK = "••••"
 WAIT_MAX_S = 30.0
+# Live pane (#1215): Chromium pushes a JPEG on each repaint (CDP screencast).
+SCREENCAST_QUALITY = 70
+SCROLL_MAX_PX = 2000
+HUMAN_KEYS = frozenset(
+    {
+        "Enter", "Tab", "Backspace", "Delete", "Escape",
+        "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown",
+    }
+)
 # Human-only steps: typing a password or captcha, and paying. Everything else
 # (login button, submit) the AI may click (owner 2026-10-11 09:17「简单、有效」).
 HANDOFF_RE = re.compile(
@@ -534,6 +544,57 @@ class PlaywrightPage:
         except Exception:
             logger.debug("input value read failed", exc_info=True)
             return ""
+
+    async def scroll(self, dy: int) -> None:
+        """Teacher's mouse wheel on the pane (#1215)."""
+        step = max(-SCROLL_MAX_PX, min(SCROLL_MAX_PX, int(dy)))
+        await self._page.mouse.wheel(0, float(step))
+
+    async def press_human_key(self, key: str) -> None:
+        """Teacher presses Enter / Tab / arrows on the pane (#1215)."""
+        if key not in HUMAN_KEYS:
+            raise ToolError("tool.invalid_arguments", "画面上只支持 Enter / Tab / 退格 / 方向键等按键")
+        before = self.url
+        await self._page.keyboard.press(key)
+        await self._settle(before)
+
+    async def screencast(self, push: Callable[[str], None]) -> Callable[[], Awaitable[None]]:
+        """Chromium pushes a base64 JPEG each time the page repaints (#1215).
+
+        Upstream CDP ``Page.startScreencast`` — the same thing Steel / browserless
+        live view use. A still page sends nothing. Returns ``stop``.
+        """
+        cdp = await self._context.new_cdp_session(self._page)
+
+        async def ack(frame_session: Any) -> None:
+            try:
+                await cdp.send("Page.screencastFrameAck", {"sessionId": frame_session})
+            except Exception:
+                logger.debug("screencast ack failed", exc_info=True)
+
+        def on_frame(event: dict[str, Any]) -> None:
+            push(str(event.get("data") or ""))
+            asyncio.ensure_future(ack(event.get("sessionId")))
+
+        cdp.on("Page.screencastFrame", on_frame)
+        await cdp.send(
+            "Page.startScreencast",
+            {
+                "format": "jpeg",
+                "quality": SCREENCAST_QUALITY,
+                "maxWidth": VIEWPORT_WIDTH,
+                "maxHeight": VIEWPORT_HEIGHT,
+            },
+        )
+
+        async def stop() -> None:
+            try:
+                await cdp.send("Page.stopScreencast")
+                await cdp.detach()
+            except Exception:
+                logger.debug("screencast stop failed", exc_info=True)
+
+        return stop
 
     async def save_login(self, path: Path) -> None:
         """Keep the teacher's login for next time (Playwright storage_state)."""

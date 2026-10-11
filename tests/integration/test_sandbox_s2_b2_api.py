@@ -253,3 +253,16 @@ def test_s1_inspect_still_works_on_own_html(client) -> None:
     assert payload["h1"] == "第一课"
     shot = payload.get("screenshot") or payload.get("raster")
     assert shot and shot.get("mime") == "image/png"
+
+
+def test_live_pane_stream_checks_owner_before_streaming(client) -> None:
+    """#1215: the SSE route refuses other teachers and gone sessions up front."""
+    owner = _headers(client, "member-a")
+    outsider = _headers(client, "member-b")
+    opened = _invoke(client, owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    session_id = opened.json()["result"]["session_id"]
+    assert client.get(f"/v1/sandbox/sessions/{session_id}/stream", headers=outsider).status_code == 403
+    assert (
+        client.get("/v1/sandbox/sessions/sbox_missingmissingmissing/stream", headers=owner).status_code
+        == 404
+    )

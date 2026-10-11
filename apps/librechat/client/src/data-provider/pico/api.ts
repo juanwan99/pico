@@ -3,6 +3,7 @@
  * Must send LibreChat JWT (same as other API clients).
  */
 import { getTokenHeader } from 'librechat-data-provider';
+import { splitSseEvents } from '~/utils/picoSse';
 
 export type PicoArtifact = {
   id: string;
@@ -495,6 +496,39 @@ export async function getPicoSandboxScreenshot(sessionId: string): Promise<Blob>
   return res.blob();
 }
 
+export type PicoSandboxFrame = { jpeg?: string; poll?: boolean; ping?: boolean; window_id?: string };
+
+/** Live pane (#1215): SSE of JPEG frames pushed when the page repaints. Resolves when it ends. */
+export async function streamPicoSandbox(
+  sessionId: string,
+  onEvent: (event: PicoSandboxFrame) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `/api/pico/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/stream`,
+    {
+      credentials: 'include',
+      headers: { ...authHeaders(), Accept: 'text/event-stream' },
+      cache: 'no-store',
+      signal,
+    },
+  );
+  if (!res.ok || !res.body) {
+    throw new Error(`pico ${res.status}`);
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) {
+      return;
+    }
+    const { events, rest } = splitSseEvents<PicoSandboxFrame>(buf + value);
+    buf = rest;
+    events.forEach(onEvent);
+  }
+}
+
 export async function focusPicoSandboxWindow(
   sessionId: string,
   body: { window_id?: string; kind?: string },
@@ -535,7 +569,14 @@ export async function clearPicoSandboxDisk() {
 
 export async function postPicoSandboxInput(
   sessionId: string,
-  body: { click_x?: number; click_y?: number; text?: string; secret?: string },
+  body: {
+    click_x?: number;
+    click_y?: number;
+    text?: string;
+    secret?: string;
+    scroll_dy?: number;
+    key?: string;
+  },
 ) {
   return picoFetch<PicoSandboxSessionMeta>(
     `/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/input`,

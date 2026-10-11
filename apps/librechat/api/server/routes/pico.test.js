@@ -577,6 +577,33 @@ describe('Pico proxy routes', () => {
     );
   });
 
+  it('pipes the live-pane SSE without buffering or compression (#1215)', async () => {
+    const frames = 'data: {"jpeg":"AAA"}\n\ndata: {"ping":true}\n\n';
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: new Response(frames).body,
+    });
+    const response = await request(app).get(
+      '/api/pico/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa/stream',
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/text\/event-stream/);
+    expect(response.headers['cache-control']).toMatch(/no-transform/);
+    expect(response.text).toBe(frames);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa/stream',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Accept: 'text/event-stream' }),
+      }),
+    );
+  });
+
+  it('live-pane stream refuses a bad session id', async () => {
+    const response = await request(app).get('/api/pico/v1/sandbox/sessions/bad%20id/stream');
+    expect(response.status).toBe(400);
+  });
+
   it('forwards pane input JSON without inventing a second path', async () => {
     const response = await request(app)
       .post('/api/pico/v1/sandbox/sessions/sbox_aaaaaaaaaaaaaaaaaaaaaaaa/input')
