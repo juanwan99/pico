@@ -175,7 +175,7 @@ class FakeChromiumPage:
 async def embedded_runtime(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PICO_SANDBOX_URL", "embedded")
 
-    async def fake_open(url: str) -> FakeChromiumPage:
+    async def fake_open(url: str, **_kw) -> FakeChromiumPage:
         return FakeChromiumPage(url)
 
     monkeypatch.setattr(RUNTIME, "_open_browser", fake_open)

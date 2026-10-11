@@ -1,7 +1,8 @@
 """In-memory B2 Chromium sessions.
 
-Sessions die with this process / TTL. Cookies stay in the Chromium context
-and a tmpfs profile directory — never the host home directory.
+Sessions die with this process / TTL. The teacher's site login is kept on
+their own disk (``.browser-login.json``, Playwright storage_state) so the next
+open is already logged in — never the host home directory.
 Passwords are never written to logs, tool payloads, or screenshot text overlays.
 """
 
@@ -52,10 +53,11 @@ HUMAN_LOGIN_COPY = "请在此画面自行登录，不要在聊天里发送密码
 HUMAN_OFFICE_COPY = "沙箱已用 LibreOffice 打开这份文档。这是字处理窗口，不是 PDF，也不是下载。"
 SESSION_TTL_S = int(os.environ.get("PICO_SANDBOX_TTL_S") or str(30 * 60))
 MAX_SESSIONS = int(os.environ.get("PICO_SANDBOX_MAX_SESSIONS") or "8")
-APPLIED_COPY = (
-    "已把操作送进 sidecar Chromium。"
-    "Cookie 只在会话内存/临时 profile，随销毁消失。"
-)
+APPLIED_COPY = "已把操作送进 sidecar Chromium。登录状态存在你自己的老师盘上，下次打开不用再登。"
+# Saved login (owner 2026-10-11 09:17): one file per teacher on their own disk.
+# Clearing the teacher disk, or logging out on the site, drops it.
+LOGIN_FILE = ".browser-login.json"
+LOGIN_SAVE_EVERY_S = 15.0
 # "current" = the caller's own desk (one per school+membership). Lets the AI act
 # on a pane the teacher opened without having the session id in hand.
 CURRENT_SESSION = "current"
@@ -88,7 +90,7 @@ _JIAOWU_HOST_MARKERS = (
     "eas.admin",
 )
 
-OpenBrowser = Callable[[str], Awaitable[BrowserPage]]
+OpenBrowser = Callable[..., Awaitable[BrowserPage]]
 
 
 @dataclass
@@ -117,6 +119,7 @@ class SandboxSession:
     secret_fields: set[str] = field(default_factory=set)
     has_text_input: bool = False
     has_password_input: bool = False
+    login_saved_at: float = 0.0
 
     def focused(self) -> SandboxWindow:
         for item in self.windows:
@@ -272,6 +275,24 @@ class SandboxRuntime:
                 return sess
         return None
 
+    @staticmethod
+    def _login_path(school_id: str, membership_id: str) -> Path:
+        return owner_disk_dir(school_id, membership_id) / LOGIN_FILE
+
+    async def _save_login(self, sess: SandboxSession, *, throttle: bool = False) -> None:
+        now = time.time()
+        if throttle and now - sess.login_saved_at < LOGIN_SAVE_EVERY_S:
+            return
+        for item in sess.windows:
+            save = getattr(item.surface, "save_login", None)
+            if item.kind != "browser" or not callable(save):
+                continue
+            try:
+                await save(self._login_path(sess.school_id, sess.membership_id))
+                sess.login_saved_at = now
+            except Exception:
+                logger.debug("sandbox login save failed", exc_info=True)
+
     def _workspace(self, sess: SandboxSession) -> Path:
         root = owner_disk_dir(sess.school_id, sess.membership_id)
         root.mkdir(parents=True, exist_ok=True)
@@ -393,7 +414,7 @@ class SandboxRuntime:
             return await self._attach_browser(existing, url)
         if len(self._sessions) >= MAX_SESSIONS:
             raise ToolError("sandbox.quota", "沙箱已满（最多 8 路），请关掉一路再开。机器未继续扩进程。")
-        page = await self._open_browser(url)
+        page = await self._open_browser(url, login_state=self._login_path(school, member))
         stored = False
         try:
             parse_public_http_url(page.url)
@@ -430,7 +451,7 @@ class SandboxRuntime:
             sess,
             message=(
                 f"已在 sidecar Chromium 打开公开页。{HUMAN_LOGIN_COPY}"
-                "会话随沙箱销毁，不会把 Cookie 写回宿主机。"
+                "登录一次后存在你的老师盘上，下次打开自动带上。"
             ),
         )
 
@@ -545,7 +566,9 @@ class SandboxRuntime:
                     sess,
                     message=f"已切回 sidecar Chromium。{HUMAN_LOGIN_COPY}",
                 )
-        page = await self._open_browser(url)
+        page = await self._open_browser(
+            url, login_state=self._login_path(sess.school_id, sess.membership_id)
+        )
         try:
             parse_public_http_url(page.url)
             win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind="browser", surface=page)
@@ -615,6 +638,7 @@ class SandboxRuntime:
     async def screenshot(self, session: SandboxSession) -> dict[str, Any]:
         await self._purge()
         await self._sync(session)
+        await self._save_login(session, throttle=True)
         return self._public_meta(
             session,
             png_sha256=hashlib.sha256(session.screenshot_png).hexdigest()[:16],
@@ -640,6 +664,7 @@ class SandboxRuntime:
                 session.secret_fields.add(field)
             await surface.type_text(text, password=password)
         await self._sync(session)
+        await self._save_login(session)
         return self._public_meta(
             session,
             clicked=clicked,
@@ -678,8 +703,8 @@ class SandboxRuntime:
     ) -> dict[str, Any]:
         """AI hands (#1207): one Playwright action, then a fresh ref snapshot.
 
-        Login / captcha / payment / submit are refused inside the browser
-        adapter (sandbox.human_required). Never logs `text`.
+        Password / captcha typing and payment clicks are refused inside the
+        browser adapter (sandbox.human_required). Never logs `text`.
         """
         await self._purge()
         verb = (action or "").strip().lower()
@@ -704,6 +729,7 @@ class SandboxRuntime:
             await hands.wait_for(text=text, text_gone=text_gone, seconds=float(seconds or 0))
         snapshot = await hands.snapshot()
         await self._sync(session)
+        await self._save_login(session)
         return self._public_meta(
             session,
             action=verb,
@@ -716,6 +742,7 @@ class SandboxRuntime:
         sess = self._sessions.pop(session_id, None)
         if sess is None:
             return
+        await self._save_login(sess)
         for item in sess.windows:
             try:
                 await item.surface.close()

@@ -134,7 +134,7 @@ Codex 后来同意主线：成熟上游接走职责 → 验证能否减少 Pico 
 | # | 上限 | 依据 |
 |---|------|------|
 | L1 | **API/进程重启后不从工具中途 resume** | `docs/RESEARCH-RUN-SURVIVE-RESTART.md` 选 B1 drain + B3 人话重跑；B2 完整 resume 不做。`ADR-DURABLE-RUN.md`：deploy 孤儿标 failed，用户续跑/retry |
-| L2 | **模型不代登站点（不碰密码 / 验证码 / 付款 / 最后提交）、不持有站点 Cookie 当真源**；用户登录后 AI 可在同一会话里代填（#1207，业主 2026-10-11） | SANDBOX-S2 §3 第 4 条：AI 动手按 Playwright 快照编号操作；人保留登录 / 付款 / 提交；Cookie 只在 sidecar tmpfs，随 destroy/TTL 死 |
+| L2 | **模型不输密码 / 验证码、不付款**；用户登录后 AI 可代填、可点登录 / 提交，登录按人保存（#1207；业主 2026-10-11 09:17「简单、有效」） | SANDBOX-S2 §3 第 4 条：AI 动手按 Playwright 快照编号操作；人只保留输密码 / 验证码 / 付款；登录存老师盘 `.browser-login.json` |
 | L3 | **设计师级 PPT / SmartArt / VBA / 动画不承诺** | ADR-OFFICE-DOC-PIPELINE：天花板 = Claude/Codex 文档 skill 档，不是 Word 内 Copilot |
 | L4 | **不是一人一机云桌面** | S1/S2：数据租户隔离，不是每校 VM |
 | L5 | **任何地方都不开放** Pi 内建 bash/read/write/edit（宿主 **与** overlay） | 业主 2026-09-06：不要 bash。ADR-PI：`--no-builtin-tools` 永在。B1 箱内 builtins **取消** |

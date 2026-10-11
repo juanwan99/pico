@@ -264,7 +264,7 @@ async def test_screenshot_then_next_chat_sees_pixels(monkeypatch) -> None:
         async def close(self) -> None:
             return None
 
-    async def fake_open(url: str):
+    async def fake_open(url: str, **_kw):
         return _FakePage(url)
 
     monkeypatch.setenv("PICO_SANDBOX_URL", "embedded")

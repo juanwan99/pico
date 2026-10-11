@@ -20,16 +20,18 @@ SANDBOX_BROWSER_TOOLS = frozenset(
 )
 HUMAN_COPY = "请在此画面自行登录，不要在聊天里发送密码"
 _SECRET_KEYS = frozenset({"password", "passwd", "secret", "credential", "cookie", "cookies"})
+# Screenshot pixels go to the model as image content (bridge), never into the ledger.
+_PIXEL_KEYS = frozenset({"image_png_base64"})
 
 
 def public_tool_result(result: Any) -> Any:
-    """Drop password-like keys before a sandbox tool result hits the ledger."""
+    """Drop password-like keys and raw pixels before a sandbox tool result hits the ledger."""
     if not isinstance(result, dict):
         return result
     out: dict[str, Any] = {}
     for key, value in result.items():
         low = str(key).lower()
-        if low in _SECRET_KEYS or low.endswith("password"):
+        if low in _SECRET_KEYS or low in _PIXEL_KEYS or low.endswith("password"):
             continue
         out[key] = value
     return out
