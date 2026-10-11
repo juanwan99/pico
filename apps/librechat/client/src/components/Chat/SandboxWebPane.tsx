@@ -24,6 +24,9 @@ const POLL_MS = 400;
 const META_EVERY_TICKS = 5;
 const STREAM_RETRY_MS = 5000;
 const SCROLL_FLUSH_MS = 120;
+/** Fit the pane (#1224): the page lays out at the stage size once resizing settles. */
+const FIT_SETTLE_MS = 300;
+const FIT_MIN_DELTA_PX = 8;
 const PANE_KEYS = new Set([
   'Enter',
   'Tab',
@@ -92,6 +95,8 @@ export default function SandboxWebPane({
   liveRef.current = live;
   const streamingRef = useRef(false);
   const scrollRef = useRef({ dy: 0, timer: 0 });
+  const stageRef = useRef<HTMLDivElement>(null);
+  const fitRef = useRef({ w: 0, h: 0 });
 
   const applyMeta = useCallback((meta: {
     url?: string;
@@ -237,6 +242,41 @@ export default function SandboxWebPane({
       streamingRef.current = false;
     };
   }, [sessionId]);
+
+  // The page lays out at the stage size instead of a 1280x800 picture shrunk in.
+  // Zoomed in, the teacher wants the bigger picture: keep the last size.
+  const fitsPane = live === 'live' && focusedKind === 'browser' && zoom === 1;
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !fitsPane || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    let timer = 0;
+    const send = () => {
+      const w = Math.floor(stage.clientWidth);
+      const h = Math.floor(stage.clientHeight);
+      const last = fitRef.current;
+      if (w <= 0 || h <= 0) {
+        return;
+      }
+      if (Math.abs(w - last.w) < FIT_MIN_DELTA_PX && Math.abs(h - last.h) < FIT_MIN_DELTA_PX) {
+        return;
+      }
+      fitRef.current = { w, h };
+      void postPicoSandboxInput(sessionId, { viewport_width: w, viewport_height: h }).catch(() => {
+        fitRef.current = last;
+      });
+    };
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(send, FIT_SETTLE_MS);
+    });
+    observer.observe(stage);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [fitsPane, sessionId]);
 
   const sendInput = async (body: {
     click_x?: number;
@@ -423,6 +463,7 @@ export default function SandboxWebPane({
         </div>
       ) : null}
       <div
+        ref={stageRef}
         className="relative min-h-0 flex-1 overflow-auto bg-[#f3f3f3]"
         data-testid="sandbox-web-stage"
         data-zoom={`${Math.round(zoom * 100)}%`}

@@ -576,6 +576,8 @@ export async function postPicoSandboxInput(
     secret?: string;
     scroll_dy?: number;
     key?: string;
+    viewport_width?: number;
+    viewport_height?: number;
   },
 ) {
   return picoFetch<PicoSandboxSessionMeta>(

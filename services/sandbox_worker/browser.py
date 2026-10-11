@@ -28,6 +28,10 @@ ENGINE_NAME = "playwright-chromium"
 # Sandbox desktop (teacher's computer), not the phone shell.
 VIEWPORT_WIDTH = 1280
 VIEWPORT_HEIGHT = 800
+# Fit the pane (#1224): the page lays out at the pane's own size instead of a
+# 1280x800 picture shrunk into it. Upstream = Playwright set_viewport_size.
+VIEWPORT_MIN = (360, 300)
+VIEWPORT_MAX = (1920, 1200)
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 GOTO_TIMEOUT_MS = 20_000
 # AI hands (#1207): aria snapshot with Playwright refs. Bounded so one page
@@ -353,6 +357,7 @@ class PlaywrightPage:
         self._profile_dir = profile_dir
         # Bumps whenever the current tab changes; the live pane re-attaches (#1217).
         self.page_token = 0
+        self._viewport = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
         self._dialogs: list[str] = []
         for existing in list(getattr(context, "pages", []) or []):
             self._watch(existing)
@@ -377,6 +382,22 @@ class PlaywrightPage:
         if page is not self._page:
             self._page = page
             self.page_token += 1
+            if page.viewport_size != self._size_dict():
+                asyncio.ensure_future(page.set_viewport_size(self._size_dict()))
+
+    def _size_dict(self) -> dict[str, int]:
+        return {"width": self._viewport[0], "height": self._viewport[1]}
+
+    async def set_viewport(self, width: int, height: int) -> tuple[int, int]:
+        """The teacher's pane size; new tabs follow it too."""
+        size = (
+            max(VIEWPORT_MIN[0], min(VIEWPORT_MAX[0], int(width))),
+            max(VIEWPORT_MIN[1], min(VIEWPORT_MAX[1], int(height))),
+        )
+        if size != self._viewport:
+            self._viewport = size
+            await self._page.set_viewport_size(self._size_dict())
+        return size
 
     def _on_new_page(self, page: Any) -> None:
         """A link with target=_blank / window.open: the new tab becomes current."""
@@ -853,8 +874,8 @@ class PlaywrightPage:
             {
                 "format": "jpeg",
                 "quality": SCREENCAST_QUALITY,
-                "maxWidth": VIEWPORT_WIDTH,
-                "maxHeight": VIEWPORT_HEIGHT,
+                "maxWidth": VIEWPORT_MAX[0],
+                "maxHeight": VIEWPORT_MAX[1],
             },
         )
 

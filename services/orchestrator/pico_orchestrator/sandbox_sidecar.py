@@ -144,6 +144,8 @@ async def _embedded_call(
                 field=str(body.get("field") or "input"),
                 scroll_dy=body.get("scroll_dy"),
                 key=str(body.get("key") or ""),
+                viewport_width=body.get("viewport_width"),
+                viewport_height=body.get("viewport_height"),
             )
         if method == "POST" and path.endswith("/act"):
             body = json_body or {}

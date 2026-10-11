@@ -676,9 +676,14 @@ class SandboxRuntime:
         field: str = "input",
         scroll_dy: int | None = None,
         key: str = "",
+        viewport_width: int | None = None,
+        viewport_height: int | None = None,
     ) -> dict[str, Any]:
         await self._purge()
         surface = session.focused().surface
+        fit = getattr(surface, "set_viewport", None)
+        if viewport_width and viewport_height and callable(fit):
+            await fit(int(viewport_width), int(viewport_height))
         clicked = click_x is not None and click_y is not None
         if clicked:
             await surface.click(int(click_x), int(click_y))
