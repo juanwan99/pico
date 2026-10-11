@@ -147,6 +147,10 @@ function registerTool(
     label: name,
     description,
     parameters,
+    // Upstream compat shim: some models send `null` for a no-arg call, which
+    // Pi's schema check rejects before execute ("root: must be object").
+    prepareArguments: (args: unknown) =>
+      (args && typeof args === "object" ? args : {}) as any,
     async execute(_toolCallId, params, signal) {
       const args = (params || {}) as Record<string, unknown>;
       const out = await callGateway(name, args, signal);
