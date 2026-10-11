@@ -91,12 +91,18 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(tmp_path)
         assert page.viewport_size == {"width": 480, "height": 620}
         assert await page.evaluate("innerWidth") == 480
         assert await page.is_visible("#w")  # the site's own narrow layout
-        await asyncio.sleep(0.6)
-        await stop()
         from PIL import Image
 
-        last = Image.open(io.BytesIO(base64.b64decode(frames[-1])))
-        assert last.size == (480, 620)  # pane clicks map 1:1 onto the page
+        def last_size() -> tuple[int, int] | None:
+            return Image.open(io.BytesIO(base64.b64decode(frames[-1]))).size if frames else None
+
+        for n in range(50):  # a still page sends nothing: repaint until a frame lands
+            await page.evaluate("t => document.getElementById('w').textContent = t", f"narrow {n}")
+            if last_size() == (480, 620):
+                break
+            await asyncio.sleep(0.1)
+        await stop()
+        assert last_size() == (480, 620)  # pane clicks map 1:1 onto the page
 
         assert await surface.set_viewport(10, 99_999) == (VIEWPORT_MIN[0], VIEWPORT_MAX[1])
         await surface.set_viewport(900, 700)
