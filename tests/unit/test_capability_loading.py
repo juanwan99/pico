@@ -34,14 +34,14 @@ def test_core_and_extended_partition_gateway():
     assert set(CORE_VISIBLE_TOOLS) & set(EXTENDED_TOOLS) == set()
     assert "bash" not in CORE_VISIBLE_TOOLS
     assert "bash" not in EXTENDED_TOOLS
-    assert len(CORE_VISIBLE_TOOLS) == 25  # 18 + 7 AI-hands verbs (#1207)
+    assert len(CORE_VISIBLE_TOOLS) == 26  # 18 + 7 AI-hands verbs (#1207) + screenshot (#1209)
     assert "read_office_skill" in CORE_VISIBLE_TOOLS
     assert "inspect_document" not in CORE_VISIBLE_TOOLS
     assert "verify_document" not in CORE_VISIBLE_TOOLS
     assert "inspect_document" not in EXTENDED_TOOLS
     assert "verify_document" not in EXTENDED_TOOLS
     assert "read_office_skill" not in EXTENDED_TOOLS
-    assert len(EXTENDED_TOOLS) == 6  # +propose_page_mutation (#975)
+    assert len(EXTENDED_TOOLS) == 5  # +propose_page_mutation (#975) − screenshot to CORE (#1209)
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS
@@ -63,7 +63,7 @@ def test_core_and_extended_partition_gateway():
     assert "sandbox_document_open" in CORE_VISIBLE_TOOLS
     assert "sandbox_browser_open" not in EXTENDED_TOOLS
     assert "sandbox_document_open" not in EXTENDED_TOOLS
-    assert "sandbox_browser_screenshot" in EXTENDED_TOOLS
+    assert "sandbox_browser_screenshot" in CORE_VISIBLE_TOOLS  # AI looks at the page (#1209)
     assert "publish_html_page" in EXTENDED_TOOLS
     assert "kb_search" in CORE_VISIBLE_TOOLS
     assert "ask_user" in CORE_VISIBLE_TOOLS
@@ -87,7 +87,7 @@ def test_default_visible_is_core_not_full_allowlist():
     assert "unpublish_html_page" not in visible
     assert "sandbox_browser_open" in visible
     assert "sandbox_document_open" in visible
-    assert "sandbox_browser_screenshot" not in visible
+    assert "sandbox_browser_screenshot" in visible  # AI looks at the page (#1209)
     assert "kb_search" in visible
     assert "verify_document" not in visible
     assert "inspect_document" not in visible
