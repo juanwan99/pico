@@ -2116,10 +2116,17 @@ def _workspace_handlers(
                 "url": str(args.get("url") or "").strip(),
                 "seconds": float(args.get("time") or args.get("seconds") or 0),
                 "text_gone": str(args.get("text_gone") or args.get("textGone") or ""),
+                "double_click": bool(args.get("double_click") or args.get("doubleClick")),
             }
+            if action == "tabs":
+                body["tab_action"] = str(args.get("action") or "list").strip().lower()
+                try:
+                    body["index"] = max(0, int(args.get("index") or 0))
+                except (TypeError, ValueError):
+                    raise ToolError("tool.invalid_arguments", "index 必须是数字") from None
             if action == "navigate" and not body["url"]:
                 raise ToolError("tool.invalid_arguments", "url 必须是非空字符串")
-            if action in {"click", "type", "select_option"} and not body["ref"]:
+            if action in {"click", "hover", "type", "select_option"} and not body["ref"]:
                 raise ToolError("tool.invalid_arguments", "ref 必须是快照里的编号")
             if action == "press_key" and not body["key"]:
                 raise ToolError("tool.invalid_arguments", "key 必须是非空字符串")
@@ -2307,7 +2314,12 @@ def _workspace_handlers(
         "sandbox_browser_screenshot": browser_screenshot,
         "sandbox_browser_snapshot": _browser_hand("sandbox_browser_snapshot", "snapshot"),
         "sandbox_browser_navigate": _browser_hand("sandbox_browser_navigate", "navigate"),
+        "sandbox_browser_navigate_back": _browser_hand(
+            "sandbox_browser_navigate_back", "navigate_back"
+        ),
         "sandbox_browser_click": _browser_hand("sandbox_browser_click", "click"),
+        "sandbox_browser_hover": _browser_hand("sandbox_browser_hover", "hover"),
+        "sandbox_browser_tabs": _browser_hand("sandbox_browser_tabs", "tabs"),
         "sandbox_browser_type": _browser_hand("sandbox_browser_type", "type"),
         "sandbox_browser_select_option": _browser_hand(
             "sandbox_browser_select_option", "select_option"
@@ -2623,9 +2635,33 @@ def build_default_gateway(
             "Args: url, session_id?.",
         ),
         (
+            "sandbox_browser_navigate_back",
+            "Go back to the previous page in the current tab. ",
+            "Args: session_id?.",
+        ),
+        (
             "sandbox_browser_click",
-            "Click the element with the given ref from the latest snapshot. ",
+            (
+                "Click the element with the given ref from the latest snapshot; "
+                "double_click=true double-clicks. A link that opens a new tab makes that "
+                "tab current (the result lists tabs). Page alert/confirm dialogs are "
+                "answered OK and reported in the result. "
+            ),
+            "Args: ref, element?, double_click?, session_id?.",
+        ),
+        (
+            "sandbox_browser_hover",
+            "Move the mouse over the element with the given ref (menus that open on hover). ",
             "Args: ref, element?, session_id?.",
+        ),
+        (
+            "sandbox_browser_tabs",
+            (
+                "List the browser tabs, or switch to (select) / close the tab at index "
+                "(0-based); action is list, select or close. New tabs from links are "
+                "already current. "
+            ),
+            "Args: action, index?, session_id?.",
         ),
         (
             "sandbox_browser_type",
@@ -3018,6 +3054,10 @@ def openai_tool_schemas(
             },
             "required": ["url"],
         },
+        "sandbox_browser_navigate_back": {
+            "type": "object",
+            "properties": {"session_id": {"type": "string"}},
+        },
         "sandbox_browser_click": {
             "type": "object",
             "properties": {
@@ -3026,9 +3066,32 @@ def openai_tool_schemas(
                     "description": "Element ref from the latest snapshot, e.g. s1e8",
                 },
                 "element": {"type": "string", "description": "Human-readable element description"},
+                "double_click": {"type": "boolean", "description": "Double-click instead"},
                 "session_id": {"type": "string"},
             },
             "required": ["ref"],
+        },
+        "sandbox_browser_hover": {
+            "type": "object",
+            "properties": {
+                "ref": {"type": "string", "description": "Element ref from the latest snapshot"},
+                "element": {"type": "string"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["ref"],
+        },
+        "sandbox_browser_tabs": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list", "select", "close"],
+                    "description": "list tabs, or select / close the tab at index",
+                },
+                "index": {"type": "integer", "description": "0-based tab index"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["action"],
         },
         "sandbox_browser_type": {
             "type": "object",

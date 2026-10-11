@@ -105,6 +105,10 @@ class FakeFormPage:
         self.keys: list[str] = []
         self.waited: list[tuple[str, str, float]] = []
         self.closed = False
+        self.dialogs: list[str] = []
+        self.second_tab = ""
+        self.tab_calls: list[tuple[str, int]] = []
+        self.hovered: list[str] = []
 
     @property
     def url(self) -> str:
@@ -167,8 +171,28 @@ class FakeFormPage:
         parse_public_http_url(url)
         self._url = url
 
-    async def click_ref(self, ref: str) -> None:
+    def take_dialogs(self) -> list[str]:
+        out, self.dialogs = self.dialogs, []
+        return out
+
+    async def tabs(self, action: str, index: int) -> list[dict[str, Any]]:
+        self.tab_calls.append((action, index))
+        rows = [{"index": 0, "url": self._url, "title": "", "current": True}]
+        if self.second_tab:
+            rows.append({"index": 1, "url": self.second_tab, "title": "", "current": False})
+        return rows
+
+    async def hover_ref(self, ref: str) -> None:
+        self._info(ref)
+        self.hovered.append(ref)
+
+    async def navigate_back(self) -> None:
+        self._url = self._url.rsplit("/", 1)[0]
+
+    async def click_ref(self, ref: str, *, double: bool = False) -> None:
         info = self._info(ref)
+        if double:
+            self.keys.append("dblclick")
         step = is_handoff_control(info)
         if step:
             from sandbox_worker.browser import human_required
@@ -315,6 +339,34 @@ async def test_fill_select_click_act_on_page_and_return_fresh_snapshot(hands_run
     waited = await gw.invoke(owner, "sandbox_browser_wait_for", {"text": "完成", "time": 2})
     assert pages[0].waited == [("完成", "", 2.0)]
     assert waited["action"] == "wait_for"
+
+
+@pytest.mark.asyncio
+async def test_back_hover_tabs_and_dialog_note_reach_the_model(hands_runtime) -> None:
+    """#1217: dialogs answered OK are reported; a second tab is listed."""
+    _, pages = hands_runtime
+    gw = _gw()
+    owner = P("school-a", "member-a", ["ai:run"])
+    await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e6"})
+    back = await gw.invoke(owner, "sandbox_browser_navigate_back", {})
+    assert back["url"] == "https://example.com"
+    assert back["action"] == "navigate_back"
+    assert "tabs" not in back  # one tab: no noise
+    await gw.invoke(owner, "sandbox_browser_hover", {"ref": "s1e6"})
+    assert pages[0].hovered == ["s1e6"]
+    with pytest.raises(ToolError):
+        await gw.invoke(owner, "sandbox_browser_hover", {})
+    pages[0].dialogs.append("确定提交?")
+    pages[0].second_tab = "https://example.com/b"
+    clicked = await gw.invoke(owner, "sandbox_browser_click", {"ref": "s1e7", "double_click": True})
+    assert pages[0].keys[-1] == "dblclick"
+    assert clicked["dialogs"] == ["确定提交?"]
+    assert "页面弹窗「确定提交?」，已点确定" in clicked["message"]
+    assert [t["url"] for t in clicked["tabs"]][1] == "https://example.com/b"
+    picked = await gw.invoke(owner, "sandbox_browser_tabs", {"action": "select", "index": 1})
+    assert ("select", 1) in pages[0].tab_calls
+    assert picked["action"] == "tabs"
 
 
 @pytest.mark.asyncio

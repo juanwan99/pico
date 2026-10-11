@@ -34,7 +34,7 @@ def test_core_and_extended_partition_gateway():
     assert set(CORE_VISIBLE_TOOLS) & set(EXTENDED_TOOLS) == set()
     assert "bash" not in CORE_VISIBLE_TOOLS
     assert "bash" not in EXTENDED_TOOLS
-    assert len(CORE_VISIBLE_TOOLS) == 26  # 18 + 7 AI-hands verbs (#1207) + screenshot (#1209)
+    assert len(CORE_VISIBLE_TOOLS) == 29  # 18 + 7 AI-hands verbs (#1207) + screenshot (#1209) + back/hover/tabs (#1217)
     assert "read_office_skill" in CORE_VISIBLE_TOOLS
     assert "inspect_document" not in CORE_VISIBLE_TOOLS
     assert "verify_document" not in CORE_VISIBLE_TOOLS
