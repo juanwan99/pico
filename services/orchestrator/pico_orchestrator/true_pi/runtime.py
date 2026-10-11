@@ -81,6 +81,15 @@ def track_open_tool(
         open_tools.clear()
 
 
+def pi_accepts_image(images: Any, model: str | None) -> bool:
+    """Declare image input to Pi when the teacher attached one, or when the chat
+    model can see (Gemini). Otherwise Pi drops screenshots and workspace images
+    ("Current model does not support images") — #1209 AI 看截图."""
+    from pico_orchestrator.vision import model_accepts_image
+
+    return bool(images) or model_accepts_image(model)
+
+
 def hung_tool(open_tools: dict[str, tuple[str, float, float]], now: float) -> str:
     """Why the oldest open tool call counts as hung, or empty if none has."""
     for name, opened, limit in open_tools.values():
@@ -534,7 +543,7 @@ async def _run_true_pi_once(
                 plan_hitl=plan_on,
                 spawn_cwd=sess,
                 system_prompt_text=system_text,
-                accept_image=bool(images),
+                accept_image=pi_accepts_image(images, backend_model),
                 base_url=pi_base,
                 api=pi_api,
                 thinking_level=pi_thinking_level,

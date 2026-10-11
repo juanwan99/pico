@@ -545,3 +545,23 @@ async def test_real_chromium_snapshot_refs_fill_select_and_handoff() -> None:
         await context.close()
         await browser.close()
         await pw.stop()
+
+
+def test_pi_declares_image_input_for_a_seeing_model() -> None:
+    """Without this Pi drops the screenshot ("Current model does not support images")."""
+    from pico_orchestrator.true_pi.client import true_pi_models_document
+    from pico_orchestrator.true_pi.runtime import pi_accepts_image
+
+    assert pi_accepts_image([], "gemini-3.8-flash") is True
+    assert pi_accepts_image(None, "deepseek-v4-flash") is False
+    assert pi_accepts_image([{"url": "x"}], "deepseek-v4-flash") is True
+    doc = json.dumps(
+        true_pi_models_document(
+            provider="deepseek",
+            model="gemini-3.8-flash",
+            max_context=100_000,
+            max_tokens=8_000,
+            accept_image=pi_accepts_image([], "gemini-3.8-flash"),
+        )
+    )
+    assert '"image"' in doc
