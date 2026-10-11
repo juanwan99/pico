@@ -27,6 +27,7 @@ import { useComposerMaterials } from '~/hooks/Pico/useComposerMaterials';
 import Landing from './Landing';
 import MainDeliveryStrip from './MainDeliveryStrip';
 import PicoAskBar from './PicoAskBar';
+import PaneChatDock from './PaneChatDock';
 import ResultPanel from './ResultPanel';
 import TaskRunBar from './TaskRunBar';
 import ChangeConfirmBanner from './ChangeConfirmBanner';
@@ -332,6 +333,20 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     rerunning={ledger.rerunning}
                     onRerun={() => void ledger.rerunFailedRun(ledger.run?.id)}
                     onClose={() => setResultOpen(false)}
+                    expandedDock={
+                      <PaneChatDock
+                        messages={flatMessages}
+                        processHint={
+                          waitingAsk
+                            ? '在等你选'
+                            : ledger.processHint || (isSubmitting ? '正在检索或作答' : null)
+                        }
+                        canStop={canCancelTask}
+                        stopping={ledger.cancelling}
+                        onStop={() => void ledger.cancelRun(cancellableRunId)}
+                        askBar={<PicoAskBar run={ledger.run} events={ledger.events} />}
+                      />
+                    }
                   />
                 ) : null}
                 {!resultOpen && !isLandingPage ? (

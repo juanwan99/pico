@@ -922,11 +922,31 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     );
     const panel = screen.getByTestId('result-panel');
     expect(panel).toHaveAttribute('data-expanded', 'false');
-    await user.click(screen.getByTestId('result-panel-chrome-menu'));
+    // #1226: 放大 sits on the header, not inside the ⋯ menu.
     await user.click(screen.getByTestId('result-panel-fullscreen'));
     expect(panel).toHaveAttribute('data-expanded', 'true');
     expect(panel.className).toMatch(/pico-result-panel--expanded/);
     expect(screen.queryByTestId('result-panel-resizer')).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(panel).toHaveAttribute('data-expanded', 'false');
+  });
+
+  it('#1226: the chat dock shows only while the pane is full screen', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          expandedDock={<div data-testid="dock-stub" />}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId('dock-stub')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('result-panel-fullscreen'));
+    expect(screen.getByTestId('dock-stub')).toBeInTheDocument();
+    await user.click(screen.getByTestId('result-panel-fullscreen'));
+    expect(screen.queryByTestId('dock-stub')).not.toBeInTheDocument();
   });
 
   it('R1b: html preview zoom buttons change the visible ratio', async () => {
@@ -1063,7 +1083,6 @@ describe('ResultPanel sandbox web pane', () => {
   });
 
   it('U3: a dead session is honest copy + reopen, not spinner + login', async () => {
-    const user = userEvent.setup();
     (getPicoSandboxScreenshot as jest.Mock).mockRejectedValue(new Error('pico 404: gone'));
     (getPicoSandboxSession as jest.Mock).mockRejectedValue(new Error('pico 404: gone'));
     render(
@@ -1098,7 +1117,8 @@ describe('ResultPanel sandbox web pane', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.queryByText('打开我的文件')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sandbox-screen-menu')).not.toBeInTheDocument();
-    await user.click(screen.getByTestId('result-panel-chrome-menu'));
+    // Nothing to zoom: the ⋯ menu is not even shown (#1226).
+    expect(screen.queryByTestId('result-panel-chrome-menu')).not.toBeInTheDocument();
     expect(screen.queryByTestId('pane-zoom-in')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sandbox-zoom-menu')).not.toBeInTheDocument();
   });
