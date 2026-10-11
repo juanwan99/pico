@@ -366,7 +366,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_snapshot",
-    "Read the current page as an accessibility snapshot with element refs (e.g. [ref=s1e8]) — work from this to decide what to click or fill; use sandbox_browser_screenshot only to look at pictures or canvas on the page. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Read the current page as an accessibility snapshot with element refs (e.g. [ref=e8]) — work from this to decide what to click or fill; use sandbox_browser_screenshot only to look at pictures or canvas on the page. Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         session_id: Type.Optional(Type.String()),
@@ -377,7 +377,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_navigate",
-    "Go to a PUBLIC http(s) URL in the existing sandbox browser session. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Go to a PUBLIC http(s) URL in the existing sandbox browser session. Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         url: Type.String(),
@@ -389,7 +389,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_navigate_back",
-    "Go back to the previous page in the current tab. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Go back to the previous page in the current tab. Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         session_id: Type.Optional(Type.String()),
@@ -400,7 +400,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_click",
-    "Click the element with the given ref from the latest snapshot; double_click=true double-clicks. A link that opens a new tab makes that tab current (the result lists tabs). Page alert/confirm dialogs are answered OK and reported in the result. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Click the element with the given ref from the latest snapshot; double_click=true double-clicks. A link that opens a new tab makes that tab current (the result lists tabs). Page alert/confirm dialogs are answered OK and reported in the result. Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         ref: Type.String(),
@@ -414,7 +414,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_hover",
-    "Move the mouse over the element with the given ref (menus that open on hover). Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Move the mouse over the element with the given ref (menus that open on hover). Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         ref: Type.String(),
@@ -427,7 +427,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_fill_form",
-    "Fill many fields of a form in one call: fields=[{ref, value}]. Text boxes get the text; checkboxes / radios are checked when value is true; dropdowns pick by value or visible label. Password / captcha fields are skipped and named back for the teacher. Prefer this over one sandbox_browser_type per field. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Fill many fields of a form in one call: fields=[{ref, value}]. Text boxes get the text; checkboxes / radios are checked when value is true; dropdowns pick by value or visible label. Password / captcha fields are skipped and named back for the teacher. Prefer this over one sandbox_browser_type per field. Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         fields: Type.Array(
@@ -448,7 +448,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_file_upload",
-    "Attach files to the file input (or the upload button) with the given ref: filenames from the teacher's sandbox disk and/or artifact_ids from the Pico ledger (e.g. a document you just generated). Max 10 files, 25 MB. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Attach files to the file input (or the upload button) with the given ref: filenames from the teacher's sandbox disk and/or artifact_ids from the Pico ledger (e.g. a document you just generated). Max 10 files, 25 MB. Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         ref: Type.String(),
@@ -463,7 +463,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_tabs",
-    "List the browser tabs, or switch to (select) / close the tab at index (0-based); action is list, select or close. New tabs from links are already current. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "List the browser tabs, or switch to (select) / close the tab at index (0-based); action is list, select or close. New tabs from links are already current. Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         action: Type.String(),
@@ -476,7 +476,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_type",
-    "Fill text into the editable element with the given ref; submit=true presses Enter afterwards. Password / captcha fields are refused. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Fill text into the editable element with the given ref; submit=true presses Enter afterwards. Password / captcha fields are refused. Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         ref: Type.String(),
@@ -491,7 +491,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_select_option",
-    "Select option(s) in the dropdown with the given ref, by value or by visible label. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Select option(s) in the dropdown with the given ref, by value or by visible label. Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         ref: Type.String(),
@@ -505,7 +505,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_press_key",
-    "Press one key on the focused element (Enter, Tab, ArrowDown, Escape…). Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Press one key on the focused element (Enter, Tab, ArrowDown, Escape…). Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         key: Type.String(),
@@ -517,7 +517,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_wait_for",
-    "Wait until some text appears (text) or disappears (text_gone), or for `time` seconds (max 30). Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Wait until some text appears (text) or disappears (text_gone), or for `time` seconds (max 30). Acts inside the teacher's own isolated sandbox browser session After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         text: Type.Optional(Type.String()),

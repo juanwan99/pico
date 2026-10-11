@@ -2647,10 +2647,12 @@ def build_default_gateway(
     )
     # AI hands (#1207) — shape follows Playwright MCP (browser_snapshot / click /
     # type / select_option / press_key / wait_for / navigate). Every call returns
-    # a fresh `snapshot` with element refs; refs change after each action.
+    # a `snapshot` with stable element refs; after an action only the delta (#1222).
     _HANDS_COMMON = (
         "Acts inside the teacher's own isolated sandbox browser session (sidecar "
-        "Chromium) and returns a fresh page snapshot with element refs. "
+        "Chromium). After an action only what changed comes back (new or changed "
+        "lines with their parents; unlisted lines did not change and their refs "
+        "still work); a new page comes back whole. "
         "Typing a password or captcha, and paying, are human-only: the sidecar "
         "refuses them (sandbox.human_required) — tell the teacher to do that step on "
         "the sandbox pane, then snapshot again. Everything else, including the login "
@@ -2661,7 +2663,7 @@ def build_default_gateway(
             "sandbox_browser_snapshot",
             (
                 "Read the current page as an accessibility snapshot with element refs "
-                "(e.g. [ref=s1e8]) — use this instead of screenshots to decide what to "
+                "(e.g. [ref=e8]) — use this instead of screenshots to decide what to "
                 "click or fill. "
             ),
             "Args: session_id?.",
@@ -3119,7 +3121,7 @@ def openai_tool_schemas(
             "properties": {
                 "ref": {
                     "type": "string",
-                    "description": "Element ref from the latest snapshot, e.g. s1e8",
+                    "description": "Element ref from the latest snapshot, e.g. e8",
                 },
                 "element": {"type": "string", "description": "Human-readable element description"},
                 "double_click": {"type": "boolean", "description": "Double-click instead"},
