@@ -576,11 +576,14 @@ class SandboxRuntime:
         for item in sess.windows:
             if item.kind == "browser":
                 sess.focused_id = item.window_id
+                copy = "已切回 sidecar Chromium。"
+                # A new address goes to the open window; the same one just switches back.
+                go = getattr(item.surface, "navigate", None)
+                if callable(go) and url.rstrip("/") != item.surface.url.rstrip("/"):
+                    await go(url)
+                    copy = "已在 sidecar Chromium 打开公开页。"
                 await self._sync(sess)
-                return self._public_meta(
-                    sess,
-                    message=f"已切回 sidecar Chromium。{HUMAN_LOGIN_COPY}",
-                )
+                return self._public_meta(sess, message=f"{copy}{HUMAN_LOGIN_COPY}")
         page = await self._open_browser(
             url, login_state=self._login_path(sess.school_id, sess.membership_id)
         )

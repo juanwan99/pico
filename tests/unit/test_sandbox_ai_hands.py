@@ -439,6 +439,22 @@ async def test_fill_form_and_upload_from_disk_and_ledger(hands_runtime) -> None:
 
 
 @pytest.mark.asyncio
+async def test_open_on_an_open_desk_goes_to_the_new_address(hands_runtime) -> None:
+    """#1219 follow-up: the desk used to switch back to its old page and drop the URL."""
+    _, pages = hands_runtime
+    gw = _gw()
+    owner = P("school-a", "member-a", ["ai:run"])
+    first = await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    again = await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com"})
+    assert again["session_id"] == first["session_id"]
+    assert "切回" in again["message"]
+    moved = await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.org/form"})
+    assert moved["session_id"] == first["session_id"]
+    assert len(pages) == 1 and pages[0].url == "https://example.org/form"
+    assert moved["url"] == "https://example.org/form"
+
+
+@pytest.mark.asyncio
 async def test_password_captcha_pay_stay_with_human_login_submit_are_ai(hands_runtime) -> None:
     _, pages = hands_runtime
     gw = _gw()
