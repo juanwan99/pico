@@ -335,6 +335,11 @@ async def test_snapshot_uses_current_desk_and_masks_password(hands_runtime) -> N
     banned = {"cookie", "cookies", "password", "passwd", "secret", "credential"}
     assert not (banned & {k.lower() for k in out})
     assert runtime.require_owner(CURRENT_SESSION, school_id="school-a", membership_id="member-a")
+    # An sbox_ id from an earlier, closed sandbox still lands on the open desk (#1233).
+    stale = await gw.invoke(
+        owner, "sandbox_browser_snapshot", {"session_id": "sbox_aa2e67e9f09c877fa8ae4a37"}
+    )
+    assert stale["ok"] is True and stale["session_id"] == opened["session_id"]
 
 
 @pytest.mark.asyncio
@@ -564,7 +569,8 @@ async def test_other_tenant_cannot_act_on_my_desk(hands_runtime) -> None:
     opened = await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
     with pytest.raises(ToolError) as exc:
         await gw.invoke(other, "sandbox_browser_click", {"ref": "e6", "session_id": opened["session_id"]})
-    assert exc.value.code == "sandbox.forbidden"
+    # The AI always acts on its own teacher's desk (#1233); another tenant's id is ignored.
+    assert exc.value.code == "sandbox.session_not_found"
     with pytest.raises(ToolError) as exc:
         await gw.invoke(other, "sandbox_browser_snapshot", {})
     assert exc.value.code == "sandbox.session_not_found"
