@@ -2004,9 +2004,15 @@ def _workspace_handlers(
             await _emit(False, {"error_code": exc.code, "workspace_id": ws})
             raise
 
+    def _sandbox_session_arg(args: dict[str, Any]) -> str:
+        """A real sbox_ id, else the teacher's open sandbox. Models invent ids
+        like "default" on a later turn; that must not lose the open page."""
+        sid = str(args.get("session_id") or "").strip()
+        return sid if sid.startswith("sbox_") else "current"
+
     async def browser_screenshot(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter()
-        session_id = str(args.get("session_id") or "").strip() or "current"
+        session_id = _sandbox_session_arg(args)
         run_id = current_run_id(principal, store)
         ws = workspace_id_for(principal.school_id, principal.membership_id, run_id)
 
@@ -2089,7 +2095,7 @@ def _workspace_handlers(
 
         async def hand(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
             started = time.perf_counter()
-            session_id = str(args.get("session_id") or "").strip() or "current"
+            session_id = _sandbox_session_arg(args)
             run_id = current_run_id(principal, store)
             ws = workspace_id_for(principal.school_id, principal.membership_id, run_id)
             values_raw = args.get("values")

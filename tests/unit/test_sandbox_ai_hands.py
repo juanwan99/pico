@@ -369,6 +369,26 @@ async def test_login_is_kept_per_teacher_for_next_open(hands_runtime, tmp_path: 
 
 
 @pytest.mark.asyncio
+async def test_invented_session_id_means_the_open_sandbox(hands_runtime) -> None:
+    """A later turn may say session_id="default"; the open page must not be lost."""
+    gw = _gw()
+    owner = P("school-a", "member-a", ["ai:run"])
+    opened = await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    for sid in ("default", "current", "", "1"):
+        out = await gw.invoke(owner, "sandbox_browser_snapshot", {"session_id": sid})
+        assert out["session_id"] == opened["session_id"]
+    shot = await gw.invoke(owner, "sandbox_browser_screenshot", {"session_id": "default"})
+    assert shot["session_id"] == opened["session_id"]
+
+
+def test_bridge_turns_null_args_into_an_object() -> None:
+    """Gemini sends `null` for a no-arg call; Pi's schema check must not see it."""
+    ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(encoding="utf-8")
+    assert "prepareArguments: (args: unknown) =>" in ts
+    assert 'typeof args === "object" ? args : {}' in ts
+
+
+@pytest.mark.asyncio
 async def test_screenshot_gives_the_model_pixels_not_the_ledger(hands_runtime) -> None:
     gw = _gw()
     owner = P("school-a", "member-a", ["ai:run"])
