@@ -2132,6 +2132,7 @@ def _workspace_handlers(
                 "values": values,
                 "key": str(args.get("key") or "").strip(),
                 "submit": bool(args.get("submit")),
+                "slowly": bool(args.get("slowly")),
                 "url": str(args.get("url") or "").strip(),
                 "seconds": float(args.get("time") or args.get("seconds") or 0),
                 "text_gone": str(args.get("text_gone") or args.get("textGone") or ""),
@@ -2648,9 +2649,14 @@ def build_default_gateway(
     # AI hands (#1207) — shape follows Playwright MCP (browser_snapshot / click /
     # type / select_option / press_key / wait_for / navigate). Every call returns
     # a `snapshot` with stable element refs; after an action only the delta (#1222).
+    # Shared rules live once on sandbox_browser_snapshot (#1233); the other
+    # actions point at it instead of repeating ~600 chars each.
     _HANDS_COMMON = (
-        "Acts inside the teacher's own isolated sandbox browser session (sidecar "
-        "Chromium). After an action only what changed comes back (new or changed "
+        "Rules for every sandbox_browser_* action: it acts inside the teacher's own "
+        "isolated sandbox browser session (sidecar Chromium). Content inside iframes "
+        "(mail body, rich-text editors, embedded forms) is listed under its iframe line "
+        "with refs like f1e5 and works like any other ref. "
+        "After an action only what changed comes back (new or changed "
         "lines with their parents; unlisted lines did not change and their refs "
         "still work); a new page comes back whole. "
         "Typing a password or captcha, and paying, are human-only: the sidecar "
@@ -2727,9 +2733,11 @@ def build_default_gateway(
             "sandbox_browser_type",
             (
                 "Fill text into the editable element with the given ref; submit=true "
-                "presses Enter afterwards. Password / captcha fields are refused. "
+                "presses Enter afterwards. slowly=true types one key at a time — use it "
+                "for recipient, search and autocomplete boxes, which only react to keys. "
+                "Password / captcha fields are refused. "
             ),
-            "Args: ref, text, element?, submit?, session_id?.",
+            "Args: ref, text, element?, submit?, slowly?, session_id?.",
         ),
         (
             "sandbox_browser_select_option",
@@ -2753,7 +2761,9 @@ def build_default_gateway(
         gw.register(
             ToolSpec(
                 name=_name,
-                description=_desc + _HANDS_COMMON + _args,
+                description=_desc
+                + (_HANDS_COMMON if _name == "sandbox_browser_snapshot" else "Rules: see sandbox_browser_snapshot. ")
+                + _args,
                 handler=h[_name],
                 school_scoped=False,
             )
@@ -3202,6 +3212,10 @@ def openai_tool_schemas(
                 "text": {"type": "string", "description": "Text to fill"},
                 "element": {"type": "string"},
                 "submit": {"type": "boolean", "description": "Press Enter after typing"},
+                "slowly": {
+                    "type": "boolean",
+                    "description": "Type one key at a time (recipient / search / autocomplete boxes)",
+                },
                 "session_id": {"type": "string"},
             },
             "required": ["ref", "text"],

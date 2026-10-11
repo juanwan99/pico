@@ -747,6 +747,7 @@ class SandboxRuntime:
         values: list[str] | None = None,
         key: str = "",
         submit: bool = False,
+        slowly: bool = False,
         url: str = "",
         seconds: float = 0.0,
         text_gone: str = "",
@@ -772,12 +773,6 @@ class SandboxRuntime:
         session.ai_acted_at = time.time()
         window = self._hands(session)
         hands: BrowserHands = window.surface  # type: ignore[assignment]
-        ref = window.refs.resolve(ref)
-        if fields:
-            fields = [
-                {**f, "ref": window.refs.resolve(str(f.get("ref") or ""))} if isinstance(f, dict) else f
-                for f in fields
-            ]
         left: list[str] = []
         if verb == "navigate":
             parse_public_http_url(url)
@@ -798,7 +793,7 @@ class SandboxRuntime:
         elif verb == "file_upload":
             await hands.upload_files(ref, self._upload_payload(session, filenames, files))
         elif verb == "type":
-            await hands.type_ref(ref, text, submit=bool(submit))
+            await hands.type_ref(ref, text, submit=bool(submit), slowly=bool(slowly))
         elif verb == "select_option":
             await hands.select_ref(ref, [str(v) for v in (values or [])])
         elif verb == "press_key":

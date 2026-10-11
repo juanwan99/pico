@@ -1,8 +1,8 @@
-"""Snapshot deltas (#1222): after an action only new / changed lines go back.
+"""Snapshot deltas (#1222) on upstream AI snapshots (#1233).
 
-Upstream = Playwright ``aria_snapshot(ref=True)`` + ``aria-ref=`` (shape of
-Playwright MCP incremental snapshots). Playwright 1.52 renumbers refs on every
-snapshot; ``RefBook`` keeps the AI's ``eN`` stable and maps it back.
+Upstream = Playwright ``aria_snapshot(mode="ai")`` + ``aria-ref=`` (shape of
+Playwright MCP incremental snapshots). Refs stay stable across snapshots and
+iframe content comes back inline with ``f1eN`` refs; ``RefBook`` only diffs.
 """
 
 from __future__ import annotations
@@ -23,75 +23,57 @@ os.environ.setdefault("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
 
 from sandbox_worker.browser import RefBook
 
-PAGE1 = """- heading "报名" [level=1] [ref=s1e3]
-- button "加一行" [ref=s1e4]
-- list [ref=s1e5]:
-  - listitem [ref=s1e6]: 第一行
-  - listitem [ref=s1e7]: 第二行
-- textbox "姓名" [ref=s1e8]
-- button "提交" [ref=s1e9]
-- link "帮助" [ref=s1e10]
-- link "关于" [ref=s1e11]"""
+PAGE1 = """- heading "报名" [level=1] [ref=e3]
+- button "加一行" [ref=e4]
+- list [ref=e5]:
+  - listitem [ref=e6]: 第一行
+  - listitem [ref=e7]: 第二行
+- textbox "姓名" [ref=e8]
+- button "提交" [ref=e9]
+- link "帮助" [ref=e10]
+- link "关于" [ref=e11]"""
 
-# Same page after "加一行": a new list item shifts every ref after it.
-PAGE2 = """- heading "报名" [level=1] [ref=s2e3]
-- button "加一行" [ref=s2e4]
-- list [ref=s2e5]:
-  - listitem [ref=s2e6]: 第一行
-  - listitem [ref=s2e7]: 第二行
-  - listitem [ref=s2e8]: 第三行
-- textbox "姓名" [ref=s2e9]
-- button "提交" [ref=s2e10]
-- link "帮助" [ref=s2e11]
-- link "关于" [ref=s2e12]"""
+# Same page after "加一行": the new item gets a new ref, the rest keep theirs.
+PAGE2 = PAGE1.replace(
+    "  - listitem [ref=e7]: 第二行", "  - listitem [ref=e7]: 第二行\n  - listitem [ref=e12]: 第三行"
+)
 
 
-def _stable(text: str, needle: str) -> str:
-    m = re.search(rf"{re.escape(needle)}[^\n]*\[ref=(e\d+)\]", text)
+def _ref(text: str, needle: str) -> str:
+    line = next((ln for ln in text.splitlines() if needle in ln), "")
+    m = re.search(r"\[ref=((?:f\d+)?e\d+)\]", line)
     assert m, f"{needle} not in:\n{text}"
     return m.group(1)
 
 
-def test_refbook_keeps_refs_and_returns_only_the_change() -> None:
+def test_refbook_returns_only_the_change() -> None:
     book = RefBook()
     full, delta = book.update(PAGE1, page=0)
-    assert delta is None  # first look: the whole page
-    assert "s1e" not in full
-    name_ref = _stable(full, 'textbox "姓名"')
-    assert book.resolve(name_ref) == "s1e8"
+    assert delta is None and full == PAGE1  # first look: the whole page
 
     full2, delta2 = book.update(PAGE2, page=0)
-    # The textbox kept its ref and now points at the renumbered element.
-    assert _stable(full2, 'textbox "姓名"') == name_ref
-    assert book.resolve(name_ref) == "s2e9"
+    assert full2 == PAGE2
     assert delta2 is not None
     assert "第三行" in delta2
-    assert '- list [ref=' in delta2  # parent comes along for context
+    assert "- list [ref=e5]:" in delta2  # parent comes along for context
     assert "提交" not in delta2 and "第一行" not in delta2
     assert len(delta2) < len(full2)
 
-    # Typing changes one line's value: same element, same ref, listed as changed.
-    _, delta3 = book.update(PAGE2.replace('textbox "姓名" [ref=s2e9]', 'textbox "姓名" [ref=s3e9]: 张三'), page=0)
-    assert delta3 is not None and f'textbox "姓名" [ref={name_ref}]: 张三' in delta3
+    # Typing changes one line's value: listed as changed, ref unchanged upstream.
+    typed = PAGE2.replace('textbox "姓名" [ref=e8]', 'textbox "姓名" [ref=e8]: 张三')
+    _, delta3 = book.update(typed, page=0)
+    assert delta3 is not None and 'textbox "姓名" [ref=e8]: 张三' in delta3
 
-    _, same = book.update(PAGE2.replace('[ref=s2e9]', '[ref=s4e9]: 张三'), page=0)
+    _, same = book.update(typed, page=0)
     assert same == "（页面结构没变，编号照用。）"
 
     # A line disappears: counted, not listed.
-    _, gone = book.update("\n".join(ln for ln in PAGE2.splitlines() if "关于" not in ln).replace("[ref=s2e9]", "[ref=s4e9]: 张三"), page=0)
+    _, gone = book.update("\n".join(ln for ln in typed.splitlines() if "关于" not in ln), page=0)
     assert gone is not None and "消失 1 行" in gone
 
     # Another tab (page token bumped) or a different page: whole snapshot.
     assert book.update(PAGE2, page=1)[1] is None
-    assert book.update('- heading "别的页" [level=1] [ref=s9e3]\n- link "x" [ref=s9e4]', page=1)[1] is None
-
-
-def test_refbook_passes_raw_playwright_refs_and_unknown_refs_through() -> None:
-    book = RefBook()
-    book.update(PAGE1, page=0)
-    assert book.resolve("s1e4") == "s1e4"
-    assert book.resolve("e999") == "e999"  # browser adapter reports「页面变了」
-    assert book.resolve(" e1 ") == book.resolve("e1")
+    assert book.update('- heading "别的页" [level=1] [ref=e2]\n- link "x" [ref=e3]', page=1)[1] is None
 
 
 LIST_PAGE = (
@@ -101,18 +83,34 @@ LIST_PAGE = (
     "<label>姓名 <input id=who></label>"
 )
 
+# Mail-style compose (#1233): a recipient box that only reacts to keys, and the
+# body in an iframe editor, like QQ Mail / TinyMCE.
+COMPOSE_PAGE = (
+    "<label>收件人 <input id=to></label><ul id=sug></ul>"
+    "<iframe title=正文 srcdoc=\"<body contenteditable=true><p>旧正文</p></body>\"></iframe>"
+    "<label>密码框 <input id=pw type=password value=hidden-secret></label>"
+    "<script>to.addEventListener('keyup',()=>{sug.innerHTML='<li>建议 '+to.value+'</li>'})</script>"
+)
 
-@pytest.mark.asyncio
-async def test_real_chromium_delta_and_old_ref_still_hits_the_right_box(tmp_path) -> None:
+
+async def _chromium():
     pytest.importorskip("playwright.async_api")
     from playwright.async_api import async_playwright
-    from sandbox_worker.browser import CHROMIUM_ARGS, PlaywrightPage
+    from sandbox_worker.browser import CHROMIUM_ARGS
 
     try:
         pw = await async_playwright().start()
         browser = await pw.chromium.launch(headless=True, args=list(CHROMIUM_ARGS))
     except Exception as exc:  # noqa: BLE001 — environment may lack browser bits
         pytest.skip(f"Chromium unavailable: {exc}")
+    return pw, browser
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_delta_and_old_ref_still_hits_the_right_box(tmp_path) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    pw, browser = await _chromium()
     try:
         context = await browser.new_context()
         page = await context.new_page()
@@ -121,16 +119,64 @@ async def test_real_chromium_delta_and_old_ref_still_hits_the_right_box(tmp_path
         book = RefBook()
 
         full, _ = book.update(await surface.snapshot(), page=surface.page_token)
-        who = _stable(full, 'textbox "姓名"')
-        await surface.click_ref(book.resolve(_stable(full, 'button "加一行"')))
+        who = _ref(full, 'textbox "姓名"')
+        await surface.click_ref(_ref(full, 'button "加一行"'))
         full2, delta = book.update(await surface.snapshot(), page=surface.page_token)
         assert delta is not None and "新的一行" in delta
         assert "课程 39" not in delta
         assert len(delta) * 5 < len(full2)
 
-        # Playwright renumbered everything below the new row; the AI's old ref works.
-        await surface.type_ref(book.resolve(who), "张三", submit=False)
+        # A row was inserted above the box; the AI's old ref still hits it.
+        assert _ref(full2, 'textbox "姓名"') == who
+        await surface.type_ref(who, "张三", submit=False)
         assert await page.input_value("#who") == "张三"
+    finally:
+        await browser.close()
+        await pw.stop()
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_sees_and_types_into_iframes_and_types_slowly(tmp_path) -> None:
+    from pico_orchestrator.gateway import ToolError
+    from sandbox_worker.browser import HUMAN_REQUIRED_CODE, PlaywrightPage
+
+    pw, browser = await _chromium()
+    try:
+        context = await browser.new_context()
+        page = await context.new_page()
+        await page.set_content(COMPOSE_PAGE)
+        await page.wait_for_timeout(200)
+        surface = PlaywrightPage(context, page, tmp_path / "profile")
+
+        snap = await surface.snapshot()
+        assert "旧正文" in snap  # 1.52 showed only `- iframe`
+        body = _ref(snap, "旧正文")
+        assert body.startswith("f")
+        assert "hidden-secret" not in snap
+
+        # Pasting does not wake the recipient box; typing key by key does.
+        to = _ref(snap, 'textbox "收件人"')
+        await surface.type_ref(to, "wan", submit=False)
+        assert "建议" not in await surface.snapshot()
+        await surface.type_ref(to, "", submit=False)
+        await surface.type_ref(to, "wan@x.cn", submit=False, slowly=True)
+        assert "建议 wan@x.cn" in await surface.snapshot()
+
+        # The body inside the iframe takes text through its own ref.
+        await surface.type_ref(body, "你好，这是测试邮件", submit=False)
+        frame_text = await page.frames[1].evaluate("document.body.innerText")
+        assert "你好，这是测试邮件" in frame_text
+        assert "你好，这是测试邮件" in await surface.snapshot()
+
+        # A password box focused inside an iframe still stops press_key.
+        await page.set_content(
+            "<iframe srcdoc=\"<input id=p type=password>\"></iframe>"
+        )
+        await page.wait_for_timeout(200)
+        await page.frames[1].focus("#p")
+        with pytest.raises(ToolError) as exc:
+            await surface.press_key("a")
+        assert exc.value.code == HUMAN_REQUIRED_CODE
     finally:
         await browser.close()
         await pw.stop()

@@ -51,11 +51,12 @@ FILL_FORM_MAX = 40
 UPLOAD_MAX_FILES = 10
 UPLOAD_MAX_BYTES = 25 * 1024 * 1024
 # Snapshot deltas (#1222): after an action only new / changed lines go back,
-# like Playwright MCP's incremental snapshot. Playwright 1.52 renumbers refs on
-# every snapshot, so the book hands the AI stable `eN` refs and maps them back.
+# like Playwright MCP's incremental snapshot. Since #1233 the snapshot is
+# upstream `aria_snapshot(mode="ai")`: refs stay stable across snapshots and
+# iframes come back inline with `f1eN` refs, so Pico no longer renumbers them.
 DELTA_FULL_RATIO = 0.5
-PW_REF_RE = re.compile(r"\[ref=(s\d+e\d+)\]")
-STABLE_REF_RE = re.compile(r"e(\d+)")
+EDIT_HOST_XPATH = "xpath=ancestor::*[@contenteditable and @contenteditable!='false'][1]"
+REF_RE = re.compile(r"(?:f\d+)?e\d+")
 CHECK_ROLES = frozenset({"checkbox", "radio", "switch", "menuitemcheckbox", "menuitemradio"})
 TRUE_WORDS = frozenset({"true", "1", "yes", "y", "on", "checked", "是", "对", "勾选", "选中"})
 HUMAN_KEYS = frozenset(
@@ -132,7 +133,9 @@ class BrowserHands(Protocol):
 
     async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None: ...
 
-    async def type_ref(self, ref: str, text: str, *, submit: bool) -> None: ...
+    async def type_ref(
+        self, ref: str, text: str, *, submit: bool, slowly: bool = False
+    ) -> None: ...
 
     async def select_ref(self, ref: str, values: list[str]) -> None: ...
 
@@ -142,72 +145,43 @@ class BrowserHands(Protocol):
 
 
 class RefBook:
-    """Stable refs across snapshots of one browser window (#1222).
-
-    Lines that survive a re-snapshot keep their `eN`; the AI's `eN` maps to the
-    Playwright ref of the latest snapshot. Raw Playwright refs pass through.
-    """
+    """Snapshot deltas of one browser window (#1222). Refs come from upstream
+    (`aria_snapshot(mode="ai")`, stable since #1233); this only diffs lines."""
 
     def __init__(self) -> None:
         self._page: Any = None
-        self._keys: list[str] = []
-        self._ids: list[int] = []
-        self._to_pw: dict[int, str] = {}
-        self._next = 1
-
-    def resolve(self, ref: str) -> str:
-        token = (ref or "").strip()
-        m = STABLE_REF_RE.fullmatch(token)
-        if m and int(m.group(1)) in self._to_pw:
-            return self._to_pw[int(m.group(1))]
-        return token
+        self._lines: list[str] = []
 
     def update(self, raw: str, *, page: Any = None) -> tuple[str, str | None]:
-        """Returns (full snapshot with stable refs, delta or None when the full
-        snapshot should go back: new page, or most of it changed)."""
+        """Returns (full snapshot, delta or None when the full snapshot should go
+        back: new tab, or most of it changed)."""
         lines = raw.splitlines()
-        keys = [PW_REF_RE.sub("[ref]", ln) for ln in lines]
-        fresh = page != self._page or not self._keys
-        old_keys, old_ids = ([], []) if fresh else (self._keys, self._ids)
-        ids = [0] * len(lines)
+        old = [] if page != self._page else self._lines
+        self._page, self._lines = page, lines
         changed = [True] * len(lines)
         removed = 0
-        matcher = difflib.SequenceMatcher(None, old_keys, keys, autojunk=False)
+        matcher = difflib.SequenceMatcher(None, old, lines, autojunk=False)
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():
             removed += max(0, (i2 - i1) - (j2 - j1))
-            for k in range(min(i2 - i1, j2 - j1)):
-                if tag == "equal":
-                    ids[j1 + k], changed[j1 + k] = old_ids[i1 + k], False
-                elif tag == "replace" and keys[j1 + k].split("[ref]")[0] == old_keys[i1 + k].split("[ref]")[0]:
-                    ids[j1 + k] = old_ids[i1 + k]  # same element, new value
-        to_pw: dict[int, str] = {}
-        out: list[str] = []
-        for j, line in enumerate(lines):
-            m = PW_REF_RE.search(line)
-            if m:
-                if not ids[j]:
-                    ids[j], self._next = self._next, self._next + 1
-                to_pw[ids[j]] = m.group(1)
-                line = line[: m.start()] + f"[ref=e{ids[j]}]" + line[m.end() :]
-            out.append(line)
-        self._page, self._keys, self._ids, self._to_pw = page, keys, ids, to_pw
-        full = "\n".join(out)
+            if tag == "equal":
+                for j in range(j1, j2):
+                    changed[j] = False
         n_changed = sum(changed)
-        if fresh or n_changed > len(lines) * DELTA_FULL_RATIO:
-            return full, None
+        if not old or n_changed > len(lines) * DELTA_FULL_RATIO:
+            return raw, None
         if not n_changed and not removed:
-            return full, "（页面结构没变，编号照用。）"
+            return raw, "（页面结构没变，编号照用。）"
         keep: set[int] = set()
         for j in (j for j, c in enumerate(changed) if c):
             keep.add(j)
-            depth = len(out[j]) - len(out[j].lstrip())
+            depth = len(lines[j]) - len(lines[j].lstrip())
             for a in range(j - 1, -1, -1):
-                d = len(out[a]) - len(out[a].lstrip())
+                d = len(lines[a]) - len(lines[a].lstrip())
                 if d < depth:
                     keep.add(a)
                     depth = d
         head = f"（只列新出现或改了的行和它们的上级；没列的没变，编号照用。消失 {removed} 行。）"
-        return full, "\n".join([head] + [out[j] for j in sorted(keep)])
+        return raw, "\n".join([head] + [lines[j] for j in sorted(keep)])
 
 
 def mask_secret_values(snapshot: str, secrets: list[str]) -> str:
@@ -575,25 +549,32 @@ class PlaywrightPage:
 
     def _ref(self, ref: str) -> Any:
         token = (ref or "").strip()
-        if not re.fullmatch(r"(?:s\d+)?e\d+", token):
+        if not REF_RE.fullmatch(token):
             raise ToolError("tool.invalid_arguments", "ref 必须是快照里的编号，例如 e8")
         return self._page.locator(f"aria-ref={token}")
 
+    async def _each_frame(self, script: str) -> list[Any]:
+        """Run `script` in every frame: since #1233 the AI sees and types into iframes,
+        so password masking and the password-key guard look there too."""
+        out: list[Any] = []
+        for frame in self._page.frames:
+            try:
+                out.append(await frame.evaluate(script))
+            except Exception:
+                logger.debug("frame script failed", exc_info=True)
+        return out
+
     async def _password_values(self) -> list[str]:
-        try:
-            raw = await self._page.evaluate(
-                """() => Array.from(document.querySelectorAll('input[type="password"]'))
-                        .map((el) => String(el.value || ''))
-                        .filter((v) => v.length > 0)"""
-            )
-            return [str(v) for v in raw] if isinstance(raw, list) else []
-        except Exception:
-            logger.debug("password value scan failed", exc_info=True)
-            return []
+        found = await self._each_frame(
+            """() => Array.from(document.querySelectorAll('input[type="password"]'))
+                    .map((el) => String(el.value || ''))
+                    .filter((v) => v.length > 0)"""
+        )
+        return [str(v) for raw in found if isinstance(raw, list) for v in raw]
 
     async def snapshot(self) -> str:
         try:
-            text = await self._page.locator("body").aria_snapshot(ref=True, timeout=10_000)
+            text = await self._page.aria_snapshot(mode="ai", timeout=10_000)
         except Exception as exc:
             raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能生成页面快照") from exc
         text = mask_secret_values(str(text or ""), await self._password_values())
@@ -636,6 +617,7 @@ class PlaywrightPage:
                         placeholder: String(el.getAttribute('placeholder') || ''),
                         autocomplete: String(el.getAttribute('autocomplete') || ''),
                         label: labelText,
+                        inside_editable: !!el.isContentEditable && !el.hasAttribute('contenteditable'),
                     };
                 }""",
                 timeout=5_000,
@@ -695,7 +677,9 @@ class PlaywrightPage:
             raise ToolError("sandbox.action_failed", "这个标签页没有上一页")
         assert_http_public_or_internal(self.url)
 
-    async def type_ref(self, ref: str, text: str, *, submit: bool) -> None:
+    async def type_ref(self, ref: str, text: str, *, submit: bool, slowly: bool = False) -> None:
+        """`slowly` types key by key (Playwright MCP `browser_type` slowly): recipient,
+        search and autocomplete boxes react to keys, not to a pasted value (#1233)."""
         # Never log `text`.
         loc = self._ref(ref)
         info = await self._element_info(loc)
@@ -703,8 +687,15 @@ class PlaywrightPage:
         if step:
             raise human_required(step)
         before = self.url
+        if info.get("inside_editable"):
+            # A paragraph of a rich-text body (mail / TinyMCE, often in an iframe):
+            # Playwright fills the editing host, not a line inside it (#1233).
+            loc = loc.locator(EDIT_HOST_XPATH)
         try:
-            await loc.fill(text, timeout=5_000)
+            if slowly:
+                await loc.press_sequentially(text, timeout=5_000 + 50 * len(text))
+            else:
+                await loc.fill(text, timeout=5_000)
         except Exception as exc:
             raise ToolError("sandbox.action_failed", "这个元素不能输入文字") from exc
         if submit:
@@ -791,13 +782,13 @@ class PlaywrightPage:
             raise ToolError(
                 "tool.invalid_arguments", "key 必须是按键名，例如 Enter / Tab / ArrowDown"
             )
-        focused = await self._page.evaluate(
+        focused = await self._each_frame(
             """() => {
                 const el = document.activeElement;
-                return el ? String(el.type || '').toLowerCase() : '';
+                return document.hasFocus() && el ? String(el.type || '').toLowerCase() : '';
             }"""
         )
-        if str(focused) == "password":
+        if "password" in focused:
             raise human_required("密码")
         before = self.url
         await self._page.keyboard.press(token)
