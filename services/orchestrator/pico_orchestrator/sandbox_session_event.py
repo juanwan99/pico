@@ -5,7 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 SANDBOX_BROWSER_TOOLS = frozenset(
-    {"sandbox_browser_open", "sandbox_browser_screenshot", "sandbox_document_open"}
+    {
+        "sandbox_browser_open",
+        "sandbox_browser_screenshot",
+        "sandbox_browser_snapshot",
+        "sandbox_browser_navigate",
+        "sandbox_browser_click",
+        "sandbox_browser_type",
+        "sandbox_browser_select_option",
+        "sandbox_browser_press_key",
+        "sandbox_browser_wait_for",
+        "sandbox_document_open",
+    }
 )
 HUMAN_COPY = "请在此画面自行登录，不要在聊天里发送密码"
 _SECRET_KEYS = frozenset({"password", "passwd", "secret", "credential", "cookie", "cookies"})

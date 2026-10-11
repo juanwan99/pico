@@ -2081,6 +2081,73 @@ def _workspace_handlers(
             await _emit(False, {"error_code": exc.code})
             raise
 
+    def _browser_hand(tool_name: str, action: str):
+        """AI hands (#1207): one Playwright action in the teacher's own sidecar
+        session, then a fresh ref snapshot. Thin adapter: sidecar refuses login /
+        captcha / payment / submit (sandbox.human_required). Never logs `text`."""
+
+        async def hand(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+            started = time.perf_counter()
+            session_id = str(args.get("session_id") or "").strip() or "current"
+            run_id = current_run_id(principal, store)
+            ws = workspace_id_for(principal.school_id, principal.membership_id, run_id)
+            values_raw = args.get("values")
+            values = (
+                [str(v) for v in values_raw]
+                if isinstance(values_raw, list)
+                else ([str(values_raw)] if isinstance(values_raw, (str, int, float)) else [])
+            )
+            body = {
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+                "action": action,
+                "ref": str(args.get("ref") or "").strip(),
+                "text": str(args.get("text") or ""),
+                "values": values,
+                "key": str(args.get("key") or "").strip(),
+                "submit": bool(args.get("submit")),
+                "url": str(args.get("url") or "").strip(),
+                "seconds": float(args.get("time") or args.get("seconds") or 0),
+                "text_gone": str(args.get("text_gone") or args.get("textGone") or ""),
+            }
+            if action == "navigate" and not body["url"]:
+                raise ToolError("tool.invalid_arguments", "url 必须是非空字符串")
+            if action in {"click", "type", "select_option"} and not body["ref"]:
+                raise ToolError("tool.invalid_arguments", "ref 必须是快照里的编号")
+            if action == "press_key" and not body["key"]:
+                raise ToolError("tool.invalid_arguments", "key 必须是非空字符串")
+
+            async def _emit(ok: bool, extra: dict[str, Any]) -> None:
+                duration_ms = int((time.perf_counter() - started) * 1000)
+                await emit_sandbox_usage(
+                    principal,
+                    extra={
+                        "tool": tool_name,
+                        "phase": "browser_" + action,
+                        "workspace_id": ws,
+                        "session_id": session_id,
+                        "duration_ms": duration_ms,
+                        **extra,
+                    },
+                    ok=ok,
+                )
+
+            try:
+                if body["url"]:
+                    parse_public_http_url(body["url"])
+                out = await sidecar_json(
+                    "POST", f"/v1/internal/sessions/{session_id}/act", json_body=body
+                )
+                if not isinstance(out, dict):
+                    raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
+                await _emit(True, {"workspace_id": out.get("workspace_id") or ws})
+                return out
+            except ToolError as exc:
+                await _emit(False, {"error_code": exc.code})
+                raise
+
+        return hand
+
     async def document_open(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         """Open Office as a page/slide content box in the sandbox pane. Not LibreOffice chrome."""
         started = time.perf_counter()
@@ -2231,6 +2298,15 @@ def _workspace_handlers(
         "sandbox_preview_inspect": inspect_preview,
         "sandbox_browser_open": browser_open,
         "sandbox_browser_screenshot": browser_screenshot,
+        "sandbox_browser_snapshot": _browser_hand("sandbox_browser_snapshot", "snapshot"),
+        "sandbox_browser_navigate": _browser_hand("sandbox_browser_navigate", "navigate"),
+        "sandbox_browser_click": _browser_hand("sandbox_browser_click", "click"),
+        "sandbox_browser_type": _browser_hand("sandbox_browser_type", "type"),
+        "sandbox_browser_select_option": _browser_hand(
+            "sandbox_browser_select_option", "select_option"
+        ),
+        "sandbox_browser_press_key": _browser_hand("sandbox_browser_press_key", "press_key"),
+        "sandbox_browser_wait_for": _browser_hand("sandbox_browser_wait_for", "wait_for"),
         "sandbox_document_open": document_open,
         "render_document": render_document,
         "inspect_document": inspect_document,
@@ -2512,6 +2588,71 @@ def build_default_gateway(
             school_scoped=False,
         )
     )
+    # AI hands (#1207) — shape follows Playwright MCP (browser_snapshot / click /
+    # type / select_option / press_key / wait_for / navigate). Every call returns
+    # a fresh `snapshot` with element refs; refs change after each action.
+    _HANDS_COMMON = (
+        "Acts inside the teacher's own isolated sandbox browser session (sidecar "
+        "Chromium) and returns a fresh page snapshot with element refs. "
+        "Login, captcha, payment and the final submit are human-only: the sidecar "
+        "refuses them (sandbox.human_required) — tell the teacher to do that step on "
+        "the sandbox pane, then snapshot again. Cookies never leave the sidecar. "
+    )
+    for _name, _desc, _args in (
+        (
+            "sandbox_browser_snapshot",
+            (
+                "Read the current page as an accessibility snapshot with element refs "
+                "(e.g. [ref=s1e8]) — use this instead of screenshots to decide what to "
+                "click or fill. "
+            ),
+            "Args: session_id?.",
+        ),
+        (
+            "sandbox_browser_navigate",
+            "Go to a PUBLIC http(s) URL in the existing sandbox browser session. ",
+            "Args: url, session_id?.",
+        ),
+        (
+            "sandbox_browser_click",
+            "Click the element with the given ref from the latest snapshot. ",
+            "Args: ref, element?, session_id?.",
+        ),
+        (
+            "sandbox_browser_type",
+            (
+                "Fill text into the editable element with the given ref; submit=true "
+                "presses Enter afterwards. Password / captcha fields are refused. "
+            ),
+            "Args: ref, text, element?, submit?, session_id?.",
+        ),
+        (
+            "sandbox_browser_select_option",
+            ("Select option(s) in the dropdown with the given ref, by value or by visible label. "),
+            "Args: ref, values, element?, session_id?.",
+        ),
+        (
+            "sandbox_browser_press_key",
+            "Press one key on the focused element (Enter, Tab, ArrowDown, Escape…). ",
+            "Args: key, session_id?.",
+        ),
+        (
+            "sandbox_browser_wait_for",
+            (
+                "Wait until some text appears (text) or disappears (text_gone), or for "
+                "`time` seconds (max 30). "
+            ),
+            "Args: text?, text_gone?, time?, session_id?.",
+        ),
+    ):
+        gw.register(
+            ToolSpec(
+                name=_name,
+                description=_desc + _HANDS_COMMON + _args,
+                handler=h[_name],
+                school_scoped=False,
+            )
+        )
     gw.register(
         ToolSpec(
             name="sandbox_document_open",
@@ -2851,6 +2992,77 @@ def openai_tool_schemas(
                 },
             },
             "required": ["session_id"],
+        },
+        "sandbox_browser_snapshot": {
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "Sandbox session id; omit for the current one",
+                },
+            },
+        },
+        "sandbox_browser_navigate": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Public http(s) URL"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["url"],
+        },
+        "sandbox_browser_click": {
+            "type": "object",
+            "properties": {
+                "ref": {
+                    "type": "string",
+                    "description": "Element ref from the latest snapshot, e.g. s1e8",
+                },
+                "element": {"type": "string", "description": "Human-readable element description"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["ref"],
+        },
+        "sandbox_browser_type": {
+            "type": "object",
+            "properties": {
+                "ref": {"type": "string", "description": "Element ref from the latest snapshot"},
+                "text": {"type": "string", "description": "Text to fill"},
+                "element": {"type": "string"},
+                "submit": {"type": "boolean", "description": "Press Enter after typing"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["ref", "text"],
+        },
+        "sandbox_browser_select_option": {
+            "type": "object",
+            "properties": {
+                "ref": {"type": "string"},
+                "values": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Option values or labels",
+                },
+                "element": {"type": "string"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["ref", "values"],
+        },
+        "sandbox_browser_press_key": {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "Key name, e.g. Enter / Tab / ArrowDown"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["key"],
+        },
+        "sandbox_browser_wait_for": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Wait for this text to appear"},
+                "text_gone": {"type": "string", "description": "Wait for this text to disappear"},
+                "time": {"type": "number", "description": "Seconds to wait (max 30)"},
+                "session_id": {"type": "string"},
+            },
         },
         "sandbox_document_open": {
             "type": "object",

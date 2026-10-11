@@ -33,6 +33,7 @@ from pico_orchestrator.web_guard import parse_public_http_url
 from sandbox_worker.browser import (
     ENGINE_NAME,
     PNG_MAGIC,
+    BrowserHands,
     BrowserPage,
     open_chromium,
 )
@@ -55,6 +56,21 @@ APPLIED_COPY = (
     "已把操作送进 sidecar Chromium。"
     "Cookie 只在会话内存/临时 profile，随销毁消失。"
 )
+# "current" = the caller's own desk (one per school+membership). Lets the AI act
+# on a pane the teacher opened without having the session id in hand.
+CURRENT_SESSION = "current"
+HANDS_ACTIONS = frozenset(
+    {"snapshot", "navigate", "click", "type", "select_option", "press_key", "wait_for"}
+)
+HANDS_COPY = {
+    "snapshot": "已读取当前页面快照（带编号）。",
+    "navigate": "已在沙箱 Chromium 打开新网址。",
+    "click": "已点击。",
+    "type": "已填入文字。",
+    "select_option": "已选中选项。",
+    "press_key": "已按键。",
+    "wait_for": "已等到。",
+}
 
 _WECHAT_HOST_MARKERS = (
     "wx.qq.com",
@@ -235,6 +251,14 @@ class SandboxRuntime:
         school_id: str,
         membership_id: str,
     ) -> SandboxSession:
+        if (session_id or "").strip() == CURRENT_SESSION:
+            sess = self._find_desk((school_id or "").strip(), (membership_id or "").strip())
+            if sess is None:
+                raise ToolError(
+                    "sandbox.session_not_found",
+                    "还没有打开沙箱浏览器。先调用 sandbox_browser_open 打开一个公开页。",
+                )
+            return sess
         sess = self.get(session_id)
         if sess is None:
             raise ToolError("sandbox.session_not_found", "找不到该隔离会话")
@@ -622,6 +646,69 @@ class SandboxRuntime:
             typed=bool(text),
             password_typed=bool(password and text),
             message=APPLIED_COPY if session.kind == "browser" else HUMAN_OFFICE_COPY,
+        )
+
+    def _hands(self, session: SandboxSession) -> BrowserHands:
+        """The browser window the AI may act on. Office/files windows are not pages."""
+        for item in session.windows:
+            if item.kind == "browser":
+                session.focused_id = item.window_id
+                surface = item.surface
+                if not callable(getattr(surface, "snapshot", None)):
+                    raise ToolError("sandbox.unavailable", "这个浏览器窗口不支持 AI 操作")
+                return surface  # type: ignore[return-value]
+        raise ToolError(
+            "sandbox.session_not_found",
+            "这路沙箱没有浏览器窗口。先调用 sandbox_browser_open 打开一个公开页。",
+        )
+
+    async def act(
+        self,
+        session: SandboxSession,
+        *,
+        action: str,
+        ref: str = "",
+        text: str = "",
+        values: list[str] | None = None,
+        key: str = "",
+        submit: bool = False,
+        url: str = "",
+        seconds: float = 0.0,
+        text_gone: str = "",
+    ) -> dict[str, Any]:
+        """AI hands (#1207): one Playwright action, then a fresh ref snapshot.
+
+        Login / captcha / payment / submit are refused inside the browser
+        adapter (sandbox.human_required). Never logs `text`.
+        """
+        await self._purge()
+        verb = (action or "").strip().lower()
+        if verb not in HANDS_ACTIONS:
+            raise ToolError("tool.invalid_arguments", f"未知动作 {verb or '(空)'}")
+        hands = self._hands(session)
+        if verb == "navigate":
+            parse_public_http_url(url)
+            hostile = automation_hostile_reason(url)
+            if hostile:
+                raise ToolError("sandbox.site_blocks_automation", hostile)
+            await hands.navigate(url)
+        elif verb == "click":
+            await hands.click_ref(ref)
+        elif verb == "type":
+            await hands.type_ref(ref, text, submit=bool(submit))
+        elif verb == "select_option":
+            await hands.select_ref(ref, [str(v) for v in (values or [])])
+        elif verb == "press_key":
+            await hands.press_key(key)
+        elif verb == "wait_for":
+            await hands.wait_for(text=text, text_gone=text_gone, seconds=float(seconds or 0))
+        snapshot = await hands.snapshot()
+        await self._sync(session)
+        return self._public_meta(
+            session,
+            action=verb,
+            snapshot=snapshot,
+            message=HANDS_COPY.get(verb, APPLIED_COPY),
         )
 
     async def destroy(self, session_id: str) -> None:

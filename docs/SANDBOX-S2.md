@@ -6,7 +6,8 @@ STATUS: BINDING · T-SANDBOX-B2-REAL-BROWSER (#522) · 继承 #516 sidecar · B2
 REPO: juanwan99/pico ONLY
 CLAIM-WB: NO
 EXTENDS: docs/SANDBOX-S1.md（S1 仍有效：工作区 + 同页 inspect/光栅）
-NOT: cloud PC · E2B-as-only-done · B3 代登 · host Chrome on 8080/18088
+NOT: cloud PC · E2B-as-only-done · B3 代登（AI 替人输密码）· host Chrome on 8080/18088
+AI 动手（#1207 · 业主 2026-10-11）：用户自己登录后，AI 在同一会话里按快照编号点 / 填 / 选 / 翻页 / 等待；登录 · 验证码 · 付款 · 最后提交交人
      自研微 VM 内核 · 一校一机 · privileged Docker · 宿主机 bash 逃逸
      httpx 抓 HTML 再 S2 光栅冒充 B2 画面
 ```
@@ -15,6 +16,7 @@ NOT: cloud PC · E2B-as-only-done · B3 代登 · host Chrome on 8080/18088
 > 1. **自己的页**（S1 保留）：`sandbox_preview_inspect` 仍回 title / h1 / `seen=true`，并对本次 Run HTML 产出真 PNG 光栅。  
 > 2. **强于应用层 S1 的隔离：** 浏览器/出网执行面是独立 sidecar 进程 `pico-sandbox`（compose 服务），不是 pico-api、也不是 LibreChat。容器：非特权、`cap_drop: ALL`、`no-new-privileges`、非 root、独立 pid/user/net ns（gVisor 等价档；**不是**自研微 VM 内核）。  
 > 3. **B2 人在环 = sidecar 内真 Chromium：** 老师看见的像素来自 Playwright/Chromium **viewport 截图**（或等价直播），不是 `_screen_html` / `pico-b2-banner` 合成页。点击/输入作用于 DOM。微信/教务**不是**过关条件；站点禁自动化则人话失败。禁止 B3 聊天贴密码代登。会话 Cookie 只在 sidecar 内存/tmpfs profile，随 destroy/TTL 死，不写宿主机家目录。  
+> 4. **AI 动手（#1207，业主 2026-10-11 07:55「能够 AI 代填网页」）：** 用户自己登录后，AI 可在**同一会话**里操作：`sandbox_browser_snapshot` 取 Playwright `aria_snapshot(ref=True)` 带编号快照，`click / type / select_option / press_key / wait_for / navigate` 按编号动手（形状照 Playwright MCP）。sidecar 机械拒绝：往密码框 / 验证码框打字、点「登录 / 支付 / 付款 / 提交」类按钮和登录表单的 submit（`sandbox.human_required`）。快照遮盖密码框的值。Cookie 仍只在 sidecar，不进模型、不进账本。公需科目只做报名 / 选课 / 填表 / 查进度，不挂课、不代看、不代答。  
 > 真核仍是上游 Pi harness。本档只做接线、白名单、账本、门闩、人包、门脸。上游浏览器 = Playwright Chromium；升级浏览器只改 sidecar 镜像。
 
 与 [#505](https://github.com/juanwan99/pico/issues/505) 规划对齐；计量仍走 [#506](https://github.com/juanwan99/pico/issues/506) `kind=sandbox`。**不改** [#507](https://github.com/juanwan99/pico/issues/507) `web_search` / `web_fetch` 主路。
@@ -114,7 +116,8 @@ B2 登录 = 人在环（human-in-the-loop）+ sidecar Chromium
 - 特权 Docker、宿主机 bash 逃逸、自研微 VM 内核
 - 在宿主机或 sidecar **占用 8080 / 18088** 起 Chrome
 - 以 E2B 采购作为 **唯一** 完成条件（无账号必须 sidecar 自带 Chromium）
-- B3 代登、聊天收集密码、把 Cookie 写进 Pico 账本当长期会话
+- B3 代登（AI 替人输密码 / 验证码）、聊天收集密码、把 Cookie 写进 Pico 账本当长期会话。AI 在用户登录后的会话里动手**不是** B3（#1207）
+- AI 替人点登录 / 支付 / 付款 / 最后提交；挂课、代看、代答公需科目
 - 用 httpx 抓 HTML + S2 光栅 / `pico-b2-banner` 冒充 B2 完成
 - 改 #507 搜主路 · CLAIM-WB YES · #498 edu 嵌入 · #170 Kimi
 
