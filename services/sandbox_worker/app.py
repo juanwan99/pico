@@ -57,6 +57,8 @@ class InputBody(BaseModel):
     field: str = Field(default="input", max_length=64)
     scroll_dy: int | None = None
     key: str = Field(default="", max_length=32)
+    viewport_width: int | None = Field(default=None, ge=1, le=10_000)
+    viewport_height: int | None = Field(default=None, ge=1, le=10_000)
 
 
 class FocusBody(BaseModel):
@@ -276,6 +278,8 @@ async def post_input(
             field=body.field,
             scroll_dy=body.scroll_dy,
             key=body.key,
+            viewport_width=body.viewport_width,
+            viewport_height=body.viewport_height,
         )
     except ToolError as exc:
         raise _tool_http(exc) from exc

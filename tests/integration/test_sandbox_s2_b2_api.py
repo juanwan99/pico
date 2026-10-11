@@ -266,3 +266,25 @@ def test_live_pane_stream_checks_owner_before_streaming(client) -> None:
         client.get("/v1/sandbox/sessions/sbox_missingmissingmissing/stream", headers=owner).status_code
         == 404
     )
+
+
+def test_pane_size_goes_through_api_to_the_browser_window(client, monkeypatch) -> None:
+    """#1224: the pane posts its size on the input route; the page re-lays out."""
+    sizes: list[tuple[int, int]] = []
+
+    async def set_viewport(self, width: int, height: int):
+        sizes.append((width, height))
+        return width, height
+
+    monkeypatch.setattr(_FakePage, "set_viewport", set_viewport, raising=False)
+    owner = _headers(client, "member-a")
+    opened = _invoke(client, owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    session_id = opened.json()["result"]["session_id"]
+    r = client.post(
+        f"/v1/sandbox/sessions/{session_id}/input",
+        headers={**owner, "Accept": "application/json"},
+        json={"viewport_width": 480, "viewport_height": 620},
+    )
+    assert r.status_code == 200, r.text
+    assert sizes == [(480, 620)]
+    assert r.json()["clicked"] is False

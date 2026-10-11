@@ -1089,7 +1089,7 @@ async def sandbox_session_input(
     from pico_orchestrator.sandbox_sidecar import sidecar_json
 
     ctype = (request.headers.get("content-type") or "").lower()
-    click_x = click_y = scroll_dy = None
+    click_x = click_y = scroll_dy = view_w = view_h = None
     key = ""
     text = None
     password = False
@@ -1103,6 +1103,8 @@ async def sandbox_session_input(
             if body.get("scroll_dy") is not None:
                 scroll_dy = int(body["scroll_dy"])
             key = str(body.get("key") or "")[:32]
+            if body.get("viewport_width") and body.get("viewport_height"):
+                view_w, view_h = int(body["viewport_width"]), int(body["viewport_height"])
             secret = body.get("secret") or body.get("password")
             visible = body.get("text")
             if secret:
@@ -1142,6 +1144,8 @@ async def sandbox_session_input(
                 "field": "password" if password else "input",
                 "scroll_dy": scroll_dy,
                 "key": key,
+                "viewport_width": view_w,
+                "viewport_height": view_h,
             },
         )
     except ToolError as exc:
