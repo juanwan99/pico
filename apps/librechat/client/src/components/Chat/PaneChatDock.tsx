@@ -10,12 +10,22 @@ import { PicoIcon } from '~/components/ui/pico-icons';
 import { useSubmitMessage } from '~/hooks';
 import { useChatContext } from '~/Providers';
 import { getAllContentText } from '~/utils/messages';
+import { humanizeChatErrorText } from '../Messages/Content/Error';
 
 export function latestReplyText(messages?: TMessage[] | null): string {
   const list = messages ?? [];
   for (let i = list.length - 1; i >= 0; i -= 1) {
-    if (!list[i]?.isCreatedByUser) {
-      return getAllContentText(list[i]).trim();
+    const msg = list[i];
+    if (msg && !msg.isCreatedByUser) {
+      const text = getAllContentText(msg).trim();
+      if (!msg.error) {
+        return text;
+      }
+      // A failed turn reads the same as the main bubble (「这次没完成…」).
+      const part = (msg.content ?? []).find((c) => c?.type === 'error') as
+        | { error?: string }
+        | undefined;
+      return humanizeChatErrorText(text || String(part?.error ?? ''));
     }
   }
   return '';

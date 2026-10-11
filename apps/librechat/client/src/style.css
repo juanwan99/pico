@@ -3163,7 +3163,8 @@ html.dark .pico-shell-bg {
   display: flex !important;
   position: fixed !important;
   inset: 0 !important;
-  z-index: 200;
+  /* Above TaskRunBar (z-210) and its stop button (z-230), #1226. */
+  z-index: 250;
   width: 100vw !important;
   max-width: none;
   height: 100vh !important;

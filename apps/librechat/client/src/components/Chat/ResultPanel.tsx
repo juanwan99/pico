@@ -808,7 +808,8 @@ export default function ResultPanel({
     <aside
       className={cn(
         'pico-result-panel relative flex h-full min-w-0 shrink-0 flex-col overflow-x-hidden border-l border-black/[0.06] bg-white text-[#1a1a1a] dark:border-border-light dark:bg-[color:var(--pico-surface)] dark:text-text-primary',
-        expanded && 'pico-result-panel--expanded fixed inset-0 z-[200]',
+        // Above TaskRunBar (z-210) and its stop button (z-230), #1226.
+        expanded && 'pico-result-panel--expanded fixed inset-0 z-[250]',
       )}
       style={{ ['--pico-result-w' as string]: `${paneWidth}px` }}
       data-testid="result-panel"
