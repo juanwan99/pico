@@ -16,7 +16,7 @@ AI 动手（#1207 · 业主 2026-10-11）：用户自己登录后，AI 按快照
 > 1. **自己的页**（S1 保留）：`sandbox_preview_inspect` 仍回 title / h1 / `seen=true`，并对本次 Run HTML 产出真 PNG 光栅。  
 > 2. **强于应用层 S1 的隔离：** 浏览器/出网执行面是独立 sidecar 进程 `pico-sandbox`（compose 服务），不是 pico-api、也不是 LibreChat。容器：非特权、`cap_drop: ALL`、`no-new-privileges`、非 root、独立 pid/user/net ns（gVisor 等价档；**不是**自研微 VM 内核）。  
 > 3. **B2 人在环 = sidecar 内真 Chromium：** 老师看见的像素来自 Playwright/Chromium **viewport 截图**（或等价直播），不是 `_screen_html` / `pico-b2-banner` 合成页。点击/输入作用于 DOM。微信/教务**不是**过关条件；站点禁自动化则人话失败。禁止 B3 聊天贴密码代登。站点登录按人保存在该老师自己的老师盘（`.browser-login.json`，Playwright storage_state），下次打开自动带上；清空老师盘或在网站里退出即清除；不写宿主机家目录。  
-> 4. **AI 动手（#1207，业主 2026-10-11 07:55「能够 AI 代填网页」）：** 用户自己登录后，AI 可在**同一会话**里操作：`sandbox_browser_snapshot` 取 Playwright `aria_snapshot(ref=True)` 带编号快照，`click / type / select_option / press_key / wait_for / navigate` 按编号动手（形状照 Playwright MCP）。sidecar 机械拒绝：往密码框 / 验证码框打字、点「支付 / 付款 / 缴费 / 结算」类按钮（`sandbox.human_required`）；登录、提交按钮 AI 可以点（业主 2026-10-11 09:17「权限管理…绝对禁止搞太复杂…简单、有效」）。`sandbox_browser_screenshot` 把当前画面作为图片交给模型看（像素不进账本）。公需科目只做报名 / 选课 / 填表 / 查进度，不挂课、不代看、不代答。  
+> 4. **AI 动手（#1207，业主 2026-10-11 07:55「能够 AI 代填网页」）：** 用户自己登录后，AI 可在**同一会话**里操作：`sandbox_browser_snapshot` 取 Playwright `aria_snapshot(ref=True)` 带编号快照，`click / type / select_option / press_key / wait_for / navigate` 按编号动手（形状照 Playwright MCP）。sidecar 机械拒绝：往密码框 / 验证码框打字、点「支付 / 付款 / 缴费 / 结算」类按钮（`sandbox.human_required`）；登录、提交按钮 AI 可以点（业主 2026-10-11 09:17「权限管理…绝对禁止搞太复杂…简单、有效」）。`sandbox_browser_screenshot` 把当前画面作为图片交给模型看（像素不进账本）。  
 > 5. **实时画面（#1215）：** 浏览器窗口不再每 0.4 s 拉一张 PNG：sidecar 用上游 Chromium CDP `Page.startScreencast`（Playwright `new_cdp_session`，Steel / browserless 的 live view 同款）在页面重绘时推 JPEG，经 `GET /v1/sandbox/sessions/{id}/stream`（SSE，sidecar → pico-api → LibreChat 透传）到面板；页面静止不推帧，15 s 一个 ping。Office / 文件窗口和推流断开时仍轮询 PNG。面板上滚轮 = 页面滚动，Enter / Tab / 退格 / 方向键送进页面（走原 `/input`）。不选 neko（WebRTC 要 UDP / TURN、每人一台桌面容器）。  
 > 真核仍是上游 Pi harness。本档只做接线、白名单、账本、门闩、人包、门脸。上游浏览器 = Playwright Chromium；升级浏览器只改 sidecar 镜像。
 
@@ -118,7 +118,7 @@ B2 登录 = 人在环（human-in-the-loop）+ sidecar Chromium
 - 在宿主机或 sidecar **占用 8080 / 18088** 起 Chrome
 - 以 E2B 采购作为 **唯一** 完成条件（无账号必须 sidecar 自带 Chromium）
 - B3 代登（AI 替人输密码 / 验证码）、聊天收集密码。AI 在用户登录后的会话里动手**不是** B3（#1207）
-- AI 替人付款；挂课、代看、代答公需科目
+- AI 替人付款
 - 用 httpx 抓 HTML + S2 光栅 / `pico-b2-banner` 冒充 B2 完成
 - 改 #507 搜主路 · CLAIM-WB YES · #498 edu 嵌入 · #170 Kimi
 
