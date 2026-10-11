@@ -161,6 +161,9 @@ async def _embedded_call(
                 double_click=bool(body.get("double_click")),
                 tab_action=str(body.get("tab_action") or ""),
                 index=int(body.get("index") or 0),
+                fields=list(body.get("fields") or []),
+                filenames=[str(n) for n in (body.get("filenames") or [])],
+                files=list(body.get("files") or []),
             )
         if method == "POST" and path.endswith("/focus"):
             body = json_body or {}

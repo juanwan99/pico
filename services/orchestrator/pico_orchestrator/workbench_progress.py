@@ -72,6 +72,8 @@ _DOING: dict[str, str] = {
     "sandbox_browser_navigate_back": "正在后退网页",
     "sandbox_browser_hover": "正在指网页",
     "sandbox_browser_tabs": "正在切标签页",
+    "sandbox_browser_fill_form": "正在填表",
+    "sandbox_browser_file_upload": "正在传附件",
     "sandbox_browser_type": "正在填网页",
     "sandbox_browser_select_option": "正在选网页选项",
     "sandbox_browser_press_key": "正在按键",

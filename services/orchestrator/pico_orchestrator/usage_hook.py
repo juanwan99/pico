@@ -28,6 +28,8 @@ _SANDBOX_TOOLS = frozenset(
         "sandbox_browser_navigate_back",
         "sandbox_browser_hover",
         "sandbox_browser_tabs",
+        "sandbox_browser_fill_form",
+        "sandbox_browser_file_upload",
         "sandbox_browser_type",
         "sandbox_browser_select_option",
         "sandbox_browser_press_key",

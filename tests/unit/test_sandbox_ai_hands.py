@@ -73,11 +73,17 @@ class MemoryArtifactStore:
 
     async def write(self, principal: P, *, title: str, content: bytes, kind: str = "file", **_: Any):
         row = {"artifact_id": f"art_{len(self._rows) + 1}", "title": title, "kind": kind}
-        self._rows.append(row)
+        self._rows.append({**row, "content": content})
         return row
 
-    async def read(self, principal: P, artifact_id: str):
-        raise ToolError("artifact.not_found", "no")
+    async def read(self, principal: P, artifact_id: str, title: str | None = None):
+        for row in self._rows:
+            if row["artifact_id"] == artifact_id:
+                raw = row["content"]
+                if isinstance(raw, str):
+                    return row
+                return {**row, "content": None, "content_base64": base64.b64encode(raw).decode()}
+        return None
 
     async def list(self, principal: P, *, limit: int):
         return self._rows[:limit]
@@ -109,6 +115,7 @@ class FakeFormPage:
         self.second_tab = ""
         self.tab_calls: list[tuple[str, int]] = []
         self.hovered: list[str] = []
+        self.uploaded: list[tuple[str, str, bytes]] = []
 
     @property
     def url(self) -> str:
@@ -181,6 +188,21 @@ class FakeFormPage:
         if self.second_tab:
             rows.append({"index": 1, "url": self.second_tab, "title": "", "current": False})
         return rows
+
+    async def fill_form(self, fields: list[dict[str, Any]]) -> list[str]:
+        left = []
+        for field in fields:
+            info = self._info(field["ref"])
+            step = is_human_only_field(info)
+            if step:
+                left.append(step)
+                continue
+            self.fields[field["ref"]] = str(field["value"])
+        return left
+
+    async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None:
+        self._info(ref)
+        self.uploaded.extend(files)
 
     async def hover_ref(self, ref: str) -> None:
         self._info(ref)
@@ -367,6 +389,53 @@ async def test_back_hover_tabs_and_dialog_note_reach_the_model(hands_runtime) ->
     picked = await gw.invoke(owner, "sandbox_browser_tabs", {"action": "select", "index": 1})
     assert ("select", 1) in pages[0].tab_calls
     assert picked["action"] == "tabs"
+
+
+@pytest.mark.asyncio
+async def test_fill_form_and_upload_from_disk_and_ledger(hands_runtime) -> None:
+    """#1219: one call fills the form, password / captcha named back; files come
+    from the teacher's disk or the ledger, never the host."""
+    from pico_orchestrator.sandbox_persist import write_owner_disk_file
+
+    _, pages = hands_runtime
+    store = MemoryArtifactStore(run_id="run-hands")
+    gw = build_default_gateway(store)
+    owner = P("school-a", "member-a", ["ai:run"])
+    await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    filled = await gw.invoke(
+        owner,
+        "sandbox_browser_fill_form",
+        {"fields": [
+            {"ref": "s1e1", "value": "张三", "name": "姓名"},
+            {"ref": "s1e2", "value": "pw"},
+            {"ref": "s1e3", "value": "1234"},
+        ]},
+    )
+    assert pages[0].fields["s1e1"] == "张三"
+    assert pages[0].fields["s1e2"] == "hunter2"  # password untouched
+    assert pages[0].fields["s1e3"] == ""
+    assert "密码、验证码格留给老师" in filled["message"]
+    assert filled["action"] == "fill_form"
+    with pytest.raises(ToolError):
+        await gw.invoke(owner, "sandbox_browser_fill_form", {"fields": []})
+
+    write_owner_disk_file("school-a", "member-a", "成绩.xlsx", b"PK-xlsx")
+    doc = await store.write(owner, title="申报书.docx", content=b"PK-docx")
+    up = await gw.invoke(
+        owner,
+        "sandbox_browser_file_upload",
+        {"ref": "s1e1", "filenames": ["../成绩.xlsx"], "artifact_ids": [doc["artifact_id"]]},
+    )
+    assert up["action"] == "file_upload"
+    assert [(n, b) for n, _, b in pages[0].uploaded] == [
+        ("成绩.xlsx", b"PK-xlsx"),
+        ("申报书.docx", b"PK-docx"),
+    ]
+    assert pages[0].uploaded[0][1].startswith("application/")
+    with pytest.raises(ToolError):
+        await gw.invoke(owner, "sandbox_browser_file_upload", {"ref": "s1e1"})
+    with pytest.raises(ToolError):
+        await gw.invoke(owner, "sandbox_browser_file_upload", {"ref": "s1e1", "filenames": ["没有.pdf"]})
 
 
 @pytest.mark.asyncio

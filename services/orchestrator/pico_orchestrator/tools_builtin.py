@@ -2088,6 +2088,25 @@ def _workspace_handlers(
             await _emit(False, {"error_code": exc.code})
             raise
 
+    async def _upload_from_ledger(principal: Principal, ids: Any) -> list[dict[str, str]]:
+        """Ledger artifacts (e.g. the Word just generated) as upload payloads (#1219)."""
+        out: list[dict[str, str]] = []
+        for artifact_id in [str(i).strip() for i in (ids if isinstance(ids, list) else [ids])][:10]:
+            if not artifact_id:
+                continue
+            row = await store.read(principal, artifact_id=artifact_id, title=None)
+            if not row:
+                raise ToolError("artifact.not_found", f"找不到产物 {artifact_id}")
+            content = row.get("content")
+            raw = content.encode("utf-8") if isinstance(content, str) and content else _artifact_bytes(row)
+            out.append(
+                {
+                    "name": str(row.get("title") or row.get("user_label") or artifact_id),
+                    "b64": base64.b64encode(raw).decode("ascii"),
+                }
+            )
+        return out
+
     def _browser_hand(tool_name: str, action: str):
         """AI hands (#1207): one Playwright action in the teacher's own sidecar
         session, then a fresh ref snapshot. Thin adapter: sidecar refuses login /
@@ -2124,9 +2143,25 @@ def _workspace_handlers(
                     body["index"] = max(0, int(args.get("index") or 0))
                 except (TypeError, ValueError):
                     raise ToolError("tool.invalid_arguments", "index 必须是数字") from None
+            if action == "fill_form":
+                raw_fields = args.get("fields")
+                if not isinstance(raw_fields, list) or not raw_fields:
+                    raise ToolError("tool.invalid_arguments", "fields 必须是 [{ref, value}] 列表")
+                body["fields"] = [
+                    {"ref": str(f.get("ref") or "").strip(), "value": f.get("value")}
+                    for f in raw_fields
+                    if isinstance(f, dict)
+                ]
+            if action == "file_upload":
+                body["filenames"] = [str(n) for n in (args.get("filenames") or []) if str(n).strip()]
+                body["files"] = await _upload_from_ledger(principal, args.get("artifact_ids") or [])
+                if not body["filenames"] and not body["files"]:
+                    raise ToolError(
+                        "tool.invalid_arguments", "要传的文件：filenames（老师盘）或 artifact_ids（账本）"
+                    )
             if action == "navigate" and not body["url"]:
                 raise ToolError("tool.invalid_arguments", "url 必须是非空字符串")
-            if action in {"click", "hover", "type", "select_option"} and not body["ref"]:
+            if action in {"click", "hover", "type", "select_option", "file_upload"} and not body["ref"]:
                 raise ToolError("tool.invalid_arguments", "ref 必须是快照里的编号")
             if action == "press_key" and not body["key"]:
                 raise ToolError("tool.invalid_arguments", "key 必须是非空字符串")
@@ -2320,6 +2355,8 @@ def _workspace_handlers(
         "sandbox_browser_click": _browser_hand("sandbox_browser_click", "click"),
         "sandbox_browser_hover": _browser_hand("sandbox_browser_hover", "hover"),
         "sandbox_browser_tabs": _browser_hand("sandbox_browser_tabs", "tabs"),
+        "sandbox_browser_fill_form": _browser_hand("sandbox_browser_fill_form", "fill_form"),
+        "sandbox_browser_file_upload": _browser_hand("sandbox_browser_file_upload", "file_upload"),
         "sandbox_browser_type": _browser_hand("sandbox_browser_type", "type"),
         "sandbox_browser_select_option": _browser_hand(
             "sandbox_browser_select_option", "select_option"
@@ -2662,6 +2699,25 @@ def build_default_gateway(
                 "already current. "
             ),
             "Args: action, index?, session_id?.",
+        ),
+        (
+            "sandbox_browser_fill_form",
+            (
+                "Fill many fields of a form in one call: fields=[{ref, value}]. Text boxes "
+                "get the text; checkboxes / radios are checked when value is true; dropdowns "
+                "pick by value or visible label. Password / captcha fields are skipped and "
+                "named back for the teacher. Prefer this over one sandbox_browser_type per field. "
+            ),
+            "Args: fields = [{…, ref, value, name?, …}], session_id?.",
+        ),
+        (
+            "sandbox_browser_file_upload",
+            (
+                "Attach files to the file input (or the upload button) with the given ref: "
+                "filenames from the teacher's sandbox disk and/or artifact_ids from the Pico "
+                "ledger (e.g. a document you just generated). Max 10 files, 25 MB. "
+            ),
+            "Args: ref, filenames?, artifact_ids?, element?, session_id?.",
         ),
         (
             "sandbox_browser_type",
@@ -3075,6 +3131,48 @@ def openai_tool_schemas(
             "type": "object",
             "properties": {
                 "ref": {"type": "string", "description": "Element ref from the latest snapshot"},
+                "element": {"type": "string"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["ref"],
+        },
+        "sandbox_browser_fill_form": {
+            "type": "object",
+            "properties": {
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "ref": {"type": "string", "description": "Element ref from the latest snapshot"},
+                            "value": {
+                                "type": "string",
+                                "description": "Text; \"true\"/\"false\" for checkbox/radio; option",
+                            },
+                            "name": {"type": "string", "description": "Human-readable field name"},
+                        },
+                        "required": ["ref", "value"],
+                    },
+                    "description": "Fields to fill (max 40)",
+                },
+                "session_id": {"type": "string"},
+            },
+            "required": ["fields"],
+        },
+        "sandbox_browser_file_upload": {
+            "type": "object",
+            "properties": {
+                "ref": {"type": "string", "description": "File input or upload button ref"},
+                "filenames": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Files on the teacher's sandbox disk",
+                },
+                "artifact_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Pico ledger artifacts to attach",
+                },
                 "element": {"type": "string"},
                 "session_id": {"type": "string"},
             },

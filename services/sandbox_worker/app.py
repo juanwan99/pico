@@ -83,6 +83,9 @@ class ActBody(BaseModel):
     double_click: bool = False
     tab_action: str = Field(default="", max_length=16)
     index: int = Field(default=0, ge=0, le=64)
+    fields: list[dict[str, Any]] = Field(default_factory=list, max_length=40)
+    filenames: list[str] = Field(default_factory=list, max_length=10)
+    files: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
 
 
 class ConvertBody(BaseModel):
@@ -305,6 +308,9 @@ async def act_session(
             double_click=body.double_click,
             tab_action=body.tab_action,
             index=body.index,
+            fields=list(body.fields or []),
+            filenames=list(body.filenames or []),
+            files=list(body.files or []),
         )
     except ToolError as exc:
         raise _tool_http(exc) from exc

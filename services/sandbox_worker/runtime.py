@@ -9,9 +9,11 @@ Passwords are never written to logs, tool payloads, or screenshot text overlays.
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
+import mimetypes
 import os
 import secrets
 import time
@@ -69,7 +71,7 @@ CURRENT_SESSION = "current"
 HANDS_ACTIONS = frozenset(
     {
         "snapshot", "navigate", "navigate_back", "click", "hover", "type",
-        "select_option", "press_key", "wait_for", "tabs",
+        "select_option", "press_key", "wait_for", "tabs", "fill_form", "file_upload",
     }
 )
 HANDS_COPY = {
@@ -79,6 +81,8 @@ HANDS_COPY = {
     "click": "已点击。",
     "hover": "已移到元素上。",
     "tabs": "已列出标签页。",
+    "fill_form": "已填好表单。",
+    "file_upload": "已传上附件。",
     "type": "已填入文字。",
     "select_option": "已选中选项。",
     "press_key": "已按键。",
@@ -722,6 +726,9 @@ class SandboxRuntime:
         double_click: bool = False,
         tab_action: str = "",
         index: int = 0,
+        fields: list[dict[str, Any]] | None = None,
+        filenames: list[str] | None = None,
+        files: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """AI hands (#1207): one Playwright action, then a fresh ref snapshot.
 
@@ -733,6 +740,7 @@ class SandboxRuntime:
         if verb not in HANDS_ACTIONS:
             raise ToolError("tool.invalid_arguments", f"未知动作 {verb or '(空)'}")
         hands = self._hands(session)
+        left: list[str] = []
         if verb == "navigate":
             parse_public_http_url(url)
             hostile = automation_hostile_reason(url)
@@ -747,6 +755,10 @@ class SandboxRuntime:
             await hands.hover_ref(ref)
         elif verb == "tabs":
             await hands.tabs(tab_action or "list", int(index or 0))
+        elif verb == "fill_form":
+            left = await hands.fill_form(list(fields or []))
+        elif verb == "file_upload":
+            await hands.upload_files(ref, self._upload_payload(session, filenames, files))
         elif verb == "type":
             await hands.type_ref(ref, text, submit=bool(submit))
         elif verb == "select_option":
@@ -759,6 +771,8 @@ class SandboxRuntime:
         await self._sync(session)
         await self._save_login(session)
         message = HANDS_COPY.get(verb, APPLIED_COPY)
+        if verb == "fill_form" and left:
+            message += "、".join(dict.fromkeys(left)) + "格留给老师在画面里填。"
         dialogs = hands.take_dialogs()
         if dialogs:
             message += "".join(f"页面弹窗「{d}」，已点确定。" for d in dialogs)
@@ -774,6 +788,27 @@ class SandboxRuntime:
             message=message,
             **extra,
         )
+
+    def _upload_payload(
+        self,
+        session: SandboxSession,
+        filenames: list[str] | None,
+        files: list[dict[str, Any]] | None,
+    ) -> list[tuple[str, str, bytes]]:
+        """Attachments from the teacher's own disk (by name) or the ledger (bytes the
+        gateway already read for this teacher). Never the host filesystem."""
+        out: list[tuple[str, str, bytes]] = []
+        for name in filenames or []:
+            clean = Path(str(name)).name
+            out.append((clean, _mime_of(clean), self._read_workspace_file(session, clean)))
+        for item in files or []:
+            name = Path(str(item.get("name") or "附件")).name
+            try:
+                raw = base64.b64decode(str(item.get("b64") or ""), validate=True)
+            except (ValueError, TypeError) as exc:
+                raise ToolError("tool.invalid_arguments", "附件内容不是 base64") from exc
+            out.append((name, str(item.get("mime") or _mime_of(name)), raw))
+        return out
 
     def _alive_focus(self, sess: SandboxSession) -> str:
         if self._sessions.get(sess.session_id) is not sess or not sess.windows:
@@ -831,6 +866,10 @@ class SandboxRuntime:
                 await item.surface.close()
             except Exception:
                 logger.debug("sandbox session close failed", exc_info=True)
+
+
+def _mime_of(name: str) -> str:
+    return mimetypes.guess_type(name)[0] or "application/octet-stream"
 
 
 def _keep_latest(frames: asyncio.Queue[str]) -> Callable[[str], None]:

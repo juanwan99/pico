@@ -41,6 +41,12 @@ SCROLL_MAX_PX = 2000
 # Playwright MCP. Bounded so a popup storm cannot eat the sidecar.
 MAX_TABS = 8
 DIALOG_NOTE_MAX = 200
+# Whole-form fill + attachments (#1219), Playwright MCP fill_form / file_upload.
+FILL_FORM_MAX = 40
+UPLOAD_MAX_FILES = 10
+UPLOAD_MAX_BYTES = 25 * 1024 * 1024
+CHECK_ROLES = frozenset({"checkbox", "radio", "switch", "menuitemcheckbox", "menuitemradio"})
+TRUE_WORDS = frozenset({"true", "1", "yes", "y", "on", "checked", "是", "对", "勾选", "选中"})
 HUMAN_KEYS = frozenset(
     {
         "Enter", "Tab", "Backspace", "Delete", "Escape",
@@ -111,6 +117,10 @@ class BrowserHands(Protocol):
 
     def take_dialogs(self) -> list[str]: ...
 
+    async def fill_form(self, fields: list[dict[str, Any]]) -> list[str]: ...
+
+    async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None: ...
+
     async def type_ref(self, ref: str, text: str, *, submit: bool) -> None: ...
 
     async def select_ref(self, ref: str, values: list[str]) -> None: ...
@@ -145,6 +155,12 @@ def is_handoff_control(info: dict[str, Any]) -> str | None:
     if HANDOFF_RE.search(text):
         return text.strip()[:40] or "付款"
     return None
+
+
+def is_checked_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in TRUE_WORDS
 
 
 def read_login_state(path: Path | None) -> dict[str, Any] | None:
@@ -512,6 +528,7 @@ class PlaywrightPage:
                     })();
                     return {
                         tag: String(el.tagName || ''),
+                        role: String(el.getAttribute('role') || ''),
                         type: String(el.type || el.getAttribute('type') || ''),
                         name: String(el.getAttribute('name') || ''),
                         id: String(el.id || ''),
@@ -596,6 +613,67 @@ class PlaywrightPage:
         if submit:
             await loc.press("Enter", timeout=5_000)
             await self._settle(before)
+
+    async def fill_form(self, fields: list[dict[str, Any]]) -> list[str]:
+        """Fill many fields in one call (#1219). Each element decides how: text box
+        ``fill``, checkbox / radio ``set_checked``, dropdown ``select_option``.
+        Password / captcha fields are left for the teacher and named back. Never logs values."""
+        if not fields or len(fields) > FILL_FORM_MAX:
+            raise ToolError("tool.invalid_arguments", f"fields 要 1–{FILL_FORM_MAX} 格")
+        left: list[str] = []
+        for i, field in enumerate(fields, start=1):
+            ref = str(field.get("ref") or "")
+            value = field.get("value")
+            loc = self._ref(ref)
+            info = await self._element_info(loc)
+            step = is_human_only_field(info)
+            if step:
+                left.append(step)
+                continue
+            tag = str(info.get("tag") or "").upper()
+            kind = str(info.get("type") or "").lower()
+            role = str(info.get("role") or "").lower()
+            try:
+                if kind in {"checkbox", "radio"} or role in CHECK_ROLES:
+                    await loc.set_checked(is_checked_value(value), timeout=5_000)
+                elif tag == "SELECT":
+                    picks = [str(v) for v in value] if isinstance(value, list) else [str(value)]
+                    await self.select_ref(ref, picks)
+                else:
+                    await loc.fill("" if value is None else str(value), timeout=5_000)
+            except ToolError:
+                raise
+            except Exception as exc:
+                raise ToolError(
+                    "sandbox.action_failed", f"第 {i} 格（{ref}）填不进去，前面 {i - 1} 格已填"
+                ) from exc
+        return left
+
+    async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None:
+        """Attach files (#1219): a file input takes them directly; an「上传」button opens
+        the file chooser. Bytes come from the teacher's disk / ledger, not the host."""
+        if not files or len(files) > UPLOAD_MAX_FILES:
+            raise ToolError("tool.invalid_arguments", f"一次传 1–{UPLOAD_MAX_FILES} 个文件")
+        if sum(len(b) for _, _, b in files) > UPLOAD_MAX_BYTES:
+            raise ToolError("tool.invalid_arguments", "附件合计超过 25 MB")
+        payload = [{"name": n, "mimeType": m, "buffer": b} for n, m, b in files]
+        loc = self._ref(ref)
+        info = await self._element_info(loc)
+        is_input = (
+            str(info.get("tag") or "").upper() == "INPUT"
+            and str(info.get("type") or "").lower() == "file"
+        )
+        try:
+            if is_input:
+                await loc.set_input_files(payload, timeout=5_000)
+            else:
+                async with self._page.expect_file_chooser(timeout=5_000) as chooser:
+                    await loc.click(timeout=5_000)
+                await (await chooser.value).set_files(payload, timeout=5_000)
+        except Exception as exc:
+            raise ToolError(
+                "sandbox.action_failed", "传不上：这个元素不是文件框，点了也没弹出选文件"
+            ) from exc
 
     async def select_ref(self, ref: str, values: list[str]) -> None:
         loc = self._ref(ref)
