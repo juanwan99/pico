@@ -40,6 +40,7 @@ from sandbox_worker.browser import (
     PNG_MAGIC,
     BrowserHands,
     BrowserPage,
+    RefBook,
     open_chromium,
 )
 from sandbox_worker.files import FilesSurface, list_workspace_files, open_files_surface
@@ -113,6 +114,8 @@ class SandboxWindow:
     window_id: str
     kind: str
     surface: BrowserPage | OfficeDesktop
+    # Stable element refs for AI hands (#1222); browser windows only.
+    refs: RefBook = field(default_factory=RefBook)
 
 
 @dataclass
@@ -699,15 +702,14 @@ class SandboxRuntime:
             message=APPLIED_COPY if session.kind == "browser" else HUMAN_OFFICE_COPY,
         )
 
-    def _hands(self, session: SandboxSession) -> BrowserHands:
+    def _hands(self, session: SandboxSession) -> SandboxWindow:
         """The browser window the AI may act on. Office/files windows are not pages."""
         for item in session.windows:
             if item.kind == "browser":
                 session.focused_id = item.window_id
-                surface = item.surface
-                if not callable(getattr(surface, "snapshot", None)):
+                if not callable(getattr(item.surface, "snapshot", None)):
                     raise ToolError("sandbox.unavailable", "这个浏览器窗口不支持 AI 操作")
-                return surface  # type: ignore[return-value]
+                return item
         raise ToolError(
             "sandbox.session_not_found",
             "这路沙箱没有浏览器窗口。先调用 sandbox_browser_open 打开一个公开页。",
@@ -733,7 +735,8 @@ class SandboxRuntime:
         filenames: list[str] | None = None,
         files: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """AI hands (#1207): one Playwright action, then a fresh ref snapshot.
+        """AI hands (#1207): one Playwright action, then the page snapshot — after
+        an action only what changed (#1222); `snapshot` itself is always full.
 
         Password / captcha typing and payment clicks are refused inside the
         browser adapter (sandbox.human_required). Never logs `text`.
@@ -742,7 +745,14 @@ class SandboxRuntime:
         verb = (action or "").strip().lower()
         if verb not in HANDS_ACTIONS:
             raise ToolError("tool.invalid_arguments", f"未知动作 {verb or '(空)'}")
-        hands = self._hands(session)
+        window = self._hands(session)
+        hands: BrowserHands = window.surface  # type: ignore[assignment]
+        ref = window.refs.resolve(ref)
+        if fields:
+            fields = [
+                {**f, "ref": window.refs.resolve(str(f.get("ref") or ""))} if isinstance(f, dict) else f
+                for f in fields
+            ]
         left: list[str] = []
         if verb == "navigate":
             parse_public_http_url(url)
@@ -770,7 +780,10 @@ class SandboxRuntime:
             await hands.press_key(key)
         elif verb == "wait_for":
             await hands.wait_for(text=text, text_gone=text_gone, seconds=float(seconds or 0))
-        snapshot = await hands.snapshot()
+        full, delta = window.refs.update(
+            await hands.snapshot(), page=getattr(hands, "page_token", 0)
+        )
+        whole = verb == "snapshot" or delta is None
         await self._sync(session)
         await self._save_login(session)
         message = HANDS_COPY.get(verb, APPLIED_COPY)
@@ -787,7 +800,8 @@ class SandboxRuntime:
         return self._public_meta(
             session,
             action=verb,
-            snapshot=snapshot,
+            snapshot=full if whole else delta,
+            snapshot_mode="full" if whole else "delta",
             message=message,
             **extra,
         )

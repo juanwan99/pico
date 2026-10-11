@@ -8,6 +8,7 @@ Not a second agent loop.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import os
@@ -45,6 +46,12 @@ DIALOG_NOTE_MAX = 200
 FILL_FORM_MAX = 40
 UPLOAD_MAX_FILES = 10
 UPLOAD_MAX_BYTES = 25 * 1024 * 1024
+# Snapshot deltas (#1222): after an action only new / changed lines go back,
+# like Playwright MCP's incremental snapshot. Playwright 1.52 renumbers refs on
+# every snapshot, so the book hands the AI stable `eN` refs and maps them back.
+DELTA_FULL_RATIO = 0.5
+PW_REF_RE = re.compile(r"\[ref=(s\d+e\d+)\]")
+STABLE_REF_RE = re.compile(r"e(\d+)")
 CHECK_ROLES = frozenset({"checkbox", "radio", "switch", "menuitemcheckbox", "menuitemradio"})
 TRUE_WORDS = frozenset({"true", "1", "yes", "y", "on", "checked", "是", "对", "勾选", "选中"})
 HUMAN_KEYS = frozenset(
@@ -128,6 +135,75 @@ class BrowserHands(Protocol):
     async def press_key(self, key: str) -> None: ...
 
     async def wait_for(self, *, text: str, text_gone: str, seconds: float) -> None: ...
+
+
+class RefBook:
+    """Stable refs across snapshots of one browser window (#1222).
+
+    Lines that survive a re-snapshot keep their `eN`; the AI's `eN` maps to the
+    Playwright ref of the latest snapshot. Raw Playwright refs pass through.
+    """
+
+    def __init__(self) -> None:
+        self._page: Any = None
+        self._keys: list[str] = []
+        self._ids: list[int] = []
+        self._to_pw: dict[int, str] = {}
+        self._next = 1
+
+    def resolve(self, ref: str) -> str:
+        token = (ref or "").strip()
+        m = STABLE_REF_RE.fullmatch(token)
+        if m and int(m.group(1)) in self._to_pw:
+            return self._to_pw[int(m.group(1))]
+        return token
+
+    def update(self, raw: str, *, page: Any = None) -> tuple[str, str | None]:
+        """Returns (full snapshot with stable refs, delta or None when the full
+        snapshot should go back: new page, or most of it changed)."""
+        lines = raw.splitlines()
+        keys = [PW_REF_RE.sub("[ref]", ln) for ln in lines]
+        fresh = page != self._page or not self._keys
+        old_keys, old_ids = ([], []) if fresh else (self._keys, self._ids)
+        ids = [0] * len(lines)
+        changed = [True] * len(lines)
+        removed = 0
+        matcher = difflib.SequenceMatcher(None, old_keys, keys, autojunk=False)
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            removed += max(0, (i2 - i1) - (j2 - j1))
+            for k in range(min(i2 - i1, j2 - j1)):
+                if tag == "equal":
+                    ids[j1 + k], changed[j1 + k] = old_ids[i1 + k], False
+                elif tag == "replace" and keys[j1 + k].split("[ref]")[0] == old_keys[i1 + k].split("[ref]")[0]:
+                    ids[j1 + k] = old_ids[i1 + k]  # same element, new value
+        to_pw: dict[int, str] = {}
+        out: list[str] = []
+        for j, line in enumerate(lines):
+            m = PW_REF_RE.search(line)
+            if m:
+                if not ids[j]:
+                    ids[j], self._next = self._next, self._next + 1
+                to_pw[ids[j]] = m.group(1)
+                line = line[: m.start()] + f"[ref=e{ids[j]}]" + line[m.end() :]
+            out.append(line)
+        self._page, self._keys, self._ids, self._to_pw = page, keys, ids, to_pw
+        full = "\n".join(out)
+        n_changed = sum(changed)
+        if fresh or n_changed > len(lines) * DELTA_FULL_RATIO:
+            return full, None
+        if not n_changed and not removed:
+            return full, "（页面结构没变，编号照用。）"
+        keep: set[int] = set()
+        for j in (j for j, c in enumerate(changed) if c):
+            keep.add(j)
+            depth = len(out[j]) - len(out[j].lstrip())
+            for a in range(j - 1, -1, -1):
+                d = len(out[a]) - len(out[a].lstrip())
+                if d < depth:
+                    keep.add(a)
+                    depth = d
+        head = f"（只列新出现或改了的行和它们的上级；没列的没变，编号照用。消失 {removed} 行。）"
+        return full, "\n".join([head] + [out[j] for j in sorted(keep)])
 
 
 def mask_secret_values(snapshot: str, secrets: list[str]) -> str:
@@ -479,7 +555,7 @@ class PlaywrightPage:
     def _ref(self, ref: str) -> Any:
         token = (ref or "").strip()
         if not re.fullmatch(r"(?:s\d+)?e\d+", token):
-            raise ToolError("tool.invalid_arguments", "ref 必须是快照里的编号，例如 s1e8")
+            raise ToolError("tool.invalid_arguments", "ref 必须是快照里的编号，例如 e8")
         return self._page.locator(f"aria-ref={token}")
 
     async def _password_values(self) -> list[str]:

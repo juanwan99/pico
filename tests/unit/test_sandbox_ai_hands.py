@@ -326,7 +326,7 @@ async def test_snapshot_uses_current_desk_and_masks_password(hands_runtime) -> N
     assert out["ok"] is True
     assert out["session_id"] == opened["session_id"]
     assert out["action"] == "snapshot"
-    assert "[ref=s1e1]" in out["snapshot"]
+    assert "[ref=e1]" in out["snapshot"]
     assert "hunter2" not in out["snapshot"]
     assert SECRET_MASK in out["snapshot"]
     # The ledger event still points the pane at the same session.
@@ -347,7 +347,7 @@ async def test_fill_select_click_act_on_page_and_return_fresh_snapshot(hands_run
         owner, "sandbox_browser_type", {"ref": "s1e1", "text": "张三", "element": "姓名"}
     )
     assert pages[0].fields["s1e1"] == "张三"
-    assert '[ref=s1e1]: 张三' in typed["snapshot"]
+    assert '[ref=e1]: 张三' in typed["snapshot"]
     picked = await gw.invoke(
         owner, "sandbox_browser_select_option", {"ref": "s1e4", "values": ["medium"]}
     )
@@ -702,3 +702,21 @@ def test_pi_declares_image_input_for_a_seeing_model() -> None:
         )
     )
     assert '"image"' in doc
+
+
+@pytest.mark.asyncio
+async def test_action_after_snapshot_returns_only_the_change(hands_runtime) -> None:
+    """#1222: after a full snapshot, an action sends back only what changed."""
+    _, pages = hands_runtime
+    gw = _gw()
+    owner = P("school-a", "member-a", ["ai:run"])
+    await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    full = await gw.invoke(owner, "sandbox_browser_snapshot", {})
+    assert full["snapshot_mode"] == "full"
+    typed = await gw.invoke(owner, "sandbox_browser_type", {"ref": "e1", "text": "张三"})
+    assert pages[0].fields["s1e1"] == "张三"  # stable e1 → Playwright s1e1
+    assert typed["snapshot_mode"] == "delta"
+    assert '[ref=e1]: 张三' in typed["snapshot"]
+    assert "提交报名" not in typed["snapshot"]
+    again = await gw.invoke(owner, "sandbox_browser_snapshot", {})
+    assert again["snapshot_mode"] == "full" and "提交报名" in again["snapshot"]
