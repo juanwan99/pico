@@ -42,6 +42,8 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     "sandbox_browser_select_option",
     "sandbox_browser_press_key",
     "sandbox_browser_wait_for",
+    # AI looks at the page (#1209): Pi gets the PNG as image content.
+    "sandbox_browser_screenshot",
     "sandbox_document_open",
     "edu_catalog_find",
     "edu_catalog_describe",
@@ -56,7 +58,6 @@ EXTENDED_TOOLS: tuple[str, ...] = (
     "unpublish_html_page",
     "verify_html_document",
     "sandbox_preview_inspect",
-    "sandbox_browser_screenshot",
     "propose_page_mutation",
 )
 
