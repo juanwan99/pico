@@ -8,12 +8,14 @@ Passwords are never written to logs, tool payloads, or screenshot text overlays.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import json
 import logging
 import os
 import secrets
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -58,6 +60,9 @@ APPLIED_COPY = "已把操作送进 sidecar Chromium。登录状态存在你自�
 # Clearing the teacher disk, or logging out on the site, drops it.
 LOGIN_FILE = ".browser-login.json"
 LOGIN_SAVE_EVERY_S = 15.0
+# Live pane (#1215): check focus / session once a second, keep proxies awake.
+STREAM_CHECK_S = 1.0
+STREAM_PING_S = 15.0
 # "current" = the caller's own desk (one per school+membership). Lets the AI act
 # on a pane the teacher opened without having the session id in hand.
 CURRENT_SESSION = "current"
@@ -653,6 +658,8 @@ class SandboxRuntime:
         text: str | None = None,
         password: bool = False,
         field: str = "input",
+        scroll_dy: int | None = None,
+        key: str = "",
     ) -> dict[str, Any]:
         await self._purge()
         surface = session.focused().surface
@@ -663,6 +670,12 @@ class SandboxRuntime:
             if password:
                 session.secret_fields.add(field)
             await surface.type_text(text, password=password)
+        scroll = getattr(surface, "scroll", None)
+        if scroll_dy and callable(scroll):
+            await scroll(int(scroll_dy))
+        press = getattr(surface, "press_human_key", None)
+        if key and callable(press):
+            await press(key)
         await self._sync(session)
         await self._save_login(session)
         return self._public_meta(
@@ -737,6 +750,46 @@ class SandboxRuntime:
             message=HANDS_COPY.get(verb, APPLIED_COPY),
         )
 
+    def _alive_focus(self, sess: SandboxSession) -> str:
+        if self._sessions.get(sess.session_id) is not sess or not sess.windows:
+            return ""
+        return sess.focused().window_id
+
+    async def stream(self, sess: SandboxSession) -> AsyncIterator[dict[str, Any]]:
+        """Live pane (#1215): JPEG frames from the focused browser window.
+
+        Office / files windows yield ``poll`` once; the pane keeps polling PNG.
+        Ends when the session is destroyed. Watching does not keep it alive.
+        """
+        last = time.monotonic()
+        while window_id := self._alive_focus(sess):
+            win = sess.focused()
+            cast = getattr(win.surface, "screencast", None)
+            stop = None
+            frames: asyncio.Queue[str] = asyncio.Queue(maxsize=1)
+            if callable(cast):
+                try:
+                    stop = await cast(_keep_latest(frames))
+                except Exception:
+                    logger.debug("screencast start failed", exc_info=True)
+            if stop is None:
+                yield {"poll": True, "window_id": window_id}
+                last = time.monotonic()
+            try:
+                while self._alive_focus(sess) == window_id:
+                    try:
+                        b64 = await asyncio.wait_for(frames.get(), STREAM_CHECK_S)
+                    except TimeoutError:
+                        if time.monotonic() - last >= STREAM_PING_S:
+                            last = time.monotonic()
+                            yield {"ping": True}
+                        continue
+                    last = time.monotonic()
+                    yield {"jpeg": b64, "window_id": window_id}
+            finally:
+                if stop is not None:
+                    await stop()
+
     async def destroy(self, session_id: str) -> None:
         # Close Chromium / LibreOffice only. Owner disk stays on the host bind.
         sess = self._sessions.pop(session_id, None)
@@ -748,6 +801,21 @@ class SandboxRuntime:
                 await item.surface.close()
             except Exception:
                 logger.debug("sandbox session close failed", exc_info=True)
+
+
+def _keep_latest(frames: asyncio.Queue[str]) -> Callable[[str], None]:
+    """A slow viewer skips stale frames instead of piling them up."""
+
+    def push(b64: str) -> None:
+        if frames.full():
+            frames.get_nowait()
+        frames.put_nowait(b64)
+
+    return push
+
+
+def sse_event(event: dict[str, Any]) -> bytes:
+    return f"data: {json.dumps(event, separators=(',', ':'))}\n\n".encode()
 
 
 RUNTIME = SandboxRuntime()

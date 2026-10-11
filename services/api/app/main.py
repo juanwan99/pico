@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -1007,6 +1007,35 @@ async def sandbox_session_screenshot(
     )
 
 
+@app.get("/v1/sandbox/sessions/{session_id}/stream")
+async def sandbox_session_stream(
+    session_id: str,
+    principal: Principal = Depends(require_scope("ai:read")),
+) -> StreamingResponse:
+    """Live pane (#1215): pass the sidecar's JPEG SSE through, same owner check."""
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_stream
+
+    try:
+        chunks = await sidecar_stream(
+            f"/v1/internal/sessions/{session_id}/stream",
+            params={
+                "school_id": principal.school_id,
+                "membership_id": principal.membership_id,
+            },
+        )
+    except ToolError as exc:
+        status = {"sandbox.forbidden": 403, "sandbox.session_not_found": 404}.get(exc.code, 400)
+        raise HTTPException(
+            status_code=status, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    return StreamingResponse(
+        chunks,
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/v1/sandbox/sessions/{session_id}/focus")
 async def sandbox_session_focus(
     session_id: str,
@@ -1060,7 +1089,8 @@ async def sandbox_session_input(
     from pico_orchestrator.sandbox_sidecar import sidecar_json
 
     ctype = (request.headers.get("content-type") or "").lower()
-    click_x = click_y = None
+    click_x = click_y = scroll_dy = None
+    key = ""
     text = None
     password = False
     try:
@@ -1070,6 +1100,9 @@ async def sandbox_session_input(
                 body = {}
             click_x = body.get("click_x")
             click_y = body.get("click_y")
+            if body.get("scroll_dy") is not None:
+                scroll_dy = int(body["scroll_dy"])
+            key = str(body.get("key") or "")[:32]
             secret = body.get("secret") or body.get("password")
             visible = body.get("text")
             if secret:
@@ -1107,6 +1140,8 @@ async def sandbox_session_input(
                 "text": text,
                 "password": password,
                 "field": "password" if password else "input",
+                "scroll_dy": scroll_dy,
+                "key": key,
             },
         )
     except ToolError as exc:

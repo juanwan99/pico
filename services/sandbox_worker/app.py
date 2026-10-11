@@ -6,7 +6,7 @@ import os
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.sandbox_persist import (
     PERSIST_COPY,
@@ -20,7 +20,7 @@ from sandbox_worker.diagram import mermaid_js_ready, render_diagram
 from sandbox_worker.mermaid_pin import MERMAID_VERSION
 from sandbox_worker.office import convert_legacy_office
 from sandbox_worker.ports import SANDBOX_DEFAULT_PORT, assert_listen_port
-from sandbox_worker.runtime import HUMAN_LOGIN_COPY, RUNTIME, redact_secrets
+from sandbox_worker.runtime import HUMAN_LOGIN_COPY, RUNTIME, redact_secrets, sse_event
 
 app = FastAPI(title="pico-sandbox", version="0.1.0")
 
@@ -55,6 +55,8 @@ class InputBody(BaseModel):
     text: str | None = None
     password: bool = False
     field: str = Field(default="input", max_length=64)
+    scroll_dy: int | None = None
+    key: str = Field(default="", max_length=32)
 
 
 class FocusBody(BaseModel):
@@ -218,6 +220,33 @@ async def get_png(
     return Response(content=sess.screenshot_png, media_type="image/png")
 
 
+@app.get("/v1/internal/sessions/{session_id}/stream")
+async def stream_session(
+    session_id: str,
+    school_id: str,
+    membership_id: str,
+    x_pico_sandbox_token: str | None = Header(default=None),
+) -> StreamingResponse:
+    """Live pane (#1215): SSE of JPEG frames. Client disconnect stops the screencast."""
+    _require_token(x_pico_sandbox_token)
+    try:
+        sess = RUNTIME.require_owner(
+            session_id, school_id=school_id, membership_id=membership_id
+        )
+    except ToolError as exc:
+        raise _tool_http(exc) from exc
+
+    async def events():
+        async for event in RUNTIME.stream(sess):
+            yield sse_event(event)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/v1/internal/sessions/{session_id}/input")
 async def post_input(
     session_id: str,
@@ -239,6 +268,8 @@ async def post_input(
             text=body.text,
             password=body.password,
             field=body.field,
+            scroll_dy=body.scroll_dy,
+            key=body.key,
         )
     except ToolError as exc:
         raise _tool_http(exc) from exc

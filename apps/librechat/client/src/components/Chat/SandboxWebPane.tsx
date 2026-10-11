@@ -1,5 +1,7 @@
 /**
- * Result-panel isolated webpage: poll sidecar screenshot, click → click_x/y.
+ * Result-panel isolated webpage. Browser windows stream JPEG frames pushed by
+ * Chromium on repaint (#1215); office/files windows and a dropped stream fall
+ * back to polling the PNG. Click → click_x/y, wheel → scroll, keys → Enter/Tab/…
  * Dead session: honest copy + reopen. Login chrome only when the live page
  * actually has a text/password field. Password never leaves this pane.
  */
@@ -12,11 +14,29 @@ import {
   getPicoSandboxSession,
   openPicoSandboxDocument,
   postPicoSandboxInput,
+  streamPicoSandbox,
   type PicoSandboxWindow,
 } from '~/data-provider/pico/api';
 import { isOfficeFilename } from '~/utils/picoOpenInPane';
 
 const POLL_MS = 400;
+/** While frames stream, page meta (title / inputs) refreshes every Nth tick. */
+const META_EVERY_TICKS = 5;
+const STREAM_RETRY_MS = 5000;
+const SCROLL_FLUSH_MS = 120;
+const PANE_KEYS = new Set([
+  'Enter',
+  'Tab',
+  'Backspace',
+  'Delete',
+  'Escape',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'PageUp',
+  'PageDown',
+]);
 const VIEWPORT_W = 1280;
 const VIEWPORT_H = 800;
 
@@ -70,6 +90,8 @@ export default function SandboxWebPane({
   const imgRef = useRef<HTMLImageElement>(null);
   const liveRef = useRef(live);
   liveRef.current = live;
+  const streamingRef = useRef(false);
+  const scrollRef = useRef({ dy: 0, timer: 0 });
 
   const applyMeta = useCallback((meta: {
     url?: string;
@@ -157,8 +179,16 @@ export default function SandboxWebPane({
     };
     void tick();
     void refreshMeta();
+    let ticks = 0;
     const id = window.setInterval(() => {
       if (cancelled || liveRef.current === 'dead') {
+        return;
+      }
+      ticks += 1;
+      if (streamingRef.current) {
+        if (ticks % META_EVERY_TICKS === 0) {
+          void refreshMeta();
+        }
         return;
       }
       void tick();
@@ -174,18 +204,55 @@ export default function SandboxWebPane({
     };
   }, [markDead, refreshMeta, refreshShot]);
 
+  useEffect(() => {
+    const abort = new AbortController();
+    let retry = 0;
+    const run = async () => {
+      try {
+        await streamPicoSandbox(
+          sessionId,
+          (event) => {
+            if (event.jpeg) {
+              streamingRef.current = true;
+              setImageUrl(`data:image/jpeg;base64,${event.jpeg}`);
+              setLive('live');
+            } else if (event.poll) {
+              streamingRef.current = false;
+            }
+          },
+          abort.signal,
+        );
+      } catch {
+        /* fall back to polling below */
+      }
+      streamingRef.current = false;
+      if (!abort.signal.aborted && liveRef.current !== 'dead') {
+        retry = window.setTimeout(() => void run(), STREAM_RETRY_MS);
+      }
+    };
+    void run();
+    return () => {
+      abort.abort();
+      window.clearTimeout(retry);
+      streamingRef.current = false;
+    };
+  }, [sessionId]);
+
   const sendInput = async (body: {
     click_x?: number;
     click_y?: number;
     text?: string;
     secret?: string;
+    key?: string;
   }) => {
     setBusy(true);
     setError(null);
     try {
       const meta = await postPicoSandboxInput(sessionId, body);
       applyMeta(meta);
-      await refreshShot();
+      if (!streamingRef.current) {
+        await refreshShot();
+      }
       setLive('live');
       setStatus('已送进隔离浏览器');
     } catch (err) {
@@ -214,6 +281,34 @@ export default function SandboxWebPane({
     const x = Math.round((ev.clientX - rect.left) * (nw / rect.width));
     const y = Math.round((ev.clientY - rect.top) * (nh / rect.height));
     await sendInput({ click_x: x, click_y: y });
+  };
+
+  const onViewportWheel = (ev: React.WheelEvent<HTMLImageElement>) => {
+    // Ctrl/⌘ + wheel zooms the pane; a zoomed-in pane scrolls itself.
+    if (ev.ctrlKey || ev.metaKey || zoom > 1 || live !== 'live') {
+      return;
+    }
+    const pending = scrollRef.current;
+    pending.dy += ev.deltaY;
+    if (pending.timer) {
+      return;
+    }
+    pending.timer = window.setTimeout(() => {
+      const dy = Math.round(pending.dy);
+      pending.dy = 0;
+      pending.timer = 0;
+      if (dy) {
+        void postPicoSandboxInput(sessionId, { scroll_dy: dy }).catch(() => undefined);
+      }
+    }, SCROLL_FLUSH_MS);
+  };
+
+  const onViewportKey = (ev: React.KeyboardEvent<HTMLImageElement>) => {
+    if (!PANE_KEYS.has(ev.key) || busy || live !== 'live') {
+      return;
+    }
+    ev.preventDefault();
+    void sendInput({ key: ev.key });
   };
 
   const sendVisible = async () => {
@@ -434,6 +529,9 @@ export default function SandboxWebPane({
             alt="隔离浏览器画面"
             width={VIEWPORT_W}
             onClick={(ev) => void onViewportClick(ev)}
+            onWheel={onViewportWheel}
+            onKeyDown={onViewportKey}
+            tabIndex={0}
             style={{ width: `${Math.round(zoom * 100)}%` }}
             className="mx-auto block h-auto max-w-none cursor-crosshair bg-white"
             data-testid="sandbox-web-viewport"
