@@ -69,6 +69,15 @@ describe('PaneChatDock', () => {
       { messageId: 'u', isCreatedByUser: true, text: '好' },
     ] as unknown as TMessage[];
     expect(latestReplyText(parts)).toBe('分段回复');
+    const failed = [
+      {
+        messageId: 'e',
+        isCreatedByUser: false,
+        error: true,
+        text: 'Unhandled error type 403 status code (no body)',
+      },
+    ] as unknown as TMessage[];
+    expect(latestReplyText(failed)).toBe('这次没完成。请再发一次。');
     expect(latestReplyText([])).toBe('');
   });
 });
