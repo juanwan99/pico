@@ -4,7 +4,7 @@
  * Chat column carries MainDeliveryStrip (open/download first); this panel
  * keeps the engineer timeline + full chips.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import type { TMessage } from 'librechat-data-provider';
 import {
@@ -261,6 +261,7 @@ export default function ResultPanel({
   canRerun,
   rerunning,
   onRerun,
+  expandedDock,
 }: {
   messages?: TMessage[] | null;
   conversationId?: string | null;
@@ -274,9 +275,23 @@ export default function ResultPanel({
   canRerun?: boolean;
   rerunning?: boolean;
   onRerun?: () => void;
+  /** Chat dock shown under the pane while it is full screen (#1226). */
+  expandedDock?: ReactNode;
 }) {
   const [view, setView] = useState<TopView>('web');
   const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!expanded) {
+      return;
+    }
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        setExpanded(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expanded]);
   const [artifactAction, setArtifactAction] = useState<ArtifactAction | null>(null);
   const [artifactError, setArtifactError] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState<string | null>(null);
@@ -812,7 +827,7 @@ export default function ResultPanel({
           onPointerDown={onResizePointerDown}
         />
       ) : null}
-      {/* Header — sandbox only. Zoom/fullscreen live in the ⋯ menu. */}
+      {/* Header — sandbox only. Full screen sits on the header (#1226); zoom in ⋯. */}
       <div className="flex h-10 items-center gap-1 border-b border-black/[0.06] bg-[#fafafa] px-2 dark:border-border-light dark:bg-[color:var(--pico-surface-2)]">
         <div className="px-2 text-[13px] font-medium text-[#1a1a1a] dark:text-text-primary">
           沙箱
@@ -820,42 +835,38 @@ export default function ResultPanel({
         <div className="relative ml-auto flex items-center gap-0.5">
           <button
             type="button"
-            className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-black/[0.04]"
-            aria-label="沙箱控件"
-            aria-expanded={chromeOpen}
-            data-testid="result-panel-chrome-menu"
-            onClick={() => setChromeOpen((value) => !value)}
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] text-[#5c5c5c] hover:bg-black/[0.04]"
+            aria-label={expanded ? '退出全屏' : '放大'}
+            title={expanded ? '退出全屏（Esc）' : '放大沙箱，下方可以继续跟 AI 说话'}
+            data-testid="result-panel-fullscreen"
+            onClick={() => setExpanded((value) => !value)}
           >
-            <PicoIcon name="more" size="sm" />
+            <PicoIcon name={expanded ? 'minimize' : 'maximize'} size="sm" />
+            {expanded ? '退出全屏' : '放大'}
           </button>
-          {chromeOpen ? (
+          {showZoom ? (
+            <button
+              type="button"
+              className="rounded-md p-1.5 text-[#8c8c8c] hover:bg-black/[0.04]"
+              aria-label="沙箱控件"
+              aria-expanded={chromeOpen}
+              data-testid="result-panel-chrome-menu"
+              onClick={() => setChromeOpen((value) => !value)}
+            >
+              <PicoIcon name="more" size="sm" />
+            </button>
+          ) : null}
+          {chromeOpen && showZoom ? (
             <div
               data-testid="result-panel-chrome-pop"
               className="absolute right-0 top-9 z-20 w-56 rounded-lg border border-black/[0.08] bg-white p-2 shadow-lg dark:border-border-light dark:bg-surface-secondary"
             >
-              {showZoom ? (
-                <div className="mb-1">
-                  <PaneZoomBar
-                    label={paneZoom.label}
-                    zoomIn={paneZoom.zoomIn}
-                    zoomOut={paneZoom.zoomOut}
-                    reset={paneZoom.reset}
-                  />
-                </div>
-              ) : null}
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-black/[0.04]"
-                aria-label={expanded ? '退出全屏' : '进入全屏'}
-                data-testid="result-panel-fullscreen"
-                onClick={() => {
-                  setExpanded((value) => !value);
-                  setChromeOpen(false);
-                }}
-              >
-                <PicoIcon name={expanded ? 'minimize' : 'maximize'} size="sm" />
-                {expanded ? '退出全屏' : '进入全屏'}
-              </button>
+              <PaneZoomBar
+                label={paneZoom.label}
+                zoomIn={paneZoom.zoomIn}
+                zoomOut={paneZoom.zoomOut}
+                reset={paneZoom.reset}
+              />
             </div>
           ) : null}
           {onClose ? (
@@ -1294,6 +1305,7 @@ export default function ResultPanel({
         </>
         )}
       </div>
+      {expanded ? expandedDock : null}
     </aside>
   );
 }
