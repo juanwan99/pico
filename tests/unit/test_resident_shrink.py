@@ -79,7 +79,7 @@ class MemoryArtifactStore:
 def test_core_is_shorter_and_keeps_office_ceiling() -> None:
     visible = resolve_visible_tools(None)
     assert visible == list(CORE_VISIBLE_TOOLS)
-    assert len(visible) == 26  # 18 + 7 AI-hands verbs (#1207) + screenshot (#1209)
+    assert len(visible) == 29  # 18 + 7 AI-hands verbs (#1207) + screenshot (#1209) + back/hover/tabs (#1217)
     assert "sandbox_office_lib" in visible
     assert "generate_pptx_document" not in visible
     assert "sandbox_pptx_lib" not in visible

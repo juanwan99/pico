@@ -37,6 +37,10 @@ WAIT_MAX_S = 30.0
 # Live pane (#1215): Chromium pushes a JPEG on each repaint (CDP screencast).
 SCREENCAST_QUALITY = 70
 SCROLL_MAX_PX = 2000
+# Tabs (#1217): a link that opens a new tab becomes the current page, like
+# Playwright MCP. Bounded so a popup storm cannot eat the sidecar.
+MAX_TABS = 8
+DIALOG_NOTE_MAX = 200
 HUMAN_KEYS = frozenset(
     {
         "Enter", "Tab", "Backspace", "Delete", "Escape",
@@ -97,7 +101,15 @@ class BrowserHands(Protocol):
 
     async def navigate(self, url: str) -> None: ...
 
-    async def click_ref(self, ref: str) -> None: ...
+    async def click_ref(self, ref: str, *, double: bool = False) -> None: ...
+
+    async def hover_ref(self, ref: str) -> None: ...
+
+    async def navigate_back(self) -> None: ...
+
+    async def tabs(self, action: str, index: int) -> list[dict[str, Any]]: ...
+
+    def take_dialogs(self) -> list[str]: ...
 
     async def type_ref(self, ref: str, text: str, *, submit: bool) -> None: ...
 
@@ -247,10 +259,93 @@ class PlaywrightPage:
         self._context = context
         self._page = page
         self._profile_dir = profile_dir
+        # Bumps whenever the current tab changes; the live pane re-attaches (#1217).
+        self.page_token = 0
+        self._dialogs: list[str] = []
+        for existing in list(getattr(context, "pages", []) or []):
+            self._watch(existing)
+        if page not in list(getattr(context, "pages", []) or []):
+            self._watch(page)
+        context.on("page", self._on_new_page)
 
     @property
     def url(self) -> str:
         return str(self._page.url or "")
+
+    # ---- Tabs + dialogs (#1217). Upstream = Playwright context/page events. ----
+
+    def _watch(self, page: Any) -> None:
+        page.on("dialog", self._on_dialog)
+        page.on("close", self._on_close)
+
+    def _open_pages(self) -> list[Any]:
+        return [p for p in self._context.pages if not p.is_closed()]
+
+    def _use(self, page: Any) -> None:
+        if page is not self._page:
+            self._page = page
+            self.page_token += 1
+
+    def _on_new_page(self, page: Any) -> None:
+        """A link with target=_blank / window.open: the new tab becomes current."""
+        self._watch(page)
+        if len(self._open_pages()) > MAX_TABS:
+            asyncio.ensure_future(page.close())
+            return
+        self._use(page)
+
+    def _on_close(self, page: Any) -> None:
+        if page is self._page:
+            rest = self._open_pages()
+            if rest:
+                self._use(rest[-1])
+
+    async def _on_dialog(self, dialog: Any) -> None:
+        """alert / confirm / prompt: press OK. The AI's click already was the intent;
+        payment buttons are refused before the click. Without a handler Playwright
+        dismisses, so confirm() silently returns false and the form never submits."""
+        note = f"{dialog.message or ''}".strip()[:DIALOG_NOTE_MAX]
+        self._dialogs.append(note or dialog.type)
+        try:
+            await dialog.accept()
+        except Exception:
+            logger.debug("dialog accept failed", exc_info=True)
+
+    def take_dialogs(self) -> list[str]:
+        out, self._dialogs = self._dialogs, []
+        return out
+
+    async def _tab_rows(self) -> list[dict[str, Any]]:
+        rows = []
+        for i, page in enumerate(self._open_pages()):
+            try:
+                title = str(await page.title() or "")
+            except Exception:  # noqa: BLE001
+                title = ""
+            rows.append(
+                {"index": i, "url": str(page.url or ""), "title": title[:120],
+                 "current": page is self._page}
+            )
+        return rows
+
+    async def tabs(self, action: str, index: int) -> list[dict[str, Any]]:
+        verb = (action or "list").strip().lower()
+        pages = self._open_pages()
+        if verb not in {"list", "select", "close"}:
+            raise ToolError("tool.invalid_arguments", "tabs 的 action 只能是 list / select / close")
+        if verb != "list":
+            if not 0 <= int(index) < len(pages):
+                raise ToolError("tool.invalid_arguments", f"没有第 {index} 个标签页（共 {len(pages)} 个，从 0 数）")
+            target = pages[int(index)]
+            if verb == "select":
+                self._use(target)
+                await target.bring_to_front()
+            else:
+                if len(pages) == 1:
+                    raise ToolError("tool.invalid_arguments", "只剩这一个标签页，不能关")
+                await target.close()
+            assert_http_public_or_internal(self.url)
+        return await self._tab_rows()
 
     async def title(self) -> str:
         try:
@@ -449,7 +544,7 @@ class PlaywrightPage:
             await asyncio.sleep(0.1)
         assert_http_public_or_internal(self.url)
 
-    async def click_ref(self, ref: str) -> None:
+    async def click_ref(self, ref: str, *, double: bool = False) -> None:
         loc = self._ref(ref)
         info = await self._element_info(loc)
         step = is_handoff_control(info)
@@ -457,12 +552,34 @@ class PlaywrightPage:
             raise human_required(step)
         before = self.url
         try:
-            await loc.click(timeout=5_000)
+            if double:
+                await loc.dblclick(timeout=5_000)
+            else:
+                await loc.click(timeout=5_000)
         except Exception as exc:
             raise ToolError(
                 "sandbox.action_failed", "点不到这个元素（可能被遮住或已消失）"
             ) from exc
         await self._settle(before)
+
+    async def hover_ref(self, ref: str) -> None:
+        """Menus that open on hover (#1217)."""
+        loc = self._ref(ref)
+        await self._element_info(loc)
+        try:
+            await loc.hover(timeout=5_000)
+        except Exception as exc:
+            raise ToolError("sandbox.action_failed", "移不到这个元素上（可能被遮住或已消失）") from exc
+
+    async def navigate_back(self) -> None:
+        before = self.url
+        try:
+            await self._page.go_back(wait_until="domcontentloaded", timeout=GOTO_TIMEOUT_MS)
+        except Exception as exc:
+            raise ToolError("sandbox.fetch_failed", "后退失败（上一页打不开）") from exc
+        if self.url == before:
+            raise ToolError("sandbox.action_failed", "这个标签页没有上一页")
+        assert_http_public_or_internal(self.url)
 
     async def type_ref(self, ref: str, text: str, *, submit: bool) -> None:
         # Never log `text`.

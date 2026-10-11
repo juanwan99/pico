@@ -18,9 +18,9 @@ from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS, UNREGISTERED
 
 
 def test_unregistered_office_tools_absent_from_model_surface() -> None:
-    assert len(ALLOWED_GATEWAY_TOOLS) == 31  # 24 + 7 AI-hands verbs (#1207)
+    assert len(ALLOWED_GATEWAY_TOOLS) == 34  # 24 + 7 AI-hands verbs (#1207) + back/hover/tabs (#1217)
     assert len(EXTENDED_TOOLS) == 5
-    assert len(CORE_VISIBLE_TOOLS) == 26  # 18 + 7 AI-hands verbs (#1207) + screenshot (#1209)
+    assert len(CORE_VISIBLE_TOOLS) == 29  # 18 + 7 AI-hands verbs (#1207) + screenshot (#1209) + back/hover/tabs (#1217)
     assert set(CORE_VISIBLE_TOOLS) | set(EXTENDED_TOOLS) == set(ALLOWED_GATEWAY_TOOLS)
     for name in UNREGISTERED_OFFICE_TOOLS:
         assert name not in ALLOWED_GATEWAY_TOOLS

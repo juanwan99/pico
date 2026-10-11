@@ -158,6 +158,9 @@ async def _embedded_call(
                 url=str(body.get("url") or ""),
                 seconds=float(body.get("seconds") or 0),
                 text_gone=str(body.get("text_gone") or ""),
+                double_click=bool(body.get("double_click")),
+                tab_action=str(body.get("tab_action") or ""),
+                index=int(body.get("index") or 0),
             )
         if method == "POST" and path.endswith("/focus"):
             body = json_body or {}

@@ -36,6 +36,9 @@ const ALLOWED = [
   "sandbox_browser_snapshot",
   "sandbox_browser_navigate",
   "sandbox_browser_click",
+  "sandbox_browser_navigate_back",
+  "sandbox_browser_hover",
+  "sandbox_browser_tabs",
   "sandbox_browser_type",
   "sandbox_browser_select_option",
   "sandbox_browser_press_key",
@@ -383,12 +386,50 @@ export default function (pi: ExtensionAPI) {
   );
   registerTool(
     pi,
+    "sandbox_browser_navigate_back",
+    "Go back to the previous page in the current tab. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    Type.Object(
+      {
+        session_id: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
     "sandbox_browser_click",
-    "Click the element with the given ref from the latest snapshot. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    "Click the element with the given ref from the latest snapshot; double_click=true double-clicks. A link that opens a new tab makes that tab current (the result lists tabs). Page alert/confirm dialogs are answered OK and reported in the result. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
     Type.Object(
       {
         ref: Type.String(),
         element: Type.Optional(Type.String()),
+        double_click: Type.Optional(Type.Boolean()),
+        session_id: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "sandbox_browser_hover",
+    "Move the mouse over the element with the given ref (menus that open on hover). Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    Type.Object(
+      {
+        ref: Type.String(),
+        element: Type.Optional(Type.String()),
+        session_id: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "sandbox_browser_tabs",
+    "List the browser tabs, or switch to (select) / close the tab at index (0-based); action is list, select or close. New tabs from links are already current. Acts inside the teacher's own isolated sandbox browser session and returns a fresh page snapshot with element refs. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time.",
+    Type.Object(
+      {
+        action: Type.String(),
+        index: Type.Optional(Type.Number()),
         session_id: Type.Optional(Type.String()),
       },
       { additionalProperties: true },

@@ -67,12 +67,18 @@ STREAM_PING_S = 15.0
 # on a pane the teacher opened without having the session id in hand.
 CURRENT_SESSION = "current"
 HANDS_ACTIONS = frozenset(
-    {"snapshot", "navigate", "click", "type", "select_option", "press_key", "wait_for"}
+    {
+        "snapshot", "navigate", "navigate_back", "click", "hover", "type",
+        "select_option", "press_key", "wait_for", "tabs",
+    }
 )
 HANDS_COPY = {
     "snapshot": "已读取当前页面快照（带编号）。",
     "navigate": "已在沙箱 Chromium 打开新网址。",
+    "navigate_back": "已后退到上一页。",
     "click": "已点击。",
+    "hover": "已移到元素上。",
+    "tabs": "已列出标签页。",
     "type": "已填入文字。",
     "select_option": "已选中选项。",
     "press_key": "已按键。",
@@ -713,6 +719,9 @@ class SandboxRuntime:
         url: str = "",
         seconds: float = 0.0,
         text_gone: str = "",
+        double_click: bool = False,
+        tab_action: str = "",
+        index: int = 0,
     ) -> dict[str, Any]:
         """AI hands (#1207): one Playwright action, then a fresh ref snapshot.
 
@@ -730,8 +739,14 @@ class SandboxRuntime:
             if hostile:
                 raise ToolError("sandbox.site_blocks_automation", hostile)
             await hands.navigate(url)
+        elif verb == "navigate_back":
+            await hands.navigate_back()
         elif verb == "click":
-            await hands.click_ref(ref)
+            await hands.click_ref(ref, double=bool(double_click))
+        elif verb == "hover":
+            await hands.hover_ref(ref)
+        elif verb == "tabs":
+            await hands.tabs(tab_action or "list", int(index or 0))
         elif verb == "type":
             await hands.type_ref(ref, text, submit=bool(submit))
         elif verb == "select_option":
@@ -743,11 +758,21 @@ class SandboxRuntime:
         snapshot = await hands.snapshot()
         await self._sync(session)
         await self._save_login(session)
+        message = HANDS_COPY.get(verb, APPLIED_COPY)
+        dialogs = hands.take_dialogs()
+        if dialogs:
+            message += "".join(f"页面弹窗「{d}」，已点确定。" for d in dialogs)
+        tabs = await hands.tabs("list", 0)
+        extra: dict[str, Any] = {"dialogs": dialogs} if dialogs else {}
+        if len(tabs) > 1 or verb == "tabs":
+            # A new tab opened (or the AI asked): it is already the current page.
+            extra["tabs"] = tabs
         return self._public_meta(
             session,
             action=verb,
             snapshot=snapshot,
-            message=HANDS_COPY.get(verb, APPLIED_COPY),
+            message=message,
+            **extra,
         )
 
     def _alive_focus(self, sess: SandboxSession) -> str:
@@ -764,6 +789,7 @@ class SandboxRuntime:
         last = time.monotonic()
         while window_id := self._alive_focus(sess):
             win = sess.focused()
+            token = getattr(win.surface, "page_token", 0)
             cast = getattr(win.surface, "screencast", None)
             stop = None
             frames: asyncio.Queue[str] = asyncio.Queue(maxsize=1)
@@ -776,7 +802,11 @@ class SandboxRuntime:
                 yield {"poll": True, "window_id": window_id}
                 last = time.monotonic()
             try:
-                while self._alive_focus(sess) == window_id:
+                # A new / switched tab re-attaches the screencast (#1217).
+                while (
+                    self._alive_focus(sess) == window_id
+                    and getattr(win.surface, "page_token", 0) == token
+                ):
                     try:
                         b64 = await asyncio.wait_for(frames.get(), STREAM_CHECK_S)
                     except TimeoutError:

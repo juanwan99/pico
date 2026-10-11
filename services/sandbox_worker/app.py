@@ -80,6 +80,9 @@ class ActBody(BaseModel):
     url: str = Field(default="", max_length=2048)
     seconds: float = 0.0
     text_gone: str = Field(default="", max_length=400)
+    double_click: bool = False
+    tab_action: str = Field(default="", max_length=16)
+    index: int = Field(default=0, ge=0, le=64)
 
 
 class ConvertBody(BaseModel):
@@ -299,6 +302,9 @@ async def act_session(
             url=body.url,
             seconds=body.seconds,
             text_gone=body.text_gone,
+            double_click=body.double_click,
+            tab_action=body.tab_action,
+            index=body.index,
         )
     except ToolError as exc:
         raise _tool_http(exc) from exc
