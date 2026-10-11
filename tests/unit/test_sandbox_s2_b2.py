@@ -264,7 +264,8 @@ async def test_browser_cross_account_denied(embedded_runtime) -> None:
             "sandbox_browser_screenshot",
             {"session_id": opened["session_id"]},
         )
-    assert denied.value.code == "sandbox.forbidden"
+    # AI tools always use the caller's own desk (#1233): the outsider has none.
+    assert denied.value.code == "sandbox.session_not_found"
 
 
 @pytest.mark.asyncio

@@ -2005,10 +2005,11 @@ def _workspace_handlers(
             raise
 
     def _sandbox_session_arg(args: dict[str, Any]) -> str:
-        """A real sbox_ id, else the teacher's open sandbox. Models invent ids
-        like "default" on a later turn; that must not lose the open page."""
-        sid = str(args.get("session_id") or "").strip()
-        return sid if sid.startswith("sbox_") else "current"
+        """Always the teacher's open sandbox (one desk per teacher). Models invent
+        ids like "default", or reuse an sbox_ id from an earlier, closed sandbox
+        (#1233: a wasted round on session_not_found); neither may lose the page."""
+        _ = args
+        return "current"
 
     async def browser_screenshot(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter()
