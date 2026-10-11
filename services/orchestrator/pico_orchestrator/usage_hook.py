@@ -22,6 +22,13 @@ _SANDBOX_TOOLS = frozenset(
         "generate_html_document",
         "sandbox_browser_open",
         "sandbox_browser_screenshot",
+        "sandbox_browser_snapshot",
+        "sandbox_browser_navigate",
+        "sandbox_browser_click",
+        "sandbox_browser_type",
+        "sandbox_browser_select_option",
+        "sandbox_browser_press_key",
+        "sandbox_browser_wait_for",
         "sandbox_document_open",
     }
 )

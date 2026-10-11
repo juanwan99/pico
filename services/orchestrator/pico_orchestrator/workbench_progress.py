@@ -66,6 +66,13 @@ _DOING: dict[str, str] = {
     "memory_search": "正在查记忆",
     "sandbox_document_open": "正在打开文档",
     "sandbox_browser_open": "正在阅读网页",
+    "sandbox_browser_snapshot": "正在看网页",
+    "sandbox_browser_navigate": "正在打开网页",
+    "sandbox_browser_click": "正在点网页",
+    "sandbox_browser_type": "正在填网页",
+    "sandbox_browser_select_option": "正在选网页选项",
+    "sandbox_browser_press_key": "正在按键",
+    "sandbox_browser_wait_for": "正在等网页",
 }
 
 _DONE: dict[str, str] = {
@@ -146,7 +153,7 @@ _QUERY_VERB: dict[str, str] = {
     "kb_search": "正在查材料",
     "memory_search": "正在查记忆",
 }
-_URL_TOOLS = frozenset({"web_fetch", "sandbox_browser_open"})
+_URL_TOOLS = frozenset({"web_fetch", "sandbox_browser_open", "sandbox_browser_navigate"})
 _DETAIL_MAX = 40
 
 

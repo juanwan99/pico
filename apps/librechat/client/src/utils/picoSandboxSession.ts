@@ -16,7 +16,18 @@ export type PicoOfficeContentBox = {
 };
 
 const SESSION_RE = /^sbox_[A-Za-z0-9_-]{8,120}$/;
-const BROWSER_TOOLS = new Set(['sandbox_browser_open', 'sandbox_browser_screenshot']);
+const BROWSER_TOOLS = new Set([
+  'sandbox_browser_open',
+  'sandbox_browser_screenshot',
+  // AI hands (#1207): each action returns the session it acted on.
+  'sandbox_browser_snapshot',
+  'sandbox_browser_navigate',
+  'sandbox_browser_click',
+  'sandbox_browser_type',
+  'sandbox_browser_select_option',
+  'sandbox_browser_press_key',
+  'sandbox_browser_wait_for',
+]);
 const OFFICE_KINDS = new Set(['writer', 'calc', 'impress']);
 
 function asSessionId(raw: unknown): string | null {

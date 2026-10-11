@@ -64,6 +64,22 @@ class FocusBody(BaseModel):
     kind: str = ""
 
 
+class ActBody(BaseModel):
+    """AI hands (#1207). Field names follow Playwright MCP. `text` is never logged."""
+
+    school_id: str
+    membership_id: str
+    action: str
+    ref: str = Field(default="", max_length=32)
+    text: str = Field(default="", max_length=4000)
+    values: list[str] = Field(default_factory=list)
+    key: str = Field(default="", max_length=32)
+    submit: bool = False
+    url: str = Field(default="", max_length=2048)
+    seconds: float = 0.0
+    text_gone: str = Field(default="", max_length=400)
+
+
 class ConvertBody(BaseModel):
     filename: str = ""
     document_base64: str = ""
@@ -223,6 +239,35 @@ async def post_input(
             text=body.text,
             password=body.password,
             field=body.field,
+        )
+    except ToolError as exc:
+        raise _tool_http(exc) from exc
+
+
+@app.post("/v1/internal/sessions/{session_id}/act")
+async def act_session(
+    session_id: str,
+    body: ActBody,
+    request: Request,
+    x_pico_sandbox_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_token(x_pico_sandbox_token)
+    _ = request  # body may carry form text; never logged
+    try:
+        sess = RUNTIME.require_owner(
+            session_id, school_id=body.school_id, membership_id=body.membership_id
+        )
+        return await RUNTIME.act(
+            sess,
+            action=body.action,
+            ref=body.ref,
+            text=body.text,
+            values=list(body.values or []),
+            key=body.key,
+            submit=body.submit,
+            url=body.url,
+            seconds=body.seconds,
+            text_gone=body.text_gone,
         )
     except ToolError as exc:
         raise _tool_http(exc) from exc

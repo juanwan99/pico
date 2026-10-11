@@ -142,6 +142,20 @@ async def _embedded_call(
                 password=bool(body.get("password")),
                 field=str(body.get("field") or "input"),
             )
+        if method == "POST" and path.endswith("/act"):
+            body = json_body or {}
+            return await RUNTIME.act(
+                sess,
+                action=str(body.get("action") or ""),
+                ref=str(body.get("ref") or ""),
+                text=str(body.get("text") or ""),
+                values=[str(v) for v in (body.get("values") or [])],
+                key=str(body.get("key") or ""),
+                submit=bool(body.get("submit")),
+                url=str(body.get("url") or ""),
+                seconds=float(body.get("seconds") or 0),
+                text_gone=str(body.get("text_gone") or ""),
+            )
         if method == "POST" and path.endswith("/focus"):
             body = json_body or {}
             return await RUNTIME.focus(

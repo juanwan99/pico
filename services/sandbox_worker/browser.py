@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -25,6 +26,19 @@ VIEWPORT_WIDTH = 1280
 VIEWPORT_HEIGHT = 800
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 GOTO_TIMEOUT_MS = 20_000
+# AI hands (#1207): aria snapshot with Playwright refs. Bounded so one page
+# cannot flood the model context.
+SNAPSHOT_MAX_CHARS = 30_000
+SECRET_MASK = "••••"
+WAIT_MAX_S = 30.0
+# Human-only steps: the sidecar refuses these clicks/keystrokes mechanically.
+# Login, payment and the final submit stay with the teacher (owner 2026-10-11).
+HANDOFF_RE = re.compile(
+    r"登\s*[录陆]|sign\s*in|log\s*in|支付|付款|缴费|付费|\bpay\b|checkout|结算|提交|submit",
+    re.IGNORECASE,
+)
+CAPTCHA_RE = re.compile(r"验证码|captcha|短信码|动态码", re.IGNORECASE)
+HUMAN_REQUIRED_CODE = "sandbox.human_required"
 PROFILE_ROOT = Path(
     os.environ.get("PICO_SANDBOX_PROFILE_ROOT") or "/tmp/pico-sandbox-profiles"
 )
@@ -62,6 +76,66 @@ class BrowserPage(Protocol):
     async def type_text(self, text: str, *, password: bool) -> None: ...
 
     async def close(self) -> None: ...
+
+
+class BrowserHands(Protocol):
+    """AI hands on the same page (#1207). Shape follows Playwright MCP."""
+
+    async def snapshot(self) -> str: ...
+
+    async def navigate(self, url: str) -> None: ...
+
+    async def click_ref(self, ref: str) -> None: ...
+
+    async def type_ref(self, ref: str, text: str, *, submit: bool) -> None: ...
+
+    async def select_ref(self, ref: str, values: list[str]) -> None: ...
+
+    async def press_key(self, key: str) -> None: ...
+
+    async def wait_for(self, *, text: str, text_gone: str, seconds: float) -> None: ...
+
+
+def mask_secret_values(snapshot: str, secrets: list[str]) -> str:
+    """Password field values must never reach the model (#1207)."""
+    out = snapshot
+    for value in secrets:
+        if value:
+            out = out.replace(value, SECRET_MASK)
+    return out
+
+
+def human_required(step: str) -> ToolError:
+    return ToolError(
+        HUMAN_REQUIRED_CODE,
+        f"这一步（{step}）要老师自己在沙箱画面里做；AI 不代登录、不碰密码和验证码、不替人付款或提交。"
+        "做完后再调用 sandbox_browser_snapshot 继续。",
+    )
+
+
+def is_handoff_control(info: dict[str, Any]) -> str | None:
+    """Return the human-only step name for a clickable element, else None."""
+    text = " ".join(
+        str(info.get(k) or "") for k in ("text", "value", "aria_label", "title", "name")
+    )
+    if HANDOFF_RE.search(text):
+        return text.strip()[:40] or "提交"
+    kind = str(info.get("type") or "").lower()
+    if kind in {"submit", "image"} and info.get("in_login_form"):
+        return "登录"
+    return None
+
+
+def is_human_only_field(info: dict[str, Any]) -> str | None:
+    if str(info.get("type") or "").lower() == "password":
+        return "密码"
+    text = " ".join(
+        str(info.get(k) or "")
+        for k in ("name", "placeholder", "aria_label", "label", "autocomplete", "id")
+    )
+    if CAPTCHA_RE.search(text) or "one-time-code" in text:
+        return "验证码"
+    return None
 
 
 def _is_browser_internal(url: str) -> bool:
@@ -268,6 +342,176 @@ class PlaywrightPage:
             except Exception:
                 logger.debug("no visible input to focus before typing", exc_info=True)
         await self._page.keyboard.type(text, delay=15)
+
+    # ---- AI hands (#1207). Upstream = Playwright aria snapshot + aria-ref. ----
+
+    def _ref(self, ref: str) -> Any:
+        token = (ref or "").strip()
+        if not re.fullmatch(r"(?:s\d+)?e\d+", token):
+            raise ToolError("tool.invalid_arguments", "ref 必须是快照里的编号，例如 s1e8")
+        return self._page.locator(f"aria-ref={token}")
+
+    async def _password_values(self) -> list[str]:
+        try:
+            raw = await self._page.evaluate(
+                """() => Array.from(document.querySelectorAll('input[type="password"]'))
+                        .map((el) => String(el.value || ''))
+                        .filter((v) => v.length > 0)"""
+            )
+            return [str(v) for v in raw] if isinstance(raw, list) else []
+        except Exception:
+            logger.debug("password value scan failed", exc_info=True)
+            return []
+
+    async def snapshot(self) -> str:
+        try:
+            text = await self._page.locator("body").aria_snapshot(ref=True, timeout=10_000)
+        except Exception as exc:
+            raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能生成页面快照") from exc
+        text = mask_secret_values(str(text or ""), await self._password_values())
+        if len(text) > SNAPSHOT_MAX_CHARS:
+            text = text[:SNAPSHOT_MAX_CHARS] + "\n- text: …（快照过长已截断，可滚动或翻页后再取）"
+        return text
+
+    async def navigate(self, url: str) -> None:
+        parse_public_http_url(url)
+        try:
+            response = await self._page.goto(
+                url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT_MS
+            )
+        except Exception as exc:
+            raise ToolError("sandbox.fetch_failed", "无法在隔离 Chromium 打开该公开页") from exc
+        if response is not None and response.status >= 400:
+            raise ToolError("sandbox.fetch_failed", f"公开页返回 HTTP {response.status}")
+        assert_http_public_or_internal(self.url)
+
+    async def _element_info(self, loc: Any) -> dict[str, Any]:
+        try:
+            raw = await loc.evaluate(
+                """(el) => {
+                    const labelText = (() => {
+                        try {
+                            const labels = el.labels ? Array.from(el.labels) : [];
+                            return labels.map((l) => l.innerText || '').join(' ');
+                        } catch (e) { return ''; }
+                    })();
+                    const form = el.form || el.closest('form');
+                    return {
+                        tag: String(el.tagName || ''),
+                        type: String(el.type || el.getAttribute('type') || ''),
+                        name: String(el.getAttribute('name') || ''),
+                        id: String(el.id || ''),
+                        text: String((el.innerText || '').slice(0, 120)),
+                        value: el.tagName === 'INPUT' && ['submit','button','image'].includes(String(el.type||'').toLowerCase()) ? String(el.value || '') : '',
+                        aria_label: String(el.getAttribute('aria-label') || ''),
+                        title: String(el.getAttribute('title') || ''),
+                        placeholder: String(el.getAttribute('placeholder') || ''),
+                        autocomplete: String(el.getAttribute('autocomplete') || ''),
+                        label: labelText,
+                        in_login_form: !!(form && form.querySelector('input[type="password"]')),
+                    };
+                }""",
+                timeout=5_000,
+            )
+            return dict(raw) if isinstance(raw, dict) else {}
+        except Exception as exc:
+            raise ToolError(
+                "sandbox.ref_stale",
+                "这个编号在当前页面上找不到（页面变了）。先调用 sandbox_browser_snapshot 取新编号。",
+            ) from exc
+
+    async def _settle(self, before: str) -> None:
+        for _ in range(25):
+            if str(self._page.url or "") != before:
+                try:
+                    await self._page.wait_for_load_state("domcontentloaded", timeout=5_000)
+                except Exception:
+                    logger.debug("navigation load wait failed", exc_info=True)
+                break
+            await asyncio.sleep(0.1)
+        assert_http_public_or_internal(self.url)
+
+    async def click_ref(self, ref: str) -> None:
+        loc = self._ref(ref)
+        info = await self._element_info(loc)
+        step = is_handoff_control(info)
+        if step:
+            raise human_required(step)
+        before = self.url
+        try:
+            await loc.click(timeout=5_000)
+        except Exception as exc:
+            raise ToolError(
+                "sandbox.action_failed", "点不到这个元素（可能被遮住或已消失）"
+            ) from exc
+        await self._settle(before)
+
+    async def type_ref(self, ref: str, text: str, *, submit: bool) -> None:
+        # Never log `text`.
+        loc = self._ref(ref)
+        info = await self._element_info(loc)
+        step = is_human_only_field(info)
+        if step:
+            raise human_required(step)
+        before = self.url
+        try:
+            await loc.fill(text, timeout=5_000)
+        except Exception as exc:
+            raise ToolError("sandbox.action_failed", "这个元素不能输入文字") from exc
+        if submit:
+            await loc.press("Enter", timeout=5_000)
+            await self._settle(before)
+
+    async def select_ref(self, ref: str, values: list[str]) -> None:
+        loc = self._ref(ref)
+        await self._element_info(loc)
+        try:
+            await loc.select_option([str(v) for v in values], timeout=5_000)
+        except Exception:  # noqa: BLE001 — retry by visible label
+            try:
+                await loc.select_option(label=[str(v) for v in values], timeout=5_000)
+            except Exception as exc:
+                raise ToolError(
+                    "sandbox.action_failed", "下拉框里没有这个选项（按 value 或显示文字都没找到）"
+                ) from exc
+
+    async def press_key(self, key: str) -> None:
+        token = (key or "").strip()
+        if not token or len(token) > 32:
+            raise ToolError(
+                "tool.invalid_arguments", "key 必须是按键名，例如 Enter / Tab / ArrowDown"
+            )
+        focused = await self._page.evaluate(
+            """() => {
+                const el = document.activeElement;
+                return el ? String(el.type || '').toLowerCase() : '';
+            }"""
+        )
+        if str(focused) == "password":
+            raise human_required("密码")
+        before = self.url
+        await self._page.keyboard.press(token)
+        await self._settle(before)
+
+    async def wait_for(self, *, text: str, text_gone: str, seconds: float) -> None:
+        budget = max(0.0, min(float(seconds or 0.0), WAIT_MAX_S))
+        timeout_ms = int(budget * 1000) if budget else int(WAIT_MAX_S * 1000)
+        try:
+            if text:
+                await self._page.get_by_text(text).first.wait_for(
+                    state="visible", timeout=timeout_ms
+                )
+            if text_gone:
+                await self._page.get_by_text(text_gone).first.wait_for(
+                    state="hidden", timeout=timeout_ms
+                )
+            if not text and not text_gone:
+                await asyncio.sleep(budget)
+        except Exception as exc:
+            raise ToolError(
+                "sandbox.action_failed", "等到超时，页面上还没出现（或还没消失）那段文字"
+            ) from exc
+        assert_http_public_or_internal(self.url)
 
     async def click_point_for(self, selector: str) -> tuple[int, int] | None:
         box = await self._page.locator(selector).first.bounding_box()
