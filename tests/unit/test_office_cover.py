@@ -194,5 +194,5 @@ def test_cover_tools_on_pi_allowlist():
         assert name not in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_office_lib" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 34  # 24 + 7 AI-hands verbs (#1207) + back/hover/tabs (#1217)
+    assert len(ALLOWED_GATEWAY_TOOLS) == 36  # 24 + 7 AI-hands verbs (#1207) + back/hover/tabs (#1217) + fill_form/file_upload (#1219)
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS

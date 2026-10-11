@@ -132,3 +132,82 @@ async def test_real_chromium_tabs_back_hover_dblclick_dialog(monkeypatch, tmp_pa
     finally:
         await browser.close()
         await pw.stop()
+
+
+FORM = """<form id=f>
+<label>姓名 <input name=who></label>
+<label>密码 <input type=password name=pw></label>
+<label><input type=checkbox name=agree> 同意</label>
+<label><input type=radio name=size value=s> 小</label>
+<label><input type=radio name=size value=l> 大</label>
+<label>年级 <select name=grade><option value=g1>一年级</option><option value=g2>二年级</option></select></label>
+<label>备注 <textarea name=note></textarea></label>
+<div role=checkbox aria-checked=false tabindex=0 aria-label=提醒
+  onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked') !== 'true')">提醒</div>
+<label>附件 <input type=file name=att multiple></label>
+<button type=button id=pick onclick="att2.click()">上传材料</button>
+<input type=file id=att2 style="display:none">
+</form>"""
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_fill_form_and_upload(monkeypatch, tmp_path) -> None:
+    """#1219: one call fills text / checkbox / radio / select / aria checkbox; password
+    is left for the teacher; files go into a file input or through the chooser."""
+    pytest.importorskip("playwright.async_api")
+    from playwright.async_api import async_playwright
+    from sandbox_worker.browser import CHROMIUM_ARGS, PlaywrightPage
+
+    monkeypatch.setattr(browser_mod, "parse_public_http_url", lambda url: url)
+    PAGES["/form"] = FORM
+    try:
+        pw = await async_playwright().start()
+        browser = await pw.chromium.launch(headless=True, args=list(CHROMIUM_ARGS))
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"Chromium unavailable: {exc}")
+    try:
+        context = await browser.new_context()
+        await context.route("**/*", _fulfil)
+        page = await context.new_page()
+        await page.goto(SITE + "/form")
+        surface = PlaywrightPage(context, page, tmp_path / "profile")
+        snap = await surface.snapshot()
+        left = await surface.fill_form(
+            [
+                {"ref": _ref(snap, "textbox", "姓名"), "value": "张三"},
+                {"ref": _ref(snap, "textbox", "密码"), "value": "hunter2"},
+                {"ref": _ref(snap, "checkbox", "同意"), "value": True},
+                {"ref": _ref(snap, "radio", "大"), "value": "true"},
+                {"ref": _ref(snap, "combobox", "年级"), "value": "二年级"},
+                {"ref": _ref(snap, "textbox", "备注"), "value": "第二行"},
+                {"ref": _ref(snap, "checkbox", "提醒"), "value": "是"},
+            ]
+        )
+        assert left == ["密码"]
+        got = await page.evaluate(
+            """() => { const f = new FormData(document.getElementById('f'));
+                return {who: f.get('who'), pw: f.get('pw'), agree: f.get('agree'),
+                        size: f.get('size'), grade: f.get('grade'), note: f.get('note'),
+                        remind: document.querySelector('[role=checkbox]').getAttribute('aria-checked')}; }"""
+        )
+        assert got == {
+            "who": "张三", "pw": "", "agree": "on", "size": "l",
+            "grade": "g2", "note": "第二行", "remind": "true",
+        }
+        with pytest.raises(ToolError):
+            await surface.fill_form([])
+
+        await surface.upload_files(
+            _ref(snap, "button", "附件"), [("a.txt", "text/plain", b"abc"), ("b.txt", "text/plain", b"de")]
+        )
+        await surface.upload_files(_ref(snap, "button", "上传材料"), [("c.docx", "application/zip", b"PK")])
+        files = await page.evaluate(
+            """() => [...document.querySelectorAll('input[type=file]')]
+                .map((el) => [...el.files].map((f) => f.name + ':' + f.size))"""
+        )
+        assert files == [["a.txt:3", "b.txt:2"], ["c.docx:2"]]
+        with pytest.raises(ToolError):
+            await surface.upload_files(_ref(snap, "textbox", "姓名"), [("x", "text/plain", b"x")])
+    finally:
+        await browser.close()
+        await pw.stop()
