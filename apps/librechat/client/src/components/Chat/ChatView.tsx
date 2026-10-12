@@ -28,6 +28,7 @@ import Landing from './Landing';
 import MainDeliveryStrip from './MainDeliveryStrip';
 import PicoAskBar from './PicoAskBar';
 import PaneChatDock from './PaneChatDock';
+import PaneHandBack from './PaneHandBack';
 import ResultPanel from './ResultPanel';
 import TaskRunBar from './TaskRunBar';
 import ChangeConfirmBanner from './ChangeConfirmBanner';
@@ -335,6 +336,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                     onClose={() => setResultOpen(false)}
                     aiBusy={canCancelTask}
                     onTakeOver={() => void ledger.cancelRun(cancellableRunId)}
+                    handBack={<PaneHandBack key={ledger.run?.id} />}
                     expandedDock={
                       <PaneChatDock
                         messages={flatMessages}

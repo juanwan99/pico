@@ -66,4 +66,19 @@ describe('SandboxWebPane takeover', () => {
     expect(onTakeOver).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('sandbox-takeover-bar')).not.toBeInTheDocument();
   });
+
+  it('#1238: the hand-back node shows on an idle page, not while held or while the AI works', async () => {
+    const node = <div data-testid="hand-back-node" />;
+    (getPicoSandboxSession as jest.Mock).mockResolvedValue({ human_hold: false, ai_acting: true });
+    const { rerender } = render(<SandboxWebPane sessionId="sbox_t" kind="browser" handBack={node} />);
+    expect(await screen.findByTestId('hand-back-node')).toBeInTheDocument();
+    rerender(<SandboxWebPane sessionId="sbox_t" kind="browser" aiBusy handBack={node} />);
+    expect(screen.queryByTestId('hand-back-node')).not.toBeInTheDocument();
+    expect(screen.getByTestId('sandbox-takeover-bar')).toBeInTheDocument();
+
+    (getPicoSandboxSession as jest.Mock).mockResolvedValue({ human_hold: true, ai_acting: false });
+    rerender(<SandboxWebPane sessionId="sbox_x" kind="browser" handBack={node} />);
+    expect(await screen.findByTestId('sandbox-handback')).toBeInTheDocument();
+    expect(screen.queryByTestId('hand-back-node')).not.toBeInTheDocument();
+  });
 });
