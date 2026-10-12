@@ -3,6 +3,7 @@
  * (password, slider). Once done on the pane, one click says so — the same
  * `useSubmitMessage` path as the chat box, so it lands in the ledger as the
  * teacher's message. ChatView keys it by run id: a new turn starts fresh.
+ * Sits at the bottom: the top of a login page is where the teacher's fields are.
  */
 import { useState } from 'react';
 import { useSubmitMessage } from '~/hooks';
@@ -19,7 +20,7 @@ export default function PaneHandBack() {
   }
   return (
     <div
-      className="absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-[#1a1a1a]/90 py-1 pl-3 pr-1 text-[12px] text-white shadow-md"
+      className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-[#1a1a1a]/90 py-1 pl-3 pr-1 text-[12px] text-white shadow-md"
       data-testid="sandbox-continue-bar"
       role="status"
     >
