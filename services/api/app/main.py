@@ -1128,7 +1128,7 @@ async def sandbox_session_input(
 
     ctype = (request.headers.get("content-type") or "").lower()
     click_x = click_y = scroll_dy = view_w = view_h = None
-    key = ""
+    key = drag = ""
     text = None
     password = False
     try:
@@ -1138,6 +1138,9 @@ async def sandbox_session_input(
                 body = {}
             click_x = body.get("click_x")
             click_y = body.get("click_y")
+            drag = str(body.get("drag") or "")
+            if drag not in {"", "down", "move", "up"}:
+                raise ValueError("drag")
             if body.get("scroll_dy") is not None:
                 scroll_dy = int(body["scroll_dy"])
             key = str(body.get("key") or "")[:32]
@@ -1184,6 +1187,7 @@ async def sandbox_session_input(
                 "key": key,
                 "viewport_width": view_w,
                 "viewport_height": view_h,
+                "drag": drag,
             },
         )
     except ToolError as exc:
@@ -1191,6 +1195,8 @@ async def sandbox_session_input(
         raise HTTPException(
             status_code=status, detail={"code": exc.code, "message": exc.message}
         ) from exc
+    if drag in {"down", "move"}:
+        return JSONResponse(content={"ok": True, "drag": drag}, headers={"Cache-Control": "no-store"})
     accept = (request.headers.get("accept") or "").lower()
     if "application/json" in ctype or "application/json" in accept:
         meta = applied if isinstance(applied, dict) else {}

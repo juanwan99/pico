@@ -350,3 +350,41 @@ def test_sidecar_hold_route_answers_409_on_act(client) -> None:
     assert refused.json()["detail"]["code"] == "sandbox.human_took_over"
     other = side.post(base + "/hold", json={**who, "membership_id": "member-b", "hold": False})
     assert other.status_code == 403
+
+
+def test_pane_drag_goes_press_move_release_to_the_page(client, monkeypatch) -> None:
+    """#1236: a drag on the pane reaches the page as press → moves → release (slider checks)."""
+    moves: list[tuple[str, int, int]] = []
+    shots: list[int] = []
+
+    async def drag(self, phase: str, x: int, y: int):
+        moves.append((phase, x, y))
+
+    real_shot = _FakePage.screenshot_png
+
+    async def screenshot_png(self):
+        shots.append(1)
+        return await real_shot(self)
+
+    monkeypatch.setattr(_FakePage, "drag", drag, raising=False)
+    monkeypatch.setattr(_FakePage, "screenshot_png", screenshot_png)
+    owner = _headers(client, "member-a")
+    opened = _invoke(client, owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    session_id = opened.json()["result"]["session_id"]
+    path = f"/v1/sandbox/sessions/{session_id}/input"
+    shots.clear()
+    for phase, x in (("down", 100), ("move", 160), ("move", 220), ("up", 240)):
+        r = client.post(
+            path,
+            headers={**owner, "Accept": "application/json"},
+            json={"drag": phase, "click_x": x, "click_y": 300},
+        )
+        assert r.status_code == 200, r.text
+    assert moves == [("down", 100, 300), ("move", 160, 300), ("move", 220, 300), ("up", 240, 300)]
+    assert len(shots) == 1  # only the release re-syncs the page picture
+    assert r.json()["clicked"] is False and r.json()["session_id"] == session_id
+    bad = client.post(path, headers=owner, json={"drag": "fling", "click_x": 1, "click_y": 1})
+    assert bad.status_code == 400
+    outsider = _headers(client, "member-b")
+    denied = client.post(path, headers=outsider, json={"drag": "down", "click_x": 1, "click_y": 1})
+    assert denied.status_code >= 400 and moves[-1][0] == "up"

@@ -687,9 +687,17 @@ class SandboxRuntime:
         key: str = "",
         viewport_width: int | None = None,
         viewport_height: int | None = None,
+        drag: str = "",
     ) -> dict[str, Any]:
         await self._purge()
         surface = session.focused().surface
+        hand = getattr(surface, "drag", None)
+        if drag and callable(hand) and click_x is not None and click_y is not None:
+            await hand(drag, int(click_x), int(click_y))
+            if drag != "up":
+                # Mid-drag: the pane watches the stream; no full screenshot per move.
+                return {"ok": True, "drag": drag}
+            click_x = click_y = None
         fit = getattr(surface, "set_viewport", None)
         if viewport_width and viewport_height and callable(fit):
             await fit(int(viewport_width), int(viewport_height))
