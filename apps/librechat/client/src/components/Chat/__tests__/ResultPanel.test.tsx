@@ -1159,6 +1159,35 @@ describe('ResultPanel sandbox web pane', () => {
     expect(screen.getByTestId('sandbox-web-password')).toHaveAttribute('type', 'password');
     expect(screen.getByTestId('sandbox-web-text')).toBeInTheDocument();
   });
+
+  it('#1238: 让 AI 接着做 only on the page the latest turn worked, and not while it runs', async () => {
+    const events = [
+      {
+        id: 'sbox-1',
+        run_id: 'run-1',
+        seq: 1,
+        type: 'sandbox.session',
+        payload: { session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa', url: 'https://example.com/' },
+      },
+    ];
+    const panel = (aiBusy: boolean, runEvents: typeof events) => (
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          runEvents={runEvents}
+          aiBusy={aiBusy}
+          handBack={<div data-testid="hand-back-node" />}
+        />
+      </MemoryRouter>
+    );
+    const { rerender } = render(panel(false, events));
+    expect(await screen.findByTestId('hand-back-node')).toBeInTheDocument();
+    rerender(panel(true, events));
+    expect(screen.queryByTestId('hand-back-node')).not.toBeInTheDocument();
+    rerender(panel(false, []));
+    expect(screen.queryByTestId('hand-back-node')).not.toBeInTheDocument();
+  });
 });
 
 describe('ResultPanel parked ask_user', () => {

@@ -264,6 +264,7 @@ export default function ResultPanel({
   expandedDock,
   aiBusy,
   onTakeOver,
+  handBack,
 }: {
   messages?: TMessage[] | null;
   conversationId?: string | null;
@@ -282,6 +283,8 @@ export default function ResultPanel({
   /** Takeover (#1230): the AI's turn is running; 接管 stops it like the task bar. */
   aiBusy?: boolean;
   onTakeOver?: () => void;
+  /** 「让 AI 接着做」(#1238): shown on the pane the AI's latest turn worked. */
+  handBack?: ReactNode;
 }) {
   const [view, setView] = useState<TopView>('web');
   const [expanded, setExpanded] = useState(false);
@@ -1243,6 +1246,11 @@ export default function ResultPanel({
                 onWheelZoom={paneZoom.onWheel}
                 aiBusy={aiBusy}
                 onTakeOver={onTakeOver}
+                handBack={
+                  !aiBusy && ledgerSandbox?.sessionId === sandboxSession.sessionId
+                    ? handBack
+                    : null
+                }
                 onZoomIn={paneZoom.zoomIn}
                 onZoomOut={paneZoom.zoomOut}
                 onZoomReset={paneZoom.reset}

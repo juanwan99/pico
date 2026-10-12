@@ -7,6 +7,7 @@
  * actually has a text/password field. Password never leaves this pane.
  * Takeover (#1230): while the AI works the page the pane says「AI 正在操作 · 接管」;
  * 接管 stops the task and holds the page (the AI's hands are refused) until 交还 AI.
+ * Hand back (#1238): the AI's turn ended on this page →「让 AI 接着做」(the caller's node).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PicoIcon } from '~/components/ui/pico-icons';
@@ -78,6 +79,7 @@ export default function SandboxWebPane({
   onOpenOfficeFile,
   aiBusy = false,
   onTakeOver,
+  handBack,
 }: {
   sessionId: string;
   initialUrl?: string;
@@ -97,6 +99,8 @@ export default function SandboxWebPane({
   aiBusy?: boolean;
   /** 接管 also stops the task — same as the task bar's「停止任务」. */
   onTakeOver?: () => void;
+  /** Shown while the page is idle and not held: the AI's last turn worked this page. */
+  handBack?: React.ReactNode;
 }) {
   const [windows, setWindows] = useState<PicoSandboxWindow[]>([]);
   const [files, setFiles] = useState<Array<{ name: string }>>([]);
@@ -646,6 +650,8 @@ export default function SandboxWebPane({
               </button>
             </div>
           </>
+        ) : live === 'live' && !humanHold ? (
+          handBack
         ) : null}
         <div
           ref={stageRef}
