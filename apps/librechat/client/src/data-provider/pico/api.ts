@@ -593,6 +593,7 @@ export async function postPicoSandboxInput(
     key?: string;
     viewport_width?: number;
     viewport_height?: number;
+    drag?: 'down' | 'move' | 'up';
   },
 ) {
   return picoFetch<PicoSandboxSessionMeta>(

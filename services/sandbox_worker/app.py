@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
@@ -59,6 +59,7 @@ class InputBody(BaseModel):
     key: str = Field(default="", max_length=32)
     viewport_width: int | None = Field(default=None, ge=1, le=10_000)
     viewport_height: int | None = Field(default=None, ge=1, le=10_000)
+    drag: Literal["", "down", "move", "up"] = ""
 
 
 class FocusBody(BaseModel):
@@ -289,6 +290,7 @@ async def post_input(
             key=body.key,
             viewport_width=body.viewport_width,
             viewport_height=body.viewport_height,
+            drag=body.drag,
         )
     except ToolError as exc:
         raise _tool_http(exc) from exc

@@ -833,6 +833,15 @@ class PlaywrightPage:
         step = max(-SCROLL_MAX_PX, min(SCROLL_MAX_PX, int(dy)))
         await self._page.mouse.wheel(0, float(step))
 
+    async def drag(self, phase: str, x: int, y: int) -> None:
+        """Teacher drags on the pane (#1236): press, move, release — e.g. a slider check."""
+        await self._page.mouse.move(float(x), float(y))
+        if phase == "down":
+            await self._page.mouse.down()
+        elif phase == "up":
+            await self._page.mouse.up()
+            await self._settle(self.url)
+
     async def press_human_key(self, key: str) -> None:
         """Teacher presses Enter / Tab / arrows on the pane (#1215)."""
         if key not in HUMAN_KEYS:

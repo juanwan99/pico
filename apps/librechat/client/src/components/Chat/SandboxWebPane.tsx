@@ -1,7 +1,8 @@
 /**
  * Result-panel isolated webpage. Browser windows stream JPEG frames pushed by
  * Chromium on repaint (#1215); office/files windows and a dropped stream fall
- * back to polling the PNG. Click → click_x/y, wheel → scroll, keys → Enter/Tab/…
+ * back to polling the PNG. Click → click_x/y, wheel → scroll, keys → Enter/Tab/…,
+ * mouse drag → press / move / release (#1236: slider checks are the teacher's step).
  * Dead session: honest copy + reopen. Login chrome only when the live page
  * actually has a text/password field. Password never leaves this pane.
  * Takeover (#1230): while the AI works the page the pane says「AI 正在操作 · 接管」;
@@ -27,6 +28,8 @@ const POLL_MS = 400;
 const META_EVERY_TICKS = 5;
 const STREAM_RETRY_MS = 5000;
 const SCROLL_FLUSH_MS = 120;
+/** A press that travels this far is a drag, not a click. */
+const DRAG_START_PX = 4;
 /** Fit the pane (#1224): the page lays out at the stage size once resizing settles. */
 const FIT_SETTLE_MS = 300;
 const FIT_MIN_DELTA_PX = 8;
@@ -45,6 +48,19 @@ const PANE_KEYS = new Set([
 ]);
 const VIEWPORT_W = 1280;
 const VIEWPORT_H = 800;
+
+type PanePoint = { x: number; y: number };
+type PaneDrag = {
+  from: PanePoint;
+  clientX: number;
+  clientY: number;
+  started: boolean;
+  downSent: boolean;
+  upSent: boolean;
+  running: boolean;
+  next: PanePoint | null;
+  end: PanePoint | null;
+};
 
 export default function SandboxWebPane({
   sessionId,
@@ -107,6 +123,8 @@ export default function SandboxWebPane({
   liveRef.current = live;
   const streamingRef = useRef(false);
   const scrollRef = useRef({ dy: 0, timer: 0 });
+  const dragRef = useRef<PaneDrag | null>(null);
+  const dragEndedRef = useRef(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef({ w: 0, h: 0 });
 
@@ -327,20 +345,116 @@ export default function SandboxWebPane({
     }
   };
 
-  const onViewportClick = async (ev: React.MouseEvent<HTMLImageElement>) => {
+  const toPage = (clientX: number, clientY: number) => {
     const img = imgRef.current;
-    if (!img || busy || live !== 'live') {
-      return;
-    }
-    const rect = img.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) {
-      return;
+    const rect = img?.getBoundingClientRect();
+    if (!img || !rect || rect.width <= 0 || rect.height <= 0) {
+      return null;
     }
     const nw = img.naturalWidth || VIEWPORT_W;
     const nh = img.naturalHeight || VIEWPORT_H;
-    const x = Math.round((ev.clientX - rect.left) * (nw / rect.width));
-    const y = Math.round((ev.clientY - rect.top) * (nh / rect.height));
-    await sendInput({ click_x: x, click_y: y });
+    return {
+      x: Math.round((clientX - rect.left) * (nw / rect.width)),
+      y: Math.round((clientY - rect.top) * (nh / rect.height)),
+    };
+  };
+
+  const onViewportClick = async (ev: React.MouseEvent<HTMLImageElement>) => {
+    if (dragEndedRef.current) {
+      dragEndedRef.current = false;
+      return;
+    }
+    const at = toPage(ev.clientX, ev.clientY);
+    if (!at || busy || live !== 'live') {
+      return;
+    }
+    await sendInput({ click_x: at.x, click_y: at.y });
+  };
+
+  /** One request in flight; moves made meanwhile collapse to the latest point. */
+  const pumpDrag = async (d: PaneDrag) => {
+    if (d.running) {
+      return;
+    }
+    d.running = true;
+    try {
+      for (;;) {
+        if (!d.downSent) {
+          d.downSent = true;
+          await postPicoSandboxInput(sessionId, { drag: 'down', click_x: d.from.x, click_y: d.from.y });
+        } else if (d.next) {
+          const at = d.next;
+          d.next = null;
+          await postPicoSandboxInput(sessionId, { drag: 'move', click_x: at.x, click_y: at.y });
+        } else if (d.end && !d.upSent) {
+          d.upSent = true;
+          applyMeta(
+            await postPicoSandboxInput(sessionId, { drag: 'up', click_x: d.end.x, click_y: d.end.y }),
+          );
+          setStatus('已送进隔离浏览器');
+        } else {
+          break;
+        }
+      }
+    } catch (err) {
+      d.next = null;
+      d.upSent = true;
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('404')) {
+        markDead();
+      } else {
+        setError('拖动未送出，请重试');
+      }
+    } finally {
+      d.running = false;
+    }
+  };
+
+  const onViewportPointerDown = (ev: React.PointerEvent<HTMLImageElement>) => {
+    dragEndedRef.current = false;
+    const from = toPage(ev.clientX, ev.clientY);
+    if (ev.button !== 0 || !from || busy || live !== 'live') {
+      return;
+    }
+    dragRef.current = {
+      from,
+      clientX: ev.clientX,
+      clientY: ev.clientY,
+      started: false,
+      downSent: false,
+      upSent: false,
+      running: false,
+      next: null,
+      end: null,
+    };
+    ev.currentTarget.setPointerCapture?.(ev.pointerId);
+  };
+
+  const onViewportPointerMove = (ev: React.PointerEvent<HTMLImageElement>) => {
+    const d = dragRef.current;
+    if (!d) {
+      return;
+    }
+    if (!d.started) {
+      if (Math.hypot(ev.clientX - d.clientX, ev.clientY - d.clientY) < DRAG_START_PX) {
+        return;
+      }
+      d.started = true;
+      setError(null);
+    }
+    d.next = toPage(ev.clientX, ev.clientY);
+    void pumpDrag(d);
+  };
+
+  const onViewportPointerUp = (ev: React.PointerEvent<HTMLImageElement>) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d?.started) {
+      return;
+    }
+    dragEndedRef.current = ev.type === 'pointerup';
+    d.end = toPage(ev.clientX, ev.clientY) || d.next || d.from;
+    void pumpDrag(d);
   };
 
   const onViewportWheel = (ev: React.WheelEvent<HTMLImageElement>) => {
@@ -641,6 +755,12 @@ export default function SandboxWebPane({
               alt="隔离浏览器画面"
               width={VIEWPORT_W}
               onClick={(ev) => void onViewportClick(ev)}
+              onPointerDown={onViewportPointerDown}
+              onPointerMove={onViewportPointerMove}
+              onPointerUp={onViewportPointerUp}
+              onPointerCancel={onViewportPointerUp}
+              onDragStart={(ev) => ev.preventDefault()}
+              draggable={false}
               onWheel={onViewportWheel}
               onKeyDown={onViewportKey}
               tabIndex={0}

@@ -246,12 +246,36 @@ async def test_real_chromium_pushes_frames_on_change_and_none_when_still() -> No
         await surface.press_human_key("Tab")
         with pytest.raises(ToolError):
             await surface.press_human_key("Control+A")
+        # #1236: a slider check — press, move, release on the pane.
+        await page.evaluate("window.scrollTo(0, 0)")
+        await page.evaluate(
+            """() => {
+              const s = document.createElement('div');
+              s.id = 'knob';
+              s.style.cssText = 'position:fixed;left:20px;top:20px;width:40px;height:40px;background:#08f';
+              window.trail = [];
+              let on = false;
+              s.onmousedown = (e) => { on = true; trail.push('down'); };
+              document.onmousemove = (e) => { if (on) { trail.push('move'); s.style.left = (e.clientX - 20) + 'px'; } };
+              document.onmouseup = (e) => { if (on) { on = false; trail.push('up:' + e.clientX); } };
+              document.body.appendChild(s);
+            }"""
+        )
+        await surface.drag("down", 40, 40)
+        for x in (90, 160, 230):
+            await surface.drag("move", x, 42)
+        await surface.drag("up", 260, 42)
+        trail = await page.evaluate("window.trail")
+        knob_left = await page.evaluate("document.getElementById('knob').style.left")
         await stop()
         assert moving >= 3
         assert still <= 1
         assert len(frames) > moving + still  # scrolling repainted
         assert frames[0].startswith("/9j/")  # base64 JPEG
         assert scroll_y >= 700
+        assert trail[0] == "down" and trail[-1] == "up:260"
+        assert trail.count("move") >= 4
+        assert knob_left == "240px"
     finally:
         await browser.close()
         await pw.stop()
