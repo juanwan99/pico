@@ -2161,6 +2161,27 @@ def _workspace_handlers(
                     raise ToolError(
                         "tool.invalid_arguments", "要传的文件：filenames（老师盘）或 artifact_ids（账本）"
                     )
+            if action == "page_file":
+                body["filenames"] = [str(n) for n in (args.get("filenames") or []) if str(n).strip()]
+                body["files"] = await _upload_from_ledger(principal, args.get("artifact_ids") or [])
+                if not body["filenames"] and not body["files"]:
+                    raise ToolError(
+                        "tool.invalid_arguments", "要传的文件：filenames（老师盘）或 artifact_ids（账本）"
+                    )
+            if action == "page_fn":
+                body["fn"] = str(args.get("fn") or "").strip()
+                raw_args = args.get("args")
+                if raw_args is None:
+                    body["fn_args"] = []
+                elif isinstance(raw_args, list):
+                    body["fn_args"] = raw_args
+                else:
+                    raise ToolError("tool.invalid_arguments", "args 必须是 JSON 列表")
+                if not body["fn"]:
+                    raise ToolError(
+                        "tool.invalid_arguments",
+                        "fn 必须是点号路径，例如 saveField 或 app.saveMaterial",
+                    )
             if action == "navigate" and not body["url"]:
                 raise ToolError("tool.invalid_arguments", "url 必须是非空字符串")
             if action in {"click", "hover", "type", "select_option", "file_upload"} and not body["ref"]:
@@ -2359,6 +2380,8 @@ def _workspace_handlers(
         "sandbox_browser_tabs": _browser_hand("sandbox_browser_tabs", "tabs"),
         "sandbox_browser_fill_form": _browser_hand("sandbox_browser_fill_form", "fill_form"),
         "sandbox_browser_file_upload": _browser_hand("sandbox_browser_file_upload", "file_upload"),
+        "sandbox_browser_page_file": _browser_hand("sandbox_browser_page_file", "page_file"),
+        "sandbox_browser_page_fn": _browser_hand("sandbox_browser_page_fn", "page_fn"),
         "sandbox_browser_type": _browser_hand("sandbox_browser_type", "type"),
         "sandbox_browser_select_option": _browser_hand(
             "sandbox_browser_select_option", "select_option"
@@ -2729,6 +2752,27 @@ def build_default_gateway(
                 "ledger (e.g. a document you just generated). Max 10 files, 25 MB. "
             ),
             "Args: ref, filenames?, artifact_ids?, element?, session_id?.",
+        ),
+        (
+            "sandbox_browser_page_file",
+            (
+                "Hang teacher-disk / ledger files on this page as File objects at "
+                "window.__picoFile (do not click a file input or the total upload). "
+                "Max 10 files, 25 MB. Then call the page's own save with sandbox_browser_page_fn. "
+            ),
+            "Args: filenames?, artifact_ids?, session_id?.",
+        ),
+        (
+            "sandbox_browser_page_fn",
+            (
+                "Call an existing function on this page (or same-page iframe) by dotted path "
+                "(e.g. saveField / app.saveMaterial) with JSON-serializable args. The string "
+                "__picoFile in args is the File already hung. No eval. Rate-limit copy "
+                "(IP访问量过大 / 请求过于频繁) refuses the call. Missing function fails clearly. "
+                "Do not return cookies. Use when total upload is blocked by empty required "
+                "fields but a field can be saved on its own. "
+            ),
+            "Args: fn, args?, session_id?.",
         ),
         (
             "sandbox_browser_type",
@@ -3192,6 +3236,37 @@ def openai_tool_schemas(
                 "session_id": {"type": "string"},
             },
             "required": ["ref"],
+        },
+        "sandbox_browser_page_file": {
+            "type": "object",
+            "properties": {
+                "filenames": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Files on the teacher's sandbox disk",
+                },
+                "artifact_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Pico ledger artifacts to hang as File",
+                },
+                "session_id": {"type": "string"},
+            },
+        },
+        "sandbox_browser_page_fn": {
+            "type": "object",
+            "properties": {
+                "fn": {
+                    "type": "string",
+                    "description": "Dotted path on this page, e.g. saveField or app.saveMaterial",
+                },
+                "args": {
+                    "type": "array",
+                    "description": "JSON-serializable args; __picoFile means the hung File",
+                },
+                "session_id": {"type": "string"},
+            },
+            "required": ["fn"],
         },
         "sandbox_browser_tabs": {
             "type": "object",

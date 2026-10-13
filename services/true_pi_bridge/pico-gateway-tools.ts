@@ -41,6 +41,8 @@ const ALLOWED = [
   "sandbox_browser_tabs",
   "sandbox_browser_fill_form",
   "sandbox_browser_file_upload",
+  "sandbox_browser_page_file",
+  "sandbox_browser_page_fn",
   "sandbox_browser_type",
   "sandbox_browser_select_option",
   "sandbox_browser_press_key",
@@ -455,6 +457,32 @@ export default function (pi: ExtensionAPI) {
         filenames: Type.Optional(Type.Array(Type.String())),
         artifact_ids: Type.Optional(Type.Array(Type.String())),
         element: Type.Optional(Type.String()),
+        session_id: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "sandbox_browser_page_file",
+    "Hang teacher-disk / ledger files on this page as File objects at window.__picoFile (do not click a file input or the total upload). Max 10 files, 25 MB. Then call the page's own save with sandbox_browser_page_fn. Rules: see sandbox_browser_snapshot.",
+    Type.Object(
+      {
+        filenames: Type.Optional(Type.Array(Type.String())),
+        artifact_ids: Type.Optional(Type.Array(Type.String())),
+        session_id: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "sandbox_browser_page_fn",
+    "Call an existing function on this page (or same-page iframe) by dotted path (e.g. saveField / app.saveMaterial) with JSON-serializable args. The string __picoFile in args is the File already hung. No eval. Rate-limit copy (IP访问量过大 / 请求过于频繁) refuses the call. Missing function fails clearly. Do not return cookies. Use when total upload is blocked by empty required fields but a field can be saved on its own. Rules: see sandbox_browser_snapshot.",
+    Type.Object(
+      {
+        fn: Type.String(),
+        args: Type.Optional(Type.Array(Type.String())),
         session_id: Type.Optional(Type.String()),
       },
       { additionalProperties: true },

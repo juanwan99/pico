@@ -74,6 +74,8 @@ _DOING: dict[str, str] = {
     "sandbox_browser_tabs": "正在切标签页",
     "sandbox_browser_fill_form": "正在填表",
     "sandbox_browser_file_upload": "正在传附件",
+    "sandbox_browser_page_file": "正在把文件放进这一页",
+    "sandbox_browser_page_fn": "正在调页内函数",
     "sandbox_browser_type": "正在填网页",
     "sandbox_browser_select_option": "正在选网页选项",
     "sandbox_browser_press_key": "正在按键",
@@ -107,6 +109,8 @@ _DONE: dict[str, str] = {
     "unpublish_html_page": "已撤回遗留公开页",
     "ask_user": "已选",
     "propose_page_mutation": "已拟一条改动，等你确认",
+    "sandbox_browser_page_file": "已把文件放进这一页",
+    "sandbox_browser_page_fn": "已调页内函数",
 }
 
 _FAIL: dict[str, str] = {
@@ -136,6 +140,8 @@ _FAIL: dict[str, str] = {
     "unpublish_html_page": "没撤回遗留公开页",
     "ask_user": "超时未选",
     "propose_page_mutation": "这条改动没拟成",
+    "sandbox_browser_page_file": "没把文件放进这一页",
+    "sandbox_browser_page_fn": "页内函数没调成",
 }
 
 FALLBACK_DOING = "正在调工具"

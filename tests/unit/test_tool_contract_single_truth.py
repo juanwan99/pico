@@ -66,6 +66,8 @@ ANCHORS: dict[str, tuple[str, ...]] = {
     "unpublish_html_page": ("Pico does not publish",),
     "sandbox_document_open": ("OOXML", "PDF"),
     "sandbox_browser_open": ("PUBLIC", "passwords"),
+    "sandbox_browser_page_file": ("__picoFile", "25 MB"),
+    "sandbox_browser_page_fn": ("dotted", "eval", "cookie"),
     "workspace_read_file": ("re-upload", "png/jpg"),
 }
 
