@@ -96,6 +96,8 @@ class ActBody(BaseModel):
     fields: list[dict[str, Any]] = Field(default_factory=list, max_length=40)
     filenames: list[str] = Field(default_factory=list, max_length=10)
     files: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
+    fn: str = Field(default="", max_length=200)
+    fn_args: list[Any] = Field(default_factory=list, max_length=20)
 
 
 class ConvertBody(BaseModel):
@@ -106,7 +108,7 @@ class ConvertBody(BaseModel):
 def _tool_http(exc: ToolError) -> HTTPException:
     if exc.code == "sandbox.forbidden":
         status = 403
-    elif exc.code == "sandbox.quota":
+    elif exc.code in {"sandbox.quota", "sandbox.rate_limited"}:
         status = 429
     elif exc.code == "sandbox.human_took_over":
         status = 409
@@ -327,6 +329,8 @@ async def act_session(
             fields=list(body.fields or []),
             filenames=list(body.filenames or []),
             files=list(body.files or []),
+            fn=body.fn,
+            fn_args=list(body.fn_args or []),
         )
     except ToolError as exc:
         raise _tool_http(exc) from exc

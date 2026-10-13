@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>页内保存演示</title>
+</head>
+<body>
+  <h1>材料列表</h1>
+  <p>已登录 · 演示页，不连真厅</p>
+  <label>材料名称 <input id="title" required placeholder="必填，空着"></label>
+  <p>证明材料：<span id="proof-name">未选</span> · <span id="proof-count">0</span> 件</p>
+  <button type="button" id="upload-all">上传</button>
+  <button type="button" id="go-upload">去上传</button>
+  <button type="button" id="save-proof">按栏保存</button>
+  <button type="button" id="show-limit">模拟限流</button>
+  <p id="msg"></p>
+  <p id="limit" hidden></p>
+  <iframe id="sub" title="子表" srcdoc="<!DOCTYPE html><html><body><p>子表</p><script>
+    window.frameSave = function(id, file) { return parent.saveField(id, file); };
+    window.frameQuery = function(id) { return parent.queryField(id); };
+  </script></body></html>"></iframe>
+  <script>
+    const store = {};
+    window.__clickedUploadAll = 0;
+    window.__clickedGoUpload = 0;
+    function render(id) {
+      const rec = store[id];
+      const nameEl = document.getElementById(id + "-name");
+      const countEl = document.getElementById(id + "-count");
+      if (nameEl) nameEl.textContent = rec ? rec.name : "未选";
+      if (countEl) countEl.textContent = rec ? String(rec.count) : "0";
+    }
+    window.saveField = function(id, file) {
+      if (!file || typeof file.name !== "string") throw new Error("没有文件");
+      store[id] = { name: file.name, count: 1, size: file.size || 0 };
+      render(id);
+      return { name: file.name, count: 1 };
+    };
+    window.queryField = function(id) {
+      const rec = store[id];
+      return rec ? { name: rec.name, count: rec.count } : { name: "", count: 0 };
+    };
+    window.deleteField = function(id) {
+      delete store[id];
+      render(id);
+      return { name: "", count: 0 };
+    };
+    window.app = {
+      saveMaterial: function(id, file) { return window.saveField(id, file); }
+    };
+    window.showRateLimit = function() {
+      const el = document.getElementById("limit");
+      el.hidden = false;
+      el.textContent = "IP访问量过大";
+    };
+    window.leakCookie = function() {
+      return { cookie: "sid=secret", name: "ok" };
+    };
+    document.getElementById("upload-all").addEventListener("click", function() {
+      window.__clickedUploadAll += 1;
+      const title = document.getElementById("title").value.trim();
+      document.getElementById("msg").textContent = title ? "已提交" : "未选择材料";
+    });
+    document.getElementById("go-upload").addEventListener("click", function() {
+      window.__clickedGoUpload += 1;
+    });
+    document.getElementById("save-proof").addEventListener("click", function() {
+      const file = window.__picoFile;
+      document.getElementById("msg").textContent = file ? "按栏已点" : "按栏无文件";
+    });
+    document.getElementById("show-limit").addEventListener("click", function() {
+      window.showRateLimit();
+    });
+  </script>
+</body>
+</html>

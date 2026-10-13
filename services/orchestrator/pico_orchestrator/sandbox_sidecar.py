@@ -167,6 +167,8 @@ async def _embedded_call(
                 fields=list(body.get("fields") or []),
                 filenames=[str(n) for n in (body.get("filenames") or [])],
                 files=list(body.get("files") or []),
+                fn=str(body.get("fn") or ""),
+                fn_args=list(body.get("fn_args") or []),
             )
         if method == "POST" and path.endswith("/hold"):
             return RUNTIME.hold(sess, hold=bool((json_body or {}).get("hold")))

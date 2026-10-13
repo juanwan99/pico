@@ -8,6 +8,7 @@ Not a second agent loop.
 from __future__ import annotations
 
 import asyncio
+import base64
 import difflib
 import json
 import logging
@@ -15,7 +16,7 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -50,6 +51,96 @@ DIALOG_NOTE_MAX = 200
 FILL_FORM_MAX = 40
 UPLOAD_MAX_FILES = 10
 UPLOAD_MAX_BYTES = 25 * 1024 * 1024
+# Page-native save (#1242): hang File on this page, then call a dotted path.
+# Not a second control kernel — Playwright evaluate of Pico-owned functions.
+PAGE_FILE_HANDLE = "__picoFile"
+PAGE_FILES_HANDLE = "__picoFiles"
+PAGE_FN_MAX_DOTS = 8
+PAGE_FN_MAX_ARG_BYTES = 32_768
+PAGE_FN_PATH_RE = re.compile(r"^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$")
+FORBIDDEN_FN_SEGMENTS = frozenset(
+    {"eval", "Function", "constructor", "prototype", "__proto__"}
+)
+RATE_LIMIT_PHRASES: tuple[str, ...] = (
+    "IP访问量过大",
+    "请求过于频繁",
+    "访问过于频繁",
+    "操作过于频繁",
+    "请稍后再试",
+    "请稍后重试",
+    "too many requests",
+    "rate limit",
+)
+_RESULT_BANNED = frozenset(
+    {"cookie", "cookies", "password", "passwd", "secret", "credential"}
+)
+# Pico-owned scripts. Never interpolate model text into these strings.
+# Tests assert they contain no eval / new Function / document.cookie / fetch.
+HANG_FILES_JS = """(files) => {
+  const out = [];
+  for (const f of files) {
+    const bin = atob(f.b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    out.push(new File([bytes], f.name, { type: f.mime || 'application/octet-stream' }));
+  }
+  window.__picoFiles = out;
+  window.__picoFile = out.length === 1 ? out[0] : out;
+  return {
+    handle: out.length === 1 ? '__picoFile' : '__picoFiles',
+    count: out.length,
+    names: out.map((x) => x.name),
+  };
+}"""
+PAGE_TEXT_JS = """() => (document.body && document.body.innerText) || ''"""
+CALL_PAGE_FN_JS = """({ parts, args }) => {
+  let receiver = window;
+  let fn = window;
+  for (const p of parts) {
+    if (fn == null || (typeof fn !== 'object' && typeof fn !== 'function')) {
+      return { missing: true };
+    }
+    receiver = fn;
+    fn = fn[p];
+  }
+  if (typeof fn !== 'function') return { missing: true };
+  const resolved = args.map((a) => {
+    if (a === '__picoFile') return window.__picoFile;
+    if (a === '__picoFiles') return window.__picoFiles;
+    return a;
+  });
+  const sanitize = (v, depth) => {
+    if (depth > 6) return null;
+    if (v == null) return v;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
+    if (typeof File !== 'undefined' && v instanceof File) {
+      return { name: v.name, size: v.size, type: v.type };
+    }
+    if (Array.isArray(v)) return v.slice(0, 40).map((x) => sanitize(x, depth + 1));
+    if (typeof v === 'object') {
+      const out = {};
+      for (const k of Object.keys(v).slice(0, 40)) {
+        const low = String(k).toLowerCase();
+        if (
+          low === 'cookie' || low === 'cookies' || low === 'password'
+          || low === 'passwd' || low === 'secret' || low === 'credential'
+        ) continue;
+        out[k] = sanitize(v[k], depth + 1);
+      }
+      return out;
+    }
+    return null;
+  };
+  try {
+    const raw = fn.apply(receiver, resolved);
+    if (raw && typeof raw.then === 'function') {
+      return raw.then((v) => ({ ok: true, result: sanitize(v, 0) }));
+    }
+    return { ok: true, result: sanitize(raw, 0) };
+  } catch (e) {
+    return { failed: true, message: String((e && e.message) || e).slice(0, 200) };
+  }
+}"""
 # Snapshot deltas (#1222): after an action only new / changed lines go back,
 # like Playwright MCP's incremental snapshot. Since #1233 the snapshot is
 # upstream `aria_snapshot(mode="ai")`: refs stay stable across snapshots and
@@ -133,6 +224,10 @@ class BrowserHands(Protocol):
 
     async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None: ...
 
+    async def page_file(self, files: list[tuple[str, str, bytes]]) -> dict[str, Any]: ...
+
+    async def page_fn(self, fn: str, args: list[Any]) -> Any: ...
+
     async def type_ref(
         self, ref: str, text: str, *, submit: bool, slowly: bool = False
     ) -> None: ...
@@ -215,6 +310,76 @@ def is_checked_value(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or "").strip().lower() in TRUE_WORDS
+
+
+def parse_page_fn_path(fn: str) -> list[str]:
+    """Dotted path only. Never a JS string to eval."""
+    token = (fn or "").strip()
+    if (
+        not token
+        or len(token) > 200
+        or not PAGE_FN_PATH_RE.fullmatch(token)
+        or token.count(".") >= PAGE_FN_MAX_DOTS
+    ):
+        raise ToolError(
+            "tool.invalid_arguments",
+            "fn 必须是点号路径，例如 saveField 或 app.saveMaterial，不能是任意脚本",
+        )
+    parts = token.split(".")
+    if any(len(p) > 64 for p in parts):
+        raise ToolError(
+            "tool.invalid_arguments",
+            "fn 必须是点号路径，例如 saveField 或 app.saveMaterial，不能是任意脚本",
+        )
+    bad = [p for p in parts if p in FORBIDDEN_FN_SEGMENTS]
+    if bad:
+        raise ToolError(
+            "tool.invalid_arguments",
+            f"fn 不能包含 {' / '.join(bad)}（禁止 eval / Function / constructor）",
+        )
+    return parts
+
+
+def json_safe_args(args: list[Any] | None) -> list[Any]:
+    if args is None:
+        return []
+    if not isinstance(args, list) or len(args) > 20:
+        raise ToolError("tool.invalid_arguments", "args 必须是最多 20 项的 JSON 列表")
+    try:
+        raw = json.dumps(args, ensure_ascii=False, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ToolError("tool.invalid_arguments", "args 必须是 JSON 能序列化的列表") from exc
+    if len(raw.encode("utf-8")) > PAGE_FN_MAX_ARG_BYTES:
+        raise ToolError("tool.invalid_arguments", "args 太长")
+    return json.loads(raw)
+
+
+def rate_limit_hit(texts: Iterable[str]) -> str | None:
+    """First matching phrase from the testable list, or None."""
+    blob = "\n".join(str(t or "") for t in texts)
+    low = blob.lower()
+    for phrase in RATE_LIMIT_PHRASES:
+        if phrase.lower() in low:
+            return phrase
+    return None
+
+
+def sanitize_page_result(value: Any, *, depth: int = 0) -> Any:
+    """JSON-safe result. Never pass cookie / password keys back to the model."""
+    if depth > 6:
+        return None
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, list):
+        return [sanitize_page_result(v, depth=depth + 1) for v in value[:40]]
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in list(value.items())[:40]:
+            if str(key).lower() in _RESULT_BANNED:
+                continue
+            out[str(key)[:80]] = sanitize_page_result(item, depth=depth + 1)
+        return out
+    return None
 
 
 def read_login_state(path: Path | None) -> dict[str, Any] | None:
@@ -762,6 +927,69 @@ class PlaywrightPage:
             raise ToolError(
                 "sandbox.action_failed", "传不上：这个元素不是文件框，点了也没弹出选文件"
             ) from exc
+
+    async def page_file(self, files: list[tuple[str, str, bytes]]) -> dict[str, Any]:
+        """Put teacher-disk / ledger bytes on this page as File (#1242). No file picker."""
+        if not files or len(files) > UPLOAD_MAX_FILES:
+            raise ToolError("tool.invalid_arguments", f"一次传 1–{UPLOAD_MAX_FILES} 个文件")
+        if sum(len(b) for _, _, b in files) > UPLOAD_MAX_BYTES:
+            raise ToolError("tool.invalid_arguments", "附件合计超过 25 MB")
+        payload = [
+            {"name": n, "mime": m, "b64": base64.b64encode(b).decode("ascii")}
+            for n, m, b in files
+        ]
+        hung = 0
+        last: dict[str, Any] = {}
+        for frame in self._page.frames:
+            try:
+                raw = await frame.evaluate(HANG_FILES_JS, payload)
+                if isinstance(raw, dict):
+                    last = raw
+                    hung += 1
+            except Exception:
+                logger.debug("page_file hang failed in a frame", exc_info=True)
+        if hung == 0:
+            raise ToolError("sandbox.action_failed", "没法把文件放进这一页（主页面和 iframe 都试过了）")
+        names = [n for n, _, _ in files]
+        return {
+            "handle": PAGE_FILE_HANDLE if len(files) == 1 else PAGE_FILES_HANDLE,
+            "count": len(files),
+            "names": names,
+            **{k: v for k, v in last.items() if k in {"handle", "count", "names"}},
+        }
+
+    async def page_fn(self, fn: str, args: list[Any]) -> Any:
+        """Call an existing dotted-path function on this page or a same-page iframe."""
+        parts = parse_page_fn_path(fn)
+        safe_args = json_safe_args(args)
+        texts = await self._each_frame(PAGE_TEXT_JS)
+        phrase = rate_limit_hit(str(t) for t in texts if t is not None)
+        if phrase:
+            raise ToolError(
+                "sandbox.rate_limited",
+                f"页上出现限流文案「{phrase}」，保存/查询/删除已停。不要连打。",
+            )
+        for frame in self._page.frames:
+            try:
+                raw = await frame.evaluate(CALL_PAGE_FN_JS, {"parts": parts, "args": safe_args})
+            except Exception:
+                logger.debug("page_fn frame failed", exc_info=True)
+                continue
+            if not isinstance(raw, dict):
+                continue
+            if raw.get("missing"):
+                continue
+            if raw.get("failed"):
+                raise ToolError(
+                    "sandbox.action_failed",
+                    f"页内函数 {fn} 调用失败：{raw.get('message') or '未知错误'}",
+                )
+            if raw.get("ok"):
+                return sanitize_page_result(raw.get("result"))
+        raise ToolError(
+            "sandbox.fn_missing",
+            f"这一页上没有函数 {fn}（主页面和 iframe 都找过了）。不要猜别的名字。",
+        )
 
     async def select_ref(self, ref: str, values: list[str]) -> None:
         loc = self._ref(ref)

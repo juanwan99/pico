@@ -116,6 +116,9 @@ class FakeFormPage:
         self.tab_calls: list[tuple[str, int]] = []
         self.hovered: list[str] = []
         self.uploaded: list[tuple[str, str, bytes]] = []
+        self.page_files: list[tuple[str, str, bytes]] = []
+        self.page_fn_calls: list[tuple[str, list[Any]]] = []
+        self.rate_limited = False
 
     @property
     def url(self) -> str:
@@ -203,6 +206,26 @@ class FakeFormPage:
     async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None:
         self._info(ref)
         self.uploaded.extend(files)
+
+    async def page_file(self, files: list[tuple[str, str, bytes]]) -> dict[str, Any]:
+        self.page_files.extend(files)
+        return {"handle": "__picoFile", "count": len(files), "names": [n for n, _, _ in files]}
+
+    async def page_fn(self, fn: str, args: list[Any]) -> Any:
+        if self.rate_limited:
+            raise ToolError("sandbox.rate_limited", "页上出现限流文案「IP访问量过大」，保存/查询/删除已停。不要连打。")
+        known = {"saveField", "queryField", "deleteField", "app.saveMaterial"}
+        if fn not in known:
+            raise ToolError(
+                "sandbox.fn_missing",
+                f"这一页上没有函数 {fn}（主页面和 iframe 都找过了）。不要猜别的名字。",
+            )
+        self.page_fn_calls.append((fn, args))
+        if fn == "queryField":
+            return {"name": "成绩.xlsx", "count": 1}
+        if fn == "deleteField":
+            return {"name": "", "count": 0}
+        return {"name": "成绩.xlsx", "count": 1}
 
     async def hover_ref(self, ref: str) -> None:
         self._info(ref)
@@ -441,6 +464,46 @@ async def test_fill_form_and_upload_from_disk_and_ledger(hands_runtime) -> None:
         await gw.invoke(owner, "sandbox_browser_file_upload", {"ref": "e1"})
     with pytest.raises(ToolError):
         await gw.invoke(owner, "sandbox_browser_file_upload", {"ref": "e1", "filenames": ["没有.pdf"]})
+
+
+@pytest.mark.asyncio
+async def test_page_file_and_page_fn_from_disk(hands_runtime) -> None:
+    """#1242: hang disk files, then call a dotted path; missing / rate-limit fail clearly."""
+    from pico_orchestrator.sandbox_persist import write_owner_disk_file
+
+    _, pages = hands_runtime
+    gw = _gw()
+    owner = P("school-a", "member-a", ["ai:run"])
+    await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    write_owner_disk_file("school-a", "member-a", "成绩.xlsx", b"PK-xlsx")
+    hung = await gw.invoke(
+        owner, "sandbox_browser_page_file", {"filenames": ["../成绩.xlsx"]}
+    )
+    assert hung["action"] == "page_file"
+    assert hung["handle"] == "__picoFile"
+    assert hung["names"] == ["成绩.xlsx"]
+    assert [(n, b) for n, _, b in pages[0].page_files] == [("成绩.xlsx", b"PK-xlsx")]
+    saved = await gw.invoke(
+        owner,
+        "sandbox_browser_page_fn",
+        {"fn": "saveField", "args": ["proof", "__picoFile"]},
+    )
+    assert saved["action"] == "page_fn"
+    assert saved["page_result"] == {"name": "成绩.xlsx", "count": 1}
+    assert pages[0].page_fn_calls == [("saveField", ["proof", "__picoFile"])]
+    with pytest.raises(ToolError) as missing:
+        await gw.invoke(owner, "sandbox_browser_page_fn", {"fn": "hallSave_99"})
+    assert missing.value.code == "sandbox.fn_missing"
+    assert "hallSave_99" in missing.value.message
+    assert "不要猜" in missing.value.message
+    pages[0].rate_limited = True
+    with pytest.raises(ToolError) as limited:
+        await gw.invoke(owner, "sandbox_browser_page_fn", {"fn": "queryField", "args": ["proof"]})
+    assert limited.value.code == "sandbox.rate_limited"
+    with pytest.raises(ToolError):
+        await gw.invoke(owner, "sandbox_browser_page_file", {})
+    with pytest.raises(ToolError):
+        await gw.invoke(owner, "sandbox_browser_page_fn", {})
 
 
 @pytest.mark.asyncio

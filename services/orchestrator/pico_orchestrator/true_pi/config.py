@@ -80,6 +80,8 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "sandbox_browser_tabs",
         "sandbox_browser_fill_form",
         "sandbox_browser_file_upload",
+        "sandbox_browser_page_file",
+        "sandbox_browser_page_fn",
         "sandbox_browser_type",
         "sandbox_browser_select_option",
         "sandbox_browser_press_key",

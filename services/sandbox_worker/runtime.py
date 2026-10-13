@@ -76,6 +76,7 @@ HANDS_ACTIONS = frozenset(
     {
         "snapshot", "navigate", "navigate_back", "click", "hover", "type",
         "select_option", "press_key", "wait_for", "tabs", "fill_form", "file_upload",
+        "page_file", "page_fn",
     }
 )
 HANDS_COPY = {
@@ -87,6 +88,8 @@ HANDS_COPY = {
     "tabs": "已列出标签页。",
     "fill_form": "已填好表单。",
     "file_upload": "已传上附件。",
+    "page_file": "已把文件放进这一页（未点文件框）。",
+    "page_fn": "已调用页内函数。",
     "type": "已填入文字。",
     "select_option": "已选中选项。",
     "press_key": "已按键。",
@@ -765,6 +768,8 @@ class SandboxRuntime:
         fields: list[dict[str, Any]] | None = None,
         filenames: list[str] | None = None,
         files: list[dict[str, Any]] | None = None,
+        fn: str = "",
+        fn_args: list[Any] | None = None,
     ) -> dict[str, Any]:
         """AI hands (#1207): one Playwright action, then the page snapshot — after
         an action only what changed (#1222); `snapshot` itself is always full.
@@ -782,6 +787,8 @@ class SandboxRuntime:
         window = self._hands(session)
         hands: BrowserHands = window.surface  # type: ignore[assignment]
         left: list[str] = []
+        page_result: Any = None
+        page_file_meta: dict[str, Any] = {}
         if verb == "navigate":
             parse_public_http_url(url)
             hostile = automation_hostile_reason(url)
@@ -800,6 +807,10 @@ class SandboxRuntime:
             left = await hands.fill_form(list(fields or []))
         elif verb == "file_upload":
             await hands.upload_files(ref, self._upload_payload(session, filenames, files))
+        elif verb == "page_file":
+            page_file_meta = await hands.page_file(self._upload_payload(session, filenames, files))
+        elif verb == "page_fn":
+            page_result = await hands.page_fn(fn, list(fn_args or []))
         elif verb == "type":
             await hands.type_ref(ref, text, submit=bool(submit), slowly=bool(slowly))
         elif verb == "select_option":
@@ -822,6 +833,10 @@ class SandboxRuntime:
             message += "".join(f"页面弹窗「{d}」，已点确定。" for d in dialogs)
         tabs = await hands.tabs("list", 0)
         extra: dict[str, Any] = {"dialogs": dialogs} if dialogs else {}
+        if page_file_meta:
+            extra.update(page_file_meta)
+        if verb == "page_fn":
+            extra["page_result"] = page_result
         if len(tabs) > 1 or verb == "tabs":
             # A new tab opened (or the AI asked): it is already the current page.
             extra["tabs"] = tabs
