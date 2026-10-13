@@ -300,7 +300,7 @@ def test_bridge_allowlist_is_thin() -> None:
     assert "sandbox_pptx_lib" not in ALLOWED_GATEWAY_TOOLS
     # #975: one sidebar-only hand that stages left-page proposals; never executes.
     assert "propose_page_mutation" in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 36  # 24 + 7 AI-hands verbs (#1207) + back/hover/tabs (#1217) + fill_form/file_upload (#1219)
+    assert len(ALLOWED_GATEWAY_TOOLS) == 38  # 24 + 7 AI-hands verbs (#1207) + back/hover/tabs (#1217) + fill_form/file_upload (#1219) + page_file/page_fn (#1242)
 
 
 def test_shadow_diff_flags_false_green() -> None:

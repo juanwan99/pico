@@ -47,7 +47,7 @@ def test_publish_tools_on_allowlist_and_system_stays_generic():
     assert "publish_html_page" in ALLOWED_GATEWAY_TOOLS
     assert "unpublish_html_page" in ALLOWED_GATEWAY_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
-    assert len(ALLOWED_GATEWAY_TOOLS) == 36  # 24 + 7 AI-hands verbs (#1207) + back/hover/tabs (#1217) + fill_form/file_upload (#1219)
+    assert len(ALLOWED_GATEWAY_TOOLS) == 38  # 24 + 7 AI-hands verbs (#1207) + back/hover/tabs (#1217) + fill_form/file_upload (#1219) + page_file/page_fn (#1242)
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     body = pico_system_text()
     assert "publish_html_page" in body
