@@ -403,10 +403,11 @@ _OVERLOAD_STATUS = {429, 503, 529}
 
 # Thinking-off calls answer within seconds; a stall before the first byte is a
 # hung upstream, not a long think (#1195: a 385-token call sat 114 s on a 3600 s
-# read timeout). One quick resend covers that and the vertex hop's 1.7 s
-# URLError 502s. Thinking-on keeps the long read timeout (GPT can think 10 min).
+# read timeout). Thinking-on keeps the long read timeout (GPT can think 10 min).
+# Resends now belong to the hedged race in stream_chat (pico#1257): a fast 502
+# or a stall is replaced by the next attempt there, not retried in place.
 FIRST_BYTE_TIMEOUT_S = 60.0
-FIRST_BYTE_RETRIES = 1
+FIRST_BYTE_RETRIES = 0
 
 
 def _is_upstream_5xx(exc: Exception) -> bool:
@@ -779,22 +780,64 @@ async def stream_chat(
         models = [
             m for m in brain_candidates(model_id) if not images or model_accepts_image(m)
         ] or [model_id]
-    for i, mid in enumerate(models):
-        yielded = False
-        try:
-            async for piece in _pump(cfg if mid == model_id else replace(cfg, model=mid), mid):
-                yielded = True
-                yield piece
-        except RuntimeError as e:
-            from pico_orchestrator.brain_ha import is_failover_error
+    from pico_orchestrator.brain_ha import is_failover_error
+    from pico_orchestrator.hedge import hedge_delays, race_first
 
-            if (
-                yielded
-                or i + 1 >= len(models)
-                or not is_failover_error(f"{e} {e.__cause__ or ''}", first=i == 0)
-            ):
-                raise
-            continue
-        if mid != model_id and finish_out is not None:
-            finish_out["model"] = mid  # bill the backup that answered
-        return
+    # Hedged race (pico#1257): the relay's first token is heavy-tailed, so a
+    # slow attempt gets company instead of a 60 s wait. Hedges alternate the
+    # primary and the first backup; a channel that is down is skipped.
+    plan = [models[0], models[1], models[0], models[1], *models[2:]] if len(models) > 1 else [models[0]] * 4
+    dead: set[str] = set()
+    picked: dict[int, str] = {}
+    retry: dict[int, bool] = {}
+
+    def start(k: int):
+        while k < len(plan) and plan[k] in dead:
+            plan.pop(k)
+        if k >= len(plan):
+            return None
+        mid = plan[k]
+        picked[k] = mid
+        return _open(cfg if mid == model_id else replace(cfg, model=mid), mid)
+
+    async def _open(provider: ProviderConfig, mid: str):
+        pieces = _pump(provider, mid)
+        try:
+            first = await anext(pieces)
+        except StopAsyncIteration:
+            first = None
+        except BaseException as exc:
+            with suppress(Exception):
+                await pieces.aclose()
+            text = f"{exc} {exc.__cause__ or ''}"
+            # No channel / model refused: the same model cannot answer this call.
+            if is_channel_dead(text) or str(exc).startswith("模型不可用"):
+                dead.add(mid)
+            # A 400 may be the primary's relay (one hop); from a backup it is the request.
+            retry[id(exc)] = isinstance(exc, RuntimeError) and is_failover_error(
+                text, first=mid == model_id
+            )
+            raise
+        return pieces, first
+
+    async def _discard(opened) -> None:
+        with suppress(Exception):
+            await opened[0].aclose()
+
+    def _relaunch(exc: BaseException) -> bool:
+        return retry.get(id(exc), False)
+
+    (pieces, first), won = await race_first(
+        start, hedge_delays(deep=bool(lane_thinking)), relaunch=_relaunch, discard=_discard
+    )
+    mid = picked[won]
+    try:
+        if first is not None:
+            yield first
+        async for piece in pieces:
+            yield piece
+    finally:
+        with suppress(Exception):
+            await pieces.aclose()
+    if mid != model_id and finish_out is not None:
+        finish_out["model"] = mid  # bill the backup that answered

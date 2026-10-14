@@ -161,10 +161,10 @@ def proxy_client(monkeypatch):
     monkeypatch.setenv("PICO_RUNNER_TOKEN", TOKEN)
     seen: dict[str, Any] = {}
 
-    async def fake_stream(method, target, headers, body, on_done=None):
+    async def fake_stream(method, target, headers, body, on_done=None, hedge=None):
         from fastapi.responses import JSONResponse
 
-        seen.update(method=method, target=target, headers=headers, body=body)
+        seen.update(method=method, target=target, headers=headers, body=body, hedge=hedge)
         if on_done is not None:
             on_done()
         return JSONResponse({"ok": True})
@@ -516,3 +516,16 @@ def test_box_prompt_keeps_tool_calls_small() -> None:
 
     assert "150 lines" in WORKSPACE_SYSTEM and "cat << EOF" in WORKSPACE_SYSTEM
     assert "content_01.json" in WORKSPACE_SYSTEM and "under 100 lines" in WORKSPACE_SYSTEM
+
+
+def test_proxy_hedges_model_calls_not_tools(proxy_client) -> None:
+    client, seen = proxy_client
+    auth = {**H, "authorization": "Bearer boxtok"}
+    client.post(
+        "/internal/ws-proxy/l/run9/v1/chat/completions",
+        headers=auth,
+        json={"model": "gemini-3.8-flash", "stream": True},
+    )
+    assert seen["hedge"]
+    client.post("/internal/ws-proxy/t/run9/v1/tool", headers={**H, "authorization": "Bearer tooltok"}, json={})
+    assert not seen["hedge"]

@@ -24,6 +24,7 @@ from collections import Counter
 import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
+from pico_orchestrator.hedge import hedge_delays, race_first
 from pico_orchestrator.true_pi.runner import proxy_entry, runner_token
 
 from app.loopback import request_on_loopback_socket
@@ -55,6 +56,44 @@ def _bearer(request: Request) -> str:
     return raw[7:].strip() if raw.lower().startswith("bearer ") else ""
 
 
+class _Retry(Exception):
+    """Attempt answered 429 / 5xx before any token: try another one."""
+
+    def __init__(self, status: int, body: bytes, headers: dict[str, str]) -> None:
+        super().__init__(f"upstream {status}")
+        self.status = status
+        self.body = body
+        self.headers = headers
+
+
+_RETRY_STATUS = frozenset({429, 500, 502, 503, 504, 520, 522, 524})
+
+
+async def _open(method: str, target: str, headers: dict[str, str], body: bytes):
+    """One upstream call up to its first body chunk: (client, upstream, first)."""
+    client = httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False)
+    upstream = None
+    try:
+        req = client.build_request(method, target, headers=headers, content=body or None)
+        upstream = await client.send(req, stream=True)
+        if upstream.status_code in _RETRY_STATUS:
+            raw = await upstream.aread()
+            raise _Retry(upstream.status_code, raw, dict(upstream.headers))
+        chunks = upstream.aiter_bytes()
+        first = b""
+        async for chunk in chunks:
+            if chunk:
+                first = chunk
+                break
+        return client, upstream, first, chunks
+    except BaseException:
+        with contextlib.suppress(Exception):
+            if upstream is not None:
+                await upstream.aclose()
+        await client.aclose()
+        raise
+
+
 async def _stream(
     method: str,
     target: str,
@@ -62,26 +101,56 @@ async def _stream(
     body: bytes,
     *,
     on_done=None,
+    hedge: list[float] | None = None,
 ) -> Response:
-    """Stream upstream back. ``on_done`` runs once the body is fully sent (or failed)."""
+    """Stream upstream back. ``on_done`` runs once the body is fully sent (or failed).
+
+    ``hedge`` (model calls only, pico#1257): seconds at which to race another
+    identical call when no first token has come back yet.
+    """
 
     def _done() -> None:
         if on_done is not None:
             on_done()
 
-    client = httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False)
-    req = client.build_request(method, target, headers=headers, content=body or None)
-    try:
-        upstream = await client.send(req, stream=True)
-    except Exception as exc:  # noqa: BLE001 — any upstream failure is a 502 to the box
+    attempts = 1 + len(hedge or [])
+
+    def start(k: int):
+        return _open(method, target, headers, body) if k < attempts else None
+
+    async def discard(opened) -> None:
+        client, upstream, _first, _chunks = opened
+        with contextlib.suppress(Exception):
+            await upstream.aclose()
         await client.aclose()
+
+    try:
+        (client, upstream, first, chunks), won = await race_first(
+            start,
+            hedge or [],
+            relaunch=lambda exc: isinstance(exc, (_Retry, httpx.HTTPError)),
+            discard=discard,
+        )
+    except _Retry as exc:
+        _done()
+        logger.warning("ws-proxy upstream %s after %s attempts", exc.status, attempts)
+        out = {k: v for k, v in exc.headers.items() if k.lower() not in _HOP}
+        return Response(exc.body, status_code=exc.status, headers=out)
+    except Exception as exc:  # noqa: BLE001 — any upstream failure is a 502 to the box
         _done()
         logger.warning("ws-proxy upstream error %s", type(exc).__name__)
         return _deny("proxy.upstream_unreachable", 502)
+    except BaseException:
+        _done()
+        raise
+    if won:
+        logger.info("ws-proxy hedge won attempt=%s target=%s", won, target.rsplit("/", 1)[-1])
 
     async def _iter():
         try:
-            async for chunk in upstream.aiter_bytes():
+            if first:
+                yield first
+            async for chunk in chunks:
                 yield chunk
         finally:
             try:
@@ -97,6 +166,33 @@ async def _stream(
         headers=out,
         media_type=upstream.headers.get("content-type"),
     )
+
+
+def deep_request(body: bytes) -> bool:
+    """Reasoning effort medium+ asked for: first token may honestly take long."""
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    effort = ""
+    reasoning = payload.get("reasoning")
+    if isinstance(reasoning, dict):
+        effort = str(reasoning.get("effort") or "")
+    effort = effort or str(payload.get("reasoning_effort") or "")
+    return effort.lower() in {"medium", "high", "xhigh"}
+
+
+def model_hedge(body: bytes) -> list[float]:
+    """Hedge schedule for one model call; streaming only (a JSON reply has no first token)."""
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, dict) or payload.get("stream") is not True:
+        return []
+    return hedge_delays(deep=deep_request(body))
 
 
 MODEL_PATHS = frozenset({"chat/completions", "responses", "models"})
@@ -212,7 +308,11 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
     except TimeoutError:
         return _deny("proxy.busy", 429)
     # Slot is held until the streamed body is done, not just the headers.
-    return await _stream(request.method, target, headers, body, on_done=entry.slots.release)
+    # Hedged copies ride the same slot: they race for one answer (pico#1257).
+    hedge = model_hedge(body) if request.method == "POST" else []
+    return await _stream(
+        request.method, target, headers, body, on_done=entry.slots.release, hedge=hedge
+    )
 
 
 def pinned_model_body(body: bytes, model: str) -> bytes | None:
