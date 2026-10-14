@@ -637,6 +637,44 @@ async def _caps_with_turn(caps: Any, principal: Principal, conversation_id: str 
     return replace(caps, turn_no=int(n or 0))
 
 
+async def _supersede_active_turns(principal: Principal, conversation_id: str | None) -> int:
+    """A new agent turn stops the teacher's still-running turn in this conversation (#1250).
+
+    Cancel is the same sticky stop as the 停止 button; the old turn's runtime
+    sees it within a second and releases the workspace, which the new turn's
+    outputs snapshot already waits for. Never blocks the new turn.
+    """
+    if not conversation_id:
+        return 0
+    from pico_orchestrator.ask_user import cancel as cancel_ask
+
+    from app.run_service import cancel_active_runs_for_conversation
+
+    try:
+        async with session_factory()() as session:
+            results = await cancel_active_runs_for_conversation(
+                session,
+                school_id=principal.school_id,
+                membership_id=principal.membership_id,
+                conversation_id=conversation_id,
+            )
+            for result in results:
+                old_id = str(result.run.id)
+                cancel_ask(old_id)
+                if result.request_recorded:
+                    await append_event(
+                        session, old_id, "run.cancel_requested", {"source": "superseded"}
+                    )
+                if result.status_changed:
+                    await append_event(
+                        session, old_id, "run.status", {"status": "cancelled", "reason": "superseded"}
+                    )
+    except Exception:  # runner busy stays the last line
+        logger.exception("supersede active turns failed conv=%s", conversation_id[:24])
+        return 0
+    return len(results)
+
+
 async def _ledger_task_run(
     *,
     principal: Principal,
@@ -1854,6 +1892,8 @@ async def chat_completions(
                 replayed = json_only_replay.get(replay_key)
                 if replayed is not None:
                     return JSONResponse(replayed, headers={"X-Pico-Replay": "1"})
+        if not use_direct:
+            await _supersede_active_turns(principal, conversation_id)
         task_id, run_id = await _ledger_task_run(
             principal=principal,
             prompt=prompt,
@@ -2170,6 +2210,7 @@ async def chat_completions(
         from app.db import init_db
 
         await init_db()
+        await _supersede_active_turns(principal, conversation_id)
         factory = session_factory()
         task_id = new_id()
         run_id = new_id()

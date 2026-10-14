@@ -358,6 +358,42 @@ async def cancel_active_runs_for_task(
     return out
 
 
+async def cancel_active_runs_for_conversation(
+    session: AsyncSession,
+    *,
+    school_id: str,
+    membership_id: str,
+    conversation_id: str,
+) -> list[CancelResult]:
+    """Cancel this teacher's non-terminal runs in one conversation (#1250).
+
+    A new message in a conversation whose last turn still runs takes over:
+    the old box holds the workspace, so the new turn would otherwise wait
+    ~65 s on outputs and then be refused ``runner.workspace_busy``.
+    """
+    if not conversation_id:
+        return []
+    rows = (
+        await session.execute(
+            select(RunRow)
+            .join(TaskRow, TaskRow.id == RunRow.task_id)
+            .where(
+                TaskRow.school_id == school_id,
+                TaskRow.membership_id == membership_id,
+                TaskRow.conversation_id == conversation_id,
+                RunRow.status.in_(("queued", "preparing", "running")),
+            )
+        )
+    ).scalars().all()
+    out: list[CancelResult] = []
+    for run in rows:
+        try:
+            out.append(await request_cancel(session, run))
+        except ValueError:
+            continue  # finished between select and update
+    return out
+
+
 async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
     """Finalize non-terminal runs whose in-process owner was lost on restart.
 
