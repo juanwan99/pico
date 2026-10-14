@@ -780,7 +780,7 @@ async def stream_chat(
     for i, mid in enumerate(models):
         yielded = False
         try:
-            async for piece in _pump(cfg if i == 0 else replace(cfg, model=mid), mid):
+            async for piece in _pump(cfg if mid == model_id else replace(cfg, model=mid), mid):
                 yielded = True
                 yield piece
         except RuntimeError as e:
@@ -793,6 +793,6 @@ async def stream_chat(
             ):
                 raise
             continue
-        if i and finish_out is not None:
+        if mid != model_id and finish_out is not None:
             finish_out["model"] = mid  # bill the backup that answered
         return
