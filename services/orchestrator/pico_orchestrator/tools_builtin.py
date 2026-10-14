@@ -871,8 +871,8 @@ def _workspace_handlers(
             raw_allow = scope.get("allow_ids")
             if raw_allow:
                 allow_ids = {str(x) for x in raw_allow if x}
-        except Exception:  # noqa: BLE001 — missing bind/db: default mine (member-only)
-            include_school = False
+        except Exception:  # noqa: BLE001 — missing bind/db: no venue narrowing; edu still prunes rows
+            include_school = True
             allow_ids = None
         if not meili_configured():
             degraded = True
