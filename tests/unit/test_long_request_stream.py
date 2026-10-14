@@ -414,7 +414,7 @@ class _UrlError502(Exception):
 async def test_stream_chat_resends_once_on_5xx_before_first_byte(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#1195: the vertex hop's fast 502 URLError gets one quick resend, no backoff."""
+    """#1195: the vertex hop's fast 502 URLError is replaced at once, no backoff (pico#1257 race)."""
     slept = _gemini_env(monkeypatch)
     calls = {"n": 0}
 
@@ -449,14 +449,15 @@ async def test_stream_chat_5xx_twice_fails(monkeypatch: pytest.MonkeyPatch) -> N
     )
     with pytest.raises(RuntimeError, match="URLError"):
         _ = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
-    assert calls["n"] == 2
+    # The hedged race gives one model four attempts, then gives up.
+    assert calls["n"] == 4
 
 
 @pytest.mark.asyncio
 async def test_stream_chat_first_byte_timeout_resends_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#1195: a thinking-off call silent past the first-byte limit is resent once."""
+    """#1195: a thinking-off call silent past the first-byte limit is replaced (pico#1257 race)."""
     _gemini_env(monkeypatch)
     monkeypatch.setattr("pico_orchestrator.provider.FIRST_BYTE_TIMEOUT_S", 0.05)
     calls = {"n": 0}
@@ -493,4 +494,4 @@ async def test_stream_chat_first_byte_timeout_resends_once(
     )
     with pytest.raises(RuntimeError, match="first byte timeout"):
         _ = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
-    assert calls["n"] == 2
+    assert calls["n"] == 4
