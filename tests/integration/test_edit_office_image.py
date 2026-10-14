@@ -196,7 +196,7 @@ def test_generate_image_siliconflow_key_rejected(client, monkeypatch) -> None:
     assert created.status_code == 400, created.text
     detail = created.json().get("detail") or {}
     message = detail.get("message") if isinstance(detail, dict) else str(detail)
-    assert "否决" in str(message)
+    assert "没能出图" in str(message)
     assert "SILICONFLOW_API_KEY" not in str(message)
     assert "artifact_id" not in created.text
 
