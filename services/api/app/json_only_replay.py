@@ -2,8 +2,9 @@
 
 Edu's steward re-sends the very same JSON envelope (72% of its calls, half
 within 96 s). Same tenant + member + same model input → hand back the last
-successful answer: no model call, no run, no usage row. Process-local only;
-a restart just empties it. Not a general cache: callers decide what is
+successful answer: no model call, no run, no usage row. A caller that hung
+up (steward's 15 s budget) still gets its answer stored here (pico#1257).
+Process-local only; a restart just empties it. Not a general cache: callers decide what is
 replayable, a miss is the normal path.
 """
 

@@ -1456,6 +1456,58 @@ async def test_json_only_envelope_replays_identical_request(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_json_only_hung_up_caller_gets_answer_on_resend(tmp_path, monkeypatch) -> None:
+    """pico#1257: steward gives up at 15 s; the answer still lands for its re-send."""
+    settings = await _fresh_db(tmp_path, monkeypatch, "json-kept.db")
+    monkeypatch.setattr("app.openai_compat._CLIENT_GONE_POLL_S", 0.01)
+    release = asyncio.Event()
+    calls: list[str] = []
+
+    async def slow_stream(*_args, usage_out=None, **_kwargs) -> AsyncIterator[str]:
+        calls.append("x")
+        await release.wait()
+        if usage_out is not None:
+            usage_out.update({"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12})
+        yield '{"items":[]}'
+
+    monkeypatch.setattr("pico_orchestrator.provider.stream_chat", slow_stream)
+    envelope = '{"output":"json_only_no_files","items":[{"kicker":"待我审"}]}'
+    token = issue_test_token(school_id="school-a", membership_id="member-kept", settings=settings)
+    gone = await chat_completions(
+        ChatCompletionRequest(
+            model="pico-fast",
+            stream=False,
+            messages=[ChatMessage(role="user", content=envelope)],
+        ),
+        authorization=f"Bearer {token}",
+        x_conversation_id=None,
+        x_workspace_id=None,
+        x_pico_membership_id=None,
+        x_pico_output="json_only_no_files",
+        settings=settings,
+        request=_GoneRequest(),
+    )
+    assert gone.status_code == 499
+    from app import openai_compat
+
+    kept = list(openai_compat._KEPT)
+    assert len(kept) == 1
+    release.set()
+    await asyncio.wait_for(kept[0], timeout=5)
+
+    again = await _json_only_call(settings, envelope, member="member-kept")
+    assert again.headers["X-Pico-Replay"] == "1"
+    assert json.loads(again.body)["choices"][0]["message"]["content"] == '{"items":[]}'
+    assert len(calls) == 1
+    from sqlalchemy import select
+
+    async with session_factory()() as session:
+        run = (await session.execute(select(RunRow))).scalar_one()
+        assert run.status == "succeeded"
+        assert run.cancel_requested == 0
+
+
+@pytest.mark.asyncio
 async def test_json_only_replay_skips_header_only_and_failures(tmp_path, monkeypatch) -> None:
     """#1204: exam grading re-runs on purpose; a failed answer is never replayed."""
     settings = await _fresh_db(tmp_path, monkeypatch, "json-replay-skip.db")

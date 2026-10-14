@@ -1357,6 +1357,10 @@ async def _run_and_collect(
 # a failed or empty run is never a 200 whose body they cannot parse.
 _CLIENT_GONE_POLL_S = 1.0
 _CLIENT_GONE_GRACE_S = 20.0
+# Edu's steward gives up after 15 s while the relay sometimes needs 20–40 s
+# (pico#1257); the kept answer lands in the replay cache for the next visit.
+_KEEP_CAP_S = 120.0
+_KEPT: set[asyncio.Task] = set()
 _TIMEOUT_MARKS = ("timeout", "timed out", "524", "超时", "wall")
 _OVERLOAD_MARKS = ("429", "503", "529", "overload", "rate limit", "频繁")
 
@@ -1393,13 +1397,21 @@ def _failure_response(
 
 
 async def _client_gone_first(
-    request: Request | None, work: asyncio.Task, run_id: str, *, grace: float = 0.0
+    request: Request | None,
+    work: asyncio.Task,
+    run_id: str,
+    *,
+    grace: float = 0.0,
+    keep: bool = False,
 ) -> bool:
     """Wait for ``work``; True when the non-stream caller hung up first.
 
     The run is cancelled on the ledger; a Pi run gets ``grace`` to abort on its
     own cancel poll (and report usage), then the task is cancelled. The handler
     returns, which frees the caller's concurrency slot (#1195).
+
+    ``keep``: a replayable answer finishes in the background instead, so the
+    caller's identical re-send gets it at once (pico#1257).
     """
     while True:
         done, _ = await asyncio.wait({work}, timeout=_CLIENT_GONE_POLL_S)
@@ -1407,6 +1419,15 @@ async def _client_gone_first(
             return False
         if request is not None and await request.is_disconnected():
             break
+    if keep:
+        _KEPT.add(work)
+        work.add_done_callback(_KEPT.discard)
+        asyncio.get_running_loop().call_later(_KEEP_CAP_S, work.cancel)
+        async with session_factory()() as session:
+            await append_event(
+                session, run_id, "run.client_gone", {"source": "non_stream", "kept": True}
+            )
+        return True
     from app.run_service import request_cancel
 
     async with session_factory()() as session:
@@ -1848,6 +1869,35 @@ async def chat_completions(
     # Direct Kimi (or DeepSeek) for non-agent models — real HTTPS API, not mock
     if not body.stream:
         replay_key: str | None = None
+
+        def _reply(
+            text: str, finish: str | None, usage_blob: Any, mutations: Any
+        ) -> dict[str, Any]:
+            payload: dict[str, Any] = {
+                "id": completion_id,
+                "object": "chat.completion",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": text},
+                        "finish_reason": finish or "stop",
+                    }
+                ],
+            }
+            usage = _compat_usage_payload(prompt, text, usage_blob)
+            if usage:
+                payload["usage"] = usage
+            if sidebar_web_hits is not None:
+                payload["pico_web_search"] = sidebar_web_hits
+            envelope = _mutations_envelope(page_affordances, mutations)
+            if envelope:
+                payload.update(envelope)
+            if replay_key and payload["choices"][0]["finish_reason"] == "stop":
+                json_only_replay.put(replay_key, payload)
+            return payload
+
         if use_direct:
             system = (
                 sidebar_system
@@ -1927,40 +1977,54 @@ async def chat_completions(
                         parts.append(piece)
                 return "".join(parts)
 
-            work = asyncio.create_task(_direct_text())
-            if await _client_gone_first(request, work, run_id):
-                return Response(status_code=499)
-            try:
-                text = work.result()
-            except Exception as e:  # noqa: BLE001
+            async def _direct_reply() -> dict[str, Any] | Response:
+                try:
+                    text = await _direct_text()
+                except asyncio.CancelledError:
+                    await _finalize_run(
+                        run_id,
+                        status="cancelled",
+                        error="client disconnected",
+                        task_id=task_id,
+                        token_usage=direct_usage or None,
+                        bill_to=payer_for(principal),
+                    )
+                    raise
+                except Exception as e:  # noqa: BLE001
+                    await _finalize_run(
+                        run_id,
+                        status="failed",
+                        error=str(e),
+                        task_id=task_id,
+                        bill_to=payer_for(principal),
+                    )
+                    return _failure_response(str(e), status="failed", run_id=run_id)
+                if not text.strip():
+                    await _finalize_run(
+                        run_id,
+                        status="failed",
+                        error="empty model output",
+                        task_id=task_id,
+                        token_usage=direct_usage or None,
+                        bill_to=payer_for(principal),
+                    )
+                    return _failure_response(None, status="failed", run_id=run_id, empty=True)
                 await _finalize_run(
                     run_id,
-                    status="failed",
-                    error=str(e),
+                    status="succeeded",
+                    final_text=text,
                     task_id=task_id,
-                    bill_to=payer_for(principal),
-                )
-                return _failure_response(str(e), status="failed", run_id=run_id)
-            if not text.strip():
-                await _finalize_run(
-                    run_id,
-                    status="failed",
-                    error="empty model output",
-                    task_id=task_id,
+                    user_prompt=prompt,
                     token_usage=direct_usage or None,
                     bill_to=payer_for(principal),
+                    backend_model=direct_finish.get("model"),
                 )
-                return _failure_response(None, status="failed", run_id=run_id, empty=True)
-            await _finalize_run(
-                run_id,
-                status="succeeded",
-                final_text=text,
-                task_id=task_id,
-                user_prompt=prompt,
-                token_usage=direct_usage or None,
-                bill_to=payer_for(principal),
-                backend_model=direct_finish.get("model"),
-            )
+                return _reply(text, direct_finish.get("finish_reason"), direct_usage, None)
+
+            work = asyncio.create_task(_direct_reply())
+            if await _client_gone_first(request, work, run_id, keep=replay_key is not None):
+                return Response(status_code=499)
+            return work.result()
         else:
             work = asyncio.create_task(_run_and_collect(
                 prompt,
@@ -2026,40 +2090,12 @@ async def chat_completions(
                     run_id=run_id,
                     empty=result.status == "succeeded",
                 )
-        payload = {
-            "id": completion_id,
-            "object": "chat.completion",
-            "created": created,
-            "model": model,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {"role": "assistant", "content": text},
-                    "finish_reason": (
-                        (direct_finish.get("finish_reason") if use_direct else None)
-                        or "stop"
-                    ),
-                }
-            ],
-        }
-        usage = _compat_usage_payload(
-            prompt,
+        return _reply(
             text,
-            (direct_usage if use_direct else getattr(result, "token_usage", None)),
+            None,
+            getattr(result, "token_usage", None),
+            getattr(result, "page_mutations", None),
         )
-        if usage:
-            payload["usage"] = usage
-        if sidebar_web_hits is not None:
-            payload["pico_web_search"] = sidebar_web_hits
-        envelope = _mutations_envelope(
-            page_affordances,
-            None if use_direct else getattr(result, "page_mutations", None),
-        )
-        if envelope:
-            payload.update(envelope)
-        if replay_key and payload["choices"][0]["finish_reason"] == "stop":
-            json_only_replay.put(replay_key, payload)
-        return payload
 
     async def event_stream() -> AsyncIterator[bytes]:
         def chunk(
