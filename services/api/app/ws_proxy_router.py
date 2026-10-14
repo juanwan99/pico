@@ -168,20 +168,11 @@ async def _stream(
     )
 
 
-def deep_request(body: bytes) -> bool:
-    """Reasoning effort medium+ asked for: first token may honestly take long."""
-    try:
-        payload = json.loads(body.decode("utf-8") or "{}")
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    if not isinstance(payload, dict):
-        return False
-    effort = ""
+def request_effort(payload: dict) -> str:
+    """Reasoning effort the call asked for (Responses or chat/completions shape)."""
     reasoning = payload.get("reasoning")
-    if isinstance(reasoning, dict):
-        effort = str(reasoning.get("effort") or "")
-    effort = effort or str(payload.get("reasoning_effort") or "")
-    return effort.lower() in {"medium", "high", "xhigh"}
+    effort = str(reasoning.get("effort") or "") if isinstance(reasoning, dict) else ""
+    return (effort or str(payload.get("reasoning_effort") or "")).lower()
 
 
 def model_hedge(body: bytes) -> list[float]:
@@ -192,7 +183,7 @@ def model_hedge(body: bytes) -> list[float]:
         return []
     if not isinstance(payload, dict) or payload.get("stream") is not True:
         return []
-    return hedge_delays(deep=deep_request(body))
+    return hedge_delays(request_effort(payload))
 
 
 MODEL_PATHS = frozenset({"chat/completions", "responses", "models"})

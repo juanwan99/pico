@@ -13,12 +13,15 @@ from pico_orchestrator.provider import stream_chat
 
 def test_delays_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_HEDGE_FAST_S", raising=False)
-    assert hedge_delays(deep=False) == [1.5, 4.0, 8.0]
-    assert hedge_delays(deep=True)[0] >= 20
+    monkeypatch.delenv("PICO_HEDGE_MEDIUM_S", raising=False)
+    assert hedge_delays() == [1.5, 4.0, 8.0]
+    assert hedge_delays("low") == [1.5, 4.0, 8.0]
+    assert hedge_delays("medium") == [5.0, 10.0, 16.0]
+    assert hedge_delays("high")[0] >= 20
     monkeypatch.setenv("PICO_HEDGE_FAST_S", "off")
-    assert hedge_delays(deep=False) == []
+    assert hedge_delays() == []
     monkeypatch.setenv("PICO_HEDGE_FAST_S", "4, 2,x")
-    assert hedge_delays(deep=False) == [2.0, 4.0]
+    assert hedge_delays() == [2.0, 4.0]
 
 
 async def _never_discard(_x) -> None:
@@ -175,8 +178,11 @@ def test_proxy_hedge_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.ws_proxy_router import model_hedge
 
     monkeypatch.delenv("PICO_HEDGE_FAST_S", raising=False)
+    monkeypatch.delenv("PICO_HEDGE_MEDIUM_S", raising=False)
     monkeypatch.delenv("PICO_HEDGE_DEEP_S", raising=False)
     assert model_hedge(b'{"model":"m","stream":true}') == [1.5, 4.0, 8.0]
+    pi_step = b'{"model":"m","stream":true,"reasoning":{"effort":"medium"}}'
+    assert model_hedge(pi_step) == [5.0, 10.0, 16.0]
     deep = model_hedge(b'{"model":"m","stream":true,"reasoning":{"effort":"high"}}')
     assert deep and deep[0] >= 20
     assert model_hedge(b'{"model":"m"}') == []  # JSON reply: no first token to wait on

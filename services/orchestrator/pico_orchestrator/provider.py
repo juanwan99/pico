@@ -828,7 +828,7 @@ async def stream_chat(
         return retry.get(id(exc), False)
 
     (pieces, first), won = await race_first(
-        start, hedge_delays(deep=bool(lane_thinking)), relaunch=_relaunch, discard=_discard
+        start, hedge_delays("medium" if lane_thinking else None), relaunch=_relaunch, discard=_discard
     )
     mid = picked[won]
     try:

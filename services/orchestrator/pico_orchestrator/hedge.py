@@ -19,11 +19,16 @@ from collections.abc import Awaitable, Callable, Sequence
 from contextlib import suppress
 
 HEDGE_FAST_ENV = "PICO_HEDGE_FAST_S"
+HEDGE_MEDIUM_ENV = "PICO_HEDGE_MEDIUM_S"
 HEDGE_DEEP_ENV = "PICO_HEDGE_DEEP_S"
 # Fast lane: live A/B 10-14 (20 alternating calls): 1.5/4/8 s → first-token
 # p90 7.6 s vs 21 s unhedged. Cancelled losers bill 0 in New API.
 _FAST_DEFAULT = (1.5, 4.0, 8.0)
-# Deep thinking legitimately holds the first token for tens of seconds.
+# Medium effort (every Pico thinking call, Pi steps included): 3 days of sol
+# frt p50 3.9 s, p75 7.9 s, p90 28 s — and the slow ones answer 60–200 tokens,
+# so the tail is the relay stalling, not reasoning.
+_MEDIUM_DEFAULT = (5.0, 10.0, 16.0)
+# High effort and up legitimately holds the first token for tens of seconds.
 _DEEP_DEFAULT = (25.0, 50.0)
 
 
@@ -41,10 +46,13 @@ def _parse(raw: str | None, default: Sequence[float]) -> list[float]:
     return sorted(out)
 
 
-def hedge_delays(*, deep: bool) -> list[float]:
-    """Seconds after start at which the 2nd, 3rd, … attempt fires."""
-    if deep:
+def hedge_delays(effort: str | None = None) -> list[float]:
+    """Seconds after start at which the 2nd, 3rd, … attempt fires, by reasoning effort."""
+    effort = (effort or "").strip().lower()
+    if effort in {"high", "xhigh", "max"}:
         return _parse(os.environ.get(HEDGE_DEEP_ENV), _DEEP_DEFAULT)
+    if effort == "medium":
+        return _parse(os.environ.get(HEDGE_MEDIUM_ENV), _MEDIUM_DEFAULT)
     return _parse(os.environ.get(HEDGE_FAST_ENV), _FAST_DEFAULT)
 
 
