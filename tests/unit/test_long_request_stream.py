@@ -316,6 +316,8 @@ def _gemini_env(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.8-flash")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    # No backup model: these pin one model's own retries (#1248 adds failover).
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "gemini-3.8-flash")
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
     slept: list[float] = []
 

@@ -1,4 +1,4 @@
-"""Thin chat failover: same New API, next model if the current one has no channel.
+"""Thin chat failover: same New API, next model if the current one is down.
 
 Not a second router. Gemini Vertex is primary; Grok / GPT-5.6-sol are backups.
 Teacher is told when a backup is used. Tests inject transport and skip this loop.
@@ -24,7 +24,14 @@ _FAILOVER_MARKERS = (
     "connection",
     "upstream",
     "model.unconfigured",
+    # AIProxy relay (gpt-5.6-sol) answered every image call with 400 "try again
+    # later" for hours (#1248); the next model on the same New API was fine.
+    "aiproxy_api_error",
+    "try again later",
 )
+# A 400 the primary rejects may be its relay, not the request: one hop only.
+# The next model rejecting it too means the request itself is bad.
+_FIRST_HOP_MARKERS = ("invalid_request", "invalid request")
 
 
 def configured_fallbacks() -> list[str]:
@@ -59,13 +66,19 @@ def is_upstream_overloaded(error: str) -> bool:
     return "overloaded" in low or "429" in low or "rate limit" in low
 
 
-def should_failover(result: Any) -> bool:
+def is_failover_error(error: str, *, first: bool = False) -> bool:
+    low = (error or "").lower()
+    if any(m in low for m in _FAILOVER_MARKERS):
+        return True
+    return first and any(m in low for m in _FIRST_HOP_MARKERS)
+
+
+def should_failover(result: Any, *, first: bool = False) -> bool:
     if str(getattr(result, "status", "") or "") != "failed":
         return False
-    err = str(getattr(result, "error", "") or "").lower()
-    code = str(getattr(result, "code", "") or "").lower()
-    blob = f"{code} {err}"
-    return any(m in blob for m in _FAILOVER_MARKERS)
+    err = str(getattr(result, "error", "") or "")
+    code = str(getattr(result, "code", "") or "")
+    return is_failover_error(f"{code} {err}", first=first)
 
 
 def fallback_teacher_note(from_model: str, to_model: str) -> str:

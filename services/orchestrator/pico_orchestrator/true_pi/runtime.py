@@ -220,7 +220,11 @@ async def run_true_pi_agent(
         )
         # Once the model has produced output the teacher saw it live; a
         # restart on another model would redo the task from scratch.
-        if gate.live or last.status in {"succeeded", "cancelled"} or not should_failover(last):
+        if (
+            gate.live
+            or last.status in {"succeeded", "cancelled"}
+            or not should_failover(last, first=i == 0)
+        ):
             await gate.flush()
             return last
     if gate is not None:

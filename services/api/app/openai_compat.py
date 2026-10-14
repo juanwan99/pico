@@ -922,6 +922,7 @@ async def _finalize_run(
     change_proposal: dict | None = None,
     token_usage: dict[str, Any] | None = None,
     bill_to: str | None = None,
+    backend_model: str | None = None,
 ) -> None:
     from sqlalchemy import case, select, update
 
@@ -1198,6 +1199,8 @@ async def _finalize_run(
         completion=final_text,
         source="openai_compat",
         bill_to=bill_to,
+        # Direct path: the model that answered, a backup after failover (#1248).
+        model=backend_model,
     )
 
 
@@ -1916,6 +1919,7 @@ async def chat_completions(
                 user_prompt=prompt,
                 token_usage=direct_usage or None,
                 bill_to=payer_for(principal),
+                backend_model=direct_finish.get("model"),
             )
         else:
             work = asyncio.create_task(_run_and_collect(
@@ -2116,6 +2120,7 @@ async def chat_completions(
                     user_prompt=prompt,
                     token_usage=stream_usage or None,
                     bill_to=payer_for(principal),
+                    backend_model=stream_finish.get("model"),
                 )
                 finalized = True
             except (asyncio.CancelledError, GeneratorExit):
