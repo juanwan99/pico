@@ -163,7 +163,7 @@ def recreate_api() -> None:
             with urllib.request.urlopen(PICO_API + "/health", timeout=5) as resp:
                 if resp.status == 200:
                     return
-        except Exception:  # noqa: BLE001 — still booting
+        except Exception:  # noqa: BLE001, S110 — still booting
             pass
         time.sleep(2)
     raise RuntimeError("pico-api not healthy after recreate")
