@@ -454,3 +454,45 @@ def test_skill_kb_ask_snapshot() -> None:
 def test_user_message_kb_miss() -> None:
     msg = user_message_for_error("未在已挂载材料中命中", code="kb.miss")
     assert "材料" in msg
+
+
+def test_kb_search_default_finds_own_workbench_school_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1250: no tick → school rows still searched, edu keeps what this teacher may read."""
+    store = _MemStore()
+    principal = _P()
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-master")
+    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
+
+    class _Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    async def no_ticks(session, school_id, membership_id, conversation_id):
+        return False, []
+
+    monkeypatch.setattr("app.db.session_factory", lambda: _Session)
+    monkeypatch.setattr("app.edu_school.load_named_search_flags", no_ticks)
+    captured: dict[str, Any] = {}
+
+    def fake_search(query, *, school_id, membership_id, limit=8, client=None, rerank_ok=True, include_school=False):
+        _ = query, client, limit
+        captured["include_school"] = include_school
+        return {"hybrid": False, "hits": _school_hits(principal)}
+
+    async def fake_post(principal_, path, *, body=None, settings=None):
+        return {"configured": True, "items": [{"id": _EDU_OK}], "dumped": False}
+
+    monkeypatch.setattr("pico_orchestrator.tools_builtin.search_materials", fake_search)
+    monkeypatch.setattr("app.edu_school._edu_post", fake_post)
+
+    async def _run() -> None:
+        gw = build_default_gateway(store)
+        out = await gw.invoke(principal, "kb_search", {"query": "证书", "limit": 5})
+        assert captured["include_school"] is True
+        assert [h["artifact_id"] for h in out["hits"]] == [_EDU_OK, "art-mine"]
+        assert out["school_bind"] == "ok"
+
+    asyncio.run(_run())

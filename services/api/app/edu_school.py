@@ -107,7 +107,7 @@ def kb_scope_system_block(*, search_school: bool, search_field_ids: list[str] | 
     elif fields:
         scope = "本轮检索限制在老师勾选的场。"
     else:
-        scope = "本轮默认可检索你负责范围内的学校材料。"
+        scope = "本轮默认可检索你有权看的学校材料（含你的个人工作台）。"
     return (
         "## 学校材料范围（本轮）\n"
         f"{scope}答案可能在学校材料里时先 kb_search。"
@@ -376,14 +376,20 @@ async def load_kb_search_scope(
     session: AsyncSession | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
-    """Meili include_school + optional edu-field item allowlist. Empty allowlist = no extra filter."""
+    """Meili include_school + optional edu-field item allowlist. Empty allowlist = no extra filter.
+
+    School rows are always searched (#1250): with nothing ticked the teacher
+    still finds what edu lets them read (own workbench included) — edu
+    ``membership/excerpts`` prunes per row, edu down drops them. Ticked venues
+    only narrow that set.
+    """
     search_school = False
     field_ids: list[str] = []
     if session is not None:
         search_school, field_ids = await load_named_search_flags(
             session, principal.school_id, principal.membership_id, conversation_id
         )
-    include_school = bool(search_school or field_ids)
+    include_school = True
     allow_ids: set[str] | None = None
     if field_ids and not search_school:
         gathered: set[str] = set()

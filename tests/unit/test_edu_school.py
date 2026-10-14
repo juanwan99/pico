@@ -17,6 +17,7 @@ from app.edu_school import (
     classify_land_kind,
     inject_named_school_materials,
     kb_scope_system_block,
+    load_kb_search_scope,
     sanitize_field_id,
     sanitize_search_field_ids,
 )
@@ -123,7 +124,7 @@ def test_named_bind_roundtrip_does_not_store_bodies(client) -> None:
 
 def test_kb_scope_block_default_is_mine_not_dump() -> None:
     text = kb_scope_system_block(search_school=False, search_field_ids=[])
-    assert "负责范围内" in text
+    assert "有权看的学校材料" in text
     assert "kb_search" in text
     assert "禁止编造校规" in text
     assert "不算已读全文" in text
@@ -609,3 +610,15 @@ def test_materials_without_edu_base_does_not_dump(client) -> None:
     assert body.get("items") == []
     assert body.get("dumped") is False
     assert body.get("configured") is False
+
+
+def test_kb_scope_default_searches_school_rows() -> None:
+    """#1250: nothing ticked still searches school rows; edu prunes per row."""
+    import asyncio
+    from types import SimpleNamespace
+
+    principal = SimpleNamespace(school_id="school-a", membership_id="m-edu")
+    scope = asyncio.run(load_kb_search_scope(principal, "c1", None))
+    assert scope["include_school"] is True
+    assert scope["allow_ids"] is None
+    assert scope["search_school"] is False
