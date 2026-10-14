@@ -15,11 +15,11 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pico_orchestrator.teacher_text import teacher_safe
 from pydantic import BaseModel, Field
 
 from app.auth import Principal, payer_for, require_scope
 from app.usage_ledger import record_usage_event
-from pico_orchestrator.teacher_text import teacher_safe
 
 logger = logging.getLogger(__name__)
 

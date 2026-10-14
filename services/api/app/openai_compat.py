@@ -1782,7 +1782,7 @@ async def chat_completions(
                         )
                     finally:
                         reset_usage_context(_search_tok)
-                except Exception as exc:  # noqa: BLE001
+                except Exception:  # noqa: BLE001
                     raw_hits = {
                         "retrieved": False,
                         "honest_miss": True,
