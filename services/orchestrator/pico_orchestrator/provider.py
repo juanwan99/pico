@@ -6,7 +6,7 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import httpx
 from openai import AsyncOpenAI
@@ -629,7 +629,7 @@ async def stream_chat(
     extra_body = thinking_extra_body(model, thinking=thinking)
 
     async def _iter_chat_completions(
-        provider: ProviderConfig, mid: str
+        provider: ProviderConfig, mid: str, think: bool | None
     ) -> AsyncIterator[str]:
         client = _llm_client(provider)
         kwargs: dict = {
@@ -637,7 +637,10 @@ async def stream_chat(
             "messages": messages,
             "stream": True,
             "max_tokens": max_tokens,
-            "extra_body": extra_body,
+            # A backup model gets its own wire (Gemini must not see DeepSeek's).
+            "extra_body": extra_body if mid == model_id else thinking_extra_body(
+                mid, thinking=think
+            ),
             "stream_options": {"include_usage": True},
         }
         stream = await client.chat.completions.create(**kwargs)
@@ -668,19 +671,27 @@ async def stream_chat(
         ):
             finish_out["finish_reason"] = "length"
 
+    # A backup keeps the lane's thinking, not its own default.
+    lane_thinking = (
+        thinking
+        if thinking is not None
+        else bool(runtime_policy_for_model(model).get("thinking", False))
+    )
+
     async def _iter_provider(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
+        think = thinking if mid == model_id else lane_thinking
         if uses_openai_responses_brain(provider):
             async for piece in _iter_openai_responses(
                 provider,
                 mid,
                 messages,
                 max_tokens=max_tokens,
-                thinking=thinking,
+                thinking=think,
                 usage_out=usage_out,
             ):
                 yield piece
             return
-        async for piece in _iter_chat_completions(provider, mid):
+        async for piece in _iter_chat_completions(provider, mid, think):
             yield piece
 
     first_byte_s = FIRST_BYTE_TIMEOUT_S if thinking is False else None
@@ -757,5 +768,31 @@ async def stream_chat(
                 raise RuntimeError("模型调用过于频繁，请稍后再试。") from e
             raise RuntimeError(f"模型调用失败：{msg}") from e
 
-    async for piece in _pump(cfg, model_id):
-        yield piece
+    # Same New API, next model when the primary's channel is down (#1248).
+    models = [model_id]
+    if cfg.name == "deepseek" and uses_new_api_openai_overlay(cfg):
+        from pico_orchestrator.brain_ha import brain_candidates
+        from pico_orchestrator.vision import model_accepts_image
+
+        models = [
+            m for m in brain_candidates(model_id) if not images or model_accepts_image(m)
+        ] or [model_id]
+    for i, mid in enumerate(models):
+        yielded = False
+        try:
+            async for piece in _pump(cfg if i == 0 else replace(cfg, model=mid), mid):
+                yielded = True
+                yield piece
+        except RuntimeError as e:
+            from pico_orchestrator.brain_ha import is_failover_error
+
+            if (
+                yielded
+                or i + 1 >= len(models)
+                or not is_failover_error(f"{e} {e.__cause__ or ''}", first=i == 0)
+            ):
+                raise
+            continue
+        if i and finish_out is not None:
+            finish_out["model"] = mid  # bill the backup that answered
+        return
