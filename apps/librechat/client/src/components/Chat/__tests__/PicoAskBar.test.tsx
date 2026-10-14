@@ -35,7 +35,7 @@ describe('PicoAskBar main column', () => {
       />,
     );
     expect(screen.getByTestId('pico-ask-main')).toHaveTextContent('计划好了，下一步？');
-    expect(screen.getByText('点一项继续。这时不是在跑模型。')).toBeInTheDocument();
+    expect(screen.getByText('点一项继续，选好了才会接着做。')).toBeInTheDocument();
     expect(screen.getByText('需要你选一项')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
     expect(mockAnswerPicoAsk).toHaveBeenCalledWith('run-1', '确认执行');

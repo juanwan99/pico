@@ -545,7 +545,7 @@ export default function AutomationPage() {
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-[12px] text-[#6b6b6b]">模型偏好</span>
+                    <span className="mb-1 block text-[12px] text-[#6b6b6b]">档位</span>
                     <select
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
@@ -742,7 +742,7 @@ export default function AutomationPage() {
               </div>
               <dl className="divide-y divide-black/[0.05] px-4">
                 {[
-                  ['模型偏好', model],
+                  ['档位', model],
                   [
                     '频率',
                     scheduleKind === 'periodic'

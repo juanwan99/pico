@@ -55,13 +55,9 @@ _MAX_IMAGE_BYTES = 8 * 1024 * 1024
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 JPEG_MAGIC = b"\xff\xd8\xff"
 
-NO_KEY_MESSAGE = (
-    "出图尚未接通。请管理员配置 PICO_IMAGE_GATEWAY_URL + PICO_IMAGE_GATEWAY_KEY 后重试，"
-    "不能编造图片。"
-)
-REJECTED_PROVIDER_MESSAGE = (
-    "出图提供商硅基流动已否决，不再调用。请使用 New API 出图网关，不能编造图片。"
-)
+# Teachers read these (the model relays them): no vendor, key or env names.
+NO_KEY_MESSAGE = "出图尚未接通，请告诉学校管理员。不能编造图片。"
+REJECTED_PROVIDER_MESSAGE = "这次没能出图。请稍后重试，不能编造图片。"
 TIMEOUT_MESSAGE = "出图超时（90 秒）。请稍后重试，不能编造图片。"
 REJECT_MESSAGE = "出图服务拒绝了这次请求。请稍后重试或换一句描述，不能编造图片。"
 INVALID_MESSAGE = "出图结果不是可打开的 png/jpg，未保存，不能编造图片。"

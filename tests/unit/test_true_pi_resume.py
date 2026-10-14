@@ -127,11 +127,11 @@ async def test_error_after_output_resumes_same_session_and_succeeds() -> None:
     assert result.status == "succeeded", result.error
     prompts = _prompts(transport)
     assert len(prompts) == 2
-    assert "继续" in prompts[1] and _CUT in prompts[1]
+    assert "继续" in prompts[1] and _CUT not in prompts[1]
     assert "不要重做" in prompts[1]
     resumes = [p for k, p in events if k == "run.resume"]
     assert resumes and resumes[0]["attempt"] == 1 and resumes[0]["reason"] == _CUT
-    assert any("续跑" in str(p.get("text")) for k, p in events if k == "message.delta")
+    assert any("正在重试" in str(p.get("text")) for k, p in events if k == "message.delta")
     assert [k for k, _ in events if k == "run.status"][-1:] == ["run.status"]
     assert [p["status"] for k, p in events if k == "run.status"][-1] == "succeeded"
     assert not any(k == "run.error" for k, _ in events)

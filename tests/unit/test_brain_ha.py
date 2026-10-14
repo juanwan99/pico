@@ -1,8 +1,4 @@
-from pico_orchestrator.brain_ha import (
-    brain_candidates,
-    fallback_teacher_note,
-    should_failover,
-)
+from pico_orchestrator.brain_ha import brain_candidates, should_failover
 
 
 class _Res:
@@ -28,10 +24,14 @@ def test_failover_only_on_channel_death() -> None:
     assert not should_failover(_Res("failed", "timeout after 10s", "timeout"))
 
 
-def test_teacher_note_is_human() -> None:
-    msg = fallback_teacher_note("gemini-3.8-flash", "grok-4.6")
-    assert "备用" in msg
-    assert "【错误】" not in msg
+def test_resume_note_and_prompt_name_no_model() -> None:
+    from pico_orchestrator.teacher_text import leaks
+    from pico_orchestrator.true_pi.runtime import resume_prompt, resume_teacher_note
+
+    assert not leaks(resume_teacher_note(1))
+    assert not leaks(resume_teacher_note(2, tool_hang=True))
+    raw = 'OpenAI API error (400): {"message":"Invalid request."}'
+    assert "OpenAI" not in resume_prompt(raw)
 
 
 async def _drive(monkeypatch, attempts):
@@ -101,8 +101,8 @@ async def test_dead_channel_before_output_fails_over_quietly(monkeypatch) -> Non
     assert last.status == "succeeded"
     assert tried == ["gemini-3.8-flash", "grok-4.6"]
     kinds = [k for k, _ in seen]
-    assert kinds == ["message.delta", "tool.call"]
-    assert "备用" in seen[0][1]["text"]
+    # The switch is invisible: no note, no model name, only the live work.
+    assert kinds == ["tool.call"]
 
 
 async def test_no_restart_after_teacher_saw_progress(monkeypatch) -> None:

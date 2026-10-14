@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle2, Circle, FileText, Wrench } from 'lucide-react';
 import type { PicoRun, PicoRunEvent } from '~/data-provider/pico/api';
 import { workbenchToolResultLine, workbenchToolStepLine } from '~/utils/picoWorkbenchProgress';
+import { leaksToTeacher, teacherSafe } from '~/utils/picoTeacherText';
 
 const VISIBLE_EVENT_TYPES = new Set([
   'skill.snapshot',
@@ -71,7 +72,7 @@ export function describePicoRunEvent(
       ? '成功'
       : runSucceeded
         ? '失败 · 已恢复'
-        : [userMessage || '失败', code && !userMessage ? `错误码：${code}` : null]
+        : [userMessage ? teacherSafe(userMessage) : '失败', code && !userMessage ? `错误码：${code}` : null]
             .filter(Boolean)
             .join(' · ');
     return {
@@ -153,15 +154,17 @@ export function describePicoRunEvent(
   if (event.type === 'run.error') {
     return {
       title: '运行出错',
-      detail:
-        textValue(payload, 'user_message', 'message', 'reason') || '本次运行未能完成，请稍后重试。',
+      detail: teacherSafe(
+        textValue(payload, 'user_message', 'message', 'reason'),
+        '本次运行未能完成，请稍后重试。',
+      ),
     };
   }
   if (event.type === 'run.status') {
     const status = textValue(payload, 'status');
     const code = textValue(payload, 'code', 'error_code');
     const runtime = textValue(payload, 'runtime');
-    const runtimeLabel = runtime === 'kimi-agent' ? 'Kimi Agent' : runtime ? runtime : null;
+    const runtimeLabel = runtime && !leaksToTeacher(runtime) ? runtime : null;
     if (status === 'running' || status === 'queued' || status === 'preparing') {
       return {
         title: status === 'running' ? '正在运行' : '排队中',
@@ -178,7 +181,7 @@ export function describePicoRunEvent(
       return {
         title: '运行失败',
         detail: [
-          textValue(payload, 'user_message') || '本次运行未能完成，请稍后重试。',
+          teacherSafe(textValue(payload, 'user_message'), '本次运行未能完成，请稍后重试。'),
           runtimeLabel ? `运行时 · ${runtimeLabel}` : null,
           code ? `错误码：${code}` : null,
         ]

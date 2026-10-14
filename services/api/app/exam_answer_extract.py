@@ -9,15 +9,19 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import logging
 import sys
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pico_orchestrator.teacher_text import teacher_safe
 from pydantic import BaseModel, Field
 
 from app.auth import Principal, payer_for, require_scope
 from app.usage_ledger import record_usage_event
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["exam-answer-extract"])
 
@@ -135,9 +139,12 @@ async def post_exam_answer_extract(
                 "extract.empty": 422,
                 "skill.invalid": 500,
             }.get(exc.code, 400)
-            raise _bad(exc.code, str(exc), status) from exc
+            if teacher_safe(str(exc), "") != str(exc):
+                logger.warning("exam extract failed: %s", str(exc)[:300])
+            raise _bad(exc.code, teacher_safe(str(exc), "这次没读成，请再试一次。"), status) from exc
         except Exception as exc:
-            raise _bad("model.failed", f"上游没做成：{str(exc)[:160]}", 502) from exc
+            logger.warning("exam extract failed: %s", str(exc)[:300])
+            raise _bad("model.failed", "这次没读成，请再试一次。", 502) from exc
         usage = result.pop("usage", None) or None
         return result
     finally:

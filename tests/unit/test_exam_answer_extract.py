@@ -981,5 +981,5 @@ async def test_half_still_blocked_keeps_the_other_half_and_tells_the_teacher():
     assert [q["number"] for q in result["questions"]] == [8], "page 3 continuation: page 2 tail unknown"
     assert result["pages"][0]["ok"] is False and "下半页" in result["pages"][0]["error"]
     assert result["warnings"] == [
-        "第 2 页被模型安全审查拦下，切成两半重读仍没读全：这页的题请老师按卷面手动录入答案"
+        "第 2 页被安全审查拦下，切成两半重读仍没读全：这页的题请老师按卷面手动录入答案"
     ]

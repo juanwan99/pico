@@ -138,7 +138,7 @@ export default function AssistantPage() {
               </div>
               <div className="mt-4 flex items-center gap-2 rounded-xl bg-[color:var(--pico-violet-wash)] px-3 py-2 text-[12.5px] text-[color:var(--pico-violet-dark)]">
                 <PicoIcon name="spark" size="sm" />
-                模型：{open.model}
+                档位：{open.model}
               </div>
               <ul className="mt-4 space-y-2 text-[12.5px] text-[color:var(--pico-ink-2)]">
                 <li>· 对话与多步（选 pico-agent）走 Pico API</li>

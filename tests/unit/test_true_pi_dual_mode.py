@@ -375,3 +375,13 @@ def test_pi_wire_responses_models_on_gemini_primary() -> None:
         "",
         "",
     )
+
+
+def test_pi_wire_gemini_backup_under_gpt_primary() -> None:
+    """Live 10-14 14:26: GPT primary failed over to Gemini on Responses; Pi
+    crashed on 'startsWith'. The backup rides its own wire."""
+    from pico_orchestrator.true_pi.runtime import pi_wire
+
+    wire = {"openai_brain": True, "openai_overlay": True}
+    assert pi_wire("gemini-3.8-flash", thinking_on=False, **wire) == ("openai-completions", "off")
+    assert pi_wire("grok-4.6", thinking_on=False, **wire) == ("openai-responses", "off")

@@ -37,7 +37,7 @@ describe('parked ask_user labels', () => {
     ).toBe('在等你选');
   });
 
-  it('does not paint 云端继续中 / 等待模型响应 while waiting for a pick', () => {
+  it('does not paint 云端继续中 / 等待回复 while waiting for a pick', () => {
     expect(composeProcessHint({ id: 'r1', task_id: 't1', status: 'running' }, [prompt])).toBe(
       '在等你选',
     );

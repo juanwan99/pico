@@ -947,7 +947,7 @@ async def extract_pages(
             "page": number,
             "ok": not missing,
             "count": len(items),
-            "error": f"SafetyBlocked: 整页被模型安全审查拦下，切半重读后{missing}半页仍没读成" if missing else None,
+            "error": f"SafetyBlocked: 整页被安全审查拦下，切半重读后{missing}半页仍没读成" if missing else None,
             "safety": True,
         }
         return number, items, "\n".join(outs), report
@@ -991,10 +991,10 @@ def _finish(
     if len(errors) > len(blocked) and questions:
         warnings.append(f"{len(errors) - len(blocked)} 页没读成，其余页已合并")
     for page in blocked:
-        warnings.append(f"第 {page} 页被模型安全审查拦下，切成两半重读仍没读全：这页的题请老师按卷面手动录入答案")
+        warnings.append(f"第 {page} 页被安全审查拦下，切成两半重读仍没读全：这页的题请老师按卷面手动录入答案")
     if not questions:
         if errors and len(errors) == len(reports):
-            raise ExtractError("model.failed", f"上游没做成：{_preview(str(errors[-1]))}")
+            raise ExtractError("model.failed", f"这次没读成：{_preview(str(errors[-1]))}")
         head = _preview(last_text)
         raise ExtractError(
             "extract.empty",

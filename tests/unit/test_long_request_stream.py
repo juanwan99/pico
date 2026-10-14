@@ -47,8 +47,8 @@ def test_524_is_first_byte_timeout() -> None:
 
 def test_524_user_copy_is_honest() -> None:
     msg = user_message_for_error("HTTP 524: AIProxy service is temporarily unavailable")
-    assert "首包" in msg
-    assert "流式" in msg
+    assert "太久" in msg
+    assert "首包" not in msg and "524" not in msg
     assert "temporarily unavailable" not in msg.lower()
 
 

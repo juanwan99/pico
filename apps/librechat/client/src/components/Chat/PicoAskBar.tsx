@@ -47,7 +47,7 @@ export default function PicoAskBar({
         {ask.question}
       </p>
       <p className="mt-1 text-[12px] text-[#6b6b6b] dark:text-text-secondary">
-        点一项继续。这时不是在跑模型。
+        点一项继续，选好了才会接着做。
       </p>
       <div className="mt-3 flex flex-col gap-2" role="listbox" aria-label="选项">
         {ask.options.map((label) => {

@@ -196,11 +196,7 @@ async def run_true_pi_agent(
         return await _run_true_pi_once(emit=emit, **kwargs)
     from dataclasses import replace
 
-    from pico_orchestrator.brain_ha import (
-        brain_candidates,
-        fallback_teacher_note,
-        should_failover,
-    )
+    from pico_orchestrator.brain_ha import brain_candidates, should_failover
     from pico_orchestrator.provider import runtime_policy_for_model
 
     caps = caps or RunCaps()
@@ -212,8 +208,8 @@ async def run_true_pi_agent(
     last: RunResult | None = None
     gate: _FailoverGate | None = None
     for i, mid in enumerate(models):
-        note = fallback_teacher_note(models[0], mid) + "\n" if i > 0 else ""
-        gate = _FailoverGate(emit, note)
+        # Switching models is invisible to the teacher (owner 10-14 14:28).
+        gate = _FailoverGate(emit, "")
         last = await _run_true_pi_once(
             emit=gate.emit,
             **{**kwargs, "caps": replace(caps, backend_model=mid)},
@@ -278,11 +274,12 @@ def pi_wire(
     """
     from pico_orchestrator.provider import is_gemini_model, is_openai_responses_model
 
-    responses = openai_brain or (openai_overlay and is_openai_responses_model(backend_model))
-    if responses:
-        api = "openai-responses"
-    elif openai_overlay and is_gemini_model(backend_model):
+    # Gemini first: a GPT primary must not drag the Gemini backup onto
+    # Responses — Pi crashed on 'startsWith' there (live 10-14 14:26).
+    if openai_overlay and is_gemini_model(backend_model):
         api = "openai-completions"
+    elif openai_brain or (openai_overlay and is_openai_responses_model(backend_model)):
+        api = "openai-responses"
     else:
         api = ""
     level = ("medium" if thinking_on else "off") if (api or is_gemini_model(backend_model)) else ""
@@ -1339,15 +1336,19 @@ def turn_label(turn_no: int) -> str:
 
 def resume_teacher_note(attempt: int, *, tool_hang: bool = False) -> str:
     if tool_hang:
-        return f"（有一条命令跑太久没结束，已中断并让模型换个办法接着做，第 {attempt} 次）\n"
-    return f"（模型渠道中断了一次，已自动从断处续跑，第 {attempt} 次）\n"
+        return f"（有一条命令跑太久没结束，已中断，换个办法接着做，第 {attempt} 次）\n"
+    return f"（稍等，正在重试，第 {attempt} 次）\n"
 
 
 def resume_prompt(reason: str) -> str:
-    """User turn Pi gets after an upstream error: carry on, do not redo saved work."""
-    why = (reason or "").strip().replace("\n", " ")[:200]
+    """User turn Pi gets after an upstream error: carry on, do not redo saved work.
+
+    ``reason`` stays in the run.resume event only: the raw error names the
+    vendor and the model would repeat it to the teacher.
+    """
+    del reason
     return (
-        f"上游模型刚才中断了一次（{why}）。请从中断处继续完成原任务："
+        "刚才中断了一次。请从中断处继续完成原任务，不要向老师提这次中断："
         "先看工作区里已经写好的文件，不要重做，只补齐剩下的部分，然后照常交付。"
     )
 

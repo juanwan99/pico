@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import re
 
+from pico_orchestrator.teacher_text import teacher_safe
+
 FILE_IN_RESULTS = "已经生成的文件还在结果里，可以直接打开。"
 
 
@@ -69,7 +71,7 @@ def user_message_for_error(
         m = re.search(r"timeout after (\d+)s", (raw or ""), re.IGNORECASE)
         sec = int(m.group(1)) if m else 0
         return wall_stop_teacher_text(max_seconds=sec, has_deliverable=has_deliverable)
-    return _with_deliverable_hint(_map_error(raw, code=code), has_deliverable)
+    return teacher_safe(_with_deliverable_hint(_map_error(raw, code=code), has_deliverable))
 
 
 def _map_error(raw: str | None, *, code: str | None = None) -> str:
@@ -92,7 +94,7 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
         or "预扣费额度失败" in text
         or "剩余额度" in text
     ):
-        return "模型额度不够了，请管理员给中转账号加额度后再试。不是你的问题写错。"
+        return "Pico 这会儿用不了，请稍后再试；一直这样请告诉学校管理员。不是你的问题写错。"
     # New API relay could not reach its upstream (live 2026-09-11/12: the gateway
     # box inherited a host proxy that reset every call). Not the teacher's input,
     # not a first-byte timeout — say so, and point the admin at gateway egress.
@@ -102,20 +104,15 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
         or "new_api_error" in low
         or "upstream error" in low
     ):
-        return (
-            "模型中转这次没连上上游，请再发一次。"
-            "持续出现请管理员检查网关出网，不是你的问题写错。"
-        )
+        return "这次没连上，请再发一次。一直这样请告诉学校管理员，不是你的问题写错。"
     if "524" in low or "等首包" in text:
-        return (
-            "模型中转等首包超时。长思考必须走流式；请再试一次，不要关流。"
-        )
+        return "等了太久没有回应，请再发一次。不是你的问题写错。"
     # AIProxy 503 is「上游不可用」, not a first-byte timeout; do not tell the
     # teacher to keep the stream open.
     if "temporarily unavailable" in low or "(503)" in low or "error code: 503" in low:
-        return "模型中转暂时不可用（上游 503）。请稍等再发一次，不是你的问题写错。"
+        return "这会儿有点忙，请稍等再发一次。不是你的问题写错。"
     if "overloaded" in low or "server_error" in low:
-        return "模型服务繁忙（上游过载）。请稍等再发一次。"
+        return "这会儿有点忙，请稍等再发一次。"
     if (
         "stream_read_error" in low
         or "stream ended abnormally" in low
@@ -125,10 +122,7 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
             and ("eof" in low or "bad_response" in low)
         )
     ):
-        return (
-            "模型中转的流中断了。已经生成的文件还在，可以直接打开；"
-            "需要的话再发一次。"
-        )
+        return "回复中途断了。已经生成的文件还在，可以直接打开；需要的话再发一次。"
     if c == "timeout" or "timeout" in low or "timed out" in low:
         return wall_stop_teacher_text(max_seconds=0, has_deliverable=False)
     if "cancelled" in low or c == "cancelled":
@@ -154,20 +148,14 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
         if c == "image.timeout" or "超时" in text:
             return "出图超时。请稍后重试，不能编造图片。"
         if c == "image.provider_rejected" or "硅基流动已否决" in text:
-            return (
-                "出图提供商硅基流动已否决，不再调用。"
-                "请走 New API 的 Gemini 渠道出图，不能编造图片。"
-            )
+            return "这次没能出图。请稍后重试，不能编造图片。"
         if (
             c == "image.unconfigured"
             or "尚未接通" in text
             or ("zhipu_api_key" in low and ("未" in text or "写入" in text))
             or ("gemini_api_key" in low and ("未" in text or "写入" in text))
         ):
-            return (
-                "出图尚未接通。请管理员在主机写入 PICO_IMAGE_GATEWAY_URL + "
-                "PICO_IMAGE_GATEWAY_KEY（New API）后重试，不能编造图片。"
-            )
+            return "出图还没开通，请告诉学校管理员。不能编造图片。"
         # image.provider / image.invalid / tool.write_failed with「没能出图」/ etc.
         return "这次没能出图。请稍后重试，不能编造图片。"
     if c in ("office.timeout", "artifact.not_ooxml", "artifact.not_binary", "artifact.not_found") or (
@@ -188,20 +176,20 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
         or "model.unconfigured" in low
         or c == "model.unconfigured"
     ):
-        return "模型网关未配置或密钥无效。请管理员检查 New API 渠道与网关密钥后重试。"
+        return "Pico 这会儿用不了，请告诉学校管理员。不是你的问题写错。"
     if "rate limit" in low or "429" in low or c in ("rate_limit", "concurrency_limit"):
         if c == "concurrency_limit" or "concurrency" in low:
             return "当前对话繁忙（并发已满）。请稍后再试，或关闭其他进行中的任务。"
-        return "请求过于频繁或模型限流。请稍后再试，勿并行轰炸。"
+        return "请求太频繁了，请稍后再试。"
     if (
         c == "model.usage_limit"
         or "usage limit" in low
         or "insufficient_quota" in low
         or ("quota" in low and "exceed" in low)
     ):
-        return "模型中转用量已满。请稍后再问，不要连点；这不是你的问题写错。"
+        return "这会儿用的人多，请稍后再问，不要连点；不是你的问题写错。"
     if c == "pi.empty_response" or "empty model response" in low:
-        return "这次没有生成可见回复。请再试一次；若刚提示用量已满，请稍等再问。"
+        return "这次没有生成可见回复。请再试一次。"
     if c in (
         "runtime.emergency_noop",
         "runtime.loop_removed",
@@ -209,9 +197,9 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
         "runtime.pi_required",
         "runtime.not_allowlisted",
     ):
-        return "多智能体运行时当前不可用。请确认 Pi 编排已开启，或联系管理员。"
+        return "Pico 这会儿用不了，请告诉学校管理员。"
     if "connect" in low or "connection" in low or "network" in low:
-        return "无法连接模型服务。请检查网络或稍后重试。"
+        return "这次没连上，请检查网络或稍后重试。"
     if (
         c == "api.restart"
         or "owner was lost" in low
@@ -228,7 +216,7 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
     if c in ("kb.miss", "kb.not_found") or "honest_miss" in low or "未在已挂载" in text:
         return "未在已挂载材料中找到依据。请先生成或上传材料后再问，或换关键词。"
     if c.startswith("mcp.") or "mcp allowlist" in low or "mcp_bridge" in low:
-        return "MCP 工具当前不可用或不在白名单。请联系管理员检查 PICO_MCP_ALLOWLIST。"
+        return "这个工具暂时用不了，请告诉学校管理员。"
     if "not found" in low:
         return "找不到对应的会话或运行记录。"
     if (
@@ -241,7 +229,7 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
     if "missing bearer" in low or "invalid token" in low or "expired" in low:
         return "登录已失效，请打开设置重新获取令牌。"
     if "cross_school" in low or "cross-school" in low or "tenant" in low:
-        return "跨校访问已被拒绝（租户隔离）。"
+        return "这是别的学校的内容，跨校不能看。"
     if (
         c in ("kimi.max_steps", "max_steps", "pi.max_steps")
         or "max_steps" in low
@@ -284,7 +272,7 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
     # Keep short; avoid dumping stack traces
     if "traceback" in low or len(text) > 180:
         return "服务暂时出错，请重试。详情已记入运行日志。"
-    return f"未能完成：{text[:160]}"
+    return teacher_safe(f"未能完成：{text[:160]}")
 
 
 def enrich_fail_payload(payload: dict, *, has_deliverable: bool = False) -> dict:
@@ -300,4 +288,7 @@ def enrich_fail_payload(payload: dict, *, has_deliverable: bool = False) -> dict
             str(raw) if raw else None, code=code, has_deliverable=has_file
         )
         out.setdefault("user_message", redact_tenant_text(msg))
+    if "user_message" in out:
+        # Whoever set it, a teacher reads it: never a model or vendor name.
+        out["user_message"] = teacher_safe(str(out["user_message"] or ""))
     return out
