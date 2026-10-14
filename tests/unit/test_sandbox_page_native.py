@@ -33,6 +33,7 @@ from sandbox_worker.browser import (
     json_safe_args,
     parse_page_fn_path,
     rate_limit_hit,
+    same_origin,
     sanitize_page_result,
 )
 
@@ -107,14 +108,23 @@ def test_rate_limit_phrases_are_the_testable_list() -> None:
         "请求过于频繁",
         "访问过于频繁",
         "操作过于频繁",
-        "请稍后再试",
-        "请稍后重试",
         "too many requests",
         "rate limit",
     )
     assert rate_limit_hit(["正常页面"]) is None
     assert rate_limit_hit(["系统提示：IP访问量过大，请稍候"]) == "IP访问量过大"
     assert rate_limit_hit(["Too Many Requests"]) == "too many requests"
+    assert rate_limit_hit(["Rate limited, try later"]) == "rate limit"
+    # #1246: generic retry copy and substrings are not a limit.
+    assert rate_limit_hit(["网络异常请稍后再试", "失败请稍后重试"]) is None
+    assert rate_limit_hit(["Accurate limits apply."]) is None
+
+
+def test_same_origin_frames_rule() -> None:
+    assert same_origin("https://hall.test/sub", "https://hall.test")
+    assert same_origin("about:srcdoc", "https://hall.test")
+    assert not same_origin("https://ads.test/ad", "https://hall.test")
+    assert not same_origin("http://hall.test/", "https://hall.test")
 
 
 def test_sanitize_page_result_drops_cookie_keys() -> None:
@@ -237,7 +247,90 @@ async def test_real_chromium_t1_t2_t3_demo_page(tmp_path: Path) -> None:
                 await hands.page_fn(name, args)
             assert limited.value.code == "sandbox.rate_limited"
             assert "IP访问量过大" in limited.value.message
+        # #1246: the banner going away does not reopen the door.
+        await page.evaluate("() => { document.getElementById('limit').hidden = true; }")
+        with pytest.raises(ToolError) as cooled:
+            await hands.page_fn("queryField", ["proof"])
+        assert cooled.value.code == "sandbox.rate_limited"
     finally:
         await context.close()
+        await browser.close()
+        await pw.stop()
+
+
+HALL_HTML = """<!DOCTYPE html><html><body>
+<p>网络异常请稍后再试 · Accurate limits apply.</p>
+<p id="note"></p>
+<iframe id="same" src="https://hall.test/sub"></iframe>
+<iframe id="ad" src="https://ads.test/ad"></iframe>
+<script>
+  window.ok = function() { return { count: 1 }; };
+  window.alertLimit = function() { alert('请求过于频繁'); return { count: 0 }; };
+  window.replyLimit = function() { return { msg: 'Too Many Requests' }; };
+  window.flashLimit = function() {
+    document.getElementById('note').textContent = '访问过于频繁';
+    setTimeout(function() { document.getElementById('note').textContent = ''; }, 30);
+    return { count: 0 };
+  };
+</script></body></html>"""
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_rate_limit_cooldown_and_same_origin_file(tmp_path: Path) -> None:
+    """#1246: resident retry copy is not a limit; a hit from new copy, an alert or the
+    reply stops page_fn for the session; page_file skips cross-origin iframes."""
+    pytest.importorskip("playwright.async_api")
+    from playwright.async_api import async_playwright
+    from sandbox_worker.browser import PlaywrightPage
+
+    try:
+        pw = await async_playwright().start()
+        browser = await pw.chromium.launch(headless=True, args=list(CHROMIUM_ARGS))
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"Chromium unavailable: {exc}")
+    bodies = {
+        "https://hall.test/": HALL_HTML,
+        "https://hall.test/sub": "<html><body><p>子表</p></body></html>",
+        "https://ads.test/ad": "<html><body><p>广告</p></body></html>",
+    }
+
+    async def serve(route) -> None:  # type: ignore[no-untyped-def]
+        await route.fulfill(
+            status=200, content_type="text/html; charset=utf-8", body=bodies[route.request.url]
+        )
+
+    try:
+        for i, trip in enumerate(("alertLimit", "replyLimit", "flashLimit")):
+            context = await browser.new_context(
+                viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
+            )
+            await context.route("https://*.test/**", serve)
+            page = await context.new_page()
+            await page.goto("https://hall.test/", wait_until="load")
+            hands = PlaywrightPage(context, page, tmp_path / f"profile{i}")
+
+            assert await hands.page_fn("ok", []) == {"count": 1}
+            if i == 0:
+                hung = await hands.page_file([("a.txt", "text/plain", b"a")])
+                assert hung["names"] == ["a.txt"]
+                seen = {
+                    f.url: await f.evaluate("() => !!window.__picoFile") for f in page.frames
+                }
+                assert seen == {
+                    "https://hall.test/": True,
+                    "https://hall.test/sub": True,
+                    "https://ads.test/ad": False,
+                }
+
+            with pytest.raises(ToolError) as tripped:
+                await hands.page_fn(trip, [])
+            assert tripped.value.code == "sandbox.rate_limited", trip
+            await page.wait_for_timeout(60)
+            with pytest.raises(ToolError) as cooled:
+                await hands.page_fn("ok", [])
+            assert cooled.value.code == "sandbox.rate_limited", trip
+            assert "10 分钟" in cooled.value.message
+            await context.close()
+    finally:
         await browser.close()
         await pw.stop()

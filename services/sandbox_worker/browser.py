@@ -16,9 +16,11 @@ import os
 import re
 import shutil
 import tempfile
+import time
 from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.web_guard import parse_public_http_url
@@ -79,16 +81,23 @@ BLOCKED_FN_ROOTS = frozenset(
     }
 )
 PAGE_FN_MAX_RESULT_BYTES = 8_192
+# Specific copy only: a page that always shows "网络异常请稍后再试" is not limited (#1246).
+# English matches on word boundaries ("Accurate limits apply." is not a hit).
 RATE_LIMIT_PHRASES: tuple[str, ...] = (
     "IP访问量过大",
     "请求过于频繁",
     "访问过于频繁",
     "操作过于频繁",
-    "请稍后再试",
-    "请稍后重试",
     "too many requests",
     "rate limit",
 )
+_RATE_LIMIT_RES = tuple(
+    re.compile(rf"\b{re.escape(p)}", re.IGNORECASE) if p.isascii() else re.compile(re.escape(p))
+    for p in RATE_LIMIT_PHRASES
+)
+# One hit (page copy, dialog or return value) stops page_fn for this session,
+# even after the banner goes away.
+RATE_LIMIT_COOLDOWN_S = 600
 _RESULT_BANNED = frozenset(
     {"cookie", "cookies", "password", "passwd", "secret", "credential"}
 )
@@ -402,11 +411,18 @@ def json_safe_args(args: list[Any] | None) -> list[Any]:
 def rate_limit_hit(texts: Iterable[str]) -> str | None:
     """First matching phrase from the testable list, or None."""
     blob = "\n".join(str(t or "") for t in texts)
-    low = blob.lower()
-    for phrase in RATE_LIMIT_PHRASES:
-        if phrase.lower() in low:
+    for phrase, pattern in zip(RATE_LIMIT_PHRASES, _RATE_LIMIT_RES):
+        if pattern.search(blob):
             return phrase
     return None
+
+
+def same_origin(url: str, origin: str) -> bool:
+    """scheme://host:port match; about:blank / srcdoc inherit the parent's origin."""
+    parts = urlsplit(url or "")
+    if parts.scheme == "about":
+        return True
+    return f"{parts.scheme}://{parts.netloc}" == origin
 
 
 def sanitize_page_result(value: Any, *, depth: int = 0) -> Any:
@@ -543,6 +559,7 @@ class PlaywrightPage:
         self.page_token = 0
         self._viewport = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
         self._dialogs: list[str] = []
+        self._rate_limit: tuple[float, str] | None = None
         for existing in list(getattr(context, "pages", []) or []):
             self._watch(existing)
         if page not in list(getattr(context, "pages", []) or []):
@@ -985,7 +1002,7 @@ class PlaywrightPage:
         ]
         hung = 0
         last: dict[str, Any] = {}
-        for frame in self._page.frames:
+        for frame in self._same_origin_frames():
             try:
                 raw = await frame.evaluate(HANG_FILES_JS, payload)
                 if isinstance(raw, dict):
@@ -994,7 +1011,9 @@ class PlaywrightPage:
             except Exception:
                 logger.debug("page_file hang failed in a frame", exc_info=True)
         if hung == 0:
-            raise ToolError("sandbox.action_failed", "没法把文件放进这一页（主页面和 iframe 都试过了）")
+            raise ToolError(
+                "sandbox.action_failed", "没法把文件放进这一页（主页面和同源 iframe 都试过了）"
+            )
         names = [n for n, _, _ in files]
         return {
             "handle": PAGE_FILE_HANDLE if len(files) == 1 else PAGE_FILES_HANDLE,
@@ -1003,17 +1022,45 @@ class PlaywrightPage:
             **{k: v for k, v in last.items() if k in {"handle", "count", "names"}},
         }
 
+    def _same_origin_frames(self) -> list[Any]:
+        """Main page + iframes of its origin (not cross-site ads, #1246)."""
+        main = self._page.main_frame
+        parts = urlsplit(main.url or "")
+        origin = f"{parts.scheme}://{parts.netloc}"
+        out = [main]
+        for frame in self._page.frames:
+            if frame is main:
+                continue
+            chain, ok = frame, True
+            while chain is not None and chain is not main:
+                if not same_origin(chain.url, origin):
+                    ok = False
+                    break
+                chain = chain.parent_frame
+            if ok:
+                out.append(frame)
+        return out
+
+    def _rate_limited(self, phrase: str) -> ToolError:
+        if phrase:
+            self._rate_limit = (time.monotonic() + RATE_LIMIT_COOLDOWN_S, phrase)
+        until, seen = self._rate_limit or (0.0, phrase)
+        minutes = max(1, round((until - time.monotonic()) / 60))
+        return ToolError(
+            "sandbox.rate_limited",
+            f"页上出现过限流文案「{seen}」，保存/查询/删除停 {minutes} 分钟。不要连打。",
+        )
+
     async def page_fn(self, fn: str, args: list[Any]) -> Any:
         """Call an existing dotted-path function on this page or a same-page iframe."""
         parts = parse_page_fn_path(fn)
         safe_args = json_safe_args(args)
+        if self._rate_limit and self._rate_limit[0] > time.monotonic():
+            raise self._rate_limited("")
         texts = await self._each_frame(PAGE_TEXT_JS)
         phrase = rate_limit_hit(str(t) for t in texts if t is not None)
         if phrase:
-            raise ToolError(
-                "sandbox.rate_limited",
-                f"页上出现限流文案「{phrase}」，保存/查询/删除已停。不要连打。",
-            )
+            raise self._rate_limited(phrase)
         for frame in self._page.frames:
             try:
                 raw = await frame.evaluate(CALL_PAGE_FN_JS, {"parts": parts, "args": safe_args})
@@ -1029,13 +1076,22 @@ class PlaywrightPage:
                     "sandbox.fn_native_blocked",
                     f"{fn} 是浏览器自带函数，不是这一页自己的保存 / 查询 / 删除，不能调",
                 )
+            result = cap_page_result(sanitize_page_result(raw.get("result")))
+            # The call itself may trip the limit: new copy, an alert, or the reply.
+            after = await self._each_frame(PAGE_TEXT_JS)
+            phrase = rate_limit_hit(
+                [*(str(t) for t in after if t is not None), *self._dialogs, raw.get("message"),
+                 json.dumps(result, ensure_ascii=False)]
+            )
+            if phrase:
+                raise self._rate_limited(phrase)
             if raw.get("failed"):
                 raise ToolError(
                     "sandbox.action_failed",
                     f"页内函数 {fn} 调用失败：{raw.get('message') or '未知错误'}",
                 )
             if raw.get("ok"):
-                return cap_page_result(sanitize_page_result(raw.get("result")))
+                return result
         raise ToolError(
             "sandbox.fn_missing",
             f"这一页上没有函数 {fn}（主页面和 iframe 都找过了）。不要猜别的名字。",
