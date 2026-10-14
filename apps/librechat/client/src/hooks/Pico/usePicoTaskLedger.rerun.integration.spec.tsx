@@ -62,7 +62,7 @@ function ledgerResponse(url: string, retried: boolean): Response {
           type: 'run.status',
           payload: {
             status: 'failed',
-            user_message: '模型服务暂时繁忙，请稍后重试。',
+            user_message: '这会儿有点忙，请稍后重试。',
           },
         },
       ],
@@ -130,7 +130,7 @@ describe('Pico failed run retry integration', () => {
     global.fetch = fetchMock as typeof fetch;
 
     render(<RerunHarness />);
-    expect(await screen.findByText('失败：模型服务暂时繁忙，请稍后重试。')).toBeInTheDocument();
+    expect(await screen.findByText('失败：这会儿有点忙，请稍后重试。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '重新运行' }));
 
     expect(screen.getByRole('button', { name: '重新运行中' })).toBeDisabled();
@@ -147,7 +147,7 @@ describe('Pico failed run retry integration', () => {
       }),
     );
 
-    expect(await screen.findByRole('status')).toHaveTextContent('等待模型响应');
-    expect(screen.queryByText('失败：模型服务暂时繁忙，请稍后重试。')).not.toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent('等待回复');
+    expect(screen.queryByText('失败：这会儿有点忙，请稍后重试。')).not.toBeInTheDocument();
   });
 });

@@ -70,7 +70,7 @@ def test_assistant_turn_error_reads_live_usage_limit_shape() -> None:
 
 def test_usage_limit_and_empty_response_are_human_chinese() -> None:
     limit = user_message_for_error(_USAGE_LIMIT, code="model.usage_limit")
-    assert "用量" in limit
+    assert "稍后" in limit
     assert "usage limit" not in limit.lower()
     empty = user_message_for_error(
         "Pi agent received empty model response", code="pi.empty_response"
@@ -147,7 +147,7 @@ async def test_usage_limit_run_fails_with_human_copy_not_blank_success() -> None
     assert "succeeded" not in statuses
     assert "failed" in statuses
     human = user_message_for_error(result.error, code="model.usage_limit")
-    assert "用量" in human
+    assert "稍后" in human
     deltas = [p.get("text") for k, p in events if k == "message.delta"]
     assert deltas == []
 

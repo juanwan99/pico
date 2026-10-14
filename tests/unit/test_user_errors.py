@@ -15,8 +15,9 @@ enrich_fail_payload = _mod.enrich_fail_payload
 
 def test_no_key_message():
     msg = user_message_for_error("BLOCKED S1: no KIMI_API_KEY or DEEPSEEK_API_KEY")
-    assert "密钥" in msg or "模型" in msg
+    assert "管理员" in msg
     assert "BLOCKED" not in msg
+    assert "KEY" not in msg
 
 
 def test_timeout():
@@ -156,8 +157,8 @@ def test_image_siliconflow_rejected_copy() -> None:
         "出图提供商硅基流动已否决，不再调用。请使用 Gemini 或智谱出图，不能编造图片。",
         code="image.provider_rejected",
     )
-    assert "否决" in msg
-    assert "Gemini" in msg or "智谱" in msg
+    assert "没能出图" in msg
+    assert "Gemini" not in msg and "智谱" not in msg and "硅基" not in msg
     assert "SILICONFLOW" not in msg
 
 
@@ -168,7 +169,7 @@ def test_new_api_quota_is_not_blamed_on_gateway_egress() -> None:
         '"param":"","code":"insufficient_user_quota"}'
     )
     msg = user_message_for_error(raw, code="true_pi.assistant_error")
-    assert "额度" in msg
+    assert "额度" not in msg
     assert "管理员" in msg
     assert "不是你的问题" in msg
     assert "网关出网" not in msg
@@ -186,7 +187,7 @@ def test_new_api_relay_failure_is_not_blamed_on_teacher_or_first_byte() -> None:
         '"code":"do_request_failed"}'
     )
     msg = user_message_for_error(raw, code="true_pi.assistant_error")
-    assert "中转" in msg
+    assert "中转" not in msg
     assert "再发一次" in msg
     assert "不是你的问题" in msg
     assert "首包" not in msg
@@ -197,7 +198,8 @@ def test_new_api_relay_failure_is_not_blamed_on_teacher_or_first_byte() -> None:
         "模型调用失败：Error code: 500 - {'error': {'message': 'upstream error: do request "
         "failed (request id: x)', 'type': 'new_api_error', 'code': 'do_request_failed'}}"
     )
-    assert "中转" in wrapped
+    assert "中转" not in wrapped
+    assert "再发一次" in wrapped
     assert "Error code" not in wrapped
 
 
@@ -206,13 +208,14 @@ def test_aiproxy_503_is_unavailable_not_524_first_byte() -> None:
         'OpenAI API error (503): {"message":"AIProxy service is temporarily unavailable. '
         'Please try again later.","type":"api_error","param":"","code":"api_error"}'
     )
-    assert "503" in msg or "不可用" in msg
+    assert "503" not in msg and "忙" in msg
     assert "首包" not in msg
     assert "不要关流" not in msg
     assert "temporarily unavailable" not in msg.lower()
-    # A real 524 keeps the first-byte copy.
+    # A real 524 is a long wait, said plainly.
     msg524 = user_message_for_error("HTTP 524: AIProxy service is temporarily unavailable")
-    assert "首包" in msg524
+    assert "太久" in msg524
+    assert "524" not in msg524
 
 
 def test_upstream_overloaded_english_is_human() -> None:
@@ -220,7 +223,7 @@ def test_upstream_overloaded_english_is_human() -> None:
         "server_error: Our servers are currently overloaded. Please try again later.",
         code="true_pi.assistant_error",
     )
-    assert "繁忙" in msg or "过载" in msg
+    assert "忙" in msg
     assert "overloaded" not in msg.lower()
     assert "server_error" not in msg.lower()
     assert not msg.startswith("未能完成")
@@ -233,7 +236,7 @@ def test_overloaded_with_landed_file_points_at_results() -> None:
         code="true_pi.assistant_error",
         has_deliverable=True,
     )
-    assert "繁忙" in msg or "过载" in msg
+    assert "忙" in msg
     assert "结果里" in msg
     assert "overloaded" not in msg.lower()
     p = enrich_fail_payload(
@@ -247,9 +250,10 @@ def test_overloaded_with_landed_file_points_at_results() -> None:
     assert "结果里" in p["user_message"]
 
 
-def test_key_copy_points_at_new_api_not_legacy_vendors() -> None:
+def test_key_copy_names_no_plumbing() -> None:
     msg = user_message_for_error("401 unauthorized", code="model.unconfigured")
-    assert "New API" in msg
+    assert "New API" not in msg
+    assert "管理员" in msg
     assert "KIMI_API_KEY" not in msg
     assert "DEEPSEEK_API_KEY" not in msg
 

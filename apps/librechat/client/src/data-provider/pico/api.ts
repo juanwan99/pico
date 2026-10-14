@@ -4,6 +4,7 @@
  */
 import { getTokenHeader } from 'librechat-data-provider';
 import { splitSseEvents } from '~/utils/picoSse';
+import { teacherSafe } from '~/utils/picoTeacherText';
 
 export type PicoArtifact = {
   id: string;
@@ -76,6 +77,11 @@ export function labelForLatestRun(run?: PicoTaskLatestRun | null): string | null
 
 /** Map raw ledger error → short Chinese for list UIs (client fallback). */
 export function humanizeRunError(raw?: string | null, userMessage?: string | null): string | null {
+  const shown = humanizeRunErrorText(raw, userMessage);
+  return shown === null ? null : teacherSafe(shown);
+}
+
+function humanizeRunErrorText(raw?: string | null, userMessage?: string | null): string | null {
   if (typeof userMessage === 'string' && userMessage.trim()) {
     return userMessage.trim();
   }
@@ -196,10 +202,10 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
             ? parsed.detail.message
             : '';
       const msg = parsed.user_message || parsed.message || detail || text;
-      throw new Error(String(msg).slice(0, 200) || `pico ${res.status}`);
+      throw new Error(teacherSafe(String(msg).slice(0, 200)));
     } catch (err) {
       if (err instanceof SyntaxError) {
-        throw new Error(`pico ${res.status}: ${text.slice(0, 200)}`);
+        throw new Error(teacherSafe(text.slice(0, 200)));
       }
       throw err;
     }

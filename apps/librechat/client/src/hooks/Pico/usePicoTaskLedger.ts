@@ -17,6 +17,7 @@ import {
 import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
 import { liveAskEvent } from '~/utils/picoAskPrompt';
 import { workbenchToolResultLine, workbenchToolStepLine } from '~/utils/picoWorkbenchProgress';
+import { teacherSafe } from '~/utils/picoTeacherText';
 
 export type PicoLedgerState = {
   task: PicoTask | null;
@@ -178,13 +179,13 @@ export function mapRawRunErrorToUserMessage(raw: string): string {
 export function friendlyFailureLabel(run: PicoRun, events: PicoRunEvent[]): string {
   const userMessage = failedRunUserMessage(events);
   if (userMessage) {
-    return `失败：${userMessage}`;
+    return `失败：${teacherSafe(userMessage)}`;
   }
   const raw = (run.error || '').trim();
   if (!raw) {
     return '失败';
   }
-  return `失败：${mapRawRunErrorToUserMessage(raw)}`;
+  return `失败：${teacherSafe(mapRawRunErrorToUserMessage(raw))}`;
 }
 
 function runtimeHint(events: PicoRunEvent[]): string | null {
@@ -195,7 +196,7 @@ function runtimeHint(events: PicoRunEvent[]): string | null {
     }
     const runtime = event.payload?.runtime;
     if (runtime === 'kimi-agent') {
-      return 'Kimi Agent';
+      return '智能体';
     }
   }
   return null;
@@ -338,7 +339,7 @@ export const THINKING_QUIET_MS = 10_000;
 const NOT_THINKING_AFTER = new Set(['tool.call', 'ui.prompt.begin']);
 
 /**
- * 「模型在思考 · 已 N 秒」when an active run has been quiet a while. Between
+ * 「正在思考 · 已 N 秒」when an active run has been quiet a while. Between
  * tool.result and the next tool, the model (or a slow first token) often gives
  * no event for 10–60s+ and the strip would sit on the last finished step (#1090).
  * ``quietMs`` is client-observed time since the event list last grew.
@@ -351,7 +352,7 @@ export function thinkingLine(events: PicoRunEvent[], quietMs: number): string | 
   if (last && NOT_THINKING_AFTER.has(last.type)) {
     return null;
   }
-  return `模型在思考 · 已 ${Math.floor(quietMs / 1000)} 秒`;
+  return `正在思考 · 已 ${Math.floor(quietMs / 1000)} 秒`;
 }
 
 /**
@@ -456,7 +457,7 @@ export function computeRunStatusLabel(
     return '在等你选';
   }
   if (isSubmitting) {
-    return '等待模型响应';
+    return '等待回复';
   }
   if (!run) {
     if (artifacts.length) {

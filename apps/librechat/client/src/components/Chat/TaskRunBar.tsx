@@ -1,9 +1,10 @@
 /**
- * Center column run status strip: 等待模型响应 / 已完成 + model/duration.
+ * Center column run status strip: 等待回复 / 已完成 + 档位/duration.
  */
 import { memo } from 'react';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import { cn } from '~/utils';
+import { leaksToTeacher } from '~/utils/picoTeacherText';
 import RunLoadingIndicator from './RunLoadingIndicator';
 
 function TaskRunBar({
@@ -57,7 +58,9 @@ function TaskRunBar({
         data-testid="task-run-column"
       >
       <div className="min-w-0 flex-1 overflow-hidden">
-        {model ? <p className="truncate text-[11px] text-[#8c8c8c]">模型 {model}</p> : null}
+        {model && !leaksToTeacher(model) ? (
+          <p className="truncate text-[11px] text-[#8c8c8c]">档位 {model}</p>
+        ) : null}
         {processHint &&
         !waitingAsk &&
         !showFailed &&

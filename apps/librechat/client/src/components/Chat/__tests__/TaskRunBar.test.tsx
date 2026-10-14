@@ -20,13 +20,13 @@ describe('TaskRunBar parked ask', () => {
       />,
     );
     expect(screen.getByTestId('task-waiting-ask')).toHaveTextContent('在等你选');
-    expect(screen.queryByText('等待模型响应')).not.toBeInTheDocument();
+    expect(screen.queryByText('等待回复')).not.toBeInTheDocument();
     expect(screen.getByTestId('task-stop-button')).toBeInTheDocument();
   });
 
-  it('still spins 等待模型响应 when the model is actually generating', () => {
+  it('still spins 等待回复 when the model is actually generating', () => {
     render(<TaskRunBar isSubmitting canCancel />);
-    expect(screen.getByRole('status')).toHaveTextContent('等待模型响应');
+    expect(screen.getByRole('status')).toHaveTextContent('等待回复');
     expect(screen.queryByTestId('task-waiting-ask')).not.toBeInTheDocument();
   });
 

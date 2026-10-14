@@ -488,7 +488,7 @@ describe('usePicoTaskLedger', () => {
         });
       }
       await waitFor(() => expect(result.current.run?.id).toBe('run-delayed'));
-      expect(result.current.statusLabel).toBe('等待模型响应');
+      expect(result.current.statusLabel).toBe('等待回复');
     } finally {
       unmount();
       jest.useRealTimers();
@@ -523,7 +523,7 @@ describe('usePicoTaskLedger', () => {
 
     try {
       await waitFor(() => expect(result.current.run?.status).toBe('running'));
-      expect(result.current.statusLabel).toBe('等待模型响应');
+      expect(result.current.statusLabel).toBe('等待回复');
 
       await act(async () => {
         jest.advanceTimersByTime(2000);
@@ -770,7 +770,7 @@ describe('usePicoTaskLedger', () => {
 
     expect(mockedRetryRun).toHaveBeenCalledWith('run-failed');
     expect(result.current.run).toMatchObject({ id: 'run-retry', status: 'queued' });
-    expect(result.current.statusLabel).toBe('等待模型响应');
+    expect(result.current.statusLabel).toBe('等待回复');
     unmount();
   });
 

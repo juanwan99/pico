@@ -2,7 +2,7 @@ import { Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function RunLoadingIndicator({
-  label = '等待模型响应',
+  label = '等待回复',
   className,
   spin = true,
 }: {

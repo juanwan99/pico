@@ -101,7 +101,7 @@ describe('ResultPanel token usage', () => {
         type: 'run.status',
         payload: {
           status: 'failed',
-          user_message: '模型服务暂时繁忙，请稍后重试。',
+          user_message: '这会儿有点忙，请稍后重试。',
         },
       },
     ];
@@ -111,15 +111,15 @@ describe('ResultPanel token usage', () => {
         <ResultPanel
           run={failedRun}
           runEvents={events}
-          runStatusLabel="失败：模型服务暂时繁忙，请稍后重试。"
+          runStatusLabel="失败：这会儿有点忙，请稍后重试。"
         />
       </MemoryRouter>,
     );
 
     expect(screen.getByTestId('result-status-banner')).toHaveTextContent(
-      '失败：模型服务暂时繁忙，请稍后重试。',
+      '失败：这会儿有点忙，请稍后重试。',
     );
-    expect(screen.getByText('模型服务暂时繁忙，请稍后重试。')).toBeInTheDocument();
+    expect(screen.getByText('这会儿有点忙，请稍后重试。')).toBeInTheDocument();
     expect(screen.queryByText(/technical provider failure/)).not.toBeInTheDocument();
   });
 

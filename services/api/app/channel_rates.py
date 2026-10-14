@@ -189,7 +189,7 @@ def require_rate(
     if row is None or not row.priced():
         raise ToolError(
             "channel.unpriced",
-            "该渠道未标价，已停用。请在渠道价签里补上成本后再用。",
+            "这一档暂时用不了，请告诉学校管理员。",
         )
     return row
 

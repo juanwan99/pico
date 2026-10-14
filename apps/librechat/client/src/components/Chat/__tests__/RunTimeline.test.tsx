@@ -98,7 +98,7 @@ describe('RunTimeline', () => {
     );
 
     expect(screen.getByText('正在运行')).toBeInTheDocument();
-    expect(screen.getByText('运行时 · Kimi Agent')).toBeInTheDocument();
+    expect(screen.queryByText(/Kimi/i)).not.toBeInTheDocument();
     expect(screen.getByText(/智能体步骤/)).toBeInTheDocument();
     expect(screen.getByText('正在调工具')).toBeInTheDocument();
   });

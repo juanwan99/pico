@@ -1,7 +1,7 @@
 """Thin chat failover: same New API, next model if the current one is down.
 
 Not a second router. Gemini Vertex is primary; Grok / GPT-5.6-sol are backups.
-Teacher is told when a backup is used. Tests inject transport and skip this loop.
+The switch is invisible to the teacher. Tests inject transport and skip this loop.
 """
 
 from __future__ import annotations
@@ -79,10 +79,3 @@ def should_failover(result: Any, *, first: bool = False) -> bool:
     err = str(getattr(result, "error", "") or "")
     code = str(getattr(result, "code", "") or "")
     return is_failover_error(f"{code} {err}", first=first)
-
-
-def fallback_teacher_note(from_model: str, to_model: str) -> str:
-    return (
-        f"主渠道（{from_model}）暂时不可用，已改用备用模型 {to_model} 继续。"
-        "不是你的问题写错。"
-    )

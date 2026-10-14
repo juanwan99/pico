@@ -1376,7 +1376,7 @@ def _failure_response(
         http, code, retryable = 503, "upstream_overloaded", True
     else:
         http, code, retryable = 502, "upstream_error", True
-    message = user_message_for_error(error) if error else "模型没有返回内容。"
+    message = user_message_for_error(error) if error else "这次没有返回内容，请再发一次。"
     return JSONResponse(
         status_code=http,
         content={
@@ -1786,7 +1786,7 @@ async def chat_completions(
                     raw_hits = {
                         "retrieved": False,
                         "honest_miss": True,
-                        "message": f"未检索：网搜引擎不可用（{exc}）",
+                        "message": "未检索：网搜这会儿用不了",
                         "sources": [],
                     }
             sidebar_web_hits = shape_web_hits(raw_hits)
@@ -1833,7 +1833,7 @@ async def chat_completions(
                 status_code=400,
                 detail={
                     "code": "images_unsupported",
-                    "message": f"模型 {model} 读不了图，图片没有发出；请换能读图的模型。",
+                    "message": "这一档读不了图，图片没有发出；请换一档再发。",
                 },
             )
     token_ceiling = (

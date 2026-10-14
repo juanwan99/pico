@@ -86,7 +86,7 @@ function showFilesPreparingSpinner(
     return false;
   }
   return (
-    text.includes('等待模型') ||
+    text.includes('等待回复') ||
     text.includes('云端运行') ||
     text.includes('仍在处理') ||
     text.includes('正在准备')
