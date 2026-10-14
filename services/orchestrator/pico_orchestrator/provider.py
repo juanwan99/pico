@@ -11,6 +11,7 @@ from dataclasses import dataclass, replace
 import httpx
 from openai import AsyncOpenAI
 
+from pico_orchestrator.brain_ha import is_channel_dead
 from pico_orchestrator.sse_keepalive import is_proxy_first_byte_timeout
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
@@ -718,7 +719,8 @@ async def stream_chat(
                     yielded = True
                     yield piece
             except Exception as exc:
-                if yielded:
+                # No channel answers 503 too; waiting cannot help, the next model can.
+                if yielded or is_channel_dead(str(exc)):
                     raise
                 if attempt < OVERLOAD_RETRY_MAX and _is_upstream_overload(exc):
                     await asyncio.sleep(OVERLOAD_RETRY_BASE_S * 2**attempt)

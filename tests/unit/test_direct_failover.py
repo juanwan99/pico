@@ -15,9 +15,9 @@ AIPROXY_400 = (
 BAD_REQUEST = "Error code: 400 - {'error': {'type': 'invalid_request_error'}}"
 
 
-def _err(text: str) -> Exception:
+def _err(text: str, status: int = 400) -> Exception:
     exc = RuntimeError(text)
-    exc.status_code = 400  # type: ignore[attr-defined]
+    exc.status_code = status  # type: ignore[attr-defined]
     return exc
 
 
@@ -52,11 +52,11 @@ class _Stream:
         raise StopAsyncIteration
 
 
-def _client(calls: list, *, responses_error: str, chat_error: str | None = None):
+def _client(calls: list, *, responses_error: str, chat_error: str | None = None, status=400):
     class _Responses:
         async def create(self, **kwargs):
             calls.append(("responses", kwargs))
-            raise _err(responses_error)
+            raise _err(responses_error, status)
 
     class _Completions:
         async def create(self, **kwargs):
@@ -109,3 +109,25 @@ async def test_bad_request_stops_after_one_backup(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(RuntimeError):
         _ = [piece async for piece in stream_chat("hi", model="pico-fast", thinking=False)]
     assert [kwargs["model"] for _, kwargs in calls] == ["gpt-5.6-sol", "gemini-3.8-flash"]
+
+
+@pytest.mark.asyncio
+async def test_dead_channel_skips_overload_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """New API answers 503 when a model has no channel; that is not load to wait out."""
+    _setup(monkeypatch, "gemini-3.8-flash")
+    slept: list[float] = []
+
+    async def _sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    monkeypatch.setattr("pico_orchestrator.provider.asyncio.sleep", _sleep)
+    calls: list = []
+    dead = "Error code: 503 - No available channel for model gpt-5.6-sol under group default"
+    monkeypatch.setattr(
+        "pico_orchestrator.provider.AsyncOpenAI",
+        _client(calls, responses_error=dead, status=503),
+    )
+    out = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
+    assert out == ["ok"]
+    assert slept == []
+    assert [kind for kind, _ in calls] == ["responses", "chat"]
