@@ -2768,7 +2768,8 @@ def build_default_gateway(
                 "Call an existing function on this page (or same-page iframe) by dotted path "
                 "(e.g. saveField / app.saveMaterial) with JSON-serializable args. The string "
                 "__picoFile in args is the File already hung. No eval. Rate-limit copy "
-                "(IP访问量过大 / 请求过于频繁) refuses the call. Missing function fails clearly. "
+                "(IP访问量过大 / 请求过于频繁 on the page, in an alert or in the reply) stops "
+                "page_fn for 10 minutes. Missing function fails clearly. "
                 "Do not return cookies. Use when total upload is blocked by empty required "
                 "fields but a field can be saved on its own. "
             ),
