@@ -61,6 +61,24 @@ PAGE_FN_PATH_RE = re.compile(r"^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$")
 FORBIDDEN_FN_SEGMENTS = frozenset(
     {"eval", "Function", "constructor", "prototype", "__proto__"}
 )
+# Leading global aliases are dropped before the root check (window.saveField == saveField).
+GLOBAL_ALIASES = frozenset({"window", "self", "globalThis"})
+# Browser built-ins that would run a string as code, leave the page, or hand
+# cookies / tokens back to the model (#1246). The page's own functions never
+# live under these roots; native functions are also refused inside the page.
+BLOCKED_FN_ROOTS = frozenset(
+    {
+        "top", "parent", "frames", "opener",
+        "document", "location", "navigator", "history",
+        "cookieStore", "localStorage", "sessionStorage", "indexedDB", "caches",
+        "open", "close", "setTimeout", "setInterval", "queueMicrotask",
+        "requestAnimationFrame", "requestIdleCallback",
+        "fetch", "XMLHttpRequest", "WebSocket", "EventSource", "Worker",
+        "SharedWorker", "postMessage", "importScripts", "Reflect", "Object",
+        "alert", "confirm", "prompt", "print",
+    }
+)
+PAGE_FN_MAX_RESULT_BYTES = 8_192
 RATE_LIMIT_PHRASES: tuple[str, ...] = (
     "IP访问量过大",
     "请求过于频繁",
@@ -104,6 +122,11 @@ CALL_PAGE_FN_JS = """({ parts, args }) => {
     fn = fn[p];
   }
   if (typeof fn !== 'function') return { missing: true };
+  // Only the page's own functions: browser built-ins (setTimeout with a string,
+  // cookieStore, storage getters …) are native and refused (#1246).
+  let src = '';
+  try { src = Function.prototype.toString.call(fn); } catch (e) { return { native: true }; }
+  if (src.includes('[native code]')) return { native: true };
   const resolved = args.map((a) => {
     if (a === '__picoFile') return window.__picoFile;
     if (a === '__picoFiles') return window.__picoFiles;
@@ -112,6 +135,10 @@ CALL_PAGE_FN_JS = """({ parts, args }) => {
   const sanitize = (v, depth) => {
     if (depth > 6) return null;
     if (v == null) return v;
+    if (typeof v === 'object' || typeof v === 'function') {
+      try { if (v.window === v) return null; } catch (e) { return null; }
+      if (typeof Node !== 'undefined' && v instanceof Node) return null;
+    }
     if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
     if (typeof File !== 'undefined' && v instanceof File) {
       return { name: v.name, size: v.size, type: v.type };
@@ -337,7 +364,25 @@ def parse_page_fn_path(fn: str) -> list[str]:
             "tool.invalid_arguments",
             f"fn 不能包含 {' / '.join(bad)}（禁止 eval / Function / constructor）",
         )
+    while len(parts) > 1 and parts[0] in GLOBAL_ALIASES:
+        parts = parts[1:]
+    if parts[0] in GLOBAL_ALIASES or parts[0] in BLOCKED_FN_ROOTS:
+        raise ToolError(
+            "sandbox.fn_native_blocked",
+            f"{token} 是浏览器自带接口，不是这一页自己的保存 / 查询 / 删除，不能调",
+        )
     return parts
+
+
+def cap_page_result(value: Any) -> Any:
+    """Keep page_fn results small enough for the model."""
+    try:
+        dumped = json.dumps(value, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return None
+    if len(dumped.encode("utf-8")) <= PAGE_FN_MAX_RESULT_BYTES:
+        return value
+    return {"truncated": True, "preview": dumped[:2_000]}
 
 
 def json_safe_args(args: list[Any] | None) -> list[Any]:
@@ -979,13 +1024,18 @@ class PlaywrightPage:
                 continue
             if raw.get("missing"):
                 continue
+            if raw.get("native"):
+                raise ToolError(
+                    "sandbox.fn_native_blocked",
+                    f"{fn} 是浏览器自带函数，不是这一页自己的保存 / 查询 / 删除，不能调",
+                )
             if raw.get("failed"):
                 raise ToolError(
                     "sandbox.action_failed",
                     f"页内函数 {fn} 调用失败：{raw.get('message') or '未知错误'}",
                 )
             if raw.get("ok"):
-                return sanitize_page_result(raw.get("result"))
+                return cap_page_result(sanitize_page_result(raw.get("result")))
         raise ToolError(
             "sandbox.fn_missing",
             f"这一页上没有函数 {fn}（主页面和 iframe 都找过了）。不要猜别的名字。",
