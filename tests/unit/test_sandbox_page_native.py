@@ -24,10 +24,12 @@ from sandbox_worker.browser import (
     CALL_PAGE_FN_JS,
     CHROMIUM_ARGS,
     HANG_FILES_JS,
+    PAGE_FN_MAX_RESULT_BYTES,
     PAGE_TEXT_JS,
     RATE_LIMIT_PHRASES,
     VIEWPORT_HEIGHT,
     VIEWPORT_WIDTH,
+    cap_page_result,
     json_safe_args,
     parse_page_fn_path,
     rate_limit_hit,
@@ -57,6 +59,37 @@ def test_page_fn_path_is_dotted_only() -> None:
             parse_page_fn_path(bad)
         assert exc.value.code == "tool.invalid_arguments"
         assert "点号路径" in exc.value.message or "不能包含" in exc.value.message
+
+
+def test_page_fn_refuses_browser_builtins() -> None:
+    """#1246: setTimeout strings / cookieStore / storage never reach the page."""
+    assert parse_page_fn_path("window.saveField") == ["saveField"]
+    assert parse_page_fn_path("self.app.saveMaterial") == ["app", "saveMaterial"]
+    for bad in (
+        "setTimeout",
+        "window.setTimeout",
+        "globalThis.setInterval",
+        "cookieStore.getAll",
+        "localStorage.getItem",
+        "window.sessionStorage.getItem",
+        "location.assign",
+        "document.write",
+        "open",
+        "top.saveField",
+        "window",
+    ):
+        with pytest.raises(ToolError) as exc:
+            parse_page_fn_path(bad)
+        assert exc.value.code == "sandbox.fn_native_blocked", bad
+
+
+def test_page_fn_result_is_capped() -> None:
+    small = {"name": "成绩.xlsx", "count": 1}
+    assert cap_page_result(small) == small
+    big = cap_page_result({"rows": ["x" * 100] * 200})
+    assert big["truncated"] is True
+    assert len(big["preview"]) <= 2_000
+    assert PAGE_FN_MAX_RESULT_BYTES == 8_192
 
 
 def test_page_fn_args_must_be_json() -> None:
@@ -163,6 +196,34 @@ async def test_real_chromium_t1_t2_t3_demo_page(tmp_path: Path) -> None:
             await hands.page_fn("hallSave_99", [])
         assert missing.value.code == "sandbox.fn_missing"
         assert "hallSave_99" in missing.value.message
+
+        # #1246: native functions are refused even when the page aliases them,
+        # so a string never runs as code and cookies / tokens never come back.
+        await page.evaluate(
+            "() => { window.__secret = 'SECRET123';"
+            " window.app.store = { getItem: Storage.prototype.getItem }; window.app.later = setTimeout;"
+            " window.app.big = () => ({ rows: 'x'.repeat(20000) }); }"
+        )
+        for name, args in (
+            ("app.later", ["document.body.insertAdjacentText('beforeend','LEAK='+window.__secret)"]),
+            ("app.store.getItem", ["token"]),
+        ):
+            with pytest.raises(ToolError) as native:
+                await hands.page_fn(name, args)
+            assert native.value.code == "sandbox.fn_native_blocked", name
+        for name, args in (
+            ("setTimeout", ["document.title = window.__secret"]),
+            ("cookieStore.getAll", []),
+            ("localStorage.getItem", ["token"]),
+        ):
+            with pytest.raises(ToolError) as blocked:
+                await hands.page_fn(name, args)
+            assert blocked.value.code == "sandbox.fn_native_blocked", name
+        await page.wait_for_timeout(50)
+        assert "LEAK=" not in await page.inner_text("body")
+        assert "SECRET123" not in await page.title()
+        capped = await hands.page_fn("app.big", [])
+        assert capped["truncated"] is True
 
         # T3
         await page.click("#show-limit")
