@@ -25,3 +25,16 @@ def _empty_json_only_replay():
     json_only_replay.clear()
     yield
     json_only_replay.clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_model_marked_down():
+    """#1261: a model one test marked down must not reorder the next test's brain."""
+    try:
+        from pico_orchestrator import brain_ha
+    except ImportError:
+        yield
+        return
+    brain_ha._down_until.clear()
+    yield
+    brain_ha._down_until.clear()

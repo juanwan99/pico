@@ -493,13 +493,13 @@ async def map_event(
                 **tag,
             },
         )
-        from pico_orchestrator.brain_ha import is_channel_dead, is_upstream_overloaded
+        from pico_orchestrator.brain_ha import is_model_dead, is_upstream_overloaded
 
         # Only an overload gets Pi's long budget before output; anything else
-        # fails over after the old 5 tries, a dead channel at once.
+        # fails over after the old 5 tries, a dead channel or key at once.
         attempt = int(raw.get("attempt") or 0)
         if not state.has_output and (
-            is_channel_dead(err)
+            is_model_dead(err)
             or (attempt > PRE_OUTPUT_RETRIES and not is_upstream_overloaded(err))
         ):
             state.failover_error = err

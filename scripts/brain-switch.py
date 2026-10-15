@@ -6,8 +6,9 @@ exam AI marking failed for 14 minutes before anyone saw it. Never again flip
 blind:
 
 1. Preflight every candidate straight at the relay (DEEPSEEK_BASE_URL): one text
-   turn, one image turn. Primary must pass both; fallbacks must pass text and at
-   least one of them must read images (image work needs a landing).
+   turn, one image turn. Primary must pass both; at least one fallback must pass
+   both (image work needs a landing). A fallback that is down now stays listed
+   (failover skips it, #1261) with a DOWN line.
 2. Back up /opt/pico/.env, write DEEPSEEK_MODEL + PICO_BRAIN_FALLBACKS, recreate
    pico-api (the only service that reads them).
 3. Post-check through Pico itself (text lane + image lane). Any failure → restore
@@ -15,8 +16,8 @@ blind:
 
 Host-only. Never prints keys. Smoke membership only (never a real school).
 
-    python3 scripts/brain-switch.py --primary gpt-5.6-sol --fallbacks gemini-3.8-flash,grok-4.6 --dry-run
-    python3 scripts/brain-switch.py --primary gpt-5.6-sol --fallbacks gemini-3.8-flash,grok-4.6
+    python3 scripts/brain-switch.py --primary gemini-3.8-flash --fallbacks grok-4.6,gpt-5.6-sol --dry-run
+    python3 scripts/brain-switch.py --primary gemini-3.8-flash --fallbacks grok-4.6,gpt-5.6-sol
 """
 from __future__ import annotations
 
@@ -144,9 +145,13 @@ def preflight(base: str, key: str, primary: str, fallbacks: list[str]) -> bool:
     problems = []
     if not (rows[primary]["text"]["ok"] and rows[primary]["image"]["ok"]):
         problems.append(f"主模型 {primary} 文字或读图不过")
-    problems += [f"备用 {m} 文字不过" for m in fallbacks if not rows[m]["text"]["ok"]]
-    if fallbacks and not any(rows[m]["image"]["ok"] for m in fallbacks):
-        problems.append("备用里没有一个能读图")
+    # A backup that is down now may stay listed: failover skips a dead channel or
+    # key (#1261) and it comes back on its own. One backup must catch everything.
+    for m in fallbacks:
+        if not rows[m]["text"]["ok"]:
+            print("DOWN", f"备用 {m} 现在不通，留在名单里，坏着会自动跳过", flush=True)
+    if fallbacks and not any(rows[m]["text"]["ok"] and rows[m]["image"]["ok"] for m in fallbacks):
+        problems.append("备用里没有一个文字、读图都通的")
     for p in problems:
         print("BLOCKED", p, flush=True)
     return not problems

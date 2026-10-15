@@ -81,6 +81,8 @@ class RunResult:
     change_proposal: dict[str, Any] | None = None
     # Staged left-page mutations for the school shell to confirm and run.
     page_mutations: list[dict[str, Any]] | None = None
+    # Failure code (run.error ``code``); brain HA reads it to pick a failover.
+    code: str | None = None
 
 
 class CancelledError(Exception):

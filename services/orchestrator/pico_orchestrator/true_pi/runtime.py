@@ -196,7 +196,12 @@ async def run_true_pi_agent(
         return await _run_true_pi_once(emit=emit, **kwargs)
     from dataclasses import replace
 
-    from pico_orchestrator.brain_ha import brain_candidates, should_failover
+    from pico_orchestrator.brain_ha import (
+        brain_candidates,
+        is_model_dead,
+        mark_down,
+        should_failover,
+    )
     from pico_orchestrator.provider import runtime_policy_for_model
 
     caps = caps or RunCaps()
@@ -223,6 +228,8 @@ async def run_true_pi_agent(
         ):
             await gate.flush()
             return last
+        if is_model_dead(f"{last.code or ''} {last.error or ''}"):
+            mark_down(mid)
     if gate is not None:
         await gate.flush()
     return last or await _run_true_pi_once(emit=emit, **kwargs)
@@ -1437,7 +1444,9 @@ async def _failed(
             {"status": "failed", "reason": reason, "code": code, **tag}
         ),
     )
-    return _result("failed", state or EventMapState(), error=reason, principal=principal)
+    res = _result("failed", state or EventMapState(), error=reason, principal=principal)
+    res.code = code
+    return res
 
 
 def _result(
