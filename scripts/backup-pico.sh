@@ -220,7 +220,9 @@ cmd_drill() {
     rm -f "$base".part-*
   done
   if [[ "$corrupt" == --corrupt ]]; then
-    printf '\xff' | dd of="$dir/mongo.archive.gz" bs=1 seek=1000 conv=notrunc status=none
+    # invert byte 1000 (a fixed value would be no change when the byte already held it)
+    n="$(dd if="$dir/mongo.archive.gz" bs=1 skip=1000 count=1 status=none | od -An -tu1 | tr -d ' ')"
+    printf "\\x$(printf %02x $((n ^ 255)))" | dd of="$dir/mongo.archive.gz" bs=1 seek=1000 conv=notrunc status=none
     log "drill: flipped one byte of mongo.archive.gz on purpose"
     CORRUPT=flipped
   fi
