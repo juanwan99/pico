@@ -243,14 +243,15 @@ raise SystemExit(0 if qc == "ok" and runs > 0 else 1)')" || drill_fail "pico.db:
     "$img_meili" meilisearch --import-dump /d.dump --db-path /tmp/drill-db --master-key drill-only-key >/dev/null \
     || drill_fail "start meili"
   out=""
-  for _ in $(seq 1 200); do
+  # 72k documents took 9 min to import on 10-15; leave room for growth (30 min).
+  for _ in $(seq 1 600); do
     out="$(docker exec pico-drill-meili sh -c 'wget -qO- http://127.0.0.1:7700/health' 2>/dev/null)" || true
     [[ "$out" == *available* ]] && break
     sleep 3
   done
   [[ "$out" == *available* ]] || drill_fail "meili import did not come up"
   out="$(docker exec pico-drill-meili sh -c 'wget -qO- --header "Authorization: Bearer drill-only-key" http://127.0.0.1:7700/stats' \
-    | python3 -c 'import json,sys; s=json.load(sys.stdin)["indexes"]; print(" ".join(f"{k}={v[\"numberOfDocuments\"]}" for k,v in s.items())); raise SystemExit(0 if sum(v["numberOfDocuments"] for v in s.values()) else 1)')" \
+    | python3 -c 'import json,sys; s=json.load(sys.stdin)["indexes"]; print(" ".join("%s=%s" % (k, v["numberOfDocuments"]) for k, v in s.items())); raise SystemExit(0 if sum(v["numberOfDocuments"] for v in s.values()) else 1)')" \
     || drill_fail "meili empty: $out"
   log "drill meili: $out"
   STATUS_JSON="$DRILL_STATUS" write_status OK "$latest"
