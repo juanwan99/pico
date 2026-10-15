@@ -886,6 +886,9 @@ async def model_complete(
         raise ExtractError(
             "model.unconfigured", "Pico 没配模型脑（DEEPSEEK_API_KEY / KIMI_API_KEY）"
         )
+    if thinking:
+        # 推理的 token 也算在输出上限里：不另给，一页三道遗传大题推满 16k 就把答案截掉了（edu-core#3164）
+        max_tokens += think_tokens()
     mid = P.product_backend_model(deep=False)
     if _has_images(messages):
         mid = vision_model_for_images(mid)
@@ -1142,6 +1145,17 @@ _DEFAULT_CONCURRENCY = 4
 # default for Gemini flash is now thinking off (#1183), so None no longer meant medium.
 _DEFAULT_PAGE_EFFORT = "low"
 _DEFAULT_SOLVE_EFFORT = "medium"
+_DEFAULT_THINK_TOKENS = 16_000
+
+
+def think_tokens() -> int:
+    """开推理时另加在输出上限上的 token（推理也算输出，不另给就挤掉答案）。
+
+    Gemini 3.8 flash 经 New API 推理不封顶：thinking_budget 8192、reasoning_effort low 都照推
+    13–23k，thinking_level low 等于不推（实测 edu-core#3164）。所以只加余量，推爆了由
+    extract_pages 的 read 退回不推理再读一次。
+    """
+    return _env_int("PICO_EXAM_EXTRACT_THINK_TOKENS", _DEFAULT_THINK_TOKENS)
 
 
 def page_thinking() -> bool:
@@ -1446,6 +1460,7 @@ async def extract_pages(
     by_page = {int(p["page"]): p for p in pages}
 
     thinking = task_thinking(task, page_thinking())
+    unthought: set[int] = set()  # 推爆了、不推理读成的页
 
     async def read(image: dict[str, Any] | None, number: int, text: str = "") -> str:
         content: list[dict[str, Any]] = [
@@ -1465,9 +1480,25 @@ async def extract_pages(
                 {"type": "image", "mime": nxt["mime"], "data_b64": nxt["data_b64"]},
             ]
         messages = [{"role": "system", "content": prompts["system"]}, {"role": "user", "content": content}]
-        return await _complete_with_retry(
-            complete, messages, thinking=thinking, usage=usage, model_out=model_out
-        )
+        if not thinking:
+            return await _complete_with_retry(complete, messages, thinking=False, usage=usage, model_out=model_out)
+        # 推理不封顶：难页推满时限 / 输出上限，答案截断或整页超时（一模 21 题两条带那页推 23k、
+        # 第 20、21 题整题没做出，edu-core#3164）。推一次，推爆了这页不推理再读，不丢页。
+        try:
+            out = await _complete_with_retry(
+                complete, messages, thinking=True, usage=usage, model_out=model_out, attempts=1
+            )
+        except (ExtractError, SafetyBlocked):
+            raise
+        except Exception as exc:  # noqa: BLE001 — read again below without thinking
+            logger.warning("exam extract page %s thinking failed, reading without: %s", number, str(exc)[:200])
+        else:
+            if not json_looks_truncated(out) and parse_json_array(out) is not None:
+                return out
+            logger.warning("exam extract page %s thinking ran out, reading without", number)
+        out = await _complete_with_retry(complete, messages, thinking=False, usage=usage, model_out=model_out)
+        unthought.add(number)
+        return out
 
     async def read_halves(
         number: int, page: dict[str, Any], blocked: SafetyBlocked
@@ -1656,6 +1687,10 @@ async def extract_pages(
         if missing:
             nums = "、".join(str(n) for n in missing)
             result["warnings"].append(f"第 {nums} 题按所在页没做出答案，请老师核对或手动填")
+    if unthought and task == "solve":
+        # 不推理做的答案准头低（一模 5 题不推理答 B、推理答 D），老师得知道哪几页要重点核
+        nums = "、".join(str(n) for n in sorted(unthought))
+        result["warnings"].append(f"第 {nums} 页没用推理做题，AI 答案请重点核对")
     return result
 
 

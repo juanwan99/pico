@@ -320,4 +320,5 @@ always-apply: false
 | `PICO_EXAM_EXTRACT_ATTEMPTS` | `5` | 单页 / 单块的尝试次数，退避 3s / 8s / 20s / 45s（代理重置成簇出现、单次只耗 ~1 s，拉长跨度比密集重试有效）；只重试瞬时错误，配置错误（`model.unconfigured`）不重试 |
 | `PICO_EXAM_EXTRACT_PAGE_SECONDS` | `240` | 单次模型调用超时 |
 | `PICO_EXAM_EXTRACT_PAGE_EFFORT` | `low` | 读一页图的推理力度：`low`（同文本路，flash 不思考）或 `medium`（显式开思考；#1183 后 flash 默认不思考，不能再靠「上游默认」）。在 edu 送 150 dpi 原生页图（1092×1648）的前提下，21 次对照 `low` 正确率不低于 `medium`，细则页快一半；72 dpi 小图上的误读是图糊不是力度（edu-core#1506）。图再变糊先修图，不要先调这里 |
-| `PICO_EXAM_EXTRACT_SOLVE_EFFORT` | `medium` | 做题（`solve`）的推理力度，只管做题，读结构 / 读卷不受影响。不推理时模型把推敲写进解析（「等等，重新分析」）、同一题写两遍，答案和自己的解析对不上（edu-core#3164）。`low` 关掉 |
+| `PICO_EXAM_EXTRACT_SOLVE_EFFORT` | `medium` | 做题（`solve`）的推理力度，只管做题，读结构 / 读卷不受影响。不推理时模型把推敲写进解析（「等等，重新分析」）、同一题写两遍，答案和自己的解析对不上（edu-core#3164）。`low` 关掉 推理不封顶（Gemini 经 New API 不认推理预算）：一页推爆时限或输出上限、答案截断或没有 JSON 时，这页不推理再读一次，不丢题，并提示「第 N 页没用推理做题，AI 答案请重点核对」 |
+| `PICO_EXAM_EXTRACT_THINK_TOKENS` | `16000` | 开推理时另加在输出上限上的 token（推理也算输出，不另给就把答案挤掉：一模 21 题那页推 23k，第 20、21 题没做出，edu-core#3164） |
