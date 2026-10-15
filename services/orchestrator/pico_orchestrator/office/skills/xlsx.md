@@ -78,3 +78,4 @@ Do not `wb = Workbook()` then retype the grid. That drops formulas, charts, and 
 ## Check
 
 At least one numeric cell (not a title wall). If the teacher named groups and counts, those values are in the grid. Wrong → rewrite with the same title.
+In the workspace, also render the pages and look at them before you answer (Workspace rules: first, last, pages with tables / pictures; at most 8).

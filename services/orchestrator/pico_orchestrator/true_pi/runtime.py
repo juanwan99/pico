@@ -40,6 +40,7 @@ from pico_orchestrator.true_pi.config import (
     tool_hang_seconds,
 )
 from pico_orchestrator.true_pi.events import EventMapState, map_event
+from pico_orchestrator.true_pi.runner import LOOK_STEER
 from pico_orchestrator.true_pi.tool_server import ToolServer
 from pico_orchestrator.user_errors import enrich_fail_payload
 from pico_orchestrator.workbench_progress import failed_write_user_message
@@ -828,6 +829,15 @@ async def _run_true_pi_once(
                         fuse_from = max(fuse_from, last_progress_wall)
                     if state.tool_oks > prev_tool_oks:
                         last_tool_ok_wall = loop.time()
+                    if ws_on and state.visual_output and not state.look_steered and not state.settled:
+                        # pico#1296: once per run, before the final answer.
+                        state.look_steered = True
+                        try:
+                            await client.steer(LOOK_STEER)
+                            state.event_kinds.append("run.look_check")
+                            await emit("run.look_check", {"steered": True, **tag})
+                        except Exception as exc:  # noqa: BLE001 — a missed reminder never fails a run
+                            logger.warning("true_pi look steer failed: %s", type(exc).__name__)
                     if state.settled:
                         break
 
@@ -1046,6 +1056,13 @@ async def _run_true_pi_once(
                 state.provider_error = f"resume produced no new turn after: {reason}"
                 state.settled = True
                 state.no_resume = True
+        if state.visual_output:
+            logger.info(
+                "true_pi look run_id=%s steered=%s reads=%s",
+                rid,
+                state.look_steered,
+                state.look_reads,
+            )
         if state.event_kinds:
             logger.info(
                 "true_pi mapped_kinds run_id=%s n=%s kinds=%s",

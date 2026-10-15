@@ -21,6 +21,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
@@ -60,9 +61,50 @@ You have an isolated Linux workspace at `/workspace` with read / write / edit / 
 - Make Word / Excel / PowerPoint / HTML / Markdown files yourself with Python in this workspace: python-docx, openpyxl, python-pptx, pandas, matplotlib and LibreOffice (`soffice`) are installed; `pip install` and the internet work too. When a skill says `sandbox_office_lib`, run the same code here instead.
 - Keep every tool call under about 150 lines. Nothing reaches the teacher until a call's arguments are complete, so a 1000-line script is minutes of silence, and an upstream error regenerates all of it. For a long document, deck, workbook or page, keep content apart from code: first `write` the content as data files, one per section or per 3–5 slides (e.g. `/workspace/work/content_01.json`, `content_02.json`, …, each its own `write` call); then `write` one short build script (under 100 lines) that loops over those files and applies the styling. Never embed all the text in the build script. Never use `cat << EOF` (or any heredoc) in `bash` to create a file: use `write`, then run it. To change a file, `edit` only the lines that change.
 - Save only the files the teacher should receive in `/workspace/outputs/`; they are delivered when you finish, nothing else is. When the teacher asked for a program, script or project, its code files are deliverables: put them there. Scripts you only use to build a document, and scratch files, stay elsewhere (e.g. `/workspace/work/`).
-- Never say a file is done until you have checked it: `ls -l /workspace/outputs`, reopen it, count pages / slides / rows, or render with `soffice --headless --convert-to pdf`. If it is not there, it was not delivered.
+- Look at what you made before you say it is done; counting pages is not looking. `read` on a .png / .jpg shows you the picture. Render, then `read`:
+  - Word / PPT / Excel: `soffice --headless --convert-to pdf --outdir /workspace/work/look <file>`; then for the PDF `pdftoppm -r 60 -png [-f N -l N] <pdf> /workspace/work/look/p`.
+  - Web page: Playwright screenshot (`p.chromium.launch(args=["--no-sandbox"])`, `page.goto("file:///workspace/outputs/<name>.html")`, `page.screenshot(path=..., full_page=True)`).
+  - Chart or picture: `read` the file itself.
+  Look at the first page, the last page, and pages with a table, picture, chart or formula: at most 8 pictures in all. Check them against what the teacher asked: right and complete content; nothing cut off, overlapping, garbled (□ boxes), blank or out of order; every picture fits the text beside it. Fix what is wrong, then look again only at what you changed. One round, then finish.
+- Then `ls -l /workspace/outputs`: a file that is not there was not delivered.
 - The workspace persists across turns of this conversation: revise earlier files in place.
 """
+
+# Sent once per run (Pi RPC steer) when the model starts writing a file the
+# teacher will look at (pico#1296). Delivered before its next model call, so
+# it lands before the final answer, not after it.
+LOOK_STEER = (
+    "Before your final answer: look at the file(s) you are making for the teacher. "
+    "Render the key pages to pictures and `read` them as the Workspace rules say "
+    "(first, last, and pages with tables / pictures / charts / formulas; at most 8). "
+    "Fix what is wrong and look again only at what you changed. If something is still "
+    "wrong after that, tell the teacher plainly."
+)
+_VISUAL_EXT = re.compile(r"\.(docx|pptx|xlsx|pdf|html?|png|jpe?g|svg)\b", re.IGNORECASE)
+_IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+_FILE_TOOLS = frozenset({"write", "edit", "bash"})
+
+
+def visual_output_call(tool: str, args: Mapping[str, Any]) -> bool:
+    """A builtin call that writes (or builds a script that writes) a file the teacher looks at.
+
+    Text match on the call's own arguments: a write/edit/bash that names
+    ``outputs`` and a document / page / picture extension. Thin by design: a
+    miss only skips the reminder, a false hit costs one look.
+    """
+    if tool not in _FILE_TOOLS:
+        return False
+    text = " ".join(str(v) for v in args.values() if isinstance(v, str))
+    return "outputs" in text and bool(_VISUAL_EXT.search(text))
+
+
+def look_read_call(tool: str, args: Mapping[str, Any]) -> bool:
+    """The model opened a picture of its own work (not a teacher attachment)."""
+    if tool != "read":
+        return False
+    path = str(args.get("path") or args.get("file_path") or "")
+    return path.lower().endswith(_IMAGE_EXT) and "/attachments/" not in path
+
 
 # Gateway tools the workspace makes redundant (same job, done in the box).
 BOX_HIDDEN_TOOLS = frozenset({"sandbox_office_lib", "workspace_write_file"})

@@ -17,6 +17,7 @@ from pico_orchestrator.sandbox_session_event import (
 )
 from pico_orchestrator.true_pi.client import RpcEvent
 from pico_orchestrator.true_pi.config import RUNTIME_LABEL
+from pico_orchestrator.true_pi.runner import look_read_call, visual_output_call
 
 # Pi's retry budget before #1135; non-overload errors before output keep it.
 PRE_OUTPUT_RETRIES = 5
@@ -73,6 +74,12 @@ class EventMapState:
     # Before any output, an upstream error that waiting will not fix: stop Pi's
     # retries and let brain-HA fail over to the next model.
     failover_error: str = ""
+    # pico#1296: the model is making a file the teacher will look at, the
+    # one-time "look before you answer" steer went out, and how many pictures
+    # of its own work it opened.
+    visual_output: bool = False
+    look_steered: bool = False
+    look_reads: int = 0
 
     @property
     def has_output(self) -> bool:
@@ -251,6 +258,10 @@ async def map_event(
         if not isinstance(args, dict):
             args = {}
         state.event_kinds.append("tool.call")
+        if visual_output_call(name, args):
+            state.visual_output = True
+        if look_read_call(name, args):
+            state.look_reads += 1
         step = workbench_call_step_line(name, args)
         await emit(
             "tool.call",

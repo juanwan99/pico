@@ -18,6 +18,7 @@ ENV PATH="/usr/local/lib/nodejs/bin:${PATH}" \
     NPM_CONFIG_PREFIX=/home/pi/.npm-global \
     OPENBLAS_NUM_THREADS=2 \
     OMP_NUM_THREADS=2 \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
     PYTHONPATH=
 
 RUN set -eux; \

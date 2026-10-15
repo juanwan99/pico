@@ -786,6 +786,14 @@ class TruePiRpcClient:
         except TruePiClientError:
             logger.info("true_pi abort response missing (process may be dead)")
 
+    async def steer(self, message: str) -> None:
+        """Queue a message Pi delivers after the running tools, before its next model call."""
+        rid = f"s-{uuid.uuid4().hex[:8]}"
+        await self.transport.send({"id": rid, "type": "steer", "message": message})
+        resp = await self.transport.wait_response("steer", req_id=rid, timeout=10.0)
+        if not resp.get("success"):
+            raise TruePiClientError(f"steer rejected: {resp}")
+
     async def get_last_assistant_text(self) -> str:
         rid = f"t-{uuid.uuid4().hex[:8]}"
         await self.transport.send({"id": rid, "type": "get_last_assistant_text"})
