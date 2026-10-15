@@ -983,3 +983,147 @@ async def test_half_still_blocked_keeps_the_other_half_and_tells_the_teacher():
     assert result["warnings"] == [
         "第 2 页被安全审查拦下，切成两半重读仍没读全：这页的题请老师按卷面手动录入答案"
     ]
+
+
+# --------------------------------------------------------------------------- paper (edu-core#3157)
+
+
+def test_paper_prompts_load():
+    p = ex.load_prompts(task="paper")
+    assert "试卷录入员" in p["system"] and "figures" in p["system"]
+    assert "{{text}}" in p["user_text"]
+    assert "continued" in p["user_page"]
+
+
+def test_escape_latex_keeps_json_escapes_and_fixes_bare_commands():
+    raw = r'[{"number":1,"stem":"$\frac{1}{2}$ $\times$ $a\neq b$ $\perp$ $\{x\}$ $\\sqrt{2}$\nA．x\tB 中 $\right)$"}]'
+    stem = ex.parse_json_array(raw)[0]["stem"]
+    assert stem == "$\\frac{1}{2}$ $\\times$ $a\\neq b$ $\\perp$ $\\{x\\}$ $\\sqrt{2}$\nA．x\tB 中 $\\right)$"
+
+
+def test_paper_item_keeps_stem_and_figures():
+    raw = json.dumps(
+        [
+            {
+                "number": 6,
+                "type": "single_choice",
+                "score": 3,
+                "options_count": 4,
+                "stem": "下列说法正确的是（ ）\nA．甲\nB．乙\nC．丙\nD．丁",
+                "figures": [
+                    {"box_2d": [80, 700, 170, 900]},
+                    {"box_2d": [1, 1, 5, 5]},
+                    {"box": [-20, 900, 1200, 1100]},
+                ],
+                "answer": "",
+            }
+        ],
+        ensure_ascii=False,
+    )
+    (item,) = ex.items_from_model_text(raw, page=2, task="paper")
+    assert item["stem"].startswith("下列说法") and item["material_id"] is None
+    # box_2d is [ymin, xmin, ymax, xmax]; box is [x0, y0, x1, y1]; tiny boxes dropped, clamped to 0–1000
+    assert item["figures"] == [
+        {"page": 2, "box": [700, 80, 900, 170]},
+        {"page": 2, "box": [0, 900, 1000, 1000]},
+    ]
+    assert item["options_count"] == 4 and item["answer"] == "" and item["sub_count"] == 1
+
+
+def _paper_page(page: int, items: list[dict]) -> list[dict]:
+    return ex.items_from_model_text(json.dumps(items, ensure_ascii=False), page=page, task="paper")
+
+
+def test_paper_material_spans_pages_and_tags_its_questions():
+    p1 = _paper_page(1, [{"kind": "material", "material_for": [1, 2, 3], "material": "访谈上半"}])
+    p2 = _paper_page(
+        2,
+        [
+            {"kind": "material", "continued": True, "material": "访谈下半"},
+            {"number": 1, "type": "single_choice", "stem": "下列理解正确的一项是"},
+            {"number": 2, "type": "single_choice", "stem": "下列说法不正确的一项是"},
+        ],
+    )
+    p3 = _paper_page(
+        3,
+        [
+            {"number": 3, "type": "short_answer", "stem": "请简要分析"},
+            {"kind": "material", "material": "文言文", "figures": [{"box_2d": [500, 100, 600, 900]}]},
+            {"number": 4, "type": "single_choice", "stem": "下列解说不正确的一项是"},
+            {"number": 5, "type": "short_answer", "stem": "翻译"},
+        ],
+    )
+    result = ex._finish("pages", [p1, p2, p3], [{"ok": True}] * 3, [], "", {}, {})
+    mats = result["materials"]
+    assert [m["id"] for m in mats] == ["M1", "M2"]
+    assert mats[0]["material"] == "访谈上半\n访谈下半" and mats[0]["material_for"] == [1, 2, 3]
+    assert mats[1]["material_for"] == [4, 5] and mats[1]["figures"][0]["page"] == 3
+    by_no = {q["number"]: q["material_id"] for q in result["questions"]}
+    assert by_no == {1: "M1", 2: "M1", 3: "M1", 4: "M2", 5: "M2"}
+
+
+def test_paper_material_reread_on_two_pages_is_one_material():
+    p1 = _paper_page(1, [{"kind": "material", "material_for": [6, 7], "material": "驯鹿之语（上）"}])
+    p2 = _paper_page(
+        2,
+        [
+            {"kind": "material", "material_for": [6, 7], "material": "驯鹿之语（下）"},
+            {"number": 6, "type": "single_choice", "stem": "甲"},
+            {"number": 7, "type": "short_answer", "stem": "乙"},
+        ],
+    )
+    result = ex._finish("pages", [p1, p2], [{"ok": True}] * 2, [], "", {}, {})
+    assert len(result["materials"]) == 1
+    assert result["materials"][0]["material"] == "驯鹿之语（上）\n驯鹿之语（下）"
+
+
+def test_paper_material_continuation_after_unread_page_is_dropped():
+    p1 = _paper_page(1, [{"kind": "material", "material_for": [1], "material": "甲"}])
+    p3 = _paper_page(
+        3,
+        [
+            {"kind": "material", "continued": True, "material": "不知道接谁"},
+            {"number": 2, "type": "single_choice", "stem": "乙"},
+        ],
+    )
+    result = ex._finish("pages", [p1, [], p3], [{"ok": True}, {"ok": False}, {"ok": True}], [], "", {}, {})
+    assert [m["material"] for m in result["materials"]] == ["甲"]
+
+
+def test_paper_text_read_has_no_figure_boxes_and_no_default_options():
+    raw = '[{"number": 3, "type": "single_choice", "stem": "[图1] 如图", "figures": [{"box": [1,2,300,400]}]}]'
+    (item,) = ex.items_from_model_text(raw, page=None, task="paper")
+    assert item["figures"] == [] and item["options_count"] is None
+    assert item["stem"] == "[图1] 如图"
+
+
+def test_paper_page_top_continuation_appends_stem_and_figures():
+    p1 = ex.items_from_model_text(
+        '[{"number": 15, "type": "short_answer", "stem": "如图，在三棱锥中", "figures": [{"box": [600,700,900,950]}]}]',
+        page=1,
+        task="paper",
+    )
+    p2 = ex.items_from_model_text(
+        '[{"number": 0, "continued": true, "stem": "(2)求距离", "figures": [{"box": [100,0,400,200]}]},'
+        ' {"number": 16, "type": "short_answer", "stem": "某公司"}]',
+        page=2,
+        task="paper",
+    )
+    merged = ex.merge_items(ex.attach_continued([p1, p2]))
+    q15 = merged[0]
+    assert q15["stem"] == "如图，在三棱锥中\n(2)求距离"
+    assert [f["page"] for f in q15["figures"]] == [1, 2]
+    assert merged[1]["number"] == 16
+
+
+def test_answers_keep_analysis_apart_from_rubric():
+    raw = '[{"number": 17, "type": "short_answer", "answer": "(1)略", "analysis": "由题意……", "rubric": "写出公式 2 分"}]'
+    (item,) = ex.items_from_model_text(raw, page=None, task="answers")
+    assert item["analysis"] == "由题意……" and item["rubric"] == "写出公式 2 分"
+    assert item["stem"] == "" and item["figures"] == [] and item["material_id"] is None
+
+
+def test_route_takes_a_whole_paper_of_pages():
+    from app import exam_answer_extract as route
+
+    assert route.MAX_PAGES >= 16

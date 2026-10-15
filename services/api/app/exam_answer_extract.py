@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["exam-answer-extract"])
 
-MAX_PAGES = 8
+MAX_PAGES = 24  # 试卷录入整份卷一次读（12 页物理卷，edu-core#3157）
 MAX_PAGE_BYTES = 4 * 1024 * 1024
 MAX_TOTAL_BYTES = 20 * 1024 * 1024
 MAX_TEXT_CHARS = 400_000
