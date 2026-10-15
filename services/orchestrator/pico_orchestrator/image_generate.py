@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from pico_orchestrator import upstream
 from pico_orchestrator.gateway import ToolError
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,8 @@ IMAGE_TIMEOUT_S = 90.0
 # Missing header → rest that window before the next POST, not 28s.
 # 1113 is not a rate limit — do not retry. Exhausted still
 # image.provider — never invent pixels.
-_429_MAX_TRIES = 6
+# 429 waits come out of the same three-request budget as everything else (pico#1271).
+_429_MAX_TRIES = upstream.CALL_BUDGET
 _429_RETRY_AFTER_CAP_S = IMAGE_TIMEOUT_S
 _429_NON_RETRYABLE_CODES = frozenset({"1113"})
 _flight_lock = asyncio.Lock()
@@ -357,8 +359,12 @@ async def _post_gateway(
         "Content-Type": "application/json",
     }
     target = (url or gateway_images_url()).strip()
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        return await client.post(target, json=payload, headers=headers)
+    release = await upstream.acquire(api_key, "image")
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            return await client.post(target, json=payload, headers=headers)
+    finally:
+        release()
 
 
 async def _post_gemini(
@@ -526,8 +532,11 @@ async def _generate_image_campaign(text: str) -> tuple[bytes, str, dict[str, int
     await _respect_rate_gate()
     rate_tries = 0
     provider_retried = False
+    # 429 waits and the one provider retry share the door's budget (pico#1271).
+    call = upstream.Call("image")
     while True:
         try:
+            call.allow()
             return await _generate_image_call(text)
         except ToolError as exc:
             if exc.code != "image.provider":
@@ -541,7 +550,8 @@ async def _generate_image_campaign(text: str) -> tuple[bytes, str, dict[str, int
                     delay = _429_RETRY_AFTER_CAP_S
                 _arm_rate_gate(delay)
                 no_retry = (
-                    error_code in _429_NON_RETRYABLE_CODES
+                    call.sent >= call.budget
+                    or error_code in _429_NON_RETRYABLE_CODES
                     or rate_tries >= _429_MAX_TRIES - 1
                     or delay >= _429_RETRY_AFTER_CAP_S
                 )
@@ -568,7 +578,7 @@ async def _generate_image_campaign(text: str) -> tuple[bytes, str, dict[str, int
                 continue
             if isinstance(status, int) and 400 <= status < 500:
                 raise
-            if provider_retried:
+            if provider_retried or call.sent >= call.budget:
                 raise
             logger.warning("images provider failed; retrying once")
             provider_retried = True

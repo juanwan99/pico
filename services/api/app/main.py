@@ -280,6 +280,10 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.meili_kb import health_fields as meili_health_fields
 
     body.update(meili_health_fields())
+    # pico#1271: upstream requests by purpose / outcome, in-flight and peak per key.
+    from pico_orchestrator import upstream
+
+    body["upstream"] = upstream.stats()
     if pi_batch:
         body["pi_agent_canary_batch"] = pi_batch
     if kimi_batch:

@@ -7,8 +7,11 @@ The switch is invisible to the teacher. Tests inject transport and skip this loo
 from __future__ import annotations
 
 import os
+import re
 import time
 from typing import Any
+
+from pico_orchestrator.upstream import DEAD_STATUS
 
 # New API has no channel for this model: retrying the same model cannot help.
 _CHANNEL_DEAD_MARKERS = (
@@ -120,9 +123,19 @@ def is_key_dead(error: str) -> bool:
     return any(m in low for m in _KEY_DEAD_MARKERS)
 
 
+def is_relay_key_dead(error: str) -> bool:
+    """The relay itself answered 401 / 402 / 403 (noted by the run proxy, pico#1271).
+
+    Our own proxy's 403 (``proxy.no_run``, ``auth.denied``) never gets an
+    ``upstream <status>`` note, so a bare relay 403 still counts (#1263).
+    """
+    m = re.search(r"\bupstream (\d{3})\b", error or "")
+    return bool(m) and int(m.group(1)) in DEAD_STATUS
+
+
 def is_model_dead(error: str) -> bool:
     """This model cannot answer any call now: no channel, or its key is dead."""
-    return is_channel_dead(error) or is_key_dead(error)
+    return is_channel_dead(error) or is_key_dead(error) or is_relay_key_dead(error)
 
 
 def pi_stall_switch_s() -> float:
@@ -145,12 +158,13 @@ def is_upstream_overloaded(error: str) -> bool:
 
 def is_failover_error(error: str, *, first: bool = False) -> bool:
     low = (error or "").lower()
-    if any(m in low for m in _FAILOVER_MARKERS) or is_key_dead(low):
+    if any(m in low for m in _FAILOVER_MARKERS) or is_key_dead(low) or is_relay_key_dead(low):
         return True
     return first and any(m in low for m in _FIRST_HOP_MARKERS)
 
 
-def should_failover(result: Any, *, first: bool = False) -> bool:
+def should_failover(result: Any, *, first: bool = False, relay: str = "") -> bool:
+    """``relay``: what the relay itself last answered this run (``upstream <status> …``)."""
     if str(getattr(result, "status", "") or "") != "failed":
         return False
     err = str(getattr(result, "error", "") or "")
@@ -159,4 +173,4 @@ def should_failover(result: Any, *, first: bool = False) -> bool:
     # said (formats change), the next model gets one try.
     if first and code in _MODEL_FAIL_CODES:
         return True
-    return is_failover_error(f"{code} {err}", first=first)
+    return is_failover_error(f"{code} {err} {relay}", first=first)

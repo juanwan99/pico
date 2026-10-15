@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, replace
 
 import httpx
-from openai import AsyncOpenAI
+from openai import APIConnectionError, AsyncOpenAI
 
+from pico_orchestrator import upstream
 from pico_orchestrator.brain_ha import is_model_dead
 from pico_orchestrator.sse_keepalive import is_proxy_first_byte_timeout
 
@@ -393,41 +394,72 @@ def _is_model_missing_error(exc: Exception) -> bool:
     return "404" in msg or ("model" in low and "not" in low) or "invalid_request" in low
 
 
-# New API sheds load with an instant 503 while the host CPU is pegged; that
-# can last minutes (#1135). Before the first token, back off and try again:
-# 3s doubling × 6 ≈ 3 min. The SDK's own retry stays off (timeouts, #766).
-OVERLOAD_RETRY_MAX = 6
-OVERLOAD_RETRY_BASE_S = 3.0
-_OVERLOAD_STATUS = {429, 503, 529}
-
-
 # Thinking-off calls answer within seconds; a stall before the first byte is a
 # hung upstream, not a long think (#1195: a 385-token call sat 114 s on a 3600 s
 # read timeout). Thinking-on keeps the long read timeout (GPT can think 10 min).
-# Resends now belong to the hedged race in stream_chat (pico#1257): a fast 502
-# or a stall is replaced by the next attempt there, not retried in place.
+# Resending (hedge, 429 / 5xx, next model) is the race in stream_chat, under
+# one budget (pico#1271): nothing here retries in place.
 FIRST_BYTE_TIMEOUT_S = 60.0
-FIRST_BYTE_RETRIES = 0
 
 
-def _is_upstream_5xx(exc: Exception) -> bool:
-    status = getattr(exc, "status_code", None)
-    return (isinstance(status, int) and 500 <= status < 600) or "URLError" in str(exc)
-
-
-def _is_upstream_overload(exc: Exception) -> bool:
-    status = getattr(exc, "status_code", None)
-    return status in _OVERLOAD_STATUS or "overloaded" in str(exc).lower()
+_CLIENTS: dict[tuple[int, str, str], AsyncOpenAI] = {}
 
 
 def _llm_client(provider: ProviderConfig) -> AsyncOpenAI:
-    """Official OpenAI SDK. Long read timeout: GPT thinking can exceed 10 min."""
-    return AsyncOpenAI(
-        api_key=provider.api_key,
-        base_url=provider.base_url,
-        timeout=httpx.Timeout(connect=30.0, read=3600.0, write=60.0, pool=30.0),
-        max_retries=0,
+    """Official OpenAI SDK, one per key and event loop (pico#1271: shared pool).
+
+    Long read timeout: GPT thinking can exceed 10 min. The SDK never retries.
+    """
+    try:
+        loop_id = id(asyncio.get_running_loop())
+    except RuntimeError:
+        loop_id = 0
+    k = (loop_id, provider.base_url or "", provider.api_key or "")
+    client = _CLIENTS.get(k)
+    if client is None:
+        if len(_CLIENTS) > 32:
+            _CLIENTS.clear()
+        client = _CLIENTS[k] = AsyncOpenAI(
+            api_key=provider.api_key,
+            base_url=provider.base_url,
+            timeout=httpx.Timeout(connect=30.0, read=3600.0, write=60.0, pool=30.0),
+            max_retries=0,
+        )
+    return client
+
+
+async def _drop(_result: object) -> None:
+    return None
+
+
+async def call_once[T](
+    provider: ProviderConfig,
+    purpose: str,
+    send: Callable[[], Awaitable[T]],
+    *,
+    run_id: str | None = None,
+) -> T:
+    """One non-streamed logical call through the door (pico#1271).
+
+    ``send()`` makes one request. It is sent with a key slot held, at most
+    ``CALL_BUDGET`` times, retried only on 429 / 5xx / no answer with the
+    door's pause. Callers keep no retry loop of their own.
+    """
+
+    async def one(_k: int) -> T:
+        release = await upstream.acquire(provider.api_key, purpose)
+        try:
+            return await send()
+        finally:
+            release()
+
+    result, _ = await upstream.race(
+        one,
+        upstream.Call(purpose, run_id=run_id),
+        relaunch=upstream.worth_retry,
+        discard=_drop,
     )
+    return result
 
 
 def _responses_input_from_messages(
@@ -555,37 +587,28 @@ async def _iter_openai_responses(
     }
     if instructions:
         kwargs["instructions"] = instructions
-    last_exc: Exception | None = None
+    # One try: resending belongs to the race in stream_chat (pico#1271).
     yielded = False
-    for attempt in range(2):
-        try:
-            stream = await client.responses.create(**kwargs)
-            async for event in stream:
-                usage = _responses_completed_usage(event)
-                if usage:
-                    _apply_usage_out(usage_out, usage)
-                piece = _responses_text_delta(event)
-                if piece:
-                    yielded = True
-                    yield piece
-                    continue
-                if not yielded:
-                    full = _responses_completed_text(event)
-                    if full:
-                        yielded = True
-                        yield full
-            return
-        except Exception as exc:
-            last_exc = exc
-            if (
-                attempt == 0
-                and not yielded
-                and is_proxy_first_byte_timeout(exc)
-            ):
+    stream = await client.responses.create(**kwargs)
+    try:
+        async for event in stream:
+            usage = _responses_completed_usage(event)
+            if usage:
+                _apply_usage_out(usage_out, usage)
+            piece = _responses_text_delta(event)
+            if piece:
+                yielded = True
+                yield piece
                 continue
-            raise
-    if last_exc is not None:
-        raise last_exc
+            if not yielded:
+                full = _responses_completed_text(event)
+                if full:
+                    yielded = True
+                    yield full
+    finally:
+        # A dropped hedge copy must hang up now, not when GC finds it (pico#1283).
+        with suppress(Exception):
+            await stream.close()
 
 
 async def stream_chat(
@@ -648,22 +671,27 @@ async def stream_chat(
         stream = await client.chat.completions.create(**kwargs)
         spent = 0
         answered = False
-        async for chunk in stream:
-            usage = getattr(chunk, "usage", None)
-            if usage is not None:
-                from pico_orchestrator.usage_parse import parse_usage_blob
+        try:
+            async for chunk in stream:
+                usage = getattr(chunk, "usage", None)
+                if usage is not None:
+                    from pico_orchestrator.usage_parse import parse_usage_blob
 
-                parsed = parse_usage_blob(usage)
-                _apply_usage_out(usage_out, parsed)
-                spent = int((parsed or {}).get("completion_tokens") or 0)
-            choices = getattr(chunk, "choices", None) or []
-            finish = getattr(choices[0], "finish_reason", None) if choices else None
-            if finish and finish_out is not None:
-                finish_out["finish_reason"] = str(finish)
-            delta = choices[0].delta.content if choices else None
-            if delta:
-                answered = True
-                yield delta
+                    parsed = parse_usage_blob(usage)
+                    _apply_usage_out(usage_out, parsed)
+                    spent = int((parsed or {}).get("completion_tokens") or 0)
+                choices = getattr(chunk, "choices", None) or []
+                finish = getattr(choices[0], "finish_reason", None) if choices else None
+                if finish and finish_out is not None:
+                    finish_out["finish_reason"] = str(finish)
+                delta = choices[0].delta.content if choices else None
+                if delta:
+                    answered = True
+                    yield delta
+        finally:
+            # A dropped hedge copy must hang up now, not when GC finds it (pico#1283).
+            with suppress(Exception):
+                await stream.close()
         # Gemini can spend the whole budget thinking and still say stop (#1116).
         if (
             finish_out is not None
@@ -682,62 +710,51 @@ async def stream_chat(
 
     async def _iter_provider(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
         think = thinking if mid == model_id else lane_thinking
-        if uses_openai_responses_brain(provider):
-            async for piece in _iter_openai_responses(
-                provider,
-                mid,
-                messages,
-                max_tokens=max_tokens,
-                thinking=think,
-                usage_out=usage_out,
-            ):
+        release = await upstream.acquire(provider.api_key, "direct")
+        try:
+            if uses_openai_responses_brain(provider):
+                async for piece in _iter_openai_responses(
+                    provider,
+                    mid,
+                    messages,
+                    max_tokens=max_tokens,
+                    thinking=think,
+                    usage_out=usage_out,
+                ):
+                    yield piece
+                return
+            async for piece in _iter_chat_completions(provider, mid, think):
                 yield piece
-            return
-        async for piece in _iter_chat_completions(provider, mid, think):
-            yield piece
+        finally:
+            release()
 
     first_byte_s = FIRST_BYTE_TIMEOUT_S if thinking is False else None
 
-    async def _with_overload_retry(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
-        attempt = 0
-        quick_left = FIRST_BYTE_RETRIES
-        while True:
-            yielded = False
-            pieces = _iter_provider(provider, mid)
-            try:
-                while True:
-                    try:
-                        if yielded or first_byte_s is None:
-                            piece = await anext(pieces)
-                        else:
-                            piece = await asyncio.wait_for(anext(pieces), first_byte_s)
-                    except StopAsyncIteration:
-                        return
-                    except TimeoutError:
-                        raise TimeoutError(
-                            f"upstream first byte timeout after {int(first_byte_s or 0)}s"
-                        ) from None
-                    yielded = True
-                    yield piece
-            except Exception as exc:
-                # No channel (503) or a dead key (429 quota, 403): waiting cannot help, the next model can.
-                if yielded or is_model_dead(str(exc)):
-                    raise
-                if attempt < OVERLOAD_RETRY_MAX and _is_upstream_overload(exc):
-                    await asyncio.sleep(OVERLOAD_RETRY_BASE_S * 2**attempt)
-                    attempt += 1
-                    continue
-                if quick_left > 0 and (isinstance(exc, TimeoutError) or _is_upstream_5xx(exc)):
-                    quick_left -= 1
-                    continue
-                raise
-            finally:
-                with suppress(Exception):
-                    await pieces.aclose()
+    async def _first_byte_guard(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
+        yielded = False
+        pieces = _iter_provider(provider, mid)
+        try:
+            while True:
+                try:
+                    if yielded or first_byte_s is None:
+                        piece = await anext(pieces)
+                    else:
+                        piece = await asyncio.wait_for(anext(pieces), first_byte_s)
+                except StopAsyncIteration:
+                    return
+                except TimeoutError:
+                    raise TimeoutError(
+                        f"upstream first byte timeout after {int(first_byte_s or 0)}s"
+                    ) from None
+                yielded = True
+                yield piece
+        finally:
+            with suppress(Exception):
+                await pieces.aclose()
 
     async def _pump(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
         try:
-            async for piece in _with_overload_retry(provider, mid):
+            async for piece in _first_byte_guard(provider, mid):
                 yield piece
         except Exception as e:
             fallback = _deepseek_config()
@@ -767,8 +784,13 @@ async def stream_chat(
                 raise RuntimeError(
                     f"模型不可用：{mid}。请检查 DEEPSEEK_MODEL / KIMI_MODEL。"
                 ) from e
-            if "429" in msg or "rate" in low:
-                raise RuntimeError("模型调用过于频繁，请稍后再试。") from e
+            if (
+                upstream.status_of(e) in upstream.BUSY_STATUS
+                or "429" in msg
+                or "rate" in low
+                or "overloaded" in low
+            ):
+                raise RuntimeError(upstream.BUSY_TEXT) from e
             raise RuntimeError(f"模型调用失败：{msg}") from e
 
     # Same New API, next model when the primary's channel is down (#1248).
@@ -781,13 +803,13 @@ async def stream_chat(
             m for m in brain_candidates(model_id) if not images or model_accepts_image(m)
         ] or [model_id]
     from pico_orchestrator.brain_ha import is_failover_error, mark_down
-    from pico_orchestrator.hedge import hedge_delays, race_first
 
-    # Hedged race (pico#1257): the relay's first token is heavy-tailed, so a
-    # slow attempt gets company instead of a 60 s wait. Hedges alternate the
-    # primary and the first backup; a channel that is down is skipped.
-    plan = [models[0], models[1], models[0], models[1], *models[2:]] if len(models) > 1 else [models[0]] * 4
+    # One budget (pico#1271): the first try, one hedge at the relay's ~p95 first
+    # token, one retry or next model — three requests at most. The hedge goes to
+    # the first backup; a channel that is down is skipped.
+    plan = [models[0], models[1], models[0], *models[2:]] if len(models) > 1 else [models[0]] * 3
     dead: set[str] = set()
+    switched: set[int] = set()
     picked: dict[int, str] = {}
     retry: dict[int, bool] = {}
 
@@ -810,17 +832,28 @@ async def stream_chat(
             with suppress(Exception):
                 await pieces.aclose()
             text = f"{exc} {exc.__cause__ or ''}"
+            cause = exc.__cause__
+            status = getattr(cause, "status_code", None)
+            if status is not None:
+                verdict = upstream.verdict(status)
+            elif isinstance(cause, (TimeoutError, httpx.HTTPError, APIConnectionError)):
+                verdict = "retry"  # no answer at all
+            else:
+                verdict = "stop"
             # No channel / key suspended / model refused: this model cannot answer.
-            if is_model_dead(text):
+            if is_model_dead(text) or verdict == "switch":
                 dead.add(mid)
                 mark_down(mid)
+                switched.add(id(exc))
             elif str(exc).startswith("模型不可用"):
                 dead.add(mid)
             # The head model failing before output gets the next model whatever the
             # relay said (#1261); from a backup only a known relay / key fault does.
             head = mid == models[0]
             retry[id(exc)] = isinstance(exc, RuntimeError) and (
-                is_failover_error(text, first=head) or (head and len(set(models)) > 1)
+                is_failover_error(text, first=head)
+                or verdict in {"retry", "switch"}
+                or (head and len(set(models)) > 1)
             )
             raise
         return pieces, first
@@ -832,8 +865,14 @@ async def stream_chat(
     def _relaunch(exc: BaseException) -> bool:
         return retry.get(id(exc), False)
 
-    (pieces, first), won = await race_first(
-        start, hedge_delays("medium" if lane_thinking else None), relaunch=_relaunch, discard=_discard
+    (pieces, first), won = await upstream.race(
+        start,
+        upstream.Call("direct"),
+        hedge=upstream.hedge_after("medium" if lane_thinking else None),
+        relaunch=_relaunch,
+        discard=_discard,
+        # the next model goes at once; the same busy relay gets a pause
+        pause=lambda exc, n: 0.0 if id(exc) in switched else upstream.backoff(exc, n),
     )
     mid = picked[won]
     try:

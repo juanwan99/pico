@@ -109,11 +109,12 @@ PI_AGENT_HOME_ENV = "PI_CODING_AGENT_DIR"
 # of silence on the wire. Pi's 5 min idle default would cut bigger ones; match
 # the ws-proxy read timeout (900s) instead.
 PI_HTTP_IDLE_TIMEOUT_MS = 900_000
-PI_RETRY_MAX = 8
+# Pi's own retry is off (pico#1271): the run proxy already retries once before
+# the first token, under the same budget; a cut mid-stream is Pico's
+# same-session resume. Pi 8× on top of that is how one step became dozens of
+# upstream requests (and #1195: 36 resends of one toolless answer).
+PI_RETRY_MAX = 0
 PI_RETRY_BASE_DELAY_MS = 3_000
-# A run with no tools is one model answer. Upstream cuts it at the same token
-# every time (#1195): 8 retries × resumes was 36 resends and an hour. One retry.
-PI_RETRY_MAX_TOOLLESS = 1
 
 
 def official_compaction_settings(
@@ -138,12 +139,12 @@ def official_compaction_settings(
             "keepRecentTokens": keep,
         },
         "httpIdleTimeoutMs": PI_HTTP_IDLE_TIMEOUT_MS,
-        # Pi's own retry on retryable upstream errors (overloaded / 5xx / 429).
-        # Default 3 × 2s. New API rejects with 503 for minutes while the host
-        # CPU is pegged (#1135): 3s doubling × 8 ≈ 13 min keeps a long task alive.
-        # A model with no channel does not wait this out: the runtime aborts on
-        # the first auto_retry_start and brain-HA fails over.
-        "retry": {"enabled": True, "maxRetries": retry_max, "baseDelayMs": PI_RETRY_BASE_DELAY_MS},
+        # Pi's own retry: off by default (PI_RETRY_MAX, pico#1271).
+        "retry": {
+            "enabled": retry_max > 0,
+            "maxRetries": retry_max,
+            "baseDelayMs": PI_RETRY_BASE_DELAY_MS,
+        },
     }
 
 

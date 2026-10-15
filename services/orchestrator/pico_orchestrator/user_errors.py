@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 
 from pico_orchestrator.teacher_text import teacher_safe
+from pico_orchestrator.upstream import BUSY_TEXT
 
 FILE_IN_RESULTS = "已经生成的文件还在结果里，可以直接打开。"
 
@@ -109,10 +110,15 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
         return "等了太久没有回应，请再发一次。不是你的问题写错。"
     # AIProxy 503 is「上游不可用」, not a first-byte timeout; do not tell the
     # teacher to keep the stream open.
-    if "temporarily unavailable" in low or "(503)" in low or "error code: 503" in low:
-        return "这会儿有点忙，请稍等再发一次。不是你的问题写错。"
-    if "overloaded" in low or "server_error" in low:
-        return "这会儿有点忙，请稍等再发一次。"
+    if (
+        "temporarily unavailable" in low
+        or "(503)" in low
+        or "error code: 503" in low
+        or "overloaded" in low
+        or "server_error" in low
+        or text.startswith(BUSY_TEXT)
+    ):
+        return f"{BUSY_TEXT}不是你的问题写错。"
     if (
         "stream_read_error" in low
         or "stream ended abnormally" in low

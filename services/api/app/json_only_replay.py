@@ -6,10 +6,14 @@ successful answer: no model call, no run, no usage row. A caller that hung
 up (steward's 15 s budget) still gets its answer stored here (pico#1257).
 Process-local only; a restart just empties it. Not a general cache: callers decide what is
 replayable, a miss is the normal path.
+
+A re-send that arrives while the first is still being answered joins that
+answer (pico#1271 / #1259): one model call, not one per re-send.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import time
@@ -20,6 +24,7 @@ TTL_S = 600.0
 MAX_ENTRIES = 512
 
 _entries: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
+_inflight: dict[str, asyncio.Task] = {}
 
 
 def replay_key(*, school_id: str, membership_id: str, **model_input: Any) -> str:
@@ -50,5 +55,22 @@ def put(key: str, payload: dict[str, Any]) -> None:
         _entries.popitem(last=False)
 
 
+def running(key: str) -> asyncio.Task | None:
+    """The answer for this key still being computed, if any."""
+    task = _inflight.get(key)
+    return task if task is not None and not task.done() else None
+
+
+def track(key: str, task: asyncio.Task) -> None:
+    _inflight[key] = task
+
+    def _drop(done: asyncio.Task) -> None:
+        if _inflight.get(key) is done:
+            _inflight.pop(key, None)
+
+    task.add_done_callback(_drop)
+
+
 def clear() -> None:
     _entries.clear()
+    _inflight.clear()

@@ -24,7 +24,7 @@ from collections import Counter
 import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
-from pico_orchestrator.hedge import hedge_delays, race_first
+from pico_orchestrator import upstream
 from pico_orchestrator.true_pi.runner import proxy_entry, runner_token
 
 from app.loopback import request_on_loopback_socket
@@ -56,41 +56,45 @@ def _bearer(request: Request) -> str:
     return raw[7:].strip() if raw.lower().startswith("bearer ") else ""
 
 
-class _Retry(Exception):
-    """Attempt answered 429 / 5xx before any token: try another one."""
+class _Status(Exception):
+    """Attempt answered an error status before any token."""
 
     def __init__(self, status: int, body: bytes, headers: dict[str, str]) -> None:
         super().__init__(f"upstream {status}")
-        self.status = status
+        self.status = status  # upstream.status_of / retry_after read these
+
         self.body = body
         self.headers = headers
 
 
-_RETRY_STATUS = frozenset({429, 500, 502, 503, 504, 520, 522, 524})
+async def _open(method: str, target: str, headers: dict[str, str], body: bytes, *, key: str, purpose: str):
+    """One upstream call up to its first body chunk: (client, upstream, first, chunks, release).
 
-
-async def _open(method: str, target: str, headers: dict[str, str], body: bytes):
-    """One upstream call up to its first body chunk: (client, upstream, first)."""
+    The relay's key slot (pico#1271) is held until the body is done; a call to
+    our own llm-pass hop is counted there, not here.
+    """
+    release = (lambda: None) if not key else await upstream.acquire(key, purpose)
     client = httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False)
-    upstream = None
+    resp = None
     try:
         req = client.build_request(method, target, headers=headers, content=body or None)
-        upstream = await client.send(req, stream=True)
-        if upstream.status_code in _RETRY_STATUS:
-            raw = await upstream.aread()
-            raise _Retry(upstream.status_code, raw, dict(upstream.headers))
-        chunks = upstream.aiter_bytes()
+        resp = await client.send(req, stream=True)
+        if resp.status_code >= 400:
+            raw = await resp.aread()
+            raise _Status(resp.status_code, raw, dict(resp.headers))
+        chunks = resp.aiter_bytes()
         first = b""
         async for chunk in chunks:
             if chunk:
                 first = chunk
                 break
-        return client, upstream, first, chunks
+        return client, resp, first, chunks, release
     except BaseException:
         with contextlib.suppress(Exception):
-            if upstream is not None:
-                await upstream.aclose()
+            if resp is not None:
+                await resp.aclose()
         await client.aclose()
+        release()
         raise
 
 
@@ -102,43 +106,58 @@ async def _stream(
     *,
     on_done=None,
     hedge: list[float] | None = None,
+    call: upstream.Call | None = None,
+    key: str = "",
+    run_id: str | None = None,
 ) -> Response:
     """Stream upstream back. ``on_done`` runs once the body is fully sent (or failed).
 
-    ``hedge`` (model calls only, pico#1257): seconds at which to race another
-    identical call when no first token has come back yet.
+    Model calls (pico#1271) carry a ``call`` budget: one hedge after ``hedge``
+    s without a first token, one retry on 429 / 5xx / no connection. Any other
+    error status goes straight back to Pi, and is noted for the run so brain
+    fail-over can tell a relay 403 from our own.
     """
 
     def _done() -> None:
         if on_done is not None:
             on_done()
 
-    attempts = 1 + len(hedge or [])
+    call = call or upstream.Call("tool", budget=1)
 
     def start(k: int):
-        return _open(method, target, headers, body) if k < attempts else None
+        return _open(method, target, headers, body, key=key, purpose=call.purpose)
 
     async def discard(opened) -> None:
-        client, upstream, _first, _chunks = opened
+        client, resp, _first, _chunks, release = opened
         with contextlib.suppress(Exception):
-            await upstream.aclose()
+            await resp.aclose()
         await client.aclose()
+        release()
+
+    def relaunch(exc: BaseException) -> bool:
+        if isinstance(exc, _Status):
+            return upstream.verdict(exc.status) == "retry"
+        return isinstance(exc, httpx.HTTPError)
 
     try:
-        (client, upstream, first, chunks), won = await race_first(
-            start,
-            hedge or [],
-            relaunch=lambda exc: isinstance(exc, (_Retry, httpx.HTTPError)),
-            discard=discard,
+        (client, resp, first, chunks, release), won = await upstream.race(
+            start, call, hedge=hedge or [], relaunch=relaunch, discard=discard
         )
-    except _Retry as exc:
+    except _Status as exc:
         _done()
-        logger.warning("ws-proxy upstream %s after %s attempts", exc.status, attempts)
+        logger.warning("ws-proxy upstream %s after %s attempts", exc.status, call.sent)
+        upstream.count(call.purpose, f"http_{exc.status}")
+        if call.purpose != "tool":
+            upstream.note_upstream_error(run_id, exc.status, exc.body.decode("utf-8", "replace"))
         out = {k: v for k, v in exc.headers.items() if k.lower() not in _HOP}
         return Response(exc.body, status_code=exc.status, headers=out)
+    except upstream.UpstreamBusy:
+        _done()
+        return _deny("proxy.busy", 429)
     except Exception as exc:  # noqa: BLE001 — any upstream failure is a 502 to the box
         _done()
         logger.warning("ws-proxy upstream error %s", type(exc).__name__)
+        upstream.count(call.purpose, "unreachable")
         return _deny("proxy.upstream_unreachable", 502)
     except BaseException:
         _done()
@@ -154,17 +173,18 @@ async def _stream(
                 yield chunk
         finally:
             try:
-                await upstream.aclose()
+                await resp.aclose()
                 await client.aclose()
             finally:
+                release()
                 _done()
 
-    out = {k: v for k, v in upstream.headers.items() if k.lower() not in _HOP}
+    out = {k: v for k, v in resp.headers.items() if k.lower() not in _HOP}
     return StreamingResponse(
         _iter(),
-        status_code=upstream.status_code,
+        status_code=resp.status_code,
         headers=out,
-        media_type=upstream.headers.get("content-type"),
+        media_type=resp.headers.get("content-type"),
     )
 
 
@@ -175,7 +195,7 @@ def request_effort(payload: dict) -> str:
     return (effort or str(payload.get("reasoning_effort") or "")).lower()
 
 
-def model_hedge(body: bytes) -> list[float]:
+def model_hedge(body: bytes, run_id: str | None = None) -> list[float]:
     """Hedge schedule for one model call; streaming only (a JSON reply has no first token)."""
     try:
         payload = json.loads(body.decode("utf-8") or "{}")
@@ -183,7 +203,10 @@ def model_hedge(body: bytes) -> list[float]:
         return []
     if not isinstance(payload, dict) or payload.get("stream") is not True:
         return []
-    return hedge_delays(request_effort(payload))
+    st = upstream.run_state(run_id)
+    if st is not None and st.no_hedge:
+        return []
+    return upstream.hedge_after(request_effort(payload))
 
 
 MODEL_PATHS = frozenset({"chat/completions", "responses", "models"})
@@ -300,10 +323,30 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
         return _deny("proxy.busy", 429)
     # Slot is held until the streamed body is done, not just the headers.
     # Hedged copies ride the same slot: they race for one answer (pico#1257).
-    hedge = model_hedge(body) if request.method == "POST" else []
+    hedge = model_hedge(body, run_id) if request.method == "POST" else []
+    if is_llm_pass(target):
+        headers[DOOR_HEADER] = "raced"
     return await _stream(
-        request.method, target, headers, body, on_done=entry.slots.release, hedge=hedge
+        request.method,
+        target,
+        headers,
+        body,
+        on_done=entry.slots.release,
+        hedge=hedge,
+        call=upstream.Call("pi_step", run_id=run_id),
+        key="" if is_llm_pass(target) else entry.llm_key,
+        run_id=run_id,
     )
+
+
+# Set on a step the run proxy already raced when it goes on to our llm-pass hop:
+# that hop then sends once (one retry layer, pico#1283).
+DOOR_HEADER = "x-pico-door"
+
+
+def is_llm_pass(target: str) -> bool:
+    """Our own loopback hop (paperclip splice): it goes through the door itself."""
+    return "/internal/llm-pass/" in target
 
 
 def pinned_model_body(body: bytes, model: str) -> bytes | None:

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 
-import httpx
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import StreamingResponse
+from pico_orchestrator import upstream as door
 from pico_orchestrator.llm_file_pass import splice_responses_body, turn_files
 
 from app.loopback import is_loopback_host, request_on_loopback_socket
 from app.settings import Settings, get_settings
+from app.ws_proxy_router import DOOR_HEADER, _stream, model_hedge
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -62,33 +62,22 @@ async def llm_pass(run_id: str, path: str, request: Request) -> Response:
                 )
         except Exception:
             logger.exception("llm-pass splice skipped run_id=%s", run_id)
-    timeout = httpx.Timeout(600.0, connect=10.0)
-    client = httpx.AsyncClient(timeout=timeout, follow_redirects=False)
-    req = client.build_request(
-        request.method, target, headers=headers, content=raw or None
-    )
-    try:
-        upstream = await client.send(req, stream=True)
-    except Exception:
-        await client.aclose()
-        raise
-
-    async def _iter():
-        try:
-            async for chunk in upstream.aiter_bytes():
-                yield chunk
-        finally:
-            await upstream.aclose()
-            await client.aclose()
-
-    out_headers = {
-        key: value
-        for key, value in upstream.headers.items()
-        if key.lower() not in _HOP
-    }
-    return StreamingResponse(
-        _iter(),
-        status_code=upstream.status_code,
-        headers=out_headers,
-        media_type=upstream.headers.get("content-type"),
+    auth = headers.get("authorization") or headers.get("Authorization") or ""
+    # One door, one retry layer (pico#1271): the run proxy already raced this
+    # step and marked it; Pi talking here directly (no box) is raced here.
+    raced = headers.pop(DOOR_HEADER, None)  # starlette keys are lower-case
+    if raced:
+        call, hedge = door.Call("pi_pass", budget=1), []
+    else:
+        call = door.Call("pi_step", run_id=run_id)
+        hedge = model_hedge(raw, run_id) if request.method == "POST" else []
+    return await _stream(
+        request.method,
+        target,
+        headers,
+        raw,
+        hedge=hedge,
+        call=call,
+        key=auth.removeprefix("Bearer ").strip() or "llm-pass",
+        run_id=None if raced else run_id,
     )

@@ -38,3 +38,24 @@ def _no_model_marked_down():
     brain_ha._down_until.clear()
     yield
     brain_ha._down_until.clear()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_upstream_door():
+    """pico#1271: budgets, key slots and counters are per test (slots bind to a loop).
+
+    The 2 s / 6 s retry pause is off here; ``test_upstream`` asserts it on its own.
+    """
+    try:
+        from pico_orchestrator import provider, upstream
+    except ImportError:
+        yield
+        return
+    upstream.reset()
+    provider._CLIENTS.clear()
+    pause = upstream.RETRY_BACKOFF_S
+    upstream.RETRY_BACKOFF_S = (0.0,)
+    yield
+    upstream.RETRY_BACKOFF_S = pause
+    upstream.reset()
+    provider._CLIENTS.clear()

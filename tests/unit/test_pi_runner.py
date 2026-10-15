@@ -161,10 +161,10 @@ def proxy_client(monkeypatch):
     monkeypatch.setenv("PICO_RUNNER_TOKEN", TOKEN)
     seen: dict[str, Any] = {}
 
-    async def fake_stream(method, target, headers, body, on_done=None, hedge=None):
+    async def fake_stream(method, target, headers, body, on_done=None, hedge=None, **door):
         from fastapi.responses import JSONResponse
 
-        seen.update(method=method, target=target, headers=headers, body=body, hedge=hedge)
+        seen.update(method=method, target=target, headers=headers, body=body, hedge=hedge, **door)
         if on_done is not None:
             on_done()
         return JSONResponse({"ok": True})
