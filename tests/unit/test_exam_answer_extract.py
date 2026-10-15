@@ -1726,3 +1726,11 @@ async def test_solve_thinks_and_flags_analysis_that_picks_other_letters(monkeypa
     await ex.extract_pages([_page(1)], task="paper", complete=complete)
     assert thinking == [False], "读卷不开推理"
     assert ex.task_thinking("structure", False) is False
+
+
+def test_page_text_over_cap_is_truncated_not_rejected() -> None:
+    from app.exam_answer_extract import MAX_PAGE_TEXT_CHARS, PageIn
+
+    page = PageIn(**{**_page_in(1), "text": "字" * (MAX_PAGE_TEXT_CHARS + 500)})
+    assert len(page.text) == MAX_PAGE_TEXT_CHARS
+    assert PageIn(**_page_in(1)).text is None

@@ -57,6 +57,7 @@ always-apply: false
 - `score` 没有就是 `null`，禁止默认 1。
 - `subs` 一问一条（原卷几问就几条，没有小问为 `[]`）；`subs[].score` 是评分细则写明的本问分，拿不到就是 `null`，不平摊、不估。题分为 `null` 且各问都有分时，题分取合计。
 - `sub_count` 只数小问：有 `subs` 时等于最大小问号；①② 空不算。`answer` 必带「（1）…（2）…」号，一问一段（模型漏号时由 `subs` 拼回），edu 按号切。
+- 小问空着、整题答案里有「（1）…（2）…」的按号拆进小问（`split_by_sub_marks`）。已知局限：只认 (1)（1）1) 这几种号，带括号的圈码「⑴⑵」不拆，那题小问照模型给的。
 - `rubric` 与 `answer` 分离：细则默认折叠在题下，不进排版。`analysis`（解析）与 `rubric`（评分标准）分开，edu 各存一处（edu-core#3157）。
 - `paper` 读法的共用材料单独成条（`kind: material`），合并后放进顶层 `materials: [{id, material_for, material, figures}]`，题上带 `material_id`；页顶续写的材料接到前一段材料后面；材料没写 `material_for` 时，管到下一段材料之前的题。
 - `task`：`answers`（答案卷）/ `structure`（只抽结构）/ `solve`（按题号表做题）/ `paper`（试卷录入：题干、选项、共用材料、配图外框，卷上印了答案 / 解析 / 评分标准一起抄，不做题；edu-core#3157）。

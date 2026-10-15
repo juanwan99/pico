@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pico_orchestrator.teacher_text import teacher_safe
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.auth import Principal, payer_for, require_scope
 from app.usage_ledger import record_usage_event
@@ -46,7 +46,13 @@ class PageIn(BaseModel):
     mime: str = Field(default="image/jpeg", max_length=32)
     content_b64: str
     # 本页 PDF 文字层（edu pdftotext 按页切，edu-core#3164）：字以它为准，被拦的整页按它读
-    text: str | None = Field(default=None, max_length=MAX_PAGE_TEXT_CHARS)
+    text: str | None = None
+
+    @field_validator("text")
+    @classmethod
+    def _cap_text(cls, v: str | None) -> str | None:
+        # 超长截断、不整单 422：文字层只是辅助，页图照读
+        return v[:MAX_PAGE_TEXT_CHARS] if v else v
 
 
 class ExtractIn(BaseModel):
