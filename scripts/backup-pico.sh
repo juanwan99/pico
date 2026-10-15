@@ -3,7 +3,8 @@
 #
 #   backup-pico.sh run     dump everything, upload, verify sizes, prune > KEEP_DAYS, clean local
 #   backup-pico.sh drill   pull the newest backup and restore it into throwaway containers
-#                          (--corrupt flips one byte first: proves a bad backup is stopped)
+#                          (--corrupt flips one byte first: proves a bad backup is stopped;
+#                           CORRUPT_CAUGHT exits 0 and leaves the real drill status alone)
 #   backup-pico.sh watch   alert when the last good backup is older than STALE_HOURS (26)
 #
 # What goes out (one folder per run, <stamp>/):
@@ -175,18 +176,35 @@ raise SystemExit(0 if ok == "ok" else "quick_check: " + ok)
 # Every check fails the drill (status JSON + mail); only a clean pass prints DRILL_OK.
 DRILL_STATUS="${PICO_BACKUP_DRILL_STATUS:-$LOG_DIR/pico-backup-drill-status.json}"
 
-drill_fail() {
+# --corrupt is a probe of the drill itself: it never touches the real drill status
+# (watch and pico_ops_watch read it) and only mails when the bad backup got through.
+CORRUPT=""  # "" | armed (asked, byte not flipped yet) | flipped
+
+drill_alert() {
   STATUS_JSON="$DRILL_STATUS" write_status FAIL "$1"
   if [[ -f "$ALERT_BIN" ]]; then
     python3 "$ALERT_BIN" --subject "[pico] 备份恢复演练失败 $(hostname)" \
       --body "pico 备份恢复演练失败：$1。看 $LOG_DIR/pico-backup.log。" >/dev/null 2>&1 || true
   fi
+}
+
+drill_fail() {
+  if [[ "$CORRUPT" == flipped ]]; then
+    log "CORRUPT_CAUGHT $1"  # the flipped byte was stopped: what --corrupt is meant to prove
+    exit 0
+  fi
+  if [[ "$CORRUPT" == armed ]]; then
+    log "CORRUPT_PROBE_ERROR $1"  # failed before the flip: proves nothing, status untouched
+    exit 1
+  fi
+  drill_alert "$1"
   log "DRILL_FAIL $1"
   exit 1
 }
 
 cmd_drill() {
   local corrupt="${1:-}" latest dir img_api img_meili out n f part base
+  [[ "$corrupt" == --corrupt ]] && CORRUPT=armed
   export https_proxy="$PROXY" HTTPS_PROXY="$PROXY"
   latest="$("$RCLONE_BIN" lsf "$REMOTE" --dirs-only 2>/dev/null | sort | tail -1)" || true
   latest="${latest%/}"
@@ -202,8 +220,11 @@ cmd_drill() {
     rm -f "$base".part-*
   done
   if [[ "$corrupt" == --corrupt ]]; then
-    printf '\xff' | dd of="$dir/mongo.archive.gz" bs=1 seek=1000 conv=notrunc status=none
+    # invert byte 1000 (a fixed value would be no change when the byte already held it)
+    n="$(dd if="$dir/mongo.archive.gz" bs=1 skip=1000 count=1 status=none | od -An -tu1 | tr -d ' ')"
+    printf "\\x$(printf %02x $((n ^ 255)))" | dd of="$dir/mongo.archive.gz" bs=1 seek=1000 conv=notrunc status=none
     log "drill: flipped one byte of mongo.archive.gz on purpose"
+    CORRUPT=flipped
   fi
   (cd "$dir" && sha256sum -c --quiet SHA256SUMS) || drill_fail "sha256 mismatch in $latest"
   log "drill $latest: sha256 ok"
@@ -254,6 +275,11 @@ raise SystemExit(0 if qc == "ok" and runs > 0 else 1)')" || drill_fail "pico.db:
     | python3 -c 'import json,sys; s=json.load(sys.stdin)["indexes"]; print(" ".join("%s=%s" % (k, v["numberOfDocuments"]) for k, v in s.items())); raise SystemExit(0 if sum(v["numberOfDocuments"] for v in s.values()) else 1)')" \
     || drill_fail "meili empty: $out"
   log "drill meili: $out"
+  if [[ -n "$CORRUPT" ]]; then
+    drill_alert "--corrupt: a flipped byte in mongo.archive.gz passed every check"
+    log "CORRUPT_MISSED $latest"
+    exit 1
+  fi
   STATUS_JSON="$DRILL_STATUS" write_status OK "$latest"
   log "DRILL_OK $latest"
 }

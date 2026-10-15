@@ -22,7 +22,7 @@
 
 ## 恢复演练
 
-`bash scripts/backup-pico.sh drill`：拉最新一份，进临时容器恢复（`--network none`，不碰现网）。`pico-backup-drill.timer` 每周日 06:10 自动跑；任何一项不过就失败、写 `~/logs/pico-backup-drill-status.json` 并发信，只有全过才打 `DRILL_OK`。`drill --corrupt` 故意改坏一个字节，用来证明坏包会在 sha256 这一步被拦下。逐项检查：
+`bash scripts/backup-pico.sh drill`：拉最新一份，进临时容器恢复（`--network none`，不碰现网）。`pico-backup-drill.timer` 每周日 06:10 自动跑；任何一项不过就失败、写 `~/logs/pico-backup-drill-status.json` 并发信，只有全过才打 `DRILL_OK`。`drill --corrupt` 故意改坏一个字节，用来证明坏包会在 sha256 这一步被拦下。它只检验演练本身：坏包被拦下就打 `CORRUPT_CAUGHT` 并以 0 退出，不写正式的演练状态、不发信，免得巡检把这次故意的失败当成真失败报警。只有坏包一路过了所有检查（`CORRUPT_MISSED`），才写 FAIL 并发信。逐项检查：
 - sha256 全部对上；
 - mongo 各集合条数（conversations、messages 不能为 0）；
 - pico.db `quick_check` = ok，runs 条数 > 0；
