@@ -158,3 +158,20 @@ async def test_no_steer_outside_the_workspace(monkeypatch: pytest.MonkeyPatch) -
     )
     await _run(monkeypatch, transport, workspace=False)
     assert _steers(transport) == []
+
+
+@pytest.mark.asyncio
+async def test_a_failed_steer_never_fails_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator.true_pi.client import TruePiRpcClient
+
+    async def broken_steer(self: Any, message: str) -> None:
+        raise TimeoutError
+
+    monkeypatch.setattr(TruePiRpcClient, "steer", broken_steer)
+    transport = FakeTransport(
+        scripted=_script(_call("c1", "write", {"path": "/workspace/outputs/a.html", "content": "x"}))
+    )
+    events = await _run(monkeypatch, transport)
+    kinds = [k for k, _ in events]
+    assert "run.look_check" not in kinds
+    assert "run.error" not in kinds
