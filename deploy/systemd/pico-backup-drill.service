@@ -1,0 +1,12 @@
+# pico#1270 · weekly restore drill of the newest backup into throwaway containers (mail on failure)
+[Unit]
+Description=pico backup restore drill
+
+[Service]
+Type=oneshot
+Environment=PICO_BACKUP_REMOTE=gdrive:pico-backup
+Environment=PICO_BACKUP_PROXY=http://127.0.0.1:7893
+ExecStart=/bin/bash /opt/pico/scripts/backup-pico.sh drill
+TimeoutStartSec=3h
+Nice=10
+IOSchedulingClass=idle
