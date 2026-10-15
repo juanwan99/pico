@@ -1172,6 +1172,25 @@ def test_route_reads_a_16_page_paper(client: TestClient, monkeypatch):
     assert len(calls) == 16
 
 
+def test_route_takes_a_54_page_lecture_deck_and_stops_at_60(client: TestClient, monkeypatch):
+    """edu-core#3164：讲评课件 PDF 54 页、第 21 题在第 48 页；24 页上限只读到选择题。"""
+    calls: list = []
+    monkeypatch.setattr(ex, "model_complete", _stub({48: json.dumps([{"number": 21, "type": "short_answer", "score": 12}])}, calls))
+    res = client.post(
+        "/v1/exam/answer-extract",
+        json={"task": "paper", "pages": [_page_in(n) for n in range(1, 55)]},
+        headers=_headers(),
+    )
+    assert res.status_code == 200, res.text
+    assert [q["number"] for q in res.json()["questions"]] == [21]
+    res = client.post(
+        "/v1/exam/answer-extract",
+        json={"task": "paper", "pages": [_page_in(n) for n in range(1, 62)]},
+        headers=_headers(),
+    )
+    assert res.status_code == 422
+
+
 def _solve_item(n: int, answer: str, analysis: str = "") -> dict:
     return {"number": n, "type": "single_choice", "options_count": 4, "answer": answer, "analysis": analysis}
 

@@ -25,9 +25,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["exam-answer-extract"])
 
-MAX_PAGES = 24  # 试卷录入整份卷一次读（12 页物理卷，edu-core#3157）
+# 试卷录入整份卷一次读（12 页物理卷，edu-core#3157）；讲评课件导出的 PDF 一题占几页，54 页的
+# 生物课件（≈ 13MB 页图）题号排到第 48 页，24 页只读到选择题（edu-core#3164）
+MAX_PAGES = 60
 MAX_PAGE_BYTES = 4 * 1024 * 1024
-MAX_TOTAL_BYTES = 20 * 1024 * 1024
+MAX_TOTAL_BYTES = 40 * 1024 * 1024
 MAX_TEXT_CHARS = 400_000
 PAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
 
@@ -98,7 +100,7 @@ async def post_exam_answer_extract(
             data, mime = _decode_page(page)
             total += len(data)
             if total > MAX_TOTAL_BYTES:
-                raise _bad("page.too_large", "页图总量太大（上限 20MB）", 413)
+                raise _bad("page.too_large", "页图总量太大（上限 40MB）", 413)
             digest.update(data)
             pages.append(
                 {"page": page.page, "mime": mime, "data_b64": base64.b64encode(data).decode()}
