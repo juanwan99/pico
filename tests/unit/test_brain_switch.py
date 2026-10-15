@@ -44,3 +44,17 @@ def test_preflight_blocks_when_no_fallback_reads_images(monkeypatch) -> None:
 def test_preflight_passes_healthy_set(monkeypatch) -> None:
     monkeypatch.setattr(bs, "relay_probe", _fake({("p", "text"): True, ("p", "image"): True, ("f", "text"): True, ("f", "image"): True}))
     assert bs.preflight("b", "k", "p", ["f"]) is True
+
+
+def test_preflight_keeps_a_down_backup_when_another_catches(monkeypatch) -> None:
+    # #1261: sol's key suspended (403) may stay third backup; grok catches.
+    monkeypatch.setattr(bs, "relay_probe", _fake({
+        ("p", "text"): True, ("p", "image"): True,
+        ("g", "text"): True, ("g", "image"): True,
+        ("s", "text"): False, ("s", "image"): False,
+    }))
+    assert bs.preflight("b", "k", "p", ["g", "s"]) is True
+    monkeypatch.setattr(bs, "relay_probe", _fake({
+        ("p", "text"): True, ("p", "image"): True, ("s", "text"): False, ("s", "image"): False,
+    }))
+    assert bs.preflight("b", "k", "p", ["s"]) is False

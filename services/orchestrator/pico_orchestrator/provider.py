@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 import httpx
 from openai import AsyncOpenAI
 
-from pico_orchestrator.brain_ha import is_channel_dead
+from pico_orchestrator.brain_ha import is_model_dead
 from pico_orchestrator.sse_keepalive import is_proxy_first_byte_timeout
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
@@ -720,8 +720,8 @@ async def stream_chat(
                     yielded = True
                     yield piece
             except Exception as exc:
-                # No channel answers 503 too; waiting cannot help, the next model can.
-                if yielded or is_channel_dead(str(exc)):
+                # No channel (503) or a dead key (429 quota, 403): waiting cannot help, the next model can.
+                if yielded or is_model_dead(str(exc)):
                     raise
                 if attempt < OVERLOAD_RETRY_MAX and _is_upstream_overload(exc):
                     await asyncio.sleep(OVERLOAD_RETRY_BASE_S * 2**attempt)
@@ -780,7 +780,7 @@ async def stream_chat(
         models = [
             m for m in brain_candidates(model_id) if not images or model_accepts_image(m)
         ] or [model_id]
-    from pico_orchestrator.brain_ha import is_failover_error
+    from pico_orchestrator.brain_ha import is_failover_error, mark_down
     from pico_orchestrator.hedge import hedge_delays, race_first
 
     # Hedged race (pico#1257): the relay's first token is heavy-tailed, so a
@@ -810,12 +810,17 @@ async def stream_chat(
             with suppress(Exception):
                 await pieces.aclose()
             text = f"{exc} {exc.__cause__ or ''}"
-            # No channel / model refused: the same model cannot answer this call.
-            if is_channel_dead(text) or str(exc).startswith("模型不可用"):
+            # No channel / key suspended / model refused: this model cannot answer.
+            if is_model_dead(text):
                 dead.add(mid)
-            # A 400 may be the primary's relay (one hop); from a backup it is the request.
-            retry[id(exc)] = isinstance(exc, RuntimeError) and is_failover_error(
-                text, first=mid == model_id
+                mark_down(mid)
+            elif str(exc).startswith("模型不可用"):
+                dead.add(mid)
+            # The head model failing before output gets the next model whatever the
+            # relay said (#1261); from a backup only a known relay / key fault does.
+            head = mid == models[0]
+            retry[id(exc)] = isinstance(exc, RuntimeError) and (
+                is_failover_error(text, first=head) or (head and len(set(models)) > 1)
             )
             raise
         return pieces, first
