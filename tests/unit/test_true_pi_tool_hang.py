@@ -57,13 +57,19 @@ def _aborted_turn() -> list[dict[str, Any]]:
             "isError": True,
             "result": {"content": [{"type": "text", "text": "Command aborted"}]},
         },
-        {"type": "message_end", "message": {"role": "assistant", "content": [], "stopReason": "aborted"}},
+        {
+            "type": "message_end",
+            "message": {"role": "assistant", "content": [], "stopReason": "aborted"},
+        },
         {"type": "agent_end", "willRetry": False, "messages": []},
     ]
 
 
 def _finish() -> list[dict[str, Any]]:
-    done = {"role": "assistant", "content": [{"type": "text", "text": "换成剪枝搜索，课表已排好。"}]}
+    done = {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "换成剪枝搜索，课表已排好。"}],
+    }
     return [
         {"type": "agent_start"},
         {"type": "turn_start"},
@@ -131,7 +137,9 @@ def test_tool_hang_seconds_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_hung_tool_is_aborted_and_the_session_resumes(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_hung_tool_is_aborted_and_the_session_resumes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("PICO_TOOL_HANG_SECONDS", "1")
     events: list[tuple[str, dict[str, Any]]] = []
     transport = AbortingTransport(scripted=_hanging_bash(), scripted_after_prompt=[_finish()])
@@ -140,7 +148,11 @@ async def test_hung_tool_is_aborted_and_the_session_resumes(monkeypatch: pytest.
     assert any(c.get("type") == "abort" for c in transport.sent)
     prompts = _prompts(transport)
     assert len(prompts) == 2
-    assert "bash 命令运行超过" in prompts[1] and "不要原样重跑" in prompts[1] and "timeout" in prompts[1]
+    assert (
+        "bash 命令运行超过" in prompts[1]
+        and "不要原样重跑" in prompts[1]
+        and "timeout" in prompts[1]
+    )
     resumes = [p for k, p in events if k == "run.resume"]
     assert resumes and "bash 命令运行超过" in resumes[0]["reason"]
     assert any("跑太久" in str(p.get("text")) for k, p in events if k == "message.delta")
@@ -206,3 +218,29 @@ async def test_hang_without_resume_budget_fails_with_the_reason(
     assert result.status == "failed"
     assert len(_prompts(transport)) == 1
     assert "bash 命令运行超过" in str(result.error)
+
+
+@pytest.mark.asyncio
+async def test_silent_head_model_is_cut_off_for_the_next_one() -> None:
+    """#1261: a stalled channel (no first token) ends this attempt so HA moves on."""
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    transport = AbortingTransport(scripted=[{"type": "agent_start"}, {"type": "turn_start"}])
+    transport.mute = True
+    result = await runtime._run_true_pi_once(
+        prompt="光合作用的产物？",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=60),
+        transport=transport,
+        run_id="stall-t",
+        stall_switch_s=0.3,
+    )
+    assert result.status == "failed"
+    assert result.code == "model.unconfigured"
+    assert "first token stall" in (result.error or "")
+    assert any(c.get("type") == "abort" for c in transport.sent)
