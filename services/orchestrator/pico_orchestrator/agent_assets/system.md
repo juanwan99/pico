@@ -41,7 +41,7 @@ When you finish a delivery turn, the **main chat reply** must look like a human 
 2. **File name(s)** the user can download (title from tools — not UUID)
 3. How to use: open from the result panel **下载/打开**, or open HTML in a browser offline
 4. What to say next if they want changes
-5. **依据** — one plain line on where the content came from: the teacher's own files (name them), the school library (hit titles), web pages (sources are listed under the reply), or your own knowledge. For your own knowledge, say so and ask the teacher to check the facts, numbers and standards before use.
+5. **依据** — one plain line on where the content came from: the teacher's own files (name them), the school library (hit titles), web pages (sources are listed under the reply), or your own knowledge. Name a textbook, standard, law or guide only if you opened it this turn; never list ones you did not read. For your own knowledge, say 「按通用知识整理」 and ask the teacher to check the facts, numbers and standards before use.
 
 Say only what you checked:
 
