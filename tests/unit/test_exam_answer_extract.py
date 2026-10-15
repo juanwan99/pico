@@ -1001,6 +1001,27 @@ def test_escape_latex_keeps_json_escapes_and_fixes_bare_commands():
     assert stem == "$\\frac{1}{2}$ $\\times$ $a\\neq b$ $\\perp$ $\\{x\\}$ $\\sqrt{2}$\nA．x\tB 中 $\\right)$"
 
 
+@pytest.mark.parametrize(
+    ("text", "want"),
+    [
+        ("well\\ni think", "well\ni think"),
+        ("see below\\ne.g.", "see below\ne.g."),
+        ("a\\not valid", "a\not valid"),
+        ("line\\nu turn", "line\nu turn"),
+        ("a\\neg sample", "a\neg sample"),
+        ("x\\tan apple", "x\tan apple"),
+        ("x\\to go", "x\to go"),
+        ("$\\tan x$\\nB", "$\\tan x$\nB"),
+        ("$a\\to b$ \\to", "$a\\to b$ \to"),
+        ("$$\\neg p$$\\nq", "$$\\neg p$$\nq"),
+        ("\\perp 与 $\\beta$", "\\perp 与 $\\beta$"),
+    ],
+)
+def test_escape_latex_ambiguous_escapes_are_latex_only_inside_math(text, want):
+    # text is the raw JSON string body the model wrote; want is the decoded value
+    assert ex.parse_json_array('[{"number":1,"stem":"' + text + '"}]')[0]["stem"] == want
+
+
 def test_paper_item_keeps_stem_and_figures():
     raw = json.dumps(
         [
@@ -1123,7 +1144,21 @@ def test_answers_keep_analysis_apart_from_rubric():
     assert item["stem"] == "" and item["figures"] == [] and item["material_id"] is None
 
 
-def test_route_takes_a_whole_paper_of_pages():
-    from app import exam_answer_extract as route
-
-    assert route.MAX_PAGES >= 16
+def test_route_reads_a_16_page_paper(client: TestClient, monkeypatch):
+    calls: list = []
+    responses = {
+        n: json.dumps([{"number": n, "type": "short_answer", "score": 5, "stem": f"第{n}题"}])
+        for n in range(1, 17)
+    }
+    monkeypatch.setattr(ex, "model_complete", _stub(responses, calls))
+    res = client.post(
+        "/v1/exam/answer-extract",
+        json={"task": "paper", "pages": [_page_in(n) for n in range(1, 17)]},
+        headers=_headers(),
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert [p["page"] for p in body["pages"]] == list(range(1, 17))
+    assert [q["stem"] for q in body["questions"]] == [f"第{n}题" for n in range(1, 17)]
+    # one model call per page: a 16-page paper costs 16 calls
+    assert len(calls) == 16

@@ -89,35 +89,72 @@ def strip_fence(content: str | None) -> str:
     return c.strip()
 
 
-# LaTeX commands whose first letter is also a JSON escape (\t \n \r): "\times" must stay
-# LaTeX, "\nA．" stays newline + option. \b \f are never meant as JSON escapes here.
-_LATEX_TNR = frozenset(
+# LaTeX commands whose first letter is also a JSON escape (\b \f \n \r \t). Only read as LaTeX
+# inside $…$: outside math "well\ni think" / "x\tan apple" / "see below\ne.g." are a real newline
+# or tab followed by text, and the model writes formulas in $…$ (SKILL.md).
+_LATEX_JSON_LOOKALIKE = frozenset(
     {
         "times", "theta", "tan", "tanh", "text", "textbf", "textrm", "tfrac", "tilde", "to", "top",
-        "triangle", "tau", "therefore", "neq", "ne", "nu", "not", "notin", "nabla", "neg", "ni",
-        "nleq", "ngeq", "nmid", "nexists", "nolimits", "right", "rightarrow", "Rightarrow", "rho",
-        "rangle", "rceil", "rfloor", "rm",
+        "triangle", "triangleq", "tau", "therefore", "neq", "ne", "nu", "not", "notin", "nabla", "neg",
+        "ni", "nleq", "ngeq", "nmid", "nexists", "nolimits", "right", "rightarrow", "rho", "rangle",
+        "rceil", "rfloor", "rm", "frac", "dfrac", "forall", "flat", "frown", "fbox", "beta", "bar",
+        "binom", "bf", "boldsymbol", "bot", "because", "big", "bigg", "bigcup", "bigcap", "bullet",
+        "backslash", "boxed", "bmod", "bigl", "bigr", "biggl", "biggr", "bmatrix", "begin",
     }
 )
 _ESCAPE_RE = re.compile(r'\\(\\|u[0-9a-fA-F]{4}|["/]|[A-Za-z]+|.)', re.DOTALL)
+
+
+def _fix_escape(tok: str, in_math: bool) -> str:
+    if tok in ("\\", '"', "/") or re.fullmatch(r"u[0-9a-fA-F]{4}", tok):
+        return "\\" + tok
+    if tok[0] in "bfnrt":
+        # Ambiguous: LaTeX only inside $…$ and only for a known command; else the JSON escape
+        # (just its one letter — the letters after it are ordinary text).
+        if in_math and tok in _LATEX_JSON_LOOKALIKE:
+            return "\\\\" + tok
+        return "\\" + tok
+    return "\\\\" + tok
 
 
 def escape_latex(raw: str) -> str:
     r"""Double the backslashes of LaTeX the model left bare inside JSON strings.
 
     Stems are written with $…$ LaTeX. A bare "\perp" makes the whole array unparseable and a
-    bare "\frac" parses as form feed + "rac", silently. Valid JSON escapes are kept.
+    bare "\frac" parses as form feed + "rac", silently. Valid JSON escapes are kept; the
+    ambiguous ones (\b \f \n \r \t + letters) are LaTeX only inside $…$ in a JSON string.
     """
-
-    def fix(m: re.Match[str]) -> str:
-        tok = m.group(1)
-        if tok in ("\\", '"', "/") or re.fullmatch(r"u[0-9a-fA-F]{4}", tok):
-            return m.group(0)
-        if tok[0] in "tnr" and tok not in _LATEX_TNR:
-            return m.group(0)
-        return "\\\\" + tok
-
-    return _ESCAPE_RE.sub(fix, raw)
+    out: list[str] = []
+    i, n = 0, len(raw)
+    in_string = in_math = False
+    while i < n:
+        ch = raw[i]
+        if not in_string:
+            if ch == '"':
+                in_string, in_math = True, False
+            out.append(ch)
+            i += 1
+        elif ch == "\\":
+            m = _ESCAPE_RE.match(raw, i)
+            if not m:  # trailing lone backslash
+                out.append("\\\\")
+                i += 1
+                continue
+            out.append(_fix_escape(m.group(1), in_math))
+            i = m.end()
+        elif ch == '"':
+            in_string = False
+            out.append(ch)
+            i += 1
+        elif ch == "$":
+            step = 2 if raw.startswith("$$", i) else 1
+            in_math = not in_math
+            out.append(raw[i : i + step])
+            i += step
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
 
 
 def parse_json_array(content: str | None) -> list[Any] | None:
