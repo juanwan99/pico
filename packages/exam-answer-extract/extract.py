@@ -1110,6 +1110,56 @@ def _fill_user_template(template: str, *, subject: str, text: str = "", roster: 
     )
 
 
+# Structure read from text is asked twice at once and compared (edu-core#3164: 一模定稿 18 题
+# 「（1）…（2）①②③」read as 2 小问 three runs, then 3 小问 once — same text, same prompt).
+# Agreeing reads go out as they are; a disagreement gets a third read and each question takes
+# the majority. Text reads are small (a 21-question Word is ~5k tokens), so the vote is cheap
+# and adds no wait (the two go out together).
+_STRUCTURE_VOTES = 2
+
+
+def structure_signature(q: dict[str, Any]) -> tuple[Any, ...]:
+    """What the card is built from: 题型 / 分值 / 选项数 / 小问 (a choice question has no 小问:
+    a read that gives one a stray sub_count still builds the same card)."""
+    if q.get("type") in ("single_choice", "multi_choice"):
+        return (q.get("type"), q.get("score"), q.get("options_count"), None, ())
+    subs = tuple(s.get("sub") for s in q.get("subs") or [])
+    return (q.get("type"), q.get("score"), q.get("options_count"), q.get("sub_count"), subs)
+
+
+def _describe_signature(sig: tuple[Any, ...]) -> str:
+    qtype, score, options, subs_n, _ = sig
+    parts = [str(qtype)]
+    if score is not None:
+        parts.append(f"{score} 分")
+    if options:
+        parts.append(f"{options} 选项")
+    if qtype not in ("single_choice", "multi_choice"):
+        parts.append(f"{subs_n} 问")
+    return " ".join(parts)
+
+
+def vote_structure(reads: list[list[dict[str, Any]]]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Per question number, the structure most reads agree on (ties: the first read's)."""
+    need = (len(reads) + 1) // 2
+    numbers = sorted({q["number"] for read in reads for q in read})
+    out: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for number in numbers:
+        found = [q for read in reads for q in read if q["number"] == number]
+        if len(found) < need:
+            # a card one question short with nobody told is worse than one too many
+            warnings.append(f"第 {number} 题只有一次读到，没排进卡，请老师核对卷上有没有这题")
+            continue
+        sigs = [structure_signature(q) for q in found]
+        best = max(sigs, key=lambda s: (sigs.count(s), -sigs.index(s)))
+        if sigs.count(best) * 2 <= len(reads):
+            seen = "；".join(dict.fromkeys(_describe_signature(s) for s in sigs))
+            warnings.append(f"第 {number} 题结构几次读得不一样（{seen}），先按第一种排，请老师核对卡上这题")
+        out.append(found[sigs.index(best)])
+    return out, warnings
+
+
 async def extract_text(
     text: str,
     *,
@@ -1120,6 +1170,68 @@ async def extract_text(
     task: str = "answers",
     roster: str = "",
 ) -> dict[str, Any]:
+    args = dict(
+        subject_code=subject_code, subject_name=subject_name, complete=complete,
+        prompts=prompts, task=task, roster=roster,
+    )
+    votes = _env_int("PICO_EXAM_STRUCTURE_VOTES", _STRUCTURE_VOTES)
+    if task != "structure" or votes < 2:
+        return await _extract_text_once(text, **args)
+    usage: dict[str, Any] = {}
+    model_out: dict[str, Any] = {}
+
+    async def once() -> dict[str, Any] | BaseException:
+        try:
+            return await _extract_text_once(text, usage=usage, model_out=model_out, **args)
+        except Exception as exc:  # noqa: BLE001 — a failed read just does not vote
+            return exc
+
+    results = list(await asyncio.gather(once(), once()))
+    reads = [r for r in results if isinstance(r, dict)]
+    if not reads:
+        raise results[0]
+    agree = len(reads) == 2 and [structure_signature(q) for q in reads[0]["questions"]] == [
+        structure_signature(q) for q in reads[1]["questions"]
+    ] and [q["number"] for q in reads[0]["questions"]] == [q["number"] for q in reads[1]["questions"]]
+    if len(reads) == 2 and not agree:
+        third = await once()
+        if isinstance(third, dict):
+            reads.append(third)
+        logger.warning(
+            "exam structure reads disagree, %s reads: %s",
+            len(reads),
+            [[(q["number"], structure_signature(q)[3]) for q in r["questions"]] for r in reads[:2]],
+        )
+    if len(reads) == 1 or agree:
+        return {**reads[0], "usage": usage or None, "votes": len(results)}
+    questions, warnings = vote_structure([r["questions"] for r in reads])
+    # Per-question 小问分合计 warnings belong to whichever read each question came from.
+    kept = [w for w in reads[0]["warnings"] if "小问分合计" not in w]
+    for q in questions:
+        total = subs_total(q.get("subs") or [])
+        if total is not None and q["score"] is not None and total != q["score"]:
+            kept.append(f"第 {q['number']} 题小问分合计 {total} ≠ 题分 {q['score']}，请老师核对")
+    return {
+        **reads[0],
+        "questions": questions,
+        "warnings": [*kept, *warnings],
+        "usage": usage or None,
+        "votes": len(reads),
+    }
+
+
+async def _extract_text_once(
+    text: str,
+    *,
+    subject_code: str | None = None,
+    subject_name: str | None = None,
+    complete: Completer | None = None,
+    prompts: dict[str, str] | None = None,
+    task: str = "answers",
+    roster: str = "",
+    usage: dict[str, Any] | None = None,
+    model_out: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     complete = complete or model_complete
     prompts = prompts or load_prompts(task=task)
     body = str(text or "").strip()
@@ -1128,8 +1240,8 @@ async def extract_text(
     body = body[:MAX_TEXT_CHARS]
     tag = subject_tag(subject_code, subject_name)
     chunks = chunk_text(body)
-    usage: dict[str, Any] = {}
-    model_out: dict[str, Any] = {}
+    usage = {} if usage is None else usage
+    model_out = {} if model_out is None else model_out
     batches: list[list[dict[str, Any]]] = []
     reports: list[dict[str, Any]] = []
     last_text = ""
