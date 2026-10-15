@@ -6,6 +6,7 @@ Destroying a sandbox session must not delete this tree.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,11 @@ DEFAULT_OWNER_DISK_QUOTA = 2 * 1024 * 1024 * 1024
 QUOTA_COPY = "这台老师盘已满（上限 2GB）。关掉窗口不会删文件；请先清空不用的文件。"
 PERSIST_COPY = "文件在这台老师盘上。关掉窗口或会话不会删文件。"
 OFFICE_DISK_KINDS = frozenset({"pptx", "docx", "xlsx"})
+# The sandbox container user (services/sandbox_worker/Dockerfile). pico-api runs as
+# root on the same bind mount, so whatever it creates is handed over (#1267).
+SANDBOX_DISK_UID = 65532
+
+logger = logging.getLogger(__name__)
 
 
 def disk_root() -> Path:
@@ -48,6 +54,32 @@ def owner_disk_dir(school_id: str, membership_id: str) -> Path:
         / safe_segment(school_id, fallback="school")
         / safe_segment(membership_id, fallback="member")
     )
+
+
+def _disk_uid() -> int:
+    raw = (os.environ.get("PICO_SANDBOX_DISK_UID") or "").strip()
+    return int(raw) if raw.isdigit() else SANDBOX_DISK_UID
+
+
+def _hand_to_sandbox(path: Path) -> None:
+    """Root-created dirs / files go to the sandbox user, or it cannot open pages
+    or save into this teacher's disk (#1267). No-op when not running as root."""
+    if not hasattr(os, "geteuid") or os.geteuid() != 0:
+        return
+    uid = _disk_uid()
+    try:
+        if path.stat().st_uid != uid:
+            os.chown(path, uid, uid)
+    except OSError:
+        logger.warning("teacher disk chown failed: %s", path, exc_info=True)
+
+
+def ensure_owner_disk_dir(school_id: str, membership_id: str) -> Path:
+    root = owner_disk_dir(school_id, membership_id)
+    root.mkdir(parents=True, exist_ok=True)
+    _hand_to_sandbox(root.parent)
+    _hand_to_sandbox(root)
+    return root
 
 
 def owner_disk_usage_bytes(root: Path) -> int:
@@ -83,8 +115,7 @@ def list_owner_disk_names(school_id: str, membership_id: str) -> list[str]:
 
 def owner_disk_file(school_id: str, membership_id: str, filename: str) -> Path:
     deny_secret_filename(filename)
-    root = owner_disk_dir(school_id, membership_id)
-    root.mkdir(parents=True, exist_ok=True)
+    root = ensure_owner_disk_dir(school_id, membership_id)
     name = Path(filename or "").name
     if not name or name in {".", ".."}:
         raise ToolError("sandbox.path_denied", "文件名非法")
@@ -125,6 +156,7 @@ def write_owner_disk_file(
     old = dest.stat().st_size if dest.is_file() else 0
     assert_owner_disk_quota(dest.parent, add_bytes=len(data), replace_bytes=old)
     dest.write_bytes(data)
+    _hand_to_sandbox(dest)
     return dest
 
 

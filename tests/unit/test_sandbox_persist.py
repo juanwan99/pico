@@ -175,3 +175,38 @@ async def test_destroy_keeps_disk_and_new_run_sees_file(disk, monkeypatch) -> No
     with pytest.raises(ToolError) as denied:
         runtime.require_owner(second["session_id"], school_id="sch", membership_id="other")
     assert denied.value.code == "sandbox.forbidden"
+
+
+def test_root_written_disk_goes_to_sandbox_user(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1267: pico-api is root; the school dir, teacher dir and file it makes must be
+    the sandbox user's, or the sandbox cannot open pages / save for that teacher."""
+    import os
+
+    import pico_orchestrator.sandbox_persist as persist
+
+    monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disks"))
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    owned: dict[str, int] = {}
+    monkeypatch.setattr(os, "chown", lambda path, uid, gid: owned.__setitem__(str(path), uid))
+
+    dest = write_owner_disk_file("school-1", "member-1", "a.docx", b"x")
+    teacher = owner_disk_dir("school-1", "member-1")
+    assert owned == {
+        str(teacher.parent): persist.SANDBOX_DISK_UID,
+        str(teacher): persist.SANDBOX_DISK_UID,
+        str(dest): persist.SANDBOX_DISK_UID,
+    }
+
+    owned.clear()
+    with pytest.raises(ToolError):
+        read_owner_disk_file("school-2", "member-2", "none.docx")
+    assert str(owner_disk_dir("school-2", "member-2")) in owned
+
+
+def test_non_root_never_chowns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import os
+
+    monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disks"))
+    monkeypatch.setattr(os, "geteuid", lambda: 65532)
+    monkeypatch.setattr(os, "chown", lambda *a: pytest.fail("chown as non-root"))
+    write_owner_disk_file("school-1", "member-1", "a.docx", b"x")
