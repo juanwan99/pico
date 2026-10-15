@@ -1471,3 +1471,110 @@ async def test_page_lost_to_an_upstream_burst_is_read_once_more_after_a_pause() 
 
     await ex.extract_pages(pages, task="paper", complete=fine, sleep=pause)
     assert pauses == [] and sorted(seen) == [1, 2, 3]
+
+
+# ---------------------------------------------------------------- structure vote (edu-core#3164)
+
+
+def _structure_rows(q18_subs: int) -> str:
+    rows = [{"number": i, "type": "single_choice", "options_count": 4, "score": 2} for i in range(1, 17)]
+    rows.append(
+        {
+            "number": 18,
+            "type": "short_answer",
+            "score": 11,
+            "sub_count": q18_subs,
+            "subs": [{"sub": f"({k})", "score": None} for k in range(1, q18_subs + 1)],
+        }
+    )
+    return json.dumps(rows)
+
+
+def _seq_stub(responses: list[str], calls: list):
+    async def complete(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        calls.append(messages)
+        if model_out is not None:
+            model_out["model"] = "stub-model"
+        if usage_out is not None:
+            for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                usage_out[k] = usage_out.get(k, 0) + {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}[k]
+        return responses[min(len(calls), len(responses)) - 1]
+
+    return complete
+
+
+def _q(result, number):
+    return next(q for q in result["questions"] if q["number"] == number)
+
+
+@pytest.mark.asyncio
+async def test_structure_from_text_is_read_twice_and_agreeing_reads_go_out_as_they_are():
+    calls: list = []
+    result = await ex.extract_text(
+        "18.（1）…（2）①②③", task="structure", complete=_seq_stub([_structure_rows(2)], calls)
+    )
+    assert len(calls) == 2
+    assert _q(result, 18)["sub_count"] == 2
+    assert result["votes"] == 2
+    assert result["usage"]["total_tokens"] == 30  # both reads billed
+    assert not any("几次读得不一样" in w for w in result["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_structure_reads_that_disagree_get_a_third_and_the_majority_wins():
+    # 一模定稿 18 题：（2）里的①②③ 是填空不是小问，同一文本有一次读成 3 问
+    calls: list = []
+    result = await ex.extract_text(
+        "卷",
+        task="structure",
+        complete=_seq_stub([_structure_rows(3), _structure_rows(2), _structure_rows(2)], calls),
+    )
+    assert len(calls) == 3
+    assert _q(result, 18)["sub_count"] == 2
+    assert len(result["questions"]) == 17
+    assert result["votes"] == 3
+    assert not any("几次读得不一样" in w for w in result["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_structure_with_no_majority_keeps_the_first_read_and_asks_the_teacher():
+    calls: list = []
+    result = await ex.extract_text(
+        "卷",
+        task="structure",
+        complete=_seq_stub([_structure_rows(2), _structure_rows(3), _structure_rows(4)], calls),
+    )
+    assert _q(result, 18)["sub_count"] == 2
+    assert any(w.startswith("第 18 题结构几次读得不一样") for w in result["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_structure_question_seen_by_one_read_of_three_is_dropped():
+    extra = json.loads(_structure_rows(2)) + [{"number": 19, "type": "short_answer", "score": 12, "sub_count": 2}]
+    calls: list = []
+    result = await ex.extract_text(
+        "卷",
+        task="structure",
+        complete=_seq_stub([json.dumps(extra), _structure_rows(2), _structure_rows(2)], calls),
+    )
+    assert [q["number"] for q in result["questions"]][-1] == 18
+
+
+@pytest.mark.asyncio
+async def test_structure_one_failed_read_uses_the_other(monkeypatch):
+    calls: list = []
+    result = await ex.extract_text(
+        "卷", task="structure", complete=_seq_stub(["【错误】模型不可用：x", _structure_rows(2)], calls)
+    )
+    assert _q(result, 18)["sub_count"] == 2
+    monkeypatch.setenv("PICO_EXAM_STRUCTURE_VOTES", "1")
+    calls2: list = []
+    await ex.extract_text("卷", task="structure", complete=_seq_stub([_structure_rows(2)], calls2))
+    assert len(calls2) == 1
+
+
+@pytest.mark.asyncio
+async def test_answers_task_from_text_is_still_read_once():
+    calls: list = []
+    await ex.extract_text("1. C", complete=_seq_stub([json.dumps(_gold_items())], calls))
+    assert len(calls) == 1
