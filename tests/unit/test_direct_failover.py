@@ -50,6 +50,9 @@ def test_dead_key_fails_over_from_any_hop() -> None:
         assert is_model_dead(text), text
     assert not is_model_dead("Error code: 429 - rate limit, slow down")
     assert not is_model_dead("timeout after 4030 ms")
+    # Our own run proxy answers a bare 403 (proxy.no_run): not the model's key.
+    assert not is_model_dead("OpenAI API error (403): 403 status code (no body)")
+    assert not is_model_dead('{"ok": false, "code": "proxy.no_run"}')
 
 
 def _setup(monkeypatch: pytest.MonkeyPatch, fallbacks: str) -> None:

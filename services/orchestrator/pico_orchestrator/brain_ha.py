@@ -7,7 +7,6 @@ The switch is invisible to the teacher. Tests inject transport and skip this loo
 from __future__ import annotations
 
 import os
-import re
 import time
 from typing import Any
 
@@ -37,14 +36,14 @@ _FIRST_HOP_MARKERS = ("invalid_request", "invalid request")
 # The key behind this model's channel is suspended / unauthorised / out of
 # quota (10-15: sol's upstream answered every call 403 "API密钥已被暂停" for
 # 23 minutes while flash was fine). Other models ride other channels' keys.
+# Only the relay's own words count: a bare 401 / 403 is also what our run
+# proxy answers (proxy.no_run, auth.denied) and says nothing about the model.
 _KEY_DEAD_MARKERS = (
     "permission_error",
     "已被暂停",
     "密钥无效",
-    "未授权",
     "suspended",
     "unauthorized",
-    "forbidden",
     "invalid api key",
     "invalid_api_key",
     "insufficient_quota",
@@ -52,7 +51,6 @@ _KEY_DEAD_MARKERS = (
     "额度",
     "余额",
 )
-_KEY_DEAD_STATUS = re.compile(r"(?<!\d)(401|402|403)(?!\d)")
 # Pi run codes that mean the model call itself failed (not the runner / tools).
 _MODEL_FAIL_CODES = ("true_pi.assistant_error", "model.usage_limit", "model.unconfigured")
 DOWN_ENV = "PICO_BRAIN_DOWN_S"
@@ -110,7 +108,7 @@ def is_channel_dead(error: str) -> bool:
 
 def is_key_dead(error: str) -> bool:
     low = (error or "").lower()
-    return any(m in low for m in _KEY_DEAD_MARKERS) or bool(_KEY_DEAD_STATUS.search(low))
+    return any(m in low for m in _KEY_DEAD_MARKERS)
 
 
 def is_model_dead(error: str) -> bool:
