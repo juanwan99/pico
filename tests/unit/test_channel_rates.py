@@ -104,6 +104,25 @@ def test_seed_card_thousand_input_tokens(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
 
+def test_seed_card_nano_banana_image_is_priced(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
+    reset_rate_card()
+    # pico#1301：1K 图标价 $0.0336 × 7.3 ≈ 0.245 元 × 2.5 = 612.5 积分；没登记会报「这一档暂时用不了」
+    assert require_rate(kind="image", model="gemini-nano-banana-2.1").per_image_yuan > 0
+    assert (
+        points_from_row(
+            tokens_unknown=True,
+            prompt_tokens=None,
+            completion_tokens=None,
+            total_tokens=None,
+            extra={"ok": True},
+            kind="image",
+            model="gemini-nano-banana-2.1",
+        )
+        == "612.500"
+    )
+
+
 def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
     reset_rate_card()

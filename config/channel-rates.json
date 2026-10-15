@@ -23,6 +23,14 @@
       "per_image_yuan": 0.489
     },
     {
+      "id": "new-api:gemini-vertex-trial:gemini-nano-banana-2.1",
+      "kind": "image",
+      "model": "gemini-nano-banana-2.1",
+      "input_yuan_per_million": 10.95,
+      "output_yuan_per_million": 219,
+      "per_image_yuan": 0.245
+    },
+    {
       "id": "new-api:gemini-vertex-trial:gemini-2.5-flash-image",
       "kind": "image",
       "model": "gemini-2.5-flash-image",
