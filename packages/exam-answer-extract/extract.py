@@ -58,7 +58,7 @@ def _prompt_block(name: str, skill_text: str | None = None) -> str:
     return block.strip()
 
 
-TASKS = ("answers", "structure", "solve")
+TASKS = ("answers", "structure", "solve", "paper")
 
 
 def load_prompts(skill_text: str | None = None, task: str = "answers") -> dict[str, str]:
@@ -89,9 +89,79 @@ def strip_fence(content: str | None) -> str:
     return c.strip()
 
 
+# LaTeX commands whose first letter is also a JSON escape (\n \r \t). Only read as LaTeX
+# inside $…$: outside math "well\ni think" / "x\tan apple" / "see below\ne.g." are a real newline
+# or tab followed by text, and the model writes formulas in $…$ (SKILL.md). \b \f are never
+# meant as JSON escapes in a paper, so they are LaTeX anywhere.
+_LATEX_JSON_LOOKALIKE = frozenset(
+    {
+        "times", "theta", "tan", "tanh", "text", "textbf", "textrm", "tfrac", "tilde", "to", "top",
+        "triangle", "triangleq", "tau", "therefore", "neq", "ne", "nu", "not", "notin", "nabla", "neg",
+        "ni", "nleq", "ngeq", "nmid", "nexists", "nolimits", "right", "rightarrow", "rho", "rangle",
+        "rceil", "rfloor", "rm", "frac", "dfrac", "forall", "flat", "frown", "fbox", "beta", "bar",
+        "binom", "bf", "boldsymbol", "bot", "because", "big", "bigg", "bigcup", "bigcap", "bullet",
+        "backslash", "boxed", "bmod", "bigl", "bigr", "biggl", "biggr", "bmatrix", "begin",
+    }
+)
+_ESCAPE_RE = re.compile(r'\\(\\|u[0-9a-fA-F]{4}|["/]|[A-Za-z]+|.)', re.DOTALL)
+
+
+def _fix_escape(tok: str, in_math: bool) -> str:
+    if tok in ("\\", '"', "/") or re.fullmatch(r"u[0-9a-fA-F]{4}", tok):
+        return "\\" + tok
+    if tok[0] in "nrt":
+        # Ambiguous: LaTeX only inside $…$ and only for a known command; else the JSON escape
+        # (just its one letter — the letters after it are ordinary text). Paper text never holds
+        # a real backspace / form feed, so \b \f are always LaTeX ("面积 \frac{1}{2}ab").
+        if in_math and tok in _LATEX_JSON_LOOKALIKE:
+            return "\\\\" + tok
+        return "\\" + tok
+    return "\\\\" + tok
+
+
+def escape_latex(raw: str) -> str:
+    r"""Double the backslashes of LaTeX the model left bare inside JSON strings.
+
+    Stems are written with $…$ LaTeX. A bare "\perp" makes the whole array unparseable and a
+    bare "\frac" parses as form feed + "rac", silently. Valid JSON escapes are kept; \b \f are
+    always LaTeX; the ambiguous \n \r \t + letters are LaTeX only inside $…$ in a JSON string.
+    """
+    out: list[str] = []
+    i, n = 0, len(raw)
+    in_string = in_math = False
+    while i < n:
+        ch = raw[i]
+        if not in_string:
+            if ch == '"':
+                in_string, in_math = True, False
+            out.append(ch)
+            i += 1
+        elif ch == "\\":
+            m = _ESCAPE_RE.match(raw, i)
+            if not m:  # trailing lone backslash
+                out.append("\\\\")
+                i += 1
+                continue
+            out.append(_fix_escape(m.group(1), in_math))
+            i = m.end()
+        elif ch == '"':
+            in_string = False
+            out.append(ch)
+            i += 1
+        elif ch == "$":
+            step = 2 if raw.startswith("$$", i) else 1
+            in_math = not in_math
+            out.append(raw[i : i + step])
+            i += step
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
 def parse_json_array(content: str | None) -> list[Any] | None:
     """Model text → list. Accepts fenced JSON, {questions:[…]}, NDJSON, truncated arrays."""
-    raw = strip_fence(content)
+    raw = escape_latex(strip_fence(content))
     if not raw:
         return None
     try:
@@ -318,6 +388,8 @@ def is_vision_miss(item: dict[str, Any]) -> bool:
 def normalize_item(
     raw: dict[str, Any], *, page: int | None, task: str = "answers"
 ) -> dict[str, Any] | None:
+    if raw.get("kind") == "material":
+        return _normalize_material(raw, page=page)
     # 0 is never a 题号: the page prompt asks for number 0 on page-top continuations,
     # and the model sometimes forgets the companion "continued": true.
     try:
@@ -339,14 +411,14 @@ def normalize_item(
         letters = re.sub(r"[^A-Ha-h]", "", answer).upper()
         if letters:
             answer = letters
-            if task != "structure" and len(letters) > 1 and qtype == "single_choice":
+            if task not in ("structure", "paper") and len(letters) > 1 and qtype == "single_choice":
                 qtype = "multi_choice"
         try:
             raw_opts = raw.get("options_count")
             options_count = int(raw_opts) if raw_opts not in (None, "") else None
         except (TypeError, ValueError):
             options_count = None
-        if task == "structure":
+        if task in ("structure", "paper"):
             if options_count is not None and options_count < 2:
                 options_count = None
         else:
@@ -368,7 +440,7 @@ def normalize_item(
             score = subs_total(subs)
     else:
         sub_count = max(sub_count, count_sub_marks(answer), 1)
-        if has_figure:
+        if has_figure and task != "paper":
             sub_count = max(sub_count, 3)
 
     quote = str(raw.get("quote") or "").strip()[:60]
@@ -384,6 +456,10 @@ def normalize_item(
         "section": str(section).strip() if section not in (None, "") else None,
         "answer": answer,
         "rubric": rubric,
+        "analysis": _text(raw.get("analysis", raw.get("解析"))),
+        "stem": _text(raw.get("stem")),
+        "material_id": None,
+        "figures": _normalize_figures(raw.get("figures"), page=page),
         "score": score,
         "options_count": options_count,
         "sub_count": sub_count,
@@ -393,6 +469,112 @@ def normalize_item(
         "uncertain": raw.get("uncertain") is True,
         "source": {"page": page, "quote": quote},
     }
+
+
+def _text(raw: Any) -> str:
+    return "" if raw is None else str(raw).strip()
+
+
+def _numbers(raw: Any) -> list[int]:
+    if not isinstance(raw, list):
+        return []
+    out: set[int] = set()
+    for v in raw:
+        try:
+            n = int(float(v))
+        except (TypeError, ValueError):
+            continue
+        if n > 0:
+            out.add(n)
+    return sorted(out)
+
+
+def _normalize_figures(raw: Any, *, page: int | None) -> list[dict[str, Any]]:
+    """Figure boxes on a page image, 0–1000 of page width / height. Text reads have no page → []."""
+    if page is None or not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for f in raw:
+        if not isinstance(f, dict):
+            continue
+        native = f.get("box_2d")
+        box = native if native is not None else f.get("box")
+        if not isinstance(box, list) or len(box) != 4:
+            continue
+        try:
+            a0, b0, a1, b1 = (min(max(round(float(v)), 0), 1000) for v in box)
+        except (TypeError, ValueError):
+            continue
+        # box_2d is the vision models' native [ymin, xmin, ymax, xmax]; box is [x0, y0, x1, y1].
+        x0, y0, x1, y1 = (b0, a0, b1, a1) if native is not None else (a0, b0, a1, b1)
+        x0, x1 = min(x0, x1), max(x0, x1)
+        y0, y1 = min(y0, y1), max(y0, y1)
+        if x1 - x0 < 10 or y1 - y0 < 10:
+            continue
+        out.append({"page": page, "box": [x0, y0, x1, y1]})
+    return out
+
+
+def _normalize_material(raw: dict[str, Any], *, page: int | None) -> dict[str, Any] | None:
+    """Shared 材料 (passage / poem / data) is its own item; it never rides on one question."""
+    text = _text(raw.get("material", raw.get("text")))
+    figures = _normalize_figures(raw.get("figures"), page=page)
+    if not text and not figures:
+        return None
+    return {
+        "kind": "material",
+        "material": text,
+        "material_for": _numbers(raw.get("material_for")),
+        "figures": figures,
+        "continued": raw.get("continued") is True,
+    }
+
+
+def is_material(item: dict[str, Any]) -> bool:
+    return item.get("kind") == "material"
+
+
+def collect_materials(
+    batches: list[list[dict[str, Any]]], questions: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Reading order → materials with ids; tag each question with the material it rests on.
+
+    A material without material_for owns the questions after it until the next material.
+    The same material_for seen twice (one passage re-read on two pages) is one material.
+    """
+    out: list[dict[str, Any]] = []
+    by_key: dict[tuple[int, ...], dict[str, Any]] = {}
+    open_mat: dict[str, Any] | None = None
+    for batch in batches:
+        for item in batch:
+            if is_material(item):
+                key = tuple(item["material_for"])
+                same = by_key.get(key) if key else None
+                if same is not None:
+                    same["material"] = _merge_text(same["material"], item["material"])
+                    same["figures"] = same["figures"] + item["figures"]
+                    open_mat = None
+                    continue
+                mat = {
+                    "id": f"M{len(out) + 1}",
+                    "material_for": list(item["material_for"]),
+                    "material": item["material"],
+                    "figures": list(item["figures"]),
+                }
+                out.append(mat)
+                if key:
+                    by_key[key] = mat
+                open_mat = None if key else mat
+            elif open_mat is not None and item["number"] not in open_mat["material_for"]:
+                open_mat["material_for"].append(item["number"])
+    by_no = {q["number"]: q for q in questions}
+    for mat in out:
+        mat["material_for"] = sorted(set(mat["material_for"]))
+        for n in mat["material_for"]:
+            q = by_no.get(n)
+            if q is not None and q.get("material_id") is None:
+                q["material_id"] = mat["id"]
+    return out
 
 
 def _normalize_blanks(raw: Any) -> list[dict[str, Any]]:
@@ -441,19 +623,30 @@ def attach_continued(
     → dropped, never hung on a guessed number.
     """
     last = 0
+    last_mat: dict[str, Any] | None = None
     out: list[list[dict[str, Any]]] = []
     for idx, batch in enumerate(batches):
         kept: list[dict[str, Any]] = []
         for item in batch:
+            if is_material(item):
+                if not item["continued"]:
+                    last_mat = {**item, "figures": list(item["figures"])}
+                    kept.append(last_mat)
+                elif last_mat is not None:
+                    last_mat["material"] = _merge_text(last_mat["material"], item["material"])
+                    last_mat["figures"] += item["figures"]
+                continue
             if item["number"] == 0:
                 if last:
                     kept.append({**item, "number": last})
                 continue
             kept.append(item)
-        if kept:
-            last = max(last, max(i["number"] for i in kept))
+        numbers = [i["number"] for i in kept if not is_material(i)]
+        if numbers:
+            last = max(last, max(numbers))
         if ok is not None and idx < len(ok) and not ok[idx]:
             last = 0
+            last_mat = None
         out.append(kept)
     return out
 
@@ -475,11 +668,18 @@ def _merge_rubric(prev: str, nxt: str) -> str:
     return f"{prev}\n{nxt}"
 
 
+def _merge_text(prev: str, nxt: str) -> str:
+    """Same rule as the rubric: a page-top continuation appends, a repeat is dropped."""
+    return _merge_rubric(prev or "", nxt or "")
+
+
 def merge_items(batches: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
     """Merge per-page / per-chunk items by number. Earlier batch wins on answer."""
     by_no: dict[int, dict[str, Any]] = {}
     for batch in batches:
         for item in batch:
+            if is_material(item):
+                continue
             prev = by_no.get(item["number"])
             if prev is None:
                 by_no[item["number"]] = dict(item)
@@ -499,6 +699,9 @@ def merge_items(batches: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
             if not prev["section"] and item["section"]:
                 merged["section"] = item["section"]
             merged["rubric"] = _merge_rubric(prev["rubric"], item["rubric"])
+            for key in ("analysis", "stem"):
+                merged[key] = _merge_text(prev.get(key, ""), item.get(key, ""))
+            merged["figures"] = (prev.get("figures") or []) + (item.get("figures") or [])
             subs = merge_subs(prev.get("subs") or [], item.get("subs") or [])
             merged["subs"] = subs
             if subs:
@@ -937,8 +1140,14 @@ async def extract_pages(
         # The bottom half's leading number 0 continues the top half's last question;
         # with the top unread its owner is unknown, so it is dropped (as across pages).
         items = list(top or [])
-        last = max((i["number"] for i in items), default=0)
+        last = max((i["number"] for i in items if not is_material(i)), default=0)
         for item in bottom or []:
+            if is_material(item):
+                # a continued material stays continued: attach_continued joins it to the
+                # top half's material, or drops it when the top half is unread
+                if not (item["continued"] and top is None):
+                    items.append(item)
+                continue
             if item["number"] == 0 and top is None:
                 continue
             items.append({**item, "number": last} if item["number"] == 0 and last else item)
@@ -985,7 +1194,9 @@ def _finish(
     model_out: dict[str, Any],
 ) -> dict[str, Any]:
     ok = [rep["ok"] for rep in reports] if len(reports) == len(batches) else None
-    questions = merge_items(attach_continued(batches, ok))
+    attached = attach_continued(batches, ok)
+    questions = merge_items(attached)
+    materials = collect_materials(attached, questions)
     warnings: list[str] = []
     blocked = [rep["page"] for rep in reports if rep.get("safety") and not rep["ok"]]
     if len(errors) > len(blocked) and questions:
@@ -1018,6 +1229,7 @@ def _finish(
         "mode": mode,
         "model": model_out.get("model"),
         "questions": questions,
+        "materials": materials,
         "pages": reports,
         "warnings": warnings,
         "usage": usage or None,
