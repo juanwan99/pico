@@ -12,11 +12,14 @@ import asyncio
 import base64
 import io
 import json
+import logging
 import os
 import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 ENGINE = "exam-answer-extract/1"
 TYPES = ("single_choice", "multi_choice", "fill_in_blank", "short_answer")
@@ -64,11 +67,14 @@ TASKS = ("answers", "structure", "solve", "paper")
 def load_prompts(skill_text: str | None = None, task: str = "answers") -> dict[str, str]:
     t = task if task in TASKS else "answers"
     suffix = "" if t == "answers" else f"_{t}"
-    return {
+    prompts = {
         "system": _prompt_block(f"system{suffix}", skill_text),
         "user_text": _prompt_block(f"user_text{suffix}", skill_text),
         "user_page": _prompt_block(f"user_page{suffix}", skill_text),
     }
+    if t == "structure":
+        prompts["user_pages"] = _prompt_block("user_pages_structure", skill_text)
+    return prompts
 
 
 def subject_tag(subject_code: str | None, subject_name: str | None) -> str:
@@ -1213,6 +1219,36 @@ async def extract_pages(
         }
         return number, own(number, items), "\n".join(outs), report
 
+    async def read_whole() -> dict[str, Any] | None:
+        # Structure is short (number / type / score per question) but its rules sit in section
+        # headers on one page and govern the next: 「一、选择题 每小题 2 分」 on page 1 covers 6–12
+        # on page 2, 「有一项或多项符合」 on page 3 covers 14–16 on page 4. Read page by page those
+        # lost the header (scores estimated, 多选 read as 单选, edu-core#3164), so the structure of
+        # the whole paper is one call. Any failure falls back to the per-page read below.
+        content: list[dict[str, Any]] = [
+            {"type": "text", "text": _fill_user_template(prompts["user_pages"], subject=tag, roster=roster)}
+        ]
+        for page in pages:
+            content.append({"type": "text", "text": f"第 {int(page['page'])} 页"})
+            content.append({"type": "image", "mime": page["mime"], "data_b64": page["data_b64"]})
+        messages = [{"role": "system", "content": prompts["system"]}, {"role": "user", "content": content}]
+        try:
+            out = await _complete_with_retry(
+                complete, messages, thinking=page_thinking(), usage=usage, model_out=model_out
+            )
+        except ExtractError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — per-page read takes over
+            logger.warning("exam structure whole-paper read failed, per page instead: %s", _preview(str(exc)))
+            return None
+        items = [i for i in items_from_model_text(out, page=None, task=task) if is_material(i) or i["number"] > 0]
+        if not items:
+            logger.warning("exam structure whole-paper read empty, per page instead: %s", _preview(out))
+            return None
+        reports = [{"page": int(p["page"]), "ok": True, "count": 0, "error": None} for p in pages]
+        reports[0]["count"] = len(items)
+        return _finish("pages", [items] + [[] for _ in pages[1:]], reports, [], out, usage, model_out)
+
     async def one(page: dict[str, Any]) -> tuple[int, list[dict[str, Any]], str, dict[str, Any]]:
         number = int(page["page"])
         if on_page and not page_roster(number):
@@ -1224,11 +1260,18 @@ async def extract_pages(
             except ExtractError:
                 raise
             except SafetyBlocked as exc:
+                # 原文原因留在日志里（老师只看到「被安全审查拦下」），查是哪类拦截
+                logger.warning("exam extract page %s safety blocked: %s", number, str(exc)[:400])
                 return await read_halves(number, page, exc)
             except Exception as exc:  # noqa: BLE001
                 return number, [], "", _failed_page(number, exc)
         items = own(number, items_from_model_text(out, page=number, task=task))
         return number, items, out, {"page": number, "ok": True, "count": len(items), "error": None}
+
+    if prompts.get("user_pages") and len(pages) > 1:
+        whole = await read_whole()
+        if whole is not None:
+            return whole
 
     results = await asyncio.gather(*(one(p) for p in pages))
     results.sort(key=lambda r: r[0])

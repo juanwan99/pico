@@ -186,6 +186,13 @@ always-apply: false
 ```
 <!-- /prompt:user_page_structure -->
 
+<!-- prompt:user_pages_structure -->
+```text
+这是老师试卷或答案卷{{subject}}的全部页，按页序排，每张图前写着第几页。只抽结构：全卷每题的题号、题型、选项字母个数、小问、横线、分值；不要做题。
+大题标题里写的规则管到下一个大题标题为止，跨页也算：「每小题 2 分」就是这一大题里每题 2 分；「有一项或多项符合」「不定项」就是这一大题每题 multi_choice。跨页的题（题干、选项、小问在下一页接着写）算一题，不要拆成两条、不要出 number 0。只返回 JSON 数组。
+```
+<!-- /prompt:user_pages_structure -->
+
 <!-- prompt:system_solve -->
 ```text
 你在做这套试卷，给答题卡填标准答案。结构（题号、题型、选项数、小问）已经定了，不许改。

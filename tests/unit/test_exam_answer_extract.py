@@ -1283,3 +1283,74 @@ async def test_solve_warns_when_a_paged_question_comes_back_empty() -> None:
     only = await ex.extract_pages(pages, task="solve", roster="9 single_choice options=4 pages=2", complete=complete)
     assert only["questions"] == []
     assert only["warnings"] == ["第 9 题按所在页没做出答案，请老师核对或手动填"]
+
+
+# --------------------------------------------------------------------------- structure whole paper (edu-core#3164)
+
+
+def _whole_stub(whole, per_page: dict | None = None, calls: list | None = None):
+    """Whole-paper call = several images in one message; per-page calls answer from per_page[page]."""
+
+    async def complete(messages, *, thinking=None, usage_out=None, model_out=None):
+        parts = messages[-1]["content"]
+        images = [p for p in parts if p.get("type") == "image"]
+        if model_out is not None:
+            model_out["model"] = "stub-model"
+        if len(images) > 1:
+            calls.append(("whole", [p["text"] for p in parts if p.get("type") == "text"]))
+            if isinstance(whole, BaseException):
+                raise whole
+            return whole
+        page = int(base64.b64decode(images[0]["data_b64"]).decode())
+        calls.append(("page", page))
+        return (per_page or {}).get(page, "[]")
+
+    return complete
+
+
+@pytest.mark.asyncio
+async def test_structure_reads_whole_paper_in_one_call_so_section_rules_cross_pages():
+    calls: list = []
+    whole = json.dumps(
+        [{"number": n, "type": "single_choice", "options_count": 4, "score": 2} for n in range(1, 13)]
+        + [{"number": n, "type": "multi_choice", "options_count": 4, "score": 4} for n in range(13, 17)]
+    )
+    result = await ex.extract_pages(
+        [_page(1), _page(2), _page(3)], task="structure", complete=_whole_stub(whole, calls=calls)
+    )
+    assert [c[0] for c in calls] == ["whole"], "one call for the whole paper"
+    texts = calls[0][1]
+    assert "大题标题里写的规则管到下一个大题标题为止" in texts[0]
+    assert texts[1:] == ["第 1 页", "第 2 页", "第 3 页"]
+    by_no = {q["number"]: q for q in result["questions"]}
+    assert sorted(by_no) == list(range(1, 17))
+    assert by_no[14]["type"] == "multi_choice" and by_no[14]["score"] == 4
+    assert [p["ok"] for p in result["pages"]] == [True, True, True]
+    assert result["mode"] == "pages"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("whole", [RuntimeError("upstream 503"), RuntimeError("prompt_blocked: SAFETY"), "[]", "不是 JSON"])
+async def test_structure_whole_read_failure_falls_back_to_per_page(whole):
+    calls: list = []
+    per_page = {
+        1: json.dumps([{"number": 1, "type": "single_choice", "options_count": 4, "score": 2}]),
+        2: json.dumps([{"number": 2, "type": "short_answer", "score": 10}]),
+    }
+    result = await ex.extract_pages(
+        [_page(1), _page(2)], task="structure", complete=_whole_stub(whole, per_page, calls), concurrency=1
+    )
+    kinds = [c[0] for c in calls]
+    assert kinds[-2:] == ["page", "page"] and kinds.count("whole") >= 1
+    assert [q["number"] for q in result["questions"]] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_only_structure_reads_whole_paper():
+    calls: list = []
+    per_page = {1: json.dumps([{"number": 1, "type": "single_choice", "answer": "C"}]), 2: "[]"}
+    await ex.extract_pages([_page(1), _page(2)], task="answers", complete=_whole_stub("[]", per_page, calls))
+    assert sorted(c[0] for c in calls) == ["page", "page"]
+    calls.clear()
+    await ex.extract_pages([_page(1)], task="structure", complete=_whole_stub("[]", per_page, calls))
+    assert calls == [("page", 1)], "a one-page paper is one call either way"
