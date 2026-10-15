@@ -621,6 +621,128 @@ async def test_every_road_picks_the_wire_by_the_model_it_sends(
     assert calls == [("responses", "gpt-5.6-sol")]
 
 
+def _gemini_fails(monkeypatch: pytest.MonkeyPatch, error) -> list[tuple[str, str]]:
+    """Wire relay where every Gemini request raises ``error()``."""
+    from pico_orchestrator import provider
+
+    calls = _wire_relay(monkeypatch)
+    real = provider.AsyncOpenAI
+
+    def client(**kw):
+        out = real(**kw)
+        create = out.chat.completions.create
+
+        async def chat(**kwargs):
+            if kwargs["model"].startswith("gemini"):
+                calls.append(("chat", kwargs["model"]))
+                raise error()
+            return await create(**kwargs)
+
+        out.chat.completions.create = chat
+        return out
+
+    monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", client)
+    return calls
+
+
+def _extract():
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages" / "exam-answer-extract"))
+    import extract
+
+    return extract
+
+
+@pytest.mark.asyncio
+async def test_exam_falls_to_the_backup_brain_when_gemini_is_dead(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dead Gemini key / channel no longer stops every exam read until someone switches."""
+    ex = _extract()
+    _env(monkeypatch, fallbacks="gpt-5.6-sol")
+    calls = _gemini_fails(monkeypatch, lambda: _Status(403, "channel suspended"))
+    picked: dict = {}
+    assert await ex.model_complete([{"role": "user", "content": "读题"}], model_out=picked) == "好"
+    assert calls == [("chat", "gemini-3.8-pro"), ("responses", "gpt-5.6-sol")]
+    assert picked == {"model": "gpt-5.6-sol"}  # billed as the model that answered
+
+    # Marked down: the next page goes straight to the backup.
+    calls.clear()
+    assert await ex.model_complete([{"role": "user", "content": "读题"}]) == "好"
+    assert calls == [("responses", "gpt-5.6-sol")]
+
+
+@pytest.mark.asyncio
+async def test_exam_stays_on_gemini_when_it_is_only_busy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """429 (Vertex shared quota) is retried on the same model, never switched."""
+    ex = _extract()
+    _env(monkeypatch, fallbacks="gpt-5.6-sol")
+    calls = _gemini_fails(monkeypatch, lambda: _Status(429, "Resource exhausted. quota"))
+    with pytest.raises(_Status):
+        await ex.model_complete([{"role": "user", "content": "读题"}])
+    assert calls == [("chat", "gemini-3.8-pro")] * upstream.CALL_BUDGET
+
+
+@pytest.mark.asyncio
+async def test_exam_image_page_skips_a_backup_that_cannot_see(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A text-only backup is never sent a page image."""
+    ex = _extract()
+    _env(monkeypatch, fallbacks="deepseek-chat,gpt-5.6-sol")
+    calls = _gemini_fails(monkeypatch, lambda: _Status(403, "suspended"))
+    page = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "读这页"},
+                {"type": "image", "mime": "image/png", "data_b64": "iVBORw0KGgo="},
+            ],
+        }
+    ]
+    assert await ex.model_complete(page) == "好"
+    assert calls == [("chat", "gemini-3.8-pro"), ("responses", "gpt-5.6-sol")]
+
+    # Only a text backup left: a dead Gemini fails the page, no blind call.
+    _env(monkeypatch, fallbacks="deepseek-chat")
+    calls = _gemini_fails(monkeypatch, lambda: _Status(403, "suspended"))
+    with pytest.raises(_Status):
+        await ex.model_complete(page)
+    assert calls == [("chat", "gemini-3.8-pro")]
+
+
+@pytest.mark.asyncio
+async def test_exam_backup_shares_the_three_request_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator import provider
+
+    ex = _extract()
+    _env(monkeypatch, fallbacks="gpt-5.6-sol")
+    provider._CLIENTS.clear()
+    gemini = iter([_Status(503, "busy"), _Status(403, "suspended")])
+    calls: list[str] = []
+
+    async def chat(**kwargs):
+        calls.append(kwargs["model"])
+        raise next(gemini)
+
+    async def responses(**kwargs):
+        calls.append(kwargs["model"])
+        raise _Status(503, "busy")
+
+    monkeypatch.setattr(
+        "pico_orchestrator.provider.AsyncOpenAI",
+        lambda **_kw: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=chat)),
+            responses=SimpleNamespace(create=responses),
+        ),
+    )
+    with pytest.raises(_Status):
+        await ex.model_complete([{"role": "user", "content": "读题"}])
+    assert calls == ["gemini-3.8-pro", "gemini-3.8-pro", "gpt-5.6-sol"]  # 3, not 2 + 3
+
+
 @pytest.mark.asyncio
 async def test_hosted_rollback_steps_go_through_the_door(monkeypatch: pytest.MonkeyPatch) -> None:
     """Review #1283 ⑤: PICO_HOSTED_LOOP=1 no longer builds its own retrying client."""
