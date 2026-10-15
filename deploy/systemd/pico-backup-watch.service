@@ -1,0 +1,7 @@
+# pico#1270 · hourly: mail when the last good backup is older than 26 h
+[Unit]
+Description=pico backup freshness watch
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/pico/scripts/backup-pico.sh watch

@@ -1,0 +1,9 @@
+[Unit]
+Description=pico backup freshness watch, hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
