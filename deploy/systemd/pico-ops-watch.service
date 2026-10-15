@@ -1,0 +1,11 @@
+# pico#1273 · ops watch on the ECS host: install with
+#   cp deploy/systemd/pico-ops-watch.* ~/.config/systemd/user/ && systemctl --user daemon-reload \
+#   && systemctl --user enable --now pico-ops-watch.timer
+[Unit]
+Description=pico ops watch (probe, run failures, upstream errors, disk, build cache, .env trail)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/pico/scripts/pico_ops_watch.py check
+TimeoutStartSec=10min
+Nice=10

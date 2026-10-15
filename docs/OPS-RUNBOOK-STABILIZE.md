@@ -161,8 +161,7 @@ ssh pico-prod 'curl -sf --max-time 5 http://127.0.0.1:18765/health'
 | 项 | 路径 / 动作 |
 |----|-------------|
 | 公网采样脚本 | `bash scripts/public-502-monitor.sh`（`ONCE=1` 单采；默认长窗） |
-| Jump 公网 cron（参考） | 每 15m · `/login`+`/health` → `/home/ops/var/pico-502-monitor/` |
-| Prod loopback cron（参考） | 每 15m · `127.0.0.1:18765/health` → `/opt/pico/var/502-monitor/` |
+| 自动巡检（会发信） | `pico-ops-watch.timer` 每 5 分钟，公网 `/login`+`/health` 与本机 health，连续 2 轮不通发信（见 `docs/OPS-WATCH.md`，pico#1273；旧的两条 15m cron 只写文件不发信，已停） |
 | DUTY 摘要 | `/opt/pico/var/502-monitor/DUTY.txt` 或 jump 目录 `summary-*.txt` |
 | **阈值** | 15min 窗内 **≥2 次非 2xx** → 值班查 loopback health → 容器 → nginx；**勿**先改密钥 |
 | 失败退出码 | 脚本非 0 或 summary 含 FAIL/502 → 同上 |
