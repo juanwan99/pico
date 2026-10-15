@@ -311,6 +311,12 @@ def extension_path() -> Path:
     return here.parents[3] / "true_pi_bridge" / "pico-gateway-tools.ts"
 
 
+def look_cap_extension_path() -> Path:
+    """pico#1296: caps how many pictures of its own work the model reads (box only)."""
+    here = Path(__file__).resolve()
+    return here.parents[3] / "true_pi_bridge" / "look-cap.ts"
+
+
 def plan_mode_extension_path() -> Path:
     """Official 0.73.1 plan-mode (vendored). Override with PICO_TRUE_PI_PLAN_MODE_EXT."""
     override = os.environ.get("PICO_TRUE_PI_PLAN_MODE_EXT", "").strip()

@@ -32,6 +32,7 @@ from pico_orchestrator.true_pi.client import (
 )
 from pico_orchestrator.true_pi.config import (
     RUNTIME_LABEL,
+    look_cap_extension_path,
     memory_extension_path,
     persist_memory_dir,
     persist_session_dir,
@@ -41,7 +42,7 @@ from pico_orchestrator.true_pi.config import (
     tool_hang_seconds,
 )
 from pico_orchestrator.true_pi.events import EventMapState, map_event
-from pico_orchestrator.true_pi.runner import LOOK_STEER
+from pico_orchestrator.true_pi.runner import LOOK_CAP_STEER, LOOK_STEER
 from pico_orchestrator.true_pi.tool_server import ToolServer
 from pico_orchestrator.user_errors import enrich_fail_payload
 from pico_orchestrator.workbench_progress import failed_write_user_message
@@ -559,6 +560,7 @@ async def _run_true_pi_once(
                     ),
                 )
                 system_text = f"{system_text}\n\n{WORKSPACE_SYSTEM}".strip()
+                extra_ext.append(look_cap_extension_path())
                 transport_cls = RunnerTransport
             transport = transport_cls(
                 **runner_kwargs,
@@ -839,6 +841,15 @@ async def _run_true_pi_once(
                             await emit("run.look_check", {"steered": True, **tag})
                         except Exception as exc:  # noqa: BLE001 — a missed reminder never fails a run
                             logger.warning("true_pi look steer failed: %s", type(exc).__name__)
+                    if ws_on and state.look_capped and not state.look_cap_steered and not state.settled:
+                        # pico#1296 hard cap: the box stopped returning pictures.
+                        state.look_cap_steered = True
+                        try:
+                            await client.steer(LOOK_CAP_STEER)
+                            state.event_kinds.append("run.look_cap")
+                            await emit("run.look_cap", {"capped": state.look_capped, **tag})
+                        except Exception as exc:  # noqa: BLE001 — a missed reminder never fails a run
+                            logger.warning("true_pi look cap steer failed: %s", type(exc).__name__)
                     if state.settled:
                         break
 
