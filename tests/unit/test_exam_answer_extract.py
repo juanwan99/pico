@@ -241,6 +241,13 @@ def _stub(responses: dict[int | None, str] | str, calls: list | None = None):
     return complete
 
 
+@pytest.fixture(autouse=True)
+def _short_reread_pause(monkeypatch):
+    # the re-read of a lost page waits for the upstream burst to pass; tests don't wait 20 s
+    monkeypatch.setattr(ex, "_PAGE_REASK_PAUSE_S", 0)
+
+
+
 def _page(n: int) -> dict:
     return {"page": n, "mime": "image/jpeg", "data_b64": base64.b64encode(str(n).encode()).decode()}
 
@@ -299,8 +306,9 @@ async def test_extract_pages_all_failed_is_model_failed():
         await ex.extract_pages([_page(1)], complete=_stub({1: RuntimeError("boom")}, calls))
     assert caught.value.code == "model.failed"
     # Resending is the relay door's (model_complete → provider.call_once, 3 at most);
-    # this layer asks once unless ops set PICO_EXAM_EXTRACT_ATTEMPTS (pico#1283).
-    assert len(calls) == 1
+    # this layer asks once unless ops set PICO_EXAM_EXTRACT_ATTEMPTS (pico#1283), and a lost
+    # page gets one more read after a pause (edu-core#3164: a 429 burst outlasted the door).
+    assert len(calls) == 2
 
 
 @pytest.mark.asyncio
@@ -1428,3 +1436,38 @@ async def test_solve_page_sees_the_next_page_for_a_question_that_runs_over() -> 
     calls.clear()
     await ex.extract_pages(pages, task="paper", complete=complete)
     assert all(len(c[0]) == 1 for c in calls)
+
+
+async def test_page_lost_to_an_upstream_burst_is_read_once_more_after_a_pause() -> None:
+    # edu-core#3164: Vertex 429 outlasted the door's sends on page 3 of a solve and three answers
+    # were lost; the page gets one more go after a pause, a page failing twice stays reported
+    seen: list = []
+    pauses: list = []
+
+    async def complete(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        content = messages[-1]["content"]
+        number = int(base64.b64decode(content[1]["data_b64"]).decode())
+        seen.append(number)
+        if number == 3 or (number == 2 and seen.count(2) == 1):
+            raise RuntimeError("upstream 429 Resource exhausted")
+        return json.dumps([_solve_item(number, "A")])
+
+    async def pause(seconds):
+        pauses.append(seconds)
+
+    pages = [_page(1), _page(2), _page(3)]
+    result = await ex.extract_pages(pages, task="paper", complete=complete, sleep=pause)
+    assert sorted(seen) == [1, 2, 2, 3, 3]
+    assert len(pauses) == 1
+    assert [r["ok"] for r in result["pages"]] == [True, True, False]
+
+    seen.clear()
+    pauses.clear()
+
+    async def fine(messages, **_):
+        number = int(base64.b64decode(messages[-1]["content"][1]["data_b64"]).decode())
+        seen.append(number)
+        return json.dumps([_solve_item(number, "A")])
+
+    await ex.extract_pages(pages, task="paper", complete=fine, sleep=pause)
+    assert pauses == [] and sorted(seen) == [1, 2, 3]

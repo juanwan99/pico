@@ -984,6 +984,8 @@ def split_page_image(mime: str, data_b64: str) -> list[dict[str, str]] | None:
 # × continuation rounds hammered a busy relay. PICO_EXAM_EXTRACT_ATTEMPTS stays as
 # an ops knob (a whole-page re-ask, e.g. after a 240 s page timeout); default once.
 _DEFAULT_ATTEMPTS = 1
+# pause before the one re-read of pages an upstream burst took out (extract_pages)
+_PAGE_REASK_PAUSE_S = 20
 # Pages of one paper in flight; the relay key's slot cap bounds all papers together.
 _DEFAULT_CONCURRENCY = 4
 # Reasoning effort for one page image. "low" (thinking=False) matched or beat "medium"
@@ -1142,6 +1144,7 @@ async def extract_pages(
     concurrency: int | None = None,
     task: str = "answers",
     roster: str = "",
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> dict[str, Any]:
     """pages: [{page:int, mime:str, data_b64:str}] — one vision call per page, merged."""
     complete = complete or model_complete
@@ -1320,6 +1323,16 @@ async def extract_pages(
             return whole
 
     results = await asyncio.gather(*(one(p) for p in pages))
+    # A page lost to an upstream burst (Vertex 429 "Resource exhausted" outlasting the door's three
+    # sends) gets one more go once the burst has passed: edu-core#3164 lost page 3 of a solve that
+    # way and three answers with it. Background jobs, so the pause costs nothing the teacher waits
+    # on; safety blocks already had their re-asks and halves, skipped pages never called.
+    lost = {r[0] for r in results if not r[3]["ok"] and not r[3].get("safety")}
+    if lost:
+        await sleep(_env_int("PICO_EXAM_EXTRACT_PAGE_REASK_PAUSE_S", _PAGE_REASK_PAUSE_S))
+        again = await asyncio.gather(*(one(p) for p in pages if int(p["page"]) in lost))
+        redo = {r[0]: r for r in again}
+        results = [redo.get(r[0], r) for r in results]
     results.sort(key=lambda r: r[0])
     batches = [items for _, items, _, _ in results]
     reports = [rep for _, _, _, rep in results]
