@@ -245,7 +245,7 @@ async def test_real_chromium_pushes_frames_on_change_and_none_when_still() -> No
         await page.focus("#q")
         await surface.press_human_key("Tab")
         with pytest.raises(ToolError):
-            await surface.press_human_key("Control+A")
+            await surface.press_human_key("F5")
         # #1236: a slider check — press, move, release on the pane.
         await page.evaluate("window.scrollTo(0, 0)")
         await page.evaluate(

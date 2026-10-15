@@ -190,6 +190,7 @@ HUMAN_KEYS = frozenset(
     {
         "Enter", "Tab", "Backspace", "Delete", "Escape",
         "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown",
+        "Home", "End", "Control+a",
     }
 )
 # Human-only steps: typing a password or captcha, and paying. Everything else
@@ -1179,7 +1180,7 @@ class PlaywrightPage:
     async def press_human_key(self, key: str) -> None:
         """Teacher presses Enter / Tab / arrows on the pane (#1215)."""
         if key not in HUMAN_KEYS:
-            raise ToolError("tool.invalid_arguments", "画面上只支持 Enter / Tab / 退格 / 方向键等按键")
+            raise ToolError("tool.invalid_arguments", "画面上只支持 Enter / Tab / 退格 / 方向键 / 全选等按键")
         before = self.url
         await self._page.keyboard.press(key)
         await self._settle(before)
