@@ -6,12 +6,13 @@ ECS 用户定时器 `pico-ops-watch.timer` 每 5 分钟跑一次 `scripts/pico_o
 |--|--|--|
 | probe | 公网 `https://pico.aivia.asia/health`、`/login`，本机 `127.0.0.1:18765/health` | 连续 2 轮不通（发版时偶尔断一下不算）；信里写明是本机 pico-api 还是公网入口 |
 | runs | pico.db 里近 60 分钟结束的任务（经 api 容器只读） | 失败（含系统取消）≥ 4 个且占 ≥ 30%。老师自己点停不算失败。信里按原因分组 |
-| upstream | New API 容器日志（`docker logs --since 上一轮`）里的 relay 状态码和 `channel error` 行 | 出现 403（钥被停 / 被封，要人处理），或 429 + 5xx ≥ 5 |
-| disk | 根盘（口径同 df Use%） | ≥ 85%，回到 83% 以下才算恢复。85% 约等于每小时构建缓存清理守的「空闲 ≥ 30 GB」底线（edu-core `docs/DEPLOY-ECS.md` #2699），过了说明清理兜不住了 |
+| upstream | New API 容器日志（`docker logs --since 上一轮`）里的 relay 状态码和 `channel error` 行 | 出现 403（钥被停 / 被封，要人处理），或 429 + 5xx ≥ 5。`docker logs` 本身失败算「检查本身出错」并发信，游标不前移，下一轮补读 |
 | buildcache | `docker buildx du` 的 Private（独占） | > 35 GB，和每小时清理的上限一致。`docker system df` 的总数含和镜像共用的层，删不到，不看它 |
 | env | `/opt/pico/.env` 和上次记录的快照比 | 有改动但没走 `env-set` / `env-record`：自动补记一行 UNLOGGED 并发信 |
 
-阈值可用环境变量改（`PICO_OPS_RUNS_RATE`、`PICO_OPS_DISK_PCT` 等，见脚本头）。
+阈值可用环境变量改（`PICO_OPS_RUNS_RATE` 等，见脚本头）。任何一项检查自己报错（docker 不通、容器改名），都按「检查本身出错」发信，不当作正常。
+
+根盘不在这里看：磁盘是整台机器的事，只留一处，由 edu-core 的 `edu-health-probe.py` 管（剩不到 30 GB 发信，30 GB 正是每小时构建缓存清理守的空闲底线，见 edu-core `docs/DEPLOY-ECS.md` #2699）。
 
 ## 失败原因查询
 
@@ -37,7 +38,7 @@ python3 /opt/pico/scripts/pico_ops_watch.py env-record --card pico#1261 --why ".
 ## 演练
 
 ```bash
-python3 /opt/pico/scripts/pico_ops_watch.py check --drill disk   # probe / runs / upstream / disk / buildcache / env
+python3 /opt/pico/scripts/pico_ops_watch.py check --drill upstream   # probe / runs / upstream / buildcache / env
 ```
 
 把那一项强制当成坏的，发一封标「演练」的信，不改状态文件。

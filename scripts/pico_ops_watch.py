@@ -11,8 +11,9 @@
                                            write the trail for a change another tool just made
 
 Checks: probe (public + local health), runs (failure rate, 60 min window, by cause),
-upstream (New API 403 / 429 / 5xx per channel), disk (root ≥ 85 %), buildcache
-(BuildKit private > 35 GB), env (.env changed without a trail line).
+upstream (New API 403 / 429 / 5xx per channel), buildcache (BuildKit private > 35 GB),
+env (.env changed without a trail line). Root disk is the whole host's: edu-core's
+edu-health-probe alerts on it (< 30 GB free), not this script.
 Host python3 stdlib only. Reads pico.db read-only through the api container.
 """
 from __future__ import annotations
@@ -45,9 +46,6 @@ WINDOW_MIN = int(os.environ.get("PICO_OPS_RUNS_WINDOW_MIN", "60"))
 RUNS_MIN_BAD = int(os.environ.get("PICO_OPS_RUNS_MIN_BAD", "4"))
 RUNS_RATE = float(os.environ.get("PICO_OPS_RUNS_RATE", "0.3"))
 UPSTREAM_MIN = int(os.environ.get("PICO_OPS_UPSTREAM_MIN", "5"))
-# 85 % ≈ the 30 GB free floor the hourly builder prune keeps (edu-core DEPLOY-ECS #2699):
-# past it, the prune can no longer hold the line.
-DISK_PCT = float(os.environ.get("PICO_OPS_DISK_PCT", "85"))
 BUILDCACHE_GB = float(os.environ.get("PICO_OPS_BUILDCACHE_GB", "35"))
 PROBE_FAILS = 2  # consecutive rounds before "down": one blip during a deploy is not an outage
 REMIND_H = 6
@@ -179,9 +177,11 @@ ERR = re.compile(r"^\[ERR\] .*?channel error \(channel #(\d+), status code: (\d{
 
 def check_upstream(state: dict) -> tuple[bool, str, str]:
     since = state.get("upstream_since") or (now() - dt.timedelta(minutes=10)).isoformat(timespec="seconds")
-    state["upstream_since"] = stamp()
+    read_at = stamp()
+    # check=True: if docker logs fails (renamed container, broken log driver) this must
+    # be "检查本身出错", never "no errors" — the old 502 monitor died silently that way.
     r = subprocess.run(
-        ["docker", "logs", "--since", since, NEWAPI], capture_output=True, text=True, timeout=60, check=False
+        ["docker", "logs", "--since", since, NEWAPI], capture_output=True, text=True, timeout=60, check=True
     )
     codes: dict[str, int] = {}
     reasons: dict[tuple[str, str, str], int] = {}
@@ -193,6 +193,7 @@ def check_upstream(state: dict) -> tuple[bool, str, str]:
         if e:
             key = (e.group(1), e.group(2), e.group(3)[:60])
             reasons[key] = reasons.get(key, 0) + 1
+    state["upstream_since"] = read_at  # only after a good read: a failed round is re-read next time
     n403 = codes.get("403", 0)
     total = sum(codes.values())
     summary = "上游 " + (" ".join(f"{k}×{v}" for k, v in sorted(codes.items())) or "无 403/429/5xx")
@@ -200,14 +201,6 @@ def check_upstream(state: dict) -> tuple[bool, str, str]:
                        sorted(reasons.items(), key=lambda kv: -kv[1]))
     # 403 = a key was stopped or banned: a person has to act, so one is enough.
     return n403 > 0 or total >= UPSTREAM_MIN, summary, detail
-
-
-def check_disk(state: dict) -> tuple[bool, str, str]:
-    u = shutil.disk_usage("/")
-    pct = u.used / (u.used + u.free) * 100  # same as df Use% (root-reserved blocks left out)
-    was_bad = bool(state.get("checks", {}).get("disk", {}).get("bad"))
-    bad = pct >= DISK_PCT or (was_bad and pct >= DISK_PCT - 2)  # 2-point band: no flapping mail
-    return bad, f"根盘 {pct:.0f}%（剩 {u.free / 1e9:.0f} GB）", ""
 
 
 def check_buildcache(state: dict) -> tuple[bool, str, str]:
@@ -279,7 +272,6 @@ CHECKS = {
     "probe": check_probe,
     "runs": check_runs,
     "upstream": check_upstream,
-    "disk": check_disk,
     "buildcache": check_buildcache,
     "env": check_env,
 }

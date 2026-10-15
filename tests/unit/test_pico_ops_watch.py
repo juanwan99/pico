@@ -97,34 +97,34 @@ def test_env_set_backs_up_edits_and_trails(watch, tmp_path: Path) -> None:
 
 
 def _only(watch, monkeypatch: pytest.MonkeyPatch, result: list) -> None:
-    monkeypatch.setattr(watch, "CHECKS", {"disk": lambda state: tuple(result)})
+    monkeypatch.setattr(watch, "CHECKS", {"buildcache": lambda state: tuple(result)})
 
 
 def test_alert_once_remind_after_6h_and_recover(watch, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    result = [True, "根盘 86%", ""]
+    result = [True, "构建缓存独占 40 GB", ""]
     _only(watch, monkeypatch, result)
     watch.cmd_check(None)
     watch.cmd_check(None)
-    assert [s for s, _ in watch.sent] == ["[pico] 告警：disk"]  # second bad round: no repeat
+    assert [s for s, _ in watch.sent] == ["[pico] 告警：buildcache"]  # second bad round: no repeat
 
     state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     old = (dt.datetime.now().astimezone() - dt.timedelta(hours=7)).isoformat(timespec="seconds")
-    state["checks"]["disk"]["last_mail"] = old
+    state["checks"]["buildcache"]["last_mail"] = old
     (tmp_path / "state.json").write_text(json.dumps(state), encoding="utf-8")
     watch.cmd_check(None)
     assert len(watch.sent) == 2  # still bad after 6 h: reminder
 
-    result[:] = [False, "根盘 70%", ""]
+    result[:] = [False, "构建缓存独占 20 GB", ""]
     watch.cmd_check(None)
-    assert watch.sent[-1][0] == "[pico] 恢复：disk"
+    assert watch.sent[-1][0] == "[pico] 恢复：buildcache"
     watch.cmd_check(None)
     assert len(watch.sent) == 3
 
 
 def test_drill_mails_without_touching_state(watch, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    _only(watch, monkeypatch, [False, "根盘 70%", ""])
-    watch.cmd_check("disk")
-    assert watch.sent[0][0] == "[pico] 演练：disk" and "【演练】" in watch.sent[0][1]
+    _only(watch, monkeypatch, [False, "构建缓存独占 20 GB", ""])
+    watch.cmd_check("buildcache")
+    assert watch.sent[0][0] == "[pico] 演练：buildcache" and "【演练】" in watch.sent[0][1]
     assert not (tmp_path / "state.json").exists()
 
 
@@ -135,18 +135,6 @@ def test_broken_check_is_itself_an_alert(watch, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(watch, "CHECKS", {"runs": boom})
     watch.cmd_check(None)
     assert watch.sent and "检查本身出错" in watch.sent[0][1]
-
-
-def test_disk_band_does_not_flap(watch, monkeypatch: pytest.MonkeyPatch) -> None:
-    class Usage:
-        def __init__(self, used: int, free: int) -> None:
-            self.used, self.free, self.total = used, free, used + free
-
-    monkeypatch.setattr(watch.shutil, "disk_usage", lambda p: Usage(84, 16))
-    assert watch.check_disk({})[0] is False
-    assert watch.check_disk({"checks": {"disk": {"bad": True}}})[0] is True  # 84 ≥ 85 - 2
-    monkeypatch.setattr(watch.shutil, "disk_usage", lambda p: Usage(82, 18))
-    assert watch.check_disk({"checks": {"disk": {"bad": True}}})[0] is False
 
 
 def test_upstream_counts_codes_and_channel_reasons(watch, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -167,3 +155,19 @@ def test_upstream_counts_codes_and_channel_reasons(watch, monkeypatch: pytest.Mo
     assert "403×1" in summary and "429×1" in summary and "200" not in summary
     assert "渠道 #3 403 ×1" in detail
     assert state["upstream_since"]
+
+
+def test_docker_logs_failure_alerts_and_keeps_cursor(watch, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A failed `docker logs` must never read as "no 403/429/5xx" (502 monitor died silently 44 days)."""
+
+    def fail(cmd, **kwargs):
+        raise watch.subprocess.CalledProcessError(1, cmd, "", "Error: No such container: new-api")
+
+    monkeypatch.setattr(watch.subprocess, "run", fail)
+    monkeypatch.setattr(watch, "CHECKS", {"upstream": watch.check_upstream})
+    (tmp_path / "state.json").write_text(json.dumps({"upstream_since": "2026-10-15T13:00:00+08:00"}), encoding="utf-8")
+    watch.cmd_check(None)
+    assert watch.sent and watch.sent[0][0] == "[pico] 告警：upstream"
+    assert "检查本身出错：CalledProcessError" in watch.sent[0][1]
+    state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert state["upstream_since"] == "2026-10-15T13:00:00+08:00"  # this window is re-read next round
