@@ -156,3 +156,45 @@ async def test_suspended_key_fails_over_and_marks_down(monkeypatch) -> None:
     assert tried == ["gemini-3.8-flash", "grok-4.6"]
     assert [k for k, _ in seen] == ["tool.call"]
     assert brain_ha.is_down("gemini-3.8-flash")
+
+
+async def test_stalled_head_moves_on_and_only_head_has_a_deadline(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from pico_orchestrator import brain_ha
+    from pico_orchestrator.run_types import RunCaps, RunResult
+    from pico_orchestrator.true_pi import runtime
+
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "grok-4.6")
+    deadlines: list[float] = []
+    stalled = RunResult(
+        status="failed",
+        final_text="",
+        error="first token stall after 25s",
+        code="model.unconfigured",
+    )
+    ok = RunResult(status="succeeded", final_text="done")
+    script = [stalled, ok]
+
+    async def fake_once(*, emit, caps, stall_switch_s=0.0, **_kw):
+        deadlines.append(stall_switch_s)
+        return script.pop(0)
+
+    async def emit(kind, payload):
+        return None
+
+    async def never():
+        return False
+
+    monkeypatch.setattr(runtime, "_run_true_pi_once", fake_once)
+    last = await runtime.run_true_pi_agent(
+        prompt="x",
+        principal=SimpleNamespace(school_id="s", membership_id="m"),
+        emit=emit,
+        is_cancelled=never,
+        caps=RunCaps(backend_model="gemini-3.8-flash"),
+    )
+    assert last.status == "succeeded"
+    assert deadlines == [25.0, 0.0]
+    assert brain_ha.is_down("gemini-3.8-flash")
+    assert brain_candidates("gemini-3.8-flash")[0] == "grok-4.6"

@@ -197,9 +197,12 @@ async def run_true_pi_agent(
     from dataclasses import replace
 
     from pico_orchestrator.brain_ha import (
+        STALL_DOWN_S,
         brain_candidates,
         is_model_dead,
+        is_stall,
         mark_down,
+        pi_stall_switch_s,
         should_failover,
     )
     from pico_orchestrator.provider import runtime_policy_for_model
@@ -215,9 +218,12 @@ async def run_true_pi_agent(
     for i, mid in enumerate(models):
         # Switching models is invisible to the teacher (owner 10-14 14:28).
         gate = _FailoverGate(emit, "")
+        # Only the head model is cut off on a stalled first token; the next one
+        # gets all the time it needs (a slow answer beats none).
+        stall = pi_stall_switch_s() if i == 0 and len(models) > 1 else 0.0
         last = await _run_true_pi_once(
             emit=gate.emit,
-            **{**kwargs, "caps": replace(caps, backend_model=mid)},
+            **{**kwargs, "caps": replace(caps, backend_model=mid), "stall_switch_s": stall},
         )
         # Once the model has produced output the teacher saw it live; a
         # restart on another model would redo the task from scratch.
@@ -228,8 +234,11 @@ async def run_true_pi_agent(
         ):
             await gate.flush()
             return last
-        if is_model_dead(f"{last.code or ''} {last.error or ''}"):
+        why = f"{last.code or ''} {last.error or ''}"
+        if is_model_dead(why):
             mark_down(mid)
+        elif is_stall(why):
+            mark_down(mid, STALL_DOWN_S)
     if gate is not None:
         await gate.flush()
     return last or await _run_true_pi_once(emit=emit, **kwargs)
@@ -308,8 +317,13 @@ async def _run_true_pi_once(
     session_dir: Path | None = None,
     conversation_id: str | None = None,
     persist_pi_session: bool = False,
+    stall_switch_s: float = 0.0,
 ) -> RunResult:
-    """Run one multi-step turn on true Pi (or fake transport)."""
+    """Run one multi-step turn on true Pi (or fake transport).
+
+    ``stall_switch_s`` > 0 (fast lane, head model only): no visible output that
+    many seconds after the prompt → fail over to the next model (#1261).
+    """
     caps = caps or RunCaps()
     rid = run_id or f"tp-{uuid.uuid4().hex[:12]}"
     min_arts = max(0, int(getattr(caps, "min_artifacts", 0) or 0))
@@ -815,6 +829,7 @@ async def _run_true_pi_once(
                 # Consume must run while wait_response sits on prompt ack.
                 # Live Pi can stream text_delta before the prompt response;
                 # starting after prompt() made TTFB == generation wall time.
+                prompt_at = loop.time()
                 await client.prompt(prompt_text, images=images)
                 while not state.settled and not stop.is_set():
                     if _hitl_ask_timed_out(transport):
@@ -869,6 +884,16 @@ async def _run_true_pi_once(
                         state.settled = True
                         state.no_resume = True
                         break
+                    if (
+                        stall_switch_s > 0
+                        and not thinking_on
+                        and not state.has_output
+                        and not state.failover_error
+                        and loop.time() - prompt_at >= stall_switch_s
+                    ):
+                        from pico_orchestrator.brain_ha import FIRST_TOKEN_STALL
+
+                        state.failover_error = f"{FIRST_TOKEN_STALL} after {int(stall_switch_s)}s"
                     if state.failover_error:
                         await client.abort()
                         return await _failed(

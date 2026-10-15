@@ -56,6 +56,13 @@ _MODEL_FAIL_CODES = ("true_pi.assistant_error", "model.usage_limit", "model.unco
 DOWN_ENV = "PICO_BRAIN_DOWN_S"
 _DOWN_DEFAULT_S = 300.0
 _down_until: dict[str, float] = {}
+# A whole channel can stall for minutes (10-15 09:30: four gemini hedges of one
+# Pi step all waited 134 s for the first token). Same-model hedges cannot get
+# out of that; the next model can. Fast lane only: deep thinking is slow on purpose.
+PI_STALL_ENV = "PICO_PI_STALL_SWITCH_S"
+_PI_STALL_DEFAULT_S = 25.0
+FIRST_TOKEN_STALL = "first token stall"
+STALL_DOWN_S = 120.0
 
 
 def configured_fallbacks() -> list[str]:
@@ -81,12 +88,14 @@ def brain_candidates(primary: str | None) -> list[str]:
     return up + [m for m in out if m not in up]
 
 
-def mark_down(model: str) -> None:
+def mark_down(model: str, seconds: float | None = None) -> None:
     """Skip a dead channel / key for a while instead of hitting it on every call."""
-    try:
-        span = float(os.environ.get(DOWN_ENV) or _DOWN_DEFAULT_S)
-    except ValueError:
-        span = _DOWN_DEFAULT_S
+    span = seconds
+    if span is None:
+        try:
+            span = float(os.environ.get(DOWN_ENV) or _DOWN_DEFAULT_S)
+        except ValueError:
+            span = _DOWN_DEFAULT_S
     if model and span > 0:
         _down_until[model] = time.monotonic() + span
 
@@ -114,6 +123,18 @@ def is_key_dead(error: str) -> bool:
 def is_model_dead(error: str) -> bool:
     """This model cannot answer any call now: no channel, or its key is dead."""
     return is_channel_dead(error) or is_key_dead(error)
+
+
+def pi_stall_switch_s() -> float:
+    """Seconds without a first token before a Pi fast-lane run moves on (0 = off)."""
+    try:
+        return max(0.0, float(os.environ.get(PI_STALL_ENV) or _PI_STALL_DEFAULT_S))
+    except ValueError:
+        return _PI_STALL_DEFAULT_S
+
+
+def is_stall(error: str) -> bool:
+    return FIRST_TOKEN_STALL in (error or "")
 
 
 def is_upstream_overloaded(error: str) -> bool:
