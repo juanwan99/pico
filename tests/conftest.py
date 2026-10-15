@@ -8,8 +8,13 @@ Production compose pins the unix socket instead; never ship "embedded".
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
 import pytest
+
+# Ops scripts import their sibling helpers (scripts/probe_key.py) as when run directly.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 os.environ.setdefault("PICO_OFFICE_URL", "embedded")
 

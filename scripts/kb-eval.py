@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from probe_key import probe_key
 
 INDEX = "pico_materials"
 NOISE_TITLES = ("回复摘要", "pico-assoc-probe", "报送汇总台账", "summary")
@@ -199,10 +200,8 @@ GEN_PROMPT = """你是一名中小学老师，下面是学校知识库里的一�
 
 def _gpt_json(prompt: str, *, timeout_s: float = 120.0) -> dict[str, Any]:
     base = (os.environ.get("DEEPSEEK_BASE_URL") or "http://127.0.0.1:3000/v1").rstrip("/")
-    key = (os.environ.get("DEEPSEEK_API_KEY") or "").strip()
+    key = probe_key()
     model = (os.environ.get("KB_EVAL_MODEL") or os.environ.get("DEEPSEEK_MODEL") or "gpt-5.6-sol").strip()
-    if not key:
-        raise SystemExit("DEEPSEEK_API_KEY (New API token) missing")
     body = {
         "model": model,
         "input": [{"role": "user", "content": prompt}],

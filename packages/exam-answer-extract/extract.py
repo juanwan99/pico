@@ -938,6 +938,7 @@ async def _complete_once(
                 max_tokens=max_tokens,
                 thinking=thinking,
                 usage_out=usage_out,
+                purpose="exam",
             ):
                 pieces.append(piece)
             return "".join(pieces)
@@ -951,6 +952,7 @@ async def _complete_once(
         "stream": False,
         "max_tokens": max_tokens,
         "temperature": 0.1,
+        "user": "pico-exam",
     }
     extra = P.thinking_extra_body(mid, thinking=thinking)
     if extra:

@@ -165,7 +165,21 @@ def new_api_base() -> str:
 
 
 def new_api_key() -> str:
-    return (os.environ.get("DEEPSEEK_API_KEY") or "").strip()
+    """Knowledge-base token for embeddings and rerank (pico#1271): its own New API
+    token, so an ingest burst shows up and is limited apart from chat. Until
+    ``PICO_KB_API_KEY`` is set it falls back to the chat key."""
+    return (os.environ.get("PICO_KB_API_KEY") or os.environ.get("DEEPSEEK_API_KEY") or "").strip()
+
+
+KEY_MARK_HEADER = "X-Pico-Key"
+
+
+def key_mark(key: str) -> str:
+    """Meili masks apiKey on read; this header tells a key change apart.
+
+    Verified on Meili v1.13.3: changing apiKey or headers re-embeds nothing;
+    changing request / response re-embeds every document (pico#1271)."""
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:8]
 
 
 def kb_embed_model() -> str:
@@ -244,6 +258,7 @@ def new_api_embedder_spec() -> dict[str, Any] | None:
         "source": "rest",
         "url": url,
         "apiKey": key,
+        "headers": {KEY_MARK_HEADER: key_mark(key)},
         "dimensions": 2048,
         "documentTemplate": EMBED_DOCUMENT_TEMPLATE,
         "documentTemplateMaxBytes": EMBED_TEMPLATE_MAX_BYTES,
@@ -860,7 +875,7 @@ class MeiliIndex:
 
     def ensure(self, *, force: bool = False) -> None:
         spec = new_api_embedder_spec()
-        cache_key = f"{meili_url()}|{INDEX}|chunk-v2|{spec.get('url') if spec else 'off'}"
+        cache_key = f"{meili_url()}|{INDEX}|chunk-v2|{spec.get('url') if spec else 'off'}|{spec.get('headers') if spec else ''}"
         if not force and _ENSURE_CACHE.get(cache_key):
             return
         pk = self._primary_key()
@@ -946,6 +961,9 @@ class MeiliIndex:
             want_default = want_embedders.get("default") or {}
             if str(default.get("url") or "") != str(want_default.get("url") or ""):
                 return False
+            live_mark = (default.get("headers") or {}).get(KEY_MARK_HEADER)
+            if live_mark != (want_default.get("headers") or {}).get(KEY_MARK_HEADER):
+                return False  # new key: PATCH apiKey + header only, nothing re-embeds
             if str(default.get("documentTemplate") or "") != str(
                 want_default.get("documentTemplate") or ""
             ):

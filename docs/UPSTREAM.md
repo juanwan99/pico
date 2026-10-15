@@ -11,7 +11,7 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
 | 回滚用的托管循环（`PICO_HOSTED_LOOP=1`） | `pi_runtime` → `provider.call_once`（不再自建带重试的客户端） |
 | 知识库 rerank | `meili_kb.rerank_documents_with_usage`（只计数） |
 | 生图 | `image_generate._post_gateway` |
-| 嵌入（入库、查询） | Meili 自己调 New API（不经 Pico 进程，见下） |
+| 嵌入（入库、查询） | Meili 自己调 New API（不经 Pico 进程，见下「知识库」） |
 
 门外只剩旧的 Kimi CLI 灰度（`kimi_runtime`，现网没开）：它用 Kimi SDK 自己的 `max_retries_per_step`。要开它，先把 `PICO_UPSTREAM_KEY_MAX` 调低。
 
@@ -34,6 +34,36 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
   - 只有上游回的错误状态，才由 run proxy 记进 `upstream.note_upstream_error`。
   - brain 换模型时看的是这条记录（`should_failover(..., relay=...)`）。所以上游回一个光秃秃的 403 也会换模型；本机 proxy 自己回的 403（`proxy.no_run` / `auth.denied`）不会。
 - **在途去重**（复审 #1259）：管家用同一个 json_only 信封重发时，如果第一次还在算，就等那一次的结果（响应头 `X-Pico-Replay: inflight`），不再起第二次模型调用。
+
+## 三把 token（New API）
+
+| token | 环境变量 | 谁用 |
+|---|---|---|
+| 正式 | `DEEPSEEK_API_KEY` | 对话、阅卷、Pi、托管循环 |
+| 知识库 pico-kb | `PICO_KB_API_KEY`（没设就用正式的） | Meili 嵌入、rerank |
+| 探针 pico-probe | `PICO_PROBE_API_KEY` | `brain-switch.py` 预检、`model_hello.py`、`kb-eval.py`、`true-pi-live-smoke.py` |
+
+- 脚本用 `scripts/probe_key.py` 取 token。设成了正式 / 知识库的 token，脚本直接退出，一个请求都不发。还没设的时候先用正式 key，stderr 打醒目警告（brain-switch 是 gemini 出事时切主脑的工具，不能卡在还没建的 token 上）。
+- CI 不打真中转，单测都用假中转。
+
+## 请求上带的标记
+
+- 每个请求带 `user`：`pico-direct` / `pico-exam` / `pico-hosted`，只说是哪条路发的，不带人。
+- Responses（gpt / grok）另带 `prompt_cache_key`：按系统提示算的哈希。同一段系统提示的调用落到同一个缓存上。
+- Pi 自己发的请求原样转发，不加这两项。
+
+## 知识库（Meili 嵌入）
+
+- **本机实测**（Meili v1.13.3，假嵌入服务数请求，pico#1271）：
+  - 改 `apiKey`：重嵌 0 条；改 `headers`：重嵌 0 条。
+  - 改 `request` / `response`（比如换成批量格式）：所有文档全部重嵌。现网 7 万多条，等于打 7 万次。
+  - 所以嵌入**不改批量**，保持一条一发。日常量很小（10-15 那 6 小时 97 次，峰值 4 次/分）。
+  - 真要整库重灌那天，用「先把现有向量标 `regenerate:false` 钉住，再改批量格式」的办法，单开卡做。本机验过这样重嵌 0 条。
+- **换 token**：Meili 读回来的 `apiKey` 是打码的，看不出换没换。所以嵌入配置带一个请求头 `X-Pico-Key`（token 的 sha256 前 8 位），`ensure()` 看到它变了就只 PATCH apiKey 和这个头。本机用真 `ensure()` 验过：重嵌 0 条，之后新文档用新 token。
+- **整库重建限速**：`rebuild_materials` 每分钟最多写 `PICO_KB_REBUILD_PER_MIN`（默认 600）个分块。每个分块就是 Meili 打一次嵌入。
+  - 09-16 整库入库时 ch5 峰值约 2100 次/分，0 报错；现在 7.2 万块约 2 小时。
+  - 第一分钟的量直接放行，所以发版时的增量入库不会多等。
+  - `PICO_KB_REINDEX_FORCE=1` 的整库重建在后台跑，日志在 `~/logs/pico-kb-reindex-force.log`，不再因为 600 s 超时让发版失败。
 
 ## 看数
 

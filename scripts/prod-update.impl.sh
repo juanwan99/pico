@@ -385,8 +385,13 @@ echo "[pico] meili health ok"
 # re-chunks the whole ledger — required after chunker / index-schema changes.
 REINDEX_URL="http://127.0.0.1:18765/v1/kb/reindex-all"
 if [ "${PICO_KB_REINDEX_FORCE:-0}" = "1" ]; then
-  REINDEX_URL="${REINDEX_URL}?force=1"
-  echo "[pico] kb reindex: force (full re-chunk)"
+  # Full re-chunk re-embeds every chunk, paced at PICO_KB_REBUILD_PER_MIN (600/min,
+  # ~2 h for 72k; pico#1271). It runs on after the deploy instead of failing it at 600 s;
+  # the incremental pass below still runs and gates the deploy (only new artifacts).
+  REINDEX_LOG="${HOME}/logs/pico-kb-reindex-force.log"
+  mkdir -p "$(dirname "$REINDEX_LOG")"
+  nohup curl -sS --max-time 0 -X POST "${REINDEX_URL}?force=1" >"$REINDEX_LOG" 2>&1 &
+  echo "[pico] kb reindex: force (full re-chunk) running in background → $REINDEX_LOG"
 fi
 REINDEX_FILE="$(mktemp)"
 REINDEX_CODE="$(curl -sS -o "$REINDEX_FILE" -w "%{http_code}" --max-time 600 -X POST "$REINDEX_URL" || echo 000)"

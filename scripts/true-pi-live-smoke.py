@@ -5,7 +5,8 @@ Usage:
   PYTHONPATH=services/api:services/orchestrator \\
     python3 scripts/true-pi-live-smoke.py [--out docs/evidence/pi-true-kernel-p2/live-smoke]
 
-Requires: pi on PATH (@earendil-works/pi-coding-agent@0.84.4), DEEPSEEK_API_KEY.
+Requires: pi on PATH (@earendil-works/pi-coding-agent@0.84.4), PICO_PROBE_API_KEY
+(pico-probe token; the production key is refused).
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from probe_key import use_probe_key
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "api"))
@@ -281,6 +284,7 @@ def main() -> None:
         default=str(ROOT / "docs" / "evidence" / "pi-true-kernel-p2" / "live-smoke"),
     )
     args = ap.parse_args()
+    use_probe_key()
     raise SystemExit(asyncio.run(main_async(Path(args.out))))
 
 

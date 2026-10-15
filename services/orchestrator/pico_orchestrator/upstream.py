@@ -64,6 +64,17 @@ BUSY_TEXT = "Pico 这会儿忙，请稍后再试。"
 BUSY_STATUS = frozenset({429, 503, 529})
 
 
+def caller(purpose: str) -> str:
+    """``user`` on every request (pico#1271): which Pico road sent it, never who."""
+    return f"pico-{purpose}"
+
+
+def cache_key(instructions: str) -> str | None:
+    """Responses ``prompt_cache_key``: calls sharing a system prompt share a cache shard."""
+    text = (instructions or "").strip()
+    return "pico-" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:16] if text else None
+
+
 def verdict(status: int | None) -> str:
     """What to do after an upstream status before any token: retry / switch / stop."""
     if status is None or status in RETRY_STATUS:
