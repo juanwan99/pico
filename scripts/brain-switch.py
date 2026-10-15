@@ -13,11 +13,15 @@ blind:
    pico-api (the only service that reads them).
 3. Post-check through Pico itself (text lane + image lane). Any failure → restore
    the backup and recreate again.
+4. Write (and on rollback write again) one trail line to ~/pico-env-changes.log
+   with --card / --why (pico_ops_watch.py env-record, pico#1273).
 
 Host-only. Never prints keys. Smoke membership only (never a real school).
 
-    python3 scripts/brain-switch.py --primary gemini-3.8-flash --fallbacks grok-4.6,gpt-5.6-sol --dry-run
-    python3 scripts/brain-switch.py --primary gemini-3.8-flash --fallbacks grok-4.6,gpt-5.6-sol
+    python3 scripts/brain-switch.py --primary gemini-3.8-flash --fallbacks grok-4.6,gpt-5.6-sol \
+        --card pico#1261 --why "..." --dry-run
+    python3 scripts/brain-switch.py --primary gemini-3.8-flash --fallbacks grok-4.6,gpt-5.6-sol \
+        --card pico#1261 --why "gpt key banned, gemini back to primary"
 """
 from __future__ import annotations
 
@@ -187,11 +191,19 @@ def postcheck(token: str) -> bool:
     return all(row["ok"] for row in checks.values())
 
 
+def trail(card: str, why: str) -> None:
+    """One line in ~/pico-env-changes.log: keys, old -> new, card, why (pico#1273)."""
+    watch = Path(__file__).with_name("pico_ops_watch.py")
+    subprocess.run([sys.executable, str(watch), "env-record", "--card", card, "--why", why], check=False)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--primary", required=True)
     ap.add_argument("--fallbacks", default="", help="comma list, order = try order")
     ap.add_argument("--dry-run", action="store_true", help="preflight only, touch nothing")
+    ap.add_argument("--card", required=True, help="card asking for the switch, e.g. pico#1261")
+    ap.add_argument("--why", required=True, help="one line for pico-env-changes.log")
     args = ap.parse_args()
     fallbacks = [m.strip() for m in args.fallbacks.split(",") if m.strip()]
     env = env_file(PICO_ENV)
@@ -218,11 +230,13 @@ def main() -> int:
     )
     PICO_ENV.chmod(0o600)
     print("env written, backup", backup.name, flush=True)
+    trail(args.card, f"brain-switch: {args.why} (backup {backup.name})")
     recreate_api()
     if postcheck(token):
         print(f"SWITCHED primary={args.primary} fallbacks={','.join(fallbacks)}")
         return 0
     shutil.copy2(backup, PICO_ENV)
+    trail(args.card, f"brain-switch rolled back: postcheck failed (restored {backup.name})")
     recreate_api()
     print("ROLLED_BACK to", backup.name)
     return 1
