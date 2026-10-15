@@ -122,6 +122,17 @@ class EventRow(Base):
             return {}
 
 
+UPLOAD_TASK_PREFIX = "edu-read · "
+
+
+def is_teacher_material(origin: str | None, task_title: str | None) -> bool:
+    """pico#1298: only the teacher's own files are library material; Pico's drafts are not."""
+    o = str(origin or "")
+    if o:
+        return o == "upload"
+    return str(task_title or "").startswith(UPLOAD_TASK_PREFIX)
+
+
 class ArtifactRow(Base):
     __tablename__ = "artifacts"
 
@@ -136,6 +147,9 @@ class ArtifactRow(Base):
     content_sha256: Mapped[str] = mapped_column(String(64), default="")
     byte_size: Mapped[int] = mapped_column(Integer, default=0)
     folder_id: Mapped[str] = mapped_column(String(36), default="", index=True)
+    # pico#1298: "pico" = Pico made it, "upload" = the teacher's own file,
+    # "" = before #1298 (an upload's task title starts with UPLOAD_TASK_PREFIX).
+    origin: Mapped[str] = mapped_column(String(16), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     task: Mapped[TaskRow] = relationship(back_populates="artifacts")
@@ -378,6 +392,8 @@ def _migrate_sqlite_sync(conn) -> None:
             conn.execute(text("ALTER TABLE artifacts ADD COLUMN byte_size INTEGER DEFAULT 0"))
         if "folder_id" not in acols:
             conn.execute(text("ALTER TABLE artifacts ADD COLUMN folder_id VARCHAR(36) DEFAULT ''"))
+        if "origin" not in acols:
+            conn.execute(text("ALTER TABLE artifacts ADD COLUMN origin VARCHAR(16) DEFAULT ''"))
 
     try:
         named_rows = conn.execute(text("PRAGMA table_info(edu_named_bind)")).fetchall()

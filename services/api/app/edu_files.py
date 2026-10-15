@@ -22,7 +22,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal, require_any_scope
-from app.db import ArtifactRow, TaskRow, new_id, session_factory
+from app.db import UPLOAD_TASK_PREFIX, ArtifactRow, TaskRow, new_id, session_factory
 from app.office_extract import extract_office
 
 router = APIRouter(tags=["edu-files"])
@@ -711,7 +711,7 @@ async def persist_edu_file(
             id=new_id(),
             school_id=principal.school_id,
             membership_id=principal.membership_id,
-            title=f"edu-read · {filename}"[:512],
+            title=f"{UPLOAD_TASK_PREFIX}{filename}"[:512],
             conversation_id=convo,
         )
         session.add(task)
@@ -726,6 +726,7 @@ async def persist_edu_file(
             content_sha256=digest,
             byte_size=byte_size,
             folder_id=folder_id or "",
+            origin="upload",
         )
         session.add(src)
         if artifact_kind == KIND_SRC and text_body:
@@ -739,6 +740,7 @@ async def persist_edu_file(
                 content_encoding=text_enc,
                 content_sha256=text_digest,
                 byte_size=text_size,
+                origin="upload",
             )
             session.add(kb_row)
             projections.append((kb_row.id, "kb_text", text_body))
@@ -754,6 +756,7 @@ async def persist_edu_file(
                 content_encoding="utf8",
                 content_sha256="",
                 byte_size=len(sidecar_json.encode("utf-8")),
+                origin="upload",
             )
             session.add(excerpt)
         await session.commit()

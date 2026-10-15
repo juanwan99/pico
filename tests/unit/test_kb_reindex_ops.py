@@ -137,10 +137,11 @@ def test_indexed_artifact_ids_returns_none_on_http_error(
 
 
 class _Art:
-    def __init__(self, aid: str, title: str) -> None:
+    def __init__(self, aid: str, title: str, origin: str = "upload") -> None:
         self.id = aid
         self.kind = "material"
         self.title = title
+        self.origin = origin
         self.content_encoding = "utf8"
         self.inline = "正文 " * 20
         self.created_at = None
@@ -150,6 +151,7 @@ class _Task:
     id = "t1"
     school_id = "school-1"
     membership_id = "m1"
+    title = "edu-read · 旧.docx"
 
 
 def _fake_session_factory(rows):
@@ -237,3 +239,22 @@ def test_reindex_all_force_query_passes_through(monkeypatch: pytest.MonkeyPatch)
     rebuild.reset_mock()
     asyncio.run(kb_reindex_all(_Req()))  # type: ignore[arg-type]
     rebuild.assert_awaited_once_with(None, force=False)
+
+
+def test_rebuild_leaves_pico_drafts_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    """pico#1298: Pico-made files never enter the library, old or new."""
+
+    class _RunTask(_Task):
+        title = "做一份浮力讲义"
+
+    rows = [
+        (_Art("up", "上传.docx"), _Task()),
+        (_Art("legacy-up", "旧上传.docx", origin=""), _Task()),
+        (_Art("draft", "讲义.docx", origin="pico"), _RunTask()),
+        (_Art("legacy-draft", "旧讲义.docx", origin=""), _RunTask()),
+    ]
+    kb_rebuild, chunked = _wire_rebuild(monkeypatch, rows, set())
+
+    out = asyncio.run(kb_rebuild.rebuild_materials(None, force=True))
+    assert sorted(chunked) == ["legacy-up", "up"]
+    assert out["skipped"] == 2
