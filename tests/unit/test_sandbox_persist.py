@@ -177,30 +177,34 @@ async def test_destroy_keeps_disk_and_new_run_sees_file(disk, monkeypatch) -> No
     assert denied.value.code == "sandbox.forbidden"
 
 
+def _record_fchown(monkeypatch: pytest.MonkeyPatch) -> dict[int, int]:
+    """inode -> uid of every fchown; pico-api is root in production (#1267)."""
+    import os
+
+    owned: dict[int, int] = {}
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "fchown", lambda fd, uid, gid: owned.__setitem__(os.fstat(fd).st_ino, uid))
+    monkeypatch.setattr(os, "chown", lambda *a, **k: pytest.fail("path chown follows links"))
+    return owned
+
+
 def test_root_written_disk_goes_to_sandbox_user(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """#1267: pico-api is root; the school dir, teacher dir and file it makes must be
     the sandbox user's, or the sandbox cannot open pages / save for that teacher."""
-    import os
-
     import pico_orchestrator.sandbox_persist as persist
 
     monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disks"))
-    monkeypatch.setattr(os, "geteuid", lambda: 0)
-    owned: dict[str, int] = {}
-    monkeypatch.setattr(os, "chown", lambda path, uid, gid: owned.__setitem__(str(path), uid))
+    owned = _record_fchown(monkeypatch)
 
     dest = write_owner_disk_file("school-1", "member-1", "a.docx", b"x")
     teacher = owner_disk_dir("school-1", "member-1")
-    assert owned == {
-        str(teacher.parent): persist.SANDBOX_DISK_UID,
-        str(teacher): persist.SANDBOX_DISK_UID,
-        str(dest): persist.SANDBOX_DISK_UID,
-    }
+    inodes = {p.stat().st_ino for p in (teacher.parent, teacher, dest)}
+    assert owned == {ino: persist.SANDBOX_DISK_UID for ino in inodes}
 
     owned.clear()
     with pytest.raises(ToolError):
         read_owner_disk_file("school-2", "member-2", "none.docx")
-    assert str(owner_disk_dir("school-2", "member-2")) in owned
+    assert owner_disk_dir("school-2", "member-2").stat().st_ino in owned
 
 
 def test_non_root_never_chowns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -208,5 +212,84 @@ def test_non_root_never_chowns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disks"))
     monkeypatch.setattr(os, "geteuid", lambda: 65532)
-    monkeypatch.setattr(os, "chown", lambda *a: pytest.fail("chown as non-root"))
+    monkeypatch.setattr(os, "fchown", lambda *a: pytest.fail("chown as non-root"))
+    monkeypatch.setattr(os, "chown", lambda *a, **k: pytest.fail("chown as non-root"))
     write_owner_disk_file("school-1", "member-1", "a.docx", b"x")
+
+
+# The sandbox user owns <disk>/<school>/ and each teacher dir, so it can plant links
+# before root (pico-api) touches them. Every root path must refuse, never follow.
+
+
+@pytest.fixture()
+def outside(tmp_path: Path) -> Path:
+    target = tmp_path / "outside"
+    target.mkdir()
+    (target / "secret.txt").write_bytes(b"keep")
+    return target
+
+
+def _planted(disk: Path, outside: Path, *, level: str) -> None:
+    if level == "school":
+        disk.mkdir(parents=True)
+        (disk / "school-1").symlink_to(outside, target_is_directory=True)
+    else:
+        (disk / "school-1").mkdir(parents=True)
+        (disk / "school-1" / "member-1").symlink_to(outside, target_is_directory=True)
+
+
+@pytest.mark.parametrize("level", ["school", "teacher"])
+def test_planted_dir_link_is_refused_everywhere(
+    disk: Path, outside: Path, level: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    owned = _record_fchown(monkeypatch)
+    _planted(disk, outside, level=level)
+    for call in (
+        lambda: write_owner_disk_file("school-1", "member-1", "a.docx", b"x"),
+        lambda: read_owner_disk_file("school-1", "member-1", "secret.txt"),
+        lambda: clear_owner_disk("school-1", "member-1"),
+        lambda: list_owner_disk_names("school-1", "member-1"),
+    ):
+        with pytest.raises(ToolError) as denied:
+            call()
+        assert denied.value.code == "sandbox.path_denied"
+    assert sorted(p.name for p in outside.iterdir()) == ["secret.txt"]
+    assert (outside / "secret.txt").read_bytes() == b"keep"
+    assert outside.stat().st_ino not in owned
+
+
+def test_planted_file_links_are_refused(disk: Path, outside: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    owned = _record_fchown(monkeypatch)
+    write_owner_disk_file("school-1", "member-1", "real.docx", b"x")
+    teacher = owner_disk_dir("school-1", "member-1")
+    (teacher / "soft.docx").symlink_to(outside / "secret.txt")
+    (teacher / "hard.docx").hardlink_to(outside / "secret.txt")
+    for name in ("soft.docx", "hard.docx"):
+        with pytest.raises(ToolError) as denied:
+            write_owner_disk_file("school-1", "member-1", name, b"overwrite")
+        assert denied.value.code == "sandbox.path_denied"
+        with pytest.raises(ToolError):
+            read_owner_disk_file("school-1", "member-1", name)
+    assert (outside / "secret.txt").read_bytes() == b"keep"
+    assert (outside / "secret.txt").stat().st_ino not in owned
+    assert "soft.docx" not in list_owner_disk_names("school-1", "member-1")
+    clear_owner_disk("school-1", "member-1")
+    assert (outside / "secret.txt").read_bytes() == b"keep"
+
+
+def test_planted_fifo_is_refused_without_hanging(disk: Path) -> None:
+    """mkfifo needs no privilege: open() on it would block pico-api forever."""
+    import os
+    import time
+
+    write_owner_disk_file("school-1", "member-1", "real.docx", b"x")
+    os.mkfifo(owner_disk_dir("school-1", "member-1") / "pipe.docx")
+    for call in (
+        lambda: write_owner_disk_file("school-1", "member-1", "pipe.docx", b"x"),
+        lambda: read_owner_disk_file("school-1", "member-1", "pipe.docx"),
+    ):
+        started = time.monotonic()
+        with pytest.raises(ToolError) as denied:
+            call()
+        assert denied.value.code == "sandbox.path_denied"
+        assert time.monotonic() - started < 1

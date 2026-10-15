@@ -6,10 +6,15 @@ Destroying a sandbox session must not delete this tree.
 
 from __future__ import annotations
 
+import errno
 import logging
 import os
+import shutil
+import stat
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.sandbox_s1 import (
@@ -61,65 +66,139 @@ def _disk_uid() -> int:
     return int(raw) if raw.isdigit() else SANDBOX_DISK_UID
 
 
-def _hand_to_sandbox(path: Path) -> None:
+def _hand_fd(fd: int) -> None:
     """Root-created dirs / files go to the sandbox user, or it cannot open pages
-    or save into this teacher's disk (#1267). No-op when not running as root."""
+    or save into this teacher's disk (#1267). On the open fd, so nothing is followed.
+    No-op when not running as root."""
     if not hasattr(os, "geteuid") or os.geteuid() != 0:
         return
     uid = _disk_uid()
     try:
-        if path.stat().st_uid != uid:
-            os.chown(path, uid, uid)
+        if os.fstat(fd).st_uid != uid:
+            os.fchown(fd, uid, uid)
     except OSError:
-        logger.warning("teacher disk chown failed: %s", path, exc_info=True)
+        logger.warning("teacher disk chown failed", exc_info=True)
+
+
+def _refuse_link(where: str) -> NoReturn:
+    # The sandbox user owns these dirs, so it can plant a link before a teacher's first
+    # open; pico-api is root. Following it would read / write / chown / clear anywhere.
+    logger.error("teacher disk: refused a symlink / hard link / non-regular file at %s", where)
+    raise ToolError("sandbox.path_denied", "老师盘路径异常，已拒绝")
+
+
+_DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+
+
+@contextmanager
+def _owner_dir_fd(school_id: str, membership_id: str, *, create: bool) -> Iterator[int]:
+    """fd of this teacher's disk dir, walked down from disk_root() one name at a time
+    with O_NOFOLLOW: a symlink anywhere below disk_root is refused, never followed.
+    Everything after uses this fd (dir_fd / fchown), so there is no check-then-use gap."""
+    base = disk_root()
+    if create:
+        base.mkdir(parents=True, exist_ok=True)
+    fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for seg in (
+            safe_segment(school_id, fallback="school"),
+            safe_segment(membership_id, fallback="member"),
+        ):
+            if create:
+                try:
+                    os.mkdir(seg, 0o755, dir_fd=fd)
+                except FileExistsError:
+                    pass
+            try:
+                nfd = os.open(seg, _DIR_FLAGS, dir_fd=fd)
+            except OSError as exc:
+                if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                    _refuse_link(seg)
+                raise
+            os.close(fd)
+            fd = nfd
+            if create:
+                _hand_fd(fd)
+        yield fd
+    finally:
+        os.close(fd)
 
 
 def ensure_owner_disk_dir(school_id: str, membership_id: str) -> Path:
-    root = owner_disk_dir(school_id, membership_id)
-    root.mkdir(parents=True, exist_ok=True)
-    _hand_to_sandbox(root.parent)
-    _hand_to_sandbox(root)
-    return root
+    with _owner_dir_fd(school_id, membership_id, create=True):
+        pass
+    return owner_disk_dir(school_id, membership_id)
 
 
-def owner_disk_usage_bytes(root: Path) -> int:
-    if not root.is_dir():
-        return 0
+def _usage_bytes(dir_fd: int) -> int:
     total = 0
-    for path in root.rglob("*"):
-        try:
-            if path.is_file() and not path.is_symlink():
-                total += path.stat().st_size
-        except OSError:
-            continue
+    for _dir, _subdirs, files, dfd in os.fwalk(".", dir_fd=dir_fd, follow_symlinks=False):
+        for name in files:
+            try:
+                st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+            except OSError:
+                continue
+            if stat.S_ISREG(st.st_mode):
+                total += st.st_size
     return total
 
 
-def assert_owner_disk_quota(root: Path, *, add_bytes: int, replace_bytes: int = 0) -> None:
+def owner_disk_usage_bytes(school_id: str, membership_id: str) -> int:
+    try:
+        with _owner_dir_fd(school_id, membership_id, create=False) as dfd:
+            return _usage_bytes(dfd)
+    except FileNotFoundError:
+        return 0
+
+
+def _assert_quota(dir_fd: int, *, add_bytes: int, replace_bytes: int = 0) -> None:
     quota = owner_disk_quota_bytes()
-    projected = owner_disk_usage_bytes(root) - max(0, replace_bytes) + max(0, add_bytes)
+    projected = _usage_bytes(dir_fd) - max(0, replace_bytes) + max(0, add_bytes)
     if projected > quota:
         raise ToolError("sandbox.quota", QUOTA_COPY)
 
 
 def list_owner_disk_names(school_id: str, membership_id: str) -> list[str]:
-    root = owner_disk_dir(school_id, membership_id)
-    if not root.is_dir():
+    try:
+        with _owner_dir_fd(school_id, membership_id, create=False) as dfd:
+            return sorted(
+                e.name
+                for e in os.scandir(dfd)
+                if e.is_file(follow_symlinks=False) and not e.name.startswith(".")
+            )
+    except FileNotFoundError:
         return []
-    names: list[str] = []
-    for path in sorted(root.iterdir()):
-        if path.is_file() and not path.name.startswith(".") and not path.is_symlink():
-            names.append(path.name)
-    return names
 
 
-def owner_disk_file(school_id: str, membership_id: str, filename: str) -> Path:
+def _disk_name(filename: str) -> str:
     deny_secret_filename(filename)
-    root = ensure_owner_disk_dir(school_id, membership_id)
     name = Path(filename or "").name
     if not name or name in {".", ".."}:
         raise ToolError("sandbox.path_denied", "文件名非法")
-    return join_workspace_path(root, name)
+    return name
+
+
+def owner_disk_file(school_id: str, membership_id: str, filename: str) -> Path:
+    root = ensure_owner_disk_dir(school_id, membership_id)
+    return join_workspace_path(root, _disk_name(filename))
+
+
+def _open_file(name: str, flags: int, dfd: int) -> int:
+    # O_NONBLOCK: a planted FIFO would otherwise hang open() forever (write: ENXIO
+    # with no reader; read: opens, then fails the S_ISREG check). Cleared once regular.
+    try:
+        fd = os.open(name, flags | _NOFOLLOW | os.O_NONBLOCK, 0o644, dir_fd=dfd)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENXIO):
+            _refuse_link(name)
+        raise
+    st = os.fstat(fd)
+    if not stat.S_ISREG(st.st_mode) or st.st_nlink > 1:
+        os.close(fd)
+        _refuse_link(name)
+    os.set_blocking(fd, True)
+    return fd
 
 
 def persist_office_to_owner_disk(
@@ -152,37 +231,52 @@ def write_owner_disk_file(
     filename: str,
     data: bytes,
 ) -> Path:
-    dest = owner_disk_file(school_id, membership_id, filename)
-    old = dest.stat().st_size if dest.is_file() else 0
-    assert_owner_disk_quota(dest.parent, add_bytes=len(data), replace_bytes=old)
-    dest.write_bytes(data)
-    _hand_to_sandbox(dest)
-    return dest
+    name = _disk_name(filename)
+    with _owner_dir_fd(school_id, membership_id, create=True) as dfd:
+        try:
+            old = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+            old_size = old.st_size if stat.S_ISREG(old.st_mode) else 0
+        except FileNotFoundError:
+            old_size = 0
+        _assert_quota(dfd, add_bytes=len(data), replace_bytes=old_size)
+        fd = _open_file(name, os.O_WRONLY | os.O_CREAT, dfd)
+        try:
+            os.ftruncate(fd, 0)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view) :]
+            _hand_fd(fd)
+        finally:
+            os.close(fd)
+    return owner_disk_dir(school_id, membership_id) / name
 
 
 def read_owner_disk_file(school_id: str, membership_id: str, filename: str) -> bytes:
-    dest = owner_disk_file(school_id, membership_id, filename)
-    if not dest.is_file():
-        raise ToolError("sandbox.file_not_found", "老师盘上没有这个文件")
-    return dest.read_bytes()
+    name = _disk_name(filename)
+    with _owner_dir_fd(school_id, membership_id, create=True) as dfd:
+        try:
+            fd = _open_file(name, os.O_RDONLY, dfd)
+        except (FileNotFoundError, IsADirectoryError):
+            raise ToolError("sandbox.file_not_found", "老师盘上没有这个文件") from None
+        with os.fdopen(fd, "rb") as f:
+            return f.read()
 
 
 def clear_owner_disk(school_id: str, membership_id: str) -> dict[str, Any]:
-    root = owner_disk_dir(school_id, membership_id)
     removed = 0
-    if root.is_dir():
-        for path in list(root.iterdir()):
-            try:
-                if path.is_file() or path.is_symlink():
-                    path.unlink()
+    try:
+        with _owner_dir_fd(school_id, membership_id, create=False) as dfd:
+            for entry in list(os.scandir(dfd)):
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        shutil.rmtree(entry.name, dir_fd=dfd)
+                    else:
+                        os.unlink(entry.name, dir_fd=dfd)
                     removed += 1
-                elif path.is_dir():
-                    import shutil
-
-                    shutil.rmtree(path)
-                    removed += 1
-            except OSError:
-                continue
+                except OSError:
+                    continue
+    except FileNotFoundError:
+        pass
     return {
         "ok": True,
         "cleared": True,
@@ -192,9 +286,8 @@ def clear_owner_disk(school_id: str, membership_id: str) -> dict[str, Any]:
 
 
 def owner_disk_meta(school_id: str, membership_id: str) -> dict[str, Any]:
-    root = owner_disk_dir(school_id, membership_id)
     names = list_owner_disk_names(school_id, membership_id)
-    used = owner_disk_usage_bytes(root)
+    used = owner_disk_usage_bytes(school_id, membership_id)
     return {
         "ok": True,
         "persist": True,
